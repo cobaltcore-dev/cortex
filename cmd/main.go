@@ -18,7 +18,6 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -27,16 +26,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/api/delegation/ironcore/v1alpha1"
+	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/api/external/ironcore/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/prometheus"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/cinder"
@@ -49,7 +50,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	reservationscontroller "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/controller"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/cobaltcore-dev/cortex/pkg/task"
@@ -75,10 +75,19 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
+type MainConfig struct {
+	// ID used to identify leader election participants.
+	LeaderElectionID string `json:"leaderElectionID,omitempty"`
+	// List of enabled controllers.
+	EnabledControllers []string `json:"enabledControllers"`
+	// List of enabled tasks.
+	EnabledTasks []string `json:"enabledTasks"`
+}
+
 //nolint:gocyclo
 func main() {
 	ctx := context.Background()
-	config := conf.GetConfigOrDie[conf.Config]()
+	mainConfig := conf.GetConfigOrDie[MainConfig]()
 	restConfig := ctrl.GetConfigOrDie()
 
 	// Custom entrypoint for scheduler e2e tests.
@@ -87,13 +96,15 @@ func main() {
 		client := must.Return(client.New(restConfig, copts))
 		switch os.Args[1] {
 		case "e2e-nova":
-			nova.RunChecks(ctx, client, config)
+			novaChecksConfig := conf.GetConfigOrDie[nova.ChecksConfig]()
+			nova.RunChecks(ctx, client, novaChecksConfig)
 			return
 		case "e2e-cinder":
-			cinder.RunChecks(ctx, client, config)
+			cinder.RunChecks(ctx, client)
 			return
 		case "e2e-manila":
-			manila.RunChecks(ctx, client, config)
+			manilaChecksConfig := conf.GetConfigOrDie[manila.ChecksConfig]()
+			manila.RunChecks(ctx, client, manilaChecksConfig)
 			return
 		}
 	}
@@ -226,7 +237,7 @@ func main() {
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       config.LeaderElectionID,
+		LeaderElectionID:       mainConfig.LeaderElectionID,
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
@@ -258,42 +269,16 @@ func main() {
 		HomeRestConfig: restConfig,
 		HomeScheme:     scheme,
 	}
-	// Map the formatted gvk from the config to the actual gvk object so that we
-	// can look up the right cluster for a given API server override.
-	var gvksByConfStr = make(map[string]schema.GroupVersionKind)
-	for gvk := range scheme.AllKnownTypes() {
-		// This produces something like: "cortex.cloud/v1alpha1/Decision" which can
-		// be used to look up the right cluster for a given API server override.
-		formatted := gvk.GroupVersion().String() + "/" + gvk.Kind
-		gvksByConfStr[formatted] = gvk
-	}
-	for gvkStr := range gvksByConfStr {
-		setupLog.Info("scheme gvk registered", "gvk", gvkStr)
-	}
-	for _, override := range config.APIServerOverrides {
-		// Check if we have any registered gvk for this API server override.
-		gvk, ok := gvksByConfStr[override.GVK]
-		if !ok {
-			setupLog.Error(nil, "no registered objects for apiserver override resource",
-				"apiserver", override.Host, "gvk", override.GVK)
-			os.Exit(1)
-		}
-		cluster, err := multiclusterClient.AddRemote(ctx, override.Host, override.CACert, gvk)
-		if err != nil {
-			setupLog.Error(err, "unable to create cluster for apiserver override", "apiserver", override.Host)
-			os.Exit(1)
-		}
-		// Also tell the manager about this cluster so that controllers can use it.
-		// This will execute the cluster.Start function when the manager starts.
-		if err := mgr.Add(cluster); err != nil {
-			setupLog.Error(err, "unable to add cluster for apiserver override", "apiserver", override.Host)
-			os.Exit(1)
-		}
+	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
+	if err := multiclusterClient.InitFromConf(ctx, mgr, multiclusterClientConfig); err != nil {
+		setupLog.Error(err, "unable to initialize multicluster client")
+		os.Exit(1)
 	}
 
 	// Our custom monitoring registry can add prometheus labels to all metrics.
 	// This is useful to distinguish metrics from different deployments.
-	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, config.Monitoring)
+	metricsConfig := conf.GetConfigOrDie[monitoring.Config]()
+	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, metricsConfig)
 
 	// TODO: Remove me after scheduling pipeline steps don't require DB connections anymore.
 	metrics.Registry.MustRegister(&db.Monitor)
@@ -307,10 +292,9 @@ func main() {
 	pipelineMonitor := schedulinglib.NewPipelineMonitor()
 	metrics.Registry.MustRegister(&pipelineMonitor)
 
-	if slices.Contains(config.EnabledControllers, "nova-decisions-pipeline-controller") {
+	if slices.Contains(mainConfig.EnabledControllers, "nova-decisions-pipeline-controller") {
 		decisionController := &nova.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
-			Conf:    config,
 		}
 		// Inferred through the base controller.
 		decisionController.Client = multiclusterClient
@@ -321,14 +305,22 @@ func main() {
 		httpAPIConf := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
 		nova.NewAPI(httpAPIConf, decisionController).Init(mux)
 	}
-	if slices.Contains(config.EnabledControllers, "nova-deschedulings-pipeline-controller") {
+	if slices.Contains(mainConfig.EnabledControllers, "nova-deschedulings-pipeline-controller") {
 		// Deschedulings controller
 		monitor := schedulinglib.NewDetectorPipelineMonitor()
 		metrics.Registry.MustRegister(&monitor)
+		novaClient := nova.NewNovaClient()
+		novaClientConfig := conf.GetConfigOrDie[nova.NovaClientConfig]()
+		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+			return novaClient.Init(ctx, multiclusterClient, novaClientConfig)
+		})); err != nil {
+			setupLog.Error(err, "unable to initialize nova client")
+			os.Exit(1)
+		}
+		cycleBreaker := &nova.DetectorCycleBreaker{NovaClient: novaClient}
 		deschedulingsController := &nova.DetectorPipelineController{
-			Monitor:              monitor,
-			Conf:                 config,
-			DetectorCycleBreaker: nova.NewDetectorCycleBreaker(),
+			Monitor: monitor,
+			Breaker: cycleBreaker,
 		}
 		// Inferred through the base controller.
 		deschedulingsController.Client = multiclusterClient
@@ -346,10 +338,29 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledControllers, "manila-decisions-pipeline-controller") {
+	if slices.Contains(mainConfig.EnabledControllers, "nova-deschedulings-executor") {
+		executorConfig := conf.GetConfigOrDie[nova.DeschedulingsExecutorConfig]()
+		novaClient := nova.NewNovaClient()
+		novaClientConfig := conf.GetConfigOrDie[nova.NovaClientConfig]()
+		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+			return novaClient.Init(ctx, multiclusterClient, novaClientConfig)
+		})); err != nil {
+			setupLog.Error(err, "unable to initialize nova client")
+			os.Exit(1)
+		}
+		if err := (&nova.DeschedulingsExecutor{
+			Client:     multiclusterClient,
+			Scheme:     mgr.GetScheme(),
+			Conf:       executorConfig,
+			NovaClient: novaClient,
+		}).SetupWithManager(mgr, multiclusterClient); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "DeschedulingsExecutor")
+			os.Exit(1)
+		}
+	}
+	if slices.Contains(mainConfig.EnabledControllers, "manila-decisions-pipeline-controller") {
 		controller := &manila.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
-			Conf:    config,
 		}
 		// Inferred through the base controller.
 		controller.Client = multiclusterClient
@@ -357,12 +368,11 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		manila.NewAPI(config, controller).Init(mux)
+		manila.NewAPI(controller).Init(mux)
 	}
-	if slices.Contains(config.EnabledControllers, "cinder-decisions-pipeline-controller") {
+	if slices.Contains(mainConfig.EnabledControllers, "cinder-decisions-pipeline-controller") {
 		controller := &cinder.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
-			Conf:    config,
 		}
 		// Inferred through the base controller.
 		controller.Client = multiclusterClient
@@ -370,12 +380,11 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
-		cinder.NewAPI(config, controller).Init(mux)
+		cinder.NewAPI(controller).Init(mux)
 	}
-	if slices.Contains(config.EnabledControllers, "ironcore-decisions-pipeline-controller") {
+	if slices.Contains(mainConfig.EnabledControllers, "ironcore-decisions-pipeline-controller") {
 		controller := &machines.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
-			Conf:    config,
 		}
 		// Inferred through the base controller.
 		controller.Client = multiclusterClient
@@ -384,10 +393,9 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledControllers, "pods-decisions-pipeline-controller") {
+	if slices.Contains(mainConfig.EnabledControllers, "pods-decisions-pipeline-controller") {
 		controller := &pods.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
-			Conf:    config,
 		}
 		// Inferred through the base controller.
 		controller.Client = multiclusterClient
@@ -396,41 +404,41 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledControllers, "explanation-controller") {
+	if slices.Contains(mainConfig.EnabledControllers, "explanation-controller") {
 		// Setup a controller which will reconcile the history and explanation for
 		// decision resources.
+		explanationControllerConfig := conf.GetConfigOrDie[explanation.ControllerConfig]()
 		explanationController := &explanation.Controller{
 			Client: multiclusterClient,
-			// The explanation controller is compatible with multiple scheduling
-			// domains.
-			SchedulingDomain: config.SchedulingDomain,
+			Config: explanationControllerConfig,
 		}
 		if err := explanationController.SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "ExplanationController")
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledControllers, "reservations-controller") {
+	if slices.Contains(mainConfig.EnabledControllers, "reservations-controller") {
 		monitor := reservationscontroller.NewControllerMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&monitor)
+		reservationsControllerConfig := conf.GetConfigOrDie[reservationscontroller.Config]()
 		if err := (&reservationscontroller.ReservationReconciler{
 			Client:           multiclusterClient,
 			Scheme:           mgr.GetScheme(),
-			Conf:             config,
+			Conf:             reservationsControllerConfig,
 			HypervisorClient: reservationscontroller.NewHypervisorClient(),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "Reservation")
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledControllers, "datasource-controllers") {
+	if slices.Contains(mainConfig.EnabledControllers, "datasource-controllers") {
 		monitor := datasources.NewMonitor()
 		metrics.Registry.MustRegister(&monitor)
 		if err := (&openstack.OpenStackDatasourceReconciler{
 			Client:  multiclusterClient,
 			Scheme:  mgr.GetScheme(),
 			Monitor: monitor,
-			Conf:    config,
+			Conf:    conf.GetConfigOrDie[openstack.OpenStackDatasourceReconcilerConfig](),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "OpenStackDatasourceReconciler")
 			os.Exit(1)
@@ -439,20 +447,20 @@ func main() {
 			Client:  multiclusterClient,
 			Scheme:  mgr.GetScheme(),
 			Monitor: monitor,
-			Conf:    config,
+			Conf:    conf.GetConfigOrDie[prometheus.PrometheusDatasourceReconcilerConfig](),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "PrometheusDatasourceReconciler")
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledControllers, "knowledge-controllers") {
+	if slices.Contains(mainConfig.EnabledControllers, "knowledge-controllers") {
 		monitor := extractor.NewMonitor()
 		metrics.Registry.MustRegister(&monitor)
 		if err := (&extractor.KnowledgeReconciler{
 			Client:  multiclusterClient,
 			Scheme:  mgr.GetScheme(),
 			Monitor: monitor,
-			Conf:    config,
+			Conf:    conf.GetConfigOrDie[extractor.KnowledgeReconcilerConfig](),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "KnowledgeReconciler")
 			os.Exit(1)
@@ -460,18 +468,17 @@ func main() {
 		if err := (&extractor.TriggerReconciler{
 			Client: multiclusterClient,
 			Scheme: mgr.GetScheme(),
-			Conf:   config,
+			Conf:   conf.GetConfigOrDie[extractor.TriggerReconcilerConfig](),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "TriggerReconciler")
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledControllers, "kpis-controller") {
+	if slices.Contains(mainConfig.EnabledControllers, "kpis-controller") {
+		kpisControllerConfig := conf.GetConfigOrDie[kpis.ControllerConfig]()
 		if err := (&kpis.Controller{
 			Client: multiclusterClient,
-			// The kpis controller is compatible with multiple scheduling
-			// domains.
-			SchedulingDomain: config.SchedulingDomain,
+			Config: kpisControllerConfig,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "KPIController")
 			os.Exit(1)
@@ -505,56 +512,60 @@ func main() {
 		os.Exit(1)
 	}
 
-	if slices.Contains(config.EnabledTasks, "commitments-sync-task") {
+	if slices.Contains(mainConfig.EnabledTasks, "commitments-sync-task") {
 		setupLog.Info("starting commitments syncer")
 		syncer := commitments.NewSyncer(multiclusterClient)
+		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: time.Hour,
 			Name:     "commitments-sync-task",
 			Run:      func(ctx context.Context) error { return syncer.SyncReservations(ctx) },
-			Init:     func(ctx context.Context) error { return syncer.Init(ctx, config) },
+			Init:     func(ctx context.Context) error { return syncer.Init(ctx, syncerConfig) },
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add commitments sync task to manager")
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledTasks, "nova-decisions-cleanup-task") {
+	if slices.Contains(mainConfig.EnabledTasks, "nova-decisions-cleanup-task") {
 		setupLog.Info("starting nova decisions cleanup task")
+		decisionsCleanupConfig := conf.GetConfigOrDie[nova.DecisionsCleanupConfig]()
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: time.Hour,
 			Name:     "nova-decisions-cleanup-task",
 			Run: func(ctx context.Context) error {
-				return nova.DecisionsCleanup(ctx, multiclusterClient, config)
+				return nova.DecisionsCleanup(ctx, multiclusterClient, decisionsCleanupConfig)
 			},
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add nova decisions cleanup task to manager")
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledTasks, "manila-decisions-cleanup-task") {
+	if slices.Contains(mainConfig.EnabledTasks, "manila-decisions-cleanup-task") {
 		setupLog.Info("starting manila decisions cleanup task")
+		decisionsCleanupConfig := conf.GetConfigOrDie[manila.DecisionsCleanupConfig]()
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: time.Hour,
 			Name:     "manila-decisions-cleanup-task",
 			Run: func(ctx context.Context) error {
-				return manila.DecisionsCleanup(ctx, multiclusterClient, config)
+				return manila.DecisionsCleanup(ctx, multiclusterClient, decisionsCleanupConfig)
 			},
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add manila decisions cleanup task to manager")
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(config.EnabledTasks, "cinder-decisions-cleanup-task") {
+	if slices.Contains(mainConfig.EnabledTasks, "cinder-decisions-cleanup-task") {
 		setupLog.Info("starting cinder decisions cleanup task")
+		decisionsCleanupConfig := conf.GetConfigOrDie[cinder.DecisionsCleanupConfig]()
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: time.Hour,
 			Name:     "cinder-decisions-cleanup-task",
 			Run: func(ctx context.Context) error {
-				return cinder.DecisionsCleanup(ctx, multiclusterClient, config)
+				return cinder.DecisionsCleanup(ctx, multiclusterClient, decisionsCleanupConfig)
 			},
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add cinder decisions cleanup task to manager")

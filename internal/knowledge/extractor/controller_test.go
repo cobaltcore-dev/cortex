@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -37,7 +36,7 @@ func TestKnowledgeReconciler_Reconcile_NonExistentResource(t *testing.T) {
 		Client:  fakeClient,
 		Scheme:  scheme,
 		Monitor: NewMonitor(),
-		Conf:    conf.Config{SchedulingDomain: "test-operator"},
+		Conf:    KnowledgeReconcilerConfig{SchedulingDomain: "test-operator"},
 	}
 
 	req := ctrl.Request{
@@ -68,7 +67,7 @@ func TestKnowledgeReconciler_Reconcile_SkipRecentExtraction(t *testing.T) {
 		Client:  fakeClient,
 		Scheme:  scheme,
 		Monitor: NewMonitor(),
-		Conf:    conf.Config{SchedulingDomain: "test-operator"},
+		Conf:    KnowledgeReconcilerConfig{SchedulingDomain: "test-operator"},
 	}
 
 	// Create knowledge that was extracted recently
@@ -134,7 +133,7 @@ func TestKnowledgeReconciler_Reconcile_UnsupportedExtractor(t *testing.T) {
 		Client:  fakeClient,
 		Scheme:  scheme,
 		Monitor: NewMonitor(),
-		Conf:    conf.Config{SchedulingDomain: "test-operator"},
+		Conf:    KnowledgeReconcilerConfig{SchedulingDomain: "test-operator"},
 	}
 
 	req := ctrl.Request{
@@ -194,7 +193,7 @@ func TestKnowledgeReconciler_Reconcile_MissingDatasource(t *testing.T) {
 		Client:  fakeClient,
 		Scheme:  scheme,
 		Monitor: NewMonitor(),
-		Conf:    conf.Config{SchedulingDomain: "test-operator"},
+		Conf:    KnowledgeReconcilerConfig{SchedulingDomain: "test-operator"},
 	}
 
 	req := ctrl.Request{
@@ -274,7 +273,7 @@ func TestKnowledgeReconciler_Reconcile_DifferentDatabaseSecrets(t *testing.T) {
 		Client:  fakeClient,
 		Scheme:  scheme,
 		Monitor: NewMonitor(),
-		Conf:    conf.Config{SchedulingDomain: "test-operator"},
+		Conf:    KnowledgeReconcilerConfig{SchedulingDomain: "test-operator"},
 	}
 
 	req := ctrl.Request{
@@ -351,7 +350,7 @@ func TestKnowledgeReconciler_Reconcile_SameDatabaseSecrets(t *testing.T) {
 		Client:  fakeClient,
 		Scheme:  scheme,
 		Monitor: NewMonitor(),
-		Conf:    conf.Config{SchedulingDomain: "test-operator"},
+		Conf:    KnowledgeReconcilerConfig{SchedulingDomain: "test-operator"},
 	}
 
 	req := ctrl.Request{
@@ -411,7 +410,7 @@ func TestKnowledgeReconciler_Reconcile_NoDatasources(t *testing.T) {
 		Client:  fakeClient,
 		Scheme:  scheme,
 		Monitor: NewMonitor(),
-		Conf:    conf.Config{SchedulingDomain: "test-operator"},
+		Conf:    KnowledgeReconcilerConfig{SchedulingDomain: "test-operator"},
 	}
 
 	req := ctrl.Request{
@@ -484,7 +483,7 @@ func TestKnowledgeReconciler_Reconcile_SupportedExtractors(t *testing.T) {
 				Client:  fakeClient,
 				Scheme:  scheme,
 				Monitor: NewMonitor(),
-				Conf:    conf.Config{SchedulingDomain: "test-operator"},
+				Conf:    KnowledgeReconcilerConfig{SchedulingDomain: "test-operator"},
 			}
 
 			req := ctrl.Request{
@@ -517,7 +516,7 @@ func TestKnowledgeReconciler_Reconcile_SupportedExtractors(t *testing.T) {
 
 func TestKnowledgeReconciler_OperatorFiltering(t *testing.T) {
 	reconciler := &KnowledgeReconciler{
-		Conf: conf.Config{SchedulingDomain: "test-operator"},
+		Conf: KnowledgeReconcilerConfig{SchedulingDomain: "test-operator"},
 	}
 
 	// Test the predicate function logic

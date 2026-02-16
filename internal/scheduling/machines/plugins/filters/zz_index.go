@@ -4,7 +4,7 @@
 package filters
 
 import (
-	"github.com/cobaltcore-dev/cortex/api/delegation/ironcore"
+	"github.com/cobaltcore-dev/cortex/api/external/ironcore"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 

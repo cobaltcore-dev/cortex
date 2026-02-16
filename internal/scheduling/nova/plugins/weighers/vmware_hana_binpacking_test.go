@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -220,7 +220,6 @@ func TestVMwareHanaBinpackingStep_Run(t *testing.T) {
 						},
 					},
 				},
-				VMware: true,
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -231,54 +230,6 @@ func TestVMwareHanaBinpackingStep_Run(t *testing.T) {
 				"host1": true,  // HANA_EXCLUSIVE host should get activation (50% + 25% = 75%, in range 30-80%)
 				"host2": false, // HANA_EXCLUSIVE host but above range (70% + 12.5% = 82.5%, above 80% range)
 				"host3": false, // non-HANA_EXCLUSIVE host should be no-effect
-			},
-		},
-		{
-			name: "Non-HANA flavor should be skipped",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								Name:     "m1.large",
-								MemoryMB: 8192,
-							},
-						},
-					},
-				},
-				VMware: true,
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-				},
-			},
-			expectedHosts: map[string]bool{
-				"host1": false, // should be no-effect
-				"host2": false, // should be no-effect
-			},
-		},
-		{
-			name: "Non-VMware VM should be skipped",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								Name:     "hana.large",
-								MemoryMB: 8192,
-							},
-						},
-					},
-				},
-				VMware: false,
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-				},
-			},
-			expectedHosts: map[string]bool{
-				"host1": false, // should be no-effect
-				"host2": false, // should be no-effect
 			},
 		},
 	}

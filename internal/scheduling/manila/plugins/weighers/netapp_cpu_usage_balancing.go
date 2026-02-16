@@ -8,7 +8,7 @@ import (
 	"errors"
 	"log/slog"
 
-	api "github.com/cobaltcore-dev/cortex/api/delegation/manila"
+	api "github.com/cobaltcore-dev/cortex/api/external/manila"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/storage"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"

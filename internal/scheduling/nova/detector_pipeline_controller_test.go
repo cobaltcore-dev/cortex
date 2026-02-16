@@ -11,7 +11,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -19,10 +18,6 @@ import (
 )
 
 type mockDetectorCycleBreaker struct{}
-
-func (m *mockDetectorCycleBreaker) Init(ctx context.Context, client client.Client, conf conf.Config) error {
-	return nil
-}
 
 func (m *mockDetectorCycleBreaker) Filter(ctx context.Context, decisions []plugins.VMDetection) ([]plugins.VMDetection, error) {
 	return decisions, nil
@@ -71,13 +66,13 @@ func TestDetectorPipelineController_InitPipeline(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			controller := &DetectorPipelineController{
-				Monitor:              lib.NewDetectorPipelineMonitor(),
-				DetectorCycleBreaker: &mockDetectorCycleBreaker{},
+				Monitor: lib.NewDetectorPipelineMonitor(),
+				Breaker: &mockDetectorCycleBreaker{},
 			}
 
 			pipeline := lib.DetectorPipeline[plugins.VMDetection]{
-				DetectorCycleBreaker: controller.DetectorCycleBreaker,
-				Monitor:              controller.Monitor,
+				Breaker: controller.Breaker,
+				Monitor: controller.Monitor,
 			}
 			errs := pipeline.Init(t.Context(), tt.steps, map[string]lib.Detector[plugins.VMDetection]{
 				"mock-step": &mockControllerStep{},
@@ -93,7 +88,7 @@ func TestDetectorPipelineController_InitPipeline(t *testing.T) {
 				}
 			}
 
-			if pipeline.DetectorCycleBreaker != controller.DetectorCycleBreaker {
+			if pipeline.Breaker != controller.Breaker {
 				t.Error("expected pipeline to have cycle detector set")
 			}
 

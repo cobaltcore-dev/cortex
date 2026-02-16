@@ -10,8 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -32,7 +31,7 @@ func TestPrometheusDatasourceReconciler_Creation(t *testing.T) {
 	reconciler := &PrometheusDatasourceReconciler{
 		Client:  client,
 		Scheme:  scheme,
-		Conf:    conf.Config{SchedulingDomain: "test-operator"},
+		Conf:    PrometheusDatasourceReconcilerConfig{SchedulingDomain: "test-operator"},
 		Monitor: datasources.Monitor{},
 	}
 

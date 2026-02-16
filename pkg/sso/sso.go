@@ -12,10 +12,18 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// Configuration for single-sign-on (SSO).
+type SSOConfig struct {
+	Cert    string `json:"cert,omitempty"`
+	CertKey string `json:"certKey,omitempty"`
+
+	// If the certificate is self-signed, we need to skip verification.
+	SelfSigned bool `json:"selfSigned,omitempty"`
+}
 
 // Custom HTTP round tripper that logs each request.
 type requestLogger struct {
@@ -54,7 +62,7 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 			selfSigned = true
 		}
 	}
-	conf := conf.SSOConfig{
+	conf := SSOConfig{
 		Cert:       string(cert),
 		CertKey:    string(key),
 		SelfSigned: selfSigned,
@@ -64,7 +72,7 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 
 // Create a new HTTP client with the given SSO configuration
 // and logging for each request.
-func NewHTTPClient(conf conf.SSOConfig) (*http.Client, error) {
+func NewHTTPClient(conf SSOConfig) (*http.Client, error) {
 	if conf.Cert == "" {
 		// Disable SSO if no certificate is provided.
 		slog.Debug("making http requests without SSO")

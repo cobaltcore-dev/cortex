@@ -12,9 +12,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/prometheus/client_golang/prometheus"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"

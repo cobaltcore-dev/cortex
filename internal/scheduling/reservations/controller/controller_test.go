@@ -17,9 +17,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 )
 
 func TestReservationReconciler_Reconcile(t *testing.T) {
@@ -185,8 +184,8 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 	}))
 	defer server.Close()
 
-	config := conf.Config{
-		Endpoints: conf.EndpointsConfig{
+	config := Config{
+		Endpoints: EndpointsConfig{
 			NovaExternalScheduler: server.URL,
 		},
 	}

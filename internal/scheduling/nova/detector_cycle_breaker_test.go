@@ -9,9 +9,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 type mockDetectorCycleBreakerNovaClient struct {
@@ -19,7 +17,7 @@ type mockDetectorCycleBreakerNovaClient struct {
 	getError   error
 }
 
-func (m *mockDetectorCycleBreakerNovaClient) Init(ctx context.Context, client client.Client, conf conf.Config) error {
+func (m *mockDetectorCycleBreakerNovaClient) Init(ctx context.Context, client client.Client, conf NovaClientConfig) error {
 	return nil
 }
 
@@ -179,7 +177,7 @@ func TestDetectorCycleBreaker_Filter(t *testing.T) {
 				mockAPI.getError = errors.New("API error")
 			}
 
-			detector := detectorCycleBreaker{novaClient: mockAPI}
+			detector := DetectorCycleBreaker{NovaClient: mockAPI}
 
 			ctx := context.Background()
 			result, err := detector.Filter(ctx, tt.decisions)
@@ -233,7 +231,7 @@ func TestDetectorCycleBreaker_Filter_EmptyVMDetections(t *testing.T) {
 		migrations: map[string][]migration{},
 	}
 
-	detector := detectorCycleBreaker{novaClient: mockAPI}
+	detector := DetectorCycleBreaker{NovaClient: mockAPI}
 
 	ctx := context.Background()
 	result, err := detector.Filter(ctx, []plugins.VMDetection{})
@@ -245,78 +243,4 @@ func TestDetectorCycleBreaker_Filter_EmptyVMDetections(t *testing.T) {
 	if len(result) != 0 {
 		t.Errorf("expected empty result for empty input, got %d decisions", len(result))
 	}
-}
-
-func TestNewDetectorCycleBreaker(t *testing.T) {
-	detector := NewDetectorCycleBreaker()
-
-	if detector == nil {
-		t.Fatal("expected non-nil detector")
-	}
-
-	// Verify it's the correct type
-	_, ok := detector.(*detectorCycleBreaker)
-	if !ok {
-		t.Errorf("expected *detectorCycleBreaker, got %T", detector)
-	}
-
-	// Verify the novaClient field is initialized
-	detectorImpl := detector.(*detectorCycleBreaker)
-	if detectorImpl.novaClient == nil {
-		t.Error("expected novaClient to be initialized")
-	}
-}
-
-func TestDetectorCycleBreaker_Init(t *testing.T) {
-	tests := []struct {
-		name      string
-		setupMock func() NovaClient
-		expectErr bool
-	}{
-		{
-			name: "successful initialization",
-			setupMock: func() NovaClient {
-				return &mockDetectorCycleBreakerNovaClient{}
-			},
-			expectErr: false,
-		},
-		{
-			name: "initialization with error",
-			setupMock: func() NovaClient {
-				return &mockDetectorCycleBreakerNovaClientWithInitError{}
-			},
-			expectErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			detector := &detectorCycleBreaker{
-				novaClient: tt.setupMock(),
-			}
-
-			ctx := context.Background()
-			fakeClient := fake.NewClientBuilder().Build()
-			cfg := conf.Config{}
-
-			err := detector.Init(ctx, fakeClient, cfg)
-
-			if tt.expectErr && err == nil {
-				t.Error("expected error but got none")
-			}
-
-			if !tt.expectErr && err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-		})
-	}
-}
-
-// mockDetectorCycleBreakerNovaClientWithInitError is a mock that returns an error on Init
-type mockDetectorCycleBreakerNovaClientWithInitError struct {
-	mockDetectorCycleBreakerNovaClient
-}
-
-func (m *mockDetectorCycleBreakerNovaClientWithInitError) Init(ctx context.Context, client client.Client, conf conf.Config) error {
-	return errors.New("init error")
 }

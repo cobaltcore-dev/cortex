@@ -9,8 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -24,6 +23,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
+type KnowledgeReconcilerConfig struct {
+	// The controller will only touch resources with this scheduling domain.
+	SchedulingDomain v1alpha1.SchedulingDomain `json:"schedulingDomain"`
+}
+
 type KnowledgeReconciler struct {
 	// Client for the kubernetes API.
 	client.Client
@@ -32,7 +36,7 @@ type KnowledgeReconciler struct {
 	// Monitor to use for tracking the reconciler.
 	Monitor Monitor
 	// Config for the reconciler.
-	Conf conf.Config
+	Conf KnowledgeReconcilerConfig
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to

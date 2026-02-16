@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	api "github.com/cobaltcore-dev/cortex/api/delegation/manila"
+	api "github.com/cobaltcore-dev/cortex/api/external/manila"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,7 +19,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila/plugins/weighers"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -44,8 +43,6 @@ type FilterWeigherPipelineController struct {
 
 	// Monitor to pass down to all pipelines.
 	Monitor lib.FilterWeigherPipelineMonitor
-	// Config for the scheduling operator.
-	Conf conf.Config
 }
 
 // The type of pipeline this controller manages.

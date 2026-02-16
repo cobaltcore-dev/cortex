@@ -11,12 +11,12 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	"github.com/sapcc/go-bits/jobloop"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,6 +27,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
+
+type OpenStackDatasourceReconcilerConfig struct {
+	// The controller will only touch resources with this scheduling domain.
+	SchedulingDomain v1alpha1.SchedulingDomain `json:"schedulingDomain"`
+	// Secret ref to keystone credentials stored in a k8s secret.
+	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
+	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
+	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
+}
 
 type Syncer interface {
 	// Init the syncer, e.g. create the database tables.
@@ -43,7 +52,7 @@ type OpenStackDatasourceReconciler struct {
 	// Datasources monitor.
 	Monitor datasources.Monitor
 	// Config for the reconciler.
-	Conf conf.Config
+	Conf OpenStackDatasourceReconcilerConfig
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to

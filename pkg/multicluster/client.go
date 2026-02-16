@@ -34,6 +34,60 @@ type Client struct {
 	remoteClustersMu sync.RWMutex
 }
 
+type ClientConfig struct {
+	// Apiserver overrides.
+	APIServerOverrides []APIServerOverride `json:"apiServerOverrides,omitempty"`
+}
+
+// Config which maps a kubernetes resource URI to a remote kubernetes apiserver.
+// This override config can be used to manage CRDs in a different kubernetes cluster.
+// It is assumed that the remote apiserver accepts the serviceaccount tokens
+// issued by the local cluster.
+type APIServerOverride struct {
+	// The resource GVK formatted as "<group>/<version>", e.g. "cortex.cloud/v1alpha1/Decision"
+	GVK string `json:"gvk"`
+	// The remote kubernetes apiserver url, e.g. "https://my-apiserver:6443"
+	Host string `json:"host"`
+	// The root CA certificate to verify the remote apiserver.
+	CACert string `json:"caCert,omitempty"`
+}
+
+// Helper function to initialize a new multicluster client during service startup,
+// using the conf module provided by cortex.
+func (c *Client) InitFromConf(ctx context.Context, mgr ctrl.Manager, conf ClientConfig) error {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("initializing multicluster client with config", "config", conf)
+	// Map the formatted gvk from the config to the actual gvk object so that we
+	// can look up the right cluster for a given API server override.
+	var gvksByConfStr = make(map[string]schema.GroupVersionKind)
+	for gvk := range c.HomeScheme.AllKnownTypes() {
+		// This produces something like: "cortex.cloud/v1alpha1/Decision" which can
+		// be used to look up the right cluster for a given API server override.
+		formatted := gvk.GroupVersion().String() + "/" + gvk.Kind
+		gvksByConfStr[formatted] = gvk
+	}
+	for gvkStr := range gvksByConfStr {
+		log.Info("scheme gvk registered", "gvk", gvkStr)
+	}
+	for _, override := range conf.APIServerOverrides {
+		// Check if we have any registered gvk for this API server override.
+		gvk, ok := gvksByConfStr[override.GVK]
+		if !ok {
+			return errors.New("no gvk registered for API server override " + override.GVK)
+		}
+		cluster, err := c.AddRemote(ctx, override.Host, override.CACert, gvk)
+		if err != nil {
+			return err
+		}
+		// Also tell the manager about this cluster so that controllers can use it.
+		// This will execute the cluster.Start function when the manager starts.
+		if err := mgr.Add(cluster); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Add a remote cluster which uses the same REST config as the home cluster,
 // but a different host, for the given resource gvks.
 //

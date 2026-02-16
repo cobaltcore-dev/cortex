@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

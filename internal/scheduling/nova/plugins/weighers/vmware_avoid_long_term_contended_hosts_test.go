@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -203,7 +203,6 @@ func TestVMwareAvoidLongTermContendedHostsStep_Run(t *testing.T) {
 		{
 			name: "Avoid contended hosts",
 			request: api.ExternalSchedulerRequest{
-				VMware: true,
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -221,7 +220,6 @@ func TestVMwareAvoidLongTermContendedHostsStep_Run(t *testing.T) {
 		{
 			name: "Missing data",
 			request: api.ExternalSchedulerRequest{
-				VMware: true,
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host4"},
 					{ComputeHost: "host5"},

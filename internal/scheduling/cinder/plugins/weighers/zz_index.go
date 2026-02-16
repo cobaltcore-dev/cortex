@@ -4,7 +4,7 @@
 package weighers
 
 import (
-	api "github.com/cobaltcore-dev/cortex/api/delegation/cinder"
+	api "github.com/cobaltcore-dev/cortex/api/external/cinder"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 

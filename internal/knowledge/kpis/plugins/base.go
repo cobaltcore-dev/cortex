@@ -4,8 +4,8 @@
 package plugins
 
 import (
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 

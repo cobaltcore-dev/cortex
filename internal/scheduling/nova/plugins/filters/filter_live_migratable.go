@@ -9,26 +9,13 @@ import (
 	"log/slog"
 	"slices"
 
-	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 type FilterLiveMigratableStep struct {
 	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
-}
-
-// Check if the encountered request spec is a live migration.
-func (s *FilterLiveMigratableStep) isLiveMigration(
-	request api.ExternalSchedulerRequest,
-) bool {
-
-	// See: https://github.com/sapcc/nova/blob/ba48137/nova/scheduler/utils.py#L1277C47-L1277C63
-	str, err := request.Spec.Data.GetSchedulerHintStr("_nova_check_type")
-	if err != nil {
-		return false
-	}
-	return str == "live_migrate"
 }
 
 // Check if a vm can be live migrated from a source to a given target host.
@@ -68,7 +55,12 @@ func (s *FilterLiveMigratableStep) Run(
 
 	result := s.IncludeAllHostsFromRequest(request)
 
-	if !s.isLiveMigration(request) {
+	intent, err := request.GetIntent()
+	if err != nil {
+		traceLog.Info("failed to determine request intent, skipping filter", "error", err)
+		return result, nil
+	}
+	if intent != api.LiveMigrationIntent {
 		traceLog.Info("not a live migration request, skipping filter")
 		return result, nil
 	}

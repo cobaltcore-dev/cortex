@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"math"
 
-	api "github.com/cobaltcore-dev/cortex/api/delegation/pods"
+	api "github.com/cobaltcore-dev/cortex/api/external/pods"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods/helpers"
 	corev1 "k8s.io/api/core/v1"

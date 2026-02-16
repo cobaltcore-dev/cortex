@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"strings"
 
-	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
@@ -59,10 +59,6 @@ func (s *VMwareHanaBinpackingStep) Run(traceLog *slog.Logger, request api.Extern
 	// Don't execute the step for non-hana flavors.
 	if !strings.Contains(request.Spec.Data.Flavor.Data.Name, "hana") {
 		slog.Debug("Skipping hana binpacking step for non-HANA flavor", "flavor", request.Spec.Data.Flavor.Data.Name)
-		return result, nil
-	}
-	if !request.VMware {
-		slog.Debug("Skipping hana binpacking step for non-VMware VM")
 		return result, nil
 	}
 

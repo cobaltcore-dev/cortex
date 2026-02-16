@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"testing"
 
-	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,99 +17,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
-
-func TestFilterLiveMigratableStep_isLiveMigration(t *testing.T) {
-	tests := []struct {
-		name     string
-		request  api.ExternalSchedulerRequest
-		expected bool
-	}{
-		{
-			name: "Live migration request",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"_nova_check_type": "live_migrate",
-						},
-					},
-				},
-			},
-			expected: true,
-		},
-		{
-			name: "Live migration request with list hint",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"_nova_check_type": []any{"live_migrate"},
-						},
-					},
-				},
-			},
-			expected: true,
-		},
-		{
-			name: "Non-live migration request",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"_nova_check_type": "rebuild",
-						},
-					},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "Missing check type hint",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"other_hint": "value",
-						},
-					},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "Nil scheduler hints",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: nil,
-					},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "Empty scheduler hints",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{},
-					},
-				},
-			},
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			step := &FilterLiveMigratableStep{}
-			result := step.isLiveMigration(tt.request)
-			if result != tt.expected {
-				t.Errorf("isLiveMigration() = %v, expected %v", result, tt.expected)
-			}
-		})
-	}
-}
 
 func TestFilterLiveMigratableStep_checkHasSufficientFeatures(t *testing.T) {
 	tests := []struct {

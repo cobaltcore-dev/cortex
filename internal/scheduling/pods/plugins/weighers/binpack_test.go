@@ -8,7 +8,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/api/delegation/pods"
+	"github.com/cobaltcore-dev/cortex/api/external/pods"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

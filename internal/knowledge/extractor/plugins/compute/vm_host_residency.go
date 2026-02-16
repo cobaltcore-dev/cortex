@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
-	"github.com/cobaltcore-dev/cortex/pkg/tools"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/math"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -68,7 +68,7 @@ func (e *VMHostResidencyExtractor) Extract() ([]plugins.Feature, error) {
 	valueFunc := func(hostResidency VMHostResidencyRaw) float64 {
 		return float64(hostResidency.Duration)
 	}
-	hists, counts, sums := tools.Histogram(hostResidencies, buckets, keysFunc, valueFunc)
+	hists, counts, sums := math.Histogram(hostResidencies, buckets, keysFunc, valueFunc)
 	var features []VMHostResidencyHistogramBucket
 	for key, hist := range hists {
 		labels := strings.Split(key, ",")

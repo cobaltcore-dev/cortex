@@ -4,18 +4,31 @@
 package monitoring
 
 import (
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	dto "github.com/prometheus/client_model/go"
 )
+
+type Config struct {
+	// Monitoring configuration
+	Monitoring RegistryConfig `json:"monitoring"`
+}
+
+// Configuration for our custom registry.
+type RegistryConfig struct {
+	// The labels to add to all metrics.
+	Labels map[string]string `json:"labels"`
+
+	// The port to expose the metrics on.
+	Port int `json:"port"`
+}
 
 // Custom prometheus registry that adds functionality to the default registry.
 type Registry struct {
 	// Inherited prometheus registry.
 	RegistererGatherer
 	// Custom configuration for the monitoring.
-	config conf.MonitoringConfig
+	config Config
 }
 
 type RegistererGatherer interface {
@@ -23,7 +36,7 @@ type RegistererGatherer interface {
 	prometheus.Gatherer
 }
 
-func WrapRegistry(registry RegistererGatherer, config conf.MonitoringConfig) *Registry {
+func WrapRegistry(registry RegistererGatherer, config Config) *Registry {
 	wrapped := &Registry{
 		RegistererGatherer: registry,
 		config:             config,
@@ -33,7 +46,7 @@ func WrapRegistry(registry RegistererGatherer, config conf.MonitoringConfig) *Re
 
 // Create a new registry with the given configuration.
 // This registry will include the default go collector and process collector.
-func NewRegistry(config conf.MonitoringConfig) *Registry {
+func NewRegistry(config Config) *Registry {
 	registry := &Registry{
 		RegistererGatherer: prometheus.NewRegistry(),
 		config:             config,
@@ -53,7 +66,7 @@ func (r *Registry) Gather() ([]*dto.MetricFamily, error) {
 	// Add a custom label to all metrics. This is useful for distinguishing
 	// the metrics from other golang services that also use the default
 	// go collector metrics.
-	for name, value := range r.config.Labels {
+	for name, value := range r.config.Monitoring.Labels {
 		for _, family := range families {
 			for _, metric := range family.Metric {
 				metric.Label = append(metric.Label, &dto.LabelPair{

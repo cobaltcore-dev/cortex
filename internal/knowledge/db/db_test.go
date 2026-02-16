@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/db/testing"
+	testlibDB "github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing"
 )
 
 type MockTable struct {

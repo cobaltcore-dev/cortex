@@ -8,7 +8,7 @@ import (
 	"errors"
 	"log/slog"
 
-	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
@@ -63,11 +63,6 @@ func (s *VMwareAvoidLongTermContendedHostsStep) Init(ctx context.Context, client
 // Downvote hosts that are highly contended.
 func (s *VMwareAvoidLongTermContendedHostsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
-
-	if !request.VMware {
-		slog.Debug("Skipping general purpose balancing step for non-VMware VM")
-		return result, nil
-	}
 
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
 	result.Statistics["max cpu contention"] = s.PrepareStats(request, "%")

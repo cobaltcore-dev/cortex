@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -217,7 +217,6 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 						ProjectID: "project1",
 					},
 				},
-				VMware: true,
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -237,7 +236,6 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 						ProjectID: "project2",
 					},
 				},
-				VMware: true,
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -249,12 +247,6 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		{
 			name: "No noisy project data",
 			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project3",
-					},
-				},
-				VMware: true,
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},

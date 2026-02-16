@@ -12,17 +12,24 @@ import (
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+type DecisionsCleanupConfig struct {
+	// Secret ref to keystone credentials stored in a k8s secret.
+	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
+	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
+	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
+}
+
 // Delete all decisions for manila shares that have been deleted.
-func DecisionsCleanup(ctx context.Context, client client.Client, conf conf.Config) error {
+func DecisionsCleanup(ctx context.Context, client client.Client, conf DecisionsCleanupConfig) error {
 	var authenticatedHTTP = http.DefaultClient
 	if conf.SSOSecretRef != nil {
 		var err error

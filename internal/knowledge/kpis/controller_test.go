@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
 	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -463,8 +463,8 @@ func TestController_Reconcile(t *testing.T) {
 
 			mockKPIInstance := &mockKPI{name: "test_kpi"}
 			baseController := Controller{
-				Client:           fakeClient,
-				SchedulingDomain: "test-operator",
+				Client: fakeClient,
+				Config: ControllerConfig{SchedulingDomain: "test-operator"},
 				supportedKPIs: map[string]plugins.KPI{
 					"test_kpi": mockKPIInstance,
 				},
@@ -543,8 +543,8 @@ func TestController_Reconcile_KPIDeleted(t *testing.T) {
 
 	mockKPIInstance := &mockKPI{name: "test_kpi"}
 	controller := &Controller{
-		Client:           fakeClient,
-		SchedulingDomain: "test-operator",
+		Client: fakeClient,
+		Config: ControllerConfig{SchedulingDomain: "test-operator"},
 		supportedKPIs: map[string]plugins.KPI{
 			"test_kpi": mockKPIInstance,
 		},
@@ -968,8 +968,8 @@ func TestController_InitAllKPIs(t *testing.T) {
 
 	mockKPIInstance := &mockKPI{name: "test_kpi"}
 	baseController := Controller{
-		Client:           fakeClient,
-		SchedulingDomain: "test-operator",
+		Client: fakeClient,
+		Config: ControllerConfig{SchedulingDomain: "test-operator"},
 		supportedKPIs: map[string]plugins.KPI{
 			"test_kpi": mockKPIInstance,
 		},

@@ -7,12 +7,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/api/delegation/ironcore"
-	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/api/delegation/ironcore/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/api/external/ironcore"
+	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/api/external/ironcore/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -125,9 +124,6 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 					Pipelines: map[string]lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]{
 						"machines-scheduler": createMockPipeline(),
 					},
-				},
-				Conf: conf.Config{
-					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
@@ -430,9 +426,6 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]]{
 					Pipelines:       map[string]lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]{},
 					PipelineConfigs: map[string]v1alpha1.Pipeline{},
-				},
-				Conf: conf.Config{
-					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}

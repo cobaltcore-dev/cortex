@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,7 +29,7 @@ func setupTestReconciler(t *testing.T) (*TriggerReconciler, client.Client, conte
 		t.Fatalf("Failed to add corev1 to scheme: %v", err)
 	}
 
-	testConf := conf.Config{
+	testConf := TriggerReconcilerConfig{
 		SchedulingDomain: "test-operator",
 	}
 

@@ -9,9 +9,6 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 
 	"github.com/sapcc/go-bits/jobloop"
@@ -26,6 +23,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
+type DeschedulingsExecutorConfig struct {
+	// DisableDeschedulerDryRun disables the dry-run mode of the descheduler, allowing it to execute live-migrations.
+	DisableDeschedulerDryRun bool `json:"disableDeschedulerDryRun"`
+}
+
 type DeschedulingsExecutor struct {
 	// Client for the kubernetes API.
 	client.Client
@@ -35,9 +37,7 @@ type DeschedulingsExecutor struct {
 	// Nova client to execute the descheduling operations.
 	NovaClient NovaClient
 	// Configuration for the descheduler.
-	Conf conf.Config
-	// Monitor for tracking the descheduler execution.
-	Monitor lib.DetectorMonitor[plugins.VMDetection]
+	Conf DeschedulingsExecutorConfig
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to

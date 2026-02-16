@@ -18,7 +18,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
-	"github.com/cobaltcore-dev/cortex/pkg/db"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	prometheusclient "github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/jobloop"
 )

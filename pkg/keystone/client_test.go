@@ -7,13 +7,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 )
 
-func setupKeystoneMockServer(handler http.HandlerFunc) (*httptest.Server, conf.KeystoneConfig) {
+func setupKeystoneMockServer(handler http.HandlerFunc) (*httptest.Server, keystoneConfig) {
 	server := httptest.NewServer(handler)
-	conf := conf.KeystoneConfig{
+	conf := keystoneConfig{
 		URL:                 server.URL + "/v3",
 		OSUsername:          "testuser",
 		OSUserDomainName:    "default",
@@ -22,22 +20,6 @@ func setupKeystoneMockServer(handler http.HandlerFunc) (*httptest.Server, conf.K
 		OSProjectDomainName: "default",
 	}
 	return server, conf
-}
-
-func TestNewKeystoneClient(t *testing.T) {
-	keystoneConf := conf.KeystoneConfig{
-		URL:                 "http://example.com",
-		OSUsername:          "testuser",
-		OSUserDomainName:    "default",
-		OSPassword:          "password",
-		OSProjectName:       "testproject",
-		OSProjectDomainName: "default",
-	}
-
-	api := NewKeystoneClient(keystoneConf)
-	if api == nil {
-		t.Fatal("expected non-nil api")
-	}
 }
 
 func TestKeystoneClient_Authenticate(t *testing.T) {
@@ -51,7 +33,7 @@ func TestKeystoneClient_Authenticate(t *testing.T) {
 	server, keystoneConf := setupKeystoneMockServer(handler)
 	defer server.Close()
 
-	api := NewKeystoneClient(keystoneConf).(*keystoneClient)
+	api := &keystoneClient{keystoneConf: keystoneConf}
 
 	err := api.Authenticate(t.Context())
 	if err != nil {

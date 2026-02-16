@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	corev1 "k8s.io/api/core/v1"
@@ -22,6 +21,24 @@ type Connector struct {
 	client.Client
 	// Optional HTTP client to use for requests.
 	HTTPClient *http.Client
+}
+
+// Configuration for the keystone authentication.
+type keystoneConfig struct {
+	// The URL of the keystone service.
+	URL string `json:"url"`
+	// Availability of the keystone service, such as "public", "internal", or "admin".
+	Availability string `json:"availability"`
+	// The OpenStack username (OS_USERNAME in openstack cli).
+	OSUsername string `json:"username"`
+	// The OpenStack password (OS_PASSWORD in openstack cli).
+	OSPassword string `json:"password"`
+	// The OpenStack project name (OS_PROJECT_NAME in openstack cli).
+	OSProjectName string `json:"projectName"`
+	// The OpenStack user domain name (OS_USER_DOMAIN_NAME in openstack cli).
+	OSUserDomainName string `json:"userDomainName"`
+	// The OpenStack project domain name (OS_PROJECT_DOMAIN_NAME in openstack cli).
+	OSProjectDomainName string `json:"projectDomainName"`
 }
 
 // Create a new keystone client with authentication from the provided secret reference.
@@ -61,7 +78,7 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 	if !ok {
 		return nil, errors.New("missing projectDomainName in auth secret")
 	}
-	keystoneConf := conf.KeystoneConfig{
+	keystoneConf := keystoneConfig{
 		URL:                 string(url),
 		Availability:        string(availability),
 		OSUsername:          string(osUsername),
@@ -70,16 +87,14 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 		OSUserDomainName:    string(osUserDomainName),
 		OSProjectDomainName: string(osProjectDomainName),
 	}
-	var keystoneClient KeystoneClient
+	cl := &keystoneClient{keystoneConf: keystoneConf}
 	if c.HTTPClient != nil {
-		keystoneClient = NewKeystoneClientWithHTTPClient(keystoneConf, c.HTTPClient)
-	} else {
-		keystoneClient = NewKeystoneClient(keystoneConf)
+		cl.httpClient = c.HTTPClient
 	}
-	if err := keystoneClient.Authenticate(ctx); err != nil {
+	if err := cl.Authenticate(ctx); err != nil {
 		return nil, err
 	}
-	return keystoneClient, nil
+	return cl, nil
 }
 
 // KeystoneClient for OpenStack.
@@ -99,19 +114,9 @@ type keystoneClient struct {
 	// OpenStack provider client.
 	client *gophercloud.ProviderClient
 	// OpenStack keystone configuration.
-	keystoneConf conf.KeystoneConfig
+	keystoneConf keystoneConfig
 	// Optional HTTP client to use for requests.
 	httpClient *http.Client
-}
-
-// Create a new OpenStack keystone API client.
-func NewKeystoneClient(keystoneConf conf.KeystoneConfig) KeystoneClient {
-	return &keystoneClient{keystoneConf: keystoneConf}
-}
-
-// Create a new OpenStack keystone API with a custom HTTP client.
-func NewKeystoneClientWithHTTPClient(keystoneConf conf.KeystoneConfig, httpClient *http.Client) KeystoneClient {
-	return &keystoneClient{keystoneConf: keystoneConf, httpClient: httpClient}
 }
 
 // Authenticate against OpenStack keystone.

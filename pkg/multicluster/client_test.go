@@ -12,10 +12,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
@@ -1657,5 +1659,449 @@ func TestClient_IndexField_HomeClusterSkipsSecondIndex(t *testing.T) {
 	homeCalls := homeCache.getIndexFieldCalls()
 	if len(homeCalls) != 1 {
 		t.Errorf("expected 1 IndexField call (skipping duplicate for same home cluster), got %d", len(homeCalls))
+	}
+}
+
+// fakeManager implements ctrl.Manager for testing InitFromConf.
+type fakeManager struct {
+	ctrl.Manager
+	addedRunnables []cluster.Cluster
+	addError       error
+}
+
+func (f *fakeManager) Add(runnable manager.Runnable) error {
+	if f.addError != nil {
+		return f.addError
+	}
+	if cl, ok := runnable.(cluster.Cluster); ok {
+		f.addedRunnables = append(f.addedRunnables, cl)
+	}
+	return nil
+}
+
+// TestClient_InitFromConf_EmptyConfig tests that InitFromConf succeeds with an empty config.
+func TestClient_InitFromConf_EmptyConfig(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+	}
+
+	ctx := context.Background()
+	conf := ClientConfig{
+		APIServerOverrides: []APIServerOverride{},
+	}
+
+	// Create a fake manager - we won't actually use it since there are no overrides
+	mgr := &fakeManager{}
+
+	err := c.InitFromConf(ctx, mgr, conf)
+	if err != nil {
+		t.Fatalf("unexpected error with empty config: %v", err)
+	}
+
+	// Verify no runnables were added
+	if len(mgr.addedRunnables) != 0 {
+		t.Errorf("expected 0 runnables added, got %d", len(mgr.addedRunnables))
+	}
+}
+
+// TestClient_InitFromConf_UnregisteredGVK tests that InitFromConf returns an error
+// when the config contains a GVK that is not registered in the scheme.
+func TestClient_InitFromConf_UnregisteredGVK(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+	}
+
+	ctx := context.Background()
+	conf := ClientConfig{
+		APIServerOverrides: []APIServerOverride{
+			{
+				GVK:  "unregistered.group/v1/UnknownKind",
+				Host: "https://remote-api:6443",
+			},
+		},
+	}
+
+	mgr := &fakeManager{}
+
+	err := c.InitFromConf(ctx, mgr, conf)
+	if err == nil {
+		t.Fatal("expected error for unregistered GVK, got nil")
+	}
+
+	expectedErrMsg := "no gvk registered for API server override unregistered.group/v1/UnknownKind"
+	if err.Error() != expectedErrMsg {
+		t.Errorf("expected error message '%s', got '%s'", expectedErrMsg, err.Error())
+	}
+}
+
+// TestClient_InitFromConf_GVKFormatting tests that the GVK formatting works correctly
+// and matches the expected format for registered types.
+func TestClient_InitFromConf_GVKFormatting(t *testing.T) {
+	scheme := newTestScheme(t)
+
+	// Test that the GVK formatting matches what InitFromConf expects
+	tests := []struct {
+		name        string
+		gvk         schema.GroupVersionKind
+		expectedStr string
+	}{
+		{
+			name: "core API ConfigMap",
+			gvk: schema.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "ConfigMap",
+			},
+			expectedStr: "v1/ConfigMap",
+		},
+		{
+			name: "cortex Decision",
+			gvk: schema.GroupVersionKind{
+				Group:   "cortex.cloud",
+				Version: "v1alpha1",
+				Kind:    "Decision",
+			},
+			expectedStr: "cortex.cloud/v1alpha1/Decision",
+		},
+		{
+			name: "cortex DecisionList",
+			gvk: schema.GroupVersionKind{
+				Group:   "cortex.cloud",
+				Version: "v1alpha1",
+				Kind:    "DecisionList",
+			},
+			expectedStr: "cortex.cloud/v1alpha1/DecisionList",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Verify the GVK is in the scheme
+			_, found := scheme.AllKnownTypes()[tt.gvk]
+			if !found {
+				t.Skipf("GVK %v not found in scheme, skipping", tt.gvk)
+			}
+
+			// Format the GVK the same way InitFromConf does
+			formatted := tt.gvk.GroupVersion().String() + "/" + tt.gvk.Kind
+			if formatted != tt.expectedStr {
+				t.Errorf("expected formatted GVK '%s', got '%s'", tt.expectedStr, formatted)
+			}
+		})
+	}
+}
+
+// TestClient_InitFromConf_MultipleUnregisteredGVKs tests that the first unregistered
+// GVK in the list causes an error.
+func TestClient_InitFromConf_MultipleUnregisteredGVKs(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+	}
+
+	ctx := context.Background()
+	conf := ClientConfig{
+		APIServerOverrides: []APIServerOverride{
+			{
+				GVK:  "first.unregistered/v1/Type1",
+				Host: "https://remote-api-1:6443",
+			},
+			{
+				GVK:  "second.unregistered/v1/Type2",
+				Host: "https://remote-api-2:6443",
+			},
+		},
+	}
+
+	mgr := &fakeManager{}
+
+	err := c.InitFromConf(ctx, mgr, conf)
+	if err == nil {
+		t.Fatal("expected error for unregistered GVK, got nil")
+	}
+
+	// Should fail on the first unregistered GVK
+	expectedErrMsg := "no gvk registered for API server override first.unregistered/v1/Type1"
+	if err.Error() != expectedErrMsg {
+		t.Errorf("expected error message '%s', got '%s'", expectedErrMsg, err.Error())
+	}
+}
+
+// TestClient_InitFromConf_NilScheme tests behavior when HomeScheme is nil.
+func TestClient_InitFromConf_NilScheme(t *testing.T) {
+	c := &Client{
+		HomeScheme: nil,
+	}
+
+	ctx := context.Background()
+	conf := ClientConfig{
+		APIServerOverrides: []APIServerOverride{
+			{
+				GVK:  "test/v1/SomeKind",
+				Host: "https://remote-api:6443",
+			},
+		},
+	}
+
+	mgr := &fakeManager{}
+
+	// Should panic or return error due to nil scheme
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic with nil scheme")
+		}
+	}()
+
+	err := c.InitFromConf(ctx, mgr, conf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestClient_InitFromConf_EmptyGVKInConfig tests behavior when an empty GVK string is provided.
+func TestClient_InitFromConf_EmptyGVKInConfig(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+	}
+
+	ctx := context.Background()
+	conf := ClientConfig{
+		APIServerOverrides: []APIServerOverride{
+			{
+				GVK:  "",
+				Host: "https://remote-api:6443",
+			},
+		},
+	}
+
+	mgr := &fakeManager{}
+
+	err := c.InitFromConf(ctx, mgr, conf)
+	if err == nil {
+		t.Fatal("expected error for empty GVK, got nil")
+	}
+
+	// Empty GVK won't match any registered type
+	expectedErrMsg := "no gvk registered for API server override "
+	if err.Error() != expectedErrMsg {
+		t.Errorf("expected error message '%s', got '%s'", expectedErrMsg, err.Error())
+	}
+}
+
+// TestClient_InitFromConf_PartialGVKMatch tests that partial GVK matches don't work.
+func TestClient_InitFromConf_PartialGVKMatch(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+	}
+
+	ctx := context.Background()
+
+	// Try variations that shouldn't match
+	tests := []struct {
+		name   string
+		gvkStr string
+	}{
+		{
+			name:   "missing kind",
+			gvkStr: "cortex.cloud/v1alpha1",
+		},
+		{
+			name:   "wrong case",
+			gvkStr: "cortex.cloud/v1alpha1/decision", // lowercase 'd'
+		},
+		{
+			name:   "extra slash",
+			gvkStr: "cortex.cloud/v1alpha1/Decision/",
+		},
+		{
+			name:   "wrong version",
+			gvkStr: "cortex.cloud/v2/Decision",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conf := ClientConfig{
+				APIServerOverrides: []APIServerOverride{
+					{
+						GVK:  tt.gvkStr,
+						Host: "https://remote-api:6443",
+					},
+				},
+			}
+
+			mgr := &fakeManager{}
+
+			err := c.InitFromConf(ctx, mgr, conf)
+			if err == nil {
+				t.Errorf("expected error for GVK string '%s', got nil", tt.gvkStr)
+			}
+		})
+	}
+}
+
+// TestClient_InitFromConf_ValidGVKLookup tests that valid GVK strings are correctly
+// identified in the scheme. Note: This doesn't test the full AddRemote flow since
+// that requires a real REST config connection.
+func TestClient_InitFromConf_ValidGVKLookup(t *testing.T) {
+	scheme := newTestScheme(t)
+
+	// Build the gvksByConfStr map the same way InitFromConf does
+	gvksByConfStr := make(map[string]schema.GroupVersionKind)
+	for gvk := range scheme.AllKnownTypes() {
+		formatted := gvk.GroupVersion().String() + "/" + gvk.Kind
+		gvksByConfStr[formatted] = gvk
+	}
+
+	// These GVK strings should be found in the map
+	validGVKs := []string{
+		"v1/ConfigMap",
+		"v1/ConfigMapList",
+		"v1/Secret",
+		"v1/SecretList",
+		"v1/Pod",
+		"v1/PodList",
+		"cortex.cloud/v1alpha1/Decision",
+		"cortex.cloud/v1alpha1/DecisionList",
+	}
+
+	for _, gvkStr := range validGVKs {
+		t.Run(gvkStr, func(t *testing.T) {
+			gvk, found := gvksByConfStr[gvkStr]
+			if !found {
+				t.Errorf("expected GVK string '%s' to be found in scheme", gvkStr)
+				return
+			}
+
+			// Verify the GVK is correctly structured
+			if gvk.Kind == "" {
+				t.Errorf("expected non-empty Kind for GVK string '%s'", gvkStr)
+			}
+		})
+	}
+}
+
+// TestAPIServerOverride_Structure tests the APIServerOverride struct.
+func TestAPIServerOverride_Structure(t *testing.T) {
+	override := APIServerOverride{
+		GVK:    "cortex.cloud/v1alpha1/Decision",
+		Host:   "https://remote-api:6443",
+		CACert: "-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----",
+	}
+
+	if override.GVK != "cortex.cloud/v1alpha1/Decision" {
+		t.Errorf("unexpected GVK: %s", override.GVK)
+	}
+	if override.Host != "https://remote-api:6443" {
+		t.Errorf("unexpected Host: %s", override.Host)
+	}
+	if override.CACert == "" {
+		t.Error("expected non-empty CACert")
+	}
+}
+
+// TestClientConfig_Structure tests the ClientConfig struct.
+func TestClientConfig_Structure(t *testing.T) {
+	conf := ClientConfig{
+		APIServerOverrides: []APIServerOverride{
+			{
+				GVK:  "cortex.cloud/v1alpha1/Decision",
+				Host: "https://remote-api:6443",
+			},
+			{
+				GVK:    "cortex.cloud/v1alpha1/DecisionList",
+				Host:   "https://remote-api:6443",
+				CACert: "cert-data",
+			},
+		},
+	}
+
+	if len(conf.APIServerOverrides) != 2 {
+		t.Errorf("expected 2 overrides, got %d", len(conf.APIServerOverrides))
+	}
+
+	// First override
+	if conf.APIServerOverrides[0].GVK != "cortex.cloud/v1alpha1/Decision" {
+		t.Errorf("unexpected first override GVK: %s", conf.APIServerOverrides[0].GVK)
+	}
+
+	// Second override
+	if conf.APIServerOverrides[1].CACert != "cert-data" {
+		t.Errorf("unexpected second override CACert: %s", conf.APIServerOverrides[1].CACert)
+	}
+}
+
+// TestClient_InitFromConf_NilConfig tests behavior with nil APIServerOverrides slice.
+func TestClient_InitFromConf_NilOverrides(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+	}
+
+	ctx := context.Background()
+	conf := ClientConfig{
+		APIServerOverrides: nil, // nil slice
+	}
+
+	mgr := &fakeManager{}
+
+	err := c.InitFromConf(ctx, mgr, conf)
+	if err != nil {
+		t.Fatalf("unexpected error with nil overrides: %v", err)
+	}
+}
+
+// TestClient_InitFromConf_LogsRegisteredGVKs verifies that the function processes
+// all registered GVKs from the scheme. This is a structural test.
+func TestClient_InitFromConf_SchemeGVKCount(t *testing.T) {
+	scheme := newTestScheme(t)
+
+	// Count the number of types in the scheme
+	allTypes := scheme.AllKnownTypes()
+	if len(allTypes) == 0 {
+		t.Error("expected scheme to have registered types")
+	}
+
+	// Build the formatted GVK map
+	gvksByConfStr := make(map[string]schema.GroupVersionKind)
+	for gvk := range allTypes {
+		formatted := gvk.GroupVersion().String() + "/" + gvk.Kind
+		gvksByConfStr[formatted] = gvk
+	}
+
+	// The map should have the same number of entries as types
+	// (assuming no duplicate formatted strings, which shouldn't happen)
+	if len(gvksByConfStr) == 0 {
+		t.Error("expected formatted GVK map to have entries")
+	}
+
+	// Verify some specific entries exist
+	if _, found := gvksByConfStr["v1/ConfigMap"]; !found {
+		t.Error("expected v1/ConfigMap to be in formatted GVK map")
+	}
+	if _, found := gvksByConfStr["cortex.cloud/v1alpha1/Decision"]; !found {
+		t.Error("expected cortex.cloud/v1alpha1/Decision to be in formatted GVK map")
 	}
 }

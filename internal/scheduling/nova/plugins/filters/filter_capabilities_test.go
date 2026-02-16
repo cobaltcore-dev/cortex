@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
-	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -44,7 +44,7 @@ func TestHvToNovaCapabilities(t *testing.T) {
 			hv: hv1.Hypervisor{
 				Status: hv1.HypervisorStatus{
 					DomainCapabilities: hv1.DomainCapabilities{
-						HypervisorType: "qemu",
+						HypervisorType: "kvm",
 					},
 					Capabilities: hv1.Capabilities{
 						HostCpuArch: "x86_64",
@@ -80,7 +80,7 @@ func TestHvToNovaCapabilities(t *testing.T) {
 			hv: hv1.Hypervisor{
 				Status: hv1.HypervisorStatus{
 					DomainCapabilities: hv1.DomainCapabilities{
-						HypervisorType: "kvm",
+						HypervisorType: "bla",
 					},
 					Capabilities: hv1.Capabilities{
 						HostCpuArch: "x86_64",
@@ -159,7 +159,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 			},
 			Status: hv1.HypervisorStatus{
 				DomainCapabilities: hv1.DomainCapabilities{
-					HypervisorType: "qemu",
+					HypervisorType: "kvm",
 				},
 				Capabilities: hv1.Capabilities{
 					HostCpuArch: "x86_64",
@@ -185,7 +185,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 			},
 			Status: hv1.HypervisorStatus{
 				DomainCapabilities: hv1.DomainCapabilities{
-					HypervisorType: "qemu",
+					HypervisorType: "kvm",
 				},
 				Capabilities: hv1.Capabilities{
 					HostCpuArch: "aarch64",

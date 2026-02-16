@@ -7,7 +7,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/cobaltcore-dev/cortex/api/delegation/ironcore"
+	"github.com/cobaltcore-dev/cortex/api/external/ironcore"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"sigs.k8s.io/controller-runtime/pkg/client"

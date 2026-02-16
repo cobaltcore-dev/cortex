@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"strings"
 
-	api "github.com/cobaltcore-dev/cortex/api/delegation/nova"
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
@@ -30,7 +30,8 @@ func hvToNovaCapabilities(hv hv1.Hypervisor) (map[string]string, error) {
 	switch hv.Status.DomainCapabilities.HypervisorType {
 	case "ch":
 		caps["capabilities:hypervisor_type"] = "CH"
-	case "qemu":
+	// QEMU exposes domain capability "kvm"
+	case "kvm":
 		caps["capabilities:hypervisor_type"] = "QEMU"
 	default:
 		return nil, fmt.Errorf("unknown autodiscovered hypervisor type: %s", hv.Status.DomainCapabilities.HypervisorType)
