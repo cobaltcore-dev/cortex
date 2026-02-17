@@ -126,14 +126,14 @@ type ReservationStatus struct {
 	// +kubebuilder:validation:Optional
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 
-	// ObservedHost is the actual host where the reservation is on.
+	// Host is the actual host where the reservation is placed.
 	// This is set by the scheduler after successful placement and reflects the current state.
 	// It should match Spec.TargetHost when the reservation is successfully placed.
 	// This is a generic name that represents different concepts depending on the scheduling domain:
 	// - For Nova: the hypervisor hostname
 	// - For Pods: the node name
 	// +kubebuilder:validation:Optional
-	ObservedHost string `json:"observedHost,omitempty"`
+	Host string `json:"host,omitempty"`
 
 	// CommittedResourceReservation contains status fields specific to committed resource reservations.
 	// Only used when Type is CommittedResourceReservation.
@@ -150,7 +150,7 @@ type ReservationStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
-// +kubebuilder:printcolumn:name="Host",type="string",JSONPath=".status.observedHost"
+// +kubebuilder:printcolumn:name="Host",type="string",JSONPath=".status.host"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 
 // Reservation is the Schema for the reservations API

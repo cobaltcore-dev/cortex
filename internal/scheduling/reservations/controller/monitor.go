@@ -84,7 +84,7 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 
 	resourcesByLabels := map[string]map[string]uint64{}
 	for _, reservation := range reservations.Items {
-		host := reservation.Status.ObservedHost
+		host := reservation.Status.Host
 		readyCondition := meta.FindStatusCondition(reservation.Status.Conditions, v1alpha1.ReservationConditionReady)
 		readyStatus := "Unknown"
 		errorMsg := ""

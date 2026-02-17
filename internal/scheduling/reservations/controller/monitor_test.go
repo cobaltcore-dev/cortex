@@ -111,7 +111,7 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 						Reason: "ReservationActive",
 					},
 				},
-				ObservedHost: "test-host-1",
+				Host: "test-host-1",
 			},
 		},
 		{

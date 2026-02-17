@@ -72,11 +72,11 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil // Don't need to requeue.
 	}
 
-	// Sync Spec values to Status.Observed* fields
+	// Sync Spec values to Status fields
 	// This ensures the observed state reflects the desired state from Spec
 	needsStatusUpdate := false
-	if res.Spec.TargetHost != "" && res.Status.ObservedHost != res.Spec.TargetHost {
-		res.Status.ObservedHost = res.Spec.TargetHost
+	if res.Spec.TargetHost != "" && res.Status.Host != res.Spec.TargetHost {
+		res.Status.Host = res.Spec.TargetHost
 		needsStatusUpdate = true
 	}
 	if needsStatusUpdate {
@@ -86,7 +86,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			log.Error(err, "failed to sync spec to status")
 			return ctrl.Result{}, err
 		}
-		log.Info("synced spec to status", "reservation", req.Name, "host", res.Status.ObservedHost)
+		log.Info("synced spec to status", "reservation", req.Name, "host", res.Status.Host)
 	}
 
 	// Currently we can only reconcile nova CommittedResourceReservations (those with ResourceName set).
@@ -223,7 +223,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		Reason:  "ReservationActive",
 		Message: "reservation is successfully scheduled",
 	})
-	res.Status.ObservedHost = host
+	res.Status.Host = host
 	patch := client.MergeFrom(old)
 	if err := r.Status().Patch(ctx, &res, patch); err != nil {
 		log.Error(err, "failed to patch reservation status")

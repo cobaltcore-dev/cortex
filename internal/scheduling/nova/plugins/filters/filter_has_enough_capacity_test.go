@@ -82,7 +82,7 @@ func newReservation(name, specHost, observedHost, projectID, flavorName, cpu, me
 					Reason: "ReservationActive",
 				},
 			},
-			ObservedHost: observedHost,
+			Host: observedHost,
 		},
 	}
 
@@ -208,7 +208,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 								Reason: "ReservationActive",
 							},
 						},
-						ObservedHost: "host1",
+						Host: "host1",
 					},
 				},
 			},
@@ -291,12 +291,12 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 			filteredHosts: []string{"host1", "host2", "host3", "host4"},
 		},
 		// ============================================================================
-		// Tests for Spec.Host vs Status.ObservedHost behavior
+		// Tests for Spec.Host vs Status.Host behavior
 		// ============================================================================
 		{
 			name: "Pending reservation (only Spec.Host set) blocks capacity on desired host",
 			reservations: []client.Object{
-				// Pending reservation: Spec.Host is set, but ObservedHost is empty
+				// Pending reservation: Spec.TargetHost is set, but Status.Host is empty
 				newReservation("pending-res", "host1", "", "project-X", "m1.large", "8", "16Gi", v1alpha1.ReservationTypeCommittedResource, nil),
 			},
 			request:       newRequest("project-A", "instance-123", "m1.small", 4, 8000, false, "host1", "host2", "host3", "host4"),
@@ -305,7 +305,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 			filteredHosts: []string{"host1", "host4"},
 		},
 		{
-			name: "Reservation with different Spec.Host and ObservedHost blocks BOTH hosts",
+			name: "Reservation with different Spec.TargetHost and Status.Host blocks BOTH hosts",
 			reservations: []client.Object{
 				// Reservation was requested for host1 but placed on host2 - blocks BOTH
 				// host1: 8 CPU free - 4 CPU reserved = 4 CPU free (still has capacity for 4 CPU request)
@@ -323,7 +323,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 				// Pending reservation blocks host1 (via Spec.Host only)
 				// host1: 8 CPU free - 8 CPU reserved = 0 CPU free (blocked)
 				newReservation("pending-res", "host1", "", "project-X", "m1.large", "8", "16Gi", v1alpha1.ReservationTypeCommittedResource, nil),
-				// Placed reservation blocks host2 AND host3 (via both Spec.Host and ObservedHost)
+				// Placed reservation blocks host2 AND host3 (via both Spec.TargetHost and Status.Host)
 				// host2: 4 CPU free - 4 CPU reserved = 0 CPU free (blocked)
 				// host3: 16 CPU free - 4 CPU reserved = 12 CPU free (still has capacity)
 				newReservation("placed-res", "host2", "host3", "project-X", "m1.large", "4", "8Gi", v1alpha1.ReservationTypeCommittedResource, nil),
@@ -334,7 +334,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 			filteredHosts: []string{"host1", "host2", "host4"},
 		},
 		{
-			name: "Reservation with no host (neither Spec.Host nor ObservedHost) is skipped",
+			name: "Reservation with no host (neither Spec.TargetHost nor Status.Host) is skipped",
 			reservations: []client.Object{
 				newReservation("no-host-res", "", "", "project-X", "m1.large", "8", "16Gi", v1alpha1.ReservationTypeCommittedResource, nil),
 			},

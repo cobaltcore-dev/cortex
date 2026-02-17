@@ -119,16 +119,16 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			traceLog.Debug("processing failover reservation", "reservation", reservation.Name)
 		}
 
-		// Block resources on BOTH Spec.TargetHost (desired) AND Status.ObservedHost (actual).
+		// Block resources on BOTH Spec.TargetHost (desired) AND Status.Host (actual).
 		// This ensures capacity is blocked during the transition period when a reservation
-		// is being placed (TargetHost set) and after it's placed (ObservedHost set).
+		// is being placed (TargetHost set) and after it's placed (Host set).
 		// If both are the same, we only subtract once.
 		hostsToBlock := make(map[string]struct{})
 		if reservation.Spec.TargetHost != "" {
 			hostsToBlock[reservation.Spec.TargetHost] = struct{}{}
 		}
-		if reservation.Status.ObservedHost != "" {
-			hostsToBlock[reservation.Status.ObservedHost] = struct{}{}
+		if reservation.Status.Host != "" {
+			hostsToBlock[reservation.Status.Host] = struct{}{}
 		}
 		if len(hostsToBlock) == 0 {
 			traceLog.Debug("skipping reservation with no host", "reservation", reservation.Name)

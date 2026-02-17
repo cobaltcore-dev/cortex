@@ -249,7 +249,7 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 		t.Errorf("Expected Ready=True, got %v", updated.Status.Conditions)
 	}
 
-	if updated.Status.ObservedHost != "test-host-1" {
-		t.Errorf("Expected host %v, got %v", "test-host-1", updated.Status.ObservedHost)
+	if updated.Status.Host != "test-host-1" {
+		t.Errorf("Expected host %v, got %v", "test-host-1", updated.Status.Host)
 	}
 }

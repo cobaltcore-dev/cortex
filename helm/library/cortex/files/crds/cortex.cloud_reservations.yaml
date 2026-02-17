@@ -18,7 +18,7 @@ spec:
     - jsonPath: .spec.type
       name: Type
       type: string
-    - jsonPath: .status.observedHost
+    - jsonPath: .status.host
       name: Host
       type: string
     - jsonPath: .status.conditions[?(@.type=='Ready')].status
@@ -215,9 +215,9 @@ spec:
                       Key: VM/instance UUID, Value: Host name where the VM is currently running.
                     type: object
                 type: object
-              observedHost:
+              host:
                 description: |-
-                  ObservedHost is the actual host where the reservation is on.
+                  Host is the actual host where the reservation is placed.
                   This is set by the scheduler after successful placement and reflects the current state.
                   It should match Spec.TargetHost when the reservation is successfully placed.
                   This is a generic name that represents different concepts depending on the scheduling domain:
