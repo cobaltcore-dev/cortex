@@ -21,8 +21,8 @@ spec:
     - jsonPath: .status.observedHost
       name: Host
       type: string
-    - jsonPath: .status.phase
-      name: Phase
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
       type: string
     name: v1alpha1
     schema:
@@ -54,6 +54,11 @@ spec:
                   CommittedResourceReservation contains fields specific to committed resource reservations.
                   Only used when Type is CommittedResourceReservation.
                 properties:
+                  creator:
+                    description: |-
+                      Creator identifies the system or component that created this reservation.
+                      Used to track ownership and for cleanup purposes (e.g., "commitments-syncer").
+                    type: string
                   domainID:
                     description: DomainID is the domain ID to reserve for.
                     type: string
@@ -218,9 +223,6 @@ spec:
                   This is a generic name that represents different concepts depending on the scheduling domain:
                   - For Nova: the hypervisor hostname
                   - For Pods: the node name
-                type: string
-              phase:
-                description: The current phase of the reservation.
                 type: string
             type: object
         required:

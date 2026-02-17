@@ -32,14 +32,14 @@ type Monitor struct {
 func NewControllerMonitor(k8sClient client.Client) Monitor {
 	return Monitor{
 		Client: k8sClient,
-	numberOfReservations: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "cortex_reservations_number",
-		Help: "Number of reservations.",
-	}, []string{"status_ready", "status_error"}),
-	reservedResources: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "cortex_reservations_resources",
-		Help: "Resources reserved by reservations.",
-	}, []string{"status_ready", "status_error", "host", "resource"}),
+		numberOfReservations: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_reservations_number",
+			Help: "Number of reservations.",
+		}, []string{"status_ready", "status_error"}),
+		reservedResources: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_reservations_resources",
+			Help: "Resources reserved by reservations.",
+		}, []string{"status_ready", "status_error", "host", "resource"}),
 	}
 }
 
