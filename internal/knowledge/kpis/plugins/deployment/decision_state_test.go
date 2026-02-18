@@ -35,17 +35,15 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 		expectedCount   int
 		description     string
 		expectedError   int
-		expectedWaiting int
 		expectedSuccess int
 	}{
 		{
 			name:            "no decisions",
 			decisions:       []v1alpha1.Decision{},
 			operator:        "test-operator",
-			expectedCount:   3, // always emits 3 metrics: error, waiting, success
+			expectedCount:   2, // always emits 2 metrics: error, success
 			description:     "should collect metrics with zero counts when no decisions exist",
 			expectedError:   0,
-			expectedWaiting: 0,
 			expectedSuccess: 0,
 		},
 		{
@@ -65,30 +63,9 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 				},
 			},
 			operator:        "test-operator",
-			expectedCount:   3,
+			expectedCount:   2,
 			description:     "should count decision in error state",
 			expectedError:   1,
-			expectedWaiting: 0,
-			expectedSuccess: 0,
-		},
-		{
-			name: "single decision in waiting state",
-			decisions: []v1alpha1.Decision{
-				{
-					ObjectMeta: v1.ObjectMeta{Name: "dec2"},
-					Spec:       v1alpha1.DecisionSpec{SchedulingDomain: "test-operator"},
-					Status: v1alpha1.DecisionStatus{
-						Result: &v1alpha1.DecisionResult{
-							TargetHost: &targetHost,
-						},
-					},
-				},
-			},
-			operator:        "test-operator",
-			expectedCount:   3,
-			description:     "should count decision with target host as waiting",
-			expectedError:   0,
-			expectedWaiting: 1,
 			expectedSuccess: 0,
 		},
 		{
@@ -98,17 +75,14 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{Name: "dec3"},
 					Spec:       v1alpha1.DecisionSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DecisionStatus{
-						Result: &v1alpha1.DecisionResult{
-							OrderedHosts: []string{"host1", "host2"},
-						},
+						TargetHost: targetHost,
 					},
 				},
 			},
 			operator:        "test-operator",
-			expectedCount:   3,
+			expectedCount:   2,
 			description:     "should count decision without target host and no error as success",
 			expectedError:   0,
-			expectedWaiting: 0,
 			expectedSuccess: 1,
 		},
 		{
@@ -127,29 +101,17 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 					},
 				},
 				{
-					ObjectMeta: v1.ObjectMeta{Name: "dec-waiting"},
-					Spec:       v1alpha1.DecisionSpec{SchedulingDomain: "test-operator"},
-					Status: v1alpha1.DecisionStatus{
-						Result: &v1alpha1.DecisionResult{
-							TargetHost: &targetHost,
-						},
-					},
-				},
-				{
 					ObjectMeta: v1.ObjectMeta{Name: "dec-success"},
 					Spec:       v1alpha1.DecisionSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DecisionStatus{
-						Result: &v1alpha1.DecisionResult{
-							OrderedHosts: []string{"host1"},
-						},
+						TargetHost: targetHost,
 					},
 				},
 			},
 			operator:        "test-operator",
-			expectedCount:   3,
+			expectedCount:   2,
 			description:     "should correctly count decisions across all states",
 			expectedError:   1,
-			expectedWaiting: 1,
 			expectedSuccess: 1,
 		},
 		{
@@ -181,10 +143,9 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 				},
 			},
 			operator:        "test-operator",
-			expectedCount:   3,
+			expectedCount:   2,
 			description:     "should only count decisions with matching operator",
 			expectedError:   1,
-			expectedWaiting: 0,
 			expectedSuccess: 0,
 		},
 		{
@@ -216,10 +177,9 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 				},
 			},
 			operator:        "test-operator",
-			expectedCount:   3,
+			expectedCount:   2,
 			description:     "should correctly aggregate multiple decisions in same state",
 			expectedError:   2,
-			expectedWaiting: 0,
 			expectedSuccess: 0,
 		},
 		{
@@ -235,7 +195,6 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 			expectedCount:   3,
 			description:     "should count decision with no result as success",
 			expectedError:   0,
-			expectedWaiting: 0,
 			expectedSuccess: 1,
 		},
 		{
@@ -245,9 +204,7 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{Name: "dec-error-with-target"},
 					Spec:       v1alpha1.DecisionSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DecisionStatus{
-						Result: &v1alpha1.DecisionResult{
-							TargetHost: &targetHost,
-						},
+						TargetHost: targetHost,
 						Conditions: []v1.Condition{
 							{
 								Type:   v1alpha1.DecisionConditionReady,
@@ -258,10 +215,9 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 				},
 			},
 			operator:        "test-operator",
-			expectedCount:   3,
+			expectedCount:   2,
 			description:     "should count as error even if target host is present",
 			expectedError:   1,
-			expectedWaiting: 0,
 			expectedSuccess: 0,
 		},
 	}
