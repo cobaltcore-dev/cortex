@@ -16,13 +16,29 @@ import (
 // Options for the KVM failover evacuation weigher.
 type KVMFailoverEvacuationOpts struct {
 	// Weight to assign to hosts that match a failover reservation for the VM.
-	FailoverHostWeight float64 `json:"failoverHostWeight"`
+	// Default: 1.0
+	FailoverHostWeight *float64 `json:"failoverHostWeight,omitempty"`
 	// Weight to assign to hosts that don't match a failover reservation.
-	DefaultHostWeight float64 `json:"defaultHostWeight"`
+	// Default: 0.1
+	DefaultHostWeight *float64 `json:"defaultHostWeight,omitempty"`
 }
 
 func (o KVMFailoverEvacuationOpts) Validate() error {
 	return nil
+}
+
+func (o KVMFailoverEvacuationOpts) GetFailoverHostWeight() float64 {
+	if o.FailoverHostWeight == nil {
+		return 1.0
+	}
+	return *o.FailoverHostWeight
+}
+
+func (o KVMFailoverEvacuationOpts) GetDefaultHostWeight() float64 {
+	if o.DefaultHostWeight == nil {
+		return 0.1
+	}
+	return *o.DefaultHostWeight
 }
 
 // KVMFailoverEvacuationStep weighs hosts based on failover reservations.
@@ -40,7 +56,7 @@ func (s *KVMFailoverEvacuationStep) Run(traceLog *slog.Logger, request api.Exter
 
 	intent, err := request.GetIntent()
 	if err != nil || intent != api.EvacuateIntent {
-		traceLog.Debug("skipping failover weigher for non-evacuation request")
+		traceLog.Info("skipping failover weigher for non-evacuation request")
 		return result, nil //nolint:nilerr // intentionally skip weigher on error
 	}
 
@@ -71,7 +87,7 @@ func (s *KVMFailoverEvacuationStep) Run(traceLog *slog.Logger, request api.Exter
 		if reservation.Status.FailoverReservation != nil {
 			if _, ok := reservation.Status.FailoverReservation.Allocations[instanceUUID]; ok {
 				failoverHosts[reservation.Status.Host] = true
-				traceLog.Debug("found failover reservation for VM",
+				traceLog.Info("found failover reservation for VM",
 					"reservation", reservation.Name,
 					"host", reservation.Status.Host,
 					"instanceUUID", instanceUUID)
@@ -79,15 +95,8 @@ func (s *KVMFailoverEvacuationStep) Run(traceLog *slog.Logger, request api.Exter
 		}
 	}
 
-	// Assign weights based on whether the host has a failover reservation for this VM
-	failoverWeight := s.Options.FailoverHostWeight
-	if failoverWeight == 0 {
-		failoverWeight = 1.0 // Default to 1.0 if not configured
-	}
-	defaultWeight := s.Options.DefaultHostWeight
-	if defaultWeight == 0 {
-		defaultWeight = 0.1 // Default to small constant if not configured
-	}
+	failoverWeight := s.Options.GetFailoverHostWeight()
+	defaultWeight := s.Options.GetDefaultHostWeight()
 
 	for _, host := range request.Hosts {
 		if failoverHosts[host.ComputeHost] {

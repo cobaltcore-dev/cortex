@@ -102,9 +102,6 @@ type ReservationArgs struct {
 	Allocations   map[string]string // VM UUID -> original host mapping
 }
 
-// Ptr returns a pointer to the given value.
-func Ptr[T any](v T) *T { return &v }
-
 // NewReservation creates a Reservation with the given arguments.
 // Only Name is required; other fields have sensible defaults.
 // Type defaults to CommittedResource if not set.
