@@ -63,7 +63,7 @@ func (k *DecisionStateKPI) Collect(ch chan<- prometheus.Metric) {
 		decisions = append(decisions, d)
 	}
 	// For each decision, categorize by state: error, waiting, or success
-	var errorCount, waitingCount, successCount float64
+	var errorCount, successCount float64
 	for _, d := range decisions {
 		switch {
 		// Error state: decision has a false Ready condition
@@ -78,10 +78,6 @@ func (k *DecisionStateKPI) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(
 		k.counter, prometheus.GaugeValue, errorCount,
 		string(k.Options.DecisionSchedulingDomain), "error",
-	)
-	ch <- prometheus.MustNewConstMetric(
-		k.counter, prometheus.GaugeValue, waitingCount,
-		string(k.Options.DecisionSchedulingDomain), "waiting",
 	)
 	ch <- prometheus.MustNewConstMetric(
 		k.counter, prometheus.GaugeValue, successCount,
