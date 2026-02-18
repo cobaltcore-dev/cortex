@@ -6,90 +6,63 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	runtime "k8s.io/apimachinery/pkg/runtime"
 )
+
+// SchedulingReasons represents the reason for a scheduling event.
+type SchedulingReason string
+
+const (
+	// SchedulingReasonInitialPlacement indicates that this is the initial placement of a resource.
+	SchedulingReasonInitialPlacement SchedulingReason = "InitialPlacement"
+	// SchedulingReasonLiveMigration  indicates that this scheduling event is triggered by a live migration operation.
+	SchedulingReasonLiveMigration SchedulingReason = "LiveMigration"
+	// SchedulingReasonResize indicates that this scheduling event is triggered by a resize operation.
+	SchedulingReasonResize SchedulingReason = "Resize"
+	// SchedulingReasonRebuild indicates that this scheduling event is triggered by a rebuild operation.
+	SchedulingReasonRebuild SchedulingReason = "Rebuild"
+	// SchedulingReasonEvacuate indicates that this scheduling event is triggered by an evacuate operation.
+	SchedulingReasonEvacuate SchedulingReason = "Evacuate"
+)
+
+// SchedulingHistoryEntry represents a single entry in the scheduling history of a resource.
+type SchedulingHistoryEntry struct {
+	// The host that was selected in this scheduling event.
+	Host string `json:"host"`
+	// Timestamp of when the scheduling event occurred.
+	Timestamp metav1.Time `json:"timestamp"`
+	// A reference to the pipeline that was used for this decision.
+	// This reference can be used to look up the pipeline definition and its
+	// scheduler step configuration for additional context.
+	PipelineRef corev1.ObjectReference `json:"pipelineRef"`
+	// The reason for this scheduling event.
+	Reason SchedulingReason `json:"reason"`
+}
 
 type DecisionSpec struct {
 	// SchedulingDomain defines in which scheduling domain this decision
 	// was or is processed (e.g., nova, cinder, manila).
 	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`
 
-	// A reference to the pipeline that should be used for this decision.
-	// This reference can be used to look up the pipeline definition and its
-	// scheduler step configuration for additional context.
-	PipelineRef corev1.ObjectReference `json:"pipelineRef"`
-
 	// An identifier for the underlying resource to be scheduled.
 	// For example, this can be the UUID of a nova instance or cinder volume.
-	// This can be used to correlate multiple decisions for the same resource.
 	ResourceID string `json:"resourceID"`
-
-	// If the type is "nova", this field contains the raw nova decision request.
-	// +kubebuilder:validation:Optional
-	NovaRaw *runtime.RawExtension `json:"novaRaw,omitempty"`
-	// If the type is "cinder", this field contains the raw cinder decision request.
-	// +kubebuilder:validation:Optional
-	CinderRaw *runtime.RawExtension `json:"cinderRaw,omitempty"`
-	// If the type is "manila", this field contains the raw manila decision request.
-	// +kubebuilder:validation:Optional
-	ManilaRaw *runtime.RawExtension `json:"manilaRaw,omitempty"`
-	// If the type is "machine", this field contains the machine reference.
-	// +kubebuilder:validation:Optional
-	MachineRef *corev1.ObjectReference `json:"machineRef,omitempty"`
-	// If the type is "pod", this field contains the pod reference.
-	// +kubebuilder:validation:Optional
-	PodRef *corev1.ObjectReference `json:"podRef,omitempty"`
-}
-
-type StepResult struct {
-	// object reference to the scheduler step.
-	StepName string `json:"stepName"`
-	// Activations of the step for each host.
-	Activations map[string]float64 `json:"activations"`
-}
-
-type DecisionResult struct {
-	// Raw input weights to the pipeline.
-	// +kubebuilder:validation:Optional
-	RawInWeights map[string]float64 `json:"rawInWeights"`
-	// Normalized input weights to the pipeline.
-	// +kubebuilder:validation:Optional
-	NormalizedInWeights map[string]float64 `json:"normalizedInWeights"`
-	// Outputs of the decision pipeline including the activations used
-	// to make the final ordering of compute hosts.
-	// +kubebuilder:validation:Optional
-	StepResults []StepResult `json:"stepResults,omitempty"`
-	// Aggregated output weights from the pipeline.
-	// +kubebuilder:validation:Optional
-	AggregatedOutWeights map[string]float64 `json:"aggregatedOutWeights"`
-	// Final ordered list of hosts from most preferred to least preferred.
-	// +kubebuilder:validation:Optional
-	OrderedHosts []string `json:"orderedHosts,omitempty"`
-	// The first element of the ordered hosts is considered the target host.
-	// +kubebuilder:validation:Optional
-	TargetHost *string `json:"targetHost,omitempty"`
 }
 
 const (
-	// The decision was successfully processed.
+	// The decision is ready and tracking the resource.
 	DecisionConditionReady = "Ready"
 )
 
 type DecisionStatus struct {
-	// The result of this decision.
+	// The current host selected for the resource. Can be empty if no host could be determined.
 	// +kubebuilder:validation:Optional
-	Result *DecisionResult `json:"result,omitempty"`
+	CurrentHost string `json:"currentHost,omitempty"`
 
-	// If there were previous decisions for the underlying resource, they can
-	// be resolved here to provide historical context for the decision.
+	// The history of scheduling events for this resource.
 	// +kubebuilder:validation:Optional
-	History *[]corev1.ObjectReference `json:"history,omitempty"`
+	SchedulingHistory []SchedulingHistoryEntry `json:"schedulingHistory,omitempty"`
 
-	// The number of decisions that preceded this one for the same resource.
-	// +kubebuilder:validation:Optional
-	Precedence *int `json:"precedence,omitempty"`
-
-	// A human-readable explanation of the decision result.
+	// A human-readable explanation of the current scheduling state.
 	// +kubebuilder:validation:Optional
 	Explanation string `json:"explanation,omitempty"`
 
@@ -103,12 +76,8 @@ type DecisionStatus struct {
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Domain",type="string",JSONPath=".spec.schedulingDomain"
 // +kubebuilder:printcolumn:name="Resource ID",type="string",JSONPath=".spec.resourceID"
-// +kubebuilder:printcolumn:name="#",type="string",JSONPath=".status.precedence"
+// +kubebuilder:printcolumn:name="Current Host",type="string",JSONPath=".status.currentHost"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:printcolumn:name="Pipeline",type="string",JSONPath=".spec.pipelineRef.name"
-// +kubebuilder:printcolumn:name="TargetHost",type="string",JSONPath=".status.result.targetHost"
-// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
-// +kubebuilder:selectablefield:JSONPath=".spec.resourceID"
 
 // Decision is the Schema for the decisions API
 type Decision struct {
