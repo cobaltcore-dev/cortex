@@ -21,8 +21,8 @@ spec:
     - jsonPath: .spec.resourceID
       name: Resource ID
       type: string
-    - jsonPath: .status.currentHost
-      name: Current Host
+    - jsonPath: .status.targetHost
+      name: Target Host
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Created
@@ -126,10 +126,6 @@ spec:
                   - type
                   type: object
                 type: array
-              currentHost:
-                description: The current host selected for the resource. Can be empty
-                  if no host could be determined.
-                type: string
               explanation:
                 description: A human-readable explanation of the current scheduling
                   state.
@@ -140,8 +136,9 @@ spec:
                   description: SchedulingHistoryEntry represents a single entry in
                     the scheduling history of a resource.
                   properties:
-                    host:
-                      description: The host that was selected in this scheduling event.
+                    orderedHosts:
+                      description: The hosts that were selected in this scheduling
+                        event, in order of preference.
                       type: string
                     pipelineRef:
                       description: |-
@@ -197,12 +194,16 @@ spec:
                       format: date-time
                       type: string
                   required:
-                  - host
+                  - orderedHosts
                   - pipelineRef
                   - reason
                   - timestamp
                   type: object
                 type: array
+              targetHost:
+                description: The target host selected for the resource. Can be empty
+                  if no host could be determined.
+                type: string
             type: object
         required:
         - spec

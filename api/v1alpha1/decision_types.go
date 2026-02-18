@@ -26,8 +26,8 @@ const (
 
 // SchedulingHistoryEntry represents a single entry in the scheduling history of a resource.
 type SchedulingHistoryEntry struct {
-	// The host that was selected in this scheduling event.
-	Host string `json:"host"`
+	// The hosts that were selected in this scheduling event, in order of preference.
+	OrderedHosts string `json:"orderedHosts"`
 	// Timestamp of when the scheduling event occurred.
 	Timestamp metav1.Time `json:"timestamp"`
 	// A reference to the pipeline that was used for this decision.
@@ -54,9 +54,9 @@ const (
 )
 
 type DecisionStatus struct {
-	// The current host selected for the resource. Can be empty if no host could be determined.
+	// The target host selected for the resource. Can be empty if no host could be determined.
 	// +kubebuilder:validation:Optional
-	CurrentHost string `json:"currentHost,omitempty"`
+	TargetHost string `json:"targetHost,omitempty"`
 
 	// The history of scheduling events for this resource.
 	// +kubebuilder:validation:Optional
@@ -76,7 +76,7 @@ type DecisionStatus struct {
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Domain",type="string",JSONPath=".spec.schedulingDomain"
 // +kubebuilder:printcolumn:name="Resource ID",type="string",JSONPath=".spec.resourceID"
-// +kubebuilder:printcolumn:name="Current Host",type="string",JSONPath=".status.currentHost"
+// +kubebuilder:printcolumn:name="Target Host",type="string",JSONPath=".status.targetHost"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Decision is the Schema for the decisions API

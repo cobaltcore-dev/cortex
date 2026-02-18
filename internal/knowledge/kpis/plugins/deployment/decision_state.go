@@ -69,9 +69,6 @@ func (k *DecisionStateKPI) Collect(ch chan<- prometheus.Metric) {
 		// Error state: decision has a false Ready condition
 		case meta.IsStatusConditionFalse(d.Status.Conditions, v1alpha1.DecisionConditionReady):
 			errorCount++
-		// Waiting state: decision has a target host set (waiting for migration/placement)
-		case d.Status.Result != nil && d.Status.Result.TargetHost != nil:
-			waitingCount++
 		// Success state: decision is complete (has result with ordered hosts or no result needed)
 		default:
 			successCount++
