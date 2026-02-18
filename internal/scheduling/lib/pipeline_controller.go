@@ -109,7 +109,7 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 		if len(initResult.DetectorErrors) > 0 {
 			errmsg += fmt.Sprintf("%d detectors failed to initialize: %v. ", len(initResult.DetectorErrors), initResult.DetectorErrors)
 		}
-		log.Error(errors.New(errmsg), "non-critical error during pipeline initialization", "pipelineName", obj.Name)
+		log.Info("non-critical issue during pipeline initialization", "pipelineName", obj.Name, "issue", errmsg)
 		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.PipelineConditionAllStepsReady,
 			Status:  metav1.ConditionFalse,
