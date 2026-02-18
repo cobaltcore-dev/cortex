@@ -14,19 +14,15 @@ import (
 	"net/http"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/cinder"
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	scheduling "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 type HTTPAPIDelegate interface {
-	// Process the decision from the API. Should create and return the updated decision.
-	ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error
+	// Process the scheduling request from the API.
+	ProcessRequest(ctx context.Context, pipeline string, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error)
 }
 
 type HTTPAPI interface {
@@ -106,7 +102,6 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 		c.Respond(http.StatusInternalServerError, err, "failed to read request body")
 		return
 	}
-	raw := runtime.RawExtension{Raw: body}
 	var requestData api.ExternalSchedulerRequest
 	// Copy the raw body to a io.Reader for json deserialization.
 	cp := body
@@ -126,46 +121,30 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	pipelineName := requestData.Pipeline
+
 	// If the pipeline name is not set, set it to a default value.
-	if requestData.Pipeline == "" {
+	if pipelineName == "" {
 		var err error
-		requestData.Pipeline, err = httpAPI.inferPipelineName(requestData)
+		pipelineName, err = httpAPI.inferPipelineName(requestData)
 		if err != nil {
 			c.Respond(http.StatusBadRequest, err, err.Error())
 			return
 		}
-		slog.Info("inferred pipeline name", "pipeline", requestData.Pipeline)
+		slog.Info("inferred pipeline name", "pipeline", pipelineName)
 	}
 
-	// Create the decision object in kubernetes.
-	decision := &v1alpha1.Decision{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "cinder-",
-		},
-		Spec: v1alpha1.DecisionSpec{
-			SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-			PipelineRef: corev1.ObjectReference{
-				Name: requestData.Pipeline,
-			},
-			ResourceID: "", // TODO
-			CinderRaw:  &raw,
-		},
-	}
 	ctx := r.Context()
-	if err := httpAPI.delegate.ProcessNewDecisionFromAPI(ctx, decision); err != nil {
-		c.Respond(http.StatusInternalServerError, err, "failed to process scheduling decision")
+	result, err := httpAPI.delegate.ProcessRequest(ctx, pipelineName, requestData)
+	if err != nil {
+		c.Respond(http.StatusInternalServerError, err, "failed to process scheduling request")
 		return
 	}
-	// Check if the decision contains status conditions indicating an error.
-	if meta.IsStatusConditionFalse(decision.Status.Conditions, v1alpha1.DecisionConditionReady) {
-		c.Respond(http.StatusInternalServerError, errors.New("decision contains error condition"), "decision failed")
+	if result == nil {
+		c.Respond(http.StatusInternalServerError, errors.New("pipeline didn't produce a result"), "failed to process scheduling request")
 		return
 	}
-	if decision.Status.Result == nil {
-		c.Respond(http.StatusInternalServerError, errors.New("decision didn't produce a result"), "decision failed")
-		return
-	}
-	hosts := decision.Status.Result.OrderedHosts
+	hosts := result.OrderedHosts
 	response := api.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(response); err != nil {
