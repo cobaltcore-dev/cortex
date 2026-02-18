@@ -28,191 +28,34 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
 	}
 
-	cinderRequest := api.ExternalSchedulerRequest{
-		Spec: map[string]any{
-			"volume_id": "test-volume-id",
-			"size":      10,
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		Build()
+
+	controller := &FilterWeigherPipelineController{
+		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
+			Client:    client,
+			Pipelines: make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
 		},
-		Context: api.CinderRequestContext{
-			ProjectID:       "test-project",
-			UserID:          "test-user",
-			RequestID:       "req-123",
-			GlobalRequestID: "global-req-123",
-		},
-		Hosts: []api.ExternalSchedulerHost{
-			{VolumeHost: "cinder-volume-1"},
-			{VolumeHost: "cinder-volume-2"},
-		},
-		Weights:  map[string]float64{"cinder-volume-1": 1.0, "cinder-volume-2": 0.5},
-		Pipeline: "test-pipeline",
+		Monitor: lib.FilterWeigherPipelineMonitor{},
 	}
 
-	cinderRaw, err := json.Marshal(cinderRequest)
+	// Reconcile should always succeed and do nothing
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "any-name",
+			Namespace: "any-namespace",
+		},
+	}
+
+	result, err := controller.Reconcile(context.Background(), req)
+
 	if err != nil {
-		t.Fatalf("Failed to marshal cinder request: %v", err)
+		t.Errorf("Expected no error but got: %v", err)
 	}
 
-	tests := []struct {
-		name         string
-		decision     *v1alpha1.Decision
-		pipeline     *v1alpha1.Pipeline
-		expectError  bool
-		expectResult bool
-	}{
-		{
-			name: "successful cinder decision processing",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					PipelineRef: corev1.ObjectReference{
-						Name: "test-pipeline",
-					},
-					CinderRaw: &runtime.RawExtension{
-						Raw: cinderRaw,
-					},
-				},
-			},
-			pipeline: &v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-pipeline",
-				},
-				Spec: v1alpha1.PipelineSpec{
-					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					Filters:          []v1alpha1.FilterSpec{},
-					Weighers:         []v1alpha1.WeigherSpec{},
-				},
-			},
-			expectError:  false,
-			expectResult: true,
-		},
-		{
-			name: "decision without cinderRaw spec",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision-no-raw",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					PipelineRef: corev1.ObjectReference{
-						Name: "test-pipeline",
-					},
-					CinderRaw: nil,
-				},
-			},
-			pipeline: &v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-pipeline",
-				},
-				Spec: v1alpha1.PipelineSpec{
-					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					Filters:          []v1alpha1.FilterSpec{},
-					Weighers:         []v1alpha1.WeigherSpec{},
-				},
-			},
-			expectError:  true,
-			expectResult: false,
-		},
-		{
-			name: "pipeline not found",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision-no-pipeline",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					PipelineRef: corev1.ObjectReference{
-						Name: "nonexistent-pipeline",
-					},
-					CinderRaw: &runtime.RawExtension{
-						Raw: cinderRaw,
-					},
-				},
-			},
-			pipeline:     nil,
-			expectError:  true,
-			expectResult: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			objects := []client.Object{tt.decision}
-			if tt.pipeline != nil {
-				objects = append(objects, tt.pipeline)
-			}
-
-			client := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(objects...).
-				WithStatusSubresource(&v1alpha1.Decision{}).
-				Build()
-
-			controller := &FilterWeigherPipelineController{
-				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
-					Client:    client,
-					Pipelines: make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
-				},
-				Monitor: lib.FilterWeigherPipelineMonitor{},
-			}
-
-			if tt.pipeline != nil {
-				initResult := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test-pipeline",
-					},
-					Spec: v1alpha1.PipelineSpec{
-						Type:             v1alpha1.PipelineTypeFilterWeigher,
-						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-						Filters:          []v1alpha1.FilterSpec{},
-						Weighers:         []v1alpha1.WeigherSpec{},
-					},
-				})
-				if len(initResult.FilterErrors) > 0 || len(initResult.WeigherErrors) > 0 {
-					t.Fatalf("Failed to init pipeline: %v", initResult)
-				}
-				controller.Pipelines[tt.pipeline.Name] = initResult.Pipeline
-			}
-
-			req := ctrl.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      tt.decision.Name,
-					Namespace: tt.decision.Namespace,
-				},
-			}
-
-			result, err := controller.Reconcile(context.Background(), req)
-
-			if tt.expectError && err == nil {
-				t.Error("Expected error but got none")
-			}
-			if !tt.expectError && err != nil {
-				t.Errorf("Expected no error but got: %v", err)
-			}
-
-			if result.RequeueAfter > 0 {
-				t.Error("Expected no requeue")
-			}
-
-			var updatedDecision v1alpha1.Decision
-			if err := client.Get(context.Background(), req.NamespacedName, &updatedDecision); err != nil {
-				t.Fatalf("Failed to get updated decision: %v", err)
-			}
-
-			if tt.expectResult && updatedDecision.Status.Result == nil {
-				t.Error("Expected result to be set but was nil")
-			}
-			if !tt.expectResult && updatedDecision.Status.Result != nil {
-				t.Error("Expected result to be nil but was set")
-			}
-		})
+	if result.RequeueAfter > 0 {
+		t.Error("Expected no requeue delay")
 	}
 }
 
