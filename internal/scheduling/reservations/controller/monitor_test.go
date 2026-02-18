@@ -94,17 +94,24 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				Name: "test-reservation-1",
 			},
 			Spec: v1alpha1.ReservationSpec{
-				Scheduler: v1alpha1.ReservationSchedulerSpec{
-					CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{},
+				Type: v1alpha1.ReservationTypeCommittedResource,
+				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+					ResourceName: "test-flavor",
 				},
-				Requests: map[string]resource.Quantity{
+				Resources: map[string]resource.Quantity{
 					"memory": resource.MustParse("1Gi"),
 					"cpu":    resource.MustParse("2"),
 				},
 			},
 			Status: v1alpha1.ReservationStatus{
-				Phase: v1alpha1.ReservationStatusPhaseActive,
-				Host:  "test-host-1",
+				Conditions: []metav1.Condition{
+					{
+						Type:   v1alpha1.ReservationConditionReady,
+						Status: metav1.ConditionTrue,
+						Reason: "ReservationActive",
+					},
+				},
+				Host: "test-host-1",
 			},
 		},
 		{
@@ -112,20 +119,20 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				Name: "test-reservation-2",
 			},
 			Spec: v1alpha1.ReservationSpec{
-				Scheduler: v1alpha1.ReservationSchedulerSpec{
-					CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{},
+				Type: v1alpha1.ReservationTypeCommittedResource,
+				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+					ResourceName: "test-flavor",
 				},
-				Requests: map[string]resource.Quantity{
+				Resources: map[string]resource.Quantity{
 					"memory": resource.MustParse("2Gi"),
 					"cpu":    resource.MustParse("4"),
 				},
 			},
 			Status: v1alpha1.ReservationStatus{
-				Phase: v1alpha1.ReservationStatusPhaseFailed,
 				Conditions: []metav1.Condition{
 					{
-						Type:    v1alpha1.ReservationConditionError,
-						Status:  metav1.ConditionTrue,
+						Type:    v1alpha1.ReservationConditionReady,
+						Status:  metav1.ConditionFalse,
 						Reason:  "SomeError",
 						Message: "Failed due to some error",
 					},
@@ -137,16 +144,23 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				Name: "test-reservation-3",
 			},
 			Spec: v1alpha1.ReservationSpec{
-				Scheduler: v1alpha1.ReservationSchedulerSpec{
-					CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{},
+				Type: v1alpha1.ReservationTypeCommittedResource,
+				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+					ResourceName: "test-flavor",
 				},
-				Requests: map[string]resource.Quantity{
+				Resources: map[string]resource.Quantity{
 					"memory": resource.MustParse("4Gi"),
 					"cpu":    resource.MustParse("4"),
 				},
 			},
 			Status: v1alpha1.ReservationStatus{
-				Phase: v1alpha1.ReservationStatusPhaseActive,
+				Conditions: []metav1.Condition{
+					{
+						Type:   v1alpha1.ReservationConditionReady,
+						Status: metav1.ConditionTrue,
+						Reason: "ReservationActive",
+					},
+				},
 			},
 		},
 	}
@@ -180,9 +194,9 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 		t.Error("Expected some metrics to be collected")
 	}
 
-	// Verify that we have metrics for different phases
-	foundActiveCortexNova := false
-	foundFailedCortexNova := false
+	// Verify that we have metrics for different ready states
+	foundReadyTrue := false
+	foundReadyFalse := false
 
 	for _, metric := range metrics {
 		var m dto.Metric
@@ -197,20 +211,20 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				labels[label.GetName()] = label.GetValue()
 			}
 
-			if labels["status_phase"] == "active" {
-				foundActiveCortexNova = true
+			if labels["status_ready"] == "True" {
+				foundReadyTrue = true
 			}
-			if labels["status_phase"] == "failed" {
-				foundFailedCortexNova = true
+			if labels["status_ready"] == "False" {
+				foundReadyFalse = true
 			}
 		}
 	}
 
-	if !foundActiveCortexNova {
-		t.Error("Expected to find active cortex-nova reservation metric")
+	if !foundReadyTrue {
+		t.Error("Expected to find Ready=True reservation metric")
 	}
-	if !foundFailedCortexNova {
-		t.Error("Expected to find failed cortex-nova reservation metric")
+	if !foundReadyFalse {
+		t.Error("Expected to find Ready=False reservation metric")
 	}
 }
 
@@ -226,16 +240,23 @@ func TestMonitor_Collect_ResourceMetrics(t *testing.T) {
 			Name: "test-reservation",
 		},
 		Spec: v1alpha1.ReservationSpec{
-			Scheduler: v1alpha1.ReservationSchedulerSpec{
-				CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{},
+			Type: v1alpha1.ReservationTypeCommittedResource,
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				ResourceName: "test-flavor",
 			},
-			Requests: map[string]resource.Quantity{
+			Resources: map[string]resource.Quantity{
 				"memory": resource.MustParse("1000Mi"),
 				"cpu":    resource.MustParse("2"),
 			},
 		},
 		Status: v1alpha1.ReservationStatus{
-			Phase: v1alpha1.ReservationStatusPhaseActive,
+			Conditions: []metav1.Condition{
+				{
+					Type:   v1alpha1.ReservationConditionReady,
+					Status: metav1.ConditionTrue,
+					Reason: "ReservationActive",
+				},
+			},
 		},
 	}
 
@@ -342,20 +363,20 @@ func TestMonitor_Collect_LabelSanitization(t *testing.T) {
 			Name: "test-reservation",
 		},
 		Spec: v1alpha1.ReservationSpec{
-			Scheduler: v1alpha1.ReservationSchedulerSpec{
-				CortexNova: &v1alpha1.ReservationSchedulerSpecCortexNova{},
+			Type: v1alpha1.ReservationTypeCommittedResource,
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				ResourceName: "test-flavor",
 			},
-			Requests: map[string]resource.Quantity{
+			Resources: map[string]resource.Quantity{
 				"memory": resource.MustParse("1Gi"),
 				"cpu":    resource.MustParse("2"),
 			},
 		},
 		Status: v1alpha1.ReservationStatus{
-			Phase: v1alpha1.ReservationStatusPhaseFailed,
 			Conditions: []metav1.Condition{
 				{
-					Type:    v1alpha1.ReservationConditionError,
-					Status:  metav1.ConditionTrue,
+					Type:    v1alpha1.ReservationConditionReady,
+					Status:  metav1.ConditionFalse,
 					Reason:  "SomeError",
 					Message: "error with, commas, in it",
 				},

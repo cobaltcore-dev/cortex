@@ -24,6 +24,9 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 test: ## Run all tests.
 	go test ./...
 
+.PHONY: generate
+generate: deepcopy crds ## Regenerate CRDs and DeepCopy after API type changes.
+
 .PHONY: crds
 crds: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd:allowDangerousTypes=true webhook paths="./..." output:crd:artifacts:config=helm/library/cortex/files/crds

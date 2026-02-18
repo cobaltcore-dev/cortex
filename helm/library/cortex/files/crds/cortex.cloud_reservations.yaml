@@ -15,11 +15,14 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
     - jsonPath: .status.host
       name: Host
       type: string
-    - jsonPath: .status.phase
-      name: Phase
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
       type: string
     name: v1alpha1
     schema:
@@ -46,52 +49,104 @@ spec:
           spec:
             description: spec defines the desired state of Reservation
             properties:
-              creator:
+              committedResourceReservation:
                 description: |-
-                  A remark that can be used to identify the creator of the reservation.
-                  This can be used to clean up reservations synced from external systems
-                  without touching reservations created manually or by other systems.
+                  CommittedResourceReservation contains fields specific to committed resource reservations.
+                  Only used when Type is CommittedResourceReservation.
+                properties:
+                  creator:
+                    description: |-
+                      Creator identifies the system or component that created this reservation.
+                      Used to track ownership and for cleanup purposes (e.g., "commitments-syncer").
+                    type: string
+                  domainID:
+                    description: DomainID is the domain ID to reserve for.
+                    type: string
+                  projectID:
+                    description: ProjectID is the UUID of the project this reservation
+                      belongs to.
+                    type: string
+                  resourceGroup:
+                    description: ResourceGroup is the group/category of the resource
+                      (e.g., "hana_medium_v2").
+                    type: string
+                  resourceName:
+                    description: ResourceName is the name of the resource to reserve
+                      (e.g., FlavorName for Nova).
+                    type: string
+                type: object
+              endTime:
+                description: EndTime is the time when the reservation expires.
+                format: date-time
                 type: string
-              requests:
+              failoverReservation:
+                description: |-
+                  FailoverReservation contains fields specific to failover reservations.
+                  Only used when Type is FailoverReservation.
+                properties:
+                  resourceGroup:
+                    description: ResourceGroup is the group/category of the resource
+                      (e.g., "hana_medium_v2").
+                    type: string
+                type: object
+              resources:
                 additionalProperties:
                   anyOf:
                   - type: integer
                   - type: string
                   pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                   x-kubernetes-int-or-string: true
-                description: Resources requested to reserve for this instance.
+                description: Resources to reserve for this instance.
                 type: object
-              scheduler:
-                description: Specification of the scheduler that will handle the reservation.
-                properties:
-                  cortexNova:
-                    description: |-
-                      If the type of scheduler is cortex-nova, this field will contain additional
-                      information used by cortex-nova to place the instance.
-                    properties:
-                      domainID:
-                        description: The domain ID to reserve for.
-                        type: string
-                      flavorExtraSpecs:
-                        additionalProperties:
-                          type: string
-                        description: Extra specifications relevant for initial placement
-                          of the instance.
-                        type: object
-                      flavorName:
-                        description: The flavor name of the instance to reserve.
-                        type: string
-                      projectID:
-                        description: The project ID to reserve for.
-                        type: string
-                    type: object
-                type: object
+              schedulingDomain:
+                description: SchedulingDomain specifies the scheduling domain for
+                  this reservation (e.g., "nova", "ironcore").
+                type: string
+              startTime:
+                description: StartTime is the time when the reservation becomes active.
+                format: date-time
+                type: string
+              targetHost:
+                description: |-
+                  TargetHost is the desired compute host where the reservation should be placed.
+                  This is a generic name that represents different concepts depending on the scheduling domain:
+                  - For Nova: the hypervisor hostname
+                  - For Pods: the node name
+                  The scheduler will attempt to place the reservation on this host.
+                type: string
+              type:
+                description: Type of reservation.
+                enum:
+                - CommittedResourceReservation
+                - FailoverReservation
+                type: string
+            required:
+            - type
             type: object
           status:
             description: status defines the observed state of Reservation
             properties:
+              committedResourceReservation:
+                description: |-
+                  CommittedResourceReservation contains status fields specific to committed resource reservations.
+                  Only used when Type is CommittedResourceReservation.
+                properties:
+                  allocations:
+                    description: Allocations lists the VM/instance UUIDs that are
+                      currently allocated against this reservation.
+                    items:
+                      type: string
+                    type: array
+                type: object
               conditions:
-                description: The current status conditions of the reservation.
+                description: |-
+                  The current status conditions of the reservation.
+                  Conditions include:
+                  - type: Ready
+                    status: True|False|Unknown
+                    reason: ReservationReady
+                    message: Reservation is successfully scheduled
+                    lastTransitionTime: <timestamp>
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -147,14 +202,28 @@ spec:
                   - type
                   type: object
                 type: array
+              failoverReservation:
+                description: |-
+                  FailoverReservation contains status fields specific to failover reservations.
+                  Only used when Type is FailoverReservation.
+                properties:
+                  allocations:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Allocations maps VM/instance UUIDs to the host they are currently allocated on.
+                      Key: VM/instance UUID, Value: Host name where the VM is currently running.
+                    type: object
+                type: object
               host:
-                description: The name of the compute host that was allocated.
+                description: |-
+                  Host is the actual host where the reservation is placed.
+                  This is set by the scheduler after successful placement and reflects the current state.
+                  It should match Spec.TargetHost when the reservation is successfully placed.
+                  This is a generic name that represents different concepts depending on the scheduling domain:
+                  - For Nova: the hypervisor hostname
+                  - For Pods: the node name
                 type: string
-              phase:
-                description: The current phase of the reservation.
-                type: string
-            required:
-            - host
             type: object
         required:
         - spec
