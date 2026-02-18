@@ -46,39 +46,6 @@ spec:
             - name: max-conns
               mountPath: /docker-entrypoint-initdb.d/max_conns.sql
               subPath: max_conns.sql
-        - name: {{ include "cortex-postgres.fullname" . }}-exporter
-          image: "{{ .Values.exporter.image.repository }}:{{ .Values.exporter.image.tag }}"
-          imagePullPolicy: {{ .Values.exporter.image.pullPolicy }}
-          resources:
-            requests:
-              memory: {{ .Values.exporter.resources.requests.memory }}
-              cpu: {{ .Values.exporter.resources.requests.cpu }}
-            limits:
-              memory: {{ .Values.exporter.resources.limits.memory }}
-              cpu: {{ .Values.exporter.resources.limits.cpu }}
-          env:
-            - name: DATA_SOURCE_NAME
-              value: "postgresql://postgres:$(POSTGRES_PASSWORD)@localhost:5432/postgres?sslmode=disable"
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "cortex-postgres.fullname" . }}-secret
-                  key: postgres-password
-          ports:
-            - containerPort: 9187
-              name: http-metrics
-          livenessProbe:
-            httpGet:
-              path: /
-              port: http-metrics
-            initialDelaySeconds: 30
-            periodSeconds: 10
-          readinessProbe:
-            httpGet:
-              path: /
-              port: http-metrics
-            initialDelaySeconds: 5
-            periodSeconds: 5
       volumes:
         - name: max-conns
           configMap:
