@@ -56,11 +56,6 @@ func (s *VMwareGeneralPurposeBalancingStep) Init(ctx context.Context, client cli
 // Pack VMs on hosts based on their flavor.
 func (s *VMwareGeneralPurposeBalancingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
-	// Don't execute the step for non-hana flavors.
-	if strings.Contains(request.Spec.Data.Flavor.Data.Name, "hana") {
-		slog.Debug("Skipping general purpose balancing step for HANA flavor", "flavor", request.Spec.Data.Flavor.Data.Name)
-		return result, nil
-	}
 
 	result.Statistics["ram utilized"] = s.PrepareStats(request, "%")
 

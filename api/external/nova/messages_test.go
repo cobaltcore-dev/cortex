@@ -300,6 +300,126 @@ func TestGetHypervisorType(t *testing.T) {
 	}
 }
 
+func TestGetFlavorType(t *testing.T) {
+	tests := []struct {
+		name           string
+		extraSpecs     map[string]string
+		expectedFlavor FlavorType
+		expectError    bool
+	}{
+		{
+			name: "general purpose flavor (forbidden lowercase)",
+			extraSpecs: map[string]string{
+				"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "forbidden",
+			},
+			expectedFlavor: FlavorTypeGeneralPurpose,
+			expectError:    false,
+		},
+		{
+			name: "general purpose flavor (Forbidden mixed case)",
+			extraSpecs: map[string]string{
+				"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "Forbidden",
+			},
+			expectedFlavor: FlavorTypeGeneralPurpose,
+			expectError:    false,
+		},
+		{
+			name: "general purpose flavor (FORBIDDEN uppercase)",
+			extraSpecs: map[string]string{
+				"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "FORBIDDEN",
+			},
+			expectedFlavor: FlavorTypeGeneralPurpose,
+			expectError:    false,
+		},
+		{
+			name: "HANA flavor (required lowercase)",
+			extraSpecs: map[string]string{
+				"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "required",
+			},
+			expectedFlavor: FlavorTypeHANA,
+			expectError:    false,
+		},
+		{
+			name: "HANA flavor (Required mixed case)",
+			extraSpecs: map[string]string{
+				"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "Required",
+			},
+			expectedFlavor: FlavorTypeHANA,
+			expectError:    false,
+		},
+		{
+			name: "HANA flavor (REQUIRED uppercase)",
+			extraSpecs: map[string]string{
+				"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "REQUIRED",
+			},
+			expectedFlavor: FlavorTypeHANA,
+			expectError:    false,
+		},
+		{
+			name:           "trait key is missing",
+			extraSpecs:     map[string]string{},
+			expectedFlavor: FlavorTypeGeneralPurpose,
+			expectError:    false,
+		},
+		{
+			name:           "extra specs is nil",
+			extraSpecs:     nil,
+			expectedFlavor: FlavorTypeGeneralPurpose,
+			expectError:    false,
+		},
+		{
+			name: "error for unsupported trait value",
+			extraSpecs: map[string]string{
+				"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "optional",
+			},
+			expectedFlavor: "",
+			expectError:    true,
+		},
+		{
+			name: "error for empty trait value",
+			extraSpecs: map[string]string{
+				"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "",
+			},
+			expectedFlavor: "",
+			expectError:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := ExternalSchedulerRequest{
+				Spec: NovaObject[NovaSpec]{
+					Data: NovaSpec{
+						Flavor: NovaObject[NovaFlavor]{
+							Data: NovaFlavor{
+								ExtraSpecs: tt.extraSpecs,
+							},
+						},
+					},
+				},
+			}
+
+			flavorType, err := req.GetFlavorType()
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if flavorType != tt.expectedFlavor {
+				t.Errorf("expected flavor type %q, got %q", tt.expectedFlavor, flavorType)
+			}
+		})
+	}
+}
+
 func TestNovaSpecUnmarshal(t *testing.T) {
 	var jsonData = `{
         "spec": {

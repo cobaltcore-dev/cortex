@@ -1,4 +1,4 @@
-# Last updated: 28 Jan 2026
+# Last updated: 19 Feb 2026
 FROM debian:trixie-slim
 
 # explicitly set user/group IDs
@@ -68,7 +68,7 @@ RUN set -ex; \
 ENV PG_MAJOR 17
 ENV PATH $PATH:/usr/lib/postgresql/$PG_MAJOR/bin
 
-ENV PG_VERSION 17.7-3.pgdg13+1
+ENV PG_VERSION 17.8-1.pgdg13+1
 
 RUN set -ex; \
 	\

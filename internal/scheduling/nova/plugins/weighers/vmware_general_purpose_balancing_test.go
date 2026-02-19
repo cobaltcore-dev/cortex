@@ -238,30 +238,6 @@ func TestVMwareGeneralPurposeBalancingStep_Run(t *testing.T) {
 			expectStatistics: true,
 		},
 		{
-			name: "HANA flavor should be skipped",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								Name:     "hana.large",
-								MemoryMB: 8192,
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-				},
-			},
-			expectedActivations: map[string]float64{
-				"host1": 0.0, // should be no-effect
-				"host2": 0.0, // should be no-effect
-			},
-			expectStatistics: false,
-		},
-		{
 			name: "Host without capabilities gets no-effect",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
