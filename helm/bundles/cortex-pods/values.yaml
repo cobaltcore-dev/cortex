@@ -29,7 +29,6 @@ cortex:
     schedulingDomain: pods
     enabledControllers:
       - pods-decisions-pipeline-controller
-      - explanation-controller
     monitoring:
       labels:
         github_org: cobaltcore-dev

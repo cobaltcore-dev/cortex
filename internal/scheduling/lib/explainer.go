@@ -38,7 +38,7 @@ func NewExplainer(client client.Client) (*Explainer, error) {
 }
 
 // Explain the given decision and return a human-readable explanation.
-func (e *Explainer) Explain(ctx context.Context, decision *v1alpha1.Decision) (string, error) {
+func (e *Explainer) Explain(ctx context.Context, decision DecisionUpdate) (string, error) {
 	return e.ExplainWithTemplates(ctx, decision)
 }
 
@@ -396,7 +396,7 @@ func (e *Explainer) calculateStepImpacts(inputWeights map[string]float64, stepRe
 // decision data into formats suitable for template rendering.
 
 // buildContextData creates context data for template rendering.
-func (e *Explainer) buildContextData(decision *v1alpha1.Decision) ContextData {
+func (e *Explainer) buildContextData(decision DecisionUpdate) ContextData {
 	resourceType := e.getResourceType(decision.Spec.SchedulingDomain)
 
 	history := decision.Status.History
@@ -654,7 +654,7 @@ func (e *Explainer) buildChainData(ctx context.Context, decision *v1alpha1.Decis
 }
 
 // ExplainWithTemplates renders an explanation using Go templates.
-func (e *Explainer) ExplainWithTemplates(ctx context.Context, decision *v1alpha1.Decision) (string, error) {
+func (e *Explainer) ExplainWithTemplates(ctx context.Context, decision DecisionUpdate) (string, error) {
 	// Build explanation context
 	explanationCtx := ExplanationContext{
 		Context: e.buildContextData(decision),

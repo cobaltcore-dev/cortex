@@ -51,12 +51,14 @@ func (c *FilterWeigherPipelineController) PipelineType() v1alpha1.PipelineType {
 }
 
 // Process the request from the API. Returns the result of the pipeline execution.
-func (c *FilterWeigherPipelineController) ProcessRequest(ctx context.Context, pipelineName string, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
+func (c *FilterWeigherPipelineController) ProcessRequest(ctx context.Context, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
 	c.processMu.Lock()
 	defer c.processMu.Unlock()
 
 	log := ctrl.LoggerFrom(ctx)
 	startedAt := time.Now()
+
+	pipelineName := request.Pipeline
 
 	pipeline, ok := c.Pipelines[pipelineName]
 	if !ok {

@@ -33,11 +33,10 @@ type BasePipelineController[PipelineType any] struct {
 }
 
 type DecisionUpdate struct {
-	ResourceID       string
-	PipelineName     string
-	Result           FilterWeigherPipelineResult
-	Reason           v1alpha1.SchedulingReason
-	SchedulingDomain v1alpha1.SchedulingDomain
+	ResourceID   string
+	PipelineName string
+	Result       FilterWeigherPipelineResult
+	Reason       v1alpha1.SchedulingReason
 }
 
 func (c *BasePipelineController[PipelineType]) StartExplainer(ctx context.Context) {
