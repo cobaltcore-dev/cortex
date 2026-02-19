@@ -15,17 +15,15 @@ import (
 
 	cinderapi "github.com/cobaltcore-dev/cortex/api/external/cinder"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 type mockHTTPAPIDelegate struct {
-	processFunc func(ctx context.Context, pipeline string, request cinderapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error)
+	processFunc func(ctx context.Context, request cinderapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error)
 }
 
-func (m *mockHTTPAPIDelegate) ProcessRequest(ctx context.Context, pipeline string, request cinderapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
+func (m *mockHTTPAPIDelegate) ProcessRequest(ctx context.Context, request cinderapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
 	if m.processFunc != nil {
-		return m.processFunc(ctx, pipeline, request)
+		return m.processFunc(ctx, request)
 	}
 	return &lib.FilterWeigherPipelineResult{
 		OrderedHosts: []string{"host1"},
@@ -147,7 +145,7 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 		name           string
 		method         string
 		body           string
-		processFunc    func(ctx context.Context, pipeline string, request cinderapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error)
+		processFunc    func(ctx context.Context, request cinderapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error)
 		expectedStatus int
 		expectedHosts  []string
 	}{
@@ -180,7 +178,7 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 				data, _ := json.Marshal(req)
 				return string(data)
 			}(),
-			processFunc: func(ctx context.Context, pipeline string, request cinderapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
+			processFunc: func(ctx context.Context, request cinderapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
 				return &lib.FilterWeigherPipelineResult{
 					OrderedHosts: []string{"host1", "host2"},
 				}, nil
@@ -204,7 +202,7 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 				data, _ := json.Marshal(req)
 				return string(data)
 			}(),
-			processFunc: func(ctx context.Context, pipeline string, request cinderapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
+			processFunc: func(ctx context.Context, request cinderapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
 				return nil, errors.New("processing failed")
 			},
 			expectedStatus: http.StatusInternalServerError,
@@ -225,7 +223,7 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 				data, _ := json.Marshal(req)
 				return string(data)
 			}(),
-			processFunc: func(ctx context.Context, pipeline string, request cinderapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
+			processFunc: func(ctx context.Context, request cinderapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
 				return &lib.FilterWeigherPipelineResult{
 					OrderedHosts: []string{},
 				}, nil
@@ -239,9 +237,6 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 			delegate := &mockHTTPAPIDelegate{
 				processFunc: tt.processFunc,
 			}
-
-			tttscheme := runtime.NewScheme()
-			tttfakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 			api := NewAPI(delegate).(*httpAPI)
 
 			var body *strings.Reader
@@ -333,8 +328,8 @@ func TestHTTPAPI_CinderExternalScheduler_PipelineParameter(t *testing.T) {
 	var capturedRequest cinderapi.ExternalSchedulerRequest
 
 	delegate := &mockHTTPAPIDelegate{
-		processFunc: func(ctx context.Context, pipeline string, request cinderapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
-			capturedPipeline = pipeline
+		processFunc: func(ctx context.Context, request cinderapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
+			capturedPipeline = request.Pipeline
 			capturedRequest = request
 			return &lib.FilterWeigherPipelineResult{
 				OrderedHosts: []string{"host1"},
