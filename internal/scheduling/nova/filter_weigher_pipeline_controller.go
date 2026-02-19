@@ -129,7 +129,8 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 		).
 		// Watch hypervisor changes so the cache gets updated.
 		WatchesMulticluster(&hv1.Hypervisor{}, handler.Funcs{}).
-		Named("cortex-nova-pipelines").
+		WatchesMulticluster(&v1alpha1.Reservation{}, handler.Funcs{}).
+	  Named("cortex-nova-pipelines").
 		For(
 			&v1alpha1.Pipeline{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
