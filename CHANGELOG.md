@@ -8,7 +8,7 @@
 ## [v0.0.35] - 2026-02-16
 
 - Bundle charts v0.0.35, Cortex core v0.0.22
-- Handle limes api 404 response
+- Fix failed to sync limes commitments because of 404 status code response
 - Code cleanups
 - Upgrade to Go v1.26
 - External dependency upgrades
@@ -152,7 +152,6 @@
 
 - Bundle charts v0.0.13
 - Fix missing key
-- Bump to v0.0.13
 
 ## [v0.0.12] - 2025-12-01
 
