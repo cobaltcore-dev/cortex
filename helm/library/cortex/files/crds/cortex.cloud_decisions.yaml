@@ -139,7 +139,9 @@ spec:
                     orderedHosts:
                       description: The hosts that were selected in this scheduling
                         event, in order of preference.
-                      type: string
+                      items:
+                        type: string
+                      type: array
                     pipelineRef:
                       description: |-
                         A reference to the pipeline that was used for this decision.
