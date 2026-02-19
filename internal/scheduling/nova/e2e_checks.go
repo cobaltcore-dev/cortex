@@ -321,7 +321,7 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 	if err != nil {
 		slog.Info("failed to determine hypervisor type, using default pipeline", "error", err)
 	} else if hvType == api.HypervisorTypeQEMU || hvType == api.HypervisorTypeCH {
-		request.Pipeline = "nova-external-scheduler-kvm-all-filters-enabled"
+		request.Pipeline = "kvm-all-filters-enabled"
 	}
 	return request
 }

@@ -2,7 +2,7 @@
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
-  name: nova-external-scheduler-vmware
+  name: vmware-general-purpose-load-balancing
 spec:
   schedulingDomain: nova
   description: |
@@ -11,6 +11,67 @@ spec:
     for additional filtering and weighing via this external scheduler pipeline.
     Cortex returns a ranked list of hosts back to nova for final selection.
     This is the pipeline used for VMware.
+
+    Specifically, this pipeline is used for general purpose workloads.
+  type: filter-weigher
+  createDecisions: false
+  filters: []
+  weighers:
+    - name: vmware_general_purpose_balancing
+      description: |
+        This step balances non-HANA VMs across non-HANA exclusive VMware hosts. It
+        pulls vms onto the freeest hosts possible to ensure an even distribution of
+        workloads across the available infrastructure.
+      params:
+        ramUtilizedLowerBoundPct: 0
+        ramUtilizedUpperBoundPct: 100
+        ramUtilizedActivationLowerBound: 1.0
+        ramUtilizedActivationUpperBound: 0.0
+    - name: vmware_avoid_long_term_contended_hosts
+      description: |
+        This step avoids placing vms on vmware hosts with a high CPU contention over
+        a longer period of time, based on vrops contention metrics. In particular,
+        this step looks at a longer time window of 4 weeks to identify hosts that
+        are consistently contended.
+      params:
+        avgCPUContentionLowerBound: 0 # pct
+        avgCPUContentionUpperBound: 10 # pct
+        avgCPUContentionActivationLowerBound: 0.0
+        avgCPUContentionActivationUpperBound: -0.75
+        maxCPUContentionLowerBound: 0 # pct
+        maxCPUContentionUpperBound: 10 # pct
+        maxCPUContentionActivationLowerBound: 0.0
+        maxCPUContentionActivationUpperBound: -0.25
+    - name: vmware_avoid_short_term_contended_hosts
+      description: |
+        This step avoids placing vms on vmware hosts with a high CPU contention over
+        a shorter period of time, based on vrops contention metrics. In particular,
+        this step looks at a shorter time window of 20 minutes to identify hosts that
+        are currently contended.
+      params:
+        avgCPUContentionLowerBound: 0 # pct
+        avgCPUContentionUpperBound: 10 # pct
+        avgCPUContentionActivationLowerBound: 0.0
+        avgCPUContentionActivationUpperBound: -0.75
+        maxCPUContentionLowerBound: 0 # pct
+        maxCPUContentionUpperBound: 10 # pct
+        maxCPUContentionActivationLowerBound: 0.0
+        maxCPUContentionActivationUpperBound: -0.25
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: vmware-hana-bin-packing
+spec:
+  schedulingDomain: nova
+  description: |
+    Nova provides virtual machine placement on compute hosts for OpenStack.
+    After applying its own filtering and weighing logic, it delegates to cortex
+    for additional filtering and weighing via this external scheduler pipeline.
+    Cortex returns a ranked list of hosts back to nova for final selection.
+    This is the pipeline used for VMware.
+
+    Specifically, this pipeline is used for HANA workloads.
   type: filter-weigher
   createDecisions: false
   filters: []
@@ -25,16 +86,6 @@ spec:
         ramUtilizedAfterUpperBoundPct: 100
         ramUtilizedAfterActivationLowerBound: 0.0
         ramUtilizedAfterActivationUpperBound: 1.0
-    - name: vmware_general_purpose_balancing
-      description: |
-        This step balances non-HANA VMs across non-HANA exclusive VMware hosts. It
-        pulls vms onto the freeest hosts possible to ensure an even distribution of
-        workloads across the available infrastructure.
-      params:
-        ramUtilizedLowerBoundPct: 0
-        ramUtilizedUpperBoundPct: 100
-        ramUtilizedActivationLowerBound: 1.0
-        ramUtilizedActivationUpperBound: 0.0
     - name: vmware_avoid_long_term_contended_hosts
       description: |
         This step avoids placing vms on vmware hosts with a high CPU contention over

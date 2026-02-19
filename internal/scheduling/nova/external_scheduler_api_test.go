@@ -402,8 +402,69 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 		expectErr      bool
 		errContains    string
 	}{
+		// KVM/QEMU general purpose tests
 		{
-			name: "experimental project ID requesting kvm vm",
+			name: "qemu hypervisor general purpose without reservation",
+			requestData: novaapi.ExternalSchedulerRequest{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type":     "qemu",
+									"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "forbidden",
+								},
+							},
+						},
+					},
+				},
+				Reservation: false,
+			},
+			expectedResult: "kvm-general-purpose-load-balancing",
+			expectErr:      false,
+		},
+		{
+			name: "QEMU hypervisor uppercase general purpose",
+			requestData: novaapi.ExternalSchedulerRequest{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type":     "QEMU",
+									"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "forbidden",
+								},
+							},
+						},
+					},
+				},
+				Reservation: false,
+			},
+			expectedResult: "kvm-general-purpose-load-balancing",
+			expectErr:      false,
+		},
+		{
+			name: "qemu hypervisor general purpose with reservation",
+			requestData: novaapi.ExternalSchedulerRequest{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type":     "qemu",
+									"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "forbidden",
+								},
+							},
+						},
+					},
+				},
+				Reservation: true,
+			},
+			expectedResult: "kvm-general-purpose-load-balancing-all-filters-enabled",
+			expectErr:      false,
+		},
+		{
+			name: "experimental project ID requesting kvm general purpose vm",
 			requestData: novaapi.ExternalSchedulerRequest{
 				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
 					Data: novaapi.NovaSpec{
@@ -411,7 +472,8 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
 							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"capabilities:hypervisor_type": "qemu",
+									"capabilities:hypervisor_type":     "qemu",
+									"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "forbidden",
 								},
 							},
 						},
@@ -419,18 +481,20 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 				},
 				Reservation: false,
 			},
-			expectedResult: "nova-external-scheduler-kvm-all-filters-enabled",
+			expectedResult: "kvm-general-purpose-load-balancing-all-filters-enabled",
 			expectErr:      false,
 		},
+		// KVM/QEMU HANA tests
 		{
-			name: "qemu hypervisor without reservation",
+			name: "qemu hypervisor HANA without reservation",
 			requestData: novaapi.ExternalSchedulerRequest{
 				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
 					Data: novaapi.NovaSpec{
 						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
 							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"capabilities:hypervisor_type": "qemu",
+									"capabilities:hypervisor_type":     "qemu",
+									"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "required",
 								},
 							},
 						},
@@ -438,18 +502,19 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 				},
 				Reservation: false,
 			},
-			expectedResult: "nova-external-scheduler-kvm",
+			expectedResult: "kvm-hana-bin-packing",
 			expectErr:      false,
 		},
 		{
-			name: "qemu hypervisor with reservation",
+			name: "qemu hypervisor HANA with reservation",
 			requestData: novaapi.ExternalSchedulerRequest{
 				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
 					Data: novaapi.NovaSpec{
 						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
 							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"capabilities:hypervisor_type": "qemu",
+									"capabilities:hypervisor_type":     "qemu",
+									"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "required",
 								},
 							},
 						},
@@ -457,18 +522,20 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 				},
 				Reservation: true,
 			},
-			expectedResult: "nova-external-scheduler-kvm-all-filters-enabled",
+			expectedResult: "kvm-hana-bin-packing-all-filters-enabled",
 			expectErr:      false,
 		},
 		{
-			name: "QEMU hypervisor uppercase",
+			name: "experimental project ID requesting kvm HANA vm",
 			requestData: novaapi.ExternalSchedulerRequest{
 				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
 					Data: novaapi.NovaSpec{
+						ProjectID: "my-experimental-project-id",
 						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
 							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"capabilities:hypervisor_type": "QEMU",
+									"capabilities:hypervisor_type":     "qemu",
+									"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "required",
 								},
 							},
 						},
@@ -476,18 +543,20 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 				},
 				Reservation: false,
 			},
-			expectedResult: "nova-external-scheduler-kvm",
+			expectedResult: "kvm-hana-bin-packing-all-filters-enabled",
 			expectErr:      false,
 		},
+		// CH hypervisor tests
 		{
-			name: "ch hypervisor without reservation",
+			name: "ch hypervisor general purpose without reservation",
 			requestData: novaapi.ExternalSchedulerRequest{
 				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
 					Data: novaapi.NovaSpec{
 						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
 							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"capabilities:hypervisor_type": "ch",
+									"capabilities:hypervisor_type":     "ch",
+									"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "forbidden",
 								},
 							},
 						},
@@ -495,18 +564,19 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 				},
 				Reservation: false,
 			},
-			expectedResult: "nova-external-scheduler-kvm",
+			expectedResult: "kvm-general-purpose-load-balancing",
 			expectErr:      false,
 		},
 		{
-			name: "ch hypervisor with reservation",
+			name: "ch hypervisor general purpose with reservation",
 			requestData: novaapi.ExternalSchedulerRequest{
 				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
 					Data: novaapi.NovaSpec{
 						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
 							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"capabilities:hypervisor_type": "ch",
+									"capabilities:hypervisor_type":     "ch",
+									"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "forbidden",
 								},
 							},
 						},
@@ -514,18 +584,19 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 				},
 				Reservation: true,
 			},
-			expectedResult: "nova-external-scheduler-kvm-all-filters-enabled",
+			expectedResult: "kvm-general-purpose-load-balancing-all-filters-enabled",
 			expectErr:      false,
 		},
 		{
-			name: "vmware hypervisor without reservation",
+			name: "ch hypervisor HANA without reservation",
 			requestData: novaapi.ExternalSchedulerRequest{
 				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
 					Data: novaapi.NovaSpec{
 						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
 							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"capabilities:hypervisor_type": "VMware vCenter Server",
+									"capabilities:hypervisor_type":     "ch",
+									"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "required",
 								},
 							},
 						},
@@ -533,7 +604,68 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 				},
 				Reservation: false,
 			},
-			expectedResult: "nova-external-scheduler-vmware",
+			expectedResult: "kvm-hana-bin-packing",
+			expectErr:      false,
+		},
+		{
+			name: "ch hypervisor HANA with reservation",
+			requestData: novaapi.ExternalSchedulerRequest{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type":     "ch",
+									"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "required",
+								},
+							},
+						},
+					},
+				},
+				Reservation: true,
+			},
+			expectedResult: "kvm-hana-bin-packing-all-filters-enabled",
+			expectErr:      false,
+		},
+		// VMware tests
+		{
+			name: "vmware hypervisor general purpose without reservation",
+			requestData: novaapi.ExternalSchedulerRequest{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type":     "VMware vCenter Server",
+									"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "forbidden",
+								},
+							},
+						},
+					},
+				},
+				Reservation: false,
+			},
+			expectedResult: "vmware-general-purpose-load-balancing",
+			expectErr:      false,
+		},
+		{
+			name: "vmware hypervisor HANA without reservation",
+			requestData: novaapi.ExternalSchedulerRequest{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type":     "VMware vCenter Server",
+									"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "required",
+								},
+							},
+						},
+					},
+				},
+				Reservation: false,
+			},
+			expectedResult: "vmware-hana-bin-packing",
 			expectErr:      false,
 		},
 		{
@@ -544,7 +676,8 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
 							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"capabilities:hypervisor_type": "VMware vCenter Server",
+									"capabilities:hypervisor_type":     "VMware vCenter Server",
+									"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "forbidden",
 								},
 							},
 						},
@@ -555,6 +688,7 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 			expectErr:   true,
 			errContains: "reservations are not supported on vmware hypervisors",
 		},
+		// Error cases
 		{
 			name: "missing hypervisor_type",
 			requestData: novaapi.ExternalSchedulerRequest{
@@ -562,7 +696,9 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 					Data: novaapi.NovaSpec{
 						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
 							Data: novaapi.NovaFlavor{
-								ExtraSpecs: map[string]string{},
+								ExtraSpecs: map[string]string{
+									"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "forbidden",
+								},
 							},
 						},
 					},
@@ -580,7 +716,8 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
 							Data: novaapi.NovaFlavor{
 								ExtraSpecs: map[string]string{
-									"capabilities:hypervisor_type": "unknown-hypervisor",
+									"capabilities:hypervisor_type":     "unknown-hypervisor",
+									"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "forbidden",
 								},
 							},
 						},
@@ -590,6 +727,45 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 			},
 			expectErr:   true,
 			errContains: "failed to determine hypervisor type from request data",
+		},
+		{
+			name: "missing flavor type trait",
+			requestData: novaapi.ExternalSchedulerRequest{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type": "qemu",
+								},
+							},
+						},
+					},
+				},
+				Reservation: false,
+			},
+			expectErr:   true,
+			errContains: "failed to determine flavor type from request data",
+		},
+		{
+			name: "unsupported flavor type trait value",
+			requestData: novaapi.ExternalSchedulerRequest{
+				Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+					Data: novaapi.NovaSpec{
+						Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+							Data: novaapi.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type":     "qemu",
+									"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "invalid",
+								},
+							},
+						},
+					},
+				},
+				Reservation: false,
+			},
+			expectErr:   true,
+			errContains: "failed to determine flavor type from request data",
 		},
 	}
 
