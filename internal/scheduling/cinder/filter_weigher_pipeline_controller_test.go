@@ -10,8 +10,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -21,43 +19,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
-	}
-
-	client := fake.NewClientBuilder().
-		WithScheme(scheme).
-		Build()
-
-	controller := &FilterWeigherPipelineController{
-		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
-			Client:    client,
-			Pipelines: make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
-		},
-		Monitor: lib.FilterWeigherPipelineMonitor{},
-	}
-
-	// Reconcile should always succeed and do nothing
-	req := ctrl.Request{
-		NamespacedName: types.NamespacedName{
-			Name:      "any-name",
-			Namespace: "any-namespace",
-		},
-	}
-
-	result, err := controller.Reconcile(context.Background(), req)
-
-	if err != nil {
-		t.Errorf("Expected no error but got: %v", err)
-	}
-
-	if result.RequeueAfter > 0 {
-		t.Error("Expected no requeue delay")
-	}
-}
 
 func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
 	scheme := runtime.NewScheme()

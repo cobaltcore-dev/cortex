@@ -11,10 +11,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -30,6 +28,64 @@ type BasePipelineController[PipelineType any] struct {
 	client.Client
 	// The scheduling domain to scope resources to.
 	SchedulingDomain v1alpha1.SchedulingDomain
+
+	DecisionQueue chan DecisionUpdate
+}
+
+type DecisionUpdate struct {
+	ResourceID       string
+	PipelineName     string
+	Result           FilterWeigherPipelineResult
+	Reason           v1alpha1.SchedulingReason
+	SchedulingDomain v1alpha1.SchedulingDomain
+}
+
+func (c *BasePipelineController[PipelineType]) StartExplainer(ctx context.Context) {
+	c.DecisionQueue = make(chan DecisionUpdate, 100)
+	log := ctrl.LoggerFrom(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case update := <-c.DecisionQueue:
+			if err := c.updateDecision(ctx, update); err != nil {
+				log.Error(err, "failed to update decision", "resourceID", update.ResourceID)
+			}
+		}
+	}
+}
+
+func (c *BasePipelineController[PipelineType]) updateDecision(ctx context.Context, update DecisionUpdate) error {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Explaining decision for resource", "resourceID", update.ResourceID, "pipelineName", update.PipelineName)
+
+	explainer, err := NewExplainer(c.Client)
+	if err != nil {
+		return fmt.Errorf("failed to create explainer: %w", err)
+	}
+
+	explanationText, err := explainer.Explain(ctx, update.ResourceID, update.PipelineName, update.RequestContext, update.Reason, update.Result)
+	if err != nil {
+		return fmt.Errorf("failed to generate explanation: %w", err)
+	}
+
+	// Update the decision with the explanation.
+	decision := &v1alpha1.Decision{}
+	if err := c.Get(ctx, client.ObjectKey{Name: update.ResourceID}, decision); err != nil {
+		return fmt.Errorf("failed to get decision: %w", err)
+	}
+
+	if decision.Status.Result == nil {
+		return errors.New("cannot update decision explanation: result is nil")
+	}
+
+	decision.Status.Explanation = explanationText
+	if err := c.Status().Update(ctx, decision); err != nil {
+		return fmt.Errorf("failed to update decision status: %w", err)
+	}
+
+	log.Info("Successfully updated decision explanation", "resourceID", update.ResourceID)
+	return nil
 }
 
 // Handle the startup of the manager by initializing the pipeline map.
@@ -51,17 +107,40 @@ func (c *BasePipelineController[PipelineType]) InitAllPipelines(ctx context.Cont
 			continue
 		}
 		log.Info("initializing existing pipeline", "pipelineName", pipelineConf.Name)
-		c.handlePipelineChange(ctx, &pipelineConf, nil)
+		c.handlePipelineChange(ctx, &pipelineConf)
 		c.PipelineConfigs[pipelineConf.Name] = pipelineConf
 	}
 	return nil
+}
+
+func (c *BasePipelineController[PipelineType]) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("reconcile called for pipeline", "pipelineName", req.NamespacedName)
+
+	pipeline := &v1alpha1.Pipeline{}
+	err := c.Get(ctx, req.NamespacedName, pipeline)
+
+	if err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			// Pipeline was deleted
+			log.Info("pipeline deleted, removing from cache", "pipelineName", req.Name)
+			delete(c.Pipelines, req.Name)
+			delete(c.PipelineConfigs, req.Name)
+			return ctrl.Result{}, nil
+		}
+		log.Error(err, "failed to get pipeline", "pipelineName", req.NamespacedName)
+		return ctrl.Result{}, fmt.Errorf("failed to get pipeline: %w", err)
+	}
+
+	c.handlePipelineChange(ctx, pipeline)
+
+	return ctrl.Result{}, nil
 }
 
 // Handle a pipeline creation or update event from watching pipeline resources.
 func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	ctx context.Context,
 	obj *v1alpha1.Pipeline,
-	_ workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 
 	if obj.Spec.SchedulingDomain != c.SchedulingDomain {
@@ -141,123 +220,14 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	}
 }
 
-// Handler bound to a pipeline watch to handle created pipelines.
-//
-// This handler will initialize new pipelines as needed and put them into the
-// pipeline map.
-func (c *BasePipelineController[PipelineType]) HandlePipelineCreated(
-	ctx context.Context,
-	evt event.CreateEvent,
-	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
-) {
-
-	pipelineConf := evt.Object.(*v1alpha1.Pipeline)
-	c.handlePipelineChange(ctx, pipelineConf, queue)
-}
-
-// Handler bound to a pipeline watch to handle updated pipelines.
-//
-// This handler will initialize new pipelines as needed and put them into the
-// pipeline map.
-func (c *BasePipelineController[PipelineType]) HandlePipelineUpdated(
-	ctx context.Context,
-	evt event.UpdateEvent,
-	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
-) {
-
-	pipelineConf := evt.ObjectNew.(*v1alpha1.Pipeline)
-	c.handlePipelineChange(ctx, pipelineConf, queue)
-}
-
-// Handler bound to a pipeline watch to handle deleted pipelines.
-//
-// This handler will remove pipelines from the pipeline map.
-func (c *BasePipelineController[PipelineType]) HandlePipelineDeleted(
-	ctx context.Context,
-	evt event.DeleteEvent,
-	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
-) {
-
-	pipelineConf := evt.Object.(*v1alpha1.Pipeline)
-	delete(c.Pipelines, pipelineConf.Name)
-	delete(c.PipelineConfigs, pipelineConf.Name)
-}
-
-// Handle a knowledge creation, readiness update, or delete event from watching knowledge resources.
-func (c *BasePipelineController[PipelineType]) handleKnowledgeChange(
-	ctx context.Context,
-	obj *v1alpha1.Knowledge,
-	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
-) {
-
-	if obj.Spec.SchedulingDomain != c.SchedulingDomain {
-		return
+// GetAllPipelineReconcileRequests returns reconcile requests for all pipelines
+// managed by this controller. Used when Knowledge changes require pipeline re-evaluation.
+func (c *BasePipelineController[PipelineType]) GetAllPipelineReconcileRequests(ctx context.Context) []reconcile.Request {
+	var requests []reconcile.Request
+	for name := range c.Pipelines {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: client.ObjectKey{Name: name},
+		})
 	}
-	log := ctrl.LoggerFrom(ctx)
-	log.Info("knowledge changed, re-evaluating all pipelines", "knowledgeName", obj.Name)
-	// Find all pipelines depending on this knowledge and re-evaluate them.
-	var pipelines v1alpha1.PipelineList
-	if err := c.List(ctx, &pipelines); err != nil {
-		log.Error(err, "failed to list pipelines for knowledge change", "knowledgeName", obj.Name)
-		return
-	}
-	for _, pipeline := range pipelines.Items {
-		// TODO: Not all pipelines may depend on this knowledge. At the moment
-		// we re-evaluate all pipelines matching this controller.
-		if pipeline.Spec.SchedulingDomain != c.SchedulingDomain {
-			continue
-		}
-		if pipeline.Spec.Type != c.Initializer.PipelineType() {
-			continue
-		}
-		c.handlePipelineChange(ctx, &pipeline, queue)
-	}
-}
-
-// Handler bound to a knowledge watch to handle created knowledges.
-//
-// This handler will re-evaluate all pipelines depending on the knowledge.
-func (c *BasePipelineController[PipelineType]) HandleKnowledgeCreated(
-	ctx context.Context,
-	evt event.CreateEvent,
-	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
-) {
-
-	knowledgeConf := evt.Object.(*v1alpha1.Knowledge)
-	c.handleKnowledgeChange(ctx, knowledgeConf, queue)
-}
-
-// Handler bound to a knowledge watch to handle updated knowledges.
-//
-// This handler will re-evaluate all pipelines depending on the knowledge.
-func (c *BasePipelineController[PipelineType]) HandleKnowledgeUpdated(
-	ctx context.Context,
-	evt event.UpdateEvent,
-	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
-) {
-
-	before := evt.ObjectOld.(*v1alpha1.Knowledge)
-	after := evt.ObjectNew.(*v1alpha1.Knowledge)
-	errorBefore := meta.IsStatusConditionFalse(before.Status.Conditions, v1alpha1.KnowledgeConditionReady)
-	errorAfter := meta.IsStatusConditionFalse(after.Status.Conditions, v1alpha1.KnowledgeConditionReady)
-	errorChanged := errorBefore != errorAfter
-	dataBecameAvailable := before.Status.RawLength == 0 && after.Status.RawLength > 0
-	if !errorChanged && !dataBecameAvailable {
-		// No relevant change, skip re-evaluation.
-		return
-	}
-	c.handleKnowledgeChange(ctx, after, queue)
-}
-
-// Handler bound to a knowledge watch to handle deleted knowledges.
-//
-// This handler will re-evaluate all pipelines depending on the knowledge.
-func (c *BasePipelineController[PipelineType]) HandleKnowledgeDeleted(
-	ctx context.Context,
-	evt event.DeleteEvent,
-	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
-) {
-
-	knowledgeConf := evt.Object.(*v1alpha1.Knowledge)
-	c.handleKnowledgeChange(ctx, knowledgeConf, queue)
+	return requests
 }

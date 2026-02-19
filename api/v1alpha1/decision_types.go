@@ -22,6 +22,8 @@ const (
 	SchedulingReasonRebuild SchedulingReason = "Rebuild"
 	// SchedulingReasonEvacuate indicates that this scheduling event is triggered by an evacuate operation.
 	SchedulingReasonEvacuate SchedulingReason = "Evacuate"
+	// SchedulingReasonUnknown indicates that the reason for this scheduling event is unknown.
+	SchedulingReasonUnknown SchedulingReason = "Unknown"
 )
 
 // SchedulingHistoryEntry represents a single entry in the scheduling history of a resource.

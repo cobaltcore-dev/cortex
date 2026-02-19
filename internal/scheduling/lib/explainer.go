@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package explanation
+package lib
 
 import (
 	"context"
@@ -53,6 +53,8 @@ func (e *Explainer) getResourceType(schedulingDomain v1alpha1.SchedulingDomain) 
 		return "cinder volume"
 	case v1alpha1.SchedulingDomainMachines:
 		return "ironcore machine"
+	case v1alpha1.SchedulingDomainPods:
+		return "pod"
 	default:
 		return "resource"
 	}

@@ -22,7 +22,7 @@ import (
 
 type HTTPAPIDelegate interface {
 	// Process the scheduling request from the API.
-	ProcessRequest(ctx context.Context, pipeline string, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error)
+	ProcessRequest(ctx context.Context, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error)
 }
 
 type HTTPAPI interface {
@@ -121,21 +121,19 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	pipelineName := requestData.Pipeline
-
 	// If the pipeline name is not set, set it to a default value.
-	if pipelineName == "" {
+	if requestData.Pipeline == "" {
 		var err error
-		pipelineName, err = httpAPI.inferPipelineName(requestData)
+		requestData.Pipeline, err = httpAPI.inferPipelineName(requestData)
 		if err != nil {
 			c.Respond(http.StatusBadRequest, err, err.Error())
 			return
 		}
-		slog.Info("inferred pipeline name", "pipeline", pipelineName)
+		slog.Info("inferred pipeline name", "pipeline", requestData.Pipeline)
 	}
 
 	ctx := r.Context()
-	result, err := httpAPI.delegate.ProcessRequest(ctx, pipelineName, requestData)
+	result, err := httpAPI.delegate.ProcessRequest(ctx, requestData)
 	if err != nil {
 		c.Respond(http.StatusInternalServerError, err, "failed to process scheduling request")
 		return
@@ -151,5 +149,6 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 		c.Respond(http.StatusInternalServerError, err, "failed to encode response")
 		return
 	}
+
 	c.Respond(http.StatusOK, nil, "Success")
 }

@@ -15,6 +15,8 @@ import (
 
 	cinderapi "github.com/cobaltcore-dev/cortex/api/external/cinder"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 type mockHTTPAPIDelegate struct {
@@ -238,6 +240,8 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 				processFunc: tt.processFunc,
 			}
 
+			tttscheme := runtime.NewScheme()
+			tttfakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 			api := NewAPI(delegate).(*httpAPI)
 
 			var body *strings.Reader

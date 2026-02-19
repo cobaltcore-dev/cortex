@@ -17,10 +17,12 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // The decision pipeline controller takes decision resources containing a
@@ -45,18 +47,26 @@ func (c *FilterWeigherPipelineController) PipelineType() v1alpha1.PipelineType {
 	return v1alpha1.PipelineTypeFilterWeigher
 }
 
-// Process the decision from the API. Should create and return the updated decision.
-func (c *FilterWeigherPipelineController) ProcessRequest(ctx context.Context, pipelineName string, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
+// Process the request from the API. Returns the result of the pipeline execution.
+func (c *FilterWeigherPipelineController) ProcessRequest(ctx context.Context, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
 	c.processMu.Lock()
 	defer c.processMu.Unlock()
 
 	log := ctrl.LoggerFrom(ctx)
 	startedAt := time.Now()
 
+	pipelineName := request.Pipeline
+
 	pipeline, ok := c.Pipelines[pipelineName]
 	if !ok {
 		log.Error(nil, "pipeline not found or not ready", "pipelineName", pipelineName)
 		return nil, fmt.Errorf("pipeline %s not found or not ready", pipelineName)
+	}
+
+	pipelineConfig, ok := c.PipelineConfigs[pipelineName]
+	if !ok {
+		log.Error(nil, "pipeline config not found", "pipelineName", pipelineName)
+		return nil, fmt.Errorf("pipeline config for %s not found", pipelineName)
 	}
 
 	result, err := pipeline.Run(request)
@@ -65,6 +75,15 @@ func (c *FilterWeigherPipelineController) ProcessRequest(ctx context.Context, pi
 		return nil, err
 	}
 	log.Info("request processed successfully", "duration", time.Since(startedAt))
+
+	if pipelineConfig.Spec.CreateDecisions {
+		c.DecisionQueue <- lib.DecisionUpdate{
+			ResourceID:   request.Context.ResourceUUID,
+			PipelineName: pipelineName,
+			Result:       result,
+			Reason:       v1alpha1.SchedulingReasonUnknown,
+		}
+	}
 	return &result, nil
 }
 
@@ -82,13 +101,6 @@ func (c *FilterWeigherPipelineController) InitPipeline(
 	)
 }
 
-// Reconcile is required by the controller interface but does nothing.
-// Decisions are now read-only tracking objects created by the HTTP API.
-func (c *FilterWeigherPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// Nothing to reconcile - decisions are created directly by the HTTP API
-	return ctrl.Result{}, nil
-}
-
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainCinder
@@ -98,34 +110,32 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	return multicluster.BuildController(mcl, mgr).
 		// Watch pipeline changes so that we can reconfigure pipelines as needed.
 		WatchesMulticluster(
-			&v1alpha1.Pipeline{},
-			handler.Funcs{
-				CreateFunc: c.HandlePipelineCreated,
-				UpdateFunc: c.HandlePipelineUpdated,
-				DeleteFunc: c.HandlePipelineDeleted,
-			},
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				pipeline := obj.(*v1alpha1.Pipeline)
-				// Only react to pipelines matching the scheduling domain.
-				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainCinder {
-					return false
-				}
-				return pipeline.Spec.Type == c.PipelineType()
-			}),
-		).
-		// Watch knowledge changes so that we can reconfigure pipelines as needed.
-		WatchesMulticluster(
 			&v1alpha1.Knowledge{},
-			handler.Funcs{
-				CreateFunc: c.HandleKnowledgeCreated,
-				UpdateFunc: c.HandleKnowledgeUpdated,
-				DeleteFunc: c.HandleKnowledgeDeleted,
-			},
+			// Get all pipelines of the controller when knowledge changes and trigger reconciliation to update the candidates in the pipelines.
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				knowledge := obj.(*v1alpha1.Knowledge)
+				if knowledge.Spec.SchedulingDomain != v1alpha1.SchedulingDomainCinder {
+					return nil
+				}
+				// When Knowledge changes, reconcile all pipelines
+				return c.GetAllPipelineReconcileRequests(ctx)
+			}),
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				knowledge := obj.(*v1alpha1.Knowledge)
 				// Only react to knowledge matching the scheduling domain.
 				return knowledge.Spec.SchedulingDomain == v1alpha1.SchedulingDomainCinder
 			}),
+		).
+		Named("cortex-cinder-pipelines").
+		For(
+			&v1alpha1.Pipeline{},
+			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+				pipeline := obj.(*v1alpha1.Pipeline)
+				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainCinder {
+					return false
+				}
+				return pipeline.Spec.Type == c.PipelineType()
+			})),
 		).
 		Complete(c)
 }
