@@ -87,8 +87,35 @@ spec:
                     params:
                       description: Additional configuration for the step that can
                         be used
-                      type: object
-                      x-kubernetes-preserve-unknown-fields: true
+                      items:
+                        description: |-
+                          Parameter is a struct that can be used to define parameters for filters,
+                          weighers, and other resources that need flexible configuration.
+
+                          It is strongly encouraged to use this type for configuration of resources
+                          at it provides a more strict schema and validation compared to using
+                          runtime.RawExtension directly.
+                        properties:
+                          boolValue:
+                            type: boolean
+                          floatValue:
+                            type: number
+                          intValue:
+                            format: int64
+                            type: integer
+                          key:
+                            description: The key of the parameter.
+                            type: string
+                          stringListValue:
+                            items:
+                              type: string
+                            type: array
+                          stringValue:
+                            type: string
+                        required:
+                        - key
+                        type: object
+                      type: array
                   required:
                   - name
                   type: object
@@ -115,8 +142,35 @@ spec:
                     params:
                       description: Additional configuration for the step that can
                         be used
-                      type: object
-                      x-kubernetes-preserve-unknown-fields: true
+                      items:
+                        description: |-
+                          Parameter is a struct that can be used to define parameters for filters,
+                          weighers, and other resources that need flexible configuration.
+
+                          It is strongly encouraged to use this type for configuration of resources
+                          at it provides a more strict schema and validation compared to using
+                          runtime.RawExtension directly.
+                        properties:
+                          boolValue:
+                            type: boolean
+                          floatValue:
+                            type: number
+                          intValue:
+                            format: int64
+                            type: integer
+                          key:
+                            description: The key of the parameter.
+                            type: string
+                          stringListValue:
+                            items:
+                              type: string
+                            type: array
+                          stringValue:
+                            type: string
+                        required:
+                        - key
+                        type: object
+                      type: array
                   required:
                   - name
                   type: object
@@ -173,8 +227,35 @@ spec:
                     params:
                       description: Additional configuration for the step that can
                         be used
-                      type: object
-                      x-kubernetes-preserve-unknown-fields: true
+                      items:
+                        description: |-
+                          Parameter is a struct that can be used to define parameters for filters,
+                          weighers, and other resources that need flexible configuration.
+
+                          It is strongly encouraged to use this type for configuration of resources
+                          at it provides a more strict schema and validation compared to using
+                          runtime.RawExtension directly.
+                        properties:
+                          boolValue:
+                            type: boolean
+                          floatValue:
+                            type: number
+                          intValue:
+                            format: int64
+                            type: integer
+                          key:
+                            description: The key of the parameter.
+                            type: string
+                          stringListValue:
+                            items:
+                              type: string
+                            type: array
+                          stringValue:
+                            type: string
+                        required:
+                        - key
+                        type: object
+                      type: array
                   required:
                   - name
                   type: object

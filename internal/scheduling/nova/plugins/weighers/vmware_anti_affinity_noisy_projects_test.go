@@ -12,8 +12,8 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -81,9 +81,23 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Init(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Valid params JSON for the weigher
-	validParams := runtime.RawExtension{
-		Raw: []byte(`{"avgCPUUsageLowerBound": 20.0, "avgCPUUsageUpperBound": 100.0, "avgCPUUsageActivationLowerBound": 0.0, "avgCPUUsageActivationUpperBound": -0.5}`),
+	params := []v1alpha1.Parameter{
+		{
+			Key:        "avgCPUUsageLowerBound",
+			FloatValue: testlib.Ptr(20.0),
+		},
+		{
+			Key:        "avgCPUUsageUpperBound",
+			FloatValue: testlib.Ptr(100.0),
+		},
+		{
+			Key:        "avgCPUUsageActivationLowerBound",
+			FloatValue: testlib.Ptr(0.0),
+		},
+		{
+			Key:        "avgCPUUsageActivationUpperBound",
+			FloatValue: testlib.Ptr(-0.5),
+		},
 	}
 
 	tests := []struct {
@@ -109,7 +123,7 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Init(t *testing.T) {
 			},
 			weigherSpec: v1alpha1.WeigherSpec{
 				Name:   "vmware_anti_affinity_noisy_projects",
-				Params: validParams,
+				Params: params,
 			},
 			wantError: false,
 		},
@@ -118,7 +132,7 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Init(t *testing.T) {
 			knowledge: nil,
 			weigherSpec: v1alpha1.WeigherSpec{
 				Name:   "vmware_anti_affinity_noisy_projects",
-				Params: validParams,
+				Params: params,
 			},
 			wantError:     true,
 			errorContains: "failed to get knowledge",
@@ -139,7 +153,7 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Init(t *testing.T) {
 			},
 			weigherSpec: v1alpha1.WeigherSpec{
 				Name:   "vmware_anti_affinity_noisy_projects",
-				Params: validParams,
+				Params: params,
 			},
 			wantError:     true,
 			errorContains: "not ready",

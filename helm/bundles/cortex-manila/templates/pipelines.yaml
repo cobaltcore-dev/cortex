@@ -21,11 +21,11 @@ spec:
         may lead to performance degradation for shares placed on that pool.
       params:
         # Min-max scaling for gap-fitting based on CPU usage (pct)
-        avgCPUUsageLowerBound: 0 # pct
-        avgCPUUsageUpperBound: 10 # pct
-        avgCPUUsageActivationLowerBound: 0.0
-        avgCPUUsageActivationUpperBound: -0.75
-        maxCPUUsageLowerBound: 0 # pct
-        maxCPUUsageUpperBound: 10 # pct
-        maxCPUUsageActivationLowerBound: 0.0
-        maxCPUUsageActivationUpperBound: -0.25
+        - {key: avgCPUUsageLowerBound, floatValue: 0} # pct
+        - {key: avgCPUUsageUpperBound, floatValue: 10} # pct
+        - {key: avgCPUUsageActivationLowerBound, floatValue: 0.0}
+        - {key: avgCPUUsageActivationUpperBound, floatValue: -0.75}
+        - {key: maxCPUUsageLowerBound, floatValue: 0} # pct
+        - {key: maxCPUUsageUpperBound, floatValue: 10} # pct
+        - {key: maxCPUUsageActivationLowerBound, floatValue: 0.0}
+        - {key: maxCPUUsageActivationUpperBound, floatValue: -0.25}
