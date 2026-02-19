@@ -7,43 +7,42 @@ import (
 	"errors"
 	"testing"
 
-	"k8s.io/apimachinery/pkg/runtime"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 // testStepOptions implements FilterWeigherPipelineStepOpts for testing.
 type testStepOptions struct {
-	ValidateError error
+	Bla string `json:"bla,omitempty"`
 }
 
 func (o testStepOptions) Validate() error {
-	return o.ValidateError
+	return nil
 }
 
 func TestBaseFilterWeigherPipelineStep_Init(t *testing.T) {
 	tests := []struct {
 		name        string
-		params      runtime.RawExtension
+		params      []v1alpha1.Parameter
 		expectError bool
 	}{
 		{
 			name: "successful initialization with valid params",
-			params: runtime.RawExtension{
-				Raw: []byte(`{}`),
+			params: []v1alpha1.Parameter{
+				{Key: "bla", StringValue: testlib.Ptr("")},
 			},
 			expectError: false,
 		},
 		{
-			name: "successful initialization with empty params",
-			params: runtime.RawExtension{
-				Raw: []byte(`{}`),
-			},
+			name:        "successful initialization with empty params",
+			params:      nil,
 			expectError: false,
 		},
 		{
 			name: "error on invalid JSON params",
-			params: runtime.RawExtension{
-				Raw: []byte(`{invalid json}`),
+			params: []v1alpha1.Parameter{
+				{Key: "unexpected", StringValue: testlib.Ptr("{invalid json}")},
 			},
 			expectError: true,
 		},
@@ -74,7 +73,7 @@ func TestBaseFilterWeigherPipelineStep_Init_ValidationError(t *testing.T) {
 	step := &BaseFilterWeigherPipelineStep[mockFilterWeigherPipelineRequest, failingValidationOptions]{}
 	cl := fake.NewClientBuilder().Build()
 
-	err := step.Init(t.Context(), cl, runtime.RawExtension{Raw: []byte(`{}`)})
+	err := step.Init(t.Context(), cl, nil)
 	if err == nil {
 		t.Error("expected error from validation but got nil")
 	}

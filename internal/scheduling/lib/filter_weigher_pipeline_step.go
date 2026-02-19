@@ -5,10 +5,11 @@ package lib
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -36,7 +37,7 @@ type FilterWeigherPipelineStep[RequestType FilterWeigherPipelineRequest] interfa
 // that would otherwise be duplicated across all steps.
 type BaseFilterWeigherPipelineStep[RequestType FilterWeigherPipelineRequest, Opts FilterWeigherPipelineStepOpts] struct {
 	// Options to pass via yaml to this step.
-	conf.JsonOpts[Opts]
+	Options Opts
 	// The activation function to use.
 	ActivationFunction
 	// The kubernetes client to use.
@@ -44,10 +45,9 @@ type BaseFilterWeigherPipelineStep[RequestType FilterWeigherPipelineRequest, Opt
 }
 
 // Init the step with the database and options.
-func (s *BaseFilterWeigherPipelineStep[RequestType, Opts]) Init(ctx context.Context, client client.Client, params runtime.RawExtension) error {
-	opts := conf.NewRawOptsBytes(params.Raw)
-	if err := s.Load(opts); err != nil {
-		return err
+func (s *BaseFilterWeigherPipelineStep[RequestType, Opts]) Init(ctx context.Context, client client.Client, params v1alpha1.Parameters) error {
+	if err := conf.UnmarshalParams(&params, &s.Options); err != nil {
+		return fmt.Errorf("failed to unmarshal parameters: %w", err)
 	}
 	if err := s.Options.Validate(); err != nil {
 		return err

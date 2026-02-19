@@ -55,30 +55,24 @@ func TestBaseWeigher_Init(t *testing.T) {
 		{
 			name: "successful initialization with valid params",
 			weigherSpec: v1alpha1.WeigherSpec{
-				Name: "test-weigher",
-				Params: runtime.RawExtension{
-					Raw: []byte(`{}`),
-				},
+				Name:   "test-weigher",
+				Params: nil,
 			},
 			expectError: false,
 		},
 		{
 			name: "successful initialization with empty params",
 			weigherSpec: v1alpha1.WeigherSpec{
-				Name: "test-weigher",
-				Params: runtime.RawExtension{
-					Raw: []byte(`{}`),
-				},
+				Name:   "test-weigher",
+				Params: nil,
 			},
 			expectError: false,
 		},
 		{
 			name: "error on invalid JSON params",
 			weigherSpec: v1alpha1.WeigherSpec{
-				Name: "test-weigher",
-				Params: runtime.RawExtension{
-					Raw: []byte(`{invalid json}`),
-				},
+				Name:   "test-weigher",
+				Params: []v1alpha1.Parameter{{Key: "invalid", FloatValue: nil}},
 			},
 			expectError: true,
 		},

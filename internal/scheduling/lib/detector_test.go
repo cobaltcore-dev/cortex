@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,11 +39,12 @@ func (o mockDetectorOptions) Validate() error {
 func TestDetector_Init(t *testing.T) {
 	step := BaseDetector[mockDetectorOptions]{}
 	cl := fake.NewClientBuilder().Build()
+	params := []v1alpha1.Parameter{
+		{Key: "option1", StringValue: testlib.Ptr("value1")},
+		{Key: "option2", IntValue: testlib.Ptr(int64(2))},
+	}
 	err := step.Init(t.Context(), cl, v1alpha1.DetectorSpec{
-		Params: runtime.RawExtension{Raw: []byte(`{
-			"option1": "value1",
-			"option2": 2
-		}`)},
+		Params: params,
 	})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -60,8 +62,12 @@ func TestDetector_Init(t *testing.T) {
 func TestDetector_Init_InvalidJSON(t *testing.T) {
 	step := BaseDetector[mockDetectorOptions]{}
 	cl := fake.NewClientBuilder().Build()
+	params := []v1alpha1.Parameter{
+		{Key: "option1", StringValue: testlib.Ptr("value1")},
+		{Key: "option2", StringValue: testlib.Ptr("value2")}, // Invalid int value
+	}
 	err := step.Init(t.Context(), cl, v1alpha1.DetectorSpec{
-		Params: runtime.RawExtension{Raw: []byte(`{invalid json}`)},
+		Params: params,
 	})
 	if err == nil {
 		t.Fatal("expected error for invalid JSON, got nil")

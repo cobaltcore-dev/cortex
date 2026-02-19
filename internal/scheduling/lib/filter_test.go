@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -53,20 +52,16 @@ func TestBaseFilter_Init(t *testing.T) {
 		{
 			name: "successful initialization with valid params",
 			filterSpec: v1alpha1.FilterSpec{
-				Name: "test-filter",
-				Params: runtime.RawExtension{
-					Raw: []byte(`{}`),
-				},
+				Name:   "test-filter",
+				Params: nil,
 			},
 			expectError: false,
 		},
 		{
 			name: "successful initialization with empty params",
 			filterSpec: v1alpha1.FilterSpec{
-				Name: "test-filter",
-				Params: runtime.RawExtension{
-					Raw: []byte(`{}`),
-				},
+				Name:   "test-filter",
+				Params: nil,
 			},
 			expectError: false,
 		},
@@ -74,8 +69,8 @@ func TestBaseFilter_Init(t *testing.T) {
 			name: "error on invalid JSON params",
 			filterSpec: v1alpha1.FilterSpec{
 				Name: "test-filter",
-				Params: runtime.RawExtension{
-					Raw: []byte(`{invalid json}`),
+				Params: []v1alpha1.Parameter{
+					{Key: "invalid", FloatValue: nil},
 				},
 			},
 			expectError: true,

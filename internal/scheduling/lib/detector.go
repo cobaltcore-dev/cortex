@@ -45,7 +45,7 @@ type Detector[DetectionType Detection] interface {
 // that would otherwise be duplicated across all steps.
 type BaseDetector[Opts DetectionStepOpts] struct {
 	// Options to pass via yaml to this step.
-	conf.JsonOpts[Opts]
+	Options Opts
 	// The kubernetes client to use.
 	Client client.Client
 }
@@ -53,10 +53,8 @@ type BaseDetector[Opts DetectionStepOpts] struct {
 // Init the step.
 func (d *BaseDetector[Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
 	d.Client = client
-
-	opts := conf.NewRawOptsBytes(step.Params.Raw)
-	if err := d.Load(opts); err != nil {
-		return err
+	if err := conf.UnmarshalParams(&step.Params, &d.Options); err != nil {
+		return fmt.Errorf("failed to unmarshal parameters: %w", err)
 	}
 	return nil
 }

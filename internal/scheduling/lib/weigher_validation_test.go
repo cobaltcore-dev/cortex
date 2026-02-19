@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -38,10 +37,8 @@ func TestWeigherValidator_Init(t *testing.T) {
 		{
 			name: "successful initialization",
 			weigherSpec: v1alpha1.WeigherSpec{
-				Name: "test-weigher",
-				Params: runtime.RawExtension{
-					Raw: []byte(`{}`),
-				},
+				Name:   "test-weigher",
+				Params: nil,
 			},
 			initError:   nil,
 			expectError: false,
@@ -49,10 +46,8 @@ func TestWeigherValidator_Init(t *testing.T) {
 		{
 			name: "initialization error",
 			weigherSpec: v1alpha1.WeigherSpec{
-				Name: "test-weigher",
-				Params: runtime.RawExtension{
-					Raw: []byte(`{}`),
-				},
+				Name:   "test-weigher",
+				Params: nil,
 			},
 			initError:   errors.New("init error"),
 			expectError: true,

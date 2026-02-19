@@ -5,7 +5,6 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
 type FilterSpec struct {
@@ -15,7 +14,7 @@ type FilterSpec struct {
 
 	// Additional configuration for the step that can be used
 	// +kubebuilder:validation:Optional
-	Params runtime.RawExtension `json:"params,omitempty"`
+	Params Parameters `json:"params,omitempty"`
 
 	// Additional description of the step which helps understand its purpose
 	// and decisions made by it.
@@ -30,7 +29,7 @@ type WeigherSpec struct {
 
 	// Additional configuration for the step that can be used
 	// +kubebuilder:validation:Optional
-	Params runtime.RawExtension `json:"params,omitempty"`
+	Params Parameters `json:"params,omitempty"`
 
 	// Additional description of the step which helps understand its purpose
 	// and decisions made by it.
@@ -51,7 +50,7 @@ type DetectorSpec struct {
 
 	// Additional configuration for the step that can be used
 	// +kubebuilder:validation:Optional
-	Params runtime.RawExtension `json:"params,omitempty"`
+	Params Parameters `json:"params,omitempty"`
 
 	// Additional description of the step which helps understand its purpose
 	// and decisions made by it.

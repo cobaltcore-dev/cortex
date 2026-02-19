@@ -21,10 +21,8 @@ func TestNodeAvailableFilter_Init(t *testing.T) {
 	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	err := filter.Init(t.Context(), cl, v1alpha1.FilterSpec{
-		Name: "node-available",
-		Params: runtime.RawExtension{
-			Raw: []byte(`{}`),
-		},
+		Name:   "node-available",
+		Params: nil,
 	})
 
 	if err != nil {
