@@ -744,8 +744,9 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 				},
 				Reservation: false,
 			},
-			expectErr:   true,
-			errContains: "failed to determine flavor type from request data",
+			expectErr:      false, // should infer general purpose.
+			expectedResult: "kvm-general-purpose-load-balancing",
+			errContains:    "",
 		},
 		{
 			name: "unsupported flavor type trait value",

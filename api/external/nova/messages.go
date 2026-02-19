@@ -88,8 +88,9 @@ func (r ExternalSchedulerRequest) GetFlavorType() (FlavorType, error) {
 	extraSpecs := r.Spec.Data.Flavor.Data.ExtraSpecs
 	val, ok := extraSpecs["trait:CUSTOM_HANA_EXCLUSIVE_HOST"]
 	if !ok {
-		return "", errors.New("flavor does not specify trait:CUSTOM_HANA_EXCLUSIVE_HOST in extra specs")
+		return FlavorTypeGeneralPurpose, nil
 	}
+	// If the key is provided, it must be either "required" or "forbidden".
 	switch strings.ToLower(val) {
 	case "forbidden":
 		return FlavorTypeGeneralPurpose, nil

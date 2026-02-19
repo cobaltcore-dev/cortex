@@ -356,16 +356,16 @@ func TestGetFlavorType(t *testing.T) {
 			expectError:    false,
 		},
 		{
-			name:           "error when trait key is missing",
+			name:           "trait key is missing",
 			extraSpecs:     map[string]string{},
-			expectedFlavor: "",
-			expectError:    true,
+			expectedFlavor: FlavorTypeGeneralPurpose,
+			expectError:    false,
 		},
 		{
-			name:           "error when extra specs is nil",
+			name:           "extra specs is nil",
 			extraSpecs:     nil,
-			expectedFlavor: "",
-			expectError:    true,
+			expectedFlavor: FlavorTypeGeneralPurpose,
+			expectError:    false,
 		},
 		{
 			name: "error for unsupported trait value",
