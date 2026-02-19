@@ -4,7 +4,6 @@
 package manila
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,20 +13,20 @@ import (
 	"testing"
 
 	manilaapi "github.com/cobaltcore-dev/cortex/api/external/manila"
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
 type mockHTTPAPIDelegate struct {
-	processDecisionFunc func(ctx context.Context, decision *v1alpha1.Decision) error
+	processFunc func(ctx context.Context, request manilaapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error)
 }
 
-func (m *mockHTTPAPIDelegate) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error {
-	if m.processDecisionFunc != nil {
-		return m.processDecisionFunc(ctx, decision)
+func (m *mockHTTPAPIDelegate) ProcessRequest(ctx context.Context, request manilaapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
+	if m.processFunc != nil {
+		return m.processFunc(ctx, request)
 	}
-	return nil
+	return &lib.FilterWeigherPipelineResult{
+		OrderedHosts: []string{"host1"},
+	}, nil
 }
 
 func TestNewAPI(t *testing.T) {
@@ -142,13 +141,12 @@ func TestHTTPAPI_canRunScheduler(t *testing.T) {
 
 func TestHTTPAPI_ManilaExternalScheduler(t *testing.T) {
 	tests := []struct {
-		name               string
-		method             string
-		body               string
-		processDecisionErr error
-		decisionResult     *v1alpha1.Decision
-		expectedStatus     int
-		expectedHosts      []string
+		name           string
+		method         string
+		body           string
+		processFunc    func(ctx context.Context, request manilaapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error)
+		expectedStatus int
+		expectedHosts  []string
 	}{
 		{
 			name:           "invalid method",
@@ -180,13 +178,6 @@ func TestHTTPAPI_ManilaExternalScheduler(t *testing.T) {
 				}
 				return string(data)
 			}(),
-			decisionResult: &v1alpha1.Decision{
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						OrderedHosts: []string{"host1"},
-					},
-				},
-			},
 			expectedStatus: http.StatusOK,
 			expectedHosts:  []string{"host1"},
 		},
@@ -209,38 +200,8 @@ func TestHTTPAPI_ManilaExternalScheduler(t *testing.T) {
 				}
 				return string(data)
 			}(),
-			processDecisionErr: errors.New("processing failed"),
-			expectedStatus:     http.StatusInternalServerError,
-		},
-		{
-			name:   "decision failed",
-			method: http.MethodPost,
-			body: func() string {
-				req := manilaapi.ExternalSchedulerRequest{
-					Hosts: []manilaapi.ExternalSchedulerHost{
-						{ShareHost: "host1"},
-					},
-					Weights: map[string]float64{
-						"host1": 1.0,
-					},
-					Pipeline: "test-pipeline",
-				}
-				data, err := json.Marshal(req)
-				if err != nil {
-					t.Fatalf("Failed to marshal request data: %v", err)
-				}
-				return string(data)
-			}(),
-			decisionResult: &v1alpha1.Decision{
-				Status: v1alpha1.DecisionStatus{
-					Conditions: []metav1.Condition{
-						{
-							Type:   v1alpha1.DecisionConditionReady,
-							Status: metav1.ConditionFalse,
-							Reason: "SchedulingError",
-						},
-					},
-				},
+			processFunc: func(ctx context.Context, request manilaapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
+				return nil, errors.New("processing failed")
 			},
 			expectedStatus: http.StatusInternalServerError,
 		},
@@ -249,16 +210,7 @@ func TestHTTPAPI_ManilaExternalScheduler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			delegate := &mockHTTPAPIDelegate{
-				processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
-					if tt.processDecisionErr != nil {
-						return tt.processDecisionErr
-					}
-					if tt.decisionResult != nil {
-						decision.Status = tt.decisionResult.Status
-						return nil
-					}
-					return nil
-				},
+				processFunc: tt.processFunc,
 			}
 
 			api := NewAPI(delegate).(*httpAPI)
@@ -344,65 +296,5 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 				t.Errorf("expected pipeline name %s, got %s", tt.expectedName, pipelineName)
 			}
 		})
-	}
-}
-
-func TestHTTPAPI_ManilaExternalScheduler_DecisionCreation(t *testing.T) {
-	var capturedDecision *v1alpha1.Decision
-	delegate := &mockHTTPAPIDelegate{
-		processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
-			capturedDecision = decision
-			// Set a successful result to avoid "decision didn't produce a result" error
-			decision.Status.Result = &v1alpha1.DecisionResult{
-				OrderedHosts: []string{"host1"},
-			}
-			return nil
-		},
-	}
-
-	api := NewAPI(delegate).(*httpAPI)
-
-	requestData := manilaapi.ExternalSchedulerRequest{
-		Hosts: []manilaapi.ExternalSchedulerHost{
-			{ShareHost: "host1"},
-		},
-		Weights: map[string]float64{
-			"host1": 1.0,
-		},
-		Pipeline: "test-pipeline",
-	}
-
-	body, err := json.Marshal(requestData)
-	if err != nil {
-		t.Fatalf("Failed to marshal request data: %v", err)
-	}
-	req := httptest.NewRequest(http.MethodPost, "/scheduler/manila/external", bytes.NewReader(body))
-	w := httptest.NewRecorder()
-
-	api.ManilaExternalScheduler(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
-	}
-
-	if capturedDecision == nil {
-		t.Fatal("Decision was not captured")
-	}
-
-	// Verify decision fields
-	if capturedDecision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainManila {
-		t.Errorf("Expected scheduling domain %s, got %s", v1alpha1.SchedulingDomainManila, capturedDecision.Spec.SchedulingDomain)
-	}
-
-	if capturedDecision.Spec.PipelineRef.Name != "test-pipeline" {
-		t.Errorf("Expected pipeline 'test-pipeline', got %s", capturedDecision.Spec.PipelineRef.Name)
-	}
-
-	if capturedDecision.GenerateName != "manila-" {
-		t.Errorf("Expected generate name 'manila-', got %s", capturedDecision.GenerateName)
-	}
-
-	if capturedDecision.Spec.ManilaRaw == nil {
-		t.Error("ManilaRaw should not be nil")
 	}
 }
