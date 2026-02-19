@@ -19,8 +19,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/machines/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/machines/plugins/weighers"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -54,91 +52,25 @@ func (c *FilterWeigherPipelineController) PipelineType() v1alpha1.PipelineType {
 	return v1alpha1.PipelineTypeFilterWeigher
 }
 
-func (c *FilterWeigherPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	c.processMu.Lock()
-	defer c.processMu.Unlock()
-
-	// Determine if this is a decision or machine reconciliation.
-	decision := &v1alpha1.Decision{}
-	if err := c.Get(ctx, req.NamespacedName, decision); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-	old := decision.DeepCopy()
-	if err := c.process(ctx, decision); err != nil {
-		return ctrl.Result{}, err
-	}
-	patch := client.MergeFrom(old)
-	if err := c.Status().Patch(ctx, decision, patch); err != nil {
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
-}
-
 func (c *FilterWeigherPipelineController) ProcessNewMachine(ctx context.Context, machine *ironcorev1alpha1.Machine) error {
 	c.processMu.Lock()
 	defer c.processMu.Unlock()
 
-	// Create a decision resource to schedule the machine.
-	decision := &v1alpha1.Decision{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "machine-",
-		},
-		Spec: v1alpha1.DecisionSpec{
-			SchedulingDomain: v1alpha1.SchedulingDomainMachines,
-			ResourceID:       machine.Name,
-			PipelineRef: corev1.ObjectReference{
-				Name: "machines-scheduler",
-			},
-			MachineRef: &corev1.ObjectReference{
-				Name:      machine.Name,
-				Namespace: machine.Namespace,
-			},
-		},
-	}
-
-	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
-	if !ok {
-		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
-	}
-	if pipelineConf.Spec.CreateDecisions {
-		if err := c.Create(ctx, decision); err != nil {
-			return err
-		}
-	}
-	old := decision.DeepCopy()
-	err := c.process(ctx, decision)
-	if err != nil {
-		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DecisionConditionReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "PipelineRunFailed",
-			Message: "pipeline run failed: " + err.Error(),
-		})
-	} else {
-		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DecisionConditionReady,
-			Status:  metav1.ConditionTrue,
-			Reason:  "PipelineRunSucceeded",
-			Message: "pipeline run succeeded",
-		})
-	}
-	if pipelineConf.Spec.CreateDecisions {
-		patch := client.MergeFrom(old)
-		if err := c.Status().Patch(ctx, decision, patch); err != nil {
-			return err
-		}
-	}
-	return err
-}
-
-func (c *FilterWeigherPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
 	log := ctrl.LoggerFrom(ctx)
-	startedAt := time.Now() // So we can measure sync duration.
+	startedAt := time.Now()
 
-	pipeline, ok := c.Pipelines[decision.Spec.PipelineRef.Name]
+	pipelineName := "machines-scheduler"
+
+	pipeline, ok := c.Pipelines[pipelineName]
 	if !ok {
-		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
+		log.Error(nil, "pipeline not found or not ready", "pipelineName", pipelineName)
 		return errors.New("pipeline not found or not ready")
+	}
+
+	pipelineConfig, ok := c.PipelineConfigs[pipelineName]
+	if !ok {
+		log.Error(nil, "pipeline not configured", "pipelineName", pipelineName)
+		return fmt.Errorf("pipeline %s not configured", pipelineName)
 	}
 
 	// Find all available machine pools.
@@ -157,27 +89,38 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		log.V(1).Error(err, "failed to run scheduler pipeline")
 		return errors.New("failed to run scheduler pipeline")
 	}
-	decision.Status.Result = &result
-	log.Info("decision processed successfully", "duration", time.Since(startedAt))
+
+	log.Info("machine processed successfully", "duration", time.Since(startedAt))
+
+	hosts := result.OrderedHosts
+	if len(hosts) == 0 {
+		log.Info("no suitable machine pools found by pipeline")
+		return errors.New("no suitable machine pools found")
+	}
+
+	targetHost := hosts[0]
 
 	// Set the machine pool ref on the machine.
-	machine := &ironcorev1alpha1.Machine{}
-	if err := c.Get(ctx, client.ObjectKey{
-		Name:      decision.Spec.MachineRef.Name,
-		Namespace: decision.Spec.MachineRef.Namespace,
-	}, machine); err != nil {
-		log.Error(err, "failed to fetch machine for decision")
-		return err
-	}
+
 	// Assign the first machine pool returned by the pipeline.
 	old := machine.DeepCopy()
-	machine.Spec.MachinePoolRef = &corev1.LocalObjectReference{Name: *result.TargetHost}
+	machine.Spec.MachinePoolRef = &corev1.LocalObjectReference{Name: targetHost}
 	patch := client.MergeFrom(old)
 	if err := c.Patch(ctx, machine, patch); err != nil {
 		log.V(1).Error(err, "failed to assign machine pool to instance")
 		return err
 	}
-	log.V(1).Info("assigned machine pool to instance", "machinePool", *result.TargetHost)
+	log.V(1).Info("assigned machine pool to instance", "machinePool", targetHost)
+
+	if pipelineConfig.Spec.CreateDecisions {
+		c.DecisionQueue <- lib.DecisionUpdate{
+			ResourceID:   machine.Name,
+			PipelineName: pipelineName,
+			Result:       result,
+			// TODO: Refine the reason
+			Reason: v1alpha1.SchedulingReasonUnknown,
+		}
+	}
 	return nil
 }
 
@@ -225,7 +168,7 @@ func (c *FilterWeigherPipelineController) handleMachine() handler.EventHandler {
 				return
 			}
 			for _, decision := range decisions.Items {
-				if decision.Spec.MachineRef.Name == machine.Name && decision.Spec.MachineRef.Namespace == machine.Namespace {
+				if decision.Spec.ResourceID == machine.Name && decision.Spec.SchedulingDomain == v1alpha1.SchedulingDomainMachines {
 					if err := c.Delete(ctx, &decision); err != nil {
 						log.Error(err, "failed to delete decision for deleted machine")
 					}
@@ -259,37 +202,16 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 				return machine.Spec.Scheduler == ""
 			}),
 		).
-		// Watch pipeline changes so that we can reconfigure pipelines as needed.
-		WatchesMulticluster(
+		For(
 			&v1alpha1.Pipeline{},
-			handler.Funcs{
-				CreateFunc: c.HandlePipelineCreated,
-				UpdateFunc: c.HandlePipelineUpdated,
-				DeleteFunc: c.HandlePipelineDeleted,
-			},
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				pipeline := obj.(*v1alpha1.Pipeline)
-				// Only react to pipelines matching the scheduling domain.
 				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainMachines {
 					return false
 				}
 				return pipeline.Spec.Type == c.PipelineType()
-			}),
-		).
-		Named("cortex-machine-scheduler").
-		For(
-			&v1alpha1.Decision{},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				decision := obj.(*v1alpha1.Decision)
-				if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainMachines {
-					return false
-				}
-				// Ignore already decided schedulings.
-				if decision.Status.Result != nil {
-					return false
-				}
-				return true
 			})),
 		).
+		Named("cortex-machine-scheduler").
 		Complete(c)
 }
