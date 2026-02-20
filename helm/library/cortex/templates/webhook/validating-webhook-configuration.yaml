@@ -1,0 +1,48 @@
+{{- if .Values.webhook.enable }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ .Values.namePrefix }}-validating-webhook-configuration
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  {{- if .Values.certmanager.enable }}
+  annotations:
+    "cert-manager.io/inject-ca-from": {{ .Release.Namespace }}/{{ .Values.namePrefix }}-webhook-cert
+  {{- end }}
+webhooks:
+  # This webhook validates the creation and update of cortex pipelines.
+  - name: {{ .Values.namePrefix }}-validate-v1alpha1-pipeline.cortex.cloud
+    admissionReviewVersions: [v1]
+    clientConfig:
+      # If we want to talk to the cortex webhook in another kubernetes cluster,
+      # we can template this out to use the ingress url provided by cortex. E.g.:
+      # url: "https://<my ingress url>/validate-cortex-cloud-v1alpha1-pipeline" for cross-cluster
+      service:
+        name: {{ .Values.namePrefix }}-webhook-service
+        namespace: {{ .Release.Namespace }}
+        # This path is managed by controller-runtime. It will route to the
+        # correct validating webhook handler based on the path.
+        path: /validate-cortex-cloud-v1alpha1-pipeline
+      {{- if not .Values.certmanager.enable }}
+      {{- if .Values.webhook.caBundle }}
+      caBundle: {{ .Values.webhook.caBundle }}
+      {{- end }}
+      {{- end }}
+    timeoutSeconds: 10
+    failurePolicy: Ignore
+    rules:
+      - apiGroups:
+          - cortex.cloud
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - pipelines
+    sideEffects: None
+    {{- if .Values.webhook.namespaceSelector }}
+    namespaceSelector:
+      {{- toYaml .Values.webhook.namespaceSelector | nindent 6 }}
+    {{- end }}
+{{- end }}

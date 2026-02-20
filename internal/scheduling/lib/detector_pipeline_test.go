@@ -17,13 +17,18 @@ import (
 
 // mockDetectorStep implements Detector[mockDetection]
 type mockDetectorStep struct {
-	decisions []mockDetection
-	initErr   error
-	runErr    error
+	decisions   []mockDetection
+	initErr     error
+	validateErr error
+	runErr      error
 }
 
 func (m *mockDetectorStep) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
 	return m.initErr
+}
+
+func (m *mockDetectorStep) Validate(ctx context.Context, params runtime.RawExtension) error {
+	return m.validateErr
 }
 
 func (m *mockDetectorStep) Run() ([]mockDetection, error) {

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -22,6 +23,11 @@ type FilterValidator[RequestType FilterWeigherPipelineRequest] struct {
 func (s *FilterValidator[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error {
 	slog.Info("scheduler: init validation for step", "name", step.Name)
 	return s.Filter.Init(ctx, client, step)
+}
+
+// Validate the wrapped filter.
+func (s *FilterValidator[RequestType]) Validate(ctx context.Context, params runtime.RawExtension) error {
+	return s.Filter.Validate(ctx, params)
 }
 
 // Validate the wrapped filter with the database and options.

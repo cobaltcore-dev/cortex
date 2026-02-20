@@ -8,6 +8,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -101,6 +102,11 @@ func (m DetectorMonitor[DetectionType]) Init(
 ) error {
 
 	return m.step.Init(ctx, client, step)
+}
+
+// Validate the wrapped step configuration.
+func (m DetectorMonitor[DetectionType]) Validate(ctx context.Context, params runtime.RawExtension) error {
+	return m.step.Validate(ctx, params)
 }
 
 // Run the step and measure its execution time.
