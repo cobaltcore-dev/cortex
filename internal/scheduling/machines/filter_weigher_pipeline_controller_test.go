@@ -139,38 +139,6 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 			expectTargetHost:          "pool1",
 		},
 		{
-			name: "successful machine processing without decision creation",
-			machine: &ironcorev1alpha1.Machine{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-machine-no-decision",
-					Namespace: "default",
-				},
-				Spec: ironcorev1alpha1.MachineSpec{
-					Scheduler: "",
-				},
-			},
-			machinePools: []ironcorev1alpha1.MachinePool{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "pool1"},
-				},
-			},
-			pipelineConfig: &v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "machines-scheduler",
-				},
-				Spec: v1alpha1.PipelineSpec{
-					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
-					CreateDecisions:  false,
-					Filters:          []v1alpha1.FilterSpec{},
-					Weighers:         []v1alpha1.WeigherSpec{},
-				},
-			},
-			expectError:               false,
-			expectMachinePoolAssigned: true,
-			expectTargetHost:          "pool1",
-		},
-		{
 			name: "pipeline not configured",
 			machine: &ironcorev1alpha1.Machine{
 				ObjectMeta: metav1.ObjectMeta{

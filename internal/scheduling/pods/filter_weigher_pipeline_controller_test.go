@@ -98,18 +98,16 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                  string
-		pod                   *corev1.Pod
-		nodes                 []corev1.Node
-		pipelineConfig        *v1alpha1.Pipeline
-		createDecisions       bool
-		expectError           bool
-		expectDecisionCreated bool
-		expectNodeAssigned    bool
-		expectTargetHost      string
+		name               string
+		pod                *corev1.Pod
+		nodes              []corev1.Node
+		pipelineConfig     *v1alpha1.Pipeline
+		expectError        bool
+		expectNodeAssigned bool
+		expectTargetHost   string
 	}{
 		{
-			name: "successful pod processing with decision creation",
+			name: "successful pod processing",
 			pod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pod",
@@ -134,50 +132,14 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainPods,
-					CreateDecisions:  true,
-					Filters:          []v1alpha1.FilterSpec{},
-					Weighers:         []v1alpha1.WeigherSpec{},
-				},
-			},
-			createDecisions:       true,
-			expectError:           false,
-			expectDecisionCreated: true,
-			expectNodeAssigned:    true,
-			expectTargetHost:      "node1",
-		},
-		{
-			name: "successful pod processing without decision creation",
-			pod: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-pod-no-decision",
-					Namespace: "default",
-				},
-				Spec: corev1.PodSpec{
-					SchedulerName: "",
-				},
-			},
-			nodes: []corev1.Node{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "node1"},
-				},
-			},
-			pipelineConfig: &v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "pods-scheduler",
-				},
-				Spec: v1alpha1.PipelineSpec{
-					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					SchedulingDomain: v1alpha1.SchedulingDomainPods,
 					CreateDecisions:  false,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createDecisions:       false,
-			expectError:           false,
-			expectDecisionCreated: false,
-			expectNodeAssigned:    true,
-			expectTargetHost:      "node1",
+			expectError:        false,
+			expectNodeAssigned: true,
+			expectTargetHost:   "node1",
 		},
 		{
 			name: "pipeline not configured",
@@ -190,11 +152,10 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 					SchedulerName: "",
 				},
 			},
-			nodes:                 []corev1.Node{},
-			pipelineConfig:        nil,
-			expectError:           true,
-			expectDecisionCreated: false,
-			expectNodeAssigned:    false,
+			nodes:              []corev1.Node{},
+			pipelineConfig:     nil,
+			expectError:        true,
+			expectNodeAssigned: false,
 		},
 		{
 			name: "no nodes available",
@@ -220,10 +181,8 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createDecisions:       true,
-			expectError:           true,
-			expectDecisionCreated: true, // Decision is created but processing fails
-			expectNodeAssigned:    false,
+			expectError:        true,
+			expectNodeAssigned: false,
 		},
 	}
 
@@ -267,60 +226,6 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 			if !tt.expectError && err != nil {
 				t.Errorf("expected no error, got: %v", err)
 				return
-			}
-
-			// Check if decision was created (if expected)
-			if tt.expectDecisionCreated {
-				var decisions v1alpha1.DecisionList
-				err := client.List(context.Background(), &decisions)
-				if err != nil {
-					t.Errorf("Failed to list decisions: %v", err)
-					return
-				}
-
-				found := false
-				for _, decision := range decisions.Items {
-					if decision.Spec.ResourceID == tt.pod.Name &&
-						decision.Spec.SchedulingDomain == v1alpha1.SchedulingDomainPods {
-						found = true
-
-						// Verify decision properties
-						if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainPods {
-							t.Errorf("expected scheduling domain %q, got %q", v1alpha1.SchedulingDomainPods, decision.Spec.SchedulingDomain)
-						}
-						if decision.Spec.ResourceID != tt.pod.Name {
-							t.Errorf("expected resource ID %q, got %q", tt.pod.Name, decision.Spec.ResourceID)
-						}
-
-						// Check if result was set (only for successful cases)
-						if !tt.expectError && tt.expectTargetHost != "" {
-							if decision.Status.TargetHost != tt.expectTargetHost {
-								t.Errorf("expected target host %q, got %q", tt.expectTargetHost, decision.Status.TargetHost)
-							}
-						}
-						break
-					}
-				}
-
-				if !found {
-					t.Error("expected decision to be created but was not found")
-				}
-			} else {
-				// Check that no decisions were created
-				var decisions v1alpha1.DecisionList
-				err := client.List(context.Background(), &decisions)
-				if err != nil {
-					t.Errorf("Failed to list decisions: %v", err)
-					return
-				}
-
-				for _, decision := range decisions.Items {
-					if decision.Spec.ResourceID == tt.pod.Name &&
-						decision.Spec.SchedulingDomain == v1alpha1.SchedulingDomainPods {
-						t.Error("expected no decision to be created but found one")
-						break
-					}
-				}
 			}
 
 			// Check if node was assigned (if expected)

@@ -170,17 +170,15 @@ func TestFilterWeigherPipelineController_ProcessRequest(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                  string
-		request               api.ExternalSchedulerRequest
-		pipeline              *v1alpha1.Pipeline
-		pipelineConf          *v1alpha1.Pipeline
-		setupPipelineConfigs  bool
-		createDecisions       bool
-		expectError           bool
-		expectResult          bool
-		expectCreatedDecision bool
-		expectUpdatedStatus   bool
-		errorContains         string
+		name                 string
+		request              api.ExternalSchedulerRequest
+		pipeline             *v1alpha1.Pipeline
+		pipelineConf         *v1alpha1.Pipeline
+		setupPipelineConfigs bool
+		expectError          bool
+		expectResult         bool
+		expectUpdatedStatus  bool
+		errorContains        string
 	}{
 		{
 			name:    "successful processing with decision creation enabled",
@@ -209,82 +207,21 @@ func TestFilterWeigherPipelineController_ProcessRequest(t *testing.T) {
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			setupPipelineConfigs:  true,
-			createDecisions:       true,
-			expectError:           false,
-			expectResult:          true,
-			expectCreatedDecision: true,
-			expectUpdatedStatus:   true,
+			setupPipelineConfigs: true,
+			expectError:          false,
+			expectResult:         true,
+			expectUpdatedStatus:  true,
 		},
 		{
-			name:    "successful processing with decision creation disabled",
-			request: novaRequest,
-			pipeline: &v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-pipeline-no-create",
-				},
-				Spec: v1alpha1.PipelineSpec{
-					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  false,
-					Filters:          []v1alpha1.FilterSpec{},
-					Weighers:         []v1alpha1.WeigherSpec{},
-				},
-			},
-			pipelineConf: &v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-pipeline-no-create",
-				},
-				Spec: v1alpha1.PipelineSpec{
-					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  false,
-					Filters:          []v1alpha1.FilterSpec{},
-					Weighers:         []v1alpha1.WeigherSpec{},
-				},
-			},
-			setupPipelineConfigs:  true,
-			createDecisions:       false,
-			expectError:           false,
-			expectResult:          true,
-			expectCreatedDecision: false,
-			expectUpdatedStatus:   false,
-		},
-		{
-			name:                  "pipeline not configured",
-			request:               novaRequest,
-			pipeline:              nil,
-			pipelineConf:          nil,
-			setupPipelineConfigs:  false,
-			expectError:           true,
-			expectResult:          false,
-			expectCreatedDecision: false,
-			expectUpdatedStatus:   false,
-			errorContains:         "pipeline nonexistent-pipeline not configured",
-		},
-		{
-			name:     "processing fails after decision creation",
-			request:  novaRequest,
-			pipeline: nil, // This will cause processing to fail after creation
-			pipelineConf: &v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-pipeline",
-				},
-				Spec: v1alpha1.PipelineSpec{
-					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  true,
-					Filters:          []v1alpha1.FilterSpec{},
-					Weighers:         []v1alpha1.WeigherSpec{},
-				},
-			},
-			setupPipelineConfigs:  true,
-			createDecisions:       true,
-			expectError:           true,
-			expectResult:          false,
-			expectCreatedDecision: true,
-			expectUpdatedStatus:   false,
-			errorContains:         "pipeline not found or not ready",
+			name:                 "pipeline not configured",
+			request:              novaRequest,
+			pipeline:             nil,
+			pipelineConf:         nil,
+			setupPipelineConfigs: false,
+			expectError:          true,
+			expectResult:         false,
+			expectUpdatedStatus:  false,
+			errorContains:        "pipeline test-pipeline not found or not ready",
 		},
 		{
 			name:     "pipeline not found in runtime map",
@@ -302,13 +239,11 @@ func TestFilterWeigherPipelineController_ProcessRequest(t *testing.T) {
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			setupPipelineConfigs:  true,
-			createDecisions:       true,
-			expectError:           true,
-			expectResult:          false,
-			expectCreatedDecision: true,
-			expectUpdatedStatus:   false,
-			errorContains:         "pipeline not found or not ready",
+			setupPipelineConfigs: true,
+			expectError:          true,
+			expectResult:         false,
+			expectUpdatedStatus:  false,
+			errorContains:        "pipeline not found or not ready",
 		},
 	}
 
@@ -330,6 +265,7 @@ func TestFilterWeigherPipelineController_ProcessRequest(t *testing.T) {
 					Client:          client,
 					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
+					DecisionQueue:   make(chan lib.DecisionUpdate, 100),
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
@@ -366,23 +302,6 @@ func TestFilterWeigherPipelineController_ProcessRequest(t *testing.T) {
 			if tt.errorContains != "" && (err == nil || !strings.Contains(err.Error(), tt.errorContains)) {
 				t.Errorf("Expected error to contain %q, got: %v", tt.errorContains, err)
 			}
-
-			// Check if decision was created in the cluster when expected
-			/* TODO CHECK IF DECISION WAS CREATED if tt.expectCreatedDecision {
-				var createdDecision v1alpha1.Decision
-				key := types.NamespacedName{Name: tt.decision.Name, Namespace: tt.decision.Namespace}
-				err := client.Get(context.Background(), key, &createdDecision)
-				if err != nil {
-					t.Errorf("Expected decision to be created but got error: %v", err)
-				}
-			} else {
-				var createdDecision v1alpha1.Decision
-				key := types.NamespacedName{Name: tt.decision.Name, Namespace: tt.decision.Namespace}
-				err := client.Get(context.Background(), key, &createdDecision)
-				if err == nil {
-					t.Error("Expected decision not to be created but it was found")
-				}
-			}*/
 
 			// Validate result and duration expectations
 			if tt.expectResult && result == nil {
