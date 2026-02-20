@@ -175,6 +175,7 @@ func (s *Syncer) resolveUnusedCommitments(ctx context.Context) ([]resolvedCommit
 // Fetch commitments and update/create reservations for each of them.
 func (s *Syncer) SyncReservations(ctx context.Context) error {
 	// Get all commitments that should be converted to reservations.
+	// TODO keep all commitments, not only the unused ones, propagate allocation correctly
 	commitments, err := s.resolveUnusedCommitments(ctx)
 	if err != nil {
 		syncLog.Error(err, "failed to get compute commitments")
@@ -198,10 +199,12 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 				// Disk is currently not considered.
 			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				ProjectID:    commitment.ProjectID,
-				DomainID:     commitment.DomainID,
-				ResourceName: commitment.Flavor.Name,
-				Creator:      CreatorValue,
+				ProjectID:     commitment.ProjectID,
+				DomainID:      commitment.DomainID,
+				ResourceName:  commitment.Flavor.Name,
+				ResourceGroup: commitment.Flavor.ExtraSpecs["hw_version"],
+				Allocations:   make(map[string]v1alpha1.CommittedResourceAllocation),
+				Creator:       CreatorValue,
 			},
 		}
 		for n := range commitment.Amount { // N instances

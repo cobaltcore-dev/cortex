@@ -21,21 +21,31 @@ const (
 	ReservationTypeFailover ReservationType = "FailoverReservation"
 )
 
+// CommittedResourceAllocation represents a workload's assignment to a committed resource reservation slot.
+// The workload could be a VM (Nova/IronCore), Pod (Kubernetes), or other resource.
+type CommittedResourceAllocation struct {
+	// Timestamp when this workload was assigned to the reservation.
+	// +kubebuilder:validation:Required
+	CreationTimestamp metav1.Time `json:"creationTimestamp"`
+
+	// Resources consumed by this instance.
+	// +kubebuilder:validation:Required
+	Resources map[string]resource.Quantity `json:"resources"`
+}
+
 // CommittedResourceReservationSpec defines the spec fields specific to committed resource reservations.
 type CommittedResourceReservationSpec struct {
-	// ResourceName is the name of the resource to reserve (e.g., FlavorName for Nova).
+	// ResourceName is the name of the resource to reserve. (e.g. flavor name for Nova)
 	// +kubebuilder:validation:Optional
 	ResourceName string `json:"resourceName,omitempty"`
 
-	// ResourceGroup is the group/category of the resource (e.g., "hana_medium_v2").
+	// ResourceGroup is the group/category of the resource (e.g., flavor group for Nova)
 	// +kubebuilder:validation:Optional
 	ResourceGroup string `json:"resourceGroup,omitempty"`
 
-	// ProjectID is the UUID of the project this reservation belongs to.
 	// +kubebuilder:validation:Optional
 	ProjectID string `json:"projectID,omitempty"`
 
-	// DomainID is the domain ID to reserve for.
 	// +kubebuilder:validation:Optional
 	DomainID string `json:"domainID,omitempty"`
 
@@ -43,6 +53,12 @@ type CommittedResourceReservationSpec struct {
 	// Used to track ownership and for cleanup purposes (e.g., "commitments-syncer").
 	// +kubebuilder:validation:Optional
 	Creator string `json:"creator,omitempty"`
+
+	// Allocations maps workload identifiers to their allocation details.
+	// Key: Workload UUID (VM UUID for Nova, Pod UID for Pods, Machine UID for IronCore, etc.)
+	// Value: allocation state and metadata
+	// +kubebuilder:validation:Optional
+	Allocations map[string]CommittedResourceAllocation `json:"allocations,omitempty"`
 }
 
 // FailoverReservationSpec defines the spec fields specific to failover reservations.
@@ -101,9 +117,10 @@ const (
 
 // CommittedResourceReservationStatus defines the status fields specific to committed resource reservations.
 type CommittedResourceReservationStatus struct {
-	// Allocations lists the VM/instance UUIDs that are currently allocated against this reservation.
+	// Allocations maps VM/instance UUIDs to the host they are currently running on.
+	// Key: VM/instance UUID, Value: Host name where the VM is currently running.
 	// +kubebuilder:validation:Optional
-	Allocations []string `json:"allocations,omitempty"`
+	Allocations map[string]string `json:"allocations,omitempty"`
 }
 
 // FailoverReservationStatus defines the status fields specific to failover reservations.
