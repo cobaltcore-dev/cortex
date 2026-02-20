@@ -4,6 +4,7 @@
 package lib
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"testing"
@@ -28,7 +29,7 @@ func TestStepMonitorRun(t *testing.T) {
 		removedHostsObserver: removedHostsObserver,
 	}
 	step := &mockWeigher[mockFilterWeigherPipelineRequest]{
-		RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+		RunFunc: func(_ context.Context, traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
 			return &FilterWeigherPipelineStepResult{
 				Activations: map[string]float64{"host1": 0.1, "host2": 1.0, "host3": 0.0},
 			}, nil
@@ -38,7 +39,7 @@ func TestStepMonitorRun(t *testing.T) {
 		Hosts:   []string{"host1", "host2", "host3"},
 		Weights: map[string]float64{"host1": 0.2, "host2": 0.1, "host3": 0.0},
 	}
-	if _, err := monitor.RunWrapped(slog.Default(), request, step); err != nil {
+	if _, err := monitor.RunWrapped(t.Context(), slog.Default(), request, step); err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
 	if len(removedHostsObserver.Observations) != 1 {

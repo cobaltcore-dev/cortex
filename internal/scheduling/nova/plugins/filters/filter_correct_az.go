@@ -18,7 +18,7 @@ type FilterCorrectAZStep struct {
 }
 
 // Only get hosts in the requested az.
-func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterCorrectAZStep) Run(ctx context.Context, traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	if request.Spec.Data.AvailabilityZone == "" {
 		traceLog.Info("no availability zone requested, skipping filter_correct_az step")
@@ -26,7 +26,7 @@ func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSch
 	}
 
 	hvs := &hv1.HypervisorList{}
-	if err := s.Client.List(context.Background(), hvs); err != nil {
+	if err := s.Client.List(ctx, hvs); err != nil {
 		traceLog.Error("failed to list hypervisors", "error", err)
 		return nil, err
 	}

@@ -22,7 +22,7 @@ func (f *TaintFilter) Init(ctx context.Context, client client.Client, step v1alp
 	return nil
 }
 
-func (TaintFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (TaintFilter) Run(_ context.Context, traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	activations := make(map[string]float64)
 	stats := make(map[string]lib.FilterWeigherPipelineStepStatistics)
 

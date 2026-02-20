@@ -12,7 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -54,14 +54,14 @@ func (s *VMwareAvoidShortTermContendedHostsStep) Init(ctx context.Context, clien
 	if err := s.BaseWeigher.Init(ctx, client, weigher); err != nil {
 		return err
 	}
-	if err := s.CheckKnowledges(ctx, corev1.ObjectReference{Name: "vmware-short-term-contended-hosts"}); err != nil {
+	if err := s.CheckKnowledges(ctx, types.NamespacedName{Name: "vmware-short-term-contended-hosts"}); err != nil {
 		return err
 	}
 	return nil
 }
 
 // Downvote hosts that are highly contended.
-func (s *VMwareAvoidShortTermContendedHostsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *VMwareAvoidShortTermContendedHostsStep) Run(ctx context.Context, traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
@@ -69,7 +69,7 @@ func (s *VMwareAvoidShortTermContendedHostsStep) Run(traceLog *slog.Logger, requ
 
 	knowledge := &v1alpha1.Knowledge{}
 	if err := s.Client.Get(
-		context.Background(),
+		ctx,
 		client.ObjectKey{Name: "vmware-short-term-contended-hosts"},
 		knowledge,
 	); err != nil {

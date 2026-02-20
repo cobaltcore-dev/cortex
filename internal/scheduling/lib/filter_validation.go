@@ -30,8 +30,8 @@ func validateFilter[RequestType FilterWeigherPipelineRequest](filter Filter[Requ
 }
 
 // Run the filter and validate what happens.
-func (s *FilterValidator[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
-	result, err := s.Filter.Run(traceLog, request)
+func (s *FilterValidator[RequestType]) Run(ctx context.Context, traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
+	result, err := s.Filter.Run(ctx, traceLog, request)
 	if err != nil {
 		return nil, err
 	}

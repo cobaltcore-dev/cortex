@@ -94,10 +94,10 @@ func monitorFeatureExtractor[F plugins.FeatureExtractor](label string, f F, m Mo
 }
 
 // Run the wrapped feature extractor and measure the time it takes.
-func (m FeatureExtractorMonitor[F]) Extract() ([]plugins.Feature, error) {
+func (m FeatureExtractorMonitor[F]) Extract(d []*v1alpha1.Datasource, k []*v1alpha1.Knowledge) ([]plugins.Feature, error) {
 	slog.Info("features: extracting", "extractor", m.label)
 
-	features, err := m.FeatureExtractor.Extract()
+	features, err := m.FeatureExtractor.Extract(d, k)
 	if err != nil {
 		return nil, err
 	}

@@ -6,6 +6,7 @@ package compute
 import (
 	_ "embed"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
 )
 
@@ -32,6 +33,6 @@ type LibvirtDomainCPUStealPctExtractor struct {
 var libvirtDomainCPUStealPctSQL string
 
 // Extract CPU steal time of kvm hosts.
-func (e *LibvirtDomainCPUStealPctExtractor) Extract() ([]plugins.Feature, error) {
+func (e *LibvirtDomainCPUStealPctExtractor) Extract(_ []*v1alpha1.Datasource, _ []*v1alpha1.Knowledge) ([]plugins.Feature, error) {
 	return e.ExtractSQL(libvirtDomainCPUStealPctSQL)
 }

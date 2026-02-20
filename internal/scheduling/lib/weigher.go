@@ -9,8 +9,8 @@ import (
 	"fmt"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -34,16 +34,13 @@ func (s *BaseWeigher[RequestType, Opts]) Init(ctx context.Context, client client
 }
 
 // Check if all knowledges are ready, and if not, return an error indicating why not.
-func (d *BaseFilterWeigherPipelineStep[RequestType, Opts]) CheckKnowledges(ctx context.Context, kns ...corev1.ObjectReference) error {
+func (d *BaseFilterWeigherPipelineStep[RequestType, Opts]) CheckKnowledges(ctx context.Context, kns ...types.NamespacedName) error {
 	if d.Client == nil {
 		return errors.New("kubernetes client not initialized")
 	}
 	for _, objRef := range kns {
 		knowledge := &v1alpha1.Knowledge{}
-		if err := d.Client.Get(ctx, client.ObjectKey{
-			Name:      objRef.Name,
-			Namespace: objRef.Namespace,
-		}, knowledge); err != nil {
+		if err := d.Client.Get(ctx, objRef, knowledge); err != nil {
 			return fmt.Errorf("failed to get knowledge %s: %w", objRef.Name, err)
 		}
 		// Check if the knowledge status conditions indicate an error.

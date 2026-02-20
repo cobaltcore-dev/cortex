@@ -326,7 +326,7 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterInstanceGroupAffinityStep{}
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(t.Context(), slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

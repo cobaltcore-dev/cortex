@@ -13,7 +13,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -45,8 +45,8 @@ func (s *VMwareHanaBinpackingStep) Init(ctx context.Context, client client.Clien
 		return err
 	}
 	if err := s.CheckKnowledges(ctx,
-		corev1.ObjectReference{Name: "host-utilization"},
-		corev1.ObjectReference{Name: "host-capabilities"},
+		types.NamespacedName{Name: "host-utilization"},
+		types.NamespacedName{Name: "host-capabilities"},
 	); err != nil {
 		return err
 	}
@@ -54,7 +54,7 @@ func (s *VMwareHanaBinpackingStep) Init(ctx context.Context, client client.Clien
 }
 
 // Pack VMs on hosts based on their flavor.
-func (s *VMwareHanaBinpackingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *VMwareHanaBinpackingStep) Run(ctx context.Context, traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	result.Statistics["ram utilized after"] = s.PrepareStats(request, "%")
@@ -64,7 +64,7 @@ func (s *VMwareHanaBinpackingStep) Run(traceLog *slog.Logger, request api.Extern
 	// this step is only executed for VMware hosts.
 	hostCapabilitiesKnowledge := &v1alpha1.Knowledge{}
 	if err := s.Client.Get(
-		context.Background(),
+		ctx,
 		client.ObjectKey{Name: "host-capabilities"},
 		hostCapabilitiesKnowledge,
 	); err != nil {
@@ -99,7 +99,7 @@ func (s *VMwareHanaBinpackingStep) Run(traceLog *slog.Logger, request api.Extern
 
 	hostUtilizationKnowledge := &v1alpha1.Knowledge{}
 	if err := s.Client.Get(
-		context.Background(),
+		ctx,
 		client.ObjectKey{Name: "host-utilization"},
 		hostUtilizationKnowledge,
 	); err != nil {

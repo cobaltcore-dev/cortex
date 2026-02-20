@@ -25,4 +25,6 @@ var supportedExtractors = map[string]plugins.FeatureExtractor{
 	"sap_host_details_extractor":                       &compute.HostDetailsExtractor{},
 
 	"netapp_storage_pool_cpu_usage_extractor": &storage.StoragePoolCPUUsageExtractor{},
+
+	"generic": &plugins.GenericExtractor{},
 }

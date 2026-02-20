@@ -13,7 +13,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -45,8 +45,8 @@ func (s *VMwareGeneralPurposeBalancingStep) Init(ctx context.Context, client cli
 		return err
 	}
 	if err := s.CheckKnowledges(ctx,
-		corev1.ObjectReference{Name: "host-utilization"},
-		corev1.ObjectReference{Name: "host-capabilities"},
+		types.NamespacedName{Name: "host-utilization"},
+		types.NamespacedName{Name: "host-capabilities"},
 	); err != nil {
 		return err
 	}
@@ -54,14 +54,14 @@ func (s *VMwareGeneralPurposeBalancingStep) Init(ctx context.Context, client cli
 }
 
 // Pack VMs on hosts based on their flavor.
-func (s *VMwareGeneralPurposeBalancingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *VMwareGeneralPurposeBalancingStep) Run(ctx context.Context, traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	result.Statistics["ram utilized"] = s.PrepareStats(request, "%")
 
 	hostUtilizationKnowledge := &v1alpha1.Knowledge{}
 	if err := s.Client.Get(
-		context.Background(),
+		ctx,
 		client.ObjectKey{Name: "host-utilization"},
 		hostUtilizationKnowledge,
 	); err != nil {
@@ -94,7 +94,7 @@ func (s *VMwareGeneralPurposeBalancingStep) Run(traceLog *slog.Logger, request a
 	// this step is only executed for VMware hosts.
 	hostCapabilitiesKnowledge := &v1alpha1.Knowledge{}
 	if err := s.Client.Get(
-		context.Background(),
+		ctx,
 		client.ObjectKey{Name: "host-capabilities"},
 		hostCapabilitiesKnowledge,
 	); err != nil {

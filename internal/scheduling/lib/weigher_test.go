@@ -9,16 +9,16 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 type mockWeigher[RequestType FilterWeigherPipelineRequest] struct {
 	InitFunc func(ctx context.Context, client client.Client, step v1alpha1.WeigherSpec) error
-	RunFunc  func(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error)
+	RunFunc  func(ctx context.Context, traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error)
 }
 
 func (m *mockWeigher[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.WeigherSpec) error {
@@ -27,11 +27,11 @@ func (m *mockWeigher[RequestType]) Init(ctx context.Context, client client.Clien
 	}
 	return m.InitFunc(ctx, client, step)
 }
-func (m *mockWeigher[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
+func (m *mockWeigher[RequestType]) Run(ctx context.Context, traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
 	if m.RunFunc == nil {
 		return &FilterWeigherPipelineStepResult{}, nil
 	}
-	return m.RunFunc(traceLog, request)
+	return m.RunFunc(ctx, traceLog, request)
 }
 
 // weigherTestOptions implements FilterWeigherPipelineStepOpts for testing.
@@ -106,7 +106,7 @@ func TestBaseFilterWeigherPipelineStep_CheckKnowledges(t *testing.T) {
 	tests := []struct {
 		name        string
 		knowledges  []v1alpha1.Knowledge
-		refs        []corev1.ObjectReference
+		refs        []types.NamespacedName
 		expectError bool
 		errorMsg    string
 	}{
@@ -129,7 +129,7 @@ func TestBaseFilterWeigherPipelineStep_CheckKnowledges(t *testing.T) {
 					},
 				},
 			},
-			refs: []corev1.ObjectReference{
+			refs: []types.NamespacedName{
 				{Name: "knowledge1", Namespace: "default"},
 			},
 			expectError: false,
@@ -137,7 +137,7 @@ func TestBaseFilterWeigherPipelineStep_CheckKnowledges(t *testing.T) {
 		{
 			name:       "knowledge not found",
 			knowledges: []v1alpha1.Knowledge{},
-			refs: []corev1.ObjectReference{
+			refs: []types.NamespacedName{
 				{Name: "missing-knowledge", Namespace: "default"},
 			},
 			expectError: true,
@@ -162,7 +162,7 @@ func TestBaseFilterWeigherPipelineStep_CheckKnowledges(t *testing.T) {
 					},
 				},
 			},
-			refs: []corev1.ObjectReference{
+			refs: []types.NamespacedName{
 				{Name: "knowledge1", Namespace: "default"},
 			},
 			expectError: true,
@@ -187,7 +187,7 @@ func TestBaseFilterWeigherPipelineStep_CheckKnowledges(t *testing.T) {
 					},
 				},
 			},
-			refs: []corev1.ObjectReference{
+			refs: []types.NamespacedName{
 				{Name: "knowledge1", Namespace: "default"},
 			},
 			expectError: true,
@@ -196,7 +196,7 @@ func TestBaseFilterWeigherPipelineStep_CheckKnowledges(t *testing.T) {
 		{
 			name:        "empty knowledge list",
 			knowledges:  []v1alpha1.Knowledge{},
-			refs:        []corev1.ObjectReference{},
+			refs:        []types.NamespacedName{},
 			expectError: false,
 		},
 	}
@@ -235,7 +235,7 @@ func TestBaseFilterWeigherPipelineStep_CheckKnowledges_NilClient(t *testing.T) {
 		Client: nil,
 	}
 
-	err := step.CheckKnowledges(t.Context(), corev1.ObjectReference{Name: "test", Namespace: "default"})
+	err := step.CheckKnowledges(t.Context(), types.NamespacedName{Name: "test", Namespace: "default"})
 
 	if err == nil {
 		t.Error("expected error for nil client but got nil")
