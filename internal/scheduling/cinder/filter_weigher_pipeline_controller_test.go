@@ -157,11 +157,8 @@ func TestFilterWeigherPipelineController_ProcessRequest(t *testing.T) {
 			if tt.expectResult {
 				if result == nil {
 					t.Error("Expected result but got nil")
-				} else {
-					// Verify result has ordered hosts
-					if len(result.OrderedHosts) == 0 && len(tt.request.Hosts) > 0 {
-						t.Error("Expected ordered hosts in result")
-					}
+				} else if len(result.OrderedHosts) == 0 && len(tt.request.Hosts) > 0 {
+					t.Error("Expected ordered hosts in result")
 				}
 			}
 		})

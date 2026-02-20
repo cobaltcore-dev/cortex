@@ -175,7 +175,10 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 					},
 					Pipeline: "test-pipeline",
 				}
-				data, _ := json.Marshal(req)
+				data, err := json.Marshal(req)
+				if err != nil {
+					t.Fatalf("Failed to marshal request data: %v", err)
+				}
 				return string(data)
 			}(),
 			processFunc: func(ctx context.Context, request cinderapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
@@ -199,7 +202,10 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 					},
 					Pipeline: "test-pipeline",
 				}
-				data, _ := json.Marshal(req)
+				data, err := json.Marshal(req)
+				if err != nil {
+					t.Fatalf("Failed to marshal request data: %v", err)
+				}
 				return string(data)
 			}(),
 			processFunc: func(ctx context.Context, request cinderapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
@@ -220,7 +226,10 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 					},
 					Pipeline: "test-pipeline",
 				}
-				data, _ := json.Marshal(req)
+				data, err := json.Marshal(req)
+				if err != nil {
+					t.Fatalf("Failed to marshal request data: %v", err)
+				}
 				return string(data)
 			}(),
 			processFunc: func(ctx context.Context, request cinderapi.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
