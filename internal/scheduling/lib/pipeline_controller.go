@@ -200,7 +200,7 @@ func (c *BasePipelineController[PipelineType]) Reconcile(ctx context.Context, re
 	err := c.Get(ctx, req.NamespacedName, pipeline)
 
 	if err != nil {
-		if client.IgnoreNotFound(err) != nil {
+		if client.IgnoreNotFound(err) == nil {
 			// Pipeline was deleted
 			log.Info("pipeline deleted, removing from cache", "pipelineName", req.Name)
 			delete(c.Pipelines, req.Name)
