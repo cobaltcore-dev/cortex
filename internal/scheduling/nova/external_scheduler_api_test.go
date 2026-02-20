@@ -192,7 +192,7 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 				}, nil
 			},
 			expectedStatus: http.StatusOK,
-			expectedHosts:  []string{"host1"},
+			expectedHosts:  []string{"host1", "host2"},
 		},
 		{
 			name:   "processing error",
