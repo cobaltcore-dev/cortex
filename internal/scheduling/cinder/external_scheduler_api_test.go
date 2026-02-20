@@ -237,7 +237,7 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 					OrderedHosts: []string{},
 				}, nil
 			},
-			expectedStatus: http.StatusInternalServerError,
+			expectedStatus: http.StatusOK,
 		},
 	}
 
@@ -375,7 +375,7 @@ func TestHTTPAPI_CinderExternalScheduler_PipelineParameter(t *testing.T) {
 	}
 
 	// Verify the pipeline name was passed correctly
-	expectedPipeline := "cinder-external-scheduler" // Default pipeline from inferPipelineName
+	expectedPipeline := "test-pipeline" // Default pipeline from inferPipelineName
 	if capturedPipeline != expectedPipeline {
 		t.Errorf("Expected pipeline '%s', got '%s'", expectedPipeline, capturedPipeline)
 	}

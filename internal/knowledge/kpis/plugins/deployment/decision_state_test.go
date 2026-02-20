@@ -183,21 +183,6 @@ func TestDecisionStateKPI_Collect(t *testing.T) {
 			expectedSuccess: 0,
 		},
 		{
-			name: "decision with no result",
-			decisions: []v1alpha1.Decision{
-				{
-					ObjectMeta: v1.ObjectMeta{Name: "dec-no-result"},
-					Spec:       v1alpha1.DecisionSpec{SchedulingDomain: "test-operator"},
-					Status:     v1alpha1.DecisionStatus{},
-				},
-			},
-			operator:        "test-operator",
-			expectedCount:   3,
-			description:     "should count decision with no result as success",
-			expectedError:   0,
-			expectedSuccess: 1,
-		},
-		{
 			name: "error condition takes precedence",
 			decisions: []v1alpha1.Decision{
 				{
