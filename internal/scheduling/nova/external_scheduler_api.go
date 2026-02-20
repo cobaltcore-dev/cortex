@@ -16,7 +16,6 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	scheduling "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
@@ -29,7 +28,7 @@ type HTTPAPIConfig struct {
 
 type HTTPAPIDelegate interface {
 	// Process the scheduling request from the API.
-	ProcessRequest(ctx context.Context, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error)
+	ProcessRequest(ctx context.Context, request api.ExternalSchedulerRequest) (*scheduling.FilterWeigherPipelineResult, error)
 }
 
 type HTTPAPI interface {
