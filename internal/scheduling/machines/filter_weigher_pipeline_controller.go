@@ -181,6 +181,7 @@ func (c *FilterWeigherPipelineController) handleMachine() handler.EventHandler {
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainMachines
+	c.Recorder = mgr.GetEventRecorder("cortex-machines-pipeline-controller")
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

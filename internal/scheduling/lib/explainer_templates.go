@@ -3,7 +3,7 @@
 
 package lib
 
-import (
+/*import (
 	"bytes"
 	"fmt"
 	"strings"
@@ -139,3 +139,4 @@ const impactsTemplate = ` Step impacts:
 
 const chainTemplate = `{{if .HasLoop}}Chain (loop detected): {{else}}Chain: {{end}}
 {{- range $i, $segment := .Segments}}{{if gt $i 0}} -> {{end}}{{$segment.Host}} ({{formatDuration $segment.Duration}}{{if gt $segment.Decisions 1}}; {{$segment.Decisions}} decisions{{end}}){{end}}.`
+*/

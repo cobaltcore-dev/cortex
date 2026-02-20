@@ -186,6 +186,7 @@ func (c *FilterWeigherPipelineController) handlePod() handler.EventHandler {
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainPods
+	c.Recorder = mgr.GetEventRecorder("cortex-pods-pipeline-controller")
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

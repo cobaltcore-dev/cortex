@@ -3,9 +3,7 @@
 
 package lib
 
-import "time"
-
-// ExplanationContext holds all data needed to render a complete explanation.
+/*// ExplanationContext holds all data needed to render a complete explanation.
 type ExplanationContext struct {
 	Context       ContextData        `json:"context"`
 	History       *HistoryData       `json:"history,omitempty"`
@@ -80,3 +78,4 @@ type ChainSegment struct {
 	// number of decisions with this as the target host
 	Decisions int `json:"decisions"`
 }
+*/

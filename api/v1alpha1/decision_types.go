@@ -53,6 +53,8 @@ type DecisionSpec struct {
 const (
 	// The decision is ready and tracking the resource.
 	DecisionConditionReady = "Ready"
+	// The decision has failed to make a placement decision for the resource.
+	DecisionConditionFailed = "Failed"
 )
 
 type DecisionStatus struct {
@@ -64,7 +66,7 @@ type DecisionStatus struct {
 	// +kubebuilder:validation:Optional
 	SchedulingHistory []SchedulingHistoryEntry `json:"schedulingHistory,omitempty"`
 
-	// A human-readable explanation of the current scheduling state.
+	// A human-readable explanation of the current scheduling decision.
 	// +kubebuilder:validation:Optional
 	Explanation string `json:"explanation,omitempty"`
 

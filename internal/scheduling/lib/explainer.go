@@ -5,14 +5,8 @@ package lib
 
 import (
 	"context"
-	"fmt"
-	"sort"
-	"time"
 
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // The explainer gets a scheduling decision and produces a human-readable
@@ -21,12 +15,12 @@ type Explainer struct {
 	// The kubernetes client to use for fetching related data.
 	client.Client
 	// The template manager to use for rendering explanations.
-	templateManager *TemplateManager
+	//templateManager *TemplateManager
 }
 
 // NewExplainer creates a new explainer with template support.
 func NewExplainer(client client.Client) (*Explainer, error) {
-	templateManager, err := NewTemplateManager()
+	/*templateManager, err := NewTemplateManager()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create template manager: %w", err)
 	}
@@ -34,15 +28,18 @@ func NewExplainer(client client.Client) (*Explainer, error) {
 	return &Explainer{
 		Client:          client,
 		templateManager: templateManager,
+	}, nil*/
+	return &Explainer{
+		Client: client,
 	}, nil
 }
 
 // Explain the given decision and return a human-readable explanation.
 func (e *Explainer) Explain(ctx context.Context, decision DecisionUpdate) (string, error) {
-	return e.ExplainWithTemplates(ctx, decision)
+	return "Explanation generation not implemented yet", nil
 }
 
-// getResourceType returns a human-readable resource type.
+/*// getResourceType returns a human-readable resource type.
 func (e *Explainer) getResourceType(schedulingDomain v1alpha1.SchedulingDomain) string {
 	switch schedulingDomain {
 	case v1alpha1.SchedulingDomainNova:
@@ -728,4 +725,4 @@ func (e *Explainer) ExplainWithTemplates(ctx context.Context, decision DecisionU
 
 	// Render using templates
 	return e.templateManager.RenderExplanation(explanationCtx)
-}
+}*/

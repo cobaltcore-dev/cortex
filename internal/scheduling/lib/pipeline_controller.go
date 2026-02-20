@@ -9,8 +9,11 @@ import (
 	"fmt"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/events"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -28,6 +31,8 @@ type BasePipelineController[PipelineType any] struct {
 	client.Client
 	// The scheduling domain to scope resources to.
 	SchedulingDomain v1alpha1.SchedulingDomain
+	// Event recorder for publishing events.
+	Recorder events.EventRecorder
 
 	DecisionQueue chan DecisionUpdate
 }
@@ -63,27 +68,102 @@ func (c *BasePipelineController[PipelineType]) updateDecision(ctx context.Contex
 		return fmt.Errorf("failed to create explainer: %w", err)
 	}
 
-	explanationText, err := explainer.Explain(ctx, update.ResourceID, update.PipelineName, update.RequestContext, update.Reason, update.Result)
+	explanationText, err := explainer.Explain(ctx, update)
 	if err != nil {
 		return fmt.Errorf("failed to generate explanation: %w", err)
 	}
 
-	// Update the decision with the explanation.
+	// Try to get existing decision
 	decision := &v1alpha1.Decision{}
-	if err := c.Get(ctx, client.ObjectKey{Name: update.ResourceID}, decision); err != nil {
-		return fmt.Errorf("failed to get decision: %w", err)
+	if err = c.Get(ctx, client.ObjectKey{Name: update.ResourceID}, decision); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			return fmt.Errorf("failed to get decision: %w", err)
+		}
+
+		// Decision doesn't exist - create new one
+		decision = &v1alpha1.Decision{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: update.ResourceID,
+			},
+			Spec: v1alpha1.DecisionSpec{
+				SchedulingDomain: c.SchedulingDomain,
+				ResourceID:       update.ResourceID,
+			},
+		}
+
+		if err := c.Create(ctx, decision); err != nil {
+			return fmt.Errorf("failed to create decision: %w", err)
+		}
+		log.Info("Created new decision", "resourceID", update.ResourceID)
 	}
 
-	if decision.Status.Result == nil {
-		return errors.New("cannot update decision explanation: result is nil")
+	// Prepare the scheduling history entry
+	historyEntry := v1alpha1.SchedulingHistoryEntry{
+		OrderedHosts: update.Result.OrderedHosts,
+		Timestamp:    metav1.Now(),
+		PipelineRef: corev1.ObjectReference{
+			Name: update.PipelineName,
+		},
+		Reason: update.Reason,
 	}
 
-	decision.Status.Explanation = explanationText
-	if err := c.Status().Update(ctx, decision); err != nil {
+	// Check if scheduling failed (no hosts available)
+	schedulingFailed := len(update.Result.OrderedHosts) == 0
+
+	// Update status with retry on conflict to handle concurrent updates
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Get the latest version before each retry attempt
+		if err := c.Get(ctx, client.ObjectKey{Name: update.ResourceID}, decision); err != nil {
+			return err
+		}
+
+		// Apply status updates
+		decision.Status.Explanation = explanationText
+
+		if schedulingFailed {
+			// No hosts available - set failed condition
+			decision.Status.TargetHost = ""
+			meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.DecisionConditionFailed,
+				Status:  metav1.ConditionTrue,
+				Reason:  "NoValidHosts",
+				Message: "Cannot schedule: No valid hosts available after filtering",
+			})
+		} else {
+			// Successful scheduling
+			decision.Status.TargetHost = update.Result.OrderedHosts[0]
+			meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.DecisionConditionReady,
+				Status:  metav1.ConditionTrue,
+				Reason:  "Scheduled",
+				Message: "Scheduling decision made successfully",
+			})
+		}
+
+		decision.Status.SchedulingHistory = append(decision.Status.SchedulingHistory, historyEntry)
+
+		return c.Status().Update(ctx, decision)
+	})
+
+	if err != nil {
 		return fmt.Errorf("failed to update decision status: %w", err)
 	}
 
-	log.Info("Successfully updated decision explanation", "resourceID", update.ResourceID)
+	// Publish event to the decision
+	if c.Recorder != nil {
+		if schedulingFailed {
+			// Warning event for failed scheduling
+			c.Recorder.Eventf(decision, nil, corev1.EventTypeWarning, "NoValidHosts", "Scheduling", "Cannot schedule: No valid hosts available. %s", explanationText)
+			log.Info("Published NoValidHosts event", "resourceID", update.ResourceID)
+		} else {
+			// Normal event for successful scheduling
+			reasonStr := string(update.Reason)
+			c.Recorder.Eventf(decision, nil, corev1.EventTypeNormal, reasonStr, "Scheduling", "Scheduled to %s. %s", decision.Status.TargetHost, explanationText)
+			log.Info("Published scheduling event", "resourceID", update.ResourceID, "targetHost", decision.Status.TargetHost, "reason", update.Reason)
+		}
+	}
+
+	log.Info("Successfully updated decision", "resourceID", update.ResourceID, "targetHost", decision.Status.TargetHost, "schedulingFailed", schedulingFailed)
 	return nil
 }
 
