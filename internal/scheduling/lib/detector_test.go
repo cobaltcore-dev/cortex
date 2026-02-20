@@ -4,6 +4,7 @@
 package lib
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -252,5 +253,68 @@ func TestBaseDetector_CheckKnowledges_NilClient(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "client not initialized") {
 		t.Errorf("expected error message about client not initialized, got %q", err.Error())
+	}
+}
+
+func TestBaseDetector_Validate(t *testing.T) {
+	tests := []struct {
+		name        string
+		params      runtime.RawExtension
+		expectError bool
+	}{
+		{
+			name: "valid params",
+			params: runtime.RawExtension{
+				Raw: []byte(`{"option1": "value1", "option2": 2}`),
+			},
+			expectError: false,
+		},
+		{
+			name: "empty params",
+			params: runtime.RawExtension{
+				Raw: []byte(`{}`),
+			},
+			expectError: false,
+		},
+		{
+			name: "invalid JSON",
+			params: runtime.RawExtension{
+				Raw: []byte(`{invalid json}`),
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			detector := &BaseDetector[mockDetectorOptions]{}
+			err := detector.Validate(t.Context(), tt.params)
+
+			if tt.expectError && err == nil {
+				t.Error("expected error but got nil")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("expected no error but got: %v", err)
+			}
+		})
+	}
+}
+
+// failingDetectorOptions implements DetectionStepOpts and returns an error on Validate.
+type failingDetectorOptions struct{}
+
+func (o failingDetectorOptions) Validate() error {
+	return errors.New("validation failed")
+}
+
+func TestBaseDetector_Validate_ValidationError(t *testing.T) {
+	detector := &BaseDetector[failingDetectorOptions]{}
+	err := detector.Validate(t.Context(), runtime.RawExtension{Raw: []byte(`{}`)})
+
+	if err == nil {
+		t.Error("expected error from validation but got nil")
+	}
+	if !strings.Contains(err.Error(), "validation failed") {
+		t.Errorf("expected error message to contain 'validation failed', got %q", err.Error())
 	}
 }

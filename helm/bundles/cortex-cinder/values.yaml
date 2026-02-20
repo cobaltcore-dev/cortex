@@ -85,6 +85,9 @@ cortex: &cortex
 cortex-scheduling-controllers:
   <<: *cortex
   namePrefix: cortex-cinder-scheduling
+  # Enable webhook that will validate CRDs for the scheduling controllers.
+  webhook: {enable: true}
+  certmanager: {enable: true} # Needed for the webhook TLS certificates.
   conf:
     <<: *cortexConf
     leaderElectionID: cortex-cinder-scheduling

@@ -324,3 +324,118 @@ func equalSlices(a, b []string) bool {
 
 	return true
 }
+
+func TestAvoidHighStealPctStepOpts_Validate(t *testing.T) {
+	tests := []struct {
+		name        string
+		opts        AvoidHighStealPctStepOpts
+		expectError bool
+	}{
+		{
+			name: "valid positive threshold",
+			opts: AvoidHighStealPctStepOpts{
+				MaxStealPctOverObservedTimeSpan: 80.0,
+			},
+			expectError: false,
+		},
+		{
+			name: "valid zero threshold",
+			opts: AvoidHighStealPctStepOpts{
+				MaxStealPctOverObservedTimeSpan: 0.0,
+			},
+			expectError: false,
+		},
+		{
+			name: "invalid negative threshold",
+			opts: AvoidHighStealPctStepOpts{
+				MaxStealPctOverObservedTimeSpan: -5.0,
+			},
+			expectError: true,
+		},
+		{
+			name: "valid small positive threshold",
+			opts: AvoidHighStealPctStepOpts{
+				MaxStealPctOverObservedTimeSpan: 0.001,
+			},
+			expectError: false,
+		},
+		{
+			name: "valid large threshold",
+			opts: AvoidHighStealPctStepOpts{
+				MaxStealPctOverObservedTimeSpan: 100.0,
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.opts.Validate()
+
+			if tt.expectError && err == nil {
+				t.Error("expected error but got nil")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("expected no error but got: %v", err)
+			}
+		})
+	}
+}
+
+func TestAvoidHighStealPctStep_Validate(t *testing.T) {
+	tests := []struct {
+		name        string
+		params      runtime.RawExtension
+		expectError bool
+	}{
+		{
+			name: "valid params",
+			params: runtime.RawExtension{
+				Raw: []byte(`{"maxStealPctOverObservedTimeSpan": 80.0}`),
+			},
+			expectError: false,
+		},
+		{
+			name: "valid params with zero threshold",
+			params: runtime.RawExtension{
+				Raw: []byte(`{"maxStealPctOverObservedTimeSpan": 0}`),
+			},
+			expectError: false,
+		},
+		{
+			name: "invalid params with negative threshold",
+			params: runtime.RawExtension{
+				Raw: []byte(`{"maxStealPctOverObservedTimeSpan": -5.0}`),
+			},
+			expectError: true,
+		},
+		{
+			name: "invalid JSON",
+			params: runtime.RawExtension{
+				Raw: []byte(`{invalid json}`),
+			},
+			expectError: true,
+		},
+		{
+			name: "empty params (defaults to zero)",
+			params: runtime.RawExtension{
+				Raw: []byte(`{}`),
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			step := &AvoidHighStealPctStep{}
+			err := step.Validate(context.Background(), tt.params)
+
+			if tt.expectError && err == nil {
+				t.Error("expected error but got nil")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("expected no error but got: %v", err)
+			}
+		})
+	}
+}

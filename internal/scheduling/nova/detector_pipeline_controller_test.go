@@ -28,6 +28,9 @@ type mockControllerStep struct{}
 func (m *mockControllerStep) Run() ([]plugins.VMDetection, error) {
 	return nil, nil
 }
+func (m *mockControllerStep) Validate(ctx context.Context, params runtime.RawExtension) error {
+	return nil
+}
 func (m *mockControllerStep) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
 	return nil
 }

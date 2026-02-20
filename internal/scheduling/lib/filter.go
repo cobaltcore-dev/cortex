@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -16,6 +17,9 @@ type Filter[RequestType FilterWeigherPipelineRequest] interface {
 
 	// Configure the filter and initialize things like a database connection.
 	Init(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error
+
+	// Validate the given config parameters for this filter.
+	Validate(ctx context.Context, params runtime.RawExtension) error
 }
 
 // Common base for all steps that provides some functionality

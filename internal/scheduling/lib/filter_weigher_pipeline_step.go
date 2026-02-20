@@ -57,6 +57,20 @@ func (s *BaseFilterWeigherPipelineStep[RequestType, Opts]) Init(ctx context.Cont
 	return nil
 }
 
+// Validate that the given config is valid for this step. This is used in
+// the pipeline validation to check if the pipeline configuration is valid
+// without actually initializing the step.
+func (s *BaseFilterWeigherPipelineStep[RequestType, Opts]) Validate(ctx context.Context, params runtime.RawExtension) error {
+	opts := conf.NewRawOptsBytes(params.Raw)
+	if err := s.Load(opts); err != nil {
+		return err
+	}
+	if err := s.Options.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Get a default result (no action) for the input weight keys given in the request.
 // Use this to initialize the result before applying filtering/weighing logic.
 func (s *BaseFilterWeigherPipelineStep[RequestType, Opts]) IncludeAllHostsFromRequest(request RequestType) *FilterWeigherPipelineStepResult {

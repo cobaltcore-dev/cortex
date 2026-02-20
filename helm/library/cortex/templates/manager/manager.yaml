@@ -35,6 +35,9 @@ spec:
             {{- range .Values.controllerManager.container.args }}
             - {{ . }}
             {{- end }}
+            {{- if and .Values.webhook.enable .Values.certmanager.enable }}
+            - "--webhook-cert-path=/tmp/k8s-webhook-server/serving-certs"
+            {{- end }}
           ports:
             - name: api
               containerPort: 8080
@@ -42,6 +45,11 @@ spec:
             - name: metrics
               containerPort: 2112
               protocol: TCP
+            {{- if .Values.webhook.enable }}
+            - name: webhook
+              containerPort: 9443
+              protocol: TCP
+            {{- end }}
           command:
             - /manager
           image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag | default .Chart.AppVersion }}
@@ -74,6 +82,11 @@ spec:
               mountPath: /tmp/k8s-metrics-server/metrics-certs
               readOnly: true
             {{- end }}
+            {{- if and .Values.webhook.enable .Values.certmanager.enable }}
+            - name: webhook-certs
+              mountPath: /tmp/k8s-webhook-server/serving-certs
+              readOnly: true
+            {{- end }}
       securityContext:
         {{- toYaml .Values.controllerManager.securityContext | nindent 8 }}
       serviceAccountName: {{ .Values.namePrefix }}-{{ .Values.controllerManager.serviceAccountName }}
@@ -90,6 +103,11 @@ spec:
         - name: metrics-certs
           secret:
             secretName: metrics-server-cert
+        {{- end }}
+        {{- if and .Values.webhook.enable .Values.certmanager.enable }}
+        - name: webhook-certs
+          secret:
+            secretName: {{ .Values.namePrefix }}-webhook-server-cert
         {{- end }}
 ---
 apiVersion: v1

@@ -89,7 +89,14 @@ prometheus:
   enable: true
 
 # [CERT-MANAGER]: To enable cert-manager injection to webhooks set true
+# Cert-manager must be enabled when webhooks are enabled to generate the required
+# TLS certificates so kubernetes can talk to the webhook endpoint over HTTPS.
 certmanager:
+  enable: false
+
+# [WEBHOOK]: To enable validating webhook for Pipeline resources set true
+# Note: When enabled, cert-manager is typically also required for TLS certificates
+webhook:
   enable: false
 
 # [NETWORK POLICIES]: To enable NetworkPolicies set true

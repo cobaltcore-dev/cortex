@@ -17,8 +17,9 @@ import (
 )
 
 type mockWeigher[RequestType FilterWeigherPipelineRequest] struct {
-	InitFunc func(ctx context.Context, client client.Client, step v1alpha1.WeigherSpec) error
-	RunFunc  func(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error)
+	InitFunc     func(ctx context.Context, client client.Client, step v1alpha1.WeigherSpec) error
+	ValidateFunc func(ctx context.Context, params runtime.RawExtension) error
+	RunFunc      func(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error)
 }
 
 func (m *mockWeigher[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.WeigherSpec) error {
@@ -26,6 +27,12 @@ func (m *mockWeigher[RequestType]) Init(ctx context.Context, client client.Clien
 		return nil
 	}
 	return m.InitFunc(ctx, client, step)
+}
+func (m *mockWeigher[RequestType]) Validate(ctx context.Context, params runtime.RawExtension) error {
+	if m.ValidateFunc == nil {
+		return nil
+	}
+	return m.ValidateFunc(ctx, params)
 }
 func (m *mockWeigher[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
 	if m.RunFunc == nil {

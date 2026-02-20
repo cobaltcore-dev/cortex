@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -20,6 +21,9 @@ type Weigher[RequestType FilterWeigherPipelineRequest] interface {
 
 	// Configure the step and initialize things like a database connection.
 	Init(ctx context.Context, client client.Client, step v1alpha1.WeigherSpec) error
+
+	// Validate the given config parameters for this weigher.
+	Validate(ctx context.Context, params runtime.RawExtension) error
 }
 
 // Common base for all steps that provides some functionality
@@ -31,6 +35,11 @@ type BaseWeigher[RequestType FilterWeigherPipelineRequest, Opts FilterWeigherPip
 // Init the weigher with the database and options.
 func (s *BaseWeigher[RequestType, Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.WeigherSpec) error {
 	return s.BaseFilterWeigherPipelineStep.Init(ctx, client, step.Params)
+}
+
+// Validate the weigher.
+func (s *BaseWeigher[RequestType, Opts]) Validate(ctx context.Context, params runtime.RawExtension) error {
+	return s.BaseFilterWeigherPipelineStep.Validate(ctx, params)
 }
 
 // Check if all knowledges are ready, and if not, return an error indicating why not.

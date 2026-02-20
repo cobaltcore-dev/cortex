@@ -9,6 +9,7 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -22,6 +23,11 @@ type WeigherValidator[RequestType FilterWeigherPipelineRequest] struct {
 func (s *WeigherValidator[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.WeigherSpec) error {
 	slog.Info("scheduler: init validation for step", "name", step.Name)
 	return s.Weigher.Init(ctx, client, step)
+}
+
+// Validate the wrapped weigher.
+func (s *WeigherValidator[RequestType]) Validate(ctx context.Context, params runtime.RawExtension) error {
+	return s.Weigher.Validate(ctx, params)
 }
 
 // Validate the wrapped weigher with the database and options.

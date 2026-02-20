@@ -5,7 +5,7 @@ kind: Issuer
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: selfsigned-issuer
+  name: {{ .Values.namePrefix }}-selfsigned-issuer
   namespace: {{ .Release.Namespace }}
 spec:
   selfSigned: {}
@@ -30,7 +30,26 @@ spec:
     - cortex-metrics-service.{{ .Release.Namespace }}.svc
   issuerRef:
     kind: Issuer
-    name: selfsigned-issuer
+    name: {{ .Values.namePrefix }}-selfsigned-issuer
   secretName: metrics-server-cert
+{{- end }}
+{{- if .Values.webhook.enable }}
+---
+# Certificate for the webhook
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: {{ .Values.namePrefix }}-webhook-cert
+  namespace: {{ .Release.Namespace }}
+spec:
+  dnsNames:
+    - {{ .Values.namePrefix }}-webhook-service.{{ .Release.Namespace }}.svc
+    - {{ .Values.namePrefix }}-webhook-service.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: {{ .Values.namePrefix }}-selfsigned-issuer
+  secretName: {{ .Values.namePrefix }}-webhook-server-cert
 {{- end }}
 {{- end }}
