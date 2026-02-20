@@ -253,19 +253,15 @@ func TestInitNewFilterWeigherPipeline_Success(t *testing.T) {
 
 	confedFilters := []v1alpha1.FilterSpec{
 		{
-			Name: "test-filter",
-			Params: runtime.RawExtension{
-				Raw: []byte(`{}`),
-			},
+			Name:   "test-filter",
+			Params: nil,
 		},
 	}
 
 	confedWeighers := []v1alpha1.WeigherSpec{
 		{
-			Name: "test-weigher",
-			Params: runtime.RawExtension{
-				Raw: []byte(`{}`),
-			},
+			Name:   "test-weigher",
+			Params: nil,
 		},
 	}
 
@@ -304,10 +300,8 @@ func TestInitNewFilterWeigherPipeline_UnsupportedFilter(t *testing.T) {
 
 	confedFilters := []v1alpha1.FilterSpec{
 		{
-			Name: "unsupported-filter",
-			Params: runtime.RawExtension{
-				Raw: []byte(`{}`),
-			},
+			Name:   "unsupported-filter",
+			Params: nil,
 		},
 	}
 
@@ -340,10 +334,8 @@ func TestInitNewFilterWeigherPipeline_UnsupportedWeigher(t *testing.T) {
 
 	confedWeighers := []v1alpha1.WeigherSpec{
 		{
-			Name: "unsupported-weigher",
-			Params: runtime.RawExtension{
-				Raw: []byte(`{}`),
-			},
+			Name:   "unsupported-weigher",
+			Params: nil,
 		},
 	}
 
