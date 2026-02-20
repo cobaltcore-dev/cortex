@@ -70,6 +70,16 @@ func (c *FilterWeigherPipelineController) ProcessRequest(ctx context.Context, re
 		log.Error(nil, "pipeline config not found", "pipelineName", pipelineName)
 		return nil, fmt.Errorf("pipeline config for %s not found", pipelineName)
 	}
+	// If necessary gather all placement candidates before filtering.
+	// This will override the hosts and weights in the nova request.
+	if pipelineConfig.Spec.IgnorePreselection {
+		log.Info("gathering all placement candidates before filtering")
+		if err := c.gatherer.MutateWithAllCandidates(ctx, &request); err != nil {
+			log.Error(err, "failed to gather all placement candidates")
+			return nil, err
+		}
+		log.Info("gathered all placement candidates", "numHosts", len(request.Hosts))
+	}
 
 	result, err := pipeline.Run(request)
 	if err != nil {
