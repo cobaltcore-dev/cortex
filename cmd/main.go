@@ -41,7 +41,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/cinder"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/explanation"
 	schedulinglib "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/machines"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila"
@@ -293,17 +292,17 @@ func main() {
 	metrics.Registry.MustRegister(&pipelineMonitor)
 
 	if slices.Contains(mainConfig.EnabledControllers, "nova-decisions-pipeline-controller") {
-		decisionController := &nova.FilterWeigherPipelineController{
+		pipelineController := &nova.FilterWeigherPipelineController{
 			Monitor: pipelineMonitor,
 		}
 		// Inferred through the base controller.
-		decisionController.Client = multiclusterClient
-		if err := (decisionController).SetupWithManager(mgr, multiclusterClient); err != nil {
+		pipelineController.Client = multiclusterClient
+		if err := (pipelineController).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
 		httpAPIConf := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
-		nova.NewAPI(httpAPIConf, decisionController).Init(mux)
+		nova.NewAPI(httpAPIConf, pipelineController).Init(mux)
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "nova-deschedulings-pipeline-controller") {
 		// Deschedulings controller
@@ -401,19 +400,6 @@ func main() {
 		controller.Client = multiclusterClient
 		if err := (controller).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
-			os.Exit(1)
-		}
-	}
-	if slices.Contains(mainConfig.EnabledControllers, "explanation-controller") {
-		// Setup a controller which will reconcile the history and explanation for
-		// decision resources.
-		explanationControllerConfig := conf.GetConfigOrDie[explanation.ControllerConfig]()
-		explanationController := &explanation.Controller{
-			Client: multiclusterClient,
-			Config: explanationControllerConfig,
-		}
-		if err := explanationController.SetupWithManager(mgr, multiclusterClient); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "ExplanationController")
 			os.Exit(1)
 		}
 	}
