@@ -150,7 +150,7 @@ func (c *DetectorPipelineController) SetupWithManager(mgr ctrl.Manager, mcl *mul
 			}),
 		).
 		// Watch hypervisor changes so the cache gets updated.
-		Named("cortex-nova-pipelines").
+		Named("cortex-nova-descheduler").
 		For(
 			&v1alpha1.Pipeline{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
