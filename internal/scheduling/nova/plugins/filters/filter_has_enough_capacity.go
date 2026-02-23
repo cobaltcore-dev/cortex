@@ -147,7 +147,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		// This prevents double-blocking of resources already consumed by running instances.
 		var resourcesToBlock map[string]resource.Quantity
 		if reservation.Spec.Type == v1alpha1.ReservationTypeCommittedResource &&
-			// if the reservation is in the process of being migrated, block full resources on both source and target host
+			// if the reservation is not being migrated, block only unused resources
 			reservation.Spec.TargetHost == reservation.Status.Host &&
 			reservation.Spec.CommittedResourceReservation != nil &&
 			reservation.Status.CommittedResourceReservation != nil &&
