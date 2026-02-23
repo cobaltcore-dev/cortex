@@ -208,6 +208,26 @@ func TestUnmarshalParams_DuplicateKeys(t *testing.T) {
 	}
 }
 
+func TestUnmarshalParams_DuplicateValues(t *testing.T) {
+	type TestStruct struct {
+		Name string `json:"name"`
+	}
+
+	params := v1alpha1.Parameters{
+		{Key: "name", StringValue: testlib.Ptr("first"), IntValue: testlib.Ptr(int64(1))},
+	}
+
+	var result TestStruct
+	err := UnmarshalParams(&params, &result)
+
+	if err == nil {
+		t.Error("expected error for duplicate keys, got nil")
+	}
+	if !strings.Contains(err.Error(), "must have exactly one value set") {
+		t.Errorf("expected error about multiple values, got: %v", err)
+	}
+}
+
 func TestUnmarshalParams_ParameterWithNoValue(t *testing.T) {
 	type TestStruct struct {
 		Name string `json:"name"`
@@ -223,8 +243,8 @@ func TestUnmarshalParams_ParameterWithNoValue(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for parameter with no value, got nil")
 	}
-	if !strings.Contains(err.Error(), "has no value") {
-		t.Errorf("expected error about no value, got: %v", err)
+	if !strings.Contains(err.Error(), "must have exactly one value set") {
+		t.Errorf("expected error about no value set, got: %v", err)
 	}
 }
 

@@ -29,6 +29,30 @@ func UnmarshalParams(p *v1alpha1.Parameters, into any) error {
 		}
 		keys[param.Key] = struct{}{}
 	}
+
+	// Check that only one value is set for each parameter.
+	for _, param := range *p {
+		count := 0
+		if param.StringValue != nil {
+			count++
+		}
+		if param.BoolValue != nil {
+			count++
+		}
+		if param.IntValue != nil {
+			count++
+		}
+		if param.FloatValue != nil {
+			count++
+		}
+		if param.StringListValue != nil {
+			count++
+		}
+		if count != 1 {
+			return fmt.Errorf("parameter %s must have exactly one value set", param.Key)
+		}
+	}
+
 	paramMap := make(map[string]any)
 	for _, param := range *p {
 		var value any
@@ -43,9 +67,7 @@ func UnmarshalParams(p *v1alpha1.Parameters, into any) error {
 			value = *param.FloatValue
 		case param.StringListValue != nil:
 			value = *param.StringListValue
-		default:
-			return fmt.Errorf("parameter %s has no value", param.Key)
-		}
+		} // No value set is handled above.
 		paramMap[param.Key] = value
 	}
 
