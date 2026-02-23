@@ -8,7 +8,6 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -39,7 +38,7 @@ func (wm *WeigherMonitor[RequestType]) Init(ctx context.Context, client client.C
 }
 
 // Validate the wrapped weigher.
-func (wm *WeigherMonitor[RequestType]) Validate(ctx context.Context, params runtime.RawExtension) error {
+func (wm *WeigherMonitor[RequestType]) Validate(ctx context.Context, params v1alpha1.Parameters) error {
 	return wm.weigher.Validate(ctx, params)
 }
 

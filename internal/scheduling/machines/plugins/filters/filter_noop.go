@@ -10,7 +10,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/external/ironcore"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -23,7 +22,7 @@ func (f *NoopFilter) Init(ctx context.Context, client client.Client, filter v1al
 	return nil
 }
 
-func (f *NoopFilter) Validate(ctx context.Context, params runtime.RawExtension) error {
+func (f *NoopFilter) Validate(ctx context.Context, params v1alpha1.Parameters) error {
 	return nil
 }
 

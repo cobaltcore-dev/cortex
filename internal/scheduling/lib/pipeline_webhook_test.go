@@ -11,15 +11,14 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // mockValidatable implements Validatable for testing.
 type mockValidatable struct {
-	ValidateFunc func(ctx context.Context, params runtime.RawExtension) error
+	ValidateFunc func(ctx context.Context, params v1alpha1.Parameters) error
 }
 
-func (m *mockValidatable) Validate(ctx context.Context, params runtime.RawExtension) error {
+func (m *mockValidatable) Validate(ctx context.Context, params v1alpha1.Parameters) error {
 	if m.ValidateFunc == nil {
 		return nil
 	}
@@ -44,10 +43,10 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					Filters: []v1alpha1.FilterSpec{
-						{Name: "filter1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "filter1", Params: nil},
 					},
 					Weighers: []v1alpha1.WeigherSpec{
-						{Name: "weigher1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "weigher1", Params: nil},
 					},
 				},
 			},
@@ -68,7 +67,7 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					Filters: []v1alpha1.FilterSpec{
-						{Name: "unknown-filter", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "unknown-filter", Params: nil},
 					},
 				},
 			},
@@ -86,7 +85,7 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					Weighers: []v1alpha1.WeigherSpec{
-						{Name: "unknown-weigher", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "unknown-weigher", Params: nil},
 					},
 				},
 			},
@@ -104,7 +103,7 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					Detectors: []v1alpha1.DetectorSpec{
-						{Name: "detector1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "detector1", Params: nil},
 					},
 				},
 			},
@@ -122,13 +121,13 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					Filters: []v1alpha1.FilterSpec{
-						{Name: "filter1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "filter1", Params: nil},
 					},
 				},
 			},
 			filters: map[string]Validatable{
 				"filter1": &mockValidatable{
-					ValidateFunc: func(ctx context.Context, params runtime.RawExtension) error {
+					ValidateFunc: func(ctx context.Context, params v1alpha1.Parameters) error {
 						return errors.New("filter validation failed")
 					},
 				},
@@ -146,14 +145,14 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					Weighers: []v1alpha1.WeigherSpec{
-						{Name: "weigher1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "weigher1", Params: nil},
 					},
 				},
 			},
 			filters: map[string]Validatable{},
 			weighers: map[string]Validatable{
 				"weigher1": &mockValidatable{
-					ValidateFunc: func(ctx context.Context, params runtime.RawExtension) error {
+					ValidateFunc: func(ctx context.Context, params v1alpha1.Parameters) error {
 						return errors.New("weigher validation failed")
 					},
 				},
@@ -208,7 +207,7 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DetectorPipeline(t *testing.T) 
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeDetector,
 					Detectors: []v1alpha1.DetectorSpec{
-						{Name: "detector1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "detector1", Params: nil},
 					},
 				},
 			},
@@ -227,7 +226,7 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DetectorPipeline(t *testing.T) 
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeDetector,
 					Detectors: []v1alpha1.DetectorSpec{
-						{Name: "unknown-detector", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "unknown-detector", Params: nil},
 					},
 				},
 			},
@@ -245,7 +244,7 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DetectorPipeline(t *testing.T) 
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeDetector,
 					Filters: []v1alpha1.FilterSpec{
-						{Name: "filter1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "filter1", Params: nil},
 					},
 				},
 			},
@@ -263,7 +262,7 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DetectorPipeline(t *testing.T) 
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeDetector,
 					Weighers: []v1alpha1.WeigherSpec{
-						{Name: "weigher1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "weigher1", Params: nil},
 					},
 				},
 			},
@@ -281,7 +280,7 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DetectorPipeline(t *testing.T) 
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeDetector,
 					Detectors: []v1alpha1.DetectorSpec{
-						{Name: "detector1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "detector1", Params: nil},
 					},
 				},
 			},
@@ -289,7 +288,7 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DetectorPipeline(t *testing.T) 
 			weighers: map[string]Validatable{},
 			detectors: map[string]Validatable{
 				"detector1": &mockValidatable{
-					ValidateFunc: func(ctx context.Context, params runtime.RawExtension) error {
+					ValidateFunc: func(ctx context.Context, params v1alpha1.Parameters) error {
 						return errors.New("detector validation failed")
 					},
 				},
@@ -340,7 +339,7 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DifferentSchedulingDomain(t *te
 			SchedulingDomain: v1alpha1.SchedulingDomainCinder, // Different domain
 			Type:             v1alpha1.PipelineTypeFilterWeigher,
 			Filters: []v1alpha1.FilterSpec{
-				{Name: "unknown-filter", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+				{Name: "unknown-filter", Params: nil},
 			},
 		},
 	}
@@ -402,7 +401,7 @@ func TestPipelineAdmissionWebhook_ValidateUpdate(t *testing.T) {
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
 			Type:             v1alpha1.PipelineTypeFilterWeigher,
 			Filters: []v1alpha1.FilterSpec{
-				{Name: "filter1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+				{Name: "filter1", Params: nil},
 			},
 		},
 	}
@@ -452,11 +451,11 @@ func TestPipelineAdmissionWebhook_MultipleValidationErrors(t *testing.T) {
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
 			Type:             v1alpha1.PipelineTypeFilterWeigher,
 			Filters: []v1alpha1.FilterSpec{
-				{Name: "unknown-filter1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
-				{Name: "unknown-filter2", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+				{Name: "unknown-filter1", Params: nil},
+				{Name: "unknown-filter2", Params: nil},
 			},
 			Weighers: []v1alpha1.WeigherSpec{
-				{Name: "unknown-weigher1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+				{Name: "unknown-weigher1", Params: nil},
 			},
 		},
 	}

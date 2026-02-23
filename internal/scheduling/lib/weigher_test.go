@@ -18,7 +18,7 @@ import (
 
 type mockWeigher[RequestType FilterWeigherPipelineRequest] struct {
 	InitFunc     func(ctx context.Context, client client.Client, step v1alpha1.WeigherSpec) error
-	ValidateFunc func(ctx context.Context, params runtime.RawExtension) error
+	ValidateFunc func(ctx context.Context, params v1alpha1.Parameters) error
 	RunFunc      func(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error)
 }
 
@@ -28,7 +28,7 @@ func (m *mockWeigher[RequestType]) Init(ctx context.Context, client client.Clien
 	}
 	return m.InitFunc(ctx, client, step)
 }
-func (m *mockWeigher[RequestType]) Validate(ctx context.Context, params runtime.RawExtension) error {
+func (m *mockWeigher[RequestType]) Validate(ctx context.Context, params v1alpha1.Parameters) error {
 	if m.ValidateFunc == nil {
 		return nil
 	}
@@ -55,30 +55,24 @@ func TestBaseWeigher_Init(t *testing.T) {
 		{
 			name: "successful initialization with valid params",
 			weigherSpec: v1alpha1.WeigherSpec{
-				Name: "test-weigher",
-				Params: runtime.RawExtension{
-					Raw: []byte(`{}`),
-				},
+				Name:   "test-weigher",
+				Params: nil,
 			},
 			expectError: false,
 		},
 		{
 			name: "successful initialization with empty params",
 			weigherSpec: v1alpha1.WeigherSpec{
-				Name: "test-weigher",
-				Params: runtime.RawExtension{
-					Raw: []byte(`{}`),
-				},
+				Name:   "test-weigher",
+				Params: nil,
 			},
 			expectError: false,
 		},
 		{
 			name: "error on invalid JSON params",
 			weigherSpec: v1alpha1.WeigherSpec{
-				Name: "test-weigher",
-				Params: runtime.RawExtension{
-					Raw: []byte(`{invalid json}`),
-				},
+				Name:   "test-weigher",
+				Params: []v1alpha1.Parameter{{Key: "invalid", FloatValue: nil}},
 			},
 			expectError: true,
 		},

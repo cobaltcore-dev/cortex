@@ -9,14 +9,13 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 type mockFilter[RequestType FilterWeigherPipelineRequest] struct {
 	InitFunc     func(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error
-	ValidateFunc func(ctx context.Context, params runtime.RawExtension) error
+	ValidateFunc func(ctx context.Context, params v1alpha1.Parameters) error
 	RunFunc      func(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error)
 }
 
@@ -26,7 +25,7 @@ func (m *mockFilter[RequestType]) Init(ctx context.Context, client client.Client
 	}
 	return m.InitFunc(ctx, client, step)
 }
-func (m *mockFilter[RequestType]) Validate(ctx context.Context, params runtime.RawExtension) error {
+func (m *mockFilter[RequestType]) Validate(ctx context.Context, params v1alpha1.Parameters) error {
 	if m.ValidateFunc == nil {
 		return nil
 	}
@@ -53,20 +52,16 @@ func TestBaseFilter_Init(t *testing.T) {
 		{
 			name: "successful initialization with valid params",
 			filterSpec: v1alpha1.FilterSpec{
-				Name: "test-filter",
-				Params: runtime.RawExtension{
-					Raw: []byte(`{}`),
-				},
+				Name:   "test-filter",
+				Params: nil,
 			},
 			expectError: false,
 		},
 		{
 			name: "successful initialization with empty params",
 			filterSpec: v1alpha1.FilterSpec{
-				Name: "test-filter",
-				Params: runtime.RawExtension{
-					Raw: []byte(`{}`),
-				},
+				Name:   "test-filter",
+				Params: nil,
 			},
 			expectError: false,
 		},
@@ -74,8 +69,8 @@ func TestBaseFilter_Init(t *testing.T) {
 			name: "error on invalid JSON params",
 			filterSpec: v1alpha1.FilterSpec{
 				Name: "test-filter",
-				Params: runtime.RawExtension{
-					Raw: []byte(`{invalid json}`),
+				Params: []v1alpha1.Parameter{
+					{Key: "invalid", FloatValue: nil},
 				},
 			},
 			expectError: true,

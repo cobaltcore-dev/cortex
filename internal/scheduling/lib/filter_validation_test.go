@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -37,10 +36,8 @@ func TestFilterValidator_Init(t *testing.T) {
 		{
 			name: "successful initialization",
 			filterSpec: v1alpha1.FilterSpec{
-				Name: "test-filter",
-				Params: runtime.RawExtension{
-					Raw: []byte(`{}`),
-				},
+				Name:   "test-filter",
+				Params: nil,
 			},
 			initError:   nil,
 			expectError: false,
@@ -48,10 +45,8 @@ func TestFilterValidator_Init(t *testing.T) {
 		{
 			name: "initialization error",
 			filterSpec: v1alpha1.FilterSpec{
-				Name: "test-filter",
-				Params: runtime.RawExtension{
-					Raw: []byte(`{}`),
-				},
+				Name:   "test-filter",
+				Params: nil,
 			},
 			initError:   errors.New("init error"),
 			expectError: true,
