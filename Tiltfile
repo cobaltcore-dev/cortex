@@ -63,7 +63,15 @@ if not os.path.exists(cache_dir + '/cert-manager-' + cert_manager_version + '.ya
     url = 'https://github.com/cert-manager/cert-manager/releases/download/' + cert_manager_version + '/cert-manager.yaml'
     local('curl -L ' + url + ' -o ' + cache_dir + '/cert-manager-' + cert_manager_version + '.yaml')
 local('kubectl apply -f ' + cache_dir + '/cert-manager-' + cert_manager_version + '.yaml')
-local('kubectl wait --namespace cert-manager --for=condition=ready pod --selector=app.kubernetes.io/instance=cert-manager --timeout=120s')
+# Patch all three cert-manager deployments to add runAsUser for Docker Desktop compatibility
+patch_json = '{"spec":{"template":{"spec":{"securityContext":{"runAsUser":1000}}}}}'
+local('kubectl patch deployment cert-manager -n cert-manager --type=strategic -p \'' + patch_json + '\'')
+local('kubectl patch deployment cert-manager-cainjector -n cert-manager --type=strategic -p \'' + patch_json + '\'')
+local('kubectl patch deployment cert-manager-webhook -n cert-manager --type=strategic -p \'' + patch_json + '\'')
+# Wait for all three deployments to be ready
+local('kubectl wait --namespace cert-manager --for=condition=available deployment/cert-manager --timeout=120s')
+local('kubectl wait --namespace cert-manager --for=condition=available deployment/cert-manager-cainjector --timeout=120s')
+local('kubectl wait --namespace cert-manager --for=condition=available deployment/cert-manager-webhook --timeout=120s')
 
 ########### Dependency CRDs
 # Make sure the local cluster is running if you are running into startup issues here.
