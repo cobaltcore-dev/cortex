@@ -251,7 +251,7 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
-  name: nova-descheduler-kvm
+  name: kvm-descheduler
 spec:
   schedulingDomain: nova
   description:
