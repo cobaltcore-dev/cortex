@@ -62,10 +62,8 @@ if not os.path.exists(cache_dir):
 if not os.path.exists(cache_dir + '/cert-manager-' + cert_manager_version + '.yaml'):
     url = 'https://github.com/cert-manager/cert-manager/releases/download/' + cert_manager_version + '/cert-manager.yaml'
     local('curl -L ' + url + ' -o ' + cache_dir + '/cert-manager-' + cert_manager_version + '.yaml')
-k8s_yaml(cache_dir + '/cert-manager-' + cert_manager_version + '.yaml')
-k8s_resource('cert-manager', labels=['ZZ_Certmanager'])
-k8s_resource('cert-manager-webhook', labels=['ZZ_Certmanager'])
-k8s_resource('cert-manager-cainjector', labels=['ZZ_Certmanager'])
+local('kubectl apply -f ' + cache_dir + '/cert-manager-' + cert_manager_version + '.yaml')
+local('kubectl wait --namespace cert-manager --for=condition=ready pod --selector=app.kubernetes.io/instance=cert-manager --timeout=120s')
 
 ########### Dependency CRDs
 # Make sure the local cluster is running if you are running into startup issues here.
