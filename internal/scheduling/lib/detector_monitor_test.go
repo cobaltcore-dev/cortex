@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -69,16 +70,21 @@ func TestMonitor_Collect(t *testing.T) {
 }
 
 type mockMonitorStep struct {
-	decisions  []mockDetection
-	initError  error
-	runError   error
-	initCalled bool
-	runCalled  bool
+	decisions     []mockDetection
+	initError     error
+	validateError error
+	runError      error
+	initCalled    bool
+	runCalled     bool
 }
 
 func (m *mockMonitorStep) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
 	m.initCalled = true
 	return m.initError
+}
+
+func (m *mockMonitorStep) Validate(ctx context.Context, params runtime.RawExtension) error {
+	return m.validateError
 }
 
 func (m *mockMonitorStep) Run() ([]mockDetection, error) {
