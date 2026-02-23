@@ -190,20 +190,19 @@ func TestBaseFilterWeigherPipelineStep_PrepareStats(t *testing.T) {
 func TestBaseFilterWeigherPipelineStep_Validate(t *testing.T) {
 	tests := []struct {
 		name        string
-		params      runtime.RawExtension
+		params      []v1alpha1.Parameter
 		expectError bool
 	}{
 		{
-			name: "valid params",
-			params: runtime.RawExtension{
-				Raw: []byte(`{}`),
-			},
+			name:        "valid params",
+			params:      []v1alpha1.Parameter{},
 			expectError: false,
 		},
 		{
 			name: "invalid JSON",
-			params: runtime.RawExtension{
-				Raw: []byte(`{invalid json}`),
+			params: []v1alpha1.Parameter{
+				{Key: "option1", StringValue: testlib.Ptr("value1")},
+				{Key: "option2", StringValue: testlib.Ptr("value2")},
 			},
 			expectError: true,
 		},
@@ -226,7 +225,7 @@ func TestBaseFilterWeigherPipelineStep_Validate(t *testing.T) {
 
 func TestBaseFilterWeigherPipelineStep_Validate_ValidationError(t *testing.T) {
 	step := &BaseFilterWeigherPipelineStep[mockFilterWeigherPipelineRequest, failingValidationOptions]{}
-	err := step.Validate(t.Context(), runtime.RawExtension{Raw: []byte(`{}`)})
+	err := step.Validate(t.Context(), []v1alpha1.Parameter{})
 
 	if err == nil {
 		t.Error("expected error from validation but got nil")

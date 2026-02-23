@@ -9,7 +9,6 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -26,7 +25,7 @@ func (s *FilterValidator[RequestType]) Init(ctx context.Context, client client.C
 }
 
 // Validate the wrapped filter.
-func (s *FilterValidator[RequestType]) Validate(ctx context.Context, params runtime.RawExtension) error {
+func (s *FilterValidator[RequestType]) Validate(ctx context.Context, params v1alpha1.Parameters) error {
 	return s.Filter.Validate(ctx, params)
 }
 

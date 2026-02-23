@@ -60,10 +60,9 @@ func (s *BaseFilterWeigherPipelineStep[RequestType, Opts]) Init(ctx context.Cont
 // Validate that the given config is valid for this step. This is used in
 // the pipeline validation to check if the pipeline configuration is valid
 // without actually initializing the step.
-func (s *BaseFilterWeigherPipelineStep[RequestType, Opts]) Validate(ctx context.Context, params runtime.RawExtension) error {
-	opts := conf.NewRawOptsBytes(params.Raw)
-	if err := s.Load(opts); err != nil {
-		return err
+func (s *BaseFilterWeigherPipelineStep[RequestType, Opts]) Validate(ctx context.Context, params v1alpha1.Parameters) error {
+	if err := conf.UnmarshalParams(&params, &s.Options); err != nil {
+		return fmt.Errorf("failed to unmarshal parameters: %w", err)
 	}
 	if err := s.Options.Validate(); err != nil {
 		return err

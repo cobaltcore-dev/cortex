@@ -12,7 +12,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -38,7 +37,7 @@ type Detector[DetectionType Detection] interface {
 	// Validate that the given config is valid for this step. This is used in
 	// the pipeline validation to check if the pipeline configuration is valid
 	// without actually initializing the step.
-	Validate(ctx context.Context, params runtime.RawExtension) error
+	Validate(ctx context.Context, params v1alpha1.Parameters) error
 }
 
 // Common base for all descheduler steps that provides some functionality
@@ -62,10 +61,9 @@ func (d *BaseDetector[Opts]) Init(ctx context.Context, client client.Client, ste
 // Validate that the given config is valid for this step. This is used in
 // the pipeline validation to check if the pipeline configuration is valid
 // without actually initializing the step.
-func (d *BaseDetector[Opts]) Validate(ctx context.Context, params runtime.RawExtension) error {
-	opts := conf.NewRawOptsBytes(params.Raw)
-	if err := d.Load(opts); err != nil {
-		return err
+func (d *BaseDetector[Opts]) Validate(ctx context.Context, params v1alpha1.Parameters) error {
+	if err := conf.UnmarshalParams(&params, &d.Options); err != nil {
+		return fmt.Errorf("failed to unmarshal parameters: %w", err)
 	}
 	if err := d.Options.Validate(); err != nil {
 		return err

@@ -26,7 +26,7 @@ func (m *mockDetectorStep) Init(ctx context.Context, client client.Client, step 
 	return m.initErr
 }
 
-func (m *mockDetectorStep) Validate(ctx context.Context, params runtime.RawExtension) error {
+func (m *mockDetectorStep) Validate(ctx context.Context, params v1alpha1.Parameters) error {
 	return m.validateErr
 }
 

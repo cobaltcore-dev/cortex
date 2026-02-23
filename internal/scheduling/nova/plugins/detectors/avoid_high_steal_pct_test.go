@@ -385,42 +385,40 @@ func TestAvoidHighStealPctStepOpts_Validate(t *testing.T) {
 func TestAvoidHighStealPctStep_Validate(t *testing.T) {
 	tests := []struct {
 		name        string
-		params      runtime.RawExtension
+		params      []v1alpha1.Parameter
 		expectError bool
 	}{
 		{
 			name: "valid params",
-			params: runtime.RawExtension{
-				Raw: []byte(`{"maxStealPctOverObservedTimeSpan": 80.0}`),
+			params: []v1alpha1.Parameter{
+				{Key: "maxStealPctOverObservedTimeSpan", FloatValue: testlib.Ptr(80.0)},
 			},
 			expectError: false,
 		},
 		{
 			name: "valid params with zero threshold",
-			params: runtime.RawExtension{
-				Raw: []byte(`{"maxStealPctOverObservedTimeSpan": 0}`),
+			params: []v1alpha1.Parameter{
+				{Key: "maxStealPctOverObservedTimeSpan", FloatValue: testlib.Ptr(0.0)},
 			},
 			expectError: false,
 		},
 		{
 			name: "invalid params with negative threshold",
-			params: runtime.RawExtension{
-				Raw: []byte(`{"maxStealPctOverObservedTimeSpan": -5.0}`),
+			params: []v1alpha1.Parameter{
+				{Key: "maxStealPctOverObservedTimeSpan", FloatValue: testlib.Ptr(-5.0)},
 			},
 			expectError: true,
 		},
 		{
 			name: "invalid JSON",
-			params: runtime.RawExtension{
-				Raw: []byte(`{invalid json}`),
+			params: []v1alpha1.Parameter{
+				{Key: "invalidJSON", StringValue: testlib.Ptr("{invalid json}")},
 			},
 			expectError: true,
 		},
 		{
-			name: "empty params (defaults to zero)",
-			params: runtime.RawExtension{
-				Raw: []byte(`{}`),
-			},
+			name:        "empty params (defaults to zero)",
+			params:      []v1alpha1.Parameter{},
 			expectError: false,
 		},
 	}

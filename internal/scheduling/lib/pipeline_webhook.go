@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
@@ -18,7 +17,7 @@ import (
 // It allows validation of step parameters without full initialization.
 type Validatable interface {
 	// Validate checks if the given parameters are valid for this step.
-	Validate(ctx context.Context, params runtime.RawExtension) error
+	Validate(ctx context.Context, params v1alpha1.Parameters) error
 }
 
 // PipelineAdmissionWebhook validates Pipeline resources for a specific scheduling domain.

@@ -265,27 +265,27 @@ func TestBaseDetector_CheckKnowledges_NilClient(t *testing.T) {
 func TestBaseDetector_Validate(t *testing.T) {
 	tests := []struct {
 		name        string
-		params      runtime.RawExtension
+		params      []v1alpha1.Parameter
 		expectError bool
 	}{
 		{
 			name: "valid params",
-			params: runtime.RawExtension{
-				Raw: []byte(`{"option1": "value1", "option2": 2}`),
+			params: []v1alpha1.Parameter{
+				{Key: "option1", StringValue: testlib.Ptr("value1")},
+				{Key: "option2", IntValue: testlib.Ptr(int64(2))},
 			},
 			expectError: false,
 		},
 		{
-			name: "empty params",
-			params: runtime.RawExtension{
-				Raw: []byte(`{}`),
-			},
+			name:        "empty params",
+			params:      []v1alpha1.Parameter{},
 			expectError: false,
 		},
 		{
 			name: "invalid JSON",
-			params: runtime.RawExtension{
-				Raw: []byte(`{invalid json}`),
+			params: []v1alpha1.Parameter{
+				{Key: "option1", StringValue: testlib.Ptr("value1")},
+				{Key: "option2", StringValue: testlib.Ptr("value2")},
 			},
 			expectError: true,
 		},
@@ -315,7 +315,7 @@ func (o failingDetectorOptions) Validate() error {
 
 func TestBaseDetector_Validate_ValidationError(t *testing.T) {
 	detector := &BaseDetector[failingDetectorOptions]{}
-	err := detector.Validate(t.Context(), runtime.RawExtension{Raw: []byte(`{}`)})
+	err := detector.Validate(t.Context(), []v1alpha1.Parameter{})
 
 	if err == nil {
 		t.Error("expected error from validation but got nil")
