@@ -87,17 +87,25 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		// Handle reservation based on its type.
 		switch reservation.Spec.Type {
 		case v1alpha1.ReservationTypeCommittedResource, "": // Empty string for backward compatibility
-			// Skip if no CommittedResourceReservation spec or no resource name set.
-			if reservation.Spec.CommittedResourceReservation == nil || reservation.Spec.CommittedResourceReservation.ResourceName == "" {
-				continue // Not handled by us (no resource name set).
+			// Skip if no CommittedResourceReservation spec or no resource group set.
+			if reservation.Spec.CommittedResourceReservation == nil || reservation.Spec.CommittedResourceReservation.ResourceGroup == "" {
+				continue // Not handled by us (no resource group set).
 			}
-			// For committed resource reservations: if the requested VM matches this reservation, free the resources (slotting).
+
+			// For committed resource reservations: unlock resources only if:
+			// 1. Project ID matches
+			// 2. ResourceGroup matches the flavor's hw_version
 			if !s.Options.LockReserved &&
 				reservation.Spec.CommittedResourceReservation.ProjectID == request.Spec.Data.ProjectID &&
-				reservation.Spec.CommittedResourceReservation.ResourceName == request.Spec.Data.Flavor.Data.Name {
-				traceLog.Info("unlocking resources reserved by matching committed resource reservation", "reservation", reservation.Name)
+				reservation.Spec.CommittedResourceReservation.ResourceGroup == request.Spec.Data.Flavor.Data.ExtraSpecs["hw_version"] {
+				traceLog.Info("unlocking resources reserved by matching committed resource reservation with allocation",
+					"reservation", reservation.Name,
+					"instanceUUID", request.Spec.Data.InstanceUUID,
+					"projectID", request.Spec.Data.ProjectID,
+					"resourceGroup", reservation.Spec.CommittedResourceReservation.ResourceGroup)
 				continue
 			}
+
 		case v1alpha1.ReservationTypeFailover:
 			// For failover reservations: if the requested VM is contained in the allocations map
 			// AND this is an evacuation request, unlock the resources.
@@ -135,15 +143,74 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			continue
 		}
 
+		// For CR reservations with allocations, calculate remaining (unallocated) resources to block.
+		// This prevents double-blocking of resources already consumed by running instances.
+		var resourcesToBlock map[string]resource.Quantity
+		if reservation.Spec.Type == v1alpha1.ReservationTypeCommittedResource &&
+			// if the reservation is not being migrated, block only unused resources
+			reservation.Spec.TargetHost == reservation.Status.Host &&
+			reservation.Spec.CommittedResourceReservation != nil &&
+			reservation.Status.CommittedResourceReservation != nil &&
+			len(reservation.Spec.CommittedResourceReservation.Allocations) > 0 &&
+			len(reservation.Status.CommittedResourceReservation.Allocations) > 0 {
+			// Start with full reservation resources
+			resourcesToBlock = make(map[string]resource.Quantity)
+			for k, v := range reservation.Spec.Resources {
+				resourcesToBlock[k] = v.DeepCopy()
+			}
+
+			// Subtract already-allocated resources because those consume already resources on the host
+			for instanceUUID, allocation := range reservation.Spec.CommittedResourceReservation.Allocations {
+				// Only subtract if allocation is already present in status (VM is actually running)
+				if _, isRunning := reservation.Status.CommittedResourceReservation.Allocations[instanceUUID]; !isRunning {
+					continue
+				}
+
+				for resourceName, quantity := range allocation.Resources {
+					if current, ok := resourcesToBlock[resourceName]; ok {
+						current.Sub(quantity)
+						resourcesToBlock[resourceName] = current
+						traceLog.Debug("subtracting allocated resources from reservation",
+							"reservation", reservation.Name,
+							"instanceUUID", instanceUUID,
+							"resource", resourceName,
+							"quantity", quantity.String())
+					}
+				}
+			}
+		} else {
+			// For other reservation types or CR without allocations, block full resources
+			resourcesToBlock = reservation.Spec.Resources
+		}
+
+		// Block the calculated resources on each host
 		for host := range hostsToBlock {
-			if cpu, ok := reservation.Spec.Resources["cpu"]; ok {
+			if cpu, ok := resourcesToBlock["cpu"]; ok {
 				freeCPU := freeResourcesByHost[host]["cpu"]
 				freeCPU.Sub(cpu)
+				if freeCPU.Value() < 0 {
+					traceLog.Warn("negative free CPU after blocking reservation",
+						"host", host,
+						"reservation", reservation.Name,
+						"reservationType", reservation.Spec.Type,
+						"freeCPU", freeCPU.String(),
+						"blocked", cpu.String())
+					freeCPU = resource.MustParse("0")
+				}
 				freeResourcesByHost[host]["cpu"] = freeCPU
 			}
-			if memory, ok := reservation.Spec.Resources["memory"]; ok {
+			if memory, ok := resourcesToBlock["memory"]; ok {
 				freeMemory := freeResourcesByHost[host]["memory"]
 				freeMemory.Sub(memory)
+				if freeMemory.Value() < 0 {
+					traceLog.Warn("negative free memory after blocking reservation",
+						"host", host,
+						"reservation", reservation.Name,
+						"reservationType", reservation.Spec.Type,
+						"freeMemory", freeMemory.String(),
+						"blocked", memory.String())
+					freeMemory = resource.MustParse("0")
+				}
 				freeResourcesByHost[host]["memory"] = freeMemory
 			}
 		}
