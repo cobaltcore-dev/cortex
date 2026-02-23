@@ -32,6 +32,10 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 						Status: v1.ConditionTrue,
 					},
 					{
+						Type:   hv1.ConditionTypeHypervisorDisabled,
+						Status: v1.ConditionFalse,
+					},
+					{
 						Type:   hv1.ConditionTypeTerminating,
 						Status: v1.ConditionFalse,
 					},
@@ -50,6 +54,10 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 				Conditions: []v1.Condition{
 					{
 						Type:   hv1.ConditionTypeReady,
+						Status: v1.ConditionFalse,
+					},
+					{
+						Type:   hv1.ConditionTypeHypervisorDisabled,
 						Status: v1.ConditionFalse,
 					},
 					{
@@ -74,6 +82,10 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 						Status: v1.ConditionTrue,
 					},
 					{
+						Type:   hv1.ConditionTypeHypervisorDisabled,
+						Status: v1.ConditionFalse,
+					},
+					{
 						Type:   hv1.ConditionTypeTerminating,
 						Status: v1.ConditionTrue,
 					},
@@ -93,6 +105,10 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 					{
 						Type:   hv1.ConditionTypeReady,
 						Status: v1.ConditionTrue,
+					},
+					{
+						Type:   hv1.ConditionTypeHypervisorDisabled,
+						Status: v1.ConditionFalse,
 					},
 					{
 						Type:   hv1.ConditionTypeTerminating,
@@ -118,6 +134,10 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 					{
 						Type:   hv1.ConditionTypeReady,
 						Status: v1.ConditionTrue,
+					},
+					{
+						Type:   hv1.ConditionTypeHypervisorDisabled,
+						Status: v1.ConditionFalse,
 					},
 					{
 						Type:   hv1.ConditionTypeTerminating,
@@ -161,6 +181,31 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 			},
 			Status: hv1.HypervisorStatus{
 				Conditions: []v1.Condition{},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host8",
+			},
+			Status: hv1.HypervisorStatus{
+				Conditions: []v1.Condition{
+					{
+						Type:   hv1.ConditionTypeReady,
+						Status: v1.ConditionTrue,
+					},
+					{
+						Type:   hv1.ConditionTypeHypervisorDisabled,
+						Status: v1.ConditionTrue,
+					},
+					{
+						Type:   hv1.ConditionTypeTerminating,
+						Status: v1.ConditionFalse,
+					},
+					{
+						Type:   hv1.ConditionTypeTainted,
+						Status: v1.ConditionFalse,
+					},
+				},
 			},
 		},
 	}
@@ -213,6 +258,16 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 			},
 			expectedHosts: []string{},
 			filteredHosts: []string{"host4"},
+		},
+		{
+			name: "Disabled hypervisor should be filtered",
+			request: api.ExternalSchedulerRequest{
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host8"},
+				},
+			},
+			expectedHosts: []string{},
+			filteredHosts: []string{"host8"},
 		},
 		{
 			name: "Host with optional conditions in any state should pass",
