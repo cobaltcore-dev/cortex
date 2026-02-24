@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"flag"
 	"net/http"
 	"os"
@@ -542,8 +543,17 @@ func main() {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
+
+	// We only want to direct traffic to this pod if it's the leader.
+	if err := mgr.AddReadyzCheck("leader-election", func(req *http.Request) error {
+		select {
+		case <-mgr.Elected():
+			return nil
+		default:
+			return errors.New("not the leader")
+		}
+	}); err != nil {
+		setupLog.Error(err, "unable to set up leader election ready check")
 		os.Exit(1)
 	}
 

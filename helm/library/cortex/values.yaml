@@ -4,7 +4,7 @@
 # [MANAGER]: Manager Deployment Configurations
 controllerManager:
   enable: true
-  replicas: 1
+  replicas: 3
   container:
     image:
       repository: ghcr.io/cobaltcore-dev/cortex
@@ -28,7 +28,9 @@ controllerManager:
         port: 8081
     readinessProbe:
       initialDelaySeconds: 5
-      periodSeconds: 10
+      # React fast to leadership changes to avoid sending traffic to a pod that
+      # is not the leader anymore.
+      periodSeconds: 1
       httpGet:
         path: /readyz
         port: 8081
@@ -43,6 +45,17 @@ controllerManager:
       type: RuntimeDefault
   terminationGracePeriodSeconds: 10
   serviceAccountName: controller-manager
+  # Avoid that multiple replicas of the controller manager are scheduled on the
+  # same node to ensure high availability.
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: cortex
+            topologyKey: kubernetes.io/hostname
 
 # Use this to unambiguate multiple cortex deployments in the same cluster.
 namePrefix: cortex
