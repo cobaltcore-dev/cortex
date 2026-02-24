@@ -41,7 +41,7 @@ type DecisionUpdate struct {
 	ResourceID   string
 	PipelineName string
 	Result       FilterWeigherPipelineResult
-	Reason       v1alpha1.SchedulingReason
+	Reason       v1alpha1.SchedulingIntent
 }
 
 func (c *BasePipelineController[PipelineType]) StartExplainer(ctx context.Context) {
@@ -104,7 +104,7 @@ func (c *BasePipelineController[PipelineType]) updateDecision(ctx context.Contex
 		PipelineRef: corev1.ObjectReference{
 			Name: update.PipelineName,
 		},
-		Reason: update.Reason,
+		Intent: update.Reason,
 	}
 
 	// Check if scheduling failed (no hosts available)

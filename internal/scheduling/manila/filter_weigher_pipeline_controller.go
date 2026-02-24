@@ -80,7 +80,7 @@ func (c *FilterWeigherPipelineController) ProcessRequest(ctx context.Context, re
 			ResourceID:   "",
 			PipelineName: pipelineName,
 			Result:       result,
-			Reason:       v1alpha1.SchedulingReasonUnknown,
+			Reason:       v1alpha1.SchedulingIntentUnknown,
 		}
 	}
 	return &result, nil

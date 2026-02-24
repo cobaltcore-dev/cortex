@@ -128,7 +128,7 @@ spec:
                 type: array
               explanation:
                 description: A human-readable explanation of the current scheduling
-                  state.
+                  decision.
                 type: string
               schedulingHistory:
                 description: The history of scheduling events for this resource.
@@ -136,6 +136,9 @@ spec:
                   description: SchedulingHistoryEntry represents a single entry in
                     the scheduling history of a resource.
                   properties:
+                    intent:
+                      description: The Intent for this scheduling event.
+                      type: string
                     orderedHosts:
                       description: The hosts that were selected in this scheduling
                         event, in order of preference.
@@ -188,17 +191,14 @@ spec:
                           type: string
                       type: object
                       x-kubernetes-map-type: atomic
-                    reason:
-                      description: The reason for this scheduling event.
-                      type: string
                     timestamp:
                       description: Timestamp of when the scheduling event occurred.
                       format: date-time
                       type: string
                   required:
+                  - intent
                   - orderedHosts
                   - pipelineRef
-                  - reason
                   - timestamp
                   type: object
                 type: array

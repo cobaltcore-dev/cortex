@@ -8,22 +8,22 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// SchedulingReasons represents the reason for a scheduling event.
-type SchedulingReason string
+// SchedulingIntents represents the Intent for a scheduling event.
+type SchedulingIntent string
 
 const (
-	// SchedulingReasonInitialPlacement indicates that this is the initial placement of a resource.
-	SchedulingReasonInitialPlacement SchedulingReason = "InitialPlacement"
-	// SchedulingReasonLiveMigration  indicates that this scheduling event is triggered by a live migration operation.
-	SchedulingReasonLiveMigration SchedulingReason = "LiveMigration"
-	// SchedulingReasonResize indicates that this scheduling event is triggered by a resize operation.
-	SchedulingReasonResize SchedulingReason = "Resize"
-	// SchedulingReasonRebuild indicates that this scheduling event is triggered by a rebuild operation.
-	SchedulingReasonRebuild SchedulingReason = "Rebuild"
-	// SchedulingReasonEvacuate indicates that this scheduling event is triggered by an evacuate operation.
-	SchedulingReasonEvacuate SchedulingReason = "Evacuate"
-	// SchedulingReasonUnknown indicates that the reason for this scheduling event is unknown.
-	SchedulingReasonUnknown SchedulingReason = "Unknown"
+	// SchedulingIntentInitialPlacement indicates that this is the initial placement of a resource.
+	SchedulingIntentInitialPlacement SchedulingIntent = "InitialPlacement"
+	// SchedulingIntentLiveMigration  indicates that this scheduling event is triggered by a live migration operation.
+	SchedulingIntentLiveMigration SchedulingIntent = "LiveMigration"
+	// SchedulingIntentResize indicates that this scheduling event is triggered by a resize operation.
+	SchedulingIntentResize SchedulingIntent = "Resize"
+	// SchedulingIntentRebuild indicates that this scheduling event is triggered by a rebuild operation.
+	SchedulingIntentRebuild SchedulingIntent = "Rebuild"
+	// SchedulingIntentEvacuate indicates that this scheduling event is triggered by an evacuate operation.
+	SchedulingIntentEvacuate SchedulingIntent = "Evacuate"
+	// SchedulingIntentUnknown indicates that the Intent for this scheduling event is unknown.
+	SchedulingIntentUnknown SchedulingIntent = "Unknown"
 )
 
 // SchedulingHistoryEntry represents a single entry in the scheduling history of a resource.
@@ -36,8 +36,8 @@ type SchedulingHistoryEntry struct {
 	// This reference can be used to look up the pipeline definition and its
 	// scheduler step configuration for additional context.
 	PipelineRef corev1.ObjectReference `json:"pipelineRef"`
-	// The reason for this scheduling event.
-	Reason SchedulingReason `json:"reason"`
+	// The Intent for this scheduling event.
+	Intent SchedulingIntent `json:"intent"`
 }
 
 type DecisionSpec struct {
