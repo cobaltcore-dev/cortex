@@ -26,3 +26,31 @@ const (
 	// which are the smallest deployable units in a Kubernetes cluster.
 	SchedulingDomainPods SchedulingDomain = "pods"
 )
+
+// Parameter is a struct that can be used to define parameters for filters,
+// weighers, and other resources that need flexible configuration.
+//
+// It is strongly encouraged to use this type for configuration of resources
+// at it provides a more strict schema and validation compared to using
+// runtime.RawExtension directly.
+type Parameter struct {
+	// The key of the parameter.
+	// +kubebuilder:validation:Required
+	Key string `json:"key"`
+
+	// +kubebuilder:validation:Optional
+	StringValue *string `json:"stringValue,omitempty"`
+	// +kubebuilder:validation:Optional
+	BoolValue *bool `json:"boolValue,omitempty"`
+	// +kubebuilder:validation:Optional
+	IntValue *int64 `json:"intValue,omitempty"`
+	// +kubebuilder:validation:Optional
+	FloatValue *float64 `json:"floatValue,omitempty"`
+	// +kubebuilder:validation:Optional
+	StringListValue *[]string `json:"stringListValue,omitempty"`
+}
+
+// Parameters is a list of Parameter structs that can be used to define
+// multiple parameters for filters, weighers, and other resources that need
+// flexible but limited configuration.
+type Parameters []Parameter

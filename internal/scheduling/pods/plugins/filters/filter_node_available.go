@@ -22,6 +22,10 @@ func (f *NodeAvailableFilter) Init(ctx context.Context, client client.Client, st
 	return nil
 }
 
+func (f *NodeAvailableFilter) Validate(ctx context.Context, params v1alpha1.Parameters) error {
+	return nil
+}
+
 func (NodeAvailableFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	activations := make(map[string]float64)
 	stats := make(map[string]lib.FilterWeigherPipelineStepStatistics)

@@ -5,7 +5,6 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
 type FilterSpec struct {
@@ -15,7 +14,7 @@ type FilterSpec struct {
 
 	// Additional configuration for the step that can be used
 	// +kubebuilder:validation:Optional
-	Params runtime.RawExtension `json:"params,omitempty"`
+	Params Parameters `json:"params,omitempty"`
 
 	// Additional description of the step which helps understand its purpose
 	// and decisions made by it.
@@ -30,7 +29,7 @@ type WeigherSpec struct {
 
 	// Additional configuration for the step that can be used
 	// +kubebuilder:validation:Optional
-	Params runtime.RawExtension `json:"params,omitempty"`
+	Params Parameters `json:"params,omitempty"`
 
 	// Additional description of the step which helps understand its purpose
 	// and decisions made by it.
@@ -51,7 +50,7 @@ type DetectorSpec struct {
 
 	// Additional configuration for the step that can be used
 	// +kubebuilder:validation:Optional
-	Params runtime.RawExtension `json:"params,omitempty"`
+	Params Parameters `json:"params,omitempty"`
 
 	// Additional description of the step which helps understand its purpose
 	// and decisions made by it.
@@ -126,39 +125,6 @@ type PipelineSpec struct {
 }
 
 const (
-	FilterConditionReady   = "Ready"
-	WeigherConditionReady  = "Ready"
-	DetectorConditionReady = "Ready"
-)
-
-type FilterStatus struct {
-	// The name of the filter.
-	Name string `json:"name"`
-
-	// The current status conditions of the filter.
-	// +kubebuilder:validation:Optional
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
-}
-
-type WeigherStatus struct {
-	// The name of the weigher.
-	Name string `json:"name"`
-
-	// The current status conditions of the weigher.
-	// +kubebuilder:validation:Optional
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
-}
-
-type DetectorStatus struct {
-	// The name of the detector.
-	Name string `json:"name"`
-
-	// The current status conditions of the detector.
-	// +kubebuilder:validation:Optional
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
-}
-
-const (
 	// The pipeline is ready to be used.
 	PipelineConditionReady = "Ready"
 	// All steps in the pipeline are ready.
@@ -166,18 +132,6 @@ const (
 )
 
 type PipelineStatus struct {
-	// List of statuses for each filter in the pipeline.
-	// +kubebuilder:validation:Optional
-	Filters []FilterStatus `json:"filters,omitempty"`
-
-	// List of statuses for each weigher in the pipeline.
-	// +kubebuilder:validation:Optional
-	Weighers []WeigherStatus `json:"weighers,omitempty"`
-
-	// List of statuses for each detector in the pipeline.
-	// +kubebuilder:validation:Optional
-	Detectors []DetectorStatus `json:"detectors,omitempty"`
-
 	// The current status conditions of the pipeline.
 	// +kubebuilder:validation:Optional
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`

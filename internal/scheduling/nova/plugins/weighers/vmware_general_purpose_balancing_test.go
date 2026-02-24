@@ -12,8 +12,8 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -57,13 +57,11 @@ func TestVMwareGeneralPurposeBalancingStep_Init(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	validParams := runtime.RawExtension{
-		Raw: []byte(`{
-			"ramUtilizedLowerBoundPct": 20.0,
-			"ramUtilizedUpperBoundPct": 80.0,
-			"ramUtilizedActivationLowerBound": 0.0,
-			"ramUtilizedActivationUpperBound": 1.0
-		}`),
+	params := []v1alpha1.Parameter{
+		{Key: "ramUtilizedLowerBoundPct", FloatValue: testlib.Ptr(20.0)},
+		{Key: "ramUtilizedUpperBoundPct", FloatValue: testlib.Ptr(80.0)},
+		{Key: "ramUtilizedActivationLowerBound", FloatValue: testlib.Ptr(0.0)},
+		{Key: "ramUtilizedActivationUpperBound", FloatValue: testlib.Ptr(1.0)},
 	}
 
 	tests := []struct {
@@ -97,7 +95,7 @@ func TestVMwareGeneralPurposeBalancingStep_Init(t *testing.T) {
 			},
 			weigherSpec: v1alpha1.WeigherSpec{
 				Name:   "vmware_general_purpose_balancing",
-				Params: validParams,
+				Params: params,
 			},
 			wantError: false,
 		},
@@ -106,7 +104,7 @@ func TestVMwareGeneralPurposeBalancingStep_Init(t *testing.T) {
 			knowledges: nil,
 			weigherSpec: v1alpha1.WeigherSpec{
 				Name:   "vmware_general_purpose_balancing",
-				Params: validParams,
+				Params: params,
 			},
 			wantError:     true,
 			errorContains: "failed to get knowledge",
@@ -236,30 +234,6 @@ func TestVMwareGeneralPurposeBalancingStep_Run(t *testing.T) {
 				"host3": 0.0,                 // HANA_EXCLUSIVE host should be no-effect
 			},
 			expectStatistics: true,
-		},
-		{
-			name: "HANA flavor should be skipped",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								Name:     "hana.large",
-								MemoryMB: 8192,
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-				},
-			},
-			expectedActivations: map[string]float64{
-				"host1": 0.0, // should be no-effect
-				"host2": 0.0, // should be no-effect
-			},
-			expectStatistics: false,
 		},
 		{
 			name: "Host without capabilities gets no-effect",

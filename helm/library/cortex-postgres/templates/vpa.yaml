@@ -30,14 +30,4 @@ spec:
           memory: {{ .Values.resources.limits.memory }}
         controlledResources: ["cpu", "memory"]
         controlledValues: "RequestsAndLimits"
-      - containerName: {{ include "cortex-postgres.fullname" . }}-exporter
-        mode: "Auto"
-        minAllowed:
-          cpu: {{ .Values.exporter.resources.requests.cpu }}
-          memory: {{ .Values.exporter.resources.requests.memory }}
-        maxAllowed:
-          cpu: {{ .Values.exporter.resources.limits.cpu }}
-          memory: {{ .Values.exporter.resources.limits.memory }}
-        controlledResources: ["cpu", "memory"]
-        controlledValues: "RequestsAndLimits"
 {{- end }}

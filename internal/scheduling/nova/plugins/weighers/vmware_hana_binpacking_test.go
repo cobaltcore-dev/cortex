@@ -12,8 +12,8 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -57,13 +57,11 @@ func TestVMwareHanaBinpackingStep_Init(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	validParams := runtime.RawExtension{
-		Raw: []byte(`{
-			"ramUtilizedAfterLowerBoundPct": 30.0,
-			"ramUtilizedAfterUpperBoundPct": 80.0,
-			"ramUtilizedAfterActivationLowerBound": 0.0,
-			"ramUtilizedAfterActivationUpperBound": 1.0
-		}`),
+	params := []v1alpha1.Parameter{
+		{Key: "ramUtilizedAfterLowerBoundPct", FloatValue: testlib.Ptr(30.0)},
+		{Key: "ramUtilizedAfterUpperBoundPct", FloatValue: testlib.Ptr(80.0)},
+		{Key: "ramUtilizedAfterActivationLowerBound", FloatValue: testlib.Ptr(0.0)},
+		{Key: "ramUtilizedAfterActivationUpperBound", FloatValue: testlib.Ptr(1.0)},
 	}
 
 	tests := []struct {
@@ -97,7 +95,7 @@ func TestVMwareHanaBinpackingStep_Init(t *testing.T) {
 			},
 			weigherSpec: v1alpha1.WeigherSpec{
 				Name:   "vmware_hana_binpacking",
-				Params: validParams,
+				Params: params,
 			},
 			wantError: false,
 		},
@@ -106,7 +104,7 @@ func TestVMwareHanaBinpackingStep_Init(t *testing.T) {
 			knowledges: nil,
 			weigherSpec: v1alpha1.WeigherSpec{
 				Name:   "vmware_hana_binpacking",
-				Params: validParams,
+				Params: params,
 			},
 			wantError:     true,
 			errorContains: "failed to get knowledge",

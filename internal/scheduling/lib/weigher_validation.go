@@ -24,6 +24,11 @@ func (s *WeigherValidator[RequestType]) Init(ctx context.Context, client client.
 	return s.Weigher.Init(ctx, client, step)
 }
 
+// Validate the wrapped weigher.
+func (s *WeigherValidator[RequestType]) Validate(ctx context.Context, params v1alpha1.Parameters) error {
+	return s.Weigher.Validate(ctx, params)
+}
+
 // Validate the wrapped weigher with the database and options.
 func validateWeigher[RequestType FilterWeigherPipelineRequest](weigher Weigher[RequestType]) *WeigherValidator[RequestType] {
 	return &WeigherValidator[RequestType]{Weigher: weigher}

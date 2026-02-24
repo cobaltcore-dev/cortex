@@ -10,8 +10,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -28,8 +28,8 @@ func TestAvoidHighStealPctStep_Init(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	validParams := runtime.RawExtension{
-		Raw: []byte(`{"maxStealPctOverObservedTimeSpan": 80.0}`),
+	params := []v1alpha1.Parameter{
+		{Key: "maxStealPctOverObservedTimeSpan", FloatValue: testlib.Ptr(80.0)},
 	}
 
 	tests := []struct {
@@ -55,7 +55,7 @@ func TestAvoidHighStealPctStep_Init(t *testing.T) {
 			},
 			detectorSpec: v1alpha1.DetectorSpec{
 				Name:   "avoid_high_steal_pct",
-				Params: validParams,
+				Params: params,
 			},
 			wantError: false,
 		},
@@ -64,7 +64,7 @@ func TestAvoidHighStealPctStep_Init(t *testing.T) {
 			knowledge: nil,
 			detectorSpec: v1alpha1.DetectorSpec{
 				Name:   "avoid_high_steal_pct",
-				Params: validParams,
+				Params: params,
 			},
 			wantError:     true,
 			errorContains: "failed to get knowledge",
@@ -85,7 +85,7 @@ func TestAvoidHighStealPctStep_Init(t *testing.T) {
 			},
 			detectorSpec: v1alpha1.DetectorSpec{
 				Name:   "avoid_high_steal_pct",
-				Params: validParams,
+				Params: params,
 			},
 			wantError:     true,
 			errorContains: "not ready",
@@ -323,4 +323,117 @@ func equalSlices(a, b []string) bool {
 	}
 
 	return true
+}
+
+func TestAvoidHighStealPctStepOpts_Validate(t *testing.T) {
+	tests := []struct {
+		name        string
+		opts        AvoidHighStealPctStepOpts
+		expectError bool
+	}{
+		{
+			name: "valid positive threshold",
+			opts: AvoidHighStealPctStepOpts{
+				MaxStealPctOverObservedTimeSpan: 80.0,
+			},
+			expectError: false,
+		},
+		{
+			name: "valid zero threshold",
+			opts: AvoidHighStealPctStepOpts{
+				MaxStealPctOverObservedTimeSpan: 0.0,
+			},
+			expectError: false,
+		},
+		{
+			name: "invalid negative threshold",
+			opts: AvoidHighStealPctStepOpts{
+				MaxStealPctOverObservedTimeSpan: -5.0,
+			},
+			expectError: true,
+		},
+		{
+			name: "valid small positive threshold",
+			opts: AvoidHighStealPctStepOpts{
+				MaxStealPctOverObservedTimeSpan: 0.001,
+			},
+			expectError: false,
+		},
+		{
+			name: "valid large threshold",
+			opts: AvoidHighStealPctStepOpts{
+				MaxStealPctOverObservedTimeSpan: 100.0,
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.opts.Validate()
+
+			if tt.expectError && err == nil {
+				t.Error("expected error but got nil")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("expected no error but got: %v", err)
+			}
+		})
+	}
+}
+
+func TestAvoidHighStealPctStep_Validate(t *testing.T) {
+	tests := []struct {
+		name        string
+		params      []v1alpha1.Parameter
+		expectError bool
+	}{
+		{
+			name: "valid params",
+			params: []v1alpha1.Parameter{
+				{Key: "maxStealPctOverObservedTimeSpan", FloatValue: testlib.Ptr(80.0)},
+			},
+			expectError: false,
+		},
+		{
+			name: "valid params with zero threshold",
+			params: []v1alpha1.Parameter{
+				{Key: "maxStealPctOverObservedTimeSpan", FloatValue: testlib.Ptr(0.0)},
+			},
+			expectError: false,
+		},
+		{
+			name: "invalid params with negative threshold",
+			params: []v1alpha1.Parameter{
+				{Key: "maxStealPctOverObservedTimeSpan", FloatValue: testlib.Ptr(-5.0)},
+			},
+			expectError: true,
+		},
+		{
+			name: "invalid JSON",
+			params: []v1alpha1.Parameter{
+				{Key: "invalidJSON", StringValue: testlib.Ptr("{invalid json}")},
+			},
+			expectError: true,
+		},
+		{
+			name:        "empty params (defaults to zero)",
+			params:      []v1alpha1.Parameter{},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			step := &AvoidHighStealPctStep{}
+			err := step.Validate(context.Background(), tt.params)
+
+			if tt.expectError && err == nil {
+				t.Error("expected error but got nil")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("expected no error but got: %v", err)
+			}
+		})
+	}
 }

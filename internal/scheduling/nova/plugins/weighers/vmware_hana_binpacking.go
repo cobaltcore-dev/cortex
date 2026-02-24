@@ -56,11 +56,6 @@ func (s *VMwareHanaBinpackingStep) Init(ctx context.Context, client client.Clien
 // Pack VMs on hosts based on their flavor.
 func (s *VMwareHanaBinpackingStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
-	// Don't execute the step for non-hana flavors.
-	if !strings.Contains(request.Spec.Data.Flavor.Data.Name, "hana") {
-		slog.Debug("Skipping hana binpacking step for non-HANA flavor", "flavor", request.Spec.Data.Flavor.Data.Name)
-		return result, nil
-	}
 
 	result.Statistics["ram utilized after"] = s.PrepareStats(request, "%")
 

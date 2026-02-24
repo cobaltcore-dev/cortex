@@ -6,8 +6,7 @@ cliVersion: 4.7.1
 domain: cortex
 layout:
 - go.kubebuilder.io/v4
-plugins:
-  helm.kubebuilder.io/v1-alpha: {}
+plugins: []
 projectName: cortex
 repo: github.com/cobaltcore-dev/cortex
 resources:

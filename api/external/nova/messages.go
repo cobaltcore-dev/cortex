@@ -74,6 +74,33 @@ func (r ExternalSchedulerRequest) FilterHosts(includedHosts map[string]float64) 
 	return r
 }
 
+type FlavorType string
+
+const (
+	// FlavorTypeGeneralPurpose represents general purpose workloads.
+	FlavorTypeGeneralPurpose FlavorType = "general-purpose"
+	// FlavorTypeHANA represents HANA workloads.
+	FlavorTypeHANA FlavorType = "hana"
+)
+
+// GetFlavorType determines the flavor type based on the requested flavor's extra specs.
+func (r ExternalSchedulerRequest) GetFlavorType() (FlavorType, error) {
+	extraSpecs := r.Spec.Data.Flavor.Data.ExtraSpecs
+	val, ok := extraSpecs["trait:CUSTOM_HANA_EXCLUSIVE_HOST"]
+	if !ok {
+		return FlavorTypeGeneralPurpose, nil
+	}
+	// If the key is provided, it must be either "required" or "forbidden".
+	switch strings.ToLower(val) {
+	case "forbidden":
+		return FlavorTypeGeneralPurpose, nil
+	case "required":
+		return FlavorTypeHANA, nil
+	default:
+		return "", fmt.Errorf("unsupported value for trait:CUSTOM_HANA_EXCLUSIVE_HOST in flavor extra specs: %s", val)
+	}
+}
+
 type HypervisorType string
 
 const (

@@ -92,6 +92,11 @@ func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerReque
 		slog.Info("failed to determine hypervisor type, cannot infer pipeline name", "error", err)
 		return "", errors.New("failed to determine hypervisor type from request data")
 	}
+	flavorType, err := requestData.GetFlavorType()
+	if err != nil {
+		slog.Info("failed to determine flavor type, cannot infer pipeline name", "error", err)
+		return "", errors.New("failed to determine flavor type from request data")
+	}
 	switch hvType {
 	case api.HypervisorTypeCH, api.HypervisorTypeQEMU:
 		enableAllFilters := false
@@ -104,14 +109,29 @@ func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerReque
 			enableAllFilters = true
 		}
 		if enableAllFilters {
-			return "nova-external-scheduler-kvm-all-filters-enabled", nil
+			switch flavorType {
+			case api.FlavorTypeHANA:
+				return "kvm-hana-bin-packing-all-filters-enabled", nil
+			default:
+				return "kvm-general-purpose-load-balancing-all-filters-enabled", nil
+			}
 		}
-		return "nova-external-scheduler-kvm", nil
+		switch flavorType {
+		case api.FlavorTypeHANA:
+			return "kvm-hana-bin-packing", nil
+		default:
+			return "kvm-general-purpose-load-balancing", nil
+		}
 	case api.HypervisorTypeVMware:
 		if requestData.Reservation {
 			return "", errors.New("reservations are not supported on vmware hypervisors")
 		}
-		return "nova-external-scheduler-vmware", nil
+		switch flavorType {
+		case api.FlavorTypeHANA:
+			return "vmware-hana-bin-packing", nil
+		default:
+			return "vmware-general-purpose-load-balancing", nil
+		}
 	default:
 		return "", fmt.Errorf("unsupported hypervisor_type: %s", hvType)
 	}

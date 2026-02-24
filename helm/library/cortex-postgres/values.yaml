@@ -18,22 +18,5 @@ resources:
     memory: "4Gi"
     cpu: "4"
 
-prometheus:
-  enable: true
-
-exporter:
-  image:
-    repository: prometheuscommunity/postgres-exporter
-    tag: "v0.19.0"
-    pullPolicy: IfNotPresent
-
-  resources:
-    requests:
-      memory: "128Mi"
-      cpu: "100m"
-    limits:
-      memory: "512Mi"
-      cpu: "200m"
-
 auth:
   password: secret

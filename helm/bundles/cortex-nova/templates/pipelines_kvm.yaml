@@ -3,7 +3,7 @@
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
-  name: nova-external-scheduler-kvm
+  name: kvm-general-purpose-load-balancing
 spec:
   schedulingDomain: nova
   description: |
@@ -12,6 +12,7 @@ spec:
     for additional filtering and weighing via this external scheduler pipeline.
     Cortex returns a ranked list of hosts back to nova for final selection.
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
+    Specifically, this pipeline is used for general purpose workloads.
   type: filter-weigher
   createDecisions: true
   filters: []
@@ -20,15 +21,34 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
-  name: nova-external-scheduler-kvm-all-filters-enabled
+  name: kvm-hana-bin-packing
 spec:
   schedulingDomain: nova
   description: |
-    This pipeline can be used to place reservations the same way nova would place
-    its virtual machines. It uses the same filtering steps as implemented in the
-    nova service, ensuring a valid placement of the reservation. It then leverages
-    cortex's weighing steps to provide an optimized host selection for the reservation.
+    Nova provides virtual machine placement on compute hosts for OpenStack.
+    After applying its own filtering and weighing logic, it delegates to cortex
+    for additional filtering and weighing via this external scheduler pipeline.
+    Cortex returns a ranked list of hosts back to nova for final selection.
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
+    Specifically, this pipeline is used for hana virtual machines.
+  type: filter-weigher
+  createDecisions: true
+  filters: []
+  weighers: []
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: kvm-general-purpose-load-balancing-all-filters-enabled
+spec:
+  schedulingDomain: nova
+  description: |
+    This pipeline uses the same filtering steps as implemented in the
+    nova service, ensuring a valid placement. Note: this pipeline is
+    currently under testing and should not be used for production workloads yet.
+
+    This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
+    Specifically, this pipeline is used for general purpose workloads.
   type: filter-weigher
   createDecisions: true
   # Fetch all placement candidates, ignoring nova's preselection.
@@ -49,7 +69,7 @@ spec:
         # For the reservations pipeline, we don't want to unlock
         # reserved space, to avoid reservations for the same project
         # and flavor to overlap.
-        lockReserved: true
+        - {key: lockReserved, boolValue: true}
     - name: filter_has_requested_traits
       description: |
         This step filters hosts that do not have the requested traits given by the
@@ -80,7 +100,7 @@ spec:
         the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
         `domain_name` scheduler hint from the nova request spec.
       params:
-        domainNamePrefixes: ["iaas-"]
+        - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
     - name: filter_packed_virtqueue
       description: |
         If the flavor extra specs contain the `hw:virtio_packed_ring` key, or the
@@ -125,7 +145,113 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
-  name: nova-descheduler-kvm
+  name: kvm-hana-bin-packing-all-filters-enabled
+spec:
+  schedulingDomain: nova
+  description: |
+    This pipeline uses the same filtering steps as implemented in the
+    nova service, ensuring a valid placement. Note: this pipeline is
+    currently under testing and should not be used for production workloads yet.
+
+    This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
+    Specifically, this pipeline is used for hana virtual machines.
+  type: filter-weigher
+  createDecisions: true
+  # Fetch all placement candidates, ignoring nova's preselection.
+  ignorePreselection: true
+  filters:
+    - name: filter_host_instructions
+      description: |
+        This step will consider the `ignore_hosts` and `force_hosts` instructions
+        from the nova scheduler request spec to filter out or exclusively allow
+        certain hosts.
+    - name: filter_has_enough_capacity
+      description: |
+        This step will filter out hosts that do not have enough available capacity
+        to host the requested flavor. If enabled, this step will subtract the
+        current reservations residing on this host from the available capacity.
+      params:
+        # If reserved space should be locked even for matching requests.
+        # For the reservations pipeline, we don't want to unlock
+        # reserved space, to avoid reservations for the same project
+        # and flavor to overlap.
+        - {key: lockReserved, boolValue: true}
+    - name: filter_has_requested_traits
+      description: |
+        This step filters hosts that do not have the requested traits given by the
+        nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
+        not have the specified trait. "trait:<trait>": "required" means the host
+        must have the specified trait.
+    - name: filter_has_accelerators
+      description: |
+        This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
+        the nova flavor extra specs request accelerators via "accel:device_profile".
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone.
+    - name: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
+    - name: filter_maintenance
+      description: |
+        This step will filter out hosts that are currently in maintenance mode that
+        prevents scheduling, for example, manual maintenance or termination.
+    - name: filter_external_customer
+      description: |
+        This step prefix-matches the domain name for external customer domains and
+        filters out hosts that are not intended for external customers. It considers
+        the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+        `domain_name` scheduler hint from the nova request spec.
+      params:
+        - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
+    - name: filter_packed_virtqueue
+      description: |
+        If the flavor extra specs contain the `hw:virtio_packed_ring` key, or the
+        image properties contain the `hw_virtio_packed_ring` key, this step will
+        filter out hosts that do not have the `COMPUTE_NET_VIRTIO_PACKED` trait.
+    - name: filter_allowed_projects
+      description: |
+        This step filters hosts based on allowed projects defined in the
+        hypervisor resource. Note that hosts allowing all projects are still
+        accessible and will not be filtered out. In this way some hypervisors
+        are made accessible to some projects only.
+    - name: filter_capabilities
+      description: |
+        This step will filter out hosts that do not meet the compute capabilities
+        requested by the nova flavor extra specs, like `{"arch": "x86_64",
+        "maxphysaddr:bits": 46, ...}`.
+
+        Note: currently, advanced boolean/numeric operators for the capabilities
+        like `>`, `!`, ... are not supported because they are not used by any of our
+        flavors in production.
+    - name: filter_instance_group_affinity
+      description: |
+        This step selects hosts in the instance group specified in the nova
+        scheduler request spec.
+    - name: filter_instance_group_anti_affinity
+      description: |
+        This step selects hosts not in the instance group specified in the nova
+        scheduler request spec, but only until the max_server_per_host limit is
+        reached (default = 1).
+    - name: filter_live_migratable
+      description: |
+        This step ensures that the target host of a live migration can accept
+        the migrating VM, by checking cpu architecture, cpu features, emulated
+        devices, and cpu modes.
+    - name: filter_requested_destination
+      description: |
+        This step filters hosts based on the `requested_destination` instruction
+        from the nova scheduler request spec. It supports filtering by host and
+        by aggregates.
+  weighers: []
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: kvm-descheduler
 spec:
   schedulingDomain: nova
   description:
@@ -140,5 +266,5 @@ spec:
         This step will deschedule VMs once they reach this CPU steal percentage over
         the observed time span.
       params:
-        maxStealPctOverObservedTimeSpan: 20.0
+        - {key: maxStealPctOverObservedTimeSpan, floatValue: 20.0}
 {{- end }}

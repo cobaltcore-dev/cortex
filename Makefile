@@ -12,6 +12,10 @@ all: crds deepcopy lint test
 help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
+.PHONY: format
+format: ## Run gofmt on all Go files
+	gofmt -w .
+
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
 	"$(GOLANGCI_LINT)" run
@@ -23,6 +27,9 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 .PHONY: test
 test: ## Run all tests.
 	go test ./...
+
+.PHONY: generate
+generate: deepcopy crds ## Regenerate CRDs and DeepCopy after API type changes.
 
 .PHONY: crds
 crds: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.

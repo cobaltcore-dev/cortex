@@ -5,6 +5,7 @@ package detectors
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -19,6 +20,14 @@ import (
 type AvoidHighStealPctStepOpts struct {
 	// Max steal pct threshold above which VMs should be descheduled.
 	MaxStealPctOverObservedTimeSpan float64 `json:"maxStealPctOverObservedTimeSpan"`
+}
+
+// Validate the options for the AvoidHighStealPctStep.
+func (o AvoidHighStealPctStepOpts) Validate() error {
+	if o.MaxStealPctOverObservedTimeSpan < 0 {
+		return errors.New("maxStealPctOverObservedTimeSpan must be non-negative")
+	}
+	return nil
 }
 
 type AvoidHighStealPctStep struct {
