@@ -123,7 +123,7 @@ func (c *FilterWeigherPipelineController) ProcessNewPod(ctx context.Context, pod
 			PipelineName: pipelineName,
 			Result:       result,
 			// TODO: Refine the reason
-			Reason: v1alpha1.SchedulingIntentUnknown,
+			Intent: v1alpha1.SchedulingIntentUnknown,
 		}
 	}
 	return nil

@@ -41,7 +41,7 @@ type DecisionUpdate struct {
 	ResourceID   string
 	PipelineName string
 	Result       FilterWeigherPipelineResult
-	Reason       v1alpha1.SchedulingIntent
+	Intent       v1alpha1.SchedulingIntent
 }
 
 func (c *BasePipelineController[PipelineType]) StartExplainer(ctx context.Context) {
@@ -104,7 +104,7 @@ func (c *BasePipelineController[PipelineType]) updateDecision(ctx context.Contex
 		PipelineRef: corev1.ObjectReference{
 			Name: update.PipelineName,
 		},
-		Intent: update.Reason,
+		Intent: update.Intent,
 	}
 
 	// Check if scheduling failed (no hosts available)
@@ -157,9 +157,9 @@ func (c *BasePipelineController[PipelineType]) updateDecision(ctx context.Contex
 			log.Info("Published NoValidHosts event", "resourceID", update.ResourceID)
 		} else {
 			// Normal event for successful scheduling
-			reasonStr := string(update.Reason)
-			c.Recorder.Eventf(decision, nil, corev1.EventTypeNormal, reasonStr, "Scheduling", "Scheduled to %s. %s", decision.Status.TargetHost, explanationText)
-			log.Info("Published scheduling event", "resourceID", update.ResourceID, "targetHost", decision.Status.TargetHost, "reason", update.Reason)
+			intentStr := string(update.Intent)
+			c.Recorder.Eventf(decision, nil, corev1.EventTypeNormal, intentStr, "Scheduling", "Scheduled to %s. %s", decision.Status.TargetHost, explanationText)
+			log.Info("Published scheduling event", "resourceID", update.ResourceID, "targetHost", decision.Status.TargetHost, "reason", update.Intent)
 		}
 	}
 

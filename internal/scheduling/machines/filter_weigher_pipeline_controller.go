@@ -118,7 +118,7 @@ func (c *FilterWeigherPipelineController) ProcessNewMachine(ctx context.Context,
 			PipelineName: pipelineName,
 			Result:       result,
 			// TODO: Refine the reason
-			Reason: v1alpha1.SchedulingIntentUnknown,
+			Intent: v1alpha1.SchedulingIntentUnknown,
 		}
 	}
 	return nil
