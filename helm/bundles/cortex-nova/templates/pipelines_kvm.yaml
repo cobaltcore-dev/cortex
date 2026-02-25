@@ -16,7 +16,14 @@ spec:
   type: filter-weigher
   createDecisions: true
   filters: []
-  weighers: []
+  weighers:
+    - name: kvm_prefer_smaller_hosts
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step pulls virtual machines onto smaller hosts (by capacity). This
+        ensures that larger hosts are not overly fragmented with small VMs,
+        and can still accommodate larger VMs when they need to be scheduled.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -34,7 +41,14 @@ spec:
   type: filter-weigher
   createDecisions: true
   filters: []
-  weighers: []
+  weighers:
+    - name: kvm_prefer_smaller_hosts
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step pulls virtual machines onto smaller hosts (by capacity). This
+        ensures that larger hosts are not overly fragmented with small VMs,
+        and can still accommodate larger VMs when they need to be scheduled.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -136,7 +150,14 @@ spec:
         This step filters hosts based on the `requested_destination` instruction
         from the nova scheduler request spec. It supports filtering by host and
         by aggregates.
-  weighers: []
+  weighers:
+    - name: kvm_prefer_smaller_hosts
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step pulls virtual machines onto smaller hosts (by capacity). This
+        ensures that larger hosts are not overly fragmented with small VMs,
+        and can still accommodate larger VMs when they need to be scheduled.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -239,6 +260,14 @@ spec:
         from the nova scheduler request spec. It supports filtering by host and
         by aggregates.
   weighers: []
+  weighers:
+    - name: kvm_prefer_smaller_hosts
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step pulls virtual machines onto smaller hosts (by capacity). This
+        ensures that larger hosts are not overly fragmented with small VMs,
+        and can still accommodate larger VMs when they need to be scheduled.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
