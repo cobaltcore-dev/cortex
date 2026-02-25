@@ -34,7 +34,15 @@ spec:
   type: filter-weigher
   createDecisions: true
   filters: []
-  weighers: []
+  weighers:
+    - name: kvm_binpack
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step implements a binpacking weigher for workloads on kvm hypervisors.
+        It pulls the requested vm into the smallest gaps possible, to ensure
+        other hosts with less allocation stay free for bigger vms.
+        In this pipeline, the binpacking will focus on hana virtual machines.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -238,7 +246,15 @@ spec:
         This step filters hosts based on the `requested_destination` instruction
         from the nova scheduler request spec. It supports filtering by host and
         by aggregates.
-  weighers: []
+  weighers:
+    - name: kvm_binpack
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step implements a binpacking weigher for workloads on kvm hypervisors.
+        It pulls the requested vm into the smallest gaps possible, to ensure
+        other hosts with less allocation stay free for bigger vms.
+        In this pipeline, the binpacking will focus on hana virtual machines.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
