@@ -35,16 +35,18 @@ func (o KVMBinpackStepOpts) Validate() error {
 		corev1.ResourceMemory,
 		corev1.ResourceCPU,
 	}
-	for resourceName, val := range o.ResourceWeights {
-		if val < 0 {
-			return errors.New("resource weights must be greater than or equal to zero")
-		}
+	for resourceName, value := range o.ResourceWeights {
 		if !slices.Contains(supportedResources, resourceName) {
 			return fmt.Errorf(
 				"unsupported resource %s in ResourceWeights, supported resources are: %v",
 				resourceName, supportedResources,
 			)
 		}
+		if value == 0 {
+			return fmt.Errorf("resource weight for %s must be greater than zero", resourceName)
+		}
+		// It is fine for weights to be less than 0, in case we want to
+		// use the worst-fit algorithm instead of best-fit for balancing.
 	}
 	return nil
 }

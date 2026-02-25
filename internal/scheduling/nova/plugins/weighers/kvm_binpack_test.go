@@ -89,6 +89,16 @@ func TestKVMBinpackStepOpts_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "inverted weights for worst-fit algorithm",
+			opts: KVMBinpackStepOpts{
+				ResourceWeights: map[corev1.ResourceName]float64{
+					corev1.ResourceMemory: -1.0,
+					corev1.ResourceCPU:    -1.0,
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "valid opts with only memory weight",
 			opts: KVMBinpackStepOpts{
 				ResourceWeights: map[corev1.ResourceName]float64{
@@ -107,14 +117,14 @@ func TestKVMBinpackStepOpts_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "valid opts with zero weights",
+			name: "zero weights should raise error",
 			opts: KVMBinpackStepOpts{
 				ResourceWeights: map[corev1.ResourceName]float64{
 					corev1.ResourceMemory: 0.0,
 					corev1.ResourceCPU:    0.0,
 				},
 			},
-			wantErr: false,
+			wantErr: true,
 		},
 		{
 			name: "valid opts with empty resource weights",
@@ -127,26 +137,6 @@ func TestKVMBinpackStepOpts_Validate(t *testing.T) {
 			name:    "valid opts with nil resource weights",
 			opts:    KVMBinpackStepOpts{},
 			wantErr: true,
-		},
-		{
-			name: "invalid opts with negative weight",
-			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: -1.0,
-				},
-			},
-			wantErr: true,
-			errMsg:  "resource weights must be greater than or equal to zero",
-		},
-		{
-			name: "invalid opts with negative cpu weight",
-			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceCPU: -0.5,
-				},
-			},
-			wantErr: true,
-			errMsg:  "resource weights must be greater than or equal to zero",
 		},
 		{
 			name: "invalid opts with unsupported resource",
