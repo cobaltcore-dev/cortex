@@ -259,7 +259,6 @@ spec:
         This step filters hosts based on the `requested_destination` instruction
         from the nova scheduler request spec. It supports filtering by host and
         by aggregates.
-  weighers: []
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
