@@ -22,6 +22,10 @@ func (f *NoopFilter) Init(ctx context.Context, client client.Client, filter v1al
 	return nil
 }
 
+func (f *NoopFilter) Validate(ctx context.Context, params v1alpha1.Parameters) error {
+	return nil
+}
+
 // Run this step of the scheduling pipeline.
 // Return a map of keys to activation values. Important: keys that are
 // not in the map are considered as filtered out.

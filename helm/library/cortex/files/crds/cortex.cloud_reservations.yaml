@@ -54,25 +54,51 @@ spec:
                   CommittedResourceReservation contains fields specific to committed resource reservations.
                   Only used when Type is CommittedResourceReservation.
                 properties:
+                  allocations:
+                    additionalProperties:
+                      description: |-
+                        CommittedResourceAllocation represents a workload's assignment to a committed resource reservation slot.
+                        The workload could be a VM (Nova/IronCore), Pod (Kubernetes), or other resource.
+                      properties:
+                        creationTimestamp:
+                          description: Timestamp when this workload was assigned to
+                            the reservation.
+                          format: date-time
+                          type: string
+                        resources:
+                          additionalProperties:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          description: Resources consumed by this instance.
+                          type: object
+                      required:
+                      - creationTimestamp
+                      - resources
+                      type: object
+                    description: |-
+                      Allocations maps workload identifiers to their allocation details.
+                      Key: Workload UUID (VM UUID for Nova, Pod UID for Pods, Machine UID for IronCore, etc.)
+                      Value: allocation state and metadata
+                    type: object
                   creator:
                     description: |-
                       Creator identifies the system or component that created this reservation.
                       Used to track ownership and for cleanup purposes (e.g., "commitments-syncer").
                     type: string
                   domainID:
-                    description: DomainID is the domain ID to reserve for.
                     type: string
                   projectID:
-                    description: ProjectID is the UUID of the project this reservation
-                      belongs to.
                     type: string
                   resourceGroup:
                     description: ResourceGroup is the group/category of the resource
-                      (e.g., "hana_medium_v2").
+                      (e.g., flavor group for Nova)
                     type: string
                   resourceName:
-                    description: ResourceName is the name of the resource to reserve
-                      (e.g., FlavorName for Nova).
+                    description: ResourceName is the name of the resource to reserve.
+                      (e.g. flavor name for Nova)
                     type: string
                 type: object
               endTime:
@@ -132,11 +158,12 @@ spec:
                   Only used when Type is CommittedResourceReservation.
                 properties:
                   allocations:
-                    description: Allocations lists the VM/instance UUIDs that are
-                      currently allocated against this reservation.
-                    items:
+                    additionalProperties:
                       type: string
-                    type: array
+                    description: |-
+                      Allocations maps VM/instance UUIDs to the host they are currently running on.
+                      Key: VM/instance UUID, Value: Host name where the VM is currently running.
+                    type: object
                 type: object
               conditions:
                 description: |-

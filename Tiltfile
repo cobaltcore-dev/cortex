@@ -51,10 +51,32 @@ helm_repo(
     labels=['Repositories'],
 )
 
+########### Certmanager
+# Certmanager is required for the validating webhooks in the cortex bundles, so
+# we need to deploy it before the bundles. If you don't need the webhooks locally,
+# you can disable them in the values.yaml and skip deploying certmanager.
+cache_dir = '.tilt/cert-manager'
+cert_manager_version = 'v1.19.3'
+if not os.path.exists(cache_dir):
+    local('mkdir -p ' + cache_dir)
+if not os.path.exists(cache_dir + '/cert-manager-' + cert_manager_version + '.yaml'):
+    url = 'https://github.com/cert-manager/cert-manager/releases/download/' + cert_manager_version + '/cert-manager.yaml'
+    local('curl -L ' + url + ' -o ' + cache_dir + '/cert-manager-' + cert_manager_version + '.yaml')
+local('kubectl apply -f ' + cache_dir + '/cert-manager-' + cert_manager_version + '.yaml')
+# Patch all three cert-manager deployments to add runAsUser for Docker Desktop compatibility
+patch_json = '{"spec":{"template":{"spec":{"securityContext":{"runAsUser":1000}}}}}'
+local('kubectl patch deployment cert-manager -n cert-manager --type=strategic -p \'' + patch_json + '\'')
+local('kubectl patch deployment cert-manager-cainjector -n cert-manager --type=strategic -p \'' + patch_json + '\'')
+local('kubectl patch deployment cert-manager-webhook -n cert-manager --type=strategic -p \'' + patch_json + '\'')
+# Wait for all three deployments to be ready
+local('kubectl wait --namespace cert-manager --for=condition=available deployment/cert-manager --timeout=120s')
+local('kubectl wait --namespace cert-manager --for=condition=available deployment/cert-manager-cainjector --timeout=120s')
+local('kubectl wait --namespace cert-manager --for=condition=available deployment/cert-manager-webhook --timeout=120s')
+
 ########### Dependency CRDs
 # Make sure the local cluster is running if you are running into startup issues here.
 url = 'https://raw.githubusercontent.com/cobaltcore-dev/openstack-hypervisor-operator/refs/heads/main/charts/openstack-hypervisor-operator/crds/hypervisor-crd.yaml'
-local('curl ' + url + ' | kubectl apply -f -')
+local('curl -L ' + url + ' | kubectl apply -f -')
 
 ########### Cortex Operator & CRDs
 docker_build('ghcr.io/cobaltcore-dev/cortex', '.',

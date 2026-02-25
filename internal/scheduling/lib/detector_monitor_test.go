@@ -69,16 +69,21 @@ func TestMonitor_Collect(t *testing.T) {
 }
 
 type mockMonitorStep struct {
-	decisions  []mockDetection
-	initError  error
-	runError   error
-	initCalled bool
-	runCalled  bool
+	decisions     []mockDetection
+	initError     error
+	validateError error
+	runError      error
+	initCalled    bool
+	runCalled     bool
 }
 
 func (m *mockMonitorStep) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
 	m.initCalled = true
 	return m.initError
+}
+
+func (m *mockMonitorStep) Validate(ctx context.Context, params v1alpha1.Parameters) error {
+	return m.validateError
 }
 
 func (m *mockMonitorStep) Run() ([]mockDetection, error) {

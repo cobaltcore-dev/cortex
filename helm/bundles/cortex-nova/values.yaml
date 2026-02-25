@@ -72,7 +72,6 @@ cortex: &cortex
   # A centralized ServiceMonitor and metrics service are defined in the cortex-nova chart.
   metrics: {enable: false}
   prometheus: {enable: false}
-  namePrefix: cortex-nova
   conf: &cortexConf
     schedulingDomain: nova
     keystoneSecretRef:
@@ -93,6 +92,9 @@ cortex-scheduling-controllers:
   rbac:
     # The cortex nova scheduling controllers need hypervisor crd access.
     hypervisor: {enable: true}
+  # Enable webhook that will validate CRDs for the scheduling controllers.
+  webhook: {enable: true}
+  certmanager: {enable: true} # Needed for the webhook TLS certificates.
   conf:
     <<: *cortexConf
     leaderElectionID: cortex-nova-scheduling
@@ -103,8 +105,7 @@ cortex-scheduling-controllers:
         <<: *cortexMonitoringLabels
         component: nova-scheduling
     enabledControllers:
-      - nova-decisions-pipeline-controller
-      - nova-deschedulings-pipeline-controller
+      - nova-pipeline-controllers
       - nova-deschedulings-executor
     enabledTasks:
       - nova-decisions-cleanup-task

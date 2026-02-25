@@ -21,10 +21,8 @@ func TestNoopFilter_Init(t *testing.T) {
 	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	err := filter.Init(t.Context(), cl, v1alpha1.FilterSpec{
-		Name: "noop",
-		Params: runtime.RawExtension{
-			Raw: []byte(`{}`),
-		},
+		Name:   "noop",
+		Params: nil,
 	})
 
 	if err != nil {

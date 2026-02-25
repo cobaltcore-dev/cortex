@@ -24,6 +24,11 @@ func (s *FilterValidator[RequestType]) Init(ctx context.Context, client client.C
 	return s.Filter.Init(ctx, client, step)
 }
 
+// Validate the wrapped filter.
+func (s *FilterValidator[RequestType]) Validate(ctx context.Context, params v1alpha1.Parameters) error {
+	return s.Filter.Validate(ctx, params)
+}
+
 // Validate the wrapped filter with the database and options.
 func validateFilter[RequestType FilterWeigherPipelineRequest](filter Filter[RequestType]) *FilterValidator[RequestType] {
 	return &FilterValidator[RequestType]{Filter: filter}

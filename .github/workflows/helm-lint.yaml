@@ -1,0 +1,50 @@
+# Copyright SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+name: "Helm lint"
+on:
+  pull_request:
+    branches:
+      - release
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4.3.1
+
+      - uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.12"
+          check-latest: true
+
+      - name: Set up chart linting
+        uses: helm/chart-testing-action@v2.8.0
+
+      - name: Check new Chart changes
+        id: list-changed
+        run: |
+          changed=$(ct list-changed --config .github/config/helm-lint.yaml)
+          if [[ -n "$changed" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update chart dependencies
+        if: steps.list-changed.outputs.changed == 'true'
+        run: |
+          for chart in $(ct list-changed --config .github/config/helm-lint.yaml); do
+            helm dependency update "$chart"
+          done
+
+      - name: Run chart lint
+        if: steps.list-changed.outputs.changed == 'true'
+        run: ct lint --config .github/config/helm-lint.yaml --lint-conf .github/config/lintconf.yaml

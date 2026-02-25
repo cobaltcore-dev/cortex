@@ -22,6 +22,10 @@ func (f *TaintFilter) Init(ctx context.Context, client client.Client, step v1alp
 	return nil
 }
 
+func (f *TaintFilter) Validate(ctx context.Context, params v1alpha1.Parameters) error {
+	return nil
+}
+
 func (TaintFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	activations := make(map[string]float64)
 	stats := make(map[string]lib.FilterWeigherPipelineStepStatistics)

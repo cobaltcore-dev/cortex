@@ -24,6 +24,9 @@ cortex:
   crd: {enable: false}
   # Use this to unambiguate multiple cortex deployments in the same cluster.
   namePrefix: cortex-ironcore
+  # Enable webhook that will validate CRDs for the scheduling controllers.
+  webhook: {enable: true}
+  certmanager: {enable: true} # Needed for the webhook TLS certificates.
   conf:
     # The operator will only touch CRs with this scheduling domain name.
     schedulingDomain: machines

@@ -30,25 +30,42 @@ type Detector[DetectionType Detection] interface {
 	// Detect resources such as VMs on their current hosts that should be
 	// considered for descheduling.
 	Run() ([]DetectionType, error)
-	// Configure the step with a database and options.
+
+	// Initialize the step.
 	Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error
+
+	// Validate that the given config is valid for this step. This is used in
+	// the pipeline validation to check if the pipeline configuration is valid
+	// without actually initializing the step.
+	Validate(ctx context.Context, params v1alpha1.Parameters) error
 }
 
 // Common base for all descheduler steps that provides some functionality
 // that would otherwise be duplicated across all steps.
-type BaseDetector[Opts any] struct {
+type BaseDetector[Opts DetectionStepOpts] struct {
 	// Options to pass via yaml to this step.
-	conf.JsonOpts[Opts]
+	Options Opts
 	// The kubernetes client to use.
 	Client client.Client
 }
 
-// Init the step with the database and options.
+// Init the step.
 func (d *BaseDetector[Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
 	d.Client = client
+	if err := conf.UnmarshalParams(&step.Params, &d.Options); err != nil {
+		return fmt.Errorf("failed to unmarshal parameters: %w", err)
+	}
+	return nil
+}
 
-	opts := conf.NewRawOptsBytes(step.Params.Raw)
-	if err := d.Load(opts); err != nil {
+// Validate that the given config is valid for this step. This is used in
+// the pipeline validation to check if the pipeline configuration is valid
+// without actually initializing the step.
+func (d *BaseDetector[Opts]) Validate(ctx context.Context, params v1alpha1.Parameters) error {
+	if err := conf.UnmarshalParams(&params, &d.Options); err != nil {
+		return fmt.Errorf("failed to unmarshal parameters: %w", err)
+	}
+	if err := d.Options.Validate(); err != nil {
 		return err
 	}
 	return nil

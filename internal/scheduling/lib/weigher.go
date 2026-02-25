@@ -20,6 +20,9 @@ type Weigher[RequestType FilterWeigherPipelineRequest] interface {
 
 	// Configure the step and initialize things like a database connection.
 	Init(ctx context.Context, client client.Client, step v1alpha1.WeigherSpec) error
+
+	// Validate the given config parameters for this weigher.
+	Validate(ctx context.Context, params v1alpha1.Parameters) error
 }
 
 // Common base for all steps that provides some functionality
@@ -31,6 +34,11 @@ type BaseWeigher[RequestType FilterWeigherPipelineRequest, Opts FilterWeigherPip
 // Init the weigher with the database and options.
 func (s *BaseWeigher[RequestType, Opts]) Init(ctx context.Context, client client.Client, step v1alpha1.WeigherSpec) error {
 	return s.BaseFilterWeigherPipelineStep.Init(ctx, client, step.Params)
+}
+
+// Validate the weigher.
+func (s *BaseWeigher[RequestType, Opts]) Validate(ctx context.Context, params v1alpha1.Parameters) error {
+	return s.BaseFilterWeigherPipelineStep.Validate(ctx, params)
 }
 
 // Check if all knowledges are ready, and if not, return an error indicating why not.

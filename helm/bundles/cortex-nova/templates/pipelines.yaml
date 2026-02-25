@@ -23,10 +23,10 @@ spec:
         pulls vms onto the freeest hosts possible to ensure an even distribution of
         workloads across the available infrastructure.
       params:
-        ramUtilizedLowerBoundPct: 0
-        ramUtilizedUpperBoundPct: 100
-        ramUtilizedActivationLowerBound: 1.0
-        ramUtilizedActivationUpperBound: 0.0
+        - {key: ramUtilizedLowerBoundPct, floatValue: 0}
+        - {key: ramUtilizedUpperBoundPct, floatValue: 100}
+        - {key: ramUtilizedActivationLowerBound, floatValue: 1.0}
+        - {key: ramUtilizedActivationUpperBound, floatValue: 0.0}
     - name: vmware_avoid_long_term_contended_hosts
       description: |
         This step avoids placing vms on vmware hosts with a high CPU contention over
@@ -34,14 +34,14 @@ spec:
         this step looks at a longer time window of 4 weeks to identify hosts that
         are consistently contended.
       params:
-        avgCPUContentionLowerBound: 0 # pct
-        avgCPUContentionUpperBound: 10 # pct
-        avgCPUContentionActivationLowerBound: 0.0
-        avgCPUContentionActivationUpperBound: -0.75
-        maxCPUContentionLowerBound: 0 # pct
-        maxCPUContentionUpperBound: 10 # pct
-        maxCPUContentionActivationLowerBound: 0.0
-        maxCPUContentionActivationUpperBound: -0.25
+        - {key: avgCPUContentionLowerBound, floatValue: 0} # pct
+        - {key: avgCPUContentionUpperBound, floatValue: 10} # pct
+        - {key: avgCPUContentionActivationLowerBound, floatValue: 0.0}
+        - {key: avgCPUContentionActivationUpperBound, floatValue: -0.75}
+        - {key: maxCPUContentionLowerBound, floatValue: 0} # pct
+        - {key: maxCPUContentionUpperBound, floatValue: 10} # pct
+        - {key: maxCPUContentionActivationLowerBound, floatValue: 0.0}
+        - {key: maxCPUContentionActivationUpperBound, floatValue: -0.25}
     - name: vmware_avoid_short_term_contended_hosts
       description: |
         This step avoids placing vms on vmware hosts with a high CPU contention over
@@ -49,14 +49,14 @@ spec:
         this step looks at a shorter time window of 20 minutes to identify hosts that
         are currently contended.
       params:
-        avgCPUContentionLowerBound: 0 # pct
-        avgCPUContentionUpperBound: 10 # pct
-        avgCPUContentionActivationLowerBound: 0.0
-        avgCPUContentionActivationUpperBound: -0.75
-        maxCPUContentionLowerBound: 0 # pct
-        maxCPUContentionUpperBound: 10 # pct
-        maxCPUContentionActivationLowerBound: 0.0
-        maxCPUContentionActivationUpperBound: -0.25
+        - {key: avgCPUContentionLowerBound, floatValue: 0} # pct
+        - {key: avgCPUContentionUpperBound, floatValue: 10} # pct
+        - {key: avgCPUContentionActivationLowerBound, floatValue: 0.0}
+        - {key: avgCPUContentionActivationUpperBound, floatValue: -0.75}
+        - {key: maxCPUContentionLowerBound, floatValue: 0} # pct
+        - {key: maxCPUContentionUpperBound, floatValue: 10} # pct
+        - {key: maxCPUContentionActivationLowerBound, floatValue: 0.0}
+        - {key: maxCPUContentionActivationUpperBound, floatValue: -0.25}
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -82,10 +82,10 @@ spec:
         VMware hosts. In this way hosts with much free space are held free for
         larger HANA VMs, improving overall packing efficiency for HANA workloads.
       params:
-        ramUtilizedAfterLowerBoundPct: 0
-        ramUtilizedAfterUpperBoundPct: 100
-        ramUtilizedAfterActivationLowerBound: 0.0
-        ramUtilizedAfterActivationUpperBound: 1.0
+        - {key: ramUtilizedAfterLowerBoundPct, floatValue: 0}
+        - {key: ramUtilizedAfterUpperBoundPct, floatValue: 100}
+        - {key: ramUtilizedAfterActivationLowerBound, floatValue: 0.0}
+        - {key: ramUtilizedAfterActivationUpperBound, floatValue: 1.0}
     - name: vmware_avoid_long_term_contended_hosts
       description: |
         This step avoids placing vms on vmware hosts with a high CPU contention over
@@ -93,14 +93,14 @@ spec:
         this step looks at a longer time window of 4 weeks to identify hosts that
         are consistently contended.
       params:
-        avgCPUContentionLowerBound: 0 # pct
-        avgCPUContentionUpperBound: 10 # pct
-        avgCPUContentionActivationLowerBound: 0.0
-        avgCPUContentionActivationUpperBound: -0.75
-        maxCPUContentionLowerBound: 0 # pct
-        maxCPUContentionUpperBound: 10 # pct
-        maxCPUContentionActivationLowerBound: 0.0
-        maxCPUContentionActivationUpperBound: -0.25
+        - {key: avgCPUContentionLowerBound, floatValue: 0} # pct
+        - {key: avgCPUContentionUpperBound, floatValue: 10} # pct
+        - {key: avgCPUContentionActivationLowerBound, floatValue: 0.0}
+        - {key: avgCPUContentionActivationUpperBound, floatValue: -0.75}
+        - {key: maxCPUContentionLowerBound, floatValue: 0} # pct
+        - {key: maxCPUContentionUpperBound, floatValue: 10} # pct
+        - {key: maxCPUContentionActivationLowerBound, floatValue: 0.0}
+        - {key: maxCPUContentionActivationUpperBound, floatValue: -0.25}
     - name: vmware_avoid_short_term_contended_hosts
       description: |
         This step avoids placing vms on vmware hosts with a high CPU contention over
@@ -108,11 +108,11 @@ spec:
         this step looks at a shorter time window of 20 minutes to identify hosts that
         are currently contended.
       params:
-        avgCPUContentionLowerBound: 0 # pct
-        avgCPUContentionUpperBound: 10 # pct
-        avgCPUContentionActivationLowerBound: 0.0
-        avgCPUContentionActivationUpperBound: -0.75
-        maxCPUContentionLowerBound: 0 # pct
-        maxCPUContentionUpperBound: 10 # pct
-        maxCPUContentionActivationLowerBound: 0.0
-        maxCPUContentionActivationUpperBound: -0.25
+        - {key: avgCPUContentionLowerBound, floatValue: 0} # pct
+        - {key: avgCPUContentionUpperBound, floatValue: 10} # pct
+        - {key: avgCPUContentionActivationLowerBound, floatValue: 0.0}
+        - {key: avgCPUContentionActivationUpperBound, floatValue: -0.75}
+        - {key: maxCPUContentionLowerBound, floatValue: 0} # pct
+        - {key: maxCPUContentionUpperBound, floatValue: 10} # pct
+        - {key: maxCPUContentionActivationLowerBound, floatValue: 0.0}
+        - {key: maxCPUContentionActivationUpperBound, floatValue: -0.25}

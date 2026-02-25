@@ -288,26 +288,27 @@ func main() {
 	// The pipeline monitor is a bucket for all metrics produced during the
 	// execution of individual steps (see step monitor below) and the overall
 	// pipeline.
-	pipelineMonitor := schedulinglib.NewPipelineMonitor()
-	metrics.Registry.MustRegister(&pipelineMonitor)
+	// TODO: Only initialize me for scheduling domains that actually use pipelines.
+	filterWeigherPipelineMonitor := schedulinglib.NewPipelineMonitor()
+	metrics.Registry.MustRegister(&filterWeigherPipelineMonitor)
+	detectorPipelineMonitor := schedulinglib.NewDetectorPipelineMonitor()
+	metrics.Registry.MustRegister(&detectorPipelineMonitor)
 
-	if slices.Contains(mainConfig.EnabledControllers, "nova-decisions-pipeline-controller") {
-		pipelineController := &nova.FilterWeigherPipelineController{
-			Monitor: pipelineMonitor,
+	if slices.Contains(mainConfig.EnabledControllers, "nova-pipeline-controllers") {
+		// Filter-weigher pipeline controller setup.
+		filterWeigherController := &nova.FilterWeigherPipelineController{
+			Monitor: filterWeigherPipelineMonitor,
 		}
 		// Inferred through the base controller.
-		pipelineController.Client = multiclusterClient
-		if err := (pipelineController).SetupWithManager(mgr, multiclusterClient); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
+		filterWeigherController.Client = multiclusterClient
+		if err := filterWeigherController.SetupWithManager(mgr, multiclusterClient); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "nova FilterWeigherPipelineController")
 			os.Exit(1)
 		}
 		httpAPIConf := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
-		nova.NewAPI(httpAPIConf, pipelineController).Init(mux)
-	}
-	if slices.Contains(mainConfig.EnabledControllers, "nova-deschedulings-pipeline-controller") {
-		// Deschedulings controller
-		monitor := schedulinglib.NewDetectorPipelineMonitor()
-		metrics.Registry.MustRegister(&monitor)
+		nova.NewAPI(httpAPIConf, filterWeigherController).Init(mux)
+
+		// Detector pipeline controller setup.
 		novaClient := nova.NewNovaClient()
 		novaClientConfig := conf.GetConfigOrDie[nova.NovaClientConfig]()
 		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
@@ -316,15 +317,14 @@ func main() {
 			setupLog.Error(err, "unable to initialize nova client")
 			os.Exit(1)
 		}
-		cycleBreaker := &nova.DetectorCycleBreaker{NovaClient: novaClient}
 		deschedulingsController := &nova.DetectorPipelineController{
-			Monitor: monitor,
-			Breaker: cycleBreaker,
+			Monitor: detectorPipelineMonitor,
+			Breaker: &nova.DetectorCycleBreaker{NovaClient: novaClient},
 		}
 		// Inferred through the base controller.
 		deschedulingsController.Client = multiclusterClient
 		if err := (deschedulingsController).SetupWithManager(mgr, multiclusterClient); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "DeschedulingsReconciler")
+			setupLog.Error(err, "unable to create controller", "controller", "nova DetectorPipelineController")
 			os.Exit(1)
 		}
 		go deschedulingsController.CreateDeschedulingsPeriodically(ctx)
@@ -334,6 +334,13 @@ func main() {
 			Scheme: mgr.GetScheme(),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "Cleanup")
+			os.Exit(1)
+		}
+
+		// Webhook that validates all pipelines.
+		novaPipelineWebhook := nova.NewPipelineWebhook()
+		if err := novaPipelineWebhook.SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to setup nova pipeline webhook")
 			os.Exit(1)
 		}
 	}
@@ -359,7 +366,7 @@ func main() {
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "manila-decisions-pipeline-controller") {
 		controller := &manila.FilterWeigherPipelineController{
-			Monitor: pipelineMonitor,
+			Monitor: filterWeigherPipelineMonitor,
 		}
 		// Inferred through the base controller.
 		controller.Client = multiclusterClient
@@ -368,10 +375,17 @@ func main() {
 			os.Exit(1)
 		}
 		manila.NewAPI(controller).Init(mux)
+
+		// Webhook that validates all pipelines.
+		manilaPipelineWebhook := manila.NewPipelineWebhook()
+		if err := manilaPipelineWebhook.SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to setup manila pipeline webhook")
+			os.Exit(1)
+		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "cinder-decisions-pipeline-controller") {
 		controller := &cinder.FilterWeigherPipelineController{
-			Monitor: pipelineMonitor,
+			Monitor: filterWeigherPipelineMonitor,
 		}
 		// Inferred through the base controller.
 		controller.Client = multiclusterClient
@@ -380,10 +394,17 @@ func main() {
 			os.Exit(1)
 		}
 		cinder.NewAPI(controller).Init(mux)
+
+		// Webhook that validates all pipelines.
+		cinderPipelineWebhook := cinder.NewPipelineWebhook()
+		if err := cinderPipelineWebhook.SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to setup cinder pipeline webhook")
+			os.Exit(1)
+		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "ironcore-decisions-pipeline-controller") {
 		controller := &machines.FilterWeigherPipelineController{
-			Monitor: pipelineMonitor,
+			Monitor: filterWeigherPipelineMonitor,
 		}
 		// Inferred through the base controller.
 		controller.Client = multiclusterClient
@@ -391,15 +412,29 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
+
+		// Webhook that validates all pipelines.
+		ironcorePipelineWebhook := machines.NewPipelineWebhook()
+		if err := ironcorePipelineWebhook.SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to setup ironcore pipeline webhook")
+			os.Exit(1)
+		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "pods-decisions-pipeline-controller") {
 		controller := &pods.FilterWeigherPipelineController{
-			Monitor: pipelineMonitor,
+			Monitor: filterWeigherPipelineMonitor,
 		}
 		// Inferred through the base controller.
 		controller.Client = multiclusterClient
 		if err := (controller).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
+			os.Exit(1)
+		}
+
+		// Webhook that validates all pipelines.
+		podsPipelineWebhook := pods.NewPipelineWebhook()
+		if err := podsPipelineWebhook.SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to setup pods pipeline webhook")
 			os.Exit(1)
 		}
 	}

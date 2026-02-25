@@ -16,6 +16,9 @@ type Filter[RequestType FilterWeigherPipelineRequest] interface {
 
 	// Configure the filter and initialize things like a database connection.
 	Init(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error
+
+	// Validate the given config parameters for this filter.
+	Validate(ctx context.Context, params v1alpha1.Parameters) error
 }
 
 // Common base for all steps that provides some functionality

@@ -69,7 +69,7 @@ spec:
         # For the reservations pipeline, we don't want to unlock
         # reserved space, to avoid reservations for the same project
         # and flavor to overlap.
-        lockReserved: true
+        - {key: lockReserved, boolValue: true}
     - name: filter_has_requested_traits
       description: |
         This step filters hosts that do not have the requested traits given by the
@@ -89,10 +89,6 @@ spec:
         This step will filter out hosts for which the hypervisor status conditions
         do not meet the expected values, for example, that the hypervisor is ready
         and not disabled.
-    - name: filter_maintenance
-      description: |
-        This step will filter out hosts that are currently in maintenance mode that
-        prevents scheduling, for example, manual maintenance or termination.
     - name: filter_external_customer
       description: |
         This step prefix-matches the domain name for external customer domains and
@@ -100,7 +96,7 @@ spec:
         the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
         `domain_name` scheduler hint from the nova request spec.
       params:
-        domainNamePrefixes: ["iaas-"]
+        - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
     - name: filter_packed_virtqueue
       description: |
         If the flavor extra specs contain the `hw:virtio_packed_ring` key, or the
@@ -175,7 +171,7 @@ spec:
         # For the reservations pipeline, we don't want to unlock
         # reserved space, to avoid reservations for the same project
         # and flavor to overlap.
-        lockReserved: true
+        - {key: lockReserved, boolValue: true}
     - name: filter_has_requested_traits
       description: |
         This step filters hosts that do not have the requested traits given by the
@@ -195,10 +191,6 @@ spec:
         This step will filter out hosts for which the hypervisor status conditions
         do not meet the expected values, for example, that the hypervisor is ready
         and not disabled.
-    - name: filter_maintenance
-      description: |
-        This step will filter out hosts that are currently in maintenance mode that
-        prevents scheduling, for example, manual maintenance or termination.
     - name: filter_external_customer
       description: |
         This step prefix-matches the domain name for external customer domains and
@@ -206,7 +198,7 @@ spec:
         the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
         `domain_name` scheduler hint from the nova request spec.
       params:
-        domainNamePrefixes: ["iaas-"]
+        - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
     - name: filter_packed_virtqueue
       description: |
         If the flavor extra specs contain the `hw:virtio_packed_ring` key, or the
@@ -251,7 +243,7 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
-  name: nova-descheduler-kvm
+  name: kvm-descheduler
 spec:
   schedulingDomain: nova
   description:
@@ -266,5 +258,5 @@ spec:
         This step will deschedule VMs once they reach this CPU steal percentage over
         the observed time span.
       params:
-        maxStealPctOverObservedTimeSpan: 20.0
+        - {key: maxStealPctOverObservedTimeSpan, floatValue: 20.0}
 {{- end }}

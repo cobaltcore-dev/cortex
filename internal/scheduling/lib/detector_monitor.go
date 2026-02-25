@@ -103,6 +103,11 @@ func (m DetectorMonitor[DetectionType]) Init(
 	return m.step.Init(ctx, client, step)
 }
 
+// Validate the wrapped step configuration.
+func (m DetectorMonitor[DetectionType]) Validate(ctx context.Context, params v1alpha1.Parameters) error {
+	return m.step.Validate(ctx, params)
+}
+
 // Run the step and measure its execution time.
 func (m DetectorMonitor[DetectionType]) Run() ([]DetectionType, error) {
 	if m.runTimer != nil {

@@ -37,6 +37,11 @@ func (fm *FilterMonitor[RequestType]) Init(ctx context.Context, client client.Cl
 	return fm.filter.Init(ctx, client, step)
 }
 
+// Validate the wrapped filter.
+func (fm *FilterMonitor[RequestType]) Validate(ctx context.Context, params v1alpha1.Parameters) error {
+	return fm.filter.Validate(ctx, params)
+}
+
 // Run the filter and observe its execution.
 func (fm *FilterMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
 	return fm.monitor.RunWrapped(traceLog, request, fm.filter)

@@ -10,20 +10,24 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 // mockDetectorStep implements Detector[mockDetection]
 type mockDetectorStep struct {
-	decisions []mockDetection
-	initErr   error
-	runErr    error
+	decisions   []mockDetection
+	initErr     error
+	validateErr error
+	runErr      error
 }
 
 func (m *mockDetectorStep) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
 	return m.initErr
+}
+
+func (m *mockDetectorStep) Validate(ctx context.Context, params v1alpha1.Parameters) error {
+	return m.validateErr
 }
 
 func (m *mockDetectorStep) Run() ([]mockDetection, error) {
@@ -41,7 +45,7 @@ func TestDetectorPipeline_Init(t *testing.T) {
 		{
 			name: "successful init with one step",
 			confedSteps: []v1alpha1.DetectorSpec{
-				{Name: "step1", Params: runtime.RawExtension{Raw: []byte("{}")}},
+				{Name: "step1", Params: nil},
 			},
 			supportedSteps: map[string]Detector[mockDetection]{
 				"step1": &mockDetectorStep{},
@@ -52,8 +56,8 @@ func TestDetectorPipeline_Init(t *testing.T) {
 		{
 			name: "successful init with multiple steps",
 			confedSteps: []v1alpha1.DetectorSpec{
-				{Name: "step1", Params: runtime.RawExtension{Raw: []byte("{}")}},
-				{Name: "step2", Params: runtime.RawExtension{Raw: []byte("{}")}},
+				{Name: "step1", Params: nil},
+				{Name: "step2", Params: nil},
 			},
 			supportedSteps: map[string]Detector[mockDetection]{
 				"step1": &mockDetectorStep{},
@@ -65,7 +69,7 @@ func TestDetectorPipeline_Init(t *testing.T) {
 		{
 			name: "unsupported step returns non-critical error",
 			confedSteps: []v1alpha1.DetectorSpec{
-				{Name: "unsupported_step", Params: runtime.RawExtension{Raw: []byte("{}")}},
+				{Name: "unsupported_step", Params: nil},
 			},
 			supportedSteps:     map[string]Detector[mockDetection]{},
 			expectNonCritical:  true,
@@ -74,7 +78,7 @@ func TestDetectorPipeline_Init(t *testing.T) {
 		{
 			name: "step init error returns non-critical error",
 			confedSteps: []v1alpha1.DetectorSpec{
-				{Name: "failing_step", Params: runtime.RawExtension{Raw: []byte("{}")}},
+				{Name: "failing_step", Params: nil},
 			},
 			supportedSteps: map[string]Detector[mockDetection]{
 				"failing_step": &mockDetectorStep{initErr: errors.New("init failed")},
@@ -92,8 +96,8 @@ func TestDetectorPipeline_Init(t *testing.T) {
 		{
 			name: "mixed valid and invalid steps",
 			confedSteps: []v1alpha1.DetectorSpec{
-				{Name: "valid_step", Params: runtime.RawExtension{Raw: []byte("{}")}},
-				{Name: "invalid_step", Params: runtime.RawExtension{Raw: []byte("{}")}},
+				{Name: "valid_step", Params: nil},
+				{Name: "invalid_step", Params: nil},
 			},
 			supportedSteps: map[string]Detector[mockDetection]{
 				"valid_step": &mockDetectorStep{},

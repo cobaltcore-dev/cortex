@@ -23,6 +23,10 @@ func (f *NodeAffinityFilter) Init(ctx context.Context, client client.Client, ste
 	return nil
 }
 
+func (f *NodeAffinityFilter) Validate(ctx context.Context, params v1alpha1.Parameters) error {
+	return nil
+}
+
 func (NodeAffinityFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	activations := make(map[string]float64)
 	stats := make(map[string]lib.FilterWeigherPipelineStepStatistics)

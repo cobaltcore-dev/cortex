@@ -13,6 +13,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/manila"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	"github.com/sapcc/go-bits/must"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/storage"
@@ -203,8 +204,11 @@ func TestFilterWeigherPipelineController_InitPipeline(t *testing.T) {
 			weighers: []v1alpha1.WeigherSpec{
 				{
 					Name: "netapp_cpu_usage_balancing",
-					Params: runtime.RawExtension{
-						Raw: []byte(`{"AvgCPUUsageLowerBound": 0, "AvgCPUUsageUpperBound": 90, "MaxCPUUsageLowerBound": 0, "MaxCPUUsageUpperBound": 100}`),
+					Params: []v1alpha1.Parameter{
+						{Key: "AvgCPUUsageLowerBound", FloatValue: testlib.Ptr(0.0)},
+						{Key: "AvgCPUUsageUpperBound", FloatValue: testlib.Ptr(90.0)},
+						{Key: "MaxCPUUsageLowerBound", FloatValue: testlib.Ptr(0.0)},
+						{Key: "MaxCPUUsageUpperBound", FloatValue: testlib.Ptr(100.0)},
 					},
 				},
 			},
