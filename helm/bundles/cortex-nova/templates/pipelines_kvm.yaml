@@ -16,7 +16,18 @@ spec:
   type: filter-weigher
   createDecisions: true
   filters: []
-  weighers: []
+  weighers:
+    - name: kvm_instance_group_soft_affinity
+      description: |
+        This weigher implements the "soft affinity" and "soft anti-affinity" policy
+        for instance groups in nova.
+
+        It assigns a weight to each host based on how many instances of the same
+        instance group are already running on that host. The more instances of the
+        same group on a host, the lower (for soft-anti-affinity) or higher
+        (for soft-affinity) the weight, which makes it less likely or more likely,
+        respectively, for the scheduler to choose that host for new instances of
+        the same group.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -34,7 +45,18 @@ spec:
   type: filter-weigher
   createDecisions: true
   filters: []
-  weighers: []
+  weighers:
+    - name: kvm_instance_group_soft_affinity
+      description: |
+        This weigher implements the "soft affinity" and "soft anti-affinity" policy
+        for instance groups in nova.
+
+        It assigns a weight to each host based on how many instances of the same
+        instance group are already running on that host. The more instances of the
+        same group on a host, the lower (for soft-anti-affinity) or higher
+        (for soft-affinity) the weight, which makes it less likely or more likely,
+        respectively, for the scheduler to choose that host for new instances of
+        the same group.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -136,7 +158,18 @@ spec:
         This step filters hosts based on the `requested_destination` instruction
         from the nova scheduler request spec. It supports filtering by host and
         by aggregates.
-  weighers: []
+  weighers:
+    - name: kvm_instance_group_soft_affinity
+      description: |
+        This weigher implements the "soft affinity" and "soft anti-affinity" policy
+        for instance groups in nova.
+
+        It assigns a weight to each host based on how many instances of the same
+        instance group are already running on that host. The more instances of the
+        same group on a host, the lower (for soft-anti-affinity) or higher
+        (for soft-affinity) the weight, which makes it less likely or more likely,
+        respectively, for the scheduler to choose that host for new instances of
+        the same group.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -238,7 +271,18 @@ spec:
         This step filters hosts based on the `requested_destination` instruction
         from the nova scheduler request spec. It supports filtering by host and
         by aggregates.
-  weighers: []
+  weighers:
+    - name: kvm_instance_group_soft_affinity
+      description: |
+        This weigher implements the "soft affinity" and "soft anti-affinity" policy
+        for instance groups in nova.
+
+        It assigns a weight to each host based on how many instances of the same
+        instance group are already running on that host. The more instances of the
+        same group on a host, the lower (for soft-anti-affinity) or higher
+        (for soft-affinity) the weight, which makes it less likely or more likely,
+        respectively, for the scheduler to choose that host for new instances of
+        the same group.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
