@@ -48,6 +48,9 @@ func UnmarshalParams(p *v1alpha1.Parameters, into any) error {
 		if param.StringListValue != nil {
 			count++
 		}
+		if param.FloatMapValue != nil {
+			count++
+		}
 		if count != 1 {
 			return fmt.Errorf("parameter %s must have exactly one value set", param.Key)
 		}
@@ -67,6 +70,8 @@ func UnmarshalParams(p *v1alpha1.Parameters, into any) error {
 			value = *param.FloatValue
 		case param.StringListValue != nil:
 			value = *param.StringListValue
+		case param.FloatMapValue != nil:
+			value = *param.FloatMapValue
 		} // No value set is handled above.
 		paramMap[param.Key] = value
 	}

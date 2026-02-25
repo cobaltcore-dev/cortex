@@ -98,6 +98,10 @@ spec:
                         properties:
                           boolValue:
                             type: boolean
+                          floatMapValue:
+                            additionalProperties:
+                              type: number
+                            type: object
                           floatValue:
                             type: number
                           intValue:
@@ -153,6 +157,10 @@ spec:
                         properties:
                           boolValue:
                             type: boolean
+                          floatMapValue:
+                            additionalProperties:
+                              type: number
+                            type: object
                           floatValue:
                             type: number
                           intValue:
@@ -238,6 +246,10 @@ spec:
                         properties:
                           boolValue:
                             type: boolean
+                          floatMapValue:
+                            additionalProperties:
+                              type: number
+                            type: object
                           floatValue:
                             type: number
                           intValue:
