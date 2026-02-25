@@ -89,10 +89,6 @@ spec:
         This step will filter out hosts for which the hypervisor status conditions
         do not meet the expected values, for example, that the hypervisor is ready
         and not disabled.
-    - name: filter_maintenance
-      description: |
-        This step will filter out hosts that are currently in maintenance mode that
-        prevents scheduling, for example, manual maintenance or termination.
     - name: filter_external_customer
       description: |
         This step prefix-matches the domain name for external customer domains and
@@ -195,10 +191,6 @@ spec:
         This step will filter out hosts for which the hypervisor status conditions
         do not meet the expected values, for example, that the hypervisor is ready
         and not disabled.
-    - name: filter_maintenance
-      description: |
-        This step will filter out hosts that are currently in maintenance mode that
-        prevents scheduling, for example, manual maintenance or termination.
     - name: filter_external_customer
       description: |
         This step prefix-matches the domain name for external customer domains and
