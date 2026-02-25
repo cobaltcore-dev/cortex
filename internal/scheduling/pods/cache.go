@@ -122,7 +122,7 @@ func (c *Cache) RemoveNode(node *corev1.Node) {
 		}
 	}
 
-	delete(c.nodeAllocated, node.Name)
+	//delete(c.nodeAllocated, node.Name)
 
 	c.updateTopology()
 }

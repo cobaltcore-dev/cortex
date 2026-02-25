@@ -41,7 +41,7 @@ func (NodeCapacityFilter) Run(traceLog *slog.Logger, request api.PodPipelineRequ
 func hasCapacityForPod(node corev1.Node, podRequests corev1.ResourceList) bool {
 	for resourceName, requestedQuantity := range podRequests {
 		allocatableQuantity, exists := node.Status.Allocatable[resourceName]
-		if !exists {
+		if !exists && !requestedQuantity.IsZero() {
 			return false
 		}
 

@@ -42,7 +42,15 @@ func (s *Scheduler) schedulePodGroupSet(ctx context.Context, pgs *v1alpha1.PodGr
 			canFit := true
 			for resourceName, requestedQty := range podGroupSetResourceRequests {
 				allocatableQty, exists := topologyNode.Allocatable[resourceName]
-				if !exists || requestedQty.Cmp(allocatableQty) > 0 {
+				if !exists {
+					if requestedQty.IsZero() {
+						continue
+					}
+					canFit = false
+					break
+				}
+
+				if requestedQty.Cmp(allocatableQty) > 0 {
 					canFit = false
 					break
 				}

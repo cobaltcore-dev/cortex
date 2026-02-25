@@ -143,6 +143,8 @@ func (s *Scheduler) handleAddNode(obj interface{}) {
 }
 
 func (s *Scheduler) handleUpdateNode(oldObj, newObj interface{}) {
+	// TODO: remove and add does not work since this clears
+	// the nodeAllocatable entry in cache
 	oldNode, ok := oldObj.(*corev1.Node)
 	if !ok {
 		s.Logger.Error(nil, "Cannot convert oldObj to *corev1.Node", "obj", oldObj)

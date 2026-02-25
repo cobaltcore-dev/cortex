@@ -19,7 +19,7 @@ type TopologyLevelName string
 // Ordered from most corse-grained topology (e.g. region or zone)
 // to fine-grained topolgoy (e.g. rack or blade-chassis).
 var TopologyLevelNames []TopologyLevelName = []TopologyLevelName{
-	TopologyLevelName("zone"),
+	TopologyLevelName("block"),
 	TopologyLevelName("rack"),
 }
 
