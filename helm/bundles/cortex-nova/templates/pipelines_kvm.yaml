@@ -17,6 +17,13 @@ spec:
   createDecisions: true
   filters: []
   weighers:
+    - name: kvm_prefer_smaller_hosts
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step pulls virtual machines onto smaller hosts (by capacity). This
+        ensures that larger hosts are not overly fragmented with small VMs,
+        and can still accommodate larger VMs when they need to be scheduled.
     - name: kvm_instance_group_soft_affinity
       description: |
         This weigher implements the "soft affinity" and "soft anti-affinity" policy
@@ -56,6 +63,13 @@ spec:
   createDecisions: true
   filters: []
   weighers:
+    - name: kvm_prefer_smaller_hosts
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step pulls virtual machines onto smaller hosts (by capacity). This
+        ensures that larger hosts are not overly fragmented with small VMs,
+        and can still accommodate larger VMs when they need to be scheduled.
     - name: kvm_instance_group_soft_affinity
       description: |
         This weigher implements the "soft affinity" and "soft anti-affinity" policy
@@ -178,6 +192,13 @@ spec:
         from the nova scheduler request spec. It supports filtering by host and
         by aggregates.
   weighers:
+    - name: kvm_prefer_smaller_hosts
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step pulls virtual machines onto smaller hosts (by capacity). This
+        ensures that larger hosts are not overly fragmented with small VMs,
+        and can still accommodate larger VMs when they need to be scheduled.
     - name: kvm_instance_group_soft_affinity
       description: |
         This weigher implements the "soft affinity" and "soft anti-affinity" policy
@@ -302,6 +323,13 @@ spec:
         from the nova scheduler request spec. It supports filtering by host and
         by aggregates.
   weighers:
+    - name: kvm_prefer_smaller_hosts
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step pulls virtual machines onto smaller hosts (by capacity). This
+        ensures that larger hosts are not overly fragmented with small VMs,
+        and can still accommodate larger VMs when they need to be scheduled.
     - name: kvm_instance_group_soft_affinity
       description: |
         This weigher implements the "soft affinity" and "soft anti-affinity" policy
