@@ -11,13 +11,15 @@ import (
 	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type KVMBinpackStepOpts struct {
+type VMwareBinpackStepOpts struct {
 	// ResourceWeights allows configuring the weight for each resource type when
 	// calculating the binpacking score. The score is a weighted average of the
 	// node's resource utilizations after placing the VM.
@@ -27,7 +29,7 @@ type KVMBinpackStepOpts struct {
 }
 
 // Validate the options to ensure they are correct before running the weigher.
-func (o KVMBinpackStepOpts) Validate() error {
+func (o VMwareBinpackStepOpts) Validate() error {
 	if len(o.ResourceWeights) == 0 {
 		return errors.New("at least one resource weight must be specified")
 	}
@@ -60,54 +62,76 @@ func (o KVMBinpackStepOpts) Validate() error {
 	return nil
 }
 
-// This step implements a binpacking weigher for workloads on kvm hypervisors.
+// This step implements a binpacking weigher for workloads on vmware hypervisors.
 // It pulls the requested vm into the smallest gaps possible, to ensure
 // other hosts with less allocation stay free for bigger vms.
 // Explanation of the algorithm: https://volcano.sh/en/docs/plugins/#binpack
-type KVMBinpackStep struct {
+type VMwareBinpackStep struct {
 	// Base weigher providing common functionality.
-	lib.BaseWeigher[api.ExternalSchedulerRequest, KVMBinpackStepOpts]
+	lib.BaseWeigher[api.ExternalSchedulerRequest, VMwareBinpackStepOpts]
+}
+
+// Initialize the step and validate that all required knowledges are ready.
+func (s *VMwareBinpackStep) Init(ctx context.Context, client client.Client, weigher v1alpha1.WeigherSpec) error {
+	if err := s.BaseWeigher.Init(ctx, client, weigher); err != nil {
+		return err
+	}
+	if err := s.CheckKnowledges(ctx,
+		corev1.ObjectReference{Name: "host-utilization"},
+	); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Run this weigher in the pipeline after filters have been executed.
-func (s *KVMBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *VMwareBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	result.Statistics["binpack score"] = s.PrepareStats(request, "float")
 
-	hvs := &hv1.HypervisorList{}
-	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+	hostUtilizationKnowledge := &v1alpha1.Knowledge{}
+	if err := s.Client.Get(
+		context.Background(),
+		client.ObjectKey{Name: "host-utilization"},
+		hostUtilizationKnowledge,
+	); err != nil {
 		return nil, err
 	}
-	hvsByName := make(map[string]hv1.Hypervisor, len(hvs.Items))
-	for _, hv := range hvs.Items {
-		hvsByName[hv.Name] = hv
+	hostUtilizations, err := v1alpha1.
+		UnboxFeatureList[compute.HostUtilization](hostUtilizationKnowledge.Status.Raw)
+	if err != nil {
+		return nil, err
+	}
+	utilizationByHost := make(map[string]compute.HostUtilization, len(request.Hosts))
+	for _, hostUtilization := range hostUtilizations {
+		utilizationByHost[hostUtilization.ComputeHost] = hostUtilization
 	}
 	vmResources := s.calcVMResources(request)
 
 	for host := range result.Activations {
-		hv, ok := hvsByName[host]
+		utilization, ok := utilizationByHost[host]
 		if !ok {
-			traceLog.Warn("no hv for host, skipping", "host", host)
+			traceLog.Warn("no utilization for host, skipping", "host", host)
 			continue
 		}
+		allocations := s.calcHostAllocation(utilization)
+		capacities := s.calcHostCapacity(utilization)
+
 		var totalWeightedUtilization, totalWeight float64
 
 		for resourceName, weight := range s.Options.ResourceWeights {
-			capacity, ok := hv.Status.Capacity[resourceName.String()]
+			capacity, ok := capacities[resourceName]
 			if !ok {
-				traceLog.Warn("no capacity in status, skipping",
+				traceLog.Warn("no capacity for resource on host, skipping resource in score calculation",
 					"host", host, "resource", resourceName)
 				continue
 			}
 			if capacity.IsZero() {
-				traceLog.Warn("capacity is zero, skipping",
-					"host", host, "resource", resourceName)
 				continue
 			}
-			allocation, ok := hv.Status.Allocation[resourceName.String()]
+			allocation, ok := allocations[resourceName]
 			if !ok {
-				traceLog.Warn("no allocation in status, skipping",
+				traceLog.Warn("no allocation for resource on host, skipping resource in score calculation",
 					"host", host, "resource", resourceName)
 				continue
 			}
@@ -137,8 +161,30 @@ func (s *KVMBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSchedule
 	return result, nil
 }
 
+// calcHostCapacity calculates the total capacity of the host.
+func (s *VMwareBinpackStep) calcHostCapacity(hostUtilization compute.HostUtilization) map[corev1.ResourceName]resource.Quantity {
+	resources := make(map[corev1.ResourceName]resource.Quantity)
+	capaMemoryBytes := (int64(hostUtilization.TotalRAMAllocatableMB) + int64(hostUtilization.RAMUsedMB)) * 1_000_000
+	resources[corev1.ResourceMemory] = *resource.
+		NewQuantity(capaMemoryBytes, resource.DecimalSI)
+	capaCPU := int64(hostUtilization.TotalVCPUsAllocatable + hostUtilization.VCPUsUsed)
+	resources[corev1.ResourceCPU] = *resource.
+		NewQuantity(capaCPU, resource.DecimalSI)
+	return resources
+}
+
+// calcHostAllocation calculates the total allocated resources on the host.
+func (s *VMwareBinpackStep) calcHostAllocation(hostUtilization compute.HostUtilization) map[corev1.ResourceName]resource.Quantity {
+	resources := make(map[corev1.ResourceName]resource.Quantity)
+	resources[corev1.ResourceMemory] = *resource.
+		NewQuantity(int64(hostUtilization.RAMUsedMB)*1_000_000, resource.DecimalSI)
+	resources[corev1.ResourceCPU] = *resource.
+		NewQuantity(int64(hostUtilization.VCPUsUsed), resource.DecimalSI)
+	return resources
+}
+
 // calcVMResources calculates the total resource requests for the VM to be scheduled.
-func (s *KVMBinpackStep) calcVMResources(req api.ExternalSchedulerRequest) map[corev1.ResourceName]resource.Quantity {
+func (s *VMwareBinpackStep) calcVMResources(req api.ExternalSchedulerRequest) map[corev1.ResourceName]resource.Quantity {
 	resources := make(map[corev1.ResourceName]resource.Quantity)
 	resourcesMemBytes := int64(req.Spec.Data.Flavor.Data.MemoryMB * 1_000_000) //nolint:gosec // memory values are bounded by Nova
 	resourcesMemBytes *= int64(req.Spec.Data.NumInstances)                     //nolint:gosec // instance count is bounded by Nova
@@ -152,5 +198,5 @@ func (s *KVMBinpackStep) calcVMResources(req api.ExternalSchedulerRequest) map[c
 }
 
 func init() {
-	Index["kvm_binpack"] = func() NovaWeigher { return &KVMBinpackStep{} }
+	Index["vmware_binpack"] = func() NovaWeigher { return &VMwareBinpackStep{} }
 }
