@@ -17,6 +17,17 @@ spec:
   createDecisions: true
   filters: []
   weighers:
+    - name: kvm_instance_group_soft_affinity
+      description: |
+        This weigher implements the "soft affinity" and "soft anti-affinity" policy
+        for instance groups in nova.
+
+        It assigns a weight to each host based on how many instances of the same
+        instance group are already running on that host. The more instances of the
+        same group on a host, the lower (for soft-anti-affinity) or higher
+        (for soft-affinity) the weight, which makes it less likely or more likely,
+        respectively, for the scheduler to choose that host for new instances of
+        the same group.
     - name: kvm_binpack
       multiplier: -1.0 # inverted = balancing
       params:
@@ -45,6 +56,17 @@ spec:
   createDecisions: true
   filters: []
   weighers:
+    - name: kvm_instance_group_soft_affinity
+      description: |
+        This weigher implements the "soft affinity" and "soft anti-affinity" policy
+        for instance groups in nova.
+
+        It assigns a weight to each host based on how many instances of the same
+        instance group are already running on that host. The more instances of the
+        same group on a host, the lower (for soft-anti-affinity) or higher
+        (for soft-affinity) the weight, which makes it less likely or more likely,
+        respectively, for the scheduler to choose that host for new instances of
+        the same group.
     - name: kvm_binpack
       params:
         - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
@@ -150,11 +172,23 @@ spec:
         the migrating VM, by checking cpu architecture, cpu features, emulated
         devices, and cpu modes.
     - name: filter_requested_destination
+      params: {{ .Values.kvm.filterRequestedDestinationParams | toYaml | nindent 8 }}
       description: |
         This step filters hosts based on the `requested_destination` instruction
         from the nova scheduler request spec. It supports filtering by host and
         by aggregates.
   weighers:
+    - name: kvm_instance_group_soft_affinity
+      description: |
+        This weigher implements the "soft affinity" and "soft anti-affinity" policy
+        for instance groups in nova.
+
+        It assigns a weight to each host based on how many instances of the same
+        instance group are already running on that host. The more instances of the
+        same group on a host, the lower (for soft-anti-affinity) or higher
+        (for soft-affinity) the weight, which makes it less likely or more likely,
+        respectively, for the scheduler to choose that host for new instances of
+        the same group.
     - name: kvm_binpack
       multiplier: -1.0 # inverted = balancing
       params:
@@ -262,11 +296,23 @@ spec:
         the migrating VM, by checking cpu architecture, cpu features, emulated
         devices, and cpu modes.
     - name: filter_requested_destination
+      params: {{ .Values.kvm.filterRequestedDestinationParams | toYaml | nindent 8 }}
       description: |
         This step filters hosts based on the `requested_destination` instruction
         from the nova scheduler request spec. It supports filtering by host and
         by aggregates.
   weighers:
+    - name: kvm_instance_group_soft_affinity
+      description: |
+        This weigher implements the "soft affinity" and "soft anti-affinity" policy
+        for instance groups in nova.
+
+        It assigns a weight to each host based on how many instances of the same
+        instance group are already running on that host. The more instances of the
+        same group on a host, the lower (for soft-anti-affinity) or higher
+        (for soft-affinity) the weight, which makes it less likely or more likely,
+        respectively, for the scheduler to choose that host for new instances of
+        the same group.
     - name: kvm_binpack
       params:
         - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
