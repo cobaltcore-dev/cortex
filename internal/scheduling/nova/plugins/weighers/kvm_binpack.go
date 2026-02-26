@@ -43,7 +43,7 @@ func (o KVMBinpackStepOpts) Validate() error {
 			)
 		}
 		if value == 0 {
-			return fmt.Errorf("resource weight for %s must be greater than zero", resourceName)
+			return fmt.Errorf("resource weight for %s can't be zero", resourceName)
 		}
 		// It is fine for weights to be less than 0, in case we want to
 		// use the worst-fit algorithm instead of best-fit for balancing.
