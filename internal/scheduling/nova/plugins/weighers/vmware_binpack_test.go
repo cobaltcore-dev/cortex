@@ -240,16 +240,16 @@ func TestVMwareBinpackStep_CalcHostCapacity(t *testing.T) {
 
 	capacity := step.calcHostCapacity(hostUtilization)
 
-	// Memory capacity: (6000 + 4000) * 1_000_000 = 10_000_000_000 bytes
-	expectedMemoryBytes := int64(10000) * 1_000_000
+	// Memory capacity: 6000 * 1_000_000 = 6_000_000_000 bytes
+	expectedMemoryBytes := int64(6000) * 1_000_000
 	memoryCapacity := capacity[corev1.ResourceMemory]
 	if memoryCapacity.Value() != expectedMemoryBytes {
 		t.Errorf("expected memory capacity %d, got %d",
 			expectedMemoryBytes, memoryCapacity.Value())
 	}
 
-	// CPU capacity: 6 + 4 = 10
-	expectedCPU := int64(10)
+	// CPU capacity: 6
+	expectedCPU := int64(6)
 	cpuCapacity := capacity[corev1.ResourceCPU]
 	if cpuCapacity.Value() != expectedCPU {
 		t.Errorf("expected CPU capacity %d, got %d",

@@ -164,10 +164,10 @@ func (s *VMwareBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSched
 // calcHostCapacity calculates the total capacity of the host.
 func (s *VMwareBinpackStep) calcHostCapacity(hostUtilization compute.HostUtilization) map[corev1.ResourceName]resource.Quantity {
 	resources := make(map[corev1.ResourceName]resource.Quantity)
-	capaMemoryBytes := (int64(hostUtilization.TotalRAMAllocatableMB) + int64(hostUtilization.RAMUsedMB)) * 1_000_000
+	capaMemoryBytes := int64(hostUtilization.TotalRAMAllocatableMB) * 1_000_000
 	resources[corev1.ResourceMemory] = *resource.
 		NewQuantity(capaMemoryBytes, resource.DecimalSI)
-	capaCPU := int64(hostUtilization.TotalVCPUsAllocatable + hostUtilization.VCPUsUsed)
+	capaCPU := int64(hostUtilization.TotalVCPUsAllocatable)
 	resources[corev1.ResourceCPU] = *resource.
 		NewQuantity(capaCPU, resource.DecimalSI)
 	return resources
