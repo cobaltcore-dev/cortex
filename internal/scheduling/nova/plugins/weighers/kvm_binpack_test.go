@@ -212,11 +212,11 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 		{
 			name: "basic binpacking with memory weight only",
 			hypervisors: []*hv1.Hypervisor{
-				// host1: capacity 100Gi, allocation (free) 80Gi -> used 20Gi, adding 8Gi VM -> 28Gi used
-				// utilization after VM = 28/100 = 0.28
+				// host1: capacity 100Gi, allocation (used) 80Gi, adding ~8Gi VM -> ~88Gi used
+				// utilization after VM = ~88/100 ≈ 0.88
 				newHypervisor("host1", "100", "100Gi", "80", "80Gi"),
-				// host2: capacity 100Gi, allocation (free) 20Gi -> used 80Gi, adding 8Gi VM -> 88Gi used
-				// utilization after VM = 88/100 = 0.88
+				// host2: capacity 100Gi, allocation (used) 20Gi, adding ~8Gi VM -> ~28Gi used
+				// utilization after VM = ~28/100 ≈ 0.28
 				newHypervisor("host2", "100", "100Gi", "20", "20Gi"),
 			},
 			request: newBinpackRequest(8192, 4, 1, []string{"host1", "host2"}), // 8Gi memory
@@ -226,17 +226,19 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 				},
 			},
 			expectedWeights: map[string]float64{ // with 0.1 tolerance
-				"host1": 0.3,
-				"host2": 0.9,
+				"host1": 0.88,
+				"host2": 0.28,
 			},
 			wantErr: false,
 		},
 		{
 			name: "basic binpacking with cpu weight only",
 			hypervisors: []*hv1.Hypervisor{
-				// host1: capacity 100 CPUs, allocation (free) 80 CPUs -> used 20 CPUs
+				// host1: capacity 100 CPUs, allocation (used) 80 CPUs, adding 4 CPUs -> 84 used
+				// utilization = 84/100 = 0.84
 				newHypervisor("host1", "100", "100Gi", "80", "80Gi"),
-				// host2: capacity 100 CPUs, allocation (free) 20 CPUs -> used 80 CPUs
+				// host2: capacity 100 CPUs, allocation (used) 20 CPUs, adding 4 CPUs -> 24 used
+				// utilization = 24/100 = 0.24
 				newHypervisor("host2", "100", "100Gi", "20", "20Gi"),
 			},
 			request: newBinpackRequest(8192, 4, 1, []string{"host1", "host2"}),
@@ -246,8 +248,8 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 				},
 			},
 			expectedWeights: map[string]float64{ // with 0.1 tolerance
-				"host1": 0.3,
-				"host2": 0.8,
+				"host1": 0.84,
+				"host2": 0.24,
 			},
 			wantErr: false,
 		},
@@ -265,8 +267,10 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 				},
 			},
 			expectedWeights: map[string]float64{ // with 0.1 tolerance
-				"host1": 0.26,
-				"host2": 0.86,
+				// host1: CPU=0.84, Mem≈0.88 -> avg≈0.86
+				"host1": 0.86,
+				// host2: CPU=0.24, Mem≈0.28 -> avg≈0.26
+				"host2": 0.26,
 			},
 			wantErr: false,
 		},
@@ -283,7 +287,8 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 				},
 			},
 			expectedWeights: map[string]float64{ // with 0.1 tolerance
-				"host1": 0.25,
+				// CPU=0.84 (weight 2), Mem≈0.88 (weight 1) -> (0.84*2 + 0.88*1)/3 ≈ 0.85
+				"host1": 0.85,
 			},
 			wantErr: false,
 		},
@@ -299,7 +304,8 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 				},
 			},
 			expectedWeights: map[string]float64{ // with 0.1 tolerance
-				"host1": 0.3,
+				// CPU: (80 + 4*2) / 100 = 88/100 = 0.88
+				"host1": 0.88,
 			},
 			wantErr: false,
 		},
@@ -332,7 +338,8 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 				},
 			},
 			expectedWeights: map[string]float64{
-				"host1": 0.24,
+				// CPU: (80 + 4) / 100 = 84/100 = 0.84
+				"host1": 0.84,
 				"host2": 0, // Default weight since no hypervisor
 			},
 			wantErr: false,
@@ -434,7 +441,7 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 		{
 			name: "high utilization scenario (over 100%)",
 			hypervisors: []*hv1.Hypervisor{
-				// Host with very little free resources
+				// Host with low allocation (1 CPU used out of 10)
 				newHypervisor("host1", "10", "10Gi", "1", "1Gi"),
 			},
 			request: newBinpackRequest(20480, 20, 1, []string{"host1"}), // 20Gi, 20 CPUs - more than available
@@ -444,8 +451,8 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 				},
 			},
 			expectedWeights: map[string]float64{
-				// (10 - 1 + 20) / 10 = 29/10 = 2.9 (over 100%)
-				"host1": 2.9,
+				// CPU: (1 + 20) / 10 = 21/10 = 2.1 (over 100%)
+				"host1": 2.1,
 			},
 			wantErr: false,
 		},

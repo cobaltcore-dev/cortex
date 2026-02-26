@@ -94,12 +94,6 @@ func (s *KVMBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSchedule
 		var totalWeightedUtilization, totalWeight float64
 
 		for resourceName, weight := range s.Options.ResourceWeights {
-			allocation, ok := hv.Status.Allocation[resourceName.String()]
-			if !ok {
-				traceLog.Warn("no allocation in status, skipping",
-					"host", host, "resource", resourceName)
-				continue
-			}
 			capacity, ok := hv.Status.Capacity[resourceName.String()]
 			if !ok {
 				traceLog.Warn("no capacity in status, skipping",
@@ -111,8 +105,12 @@ func (s *KVMBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSchedule
 					"host", host, "resource", resourceName)
 				continue
 			}
-			used := capacity.DeepCopy()
-			used.Sub(allocation)
+			used, ok := hv.Status.Allocation[resourceName.String()]
+			if !ok {
+				traceLog.Warn("no allocation in status, skipping",
+					"host", host, "resource", resourceName)
+				continue
+			}
 			vmReq, ok := vmResources[resourceName]
 			if !ok {
 				traceLog.Warn("no resource request for vm, skipping",
