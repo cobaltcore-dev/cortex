@@ -55,10 +55,11 @@ func (c *DetectorPipelineController) InitPipeline(
 		Breaker: c.Breaker,
 		Monitor: c.Monitor.SubPipeline(p.Name),
 	}
-	errs := pipeline.Init(ctx, p.Spec.Detectors, detectors.Index)
+	unknown, errs := pipeline.Init(ctx, p.Spec.Detectors, detectors.Index)
 	return lib.PipelineInitResult[*lib.DetectorPipeline[plugins.VMDetection]]{
-		Pipeline:       pipeline,
-		DetectorErrors: errs,
+		Pipeline:         pipeline,
+		DetectorErrors:   errs,
+		UnknownDetectors: unknown,
 	}
 }
 

@@ -320,8 +320,8 @@ func TestInitNewFilterWeigherPipeline_UnsupportedFilter(t *testing.T) {
 		monitor,
 	)
 
-	if result.FilterErrors["unsupported-filter"] == nil {
-		t.Fatal("expected critical error for unsupported filter, got nil")
+	if len(result.UnknownFilters) != 1 || result.UnknownFilters[0] != "unsupported-filter" {
+		t.Fatalf("expected unknown filter 'unsupported-filter', got %v", result.UnknownFilters)
 	}
 }
 
@@ -354,11 +354,8 @@ func TestInitNewFilterWeigherPipeline_UnsupportedWeigher(t *testing.T) {
 		monitor,
 	)
 
-	if result.WeigherErrors["unsupported-weigher"] == nil {
-		t.Fatal("expected error for unsupported weigher, got nil")
-	}
-	if len(result.FilterErrors) != 0 {
-		t.Fatalf("expected no filter error, got %v", result.FilterErrors)
+	if len(result.UnknownWeighers) != 1 || result.UnknownWeighers[0] != "unsupported-weigher" {
+		t.Fatalf("expected unknown weigher 'unsupported-weigher', got %v", result.UnknownWeighers)
 	}
 }
 
