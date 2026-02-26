@@ -27,6 +27,9 @@ spec:
     - jsonPath: .status.conditions[?(@.type=='AllStepsReady')].status
       name: All Steps Ready
       type: string
+    - jsonPath: .status.conditions[?(@.type=='AllStepsIndexed')].status
+      name: All Steps Known
+      type: string
     - jsonPath: .status.conditions[?(@.type=='Ready')].status
       name: Pipeline Ready
       type: string
