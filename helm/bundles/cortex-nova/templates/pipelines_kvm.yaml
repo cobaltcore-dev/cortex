@@ -16,7 +16,35 @@ spec:
   type: filter-weigher
   createDecisions: true
   filters: []
-  weighers: []
+  weighers:
+    - name: kvm_prefer_smaller_hosts
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step pulls virtual machines onto smaller hosts (by capacity). This
+        ensures that larger hosts are not overly fragmented with small VMs,
+        and can still accommodate larger VMs when they need to be scheduled.
+    - name: kvm_instance_group_soft_affinity
+      description: |
+        This weigher implements the "soft affinity" and "soft anti-affinity" policy
+        for instance groups in nova.
+
+        It assigns a weight to each host based on how many instances of the same
+        instance group are already running on that host. The more instances of the
+        same group on a host, the lower (for soft-anti-affinity) or higher
+        (for soft-affinity) the weight, which makes it less likely or more likely,
+        respectively, for the scheduler to choose that host for new instances of
+        the same group.
+    - name: kvm_binpack
+      multiplier: -1.0 # inverted = balancing
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step implements a balancing weigher for workloads on kvm hypervisors,
+        which is the opposite of binpacking. Instead of pulling the requested vm
+        into the smallest gaps possible, it spreads the load to ensure
+        workloads are balanced across hosts. In this pipeline, the balancing will
+        focus on general purpose virtual machines.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -34,7 +62,33 @@ spec:
   type: filter-weigher
   createDecisions: true
   filters: []
-  weighers: []
+  weighers:
+    - name: kvm_prefer_smaller_hosts
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step pulls virtual machines onto smaller hosts (by capacity). This
+        ensures that larger hosts are not overly fragmented with small VMs,
+        and can still accommodate larger VMs when they need to be scheduled.
+    - name: kvm_instance_group_soft_affinity
+      description: |
+        This weigher implements the "soft affinity" and "soft anti-affinity" policy
+        for instance groups in nova.
+
+        It assigns a weight to each host based on how many instances of the same
+        instance group are already running on that host. The more instances of the
+        same group on a host, the lower (for soft-anti-affinity) or higher
+        (for soft-affinity) the weight, which makes it less likely or more likely,
+        respectively, for the scheduler to choose that host for new instances of
+        the same group.
+    - name: kvm_binpack
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step implements a binpacking weigher for workloads on kvm hypervisors.
+        It pulls the requested vm into the smallest gaps possible, to ensure
+        other hosts with less allocation stay free for bigger vms.
+        In this pipeline, the binpacking will focus on hana virtual machines.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -89,10 +143,6 @@ spec:
         This step will filter out hosts for which the hypervisor status conditions
         do not meet the expected values, for example, that the hypervisor is ready
         and not disabled.
-    - name: filter_maintenance
-      description: |
-        This step will filter out hosts that are currently in maintenance mode that
-        prevents scheduling, for example, manual maintenance or termination.
     - name: filter_external_customer
       description: |
         This step prefix-matches the domain name for external customer domains and
@@ -136,11 +186,40 @@ spec:
         the migrating VM, by checking cpu architecture, cpu features, emulated
         devices, and cpu modes.
     - name: filter_requested_destination
+      params: {{ .Values.kvm.filterRequestedDestinationParams | toYaml | nindent 8 }}
       description: |
         This step filters hosts based on the `requested_destination` instruction
         from the nova scheduler request spec. It supports filtering by host and
         by aggregates.
-  weighers: []
+  weighers:
+    - name: kvm_prefer_smaller_hosts
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step pulls virtual machines onto smaller hosts (by capacity). This
+        ensures that larger hosts are not overly fragmented with small VMs,
+        and can still accommodate larger VMs when they need to be scheduled.
+    - name: kvm_instance_group_soft_affinity
+      description: |
+        This weigher implements the "soft affinity" and "soft anti-affinity" policy
+        for instance groups in nova.
+
+        It assigns a weight to each host based on how many instances of the same
+        instance group are already running on that host. The more instances of the
+        same group on a host, the lower (for soft-anti-affinity) or higher
+        (for soft-affinity) the weight, which makes it less likely or more likely,
+        respectively, for the scheduler to choose that host for new instances of
+        the same group.
+    - name: kvm_binpack
+      multiplier: -1.0 # inverted = balancing
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step implements a balancing weigher for workloads on kvm hypervisors,
+        which is the opposite of binpacking. Instead of pulling the requested vm
+        into the smallest gaps possible, it spreads the load to ensure
+        workloads are balanced across hosts. In this pipeline, the balancing will
+        focus on general purpose virtual machines.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -195,10 +274,6 @@ spec:
         This step will filter out hosts for which the hypervisor status conditions
         do not meet the expected values, for example, that the hypervisor is ready
         and not disabled.
-    - name: filter_maintenance
-      description: |
-        This step will filter out hosts that are currently in maintenance mode that
-        prevents scheduling, for example, manual maintenance or termination.
     - name: filter_external_customer
       description: |
         This step prefix-matches the domain name for external customer domains and
@@ -242,11 +317,38 @@ spec:
         the migrating VM, by checking cpu architecture, cpu features, emulated
         devices, and cpu modes.
     - name: filter_requested_destination
+      params: {{ .Values.kvm.filterRequestedDestinationParams | toYaml | nindent 8 }}
       description: |
         This step filters hosts based on the `requested_destination` instruction
         from the nova scheduler request spec. It supports filtering by host and
         by aggregates.
-  weighers: []
+  weighers:
+    - name: kvm_prefer_smaller_hosts
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step pulls virtual machines onto smaller hosts (by capacity). This
+        ensures that larger hosts are not overly fragmented with small VMs,
+        and can still accommodate larger VMs when they need to be scheduled.
+    - name: kvm_instance_group_soft_affinity
+      description: |
+        This weigher implements the "soft affinity" and "soft anti-affinity" policy
+        for instance groups in nova.
+
+        It assigns a weight to each host based on how many instances of the same
+        instance group are already running on that host. The more instances of the
+        same group on a host, the lower (for soft-anti-affinity) or higher
+        (for soft-affinity) the weight, which makes it less likely or more likely,
+        respectively, for the scheduler to choose that host for new instances of
+        the same group.
+    - name: kvm_binpack
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step implements a binpacking weigher for workloads on kvm hypervisors.
+        It pulls the requested vm into the smallest gaps possible, to ensure
+        other hosts with less allocation stay free for bigger vms.
+        In this pipeline, the binpacking will focus on hana virtual machines.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline

@@ -149,11 +149,12 @@ func TestUnmarshalParams_StringListValue(t *testing.T) {
 
 func TestUnmarshalParams_MultipleValues(t *testing.T) {
 	type TestStruct struct {
-		Name      string   `json:"name"`
-		Count     int64    `json:"count"`
-		Enabled   bool     `json:"enabled"`
-		Threshold float64  `json:"threshold"`
-		Tags      []string `json:"tags"`
+		Name      string              `json:"name"`
+		Count     int64               `json:"count"`
+		Enabled   bool                `json:"enabled"`
+		Threshold float64             `json:"threshold"`
+		Tags      []string            `json:"tags"`
+		Weights   *map[string]float64 `json:"weights"`
 	}
 
 	params := v1alpha1.Parameters{
@@ -162,6 +163,7 @@ func TestUnmarshalParams_MultipleValues(t *testing.T) {
 		{Key: "enabled", BoolValue: testlib.Ptr(true)},
 		{Key: "threshold", FloatValue: testlib.Ptr(0.5)},
 		{Key: "tags", StringListValue: testlib.Ptr([]string{"a", "b"})},
+		{Key: "weights", FloatMapValue: testlib.Ptr(map[string]float64{"cpu": 1.0, "memory": 0.5})},
 	}
 
 	var result TestStruct
@@ -184,6 +186,15 @@ func TestUnmarshalParams_MultipleValues(t *testing.T) {
 	}
 	if len(result.Tags) != 2 {
 		t.Errorf("expected 2 tags, got %d", len(result.Tags))
+	}
+	if result.Weights == nil || len(*result.Weights) != 2 {
+		t.Errorf("expected 2 weights, got %v", result.Weights)
+	}
+	if (*result.Weights)["cpu"] != 1.0 {
+		t.Errorf("expected weight for cpu=1.0, got %f", (*result.Weights)["cpu"])
+	}
+	if (*result.Weights)["memory"] != 0.5 {
+		t.Errorf("expected weight for memory=0.5, got %f", (*result.Weights)["memory"])
 	}
 }
 

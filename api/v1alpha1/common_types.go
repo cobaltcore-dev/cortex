@@ -48,6 +48,8 @@ type Parameter struct {
 	FloatValue *float64 `json:"floatValue,omitempty"`
 	// +kubebuilder:validation:Optional
 	StringListValue *[]string `json:"stringListValue,omitempty"`
+	// +kubebuilder:validation:Optional
+	FloatMapValue *map[string]float64 `json:"floatMapValue,omitempty"`
 }
 
 // Parameters is a list of Parameter structs that can be used to define

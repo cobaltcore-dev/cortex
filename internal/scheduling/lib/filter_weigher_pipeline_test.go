@@ -154,7 +154,7 @@ func TestPipeline_ApplyStepWeights(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := p.applyWeights(tt.stepWeights, tt.inWeights)
+			result := p.applyWeights(slog.Default(), tt.stepWeights, tt.inWeights)
 			for host, weight := range tt.expectedResult {
 				if result[host] != weight {
 					t.Errorf("expected weight %f for host %s, got %f", weight, host, result[host])
@@ -320,8 +320,8 @@ func TestInitNewFilterWeigherPipeline_UnsupportedFilter(t *testing.T) {
 		monitor,
 	)
 
-	if result.FilterErrors["unsupported-filter"] == nil {
-		t.Fatal("expected critical error for unsupported filter, got nil")
+	if len(result.UnknownFilters) != 1 || result.UnknownFilters[0] != "unsupported-filter" {
+		t.Fatalf("expected unknown filter 'unsupported-filter', got %v", result.UnknownFilters)
 	}
 }
 
@@ -354,11 +354,8 @@ func TestInitNewFilterWeigherPipeline_UnsupportedWeigher(t *testing.T) {
 		monitor,
 	)
 
-	if result.WeigherErrors["unsupported-weigher"] == nil {
-		t.Fatal("expected error for unsupported weigher, got nil")
-	}
-	if len(result.FilterErrors) != 0 {
-		t.Fatalf("expected no filter error, got %v", result.FilterErrors)
+	if len(result.UnknownWeighers) != 1 || result.UnknownWeighers[0] != "unsupported-weigher" {
+		t.Fatalf("expected unknown weigher 'unsupported-weigher', got %v", result.UnknownWeighers)
 	}
 }
 

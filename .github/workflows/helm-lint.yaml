@@ -1,0 +1,119 @@
+# Copyright SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+name: "Helm lint"
+on:
+  pull_request:
+    branches:
+      - release
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4.3.1
+
+      - uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.12"
+          check-latest: true
+
+      - name: Set up chart linting
+        uses: helm/chart-testing-action@v2.8.0
+
+      - name: Check new Chart changes
+        id: list-changed
+        run: |
+          changed=$(ct list-changed --config .github/config/helm-lint.yaml)
+          if [[ -n "$changed" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Replace OCI references with local file paths
+        if: steps.list-changed.outputs.changed == 'true'
+        run: |
+          for chart in $(ct list-changed --config .github/config/helm-lint.yaml); do
+            CHART_YAML="${chart}/Chart.yaml"
+            if [ ! -f "$CHART_YAML" ]; then
+              echo "Chart.yaml not found at $CHART_YAML" >&2
+              continue
+            fi
+
+            echo "Processing $CHART_YAML"
+
+            tmpfile=$(mktemp)
+
+            awk '
+            BEGIN {
+                file_ref = ""
+                in_dependency = 0
+            }
+
+            # Look for "from: file://" comments
+            /^[[:space:]]*#[[:space:]]*from:[[:space:]]*file:\/\// {
+                file_ref = $0
+                gsub(/^[[:space:]]*#[[:space:]]*from:[[:space:]]*/, "", file_ref)
+                print $0
+                next
+            }
+
+            # Check if we are entering a dependency block
+            /^[[:space:]]*-[[:space:]]*name:/ {
+                in_dependency = 1
+                print $0
+                next
+            }
+
+            # If we have a file reference and this is a repository line in a dependency
+            /^[[:space:]]*repository:[[:space:]]*oci:\/\// && in_dependency == 1 && file_ref != "" {
+                match($0, /^([[:space:]]*)repository:/)
+                indent = substr($0, 1, RLENGTH - length("repository:"))
+                print indent "repository: " file_ref
+                file_ref = ""
+                in_dependency = 0
+                next
+            }
+
+            # Reset dependency tracking when we encounter a new field at the same level
+            /^[[:space:]]*[a-zA-Z][^:]*:/ && !/^[[:space:]]*-[[:space:]]*name:/ && !/^[[:space:]]*repository:/ && !/^[[:space:]]*version:/ {
+                in_dependency = 0
+                file_ref = ""
+            }
+
+            # For version lines in dependencies, we stay in dependency mode
+            /^[[:space:]]*version:/ && in_dependency == 1 {
+                print $0
+                in_dependency = 0
+                next
+            }
+
+            # Print all other lines as-is
+            {
+                print $0
+            }
+            ' "$CHART_YAML" > "$tmpfile"
+            mv "$tmpfile" "$CHART_YAML"
+
+            echo "Updated $CHART_YAML"
+          done
+
+      - name: Update chart dependencies with local references
+        if: steps.list-changed.outputs.changed == 'true'
+        run: |
+          for chart in $(ct list-changed --config .github/config/helm-lint.yaml); do
+            echo "Updating dependencies for $chart"
+            helm dependency update "$chart"
+          done
+
+      - name: Run chart lint
+        if: steps.list-changed.outputs.changed == 'true'
+        run: ct lint --config .github/config/helm-lint.yaml --lint-conf .github/config/lintconf.yaml
