@@ -34,7 +34,7 @@ func (p *DetectorPipeline[DetectionType]) Init(
 	ctx context.Context,
 	confedSteps []v1alpha1.DetectorSpec,
 	supportedSteps map[string]Detector[DetectionType],
-) (detectorErrs map[string]error) {
+) (unknownDetectors []string, detectorErrs map[string]error) {
 
 	p.order = []string{}
 	// Load all steps from the configuration.
@@ -43,7 +43,7 @@ func (p *DetectorPipeline[DetectionType]) Init(
 	for _, stepConf := range confedSteps {
 		step, ok := supportedSteps[stepConf.Name]
 		if !ok {
-			detectorErrs[stepConf.Name] = errors.New("descheduler: unsupported step name: " + stepConf.Name)
+			unknownDetectors = append(unknownDetectors, stepConf.Name)
 			continue
 		}
 		step = monitorDetector(step, stepConf, p.Monitor)
@@ -55,7 +55,7 @@ func (p *DetectorPipeline[DetectionType]) Init(
 		p.order = append(p.order, stepConf.Name)
 		slog.Info("descheduler: added step", "name", stepConf.Name)
 	}
-	return detectorErrs
+	return unknownDetectors, detectorErrs
 }
 
 // Execute the descheduler steps in parallel and collect the decisions made by

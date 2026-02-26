@@ -59,13 +59,14 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 	filtersByName := make(map[string]Filter[RequestType], len(confedFilters))
 	filtersOrder := []string{}
 	filterErrors := make(map[string]error)
+	unknownFilters := []string{}
 	for _, filterConfig := range confedFilters {
 		slog.Info("scheduler: configuring filter", "name", filterConfig.Name)
 		slog.Info("supported:", "filters", maps.Keys(supportedFilters))
 		makeFilter, ok := supportedFilters[filterConfig.Name]
 		if !ok {
 			slog.Error("scheduler: unsupported filter", "name", filterConfig.Name)
-			filterErrors[filterConfig.Name] = errors.New("unsupported filter name: " + filterConfig.Name)
+			unknownFilters = append(unknownFilters, filterConfig.Name)
 			continue
 		}
 		filter := makeFilter()
@@ -86,13 +87,14 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 	weighersMultipliers := make(map[string]float64, len(confedWeighers))
 	weighersOrder := []string{}
 	weigherErrors := make(map[string]error)
+	unknownWeighers := []string{}
 	for _, weigherConfig := range confedWeighers {
 		slog.Info("scheduler: configuring weigher", "name", weigherConfig.Name)
 		slog.Info("supported:", "weighers", maps.Keys(supportedWeighers))
 		makeWeigher, ok := supportedWeighers[weigherConfig.Name]
 		if !ok {
 			slog.Error("scheduler: unsupported weigher", "name", weigherConfig.Name)
-			weigherErrors[weigherConfig.Name] = errors.New("unsupported weigher name: " + weigherConfig.Name)
+			unknownWeighers = append(unknownWeighers, weigherConfig.Name)
 			continue
 		}
 		weigher := makeWeigher()
@@ -115,8 +117,10 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 	}
 
 	return PipelineInitResult[FilterWeigherPipeline[RequestType]]{
-		FilterErrors:  filterErrors,
-		WeigherErrors: weigherErrors,
+		FilterErrors:    filterErrors,
+		UnknownFilters:  unknownFilters,
+		WeigherErrors:   weigherErrors,
+		UnknownWeighers: unknownWeighers,
 		Pipeline: &filterWeigherPipeline[RequestType]{
 			filtersOrder:        filtersOrder,
 			filters:             filtersByName,
