@@ -106,6 +106,14 @@ jobs:
             echo "Updated $CHART_YAML"
           done
 
+      - name: Update chart dependencies with local references
+        if: steps.list-changed.outputs.changed == 'true'
+        run: |
+          for chart in $(ct list-changed --config .github/config/helm-lint.yaml); do
+            echo "Updating dependencies for $chart"
+            helm dependency update "$chart"
+          done
+
       - name: Run chart lint
         if: steps.list-changed.outputs.changed == 'true'
         run: ct lint --config .github/config/helm-lint.yaml --lint-conf .github/config/lintconf.yaml
