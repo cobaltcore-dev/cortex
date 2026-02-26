@@ -132,6 +132,7 @@ spec:
         the migrating VM, by checking cpu architecture, cpu features, emulated
         devices, and cpu modes.
     - name: filter_requested_destination
+      params: {{ .Values.kvm.filterRequestedDestinationParams | toYaml | nindent 8 }}
       description: |
         This step filters hosts based on the `requested_destination` instruction
         from the nova scheduler request spec. It supports filtering by host and
@@ -234,6 +235,7 @@ spec:
         the migrating VM, by checking cpu architecture, cpu features, emulated
         devices, and cpu modes.
     - name: filter_requested_destination
+      params: {{ .Values.kvm.filterRequestedDestinationParams | toYaml | nindent 8 }}
       description: |
         This step filters hosts based on the `requested_destination` instruction
         from the nova scheduler request spec. It supports filtering by host and
