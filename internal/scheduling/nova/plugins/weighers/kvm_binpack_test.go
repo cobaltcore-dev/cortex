@@ -89,14 +89,24 @@ func TestKVMBinpackStepOpts_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "inverted weights for worst-fit algorithm",
+			name: "inverted weights should raise error",
 			opts: KVMBinpackStepOpts{
 				ResourceWeights: map[corev1.ResourceName]float64{
 					corev1.ResourceMemory: -1.0,
 					corev1.ResourceCPU:    -1.0,
 				},
 			},
-			wantErr: false,
+			wantErr: true,
+		},
+		{
+			name: "zero weights should raise error",
+			opts: KVMBinpackStepOpts{
+				ResourceWeights: map[corev1.ResourceName]float64{
+					corev1.ResourceMemory: 0.0,
+					corev1.ResourceCPU:    0.0,
+				},
+			},
+			wantErr: true,
 		},
 		{
 			name: "valid opts with only memory weight",
@@ -494,7 +504,7 @@ func TestKVMBinpackStep_calcVMResources(t *testing.T) {
 		expectedCPU      int64
 	}{
 		{
-			name:             "single instance with 8Gi memory and 4 CPUs",
+			name:             "single instance with 8G memory and 4 CPUs",
 			request:          newBinpackRequest(8192, 4, 1, []string{"host1"}),
 			expectedMemBytes: 8192 * 1_000_000,
 			expectedCPU:      4,

@@ -17,9 +17,10 @@ spec:
   createDecisions: true
   filters: []
   weighers:
-    - name: kvm_binpack # inverted = balancing
+    - name: kvm_binpack
+      multiplier: -1.0 # inverted = balancing
       params:
-        - {key: resourceWeights, floatMapValue: {"memory": -1.0}}
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
       description: |
         This step implements a balancing weigher for workloads on kvm hypervisors,
         which is the opposite of binpacking. Instead of pulling the requested vm
@@ -154,9 +155,10 @@ spec:
         from the nova scheduler request spec. It supports filtering by host and
         by aggregates.
   weighers:
-    - name: kvm_binpack # inverted = balancing
+    - name: kvm_binpack
+      multiplier: -1.0 # inverted = balancing
       params:
-        - {key: resourceWeights, floatMapValue: {"memory": -1.0}}
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
       description: |
         This step implements a balancing weigher for workloads on kvm hypervisors,
         which is the opposite of binpacking. Instead of pulling the requested vm

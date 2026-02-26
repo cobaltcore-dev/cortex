@@ -42,11 +42,20 @@ func (o KVMBinpackStepOpts) Validate() error {
 				resourceName, supportedResources,
 			)
 		}
+		// Value == 0 means the weight shouldn't be provided or the weigher
+		// disabled in general.
 		if value == 0 {
-			return fmt.Errorf("resource weight for %s can't be zero", resourceName)
+			return fmt.Errorf("resource weight for %s can't be zero, if you want to "+
+				"disable this resource in the weigher, remove it or the weigher", resourceName)
 		}
-		// It is fine for weights to be less than 0, in case we want to
-		// use the worst-fit algorithm instead of best-fit for balancing.
+		// Value < 0 doesn't work since the division of the
+		// weighted sum by the total weight will turn the score positive again,
+		// which is likely not what the user intended when setting a negative
+		// weight to invert the weigher's behavior.
+		if value < 0 {
+			return fmt.Errorf("resource weight for %s can't be negative. "+
+				"use weigher.multiplier to invert this weighers behavior", resourceName)
+		}
 	}
 	return nil
 }

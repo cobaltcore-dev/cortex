@@ -209,6 +209,7 @@ func (p *filterWeigherPipeline[RequestType]) normalizeInputWeights(weights map[s
 
 // Apply the step weights to the input weights.
 func (p *filterWeigherPipeline[RequestType]) applyWeights(
+	traceLog *slog.Logger,
 	stepWeights map[string]map[string]float64,
 	inWeights map[string]float64,
 ) map[string]float64 {
@@ -226,6 +227,16 @@ func (p *filterWeigherPipeline[RequestType]) applyWeights(
 		multiplier, ok := p.weighersMultipliers[weigherName]
 		if !ok {
 			multiplier = 1.0
+		}
+		// This logging will help us validate the weigher multipliers are configured
+		// and applied correctly, as well as debug any issues with the weighers outputs.
+		if multiplier == 0 {
+			traceLog.Info("weigher multiplier is zero, won't have any effect",
+				"weigher", weigherName, "multiplier", multiplier)
+		}
+		if multiplier < 0 {
+			traceLog.Info("weigher multiplier is negative, inverting weigher behavior",
+				"weigher", weigherName, "multiplier", multiplier)
 		}
 		outWeights = p.Apply(outWeights, weigherActivations, multiplier)
 	}
@@ -272,7 +283,7 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 		remainingWeights[host] = inWeights[host]
 	}
 	stepWeights := p.runWeighers(traceLog, filteredRequest)
-	outWeights := p.applyWeights(stepWeights, remainingWeights)
+	outWeights := p.applyWeights(traceLog, stepWeights, remainingWeights)
 	traceLog.Info("scheduler: output weights", "weights", outWeights)
 
 	hosts := p.sortHostsByWeights(outWeights)
