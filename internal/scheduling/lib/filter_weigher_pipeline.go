@@ -70,13 +70,14 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 	filtersByName := make(map[string]Filter[RequestType], len(confedFilters))
 	filtersOrder := []string{}
 	filterErrors := make(map[string]error)
+	unknownFilters := []string{}
 	for _, filterConfig := range confedFilters {
 		slog.Info("scheduler: configuring filter", "name", filterConfig.Name)
 		slog.Info("supported:", "filters", maps.Keys(supportedFilters))
 		makeFilter, ok := supportedFilters[filterConfig.Name]
 		if !ok {
 			slog.Error("scheduler: unsupported filter", "name", filterConfig.Name)
-			filterErrors[filterConfig.Name] = errors.New("unsupported filter name: " + filterConfig.Name)
+			unknownFilters = append(unknownFilters, filterConfig.Name)
 			continue
 		}
 		filter := makeFilter()
@@ -97,13 +98,14 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 	weighersMultipliers := make(map[string]float64, len(confedWeighers))
 	weighersOrder := []string{}
 	weigherErrors := make(map[string]error)
+	unknownWeighers := []string{}
 	for _, weigherConfig := range confedWeighers {
 		slog.Info("scheduler: configuring weigher", "name", weigherConfig.Name)
 		slog.Info("supported:", "weighers", maps.Keys(supportedWeighers))
 		makeWeigher, ok := supportedWeighers[weigherConfig.Name]
 		if !ok {
 			slog.Error("scheduler: unsupported weigher", "name", weigherConfig.Name)
-			weigherErrors[weigherConfig.Name] = errors.New("unsupported weigher name: " + weigherConfig.Name)
+			unknownWeighers = append(unknownWeighers, weigherConfig.Name)
 			continue
 		}
 		weigher := makeWeigher()
@@ -126,8 +128,10 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 	}
 
 	return PipelineInitResult[FilterWeigherPipeline[RequestType]]{
-		FilterErrors:  filterErrors,
-		WeigherErrors: weigherErrors,
+		FilterErrors:    filterErrors,
+		UnknownFilters:  unknownFilters,
+		WeigherErrors:   weigherErrors,
+		UnknownWeighers: unknownWeighers,
 		Pipeline: &filterWeigherPipeline[RequestType]{
 			filtersOrder:        filtersOrder,
 			filters:             filtersByName,
@@ -220,6 +224,7 @@ func (p *filterWeigherPipeline[RequestType]) normalizeInputWeights(weights map[s
 
 // Apply the step weights to the input weights.
 func (p *filterWeigherPipeline[RequestType]) applyWeights(
+	traceLog *slog.Logger,
 	stepWeights map[string]map[string]float64,
 	inWeights map[string]float64,
 ) map[string]float64 {
@@ -237,6 +242,16 @@ func (p *filterWeigherPipeline[RequestType]) applyWeights(
 		multiplier, ok := p.weighersMultipliers[weigherName]
 		if !ok {
 			multiplier = 1.0
+		}
+		// This logging will help us validate the weigher multipliers are configured
+		// and applied correctly, as well as debug any issues with the weighers outputs.
+		if multiplier == 0 {
+			traceLog.Info("weigher multiplier is zero, won't have any effect",
+				"weigher", weigherName, "multiplier", multiplier)
+		}
+		if multiplier < 0 {
+			traceLog.Info("weigher multiplier is negative, inverting weigher behavior",
+				"weigher", weigherName, "multiplier", multiplier)
 		}
 		outWeights = p.Apply(outWeights, weigherActivations, multiplier)
 	}
@@ -283,7 +298,7 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (FilterWei
 		remainingWeights[host] = inWeights[host]
 	}
 	stepWeights := p.runWeighers(traceLog, filteredRequest)
-	outWeights := p.applyWeights(stepWeights, remainingWeights)
+	outWeights := p.applyWeights(traceLog, stepWeights, remainingWeights)
 	traceLog.Info("scheduler: output weights", "weights", outWeights)
 
 	hosts := p.sortHostsByWeights(outWeights)

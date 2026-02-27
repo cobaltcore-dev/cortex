@@ -132,6 +132,32 @@ func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerReque
 	}
 }
 
+// Limit the external scheduler response to the hosts provided in the  external
+// scheduler request. i.e. don't provide new hosts that weren't in the request,
+// since the Nova scheduler won't know how to handle them.
+//
+// Background: Nova schedules on a list of HostStates, which is an internal
+// object used by Nova to represent hypervisors. When cortex responds with
+// a list of sorted compute host names, Nova will match those back to the
+// HostStates it has, and if it finds a host name that wasn't in the original
+// list, it will throw an error and fail the scheduling request.
+func limitHostsToRequest(request api.ExternalSchedulerRequest, hosts []string) []string {
+	hostSet := make(map[string]bool, len(request.Hosts))
+	for _, host := range request.Hosts {
+		hostSet[host.ComputeHost] = true
+	}
+	var limited []string
+	for _, host := range hosts {
+		if hostSet[host] {
+			limited = append(limited, host)
+		} else {
+			slog.Warn("filtering out host from response since it wasn't in the request",
+				"host", host, "inRequest", request.Hosts)
+		}
+	}
+	return limited
+}
+
 // Handle the POST request from the Nova scheduler.
 // The request contains a spec of the vm to be scheduled, a list of hosts,
 // and a map of weights that were calculated by the Nova weigher pipeline.
@@ -196,7 +222,8 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		c.Respond(http.StatusInternalServerError, errors.New("pipeline didn't produce a result"), "failed to process scheduling request")
 		return
 	}
-	hosts := result.OrderedHosts
+	hosts := decision.Status.Result.OrderedHosts
+	hosts = limitHostsToRequest(requestData, hosts)
 	response := api.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(response); err != nil {

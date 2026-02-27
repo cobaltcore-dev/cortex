@@ -6,6 +6,8 @@ package lib
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -16,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 )
 
 func TestBasePipelineController_InitAllPipelines(t *testing.T) {
@@ -163,13 +166,17 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 	}
 
 	tests := []struct {
-		name              string
-		pipeline          *v1alpha1.Pipeline
-		knowledges        []v1alpha1.Knowledge
-		schedulingDomain  v1alpha1.SchedulingDomain
-		initPipelineError bool
-		expectReady       bool
-		expectInMap       bool
+		name                  string
+		pipeline              *v1alpha1.Pipeline
+		knowledges            []v1alpha1.Knowledge
+		schedulingDomain      v1alpha1.SchedulingDomain
+		initPipelineError     bool
+		expectReady           bool
+		expectInMap           bool
+		expectAllStepsIndexed *bool
+		unknownFilters        []string
+		unknownWeighers       []string
+		unknownDetectors      []string
 	}{
 		{
 			name: "pipeline with all steps ready",
@@ -206,9 +213,10 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 					},
 				},
 			},
-			schedulingDomain: v1alpha1.SchedulingDomainNova,
-			expectReady:      true,
-			expectInMap:      true,
+			schedulingDomain:      v1alpha1.SchedulingDomainNova,
+			expectReady:           true,
+			expectInMap:           true,
+			expectAllStepsIndexed: testlib.Ptr(true),
 		},
 		{
 			name: "pipeline init fails",
@@ -222,11 +230,12 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			knowledges:        []v1alpha1.Knowledge{},
-			schedulingDomain:  v1alpha1.SchedulingDomainNova,
-			initPipelineError: true,
-			expectReady:       false,
-			expectInMap:       false,
+			knowledges:            []v1alpha1.Knowledge{},
+			schedulingDomain:      v1alpha1.SchedulingDomainNova,
+			initPipelineError:     true,
+			expectReady:           false,
+			expectInMap:           false,
+			expectAllStepsIndexed: nil, // Not set when filter init fails
 		},
 		{
 			name: "pipeline with different scheduling domain",
@@ -240,10 +249,114 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			knowledges:       []v1alpha1.Knowledge{},
-			schedulingDomain: v1alpha1.SchedulingDomainNova,
-			expectReady:      false,
-			expectInMap:      false,
+			knowledges:            []v1alpha1.Knowledge{},
+			schedulingDomain:      v1alpha1.SchedulingDomainNova,
+			expectReady:           false,
+			expectInMap:           false,
+			expectAllStepsIndexed: nil, // Not set for different domain
+		},
+		{
+			name: "pipeline with unknown filters",
+			pipeline: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline-unknown-filter",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					Filters: []v1alpha1.FilterSpec{
+						{
+							Name: "unknown-filter",
+						},
+					},
+					Weighers: []v1alpha1.WeigherSpec{},
+				},
+			},
+			knowledges:            []v1alpha1.Knowledge{},
+			schedulingDomain:      v1alpha1.SchedulingDomainNova,
+			expectReady:           true,
+			expectInMap:           true,
+			expectAllStepsIndexed: testlib.Ptr(false),
+			unknownFilters:        []string{"unknown-filter"},
+		},
+		{
+			name: "pipeline with unknown weighers",
+			pipeline: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline-unknown-weigher",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					Filters:          []v1alpha1.FilterSpec{},
+					Weighers: []v1alpha1.WeigherSpec{
+						{
+							Name: "unknown-weigher",
+						},
+					},
+				},
+			},
+			knowledges:            []v1alpha1.Knowledge{},
+			schedulingDomain:      v1alpha1.SchedulingDomainNova,
+			expectReady:           true,
+			expectInMap:           true,
+			expectAllStepsIndexed: testlib.Ptr(false),
+			unknownWeighers:       []string{"unknown-weigher"},
+		},
+		{
+			name: "pipeline with unknown detectors",
+			pipeline: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline-unknown-detector",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					Type:             v1alpha1.PipelineTypeDetector,
+					Detectors: []v1alpha1.DetectorSpec{
+						{
+							Name: "unknown-detector",
+						},
+					},
+				},
+			},
+			knowledges:            []v1alpha1.Knowledge{},
+			schedulingDomain:      v1alpha1.SchedulingDomainNova,
+			expectReady:           true,
+			expectInMap:           true,
+			expectAllStepsIndexed: testlib.Ptr(false),
+			unknownDetectors:      []string{"unknown-detector"},
+		},
+		{
+			name: "pipeline with multiple unknown steps",
+			pipeline: &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline-multiple-unknown",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					Filters: []v1alpha1.FilterSpec{
+						{
+							Name: "unknown-filter-1",
+						},
+						{
+							Name: "unknown-filter-2",
+						},
+					},
+					Weighers: []v1alpha1.WeigherSpec{
+						{
+							Name: "unknown-weigher-1",
+						},
+					},
+				},
+			},
+			knowledges:            []v1alpha1.Knowledge{},
+			schedulingDomain:      v1alpha1.SchedulingDomainNova,
+			expectReady:           true,
+			expectInMap:           true,
+			expectAllStepsIndexed: testlib.Ptr(false),
+			unknownFilters:        []string{"unknown-filter-1", "unknown-filter-2"},
+			unknownWeighers:       []string{"unknown-weigher-1"},
 		},
 	}
 
@@ -261,7 +374,7 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 				Build()
 
 			initializer := &mockPipelineInitializer{
-				pipelineType: v1alpha1.PipelineTypeFilterWeigher,
+				pipelineType: tt.pipeline.Spec.Type,
 			}
 
 			if tt.initPipelineError {
@@ -270,6 +383,15 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 						FilterErrors: map[string]error{
 							"test-filter": errors.New("failed to init filter"),
 						},
+					}
+				}
+			} else if len(tt.unknownFilters) > 0 || len(tt.unknownWeighers) > 0 || len(tt.unknownDetectors) > 0 {
+				initializer.initPipelineFunc = func(ctx context.Context, p v1alpha1.Pipeline) PipelineInitResult[mockPipeline] {
+					return PipelineInitResult[mockPipeline]{
+						Pipeline:         mockPipeline{name: p.Name},
+						UnknownFilters:   tt.unknownFilters,
+						UnknownWeighers:  tt.unknownWeighers,
+						UnknownDetectors: tt.unknownDetectors,
 					}
 				}
 			}
@@ -301,6 +423,39 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 			ready := meta.IsStatusConditionTrue(updatedPipeline.Status.Conditions, v1alpha1.PipelineConditionReady)
 			if ready != tt.expectReady {
 				t.Errorf("Expected ready status: %v, got: %v", tt.expectReady, ready)
+			}
+
+			// Check AllStepsIndexed status
+			if tt.expectAllStepsIndexed != nil {
+				allStepsIndexed := meta.IsStatusConditionTrue(updatedPipeline.Status.Conditions, v1alpha1.PipelineConditionAllStepsIndexed)
+				if allStepsIndexed != *tt.expectAllStepsIndexed {
+					t.Errorf("Expected AllStepsIndexed status: %v, got: %v", *tt.expectAllStepsIndexed, allStepsIndexed)
+				}
+
+				// Verify the condition message contains the unknown steps when applicable
+				if !*tt.expectAllStepsIndexed {
+					condition := meta.FindStatusCondition(updatedPipeline.Status.Conditions, v1alpha1.PipelineConditionAllStepsIndexed)
+					if condition == nil {
+						t.Error("Expected AllStepsIndexed condition to be set")
+					} else {
+						if condition.Reason != "PipelineContainsUnknownSteps" {
+							t.Errorf("Expected reason 'PipelineContainsUnknownSteps', got: %s", condition.Reason)
+						}
+						// Check that unknown steps are mentioned in the message
+						totalUnknown := len(tt.unknownFilters) + len(tt.unknownWeighers) + len(tt.unknownDetectors)
+						expectedMsg := fmt.Sprintf("pipeline contains %d unknown steps:", totalUnknown)
+						if !strings.Contains(condition.Message, expectedMsg) {
+							t.Errorf("Expected message to contain '%s', got: %s", expectedMsg, condition.Message)
+						}
+					}
+				} else {
+					condition := meta.FindStatusCondition(updatedPipeline.Status.Conditions, v1alpha1.PipelineConditionAllStepsIndexed)
+					if condition == nil {
+						t.Error("Expected AllStepsIndexed condition to be set")
+					} else if condition.Reason != "AllStepsIndexed" {
+						t.Errorf("Expected reason 'AllStepsIndexed', got: %s", condition.Reason)
+					}
+				}
 			}
 		})
 	}

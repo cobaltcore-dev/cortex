@@ -65,6 +65,12 @@ openstack:
 kvm:
   # Use this flag to enable/disable KVM host related features.
   enabled: false
+  # Params for the filter_requested_destination filter step.
+  filterRequestedDestinationParams: []
+  # Example:
+  # filterRequestedDestinationParams:
+  #   - {key: ignoredHostnames, stringListValue: []}
+  #   - {key: ignoredAggregates, stringListValue: []}
 
 cortex: &cortex
   crd: {enable: false}

@@ -283,6 +283,32 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 		})
 	}
 
+	// If there were unknown filters, weighers, or detectors, report that in
+	// the status but continue running the pipeline.
+	var unknownSteps []string
+	unknownSteps = append(unknownSteps, initResult.UnknownFilters...)
+	unknownSteps = append(unknownSteps, initResult.UnknownWeighers...)
+	unknownSteps = append(unknownSteps, initResult.UnknownDetectors...)
+	if len(unknownSteps) > 0 {
+		errmsg := fmt.Sprintf("pipeline contains %d unknown steps: %v",
+			len(unknownSteps), unknownSteps)
+		log.Info("unknown steps in pipeline configuration",
+			"pipelineName", obj.Name, "issue", errmsg)
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.PipelineConditionAllStepsIndexed,
+			Status:  metav1.ConditionFalse,
+			Reason:  "PipelineContainsUnknownSteps",
+			Message: errmsg,
+		})
+	} else {
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.PipelineConditionAllStepsIndexed,
+			Status:  metav1.ConditionTrue,
+			Reason:  "AllStepsIndexed",
+			Message: "all pipeline steps are indexed and known by the controller",
+		})
+	}
+
 	c.Pipelines[obj.Name] = initResult.Pipeline
 	c.PipelineConfigs[obj.Name] = *obj
 	log.Info("pipeline created and ready", "pipelineName", obj.Name)
