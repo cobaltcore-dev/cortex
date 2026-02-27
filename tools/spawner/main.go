@@ -19,6 +19,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/tools/spawner/cli"
 	"github.com/cobaltcore-dev/cortex/tools/spawner/defaults"
+	"github.com/cobaltcore-dev/cortex/tools/spawner/types"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
@@ -326,8 +327,8 @@ func main() {
 	var network *networks.Network
 	if len(networksAll) == 1 {
 		fmt.Printf("❓ Delete existing network %s [y/N, default: \033[1;34mN\033[0m]: ", networkName)
-		reader := bufio.NewReader(os.Stdin)
-		input := must.Return(reader.ReadString('\n'))
+		reader = bufio.NewReader(os.Stdin)
+		input = must.Return(reader.ReadString('\n'))
 		input = strings.TrimSpace(input)
 		if input == "y" {
 			// Delete the subnets.
@@ -384,8 +385,8 @@ func main() {
 	// Delete all existing keypairs with the same name.
 	if len(keypairsFiltered) > 0 {
 		fmt.Printf("❓ Delete existing keypairs %v? [y/N, default: \033[1;34my\033[0m]: ", keyName)
-		reader := bufio.NewReader(os.Stdin)
-		input := must.Return(reader.ReadString('\n'))
+		reader = bufio.NewReader(os.Stdin)
+		input = must.Return(reader.ReadString('\n'))
 		input = strings.TrimSpace(input)
 		if input == "" {
 			input = "y"
@@ -411,6 +412,89 @@ func main() {
 	kpo := keypairs.CreateOpts{Name: keyName}
 	keypair := must.Return(keypairs.Create(ctx, projectCompute, kpo).Extract())
 	fmt.Printf("🛜 Using keypair %s\n", keyName)
+
+	// Check if there are existing server groups and check if the user wants to delete them.
+	fmt.Println("🔄 Looking up existing server groups")
+	// Gophercloud doesn't support server groups, so we have to do a raw API call here.
+	var getServerGroupsResponse struct {
+		ServerGroups []types.ServerGroup `json:"server_groups"`
+	}
+	_ = must.Return(projectCompute.Get(ctx, projectCompute.Endpoint+"/os-server-groups", &getServerGroupsResponse, nil))
+	if len(getServerGroupsResponse.ServerGroups) > 0 {
+		fmt.Printf("❓ Delete existing server groups with name prefix %s [y/N, default: \033[1;34my\033[0m]: ", prefix)
+		reader = bufio.NewReader(os.Stdin)
+		input = must.Return(reader.ReadString('\n'))
+		input = strings.TrimSpace(input)
+		if input == "" {
+			input = "y"
+		}
+		if input == "y" {
+			var wg sync.WaitGroup
+			for _, sg := range getServerGroupsResponse.ServerGroups {
+				if strings.HasPrefix(sg.Name, prefix) {
+					wg.Go(func() {
+						fmt.Printf("🧨 Deleting server group %s\n", sg.Name)
+						_ = must.Return(projectCompute.Delete(ctx, projectCompute.Endpoint+"/os-server-groups/"+sg.ID, nil))
+						fmt.Printf("💥 Deleted server group %s\n", sg.Name)
+					})
+				}
+			}
+			wg.Wait()
+			fmt.Println("🧨 Deleted all existing server groups")
+		}
+	}
+
+	var selectedServerGroupID string
+
+	// Get the server groups again and check if the user wants to use an existing one or create a new one.
+	fmt.Println("🔄 Checking existing server groups again")
+	_ = must.Return(projectCompute.Get(ctx, projectCompute.Endpoint+"/os-server-groups", &getServerGroupsResponse, nil))
+	if len(getServerGroupsResponse.ServerGroups) > 0 {
+		// Ask the user if they want to use an existing server group.
+		fmt.Printf("❓ Use existing server group for affinity rules? [y/N, default: \033[1;34mN\033[0m]: ")
+		reader = bufio.NewReader(os.Stdin)
+		input = must.Return(reader.ReadString('\n'))
+		input = strings.TrimSpace(input)
+		if input == "y" {
+			selectedServerGroupID = cli.ChooseServerGroup(getServerGroupsResponse.ServerGroups).ID
+		}
+	}
+	// If the user doesn't want to use an existing server group, ask if they want to create a new one.
+	if selectedServerGroupID == "" {
+		fmt.Printf("❓ Create a server group for affinity rules? [y/N, default: \033[1;34mN\033[0m]: ")
+		reader = bufio.NewReader(os.Stdin)
+		input = must.Return(reader.ReadString('\n'))
+		input = strings.TrimSpace(input)
+		if input == "y" {
+			policies := []string{"anti-affinity", "affinity", "soft-anti-affinity", "soft-affinity"}
+			policy := cli.ChooseServerGroupPolicy(policies)
+			serverGroupName := prefix + "-server-group"
+			fmt.Printf("🆕 Creating server group %s with policy %s\n", serverGroupName, policy)
+			createServerGroupRequest := struct {
+				ServerGroup struct {
+					Name   string `json:"name"`
+					Policy string `json:"policy"`
+					// For simplicity, we don't include rules for now.
+				} `json:"server_group"`
+			}{}
+			createServerGroupRequest.ServerGroup.Name = serverGroupName
+			createServerGroupRequest.ServerGroup.Policy = policy
+			var createServerGroupResponse struct {
+				ServerGroup struct {
+					ID string `json:"id"`
+				} `json:"server_group"`
+			}
+			_ = must.Return(projectCompute.Post(ctx, projectCompute.Endpoint+"/os-server-groups", &createServerGroupRequest, &createServerGroupResponse, &gophercloud.RequestOpts{
+				OkCodes: []int{200, 201, 202},
+			}))
+			selectedServerGroupID = createServerGroupResponse.ServerGroup.ID
+		}
+	}
+	if selectedServerGroupID != "" {
+		fmt.Printf("🛜 Using server group with id %s\n", selectedServerGroupID)
+	} else {
+		fmt.Printf("🚫 Not using a server group for affinity rules\n")
+	}
 
 	// Load the script template
 	tmpl, err := template.ParseFiles("tools/spawner/script.sh.tpl")
@@ -473,7 +557,7 @@ func main() {
 				KeyName:           keyName,
 				CreateOptsBuilder: sco,
 			}
-			ho := servers.SchedulerHintOpts{}
+			ho := servers.SchedulerHintOpts{Group: selectedServerGroupID}
 			serverCreateResult, err := servers.Create(ctx, projectCompute, so, ho).Extract()
 			baseMsg := fmt.Sprintf(
 				"... (%d/%d) Spawning VM %s on %s with flavor %s, image %s ",
