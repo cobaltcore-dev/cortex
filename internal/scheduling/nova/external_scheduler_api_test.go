@@ -174,6 +174,7 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 					},
 					Hosts: []novaapi.ExternalSchedulerHost{
 						{ComputeHost: "host1"},
+						{ComputeHost: "host2"},
 					},
 					Weights: map[string]float64{
 						"host1": 1.0,
