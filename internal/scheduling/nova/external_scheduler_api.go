@@ -222,7 +222,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		c.Respond(http.StatusInternalServerError, errors.New("pipeline didn't produce a result"), "failed to process scheduling request")
 		return
 	}
-	hosts := decision.Status.Result.OrderedHosts
+	hosts := result.OrderedHosts
 	hosts = limitHostsToRequest(requestData, hosts)
 	response := api.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
