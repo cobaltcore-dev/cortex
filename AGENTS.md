@@ -30,10 +30,10 @@ General:
 - Similarly, you no longer have to capture loop variables in closures, as this is now the default behavior in Go
 - Don’t document trivial steps you do and avoid unnecessary empty lines between code segments
 - When adding imports, keep in mind that the autoformatter will remove them if you don't use them
-
-Testing:
 - `fmt.Errorf` should not be used when there are no parameters. Use `errors.New`
 - Errors should always be lowercase like `errors.New("this is an error")`
+
+Testing:
 - Ideally test files should be short and contain only the necessary cases
 - Avoid creating testing libraries, keep helper functions in the same file as the tests that use them
 - Use golang native testing whenever possible, avoid using Ginkgo or testify
