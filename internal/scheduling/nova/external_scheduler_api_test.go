@@ -178,6 +178,7 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 					},
 					Weights: map[string]float64{
 						"host1": 1.0,
+						"host2": 2.0,
 					},
 					Pipeline: "test-pipeline",
 				}
