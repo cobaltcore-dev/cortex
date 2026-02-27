@@ -113,7 +113,6 @@ cortex-scheduling-controllers:
     enabledControllers:
       - nova-pipeline-controllers
       - nova-deschedulings-executor
-      - explanation-controller
     enabledTasks:
       - nova-decisions-cleanup-task
 

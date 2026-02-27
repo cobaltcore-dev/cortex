@@ -5,16 +5,12 @@ package cinder
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/cinder"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/cinder/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/cinder/plugins/weighers"
@@ -26,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // The decision pipeline controller takes decision resources containing a
@@ -50,93 +47,44 @@ func (c *FilterWeigherPipelineController) PipelineType() v1alpha1.PipelineType {
 	return v1alpha1.PipelineTypeFilterWeigher
 }
 
-// Callback executed when kubernetes asks to reconcile a decision resource.
-func (c *FilterWeigherPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+// Process the request from the API. Returns the result of the pipeline execution.
+func (c *FilterWeigherPipelineController) ProcessRequest(ctx context.Context, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineResult, error) {
 	c.processMu.Lock()
 	defer c.processMu.Unlock()
 
-	decision := &v1alpha1.Decision{}
-	if err := c.Get(ctx, req.NamespacedName, decision); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-	old := decision.DeepCopy()
-	if err := c.process(ctx, decision); err != nil {
-		return ctrl.Result{}, err
-	}
-	patch := client.MergeFrom(old)
-	if err := c.Status().Patch(ctx, decision, patch); err != nil {
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
-}
-
-// Process the decision from the API. Should create and return the updated decision.
-func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error {
-	c.processMu.Lock()
-	defer c.processMu.Unlock()
-
-	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
-	if !ok {
-		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
-	}
-	if pipelineConf.Spec.CreateDecisions {
-		if err := c.Create(ctx, decision); err != nil {
-			return err
-		}
-	}
-	old := decision.DeepCopy()
-	err := c.process(ctx, decision)
-	if err != nil {
-		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DecisionConditionReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "PipelineRunFailed",
-			Message: "pipeline run failed: " + err.Error(),
-		})
-	} else {
-		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DecisionConditionReady,
-			Status:  metav1.ConditionTrue,
-			Reason:  "PipelineRunSucceeded",
-			Message: "pipeline run succeeded",
-		})
-	}
-	if pipelineConf.Spec.CreateDecisions {
-		patch := client.MergeFrom(old)
-		if err := c.Status().Patch(ctx, decision, patch); err != nil {
-			return err
-		}
-	}
-	return err
-}
-
-func (c *FilterWeigherPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
 	log := ctrl.LoggerFrom(ctx)
-	startedAt := time.Now() // So we can measure sync duration.
+	startedAt := time.Now()
 
-	pipeline, ok := c.Pipelines[decision.Spec.PipelineRef.Name]
+	pipelineName := request.Pipeline
+
+	pipeline, ok := c.Pipelines[pipelineName]
 	if !ok {
-		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
-		return errors.New("pipeline not found or not ready")
+		log.Error(nil, "pipeline not found or not ready", "pipelineName", pipelineName)
+		return nil, fmt.Errorf("pipeline %s not found or not ready", pipelineName)
 	}
-	if decision.Spec.CinderRaw == nil {
-		log.Error(nil, "skipping decision, no cinderRaw spec defined")
-		return errors.New("no cinderRaw spec defined")
-	}
-	var request api.ExternalSchedulerRequest
-	if err := json.Unmarshal(decision.Spec.CinderRaw.Raw, &request); err != nil {
-		log.Error(err, "failed to unmarshal cinderRaw spec")
-		return err
+
+	pipelineConfig, ok := c.PipelineConfigs[pipelineName]
+	if !ok {
+		log.Error(nil, "pipeline config not found", "pipelineName", pipelineName)
+		return nil, fmt.Errorf("pipeline config for %s not found", pipelineName)
 	}
 
 	result, err := pipeline.Run(request)
 	if err != nil {
-		log.Error(err, "failed to run pipeline")
-		return err
+		log.Error(err, "failed to run pipeline", "pipeline", pipelineName)
+		return nil, err
 	}
-	decision.Status.Result = &result
-	log.Info("decision processed successfully", "duration", time.Since(startedAt))
-	return nil
+	log.Info("request processed successfully", "duration", time.Since(startedAt))
+
+	if pipelineConfig.Spec.CreateDecisions {
+		c.DecisionQueue <- lib.DecisionUpdate{
+			ResourceID:   request.Context.ResourceUUID,
+			PipelineName: pipelineName,
+			Result:       result,
+			Intent:       v1alpha1.SchedulingIntentUnknown,
+		}
+	}
+	return &result, nil
 }
 
 // The base controller will delegate the pipeline creation down to this method.
@@ -156,55 +104,39 @@ func (c *FilterWeigherPipelineController) InitPipeline(
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainCinder
+	c.Recorder = mgr.GetEventRecorder("cortex-cinder-pipeline-controller")
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
 	return multicluster.BuildController(mcl, mgr).
 		// Watch pipeline changes so that we can reconfigure pipelines as needed.
 		WatchesMulticluster(
-			&v1alpha1.Pipeline{},
-			handler.Funcs{
-				CreateFunc: c.HandlePipelineCreated,
-				UpdateFunc: c.HandlePipelineUpdated,
-				DeleteFunc: c.HandlePipelineDeleted,
-			},
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				pipeline := obj.(*v1alpha1.Pipeline)
-				// Only react to pipelines matching the scheduling domain.
-				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainCinder {
-					return false
-				}
-				return pipeline.Spec.Type == c.PipelineType()
-			}),
-		).
-		// Watch knowledge changes so that we can reconfigure pipelines as needed.
-		WatchesMulticluster(
 			&v1alpha1.Knowledge{},
-			handler.Funcs{
-				CreateFunc: c.HandleKnowledgeCreated,
-				UpdateFunc: c.HandleKnowledgeUpdated,
-				DeleteFunc: c.HandleKnowledgeDeleted,
-			},
+			// Get all pipelines of the controller when knowledge changes and trigger reconciliation to update the candidates in the pipelines.
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				knowledge := obj.(*v1alpha1.Knowledge)
+				if knowledge.Spec.SchedulingDomain != v1alpha1.SchedulingDomainCinder {
+					return nil
+				}
+				// When Knowledge changes, reconcile all pipelines
+				return c.GetAllPipelineReconcileRequests(ctx)
+			}),
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				knowledge := obj.(*v1alpha1.Knowledge)
 				// Only react to knowledge matching the scheduling domain.
 				return knowledge.Spec.SchedulingDomain == v1alpha1.SchedulingDomainCinder
 			}),
 		).
+		Named("cortex-cinder-pipelines").
 		For(
-			&v1alpha1.Decision{},
+			&v1alpha1.Pipeline{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				decision := obj.(*v1alpha1.Decision)
-				if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainCinder {
+				pipeline := obj.(*v1alpha1.Pipeline)
+				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainCinder {
 					return false
 				}
-				// Ignore already decided schedulings.
-				if decision.Status.Result != nil {
-					return false
-				}
-				return true
+				return pipeline.Spec.Type == c.PipelineType()
 			})),
 		).
-		Named("cortex-cinder-decisions").
 		Complete(c)
 }

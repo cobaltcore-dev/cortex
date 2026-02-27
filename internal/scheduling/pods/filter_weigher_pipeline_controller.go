@@ -18,7 +18,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods/plugins/weighers"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -53,108 +52,30 @@ func (c *FilterWeigherPipelineController) PipelineType() v1alpha1.PipelineType {
 	return v1alpha1.PipelineTypeFilterWeigher
 }
 
-func (c *FilterWeigherPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	c.processMu.Lock()
-	defer c.processMu.Unlock()
-
-	// Determine if this is a decision or pod reconciliation.
-	decision := &v1alpha1.Decision{}
-	if err := c.Get(ctx, req.NamespacedName, decision); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-	old := decision.DeepCopy()
-	if err := c.process(ctx, decision); err != nil {
-		return ctrl.Result{}, err
-	}
-	patch := client.MergeFrom(old)
-	if err := c.Status().Patch(ctx, decision, patch); err != nil {
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
-}
-
 func (c *FilterWeigherPipelineController) ProcessNewPod(ctx context.Context, pod *corev1.Pod) error {
 	c.processMu.Lock()
 	defer c.processMu.Unlock()
 
-	// Create a decision resource to schedule the pod.
-	decision := &v1alpha1.Decision{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "pod-",
-		},
-		Spec: v1alpha1.DecisionSpec{
-			SchedulingDomain: v1alpha1.SchedulingDomainPods,
-			ResourceID:       pod.Name,
-			PipelineRef: corev1.ObjectReference{
-				Name: "pods-scheduler",
-			},
-			PodRef: &corev1.ObjectReference{
-				Name:      pod.Name,
-				Namespace: pod.Namespace,
-			},
-		},
-	}
-
-	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
-	if !ok {
-		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
-	}
-	if pipelineConf.Spec.CreateDecisions {
-		if err := c.Create(ctx, decision); err != nil {
-			return err
-		}
-	}
-	old := decision.DeepCopy()
-	err := c.process(ctx, decision)
-	if err != nil {
-		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DecisionConditionReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "PipelineRunFailed",
-			Message: "pipeline run failed: " + err.Error(),
-		})
-	} else {
-		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DecisionConditionReady,
-			Status:  metav1.ConditionTrue,
-			Reason:  "PipelineRunSucceeded",
-			Message: "pipeline run succeeded",
-		})
-	}
-	if pipelineConf.Spec.CreateDecisions {
-		patch := client.MergeFrom(old)
-		if err := c.Status().Patch(ctx, decision, patch); err != nil {
-			return err
-		}
-	}
-	return err
-}
-
-func (c *FilterWeigherPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
 	log := ctrl.LoggerFrom(ctx)
-	startedAt := time.Now() // So we can measure sync duration.
+	startedAt := time.Now()
 
-	pipeline, ok := c.Pipelines[decision.Spec.PipelineRef.Name]
+	pipelineName := "pods-scheduler"
+
+	pipeline, ok := c.Pipelines[pipelineName]
 	if !ok {
-		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
-		return errors.New("pipeline not found or not ready")
+		return fmt.Errorf("pipeline %s not found or not ready", pipelineName)
 	}
 
-	// Check if the pod is already assigned to a node.
-	pod := &corev1.Pod{}
-	if err := c.Get(ctx, client.ObjectKey{
-		Name:      decision.Spec.PodRef.Name,
-		Namespace: decision.Spec.PodRef.Namespace,
-	}, pod); err != nil {
-		log.Error(err, "failed to fetch pod for decision")
-		return err
+	pipelineConfig, ok := c.PipelineConfigs[pipelineName]
+	if !ok {
+		return fmt.Errorf("pipeline %s not configured", pipelineName)
 	}
+
 	if pod.Spec.NodeName != "" {
 		log.Info("pod is already assigned to a node", "node", pod.Spec.NodeName)
 		return nil
 	}
 
-	// Find all available nodes.
 	nodes := &corev1.NodeList{}
 	if err := c.List(ctx, nodes); err != nil {
 		return err
@@ -163,32 +84,48 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		return errors.New("no nodes available for scheduling")
 	}
 
-	// Execute the scheduling pipeline.
 	request := pods.PodPipelineRequest{Nodes: nodes.Items, Pod: *pod}
 	result, err := pipeline.Run(request)
 	if err != nil {
 		log.V(1).Error(err, "failed to run scheduler pipeline")
 		return errors.New("failed to run scheduler pipeline")
 	}
-	decision.Status.Result = &result
-	log.Info("decision processed successfully", "duration", time.Since(startedAt))
 
-	// Assign the first node returned by the pipeline using a Binding.
+	log.Info("pod processed successfully", "duration", time.Since(startedAt))
+
+	hosts := result.OrderedHosts
+	if len(hosts) == 0 {
+		log.Info("no suitable nodes found for pod")
+		return nil
+	}
+
+	targetHost := hosts[0]
+
 	binding := &corev1.Binding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      decision.Spec.PodRef.Name,
-			Namespace: decision.Spec.PodRef.Namespace,
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
 		},
 		Target: corev1.ObjectReference{
 			Kind: "Node",
-			Name: *result.TargetHost,
+			Name: targetHost,
 		},
 	}
 	if err := c.Create(ctx, binding); err != nil {
 		log.V(1).Error(err, "failed to assign node to pod via binding")
 		return err
 	}
-	log.V(1).Info("assigned node to pod", "node", *result.TargetHost)
+	log.V(1).Info("assigned node to pod", "node", targetHost)
+
+	if pipelineConfig.Spec.CreateDecisions {
+		c.DecisionQueue <- lib.DecisionUpdate{
+			ResourceID:   pod.Name,
+			PipelineName: pipelineName,
+			Result:       result,
+			// TODO: Refine the reason
+			Intent: v1alpha1.SchedulingIntentUnknown,
+		}
+	}
 	return nil
 }
 
@@ -236,7 +173,7 @@ func (c *FilterWeigherPipelineController) handlePod() handler.EventHandler {
 				return
 			}
 			for _, decision := range decisions.Items {
-				if decision.Spec.PodRef.Name == pod.Name && decision.Spec.PodRef.Namespace == pod.Namespace {
+				if decision.Spec.ResourceID == pod.Name && decision.Spec.SchedulingDomain == v1alpha1.SchedulingDomainPods {
 					if err := c.Delete(ctx, &decision); err != nil {
 						log.Error(err, "failed to delete decision for deleted pod")
 					}
@@ -249,6 +186,7 @@ func (c *FilterWeigherPipelineController) handlePod() handler.EventHandler {
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainPods
+	c.Recorder = mgr.GetEventRecorder("cortex-pods-pipeline-controller")
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
@@ -266,36 +204,15 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 				return pod.Spec.SchedulerName == string(v1alpha1.SchedulingDomainPods)
 			}),
 		).
-		// Watch pipeline changes so that we can reconfigure pipelines as needed.
-		WatchesMulticluster(
+		Named("cortex-pod-scheduler").
+		For(
 			&v1alpha1.Pipeline{},
-			handler.Funcs{
-				CreateFunc: c.HandlePipelineCreated,
-				UpdateFunc: c.HandlePipelineUpdated,
-				DeleteFunc: c.HandlePipelineDeleted,
-			},
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				pipeline := obj.(*v1alpha1.Pipeline)
-				// Only react to pipelines matching the scheduling domain.
 				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainPods {
 					return false
 				}
-				return pipeline.Spec.Type == v1alpha1.PipelineTypeFilterWeigher
-			}),
-		).
-		Named("cortex-pod-scheduler").
-		For(
-			&v1alpha1.Decision{},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				decision := obj.(*v1alpha1.Decision)
-				if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainPods {
-					return false
-				}
-				// Ignore already decided schedulings.
-				if decision.Status.Result != nil {
-					return false
-				}
-				return true
+				return pipeline.Spec.Type == c.PipelineType()
 			})),
 		).
 		Complete(c)

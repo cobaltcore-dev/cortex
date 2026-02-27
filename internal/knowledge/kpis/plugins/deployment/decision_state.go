@@ -63,15 +63,12 @@ func (k *DecisionStateKPI) Collect(ch chan<- prometheus.Metric) {
 		decisions = append(decisions, d)
 	}
 	// For each decision, categorize by state: error, waiting, or success
-	var errorCount, waitingCount, successCount float64
+	var errorCount, successCount float64
 	for _, d := range decisions {
 		switch {
 		// Error state: decision has a false Ready condition
 		case meta.IsStatusConditionFalse(d.Status.Conditions, v1alpha1.DecisionConditionReady):
 			errorCount++
-		// Waiting state: decision has a target host set (waiting for migration/placement)
-		case d.Status.Result != nil && d.Status.Result.TargetHost != nil:
-			waitingCount++
 		// Success state: decision is complete (has result with ordered hosts or no result needed)
 		default:
 			successCount++
@@ -81,10 +78,6 @@ func (k *DecisionStateKPI) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(
 		k.counter, prometheus.GaugeValue, errorCount,
 		string(k.Options.DecisionSchedulingDomain), "error",
-	)
-	ch <- prometheus.MustNewConstMetric(
-		k.counter, prometheus.GaugeValue, waitingCount,
-		string(k.Options.DecisionSchedulingDomain), "waiting",
 	)
 	ch <- prometheus.MustNewConstMetric(
 		k.counter, prometheus.GaugeValue, successCount,

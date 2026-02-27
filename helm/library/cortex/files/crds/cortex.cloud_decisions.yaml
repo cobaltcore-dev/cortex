@@ -21,21 +21,12 @@ spec:
     - jsonPath: .spec.resourceID
       name: Resource ID
       type: string
-    - jsonPath: .status.precedence
-      name: '#'
+    - jsonPath: .status.targetHost
+      name: Target Host
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Created
       type: date
-    - jsonPath: .spec.pipelineRef.name
-      name: Pipeline
-      type: string
-    - jsonPath: .status.result.targetHost
-      name: TargetHost
-      type: string
-    - jsonPath: .status.conditions[?(@.type=='Ready')].status
-      name: Ready
-      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -61,159 +52,10 @@ spec:
           spec:
             description: spec defines the desired state of Decision
             properties:
-              cinderRaw:
-                description: If the type is "cinder", this field contains the raw
-                  cinder decision request.
-                type: object
-                x-kubernetes-preserve-unknown-fields: true
-              machineRef:
-                description: If the type is "machine", this field contains the machine
-                  reference.
-                properties:
-                  apiVersion:
-                    description: API version of the referent.
-                    type: string
-                  fieldPath:
-                    description: |-
-                      If referring to a piece of an object instead of an entire object, this string
-                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                      For example, if the object reference is to a container within a pod, this would take on a value like:
-                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                      the event) or if no container name is specified "spec.containers[2]" (container with
-                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                      referencing a part of an object.
-                    type: string
-                  kind:
-                    description: |-
-                      Kind of the referent.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                    type: string
-                  name:
-                    description: |-
-                      Name of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                    type: string
-                  namespace:
-                    description: |-
-                      Namespace of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                    type: string
-                  resourceVersion:
-                    description: |-
-                      Specific resourceVersion to which this reference is made, if any.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                    type: string
-                  uid:
-                    description: |-
-                      UID of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
-              manilaRaw:
-                description: If the type is "manila", this field contains the raw
-                  manila decision request.
-                type: object
-                x-kubernetes-preserve-unknown-fields: true
-              novaRaw:
-                description: If the type is "nova", this field contains the raw nova
-                  decision request.
-                type: object
-                x-kubernetes-preserve-unknown-fields: true
-              pipelineRef:
-                description: |-
-                  A reference to the pipeline that should be used for this decision.
-                  This reference can be used to look up the pipeline definition and its
-                  scheduler step configuration for additional context.
-                properties:
-                  apiVersion:
-                    description: API version of the referent.
-                    type: string
-                  fieldPath:
-                    description: |-
-                      If referring to a piece of an object instead of an entire object, this string
-                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                      For example, if the object reference is to a container within a pod, this would take on a value like:
-                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                      the event) or if no container name is specified "spec.containers[2]" (container with
-                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                      referencing a part of an object.
-                    type: string
-                  kind:
-                    description: |-
-                      Kind of the referent.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                    type: string
-                  name:
-                    description: |-
-                      Name of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                    type: string
-                  namespace:
-                    description: |-
-                      Namespace of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                    type: string
-                  resourceVersion:
-                    description: |-
-                      Specific resourceVersion to which this reference is made, if any.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                    type: string
-                  uid:
-                    description: |-
-                      UID of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
-              podRef:
-                description: If the type is "pod", this field contains the pod reference.
-                properties:
-                  apiVersion:
-                    description: API version of the referent.
-                    type: string
-                  fieldPath:
-                    description: |-
-                      If referring to a piece of an object instead of an entire object, this string
-                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                      For example, if the object reference is to a container within a pod, this would take on a value like:
-                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                      the event) or if no container name is specified "spec.containers[2]" (container with
-                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                      referencing a part of an object.
-                    type: string
-                  kind:
-                    description: |-
-                      Kind of the referent.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                    type: string
-                  name:
-                    description: |-
-                      Name of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                    type: string
-                  namespace:
-                    description: |-
-                      Namespace of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                    type: string
-                  resourceVersion:
-                    description: |-
-                      Specific resourceVersion to which this reference is made, if any.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                    type: string
-                  uid:
-                    description: |-
-                      UID of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
               resourceID:
                 description: |-
                   An identifier for the underlying resource to be scheduled.
                   For example, this can be the UUID of a nova instance or cinder volume.
-                  This can be used to correlate multiple decisions for the same resource.
                 type: string
               schedulingDomain:
                 description: |-
@@ -221,7 +63,6 @@ spec:
                   was or is processed (e.g., nova, cinder, manila).
                 type: string
             required:
-            - pipelineRef
             - resourceID
             - schedulingDomain
             type: object
@@ -286,115 +127,89 @@ spec:
                   type: object
                 type: array
               explanation:
-                description: A human-readable explanation of the decision result.
+                description: A human-readable explanation of the current scheduling
+                  decision.
                 type: string
-              history:
-                description: |-
-                  If there were previous decisions for the underlying resource, they can
-                  be resolved here to provide historical context for the decision.
+              schedulingHistory:
+                description: The history of scheduling events for this resource.
                 items:
-                  description: ObjectReference contains enough information to let
-                    you inspect or modify the referred object.
+                  description: SchedulingHistoryEntry represents a single entry in
+                    the scheduling history of a resource.
                   properties:
-                    apiVersion:
-                      description: API version of the referent.
+                    intent:
+                      description: The Intent for this scheduling event.
                       type: string
-                    fieldPath:
+                    orderedHosts:
+                      description: The hosts that were selected in this scheduling
+                        event, in order of preference.
+                      items:
+                        type: string
+                      type: array
+                    pipelineRef:
                       description: |-
-                        If referring to a piece of an object instead of an entire object, this string
-                        should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                        For example, if the object reference is to a container within a pod, this would take on a value like:
-                        "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                        the event) or if no container name is specified "spec.containers[2]" (container with
-                        index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                        referencing a part of an object.
-                      type: string
-                    kind:
-                      description: |-
-                        Kind of the referent.
-                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                      type: string
-                    name:
-                      description: |-
-                        Name of the referent.
-                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                      type: string
-                    namespace:
-                      description: |-
-                        Namespace of the referent.
-                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                      type: string
-                    resourceVersion:
-                      description: |-
-                        Specific resourceVersion to which this reference is made, if any.
-                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                      type: string
-                    uid:
-                      description: |-
-                        UID of the referent.
-                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                      type: string
-                  type: object
-                  x-kubernetes-map-type: atomic
-                type: array
-              precedence:
-                description: The number of decisions that preceded this one for the
-                  same resource.
-                type: integer
-              result:
-                description: The result of this decision.
-                properties:
-                  aggregatedOutWeights:
-                    additionalProperties:
-                      type: number
-                    description: Aggregated output weights from the pipeline.
-                    type: object
-                  normalizedInWeights:
-                    additionalProperties:
-                      type: number
-                    description: Normalized input weights to the pipeline.
-                    type: object
-                  orderedHosts:
-                    description: Final ordered list of hosts from most preferred to
-                      least preferred.
-                    items:
-                      type: string
-                    type: array
-                  rawInWeights:
-                    additionalProperties:
-                      type: number
-                    description: Raw input weights to the pipeline.
-                    type: object
-                  stepResults:
-                    description: |-
-                      Outputs of the decision pipeline including the activations used
-                      to make the final ordering of compute hosts.
-                    items:
+                        A reference to the pipeline that was used for this decision.
+                        This reference can be used to look up the pipeline definition and its
+                        scheduler step configuration for additional context.
                       properties:
-                        activations:
-                          additionalProperties:
-                            type: number
-                          description: Activations of the step for each host.
-                          type: object
-                        stepName:
-                          description: object reference to the scheduler step.
+                        apiVersion:
+                          description: API version of the referent.
                           type: string
-                      required:
-                      - activations
-                      - stepName
+                        fieldPath:
+                          description: |-
+                            If referring to a piece of an object instead of an entire object, this string
+                            should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                            For example, if the object reference is to a container within a pod, this would take on a value like:
+                            "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                            the event) or if no container name is specified "spec.containers[2]" (container with
+                            index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                            referencing a part of an object.
+                          type: string
+                        kind:
+                          description: |-
+                            Kind of the referent.
+                            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                          type: string
+                        name:
+                          description: |-
+                            Name of the referent.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                        namespace:
+                          description: |-
+                            Namespace of the referent.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                          type: string
+                        resourceVersion:
+                          description: |-
+                            Specific resourceVersion to which this reference is made, if any.
+                            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                          type: string
+                        uid:
+                          description: |-
+                            UID of the referent.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                          type: string
                       type: object
-                    type: array
-                  targetHost:
-                    description: The first element of the ordered hosts is considered
-                      the target host.
-                    type: string
-                type: object
+                      x-kubernetes-map-type: atomic
+                    timestamp:
+                      description: Timestamp of when the scheduling event occurred.
+                      format: date-time
+                      type: string
+                  required:
+                  - intent
+                  - orderedHosts
+                  - pipelineRef
+                  - timestamp
+                  type: object
+                type: array
+              targetHost:
+                description: The target host selected for the resource. Can be empty
+                  if no host could be determined.
+                type: string
             type: object
         required:
         - spec
         type: object
-    selectableFields:
-    - jsonPath: .spec.resourceID
     served: true
     storage: true
     subresources:

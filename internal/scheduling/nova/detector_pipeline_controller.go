@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // The deschedulings pipeline controller is responsible for periodically running
@@ -124,11 +125,6 @@ func (c *DetectorPipelineController) CreateDeschedulingsPeriodically(ctx context
 	}
 }
 
-func (c *DetectorPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// This controller does not reconcile any resources directly.
-	return ctrl.Result{}, nil
-}
-
 func (c *DetectorPipelineController) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainNova
@@ -138,40 +134,32 @@ func (c *DetectorPipelineController) SetupWithManager(mgr ctrl.Manager, mcl *mul
 	return multicluster.BuildController(mcl, mgr).
 		// Watch pipeline changes so that we can reconfigure pipelines as needed.
 		WatchesMulticluster(
-			&v1alpha1.Pipeline{},
-			handler.Funcs{
-				CreateFunc: c.HandlePipelineCreated,
-				UpdateFunc: c.HandlePipelineUpdated,
-				DeleteFunc: c.HandlePipelineDeleted,
-			},
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				pipeline := obj.(*v1alpha1.Pipeline)
-				// Only react to pipelines matching the scheduling domain.
-				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
-					return false
-				}
-				return pipeline.Spec.Type == c.PipelineType()
-			}),
-		).
-		// Watch knowledge changes so that we can reconfigure pipelines as needed.
-		WatchesMulticluster(
 			&v1alpha1.Knowledge{},
-			handler.Funcs{
-				CreateFunc: c.HandleKnowledgeCreated,
-				UpdateFunc: c.HandleKnowledgeUpdated,
-				DeleteFunc: c.HandleKnowledgeDeleted,
-			},
+			// Get all pipelines of the controller when knowledge changes and trigger reconciliation to update the candidates in the pipelines.
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				knowledge := obj.(*v1alpha1.Knowledge)
+				if knowledge.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
+					return nil
+				}
+				// When Knowledge changes, reconcile all pipelines
+				return c.GetAllPipelineReconcileRequests(ctx)
+			}),
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				knowledge := obj.(*v1alpha1.Knowledge)
 				// Only react to knowledge matching the scheduling domain.
 				return knowledge.Spec.SchedulingDomain == v1alpha1.SchedulingDomainNova
 			}),
 		).
-		Named("cortex-nova-deschedulings").
+		// Watch hypervisor changes so the cache gets updated.
+		Named("cortex-nova-descheduler").
 		For(
-			&v1alpha1.Descheduling{},
+			&v1alpha1.Pipeline{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				return false // This controller does not reconcile Descheduling resources directly.
+				pipeline := obj.(*v1alpha1.Pipeline)
+				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
+					return false
+				}
+				return pipeline.Spec.Type == c.PipelineType()
 			})),
 		).
 		Complete(c)

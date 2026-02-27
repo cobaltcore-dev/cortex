@@ -41,7 +41,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/cinder"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/explanation"
 	schedulinglib "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/machines"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila"
@@ -436,19 +435,6 @@ func main() {
 		podsPipelineWebhook := pods.NewPipelineWebhook()
 		if err := podsPipelineWebhook.SetupWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to setup pods pipeline webhook")
-			os.Exit(1)
-		}
-	}
-	if slices.Contains(mainConfig.EnabledControllers, "explanation-controller") {
-		// Setup a controller which will reconcile the history and explanation for
-		// decision resources.
-		explanationControllerConfig := conf.GetConfigOrDie[explanation.ControllerConfig]()
-		explanationController := &explanation.Controller{
-			Client: multiclusterClient,
-			Config: explanationControllerConfig,
-		}
-		if err := explanationController.SetupWithManager(mgr, multiclusterClient); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "ExplanationController")
 			os.Exit(1)
 		}
 	}
