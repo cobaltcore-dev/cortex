@@ -561,10 +561,10 @@ func TestPipelineAdmissionWebhook_ValidateMaxHistoryEntries(t *testing.T) {
 				if !strings.Contains(err.Error(), tt.errorContains) {
 					t.Errorf("expected error to contain %q, got: %v", tt.errorContains, err)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("expected no error, got: %v", err)
-				}
+				return
+			}
+			if err != nil {
+				t.Errorf("expected no error, got: %v", err)
 			}
 		})
 	}

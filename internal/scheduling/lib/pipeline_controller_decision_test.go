@@ -75,7 +75,7 @@ func TestBasePipelineController_UpdateDecision_HistoryLimiting(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create existing history entries
 			existingHistory := make([]v1alpha1.SchedulingHistoryEntry, tt.existingHistoryCount)
-			for i := 0; i < tt.existingHistoryCount; i++ {
+			for i := range tt.existingHistoryCount {
 				existingHistory[i] = v1alpha1.SchedulingHistoryEntry{
 					OrderedHosts: []string{"host-" + string(rune('a'+i))},
 					Timestamp:    metav1.Time{Time: time.Now().Add(-time.Hour * time.Duration(tt.existingHistoryCount-i))},
@@ -482,7 +482,7 @@ type recordedEvent struct {
 	message   string
 }
 
-func (m *mockEventRecorder) Eventf(object runtime.Object, related runtime.Object, eventType string, reason, action, messageFmt string, args ...interface{}) {
+func (m *mockEventRecorder) Eventf(object, related runtime.Object, eventType, reason, action, messageFmt string, args ...interface{}) {
 	m.events = append(m.events, recordedEvent{
 		eventType: eventType,
 		reason:    reason,
