@@ -76,8 +76,7 @@ func (c *FilterWeigherPipelineController) ProcessRequest(ctx context.Context, re
 
 	if pipelineConfig.Spec.CreateDecisions {
 		c.DecisionQueue <- lib.DecisionUpdate{
-			// TODO model out the spec.
-			ResourceID:   "",
+			ResourceID:   request.Context.ResourceUUID,
 			PipelineName: pipelineName,
 			Result:       result,
 			Intent:       v1alpha1.SchedulingIntentUnknown,
@@ -104,6 +103,7 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainManila
 	c.Recorder = mgr.GetEventRecorder("cortex-manila-pipeline-controller")
+	c.DecisionQueue = make(chan lib.DecisionUpdate, 100)
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

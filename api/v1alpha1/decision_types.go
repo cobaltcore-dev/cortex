@@ -11,17 +11,8 @@ import (
 // SchedulingIntents represents the Intent for a scheduling event.
 type SchedulingIntent string
 
+// Other intents can be defined by the specific scheduling domain (e.g., nova, cinder)
 const (
-	// SchedulingIntentInitialPlacement indicates that this is the initial placement of a resource.
-	SchedulingIntentInitialPlacement SchedulingIntent = "InitialPlacement"
-	// SchedulingIntentLiveMigration  indicates that this scheduling event is triggered by a live migration operation.
-	SchedulingIntentLiveMigration SchedulingIntent = "LiveMigration"
-	// SchedulingIntentResize indicates that this scheduling event is triggered by a resize operation.
-	SchedulingIntentResize SchedulingIntent = "Resize"
-	// SchedulingIntentRebuild indicates that this scheduling event is triggered by a rebuild operation.
-	SchedulingIntentRebuild SchedulingIntent = "Rebuild"
-	// SchedulingIntentEvacuate indicates that this scheduling event is triggered by an evacuate operation.
-	SchedulingIntentEvacuate SchedulingIntent = "Evacuate"
 	// SchedulingIntentUnknown indicates that the Intent for this scheduling event is unknown.
 	SchedulingIntentUnknown SchedulingIntent = "Unknown"
 )

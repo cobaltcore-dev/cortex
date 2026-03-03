@@ -187,6 +187,7 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainPods
 	c.Recorder = mgr.GetEventRecorder("cortex-pods-pipeline-controller")
+	c.DecisionQueue = make(chan lib.DecisionUpdate, 100)
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -291,6 +292,149 @@ func TestFilterWeigherPipelineController_ProcessRequest(t *testing.T) {
 			}
 			if !tt.expectResult && result != nil {
 				t.Error("Expected result to be nil but was set")
+			}
+
+			// Check if decision was queued when CreateDecisions is enabled
+			if tt.pipelineConf != nil && tt.pipelineConf.Spec.CreateDecisions && !tt.expectError {
+				select {
+				case update := <-controller.DecisionQueue:
+					// Verify decision update details
+					if update.ResourceID != tt.request.Spec.Data.InstanceUUID {
+						t.Errorf("Expected ResourceID %q, got %q", tt.request.Spec.Data.InstanceUUID, update.ResourceID)
+					}
+					if update.PipelineName != tt.pipeline.Name {
+						t.Errorf("Expected PipelineName %q, got %q", tt.pipeline.Name, update.PipelineName)
+					}
+					// Verify intent was detected (should be CreateIntent since no scheduler hint)
+					expectedIntent := api.CreateIntent
+					if update.Intent != expectedIntent {
+						t.Errorf("Expected intent %v, got %v", expectedIntent, update.Intent)
+					}
+				case <-time.After(100 * time.Millisecond):
+					t.Error("Expected decision to be queued but queue timed out")
+				}
+			}
+		})
+	}
+}
+
+func TestFilterWeigherPipelineController_ProcessRequest_IntentDetection(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
+
+	tests := []struct {
+		name           string
+		schedulerHint  string
+		expectedIntent v1alpha1.SchedulingIntent
+	}{
+		{
+			name:           "initial placement (no hint)",
+			schedulerHint:  "",
+			expectedIntent: api.CreateIntent,
+		},
+		{
+			name:           "live migration",
+			schedulerHint:  "live_migrate",
+			expectedIntent: api.LiveMigrationIntent,
+		},
+		{
+			name:           "resize",
+			schedulerHint:  "resize",
+			expectedIntent: api.ResizeIntent,
+		},
+		{
+			name:           "rebuild",
+			schedulerHint:  "rebuild",
+			expectedIntent: api.RebuildIntent,
+		},
+		{
+			name:           "evacuate",
+			schedulerHint:  "evacuate",
+			expectedIntent: api.EvacuateIntent,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Build scheduler hints
+			schedulerHints := make(map[string]any)
+			if tt.schedulerHint != "" {
+				schedulerHints["_nova_check_type"] = []any{tt.schedulerHint}
+			}
+
+			request := api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						InstanceUUID:   "test-instance-uuid",
+						SchedulerHints: schedulerHints,
+					},
+				},
+				Pipeline: "test-pipeline",
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host-a"},
+				},
+				Weights: map[string]float64{"host-a": 1.0},
+			}
+
+			pipeline := &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pipeline",
+				},
+				Spec: v1alpha1.PipelineSpec{
+					Type:              v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain:  v1alpha1.SchedulingDomainNova,
+					CreateDecisions:   true,
+					MaxHistoryEntries: 10,
+					Filters:           []v1alpha1.FilterSpec{},
+					Weighers:          []v1alpha1.WeigherSpec{},
+				},
+			}
+
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(pipeline).
+				WithStatusSubresource(&v1alpha1.Decision{}).
+				Build()
+
+			controller := &FilterWeigherPipelineController{
+				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
+					Client:           client,
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					Pipelines:        make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
+					PipelineConfigs: map[string]v1alpha1.Pipeline{
+						"test-pipeline": *pipeline,
+					},
+					DecisionQueue: make(chan lib.DecisionUpdate, 100),
+				},
+				Monitor: lib.FilterWeigherPipelineMonitor{},
+			}
+
+			// Initialize pipeline
+			initResult := controller.InitPipeline(context.Background(), *pipeline)
+			if len(initResult.FilterErrors) > 0 || len(initResult.WeigherErrors) > 0 {
+				t.Fatalf("Failed to initialize pipeline: %v", initResult.FilterErrors)
+			}
+			controller.Pipelines["test-pipeline"] = initResult.Pipeline
+
+			// Process request
+			_, err := controller.ProcessRequest(context.Background(), request)
+			if err != nil {
+				t.Fatalf("ProcessRequest failed: %v", err)
+			}
+
+			// Verify decision was queued with correct intent
+			select {
+			case update := <-controller.DecisionQueue:
+				if update.Intent != tt.expectedIntent {
+					t.Errorf("Expected intent %v, got %v", tt.expectedIntent, update.Intent)
+				}
+				if update.ResourceID != "test-instance-uuid" {
+					t.Errorf("Expected ResourceID 'test-instance-uuid', got %q", update.ResourceID)
+				}
+			case <-time.After(100 * time.Millisecond):
+				t.Error("Expected decision to be queued but queue timed out")
 			}
 		})
 	}

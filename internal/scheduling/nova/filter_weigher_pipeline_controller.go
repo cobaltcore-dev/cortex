@@ -89,11 +89,17 @@ func (c *FilterWeigherPipelineController) ProcessRequest(ctx context.Context, re
 	log.Info("request processed successfully", "duration", time.Since(startedAt))
 
 	if pipelineConfig.Spec.CreateDecisions {
+		// Detect scheduling intent from the Nova request
+		intent, err := request.GetIntent()
+		if err != nil {
+			// If we can't determine the intent, default to unknown
+			intent = v1alpha1.SchedulingIntentUnknown
+		}
 		c.DecisionQueue <- lib.DecisionUpdate{
 			ResourceID:   request.Spec.Data.InstanceUUID,
 			PipelineName: pipelineName,
 			Result:       result,
-			Intent:       v1alpha1.SchedulingIntentUnknown,
+			Intent:       intent,
 		}
 	}
 	return &result, nil
@@ -118,6 +124,7 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	c.SchedulingDomain = v1alpha1.SchedulingDomainNova
 	c.Recorder = mgr.GetEventRecorder("cortex-nova-pipeline-controller")
 	c.gatherer = &candidateGatherer{Client: mcl}
+	c.DecisionQueue = make(chan lib.DecisionUpdate, 100)
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

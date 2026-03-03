@@ -45,11 +45,20 @@ type DecisionUpdate struct {
 }
 
 func (c *BasePipelineController[PipelineType]) StartExplainer(ctx context.Context) {
-	c.DecisionQueue = make(chan DecisionUpdate, 100)
 	log := ctrl.LoggerFrom(ctx)
 	for {
 		select {
 		case <-ctx.Done():
+			log.Info("Context cancelled, draining decision queue before shutdown")
+			// Drain the queue with a background context to ensure we process all pending decisions
+			close(c.DecisionQueue)
+			drainCtx := context.Background()
+			for update := range c.DecisionQueue {
+				if err := c.updateDecision(drainCtx, update); err != nil {
+					log.Error(err, "failed to update decision during shutdown", "resourceID", update.ResourceID, "domain", c.SchedulingDomain)
+				}
+			}
+			log.Info("Decision queue drained, explainer shutting down")
 			return
 		case update := <-c.DecisionQueue:
 			if err := c.updateDecision(ctx, update); err != nil {
@@ -97,12 +106,20 @@ func (c *BasePipelineController[PipelineType]) updateDecision(ctx context.Contex
 		log.Info("Created new decision", "resourceID", update.ResourceID)
 	}
 
+	// Get the pipeline config to check max history entries
+	pipelineConfig, ok := c.PipelineConfigs[update.PipelineName]
+	if !ok {
+		return fmt.Errorf("pipeline config %s not found", update.PipelineName)
+	}
+
 	// Prepare the scheduling history entry
 	historyEntry := v1alpha1.SchedulingHistoryEntry{
 		OrderedHosts: update.Result.OrderedHosts,
 		Timestamp:    metav1.Now(),
 		PipelineRef: corev1.ObjectReference{
-			Name: update.PipelineName,
+			APIVersion: "cortex.cloud/v1alpha1",
+			Kind:       "Pipeline",
+			Name:       update.PipelineName,
 		},
 		Intent: update.Intent,
 	}
@@ -141,6 +158,13 @@ func (c *BasePipelineController[PipelineType]) updateDecision(ctx context.Contex
 		}
 
 		decision.Status.SchedulingHistory = append(decision.Status.SchedulingHistory, historyEntry)
+
+		// Limit history entries if configured
+		maxEntries := pipelineConfig.Spec.MaxHistoryEntries
+		if maxEntries > 0 && len(decision.Status.SchedulingHistory) > maxEntries {
+			// Keep only the most recent entries
+			decision.Status.SchedulingHistory = decision.Status.SchedulingHistory[len(decision.Status.SchedulingHistory)-maxEntries:]
+		}
 
 		return c.Status().Update(ctx, decision)
 	})

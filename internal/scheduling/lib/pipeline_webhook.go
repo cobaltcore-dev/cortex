@@ -88,6 +88,11 @@ func (w *PipelineAdmissionWebhook) validatePipeline(
 	// filters/weighers/detectors, so we don't break our rollout.
 	var warnings []string
 
+	// Validate MaxHistoryEntries
+	if pipeline.Spec.MaxHistoryEntries < 0 {
+		errMsgs = append(errMsgs, "maxHistoryEntries must be greater than or equal to 0")
+	}
+
 	// Validate based on pipeline type
 	switch pipeline.Spec.Type {
 	case v1alpha1.PipelineTypeFilterWeigher:

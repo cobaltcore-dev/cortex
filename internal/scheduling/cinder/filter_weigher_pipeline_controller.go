@@ -105,6 +105,7 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainCinder
 	c.Recorder = mgr.GetEventRecorder("cortex-cinder-pipeline-controller")
+	c.DecisionQueue = make(chan lib.DecisionUpdate, 100)
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
