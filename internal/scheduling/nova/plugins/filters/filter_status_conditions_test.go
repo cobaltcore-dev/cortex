@@ -226,8 +226,8 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 					{ComputeHost: "host4"},
 				},
 			},
-			expectedHosts: []string{"host1"},
-			filteredHosts: []string{"host2", "host3", "host4"},
+			expectedHosts: []string{"host1", "host4"},
+			filteredHosts: []string{"host2", "host3"},
 		},
 		{
 			name: "Host not ready should be filtered",
@@ -250,14 +250,14 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 			filteredHosts: []string{"host3"},
 		},
 		{
-			name: "Tainted host should be filtered",
+			name: "Tainted host should not be filtered",
 			request: api.ExternalSchedulerRequest{
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host4"},
 				},
 			},
-			expectedHosts: []string{},
-			filteredHosts: []string{"host4"},
+			expectedHosts: []string{"host4"},
+			filteredHosts: []string{},
 		},
 		{
 			name: "Disabled hypervisor should be filtered",
@@ -329,8 +329,8 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 					{ComputeHost: "host5"},
 				},
 			},
-			expectedHosts: []string{"host1", "host5"},
-			filteredHosts: []string{"host2", "host3", "host4"},
+			expectedHosts: []string{"host1", "host5", "host4"},
+			filteredHosts: []string{"host2", "host3"},
 		},
 	}
 
