@@ -308,6 +308,9 @@ func main() {
 		httpAPIConf := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
 		nova.NewAPI(httpAPIConf, filterWeigherController).Init(mux)
 
+		// Start the decision explainer goroutine for this controller.
+		go filterWeigherController.StartExplainer(ctx)
+
 		// Detector pipeline controller setup.
 		novaClient := nova.NewNovaClient()
 		novaClientConfig := conf.GetConfigOrDie[nova.NovaClientConfig]()
@@ -376,6 +379,9 @@ func main() {
 		}
 		manila.NewAPI(controller).Init(mux)
 
+		// Start the decision explainer goroutine for this controller.
+		go controller.StartExplainer(ctx)
+
 		// Webhook that validates all pipelines.
 		manilaPipelineWebhook := manila.NewPipelineWebhook()
 		if err := manilaPipelineWebhook.SetupWebhookWithManager(mgr); err != nil {
@@ -395,6 +401,9 @@ func main() {
 		}
 		cinder.NewAPI(controller).Init(mux)
 
+		// Start the decision explainer goroutine for this controller.
+		go controller.StartExplainer(ctx)
+
 		// Webhook that validates all pipelines.
 		cinderPipelineWebhook := cinder.NewPipelineWebhook()
 		if err := cinderPipelineWebhook.SetupWebhookWithManager(mgr); err != nil {
@@ -413,6 +422,9 @@ func main() {
 			os.Exit(1)
 		}
 
+		// Start the decision explainer goroutine for this controller.
+		go controller.StartExplainer(ctx)
+
 		// Webhook that validates all pipelines.
 		ironcorePipelineWebhook := machines.NewPipelineWebhook()
 		if err := ironcorePipelineWebhook.SetupWebhookWithManager(mgr); err != nil {
@@ -430,6 +442,9 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
 		}
+
+		// Start the decision explainer goroutine for this controller.
+		go controller.StartExplainer(ctx)
 
 		// Webhook that validates all pipelines.
 		podsPipelineWebhook := pods.NewPipelineWebhook()
