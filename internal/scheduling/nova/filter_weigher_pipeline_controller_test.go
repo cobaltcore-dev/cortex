@@ -305,8 +305,8 @@ func TestFilterWeigherPipelineController_ProcessRequest(t *testing.T) {
 					if update.PipelineName != tt.pipeline.Name {
 						t.Errorf("Expected PipelineName %q, got %q", tt.pipeline.Name, update.PipelineName)
 					}
-					// Verify intent was detected (should be CreateIntent since no scheduler hint)
-					expectedIntent := api.CreateIntent
+					// Verify intent was detected (should be Unknown since no scheduler hint)
+					expectedIntent := v1alpha1.SchedulingIntentUnknown
 					if update.Intent != expectedIntent {
 						t.Errorf("Expected intent %v, got %v", expectedIntent, update.Intent)
 					}
@@ -332,7 +332,7 @@ func TestFilterWeigherPipelineController_ProcessRequest_IntentDetection(t *testi
 		{
 			name:           "initial placement (no hint)",
 			schedulerHint:  "",
-			expectedIntent: api.CreateIntent,
+			expectedIntent: v1alpha1.SchedulingIntentUnknown,
 		},
 		{
 			name:           "live migration",
