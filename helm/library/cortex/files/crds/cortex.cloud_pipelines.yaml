@@ -193,6 +193,14 @@ spec:
                   available placement candidates before applying filters, instead of
                   relying on a pre-filtered set and weights.
                 type: boolean
+              maxHistoryEntries:
+                default: 10
+                description: |-
+                  Maximum number of scheduling history entries to keep for each decision.
+                  When the limit is reached, the oldest entries are removed.
+                  A value of 0 means unlimited history.
+                minimum: 0
+                type: integer
               schedulingDomain:
                 description: |-
                   SchedulingDomain defines in which scheduling domain this pipeline

@@ -161,6 +161,7 @@ func (c *BasePipelineController[PipelineType]) updateDecision(ctx context.Contex
 
 		// Limit history entries if configured
 		maxEntries := pipelineConfig.Spec.MaxHistoryEntries
+		// If maxEntries is set to 0 we want to keep all history entries, otherwise trim the history to maxEntries.
 		if maxEntries > 0 && len(decision.Status.SchedulingHistory) > maxEntries {
 			// Keep only the most recent entries
 			decision.Status.SchedulingHistory = decision.Status.SchedulingHistory[len(decision.Status.SchedulingHistory)-maxEntries:]
