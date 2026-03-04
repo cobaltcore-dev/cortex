@@ -131,6 +131,7 @@ func (c *DetectorPipelineController) SetupWithManager(mgr ctrl.Manager, mcl *mul
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
+	// Note: Descheduler doesn't create decisions, so no explainer needed
 	return multicluster.BuildController(mcl, mgr).
 		// Watch pipeline changes so that we can reconfigure pipelines as needed.
 		WatchesMulticluster(
@@ -144,6 +145,7 @@ func (c *DetectorPipelineController) SetupWithManager(mgr ctrl.Manager, mcl *mul
 				// When Knowledge changes, reconcile all pipelines
 				return c.GetAllPipelineReconcileRequests(ctx)
 			}),
+			predicate.GenerationChangedPredicate{},
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				knowledge := obj.(*v1alpha1.Knowledge)
 				// Only react to knowledge matching the scheduling domain.
@@ -154,13 +156,16 @@ func (c *DetectorPipelineController) SetupWithManager(mgr ctrl.Manager, mcl *mul
 		Named("cortex-nova-descheduler").
 		For(
 			&v1alpha1.Pipeline{},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				pipeline := obj.(*v1alpha1.Pipeline)
-				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
-					return false
-				}
-				return pipeline.Spec.Type == c.PipelineType()
-			})),
+			builder.WithPredicates(
+				predicate.GenerationChangedPredicate{},
+				predicate.NewPredicateFuncs(func(obj client.Object) bool {
+					pipeline := obj.(*v1alpha1.Pipeline)
+					if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
+						return false
+					}
+					return pipeline.Spec.Type == c.PipelineType()
+				}),
+			),
 		).
 		Complete(c)
 }

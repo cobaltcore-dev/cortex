@@ -107,6 +107,13 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
+	// Start the decision explainer as a manager runnable
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		c.StartExplainer(ctx)
+		return nil
+	})); err != nil {
+		return err
+	}
 	return multicluster.BuildController(mcl, mgr).
 		// Watch knowledge changes so that we can reconfigure pipelines as needed.
 		WatchesMulticluster(
@@ -120,6 +127,7 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 				// When Knowledge changes, reconcile all pipelines
 				return c.GetAllPipelineReconcileRequests(ctx)
 			}),
+			predicate.GenerationChangedPredicate{},
 			predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				knowledge := obj.(*v1alpha1.Knowledge)
 				// Only react to knowledge matching the scheduling domain.
@@ -129,13 +137,16 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 		Named("cortex-manila-pipelines").
 		For(
 			&v1alpha1.Pipeline{},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				pipeline := obj.(*v1alpha1.Pipeline)
-				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainManila {
-					return false
-				}
-				return pipeline.Spec.Type == c.PipelineType()
-			})),
+			builder.WithPredicates(
+				predicate.GenerationChangedPredicate{},
+				predicate.NewPredicateFuncs(func(obj client.Object) bool {
+					pipeline := obj.(*v1alpha1.Pipeline)
+					if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainManila {
+						return false
+					}
+					return pipeline.Spec.Type == c.PipelineType()
+				}),
+			),
 		).
 		Complete(c)
 }

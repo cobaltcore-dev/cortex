@@ -186,6 +186,13 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
+	// Start the decision explainer as a manager runnable
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		c.StartExplainer(ctx)
+		return nil
+	})); err != nil {
+		return err
+	}
 	return multicluster.BuildController(mcl, mgr).
 		WatchesMulticluster(
 			&ironcorev1alpha1.Machine{},
@@ -206,13 +213,16 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 		).
 		For(
 			&v1alpha1.Pipeline{},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				pipeline := obj.(*v1alpha1.Pipeline)
-				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainMachines {
-					return false
-				}
-				return pipeline.Spec.Type == c.PipelineType()
-			})),
+			builder.WithPredicates(
+				predicate.GenerationChangedPredicate{},
+				predicate.NewPredicateFuncs(func(obj client.Object) bool {
+					pipeline := obj.(*v1alpha1.Pipeline)
+					if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainMachines {
+						return false
+					}
+					return pipeline.Spec.Type == c.PipelineType()
+				}),
+			),
 		).
 		Named("cortex-machine-scheduler").
 		Complete(c)

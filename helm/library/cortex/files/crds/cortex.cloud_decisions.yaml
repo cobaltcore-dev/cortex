@@ -140,8 +140,9 @@ spec:
                       description: The Intent for this scheduling event.
                       type: string
                     orderedHosts:
-                      description: The hosts that were selected in this scheduling
-                        event, in order of preference.
+                      description: |-
+                        The hosts that were selected in this scheduling event, in order of preference.
+                        Can be empty if no hosts could be determined (scheduling failed).
                       items:
                         type: string
                       type: array
@@ -197,7 +198,6 @@ spec:
                       type: string
                   required:
                   - intent
-                  - orderedHosts
                   - pipelineRef
                   - timestamp
                   type: object

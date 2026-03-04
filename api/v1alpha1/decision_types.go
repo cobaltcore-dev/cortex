@@ -20,7 +20,9 @@ const (
 // SchedulingHistoryEntry represents a single entry in the scheduling history of a resource.
 type SchedulingHistoryEntry struct {
 	// The hosts that were selected in this scheduling event, in order of preference.
-	OrderedHosts []string `json:"orderedHosts"`
+	// Can be empty if no hosts could be determined (scheduling failed).
+	// +kubebuilder:validation:Optional
+	OrderedHosts []string `json:"orderedHosts,omitempty"`
 	// Timestamp of when the scheduling event occurred.
 	Timestamp metav1.Time `json:"timestamp"`
 	// A reference to the pipeline that was used for this decision.
