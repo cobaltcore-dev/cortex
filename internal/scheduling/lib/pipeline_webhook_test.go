@@ -496,3 +496,76 @@ func TestPipelineAdmissionWebhook_EmptyPipeline(t *testing.T) {
 		t.Errorf("expected no error for empty pipeline, got: %v", err)
 	}
 }
+
+func TestPipelineAdmissionWebhook_ValidateMaxHistoryEntries(t *testing.T) {
+	webhook := &PipelineAdmissionWebhook{
+		SchedulingDomain:     v1alpha1.SchedulingDomainNova,
+		ValidatableFilters:   map[string]Validatable{},
+		ValidatableWeighers:  map[string]Validatable{},
+		ValidatableDetectors: map[string]Validatable{},
+	}
+
+	tests := []struct {
+		name              string
+		maxHistoryEntries int
+		expectError       bool
+		errorContains     string
+	}{
+		{
+			name:              "valid maxHistoryEntries - zero (unlimited)",
+			maxHistoryEntries: 0,
+			expectError:       false,
+		},
+		{
+			name:              "valid maxHistoryEntries - positive value",
+			maxHistoryEntries: 10,
+			expectError:       false,
+		},
+		{
+			name:              "valid maxHistoryEntries - large value",
+			maxHistoryEntries: 100,
+			expectError:       false,
+		},
+		{
+			name:              "invalid maxHistoryEntries - negative value",
+			maxHistoryEntries: -1,
+			expectError:       true,
+			errorContains:     "maxHistoryEntries must be greater than or equal to 0",
+		},
+		{
+			name:              "invalid maxHistoryEntries - large negative value",
+			maxHistoryEntries: -10,
+			expectError:       true,
+			errorContains:     "maxHistoryEntries must be greater than or equal to 0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pipeline := &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-pipeline"},
+				Spec: v1alpha1.PipelineSpec{
+					SchedulingDomain:  v1alpha1.SchedulingDomainNova,
+					Type:              v1alpha1.PipelineTypeFilterWeigher,
+					MaxHistoryEntries: tt.maxHistoryEntries,
+				},
+			}
+
+			_, err := webhook.ValidateCreate(context.Background(), pipeline)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("expected error but got none")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("expected error to contain %q, got: %v", tt.errorContains, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("expected no error, got: %v", err)
+			}
+		})
+	}
+}

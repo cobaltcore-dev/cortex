@@ -89,6 +89,13 @@ type PipelineSpec struct {
 	// +kubebuilder:default=false
 	IgnorePreselection bool `json:"ignorePreselection,omitempty"`
 
+	// Maximum number of scheduling history entries to keep for each decision.
+	// When the limit is reached, the oldest entries are removed.
+	// A value of 0 means unlimited history.
+	// +kubebuilder:default=10
+	// +kubebuilder:validation:Minimum=0
+	MaxHistoryEntries int `json:"maxHistoryEntries,omitempty"`
+
 	// The type of the pipeline, used to differentiate between
 	// filter-weigher and detector pipelines within the same
 	// scheduling domain.

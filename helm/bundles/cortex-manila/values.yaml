@@ -97,7 +97,6 @@ cortex-scheduling-controllers:
         component: manila-scheduling
     enabledControllers:
       - manila-decisions-pipeline-controller
-      - explanation-controller
     enabledTasks:
       - manila-decisions-cleanup-task
 

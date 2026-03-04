@@ -268,14 +268,6 @@ k8s_resource(
     labels=['Monitoring'],
 )
 
-k8s_yaml('./tools/visualizer/role.yaml')
-docker_build('cortex-visualizer', './tools/visualizer')
-k8s_yaml('./tools/visualizer/app.yaml')
-k8s_resource('cortex-visualizer', port_forwards=[
-    port_forward(4000, 80),
-], links=[
-    link('localhost:4000', 'nova visualizer'),
-], labels=['Monitoring'])
 docker_build('cortex-plutono', './tools/plutono')
 k8s_yaml('./tools/plutono/app.yaml')
 k8s_resource('cortex-plutono', port_forwards=[

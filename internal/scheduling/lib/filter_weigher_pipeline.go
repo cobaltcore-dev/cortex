@@ -17,9 +17,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+type FilterWeigherPipelineResult struct {
+	// The original weights provided as input to the pipeline, from the request that cortex received.
+	RawInWeights map[string]float64
+	// The normalized input weights after applying the normalization function.
+	NormalizedInWeights map[string]float64
+	// The output weights after applying the weigher step activations and multipliers.
+	AggregatedOutWeights map[string]float64
+	// The hosts in order of preference, with the most preferred host first.
+	OrderedHosts []string
+}
+
 type FilterWeigherPipeline[RequestType FilterWeigherPipelineRequest] interface {
 	// Run the scheduling pipeline with the given request.
-	Run(request RequestType) (v1alpha1.DecisionResult, error)
+	Run(request RequestType) (FilterWeigherPipelineResult, error)
 }
 
 // Pipeline of scheduler steps.
@@ -258,7 +269,7 @@ func (s *filterWeigherPipeline[RequestType]) sortHostsByWeights(weights map[stri
 }
 
 // Evaluate the pipeline and return a list of hosts in order of preference.
-func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.DecisionResult, error) {
+func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (FilterWeigherPipelineResult, error) {
 	slogArgs := request.GetTraceLogArgs()
 	slogArgsAny := make([]any, 0, len(slogArgs))
 	for _, arg := range slogArgs {
@@ -296,14 +307,11 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 	// Collect some metrics about the pipeline execution.
 	go p.monitor.observePipelineResult(request, hosts)
 
-	result := v1alpha1.DecisionResult{
+	result := FilterWeigherPipelineResult{
 		RawInWeights:         request.GetWeights(),
 		NormalizedInWeights:  inWeights,
 		AggregatedOutWeights: outWeights,
 		OrderedHosts:         hosts,
-	}
-	if len(hosts) > 0 {
-		result.TargetHost = &hosts[0]
 	}
 	return result, nil
 }

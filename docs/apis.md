@@ -77,7 +77,20 @@ kubectl get decisions
 
 Decisions are generated when pipelines are executed with an appropriate request, such as an initial placement request for a virtual machine. Decisions contain the input data necessary to determine a valid workload placement and a reference to the external resource that is managed, such as a virtual machine id.
 
-In its state, decisions reflect the outcome of the pipeline execution, for example the generated weights for each scheduling step. This outcome is reflected back to the caller of the pipeline. In addition, decisions provide a human-readable explanation why the workload was placed at this specific location.
+In its status, decisions track:
+
+- **Target Host**: The selected host where the resource was or should be placed
+- **Scheduling History**: A chronological list of all scheduling events for this resource, including:
+  - Ordered list of hosts selected during each scheduling event
+  - Timestamp of when each decision was made
+  - Reference to the pipeline configuration used
+  - Intent of the scheduling operation (e.g., initial placement, live migration, evacuation, resize, rebuild)
+- **Explanation**: A human-readable explanation of the most recent scheduling decision. Explanations are emitted as Kubernetes events and the most recent explanation is also stored in the Decision CRD for quick reference.
+- **Conditions**: Status conditions tracking the decision state (Ready, Failed)
+
+The scheduling history can be used for scheduling features such as scheduling cycle detection and migration cooldown enforcement.
+
+Pipelines can be configured to automatically create and update decisions by enabling the `createDecisions` flag in the pipeline spec. When enabled, each scheduling operation creates a new history entry with the intent detection (e.g., "create" for initial placement, "live_migrate" for migrations). History entries can be limited using the `maxHistoryEntries` setting to prevent unbounded growth. A value of 0 means unlimited history (default is 10 entries).
 
 ### Reservations
 
