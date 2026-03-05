@@ -66,6 +66,13 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		// Can happen when the resource was just deleted.
 		return ctrl.Result{}, err
 	}
+
+	// Skip failover reservations - they are managed by the failover controller
+	if res.Spec.Type == v1alpha1.ReservationTypeFailover {
+		log.V(1).Info("skipping failover reservation (managed by failover controller)", "reservation", req.Name)
+		return ctrl.Result{}, nil // Don't need to requeue.
+	}
+
 	// If the reservation is already active (Ready=True), skip it.
 	if meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ReservationConditionReady) {
 		log.Info("reservation is already active, skipping", "reservation", req.Name)
