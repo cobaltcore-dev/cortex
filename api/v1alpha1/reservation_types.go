@@ -147,6 +147,18 @@ type FailoverReservationStatus struct {
 	// Key: VM/instance UUID, Value: Host name where the VM is currently running.
 	// +kubebuilder:validation:Optional
 	Allocations map[string]string `json:"allocations,omitempty"`
+
+	// LastChanged tracks when the reservation was last modified.
+	// This is used to track pending changes that need acknowledgment.
+	// +kubebuilder:validation:Optional
+	LastChanged *metav1.Time `json:"lastChanged,omitempty"`
+
+	// AcknowledgedAt is the timestamp when the last change was acknowledged.
+	// When nil, the reservation is in a pending state awaiting acknowledgment.
+	// This does not affect the Ready condition - reservations are still considered
+	// ready even when not yet acknowledged.
+	// +kubebuilder:validation:Optional
+	AcknowledgedAt *metav1.Time `json:"acknowledgedAt,omitempty"`
 }
 
 // ReservationStatus defines the observed state of Reservation.
