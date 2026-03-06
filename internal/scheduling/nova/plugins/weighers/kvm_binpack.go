@@ -130,7 +130,7 @@ func (s *KVMBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSchedule
 		}
 		result.Activations[host] = score
 		result.Statistics["binpack score"].Hosts[host] = score
-		traceLog.Info("calculated binpack score for host",
+		traceLog.Debug("calculated binpack score for host",
 			"host", host, "score", score)
 	}
 

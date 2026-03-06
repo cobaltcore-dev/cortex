@@ -98,7 +98,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			if !s.Options.LockReserved &&
 				reservation.Spec.CommittedResourceReservation.ProjectID == request.Spec.Data.ProjectID &&
 				reservation.Spec.CommittedResourceReservation.ResourceGroup == request.Spec.Data.Flavor.Data.ExtraSpecs["hw_version"] {
-				traceLog.Info("unlocking resources reserved by matching committed resource reservation with allocation",
+				traceLog.Debug("unlocking resources reserved by matching committed resource reservation with allocation",
 					"reservation", reservation.Name,
 					"instanceUUID", request.Spec.Data.InstanceUUID,
 					"projectID", request.Spec.Data.ProjectID,
@@ -117,7 +117,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			if err == nil && intent == api.EvacuateIntent {
 				if reservation.Status.FailoverReservation != nil {
 					if _, contained := reservation.Status.FailoverReservation.Allocations[request.Spec.Data.InstanceUUID]; contained {
-						traceLog.Info("unlocking resources reserved by failover reservation for VM in allocations (evacuation)",
+						traceLog.Debug("unlocking resources reserved by failover reservation for VM in allocations (evacuation)",
 							"reservation", reservation.Name,
 							"instanceUUID", request.Spec.Data.InstanceUUID)
 						continue
@@ -237,7 +237,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		vcpuSlots := uint64(freeCPU.Value()) /
 			request.Spec.Data.Flavor.Data.VCPUs
 		if vcpuSlots < request.Spec.Data.NumInstances {
-			traceLog.Info(
+			traceLog.Debug(
 				"filtering host due to insufficient CPU capacity",
 				"host", host, "requested", request.Spec.Data.Flavor.Data.VCPUs,
 				"available", freeCPU.String(),
@@ -265,7 +265,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		memorySlots := uint64(freeMemory.Value()/1_000_000 /* MB */) /
 			request.Spec.Data.Flavor.Data.MemoryMB
 		if memorySlots < request.Spec.Data.NumInstances {
-			traceLog.Info(
+			traceLog.Debug(
 				"filtering host due to insufficient RAM capacity",
 				"host", host, "requested_mb", request.Spec.Data.Flavor.Data.MemoryMB,
 				"available_mb", freeMemory.String(),
@@ -273,7 +273,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			delete(result.Activations, host)
 			continue
 		}
-		traceLog.Info(
+		traceLog.Debug(
 			"host has enough capacity", "host", host,
 			"requested_cpus", request.Spec.Data.Flavor.Data.VCPUs,
 			"available_cpus", freeCPU.String(),
@@ -286,7 +286,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 	for host := range result.Activations {
 		if _, ok := hostsEncountered[host]; !ok {
 			delete(result.Activations, host)
-			traceLog.Info(
+			traceLog.Debug(
 				"removing host with unknown capacity",
 				"host", host,
 			)

@@ -22,7 +22,7 @@ func (s *FilterHasAcceleratorsStep) Run(traceLog *slog.Logger, request api.Exter
 	result := s.IncludeAllHostsFromRequest(request)
 	extraSpecs := request.Spec.Data.Flavor.Data.ExtraSpecs
 	if _, ok := extraSpecs["accel:device_profile"]; !ok {
-		traceLog.Info("no accelerators requested, skipping filter")
+		traceLog.Debug("no accelerators requested, skipping filter")
 		return result, nil
 	}
 
@@ -41,13 +41,13 @@ func (s *FilterHasAcceleratorsStep) Run(traceLog *slog.Logger, request api.Exter
 		hvsWithTrait[hv.Name] = struct{}{}
 	}
 
-	traceLog.Info("hosts with accelerators", "hosts", hvsWithTrait)
+	traceLog.Debug("hosts with accelerators", "hosts", hvsWithTrait)
 	for host := range result.Activations {
 		if _, ok := hvsWithTrait[host]; ok {
 			continue
 		}
 		delete(result.Activations, host)
-		traceLog.Info("filtering host without accelerators", "host", host)
+		traceLog.Debug("filtering host without accelerators", "host", host)
 	}
 	return result, nil
 }

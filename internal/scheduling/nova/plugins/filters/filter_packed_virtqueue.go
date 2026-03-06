@@ -24,7 +24,7 @@ func (s *FilterPackedVirtqueueStep) Run(traceLog *slog.Logger, request api.Exter
 	_, reqInSpecs := request.Spec.Data.Flavor.Data.ExtraSpecs["hw:virtio_packed_ring"]
 	_, reqInProps := request.Spec.Data.Image.Data.Properties.Data["hw_virtio_packed_ring"]
 	if !reqInSpecs && !reqInProps {
-		traceLog.Info("no request for packed virtqueues, skipping filter")
+		traceLog.Debug("no request for packed virtqueues, skipping filter")
 		return result, nil // No packed virtqueue requested, nothing to filter.
 	}
 
@@ -43,14 +43,14 @@ func (s *FilterPackedVirtqueueStep) Run(traceLog *slog.Logger, request api.Exter
 		hvsWithTrait[hv.Name] = struct{}{}
 	}
 
-	traceLog.Info("hosts with packed virtqueues", "hosts", hvsWithTrait)
+	traceLog.Debug("hosts with packed virtqueues", "hosts", hvsWithTrait)
 	for host := range result.Activations {
 		if _, ok := hvsWithTrait[host]; ok {
-			traceLog.Info("host has packed virtqueues, keeping", "host", host)
+			traceLog.Debug("host has packed virtqueues, keeping", "host", host)
 			continue
 		}
 		delete(result.Activations, host)
-		traceLog.Info("filtering host without packed virtqueues", "host", host)
+		traceLog.Debug("filtering host without packed virtqueues", "host", host)
 	}
 	return result, nil
 }

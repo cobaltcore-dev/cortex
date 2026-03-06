@@ -125,7 +125,7 @@ func (s *KVMPreferSmallerHostsStep) Run(traceLog *slog.Logger, request api.Exter
 
 			// If all hosts have the same capacity for this resource, skip it
 			if smallestCap.Cmp(*largestCap) == 0 {
-				traceLog.Info("all hypervisors have the same capacity for resource, skipping",
+				traceLog.Debug("all hypervisors have the same capacity for resource, skipping",
 					"resource", resourceName)
 				continue
 			}
@@ -147,7 +147,7 @@ func (s *KVMPreferSmallerHostsStep) Run(traceLog *slog.Logger, request api.Exter
 		}
 		result.Activations[host] = score
 		result.Statistics["small host score"].Hosts[host] = score
-		traceLog.Info("calculated small host score for host",
+		traceLog.Debug("calculated small host score for host",
 			"host", host, "score", score)
 	}
 

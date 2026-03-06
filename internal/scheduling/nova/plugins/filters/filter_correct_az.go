@@ -21,7 +21,7 @@ type FilterCorrectAZStep struct {
 func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	if request.Spec.Data.AvailabilityZone == "" {
-		traceLog.Info("no availability zone requested, skipping filter_correct_az step")
+		traceLog.Debug("no availability zone requested, skipping filter_correct_az step")
 		return result, nil
 	}
 
@@ -46,18 +46,18 @@ func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSch
 		}
 	}
 
-	traceLog.Info(
+	traceLog.Debug(
 		"hosts inside requested az",
 		"availabilityZone", request.Spec.Data.AvailabilityZone,
 		"hosts", computeHostsInAZ,
 	)
 	for host := range result.Activations {
 		if _, ok := computeHostsInAZ[host]; ok {
-			traceLog.Info("host is in requested az, keeping", "host", host)
+			traceLog.Debug("host is in requested az, keeping", "host", host)
 			continue
 		}
 		delete(result.Activations, host)
-		traceLog.Info("filtering host outside requested az", "host", host)
+		traceLog.Debug("filtering host outside requested az", "host", host)
 	}
 	return result, nil
 }

@@ -32,7 +32,7 @@ func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog *slog.Logger, request ap
 
 	ig := request.Spec.Data.InstanceGroup
 	if ig == nil {
-		traceLog.Info("no instance group in request, skipping weigher")
+		traceLog.Debug("no instance group in request, skipping weigher")
 		return result, nil
 	}
 	policy := ig.Data.Policy
@@ -43,11 +43,11 @@ func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog *slog.Logger, request ap
 	case "soft-affinity":
 		factor = 1.0
 	default:
-		traceLog.Info("instance group policy is not 'soft-affinity' or 'soft-anti-affinity', skipping weigher", "policy", policy)
+		traceLog.Debug("instance group policy is not 'soft-affinity' or 'soft-anti-affinity', skipping weigher", "policy", policy)
 		return result, nil
 	}
 	if len(ig.Data.Members) == 0 {
-		traceLog.Info("instance group has no members, skipping weigher")
+		traceLog.Debug("instance group has no members, skipping weigher")
 		return result, nil
 	}
 
@@ -64,7 +64,7 @@ func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog *slog.Logger, request ap
 	for host := range result.Activations {
 		hv, ok := hvsByName[host]
 		if !ok {
-			traceLog.Info("host not found in hypervisor list, skipping", "host", host)
+			traceLog.Debug("host not found in hypervisor list, skipping", "host", host)
 			continue
 		}
 		count := 0
@@ -76,7 +76,7 @@ func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog *slog.Logger, request ap
 		weight := factor * float64(count)
 		result.Activations[host] = weight
 		result.Statistics["affinity"].Hosts[host] = weight
-		traceLog.Info("calculated affinity weight for host",
+		traceLog.Debug("calculated affinity weight for host",
 			"host", host, "count", count, "weight", weight)
 	}
 	return result, nil

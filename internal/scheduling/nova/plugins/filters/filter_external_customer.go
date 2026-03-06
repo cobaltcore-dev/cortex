@@ -41,7 +41,7 @@ func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.Exte
 		return nil, err
 	}
 	if slices.Contains(s.Options.CustomerIgnoredDomainNames, domainName) {
-		traceLog.Info("domain is no external customer domain, skipping filter", "domain", domainName)
+		traceLog.Debug("domain is no external customer domain, skipping filter", "domain", domainName)
 		return result, nil
 	}
 	found := false
@@ -52,7 +52,7 @@ func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.Exte
 		}
 	}
 	if !found {
-		traceLog.Info("domain does not match any external customer prefix -- skipping filter", "domain", domainName)
+		traceLog.Debug("domain does not match any external customer prefix -- skipping filter", "domain", domainName)
 		return result, nil
 	}
 
@@ -71,14 +71,14 @@ func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.Exte
 		hvsWithTrait[hv.Name] = struct{}{}
 	}
 
-	traceLog.Info("hosts supporting external customers", "hosts", hvsWithTrait)
+	traceLog.Debug("hosts supporting external customers", "hosts", hvsWithTrait)
 	for host := range result.Activations {
 		if _, ok := hvsWithTrait[host]; ok {
-			traceLog.Info("host supports external customers, keeping", "host", host)
+			traceLog.Debug("host supports external customers, keeping", "host", host)
 			continue
 		}
 		delete(result.Activations, host)
-		traceLog.Info("filtering host not supporting external customers", "host", host)
+		traceLog.Debug("filtering host not supporting external customers", "host", host)
 	}
 	return result, nil
 }

@@ -22,7 +22,7 @@ type FilterAllowedProjectsStep struct {
 func (s *FilterAllowedProjectsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	if request.Spec.Data.ProjectID == "" {
-		traceLog.Info("no project ID in request, skipping filter")
+		traceLog.Debug("no project ID in request, skipping filter")
 		return result, nil
 	}
 
@@ -35,13 +35,13 @@ func (s *FilterAllowedProjectsStep) Run(traceLog *slog.Logger, request api.Exter
 	for _, hv := range hvs.Items {
 		if len(hv.Spec.AllowedProjects) == 0 {
 			// Hypervisor is available for all projects.
-			traceLog.Info("host allows all projects, keeping", "host", hv.Name)
+			traceLog.Debug("host allows all projects, keeping", "host", hv.Name)
 			continue
 		}
 		if !slices.Contains(hv.Spec.AllowedProjects, request.Spec.Data.ProjectID) {
 			// Project is not allowed on this hypervisor, filter it out.
 			delete(result.Activations, hv.Name)
-			traceLog.Info(
+			traceLog.Debug(
 				"filtering host not allowing project",
 				"host", hv.Name,
 				"project", request.Spec.Data.ProjectID,

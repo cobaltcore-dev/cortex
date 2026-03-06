@@ -28,18 +28,18 @@ func (s *FilterInstanceGroupAntiAffinityStep) Run(
 
 	ig := request.Spec.Data.InstanceGroup
 	if ig == nil {
-		traceLog.Info("no instance group in request, skipping filter")
+		traceLog.Debug("no instance group in request, skipping filter")
 		return result, nil
 	}
 	policy := ig.Data.Policy
 	if policy != "anti-affinity" {
-		traceLog.Info("instance group policy is not 'anti-affinity', skipping filter")
+		traceLog.Debug("instance group policy is not 'anti-affinity', skipping filter")
 		return result, nil
 	}
 	memberVMs := ig.Data.Members
 	if len(memberVMs) == 0 {
 		// Nothing to do.
-		traceLog.Info("instance group has no members, skipping filter")
+		traceLog.Debug("instance group has no members, skipping filter")
 		return result, nil
 	}
 	maxServersPerHost := 1
@@ -73,7 +73,7 @@ func (s *FilterInstanceGroupAntiAffinityStep) Run(
 		if slices.ContainsFunc(hv.Status.Instances, func(inst hv1.Instance) bool {
 			return inst.ID == request.Spec.Data.InstanceUUID
 		}) {
-			traceLog.Info("host is running the same VM, not filtering out", "host", host)
+			traceLog.Debug("host is running the same VM, not filtering out", "host", host)
 			continue
 		}
 		// Check how many instances from the group are already on this host.
@@ -85,7 +85,7 @@ func (s *FilterInstanceGroupAntiAffinityStep) Run(
 		}
 		if len(instancesInGroup) >= maxServersPerHost {
 			delete(result.Activations, host)
-			traceLog.Info(
+			traceLog.Debug(
 				"filtered out host exceeding max_server_per_host for instance group",
 				"host", host,
 				"instances_in_group", instancesInGroup,

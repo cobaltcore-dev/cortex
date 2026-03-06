@@ -45,11 +45,11 @@ func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.
 
 	rd := request.Spec.Data.RequestedDestination
 	if rd == nil {
-		traceLog.Info("no requested_destination in request, skipping filter")
+		traceLog.Debug("no requested_destination in request, skipping filter")
 		return result, nil
 	}
 	if len(rd.Data.Aggregates) == 0 && rd.Data.Host == "" {
-		traceLog.Info("requested_destination has no host or aggregates, skipping filter")
+		traceLog.Debug("requested_destination has no host or aggregates, skipping filter")
 		return result, nil
 	}
 
@@ -69,20 +69,20 @@ func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.
 		aggregatesToConsider := make([]string, 0, len(rd.Data.Aggregates))
 		for _, agg := range rd.Data.Aggregates {
 			if slices.Contains(s.Options.IgnoredAggregates, agg) {
-				traceLog.Info("ignoring aggregate in requested_destination as it is in the ignored list", "aggregate", agg)
+				traceLog.Debug("ignoring aggregate in requested_destination as it is in the ignored list", "aggregate", agg)
 				continue
 			}
 			aggregatesToConsider = append(aggregatesToConsider, agg)
 		}
 		if len(aggregatesToConsider) == 0 {
-			traceLog.Info("all aggregates in requested_destination are in the ignored list, skipping aggregate filtering")
+			traceLog.Debug("all aggregates in requested_destination are in the ignored list, skipping aggregate filtering")
 			return result, nil
 		}
 		for host := range result.Activations {
 			hv, exists := hvsByName[host]
 			if !exists {
 				delete(result.Activations, host)
-				traceLog.Info("filtered out host not in requested_destination aggregates (unknown host)", "host", host)
+				traceLog.Debug("filtered out host not in requested_destination aggregates (unknown host)", "host", host)
 				continue
 			}
 			hvAggregates := hv.Spec.Aggregates
@@ -99,7 +99,7 @@ func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.
 			}
 			if !found {
 				delete(result.Activations, host)
-				traceLog.Info(
+				traceLog.Debug(
 					"filtered out host not in requested_destination aggregates",
 					"host", host, "hostAggregates", hvAggregates,
 					"requestedAggregates", rd.Data.Aggregates,
@@ -108,22 +108,22 @@ func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.
 				)
 				continue
 			}
-			traceLog.Info("host is in requested_destination aggregates, keeping", "host", host)
+			traceLog.Debug("host is in requested_destination aggregates, keeping", "host", host)
 		}
 	}
 
 	// If a specific host is requested, only consider that host.
 	if rd.Data.Host != "" {
 		if slices.Contains(s.Options.IgnoredHostnames, rd.Data.Host) {
-			traceLog.Info("requested_destination host is in the ignored hostnames list, skipping host filtering", "host", rd.Data.Host)
+			traceLog.Debug("requested_destination host is in the ignored hostnames list, skipping host filtering", "host", rd.Data.Host)
 		} else {
 			for host := range result.Activations {
 				if host != rd.Data.Host {
 					delete(result.Activations, host)
-					traceLog.Info("filtered out host not matching requested_destination host", "host", host)
+					traceLog.Debug("filtered out host not matching requested_destination host", "host", host)
 					continue
 				}
-				traceLog.Info("host matches requested_destination host, keeping", "host", host)
+				traceLog.Debug("host matches requested_destination host, keeping", "host", host)
 			}
 		}
 	}

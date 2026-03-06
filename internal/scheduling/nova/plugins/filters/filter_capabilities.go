@@ -89,20 +89,20 @@ func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.External
 			return nil, err
 		}
 	}
-	traceLog.Info("looking for capabilities", "capabilities", hvCaps)
+	traceLog.Debug("looking for capabilities", "capabilities", hvCaps)
 
 	// Check which hosts match the requested capabilities.
 	for host := range result.Activations {
 		provided, ok := hvCaps[host]
 		if !ok {
 			delete(result.Activations, host)
-			traceLog.Info("filtering host without provided capabilities", "host", host)
+			traceLog.Debug("filtering host without provided capabilities", "host", host)
 			continue
 		}
 		// Check if the provided capabilities match the requested ones.
 		for keyRequested, valueRequested := range requestedCapabilities {
 			if providedValue, ok := provided[keyRequested]; !ok || providedValue != valueRequested {
-				traceLog.Info(
+				traceLog.Debug(
 					"filtering host with mismatched capabilities", "host", host,
 					"wantKey", keyRequested, "wantValue", valueRequested,
 					"haveKey?", ok, "haveValue", providedValue,
@@ -111,7 +111,7 @@ func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.External
 				break
 			}
 		}
-		traceLog.Info("host matches requested capabilities, keeping", "host", host)
+		traceLog.Debug("host matches requested capabilities, keeping", "host", host)
 	}
 	return result, nil
 }

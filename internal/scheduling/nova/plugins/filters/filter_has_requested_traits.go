@@ -37,10 +37,10 @@ func (s *FilterHasRequestedTraits) Run(traceLog *slog.Logger, request api.Extern
 		}
 	}
 	if len(requiredTraits) == 0 && len(forbiddenTraits) == 0 {
-		traceLog.Info("no traits requested, skipping filter")
+		traceLog.Debug("no traits requested, skipping filter")
 		return result, nil
 	}
-	traceLog.Info(
+	traceLog.Debug(
 		"filtering hosts based on requested traits",
 		"required", requiredTraits,
 		"forbidden", forbiddenTraits,
@@ -77,11 +77,11 @@ func (s *FilterHasRequestedTraits) Run(traceLog *slog.Logger, request api.Extern
 
 	for host := range result.Activations {
 		if _, ok := hostsMatchingAllTraits[host]; ok {
-			traceLog.Info("host matches requested traits, keeping", "host", host)
+			traceLog.Debug("host matches requested traits, keeping", "host", host)
 			continue
 		}
 		delete(result.Activations, host)
-		traceLog.Info("filtering host not matching requested traits", "host", host)
+		traceLog.Debug("filtering host not matching requested traits", "host", host)
 	}
 	return result, nil
 }
