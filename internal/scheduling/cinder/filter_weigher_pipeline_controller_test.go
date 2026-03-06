@@ -483,6 +483,8 @@ func TestFilterWeigherPipelineController_InitPipeline(t *testing.T) {
 		weighers               []v1alpha1.WeigherSpec
 		expectNonCriticalError bool
 		expectCriticalError    bool
+		expectUnknownFilter    bool
+		expectUnknownWeigher   bool
 	}{
 		{
 			name:                   "empty steps",
@@ -490,6 +492,8 @@ func TestFilterWeigherPipelineController_InitPipeline(t *testing.T) {
 			weighers:               []v1alpha1.WeigherSpec{},
 			expectNonCriticalError: false,
 			expectCriticalError:    false,
+			expectUnknownFilter:    false,
+			expectUnknownWeigher:   false,
 		},
 		{
 			name: "unsupported step",
@@ -499,7 +503,9 @@ func TestFilterWeigherPipelineController_InitPipeline(t *testing.T) {
 				},
 			},
 			expectNonCriticalError: false,
-			expectCriticalError:    true, // Expected because test-plugin is not in supportedSteps
+			expectCriticalError:    false,
+			expectUnknownFilter:    true,
+			expectUnknownWeigher:   false,
 		},
 	}
 

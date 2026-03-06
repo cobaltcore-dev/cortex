@@ -83,6 +83,11 @@ func (w *PipelineAdmissionWebhook) validatePipeline(
 
 	var errMsgs []string
 
+	// We will use warnings whenever a pipeline step is referenced that
+	// doesn't exist in our indexes, in case cortex is updated with new
+	// filters/weighers/detectors, so we don't break our rollout.
+	var warnings []string
+
 	// Validate based on pipeline type
 	switch pipeline.Spec.Type {
 	case v1alpha1.PipelineTypeFilterWeigher:
@@ -92,12 +97,22 @@ func (w *PipelineAdmissionWebhook) validatePipeline(
 			errMsgs = append(errMsgs, "detectors are not allowed in a filter/weigher pipeline")
 		}
 		for _, filterSpec := range pipeline.Spec.Filters {
-			if err := w.validateFilter(ctx, filterSpec); err != nil {
+			filter, ok := w.ValidatableFilters[filterSpec.Name]
+			if !ok {
+				warnings = append(warnings, fmt.Sprintf("unknown filter %q: this filter will be ignored", filterSpec.Name))
+				continue
+			}
+			if err := filter.Validate(ctx, filterSpec.Params); err != nil {
 				errMsgs = append(errMsgs, fmt.Sprintf("filter %q: %v", filterSpec.Name, err))
 			}
 		}
 		for _, weigherSpec := range pipeline.Spec.Weighers {
-			if err := w.validateWeigher(ctx, weigherSpec); err != nil {
+			weigher, ok := w.ValidatableWeighers[weigherSpec.Name]
+			if !ok {
+				warnings = append(warnings, fmt.Sprintf("unknown weigher %q: this weigher will be ignored", weigherSpec.Name))
+				continue
+			}
+			if err := weigher.Validate(ctx, weigherSpec.Params); err != nil {
 				errMsgs = append(errMsgs, fmt.Sprintf("weigher %q: %v", weigherSpec.Name, err))
 			}
 		}
@@ -111,7 +126,12 @@ func (w *PipelineAdmissionWebhook) validatePipeline(
 			errMsgs = append(errMsgs, "weighers are not allowed in a detector pipeline")
 		}
 		for _, detectorSpec := range pipeline.Spec.Detectors {
-			if err := w.validateDetector(ctx, detectorSpec); err != nil {
+			detector, ok := w.ValidatableDetectors[detectorSpec.Name]
+			if !ok {
+				warnings = append(warnings, fmt.Sprintf("unknown detector %q: this detector will be ignored", detectorSpec.Name))
+				continue
+			}
+			if err := detector.Validate(ctx, detectorSpec.Params); err != nil {
 				errMsgs = append(errMsgs, fmt.Sprintf("detector %q: %v", detectorSpec.Name, err))
 			}
 		}
@@ -120,37 +140,9 @@ func (w *PipelineAdmissionWebhook) validatePipeline(
 	}
 
 	if len(errMsgs) > 0 {
-		return nil, fmt.Errorf("pipeline is invalid: %s", strings.Join(errMsgs, "; "))
+		return warnings, fmt.Errorf("pipeline is invalid: %s", strings.Join(errMsgs, "; "))
 	}
-
-	return nil, nil
-}
-
-// validateFilter validates a single filter specification.
-func (w *PipelineAdmissionWebhook) validateFilter(ctx context.Context, spec v1alpha1.FilterSpec) error {
-	filter, ok := w.ValidatableFilters[spec.Name]
-	if !ok {
-		return fmt.Errorf("unknown filter: %q", spec.Name)
-	}
-	return filter.Validate(ctx, spec.Params)
-}
-
-// validateWeigher validates a single weigher specification.
-func (w *PipelineAdmissionWebhook) validateWeigher(ctx context.Context, spec v1alpha1.WeigherSpec) error {
-	weigher, ok := w.ValidatableWeighers[spec.Name]
-	if !ok {
-		return fmt.Errorf("unknown weigher: %q", spec.Name)
-	}
-	return weigher.Validate(ctx, spec.Params)
-}
-
-// validateDetector validates a single detector specification.
-func (w *PipelineAdmissionWebhook) validateDetector(ctx context.Context, spec v1alpha1.DetectorSpec) error {
-	detector, ok := w.ValidatableDetectors[spec.Name]
-	if !ok {
-		return fmt.Errorf("unknown detector: %q", spec.Name)
-	}
-	return detector.Validate(ctx, spec.Params)
+	return warnings, nil
 }
 
 // SetupWebhookWithManager sets up the validating webhook for Pipeline resources.

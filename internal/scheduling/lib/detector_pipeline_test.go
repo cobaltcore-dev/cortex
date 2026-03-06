@@ -36,11 +36,12 @@ func (m *mockDetectorStep) Run() ([]mockDetection, error) {
 
 func TestDetectorPipeline_Init(t *testing.T) {
 	tests := []struct {
-		name               string
-		confedSteps        []v1alpha1.DetectorSpec
-		supportedSteps     map[string]Detector[mockDetection]
-		expectNonCritical  bool
-		expectedStepsCount int
+		name                  string
+		confedSteps           []v1alpha1.DetectorSpec
+		supportedSteps        map[string]Detector[mockDetection]
+		expectNonCritical     bool
+		expectUnknownDetector bool
+		expectedStepsCount    int
 	}{
 		{
 			name: "successful init with one step",
@@ -50,8 +51,9 @@ func TestDetectorPipeline_Init(t *testing.T) {
 			supportedSteps: map[string]Detector[mockDetection]{
 				"step1": &mockDetectorStep{},
 			},
-			expectNonCritical:  false,
-			expectedStepsCount: 1,
+			expectNonCritical:     false,
+			expectUnknownDetector: false,
+			expectedStepsCount:    1,
 		},
 		{
 			name: "successful init with multiple steps",
@@ -63,17 +65,19 @@ func TestDetectorPipeline_Init(t *testing.T) {
 				"step1": &mockDetectorStep{},
 				"step2": &mockDetectorStep{},
 			},
-			expectNonCritical:  false,
-			expectedStepsCount: 2,
+			expectNonCritical:     false,
+			expectUnknownDetector: false,
+			expectedStepsCount:    2,
 		},
 		{
 			name: "unsupported step returns non-critical error",
 			confedSteps: []v1alpha1.DetectorSpec{
 				{Name: "unsupported_step", Params: nil},
 			},
-			supportedSteps:     map[string]Detector[mockDetection]{},
-			expectNonCritical:  true,
-			expectedStepsCount: 0,
+			supportedSteps:        map[string]Detector[mockDetection]{},
+			expectNonCritical:     false,
+			expectUnknownDetector: true,
+			expectedStepsCount:    0,
 		},
 		{
 			name: "step init error returns non-critical error",
@@ -83,15 +87,17 @@ func TestDetectorPipeline_Init(t *testing.T) {
 			supportedSteps: map[string]Detector[mockDetection]{
 				"failing_step": &mockDetectorStep{initErr: errors.New("init failed")},
 			},
-			expectNonCritical:  true,
-			expectedStepsCount: 0,
+			expectNonCritical:     true,
+			expectUnknownDetector: false,
+			expectedStepsCount:    0,
 		},
 		{
-			name:               "empty configuration",
-			confedSteps:        []v1alpha1.DetectorSpec{},
-			supportedSteps:     map[string]Detector[mockDetection]{},
-			expectNonCritical:  false,
-			expectedStepsCount: 0,
+			name:                  "empty configuration",
+			confedSteps:           []v1alpha1.DetectorSpec{},
+			supportedSteps:        map[string]Detector[mockDetection]{},
+			expectNonCritical:     false,
+			expectUnknownDetector: false,
+			expectedStepsCount:    0,
 		},
 		{
 			name: "mixed valid and invalid steps",
@@ -102,8 +108,9 @@ func TestDetectorPipeline_Init(t *testing.T) {
 			supportedSteps: map[string]Detector[mockDetection]{
 				"valid_step": &mockDetectorStep{},
 			},
-			expectNonCritical:  true,
-			expectedStepsCount: 1,
+			expectNonCritical:     false,
+			expectUnknownDetector: true,
+			expectedStepsCount:    1,
 		},
 	}
 
@@ -115,12 +122,21 @@ func TestDetectorPipeline_Init(t *testing.T) {
 				Monitor: DetectorPipelineMonitor{},
 			}
 
-			errs := pipeline.Init(
+			unknown, errs := pipeline.Init(
 				context.Background(),
 				tt.confedSteps,
 				tt.supportedSteps,
 			)
 
+			if tt.expectUnknownDetector {
+				if len(unknown) == 0 {
+					t.Errorf("expected unknown detector, got none")
+				}
+			} else {
+				if len(unknown) > 0 {
+					t.Errorf("unexpected unknown detectors: %v", unknown)
+				}
+			}
 			if tt.expectNonCritical && len(errs) == 0 {
 				t.Errorf("expected non-critical errors, got none")
 			}
