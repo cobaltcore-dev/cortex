@@ -86,7 +86,9 @@ func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.
 				continue
 			}
 			hvAggregates := hv.Spec.Aggregates
-			hvAggregates = append(hvAggregates, hv.Status.Aggregates...)
+			for _, agg := range hv.Status.Aggregates {
+				hvAggregates = append(hvAggregates, agg.Name)
+			}
 			// Check if any of the host's aggregates match the requested aggregates.
 			found := false
 			for _, reqAgg := range aggregatesToConsider {

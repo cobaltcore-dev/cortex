@@ -184,15 +184,15 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 			hypervisors: []hv1.Hypervisor{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Status:     hv1.HypervisorStatus{Aggregates: []string{"aggregate1"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{Name: "aggregate1"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
-					Status:     hv1.HypervisorStatus{Aggregates: []string{"aggregate2"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{Name: "aggregate2"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
-					Status:     hv1.HypervisorStatus{Aggregates: []string{"aggregate1", "aggregate3"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{Name: "aggregate1"}, {Name: "aggregate3"}}},
 				},
 			},
 			expectedHosts: []string{"host1", "host3"},
@@ -262,17 +262,17 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
 					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1"}},
-					Status:     hv1.HypervisorStatus{Aggregates: []string{"aggregate3"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{Name: "aggregate3"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
 					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate3"}},
-					Status:     hv1.HypervisorStatus{Aggregates: []string{"aggregate2"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{Name: "aggregate2"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
 					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate4"}},
-					Status:     hv1.HypervisorStatus{Aggregates: []string{"aggregate5"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{Name: "aggregate5"}}},
 				},
 			},
 			expectedHosts: []string{"host1", "host2"},
@@ -374,7 +374,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
 					Spec:       hv1.HypervisorSpec{Aggregates: []string{}},
-					Status:     hv1.HypervisorStatus{Aggregates: []string{}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
