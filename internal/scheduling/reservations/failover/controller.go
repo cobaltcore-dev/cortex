@@ -73,8 +73,8 @@ func (c *FailoverReservationController) Reconcile(ctx context.Context) (ctrl.Res
 	// Warn about VMs on hypervisors that are not in ListVMs (possible data sync issue)
 	warnUnknownVMsOnHypervisors(&hypervisorList, vms)
 
-	vms = filterVMsOnKnownHypervisors(vms, allHypervisors)
-	log.Info("filtered VMs to those on known hypervisors", "count", len(vms), "knownHypervisors", len(allHypervisors))
+	vms = filterVMsOnKnownHypervisors(vms, &hypervisorList)
+	log.Info("filtered VMs to those on known hypervisors and in hypervisor instances", "count", len(vms), "knownHypervisors", len(allHypervisors))
 
 	var reservationList v1alpha1.ReservationList
 	if err := c.List(ctx, &reservationList); err != nil {
@@ -135,7 +135,7 @@ func (c *FailoverReservationController) Reconcile(ctx context.Context) (ctrl.Res
 	}
 
 	// 6. Create and assign reservations for VMs that need them
-	if err := c.reconcileCreateAndAssignReservations(ctx, vms, failoverReservations); err != nil {
+	if err := c.reconcileCreateAndAssignReservations(ctx, vms, failoverReservations, allHypervisors); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -341,10 +341,15 @@ func reconcileRemoveEmptyReservations(
 }
 
 // reconcileCreateAndAssignReservations creates and assigns failover reservations for VMs that need them.
+// Note: This function logs errors but continues processing to handle as many VMs as possible.
+// The error return is kept for future use and interface consistency.
+//
+//nolint:unparam // error return is intentionally always nil - we log errors but continue processing
 func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 	ctx context.Context,
 	vms []VM,
 	failoverReservations []v1alpha1.Reservation,
+	allHypervisors []string,
 ) error {
 	// Calculate list of all VMs that are missing failover reservations
 	vmsMissingFailover := c.calculateVMsMissingFailover(vms, failoverReservations)
@@ -358,12 +363,6 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 		vmsMissingFailover = vmsMissingFailover[:c.Config.MaxVMsToProcess]
 	}
 
-	// Get all available hypervisors for scheduling
-	allHypervisors, err := c.getAllHypervisors(ctx)
-	if err != nil {
-		log.Error(err, "failed to get all hypervisors")
-		return err
-	}
 	log.Info("found hypervisors and vm missing failover reservation", "countHypervisors", len(allHypervisors), "countVMsMissingFailover", len(vmsMissingFailover))
 
 	// Track statistics for summary
@@ -512,30 +511,6 @@ func (c *FailoverReservationController) calculateVMsMissingFailover(
 	return result
 }
 
-// getAllHypervisors returns all available hypervisor names.
-func (c *FailoverReservationController) getAllHypervisors(ctx context.Context) ([]string, error) {
-	hypervisorList, err := c.getHypervisors(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	hypervisors := make([]string, 0, len(hypervisorList.Items))
-	for _, hv := range hypervisorList.Items {
-		hypervisors = append(hypervisors, hv.Name)
-	}
-
-	return hypervisors, nil
-}
-
-// getHypervisors returns all hypervisors.
-func (c *FailoverReservationController) getHypervisors(ctx context.Context) (*hv1.HypervisorList, error) {
-	var hypervisorList hv1.HypervisorList
-	if err := c.List(ctx, &hypervisorList); err != nil {
-		return nil, fmt.Errorf("failed to list hypervisors: %w", err)
-	}
-	return &hypervisorList, nil
-}
-
 // warnUnknownVMsOnHypervisors logs a warning for VMs that are on hypervisors but not in the ListVMs (i.e. nova) result.
 // This can indicate a data sync issue between the hypervisor operator and the VM datasource.
 func warnUnknownVMsOnHypervisors(hypervisors *hv1.HypervisorList, vms []VM) {
@@ -626,21 +601,56 @@ func filterFailoverReservations(resList []v1alpha1.Reservation) []v1alpha1.Reser
 	return result
 }
 
-// filterVMsOnKnownHypervisors filters VMs to only include those running on known hypervisors.
-// This removes VMs that are on hypervisors not managed by the hypervisor operator.
-func filterVMsOnKnownHypervisors(vms []VM, knownHypervisors []string) []VM {
+// filterVMsOnKnownHypervisors filters VMs to only include those that:
+// 1. Are running on a known hypervisor
+// 2. Are actually listed in that hypervisor's Status.Instances
+// This removes VMs that are on hypervisors not managed by the hypervisor operator,
+// or VMs that claim to be on a hypervisor but aren't in its instances list (data sync issue).
+func filterVMsOnKnownHypervisors(vms []VM, hypervisorList *hv1.HypervisorList) []VM {
 	// Build a set of known hypervisors for O(1) lookup
-	hypervisorSet := make(map[string]bool, len(knownHypervisors))
-	for _, hypervisor := range knownHypervisors {
-		hypervisorSet[hypervisor] = true
+	hypervisorSet := make(map[string]bool, len(hypervisorList.Items))
+	for _, hv := range hypervisorList.Items {
+		hypervisorSet[hv.Name] = true
+	}
+
+	// Build a set of VM UUIDs that are actually in hypervisor instances
+	// Key: "vmUUID:hypervisorName" to ensure VM is on the correct hypervisor
+	vmOnHypervisor := make(map[string]bool)
+	for _, hv := range hypervisorList.Items {
+		for _, inst := range hv.Status.Instances {
+			if inst.Active {
+				key := inst.ID + ":" + hv.Name
+				vmOnHypervisor[key] = true
+			}
+		}
 	}
 
 	var result []VM
+	var filtered int
 	for _, vm := range vms {
-		if hypervisorSet[vm.CurrentHypervisor] {
-			result = append(result, vm)
+		// Check if hypervisor is known
+		if !hypervisorSet[vm.CurrentHypervisor] {
+			filtered++
+			continue
 		}
+		// Check if VM is actually in the hypervisor's instances list
+		key := vm.UUID + ":" + vm.CurrentHypervisor
+		if !vmOnHypervisor[key] {
+			log.Info("filtering out VM: not found in hypervisor's instances list",
+				"vmUUID", vm.UUID,
+				"claimedHypervisor", vm.CurrentHypervisor)
+			filtered++
+			continue
+		}
+		result = append(result, vm)
 	}
+
+	if filtered > 0 {
+		log.Info("filtered out VMs not found in hypervisor instances",
+			"filteredCount", filtered,
+			"remainingCount", len(result))
+	}
+
 	return result
 }
 

@@ -220,10 +220,6 @@ spec:
         This step will filter out hosts for which the hypervisor status conditions
         do not meet the expected values, for example, that the hypervisor is ready
         and not disabled.
-    - name: filter_maintenance
-      description: |
-        This step will filter out hosts that are currently in maintenance mode that
-        prevents scheduling, for example, manual maintenance or termination.
     - name: filter_external_customer
       description: |
         This step prefix-matches the domain name for external customer domains and
@@ -352,34 +348,30 @@ spec:
         This step will filter out hosts for which the hypervisor status conditions
         do not meet the expected values, for example, that the hypervisor is ready
         and not disabled.
-    - name: filter_maintenance
-      description: |
-        This step will filter out hosts that are currently in maintenance mode that
-        prevents scheduling, for example, manual maintenance or termination.
     - name: filter_capabilities
       description: |
         This step will filter out hosts that do not meet the compute capabilities
         requested by the nova flavor extra specs, like `{"arch": "x86_64",
         "maxphysaddr:bits": 46, ...}`.
   weighers: []
----
-apiVersion: cortex.cloud/v1alpha1
-kind: Pipeline
-metadata:
-  name: nova-descheduler-kvm
-spec:
-  schedulingDomain: nova
-  description:
-    This pipeline runs steps that select virtual machines to deschedule from
-    compute hosts in order to optimize resource usage and performance.
-    This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
-  type: detector
-  createDecisions: true
-  detectors:
-    - name: avoid_high_steal_pct
-      description: |
-        This step will deschedule VMs once they reach this CPU steal percentage over
-        the observed time span.
-      params:
-        - {key: maxStealPctOverObservedTimeSpan, floatValue: 20.0}
+# ---
+# apiVersion: cortex.cloud/v1alpha1
+# kind: Pipeline
+# metadata:
+#   name: nova-descheduler-kvm
+# spec:
+#   schedulingDomain: nova
+#   description:
+#     This pipeline runs steps that select virtual machines to deschedule from
+#     compute hosts in order to optimize resource usage and performance.
+#     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
+#   type: detector
+#   createDecisions: true
+#   detectors:
+#     - name: avoid_high_steal_pct
+#       description: |
+#         This step will deschedule VMs once they reach this CPU steal percentage over
+#         the observed time span.
+#       params:
+#         - {key: maxStealPctOverObservedTimeSpan, floatValue: 20.0}
 {{- end }}

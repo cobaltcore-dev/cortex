@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -226,28 +227,39 @@ func TestFilterFailoverReservations(t *testing.T) {
 
 func TestFilterVMsOnKnownHypervisors(t *testing.T) {
 	tests := []struct {
-		name             string
-		vms              []VM
-		knownHypervisors []string
-		expectedCount    int
-		expectedUUIDs    []string
+		name           string
+		vms            []VM
+		hypervisorList *hv1.HypervisorList
+		expectedCount  int
+		expectedUUIDs  []string
 	}{
 		{
-			name:             "empty VMs list",
-			vms:              []VM{},
-			knownHypervisors: []string{"host1", "host2"},
-			expectedCount:    0,
-			expectedUUIDs:    nil,
+			name: "empty VMs list",
+			vms:  []VM{},
+			hypervisorList: &hv1.HypervisorList{
+				Items: []hv1.Hypervisor{
+					newTestHypervisor("host1", []hv1.Instance{}),
+					newTestHypervisor("host2", []hv1.Instance{}),
+				},
+			},
+			expectedCount: 0,
+			expectedUUIDs: nil,
 		},
 		{
-			name: "all VMs on known hypervisors",
+			name: "all VMs on known hypervisors and in instances",
 			vms: []VM{
 				newTestVM("vm-1", "host1", "m1.large"),
 				newTestVM("vm-2", "host2", "m1.large"),
 			},
-			knownHypervisors: []string{"host1", "host2", "host3"},
-			expectedCount:    2,
-			expectedUUIDs:    []string{"vm-1", "vm-2"},
+			hypervisorList: &hv1.HypervisorList{
+				Items: []hv1.Hypervisor{
+					newTestHypervisor("host1", []hv1.Instance{{ID: "vm-1", Name: "vm-1", Active: true}}),
+					newTestHypervisor("host2", []hv1.Instance{{ID: "vm-2", Name: "vm-2", Active: true}}),
+					newTestHypervisor("host3", []hv1.Instance{}),
+				},
+			},
+			expectedCount: 2,
+			expectedUUIDs: []string{"vm-1", "vm-2"},
 		},
 		{
 			name: "some VMs on unknown hypervisors",
@@ -256,9 +268,56 @@ func TestFilterVMsOnKnownHypervisors(t *testing.T) {
 				newTestVM("vm-2", "unknown-host", "m1.large"),
 				newTestVM("vm-3", "host2", "m1.large"),
 			},
-			knownHypervisors: []string{"host1", "host2"},
-			expectedCount:    2,
-			expectedUUIDs:    []string{"vm-1", "vm-3"},
+			hypervisorList: &hv1.HypervisorList{
+				Items: []hv1.Hypervisor{
+					newTestHypervisor("host1", []hv1.Instance{{ID: "vm-1", Name: "vm-1", Active: true}}),
+					newTestHypervisor("host2", []hv1.Instance{{ID: "vm-3", Name: "vm-3", Active: true}}),
+				},
+			},
+			expectedCount: 2,
+			expectedUUIDs: []string{"vm-1", "vm-3"},
+		},
+		{
+			name: "VM claims hypervisor but not in instances list - filter out",
+			vms: []VM{
+				newTestVM("vm-1", "host1", "m1.large"),
+				newTestVM("vm-2", "host2", "m1.large"), // claims host2 but not in instances
+			},
+			hypervisorList: &hv1.HypervisorList{
+				Items: []hv1.Hypervisor{
+					newTestHypervisor("host1", []hv1.Instance{{ID: "vm-1", Name: "vm-1", Active: true}}),
+					newTestHypervisor("host2", []hv1.Instance{}), // vm-2 not in instances
+				},
+			},
+			expectedCount: 1,
+			expectedUUIDs: []string{"vm-1"},
+		},
+		{
+			name: "VM on wrong hypervisor in instances - filter out",
+			vms: []VM{
+				newTestVM("vm-1", "host1", "m1.large"), // claims host1
+			},
+			hypervisorList: &hv1.HypervisorList{
+				Items: []hv1.Hypervisor{
+					newTestHypervisor("host1", []hv1.Instance{}),                                         // vm-1 not here
+					newTestHypervisor("host2", []hv1.Instance{{ID: "vm-1", Name: "vm-1", Active: true}}), // vm-1 is actually here
+				},
+			},
+			expectedCount: 0,
+			expectedUUIDs: nil,
+		},
+		{
+			name: "inactive VM in instances - filter out",
+			vms: []VM{
+				newTestVM("vm-1", "host1", "m1.large"),
+			},
+			hypervisorList: &hv1.HypervisorList{
+				Items: []hv1.Hypervisor{
+					newTestHypervisor("host1", []hv1.Instance{{ID: "vm-1", Name: "vm-1", Active: false}}), // inactive
+				},
+			},
+			expectedCount: 0,
+			expectedUUIDs: nil,
 		},
 		{
 			name: "no VMs on known hypervisors",
@@ -266,39 +325,60 @@ func TestFilterVMsOnKnownHypervisors(t *testing.T) {
 				newTestVM("vm-1", "unknown1", "m1.large"),
 				newTestVM("vm-2", "unknown2", "m1.large"),
 			},
-			knownHypervisors: []string{"host1", "host2"},
-			expectedCount:    0,
-			expectedUUIDs:    nil,
+			hypervisorList: &hv1.HypervisorList{
+				Items: []hv1.Hypervisor{
+					newTestHypervisor("host1", []hv1.Instance{}),
+					newTestHypervisor("host2", []hv1.Instance{}),
+				},
+			},
+			expectedCount: 0,
+			expectedUUIDs: nil,
 		},
 		{
-			name: "empty known hypervisors list",
+			name: "empty hypervisors list",
 			vms: []VM{
 				newTestVM("vm-1", "host1", "m1.large"),
 			},
-			knownHypervisors: []string{},
-			expectedCount:    0,
-			expectedUUIDs:    nil,
+			hypervisorList: &hv1.HypervisorList{
+				Items: []hv1.Hypervisor{},
+			},
+			expectedCount: 0,
+			expectedUUIDs: nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := filterVMsOnKnownHypervisors(tt.vms, tt.knownHypervisors)
+			result := filterVMsOnKnownHypervisors(tt.vms, tt.hypervisorList)
 
 			if len(result) != tt.expectedCount {
 				t.Errorf("expected %d VMs, got %d", tt.expectedCount, len(result))
 			}
 
-			for i, uuid := range tt.expectedUUIDs {
-				if i >= len(result) {
-					t.Errorf("missing expected VM %s", uuid)
-					continue
-				}
-				if result[i].UUID != uuid {
-					t.Errorf("expected VM %s at index %d, got %s", uuid, i, result[i].UUID)
+			// Check that expected UUIDs are present (order may vary due to filtering)
+			resultUUIDs := make(map[string]bool)
+			for _, vm := range result {
+				resultUUIDs[vm.UUID] = true
+			}
+
+			for _, uuid := range tt.expectedUUIDs {
+				if !resultUUIDs[uuid] {
+					t.Errorf("expected VM %s in result, but not found", uuid)
 				}
 			}
 		})
+	}
+}
+
+// newTestHypervisor creates a test hypervisor with the given instances
+func newTestHypervisor(name string, instances []hv1.Instance) hv1.Hypervisor {
+	return hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Status: hv1.HypervisorStatus{
+			Instances: instances,
+		},
 	}
 }
 
@@ -752,7 +832,7 @@ func newTestReservationWithResources(name, host string, allocations map[string]s
 			TargetHost: host,
 			Resources: map[string]resource.Quantity{
 				"memory": *resource.NewQuantity(8192*1024*1024, resource.BinarySI),
-				"cpu":    *resource.NewQuantity(4, resource.DecimalSI),
+				"vcpus":  *resource.NewQuantity(4, resource.DecimalSI),
 			},
 		},
 		Status: v1alpha1.ReservationStatus{

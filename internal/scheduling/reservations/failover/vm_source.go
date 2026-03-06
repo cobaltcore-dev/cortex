@@ -90,7 +90,7 @@ func (s *DBVMSource) ListVMs(ctx context.Context) ([]VM, error) {
 
 		// Build resources map
 		resources := map[string]resource.Quantity{
-			"cpu":    *resource.NewQuantity(int64(flavor.VCPUs), resource.DecimalSI),        //nolint:gosec // VCPUs won't overflow int64
+			"vcpus":  *resource.NewQuantity(int64(flavor.VCPUs), resource.DecimalSI),        //nolint:gosec // VCPUs won't overflow int64
 			"memory": *resource.NewQuantity(int64(flavor.RAM)*1024*1024, resource.BinarySI), //nolint:gosec // RAM in MB won't overflow int64
 		}
 
@@ -119,7 +119,17 @@ func parseExtraSpecs(extraSpecsJSON string) map[string]string {
 	var extraSpecs map[string]string
 	if err := json.Unmarshal([]byte(extraSpecsJSON), &extraSpecs); err != nil {
 		// Log error but don't fail - return empty map
+		log.Error(err, "failed to parse flavor extra specs JSON",
+			"extraSpecsJSON", truncateString(extraSpecsJSON, 100))
 		return make(map[string]string)
 	}
 	return extraSpecs
+}
+
+// truncateString truncates a string to maxLen characters, adding "..." if truncated.
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

@@ -14,7 +14,7 @@ import (
 // Default resources for test VMs and reservations (4GB memory, 2 vcpus)
 var defaultResources = map[string]resource.Quantity{
 	"memory": resource.MustParse("4Gi"),
-	"cpu":    resource.MustParse("2"),
+	"vcpus":  resource.MustParse("2"),
 }
 
 var defaultVMResources = map[string]resource.Quantity{
@@ -507,7 +507,7 @@ func TestDoesVMFitInReservation(t *testing.T) {
 			}),
 			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[string]resource.Quantity{
 				"memory": resource.MustParse("4Gi"),
-				"cpu":    resource.MustParse("2"),
+				"vcpus":  resource.MustParse("2"),
 			}),
 			expected: true,
 		},
@@ -519,7 +519,7 @@ func TestDoesVMFitInReservation(t *testing.T) {
 			}),
 			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[string]resource.Quantity{
 				"memory": resource.MustParse("4Gi"),
-				"cpu":    resource.MustParse("2"),
+				"vcpus":  resource.MustParse("2"),
 			}),
 			expected: true,
 		},
@@ -531,7 +531,7 @@ func TestDoesVMFitInReservation(t *testing.T) {
 			}),
 			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[string]resource.Quantity{
 				"memory": resource.MustParse("4Gi"),
-				"cpu":    resource.MustParse("2"),
+				"vcpus":  resource.MustParse("2"),
 			}),
 			expected: false,
 		},
@@ -543,7 +543,7 @@ func TestDoesVMFitInReservation(t *testing.T) {
 			}),
 			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[string]resource.Quantity{
 				"memory": resource.MustParse("4Gi"),
-				"cpu":    resource.MustParse("2"),
+				"vcpus":  resource.MustParse("2"),
 			}),
 			expected: false,
 		},
@@ -552,7 +552,7 @@ func TestDoesVMFitInReservation(t *testing.T) {
 			vm:   makeVMWithResources("vm-1", "host1", map[string]resource.Quantity{}),
 			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[string]resource.Quantity{
 				"memory": resource.MustParse("4Gi"),
-				"cpu":    resource.MustParse("2"),
+				"vcpus":  resource.MustParse("2"),
 			}),
 			expected: true,
 		},
@@ -563,12 +563,12 @@ func TestDoesVMFitInReservation(t *testing.T) {
 				"vcpus":  resource.MustParse("2"),
 			}),
 			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[string]resource.Quantity{
-				"cpu": resource.MustParse("2"),
+				"vcpus": resource.MustParse("2"),
 			}),
 			expected: false,
 		},
 		{
-			name: "exceeds: reservation has no cpu resource",
+			name: "exceeds: reservation has no vcpus resource",
 			vm: makeVMWithResources("vm-1", "host1", map[string]resource.Quantity{
 				"memory": resource.MustParse("4Gi"),
 				"vcpus":  resource.MustParse("2"),

@@ -77,16 +77,16 @@ func (c *FailoverReservationController) getPotentialHypervisorsForVM(ctx context
 		return nil, fmt.Errorf("no eligible hypervisors for failover reservation (VM is on %s, already has reservations on %d hypervisors)", vm.CurrentHypervisor, len(vmReservationHypervisors))
 	}
 
-	// Get memory and cpu from VM resources
-	// The VM struct uses "cpu" and "memory" keys (see vm_source.go)
+	// Get memory and vcpus from VM resources
+	// The VM struct uses "vcpus" and "memory" keys (see vm_source.go)
 	var memoryMB uint64
 	var vcpus uint64
 	if memory, ok := vm.Resources["memory"]; ok {
 		// Convert from bytes to MB
 		memoryMB = uint64(memory.Value() / (1024 * 1024)) //nolint:gosec // memory values won't overflow
 	}
-	if cpu, ok := vm.Resources["cpu"]; ok {
-		vcpus = uint64(cpu.Value()) //nolint:gosec // cpu values won't overflow
+	if vcpusRes, ok := vm.Resources["vcpus"]; ok {
+		vcpus = uint64(vcpusRes.Value()) //nolint:gosec // vcpus values won't overflow
 	}
 
 	// Build flavor extra specs from VM's extra specs
@@ -204,15 +204,15 @@ func buildReservationWithVM(reservation v1alpha1.Reservation, vm VM) *v1alpha1.R
 // The caller is responsible for persisting the reservation.
 func (c *FailoverReservationController) buildNewFailoverReservation(vm VM, hypervisor string) *v1alpha1.Reservation {
 	// Build resources from VM's Resources map
-	// The VM struct uses "cpu" and "memory" keys (see vm_source.go)
+	// The VM struct uses "vcpus" and "memory" keys (see vm_source.go)
 
 	// TODO we may want to use different resource (bigger) to enable better sharing
 	resources := make(map[string]resource.Quantity)
 	if memory, ok := vm.Resources["memory"]; ok {
 		resources["memory"] = memory
 	}
-	if cpu, ok := vm.Resources["cpu"]; ok {
-		resources["cpu"] = cpu
+	if vcpus, ok := vm.Resources["vcpus"]; ok {
+		resources["vcpus"] = vcpus
 	}
 
 	reservation := &v1alpha1.Reservation{
