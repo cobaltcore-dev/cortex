@@ -44,15 +44,15 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 			hypervisors: []hv1.Hypervisor{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate2"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate2"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate3"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate3"}}},
 				},
 			},
 			expectedHosts: []string{"host1", "host2", "host3"},
@@ -80,11 +80,11 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 			hypervisors: []hv1.Hypervisor{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate2"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate2"}}},
 				},
 			},
 			expectedHosts: []string{"host1", "host2"},
@@ -112,15 +112,15 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 			hypervisors: []hv1.Hypervisor{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
 				},
 			},
 			expectedHosts: []string{"host2"},
@@ -148,15 +148,15 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 			hypervisors: []hv1.Hypervisor{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate2"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate2"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1", "aggregate2"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}, {UUID: "aggregate2"}}},
 				},
 			},
 			expectedHosts: []string{"host1", "host3"},
@@ -184,15 +184,15 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 			hypervisors: []hv1.Hypervisor{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Status:     hv1.HypervisorStatus{Aggregates: []string{"aggregate1"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
-					Status:     hv1.HypervisorStatus{Aggregates: []string{"aggregate2"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate2"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
-					Status:     hv1.HypervisorStatus{Aggregates: []string{"aggregate1", "aggregate3"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}, {UUID: "aggregate3"}}},
 				},
 			},
 			expectedHosts: []string{"host1", "host3"},
@@ -221,19 +221,19 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 			hypervisors: []hv1.Hypervisor{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate2"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate2"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate3"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate3"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host4"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate4"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate4"}}},
 				},
 			},
 			expectedHosts: []string{"host1", "host3"},
@@ -261,18 +261,15 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 			hypervisors: []hv1.Hypervisor{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1"}},
-					Status:     hv1.HypervisorStatus{Aggregates: []string{"aggregate3"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}, {UUID: "aggregate3"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate3"}},
-					Status:     hv1.HypervisorStatus{Aggregates: []string{"aggregate2"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate2"}, {UUID: "aggregate3"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate4"}},
-					Status:     hv1.HypervisorStatus{Aggregates: []string{"aggregate5"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate4"}, {UUID: "aggregate5"}}},
 				},
 			},
 			expectedHosts: []string{"host1", "host2"},
@@ -301,15 +298,15 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 			hypervisors: []hv1.Hypervisor{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate2"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate2"}}},
 				},
 			},
 			expectedHosts: []string{"host2"},
@@ -337,11 +334,11 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 			hypervisors: []hv1.Hypervisor{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
 				},
 			},
 			expectedHosts: []string{"host1", "host2"},
@@ -369,16 +366,15 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 			hypervisors: []hv1.Hypervisor{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{}},
-					Status:     hv1.HypervisorStatus{Aggregates: []string{}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
 				},
 			},
 			expectedHosts: []string{"host1", "host3"},
@@ -405,11 +401,11 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 			hypervisors: []hv1.Hypervisor{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate2"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate2"}}},
 				},
 			},
 			expectedHosts: []string{},
@@ -436,15 +432,15 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 			hypervisors: []hv1.Hypervisor{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate2"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate2"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host-not-in-list"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate3"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate3"}}},
 				},
 			},
 			expectedHosts: []string{},
@@ -468,7 +464,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 			hypervisors: []hv1.Hypervisor{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"aggregate1"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
 				},
 			},
 			expectedHosts: []string{},
@@ -608,15 +604,15 @@ func TestFilterRequestedDestinationStepOpts_Combined(t *testing.T) {
 			hypervisors: []hv1.Hypervisor{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"az-west"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "az-west"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"az-east"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "az-east"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"az-west"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "az-west"}}},
 				},
 			},
 			ignoredAggregates: []string{"az-west"},
@@ -646,15 +642,15 @@ func TestFilterRequestedDestinationStepOpts_Combined(t *testing.T) {
 			hypervisors: []hv1.Hypervisor{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"production"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "production"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"production"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "production"}}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
-					Spec:       hv1.HypervisorSpec{Aggregates: []string{"staging"}},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "staging"}}},
 				},
 			},
 			// az-west is ignored, so only production is considered
