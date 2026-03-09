@@ -62,11 +62,11 @@ func (k *DecisionStateKPI) Collect(ch chan<- prometheus.Metric) {
 		}
 		decisions = append(decisions, d)
 	}
-	// For each decision, categorize by state: error, waiting, or success
+	// For each decision, categorize by state: error or success
 	var errorCount, successCount float64
 	for _, d := range decisions {
 		switch {
-		// Error state: decision has a false Ready condition
+		// Error state: decision has Ready=False
 		case meta.IsStatusConditionFalse(d.Status.Conditions, v1alpha1.DecisionConditionReady):
 			errorCount++
 		// Success state: decision is complete (has result with ordered hosts or no result needed)

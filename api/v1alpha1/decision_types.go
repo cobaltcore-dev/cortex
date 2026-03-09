@@ -45,9 +45,8 @@ type DecisionSpec struct {
 
 const (
 	// The decision is ready and tracking the resource.
+	// When False, indicates a scheduling failure (check Reason for details).
 	DecisionConditionReady = "Ready"
-	// The decision has failed to make a placement decision for the resource.
-	DecisionConditionFailed = "Failed"
 )
 
 type DecisionStatus struct {

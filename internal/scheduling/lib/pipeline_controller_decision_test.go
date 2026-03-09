@@ -6,6 +6,7 @@ package lib
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -458,7 +459,7 @@ func TestBasePipelineController_UpdateDecision_EventEmission(t *testing.T) {
 			}
 
 			// Check message contains expected text
-			if !contains(event.message, tt.messageContains) {
+			if !strings.Contains(event.message, tt.messageContains) {
 				t.Errorf("Expected message to contain %q, got %q", tt.messageContains, event.message)
 			}
 
@@ -491,15 +492,3 @@ func (m *mockEventRecorder) Eventf(object, related runtime.Object, eventType, re
 	})
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}

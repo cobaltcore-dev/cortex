@@ -138,16 +138,14 @@ func (c *BasePipelineController[PipelineType]) updateDecision(ctx context.Contex
 		decision.Status.Explanation = explanationText
 
 		if schedulingFailed {
-			// No hosts available - set failed condition
 			decision.Status.TargetHost = ""
 			meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
-				Type:    v1alpha1.DecisionConditionFailed,
-				Status:  metav1.ConditionTrue,
+				Type:    v1alpha1.DecisionConditionReady,
+				Status:  metav1.ConditionFalse,
 				Reason:  "NoValidHosts",
 				Message: "Cannot schedule: No valid hosts available after filtering",
 			})
 		} else {
-			// Successful scheduling
 			decision.Status.TargetHost = update.Result.OrderedHosts[0]
 			meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
 				Type:    v1alpha1.DecisionConditionReady,

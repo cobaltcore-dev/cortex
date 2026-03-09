@@ -73,8 +73,8 @@ func DecisionsCleanup(ctx context.Context, client client.Client, conf DecisionsC
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
 			return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 		}
 		var list struct {
@@ -87,6 +87,7 @@ func DecisionsCleanup(ctx context.Context, client client.Client, conf DecisionsC
 			} `json:"volumes_links"`
 		}
 		err = json.NewDecoder(resp.Body).Decode(&list)
+		resp.Body.Close()
 		if err != nil {
 			return err
 		}
