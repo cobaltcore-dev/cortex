@@ -17,6 +17,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+type StepResult struct {
+	// object reference to the scheduler step.
+	StepName string `json:"stepName"`
+	// Activations of the step for each host.
+	Activations map[string]float64 `json:"activations"`
+}
+
 type FilterWeigherPipelineResult struct {
 	// The original weights provided as input to the pipeline, from the request that cortex received.
 	RawInWeights map[string]float64
@@ -26,6 +33,8 @@ type FilterWeigherPipelineResult struct {
 	AggregatedOutWeights map[string]float64
 	// The hosts in order of preference, with the most preferred host first.
 	OrderedHosts []string
+	// The results of each step in the pipeline, in the order they were executed.
+	StepResults []StepResult
 }
 
 type FilterWeigherPipeline[RequestType FilterWeigherPipelineRequest] interface {
@@ -149,7 +158,7 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 func (p *filterWeigherPipeline[RequestType]) runFilters(
 	log *slog.Logger,
 	request RequestType,
-) (filteredRequest RequestType) {
+) (filteredRequest RequestType, stepResults []StepResult) {
 
 	filteredRequest = request
 	for _, filterName := range p.filtersOrder {
@@ -166,20 +175,29 @@ func (p *filterWeigherPipeline[RequestType]) runFilters(
 			continue
 		}
 		stepLog.Info("scheduler: finished filter")
+
+		// Record the filter step result before mutating the request.
+		// Hosts present in Activations passed the filter; absent hosts were filtered out.
+		stepResults = append(stepResults, StepResult{
+			StepName:    filterName,
+			Activations: result.Activations,
+		})
+
 		// Mutate the request to only include the remaining hosts.
 		// Assume the resulting request type is the same as the input type.
 		filteredRequest = filteredRequest.FilterHosts(result.Activations).(RequestType)
 	}
-	return filteredRequest
+	return filteredRequest, stepResults
 }
 
 // Execute weighers and collect their activations by step name.
 func (p *filterWeigherPipeline[RequestType]) runWeighers(
 	log *slog.Logger,
 	filteredRequest RequestType,
-) map[string]map[string]float64 {
+) (map[string]map[string]float64, []StepResult) {
 
 	activationsByStep := map[string]map[string]float64{}
+	var stepResults []StepResult
 	// Weighers can be run in parallel as they do not modify the request.
 	var lock sync.Mutex
 	var wg sync.WaitGroup
@@ -201,10 +219,14 @@ func (p *filterWeigherPipeline[RequestType]) runWeighers(
 			lock.Lock()
 			defer lock.Unlock()
 			activationsByStep[weigherName] = result.Activations
+			stepResults = append(stepResults, StepResult{
+				StepName:    weigherName,
+				Activations: result.Activations,
+			})
 		})
 	}
 	wg.Wait()
-	return activationsByStep
+	return activationsByStep, stepResults
 }
 
 // Apply an initial weight to the hosts.
@@ -286,7 +308,7 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (FilterWei
 
 	// Run filters first to reduce the number of hosts.
 	// Any weights assigned to filtered out hosts are ignored.
-	filteredRequest := p.runFilters(traceLog, request)
+	filteredRequest, filterStepResults := p.runFilters(traceLog, request)
 	traceLog.Info(
 		"scheduler: finished filters",
 		"remainingHosts", filteredRequest.GetHosts(),
@@ -297,7 +319,7 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (FilterWei
 	for _, host := range filteredRequest.GetHosts() {
 		remainingWeights[host] = inWeights[host]
 	}
-	stepWeights := p.runWeighers(traceLog, filteredRequest)
+	stepWeights, weigherStepResults := p.runWeighers(traceLog, filteredRequest)
 	outWeights := p.applyWeights(traceLog, stepWeights, remainingWeights)
 	traceLog.Info("scheduler: output weights", "weights", outWeights)
 
@@ -312,6 +334,7 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (FilterWei
 		NormalizedInWeights:  inWeights,
 		AggregatedOutWeights: outWeights,
 		OrderedHosts:         hosts,
+		StepResults:          append(filterStepResults, weigherStepResults...),
 	}
 	return result, nil
 }
