@@ -85,12 +85,15 @@ func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.
 				traceLog.Info("filtered out host not in requested_destination aggregates (unknown host)", "host", host)
 				continue
 			}
-			hvAggregates := hv.Spec.Aggregates
-			hvAggregates = append(hvAggregates, hv.Status.Aggregates...)
+			// The requested destination from Nova will contain aggregate uuids.
+			hvAggregateUUIDs := make([]string, 0, len(hv.Status.Aggregates))
+			for _, agg := range hv.Status.Aggregates {
+				hvAggregateUUIDs = append(hvAggregateUUIDs, agg.UUID)
+			}
 			// Check if any of the host's aggregates match the requested aggregates.
 			found := false
 			for _, reqAgg := range aggregatesToConsider {
-				if slices.Contains(hvAggregates, reqAgg) {
+				if slices.Contains(hvAggregateUUIDs, reqAgg) {
 					found = true
 					break
 				}
@@ -99,7 +102,7 @@ func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.
 				delete(result.Activations, host)
 				traceLog.Info(
 					"filtered out host not in requested_destination aggregates",
-					"host", host, "hostAggregates", hvAggregates,
+					"host", host, "hostAggregates", hvAggregateUUIDs,
 					"requestedAggregates", rd.Data.Aggregates,
 					"ignoredAggregates", s.Options.IgnoredAggregates,
 					"aggregatesConsidered", aggregatesToConsider,
