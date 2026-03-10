@@ -151,11 +151,6 @@ spec:
         `domain_name` scheduler hint from the nova request spec.
       params:
         - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
-    - name: filter_packed_virtqueue
-      description: |
-        If the flavor extra specs contain the `hw:virtio_packed_ring` key, or the
-        image properties contain the `hw_virtio_packed_ring` key, this step will
-        filter out hosts that do not have the `COMPUTE_NET_VIRTIO_PACKED` trait.
     - name: filter_allowed_projects
       description: |
         This step filters hosts based on allowed projects defined in the
@@ -282,11 +277,6 @@ spec:
         `domain_name` scheduler hint from the nova request spec.
       params:
         - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
-    - name: filter_packed_virtqueue
-      description: |
-        If the flavor extra specs contain the `hw:virtio_packed_ring` key, or the
-        image properties contain the `hw_virtio_packed_ring` key, this step will
-        filter out hosts that do not have the `COMPUTE_NET_VIRTIO_PACKED` trait.
     - name: filter_allowed_projects
       description: |
         This step filters hosts based on allowed projects defined in the
