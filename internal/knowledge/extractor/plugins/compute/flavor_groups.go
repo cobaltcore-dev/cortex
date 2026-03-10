@@ -6,10 +6,10 @@ package compute
 import (
 	_ "embed"
 	"encoding/json"
-	"log/slog"
 	"sort"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 // FlavorInGroup represents a single flavor within a flavor group.
@@ -63,13 +63,14 @@ var flavorGroupsQuery string
 // flavorGroupIdentifierName specifies the extra_spec key used to group flavors.
 const flavorGroupIdentifierName = "quota:hw_version"
 
+var flavorGroupLog = ctrl.Log.WithName("flavor_group_extractor")
+
 // Extract flavor groups from the database.
-// Groups flavors by their hw_version extra_spec and identifies the largest flavor in each group.
 func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 	// Query all flavors from database
 	var rows []flavorRow
 	if _, err := e.DB.Select(&rows, flavorGroupsQuery); err != nil {
-		slog.Error("[FlavorGroupExtractor] Failed to query flavors", "error", err)
+		flavorGroupLog.Error(err, "failed to query flavors")
 		return nil, err
 	}
 
@@ -81,15 +82,14 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 		var extraSpecs map[string]string
 		if row.ExtraSpecs != "" {
 			if err := json.Unmarshal([]byte(row.ExtraSpecs), &extraSpecs); err != nil {
-				slog.Info("[FlavorGroupExtractor] Failed to parse extra_specs for flavor", "flavor", row.Name, "error", err)
+				flavorGroupLog.Info("failed to parse extra_specs for flavor", "flavor", row.Name, "error", err)
 				continue
 			}
 		}
 
-		// Extract hw_version from extra_specs
 		hwVersion, exists := extraSpecs[flavorGroupIdentifierName]
 		if !exists || hwVersion == "" {
-			slog.Info("[FlavorGroupExtractor] Flavor missing hw_version extra_spec", "flavor", row.Name)
+			flavorGroupLog.Info("flavor missing hw_version extra_spec", "flavor", row.Name)
 			continue
 		}
 
@@ -123,12 +123,17 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 			return flavors[i].Name < flavors[j].Name
 		})
 
-		// Find the largest flavor (highest memory, then highest VCPUs as tiebreaker)
 		largest := flavors[0]
 		smallest := flavors[len(flavors)-1]
 
-		slog.Info("[FlavorGroupExtractor] Identified largest flavor", "group_name", groupName, "largest_flavor", largest.Name, "memory_mb", largest.MemoryMB, "vcpus", largest.VCPUs,
-			"smallest_flavor", smallest.Name, "memory_mb", smallest.MemoryMB, "vcpus", smallest.VCPUs, "based on extra specs", largest.ExtraSpecs)
+		flavorGroupLog.Info("identified largest and smallest flavors",
+			"groupName", groupName,
+			"largestFlavor", largest.Name,
+			"largestMemoryMB", largest.MemoryMB,
+			"largestVCPUs", largest.VCPUs,
+			"smallestFlavor", smallest.Name,
+			"smallestMemoryMB", smallest.MemoryMB,
+			"smallestVCPUs", smallest.VCPUs)
 
 		features = append(features, FlavorGroupFeature{
 			Name:           groupName,
