@@ -14,11 +14,10 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	"github.com/gophercloud/gophercloud/v2"
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/must"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -28,13 +27,8 @@ type CommitmentsClient interface {
 	Init(ctx context.Context, client client.Client, conf SyncerConfig) error
 	// List all projects to resolve commitments.
 	ListProjects(ctx context.Context) ([]Project, error)
-	// List all flavors by their name to resolve instance commitments.
-	ListFlavorsByName(ctx context.Context) (map[string]Flavor, error)
 	// List all commitments with resolved metadata (e.g. project, flavor, ...).
 	ListCommitmentsByID(ctx context.Context, projects ...Project) (map[string]Commitment, error)
-	// List all servers for the given projects from nova.
-	// The result is a map from project ID to the list of servers.
-	ListServersByProjectID(ctx context.Context, projects ...Project) (map[string][]Server, error)
 }
 
 // Commitments client fetching commitments from openstack services.
@@ -49,14 +43,13 @@ type commitmentsClient struct {
 	limes *gophercloud.ServiceClient
 }
 
-// Create a new commitments client.
-// By default, this client will fetch commitments from the limes API.
 func NewCommitmentsClient() CommitmentsClient {
 	return &commitmentsClient{}
 }
 
-// Init the client.
 func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf SyncerConfig) error {
+	log := ctrl.Log.WithName("CommitmentClient")
+
 	var authenticatedHTTP = http.DefaultClient
 	if conf.SSOSecretRef != nil {
 		var err error
@@ -79,7 +72,7 @@ func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf
 		Type:         "identity",
 		Availability: "public",
 	}))
-	syncLog.Info("using identity endpoint", "url", url)
+	log.Info("using identity endpoint", "url", url)
 	c.keystone = &gophercloud.ServiceClient{
 		ProviderClient: c.provider,
 		Endpoint:       url,
@@ -91,7 +84,7 @@ func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf
 		Type:         "compute",
 		Availability: "public",
 	}))
-	syncLog.Info("using nova endpoint", "url", url)
+	log.Info("using nova endpoint", "url", url)
 	c.nova = &gophercloud.ServiceClient{
 		ProviderClient: c.provider,
 		Endpoint:       url,
@@ -104,7 +97,7 @@ func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf
 		Type:         "resources",
 		Availability: "public",
 	}))
-	syncLog.Info("using limes endpoint", "url", url)
+	log.Info("using limes endpoint", "url", url)
 	c.limes = &gophercloud.ServiceClient{
 		ProviderClient: c.provider,
 		Endpoint:       url,
@@ -113,32 +106,10 @@ func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf
 	return nil
 }
 
-// Get all Nova flavors by their name to resolve instance commitments.
-func (c *commitmentsClient) ListFlavorsByName(ctx context.Context) (map[string]Flavor, error) {
-	syncLog.Info("fetching all flavors from nova")
-	flo := flavors.ListOpts{AccessType: flavors.AllAccess}
-	pages, err := flavors.ListDetail(c.nova, flo).AllPages(ctx)
-	if err != nil {
-		return nil, err
-	}
-	// Parse the json data into our custom model.
-	var data = &struct {
-		Flavors []Flavor `json:"flavors"`
-	}{}
-	if err := pages.(flavors.FlavorPage).ExtractInto(data); err != nil {
-		return nil, err
-	}
-	syncLog.Info("fetched flavors from nova", "count", len(data.Flavors))
-	flavorsByName := make(map[string]Flavor, len(data.Flavors))
-	for _, flavor := range data.Flavors {
-		flavorsByName[flavor.Name] = flavor
-	}
-	return flavorsByName, nil
-}
-
-// Get all projects from Keystone to resolve commitments.
 func (c *commitmentsClient) ListProjects(ctx context.Context) ([]Project, error) {
-	syncLog.Info("fetching projects from keystone")
+	log := ctrl.Log.WithName("CommitmentClient")
+
+	log.V(1).Info("fetching projects from keystone")
 	allPages, err := projects.List(c.keystone, nil).AllPages(ctx)
 	if err != nil {
 		return nil, err
@@ -149,14 +120,15 @@ func (c *commitmentsClient) ListProjects(ctx context.Context) ([]Project, error)
 	if err := allPages.(projects.ProjectPage).ExtractInto(data); err != nil {
 		return nil, err
 	}
-	syncLog.Info("fetched projects from keystone", "count", len(data.Projects))
+	log.V(1).Info("fetched projects from keystone", "count", len(data.Projects))
 	return data.Projects, nil
 }
 
-// Get all available commitments from limes + keystone + nova.
-// This function fetches the commitments for each project in parallel.
+// ListCommitmentsByID fetches commitments for all projects in parallel.
 func (c *commitmentsClient) ListCommitmentsByID(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
-	syncLog.Info("fetching commitments from limes", "projects", len(projects))
+	log := ctrl.Log.WithName("CommitmentClient")
+
+	log.V(1).Info("fetching commitments from limes", "projects", len(projects))
 	commitmentsMutex := gosync.Mutex{}
 	commitments := make(map[string]Commitment)
 	var wg gosync.WaitGroup
@@ -189,15 +161,14 @@ func (c *commitmentsClient) ListCommitmentsByID(ctx context.Context, projects ..
 	// Return the first error encountered, if any.
 	for err := range errChan {
 		if err != nil {
-			syncLog.Error(err, "failed to resolve commitments")
+			log.Error(err, "failed to resolve commitments")
 			return nil, err
 		}
 	}
-	syncLog.Info("resolved commitments from limes", "count", len(commitments))
+	log.V(1).Info("resolved commitments from limes", "count", len(commitments))
 	return commitments, nil
 }
 
-// Resolve the commitments for the given project.
 func (c *commitmentsClient) listCommitments(ctx context.Context, project Project) ([]Commitment, error) {
 	url := c.limes.Endpoint + "v1" +
 		"/domains/" + project.DomainID +
@@ -231,68 +202,4 @@ func (c *commitmentsClient) listCommitments(ctx context.Context, project Project
 		commitments = append(commitments, c)
 	}
 	return commitments, nil
-}
-
-// Get all servers for the given project ids from nova.
-// The result is a map from project ID to the list of servers.
-func (c *commitmentsClient) ListServersByProjectID(ctx context.Context, projects ...Project) (map[string][]Server, error) {
-	syncLog.Info("fetching servers from nova")
-	serversByProject := make(map[string][]Server, len(projects))
-	var mu gosync.Mutex
-	var wg gosync.WaitGroup
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	// Channel to communicate errors from goroutines.
-	errChan := make(chan error, len(projects))
-	for _, project := range projects {
-		wg.Go(func() {
-			servers, err := c.listServersForProject(ctx, project)
-			if err != nil {
-				errChan <- err
-				cancel()
-				return
-			}
-			mu.Lock()
-			serversByProject[project.ID] = servers
-			mu.Unlock()
-		})
-		time.Sleep(jobloop.DefaultJitter(50 * time.Millisecond)) // Don't overload the API.
-	}
-	// Wait for all goroutines to finish and close the error channel.
-	go func() {
-		wg.Wait()
-		close(errChan)
-	}()
-	// Return the first error encountered, if any.
-	for err := range errChan {
-		if err != nil {
-			syncLog.Error(err, "failed to fetch servers")
-			return nil, err
-		}
-	}
-	syncLog.Info("fetched servers from nova", "projects", len(serversByProject))
-	return serversByProject, nil
-}
-
-// Get all servers for the given project id from nova.
-func (c *commitmentsClient) listServersForProject(ctx context.Context, project Project) ([]Server, error) {
-	lo := servers.ListOpts{
-		// AllTenants must be set to fetch servers from other projects
-		// than the one we are authenticated with.
-		AllTenants: true,
-		TenantID:   project.ID,
-	}
-	pages, err := servers.List(c.nova, lo).AllPages(ctx)
-	if err != nil {
-		return nil, err
-	}
-	// Parse the json data into our custom model.
-	var data = &struct {
-		Servers []Server `json:"servers"`
-	}{}
-	if err := pages.(servers.ServerPage).ExtractInto(data); err != nil {
-		return nil, err
-	}
-	syncLog.Info("fetched servers for project", "project", project.ID, "count", len(data.Servers))
-	return data.Servers, nil
 }

@@ -7,14 +7,88 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
+
+// FlavorGroupData holds test data for creating a flavor group
+type FlavorGroupData struct {
+	LargestFlavorName      string
+	LargestFlavorVCPUs     uint64
+	LargestFlavorMemoryMB  uint64
+	SmallestFlavorName     string
+	SmallestFlavorVCPUs    uint64
+	SmallestFlavorMemoryMB uint64
+}
+
+// createFlavorGroupKnowledge creates a Knowledge CRD with flavor group data for testing
+func createFlavorGroupKnowledge(t *testing.T, groups map[string]FlavorGroupData) *v1alpha1.Knowledge {
+	t.Helper()
+
+	// Build flavor group features
+	features := make([]compute.FlavorGroupFeature, 0, len(groups))
+	for groupName, data := range groups {
+		features = append(features, compute.FlavorGroupFeature{
+			Name: groupName,
+			Flavors: []compute.FlavorInGroup{
+				{
+					Name:     data.LargestFlavorName,
+					VCPUs:    data.LargestFlavorVCPUs,
+					MemoryMB: data.LargestFlavorMemoryMB,
+				},
+				{
+					Name:     data.SmallestFlavorName,
+					VCPUs:    data.SmallestFlavorVCPUs,
+					MemoryMB: data.SmallestFlavorMemoryMB,
+				},
+			},
+			LargestFlavor: compute.FlavorInGroup{
+				Name:     data.LargestFlavorName,
+				VCPUs:    data.LargestFlavorVCPUs,
+				MemoryMB: data.LargestFlavorMemoryMB,
+			},
+			SmallestFlavor: compute.FlavorInGroup{
+				Name:     data.SmallestFlavorName,
+				VCPUs:    data.SmallestFlavorVCPUs,
+				MemoryMB: data.SmallestFlavorMemoryMB,
+			},
+		})
+	}
+
+	// Box the features
+	rawFeatures, err := v1alpha1.BoxFeatureList(features)
+	if err != nil {
+		t.Fatalf("Failed to box flavor group features: %v", err)
+	}
+
+	return &v1alpha1.Knowledge{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "flavor-groups",
+		},
+		Spec: v1alpha1.KnowledgeSpec{
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			Extractor: v1alpha1.KnowledgeExtractorSpec{
+				Name: "flavor_groups",
+			},
+		},
+		Status: v1alpha1.KnowledgeStatus{
+			Raw: rawFeatures,
+			Conditions: []metav1.Condition{
+				{
+					Type:   v1alpha1.KnowledgeConditionReady,
+					Status: metav1.ConditionTrue,
+					Reason: "ExtractorSucceeded",
+				},
+			},
+		},
+	}
+}
 
 // Mock CommitmentsClient for testing
 type mockCommitmentsClient struct {
@@ -123,19 +197,32 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 		t.Fatalf("Failed to add scheme: %v", err)
 	}
 
+	// Create flavor group knowledge CRD
+	flavorGroupsKnowledge := createFlavorGroupKnowledge(t, map[string]FlavorGroupData{
+		"test_group_v1": {
+			LargestFlavorName:      "test-flavor",
+			LargestFlavorVCPUs:     2,
+			LargestFlavorMemoryMB:  1024,
+			SmallestFlavorName:     "test-flavor",
+			SmallestFlavorVCPUs:    2,
+			SmallestFlavorMemoryMB: 1024,
+		},
+	})
+
 	k8sClient := fake.NewClientBuilder().
 		WithScheme(scheme).
+		WithObjects(flavorGroupsKnowledge).
 		Build()
 
-	// Create mock commitments with instance flavors
+	// Create mock commitments with flavor group resources (using ram_ prefix)
 	mockCommitments := []Commitment{
 		{
 			ID:               1,
 			UUID:             "12345-67890-abcdef",
 			ServiceType:      "compute",
-			ResourceName:     "instances_test-flavor",
+			ResourceName:     "ram_test_group_v1",
 			AvailabilityZone: "az1",
-			Amount:           2, // 2 instances
+			Amount:           2, // 2 multiples of smallest flavor (2 * 1024MB = 2048MB total)
 			Unit:             "",
 			ProjectID:        "test-project-1",
 			DomainID:         "test-domain-1",
@@ -149,23 +236,6 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 				result[c.UUID] = c
 			}
 			return result, nil
-		},
-		listFlavorsByNameFunc: func(ctx context.Context) (map[string]Flavor, error) {
-			return map[string]Flavor{
-				"test-flavor": {
-					ID:    "flavor-1",
-					Name:  "test-flavor",
-					RAM:   1024, // 1GB in MB
-					VCPUs: 2,
-					Disk:  20, // 20GB
-					ExtraSpecs: map[string]string{
-						"hw:cpu_policy":                         "dedicated",
-						"hw:numa_nodes":                         "1",
-						"aggregate_instance_extra_specs:pinned": "true",
-						"capabilities:hypervisor_type":          "qemu",
-					},
-				},
-			}, nil
 		},
 		listProjectsFunc: func(ctx context.Context) ([]Project, error) {
 			return []Project{
@@ -200,7 +270,7 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 		return
 	}
 
-	// Should have 2 reservations (Amount = 2)
+	// Should have 2 reservations (Amount = 2, each for smallest flavor)
 	if len(reservations.Items) != 2 {
 		t.Errorf("Expected 2 reservations, got %d", len(reservations.Items))
 		return
@@ -216,11 +286,12 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 		t.Errorf("Expected project ID test-project-1, got %v", res.Spec.CommittedResourceReservation.ProjectID)
 	}
 
-	if res.Spec.CommittedResourceReservation.ResourceName != "test-flavor" {
-		t.Errorf("Expected flavor test-flavor, got %v", res.Spec.CommittedResourceReservation.ResourceName)
+	if res.Spec.CommittedResourceReservation.ResourceGroup != "test_group_v1" {
+		t.Errorf("Expected resource group test_group_v1, got %v", res.Spec.CommittedResourceReservation.ResourceGroup)
 	}
 
-	// Check resource values
+	// Check resource values - should be sized for the flavor that fits
+	// With 2048MB total capacity, we can fit 2x 1024MB flavors
 	expectedMemory := resource.MustParse("1073741824") // 1024MB in bytes
 	if !res.Spec.Resources["memory"].Equal(expectedMemory) {
 		t.Errorf("Expected memory %v, got %v", expectedMemory, res.Spec.Resources["memory"])
@@ -238,17 +309,31 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 		t.Fatalf("Failed to add scheme: %v", err)
 	}
 
-	// Create an existing reservation
+	// Create flavor group knowledge CRD
+	flavorGroupsKnowledge := createFlavorGroupKnowledge(t, map[string]FlavorGroupData{
+		"new_group_v1": {
+			LargestFlavorName:      "new-flavor",
+			LargestFlavorVCPUs:     4,
+			LargestFlavorMemoryMB:  2048,
+			SmallestFlavorName:     "new-flavor-small",
+			SmallestFlavorVCPUs:    2,
+			SmallestFlavorMemoryMB: 1024,
+		},
+	})
+
+	// Create an existing reservation with mismatched project/flavor group
+	// The ReservationManager will delete this and create a new one
 	existingReservation := &v1alpha1.Reservation{
 		ObjectMeta: ctrl.ObjectMeta{
-			Name: "commitment-12345-0", // Instance commitments have -0 suffix
+			Name: "commitment-12345-67890-abcdef-0",
 		},
 		Spec: v1alpha1.ReservationSpec{
 			Type: v1alpha1.ReservationTypeCommittedResource,
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				ProjectID:    "old-project",
-				ResourceName: "old-flavor",
-				Creator:      CreatorValue,
+				ProjectID:     "old-project",
+				ResourceName:  "old-flavor",
+				ResourceGroup: "old_group",
+				Creator:       CreatorValue,
 			},
 			Resources: map[string]resource.Quantity{
 				"memory": resource.MustParse("512Mi"),
@@ -259,16 +344,16 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 
 	k8sClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(existingReservation).
+		WithObjects(existingReservation, flavorGroupsKnowledge).
 		Build()
 
-	// Create mock commitment that should update the existing reservation
+	// Create mock commitment that will replace the existing reservation
 	mockCommitments := []Commitment{
 		{
 			ID:               1,
 			UUID:             "12345-67890-abcdef",
 			ServiceType:      "compute",
-			ResourceName:     "instances_new-flavor",
+			ResourceName:     "ram_new_group_v1",
 			AvailabilityZone: "az1",
 			Amount:           1,
 			Unit:             "",
@@ -284,23 +369,6 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 				result[c.UUID] = c
 			}
 			return result, nil
-		},
-		listFlavorsByNameFunc: func(ctx context.Context) (map[string]Flavor, error) {
-			return map[string]Flavor{
-				"new-flavor": {
-					ID:    "flavor-2",
-					Name:  "new-flavor",
-					RAM:   2048, // 2GB in MB
-					VCPUs: 4,
-					Disk:  40, // 40GB
-					ExtraSpecs: map[string]string{
-						"hw:cpu_policy":                         "shared",
-						"hw:numa_nodes":                         "2",
-						"aggregate_instance_extra_specs:pinned": "false",
-						"capabilities:hypervisor_type":          "qemu",
-					},
-				},
-			}, nil
 		},
 		listProjectsFunc: func(ctx context.Context) ([]Project, error) {
 			return []Project{
@@ -327,45 +395,66 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 		return
 	}
 
-	// Verify that the reservation was updated
-	var updatedReservation v1alpha1.Reservation
-	err = k8sClient.Get(context.Background(), client.ObjectKey{Name: "commitment-12345-0"}, &updatedReservation)
+	// Verify that reservations were updated (old one deleted, new one created)
+	// The new reservation will be at index 0 since the old one was deleted first
+	var reservations v1alpha1.ReservationList
+	err = k8sClient.List(context.Background(), &reservations)
 	if err != nil {
-		t.Errorf("Failed to get updated reservation: %v", err)
+		t.Errorf("Failed to list reservations: %v", err)
 		return
 	}
 
-	// Verify the reservation was updated with new values
-	if updatedReservation.Spec.CommittedResourceReservation == nil {
+	if len(reservations.Items) != 1 {
+		t.Errorf("Expected 1 reservation, got %d", len(reservations.Items))
+		return
+	}
+
+	newReservation := reservations.Items[0]
+
+	// Verify the new reservation has correct values
+	if newReservation.Spec.CommittedResourceReservation == nil {
 		t.Errorf("Expected CommittedResourceReservation to be set")
 		return
 	}
-	if updatedReservation.Spec.CommittedResourceReservation.ProjectID != "new-project" {
-		t.Errorf("Expected project ID new-project, got %v", updatedReservation.Spec.CommittedResourceReservation.ProjectID)
+	if newReservation.Spec.CommittedResourceReservation.ProjectID != "new-project" {
+		t.Errorf("Expected project ID new-project, got %v", newReservation.Spec.CommittedResourceReservation.ProjectID)
 	}
 
-	if updatedReservation.Spec.CommittedResourceReservation.ResourceName != "new-flavor" {
-		t.Errorf("Expected flavor new-flavor, got %v", updatedReservation.Spec.CommittedResourceReservation.ResourceName)
+	if newReservation.Spec.CommittedResourceReservation.ResourceGroup != "new_group_v1" {
+		t.Errorf("Expected resource group new_group_v1, got %v", newReservation.Spec.CommittedResourceReservation.ResourceGroup)
 	}
 }
 
-func TestSyncer_SyncReservations_ShortUUID(t *testing.T) {
+func TestSyncer_SyncReservations_EmptyUUID(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheme: %v", err)
 	}
 
+	// Create flavor group knowledge CRD
+	flavorGroupsKnowledge := createFlavorGroupKnowledge(t, map[string]FlavorGroupData{
+		"test_group_v1": {
+			LargestFlavorName:      "test-flavor",
+			LargestFlavorVCPUs:     2,
+			LargestFlavorMemoryMB:  1024,
+			SmallestFlavorName:     "test-flavor",
+			SmallestFlavorVCPUs:    2,
+			SmallestFlavorMemoryMB: 1024,
+		},
+	})
+
 	k8sClient := fake.NewClientBuilder().
 		WithScheme(scheme).
+		WithObjects(flavorGroupsKnowledge).
 		Build()
 
-	// Create mock commitment with short UUID (should be skipped)
+	// Create mock commitment with empty UUID (should be skipped)
 	mockCommitments := []Commitment{
 		{
 			ID:               1,
-			UUID:             "123", // Too short
+			UUID:             "", // Empty UUID
 			ServiceType:      "compute",
-			ResourceName:     "instances_test-flavor",
+			ResourceName:     "ram_test_group_v1",
 			AvailabilityZone: "az1",
 			Amount:           1,
 			Unit:             "",
@@ -381,23 +470,6 @@ func TestSyncer_SyncReservations_ShortUUID(t *testing.T) {
 				result[c.UUID] = c
 			}
 			return result, nil
-		},
-		listFlavorsByNameFunc: func(ctx context.Context) (map[string]Flavor, error) {
-			return map[string]Flavor{
-				"test-flavor": {
-					ID:    "flavor-1",
-					Name:  "test-flavor",
-					RAM:   1024, // 1GB in MB
-					VCPUs: 2,
-					Disk:  20, // 20GB
-					ExtraSpecs: map[string]string{
-						"hw:cpu_policy":                         "dedicated",
-						"hw:numa_nodes":                         "1",
-						"aggregate_instance_extra_specs:pinned": "true",
-						"capabilities:hypervisor_type":          "qemu",
-					},
-				},
-			}, nil
 		},
 		listProjectsFunc: func(ctx context.Context) ([]Project, error) {
 			return []Project{
@@ -424,7 +496,7 @@ func TestSyncer_SyncReservations_ShortUUID(t *testing.T) {
 		return
 	}
 
-	// Verify that no reservations were created due to short UUID
+	// Verify that no reservations were created due to empty UUID
 	var reservations v1alpha1.ReservationList
 	err = k8sClient.List(context.Background(), &reservations)
 	if err != nil {
@@ -433,6 +505,6 @@ func TestSyncer_SyncReservations_ShortUUID(t *testing.T) {
 	}
 
 	if len(reservations.Items) != 0 {
-		t.Errorf("Expected 0 reservations due to short UUID, got %d", len(reservations.Items))
+		t.Errorf("Expected 0 reservations due to empty UUID, got %d", len(reservations.Items))
 	}
 }

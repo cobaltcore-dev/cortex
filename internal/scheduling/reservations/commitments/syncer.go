@@ -5,24 +5,20 @@ package commitments
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"slices"
-	"sort"
 	"strings"
-
-	ctrl "sigs.k8s.io/controller-runtime"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
-	syncLog = ctrl.Log.WithName("sync")
 	// CreatorValue identifies reservations created by this syncer.
 	CreatorValue = "commitments-syncer"
 )
@@ -35,13 +31,12 @@ type SyncerConfig struct {
 }
 
 type Syncer struct {
-	// Client to fetch commitments.
+	// Client to fetch commitments from Limes
 	CommitmentsClient
-	// Client for the kubernetes API.
+	// Kubernetes client for CRD operations
 	client.Client
 }
 
-// Create a new compute reservation syncer.
 func NewSyncer(k8sClient client.Client) *Syncer {
 	return &Syncer{
 		CommitmentsClient: NewCommitmentsClient(),
@@ -49,29 +44,15 @@ func NewSyncer(k8sClient client.Client) *Syncer {
 	}
 }
 
-// Initialize the syncer.
 func (s *Syncer) Init(ctx context.Context, config SyncerConfig) error {
-	// Initialize the syncer.
 	if err := s.CommitmentsClient.Init(ctx, s.Client, config); err != nil {
 		return err
 	}
 	return nil
 }
 
-// Helper struct to unify the commitment with metadata needed for reservation creation.
-type resolvedCommitment struct {
-	Commitment
-	Flavor Flavor
-}
-
-// Get all compute commitments that should be converted to reservations.
-func (s *Syncer) resolveUnusedCommitments(ctx context.Context) ([]resolvedCommitment, error) {
-	// Get all data we need from the openstack services.
+func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavorGroups map[string]compute.FlavorGroupFeature) ([]*CommitmentState, error) {
 	allProjects, err := s.ListProjects(ctx)
-	if err != nil {
-		return nil, err
-	}
-	flavors, err := s.ListFlavorsByName(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -80,202 +61,155 @@ func (s *Syncer) resolveUnusedCommitments(ctx context.Context) ([]resolvedCommit
 		return nil, err
 	}
 
-	// Remove non-compute/non-instance commitments or commitments we can't resolve.
-	var resolvedCommitments []resolvedCommitment
+	// Filter for compute commitments with RAM flavor group resources
+	var commitmentStates []*CommitmentState
 	for id, commitment := range commitments {
 		if commitment.ServiceType != "compute" {
-			delete(commitments, id)
-			syncLog.Info("skipping non-compute commitment", "id", id, "serviceType", commitment.ServiceType)
+			log.Info("skipping non-compute commitment", "id", id, "serviceType", commitment.ServiceType)
 			continue
 		}
-		if !strings.HasPrefix(commitment.ResourceName, "instances_") {
-			syncLog.Info("skipping non-instance commitment", "id", id, "resourceName", commitment.ResourceName)
-			delete(commitments, id)
+		if !strings.HasPrefix(commitment.ResourceName, commitmentResourceNamePrefix) {
+			log.Info("skipping non-RAM-flavor-group commitment", "id", id, "resourceName", commitment.ResourceName)
 			continue
 		}
-		flavorName := strings.TrimPrefix(commitment.ResourceName, "instances_")
-		flavor, ok := flavors[flavorName]
-		if !ok {
-			syncLog.Info("skipping commitment without known flavor", "id", id, "flavorName", flavorName)
-			delete(commitments, id)
+
+		// Extract flavor group name from resource name
+		flavorGroupName, err := getFlavorGroupNameFromResource(commitment.ResourceName)
+		if err != nil {
+			log.Info("skipping commitment with invalid resource name",
+				"id", id,
+				"resourceName", commitment.ResourceName,
+				"error", err)
 			continue
 		}
-		// We only support cloud-hypervisor and qemu hypervisors for commitments.
-		hvType, ok := flavor.ExtraSpecs["capabilities:hypervisor_type"]
-		if !ok || !slices.Contains([]string{"ch", "qemu"}, strings.ToLower(hvType)) {
-			syncLog.Info("skipping commitment with unsupported hv type", "commitmentID", commitment.UUID, "hypervisorType", hvType)
-			delete(commitments, id)
+
+		// Validate flavor group exists in Knowledge
+		flavorGroup, exists := flavorGroups[flavorGroupName]
+		if !exists {
+			log.Info("skipping commitment with unknown flavor group",
+				"id", id,
+				"flavorGroup", flavorGroupName)
 			continue
 		}
-		resolvedCommitments = append(resolvedCommitments, resolvedCommitment{
-			Commitment: commitment,
-			Flavor:     flavor,
-		})
+
+		// Skip commitments with empty UUID
+		if commitment.UUID == "" {
+			log.Info("skipping commitment with empty UUID",
+				"id", id)
+			continue
+		}
+
+		// Convert commitment to state using FromCommitment
+		state, err := FromCommitment(commitment, flavorGroup)
+		if err != nil {
+			log.Error(err, "failed to convert commitment to state",
+				"id", id,
+				"uuid", commitment.UUID)
+			continue
+		}
+
+		log.Info("resolved commitment to state",
+			"commitmentID", commitment.UUID,
+			"flavorGroup", flavorGroupName,
+			"amount", commitment.Amount,
+			"totalMemoryBytes", state.TotalMemoryBytes)
+
+		commitmentStates = append(commitmentStates, state)
 	}
 
-	// Remove all commitments which are currently actively in use by a vm.
-	projectsWithCommitments := make([]Project, 0, len(resolvedCommitments))
-	projectIDs := make(map[string]bool)
-	for _, commitment := range resolvedCommitments {
-		projectIDs[commitment.ProjectID] = true
-	}
-	for _, project := range allProjects {
-		if _, exists := projectIDs[project.ID]; exists {
-			projectsWithCommitments = append(projectsWithCommitments, project)
-		}
-	}
-	// List all servers, not only the active ones, like limes when it calculates
-	// subresource usage: https://github.com/sapcc/limes/blob/c146c82/internal/liquids/nova/subresources.go#L94
-	servers, err := s.ListServersByProjectID(ctx, projectsWithCommitments...)
-	if err != nil {
-		return nil, err
-	}
-	sort.Slice(resolvedCommitments, func(i, j int) bool {
-		return resolvedCommitments[i].ID < resolvedCommitments[j].ID
-	})
-	mappedServers := map[string]struct{}{} // Servers subtracted from a commitment
-	var unusedCommitments []resolvedCommitment
-	for _, commitment := range resolvedCommitments {
-		matchingServerCount := uint64(0)
-
-		activeServers, ok := servers[commitment.ProjectID]
-		if !ok || len(activeServers) == 0 {
-			// No active servers in this project, keep the commitment.
-			unusedCommitments = append(unusedCommitments, commitment)
-			continue
-		}
-		// Some active servers, subtract them from the commitment amount.
-		sort.Slice(activeServers, func(i, j int) bool {
-			return activeServers[i].ID < activeServers[j].ID
-		})
-		for _, server := range activeServers {
-			if _, exists := mappedServers[server.ID]; exists {
-				// This server is already subtracted from another commitment.
-				continue
-			}
-			if server.FlavorName != commitment.Flavor.Name {
-				// This server is of a different flavor, skip it.
-				continue
-			}
-			mappedServers[server.ID] = struct{}{}
-			matchingServerCount++
-			syncLog.Info("subtracting server from commitment", "commitmentID", commitment.UUID, "serverID", server.ID, "remainingAmount", commitment.Amount)
-		}
-		if matchingServerCount >= commitment.Amount {
-			syncLog.Info("skipping commitment that is fully used by active servers", "id", commitment.UUID, "project", commitment.ProjectID)
-			continue
-		}
-		commitment.Amount -= matchingServerCount
-		unusedCommitments = append(unusedCommitments, commitment)
-	}
-
-	return unusedCommitments, nil
+	return commitmentStates, nil
 }
 
-// Fetch commitments and update/create reservations for each of them.
+// SyncReservations fetches commitments from Limes and synchronizes Reservation CRDs.
 func (s *Syncer) SyncReservations(ctx context.Context) error {
-	// Get all commitments that should be converted to reservations.
-	// TODO keep all commitments, not only the unused ones, propagate allocation correctly
-	commitments, err := s.resolveUnusedCommitments(ctx)
+	// TODO handle concurrency with change API: consider creation time of reservations and status ready
+
+	// Create logger with run ID for this sync execution
+	runID := fmt.Sprintf("sync-%d", time.Now().Unix())
+	log := ctrl.Log.WithName("CommitmentSyncer").WithValues("runID", runID)
+
+	log.Info("starting commitment sync")
+
+	// Check if flavor group knowledge is ready
+	knowledge := &reservations.FlavorGroupKnowledge{Client: s.Client}
+	knowledgeCRD, err := knowledge.IsReady(ctx)
 	if err != nil {
-		syncLog.Error(err, "failed to get compute commitments")
+		log.Error(err, "failed to check flavor group knowledge readiness")
 		return err
 	}
-	// Map commitments to reservations.
-	var reservationsByName = make(map[string]v1alpha1.Reservation)
-	for _, commitment := range commitments {
-		// Get only the 5 first characters from the uuid. This should be safe enough.
-		if len(commitment.UUID) < 5 {
-			err := errors.New("commitment UUID is too short")
-			syncLog.Error(err, "uuid is less than 5 characters", "uuid", commitment.UUID)
+	if knowledgeCRD == nil {
+		log.Info("skipping commitment sync - flavor group knowledge not ready yet")
+		return nil
+	}
+
+	// Get flavor groups using the CRD we already fetched
+	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, knowledgeCRD)
+	if err != nil {
+		log.Error(err, "failed to get flavor groups from knowledge")
+		return err
+	}
+
+	// Get all commitments as states
+	commitmentStates, err := s.getCommitmentStates(ctx, log, flavorGroups)
+	if err != nil {
+		log.Error(err, "failed to get compute commitments")
+		return err
+	}
+
+	// Create ReservationManager to handle state application
+	manager := NewReservationManager(s.Client)
+
+	// Apply each commitment state using the manager
+	for _, state := range commitmentStates {
+		log.Info("applying commitment state",
+			"commitmentUUID", state.CommitmentUUID,
+			"projectID", state.ProjectID,
+			"flavorGroup", state.FlavorGroupName,
+			"totalMemoryBytes", state.TotalMemoryBytes)
+
+		_, _, err := manager.ApplyCommitmentState(ctx, log, state, flavorGroups, CreatorValue)
+		if err != nil {
+			log.Error(err, "failed to apply commitment state",
+				"commitmentUUID", state.CommitmentUUID)
+			// Continue with other commitments even if one fails
 			continue
-		}
-		commitmentUUIDShort := commitment.UUID[:5]
-		spec := v1alpha1.ReservationSpec{
-			Type: v1alpha1.ReservationTypeCommittedResource,
-			Resources: map[string]resource.Quantity{
-				"memory": *resource.NewQuantity(int64(commitment.Flavor.RAM)*1024*1024, resource.BinarySI),
-				"cpu":    *resource.NewQuantity(int64(commitment.Flavor.VCPUs), resource.DecimalSI),
-				// Disk is currently not considered.
-			},
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				ProjectID:     commitment.ProjectID,
-				DomainID:      commitment.DomainID,
-				ResourceName:  commitment.Flavor.Name,
-				ResourceGroup: commitment.Flavor.ExtraSpecs["hw_version"],
-				Allocations:   make(map[string]v1alpha1.CommittedResourceAllocation),
-				Creator:       CreatorValue,
-			},
-		}
-		for n := range commitment.Amount { // N instances
-			meta := ctrl.ObjectMeta{
-				Name: fmt.Sprintf("commitment-%s-%d", commitmentUUIDShort, n),
-			}
-			if _, exists := reservationsByName[meta.Name]; exists {
-				syncLog.Error(errors.New("duplicate reservation name"),
-					"reservation name already exists",
-					"name", meta.Name,
-					"commitmentUUID", commitment.UUID,
-				)
-				continue
-			}
-			reservationsByName[meta.Name] = v1alpha1.Reservation{
-				ObjectMeta: meta,
-				Spec:       spec,
-			}
 		}
 	}
 
-	// Create new reservations or update existing ones.
-	for _, res := range reservationsByName {
-		// Check if the reservation already exists.
-		nn := types.NamespacedName{Name: res.Name, Namespace: res.Namespace}
-		var existing v1alpha1.Reservation
-		if err := s.Get(ctx, nn, &existing); err != nil {
-			if !k8serrors.IsNotFound(err) {
-				syncLog.Error(err, "failed to get reservation", "name", nn.Name)
-				return err
-			}
-			// Reservation does not exist, create it.
-			if err := s.Create(ctx, &res); err != nil {
-				return err
-			}
-			syncLog.Info("created reservation", "name", nn.Name)
-			continue
-		}
-		// Reservation exists, update it.
-		old := existing.DeepCopy()
-		existing.Spec = res.Spec
-		patch := client.MergeFrom(old)
-		if err := s.Patch(ctx, &existing, patch); err != nil {
-			syncLog.Error(err, "failed to patch reservation", "name", nn.Name)
-			return err
-		}
-		syncLog.Info("updated reservation", "name", nn.Name)
-	}
-
-	// Delete reservations that are not in the commitments anymore.
+	// Delete reservations that are no longer in commitments
 	var existingReservations v1alpha1.ReservationList
 	if err := s.List(ctx, &existingReservations); err != nil {
-		syncLog.Error(err, "failed to list existing reservations")
+		log.Error(err, "failed to list existing reservations")
 		return err
 	}
+
+	// Build set of commitment UUIDs we should have
+	activeCommitments := make(map[string]bool)
+	for _, state := range commitmentStates {
+		activeCommitments[state.CommitmentUUID] = true
+	}
+
+	// Delete reservations for commitments that no longer exist
 	for _, existing := range existingReservations.Items {
-		// Only manage reservations created by this syncer (identified by Creator field).
-		if existing.Spec.CommittedResourceReservation == nil ||
-			existing.Spec.CommittedResourceReservation.Creator != CreatorValue {
+		// Only manage reservations of type CommittedResourceReservation, ignore creator because of syncer and API based reservations
+		if existing.Spec.CommittedResourceReservation == nil {
 			continue
 		}
-		if _, found := reservationsByName[existing.Name]; !found {
-			// Reservation not found in commitments, delete it.
+
+		// Extract commitment UUID from reservation name
+		commitmentUUID := extractCommitmentUUID(existing.Name)
+		if !activeCommitments[commitmentUUID] {
+			// This commitment no longer exists, delete the reservation
 			if err := s.Delete(ctx, &existing); err != nil {
-				syncLog.Error(err, "failed to delete reservation", "name", existing.Name)
+				log.Error(err, "failed to delete reservation", "name", existing.Name)
 				return err
 			}
-			syncLog.Info("deleted reservation", "name", existing.Name)
+			log.Info("deleted reservation for expired commitment",
+				"name", existing.Name,
+				"commitmentUUID", commitmentUUID)
 		}
 	}
 
-	syncLog.Info("synced reservations", "count", len(reservationsByName))
+	log.Info("synced reservations", "commitmentCount", len(commitmentStates))
 	return nil
 }

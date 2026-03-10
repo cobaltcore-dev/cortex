@@ -108,8 +108,12 @@ cortex-scheduling-controllers:
       - nova-pipeline-controllers
       - nova-deschedulings-executor
       - explanation-controller
+      - reservations-controller
     enabledTasks:
       - nova-decisions-cleanup-task
+    # Endpoints configuration for reservations controller
+    endpoints:
+      novaExternalScheduler: "http://localhost:8080/scheduler/nova/external"
 
 cortex-knowledge-controllers:
   <<: *cortex
@@ -128,7 +132,6 @@ cortex-knowledge-controllers:
       - datasource-controllers
       - knowledge-controllers
       - kpis-controller
-      - reservations-controller
     enabledTasks:
       - commitments-sync-task
 

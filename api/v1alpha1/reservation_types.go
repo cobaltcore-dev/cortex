@@ -79,6 +79,10 @@ type ReservationSpec struct {
 	// +kubebuilder:validation:Optional
 	SchedulingDomain string `json:"schedulingDomain,omitempty"`
 
+	// AZ specifies the availability zone for this reservation, if restricted to a specific AZ.
+	// +kubebuilder:validation:Optional
+	AZ string `json:"az,omitempty"`
+
 	// Resources to reserve for this instance.
 	// +kubebuilder:validation:Optional
 	Resources map[string]resource.Quantity `json:"resources,omitempty"`
