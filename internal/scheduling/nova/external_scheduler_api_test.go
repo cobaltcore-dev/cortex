@@ -388,6 +388,129 @@ func TestHTTPAPI_NovaExternalScheduler_DecisionCreation(t *testing.T) {
 	}
 }
 
+func TestLimitHostsToRequest(t *testing.T) {
+	tests := []struct {
+		name          string
+		request       novaapi.ExternalSchedulerRequest
+		hosts         []string
+		expectedHosts []string
+	}{
+		{
+			name: "all hosts in request",
+			request: novaapi.ExternalSchedulerRequest{
+				Hosts: []novaapi.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+				},
+			},
+			hosts:         []string{"host1", "host2", "host3"},
+			expectedHosts: []string{"host1", "host2", "host3"},
+		},
+		{
+			name: "some hosts not in request - filtered out",
+			request: novaapi.ExternalSchedulerRequest{
+				Hosts: []novaapi.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host3"},
+				},
+			},
+			hosts:         []string{"host1", "host2", "host3"},
+			expectedHosts: []string{"host1", "host3"},
+		},
+		{
+			name: "no hosts in request - all filtered out",
+			request: novaapi.ExternalSchedulerRequest{
+				Hosts: []novaapi.ExternalSchedulerHost{},
+			},
+			hosts:         []string{"host1", "host2"},
+			expectedHosts: nil,
+		},
+		{
+			name: "empty hosts input",
+			request: novaapi.ExternalSchedulerRequest{
+				Hosts: []novaapi.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+				},
+			},
+			hosts:         []string{},
+			expectedHosts: nil,
+		},
+		{
+			name: "nil hosts input",
+			request: novaapi.ExternalSchedulerRequest{
+				Hosts: []novaapi.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+				},
+			},
+			hosts:         nil,
+			expectedHosts: nil,
+		},
+		{
+			name: "preserves order of input hosts",
+			request: novaapi.ExternalSchedulerRequest{
+				Hosts: []novaapi.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+				},
+			},
+			hosts:         []string{"host3", "host1", "host2"},
+			expectedHosts: []string{"host3", "host1", "host2"},
+		},
+		{
+			name: "duplicate hosts in input - all kept if in request",
+			request: novaapi.ExternalSchedulerRequest{
+				Hosts: []novaapi.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+				},
+			},
+			hosts:         []string{"host1", "host1", "host2"},
+			expectedHosts: []string{"host1", "host1", "host2"},
+		},
+		{
+			name: "host only in response not in request - filtered out",
+			request: novaapi.ExternalSchedulerRequest{
+				Hosts: []novaapi.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+				},
+			},
+			hosts:         []string{"host1", "unknown-host"},
+			expectedHosts: []string{"host1"},
+		},
+		{
+			name: "all hosts unknown - all filtered out",
+			request: novaapi.ExternalSchedulerRequest{
+				Hosts: []novaapi.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+				},
+			},
+			hosts:         []string{"unknown1", "unknown2"},
+			expectedHosts: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := limitHostsToRequest(tt.request, tt.hosts)
+
+			if len(result) != len(tt.expectedHosts) {
+				t.Errorf("expected %d hosts, got %d", len(tt.expectedHosts), len(result))
+				return
+			}
+
+			for i, expectedHost := range tt.expectedHosts {
+				if result[i] != expectedHost {
+					t.Errorf("expected host[%d] = %s, got %s", i, expectedHost, result[i])
+				}
+			}
+		})
+	}
+}
+
 func TestHTTPAPI_inferPipelineName(t *testing.T) {
 	delegate := &mockHTTPAPIDelegate{}
 	config := HTTPAPIConfig{

@@ -1,0 +1,10 @@
+# Copyright SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+remote: origin
+target-branch: release
+validate-maintainers: false
+check-version-increment: true
+chart-dirs:
+  - helm/library
+  - helm/bundles

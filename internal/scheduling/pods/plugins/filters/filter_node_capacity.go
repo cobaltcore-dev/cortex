@@ -12,7 +12,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods/helpers"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -24,7 +23,7 @@ func (f *NodeCapacityFilter) Init(ctx context.Context, client client.Client, ste
 	return nil
 }
 
-func (f *NodeCapacityFilter) Validate(ctx context.Context, params runtime.RawExtension) error {
+func (f *NodeCapacityFilter) Validate(ctx context.Context, params v1alpha1.Parameters) error {
 	return nil
 }
 

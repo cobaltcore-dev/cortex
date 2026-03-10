@@ -11,7 +11,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -23,7 +22,7 @@ func (f *TaintFilter) Init(ctx context.Context, client client.Client, step v1alp
 	return nil
 }
 
-func (f *TaintFilter) Validate(ctx context.Context, params runtime.RawExtension) error {
+func (f *TaintFilter) Validate(ctx context.Context, params v1alpha1.Parameters) error {
 	return nil
 }
 

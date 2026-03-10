@@ -5,7 +5,6 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
 type FilterSpec struct {
@@ -15,7 +14,7 @@ type FilterSpec struct {
 
 	// Additional configuration for the step that can be used
 	// +kubebuilder:validation:Optional
-	Params runtime.RawExtension `json:"params,omitempty"`
+	Params Parameters `json:"params,omitempty"`
 
 	// Additional description of the step which helps understand its purpose
 	// and decisions made by it.
@@ -30,7 +29,7 @@ type WeigherSpec struct {
 
 	// Additional configuration for the step that can be used
 	// +kubebuilder:validation:Optional
-	Params runtime.RawExtension `json:"params,omitempty"`
+	Params Parameters `json:"params,omitempty"`
 
 	// Additional description of the step which helps understand its purpose
 	// and decisions made by it.
@@ -51,7 +50,7 @@ type DetectorSpec struct {
 
 	// Additional configuration for the step that can be used
 	// +kubebuilder:validation:Optional
-	Params runtime.RawExtension `json:"params,omitempty"`
+	Params Parameters `json:"params,omitempty"`
 
 	// Additional description of the step which helps understand its purpose
 	// and decisions made by it.
@@ -130,6 +129,8 @@ const (
 	PipelineConditionReady = "Ready"
 	// All steps in the pipeline are ready.
 	PipelineConditionAllStepsReady = "AllStepsReady"
+	// All of the steps in the pipeline are indexed (known by the controller).
+	PipelineConditionAllStepsIndexed = "AllStepsIndexed"
 )
 
 type PipelineStatus struct {
@@ -145,6 +146,7 @@ type PipelineStatus struct {
 // +kubebuilder:printcolumn:name="Domain",type="string",JSONPath=".spec.schedulingDomain"
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
 // +kubebuilder:printcolumn:name="All Steps Ready",type="string",JSONPath=".status.conditions[?(@.type=='AllStepsReady')].status"
+// +kubebuilder:printcolumn:name="All Steps Known",type="string",JSONPath=".status.conditions[?(@.type=='AllStepsIndexed')].status"
 // +kubebuilder:printcolumn:name="Pipeline Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 
 // Pipeline is the Schema for the decisions API

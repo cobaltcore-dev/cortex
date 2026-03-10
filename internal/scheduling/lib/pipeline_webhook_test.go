@@ -11,15 +11,14 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // mockValidatable implements Validatable for testing.
 type mockValidatable struct {
-	ValidateFunc func(ctx context.Context, params runtime.RawExtension) error
+	ValidateFunc func(ctx context.Context, params v1alpha1.Parameters) error
 }
 
-func (m *mockValidatable) Validate(ctx context.Context, params runtime.RawExtension) error {
+func (m *mockValidatable) Validate(ctx context.Context, params v1alpha1.Parameters) error {
 	if m.ValidateFunc == nil {
 		return nil
 	}
@@ -28,13 +27,13 @@ func (m *mockValidatable) Validate(ctx context.Context, params runtime.RawExtens
 
 func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testing.T) {
 	tests := []struct {
-		name        string
-		pipeline    *v1alpha1.Pipeline
-		filters     map[string]Validatable
-		weighers    map[string]Validatable
-		detectors   map[string]Validatable
-		expectError bool
-		errorMsg    string
+		name           string
+		pipeline       *v1alpha1.Pipeline
+		filters        map[string]Validatable
+		weighers       map[string]Validatable
+		detectors      map[string]Validatable
+		expectError    bool
+		expectWarnings bool
 	}{
 		{
 			name: "valid filter-weigher pipeline with known filter and weigher",
@@ -44,10 +43,10 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					Filters: []v1alpha1.FilterSpec{
-						{Name: "filter1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "filter1", Params: nil},
 					},
 					Weighers: []v1alpha1.WeigherSpec{
-						{Name: "weigher1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "weigher1", Params: nil},
 					},
 				},
 			},
@@ -57,8 +56,9 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 			weighers: map[string]Validatable{
 				"weigher1": &mockValidatable{},
 			},
-			detectors:   map[string]Validatable{},
-			expectError: false,
+			detectors:      map[string]Validatable{},
+			expectError:    false,
+			expectWarnings: false,
 		},
 		{
 			name: "invalid filter-weigher pipeline with unknown filter",
@@ -68,15 +68,15 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					Filters: []v1alpha1.FilterSpec{
-						{Name: "unknown-filter", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "unknown-filter", Params: nil},
 					},
 				},
 			},
-			filters:     map[string]Validatable{},
-			weighers:    map[string]Validatable{},
-			detectors:   map[string]Validatable{},
-			expectError: true,
-			errorMsg:    "unknown filter",
+			filters:        map[string]Validatable{},
+			weighers:       map[string]Validatable{},
+			detectors:      map[string]Validatable{},
+			expectError:    false,
+			expectWarnings: true,
 		},
 		{
 			name: "invalid filter-weigher pipeline with unknown weigher",
@@ -86,15 +86,15 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					Weighers: []v1alpha1.WeigherSpec{
-						{Name: "unknown-weigher", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "unknown-weigher", Params: nil},
 					},
 				},
 			},
-			filters:     map[string]Validatable{},
-			weighers:    map[string]Validatable{},
-			detectors:   map[string]Validatable{},
-			expectError: true,
-			errorMsg:    "unknown weigher",
+			filters:        map[string]Validatable{},
+			weighers:       map[string]Validatable{},
+			detectors:      map[string]Validatable{},
+			expectError:    false,
+			expectWarnings: true,
 		},
 		{
 			name: "invalid filter-weigher pipeline with detectors",
@@ -104,15 +104,15 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					Detectors: []v1alpha1.DetectorSpec{
-						{Name: "detector1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "detector1", Params: nil},
 					},
 				},
 			},
-			filters:     map[string]Validatable{},
-			weighers:    map[string]Validatable{},
-			detectors:   map[string]Validatable{},
-			expectError: true,
-			errorMsg:    "detectors are not allowed in a filter/weigher pipeline",
+			filters:        map[string]Validatable{},
+			weighers:       map[string]Validatable{},
+			detectors:      map[string]Validatable{},
+			expectError:    true,
+			expectWarnings: false,
 		},
 		{
 			name: "filter validation error",
@@ -122,21 +122,21 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					Filters: []v1alpha1.FilterSpec{
-						{Name: "filter1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "filter1", Params: nil},
 					},
 				},
 			},
 			filters: map[string]Validatable{
 				"filter1": &mockValidatable{
-					ValidateFunc: func(ctx context.Context, params runtime.RawExtension) error {
+					ValidateFunc: func(ctx context.Context, params v1alpha1.Parameters) error {
 						return errors.New("filter validation failed")
 					},
 				},
 			},
-			weighers:    map[string]Validatable{},
-			detectors:   map[string]Validatable{},
-			expectError: true,
-			errorMsg:    "filter validation failed",
+			weighers:       map[string]Validatable{},
+			detectors:      map[string]Validatable{},
+			expectError:    true,
+			expectWarnings: false,
 		},
 		{
 			name: "weigher validation error",
@@ -146,21 +146,21 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					Weighers: []v1alpha1.WeigherSpec{
-						{Name: "weigher1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "weigher1", Params: nil},
 					},
 				},
 			},
 			filters: map[string]Validatable{},
 			weighers: map[string]Validatable{
 				"weigher1": &mockValidatable{
-					ValidateFunc: func(ctx context.Context, params runtime.RawExtension) error {
+					ValidateFunc: func(ctx context.Context, params v1alpha1.Parameters) error {
 						return errors.New("weigher validation failed")
 					},
 				},
 			},
-			detectors:   map[string]Validatable{},
-			expectError: true,
-			errorMsg:    "weigher validation failed",
+			detectors:      map[string]Validatable{},
+			expectError:    true,
+			expectWarnings: false,
 		},
 	}
 
@@ -173,7 +173,7 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 				ValidatableDetectors: tt.detectors,
 			}
 
-			_, err := webhook.ValidateCreate(t.Context(), tt.pipeline)
+			warnings, err := webhook.ValidateCreate(t.Context(), tt.pipeline)
 
 			if tt.expectError && err == nil {
 				t.Error("expected error but got nil")
@@ -181,10 +181,11 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 			if !tt.expectError && err != nil {
 				t.Errorf("expected no error but got: %v", err)
 			}
-			if tt.expectError && err != nil && tt.errorMsg != "" {
-				if !strings.Contains(err.Error(), tt.errorMsg) {
-					t.Errorf("expected error message to contain %q, got %q", tt.errorMsg, err.Error())
-				}
+			if tt.expectWarnings && len(warnings) == 0 {
+				t.Error("expected warnings but got none")
+			}
+			if !tt.expectWarnings && len(warnings) > 0 {
+				t.Errorf("expected no warnings but got: %v", warnings)
 			}
 		})
 	}
@@ -192,13 +193,13 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 
 func TestPipelineAdmissionWebhook_ValidateCreate_DetectorPipeline(t *testing.T) {
 	tests := []struct {
-		name        string
-		pipeline    *v1alpha1.Pipeline
-		filters     map[string]Validatable
-		weighers    map[string]Validatable
-		detectors   map[string]Validatable
-		expectError bool
-		errorMsg    string
+		name           string
+		pipeline       *v1alpha1.Pipeline
+		filters        map[string]Validatable
+		weighers       map[string]Validatable
+		detectors      map[string]Validatable
+		expectError    bool
+		expectWarnings bool
 	}{
 		{
 			name: "valid detector pipeline with known detector",
@@ -208,7 +209,7 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DetectorPipeline(t *testing.T) 
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeDetector,
 					Detectors: []v1alpha1.DetectorSpec{
-						{Name: "detector1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "detector1", Params: nil},
 					},
 				},
 			},
@@ -217,7 +218,8 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DetectorPipeline(t *testing.T) 
 			detectors: map[string]Validatable{
 				"detector1": &mockValidatable{},
 			},
-			expectError: false,
+			expectError:    false,
+			expectWarnings: false,
 		},
 		{
 			name: "invalid detector pipeline with unknown detector",
@@ -227,15 +229,15 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DetectorPipeline(t *testing.T) 
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeDetector,
 					Detectors: []v1alpha1.DetectorSpec{
-						{Name: "unknown-detector", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "unknown-detector", Params: nil},
 					},
 				},
 			},
-			filters:     map[string]Validatable{},
-			weighers:    map[string]Validatable{},
-			detectors:   map[string]Validatable{},
-			expectError: true,
-			errorMsg:    "unknown detector",
+			filters:        map[string]Validatable{},
+			weighers:       map[string]Validatable{},
+			detectors:      map[string]Validatable{},
+			expectError:    false,
+			expectWarnings: true,
 		},
 		{
 			name: "invalid detector pipeline with filters",
@@ -245,15 +247,15 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DetectorPipeline(t *testing.T) 
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeDetector,
 					Filters: []v1alpha1.FilterSpec{
-						{Name: "filter1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "filter1", Params: nil},
 					},
 				},
 			},
-			filters:     map[string]Validatable{},
-			weighers:    map[string]Validatable{},
-			detectors:   map[string]Validatable{},
-			expectError: true,
-			errorMsg:    "filters are not allowed in a detector pipeline",
+			filters:        map[string]Validatable{},
+			weighers:       map[string]Validatable{},
+			detectors:      map[string]Validatable{},
+			expectError:    true,
+			expectWarnings: false,
 		},
 		{
 			name: "invalid detector pipeline with weighers",
@@ -263,15 +265,15 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DetectorPipeline(t *testing.T) 
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeDetector,
 					Weighers: []v1alpha1.WeigherSpec{
-						{Name: "weigher1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "weigher1", Params: nil},
 					},
 				},
 			},
-			filters:     map[string]Validatable{},
-			weighers:    map[string]Validatable{},
-			detectors:   map[string]Validatable{},
-			expectError: true,
-			errorMsg:    "weighers are not allowed in a detector pipeline",
+			filters:        map[string]Validatable{},
+			weighers:       map[string]Validatable{},
+			detectors:      map[string]Validatable{},
+			expectError:    true,
+			expectWarnings: false,
 		},
 		{
 			name: "detector validation error",
@@ -281,7 +283,7 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DetectorPipeline(t *testing.T) 
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					Type:             v1alpha1.PipelineTypeDetector,
 					Detectors: []v1alpha1.DetectorSpec{
-						{Name: "detector1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+						{Name: "detector1", Params: nil},
 					},
 				},
 			},
@@ -289,13 +291,13 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DetectorPipeline(t *testing.T) 
 			weighers: map[string]Validatable{},
 			detectors: map[string]Validatable{
 				"detector1": &mockValidatable{
-					ValidateFunc: func(ctx context.Context, params runtime.RawExtension) error {
+					ValidateFunc: func(ctx context.Context, params v1alpha1.Parameters) error {
 						return errors.New("detector validation failed")
 					},
 				},
 			},
-			expectError: true,
-			errorMsg:    "detector validation failed",
+			expectError:    true,
+			expectWarnings: false,
 		},
 	}
 
@@ -308,7 +310,7 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DetectorPipeline(t *testing.T) 
 				ValidatableDetectors: tt.detectors,
 			}
 
-			_, err := webhook.ValidateCreate(t.Context(), tt.pipeline)
+			warnings, err := webhook.ValidateCreate(t.Context(), tt.pipeline)
 
 			if tt.expectError && err == nil {
 				t.Error("expected error but got nil")
@@ -316,10 +318,11 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DetectorPipeline(t *testing.T) 
 			if !tt.expectError && err != nil {
 				t.Errorf("expected no error but got: %v", err)
 			}
-			if tt.expectError && err != nil && tt.errorMsg != "" {
-				if !strings.Contains(err.Error(), tt.errorMsg) {
-					t.Errorf("expected error message to contain %q, got %q", tt.errorMsg, err.Error())
-				}
+			if tt.expectWarnings && len(warnings) == 0 {
+				t.Error("expected warnings but got none")
+			}
+			if !tt.expectWarnings && len(warnings) > 0 {
+				t.Errorf("expected no warnings but got: %v", warnings)
 			}
 		})
 	}
@@ -340,7 +343,7 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DifferentSchedulingDomain(t *te
 			SchedulingDomain: v1alpha1.SchedulingDomainCinder, // Different domain
 			Type:             v1alpha1.PipelineTypeFilterWeigher,
 			Filters: []v1alpha1.FilterSpec{
-				{Name: "unknown-filter", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+				{Name: "unknown-filter", Params: nil},
 			},
 		},
 	}
@@ -402,7 +405,7 @@ func TestPipelineAdmissionWebhook_ValidateUpdate(t *testing.T) {
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
 			Type:             v1alpha1.PipelineTypeFilterWeigher,
 			Filters: []v1alpha1.FilterSpec{
-				{Name: "filter1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+				{Name: "filter1", Params: nil},
 			},
 		},
 	}
@@ -437,7 +440,7 @@ func TestPipelineAdmissionWebhook_ValidateDelete(t *testing.T) {
 	}
 }
 
-func TestPipelineAdmissionWebhook_MultipleValidationErrors(t *testing.T) {
+func TestPipelineAdmissionWebhook_MultipleValidationWarnings(t *testing.T) {
 	webhook := &PipelineAdmissionWebhook{
 		SchedulingDomain:     v1alpha1.SchedulingDomainNova,
 		ValidatableFilters:   map[string]Validatable{},
@@ -452,31 +455,21 @@ func TestPipelineAdmissionWebhook_MultipleValidationErrors(t *testing.T) {
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
 			Type:             v1alpha1.PipelineTypeFilterWeigher,
 			Filters: []v1alpha1.FilterSpec{
-				{Name: "unknown-filter1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
-				{Name: "unknown-filter2", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+				{Name: "unknown-filter1", Params: nil},
+				{Name: "unknown-filter2", Params: nil},
 			},
 			Weighers: []v1alpha1.WeigherSpec{
-				{Name: "unknown-weigher1", Params: runtime.RawExtension{Raw: []byte(`{}`)}},
+				{Name: "unknown-weigher1", Params: nil},
 			},
 		},
 	}
 
-	_, err := webhook.ValidateCreate(t.Context(), pipeline)
-
-	if err == nil {
-		t.Error("expected error for unknown filters and weighers, got nil")
+	warnings, err := webhook.ValidateCreate(t.Context(), pipeline)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
 	}
-
-	// Check that multiple errors are reported
-	errStr := err.Error()
-	if !strings.Contains(errStr, "unknown-filter1") {
-		t.Error("expected error to contain 'unknown-filter1'")
-	}
-	if !strings.Contains(errStr, "unknown-filter2") {
-		t.Error("expected error to contain 'unknown-filter2'")
-	}
-	if !strings.Contains(errStr, "unknown-weigher1") {
-		t.Error("expected error to contain 'unknown-weigher1'")
+	if len(warnings) != 3 {
+		t.Errorf("expected 3 warnings for unknown filters and weighers, got %d: %v", len(warnings), warnings)
 	}
 }
 

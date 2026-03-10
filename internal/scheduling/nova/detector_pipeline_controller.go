@@ -55,10 +55,11 @@ func (c *DetectorPipelineController) InitPipeline(
 		Breaker: c.Breaker,
 		Monitor: c.Monitor.SubPipeline(p.Name),
 	}
-	errs := pipeline.Init(ctx, p.Spec.Detectors, detectors.Index)
+	unknown, errs := pipeline.Init(ctx, p.Spec.Detectors, detectors.Index)
 	return lib.PipelineInitResult[*lib.DetectorPipeline[plugins.VMDetection]]{
-		Pipeline:       pipeline,
-		DetectorErrors: errs,
+		Pipeline:         pipeline,
+		DetectorErrors:   errs,
+		UnknownDetectors: unknown,
 	}
 }
 
@@ -70,7 +71,7 @@ func (c *DetectorPipelineController) CreateDeschedulingsPeriodically(ctx context
 			return
 		default:
 			// Get the pipeline for the current configuration.
-			p, ok := c.Pipelines["nova-descheduler-kvm"]
+			p, ok := c.Pipelines["kvm-descheduler"]
 			if !ok {
 				slog.Error("descheduler: pipeline not found or not ready yet")
 				time.Sleep(jobloop.DefaultJitter(time.Minute))

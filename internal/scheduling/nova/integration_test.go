@@ -222,7 +222,7 @@ type PipelineConfig struct {
 // filter_has_enough_capacity and kvm_failover_evacuation
 func DefaultPipelineConfig() PipelineConfig {
 	return PipelineConfig{
-		Name: "nova-external-scheduler-kvm-all-filters-enabled",
+		Name: "kvm-general-purpose-load-balancing-all-filters-enabled",
 		Filters: []v1alpha1.FilterSpec{
 			{Name: "filter_has_enough_capacity"},
 		},
@@ -371,7 +371,7 @@ func TestIntegration_SchedulingWithReservations(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newFailoverReservation("failover-vm-existing", "host3", "m1.large", "4", "8Gi", map[string]string{"vm-existing": "host1"}),
 			},
-			request:               newNovaRequest("new-vm-uuid", "project-B", "m1.medium", "gp-1", 2, "4Gi", false, []string{"host1", "host2", "host3"}, "nova-external-scheduler-kvm-all-filters-enabled"),
+			request:               newNovaRequest("new-vm-uuid", "project-B", "m1.medium", "gp-1", 2, "4Gi", false, []string{"host1", "host2", "host3"}, "kvm-general-purpose-load-balancing-all-filters-enabled"),
 			filteredHosts:         []string{"host3"},
 			minExpectedHostsCount: 2,
 		},
@@ -384,7 +384,7 @@ func TestIntegration_SchedulingWithReservations(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newFailoverReservation("failover-vm-123", "host3", "m1.large", "4", "8Gi", map[string]string{"vm-123": "host1"}),
 			},
-			request:               newNovaRequest("vm-123", "project-A", "m1.large", "gp-1", 4, "8Gi", true, []string{"host2", "host3"}, "nova-external-scheduler-kvm-all-filters-enabled"),
+			request:               newNovaRequest("vm-123", "project-A", "m1.large", "gp-1", 4, "8Gi", true, []string{"host2", "host3"}, "kvm-general-purpose-load-balancing-all-filters-enabled"),
 			expectedHosts:         []string{"host3", "host2"}, // Failover host should be first
 			expectedHostsOrdered:  true,
 			minExpectedHostsCount: 2,
@@ -400,7 +400,7 @@ func TestIntegration_SchedulingWithReservations(t *testing.T) {
 				newFailoverReservation("failover-vm-456-on-host1", "host1", "m1.large", "4", "8Gi", map[string]string{"vm-456": "host-original"}),
 				newFailoverReservation("failover-vm-456-on-host3", "host3", "m1.large", "4", "8Gi", map[string]string{"vm-456": "host-original"}),
 			},
-			request:               newNovaRequest("vm-456", "project-A", "m1.large", "gp-1", 4, "8Gi", true, []string{"host1", "host2", "host3"}, "nova-external-scheduler-kvm-all-filters-enabled"),
+			request:               newNovaRequest("vm-456", "project-A", "m1.large", "gp-1", 4, "8Gi", true, []string{"host1", "host2", "host3"}, "kvm-general-purpose-load-balancing-all-filters-enabled"),
 			expectedHosts:         []string{"host1", "host2", "host3"},
 			minExpectedHostsCount: 3,
 			// Both host1 and host3 have failover reservations, so they should be preferred over host2
@@ -416,7 +416,7 @@ func TestIntegration_SchedulingWithReservations(t *testing.T) {
 				newFailoverReservation("failover-vm-456-on-host1", "host1", "m1.large", "4", "8Gi", map[string]string{"some-other-vm": "host-original"}),
 				newFailoverReservation("failover-vm-456-on-host3", "host3", "m1.large", "4", "8Gi", map[string]string{"vm-456": "host-original"}),
 			},
-			request:               newNovaRequest("vm-456", "project-A", "m1.large", "gp-1", 4, "8Gi", true, []string{"host1", "host2", "host3"}, "nova-external-scheduler-kvm-all-filters-enabled"),
+			request:               newNovaRequest("vm-456", "project-A", "m1.large", "gp-1", 4, "8Gi", true, []string{"host1", "host2", "host3"}, "kvm-general-purpose-load-balancing-all-filters-enabled"),
 			expectedHosts:         []string{"host3", "host2"},
 			expectedHostsOrdered:  true,
 			minExpectedHostsCount: 2,
@@ -431,7 +431,7 @@ func TestIntegration_SchedulingWithReservations(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newCommittedReservation("committed-res-host1", "host1", "host1", "project-A", "m1.large", "gp-1", "4", "8Gi"),
 			},
-			request:               newNovaRequest("new-vm should work", "project-A", "m1.large", "gp-1", 4, "8Gi", false, []string{"host1", "host2"}, "nova-external-scheduler-kvm-all-filters-enabled"),
+			request:               newNovaRequest("new-vm should work", "project-A", "m1.large", "gp-1", 4, "8Gi", false, []string{"host1", "host2"}, "kvm-general-purpose-load-balancing-all-filters-enabled"),
 			expectedHosts:         []string{"host1", "host2"}, // host1 unlocked because project/flavor match
 			minExpectedHostsCount: 2,
 		},
@@ -444,7 +444,7 @@ func TestIntegration_SchedulingWithReservations(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newCommittedReservation("committed-res-host1", "host1", "host1", "project-A", "m1.large", "gp-1", "4", "8Gi"),
 			},
-			request:               newNovaRequest("new-vm", "project-B", "m1.large", "gp-1", 4, "8Gi", false, []string{"host1", "host2"}, "nova-external-scheduler-kvm-all-filters-enabled"),
+			request:               newNovaRequest("new-vm", "project-B", "m1.large", "gp-1", 4, "8Gi", false, []string{"host1", "host2"}, "kvm-general-purpose-load-balancing-all-filters-enabled"),
 			expectedHosts:         []string{"host2"},
 			filteredHosts:         []string{"host1"}, // host1 blocked because project doesn't match
 			minExpectedHostsCount: 1,
@@ -457,7 +457,7 @@ func TestIntegration_SchedulingWithReservations(t *testing.T) {
 				newHypervisor("host3", "16", "4", "32Gi", "8Gi"),
 			},
 			reservations:          []*v1alpha1.Reservation{},
-			request:               newNovaRequest("new-vm", "project-A", "m1.large", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3"}, "nova-external-scheduler-kvm-all-filters-enabled"),
+			request:               newNovaRequest("new-vm", "project-A", "m1.large", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3"}, "kvm-general-purpose-load-balancing-all-filters-enabled"),
 			filters:               []v1alpha1.FilterSpec{{Name: "filter_has_enough_capacity"}},
 			weighers:              []v1alpha1.WeigherSpec{}, // No weighers
 			filteredHosts:         []string{"host2"},

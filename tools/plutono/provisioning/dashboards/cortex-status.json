@@ -499,7 +499,7 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Pipeline: nova-external-scheduler-*",
+      "title": "Pipeline: kvm-* (Nova)",
       "type": "text"
     },
     {
@@ -571,7 +571,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum(delta(cortex_filter_weigher_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=~\"nova-external-scheduler-.*\"}[2m]) / 2) by (le)",
+          "expr": "sum(delta(cortex_filter_weigher_pipeline_step_shift_origin_bucket{outidx=\"0\",pipeline=~\"kvm-.*\"}[2m]) / 2) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",

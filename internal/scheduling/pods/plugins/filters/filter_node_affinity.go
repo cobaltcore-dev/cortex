@@ -12,7 +12,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -24,7 +23,7 @@ func (f *NodeAffinityFilter) Init(ctx context.Context, client client.Client, ste
 	return nil
 }
 
-func (f *NodeAffinityFilter) Validate(ctx context.Context, params runtime.RawExtension) error {
+func (f *NodeAffinityFilter) Validate(ctx context.Context, params v1alpha1.Parameters) error {
 	return nil
 }
 

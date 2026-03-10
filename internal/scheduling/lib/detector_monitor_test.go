@@ -11,7 +11,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -83,7 +82,7 @@ func (m *mockMonitorStep) Init(ctx context.Context, client client.Client, step v
 	return m.initError
 }
 
-func (m *mockMonitorStep) Validate(ctx context.Context, params runtime.RawExtension) error {
+func (m *mockMonitorStep) Validate(ctx context.Context, params v1alpha1.Parameters) error {
 	return m.validateError
 }
 

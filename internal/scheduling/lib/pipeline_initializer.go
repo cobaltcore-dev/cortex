@@ -16,10 +16,16 @@ type PipelineInitResult[PipelineType any] struct {
 
 	// Errors for filters, if any, by their name.
 	FilterErrors map[string]error
+	// Unknown filters that were referenced but not found in the index, by their name.
+	UnknownFilters []string
 	// Errors for weighers, if any, by their name.
 	WeigherErrors map[string]error
+	// Unknown weighers that were referenced but not found in the index, by their name.
+	UnknownWeighers []string
 	// Errors for detectors, if any, by their name.
 	DetectorErrors map[string]error
+	// Unknown detectors that were referenced but not found in the index, by their name.
+	UnknownDetectors []string
 }
 
 // The base pipeline controller will delegate some methods to the parent

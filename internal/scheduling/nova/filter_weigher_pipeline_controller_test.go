@@ -289,6 +289,8 @@ func TestFilterWeigherPipelineController_InitPipeline(t *testing.T) {
 		weighers               []v1alpha1.WeigherSpec
 		expectNonCriticalError bool
 		expectCriticalError    bool
+		expectUnknownFilter    bool
+		expectUnknownWeigher   bool
 	}{
 		{
 			name:                   "empty steps",
@@ -296,6 +298,8 @@ func TestFilterWeigherPipelineController_InitPipeline(t *testing.T) {
 			weighers:               []v1alpha1.WeigherSpec{},
 			expectNonCriticalError: false,
 			expectCriticalError:    false,
+			expectUnknownFilter:    false,
+			expectUnknownWeigher:   false,
 		},
 		{
 			name: "supported step",
@@ -306,6 +310,8 @@ func TestFilterWeigherPipelineController_InitPipeline(t *testing.T) {
 			},
 			expectNonCriticalError: false,
 			expectCriticalError:    false,
+			expectUnknownFilter:    false,
+			expectUnknownWeigher:   false,
 		},
 		{
 			name: "unsupported step",
@@ -315,33 +321,9 @@ func TestFilterWeigherPipelineController_InitPipeline(t *testing.T) {
 				},
 			},
 			expectNonCriticalError: false,
-			expectCriticalError:    true,
-		},
-		{
-			name: "step with scoping options",
-			filters: []v1alpha1.FilterSpec{
-				{
-					Name: "filter_status_conditions",
-					Params: runtime.RawExtension{
-						Raw: []byte(`{"scope":{"host_capabilities":{"any_of_trait_infixes":["TEST_TRAIT"]}}}`),
-					},
-				},
-			},
-			expectNonCriticalError: false,
 			expectCriticalError:    false,
-		},
-		{
-			name: "step with invalid scoping options",
-			filters: []v1alpha1.FilterSpec{
-				{
-					Name: "filter_status_conditions",
-					Params: runtime.RawExtension{
-						Raw: []byte(`invalid json`),
-					},
-				},
-			},
-			expectNonCriticalError: false,
-			expectCriticalError:    true,
+			expectUnknownFilter:    true,
+			expectUnknownWeigher:   false,
 		},
 	}
 

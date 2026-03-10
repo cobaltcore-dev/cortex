@@ -63,10 +63,8 @@ func TestWeigherMonitor_Init(t *testing.T) {
 	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	err := wm.Init(t.Context(), cl, v1alpha1.WeigherSpec{
-		Name: "test-weigher",
-		Params: runtime.RawExtension{
-			Raw: []byte(`{}`),
-		},
+		Name:   "test-weigher",
+		Params: nil,
 	})
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)

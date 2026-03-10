@@ -12,8 +12,8 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -83,17 +83,39 @@ func TestVMwareAvoidShortTermContendedHostsStep_Init(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	validParams := runtime.RawExtension{
-		Raw: []byte(`{
-			"avgCPUContentionLowerBound": 0,
-			"avgCPUContentionUpperBound": 100,
-			"avgCPUContentionActivationLowerBound": 0,
-			"avgCPUContentionActivationUpperBound": -1,
-			"maxCPUContentionLowerBound": 0,
-			"maxCPUContentionUpperBound": 100,
-			"maxCPUContentionActivationLowerBound": 0,
-			"maxCPUContentionActivationUpperBound": -1
-		}`),
+	params := []v1alpha1.Parameter{
+		{
+			Key:        "avgCPUContentionLowerBound",
+			FloatValue: testlib.Ptr(0.0),
+		},
+		{
+			Key:        "avgCPUContentionUpperBound",
+			FloatValue: testlib.Ptr(100.0),
+		},
+		{
+			Key:        "avgCPUContentionActivationLowerBound",
+			FloatValue: testlib.Ptr(0.0),
+		},
+		{
+			Key:        "avgCPUContentionActivationUpperBound",
+			FloatValue: testlib.Ptr(-1.0),
+		},
+		{
+			Key:        "maxCPUContentionLowerBound",
+			FloatValue: testlib.Ptr(0.0),
+		},
+		{
+			Key:        "maxCPUContentionUpperBound",
+			FloatValue: testlib.Ptr(100.0),
+		},
+		{
+			Key:        "maxCPUContentionActivationLowerBound",
+			FloatValue: testlib.Ptr(0.0),
+		},
+		{
+			Key:        "maxCPUContentionActivationUpperBound",
+			FloatValue: testlib.Ptr(-1.0),
+		},
 	}
 
 	tests := []struct {
@@ -119,7 +141,7 @@ func TestVMwareAvoidShortTermContendedHostsStep_Init(t *testing.T) {
 			},
 			weigherSpec: v1alpha1.WeigherSpec{
 				Name:   "vmware_avoid_short_term_contended_hosts",
-				Params: validParams,
+				Params: params,
 			},
 			wantError: false,
 		},
@@ -128,7 +150,7 @@ func TestVMwareAvoidShortTermContendedHostsStep_Init(t *testing.T) {
 			knowledge: nil,
 			weigherSpec: v1alpha1.WeigherSpec{
 				Name:   "vmware_avoid_short_term_contended_hosts",
-				Params: validParams,
+				Params: params,
 			},
 			wantError:     true,
 			errorContains: "failed to get knowledge",

@@ -8,7 +8,6 @@ import (
 	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -39,7 +38,7 @@ func (fm *FilterMonitor[RequestType]) Init(ctx context.Context, client client.Cl
 }
 
 // Validate the wrapped filter.
-func (fm *FilterMonitor[RequestType]) Validate(ctx context.Context, params runtime.RawExtension) error {
+func (fm *FilterMonitor[RequestType]) Validate(ctx context.Context, params v1alpha1.Parameters) error {
 	return fm.filter.Validate(ctx, params)
 }
 

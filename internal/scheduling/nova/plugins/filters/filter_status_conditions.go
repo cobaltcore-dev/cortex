@@ -30,10 +30,13 @@ func (s *FilterStatusConditionsStep) Run(traceLog *slog.Logger, request api.Exte
 	}
 
 	expected := map[string]metav1.ConditionStatus{
+		hv1.ConditionTypeReady:              metav1.ConditionTrue,
+		hv1.ConditionTypeHypervisorDisabled: metav1.ConditionFalse,
+		hv1.ConditionTypeTerminating:        metav1.ConditionFalse,
+		// The hypervisor tainted condition is set when users touch the resource
+		// via kubectl, and shouldn't impact if we can schedule on this hypervisor.
+		hv1.ConditionTypeTainted:           "",
 		hv1.ConditionTypeOnboarding:        "", // Don't care
-		hv1.ConditionTypeReady:             metav1.ConditionTrue,
-		hv1.ConditionTypeTerminating:       metav1.ConditionFalse,
-		hv1.ConditionTypeTainted:           metav1.ConditionFalse,
 		hv1.ConditionTypeTraitsUpdated:     "", // Don't care
 		hv1.ConditionTypeAggregatesUpdated: "", // Don't care
 	}

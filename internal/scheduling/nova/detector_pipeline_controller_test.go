@@ -28,7 +28,7 @@ type mockControllerStep struct{}
 func (m *mockControllerStep) Run() ([]plugins.VMDetection, error) {
 	return nil, nil
 }
-func (m *mockControllerStep) Validate(ctx context.Context, params runtime.RawExtension) error {
+func (m *mockControllerStep) Validate(ctx context.Context, params v1alpha1.Parameters) error {
 	return nil
 }
 func (m *mockControllerStep) Init(ctx context.Context, client client.Client, step v1alpha1.DetectorSpec) error {
@@ -39,6 +39,7 @@ func TestDetectorPipelineController_InitPipeline(t *testing.T) {
 	tests := []struct {
 		name                   string
 		steps                  []v1alpha1.DetectorSpec
+		expectUnknownDetector  bool
 		expectNonCriticalError bool
 	}{
 		{
@@ -57,7 +58,7 @@ func TestDetectorPipelineController_InitPipeline(t *testing.T) {
 					Name: "unsupported",
 				},
 			},
-			expectNonCriticalError: true,
+			expectUnknownDetector: true,
 		},
 		{
 			name:                   "empty steps",
@@ -77,10 +78,19 @@ func TestDetectorPipelineController_InitPipeline(t *testing.T) {
 				Breaker: controller.Breaker,
 				Monitor: controller.Monitor,
 			}
-			errs := pipeline.Init(t.Context(), tt.steps, map[string]lib.Detector[plugins.VMDetection]{
+			unknown, errs := pipeline.Init(t.Context(), tt.steps, map[string]lib.Detector[plugins.VMDetection]{
 				"mock-step": &mockControllerStep{},
 			})
 
+			if tt.expectUnknownDetector {
+				if len(unknown) == 0 {
+					t.Errorf("expected unknown detector, got none")
+				}
+			} else {
+				if len(unknown) > 0 {
+					t.Errorf("unexpected unknown detectors: %v", unknown)
+				}
+			}
 			if tt.expectNonCriticalError {
 				if len(errs) == 0 {
 					t.Errorf("expected non-critical error, got none")
