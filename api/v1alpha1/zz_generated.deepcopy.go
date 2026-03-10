@@ -821,6 +821,7 @@ func (in *KnowledgeSpec) DeepCopy() *KnowledgeSpec {
 func (in *KnowledgeStatus) DeepCopyInto(out *KnowledgeStatus) {
 	*out = *in
 	in.LastExtracted.DeepCopyInto(&out.LastExtracted)
+	in.LastContentChange.DeepCopyInto(&out.LastContentChange)
 	in.Raw.DeepCopyInto(&out.Raw)
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
