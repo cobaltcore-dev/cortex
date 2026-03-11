@@ -181,20 +181,20 @@ func (m *ReservationManager) syncReservationMetadata(
 ) (*v1alpha1.Reservation, error) {
 
 	// if any of AZ, StarTime, EndTime differ from desired state, need to patch
-	if (state.AZ != "" && reservation.Spec.AZ != state.AZ) ||
+	if (state.AvailabilityZone != "" && reservation.Spec.AvailabilityZone != state.AvailabilityZone) ||
 		(state.StartTime != nil && (reservation.Spec.StartTime == nil || !reservation.Spec.StartTime.Time.Equal(*state.StartTime))) ||
 		(state.EndTime != nil && (reservation.Spec.EndTime == nil || !reservation.Spec.EndTime.Time.Equal(*state.EndTime))) {
 		// Apply patch
 		log.Info("syncing reservation metadata",
 			"reservation", reservation.Name,
-			"az", state.AZ,
+			"availabilityZone", state.AvailabilityZone,
 			"startTime", state.StartTime,
 			"endTime", state.EndTime)
 
 		patch := client.MergeFrom(reservation.DeepCopy())
 
-		if state.AZ != "" {
-			reservation.Spec.AZ = state.AZ
+		if state.AvailabilityZone != "" {
+			reservation.Spec.AvailabilityZone = state.AvailabilityZone
 		}
 		if state.StartTime != nil {
 			reservation.Spec.StartTime = &metav1.Time{Time: *state.StartTime}
@@ -264,9 +264,9 @@ func (m *ReservationManager) buildReservationCRD(
 		},
 	}
 
-	// Set AZ if specified
-	if state.AZ != "" {
-		spec.AZ = state.AZ
+	// Set AvailabilityZone if specified
+	if state.AvailabilityZone != "" {
+		spec.AvailabilityZone = state.AvailabilityZone
 	}
 
 	// Set validity times if specified

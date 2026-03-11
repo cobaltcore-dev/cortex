@@ -39,8 +39,8 @@ type CommitmentState struct {
 	FlavorGroupName string
 	// the total memory in bytes across all reservation slots
 	TotalMemoryBytes int64
-	// AZ specifies the availability zone for this commitment
-	AZ string
+	// AvailabilityZone specifies the availability zone for this commitment
+	AvailabilityZone string
 	// StartTime is when the commitment becomes active
 	StartTime *time.Time
 	// EndTime is when the commitment expires
@@ -85,7 +85,7 @@ func FromCommitment(
 		DomainID:         commitment.DomainID,
 		FlavorGroupName:  flavorGroupName,
 		TotalMemoryBytes: totalMemoryBytes,
-		AZ:               commitment.AvailabilityZone,
+		AvailabilityZone: commitment.AvailabilityZone,
 		StartTime:        startTime,
 		EndTime:          endTime,
 	}, nil
@@ -138,7 +138,7 @@ func FromChangeCommitmentTargetState(
 		ProjectID:        projectID,
 		FlavorGroupName:  flavorGroupName,
 		TotalMemoryBytes: totalMemoryBytes,
-		AZ:               az,
+		AvailabilityZone: az,
 		StartTime:        startTime,
 		EndTime:          endTime,
 	}, nil
@@ -162,7 +162,7 @@ func FromReservations(reservations []v1alpha1.Reservation) (*CommitmentState, er
 		DomainID:         first.Spec.CommittedResourceReservation.DomainID,
 		FlavorGroupName:  first.Spec.CommittedResourceReservation.ResourceGroup,
 		TotalMemoryBytes: 0,
-		AZ:               first.Spec.AZ,
+		AvailabilityZone: first.Spec.AvailabilityZone,
 	}
 
 	if first.Spec.StartTime != nil {

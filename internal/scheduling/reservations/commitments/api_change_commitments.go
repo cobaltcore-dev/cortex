@@ -57,7 +57,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	log.Info("received change commitments request", "affectedProjects", len(req.ByProject), "dryRun", req.DryRun)
+	log.Info("received change commitments request", "affectedProjects", len(req.ByProject), "dryRun", req.DryRun, "availabilityZone", req.AZ)
 
 	// Initialize response
 	resp := liquid.CommitmentChangeResponse{}
@@ -90,7 +90,7 @@ func (api *HTTPAPI) processCommitmentChanges(log logr.Logger, req liquid.Commitm
 	ctx := context.Background()
 	manager := NewReservationManager(api.client)
 	requireRollback := false
-	log.Info("processing commitment change request", "AZ", req.AZ, "DryRun", req.DryRun, "affectedProjects", len(req.ByProject))
+	log.Info("processing commitment change request", "availabilityZone", req.AZ, "dryRun", req.DryRun, "affectedProjects", len(req.ByProject))
 
 	knowledge := &reservations.FlavorGroupKnowledge{Client: api.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)

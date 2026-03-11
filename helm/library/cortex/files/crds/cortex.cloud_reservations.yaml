@@ -49,9 +49,9 @@ spec:
           spec:
             description: spec defines the desired state of Reservation
             properties:
-              az:
-                description: AZ specifies the availability zone for this reservation,
-                  if restricted to a specific AZ.
+              availabilityZone:
+                description: AvailabilityZone specifies the availability zone for
+                  this reservation, if restricted to a specific AZ.
                 type: string
               committedResourceReservation:
                 description: |-

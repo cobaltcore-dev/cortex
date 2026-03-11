@@ -205,10 +205,10 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		projectID = res.Spec.CommittedResourceReservation.ProjectID
 	}
 
-	// Get AZ from reservation if available
+	// Get AvailabilityZone from reservation if available
 	availabilityZone := ""
-	if res.Spec.AZ != "" {
-		availabilityZone = res.Spec.AZ
+	if res.Spec.AvailabilityZone != "" {
+		availabilityZone = res.Spec.AvailabilityZone
 	}
 
 	// Get flavor details from flavor group knowledge CRD
