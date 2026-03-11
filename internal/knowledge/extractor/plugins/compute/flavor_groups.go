@@ -6,6 +6,7 @@ package compute
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"sort"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
@@ -64,6 +65,10 @@ var flavorGroupLog = ctrl.Log.WithName("flavor_group_extractor")
 
 // Extract flavor groups from the database.
 func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
+	if e.DB == nil {
+		return nil, errors.New("database connection is not initialized")
+	}
+
 	// Query all flavors from database
 	var rows []flavorRow
 	if _, err := e.DB.Select(&rows, flavorGroupsQuery); err != nil {

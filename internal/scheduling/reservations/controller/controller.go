@@ -398,11 +398,12 @@ func (r *ReservationReconciler) reconcileAllocations(ctx context.Context, res *v
 		}
 	}
 
+	// Patch the reservation status
+	old := res.DeepCopy()
+
 	// Update Status.Allocations
 	res.Status.CommittedResourceReservation.Allocations = newStatusAllocations
 
-	// Patch the reservation status
-	old := res.DeepCopy()
 	patch := client.MergeFrom(old)
 	if err := r.Status().Patch(ctx, res, patch); err != nil {
 		// Ignore not-found errors during background deletion

@@ -127,7 +127,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 	// Add new reservations if needed (CREATE)
 	for deltaMemoryBytes > 0 {
 		// Need to create new reservation slots
-		reservation := m.buildReservationCRD(log, desiredState, nextSlotIndex, deltaMemoryBytes, flavorGroup, creator)
+		reservation := m.newReservation(log, desiredState, nextSlotIndex, deltaMemoryBytes, flavorGroup, creator)
 		touchedReservations = append(touchedReservations, *reservation)
 		memValue := reservation.Spec.Resources["memory"]
 		deltaMemoryBytes -= memValue.Value()
@@ -214,7 +214,7 @@ func (m *ReservationManager) syncReservationMetadata(
 	}
 }
 
-func (m *ReservationManager) buildReservationCRD(
+func (m *ReservationManager) newReservation(
 	log logr.Logger,
 	state *CommitmentState,
 	slotIndex int,

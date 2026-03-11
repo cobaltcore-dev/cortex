@@ -230,8 +230,7 @@ ProcessLoop:
 
 		log.Info("finished applying rollbacks for commitment changes", "reasonOfRollback", resp.RejectionReason)
 
-		// TODO improve reason messaging based on actual failure
-		resp.RejectionReason = "Validation failed for one or more commitments"
+		// TODO improve human-readable reasoning based on actual failure, i.e. polish resp.RejectionReason
 		return
 	}
 

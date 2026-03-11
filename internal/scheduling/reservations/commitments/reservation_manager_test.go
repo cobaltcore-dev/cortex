@@ -475,7 +475,7 @@ func TestApplyCommitmentState_UnknownFlavorGroup(t *testing.T) {
 	}
 }
 
-func TestBuildReservationCRD_SelectsAppropriateFlavor(t *testing.T) {
+func TestNewReservation_SelectsAppropriateFlavor(t *testing.T) {
 	manager := &ReservationManager{}
 	flavorGroup := testFlavorGroup()
 
@@ -520,7 +520,7 @@ func TestBuildReservationCRD_SelectsAppropriateFlavor(t *testing.T) {
 				TotalMemoryBytes: tt.deltaMemory,
 			}
 
-			reservation := manager.buildReservationCRD(
+			reservation := manager.newReservation(
 				logr.Discard(),
 				state,
 				0,
