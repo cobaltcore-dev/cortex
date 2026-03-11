@@ -55,7 +55,7 @@ func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
 // buildServiceInfo constructs the ServiceInfo response with metadata for all flavor groups.
 func (api *HTTPAPI) buildServiceInfo(ctx context.Context, log logr.Logger) (liquid.ServiceInfo, error) {
 	// Get all flavor groups from Knowledge CRDs
-	knowledge := &reservations.FlavorGroupKnowledge{Client: api.client}
+	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		// Return -1 as version when knowledge is not ready
@@ -99,7 +99,11 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, log logr.Logger) (liqu
 			"smallestRamMB", smallestRAM)
 	}
 
-	version := knowledge.GetVersion(ctx)
+	// Get last content changed from flavor group knowledge and treat it as version
+	var version int64 = -1
+	if knowledgeCRD, err := knowledge.Get(ctx); err == nil && knowledgeCRD != nil && !knowledgeCRD.Status.LastContentChange.IsZero() {
+		version = knowledgeCRD.Status.LastContentChange.Unix()
+	}
 
 	log.Info("built service info",
 		"resourceCount", len(resources),

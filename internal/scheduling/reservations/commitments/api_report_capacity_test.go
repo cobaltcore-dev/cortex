@@ -139,8 +139,8 @@ func TestCapacityCalculator(t *testing.T) {
 		if err == nil {
 			t.Fatal("Expected error when flavor groups knowledge doesn't exist, got nil")
 		}
-		if !strings.Contains(err.Error(), "flavor groups knowledge CRD not found") {
-			t.Errorf("Expected 'flavor groups knowledge CRD not found' error, got: %v", err)
+		if !strings.Contains(err.Error(), "not found") {
+			t.Errorf("Expected 'not found' error, got: %v", err)
 		}
 	})
 
@@ -210,8 +210,8 @@ func createEmptyFlavorGroupKnowledge() *v1alpha1.Knowledge {
 
 	return &v1alpha1.Knowledge{
 		ObjectMeta: v1.ObjectMeta{
-			Name:      "flavor-groups",
-			Namespace: "default",
+			Name: "flavor-groups",
+			// No namespace - Knowledge is cluster-scoped
 		},
 		Spec: v1alpha1.KnowledgeSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
@@ -263,8 +263,8 @@ func createTestFlavorGroupKnowledge(t *testing.T, groupName string) *v1alpha1.Kn
 
 	return &v1alpha1.Knowledge{
 		ObjectMeta: v1.ObjectMeta{
-			Name:      "flavor-groups",
-			Namespace: "default",
+			Name: "flavor-groups",
+			// No namespace - Knowledge is cluster-scoped
 		},
 		Spec: v1alpha1.KnowledgeSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,

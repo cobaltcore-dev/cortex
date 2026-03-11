@@ -28,7 +28,7 @@ func NewCapacityCalculator(client client.Client) *CapacityCalculator {
 // CalculateCapacity computes per-AZ capacity for all flavor groups.
 func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.ServiceCapacityReport, error) {
 	// Get all flavor groups from Knowledge CRDs
-	knowledge := &reservations.FlavorGroupKnowledge{Client: c.client}
+	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, fmt.Errorf("failed to get flavor groups: %w", err)

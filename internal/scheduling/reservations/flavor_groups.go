@@ -10,65 +10,44 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// FlavorGroupKnowledge accesses flavor group data from Knowledge CRDs.
-type FlavorGroupKnowledge struct {
+// FlavorGroupKnowledgeClient accesses flavor group data from Knowledge CRDs.
+type FlavorGroupKnowledgeClient struct {
 	client.Client
 }
 
-func (k *FlavorGroupKnowledge) IsReady(ctx context.Context) (*v1alpha1.Knowledge, error) {
-	// List all Knowledge CRDs
-	var knowledgeList v1alpha1.KnowledgeList
-	if err := k.List(ctx, &knowledgeList); err != nil {
-		return nil, fmt.Errorf("failed to list knowledge CRDs: %w", err)
+// Get retrieves the flavor groups Knowledge CRD and returns it if ready.
+// Returns nil, nil if not ready yet.
+func (c *FlavorGroupKnowledgeClient) Get(ctx context.Context) (*v1alpha1.Knowledge, error) {
+	knowledge := &v1alpha1.Knowledge{}
+	err := c.Client.Get(ctx, types.NamespacedName{
+		Name: "flavor-groups",
+		// Namespace is empty as Knowledge is cluster-scoped
+	}, knowledge)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get flavor groups knowledge: %w", err)
 	}
 
-	// Find the flavor groups knowledge CRD
-	var flavorGroupsKnowledge *v1alpha1.Knowledge
-	for _, knowledge := range knowledgeList.Items {
-		if knowledge.Spec.SchedulingDomain == v1alpha1.SchedulingDomainNova &&
-			knowledge.Spec.Extractor.Name == "flavor_groups" {
-			flavorGroupsKnowledge = &knowledge
-			break
-		}
+	if meta.IsStatusConditionTrue(knowledge.Status.Conditions, v1alpha1.KnowledgeConditionReady) {
+		return knowledge, nil
 	}
 
-	if flavorGroupsKnowledge == nil {
-		return nil, errors.New("flavor groups knowledge CRD not found")
-	}
-
-	// Check if knowledge is ready
-	for _, condition := range flavorGroupsKnowledge.Status.Conditions {
-		if condition.Type == v1alpha1.KnowledgeConditionReady && condition.Status == "True" {
-			return flavorGroupsKnowledge, nil
-		}
-	}
-
-	// Not ready yet
+	// Found but not ready yet
 	return nil, nil
 }
 
-// GetVersion returns Unix timestamp of last content change, or -1 if not ready.
-func (k *FlavorGroupKnowledge) GetVersion(ctx context.Context) int64 {
-	knowledgeCRD, err := k.IsReady(ctx)
-	if err != nil || knowledgeCRD == nil {
-		return -1
-	}
-	// Return Unix timestamp as version
-	// If LastContentChange is zero (never set), return -1
-	if knowledgeCRD.Status.LastContentChange.IsZero() {
-		return -1
-	}
-	return knowledgeCRD.Status.LastContentChange.Unix()
-}
-
-func (k *FlavorGroupKnowledge) GetAllFlavorGroups(ctx context.Context, knowledgeCRD *v1alpha1.Knowledge) (map[string]compute.FlavorGroupFeature, error) {
+// GetAllFlavorGroups returns all flavor groups as a map.
+// If knowledgeCRD is provided, uses it directly. Otherwise fetches the Knowledge CRD.
+func (c *FlavorGroupKnowledgeClient) GetAllFlavorGroups(ctx context.Context, knowledgeCRD *v1alpha1.Knowledge) (map[string]compute.FlavorGroupFeature, error) {
 	// If no CRD provided, fetch it
 	if knowledgeCRD == nil {
 		var err error
-		knowledgeCRD, err = k.IsReady(ctx)
+		knowledgeCRD, err = c.Get(ctx)
 		if err != nil {
 			return nil, err
 		}

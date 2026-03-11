@@ -212,7 +212,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Get flavor details from flavor group knowledge CRD
-	knowledge := &reservations.FlavorGroupKnowledge{Client: r.Client}
+	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: r.Client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		log.Info("flavor knowledge not ready, requeueing",

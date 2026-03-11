@@ -92,7 +92,7 @@ func (api *HTTPAPI) processCommitmentChanges(log logr.Logger, req liquid.Commitm
 	requireRollback := false
 	log.Info("processing commitment change request", "availabilityZone", req.AZ, "dryRun", req.DryRun, "affectedProjects", len(req.ByProject))
 
-	knowledge := &reservations.FlavorGroupKnowledge{Client: api.client}
+	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		log.Info("failed to get flavor groups from knowledge extractor", "error", err)
@@ -102,8 +102,11 @@ func (api *HTTPAPI) processCommitmentChanges(log logr.Logger, req liquid.Commitm
 		return
 	}
 
-	// Validate InfoVersion from request matches current knowledge version
-	currentVersion := knowledge.GetVersion(ctx)
+	// Validate InfoVersion from request matches current version (= last content change of flavor group knowledge)
+	var currentVersion int64 = -1
+	if knowledgeCRD, err := knowledge.Get(ctx); err == nil && knowledgeCRD != nil && !knowledgeCRD.Status.LastContentChange.IsZero() {
+		currentVersion = knowledgeCRD.Status.LastContentChange.Unix()
+	}
 
 	if req.InfoVersion != currentVersion {
 		log.Info("version mismatch in commitment change request",

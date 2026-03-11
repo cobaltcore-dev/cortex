@@ -131,8 +131,8 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	log.Info("starting commitment sync")
 
 	// Check if flavor group knowledge is ready
-	knowledge := &reservations.FlavorGroupKnowledge{Client: s.Client}
-	knowledgeCRD, err := knowledge.IsReady(ctx)
+	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: s.Client}
+	knowledgeCRD, err := knowledge.Get(ctx)
 	if err != nil {
 		log.Error(err, "failed to check flavor group knowledge readiness")
 		return err
