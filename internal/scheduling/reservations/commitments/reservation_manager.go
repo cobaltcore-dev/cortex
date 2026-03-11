@@ -152,7 +152,66 @@ func (m *ReservationManager) ApplyCommitmentState(
 		nextSlotIndex++
 	}
 
+	// Sync metadata for all remaining reservations
+	for i := range existing {
+		updated, err := m.syncReservationMetadata(ctx, log, &existing[i], desiredState)
+		if err != nil {
+			return touchedReservations, removedReservations, err
+		}
+		if updated != nil {
+			touchedReservations = append(touchedReservations, *updated)
+		}
+	}
+
+	log.Info("completed commitment state sync",
+		"commitmentUUID", desiredState.CommitmentUUID,
+		"totalReservations", len(existing),
+		"created", len(touchedReservations)-len(existing),
+		"deleted", len(removedReservations))
+
 	return touchedReservations, removedReservations, nil
+}
+
+// syncReservationMetadata updates reservation metadata if it differs from desired state.
+func (m *ReservationManager) syncReservationMetadata(
+	ctx context.Context,
+	log logr.Logger,
+	reservation *v1alpha1.Reservation,
+	state *CommitmentState,
+) (*v1alpha1.Reservation, error) {
+
+	// if any of AZ, StarTime, EndTime differ from desired state, need to patch
+	if (state.AZ != "" && reservation.Spec.AZ != state.AZ) ||
+		(state.StartTime != nil && (reservation.Spec.StartTime == nil || !reservation.Spec.StartTime.Time.Equal(*state.StartTime))) ||
+		(state.EndTime != nil && (reservation.Spec.EndTime == nil || !reservation.Spec.EndTime.Time.Equal(*state.EndTime))) {
+		// Apply patch
+		log.Info("syncing reservation metadata",
+			"reservation", reservation.Name,
+			"az", state.AZ,
+			"startTime", state.StartTime,
+			"endTime", state.EndTime)
+
+		patch := client.MergeFrom(reservation.DeepCopy())
+
+		if state.AZ != "" {
+			reservation.Spec.AZ = state.AZ
+		}
+		if state.StartTime != nil {
+			reservation.Spec.StartTime = &metav1.Time{Time: *state.StartTime}
+		}
+		if state.EndTime != nil {
+			reservation.Spec.EndTime = &metav1.Time{Time: *state.EndTime}
+		}
+
+		if err := m.Patch(ctx, reservation, patch); err != nil {
+			return nil, fmt.Errorf("failed to patch reservation %s: %w",
+				reservation.Name, err)
+		}
+
+		return reservation, nil
+	} else {
+		return nil, nil // No changes needed
+	}
 }
 
 func (m *ReservationManager) buildReservationCRD(
@@ -183,29 +242,45 @@ func (m *ReservationManager) buildReservationCRD(
 
 	log.Info("created reservation", "name", name, "slot", slotIndex, "flavor", flavorInGroup.Name, "memoryBytes", memoryBytes, "flavor memory", flavorInGroup.MemoryMB*1024*1024)
 
+	spec := v1alpha1.ReservationSpec{
+		Type: v1alpha1.ReservationTypeCommittedResource,
+		Resources: map[string]resource.Quantity{
+			"memory": *resource.NewQuantity(
+				memoryBytes,
+				resource.BinarySI,
+			),
+			"cpu": *resource.NewQuantity(
+				cpus,
+				resource.DecimalSI,
+			),
+		},
+		CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+			ProjectID:     state.ProjectID,
+			DomainID:      state.DomainID,
+			ResourceGroup: state.FlavorGroupName,
+			ResourceName:  flavorInGroup.Name,
+			Creator:       creator,
+			Allocations:   make(map[string]v1alpha1.CommittedResourceAllocation),
+		},
+	}
+
+	// Set AZ if specified
+	if state.AZ != "" {
+		spec.AZ = state.AZ
+	}
+
+	// Set validity times if specified
+	if state.StartTime != nil {
+		spec.StartTime = &metav1.Time{Time: *state.StartTime}
+	}
+	if state.EndTime != nil {
+		spec.EndTime = &metav1.Time{Time: *state.EndTime}
+	}
+
 	return &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
-		Spec: v1alpha1.ReservationSpec{
-			Type: v1alpha1.ReservationTypeCommittedResource,
-			Resources: map[string]resource.Quantity{
-				"memory": *resource.NewQuantity(
-					memoryBytes,
-					resource.BinarySI,
-				),
-				"cpu": *resource.NewQuantity(
-					cpus,
-					resource.DecimalSI,
-				),
-			},
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				ProjectID:     state.ProjectID,
-				ResourceGroup: state.FlavorGroupName,
-				ResourceName:  flavorInGroup.Name,
-				Creator:       creator,
-				Allocations:   make(map[string]v1alpha1.CommittedResourceAllocation),
-			},
-		},
+		Spec: spec,
 	}
 }

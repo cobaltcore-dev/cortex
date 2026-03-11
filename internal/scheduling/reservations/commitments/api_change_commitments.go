@@ -145,9 +145,7 @@ ProcessLoop:
 				// Additional per-commitment validation if needed
 				log.Info("processing commitment change", "commitmentUUID", commitment.UUID, "projectID", projectID, "resourceName", resourceName, "oldStatus", commitment.OldStatus.UnwrapOr("none"), "newStatus", commitment.NewStatus.UnwrapOr("none"))
 
-				// TODO add AZ spec
 				// TODO add domain
-
 				// get existing reservations for rollback
 				existing_reservations, err := ListReservationsForCommitment(ctx, api.client, string(commitment.UUID), "")
 				if err != nil {
@@ -175,7 +173,7 @@ ProcessLoop:
 				states_before[string(commitment.UUID)] = state_before
 
 				// get desired state
-				state_desired, err := FromChangeCommitmentTargetState(commitment, string(projectID), flavorGroupName, flavorGroup)
+				state_desired, err := FromChangeCommitmentTargetState(commitment, string(projectID), flavorGroupName, flavorGroup, string(req.AZ))
 				if err != nil {
 					resp.RejectionReason = fmt.Sprintf("failed to get desired state for commitment %s: %v", commitment.UUID, err)
 					requireRollback = true

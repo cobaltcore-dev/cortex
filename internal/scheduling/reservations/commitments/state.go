@@ -33,10 +33,18 @@ type CommitmentState struct {
 	CommitmentUUID string
 	// ProjectID is the OpenStack project this commitment belongs to
 	ProjectID string
+	// DomainID is the OpenStack domain this commitment belongs to
+	DomainID string
 	// FlavorGroupName identifies the flavor group (e.g., "hana_medium_v2")
 	FlavorGroupName string
 	// the total memory in bytes across all reservation slots
 	TotalMemoryBytes int64
+	// AZ specifies the availability zone for this commitment
+	AZ string
+	// StartTime is when the commitment becomes active
+	StartTime *time.Time
+	// EndTime is when the commitment expires
+	EndTime *time.Time
 }
 
 // FromCommitment converts Limes commitment to CommitmentState.
@@ -54,11 +62,32 @@ func FromCommitment(
 	smallestFlavorMemoryBytes := int64(flavorGroup.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory from specs, realistically bounded
 	totalMemoryBytes := int64(commitment.Amount) * smallestFlavorMemoryBytes              //nolint:gosec // commitment amount from Limes API, bounded by quota limits
 
+	// Set start time: use ConfirmedAt if available, otherwise CreatedAt
+	var startTime *time.Time
+	if commitment.ConfirmedAt != nil {
+		t := time.Unix(int64(*commitment.ConfirmedAt), 0) //nolint:gosec // timestamp from Limes API, realistically bounded
+		startTime = &t
+	} else {
+		t := time.Unix(int64(commitment.CreatedAt), 0) //nolint:gosec // timestamp from Limes API, realistically bounded
+		startTime = &t
+	}
+
+	// Set end time from ExpiresAt
+	var endTime *time.Time
+	if commitment.ExpiresAt > 0 {
+		t := time.Unix(int64(commitment.ExpiresAt), 0) //nolint:gosec // timestamp from Limes API, realistically bounded
+		endTime = &t
+	}
+
 	return &CommitmentState{
 		CommitmentUUID:   commitment.UUID,
 		ProjectID:        commitment.ProjectID,
+		DomainID:         commitment.DomainID,
 		FlavorGroupName:  flavorGroupName,
 		TotalMemoryBytes: totalMemoryBytes,
+		AZ:               commitment.AvailabilityZone,
+		StartTime:        startTime,
+		EndTime:          endTime,
 	}, nil
 }
 
@@ -68,23 +97,33 @@ func FromChangeCommitmentTargetState(
 	projectID string,
 	flavorGroupName string,
 	flavorGroup compute.FlavorGroupFeature,
+	az string,
 ) (*CommitmentState, error) {
 
 	amountMultiple := uint64(0)
+	var startTime *time.Time
+	var endTime *time.Time
 
 	switch commitment.NewStatus.UnwrapOr("none") {
 	// guaranteed and confirmed commitments are honored with start time now
 	case liquid.CommitmentStatusGuaranteed, liquid.CommitmentStatusConfirmed:
 		amountMultiple = commitment.Amount
+		// Set start time to now for active commitments
+		now := time.Now()
+		startTime = &now
 	}
 
 	// ConfirmBy is ignored for now
 	// TODO do more sophisticated handling of guaranteed commitments
 
-	// check expiry time
-	if commitment.ExpiresAt.Before(time.Now()) || commitment.ExpiresAt.Equal(time.Now()) {
-		// commitment is already expired, ignore capacity
-		amountMultiple = 0
+	// Set end time if not zero (commitments can have no expiry)
+	if !commitment.ExpiresAt.IsZero() {
+		endTime = &commitment.ExpiresAt
+		// check expiry time
+		if commitment.ExpiresAt.Before(time.Now()) || commitment.ExpiresAt.Equal(time.Now()) {
+			// commitment is already expired, ignore capacity
+			amountMultiple = 0
+		}
 	}
 
 	// Flavors are sorted by size descending, so the last one is the smallest
@@ -99,6 +138,9 @@ func FromChangeCommitmentTargetState(
 		ProjectID:        projectID,
 		FlavorGroupName:  flavorGroupName,
 		TotalMemoryBytes: totalMemoryBytes,
+		AZ:               az,
+		StartTime:        startTime,
+		EndTime:          endTime,
 	}, nil
 }
 
@@ -117,8 +159,17 @@ func FromReservations(reservations []v1alpha1.Reservation) (*CommitmentState, er
 	state := &CommitmentState{
 		CommitmentUUID:   extractCommitmentUUID(first.Name),
 		ProjectID:        first.Spec.CommittedResourceReservation.ProjectID,
+		DomainID:         first.Spec.CommittedResourceReservation.DomainID,
 		FlavorGroupName:  first.Spec.CommittedResourceReservation.ResourceGroup,
 		TotalMemoryBytes: 0,
+		AZ:               first.Spec.AZ,
+	}
+
+	if first.Spec.StartTime != nil {
+		state.StartTime = &first.Spec.StartTime.Time
+	}
+	if first.Spec.EndTime != nil {
+		state.EndTime = &first.Spec.EndTime.Time
 	}
 
 	// Sum memory across all reservations
