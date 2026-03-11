@@ -27,7 +27,7 @@ func NewReservationManager(k8sClient client.Client) *ReservationManager {
 	}
 }
 
-// ApplyCommitmentState reconciles (CRUD) Reservation CRDs to match desired commitment state.
+// ApplyCommitmentState applies CRUD on Reservation CRDs to match desired commitment state.
 func (m *ReservationManager) ApplyCommitmentState(
 	ctx context.Context,
 	log logr.Logger,
@@ -38,12 +38,14 @@ func (m *ReservationManager) ApplyCommitmentState(
 
 	log = log.WithName("ReservationManager")
 
-	existing, err := ListReservationsForCommitment(
-		ctx, m.Client, desiredState.CommitmentUUID, "",
-	)
-	if err != nil {
+	var existingReservations v1alpha1.ReservationList
+	if err := m.List(ctx, &existingReservations, client.MatchingLabels{
+		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+		v1alpha1.LabelCommitmentUUID:  desiredState.CommitmentUUID,
+	}); err != nil {
 		return nil, nil, fmt.Errorf("failed to list existing reservations: %w", err)
 	}
+	existing := existingReservations.Items
 
 	// Calculate the delta between existing and desired state
 	flavorGroup, exists := flavorGroups[desiredState.FlavorGroupName]
@@ -64,12 +66,10 @@ func (m *ReservationManager) ApplyCommitmentState(
 		"existingSlots", len(existing),
 	)
 
-	touchedReservations = make([]v1alpha1.Reservation, 0)
-	removedReservations = make([]v1alpha1.Reservation, 0)
 	nextSlotIndex := GetNextSlotIndex(existing)
 
 	// check all reservations for flavor group/project consistency; on mismatch, delete reservation and re-create later
-	validReservations := make([]v1alpha1.Reservation, 0)
+	var validReservations []v1alpha1.Reservation
 	for _, res := range existing {
 		if res.Spec.CommittedResourceReservation.ResourceGroup != desiredState.FlavorGroupName ||
 			res.Spec.CommittedResourceReservation.ProjectID != desiredState.ProjectID {
@@ -152,7 +152,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 		nextSlotIndex++
 	}
 
-	// Sync metadata for all remaining reservations
+	// Sync metadata for all remaining reservations (UPDATE)
 	for i := range existing {
 		updated, err := m.syncReservationMetadata(ctx, log, &existing[i], desiredState)
 		if err != nil {
@@ -260,7 +260,7 @@ func (m *ReservationManager) buildReservationCRD(
 			ResourceGroup: state.FlavorGroupName,
 			ResourceName:  flavorInGroup.Name,
 			Creator:       creator,
-			Allocations:   make(map[string]v1alpha1.CommittedResourceAllocation),
+			Allocations:   nil,
 		},
 	}
 
@@ -280,6 +280,10 @@ func (m *ReservationManager) buildReservationCRD(
 	return &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
+			Labels: map[string]string{
+				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+				v1alpha1.LabelCommitmentUUID:  state.CommitmentUUID,
+			},
 		},
 		Spec: spec,
 	}

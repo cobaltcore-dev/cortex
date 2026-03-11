@@ -21,6 +21,27 @@ const (
 	ReservationTypeFailover ReservationType = "FailoverReservation"
 )
 
+// Label keys for Reservation metadata.
+// Labels follow Kubernetes naming conventions using reverse-DNS notation
+const (
+	// ===== Common Reservation Labels =====
+
+	// LabelReservationType identifies the type of reservation.
+	// This label is present on all reservations to enable type-based filtering.
+	LabelReservationType = "reservations.cortex.sap.com/type"
+
+	// Reservation type label values
+	ReservationTypeLabelCommittedResource = "committed-resource"
+	ReservationTypeLabelFailover          = "failover"
+
+	// ===== Committed Resource Reservation Labels =====
+
+	// LabelCommitmentUUID links a committed resource reservation to its commitment.
+	// This label is only present on committed resource reservations.
+	// Value: The UUID of the commitment.
+	LabelCommitmentUUID = "reservations.cortex.sap.com/commitment-uuid"
+)
+
 // CommittedResourceAllocation represents a workload's assignment to a committed resource reservation slot.
 // The workload could be a VM (Nova/IronCore), Pod (Kubernetes), or other resource.
 type CommittedResourceAllocation struct {
@@ -170,7 +191,8 @@ type ReservationStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
-// +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
+// +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".metadata.labels['reservations\\.cortex\\.sap\\.com/type']"
+// +kubebuilder:printcolumn:name="CommitmentUUID",type="string",JSONPath=".metadata.labels['reservations\\.cortex\\.sap\\.com/commitment-uuid']"
 // +kubebuilder:printcolumn:name="Host",type="string",JSONPath=".status.host"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 

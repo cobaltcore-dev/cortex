@@ -82,7 +82,13 @@ func TestApplyCommitmentState_DeletesExcessReservations(t *testing.T) {
 	// Create existing reservations (32 GiB total)
 	existingReservations := []v1alpha1.Reservation{
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "commitment-abc123-0"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "commitment-abc123-0",
+				Labels: map[string]string{
+					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+					v1alpha1.LabelCommitmentUUID:  "abc123",
+				},
+			},
 			Spec: v1alpha1.ReservationSpec{
 				Resources: map[string]resource.Quantity{
 					"memory": *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
@@ -96,7 +102,13 @@ func TestApplyCommitmentState_DeletesExcessReservations(t *testing.T) {
 			},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "commitment-abc123-1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "commitment-abc123-1",
+				Labels: map[string]string{
+					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+					v1alpha1.LabelCommitmentUUID:  "abc123",
+				},
+			},
 			Spec: v1alpha1.ReservationSpec{
 				Resources: map[string]resource.Quantity{
 					"memory": *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
@@ -176,7 +188,13 @@ func TestApplyCommitmentState_PreservesAllocatedReservations(t *testing.T) {
 	// Create reservations: one with allocation, one without
 	existingReservations := []v1alpha1.Reservation{
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "commitment-abc123-0"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "commitment-abc123-0",
+				Labels: map[string]string{
+					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+					v1alpha1.LabelCommitmentUUID:  "abc123",
+				},
+			},
 			Spec: v1alpha1.ReservationSpec{
 				Resources: map[string]resource.Quantity{
 					"memory": *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
@@ -192,7 +210,13 @@ func TestApplyCommitmentState_PreservesAllocatedReservations(t *testing.T) {
 			},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "commitment-abc123-1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "commitment-abc123-1",
+				Labels: map[string]string{
+					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+					v1alpha1.LabelCommitmentUUID:  "abc123",
+				},
+			},
 			Spec: v1alpha1.ReservationSpec{
 				Resources: map[string]resource.Quantity{
 					"memory": *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
@@ -272,7 +296,13 @@ func TestApplyCommitmentState_HandlesZeroCapacity(t *testing.T) {
 
 	// Create existing reservation
 	existingReservation := v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: "commitment-abc123-0"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "commitment-abc123-0",
+			Labels: map[string]string{
+				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+				v1alpha1.LabelCommitmentUUID:  "abc123",
+			},
+		},
 		Spec: v1alpha1.ReservationSpec{
 			Resources: map[string]resource.Quantity{
 				"memory": *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
@@ -345,7 +375,13 @@ func TestApplyCommitmentState_FixesWrongFlavorGroup(t *testing.T) {
 
 	// Create reservation with wrong flavor group
 	existingReservation := v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: "commitment-abc123-0"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "commitment-abc123-0",
+			Labels: map[string]string{
+				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+				v1alpha1.LabelCommitmentUUID:  "abc123",
+			},
+		},
 		Spec: v1alpha1.ReservationSpec{
 			Resources: map[string]resource.Quantity{
 				"memory": *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),

@@ -177,9 +177,12 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	}
 
 	// Delete reservations that are no longer in commitments
+	// Only query committed resource reservations using labels for efficiency
 	var existingReservations v1alpha1.ReservationList
-	if err := s.List(ctx, &existingReservations); err != nil {
-		log.Error(err, "failed to list existing reservations")
+	if err := s.List(ctx, &existingReservations, client.MatchingLabels{
+		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+	}); err != nil {
+		log.Error(err, "failed to list existing committed resource reservations")
 		return err
 	}
 
@@ -191,13 +194,13 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 
 	// Delete reservations for commitments that no longer exist
 	for _, existing := range existingReservations.Items {
-		// Only manage reservations of type CommittedResourceReservation, ignore creator because of syncer and API based reservations
-		if existing.Spec.CommittedResourceReservation == nil {
-			continue
+		// Get commitment UUID from label (more efficient than parsing name)
+		commitmentUUID := existing.Labels[v1alpha1.LabelCommitmentUUID]
+		if commitmentUUID == "" {
+			// Fallback to name parsing for reservations without labels (legacy)
+			commitmentUUID = extractCommitmentUUID(existing.Name)
 		}
 
-		// Extract commitment UUID from reservation name
-		commitmentUUID := extractCommitmentUUID(existing.Name)
 		if !activeCommitments[commitmentUUID] {
 			// This commitment no longer exists, delete the reservation
 			if err := s.Delete(ctx, &existing); err != nil {

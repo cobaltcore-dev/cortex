@@ -118,7 +118,7 @@ func (api *HTTPAPI) processCommitmentChanges(log logr.Logger, req liquid.Commitm
 	}
 
 	statesBefore := make(map[string]*CommitmentState) // map of commitmentID to existing state for rollback
-	reservationsToWatch := make([]v1alpha1.Reservation, 0)
+	var reservationsToWatch []v1alpha1.Reservation
 
 	if req.DryRun {
 		resp.RejectionReason = "Dry run not supported yet"
@@ -149,16 +149,19 @@ ProcessLoop:
 				log.Info("processing commitment change", "commitmentUUID", commitment.UUID, "projectID", projectID, "resourceName", resourceName, "oldStatus", commitment.OldStatus.UnwrapOr("none"), "newStatus", commitment.NewStatus.UnwrapOr("none"))
 
 				// TODO add domain
-				// get existing reservations for rollback
-				existing_reservations, err := ListReservationsForCommitment(ctx, api.client, string(commitment.UUID), "")
-				if err != nil {
+
+				var existing_reservations v1alpha1.ReservationList
+				if err := api.client.List(ctx, &existing_reservations, client.MatchingLabels{
+					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+					v1alpha1.LabelCommitmentUUID:  string(commitment.UUID),
+				}); err != nil {
 					resp.RejectionReason = fmt.Sprintf("failed to list existing reservations for commitment %s: %v", commitment.UUID, err)
 					requireRollback = true
 					break ProcessLoop
 				}
 
 				var stateBefore *CommitmentState
-				if len(existing_reservations) == 0 {
+				if len(existing_reservations.Items) == 0 {
 					stateBefore = &CommitmentState{
 						CommitmentUUID:   string(commitment.UUID),
 						ProjectID:        string(projectID),
@@ -166,7 +169,7 @@ ProcessLoop:
 						TotalMemoryBytes: 0,
 					}
 				} else {
-					stateBefore, err = FromReservations(existing_reservations)
+					stateBefore, err = FromReservations(existing_reservations.Items)
 					if err != nil {
 						resp.RejectionReason = fmt.Sprintf("failed to get existing state for commitment %s: %v", commitment.UUID, err)
 						requireRollback = true

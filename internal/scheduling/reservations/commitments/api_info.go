@@ -37,7 +37,8 @@ func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
 	// Build info response
 	info, err := api.buildServiceInfo(r.Context(), log)
 	if err != nil {
-		log.Error(err, "failed to build service info")
+		// Use Info level for expected conditions like knowledge not being ready yet
+		log.Info("failed to build service info", "error", err.Error())
 		http.Error(w, "Failed to build service info: "+err.Error(),
 			http.StatusInternalServerError)
 		return
