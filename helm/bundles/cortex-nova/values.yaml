@@ -117,6 +117,24 @@ cortex-scheduling-controllers:
     enabledTasks:
       - nova-decisions-cleanup-task
 
+    # List: iterate over all api servers with the gvk and return a combined list.
+    # Get: iterate over all api server with the gvk and return the first result that is found.
+    # Create/Update/Delete: based on the content of the resource, match api server with labels and execute op only there.
+    # WatchesMulticluster: watch resource in all clusters with the gvk.
+    multicluster:
+      # These resources will be written into the home cluster if no match is found.
+      fallbacks:
+        - gvk: "cortex.cloud/v1alpha1/Decision"
+        - # ...
+      apiservers:
+        - host: "https://api.cc-b0-qa-de-1.ccloud.external.a-qa-de-200.soil-garden.qa-de-1.cloud.sap"
+          gvks: # Used for List, Get, Watches
+            - "cortex.cloud/v1alpha1/Decision"
+            - "cortex.cloud/v1alpha1/DecisionList"
+            # ...
+          labels: # Used for Create/Update/Delete
+            az: "qa-de-1b"
+
 cortex-knowledge-controllers:
   <<: *cortex
   namePrefix: cortex-nova-knowledge

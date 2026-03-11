@@ -8,6 +8,7 @@ import (
 	"errors"
 	"sync"
 
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -17,7 +18,40 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 )
 
+type ResourceRouter interface {
+	Match(obj any, labels map[string]string) (bool, error)
+}
+
+type HypervisorResourceRouter struct{}
+
+func (h HypervisorResourceRouter) Match(obj any, labels map[string]string) (bool, error) {
+	hv, ok := obj.(hv1.Hypervisor)
+	if !ok {
+		return false, errors.New("object is not a Hypervisor")
+	}
+	// Match by hypervisor availability zone label.
+	az, ok := labels["az"]
+	if !ok {
+		return false, errors.New("object does not have availability zone label")
+	}
+	hvAZ, ok := hv.Labels["topology.kubernetes.io/zone"]
+	if !ok {
+		return false, errors.New("hypervisor does not have availability zone label")
+	}
+	return hvAZ == az, nil
+}
+
+func main() {
+	_ = Client{
+		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
+			hv1.GroupVersion.WithKind("Hypervisor"): HypervisorResourceRouter{},
+		},
+	}
+}
+
 type Client struct {
+	ResourceRouters map[schema.GroupVersionKind]ResourceRouter
+
 	// The cluster in which cortex is deployed.
 	HomeCluster cluster.Cluster
 	// The REST config for the home cluster in which cortex is deployed.
@@ -134,17 +168,11 @@ func (c *Client) GVKFromHomeScheme(obj runtime.Object) (gvk schema.GroupVersionK
 	return gvks[0], nil
 }
 
-// Get the cluster for the given group version kind.
-//
-// If this object kind does not have a remote cluster configured,
-// the home cluster is returned.
-func (c *Client) ClusterForResource(gvk schema.GroupVersionKind) cluster.Cluster {
+func (c *Client) ClusterForResource(routable Routable) cluster.Cluster {
 	c.remoteClustersMu.RLock()
 	defer c.remoteClustersMu.RUnlock()
-	cl, ok := c.remoteClusters[gvk]
-	if ok {
-		return cl
-	}
+	// TODO: Match the approprite cluster.
+
 	return c.HomeCluster
 }
 
