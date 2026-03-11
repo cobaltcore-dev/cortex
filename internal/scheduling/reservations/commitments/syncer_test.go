@@ -328,7 +328,6 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 			Name: "commitment-12345-67890-abcdef-0",
 			Labels: map[string]string{
 				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-				v1alpha1.LabelCommitmentUUID:  "12345-67890-abcdef",
 			},
 		},
 		Spec: v1alpha1.ReservationSpec{

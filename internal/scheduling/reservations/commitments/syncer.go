@@ -194,11 +194,11 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 
 	// Delete reservations for commitments that no longer exist
 	for _, existing := range existingReservations.Items {
-		// Get commitment UUID from label (more efficient than parsing name)
-		commitmentUUID := existing.Labels[v1alpha1.LabelCommitmentUUID]
+		// Extract commitment UUID from reservation name
+		commitmentUUID := extractCommitmentUUID(existing.Name)
 		if commitmentUUID == "" {
-			// Fallback to name parsing for reservations without labels (legacy)
-			commitmentUUID = extractCommitmentUUID(existing.Name)
+			log.Info("skipping reservation with unparseable name", "name", existing.Name)
+			continue
 		}
 
 		if !activeCommitments[commitmentUUID] {

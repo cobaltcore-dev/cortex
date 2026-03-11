@@ -150,14 +150,23 @@ ProcessLoop:
 
 				// TODO add domain
 
-				var existing_reservations v1alpha1.ReservationList
-				if err := api.client.List(ctx, &existing_reservations, client.MatchingLabels{
+				// List all committed resource reservations, then filter by name prefix
+				var all_reservations v1alpha1.ReservationList
+				if err := api.client.List(ctx, &all_reservations, client.MatchingLabels{
 					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-					v1alpha1.LabelCommitmentUUID:  string(commitment.UUID),
 				}); err != nil {
-					resp.RejectionReason = fmt.Sprintf("failed to list existing reservations for commitment %s: %v", commitment.UUID, err)
+					resp.RejectionReason = fmt.Sprintf("failed to list reservations for commitment %s: %v", commitment.UUID, err)
 					requireRollback = true
 					break ProcessLoop
+				}
+
+				// Filter by name prefix to find reservations for this commitment
+				namePrefix := fmt.Sprintf("commitment-%s-", string(commitment.UUID))
+				var existing_reservations v1alpha1.ReservationList
+				for _, res := range all_reservations.Items {
+					if len(res.Name) >= len(namePrefix) && res.Name[:len(namePrefix)] == namePrefix {
+						existing_reservations.Items = append(existing_reservations.Items, res)
+					}
 				}
 
 				var stateBefore *CommitmentState
@@ -274,8 +283,9 @@ func watchReservationsUntilReady(
 
 			if err := k8sClient.Get(ctx, nn, &current); err != nil {
 				if apierrors.IsNotFound(err) {
-					// Reservation was deleted during watch
-					return fmt.Errorf("reservation %s was deleted during watch", res.Name)
+					// Reservation is still in process of being created
+					allReady = false
+					continue
 				}
 				return fmt.Errorf("failed to get reservation %s: %w", res.Name, err)
 			}

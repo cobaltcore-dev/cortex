@@ -86,7 +86,6 @@ func TestApplyCommitmentState_DeletesExcessReservations(t *testing.T) {
 				Name: "commitment-abc123-0",
 				Labels: map[string]string{
 					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-					v1alpha1.LabelCommitmentUUID:  "abc123",
 				},
 			},
 			Spec: v1alpha1.ReservationSpec{
@@ -106,7 +105,6 @@ func TestApplyCommitmentState_DeletesExcessReservations(t *testing.T) {
 				Name: "commitment-abc123-1",
 				Labels: map[string]string{
 					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-					v1alpha1.LabelCommitmentUUID:  "abc123",
 				},
 			},
 			Spec: v1alpha1.ReservationSpec{
@@ -192,7 +190,6 @@ func TestApplyCommitmentState_PreservesAllocatedReservations(t *testing.T) {
 				Name: "commitment-abc123-0",
 				Labels: map[string]string{
 					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-					v1alpha1.LabelCommitmentUUID:  "abc123",
 				},
 			},
 			Spec: v1alpha1.ReservationSpec{
@@ -214,7 +211,6 @@ func TestApplyCommitmentState_PreservesAllocatedReservations(t *testing.T) {
 				Name: "commitment-abc123-1",
 				Labels: map[string]string{
 					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-					v1alpha1.LabelCommitmentUUID:  "abc123",
 				},
 			},
 			Spec: v1alpha1.ReservationSpec{
@@ -300,7 +296,6 @@ func TestApplyCommitmentState_HandlesZeroCapacity(t *testing.T) {
 			Name: "commitment-abc123-0",
 			Labels: map[string]string{
 				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-				v1alpha1.LabelCommitmentUUID:  "abc123",
 			},
 		},
 		Spec: v1alpha1.ReservationSpec{
@@ -379,7 +374,6 @@ func TestApplyCommitmentState_FixesWrongFlavorGroup(t *testing.T) {
 			Name: "commitment-abc123-0",
 			Labels: map[string]string{
 				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-				v1alpha1.LabelCommitmentUUID:  "abc123",
 			},
 		},
 		Spec: v1alpha1.ReservationSpec{
@@ -521,7 +515,6 @@ func TestNewReservation_SelectsAppropriateFlavor(t *testing.T) {
 			}
 
 			reservation := manager.newReservation(
-				logr.Discard(),
 				state,
 				0,
 				tt.deltaMemory,

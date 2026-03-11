@@ -38,14 +38,22 @@ func (m *ReservationManager) ApplyCommitmentState(
 
 	log = log.WithName("ReservationManager")
 
-	var existingReservations v1alpha1.ReservationList
-	if err := m.List(ctx, &existingReservations, client.MatchingLabels{
+	// List all committed resource reservations, then filter by name prefix
+	var allReservations v1alpha1.ReservationList
+	if err := m.List(ctx, &allReservations, client.MatchingLabels{
 		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-		v1alpha1.LabelCommitmentUUID:  desiredState.CommitmentUUID,
 	}); err != nil {
-		return nil, nil, fmt.Errorf("failed to list existing reservations: %w", err)
+		return nil, nil, fmt.Errorf("failed to list reservations: %w", err)
 	}
-	existing := existingReservations.Items
+
+	// Filter by name prefix to find reservations for this commitment
+	namePrefix := fmt.Sprintf("commitment-%s-", desiredState.CommitmentUUID)
+	var existing []v1alpha1.Reservation
+	for _, res := range allReservations.Items {
+		if len(res.Name) >= len(namePrefix) && res.Name[:len(namePrefix)] == namePrefix {
+			existing = append(existing, res)
+		}
+	}
 
 	// Calculate the delta between existing and desired state
 	flavorGroup, exists := flavorGroups[desiredState.FlavorGroupName]
@@ -127,7 +135,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 	// Add new reservations if needed (CREATE)
 	for deltaMemoryBytes > 0 {
 		// Need to create new reservation slots
-		reservation := m.newReservation(log, desiredState, nextSlotIndex, deltaMemoryBytes, flavorGroup, creator)
+		reservation := m.newReservation(desiredState, nextSlotIndex, deltaMemoryBytes, flavorGroup, creator)
 		touchedReservations = append(touchedReservations, *reservation)
 		memValue := reservation.Spec.Resources["memory"]
 		deltaMemoryBytes -= memValue.Value()
@@ -215,7 +223,6 @@ func (m *ReservationManager) syncReservationMetadata(
 }
 
 func (m *ReservationManager) newReservation(
-	log logr.Logger,
 	state *CommitmentState,
 	slotIndex int,
 	deltaMemoryBytes int64,
@@ -239,8 +246,6 @@ func (m *ReservationManager) newReservation(
 			break
 		}
 	}
-
-	log.Info("created reservation", "name", name, "slot", slotIndex, "flavor", flavorInGroup.Name, "memoryBytes", memoryBytes, "flavor memory", flavorInGroup.MemoryMB*1024*1024)
 
 	spec := v1alpha1.ReservationSpec{
 		Type: v1alpha1.ReservationTypeCommittedResource,
@@ -282,7 +287,6 @@ func (m *ReservationManager) newReservation(
 			Name: name,
 			Labels: map[string]string{
 				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-				v1alpha1.LabelCommitmentUUID:  state.CommitmentUUID,
 			},
 		},
 		Spec: spec,

@@ -18,9 +18,6 @@ spec:
     - jsonPath: .metadata.labels['reservations\.cortex\.sap\.com/type']
       name: Type
       type: string
-    - jsonPath: .metadata.labels['reservations\.cortex\.sap\.com/commitment-uuid']
-      name: CommitmentUUID
-      type: string
     - jsonPath: .status.host
       name: Host
       type: string
