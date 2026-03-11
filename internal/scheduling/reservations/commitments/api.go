@@ -26,7 +26,7 @@ func NewAPI(client client.Client) *HTTPAPI {
 
 func (api *HTTPAPI) Init(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/change-commitments", api.HandleChangeCommitments)
-	mux.HandleFunc("/v1/report-capacity", api.HandleReportCapacity)
+	// mux.HandleFunc("/v1/report-capacity", api.HandleReportCapacity)
 	mux.HandleFunc("/v1/info", api.HandleInfo)
 }
 

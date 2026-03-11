@@ -60,9 +60,6 @@ type FlavorGroupExtractor struct {
 //go:embed flavor_groups.sql
 var flavorGroupsQuery string
 
-// flavorGroupIdentifierName specifies the extra_spec key used to group flavors.
-const flavorGroupIdentifierName = "quota:hw_version"
-
 var flavorGroupLog = ctrl.Log.WithName("flavor_group_extractor")
 
 // Extract flavor groups from the database.
@@ -87,7 +84,7 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 			}
 		}
 
-		hwVersion, exists := extraSpecs[flavorGroupIdentifierName]
+		hwVersion, exists := extraSpecs["quota:hw_version"]
 		if !exists || hwVersion == "" {
 			flavorGroupLog.Info("flavor missing hw_version extra_spec", "flavor", row.Name)
 			continue

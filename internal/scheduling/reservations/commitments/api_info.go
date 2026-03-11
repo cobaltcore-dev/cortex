@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
@@ -75,12 +76,19 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, log logr.Logger) (liqu
 		smallestRAM := groupData.SmallestFlavor.MemoryMB
 		unit := fmt.Sprintf("%d MiB", smallestRAM)
 
+		// Build flavor names list for display
+		flavorNames := make([]string, len(groupData.Flavors))
+		for i, flavor := range groupData.Flavors {
+			flavorNames[i] = flavor.Name
+		}
+
 		resources[resourceName] = liquid.ResourceInfo{
-			Unit:                liquid.UnitMebibytes,   // RAM is measured in MiB
-			Topology:            liquid.AZAwareTopology, // Commitments are per-AZ
-			NeedsResourceDemand: false,                  // Capacity planning out of scope for now
-			HasCapacity:         true,                   // We report capacity via /v1/report-capacity
-			HasQuota:            false,                  // No quota enforcement as of now
+			DisplayName:         strings.Join(flavorNames, ", "), // join all flavor names within the group
+			Unit:                liquid.UnitMebibytes,            // RAM is measured in MiB
+			Topology:            liquid.AZAwareTopology,          // Commitments are per-AZ
+			NeedsResourceDemand: false,                           // Capacity planning out of scope for now
+			HasCapacity:         true,                            // We report capacity via /v1/report-capacity
+			HasQuota:            false,                           // No quota enforcement as of now
 		}
 
 		log.V(1).Info("registered flavor group resource",

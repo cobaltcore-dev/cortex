@@ -114,8 +114,8 @@ func (api *HTTPAPI) processCommitmentChanges(log logr.Logger, req liquid.Commitm
 		return
 	}
 
-	states_before := make(map[string]*CommitmentState) // map of commitmentID to existing state for rollback
-	reservations_to_watch := make([]v1alpha1.Reservation, 0)
+	statesBefore := make(map[string]*CommitmentState) // map of commitmentID to existing state for rollback
+	reservationsToWatch := make([]v1alpha1.Reservation, 0)
 
 	if req.DryRun {
 		resp.RejectionReason = "Dry run not supported yet"
@@ -154,53 +154,53 @@ ProcessLoop:
 					break ProcessLoop
 				}
 
-				var state_before *CommitmentState
+				var stateBefore *CommitmentState
 				if len(existing_reservations) == 0 {
-					state_before = &CommitmentState{
+					stateBefore = &CommitmentState{
 						CommitmentUUID:   string(commitment.UUID),
 						ProjectID:        string(projectID),
 						FlavorGroupName:  flavorGroupName,
 						TotalMemoryBytes: 0,
 					}
 				} else {
-					state_before, err = FromReservations(existing_reservations)
+					stateBefore, err = FromReservations(existing_reservations)
 					if err != nil {
 						resp.RejectionReason = fmt.Sprintf("failed to get existing state for commitment %s: %v", commitment.UUID, err)
 						requireRollback = true
 						break ProcessLoop
 					}
 				}
-				states_before[string(commitment.UUID)] = state_before
+				statesBefore[string(commitment.UUID)] = stateBefore
 
 				// get desired state
-				state_desired, err := FromChangeCommitmentTargetState(commitment, string(projectID), flavorGroupName, flavorGroup, string(req.AZ))
+				stateDesired, err := FromChangeCommitmentTargetState(commitment, string(projectID), flavorGroupName, flavorGroup, string(req.AZ))
 				if err != nil {
 					resp.RejectionReason = fmt.Sprintf("failed to get desired state for commitment %s: %v", commitment.UUID, err)
 					requireRollback = true
 					break ProcessLoop
 				}
 
-				log.Info("applying commitment state change", "commitmentUUID", commitment.UUID, "oldState", state_before, "desiredState", state_desired)
+				log.Info("applying commitment state change", "commitmentUUID", commitment.UUID, "oldState", stateBefore, "desiredState", stateDesired)
 
-				touchedReservations, deletedReservations, err := manager.ApplyCommitmentState(ctx, log, state_desired, flavorGroups, "changeCommitmentsApi")
+				touchedReservations, deletedReservations, err := manager.ApplyCommitmentState(ctx, log, stateDesired, flavorGroups, "changeCommitmentsApi")
 				if err != nil {
 					resp.RejectionReason = fmt.Sprintf("failed to apply commitment state for commitment %s: %v", commitment.UUID, err)
 					requireRollback = true
 					break ProcessLoop
 				}
 				log.Info("applied commitment state change", "commitmentUUID", commitment.UUID, "touchedReservations", len(touchedReservations), "deletedReservations", len(deletedReservations))
-				reservations_to_watch = append(reservations_to_watch, touchedReservations...)
+				reservationsToWatch = append(reservationsToWatch, touchedReservations...)
 			}
 		}
 	}
 
 	// TODO make the rollback defer safe
 	if !requireRollback {
-		log.Info("applied commitment changes, now watching for reservation readiness", "reservationsToWatch", len(reservations_to_watch))
+		log.Info("applied commitment changes, now watching for reservation readiness", "reservationsToWatch", len(reservationsToWatch))
 
 		time_start := time.Now()
 
-		if err := watchReservationsUntilReady(ctx, log, api.client, reservations_to_watch, watchTimeout); err != nil {
+		if err := watchReservationsUntilReady(ctx, log, api.client, reservationsToWatch, watchTimeout); err != nil {
 			log.Info("reservations failed to become ready, initiating rollback",
 				"reason", err.Error())
 			resp.RejectionReason = fmt.Sprintf("Not all reservations can be fulfilled: %v", err)
@@ -212,8 +212,8 @@ ProcessLoop:
 
 	if requireRollback {
 		log.Info("rollback of commitment changes")
-		for commitmentUUID, state := range states_before {
-			// Rollback to state_before for this commitment
+		for commitmentUUID, state := range statesBefore {
+			// Rollback to statesBefore for this commitment
 			log.Info("applying rollback for commitment", "commitmentUUID", commitmentUUID, "stateBefore", state)
 			_, _, err := manager.ApplyCommitmentState(ctx, log, state, flavorGroups, "changeCommitmentsApiRollback")
 			if err != nil {
