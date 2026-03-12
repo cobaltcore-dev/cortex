@@ -21,6 +21,20 @@ const (
 	ReservationTypeFailover ReservationType = "FailoverReservation"
 )
 
+// Label keys for Reservation metadata.
+// Labels follow Kubernetes naming conventions using reverse-DNS notation
+const (
+	// ===== Common Reservation Labels =====
+
+	// LabelReservationType identifies the type of reservation.
+	// This label is present on all reservations to enable type-based filtering.
+	LabelReservationType = "reservations.cortex.sap.com/type"
+
+	// Reservation type label values
+	ReservationTypeLabelCommittedResource = "committed-resource"
+	ReservationTypeLabelFailover          = "failover"
+)
+
 // CommittedResourceAllocation represents a workload's assignment to a committed resource reservation slot.
 // The workload could be a VM (Nova/IronCore), Pod (Kubernetes), or other resource.
 type CommittedResourceAllocation struct {
@@ -78,6 +92,10 @@ type ReservationSpec struct {
 	// SchedulingDomain specifies the scheduling domain for this reservation (e.g., "nova", "ironcore").
 	// +kubebuilder:validation:Optional
 	SchedulingDomain string `json:"schedulingDomain,omitempty"`
+
+	// AvailabilityZone specifies the availability zone for this reservation, if restricted to a specific AZ.
+	// +kubebuilder:validation:Optional
+	AvailabilityZone string `json:"availabilityZone,omitempty"`
 
 	// Resources to reserve for this instance.
 	// +kubebuilder:validation:Optional
@@ -166,7 +184,7 @@ type ReservationStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
-// +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
+// +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".metadata.labels['reservations\\.cortex\\.sap\\.com/type']"
 // +kubebuilder:printcolumn:name="Host",type="string",JSONPath=".status.host"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 

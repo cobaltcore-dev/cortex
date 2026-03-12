@@ -3,6 +3,23 @@
 apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
 metadata:
+  name: flavor-groups
+spec:
+  schedulingDomain: nova
+  extractor:
+    name: flavor_groups
+  recency: "5m"
+  description: |
+    This knowledge extracts flavor groups from Nova flavors based on the
+    hw_version extra_spec. It identifies all flavors belonging to each group
+    and determines the largest flavor for reservation slot sizing.
+  dependencies:
+    datasources:
+      - name: nova-flavors
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Knowledge
+metadata:
   name: kvm-libvirt-domain-cpu-steal-pct
 spec:
   schedulingDomain: nova
