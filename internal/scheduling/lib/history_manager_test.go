@@ -93,9 +93,10 @@ func TestGenerateExplanation(t *testing.T) {
 				},
 				TargetHost: testlib.Ptr("host-a"),
 			},
-			expected: "Started with 3 host(s).\n" +
-				"Step 'filter_capacity' filtered out: host-c. Remaining: host-a, host-b.\n" +
-				"Step 'filter_status' filtered out: host-b. Remaining: host-a.\n" +
+			expected: "Started with 3 host(s).\n\n" +
+				"filter_capacity filtered out host-c\n" +
+				"filter_status filtered out host-b\n\n" +
+				"1 hosts remaining (host-a)\n\n" +
 				"Selected host: host-a.",
 		},
 		{
@@ -116,7 +117,7 @@ func TestGenerateExplanation(t *testing.T) {
 				},
 				TargetHost: testlib.Ptr("host-x"),
 			},
-			expected: "Started with 2 host(s).\nSelected host: host-x.",
+			expected: "Started with 2 host(s).\n\n\n2 hosts remaining (host-x, host-y)\n\nSelected host: host-x.",
 		},
 		{
 			name: "no weights no target",
@@ -155,7 +156,7 @@ func TestGenerateExplanation(t *testing.T) {
 				},
 				TargetHost: testlib.Ptr("host-a"),
 			},
-			expected: "Started with 2 host(s).\nSelected host: host-a.",
+			expected: "Started with 2 host(s).\n\n\n2 hosts remaining (host-a, host-b)\n\nSelected host: host-a.",
 		},
 	}
 	for _, tt := range tests {
@@ -189,12 +190,12 @@ func TestHistoryManager_Upsert(t *testing.T) {
 		// assertions on the history list (archived entries only).
 		expectHistoryLen int
 		// assertions on the current decision.
-		expectTargetHost    *string
-		expectSuccessful    bool
-		expectCondStatus    metav1.ConditionStatus
-		expectReason        string
-		checkExplanation    func(t *testing.T, explanation string)
-		checkCurrentHosts   func(t *testing.T, hosts []string)
+		expectTargetHost  *string
+		expectSuccessful  bool
+		expectCondStatus  metav1.ConditionStatus
+		expectReason      string
+		checkExplanation  func(t *testing.T, explanation string)
+		checkCurrentHosts func(t *testing.T, hosts []string)
 	}{
 		{
 			name: "create new history",
