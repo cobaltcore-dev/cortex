@@ -308,6 +308,10 @@ func main() {
 		httpAPIConf := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
 		nova.NewAPI(httpAPIConf, filterWeigherController).Init(mux)
 
+		// Initialize commitments API for LIQUID interface
+		commitmentsAPI := commitments.NewAPI(multiclusterClient)
+		commitmentsAPI.Init(mux)
+
 		// Detector pipeline controller setup.
 		novaClient := nova.NewNovaClient()
 		novaClientConfig := conf.GetConfigOrDie[nova.NovaClientConfig]()
@@ -442,11 +446,11 @@ func main() {
 		monitor := reservationscontroller.NewControllerMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&monitor)
 		reservationsControllerConfig := conf.GetConfigOrDie[reservationscontroller.Config]()
+
 		if err := (&reservationscontroller.ReservationReconciler{
-			Client:           multiclusterClient,
-			Scheme:           mgr.GetScheme(),
-			Conf:             reservationsControllerConfig,
-			HypervisorClient: reservationscontroller.NewHypervisorClient(),
+			Client: multiclusterClient,
+			Scheme: mgr.GetScheme(),
+			Conf:   reservationsControllerConfig,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "Reservation")
 			os.Exit(1)
