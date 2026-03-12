@@ -21,8 +21,11 @@ spec:
     - jsonPath: .spec.resourceID
       name: Resource ID
       type: string
-    - jsonPath: .status.targetHost
+    - jsonPath: .status.current.targetHost
       name: Target Host
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].reason
+      name: Status
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Created
@@ -125,12 +128,85 @@ spec:
                   - type
                   type: object
                 type: array
-              explanation:
-                description: A human-readable explanation of the scheduling history
-                  and decisions.
-                type: string
+              current:
+                description: Current represents the latest scheduling decision with
+                  full context.
+                properties:
+                  explanation:
+                    description: A human-readable explanation of the scheduling decision.
+                    type: string
+                  intent:
+                    description: The intent of the decision (e.g., initial scheduling,
+                      rescheduling, etc.).
+                    type: string
+                  orderedHosts:
+                    description: The top hosts ordered by score (limited to 3).
+                    items:
+                      type: string
+                    type: array
+                  pipelineRef:
+                    description: The pipeline that was used for the decision.
+                    properties:
+                      apiVersion:
+                        description: API version of the referent.
+                        type: string
+                      fieldPath:
+                        description: |-
+                          If referring to a piece of an object instead of an entire object, this string
+                          should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                          For example, if the object reference is to a container within a pod, this would take on a value like:
+                          "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                          the event) or if no container name is specified "spec.containers[2]" (container with
+                          index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                          referencing a part of an object.
+                        type: string
+                      kind:
+                        description: |-
+                          Kind of the referent.
+                          More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                        type: string
+                      name:
+                        description: |-
+                          Name of the referent.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace of the referent.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                        type: string
+                      resourceVersion:
+                        description: |-
+                          Specific resourceVersion to which this reference is made, if any.
+                          More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                        type: string
+                      uid:
+                        description: |-
+                          UID of the referent.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  successful:
+                    description: Whether the scheduling decision was successful.
+                    type: boolean
+                  targetHost:
+                    description: The target host selected for the resource. nil when
+                      no host was found.
+                    type: string
+                  timestamp:
+                    description: The timestamp of when the decision was made.
+                    format: date-time
+                    type: string
+                required:
+                - intent
+                - pipelineRef
+                - successful
+                - timestamp
+                type: object
               history:
-                description: The history of decisions for the resource.
+                description: History of past scheduling decisions (limited to last
+                  10).
                 items:
                   properties:
                     intent:
@@ -139,9 +215,9 @@ spec:
                       type: string
                     orderedHosts:
                       description: |-
-                        All the possible hosts ordered by score for the decision.
-                        The first entry is the host that should be selected.
-                        Note: If the requester failed to schedule on the first host, the second host will be used.
+                        The top hosts ordered by score for the decision (limited to 3).
+                        This is not a complete list of all candidates — only the highest-ranked
+                        hosts are retained to keep the history compact.
                       items:
                         type: string
                       type: array
@@ -188,6 +264,9 @@ spec:
                           type: string
                       type: object
                       x-kubernetes-map-type: atomic
+                    successful:
+                      description: Whether the scheduling decision was successful.
+                      type: boolean
                     timestamp:
                       description: The timestamp of when the decision was made.
                       format: date-time
@@ -198,10 +277,6 @@ spec:
                   - timestamp
                   type: object
                 type: array
-              targetHost:
-                description: The target host that was selected for the resource in
-                  the decision.
-                type: string
             type: object
         required:
         - spec
