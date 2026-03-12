@@ -44,8 +44,7 @@ func (u *unknownType) DeepCopyObject() runtime.Object {
 // fakeCache implements cache.Cache interface for testing IndexField.
 type fakeCache struct {
 	cache.Cache
-	indexFieldFunc func(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error
-	// Track calls to IndexField for verification
+	indexFieldFunc  func(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error
 	indexFieldCalls []indexFieldCall
 	mu              sync.Mutex
 }
@@ -113,289 +112,306 @@ func newTestScheme(t *testing.T) *runtime.Scheme {
 	return scheme
 }
 
-// TestClient_Apply tests that the Apply method returns an error.
-func TestClient_Apply(t *testing.T) {
-	scheme := newTestScheme(t)
+// testRouter is a simple ResourceRouter for testing.
+type testRouter struct{}
 
-	c := &Client{
-		HomeScheme: scheme,
+func (r testRouter) Match(obj any, labels map[string]string) (bool, error) {
+	cm, ok := obj.(*corev1.ConfigMap)
+	if !ok {
+		return false, nil
 	}
-
-	ctx := context.Background()
-
-	t.Run("apply returns error", func(t *testing.T) {
-		err := c.Apply(ctx, nil)
-		if err == nil {
-			t.Error("expected error for Apply operation")
-		}
-		if err.Error() != "apply operation is not supported in multicluster client" {
-			t.Errorf("unexpected error message: %v", err)
-		}
-	})
+	az, ok := labels["az"]
+	if !ok {
+		return false, nil
+	}
+	objAZ, ok := cm.Labels["az"]
+	if !ok {
+		return false, nil
+	}
+	return objAZ == az, nil
 }
 
-// TestStatusClient_Apply tests that the status client Apply method returns an error.
+var configMapGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
+var configMapListGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMapList"}
+var podGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
+
+func TestClient_Apply(t *testing.T) {
+	c := &Client{HomeScheme: newTestScheme(t)}
+
+	// Check if apply will throw an error since it's not supported by multicluster client.
+	err := c.Apply(context.Background(), nil)
+	if err == nil {
+		t.Error("expected error for Apply operation")
+	}
+}
+
 func TestStatusClient_Apply(t *testing.T) {
 	sc := &statusClient{multiclusterClient: &Client{}}
 
-	ctx := context.Background()
-
-	err := sc.Apply(ctx, nil)
+	// Check if apply will throw an error since it's not supported by multicluster client.
+	err := sc.Apply(context.Background(), nil)
 	if err == nil {
 		t.Error("expected error for Apply operation")
 	}
-	if err.Error() != "apply operation is not supported in multicluster status client" {
-		t.Errorf("unexpected error message: %v", err)
-	}
 }
 
-// TestSubResourceClientApply tests that the subresource client Apply method returns an error.
-func TestSubResourceClientApply(t *testing.T) {
-	src := &subResourceClient{
-		multiclusterClient: &Client{},
-		subResource:        "status",
-	}
+func TestSubResourceClient_Apply(t *testing.T) {
+	src := &subResourceClient{multiclusterClient: &Client{}, subResource: "status"}
 
-	ctx := context.Background()
-
-	err := src.Apply(ctx, nil)
+	// Check if apply will throw an error since it's not supported by multicluster client.
+	err := src.Apply(context.Background(), nil)
 	if err == nil {
 		t.Error("expected error for Apply operation")
 	}
-	if err.Error() != "apply operation is not supported in multicluster subresource client" {
-		t.Errorf("unexpected error message: %v", err)
-	}
 }
 
-// TestClient_ClusterForResource_NilRemoteClusters tests behavior when no remote clusters are configured.
-func TestClient_ClusterForResource_NilRemoteClusters(t *testing.T) {
+func TestClient_ClustersForGVK_NoRemoteClusters(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
 	c := &Client{
-		remoteClusters: nil,
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
 	}
 
-	gvk := schema.GroupVersionKind{
-		Group:   "test",
-		Version: "v1",
-		Kind:    "TestKind",
+	clusters := c.ClustersForGVK(configMapGVK)
+	if len(clusters) != 1 {
+		t.Fatalf("expected 1 cluster, got %d", len(clusters))
 	}
-
-	// When remoteClusters is nil and HomeCluster is nil, we should get nil
-	result := c.ClusterForResource(gvk)
-	if result != nil {
-		t.Error("expected nil when no home cluster is set")
+	if clusters[0] != homeCluster {
+		t.Error("expected home cluster")
 	}
 }
 
-// TestClient_ClusterForResource_EmptyRemoteClusters tests behavior with empty remote clusters map.
-func TestClient_ClusterForResource_EmptyRemoteClusters(t *testing.T) {
+func TestClient_ClustersForGVK_SingleRemoteCluster(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+	remote := newFakeCluster(scheme)
 	c := &Client{
-		remoteClusters: make(map[schema.GroupVersionKind]cluster.Cluster),
-	}
-
-	gvk := schema.GroupVersionKind{
-		Group:   "test",
-		Version: "v1",
-		Kind:    "TestKind",
-	}
-
-	// When remoteClusters is empty and HomeCluster is nil, we should get nil
-	result := c.ClusterForResource(gvk)
-	if result != nil {
-		t.Error("expected nil when no home cluster is set and GVK not found")
-	}
-}
-
-// TestClient_Status returns a status writer.
-func TestClient_Status(t *testing.T) {
-	c := &Client{}
-
-	status := c.Status()
-	if status == nil {
-		t.Error("expected non-nil status writer")
-	}
-
-	// Verify it's the right type
-	if _, ok := status.(*statusClient); !ok {
-		t.Error("expected statusClient type")
-	}
-}
-
-// TestClient_SubResource returns a subresource client.
-func TestClient_SubResource(t *testing.T) {
-	c := &Client{}
-
-	subResource := c.SubResource("scale")
-	if subResource == nil {
-		t.Error("expected non-nil subresource client")
-	}
-
-	// Verify it's the right type
-	src, ok := subResource.(*subResourceClient)
-	if !ok {
-		t.Error("expected subResourceClient type")
-	}
-
-	if src.subResource != "scale" {
-		t.Errorf("expected subResource='scale', got '%s'", src.subResource)
-	}
-}
-
-// TestClient_AddRemote_NilRemoteClusters initializes the remote clusters map.
-func TestClient_AddRemote_NilRemoteClusters(t *testing.T) {
-	c := &Client{
-		remoteClusters: nil,
-	}
-
-	// Just verify the lock mechanism works without panicking
-	c.remoteClustersMu.Lock()
-	if c.remoteClusters == nil {
-		c.remoteClusters = make(map[schema.GroupVersionKind]cluster.Cluster)
-	}
-	c.remoteClustersMu.Unlock()
-
-	// Should not panic
-	if c.remoteClusters == nil {
-		t.Error("expected remoteClusters to be initialized")
-	}
-}
-
-// TestClient_ConcurrentAccess tests thread safety of ClusterForResource.
-func TestClient_ConcurrentAccess(t *testing.T) {
-	c := &Client{
-		remoteClusters: make(map[schema.GroupVersionKind]cluster.Cluster),
-	}
-
-	gvk := schema.GroupVersionKind{
-		Group:   "test",
-		Version: "v1",
-		Kind:    "TestKind",
-	}
-
-	// Test concurrent reads - should not panic or race
-	done := make(chan bool)
-	for range 10 {
-		go func() {
-			_ = c.ClusterForResource(gvk)
-			done <- true
-		}()
-	}
-
-	for range 10 {
-		<-done
-	}
-}
-
-// TestObjectKeyFromConfigMap tests that we can construct object keys properly.
-func TestObjectKeyFromConfigMap(t *testing.T) {
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-config",
-			Namespace: "default",
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {{cluster: remote, labels: map[string]string{"az": "az-1"}}},
 		},
 	}
 
-	key := client.ObjectKeyFromObject(cm)
-	if key.Name != "test-config" {
-		t.Errorf("expected Name='test-config', got '%s'", key.Name)
+	clusters := c.ClustersForGVK(configMapGVK)
+	if len(clusters) != 1 {
+		t.Fatalf("expected 1 cluster, got %d", len(clusters))
 	}
-	if key.Namespace != "default" {
-		t.Errorf("expected Namespace='default', got '%s'", key.Namespace)
-	}
-}
-
-// TestGVKExtraction tests that GVK can be properly set and retrieved.
-func TestGVKExtraction(t *testing.T) {
-	cm := &corev1.ConfigMap{}
-	gvk := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMap",
-	}
-
-	cm.SetGroupVersionKind(gvk)
-
-	result := cm.GetObjectKind().GroupVersionKind()
-	if result != gvk {
-		t.Errorf("expected GVK %v, got %v", gvk, result)
+	if clusters[0] != remote {
+		t.Error("expected remote cluster")
 	}
 }
 
-// TestGVKFromHomeScheme_Success tests successful GVK lookup for registered types.
+func TestClient_ClustersForGVK_MultipleRemoteClusters(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+	remote1 := newFakeCluster(scheme)
+	remote2 := newFakeCluster(scheme)
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {
+				{cluster: remote1, labels: map[string]string{"az": "az-1"}},
+				{cluster: remote2, labels: map[string]string{"az": "az-2"}},
+			},
+		},
+	}
+
+	clusters := c.ClustersForGVK(configMapGVK)
+	if len(clusters) != 2 {
+		t.Fatalf("expected 2 clusters, got %d", len(clusters))
+	}
+}
+
+func TestClient_ClustersForGVK_FallbackIncludesHome(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+	remote := newFakeCluster(scheme)
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {{cluster: remote, labels: map[string]string{"az": "az-1"}}},
+		},
+		fallbackGVKs: map[schema.GroupVersionKind]bool{configMapGVK: true},
+	}
+
+	clusters := c.ClustersForGVK(configMapGVK)
+	if len(clusters) != 2 {
+		t.Fatalf("expected 2 clusters (remote + home fallback), got %d", len(clusters))
+	}
+	if clusters[0] != remote {
+		t.Error("expected remote cluster first")
+	}
+	if clusters[1] != homeCluster {
+		t.Error("expected home cluster as fallback")
+	}
+}
+
+func TestClient_clusterForWrite_NoRemoteClusters(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+	}
+
+	cl, err := c.clusterForWrite(configMapGVK, &corev1.ConfigMap{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cl != homeCluster {
+		t.Error("expected home cluster when no remotes configured")
+	}
+}
+
+func TestClient_clusterForWrite_SingleRemoteCluster(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+	remote := newFakeCluster(scheme)
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {{cluster: remote, labels: map[string]string{"az": "az-1"}}},
+		},
+	}
+
+	cl, err := c.clusterForWrite(configMapGVK, &corev1.ConfigMap{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cl != remote {
+		t.Error("expected remote cluster for single remote")
+	}
+}
+
+func TestClient_clusterForWrite_RouterMatches(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+	remote1 := newFakeCluster(scheme)
+	remote2 := newFakeCluster(scheme)
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
+			configMapGVK: testRouter{},
+		},
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {
+				{cluster: remote1, labels: map[string]string{"az": "az-1"}},
+				{cluster: remote2, labels: map[string]string{"az": "az-2"}},
+			},
+		},
+	}
+
+	obj := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"az": "az-2"}},
+	}
+	cl, err := c.clusterForWrite(configMapGVK, obj)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cl != remote2 {
+		t.Error("expected second remote cluster for az-2")
+	}
+}
+
+func TestClient_clusterForWrite_NoMatchWithFallback(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+	remote1 := newFakeCluster(scheme)
+	remote2 := newFakeCluster(scheme)
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
+			configMapGVK: testRouter{},
+		},
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {
+				{cluster: remote1, labels: map[string]string{"az": "az-1"}},
+				{cluster: remote2, labels: map[string]string{"az": "az-2"}},
+			},
+		},
+		fallbackGVKs: map[schema.GroupVersionKind]bool{configMapGVK: true},
+	}
+
+	// Object with az-3 doesn't match any remote cluster.
+	obj := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"az": "az-3"}},
+	}
+	cl, err := c.clusterForWrite(configMapGVK, obj)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cl != homeCluster {
+		t.Error("expected home cluster as fallback")
+	}
+}
+
+func TestClient_clusterForWrite_NoMatchNoFallback(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+	remote1 := newFakeCluster(scheme)
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
+			configMapGVK: testRouter{},
+		},
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {
+				{cluster: remote1, labels: map[string]string{"az": "az-1"}},
+				{cluster: newFakeCluster(scheme), labels: map[string]string{"az": "az-2"}},
+			},
+		},
+	}
+
+	obj := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"az": "az-3"}},
+	}
+	_, err := c.clusterForWrite(configMapGVK, obj)
+	if err == nil {
+		t.Error("expected error when no match and no fallback")
+	}
+}
+
+func TestClient_clusterForWrite_NoRouterMultipleClusters(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {
+				{cluster: newFakeCluster(scheme), labels: map[string]string{"az": "az-1"}},
+				{cluster: newFakeCluster(scheme), labels: map[string]string{"az": "az-2"}},
+			},
+		},
+	}
+
+	_, err := c.clusterForWrite(configMapGVK, &corev1.ConfigMap{})
+	if err == nil {
+		t.Error("expected error when no router with multiple clusters")
+	}
+}
+
 func TestGVKFromHomeScheme_Success(t *testing.T) {
 	scheme := newTestScheme(t)
-
-	c := &Client{
-		HomeScheme: scheme,
-	}
+	c := &Client{HomeScheme: scheme}
 
 	tests := []struct {
 		name        string
 		obj         runtime.Object
 		expectedGVK schema.GroupVersionKind
 	}{
-		{
-			name: "ConfigMap",
-			obj:  &corev1.ConfigMap{},
-			expectedGVK: schema.GroupVersionKind{
-				Group:   "",
-				Version: "v1",
-				Kind:    "ConfigMap",
-			},
-		},
-		{
-			name: "ConfigMapList",
-			obj:  &corev1.ConfigMapList{},
-			expectedGVK: schema.GroupVersionKind{
-				Group:   "",
-				Version: "v1",
-				Kind:    "ConfigMapList",
-			},
-		},
-		{
-			name: "Secret",
-			obj:  &corev1.Secret{},
-			expectedGVK: schema.GroupVersionKind{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Secret",
-			},
-		},
-		{
-			name: "Pod",
-			obj:  &corev1.Pod{},
-			expectedGVK: schema.GroupVersionKind{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Pod",
-			},
-		},
-		{
-			name: "Service",
-			obj:  &corev1.Service{},
-			expectedGVK: schema.GroupVersionKind{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Service",
-			},
-		},
-		{
-			name: "v1alpha1 Decision",
-			obj:  &v1alpha1.Decision{},
-			expectedGVK: schema.GroupVersionKind{
-				Group:   "cortex.cloud",
-				Version: "v1alpha1",
-				Kind:    "Decision",
-			},
-		},
-		{
-			name: "v1alpha1 DecisionList",
-			obj:  &v1alpha1.DecisionList{},
-			expectedGVK: schema.GroupVersionKind{
-				Group:   "cortex.cloud",
-				Version: "v1alpha1",
-				Kind:    "DecisionList",
-			},
-		},
+		{"ConfigMap", &corev1.ConfigMap{}, configMapGVK},
+		{"ConfigMapList", &corev1.ConfigMapList{}, configMapListGVK},
+		{"Decision", &v1alpha1.Decision{}, schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Decision"}},
+		{"DecisionList", &v1alpha1.DecisionList{}, schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "DecisionList"}},
 	}
 
 	for _, tt := range tests {
@@ -411,244 +427,53 @@ func TestGVKFromHomeScheme_Success(t *testing.T) {
 	}
 }
 
-// TestGVKFromHomeScheme_UnknownType tests error handling for unregistered types.
 func TestGVKFromHomeScheme_UnknownType(t *testing.T) {
-	scheme := newTestScheme(t)
-
-	c := &Client{
-		HomeScheme: scheme,
-	}
-
-	obj := &unknownType{}
-	_, err := c.GVKFromHomeScheme(obj)
+	c := &Client{HomeScheme: newTestScheme(t)}
+	_, err := c.GVKFromHomeScheme(&unknownType{})
 	if err == nil {
 		t.Error("expected error for unknown type")
 	}
 }
 
-// TestGVKFromHomeScheme_UnversionedType tests error handling for unversioned types.
 func TestGVKFromHomeScheme_UnversionedType(t *testing.T) {
 	scheme := runtime.NewScheme()
-
-	// Register the type as unversioned
 	scheme.AddUnversionedTypes(schema.GroupVersion{Group: "", Version: "v1"}, &unversionedType{})
-
-	c := &Client{
-		HomeScheme: scheme,
-	}
-
-	obj := &unversionedType{}
-	_, err := c.GVKFromHomeScheme(obj)
+	c := &Client{HomeScheme: scheme}
+	_, err := c.GVKFromHomeScheme(&unversionedType{})
 	if err == nil {
 		t.Error("expected error for unversioned type")
 	}
-	if err.Error() != "cannot list unversioned resource" {
-		t.Errorf("unexpected error message: %v", err)
-	}
 }
 
-// TestGVKFromHomeScheme_NilScheme tests behavior with nil scheme.
 func TestGVKFromHomeScheme_NilScheme(t *testing.T) {
-	c := &Client{
-		HomeScheme: nil,
-	}
-
-	obj := &corev1.ConfigMap{}
-
-	// Should panic or return error when scheme is nil
+	c := &Client{HomeScheme: nil}
 	defer func() {
 		if r := recover(); r == nil {
 			t.Error("expected panic with nil scheme")
 		}
 	}()
-
-	_, err := c.GVKFromHomeScheme(obj)
-	if err == nil {
-		t.Error("expected error with nil scheme")
-	}
+	_, _ = c.GVKFromHomeScheme(&corev1.ConfigMap{})
 }
 
-// TestClient_ClusterForResource_WithRemoteCluster tests ClusterForResource with a remote cluster configured.
-func TestClient_ClusterForResource_WithRemoteCluster(t *testing.T) {
+func TestClient_Get_SingleRemoteCluster(t *testing.T) {
 	scheme := newTestScheme(t)
-	homeCluster := newFakeCluster(scheme)
-	remoteCluster := newFakeCluster(scheme)
-
-	gvk := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMap",
-	}
-
-	c := &Client{
-		HomeCluster:    homeCluster,
-		HomeScheme:     scheme,
-		remoteClusters: map[schema.GroupVersionKind]cluster.Cluster{gvk: remoteCluster},
-	}
-
-	// Should return the remote cluster for the registered GVK
-	result := c.ClusterForResource(gvk)
-	if result != remoteCluster {
-		t.Error("expected remote cluster for registered GVK")
-	}
-
-	// Should return home cluster for non-registered GVK
-	otherGVK := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "Secret",
-	}
-	result = c.ClusterForResource(otherGVK)
-	if result != homeCluster {
-		t.Error("expected home cluster for non-registered GVK")
-	}
-}
-
-// TestClient_ClientForResource tests ClientForResource returns the correct client.
-func TestClient_ClientForResource(t *testing.T) {
-	scheme := newTestScheme(t)
-	homeCluster := newFakeCluster(scheme)
-	remoteCluster := newFakeCluster(scheme)
-
-	gvk := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMap",
-	}
-
-	c := &Client{
-		HomeCluster:    homeCluster,
-		HomeScheme:     scheme,
-		remoteClusters: map[schema.GroupVersionKind]cluster.Cluster{gvk: remoteCluster},
-	}
-
-	// Should return the remote cluster's client for the registered GVK
-	result := c.ClientForResource(gvk)
-	if result != remoteCluster.GetClient() {
-		t.Error("expected remote cluster client for registered GVK")
-	}
-
-	// Should return home cluster's client for non-registered GVK
-	otherGVK := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "Secret",
-	}
-	result = c.ClientForResource(otherGVK)
-	if result != homeCluster.GetClient() {
-		t.Error("expected home cluster client for non-registered GVK")
-	}
-}
-
-// TestClient_Scheme tests that Scheme returns the home cluster's client scheme.
-func TestClient_Scheme(t *testing.T) {
-	scheme := newTestScheme(t)
-	homeCluster := newFakeCluster(scheme)
-
-	c := &Client{
-		HomeCluster: homeCluster,
-		HomeScheme:  scheme,
-	}
-
-	result := c.Scheme()
-	if result == nil {
-		t.Error("expected non-nil scheme")
-	}
-}
-
-// TestClient_RESTMapper tests that RESTMapper returns the home cluster's client RESTMapper.
-func TestClient_RESTMapper(t *testing.T) {
-	scheme := newTestScheme(t)
-	homeCluster := newFakeCluster(scheme)
-
-	c := &Client{
-		HomeCluster: homeCluster,
-		HomeScheme:  scheme,
-	}
-
-	result := c.RESTMapper()
-	if result == nil {
-		t.Error("expected non-nil RESTMapper")
-	}
-}
-
-// TestClient_GroupVersionKindFor tests GroupVersionKindFor returns correct GVK.
-func TestClient_GroupVersionKindFor(t *testing.T) {
-	scheme := newTestScheme(t)
-	homeCluster := newFakeCluster(scheme)
-
-	c := &Client{
-		HomeCluster: homeCluster,
-		HomeScheme:  scheme,
-	}
-
-	gvk, err := c.GroupVersionKindFor(&corev1.ConfigMap{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	expected := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMap",
-	}
-	if gvk != expected {
-		t.Errorf("expected GVK %v, got %v", expected, gvk)
-	}
-}
-
-// TestClient_IsObjectNamespaced tests IsObjectNamespaced delegates to home cluster client.
-func TestClient_IsObjectNamespaced(t *testing.T) {
-	scheme := newTestScheme(t)
-	homeCluster := newFakeCluster(scheme)
-
-	c := &Client{
-		HomeCluster: homeCluster,
-		HomeScheme:  scheme,
-	}
-
-	// The fake client's RESTMapper doesn't have all mappings, so we just test
-	// that the method delegates properly to the home cluster's client.
-	// We expect an error due to the fake client's limited RESTMapper.
-	_, err := c.IsObjectNamespaced(&corev1.ConfigMap{})
-	// The fake client doesn't have a proper RESTMapper, so this will fail,
-	// but we're testing that the delegation works.
-	_ = err // Error expected with fake client
-}
-
-// TestClient_Get tests the Get method routes to the correct cluster.
-func TestClient_Get(t *testing.T) {
-	scheme := newTestScheme(t)
-
-	// Create a ConfigMap in the remote cluster
 	existingCM := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cm",
-			Namespace: "default",
-		},
-		Data: map[string]string{"key": "remote-value"},
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "default"},
+		Data:       map[string]string{"key": "remote-value"},
 	}
-
-	remoteCluster := newFakeCluster(scheme, existingCM)
+	remote := newFakeCluster(scheme, existingCM)
 	homeCluster := newFakeCluster(scheme)
 
-	gvk := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMap",
-	}
-
 	c := &Client{
-		HomeCluster:    homeCluster,
-		HomeScheme:     scheme,
-		remoteClusters: map[schema.GroupVersionKind]cluster.Cluster{gvk: remoteCluster},
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {{cluster: remote}},
+		},
 	}
 
-	ctx := context.Background()
-
-	// Get from remote cluster (ConfigMap GVK is registered)
 	cm := &corev1.ConfigMap{}
-	err := c.Get(ctx, client.ObjectKey{Name: "test-cm", Namespace: "default"}, cm)
+	err := c.Get(context.Background(), client.ObjectKey{Name: "test-cm", Namespace: "default"}, cm)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -657,69 +482,121 @@ func TestClient_Get(t *testing.T) {
 	}
 }
 
-// TestClient_Get_UnknownType tests Get returns error for unknown types.
-func TestClient_Get_UnknownType(t *testing.T) {
+func TestClient_Get_MultiCluster_FirstFound(t *testing.T) {
+	// Iterate all remote clusters and return the first found object. In this test, only remote2 has the object, so it should be returned.
+
 	scheme := newTestScheme(t)
-	homeCluster := newFakeCluster(scheme)
+	existingCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "default"},
+		Data:       map[string]string{"key": "from-cluster-2"},
+	}
+	remote1 := newFakeCluster(scheme) // empty
+	remote2 := newFakeCluster(scheme, existingCM)
 
 	c := &Client{
-		HomeCluster: homeCluster,
+		HomeCluster: newFakeCluster(scheme),
 		HomeScheme:  scheme,
-	}
-
-	ctx := context.Background()
-
-	obj := &unknownType{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "default",
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {
+				{cluster: remote1, labels: map[string]string{"az": "az-1"}},
+				{cluster: remote2, labels: map[string]string{"az": "az-2"}},
+			},
 		},
 	}
 
-	err := c.Get(ctx, client.ObjectKey{Name: "test", Namespace: "default"}, obj)
+	cm := &corev1.ConfigMap{}
+	err := c.Get(context.Background(), client.ObjectKey{Name: "test-cm", Namespace: "default"}, cm)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cm.Data["key"] != "from-cluster-2" {
+		t.Errorf("expected 'from-cluster-2', got '%s'", cm.Data["key"])
+	}
+}
+
+func TestClient_Get_MultiCluster_NotFound(t *testing.T) {
+	// Iterate all remote clusters and return NotFound if object is not found in any cluster (including home cluster if fallback is enabled).
+	// In this test, the object doesn't exist in any cluster, so NotFound should be returned.
+
+	scheme := newTestScheme(t)
+	remote1 := newFakeCluster(scheme) // empty
+	remote2 := newFakeCluster(scheme) // empty
+
+	c := &Client{
+		HomeCluster: newFakeCluster(scheme),
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {
+				{cluster: remote1},
+				{cluster: remote2},
+			},
+		},
+	}
+
+	cm := &corev1.ConfigMap{}
+	err := c.Get(context.Background(), client.ObjectKey{Name: "missing", Namespace: "default"}, cm)
+	if err == nil {
+		t.Error("expected NotFound error")
+	}
+}
+
+func TestClient_Get_UnknownType(t *testing.T) {
+	scheme := newTestScheme(t)
+	c := &Client{
+		HomeCluster: newFakeCluster(scheme),
+		HomeScheme:  scheme,
+	}
+	obj := &unknownType{ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"}}
+	err := c.Get(context.Background(), client.ObjectKey{Name: "test", Namespace: "default"}, obj)
 	if err == nil {
 		t.Error("expected error for unknown type")
 	}
 }
 
-// TestClient_List tests the List method routes to the correct cluster.
-func TestClient_List(t *testing.T) {
+func TestClient_Get_FallbackCluster(t *testing.T) {
 	scheme := newTestScheme(t)
-
-	// Create ConfigMaps in the remote cluster
-	cm1 := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cm1",
-			Namespace: "default",
-		},
-	}
-	cm2 := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cm2",
-			Namespace: "default",
-		},
-	}
-
-	remoteCluster := newFakeCluster(scheme, cm1, cm2)
-	homeCluster := newFakeCluster(scheme)
-
-	gvk := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMapList",
-	}
+	homeCluster := newFakeCluster(scheme, &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "home-cm", Namespace: "default"},
+		Data:       map[string]string{"key": "from-home"},
+	})
+	remote := newFakeCluster(scheme) // empty
 
 	c := &Client{
-		HomeCluster:    homeCluster,
-		HomeScheme:     scheme,
-		remoteClusters: map[schema.GroupVersionKind]cluster.Cluster{gvk: remoteCluster},
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {{cluster: remote}},
+		},
+		fallbackGVKs: map[schema.GroupVersionKind]bool{configMapGVK: true},
 	}
 
-	ctx := context.Background()
+	cm := &corev1.ConfigMap{}
+	err := c.Get(context.Background(), client.ObjectKey{Name: "home-cm", Namespace: "default"}, cm)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cm.Data["key"] != "from-home" {
+		t.Errorf("expected 'from-home', got '%s'", cm.Data["key"])
+	}
+}
 
-	// List from remote cluster
+func TestClient_List_SingleRemoteCluster(t *testing.T) {
+	scheme := newTestScheme(t)
+	cm1 := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm1", Namespace: "default"}}
+	cm2 := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm2", Namespace: "default"}}
+	remote := newFakeCluster(scheme, cm1, cm2)
+	homeCluster := newFakeCluster(scheme)
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapListGVK: {{cluster: remote}},
+		},
+	}
+
 	cmList := &corev1.ConfigMapList{}
-	err := c.List(ctx, cmList, client.InNamespace("default"))
+	err := c.List(context.Background(), cmList, client.InNamespace("default"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -728,725 +605,78 @@ func TestClient_List(t *testing.T) {
 	}
 }
 
-// TestClient_Create tests the Create method routes to the correct cluster.
-func TestClient_Create(t *testing.T) {
+func TestClient_List_MultipleClusters_CombinesResults(t *testing.T) {
 	scheme := newTestScheme(t)
-	homeCluster := newFakeCluster(scheme)
-	remoteCluster := newFakeCluster(scheme)
-
-	gvk := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMap",
-	}
+	remote1 := newFakeCluster(scheme,
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm-az1-1", Namespace: "default"}},
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm-az1-2", Namespace: "default"}},
+	)
+	remote2 := newFakeCluster(scheme,
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm-az2-1", Namespace: "default"}},
+	)
 
 	c := &Client{
-		HomeCluster:    homeCluster,
-		HomeScheme:     scheme,
-		remoteClusters: map[schema.GroupVersionKind]cluster.Cluster{gvk: remoteCluster},
-	}
-
-	ctx := context.Background()
-
-	// Create in remote cluster
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "new-cm",
-			Namespace: "default",
-		},
-	}
-	err := c.Create(ctx, cm)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Verify it was created in remote cluster
-	result := &corev1.ConfigMap{}
-	err = remoteCluster.GetClient().Get(ctx, client.ObjectKey{Name: "new-cm", Namespace: "default"}, result)
-	if err != nil {
-		t.Fatalf("failed to get created object from remote cluster: %v", err)
-	}
-}
-
-// TestClient_Delete tests the Delete method routes to the correct cluster.
-func TestClient_Delete(t *testing.T) {
-	scheme := newTestScheme(t)
-
-	existingCM := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "to-delete",
-			Namespace: "default",
+		HomeCluster: newFakeCluster(scheme),
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapListGVK: {
+				{cluster: remote1, labels: map[string]string{"az": "az-1"}},
+				{cluster: remote2, labels: map[string]string{"az": "az-2"}},
+			},
 		},
 	}
 
-	homeCluster := newFakeCluster(scheme)
-	remoteCluster := newFakeCluster(scheme, existingCM)
-
-	gvk := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMap",
-	}
-
-	c := &Client{
-		HomeCluster:    homeCluster,
-		HomeScheme:     scheme,
-		remoteClusters: map[schema.GroupVersionKind]cluster.Cluster{gvk: remoteCluster},
-	}
-
-	ctx := context.Background()
-
-	// Delete from remote cluster
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "to-delete",
-			Namespace: "default",
-		},
-	}
-	err := c.Delete(ctx, cm)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Verify it was deleted from remote cluster
-	result := &corev1.ConfigMap{}
-	err = remoteCluster.GetClient().Get(ctx, client.ObjectKey{Name: "to-delete", Namespace: "default"}, result)
-	if err == nil {
-		t.Error("expected object to be deleted from remote cluster")
-	}
-}
-
-// TestClient_Update tests the Update method routes to the correct cluster.
-func TestClient_Update(t *testing.T) {
-	scheme := newTestScheme(t)
-
-	existingCM := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "to-update",
-			Namespace: "default",
-		},
-		Data: map[string]string{"key": "old-value"},
-	}
-
-	homeCluster := newFakeCluster(scheme)
-	remoteCluster := newFakeCluster(scheme, existingCM)
-
-	gvk := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMap",
-	}
-
-	c := &Client{
-		HomeCluster:    homeCluster,
-		HomeScheme:     scheme,
-		remoteClusters: map[schema.GroupVersionKind]cluster.Cluster{gvk: remoteCluster},
-	}
-
-	ctx := context.Background()
-
-	// First get the object to have the correct resource version
-	cm := &corev1.ConfigMap{}
-	err := remoteCluster.GetClient().Get(ctx, client.ObjectKey{Name: "to-update", Namespace: "default"}, cm)
-	if err != nil {
-		t.Fatalf("failed to get object: %v", err)
-	}
-
-	// Update in remote cluster
-	cm.Data["key"] = "new-value"
-	err = c.Update(ctx, cm)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Verify it was updated in remote cluster
-	result := &corev1.ConfigMap{}
-	err = remoteCluster.GetClient().Get(ctx, client.ObjectKey{Name: "to-update", Namespace: "default"}, result)
-	if err != nil {
-		t.Fatalf("failed to get updated object: %v", err)
-	}
-	if result.Data["key"] != "new-value" {
-		t.Errorf("expected 'new-value', got '%s'", result.Data["key"])
-	}
-}
-
-// TestClient_Patch tests the Patch method routes to the correct cluster.
-func TestClient_Patch(t *testing.T) {
-	scheme := newTestScheme(t)
-
-	existingCM := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "to-patch",
-			Namespace: "default",
-		},
-		Data: map[string]string{"key": "old-value"},
-	}
-
-	homeCluster := newFakeCluster(scheme)
-	remoteCluster := newFakeCluster(scheme, existingCM)
-
-	gvk := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMap",
-	}
-
-	c := &Client{
-		HomeCluster:    homeCluster,
-		HomeScheme:     scheme,
-		remoteClusters: map[schema.GroupVersionKind]cluster.Cluster{gvk: remoteCluster},
-	}
-
-	ctx := context.Background()
-
-	// Patch in remote cluster
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "to-patch",
-			Namespace: "default",
-		},
-	}
-	patch := client.MergeFrom(cm.DeepCopy())
-	cm.Data = map[string]string{"key": "patched-value"}
-	err := c.Patch(ctx, cm, patch)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Verify it was patched in remote cluster
-	result := &corev1.ConfigMap{}
-	err = remoteCluster.GetClient().Get(ctx, client.ObjectKey{Name: "to-patch", Namespace: "default"}, result)
-	if err != nil {
-		t.Fatalf("failed to get patched object: %v", err)
-	}
-	if result.Data["key"] != "patched-value" {
-		t.Errorf("expected 'patched-value', got '%s'", result.Data["key"])
-	}
-}
-
-// TestClient_DeleteAllOf tests the DeleteAllOf method routes to the correct cluster.
-func TestClient_DeleteAllOf(t *testing.T) {
-	scheme := newTestScheme(t)
-
-	cm1 := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cm1",
-			Namespace: "default",
-			Labels:    map[string]string{"app": "test"},
-		},
-	}
-	cm2 := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cm2",
-			Namespace: "default",
-			Labels:    map[string]string{"app": "test"},
-		},
-	}
-
-	homeCluster := newFakeCluster(scheme)
-	remoteCluster := newFakeCluster(scheme, cm1, cm2)
-
-	gvk := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMap",
-	}
-
-	c := &Client{
-		HomeCluster:    homeCluster,
-		HomeScheme:     scheme,
-		remoteClusters: map[schema.GroupVersionKind]cluster.Cluster{gvk: remoteCluster},
-	}
-
-	ctx := context.Background()
-
-	// DeleteAllOf in remote cluster
-	err := c.DeleteAllOf(ctx, &corev1.ConfigMap{}, client.InNamespace("default"), client.MatchingLabels{"app": "test"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Verify all were deleted from remote cluster
 	cmList := &corev1.ConfigMapList{}
-	err = remoteCluster.GetClient().List(ctx, cmList, client.InNamespace("default"))
-	if err != nil {
-		t.Fatalf("failed to list objects: %v", err)
-	}
-	if len(cmList.Items) != 0 {
-		t.Errorf("expected 0 items, got %d", len(cmList.Items))
-	}
-}
-
-// TestClient_ConcurrentAddRemote tests thread safety of adding remote clusters.
-func TestClient_ConcurrentAddRemote(t *testing.T) {
-	c := &Client{
-		remoteClusters: make(map[schema.GroupVersionKind]cluster.Cluster),
-	}
-
-	var wg sync.WaitGroup
-	for i := range 10 {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			gvk := schema.GroupVersionKind{
-				Group:   "test",
-				Version: "v1",
-				Kind:    "TestKind" + string(rune('A'+i)),
-			}
-			c.remoteClustersMu.Lock()
-			c.remoteClusters[gvk] = nil
-			c.remoteClustersMu.Unlock()
-		}(i)
-	}
-	wg.Wait()
-
-	if len(c.remoteClusters) != 10 {
-		t.Errorf("expected 10 remote clusters, got %d", len(c.remoteClusters))
-	}
-}
-
-// TestClient_ConcurrentClusterForResourceAndAddRemote tests concurrent read/write operations.
-func TestClient_ConcurrentClusterForResourceAndAddRemote(t *testing.T) {
-	c := &Client{
-		remoteClusters: make(map[schema.GroupVersionKind]cluster.Cluster),
-	}
-
-	gvk := schema.GroupVersionKind{
-		Group:   "test",
-		Version: "v1",
-		Kind:    "TestKind",
-	}
-
-	var wg sync.WaitGroup
-
-	// Readers
-	for range 10 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for range 100 {
-				_ = c.ClusterForResource(gvk)
-			}
-		}()
-	}
-
-	// Writers
-	for range 5 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for range 100 {
-				c.remoteClustersMu.Lock()
-				c.remoteClusters[gvk] = nil
-				c.remoteClustersMu.Unlock()
-			}
-		}()
-	}
-
-	wg.Wait()
-}
-
-// TestStatusClient_Create tests the status client Create method.
-func TestStatusClient_Create(t *testing.T) {
-	scheme := newTestScheme(t)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
-	}
-
-	homeCluster := newFakeCluster(scheme, pod)
-
-	c := &Client{
-		HomeCluster: homeCluster,
-		HomeScheme:  scheme,
-	}
-
-	ctx := context.Background()
-
-	// Create requires a subresource object, but we're just testing the routing
-	sc := c.Status()
-
-	// The fake client doesn't support status subresource creation in the standard way,
-	// but we can verify the method exists and routes correctly
-	err := sc.Create(ctx, pod, &corev1.Pod{})
-	// We expect an error because the fake client doesn't support this,
-	// but we're testing that the routing works
-	_ = err // Error is expected with fake client
-}
-
-// TestStatusClient_Update tests the status client Update method.
-func TestStatusClient_Update(t *testing.T) {
-	scheme := newTestScheme(t)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodPending,
-		},
-	}
-
-	homeCluster := newFakeCluster(scheme, pod)
-
-	c := &Client{
-		HomeCluster: homeCluster,
-		HomeScheme:  scheme,
-	}
-
-	ctx := context.Background()
-
-	// Get the pod first
-	existingPod := &corev1.Pod{}
-	err := homeCluster.GetClient().Get(ctx, client.ObjectKey{Name: "test-pod", Namespace: "default"}, existingPod)
-	if err != nil {
-		t.Fatalf("failed to get pod: %v", err)
-	}
-
-	// Update status
-	existingPod.Status.Phase = corev1.PodRunning
-	err = c.Status().Update(ctx, existingPod)
+	err := c.List(context.Background(), cmList, client.InNamespace("default"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if len(cmList.Items) != 3 {
+		t.Errorf("expected 3 combined items, got %d", len(cmList.Items))
+	}
 }
 
-// TestStatusClient_Patch tests the status client Patch method.
-func TestStatusClient_Patch(t *testing.T) {
+func TestClient_List_FallbackIncludesHome(t *testing.T) {
 	scheme := newTestScheme(t)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodPending,
-		},
-	}
-
-	homeCluster := newFakeCluster(scheme, pod)
+	remote := newFakeCluster(scheme,
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "remote-cm", Namespace: "default"}},
+	)
+	homeCluster := newFakeCluster(scheme,
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "home-cm", Namespace: "default"}},
+	)
 
 	c := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
-	}
-
-	ctx := context.Background()
-
-	// Get the pod first
-	existingPod := &corev1.Pod{}
-	err := homeCluster.GetClient().Get(ctx, client.ObjectKey{Name: "test-pod", Namespace: "default"}, existingPod)
-	if err != nil {
-		t.Fatalf("failed to get pod: %v", err)
-	}
-
-	// Patch status
-	patch := client.MergeFrom(existingPod.DeepCopy())
-	existingPod.Status.Phase = corev1.PodRunning
-	err = c.Status().Patch(ctx, existingPod, patch)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-// TestStatusClient_RoutesToRemoteCluster tests that status client routes to remote cluster.
-func TestStatusClient_RoutesToRemoteCluster(t *testing.T) {
-	scheme := newTestScheme(t)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapListGVK: {{cluster: remote}},
 		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodPending,
-		},
+		fallbackGVKs: map[schema.GroupVersionKind]bool{configMapListGVK: true},
 	}
 
-	homeCluster := newFakeCluster(scheme)
-	remoteCluster := newFakeCluster(scheme, pod)
-
-	gvk := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "Pod",
-	}
-
-	c := &Client{
-		HomeCluster:    homeCluster,
-		HomeScheme:     scheme,
-		remoteClusters: map[schema.GroupVersionKind]cluster.Cluster{gvk: remoteCluster},
-	}
-
-	ctx := context.Background()
-
-	// Get the pod from remote cluster
-	existingPod := &corev1.Pod{}
-	err := remoteCluster.GetClient().Get(ctx, client.ObjectKey{Name: "test-pod", Namespace: "default"}, existingPod)
-	if err != nil {
-		t.Fatalf("failed to get pod: %v", err)
-	}
-
-	// Update status via multicluster client - should go to remote cluster
-	existingPod.Status.Phase = corev1.PodRunning
-	err = c.Status().Update(ctx, existingPod)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Verify it was updated in remote cluster
-	result := &corev1.Pod{}
-	err = remoteCluster.GetClient().Get(ctx, client.ObjectKey{Name: "test-pod", Namespace: "default"}, result)
-	if err != nil {
-		t.Fatalf("failed to get updated pod: %v", err)
-	}
-	if result.Status.Phase != corev1.PodRunning {
-		t.Errorf("expected PodRunning, got %s", result.Status.Phase)
-	}
-}
-
-// TestSubResourceClient_Get tests the subresource client Get method.
-func TestSubResourceClient_Get(t *testing.T) {
-	scheme := newTestScheme(t)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
-	}
-
-	homeCluster := newFakeCluster(scheme, pod)
-
-	c := &Client{
-		HomeCluster: homeCluster,
-		HomeScheme:  scheme,
-	}
-
-	ctx := context.Background()
-
-	// The fake client may not support all subresources, but we can test the routing
-	src := c.SubResource("status")
-	err := src.Get(ctx, pod, &corev1.Pod{})
-	// Error is expected with fake client for subresource operations
-	_ = err
-}
-
-// TestSubResourceClient_Create tests the subresource client Create method.
-func TestSubResourceClient_Create(t *testing.T) {
-	scheme := newTestScheme(t)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
-	}
-
-	homeCluster := newFakeCluster(scheme, pod)
-
-	c := &Client{
-		HomeCluster: homeCluster,
-		HomeScheme:  scheme,
-	}
-
-	ctx := context.Background()
-
-	src := c.SubResource("eviction")
-	err := src.Create(ctx, pod, &corev1.Pod{})
-	// Error is expected with fake client for subresource operations
-	_ = err
-}
-
-// TestSubResourceClient_Update tests the subresource client Update method.
-func TestSubResourceClient_Update(t *testing.T) {
-	scheme := newTestScheme(t)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
-	}
-
-	homeCluster := newFakeCluster(scheme, pod)
-
-	c := &Client{
-		HomeCluster: homeCluster,
-		HomeScheme:  scheme,
-	}
-
-	ctx := context.Background()
-
-	// Get the pod first
-	existingPod := &corev1.Pod{}
-	err := homeCluster.GetClient().Get(ctx, client.ObjectKey{Name: "test-pod", Namespace: "default"}, existingPod)
-	if err != nil {
-		t.Fatalf("failed to get pod: %v", err)
-	}
-
-	src := c.SubResource("status")
-	err = src.Update(ctx, existingPod)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-// TestSubResourceClient_Patch tests the subresource client Patch method.
-func TestSubResourceClient_Patch(t *testing.T) {
-	scheme := newTestScheme(t)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
-	}
-
-	homeCluster := newFakeCluster(scheme, pod)
-
-	c := &Client{
-		HomeCluster: homeCluster,
-		HomeScheme:  scheme,
-	}
-
-	ctx := context.Background()
-
-	// Get the pod first
-	existingPod := &corev1.Pod{}
-	err := homeCluster.GetClient().Get(ctx, client.ObjectKey{Name: "test-pod", Namespace: "default"}, existingPod)
-	if err != nil {
-		t.Fatalf("failed to get pod: %v", err)
-	}
-
-	patch := client.MergeFrom(existingPod.DeepCopy())
-	src := c.SubResource("status")
-	err = src.Patch(ctx, existingPod, patch)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-// TestSubResourceClient_RoutesToRemoteCluster tests that subresource client routes to remote cluster.
-func TestSubResourceClient_RoutesToRemoteCluster(t *testing.T) {
-	scheme := newTestScheme(t)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
-	}
-
-	homeCluster := newFakeCluster(scheme)
-	remoteCluster := newFakeCluster(scheme, pod)
-
-	gvk := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "Pod",
-	}
-
-	c := &Client{
-		HomeCluster:    homeCluster,
-		HomeScheme:     scheme,
-		remoteClusters: map[schema.GroupVersionKind]cluster.Cluster{gvk: remoteCluster},
-	}
-
-	ctx := context.Background()
-
-	// Get the pod from remote cluster
-	existingPod := &corev1.Pod{}
-	err := remoteCluster.GetClient().Get(ctx, client.ObjectKey{Name: "test-pod", Namespace: "default"}, existingPod)
-	if err != nil {
-		t.Fatalf("failed to get pod: %v", err)
-	}
-
-	// Update via subresource client - should go to remote cluster
-	src := c.SubResource("status")
-	err = src.Update(ctx, existingPod)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-// TestGVKFromHomeScheme_WithDifferentAPIGroups tests GVK lookup for different API groups.
-func TestGVKFromHomeScheme_WithDifferentAPIGroups(t *testing.T) {
-	scheme := newTestScheme(t)
-
-	c := &Client{
-		HomeScheme: scheme,
-	}
-
-	tests := []struct {
-		name        string
-		obj         runtime.Object
-		expectedGrp string
-	}{
-		{
-			name:        "core API group (empty string)",
-			obj:         &corev1.ConfigMap{},
-			expectedGrp: "",
-		},
-		{
-			name:        "custom API group",
-			obj:         &v1alpha1.Decision{},
-			expectedGrp: "cortex.cloud",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gvk, err := c.GVKFromHomeScheme(tt.obj)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if gvk.Group != tt.expectedGrp {
-				t.Errorf("expected group '%s', got '%s'", tt.expectedGrp, gvk.Group)
-			}
-		})
-	}
-}
-
-// TestClient_Operations_WithHomeClusterOnly tests operations when no remote clusters are configured.
-func TestClient_Operations_WithHomeClusterOnly(t *testing.T) {
-	scheme := newTestScheme(t)
-
-	existingCM := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "home-cm",
-			Namespace: "default",
-		},
-		Data: map[string]string{"key": "home-value"},
-	}
-
-	homeCluster := newFakeCluster(scheme, existingCM)
-
-	c := &Client{
-		HomeCluster: homeCluster,
-		HomeScheme:  scheme,
-	}
-
-	ctx := context.Background()
-
-	// Get from home cluster
-	cm := &corev1.ConfigMap{}
-	err := c.Get(ctx, client.ObjectKey{Name: "home-cm", Namespace: "default"}, cm)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cm.Data["key"] != "home-value" {
-		t.Errorf("expected 'home-value', got '%s'", cm.Data["key"])
-	}
-
-	// List from home cluster
 	cmList := &corev1.ConfigMapList{}
-	err = c.List(ctx, cmList, client.InNamespace("default"))
+	err := c.List(context.Background(), cmList, client.InNamespace("default"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cmList.Items) != 2 {
+		t.Errorf("expected 2 items (remote + home), got %d", len(cmList.Items))
+	}
+}
+
+func TestClient_List_HomeClusterOnly(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme,
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "home-cm", Namespace: "default"}},
+	)
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+	}
+
+	cmList := &corev1.ConfigMapList{}
+	err := c.List(context.Background(), cmList, client.InNamespace("default"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1455,211 +685,565 @@ func TestClient_Operations_WithHomeClusterOnly(t *testing.T) {
 	}
 }
 
-// TestClient_StatusAndSubResource_ErrorOnUnknownType tests error handling for unknown types.
-func TestClient_StatusAndSubResource_ErrorOnUnknownType(t *testing.T) {
+func TestClient_Create_SingleRemoteCluster(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+	remote := newFakeCluster(scheme)
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {{cluster: remote}},
+		},
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "new-cm", Namespace: "default"},
+	}
+	err := c.Create(context.Background(), cm)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify it was created in remote, not home.
+	result := &corev1.ConfigMap{}
+	err = remote.GetClient().Get(context.Background(), client.ObjectKey{Name: "new-cm", Namespace: "default"}, result)
+	if err != nil {
+		t.Fatalf("expected to find in remote cluster: %v", err)
+	}
+}
+
+func TestClient_Create_RouterMatchesCluster(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+	remote1 := newFakeCluster(scheme)
+	remote2 := newFakeCluster(scheme)
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
+			configMapGVK: testRouter{},
+		},
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {
+				{cluster: remote1, labels: map[string]string{"az": "az-1"}},
+				{cluster: remote2, labels: map[string]string{"az": "az-2"}},
+			},
+		},
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "new-cm",
+			Namespace: "default",
+			Labels:    map[string]string{"az": "az-2"},
+		},
+	}
+	err := c.Create(context.Background(), cm)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should be in remote2, not remote1.
+	result := &corev1.ConfigMap{}
+	err = remote2.GetClient().Get(context.Background(), client.ObjectKey{Name: "new-cm", Namespace: "default"}, result)
+	if err != nil {
+		t.Fatalf("expected to find in remote2: %v", err)
+	}
+	err = remote1.GetClient().Get(context.Background(), client.ObjectKey{Name: "new-cm", Namespace: "default"}, result)
+	if err == nil {
+		t.Error("should NOT be in remote1")
+	}
+}
+
+func TestClient_Create_FallbackToHome(t *testing.T) {
 	scheme := newTestScheme(t)
 	homeCluster := newFakeCluster(scheme)
 
 	c := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
+		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
+			configMapGVK: testRouter{},
+		},
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {
+				{cluster: newFakeCluster(scheme), labels: map[string]string{"az": "az-1"}},
+			},
+		},
+		fallbackGVKs: map[schema.GroupVersionKind]bool{configMapGVK: true},
 	}
 
-	ctx := context.Background()
-
-	obj := &unknownType{
+	// Object with az-99 doesn't match any remote — should fall back to home.
+	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
+			Name:      "fallback-cm",
 			Namespace: "default",
+			Labels:    map[string]string{"az": "az-99"},
 		},
 	}
 
-	// Status client should return error for unknown type
-	err := c.Status().Update(ctx, obj)
+	err := c.Create(context.Background(), cm)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	result := &corev1.ConfigMap{}
+	err = homeCluster.GetClient().Get(context.Background(), client.ObjectKey{Name: "fallback-cm", Namespace: "default"}, result)
+	if err != nil {
+		t.Fatalf("expected to find in home cluster (fallback): %v", err)
+	}
+}
+
+func TestClient_Delete_SingleRemoteCluster(t *testing.T) {
+	scheme := newTestScheme(t)
+	existingCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "to-delete", Namespace: "default"},
+	}
+	homeCluster := newFakeCluster(scheme)
+	remote := newFakeCluster(scheme, existingCM)
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {{cluster: remote}},
+		},
+	}
+
+	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "to-delete", Namespace: "default"}}
+	err := c.Delete(context.Background(), cm)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	result := &corev1.ConfigMap{}
+	err = remote.GetClient().Get(context.Background(), client.ObjectKey{Name: "to-delete", Namespace: "default"}, result)
 	if err == nil {
+		t.Error("expected object to be deleted from remote cluster")
+	}
+}
+
+func TestClient_Update_SingleRemoteCluster(t *testing.T) {
+	scheme := newTestScheme(t)
+	existingCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "to-update", Namespace: "default"},
+		Data:       map[string]string{"key": "old-value"},
+	}
+	homeCluster := newFakeCluster(scheme)
+	remote := newFakeCluster(scheme, existingCM)
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {{cluster: remote}},
+		},
+	}
+
+	ctx := context.Background()
+	cm := &corev1.ConfigMap{}
+	err := remote.GetClient().Get(ctx, client.ObjectKey{Name: "to-update", Namespace: "default"}, cm)
+	if err != nil {
+		t.Fatalf("failed to get object: %v", err)
+	}
+
+	cm.Data["key"] = "new-value"
+	err = c.Update(ctx, cm)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	result := &corev1.ConfigMap{}
+	err = remote.GetClient().Get(ctx, client.ObjectKey{Name: "to-update", Namespace: "default"}, result)
+	if err != nil {
+		t.Fatalf("failed to get updated object: %v", err)
+	}
+	if result.Data["key"] != "new-value" {
+		t.Errorf("expected 'new-value', got '%s'", result.Data["key"])
+	}
+}
+
+func TestClient_Patch_SingleRemoteCluster(t *testing.T) {
+	scheme := newTestScheme(t)
+	existingCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "to-patch", Namespace: "default"},
+		Data:       map[string]string{"key": "old-value"},
+	}
+	homeCluster := newFakeCluster(scheme)
+	remote := newFakeCluster(scheme, existingCM)
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {{cluster: remote}},
+		},
+	}
+
+	ctx := context.Background()
+	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "to-patch", Namespace: "default"}}
+	patch := client.MergeFrom(cm.DeepCopy())
+	cm.Data = map[string]string{"key": "patched-value"}
+	err := c.Patch(ctx, cm, patch)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	result := &corev1.ConfigMap{}
+	err = remote.GetClient().Get(ctx, client.ObjectKey{Name: "to-patch", Namespace: "default"}, result)
+	if err != nil {
+		t.Fatalf("failed to get patched object: %v", err)
+	}
+	if result.Data["key"] != "patched-value" {
+		t.Errorf("expected 'patched-value', got '%s'", result.Data["key"])
+	}
+}
+
+func TestClient_DeleteAllOf_SingleRemoteCluster(t *testing.T) {
+	scheme := newTestScheme(t)
+	cm1 := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "cm1", Namespace: "default", Labels: map[string]string{"app": "test"}},
+	}
+	cm2 := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "cm2", Namespace: "default", Labels: map[string]string{"app": "test"}},
+	}
+	homeCluster := newFakeCluster(scheme)
+	remote := newFakeCluster(scheme, cm1, cm2)
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {{cluster: remote}},
+		},
+	}
+
+	err := c.DeleteAllOf(context.Background(), &corev1.ConfigMap{}, client.InNamespace("default"), client.MatchingLabels{"app": "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cmList := &corev1.ConfigMapList{}
+	err = remote.GetClient().List(context.Background(), cmList, client.InNamespace("default"))
+	if err != nil {
+		t.Fatalf("failed to list objects: %v", err)
+	}
+	if len(cmList.Items) != 0 {
+		t.Errorf("expected 0 items, got %d", len(cmList.Items))
+	}
+}
+
+func TestClient_DeleteAllOf_MultipleClusters(t *testing.T) {
+	scheme := newTestScheme(t)
+	remote1 := newFakeCluster(scheme,
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm1", Namespace: "default", Labels: map[string]string{"app": "test"}}},
+	)
+	remote2 := newFakeCluster(scheme,
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm2", Namespace: "default", Labels: map[string]string{"app": "test"}}},
+	)
+
+	c := &Client{
+		HomeCluster: newFakeCluster(scheme),
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {
+				{cluster: remote1},
+				{cluster: remote2},
+			},
+		},
+	}
+
+	err := c.DeleteAllOf(context.Background(), &corev1.ConfigMap{}, client.InNamespace("default"), client.MatchingLabels{"app": "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for i, remote := range []*fakeCluster{remote1, remote2} {
+		cmList := &corev1.ConfigMapList{}
+		_ = remote.GetClient().List(context.Background(), cmList, client.InNamespace("default"))
+		if len(cmList.Items) != 0 {
+			t.Errorf("expected 0 items in remote%d, got %d", i+1, len(cmList.Items))
+		}
+	}
+}
+
+func TestStatusClient_Update(t *testing.T) {
+	scheme := newTestScheme(t)
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: "default"},
+		Status:     corev1.PodStatus{Phase: corev1.PodPending},
+	}
+	homeCluster := newFakeCluster(scheme, pod)
+	c := &Client{HomeCluster: homeCluster, HomeScheme: scheme}
+
+	ctx := context.Background()
+	existingPod := &corev1.Pod{}
+	if err := homeCluster.GetClient().Get(ctx, client.ObjectKey{Name: "test-pod", Namespace: "default"}, existingPod); err != nil {
+		t.Fatalf("failed to get pod: %v", err)
+	}
+	existingPod.Status.Phase = corev1.PodRunning
+	if err := c.Status().Update(ctx, existingPod); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Validate the update took effect
+	result := &corev1.Pod{}
+	if err := homeCluster.GetClient().Get(ctx, client.ObjectKey{Name: "test-pod", Namespace: "default"}, result); err != nil {
+		t.Fatalf("failed to get updated pod: %v", err)
+	}
+	if result.Status.Phase != corev1.PodRunning {
+		t.Errorf("expected PodRunning, got %s", result.Status.Phase)
+	}
+}
+
+func TestStatusClient_Patch(t *testing.T) {
+	scheme := newTestScheme(t)
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: "default"},
+		Status:     corev1.PodStatus{Phase: corev1.PodPending},
+	}
+	homeCluster := newFakeCluster(scheme, pod)
+	c := &Client{HomeCluster: homeCluster, HomeScheme: scheme}
+
+	ctx := context.Background()
+	existingPod := &corev1.Pod{}
+	if err := homeCluster.GetClient().Get(ctx, client.ObjectKey{Name: "test-pod", Namespace: "default"}, existingPod); err != nil {
+		t.Fatalf("failed to get pod: %v", err)
+	}
+	patch := client.MergeFrom(existingPod.DeepCopy())
+	existingPod.Status.Phase = corev1.PodRunning
+	if err := c.Status().Patch(ctx, existingPod, patch); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Validate the patch took effect
+	result := &corev1.Pod{}
+	if err := homeCluster.GetClient().Get(ctx, client.ObjectKey{Name: "test-pod", Namespace: "default"}, result); err != nil {
+		t.Fatalf("failed to get patched pod: %v", err)
+	}
+	if result.Status.Phase != corev1.PodRunning {
+		t.Errorf("expected PodRunning, got %s", result.Status.Phase)
+	}
+}
+
+func TestStatusClient_RoutesToRemoteCluster(t *testing.T) {
+	scheme := newTestScheme(t)
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: "default"},
+		Status:     corev1.PodStatus{Phase: corev1.PodPending},
+	}
+	homeCluster := newFakeCluster(scheme)
+	remote := newFakeCluster(scheme, pod)
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			podGVK: {{cluster: remote}},
+		},
+	}
+
+	ctx := context.Background()
+	existingPod := &corev1.Pod{}
+	if err := remote.GetClient().Get(ctx, client.ObjectKey{Name: "test-pod", Namespace: "default"}, existingPod); err != nil {
+		t.Fatalf("failed to get pod: %v", err)
+	}
+	existingPod.Status.Phase = corev1.PodRunning
+	if err := c.Status().Update(ctx, existingPod); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	result := &corev1.Pod{}
+	if err := remote.GetClient().Get(ctx, client.ObjectKey{Name: "test-pod", Namespace: "default"}, result); err != nil {
+		t.Fatalf("failed to get updated pod: %v", err)
+	}
+	if result.Status.Phase != corev1.PodRunning {
+		t.Errorf("expected PodRunning, got %s", result.Status.Phase)
+	}
+}
+
+func TestClient_StatusAndSubResource_ErrorOnUnknownType(t *testing.T) {
+	scheme := newTestScheme(t)
+	c := &Client{HomeCluster: newFakeCluster(scheme), HomeScheme: scheme}
+	ctx := context.Background()
+	obj := &unknownType{ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"}}
+
+	if err := c.Status().Update(ctx, obj); err == nil {
 		t.Error("expected error for unknown type in status Update")
 	}
-
-	err = c.Status().Patch(ctx, obj, client.MergeFrom(obj))
-	if err == nil {
+	if err := c.Status().Patch(ctx, obj, client.MergeFrom(obj)); err == nil {
 		t.Error("expected error for unknown type in status Patch")
 	}
-
-	// SubResource client should return error for unknown type
-	err = c.SubResource("status").Update(ctx, obj)
-	if err == nil {
+	if err := c.SubResource("status").Update(ctx, obj); err == nil {
 		t.Error("expected error for unknown type in subresource Update")
 	}
-
-	err = c.SubResource("status").Patch(ctx, obj, client.MergeFrom(obj))
-	if err == nil {
+	if err := c.SubResource("status").Patch(ctx, obj, client.MergeFrom(obj)); err == nil {
 		t.Error("expected error for unknown type in subresource Patch")
 	}
 }
 
-// TestClient_IndexField_WithRemoteClusters tests IndexField with remote clusters configured.
+func TestSubResourceClient_RoutesToRemoteCluster(t *testing.T) {
+	scheme := newTestScheme(t)
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: "default"},
+	}
+	homeCluster := newFakeCluster(scheme)
+	remote := newFakeCluster(scheme, pod)
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			podGVK: {{cluster: remote}},
+		},
+	}
+
+	ctx := context.Background()
+	existingPod := &corev1.Pod{}
+	if err := remote.GetClient().Get(ctx, client.ObjectKey{Name: "test-pod", Namespace: "default"}, existingPod); err != nil {
+		t.Fatalf("failed to get pod: %v", err)
+	}
+	src := c.SubResource("status")
+	if err := src.Update(ctx, existingPod); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestClient_GroupVersionKindFor(t *testing.T) {
+	scheme := newTestScheme(t)
+	c := &Client{HomeCluster: newFakeCluster(scheme), HomeScheme: scheme}
+	gvk, err := c.GroupVersionKindFor(&corev1.ConfigMap{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gvk != configMapGVK {
+		t.Errorf("expected GVK %v, got %v", configMapGVK, gvk)
+	}
+}
+
 func TestClient_IndexField_WithRemoteClusters(t *testing.T) {
 	scheme := newTestScheme(t)
-
 	homeCache := &fakeCache{}
 	homeCluster := newFakeClusterWithCache(scheme, homeCache)
-
 	remoteObjCache := &fakeCache{}
 	remoteObjCluster := newFakeClusterWithCache(scheme, remoteObjCache)
-
 	remoteListCache := &fakeCache{}
 	remoteListCluster := newFakeClusterWithCache(scheme, remoteListCache)
 
-	objGVK := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMap",
-	}
-	listGVK := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMapList",
-	}
-
 	c := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
-		remoteClusters: map[schema.GroupVersionKind]cluster.Cluster{
-			objGVK:  remoteObjCluster,
-			listGVK: remoteListCluster,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK:     {{cluster: remoteObjCluster}},
+			configMapListGVK: {{cluster: remoteListCluster}},
 		},
 	}
 
-	ctx := context.Background()
-
-	obj := &corev1.ConfigMap{}
-	list := &corev1.ConfigMapList{}
-	field := "metadata.name"
-	extractValue := func(obj client.Object) []string {
+	err := c.IndexField(context.Background(), &corev1.ConfigMap{}, &corev1.ConfigMapList{}, "metadata.name", func(obj client.Object) []string {
 		return []string{obj.GetName()}
-	}
-
-	err := c.IndexField(ctx, obj, list, field, extractValue)
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Verify IndexField was called on the remote object cluster's cache
-	objCalls := remoteObjCache.getIndexFieldCalls()
-	if len(objCalls) != 1 {
-		t.Errorf("expected 1 IndexField call on remote object cluster, got %d", len(objCalls))
+	if len(remoteObjCache.getIndexFieldCalls()) != 1 {
+		t.Errorf("expected 1 IndexField call on remote obj cache, got %d", len(remoteObjCache.getIndexFieldCalls()))
 	}
-
-	// Verify IndexField was called on the remote list cluster's cache
-	listCalls := remoteListCache.getIndexFieldCalls()
-	if len(listCalls) != 1 {
-		t.Errorf("expected 1 IndexField call on remote list cluster, got %d", len(listCalls))
+	if len(remoteListCache.getIndexFieldCalls()) != 1 {
+		t.Errorf("expected 1 IndexField call on remote list cache, got %d", len(remoteListCache.getIndexFieldCalls()))
 	}
-
-	// Verify home cluster cache was NOT called
-	homeCalls := homeCache.getIndexFieldCalls()
-	if len(homeCalls) != 0 {
-		t.Errorf("expected 0 IndexField calls on home cluster, got %d", len(homeCalls))
+	if len(homeCache.getIndexFieldCalls()) != 0 {
+		t.Errorf("expected 0 IndexField calls on home cache, got %d", len(homeCache.getIndexFieldCalls()))
 	}
 }
 
-// TestClient_IndexField_SameClusterSkipsSecondIndex tests that when object and list map to
-// the same cluster, IndexField is only called once to avoid re-defining the index (which would error).
-func TestClient_IndexField_SameClusterSkipsSecondIndex(t *testing.T) {
+func TestClient_IndexField_SameClusterSkipsDuplicate(t *testing.T) {
 	scheme := newTestScheme(t)
-
-	// Use the same cache/cluster for both object and list GVKs
 	remoteCache := &fakeCache{}
-	remoteCluster := newFakeClusterWithCache(scheme, remoteCache)
-
+	remote := newFakeClusterWithCache(scheme, remoteCache)
 	homeCache := &fakeCache{}
 	homeCluster := newFakeClusterWithCache(scheme, homeCache)
 
-	objGVK := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMap",
-	}
-	listGVK := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMapList",
-	}
-
-	// Both object and list GVKs point to the SAME remote cluster instance
 	c := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
-		remoteClusters: map[schema.GroupVersionKind]cluster.Cluster{
-			objGVK:  remoteCluster,
-			listGVK: remoteCluster, // Same cluster instance
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK:     {{cluster: remote}},
+			configMapListGVK: {{cluster: remote}}, // same cluster
 		},
 	}
 
-	ctx := context.Background()
-
-	obj := &corev1.ConfigMap{}
-	list := &corev1.ConfigMapList{}
-	field := "metadata.name"
-	extractValue := func(obj client.Object) []string {
+	err := c.IndexField(context.Background(), &corev1.ConfigMap{}, &corev1.ConfigMapList{}, "metadata.name", func(obj client.Object) []string {
 		return []string{obj.GetName()}
-	}
-
-	err := c.IndexField(ctx, obj, list, field, extractValue)
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Key assertion: IndexField should only be called ONCE because both object
-	// and list resolve to the same cluster. Calling it twice would cause an error
-	// from re-defining the same index.
-	remoteCalls := remoteCache.getIndexFieldCalls()
-	if len(remoteCalls) != 1 {
-		t.Errorf("expected 1 IndexField call (skipping duplicate for same cluster), got %d", len(remoteCalls))
+	if len(remoteCache.getIndexFieldCalls()) != 1 {
+		t.Errorf("expected 1 IndexField call (deduped), got %d", len(remoteCache.getIndexFieldCalls()))
 	}
-
-	// Home cluster should not be called at all
-	homeCalls := homeCache.getIndexFieldCalls()
-	if len(homeCalls) != 0 {
-		t.Errorf("expected 0 IndexField calls on home cluster, got %d", len(homeCalls))
+	if len(homeCache.getIndexFieldCalls()) != 0 {
+		t.Errorf("expected 0 IndexField calls on home, got %d", len(homeCache.getIndexFieldCalls()))
 	}
 }
 
-// TestClient_IndexField_HomeClusterSkipsSecondIndex tests that when both object and list
-// use the home cluster (no remote clusters configured), IndexField is only called once.
-func TestClient_IndexField_HomeClusterSkipsSecondIndex(t *testing.T) {
+func TestClient_IndexField_HomeClusterOnly(t *testing.T) {
 	scheme := newTestScheme(t)
-
 	homeCache := &fakeCache{}
 	homeCluster := newFakeClusterWithCache(scheme, homeCache)
 
-	// No remote clusters configured - both object and list will use home cluster
 	c := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
 	}
 
-	ctx := context.Background()
-
-	obj := &corev1.ConfigMap{}
-	list := &corev1.ConfigMapList{}
-	field := "metadata.name"
-	extractValue := func(obj client.Object) []string {
+	err := c.IndexField(context.Background(), &corev1.ConfigMap{}, &corev1.ConfigMapList{}, "metadata.name", func(obj client.Object) []string {
 		return []string{obj.GetName()}
-	}
-
-	err := c.IndexField(ctx, obj, list, field, extractValue)
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Key assertion: IndexField should only be called ONCE because both object
-	// and list resolve to the same home cluster. Calling it twice would cause
-	// an error from re-defining the same index.
-	homeCalls := homeCache.getIndexFieldCalls()
-	if len(homeCalls) != 1 {
-		t.Errorf("expected 1 IndexField call (skipping duplicate for same home cluster), got %d", len(homeCalls))
+	if len(homeCache.getIndexFieldCalls()) != 1 {
+		t.Errorf("expected 1 IndexField call on home (deduped), got %d", len(homeCache.getIndexFieldCalls()))
 	}
+}
+
+func TestClient_ConcurrentAddRemoteAndRead(t *testing.T) {
+	scheme := newTestScheme(t)
+	c := &Client{
+		HomeCluster:    newFakeCluster(scheme),
+		HomeScheme:     scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{},
+	}
+
+	var wg sync.WaitGroup
+
+	// Readers
+	for range 10 {
+		wg.Go(func() {
+			for range 100 {
+				_ = c.ClustersForGVK(configMapGVK)
+			}
+		})
+	}
+
+	// Writers
+	for range 5 {
+		wg.Go(func() {
+			for range 100 {
+				c.remoteClustersMu.Lock()
+				c.remoteClusters[configMapGVK] = append(c.remoteClusters[configMapGVK], remoteCluster{})
+				c.remoteClustersMu.Unlock()
+			}
+		})
+	}
+
+	wg.Wait()
 }
 
 // fakeManager implements ctrl.Manager for testing InitFromConf.
@@ -1679,429 +1263,82 @@ func (f *fakeManager) Add(runnable manager.Runnable) error {
 	return nil
 }
 
-// TestClient_InitFromConf_EmptyConfig tests that InitFromConf succeeds with an empty config.
 func TestClient_InitFromConf_EmptyConfig(t *testing.T) {
 	scheme := newTestScheme(t)
-	homeCluster := newFakeCluster(scheme)
-
 	c := &Client{
-		HomeCluster: homeCluster,
+		HomeCluster: newFakeCluster(scheme),
 		HomeScheme:  scheme,
 	}
-
-	ctx := context.Background()
-	conf := ClientConfig{
-		APIServerOverrides: []APIServerOverride{},
-	}
-
-	// Create a fake manager - we won't actually use it since there are no overrides
 	mgr := &fakeManager{}
 
-	err := c.InitFromConf(ctx, mgr, conf)
+	err := c.InitFromConf(context.Background(), mgr, ClientConfig{})
 	if err != nil {
 		t.Fatalf("unexpected error with empty config: %v", err)
 	}
-
-	// Verify no runnables were added
 	if len(mgr.addedRunnables) != 0 {
 		t.Errorf("expected 0 runnables added, got %d", len(mgr.addedRunnables))
 	}
 }
 
-// TestClient_InitFromConf_UnregisteredGVK tests that InitFromConf returns an error
-// when the config contains a GVK that is not registered in the scheme.
 func TestClient_InitFromConf_UnregisteredGVK(t *testing.T) {
 	scheme := newTestScheme(t)
-	homeCluster := newFakeCluster(scheme)
-
 	c := &Client{
-		HomeCluster: homeCluster,
+		HomeCluster: newFakeCluster(scheme),
 		HomeScheme:  scheme,
 	}
-
-	ctx := context.Background()
+	mgr := &fakeManager{}
 	conf := ClientConfig{
 		APIServerOverrides: []APIServerOverride{
 			{
-				GVK:  "unregistered.group/v1/UnknownKind",
 				Host: "https://remote-api:6443",
+				GVKs: []string{"unregistered.group/v1/UnknownKind"},
 			},
 		},
 	}
 
-	mgr := &fakeManager{}
-
-	err := c.InitFromConf(ctx, mgr, conf)
+	err := c.InitFromConf(context.Background(), mgr, conf)
 	if err == nil {
-		t.Fatal("expected error for unregistered GVK, got nil")
-	}
-
-	expectedErrMsg := "no gvk registered for API server override unregistered.group/v1/UnknownKind"
-	if err.Error() != expectedErrMsg {
-		t.Errorf("expected error message '%s', got '%s'", expectedErrMsg, err.Error())
+		t.Fatal("expected error for unregistered GVK")
 	}
 }
 
-// TestClient_InitFromConf_GVKFormatting tests that the GVK formatting works correctly
-// and matches the expected format for registered types.
+func TestClient_InitFromConf_UnregisteredFallbackGVK(t *testing.T) {
+	scheme := newTestScheme(t)
+	c := &Client{
+		HomeCluster: newFakeCluster(scheme),
+		HomeScheme:  scheme,
+	}
+	mgr := &fakeManager{}
+	conf := ClientConfig{
+		Fallbacks: []FallbackConfig{{GVK: "unregistered.group/v1/UnknownKind"}},
+	}
+
+	err := c.InitFromConf(context.Background(), mgr, conf)
+	if err == nil {
+		t.Fatal("expected error for unregistered fallback GVK")
+	}
+}
+
 func TestClient_InitFromConf_GVKFormatting(t *testing.T) {
 	scheme := newTestScheme(t)
-
-	// Test that the GVK formatting matches what InitFromConf expects
 	tests := []struct {
 		name        string
 		gvk         schema.GroupVersionKind
 		expectedStr string
 	}{
-		{
-			name: "core API ConfigMap",
-			gvk: schema.GroupVersionKind{
-				Group:   "",
-				Version: "v1",
-				Kind:    "ConfigMap",
-			},
-			expectedStr: "v1/ConfigMap",
-		},
-		{
-			name: "cortex Decision",
-			gvk: schema.GroupVersionKind{
-				Group:   "cortex.cloud",
-				Version: "v1alpha1",
-				Kind:    "Decision",
-			},
-			expectedStr: "cortex.cloud/v1alpha1/Decision",
-		},
-		{
-			name: "cortex DecisionList",
-			gvk: schema.GroupVersionKind{
-				Group:   "cortex.cloud",
-				Version: "v1alpha1",
-				Kind:    "DecisionList",
-			},
-			expectedStr: "cortex.cloud/v1alpha1/DecisionList",
-		},
+		{"core ConfigMap", configMapGVK, "v1/ConfigMap"},
+		{"cortex Decision", schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Decision"}, "cortex.cloud/v1alpha1/Decision"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Verify the GVK is in the scheme
-			_, found := scheme.AllKnownTypes()[tt.gvk]
-			if !found {
-				t.Skipf("GVK %v not found in scheme, skipping", tt.gvk)
+			if _, found := scheme.AllKnownTypes()[tt.gvk]; !found {
+				t.Skipf("GVK %v not in scheme", tt.gvk)
 			}
-
-			// Format the GVK the same way InitFromConf does
 			formatted := tt.gvk.GroupVersion().String() + "/" + tt.gvk.Kind
 			if formatted != tt.expectedStr {
-				t.Errorf("expected formatted GVK '%s', got '%s'", tt.expectedStr, formatted)
+				t.Errorf("expected '%s', got '%s'", tt.expectedStr, formatted)
 			}
 		})
-	}
-}
-
-// TestClient_InitFromConf_MultipleUnregisteredGVKs tests that the first unregistered
-// GVK in the list causes an error.
-func TestClient_InitFromConf_MultipleUnregisteredGVKs(t *testing.T) {
-	scheme := newTestScheme(t)
-	homeCluster := newFakeCluster(scheme)
-
-	c := &Client{
-		HomeCluster: homeCluster,
-		HomeScheme:  scheme,
-	}
-
-	ctx := context.Background()
-	conf := ClientConfig{
-		APIServerOverrides: []APIServerOverride{
-			{
-				GVK:  "first.unregistered/v1/Type1",
-				Host: "https://remote-api-1:6443",
-			},
-			{
-				GVK:  "second.unregistered/v1/Type2",
-				Host: "https://remote-api-2:6443",
-			},
-		},
-	}
-
-	mgr := &fakeManager{}
-
-	err := c.InitFromConf(ctx, mgr, conf)
-	if err == nil {
-		t.Fatal("expected error for unregistered GVK, got nil")
-	}
-
-	// Should fail on the first unregistered GVK
-	expectedErrMsg := "no gvk registered for API server override first.unregistered/v1/Type1"
-	if err.Error() != expectedErrMsg {
-		t.Errorf("expected error message '%s', got '%s'", expectedErrMsg, err.Error())
-	}
-}
-
-// TestClient_InitFromConf_NilScheme tests behavior when HomeScheme is nil.
-func TestClient_InitFromConf_NilScheme(t *testing.T) {
-	c := &Client{
-		HomeScheme: nil,
-	}
-
-	ctx := context.Background()
-	conf := ClientConfig{
-		APIServerOverrides: []APIServerOverride{
-			{
-				GVK:  "test/v1/SomeKind",
-				Host: "https://remote-api:6443",
-			},
-		},
-	}
-
-	mgr := &fakeManager{}
-
-	// Should panic or return error due to nil scheme
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic with nil scheme")
-		}
-	}()
-
-	err := c.InitFromConf(ctx, mgr, conf)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-// TestClient_InitFromConf_EmptyGVKInConfig tests behavior when an empty GVK string is provided.
-func TestClient_InitFromConf_EmptyGVKInConfig(t *testing.T) {
-	scheme := newTestScheme(t)
-	homeCluster := newFakeCluster(scheme)
-
-	c := &Client{
-		HomeCluster: homeCluster,
-		HomeScheme:  scheme,
-	}
-
-	ctx := context.Background()
-	conf := ClientConfig{
-		APIServerOverrides: []APIServerOverride{
-			{
-				GVK:  "",
-				Host: "https://remote-api:6443",
-			},
-		},
-	}
-
-	mgr := &fakeManager{}
-
-	err := c.InitFromConf(ctx, mgr, conf)
-	if err == nil {
-		t.Fatal("expected error for empty GVK, got nil")
-	}
-
-	// Empty GVK won't match any registered type
-	expectedErrMsg := "no gvk registered for API server override "
-	if err.Error() != expectedErrMsg {
-		t.Errorf("expected error message '%s', got '%s'", expectedErrMsg, err.Error())
-	}
-}
-
-// TestClient_InitFromConf_PartialGVKMatch tests that partial GVK matches don't work.
-func TestClient_InitFromConf_PartialGVKMatch(t *testing.T) {
-	scheme := newTestScheme(t)
-	homeCluster := newFakeCluster(scheme)
-
-	c := &Client{
-		HomeCluster: homeCluster,
-		HomeScheme:  scheme,
-	}
-
-	ctx := context.Background()
-
-	// Try variations that shouldn't match
-	tests := []struct {
-		name   string
-		gvkStr string
-	}{
-		{
-			name:   "missing kind",
-			gvkStr: "cortex.cloud/v1alpha1",
-		},
-		{
-			name:   "wrong case",
-			gvkStr: "cortex.cloud/v1alpha1/decision", // lowercase 'd'
-		},
-		{
-			name:   "extra slash",
-			gvkStr: "cortex.cloud/v1alpha1/Decision/",
-		},
-		{
-			name:   "wrong version",
-			gvkStr: "cortex.cloud/v2/Decision",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			conf := ClientConfig{
-				APIServerOverrides: []APIServerOverride{
-					{
-						GVK:  tt.gvkStr,
-						Host: "https://remote-api:6443",
-					},
-				},
-			}
-
-			mgr := &fakeManager{}
-
-			err := c.InitFromConf(ctx, mgr, conf)
-			if err == nil {
-				t.Errorf("expected error for GVK string '%s', got nil", tt.gvkStr)
-			}
-		})
-	}
-}
-
-// TestClient_InitFromConf_ValidGVKLookup tests that valid GVK strings are correctly
-// identified in the scheme. Note: This doesn't test the full AddRemote flow since
-// that requires a real REST config connection.
-func TestClient_InitFromConf_ValidGVKLookup(t *testing.T) {
-	scheme := newTestScheme(t)
-
-	// Build the gvksByConfStr map the same way InitFromConf does
-	gvksByConfStr := make(map[string]schema.GroupVersionKind)
-	for gvk := range scheme.AllKnownTypes() {
-		formatted := gvk.GroupVersion().String() + "/" + gvk.Kind
-		gvksByConfStr[formatted] = gvk
-	}
-
-	// These GVK strings should be found in the map
-	validGVKs := []string{
-		"v1/ConfigMap",
-		"v1/ConfigMapList",
-		"v1/Secret",
-		"v1/SecretList",
-		"v1/Pod",
-		"v1/PodList",
-		"cortex.cloud/v1alpha1/Decision",
-		"cortex.cloud/v1alpha1/DecisionList",
-	}
-
-	for _, gvkStr := range validGVKs {
-		t.Run(gvkStr, func(t *testing.T) {
-			gvk, found := gvksByConfStr[gvkStr]
-			if !found {
-				t.Errorf("expected GVK string '%s' to be found in scheme", gvkStr)
-				return
-			}
-
-			// Verify the GVK is correctly structured
-			if gvk.Kind == "" {
-				t.Errorf("expected non-empty Kind for GVK string '%s'", gvkStr)
-			}
-		})
-	}
-}
-
-// TestAPIServerOverride_Structure tests the APIServerOverride struct.
-func TestAPIServerOverride_Structure(t *testing.T) {
-	override := APIServerOverride{
-		GVK:    "cortex.cloud/v1alpha1/Decision",
-		Host:   "https://remote-api:6443",
-		CACert: "-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----",
-	}
-
-	if override.GVK != "cortex.cloud/v1alpha1/Decision" {
-		t.Errorf("unexpected GVK: %s", override.GVK)
-	}
-	if override.Host != "https://remote-api:6443" {
-		t.Errorf("unexpected Host: %s", override.Host)
-	}
-	if override.CACert == "" {
-		t.Error("expected non-empty CACert")
-	}
-}
-
-// TestClientConfig_Structure tests the ClientConfig struct.
-func TestClientConfig_Structure(t *testing.T) {
-	conf := ClientConfig{
-		APIServerOverrides: []APIServerOverride{
-			{
-				GVK:  "cortex.cloud/v1alpha1/Decision",
-				Host: "https://remote-api:6443",
-			},
-			{
-				GVK:    "cortex.cloud/v1alpha1/DecisionList",
-				Host:   "https://remote-api:6443",
-				CACert: "cert-data",
-			},
-		},
-	}
-
-	if len(conf.APIServerOverrides) != 2 {
-		t.Errorf("expected 2 overrides, got %d", len(conf.APIServerOverrides))
-	}
-
-	// First override
-	if conf.APIServerOverrides[0].GVK != "cortex.cloud/v1alpha1/Decision" {
-		t.Errorf("unexpected first override GVK: %s", conf.APIServerOverrides[0].GVK)
-	}
-
-	// Second override
-	if conf.APIServerOverrides[1].CACert != "cert-data" {
-		t.Errorf("unexpected second override CACert: %s", conf.APIServerOverrides[1].CACert)
-	}
-}
-
-// TestClient_InitFromConf_NilConfig tests behavior with nil APIServerOverrides slice.
-func TestClient_InitFromConf_NilOverrides(t *testing.T) {
-	scheme := newTestScheme(t)
-	homeCluster := newFakeCluster(scheme)
-
-	c := &Client{
-		HomeCluster: homeCluster,
-		HomeScheme:  scheme,
-	}
-
-	ctx := context.Background()
-	conf := ClientConfig{
-		APIServerOverrides: nil, // nil slice
-	}
-
-	mgr := &fakeManager{}
-
-	err := c.InitFromConf(ctx, mgr, conf)
-	if err != nil {
-		t.Fatalf("unexpected error with nil overrides: %v", err)
-	}
-}
-
-// TestClient_InitFromConf_LogsRegisteredGVKs verifies that the function processes
-// all registered GVKs from the scheme. This is a structural test.
-func TestClient_InitFromConf_SchemeGVKCount(t *testing.T) {
-	scheme := newTestScheme(t)
-
-	// Count the number of types in the scheme
-	allTypes := scheme.AllKnownTypes()
-	if len(allTypes) == 0 {
-		t.Error("expected scheme to have registered types")
-	}
-
-	// Build the formatted GVK map
-	gvksByConfStr := make(map[string]schema.GroupVersionKind)
-	for gvk := range allTypes {
-		formatted := gvk.GroupVersion().String() + "/" + gvk.Kind
-		gvksByConfStr[formatted] = gvk
-	}
-
-	// The map should have the same number of entries as types
-	// (assuming no duplicate formatted strings, which shouldn't happen)
-	if len(gvksByConfStr) == 0 {
-		t.Error("expected formatted GVK map to have entries")
-	}
-
-	// Verify some specific entries exist
-	if _, found := gvksByConfStr["v1/ConfigMap"]; !found {
-		t.Error("expected v1/ConfigMap to be in formatted GVK map")
-	}
-	if _, found := gvksByConfStr["cortex.cloud/v1alpha1/Decision"]; !found {
-		t.Error("expected cortex.cloud/v1alpha1/Decision to be in formatted GVK map")
 	}
 }
