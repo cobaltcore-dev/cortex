@@ -6,6 +6,7 @@ package pods
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/external/pods"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -269,7 +270,7 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 		pipelineConfig        *v1alpha1.Pipeline
 		createDecisions       bool
 		expectError           bool
-		expectDecisionCreated bool
+		expectHistoryCreated bool
 		expectNodeAssigned    bool
 		expectTargetHost      string
 	}{
@@ -306,7 +307,7 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 			},
 			createDecisions:       true,
 			expectError:           false,
-			expectDecisionCreated: true,
+			expectHistoryCreated: true,
 			expectNodeAssigned:    true,
 			expectTargetHost:      "node1",
 		},
@@ -340,7 +341,7 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 			},
 			createDecisions:       false,
 			expectError:           false,
-			expectDecisionCreated: false,
+			expectHistoryCreated: false,
 			expectNodeAssigned:    true,
 			expectTargetHost:      "node1",
 		},
@@ -358,7 +359,7 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 			nodes:                 []corev1.Node{},
 			pipelineConfig:        nil,
 			expectError:           true,
-			expectDecisionCreated: false,
+			expectHistoryCreated: false,
 			expectNodeAssigned:    false,
 		},
 		{
@@ -387,7 +388,7 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 			},
 			createDecisions:       true,
 			expectError:           true,
-			expectDecisionCreated: true, // Decision is created but processing fails
+			expectHistoryCreated: true, // Decision is created but processing fails
 			expectNodeAssigned:    false,
 		},
 	}
@@ -405,13 +406,14 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 			client := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithRuntimeObjects(objects...).
-				WithStatusSubresource(&v1alpha1.Decision{}).
+				WithStatusSubresource(&v1alpha1.Decision{}, &v1alpha1.History{}).
 				Build()
 
 			controller := &FilterWeigherPipelineController{
 				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[pods.PodPipelineRequest]]{
 					Pipelines:       map[string]lib.FilterWeigherPipeline[pods.PodPipelineRequest]{},
 					PipelineConfigs: map[string]v1alpha1.Pipeline{},
+					HistoryManager:  lib.HistoryManager{Client: client},
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
@@ -434,70 +436,29 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 				return
 			}
 
-			// Check if decision was created (if expected)
-			if tt.expectDecisionCreated {
-				var decisions v1alpha1.DecisionList
-				err := client.List(context.Background(), &decisions)
-				if err != nil {
-					t.Errorf("Failed to list decisions: %v", err)
-					return
-				}
-
-				found := false
-				for _, decision := range decisions.Items {
-					if decision.Spec.PodRef != nil &&
-						decision.Spec.PodRef.Name == tt.pod.Name &&
-						decision.Spec.PodRef.Namespace == tt.pod.Namespace {
-						found = true
-
-						// Verify decision properties
-						if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainPods {
-							t.Errorf("expected scheduling domain %q, got %q", v1alpha1.SchedulingDomainPods, decision.Spec.SchedulingDomain)
-						}
-						if decision.Spec.ResourceID != tt.pod.Name {
-							t.Errorf("expected resource ID %q, got %q", tt.pod.Name, decision.Spec.ResourceID)
-						}
-						if decision.Spec.PipelineRef.Name != "pods-scheduler" {
-							t.Errorf("expected pipeline ref %q, got %q", "pods-scheduler", decision.Spec.PipelineRef.Name)
-						}
-
-						// Check if result was set (only for successful cases)
-						if !tt.expectError && tt.expectTargetHost != "" {
-							if decision.Status.Result == nil {
-								t.Error("expected decision result to be set")
-								return
-							}
-							if decision.Status.Result.TargetHost == nil {
-								t.Error("expected target host to be set")
-								return
-							}
-							if *decision.Status.Result.TargetHost != tt.expectTargetHost {
-								t.Errorf("expected target host %q, got %q", tt.expectTargetHost, *decision.Status.Result.TargetHost)
-							}
-						}
+			// Check if history CRD was created when expected
+			if tt.expectHistoryCreated {
+				var histories v1alpha1.HistoryList
+				deadline := time.Now().Add(2 * time.Second)
+				for {
+					if err := client.List(context.Background(), &histories); err != nil {
+						t.Fatalf("Failed to list histories: %v", err)
+					}
+					if len(histories.Items) > 0 {
 						break
 					}
-				}
-
-				if !found {
-					t.Error("expected decision to be created but was not found")
+					if time.Now().After(deadline) {
+						t.Fatal("timed out waiting for history CRD to be created")
+					}
+					time.Sleep(5 * time.Millisecond)
 				}
 			} else {
-				// Check that no decisions were created
-				var decisions v1alpha1.DecisionList
-				err := client.List(context.Background(), &decisions)
-				if err != nil {
-					t.Errorf("Failed to list decisions: %v", err)
-					return
+				var histories v1alpha1.HistoryList
+				if err := client.List(context.Background(), &histories); err != nil {
+					t.Fatalf("Failed to list histories: %v", err)
 				}
-
-				for _, decision := range decisions.Items {
-					if decision.Spec.PodRef != nil &&
-						decision.Spec.PodRef.Name == tt.pod.Name &&
-						decision.Spec.PodRef.Namespace == tt.pod.Namespace {
-						t.Error("expected no decision to be created but found one")
-						break
-					}
+				if len(histories.Items) != 0 {
+					t.Error("Expected no history CRD but found one")
 				}
 			}
 

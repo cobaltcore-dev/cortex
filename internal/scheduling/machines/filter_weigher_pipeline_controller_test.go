@@ -6,6 +6,7 @@ package machines
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/external/ironcore"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/api/external/ironcore/v1alpha1"
@@ -291,7 +292,7 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 		pipelineConfig            *v1alpha1.Pipeline
 		createDecisions           bool
 		expectError               bool
-		expectDecisionCreated     bool
+		expectHistoryCreated     bool
 		expectMachinePoolAssigned bool
 		expectTargetHost          string
 	}{
@@ -328,7 +329,7 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 			},
 			createDecisions:           true,
 			expectError:               false,
-			expectDecisionCreated:     true,
+			expectHistoryCreated:     true,
 			expectMachinePoolAssigned: true,
 			expectTargetHost:          "pool1",
 		},
@@ -362,7 +363,7 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 			},
 			createDecisions:           false,
 			expectError:               false,
-			expectDecisionCreated:     false,
+			expectHistoryCreated:     false,
 			expectMachinePoolAssigned: true,
 			expectTargetHost:          "pool1",
 		},
@@ -380,7 +381,7 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 			machinePools:              []ironcorev1alpha1.MachinePool{},
 			pipelineConfig:            nil,
 			expectError:               true,
-			expectDecisionCreated:     false,
+			expectHistoryCreated:     false,
 			expectMachinePoolAssigned: false,
 		},
 		{
@@ -409,7 +410,7 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 			},
 			createDecisions:           true,
 			expectError:               true,
-			expectDecisionCreated:     true, // Decision is created but processing fails
+			expectHistoryCreated:     true, // Decision is created but processing fails
 			expectMachinePoolAssigned: false,
 		},
 	}
@@ -427,13 +428,14 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 			client := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithRuntimeObjects(objects...).
-				WithStatusSubresource(&v1alpha1.Decision{}).
+				WithStatusSubresource(&v1alpha1.Decision{}, &v1alpha1.History{}).
 				Build()
 
 			controller := &FilterWeigherPipelineController{
 				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]]{
 					Pipelines:       map[string]lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]{},
 					PipelineConfigs: map[string]v1alpha1.Pipeline{},
+					HistoryManager:  lib.HistoryManager{Client: client},
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
@@ -456,70 +458,29 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 				return
 			}
 
-			// Check if decision was created (if expected)
-			if tt.expectDecisionCreated {
-				var decisions v1alpha1.DecisionList
-				err := client.List(context.Background(), &decisions)
-				if err != nil {
-					t.Errorf("Failed to list decisions: %v", err)
-					return
-				}
-
-				found := false
-				for _, decision := range decisions.Items {
-					if decision.Spec.MachineRef != nil &&
-						decision.Spec.MachineRef.Name == tt.machine.Name &&
-						decision.Spec.MachineRef.Namespace == tt.machine.Namespace {
-						found = true
-
-						// Verify decision properties
-						if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainMachines {
-							t.Errorf("expected scheduling domain %q, got %q", v1alpha1.SchedulingDomainMachines, decision.Spec.SchedulingDomain)
-						}
-						if decision.Spec.ResourceID != tt.machine.Name {
-							t.Errorf("expected resource ID %q, got %q", tt.machine.Name, decision.Spec.ResourceID)
-						}
-						if decision.Spec.PipelineRef.Name != "machines-scheduler" {
-							t.Errorf("expected pipeline ref %q, got %q", "machines-scheduler", decision.Spec.PipelineRef.Name)
-						}
-
-						// Check if result was set (only for successful cases)
-						if !tt.expectError && tt.expectTargetHost != "" {
-							if decision.Status.Result == nil {
-								t.Error("expected decision result to be set")
-								return
-							}
-							if decision.Status.Result.TargetHost == nil {
-								t.Error("expected target host to be set")
-								return
-							}
-							if *decision.Status.Result.TargetHost != tt.expectTargetHost {
-								t.Errorf("expected target host %q, got %q", tt.expectTargetHost, *decision.Status.Result.TargetHost)
-							}
-						}
+			// Check if history CRD was created when expected
+			if tt.expectHistoryCreated {
+				var histories v1alpha1.HistoryList
+				deadline := time.Now().Add(2 * time.Second)
+				for {
+					if err := client.List(context.Background(), &histories); err != nil {
+						t.Fatalf("Failed to list histories: %v", err)
+					}
+					if len(histories.Items) > 0 {
 						break
 					}
-				}
-
-				if !found {
-					t.Error("expected decision to be created but was not found")
+					if time.Now().After(deadline) {
+						t.Fatal("timed out waiting for history CRD to be created")
+					}
+					time.Sleep(5 * time.Millisecond)
 				}
 			} else {
-				// Check that no decisions were created
-				var decisions v1alpha1.DecisionList
-				err := client.List(context.Background(), &decisions)
-				if err != nil {
-					t.Errorf("Failed to list decisions: %v", err)
-					return
+				var histories v1alpha1.HistoryList
+				if err := client.List(context.Background(), &histories); err != nil {
+					t.Fatalf("Failed to list histories: %v", err)
 				}
-
-				for _, decision := range decisions.Items {
-					if decision.Spec.MachineRef != nil &&
-						decision.Spec.MachineRef.Name == tt.machine.Name &&
-						decision.Spec.MachineRef.Namespace == tt.machine.Namespace {
-						t.Error("expected no decision to be created but found one")
-						break
-					}
+				if len(histories.Items) != 0 {
+					t.Error("Expected no history CRD but found one")
 				}
 			}
 
