@@ -264,15 +264,15 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                  string
-		pod                   *corev1.Pod
-		nodes                 []corev1.Node
-		pipelineConfig        *v1alpha1.Pipeline
-		createDecisions       bool
-		expectError           bool
+		name                 string
+		pod                  *corev1.Pod
+		nodes                []corev1.Node
+		pipelineConfig       *v1alpha1.Pipeline
+		createDecisions      bool
+		expectError          bool
 		expectHistoryCreated bool
-		expectNodeAssigned    bool
-		expectTargetHost      string
+		expectNodeAssigned   bool
+		expectTargetHost     string
 	}{
 		{
 			name: "successful pod processing with decision creation",
@@ -305,11 +305,11 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createDecisions:       true,
-			expectError:           false,
+			createDecisions:      true,
+			expectError:          false,
 			expectHistoryCreated: true,
-			expectNodeAssigned:    true,
-			expectTargetHost:      "node1",
+			expectNodeAssigned:   true,
+			expectTargetHost:     "node1",
 		},
 		{
 			name: "successful pod processing without decision creation",
@@ -339,11 +339,11 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createDecisions:       false,
-			expectError:           false,
+			createDecisions:      false,
+			expectError:          false,
 			expectHistoryCreated: false,
-			expectNodeAssigned:    true,
-			expectTargetHost:      "node1",
+			expectNodeAssigned:   true,
+			expectTargetHost:     "node1",
 		},
 		{
 			name: "pipeline not configured",
@@ -356,11 +356,11 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 					SchedulerName: "",
 				},
 			},
-			nodes:                 []corev1.Node{},
-			pipelineConfig:        nil,
-			expectError:           true,
+			nodes:                []corev1.Node{},
+			pipelineConfig:       nil,
+			expectError:          true,
 			expectHistoryCreated: false,
-			expectNodeAssigned:    false,
+			expectNodeAssigned:   false,
 		},
 		{
 			name: "no nodes available",
@@ -386,10 +386,10 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createDecisions:       true,
-			expectError:           true,
+			createDecisions:      true,
+			expectError:          true,
 			expectHistoryCreated: true, // Decision is created but processing fails
-			expectNodeAssigned:    false,
+			expectNodeAssigned:   false,
 		},
 	}
 

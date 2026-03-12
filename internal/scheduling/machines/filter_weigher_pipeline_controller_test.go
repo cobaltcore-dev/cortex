@@ -292,7 +292,7 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 		pipelineConfig            *v1alpha1.Pipeline
 		createDecisions           bool
 		expectError               bool
-		expectHistoryCreated     bool
+		expectHistoryCreated      bool
 		expectMachinePoolAssigned bool
 		expectTargetHost          string
 	}{
@@ -329,7 +329,7 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 			},
 			createDecisions:           true,
 			expectError:               false,
-			expectHistoryCreated:     true,
+			expectHistoryCreated:      true,
 			expectMachinePoolAssigned: true,
 			expectTargetHost:          "pool1",
 		},
@@ -363,7 +363,7 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 			},
 			createDecisions:           false,
 			expectError:               false,
-			expectHistoryCreated:     false,
+			expectHistoryCreated:      false,
 			expectMachinePoolAssigned: true,
 			expectTargetHost:          "pool1",
 		},
@@ -381,7 +381,7 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 			machinePools:              []ironcorev1alpha1.MachinePool{},
 			pipelineConfig:            nil,
 			expectError:               true,
-			expectHistoryCreated:     false,
+			expectHistoryCreated:      false,
 			expectMachinePoolAssigned: false,
 		},
 		{
@@ -410,7 +410,7 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 			},
 			createDecisions:           true,
 			expectError:               true,
-			expectHistoryCreated:     true, // Decision is created but processing fails
+			expectHistoryCreated:      true, // Decision is created but processing fails
 			expectMachinePoolAssigned: false,
 		},
 	}

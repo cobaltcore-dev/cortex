@@ -248,13 +248,13 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 	}
 
 	tests := []struct {
-		name                  string
-		decision              *v1alpha1.Decision
-		pipelineConfig        *v1alpha1.Pipeline
-		createDecisions       bool
-		expectError           bool
+		name                 string
+		decision             *v1alpha1.Decision
+		pipelineConfig       *v1alpha1.Pipeline
+		createDecisions      bool
+		expectError          bool
 		expectHistoryCreated bool
-		expectResult          bool
+		expectResult         bool
 	}{
 		{
 			name: "successful decision processing with creation",
@@ -286,10 +286,10 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createDecisions:       true,
-			expectError:           false,
+			createDecisions:      true,
+			expectError:          false,
 			expectHistoryCreated: true,
-			expectResult:          true,
+			expectResult:         true,
 		},
 		{
 			name: "successful decision processing without creation",
@@ -320,10 +320,10 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createDecisions:       false,
-			expectError:           false,
+			createDecisions:      false,
+			expectError:          false,
 			expectHistoryCreated: false,
-			expectResult:          true,
+			expectResult:         true,
 		},
 		{
 			name: "pipeline not configured",
@@ -342,10 +342,10 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					},
 				},
 			},
-			pipelineConfig:        nil,
-			expectError:           true,
+			pipelineConfig:       nil,
+			expectError:          true,
 			expectHistoryCreated: false,
-			expectResult:          false,
+			expectResult:         false,
 		},
 		{
 			name: "decision without cinderRaw spec",
@@ -374,10 +374,10 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createDecisions:       true,
-			expectError:           true,
+			createDecisions:      true,
+			expectError:          true,
 			expectHistoryCreated: false,
-			expectResult:          false,
+			expectResult:         false,
 		},
 	}
 

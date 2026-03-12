@@ -118,6 +118,7 @@ func (h *HistoryManager) Upsert(
 	intent v1alpha1.SchedulingIntent,
 	pipelineErr error,
 ) error {
+
 	log := ctrl.LoggerFrom(ctx)
 
 	name := getName(decision.Spec.SchedulingDomain, decision.Spec.ResourceID)
@@ -241,6 +242,7 @@ func (h *HistoryManager) Delete(
 	schedulingDomain v1alpha1.SchedulingDomain,
 	resourceID string,
 ) error {
+
 	log := ctrl.LoggerFrom(ctx)
 	name := getName(schedulingDomain, resourceID)
 
