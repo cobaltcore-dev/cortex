@@ -13,8 +13,8 @@ import (
 )
 
 // handles POST /v1/report-capacity requests from Limes:
-// See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/capacity.go
-// See: https://github.com/sapcc/limes/blob/master/docs/operators/liquid.md
+// See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/commitment.go
+// See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid
 // Reports available capacity across all flavor group resources. Note, unit is specified in the Info API response with multiple of the smallest memory resource unit within a flavor group.
 func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request) {
 	// Extract or generate request ID for tracing

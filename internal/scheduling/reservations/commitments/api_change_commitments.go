@@ -32,7 +32,7 @@ const (
 
 // implements POST /v1/change-commitments from Limes LIQUID API:
 // See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/commitment.go
-// See: https://github.com/sapcc/limes/blob/master/docs/operators/liquid.md
+// See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid
 //
 // This endpoint handles commitment changes by creating/updating/deleting Reservation CRDs based on the commitment lifecycle.
 // A request may contain multiple commitment changes which are processed in a single transaction. If any change fails, all changes are rolled back.

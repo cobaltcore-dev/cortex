@@ -17,8 +17,8 @@ import (
 )
 
 // handles GET /v1/info requests from Limes:
-// See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/info.go
-// See: https://github.com/sapcc/limes/blob/master/docs/operators/liquid.md
+// See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/commitment.go
+// See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid
 func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
 	// Extract or generate request ID for tracing
 	requestID := r.Header.Get("X-Request-ID")
