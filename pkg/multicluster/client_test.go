@@ -452,7 +452,9 @@ func TestGVKFromHomeScheme_NilScheme(t *testing.T) {
 			t.Error("expected panic with nil scheme")
 		}
 	}()
-	_, _ = c.GVKFromHomeScheme(&corev1.ConfigMap{})
+	if _, err := c.GVKFromHomeScheme(&corev1.ConfigMap{}); err == nil {
+		t.Error("expected panic with nil scheme")
+	}
 }
 
 func TestClient_Get_SingleRemoteCluster(t *testing.T) {
@@ -963,7 +965,10 @@ func TestClient_DeleteAllOf_MultipleClusters(t *testing.T) {
 
 	for i, remote := range []*fakeCluster{remote1, remote2} {
 		cmList := &corev1.ConfigMapList{}
-		_ = remote.GetClient().List(context.Background(), cmList, client.InNamespace("default"))
+		if err := remote.GetClient().List(context.Background(), cmList, client.InNamespace("default")); err != nil {
+			t.Fatalf("failed to list objects in remote%d: %v", i+1, err)
+		}
+
 		if len(cmList.Items) != 0 {
 			t.Errorf("expected 0 items in remote%d, got %d", i+1, len(cmList.Items))
 		}

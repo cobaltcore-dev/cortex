@@ -520,7 +520,6 @@ func (c *Client) IndexField(ctx context.Context, obj client.Object, list client.
 		return err
 	}
 	// Collect all unique caches to index.
-	type cacheKey struct{}
 	indexed := make(map[any]bool)
 	for _, cl := range c.ClustersForGVK(gvkObj) {
 		ch := cl.GetCache()
