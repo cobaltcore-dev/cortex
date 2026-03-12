@@ -111,22 +111,22 @@ func DecisionsCleanup(ctx context.Context, client client.Client, conf DecisionsC
 	}
 
 	// List all decisions and delete those whose share no longer exists.
-	decisionList := &v1alpha1.DecisionList{}
-	if err := client.List(ctx, decisionList); err != nil {
+	historyList := &v1alpha1.HistoryList{}
+	if err := client.List(ctx, historyList); err != nil {
 		return err
 	}
-	for _, decision := range decisionList.Items {
-		// Skip non-manila decisions.
-		if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainManila {
+	for _, history := range historyList.Items {
+		// Skip non-manila histories.
+		if history.Spec.SchedulingDomain != v1alpha1.SchedulingDomainManila {
 			continue
 		}
-		// Skip decisions for which the share still exists.
-		if _, ok := sharesByID[decision.Spec.ResourceID]; ok {
+		// Skip histories for which the share still exists.
+		if _, ok := sharesByID[history.Spec.ResourceID]; ok {
 			continue
 		}
-		// Delete the decision since the share no longer exists.
-		slog.Info("deleting decision for deleted share", "decision", decision.Name, "shareID", decision.Spec.ResourceID)
-		if err := client.Delete(ctx, &decision); err != nil {
+		// Delete the history since the share no longer exists.
+		slog.Info("deleting history for deleted share", "history", history.Name, "shareID", history.Spec.ResourceID)
+		if err := client.Delete(ctx, &history); err != nil {
 			return err
 		}
 	}

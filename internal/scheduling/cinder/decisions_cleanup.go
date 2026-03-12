@@ -107,22 +107,22 @@ func DecisionsCleanup(ctx context.Context, client client.Client, conf DecisionsC
 	}
 
 	// List all decisions and delete those whose volume no longer exists.
-	decisionList := &v1alpha1.DecisionList{}
-	if err := client.List(ctx, decisionList); err != nil {
+	historyList := &v1alpha1.HistoryList{}
+	if err := client.List(ctx, historyList); err != nil {
 		return err
 	}
-	for _, decision := range decisionList.Items {
+	for _, history := range historyList.Items {
 		// Skip non-cinder decisions.
-		if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainCinder {
+		if history.Spec.SchedulingDomain != v1alpha1.SchedulingDomainCinder {
 			continue
 		}
 		// Skip decisions for which the volume still exists.
-		if _, ok := volumesByID[decision.Spec.ResourceID]; ok {
+		if _, ok := volumesByID[history.Spec.ResourceID]; ok {
 			continue
 		}
 		// Delete the decision since the volume no longer exists.
-		slog.Info("deleting decision for deleted volume", "decision", decision.Name, "volumeID", decision.Spec.ResourceID)
-		if err := client.Delete(ctx, &decision); err != nil {
+		slog.Info("deleting decision for deleted volume", "decision", history.Name, "volumeID", history.Spec.ResourceID)
+		if err := client.Delete(ctx, &history); err != nil {
 			return err
 		}
 	}
