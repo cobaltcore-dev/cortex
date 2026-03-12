@@ -183,6 +183,9 @@ func (c *FailoverReservationController) validateReservation(ctx context.Context,
 			return false
 		}
 
+		// TODO we just invalidate the entire reservation if one VM is not placable anymore
+		// That is probably ok as most likely due to concurrency we just do not have space and then all VMs are affected
+		// but it is also possible that it can be because of anti-affinity rules
 		if !valid {
 			log.Info("VM failed validation for reservation host",
 				"reservationName", res.Name,
@@ -490,7 +493,8 @@ func reconcileRemoveEmptyReservations(
 
 // selectVMsToProcess selects a subset of VMs to process based on MaxVMsToProcess limit.
 // VMs are sorted by memory (largest first) to prioritize large VMs for failover reservations.
-// A rotating offset (every 4 reconciliations) ensures different VMs are tried
+// 3 out of 4 reconciliations start at offset 0 (process largest VMs first).
+// Every 4th reconciliation uses a rotating offset to try different VMs
 // if the largest VMs consistently fail to get reservations.
 func (c *FailoverReservationController) selectVMsToProcess(
 	vmsMissingFailover []vmFailoverNeed,
@@ -508,9 +512,12 @@ func (c *FailoverReservationController) selectVMsToProcess(
 		return vmsMissingFailover, false
 	}
 
-	// Rotate every 4 reconciliations to try different VMs if large ones fail
-	rotationPeriod := int64(4)
-	offset := int((c.reconcileCount / rotationPeriod) % int64(len(vmsMissingFailover)))
+	// 3 out of 4 runs start at offset 0, every 4th run uses reconcileCount as offset
+	offset := 0
+	if c.reconcileCount%4 == 0 {
+		// Every 4th reconciliation, use reconcileCount as offset (mod vmCount to wrap around)
+		offset = int(c.reconcileCount) % len(vmsMissingFailover)
+	}
 
 	// Select VMs starting from offset, wrapping around
 	selected = make([]vmFailoverNeed, 0, maxToProcess)
@@ -523,8 +530,7 @@ func (c *FailoverReservationController) selectVMsToProcess(
 		"totalVMsMissingFailover", len(vmsMissingFailover),
 		"maxToProcess", maxToProcess,
 		"offset", offset,
-		"reconcileCount", c.reconcileCount,
-		"rotationPeriod", rotationPeriod)
+		"reconcileCount", c.reconcileCount)
 
 	return selected, true
 }
@@ -804,12 +810,6 @@ func (c *FailoverReservationController) Start(ctx context.Context) error {
 		"schedulerURL", c.Config.SchedulerURL,
 		"flavorFailoverRequirements", c.Config.FlavorFailoverRequirements,
 		"maxVMsToProcess", c.Config.MaxVMsToProcess)
-
-	// Run initial reconciliation
-	if _, err := c.ReconcilePeriodic(ctx); err != nil {
-		log.Error(err, "initial failover reconciliation failed")
-		// Don't return error - continue with periodic reconciliation
-	}
 
 	// Set up periodic reconciliation
 	ticker := time.NewTicker(c.Config.ReconcileInterval)

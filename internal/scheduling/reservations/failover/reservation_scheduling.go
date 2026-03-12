@@ -213,9 +213,21 @@ func (c *FailoverReservationController) validateVmViaSchedulerEvacuation(
 		return false, fmt.Errorf("failed to validate VM for reservation host: %w", err)
 	}
 
+	// Handle empty response - no hosts returned
+	if len(resp.Hosts) < 1 {
+		return false, nil
+	}
+
+	// Log unexpected scheduler responses
+	if len(resp.Hosts) > 1 || resp.Hosts[0] != reservationHost {
+		log.Error(nil, "scheduler returned unexpected hosts for single-host validation request",
+			"vmUUID", vm.UUID,
+			"reservationHost", reservationHost,
+			"returnedHosts", resp.Hosts)
+	}
+
 	// If the reservation host is returned, the VM can use it
-	isValid := len(resp.Hosts) > 0 && resp.Hosts[0] == reservationHost
-	return isValid, nil
+	return resp.Hosts[0] == reservationHost, nil
 }
 
 // scheduleAndBuildNewFailoverReservation schedules a failover reservation for a VM.
