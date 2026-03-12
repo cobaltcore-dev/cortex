@@ -30,7 +30,12 @@ const (
 	pollInterval = 1 * time.Second
 )
 
-// HandleChangeCommitments implements POST /v1/change-commitments from Limes LIQUID API.
+// implements POST /v1/change-commitments from Limes LIQUID API:
+// See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/commitment.go
+// See: https://github.com/sapcc/limes/blob/master/docs/operators/liquid.md
+//
+// This endpoint handles commitment changes by creating/updating/deleting Reservation CRDs based on the commitment lifecycle.
+// A request may contain multiple commitment changes which are processed in a single transaction. If any change fails, all changes are rolled back.
 func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Request) {
 	// Serialize all change-commitments requests
 	api.changeMutex.Lock()

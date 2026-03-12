@@ -27,7 +27,21 @@ func NewReservationManager(k8sClient client.Client) *ReservationManager {
 	}
 }
 
-// ApplyCommitmentState applies CRUD on Reservation CRDs to match desired commitment state.
+// ApplyCommitmentState synchronizes Reservation CRDs to match the desired commitment state.
+// This function performs CRUD operations (create/update/delete) on reservation slots to align
+// with the capacity specified in desiredState.
+//
+// Entry points:
+//   - from Syncer - periodic sync with Limes state
+//   - from API ChangeCommitmentsHandler - batch processing of commitment changes
+//
+// The function is idempotent and handles:
+//   - Repairing inconsistent slots (wrong flavor group/project)
+//   - Creating new reservation slots when capacity increases
+//   - Deleting unused/excess slots when capacity decreases
+//   - Syncing reservation metadata for all remaining slots
+//
+// Returns touched reservations (created/updated) and removed reservations for caller tracking.
 func (m *ReservationManager) ApplyCommitmentState(
 	ctx context.Context,
 	log logr.Logger,
@@ -38,7 +52,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 
 	log = log.WithName("ReservationManager")
 
-	// List all committed resource reservations, then filter by name prefix
+	// Phase 1: List and filter existing reservations for this commitment
 	var allReservations v1alpha1.ReservationList
 	if err := m.List(ctx, &allReservations, client.MatchingLabels{
 		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
@@ -55,7 +69,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 		}
 	}
 
-	// Calculate the delta between existing and desired state
+	// Phase 2: Calculate memory delta (desired - current)
 	flavorGroup, exists := flavorGroups[desiredState.FlavorGroupName]
 
 	if !exists {
@@ -76,7 +90,8 @@ func (m *ReservationManager) ApplyCommitmentState(
 
 	nextSlotIndex := GetNextSlotIndex(existing)
 
-	// check all reservations for flavor group/project consistency; on mismatch, delete reservation and re-create later
+	// Phase 3 (DELETE): Delete inconsistent reservations (wrong flavor group/project)
+	// They will be recreated with correct metadata in subsequent phases.
 	var validReservations []v1alpha1.Reservation
 	for _, res := range existing {
 		if res.Spec.CommittedResourceReservation.ResourceGroup != desiredState.FlavorGroupName ||
@@ -101,9 +116,9 @@ func (m *ReservationManager) ApplyCommitmentState(
 	}
 	existing = validReservations
 
-	// remove reservations if needed (DELETE)
+	// Phase 4 (DELETE): Remove reservations (capacity decreased)
 	for deltaMemoryBytes < 0 && len(existing) > 0 {
-		// find next unused reservation slot or simply last one
+		// prefer unused reservation slot or simply remove last one
 		var reservationToDelete *v1alpha1.Reservation
 		for i, res := range existing {
 			if len(res.Spec.CommittedResourceReservation.Allocations) == 0 {
@@ -132,9 +147,10 @@ func (m *ReservationManager) ApplyCommitmentState(
 		}
 	}
 
-	// Add new reservations if needed (CREATE)
+	// Phase 5 (CREATE): Create new reservations (capacity increased)
 	for deltaMemoryBytes > 0 {
-		// Need to create new reservation slots
+		// Need to create new reservation slots, always prefer largest flavor within the group
+		// TODO more sophisticated flavor selection, especially with flavors of different cpu/memory ratio
 		reservation := m.newReservation(desiredState, nextSlotIndex, deltaMemoryBytes, flavorGroup, creator)
 		touchedReservations = append(touchedReservations, *reservation)
 		memValue := reservation.Spec.Resources["memory"]
@@ -160,7 +176,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 		nextSlotIndex++
 	}
 
-	// Sync metadata for all remaining reservations (UPDATE)
+	// Phase 6 (UPDATE): Sync metadata for remaining reservations
 	for i := range existing {
 		updated, err := m.syncReservationMetadata(ctx, log, &existing[i], desiredState)
 		if err != nil {

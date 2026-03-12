@@ -16,8 +16,9 @@ import (
 	liquid "github.com/sapcc/go-api-declarations/liquid"
 )
 
-// HandleInfo handles GET /v1/info requests from Limes.
-// Returns metadata about available resources (flavor groups).
+// handles GET /v1/info requests from Limes:
+// See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/info.go
+// See: https://github.com/sapcc/limes/blob/master/docs/operators/liquid.md
 func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
 	// Extract or generate request ID for tracing
 	requestID := r.Header.Get("X-Request-ID")
@@ -69,35 +70,34 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, log logr.Logger) (liqu
 	// Build resources map
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo)
 	for groupName, groupData := range flavorGroups {
-		// Resource name follows pattern: ram_<flavorgroup>
 		resourceName := liquid.ResourceName("ram_" + groupName)
 
-		// Calculate unit based on smallest flavor's RAM (in MB)
-		// Unit represents the multiple of the smallest flavor
-		smallestRAM := groupData.SmallestFlavor.MemoryMB
-		unit := fmt.Sprintf("%d MiB", smallestRAM)
-
-		// Build flavor names list for display
-		flavorNames := make([]string, len(groupData.Flavors))
-		for i, flavor := range groupData.Flavors {
-			flavorNames[i] = flavor.Name
+		flavorNames := make([]string, 0, len(groupData.Flavors))
+		for _, flavor := range groupData.Flavors {
+			flavorNames = append(flavorNames, flavor.Name)
 		}
+		displayName := fmt.Sprintf(
+			"multiples of %d MiB (usable by: %s)",
+			groupData.SmallestFlavor.MemoryMB,
+			strings.Join(flavorNames, ", "),
+		)
 
 		resources[resourceName] = liquid.ResourceInfo{
-			DisplayName:         strings.Join(flavorNames, ", "), // join all flavor names within the group
-			Unit:                liquid.UnitMebibytes,            // RAM is measured in MiB
-			Topology:            liquid.AZAwareTopology,          // Commitments are per-AZ
-			NeedsResourceDemand: false,                           // Capacity planning out of scope for now
-			HasCapacity:         true,                            // We report capacity via /v1/report-capacity
-			HasQuota:            false,                           // No quota enforcement as of now
+			DisplayName:         displayName,
+			Unit:                liquid.UnitNone,        // Countable: multiples of smallest flavor instances
+			Topology:            liquid.AZAwareTopology, // Commitments are per-AZ
+			NeedsResourceDemand: false,                  // Capacity planning out of scope for now
+			HasCapacity:         true,                   // We report capacity via /v1/report-capacity
+			HasQuota:            false,                  // No quota enforcement as of now
+			HandlesCommitments:  true,                   // We handle commitment changes via /v1/change-commitments
 		}
 
 		log.V(1).Info("registered flavor group resource",
 			"resourceName", resourceName,
 			"flavorGroup", groupName,
-			"unit", unit,
+			"displayName", displayName,
 			"smallestFlavor", groupData.SmallestFlavor.Name,
-			"smallestRamMB", smallestRAM)
+			"smallestRamMB", groupData.SmallestFlavor.MemoryMB)
 	}
 
 	// Get last content changed from flavor group knowledge and treat it as version
