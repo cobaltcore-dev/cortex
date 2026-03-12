@@ -80,6 +80,9 @@ type PipelineSpec struct {
 
 	// If this pipeline should create decision objects.
 	// When this is false, the pipeline will still process requests.
+	// NOTE: This flag is intentionally kept as "createDecisions" to avoid
+	// breaking changes. It will be renamed when the deprecated Decision CRD
+	// is fully replaced in a future refactoring.
 	// +kubebuilder:default=false
 	CreateDecisions bool `json:"createDecisions,omitempty"`
 
