@@ -6,6 +6,7 @@ package commitments
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -81,7 +82,10 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 
 	// Process commitment changes
 	// For now, we'll implement a simplified path that checks capacity for immediate start CRs
-	api.processCommitmentChanges(log, req, &resp)
+	if err := api.processCommitmentChanges(w, log, req, &resp); err != nil {
+		// Error already written to response by processCommitmentChanges
+		return
+	}
 
 	// Return response
 	w.Header().Set("Content-Type", "application/json")
@@ -91,7 +95,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-func (api *HTTPAPI) processCommitmentChanges(log logr.Logger, req liquid.CommitmentChangeRequest, resp *liquid.CommitmentChangeResponse) {
+func (api *HTTPAPI) processCommitmentChanges(w http.ResponseWriter, log logr.Logger, req liquid.CommitmentChangeRequest, resp *liquid.CommitmentChangeResponse) error {
 	ctx := context.Background()
 	manager := NewReservationManager(api.client)
 	requireRollback := false
@@ -104,7 +108,7 @@ func (api *HTTPAPI) processCommitmentChanges(log logr.Logger, req liquid.Commitm
 		resp.RejectionReason = "caches not ready"
 		retryTime := time.Now().Add(1 * time.Minute)
 		resp.RetryAt = Some(retryTime)
-		return
+		return nil
 	}
 
 	// Validate InfoVersion from request matches current version (= last content change of flavor group knowledge)
@@ -117,9 +121,9 @@ func (api *HTTPAPI) processCommitmentChanges(log logr.Logger, req liquid.Commitm
 		log.Info("version mismatch in commitment change request",
 			"requestVersion", req.InfoVersion,
 			"currentVersion", currentVersion)
-		resp.RejectionReason = fmt.Sprintf("Version mismatch: request version %d, current version %d. Please refresh and retry.",
-			req.InfoVersion, currentVersion)
-		return
+		http.Error(w, fmt.Sprintf("Version mismatch: request version %d, current version %d. Please refresh and retry.",
+			req.InfoVersion, currentVersion), http.StatusConflict)
+		return errors.New("version mismatch")
 	}
 
 	statesBefore := make(map[string]*CommitmentState) // map of commitmentID to existing state for rollback
@@ -127,7 +131,7 @@ func (api *HTTPAPI) processCommitmentChanges(log logr.Logger, req liquid.Commitm
 
 	if req.DryRun {
 		resp.RejectionReason = "Dry run not supported yet"
-		return
+		return nil
 	}
 
 ProcessLoop:
@@ -245,7 +249,7 @@ ProcessLoop:
 		log.Info("finished applying rollbacks for commitment changes", "reasonOfRollback", resp.RejectionReason)
 
 		// TODO improve human-readable reasoning based on actual failure, i.e. polish resp.RejectionReason
-		return
+		return nil
 	}
 
 	log.Info("commitment changes accepted")
@@ -253,6 +257,7 @@ ProcessLoop:
 		log.Info("unexpected non-empty rejection reason without rollback", "reason", resp.RejectionReason)
 		resp.RejectionReason = ""
 	}
+	return nil
 }
 
 // watchReservationsUntilReady polls until all reservations reach Ready=True or timeout.
