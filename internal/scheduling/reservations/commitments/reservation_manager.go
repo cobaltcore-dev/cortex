@@ -136,7 +136,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 		memValue := reservationToDelete.Spec.Resources[hv1.ResourceMemory]
 		deltaMemoryBytes += memValue.Value()
 
-		log.Info("deleting reservation",
+		log.Info("deleting reservation (capacity decrease)",
 			"commitmentUUID", desiredState.CommitmentUUID,
 			"deltaMemoryBytes", deltaMemoryBytes,
 			"name", reservationToDelete.Name,
@@ -205,18 +205,24 @@ func (m *ReservationManager) syncReservationMetadata(
 	state *CommitmentState,
 ) (*v1alpha1.Reservation, error) {
 
-	// if any of AZ, StarTime, EndTime differ from desired state, need to patch
-	if (state.AvailabilityZone != "" && reservation.Spec.AvailabilityZone != state.AvailabilityZone) ||
+	// if any of CommitmentUUID, AZ, StarTime, EndTime differ from desired state, need to patch
+	if (state.CommitmentUUID != "" && reservation.Spec.CommittedResourceReservation.CommitmentUUID != state.CommitmentUUID) ||
+		(state.AvailabilityZone != "" && reservation.Spec.AvailabilityZone != state.AvailabilityZone) ||
 		(state.StartTime != nil && (reservation.Spec.StartTime == nil || !reservation.Spec.StartTime.Time.Equal(*state.StartTime))) ||
 		(state.EndTime != nil && (reservation.Spec.EndTime == nil || !reservation.Spec.EndTime.Time.Equal(*state.EndTime))) {
 		// Apply patch
 		log.Info("syncing reservation metadata",
-			"reservation", reservation.Name,
-			"availabilityZone", state.AvailabilityZone,
-			"startTime", state.StartTime,
-			"endTime", state.EndTime)
+			"reservation", reservation,
+			"desired commitmentUUID", state.CommitmentUUID,
+			"desired availabilityZone", state.AvailabilityZone,
+			"desired startTime", state.StartTime,
+			"desired endTime", state.EndTime)
 
 		patch := client.MergeFrom(reservation.DeepCopy())
+
+		if state.CommitmentUUID != "" {
+			reservation.Spec.CommittedResourceReservation.CommitmentUUID = state.CommitmentUUID
+		}
 
 		if state.AvailabilityZone != "" {
 			reservation.Spec.AvailabilityZone = state.AvailabilityZone
@@ -277,12 +283,13 @@ func (m *ReservationManager) newReservation(
 			),
 		},
 		CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-			ProjectID:     state.ProjectID,
-			DomainID:      state.DomainID,
-			ResourceGroup: state.FlavorGroupName,
-			ResourceName:  flavorInGroup.Name,
-			Creator:       creator,
-			Allocations:   nil,
+			ProjectID:      state.ProjectID,
+			CommitmentUUID: state.CommitmentUUID,
+			DomainID:       state.DomainID,
+			ResourceGroup:  state.FlavorGroupName,
+			ResourceName:   flavorInGroup.Name,
+			Creator:        creator,
+			Allocations:    nil,
 		},
 	}
 
