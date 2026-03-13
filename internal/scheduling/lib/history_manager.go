@@ -24,11 +24,11 @@ const maxHostsInExplanation = 10
 
 // joinHostsCapped joins up to max host names. If hosts exceeds max, it appends
 // a count of the omitted entries, e.g. "host-a, host-b (and 48 more)".
-func joinHostsCapped(hosts []string, max int) string {
-	if len(hosts) <= max {
+func joinHostsCapped(hosts []string, maxHosts int) string {
+	if len(hosts) <= maxHosts {
 		return strings.Join(hosts, ", ")
 	}
-	return fmt.Sprintf("%s (and %d more)", strings.Join(hosts[:max], ", "), len(hosts)-max)
+	return fmt.Sprintf("%s (and %d more)", strings.Join(hosts[:maxHosts], ", "), len(hosts)-maxHosts)
 }
 
 func getName(schedulingDomain v1alpha1.SchedulingDomain, resourceID string) string {
