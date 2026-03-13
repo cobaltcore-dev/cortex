@@ -7,6 +7,7 @@ package external
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
@@ -21,6 +22,8 @@ type PostgresReader struct {
 	Client client.Client
 	// Reference to the database secret containing connection info.
 	DatabaseSecretRef corev1.SecretReference
+	// Mutex to protect lazy initialization of the database connection.
+	mu sync.Mutex
 	// Cached database connection (lazily initialized).
 	db *db.DB
 }
@@ -49,7 +52,11 @@ func NewPostgresReaderFromSecretRef(c client.Client, secretRef corev1.SecretRefe
 }
 
 // DB returns the database connection, initializing it if necessary.
+// This method is safe for concurrent use.
 func (r *PostgresReader) DB(ctx context.Context) (*db.DB, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	if r.db != nil {
 		return r.db, nil
 	}
@@ -65,7 +72,7 @@ func (r *PostgresReader) DB(ctx context.Context) (*db.DB, error) {
 }
 
 // Select executes a SELECT query and returns the results.
-func (r *PostgresReader) Select(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
+func (r *PostgresReader) Select(ctx context.Context, dest any, query string, args ...any) error {
 	database, err := r.DB(ctx)
 	if err != nil {
 		return err

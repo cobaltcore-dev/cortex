@@ -14,9 +14,11 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -35,7 +37,8 @@ type FailoverReservationController struct {
 	VMSource        VMSource
 	Config          FailoverConfig
 	SchedulerClient *reservations.SchedulerClient
-	reconcileCount  int64 // Track reconciliation count for rotating VM selection
+	Recorder        record.EventRecorder // Event recorder for emitting Kubernetes events
+	reconcileCount  int64                // Track reconciliation count for rotating VM selection
 }
 
 func NewFailoverReservationController(c client.Client, vmSource VMSource, config FailoverConfig, schedulerClient *reservations.SchedulerClient) *FailoverReservationController {
@@ -144,19 +147,33 @@ func (c *FailoverReservationController) reconcileValidateAndAcknowledge(ctx cont
 		return ctrl.Result{}, nil
 	}
 
-	// Update AcknowledgedAt on successful validation
-	updatedRes := res.DeepCopy()
-	acknowledgedAt := metav1.Now()
-	updatedRes.Status.FailoverReservation.AcknowledgedAt = &acknowledgedAt
+	// Emit event for successful validation (doesn't trigger watch reconciliation)
+	c.Recorder.Event(res, corev1.EventTypeNormal, "ValidationPassed",
+		fmt.Sprintf("Reservation validated successfully for host %s with %d VMs",
+			res.Status.Host, len(getFailoverAllocations(res))))
 
-	if err := c.patchReservationStatus(ctx, updatedRes); err != nil {
-		logger.Error(err, "failed to update reservation acknowledgment")
-		return ctrl.Result{}, err
+	// Only update AcknowledgedAt if there are unacknowledged changes
+	// This avoids self-triggered reconciliation loops
+	lastChanged := res.Status.FailoverReservation.LastChanged
+	acknowledgedAt := res.Status.FailoverReservation.AcknowledgedAt
+	if lastChanged != nil && (acknowledgedAt == nil || acknowledgedAt.Before(lastChanged)) {
+		updatedRes := res.DeepCopy()
+		now := metav1.Now()
+		updatedRes.Status.FailoverReservation.AcknowledgedAt = &now
+
+		if err := c.patchReservationStatus(ctx, updatedRes); err != nil {
+			logger.Error(err, "failed to update reservation acknowledgment")
+			return ctrl.Result{}, err
+		}
+
+		logger.V(1).Info("reservation changes acknowledged",
+			"host", res.Status.Host,
+			"lastChanged", lastChanged,
+			"acknowledgedAt", now)
+	} else {
+		logger.V(1).Info("reservation validation passed (no new changes to acknowledge)",
+			"host", res.Status.Host)
 	}
-
-	logger.V(1).Info("reservation validation passed",
-		"host", res.Status.Host,
-		"acknowledgedAt", acknowledgedAt)
 
 	// Requeue for next re-validation
 	return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval}, nil
@@ -821,6 +838,9 @@ func (c *FailoverReservationController) patchReservationStatus(ctx context.Conte
 // SetupWithManager sets up the watch-based reconciler with the Manager.
 // This handles per-reservation reconciliation triggered by CRD changes.
 func (c *FailoverReservationController) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
+	// Initialize the event recorder for emitting Kubernetes events
+	c.Recorder = mgr.GetEventRecorderFor("failover-reservation-controller")
+
 	return multicluster.BuildController(mcl, mgr).
 		For(&v1alpha1.Reservation{}).
 		WithEventFilter(failoverReservationPredicate).

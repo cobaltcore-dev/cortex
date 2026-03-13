@@ -4,7 +4,7 @@ The failover reservation system ensures VMs have pre-reserved capacity on altern
 
 ## File Structure
 
-```
+```text
 internal/scheduling/reservations/failover/
 ├── config.go                    # Configuration struct (intervals, flavor requirements)
 ├── controller.go                # Handles lifecycle of Reservation CRD of type failover
@@ -156,7 +156,7 @@ This is the most restrictive pipeline since we're actually reserving new capacit
 ### `kvm-acknowledge-failover-reservation`
 **Used when:** Validating that an existing reservation is still valid (watch-based reconciliation).
 
-**Why:** Periodically we need to verify that a VM could still evacuate to its reserved host. This sends an evacuation-style scheduling request with only the reservation's host as the eligible target. If the scheduler rejects it, the reservation is no longer valid and
+**Why:** Periodically we need to verify that a VM could still evacuate to its reserved host. This sends an evacuation-style scheduling request with only the reservation's host as the eligible target. If the scheduler rejects it, the reservation is no longer valid and should be deleted so the periodic controller can create a new one on a valid host.
 
 ## Data Model
 

@@ -268,15 +268,15 @@ func DoesVMFitInReservation(vm VM, reservation v1alpha1.Reservation) bool {
 		}
 	}
 
-	// Check CPU: VM's vcpus must be <= reservation's vcpus
-	// Note: Both VM and Reservation use "vcpus" as the resource key
+	// Check CPU: VM's vcpus must be <= reservation's cpu
+	// Note: VM uses "vcpus" key, but reservations use "cpu" as the canonical key.
 	if vmVCPUs, ok := vm.Resources["vcpus"]; ok {
-		if resVCPUs, ok := reservation.Spec.Resources["vcpus"]; ok {
-			if vmVCPUs.Cmp(resVCPUs) > 0 {
-				return false // VM vcpus exceeds reservation vcpus
+		if resCPU, ok := reservation.Spec.Resources["cpu"]; ok {
+			if vmVCPUs.Cmp(resCPU) > 0 {
+				return false // VM vcpus exceeds reservation cpu
 			}
 		} else {
-			return false // Reservation has no vcpus resource defined
+			return false // Reservation has no cpu resource defined
 		}
 	}
 

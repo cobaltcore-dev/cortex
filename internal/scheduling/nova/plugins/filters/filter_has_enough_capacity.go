@@ -59,7 +59,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		// Start with the total capacity.
 		// Skip hypervisors with nil or empty capacity.
 		if len(hv.Status.Capacity) == 0 {
-			traceLog.Debug("skipping hypervisor with nil or empty capacity", "host", hv.Name)
+			traceLog.Info("skipping hypervisor with nil or empty capacity", "host", hv.Name)
 			continue
 		}
 		// Make a copy of the capacity map to avoid modifying the original.
