@@ -151,6 +151,7 @@ spec:
                     description: The top hosts ordered by score (limited to 3).
                     items:
                       type: string
+                    maxItems: 3
                     type: array
                   pipelineRef:
                     description: The pipeline that was used for the decision.
@@ -228,6 +229,7 @@ spec:
                         hosts are retained to keep the history compact.
                       items:
                         type: string
+                      maxItems: 3
                       type: array
                     pipelineRef:
                       description: The pipeline that was used for the decision.
@@ -281,7 +283,6 @@ spec:
                       type: string
                   required:
                   - intent
-                  - orderedHosts
                   - pipelineRef
                   - timestamp
                   type: object

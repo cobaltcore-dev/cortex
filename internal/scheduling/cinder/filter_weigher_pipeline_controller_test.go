@@ -376,7 +376,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 			},
 			createDecisions:      true,
 			expectError:          true,
-			expectHistoryCreated: false,
+			expectHistoryCreated: true,
 			expectResult:         false,
 		},
 	}
