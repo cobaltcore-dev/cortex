@@ -28,7 +28,7 @@ type SchedulingHistoryEntry struct {
 	// This is not a complete list of all candidates — only the highest-ranked
 	// hosts are retained to keep the history compact.
 	// +kubebuilder:validation:Optional,MaxItems=3
-	OrderedHosts []string `json:"orderedHosts"`
+	OrderedHosts []string `json:"orderedHosts,omitempty"`
 	// Whether the scheduling decision was successful.
 	// +kubebuilder:validation:Optional
 	Successful bool `json:"successful"`
