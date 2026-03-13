@@ -175,11 +175,15 @@ func (h *HistoryManager) Upsert(
 
 	// Archive the previous current decision into the history list.
 	if !history.Status.Current.Timestamp.IsZero() {
+		orderedHosts := history.Status.Current.OrderedHosts
+		if orderedHosts == nil {
+			orderedHosts = []string{}
+		}
 		entry := v1alpha1.SchedulingHistoryEntry{
 			Timestamp:    history.Status.Current.Timestamp,
 			PipelineRef:  history.Status.Current.PipelineRef,
 			Intent:       history.Status.Current.Intent,
-			OrderedHosts: history.Status.Current.OrderedHosts,
+			OrderedHosts: orderedHosts,
 			Successful:   history.Status.Current.Successful,
 		}
 		history.Status.History = append(history.Status.History, entry)
@@ -199,10 +203,14 @@ func (h *HistoryManager) Upsert(
 	if decision.Status.Result != nil {
 		current.TargetHost = decision.Status.Result.TargetHost
 		hosts := decision.Status.Result.OrderedHosts
-		if len(hosts) > 3 {
+		if hosts == nil {
+			hosts = []string{}
+		} else if len(hosts) > 3 {
 			hosts = hosts[:3]
 		}
 		current.OrderedHosts = hosts
+	} else {
+		current.OrderedHosts = []string{}
 	}
 	history.Status.Current = current
 
