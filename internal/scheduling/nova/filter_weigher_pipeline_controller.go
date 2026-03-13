@@ -99,7 +99,9 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 		})
 	}
 	if pipelineConf.Spec.CreateDecisions {
-		go c.upsertHistory(ctx, decision, err)
+		decisionForHistory := decision.DeepCopy()
+		histCtx := context.WithoutCancel(ctx)
+		go c.upsertHistory(histCtx, decisionForHistory, err)
 	}
 	return err
 }
@@ -126,7 +128,7 @@ func (c *FilterWeigherPipelineController) upsertHistory(ctx context.Context, dec
 		}
 	}
 
-	if upsertErr := c.HistoryManager.Upsert(context.Background(), decision, intent, az, pipelineErr); upsertErr != nil {
+	if upsertErr := c.HistoryManager.Upsert(ctx, decision, intent, az, pipelineErr); upsertErr != nil {
 		log.Error(upsertErr, "failed to create/update history")
 	}
 }
