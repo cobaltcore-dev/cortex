@@ -116,11 +116,9 @@ func (c *FilterWeigherPipelineController) ProcessNewPod(ctx context.Context, pod
 		})
 	}
 	if pipelineConf.Spec.CreateDecisions {
-		go func() {
-			if upsertErr := c.HistoryManager.Upsert(context.Background(), decision, v1alpha1.SchedulingIntentUnknown, nil, err); upsertErr != nil {
-				ctrl.LoggerFrom(ctx).Error(upsertErr, "failed to create/update history")
-			}
-		}()
+		if upsertErr := c.HistoryManager.Upsert(ctx, decision, v1alpha1.SchedulingIntentUnknown, nil, err); upsertErr != nil {
+			ctrl.LoggerFrom(ctx).Error(upsertErr, "failed to create/update history")
+		}
 	}
 	return err
 }
@@ -222,6 +220,8 @@ func (c *FilterWeigherPipelineController) handlePod() handler.EventHandler {
 			}
 		},
 		DeleteFunc: func(ctx context.Context, evt event.DeleteEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			c.processMu.Lock()
+			defer c.processMu.Unlock()
 			pod := evt.Object.(*corev1.Pod)
 			if err := c.HistoryManager.Delete(ctx, v1alpha1.SchedulingDomainPods, pod.Name); err != nil {
 				log := ctrl.LoggerFrom(ctx)

@@ -117,11 +117,9 @@ func (c *FilterWeigherPipelineController) ProcessNewMachine(ctx context.Context,
 		})
 	}
 	if pipelineConf.Spec.CreateDecisions {
-		go func() {
-			if upsertErr := c.HistoryManager.Upsert(context.Background(), decision, v1alpha1.SchedulingIntentUnknown, nil, err); upsertErr != nil {
-				ctrl.LoggerFrom(ctx).Error(upsertErr, "failed to create/update history")
-			}
-		}()
+		if upsertErr := c.HistoryManager.Upsert(context.Background(), decision, v1alpha1.SchedulingIntentUnknown, nil, err); upsertErr != nil {
+			ctrl.LoggerFrom(ctx).Error(upsertErr, "failed to create/update history")
+		}
 	}
 	return err
 }
@@ -211,6 +209,8 @@ func (c *FilterWeigherPipelineController) handleMachine() handler.EventHandler {
 			}
 		},
 		DeleteFunc: func(ctx context.Context, evt event.DeleteEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			c.processMu.Lock()
+			defer c.processMu.Unlock()
 			machine := evt.Object.(*ironcorev1alpha1.Machine)
 			if err := c.HistoryManager.Delete(ctx, v1alpha1.SchedulingDomainMachines, machine.Name); err != nil {
 				log := ctrl.LoggerFrom(ctx)
