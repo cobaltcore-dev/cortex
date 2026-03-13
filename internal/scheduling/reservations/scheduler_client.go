@@ -4,15 +4,19 @@
 package reservations
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
+	"time"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+// DefaultHTTPTimeout is the default timeout for HTTP requests to the scheduler API.
+const DefaultHTTPTimeout = 30 * time.Second
 
 var log = logf.Log.WithName("scheduler-client").WithValues("module", "reservations")
 
@@ -27,11 +31,13 @@ type SchedulerClient struct {
 	HTTPClient *http.Client
 }
 
-// NewSchedulerClient creates a new SchedulerClient.
+// NewSchedulerClient creates a new SchedulerClient with a default timeout.
 func NewSchedulerClient(url string) *SchedulerClient {
 	return &SchedulerClient{
-		URL:        url,
-		HTTPClient: &http.Client{},
+		URL: url,
+		HTTPClient: &http.Client{
+			Timeout: DefaultHTTPTimeout,
+		},
 	}
 }
 
@@ -127,7 +133,7 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 	}
 
 	// Create HTTP request with context
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.URL, strings.NewReader(string(reqBody)))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.URL, bytes.NewReader(reqBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
 	}

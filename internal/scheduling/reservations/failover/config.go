@@ -55,7 +55,7 @@ type FailoverConfig struct {
 // DefaultConfig returns a default configuration.
 func DefaultConfig() FailoverConfig {
 	return FailoverConfig{
-		FlavorFailoverRequirements: map[string]int{"*": 2}, // by default general purpose 1 and hana 2 failover reservations
+		FlavorFailoverRequirements: map[string]int{"*": 2}, // by default all VMs get 2 failover reservations
 		ReconcileInterval:          5 * time.Second,
 		ShortReconcileInterval:     100 * time.Millisecond,
 		Creator:                    "cortex-failover-controller",

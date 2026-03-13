@@ -15,6 +15,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -91,16 +92,46 @@ func (c *FailoverReservationController) Reconcile(ctx context.Context, req ctrl.
 }
 
 // reconcileValidateAndAcknowledge validates a reservation and acknowledges it if valid.
-// If invalid, the reservation is deleted. On success, AcknowledgedAt is always updated.
+// If invalid, the reservation is marked as not ready. On transient errors, the reservation is requeued.
+// On success, AcknowledgedAt is always updated.
 func (c *FailoverReservationController) reconcileValidateAndAcknowledge(ctx context.Context, res *v1alpha1.Reservation) (ctrl.Result, error) {
 	logger := log.WithValues("reservation", res.Name)
 	logger.V(1).Info("validating failover reservation")
 
+	// Validate resource keys first (must be "cpu" and "memory" only)
+	if err := ValidateFailoverReservationResources(res); err != nil {
+		logger.Info("reservation has invalid resources, marking as not ready", "error", err)
+
+		updatedRes := res.DeepCopy()
+		meta.SetStatusCondition(&updatedRes.Status.Conditions, metav1.Condition{
+			Type:               v1alpha1.ReservationConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "InvalidResources",
+			Message:            err.Error(),
+			LastTransitionTime: metav1.Now(),
+		})
+
+		if patchErr := c.patchReservationStatus(ctx, updatedRes); patchErr != nil {
+			logger.Error(patchErr, "failed to update reservation status for invalid resources")
+			return ctrl.Result{}, patchErr
+		}
+
+		// Requeue to check again later (in case it gets fixed)
+		return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval}, nil
+	}
+
 	// Validate the reservation
-	valid := c.validateReservation(ctx, res)
+	valid, validationErr := c.validateReservation(ctx, res)
+
+	if validationErr != nil {
+		// Transient error during validation - requeue without deleting
+		logger.Error(validationErr, "transient error during reservation validation, will retry",
+			"host", res.Status.Host)
+		return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval}, nil
+	}
 
 	if !valid {
-		// Reservation is invalid - delete it
+		// Reservation is definitively invalid - delete it
 		logger.Info("reservation validation failed, deleting",
 			"host", res.Status.Host)
 		if err := c.Delete(ctx, res); err != nil {
@@ -132,20 +163,22 @@ func (c *FailoverReservationController) reconcileValidateAndAcknowledge(ctx cont
 }
 
 // validateReservation validates that a reservation is still valid for all its allocated VMs.
-// Returns true if all VMs pass validation, false if any VM fails.
-// TODO when should we invalidate a reservation? Currently we do that if we do not get a VM from Postgres or if the scheduler evacuation check fails. We may want to keep the reservation in those cases
-func (c *FailoverReservationController) validateReservation(ctx context.Context, res *v1alpha1.Reservation) bool {
+// Returns:
+//   - (true, nil) if all VMs pass validation
+//   - (false, nil) if any VM definitively fails validation (reservation should be deleted)
+//   - (false, error) if a transient error occurred (reservation should be requeued, not deleted)
+func (c *FailoverReservationController) validateReservation(ctx context.Context, res *v1alpha1.Reservation) (bool, error) {
 	allocations := getFailoverAllocations(res)
 	if len(allocations) == 0 {
 		// No VMs allocated - reservation is valid (will be cleaned up by periodic controller)
-		return true
+		return true, nil
 	}
 
 	reservationHost := res.Status.Host
 	if reservationHost == "" {
 		log.Info("reservation has no host, marking as invalid",
 			"reservationName", res.Name)
-		return false
+		return false, nil
 	}
 
 	log.V(1).Info("validating reservation",
@@ -158,11 +191,11 @@ func (c *FailoverReservationController) validateReservation(ctx context.Context,
 		// Get VM details
 		vm, err := c.VMSource.GetVM(ctx, vmUUID)
 		if err != nil {
-			log.Error(err, "failed to get VM for validation",
+			// Transient error - could be DB/cache issue, don't delete the reservation
+			log.Error(err, "transient error getting VM for validation",
 				"reservationName", res.Name,
 				"vmUUID", vmUUID)
-			// Treat as validation failure - VM might not exist
-			return false
+			return false, fmt.Errorf("failed to get VM %s: %w", vmUUID, err)
 		}
 		if vm == nil {
 			// VM not found - skip this VM (will be cleaned up by periodic controller)
@@ -175,12 +208,12 @@ func (c *FailoverReservationController) validateReservation(ctx context.Context,
 		// Validate the VM can use the reservation host via scheduler evacuation
 		valid, err := c.validateVMViaSchedulerEvacuation(ctx, *vm, reservationHost, vmCurrentHost)
 		if err != nil {
-			log.Error(err, "failed to validate VM for reservation host",
+			// Transient error - could be scheduler unavailable, don't delete the reservation
+			log.Error(err, "transient error validating VM for reservation host",
 				"reservationName", res.Name,
 				"vmUUID", vmUUID,
 				"reservationHost", reservationHost)
-			// Treat scheduler errors as validation failure
-			return false
+			return false, fmt.Errorf("failed to validate VM %s: %w", vmUUID, err)
 		}
 
 		// TODO we just invalidate the entire reservation if one VM is not placable anymore
@@ -192,7 +225,7 @@ func (c *FailoverReservationController) validateReservation(ctx context.Context,
 				"vmUUID", vmUUID,
 				"vmCurrentHost", vmCurrentHost,
 				"reservationHost", reservationHost)
-			return false
+			return false, nil
 		}
 
 		log.V(1).Info("VM passed validation for reservation host",
@@ -201,7 +234,7 @@ func (c *FailoverReservationController) validateReservation(ctx context.Context,
 			"reservationHost", reservationHost)
 	}
 
-	return true
+	return true, nil
 }
 
 // ============================================================================
@@ -239,7 +272,7 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 	// List only failover reservations using label selector
 	var reservationList v1alpha1.ReservationList
 	if err := c.List(ctx, &reservationList, client.MatchingLabels{
-		"cortex.sap.com/type": "failover",
+		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelFailover,
 	}); err != nil {
 		log.Error(err, "failed to list failover reservations")
 		return ctrl.Result{}, err

@@ -473,35 +473,35 @@ func (r *ReservationReconciler) listServersByProjectID(ctx context.Context, proj
 // notFailoverReservationPredicate filters out failover reservations at the watch level.
 // This prevents the controller from being notified about failover reservations,
 // which are managed by the separate failover controller.
-// Failover reservations are identified by the label "cortex.sap.com/type": "failover".
+// Failover reservations are identified by the label v1alpha1.LabelReservationType.
 var notFailoverReservationPredicate = predicate.Funcs{
 	CreateFunc: func(e event.CreateEvent) bool {
 		res, ok := e.Object.(*v1alpha1.Reservation)
 		if !ok {
 			return false
 		}
-		return res.Labels["cortex.sap.com/type"] != "failover"
+		return res.Labels[v1alpha1.LabelReservationType] != v1alpha1.ReservationTypeLabelFailover
 	},
 	UpdateFunc: func(e event.UpdateEvent) bool {
 		res, ok := e.ObjectNew.(*v1alpha1.Reservation)
 		if !ok {
 			return false
 		}
-		return res.Labels["cortex.sap.com/type"] != "failover"
+		return res.Labels[v1alpha1.LabelReservationType] != v1alpha1.ReservationTypeLabelFailover
 	},
 	DeleteFunc: func(e event.DeleteEvent) bool {
 		res, ok := e.Object.(*v1alpha1.Reservation)
 		if !ok {
 			return false
 		}
-		return res.Labels["cortex.sap.com/type"] != "failover"
+		return res.Labels[v1alpha1.LabelReservationType] != v1alpha1.ReservationTypeLabelFailover
 	},
 	GenericFunc: func(e event.GenericEvent) bool {
 		res, ok := e.Object.(*v1alpha1.Reservation)
 		if !ok {
 			return false
 		}
-		return res.Labels["cortex.sap.com/type"] != "failover"
+		return res.Labels[v1alpha1.LabelReservationType] != v1alpha1.ReservationTypeLabelFailover
 	},
 }
 

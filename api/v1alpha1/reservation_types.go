@@ -28,7 +28,7 @@ const (
 
 	// LabelReservationType identifies the type of reservation.
 	// This label is present on all reservations to enable type-based filtering.
-	LabelReservationType = "reservations.cortex.sap.com/type"
+	LabelReservationType = "reservations.cortex.cloud/type"
 
 	// Reservation type label values
 	ReservationTypeLabelCommittedResource = "committed-resource"
@@ -196,7 +196,7 @@ type ReservationStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
-// +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".metadata.labels['reservations\\.cortex\\.sap\\.com/type']"
+// +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".metadata.labels['reservations\\.cortex\\.cloud/type']"
 // +kubebuilder:printcolumn:name="Host",type="string",JSONPath=".status.host"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 

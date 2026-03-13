@@ -15,7 +15,7 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .metadata.labels['reservations\.cortex\.sap\.com/type']
+    - jsonPath: .metadata.labels['reservations\.cortex\.cloud/type']
       name: Type
       type: string
     - jsonPath: .status.host

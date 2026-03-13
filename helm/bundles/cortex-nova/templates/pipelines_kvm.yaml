@@ -393,6 +393,11 @@ spec:
         nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
         not have the specified trait. "trait:<trait>": "required" means the host
         must have the specified trait.
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone. This ensures failover
+        reservations are created in the same AZ as the VM they protect.
     - name: filter_status_conditions
       description: |
         This step will filter out hosts for which the hypervisor status conditions
@@ -433,6 +438,11 @@ spec:
         nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
         not have the specified trait. "trait:<trait>": "required" means the host
         must have the specified trait.
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone. This ensures VMs can
+        only reuse reservations in their own AZ.
     - name: filter_status_conditions
       description: |
         This step will filter out hosts for which the hypervisor status conditions
@@ -481,6 +491,11 @@ spec:
         nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
         not have the specified trait. "trait:<trait>": "required" means the host
         must have the specified trait.
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone. This ensures reservation
+        validation respects AZ boundaries.
     - name: filter_status_conditions
       description: |
         This step will filter out hosts for which the hypervisor status conditions

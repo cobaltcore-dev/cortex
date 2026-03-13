@@ -165,6 +165,7 @@ func TestBuildNewFailoverReservation(t *testing.T) {
 			}
 
 			// Verify resources are copied from VM
+			// Note: VM uses "vcpus" but reservation uses "cpu" as the canonical key
 			if tt.vm.Resources != nil {
 				if memory, ok := tt.vm.Resources["memory"]; ok {
 					if resMemory, ok := result.Spec.Resources["memory"]; !ok {
@@ -174,20 +175,21 @@ func TestBuildNewFailoverReservation(t *testing.T) {
 					}
 				}
 				if vcpus, ok := tt.vm.Resources["vcpus"]; ok {
-					if resVCPUs, ok := result.Spec.Resources["vcpus"]; !ok {
-						t.Error("reservation missing vcpus resource")
-					} else if !vcpus.Equal(resVCPUs) {
-						t.Errorf("vcpus resource = %v, want %v", resVCPUs, vcpus)
+					// VM uses "vcpus" but reservation should use "cpu"
+					if resCPU, ok := result.Spec.Resources["cpu"]; !ok {
+						t.Error("reservation missing cpu resource")
+					} else if !vcpus.Equal(resCPU) {
+						t.Errorf("cpu resource = %v, want %v", resCPU, vcpus)
 					}
 				}
 			}
 
 			// Verify labels
-			if result.Labels["cortex.sap.com/creator"] != "test-creator" {
-				t.Errorf("creator label = %v, want %v", result.Labels["cortex.sap.com/creator"], "test-creator")
+			if result.Labels["cortex.cloud/creator"] != "test-creator" {
+				t.Errorf("creator label = %v, want %v", result.Labels["cortex.cloud/creator"], "test-creator")
 			}
-			if result.Labels["cortex.sap.com/type"] != "failover" {
-				t.Errorf("type label = %v, want %v", result.Labels["cortex.sap.com/type"], "failover")
+			if result.Labels[v1alpha1.LabelReservationType] != v1alpha1.ReservationTypeLabelFailover {
+				t.Errorf("type label = %v, want %v", result.Labels[v1alpha1.LabelReservationType], v1alpha1.ReservationTypeLabelFailover)
 			}
 
 			// Verify GenerateName is set

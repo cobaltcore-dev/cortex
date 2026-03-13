@@ -1407,8 +1407,8 @@ func newReservation(name, host string, memoryMB, vcpus uint64, allocations map[s
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			Labels: map[string]string{
-				"cortex.sap.com/type":    "failover",
-				"cortex.sap.com/creator": "test",
+				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelFailover,
+				"cortex.cloud/creator":        "test",
 			},
 		},
 		Spec: v1alpha1.ReservationSpec{
