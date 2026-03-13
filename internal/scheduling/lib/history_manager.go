@@ -181,13 +181,15 @@ func (h *HistoryManager) Upsert(
 	// Use Update instead of MergeFrom+Patch because JSON merge patch strips
 	// boolean false values, which causes CRD validation to reject the patch
 	// when Successful is false. Retry on conflict to handle concurrent updates.
+	firstAttempt := true
 	if retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		// On retries, re-fetch the latest History object.
-		if history.ResourceVersion != "" {
+		// On retries, re-fetch the latest History object after a conflict.
+		if !firstAttempt {
 			if getErr := h.Client.Get(ctx, namespacedName, history); getErr != nil {
 				return getErr
 			}
 		}
+		firstAttempt = false
 
 		// Archive the previous current decision into the history list.
 		if !history.Status.Current.Timestamp.IsZero() {
