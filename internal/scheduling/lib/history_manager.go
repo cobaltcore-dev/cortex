@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/events"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -175,71 +176,82 @@ func (h *HistoryManager) Upsert(
 
 	successful := pipelineErr == nil && decision.Status.Result != nil && decision.Status.Result.TargetHost != nil
 
-	// Archive the previous current decision into the history list.
-	if !history.Status.Current.Timestamp.IsZero() {
-		orderedHosts := history.Status.Current.OrderedHosts
-		if orderedHosts == nil {
-			orderedHosts = []string{}
-		}
-		entry := v1alpha1.SchedulingHistoryEntry{
-			Timestamp:    history.Status.Current.Timestamp,
-			PipelineRef:  history.Status.Current.PipelineRef,
-			Intent:       history.Status.Current.Intent,
-			OrderedHosts: orderedHosts,
-			Successful:   history.Status.Current.Successful,
-		}
-		history.Status.History = append(history.Status.History, entry)
-		if len(history.Status.History) > maxHistoryEntries {
-			history.Status.History = history.Status.History[len(history.Status.History)-maxHistoryEntries:]
-		}
-	}
-
-	// Build the new current decision.
-	current := v1alpha1.CurrentDecision{
-		Timestamp:   metav1.Now(),
-		PipelineRef: decision.Spec.PipelineRef,
-		Intent:      intent,
-		Successful:  successful,
-		Explanation: generateExplanation(decision.Status.Result, pipelineErr),
-	}
-
-	current.OrderedHosts = []string{}
-	if decision.Status.Result != nil {
-		current.TargetHost = decision.Status.Result.TargetHost
-		hosts := decision.Status.Result.OrderedHosts
-		if len(hosts) > maxHostsInOrderedList {
-			hosts = hosts[:maxHostsInOrderedList]
-		}
-		current.OrderedHosts = hosts
-	}
-	history.Status.Current = current
-
-	// Set Ready condition — True only when a host was successfully selected.
-	condStatus := metav1.ConditionTrue
-	reason := "SchedulingSucceeded"
-	message := "scheduling decision selected a target host"
-	if pipelineErr != nil {
-		condStatus = metav1.ConditionFalse
-		reason = "PipelineRunFailed"
-		message = "pipeline run failed: " + pipelineErr.Error()
-	} else if !successful {
-		condStatus = metav1.ConditionFalse
-		reason = "NoHostFound"
-		message = "pipeline completed but no suitable host was found"
-	}
-	meta.SetStatusCondition(&history.Status.Conditions, metav1.Condition{
-		Type:    "Ready",
-		Status:  condStatus,
-		Reason:  reason,
-		Message: message,
-	})
+	namespacedName := client.ObjectKey{Name: name}
 
 	// Use Update instead of MergeFrom+Patch because JSON merge patch strips
 	// boolean false values, which causes CRD validation to reject the patch
-	// when Successful is false.
-	if updateErr := h.Client.Status().Update(ctx, history); updateErr != nil {
-		log.Error(updateErr, "failed to update history CRD status", "name", name)
-		return updateErr
+	// when Successful is false. Retry on conflict to handle concurrent updates.
+	if retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// On retries, re-fetch the latest History object.
+		if history.ResourceVersion != "" {
+			if getErr := h.Client.Get(ctx, namespacedName, history); getErr != nil {
+				return getErr
+			}
+		}
+
+		// Archive the previous current decision into the history list.
+		if !history.Status.Current.Timestamp.IsZero() {
+			orderedHosts := history.Status.Current.OrderedHosts
+			if orderedHosts == nil {
+				orderedHosts = []string{}
+			}
+			entry := v1alpha1.SchedulingHistoryEntry{
+				Timestamp:    history.Status.Current.Timestamp,
+				PipelineRef:  history.Status.Current.PipelineRef,
+				Intent:       history.Status.Current.Intent,
+				OrderedHosts: orderedHosts,
+				Successful:   history.Status.Current.Successful,
+			}
+			history.Status.History = append(history.Status.History, entry)
+			if len(history.Status.History) > maxHistoryEntries {
+				history.Status.History = history.Status.History[len(history.Status.History)-maxHistoryEntries:]
+			}
+		}
+
+		// Build the new current decision.
+		current := v1alpha1.CurrentDecision{
+			Timestamp:   metav1.Now(),
+			PipelineRef: decision.Spec.PipelineRef,
+			Intent:      intent,
+			Successful:  successful,
+			Explanation: generateExplanation(decision.Status.Result, pipelineErr),
+		}
+
+		current.OrderedHosts = []string{}
+		if decision.Status.Result != nil {
+			current.TargetHost = decision.Status.Result.TargetHost
+			hosts := decision.Status.Result.OrderedHosts
+			if len(hosts) > maxHostsInOrderedList {
+				hosts = hosts[:maxHostsInOrderedList]
+			}
+			current.OrderedHosts = hosts
+		}
+		history.Status.Current = current
+
+		// Set Ready condition — True only when a host was successfully selected.
+		condStatus := metav1.ConditionTrue
+		reason := "SchedulingSucceeded"
+		message := "scheduling decision selected a target host"
+		if pipelineErr != nil {
+			condStatus = metav1.ConditionFalse
+			reason = "PipelineRunFailed"
+			message = "pipeline run failed: " + pipelineErr.Error()
+		} else if !successful {
+			condStatus = metav1.ConditionFalse
+			reason = "NoHostFound"
+			message = "pipeline completed but no suitable host was found"
+		}
+		meta.SetStatusCondition(&history.Status.Conditions, metav1.Condition{
+			Type:    "Ready",
+			Status:  condStatus,
+			Reason:  reason,
+			Message: message,
+		})
+
+		return h.Client.Status().Update(ctx, history)
+	}); retryErr != nil {
+		log.Error(retryErr, "failed to update history CRD status", "name", name)
+		return retryErr
 	}
 
 	// Emit a Kubernetes Event on the History object to short-term persist the
@@ -254,7 +266,7 @@ func (h *HistoryManager) Upsert(
 			eventReason = "SchedulingFailed"
 			action = "FailedScheduling"
 		}
-		h.Recorder.Eventf(history, nil, eventType, eventReason, action, "%s", current.Explanation)
+		h.Recorder.Eventf(history, nil, eventType, eventReason, action, "%s", history.Status.Current.Explanation)
 	}
 
 	log.Info("history CRD updated", "name", name, "entries", len(history.Status.History))
