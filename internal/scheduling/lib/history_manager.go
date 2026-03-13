@@ -5,6 +5,7 @@ package lib
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -130,6 +131,10 @@ func (h *HistoryManager) Upsert(
 	az *string,
 	pipelineErr error,
 ) error {
+
+	if decision == nil {
+		return errors.New("decision cannot be nil")
+	}
 
 	log := ctrl.LoggerFrom(ctx)
 
