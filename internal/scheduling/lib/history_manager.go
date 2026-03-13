@@ -19,6 +19,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const maxHostsInExplanation = 10
+
+// joinHostsCapped joins up to max host names. If hosts exceeds max, it appends
+// a count of the omitted entries, e.g. "host-a, host-b (and 48 more)".
+func joinHostsCapped(hosts []string, max int) string {
+	if len(hosts) <= max {
+		return strings.Join(hosts, ", ")
+	}
+	return fmt.Sprintf("%s (and %d more)", strings.Join(hosts[:max], ", "), len(hosts)-max)
+}
+
 func getName(schedulingDomain v1alpha1.SchedulingDomain, resourceID string) string {
 	return fmt.Sprintf("%s-%s", schedulingDomain, resourceID)
 }
@@ -76,7 +87,7 @@ func generateExplanation(result *v1alpha1.DecisionResult, pipelineErr error) str
 			}
 			fmt.Fprintf(&sb, "%s filtered out %s\n",
 				step.StepName,
-				strings.Join(removed, ", "),
+				joinHostsCapped(removed, maxHostsInExplanation),
 			)
 		}
 	}
@@ -89,7 +100,7 @@ func generateExplanation(result *v1alpha1.DecisionResult, pipelineErr error) str
 	sort.Strings(remaining)
 	fmt.Fprintf(&sb, "\n%d hosts remaining (%s)\n",
 		len(remaining),
-		strings.Join(remaining, ", "),
+		joinHostsCapped(remaining, maxHostsInExplanation),
 	)
 
 	if result.TargetHost != nil {

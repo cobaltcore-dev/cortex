@@ -158,6 +158,34 @@ func TestGenerateExplanation(t *testing.T) {
 			},
 			expected: "Started with 2 host(s).\n\n\n2 hosts remaining (host-a, host-b)\n\nSelected host: host-a.",
 		},
+		{
+			name: "large cluster caps host lists",
+			result: func() *v1alpha1.DecisionResult {
+				weights := make(map[string]float64, 50)
+				for i := range 50 {
+					weights[fmt.Sprintf("host-%03d", i)] = 1.0
+				}
+				// Step filters out 20 hosts (keep host-000..host-029).
+				surviving := make(map[string]float64, 30)
+				for i := range 30 {
+					surviving[fmt.Sprintf("host-%03d", i)] = 1.0
+				}
+				return &v1alpha1.DecisionResult{
+					RawInWeights: weights,
+					StepResults: []v1alpha1.StepResult{
+						{
+							StepName:    "filter_big",
+							Activations: surviving,
+						},
+					},
+					TargetHost: testlib.Ptr("host-000"),
+				}
+			}(),
+			expected: "Started with 50 host(s).\n\n" +
+				"filter_big filtered out host-030, host-031, host-032, host-033, host-034, host-035, host-036, host-037, host-038, host-039 (and 10 more)\n\n" +
+				"30 hosts remaining (host-000, host-001, host-002, host-003, host-004, host-005, host-006, host-007, host-008, host-009 (and 20 more))\n\n" +
+				"Selected host: host-000.",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
