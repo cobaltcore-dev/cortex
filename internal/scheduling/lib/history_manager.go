@@ -22,6 +22,7 @@ import (
 
 const maxHostsInExplanation = 10
 const maxHistoryEntries = 10
+const maxHostsInOrderedList = 3
 
 // joinHostsCapped joins up to max host names. If hosts exceeds max, it appends
 // a count of the omitted entries, e.g. "host-a, host-b (and 48 more)".
@@ -201,17 +202,15 @@ func (h *HistoryManager) Upsert(
 		Successful:  successful,
 		Explanation: generateExplanation(decision.Status.Result, pipelineErr),
 	}
+
+	current.OrderedHosts = []string{}
 	if decision.Status.Result != nil {
 		current.TargetHost = decision.Status.Result.TargetHost
 		hosts := decision.Status.Result.OrderedHosts
-		if hosts == nil {
-			hosts = []string{}
-		} else if len(hosts) > 3 {
-			hosts = hosts[:3]
+		if hosts != nil && len(hosts) > maxHostsInOrderedList {
+			hosts = hosts[:maxHostsInOrderedList]
 		}
 		current.OrderedHosts = hosts
-	} else {
-		current.OrderedHosts = []string{}
 	}
 	history.Status.Current = current
 
