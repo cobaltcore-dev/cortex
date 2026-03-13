@@ -21,6 +21,9 @@ spec:
     - jsonPath: .spec.resourceID
       name: Resource ID
       type: string
+    - jsonPath: .spec.availabilityZone
+      name: AZ
+      type: string
     - jsonPath: .status.current.targetHost
       name: Target Host
       type: string
@@ -55,6 +58,11 @@ spec:
           spec:
             description: Spec defines the desired state of History.
             properties:
+              availabilityZone:
+                description: |-
+                  The availability zone of the resource, if known. Only set for scheduling
+                  domains that provide AZ information (e.g., Nova).
+                type: string
               resourceID:
                 description: The resource ID this history belongs to (e.g., the UUID
                   of a nova instance).

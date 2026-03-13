@@ -116,6 +116,7 @@ func (h *HistoryManager) Upsert(
 	ctx context.Context,
 	decision *v1alpha1.Decision,
 	intent v1alpha1.SchedulingIntent,
+	az *string,
 	pipelineErr error,
 ) error {
 
@@ -135,6 +136,7 @@ func (h *HistoryManager) Upsert(
 			Spec: v1alpha1.HistorySpec{
 				SchedulingDomain: decision.Spec.SchedulingDomain,
 				ResourceID:       decision.Spec.ResourceID,
+				AvailabilityZone: az,
 			},
 		}
 		if createErr := h.Client.Create(ctx, history); createErr != nil {

@@ -463,7 +463,7 @@ func TestHistoryManager_Upsert(t *testing.T) {
 			c := tt.setup(t)
 			hm := HistoryManager{Client: c}
 
-			err := hm.Upsert(context.Background(), tt.decision, tt.intent, tt.pipelineErr)
+			err := hm.Upsert(context.Background(), tt.decision, tt.intent, nil, tt.pipelineErr)
 			if err != nil {
 				t.Fatalf("Upsert() returned error: %v", err)
 			}
@@ -558,7 +558,7 @@ func TestHistoryManager_UpsertFromGoroutine(t *testing.T) {
 	// Mirrors the pattern used in pipeline controllers.
 	ctx := context.Background()
 	go func() {
-		if err := hm.Upsert(ctx, decision, v1alpha1.SchedulingIntentUnknown, nil); err != nil {
+		if err := hm.Upsert(ctx, decision, v1alpha1.SchedulingIntentUnknown, nil, nil); err != nil {
 			t.Errorf("Upsert() returned error: %v", err)
 		}
 	}()

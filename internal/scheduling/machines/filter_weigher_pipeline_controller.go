@@ -118,7 +118,7 @@ func (c *FilterWeigherPipelineController) ProcessNewMachine(ctx context.Context,
 	}
 	if pipelineConf.Spec.CreateDecisions {
 		go func() {
-			if upsertErr := c.HistoryManager.Upsert(context.Background(), decision, v1alpha1.SchedulingIntentUnknown, err); upsertErr != nil {
+			if upsertErr := c.HistoryManager.Upsert(context.Background(), decision, v1alpha1.SchedulingIntentUnknown, nil, err); upsertErr != nil {
 				ctrl.LoggerFrom(ctx).Error(upsertErr, "failed to create/update history")
 			}
 		}()

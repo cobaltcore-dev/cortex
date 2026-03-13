@@ -39,6 +39,10 @@ type HistorySpec struct {
 	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`
 	// The resource ID this history belongs to (e.g., the UUID of a nova instance).
 	ResourceID string `json:"resourceID"`
+	// The availability zone of the resource, if known. Only set for scheduling
+	// domains that provide AZ information (e.g., Nova).
+	// +kubebuilder:validation:Optional
+	AvailabilityZone *string `json:"availabilityZone,omitempty"`
 }
 
 // CurrentDecision holds the full context of the most recent scheduling
@@ -82,6 +86,7 @@ type HistoryStatus struct {
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Domain",type="string",JSONPath=".spec.schedulingDomain"
 // +kubebuilder:printcolumn:name="Resource ID",type="string",JSONPath=".spec.resourceID"
+// +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
 // +kubebuilder:printcolumn:name="Target Host",type="string",JSONPath=".status.current.targetHost"
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].reason"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"

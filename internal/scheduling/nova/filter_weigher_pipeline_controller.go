@@ -99,13 +99,36 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 		})
 	}
 	if pipelineConf.Spec.CreateDecisions {
-		go func() {
-			if upsertErr := c.HistoryManager.Upsert(context.Background(), decision, v1alpha1.SchedulingIntentUnknown, err); upsertErr != nil {
-				ctrl.LoggerFrom(ctx).Error(upsertErr, "failed to create/update history")
-			}
-		}()
+		go c.upsertHistory(ctx, decision, err)
 	}
 	return err
+}
+
+func (c *FilterWeigherPipelineController) upsertHistory(ctx context.Context, decision *v1alpha1.Decision, pipelineErr error) {
+	log := ctrl.LoggerFrom(ctx)
+
+	var az *string
+	intent := v1alpha1.SchedulingIntentUnknown
+
+	if decision.Spec.NovaRaw != nil {
+		var request api.ExternalSchedulerRequest
+		err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request)
+		if err != nil {
+			log.Error(err, "failed to unmarshal novaRaw for history, using defaults")
+		} else {
+			azStr := request.Spec.Data.AvailabilityZone
+			az = &azStr
+			if parsedIntent, intentErr := request.GetIntent(); intentErr != nil {
+				log.Error(intentErr, "failed to get intent from nova request, using Unknown")
+			} else {
+				intent = parsedIntent
+			}
+		}
+	}
+
+	if upsertErr := c.HistoryManager.Upsert(context.Background(), decision, intent, az, pipelineErr); upsertErr != nil {
+		log.Error(upsertErr, "failed to create/update history")
+	}
 }
 
 func (c *FilterWeigherPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
