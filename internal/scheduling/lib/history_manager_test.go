@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -584,12 +585,11 @@ func TestHistoryManager_UpsertFromGoroutine(t *testing.T) {
 	}
 
 	// Mirrors the pattern used in pipeline controllers.
-	ctx := context.Background()
-	go func() {
-		if err := hm.Upsert(ctx, decision, v1alpha1.SchedulingIntentUnknown, nil, nil); err != nil {
-			t.Errorf("Upsert() returned error: %v", err)
-		}
-	}()
+	var wg sync.WaitGroup
+	var upsertErr error
+	wg.Go(func() {
+		upsertErr = hm.Upsert(context.Background(), decision, v1alpha1.SchedulingIntentUnknown, nil, nil)
+	})
 
 	// Poll for history creation.
 	var histories v1alpha1.HistoryList
@@ -605,6 +605,11 @@ func TestHistoryManager_UpsertFromGoroutine(t *testing.T) {
 			t.Fatal("timed out waiting for async history creation")
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+
+	wg.Wait()
+	if upsertErr != nil {
+		t.Fatalf("Upsert() returned error: %v", upsertErr)
 	}
 
 	got := histories.Items[0].Status.Current.TargetHost
