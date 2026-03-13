@@ -110,7 +110,7 @@ func DecisionsCleanup(ctx context.Context, client client.Client, conf DecisionsC
 		sharesByID[share.ID] = struct{}{}
 	}
 
-	// List all decisions and delete those whose share no longer exists.
+	// List all history and delete those whose share no longer exists.
 	historyList := &v1alpha1.HistoryList{}
 	if err := client.List(ctx, historyList); err != nil {
 		return err
@@ -124,8 +124,8 @@ func DecisionsCleanup(ctx context.Context, client client.Client, conf DecisionsC
 		if _, ok := sharesByID[history.Spec.ResourceID]; ok {
 			continue
 		}
-		// Delete the history since the share no longer exists.
-		slog.Info("deleting history for deleted share", "history", history.Name, "shareID", history.Spec.ResourceID)
+		// Delete the history entry since the share no longer exists.
+		slog.Info("deleting history entry for deleted share", "history", history.Name, "shareID", history.Spec.ResourceID)
 		if err := client.Delete(ctx, &history); err != nil {
 			return err
 		}
