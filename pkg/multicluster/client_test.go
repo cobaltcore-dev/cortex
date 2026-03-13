@@ -1237,7 +1237,9 @@ func TestClient_ConcurrentAddRemoteAndRead(t *testing.T) {
 	for range 10 {
 		wg.Go(func() {
 			for range 100 {
-				_, _ = c.ClustersForGVK(configMapGVK)
+				if _, err := c.ClustersForGVK(configMapGVK); err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
 			}
 		})
 	}
