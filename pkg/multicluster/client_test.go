@@ -165,20 +165,37 @@ func TestSubResourceClient_Apply(t *testing.T) {
 	}
 }
 
-func TestClient_ClustersForGVK_NoRemoteClusters(t *testing.T) {
+func TestClient_ClustersForGVK_HomeGVKOnly(t *testing.T) {
 	scheme := newTestScheme(t)
 	homeCluster := newFakeCluster(scheme)
 	c := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
+		homeGVKs:    map[schema.GroupVersionKind]bool{configMapGVK: true},
 	}
 
-	clusters := c.ClustersForGVK(configMapGVK)
+	clusters, err := c.ClustersForGVK(configMapGVK)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(clusters) != 1 {
 		t.Fatalf("expected 1 cluster, got %d", len(clusters))
 	}
 	if clusters[0] != homeCluster {
 		t.Error("expected home cluster")
+	}
+}
+
+func TestClient_ClustersForGVK_UnknownGVK(t *testing.T) {
+	scheme := newTestScheme(t)
+	c := &Client{
+		HomeCluster: newFakeCluster(scheme),
+		HomeScheme:  scheme,
+	}
+
+	_, err := c.ClustersForGVK(configMapGVK)
+	if err == nil {
+		t.Error("expected error for unknown GVK")
 	}
 }
 
@@ -194,7 +211,10 @@ func TestClient_ClustersForGVK_SingleRemoteCluster(t *testing.T) {
 		},
 	}
 
-	clusters := c.ClustersForGVK(configMapGVK)
+	clusters, err := c.ClustersForGVK(configMapGVK)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(clusters) != 1 {
 		t.Fatalf("expected 1 cluster, got %d", len(clusters))
 	}
@@ -219,13 +239,16 @@ func TestClient_ClustersForGVK_MultipleRemoteClusters(t *testing.T) {
 		},
 	}
 
-	clusters := c.ClustersForGVK(configMapGVK)
+	clusters, err := c.ClustersForGVK(configMapGVK)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(clusters) != 2 {
 		t.Fatalf("expected 2 clusters, got %d", len(clusters))
 	}
 }
 
-func TestClient_ClustersForGVK_FallbackIncludesHome(t *testing.T) {
+func TestClient_ClustersForGVK_HomeAndRemote(t *testing.T) {
 	scheme := newTestScheme(t)
 	homeCluster := newFakeCluster(scheme)
 	remote := newFakeCluster(scheme)
@@ -235,27 +258,31 @@ func TestClient_ClustersForGVK_FallbackIncludesHome(t *testing.T) {
 		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
 			configMapGVK: {{cluster: remote, labels: map[string]string{"az": "az-1"}}},
 		},
-		fallbackGVKs: map[schema.GroupVersionKind]bool{configMapGVK: true},
+		homeGVKs: map[schema.GroupVersionKind]bool{configMapGVK: true},
 	}
 
-	clusters := c.ClustersForGVK(configMapGVK)
+	clusters, err := c.ClustersForGVK(configMapGVK)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(clusters) != 2 {
-		t.Fatalf("expected 2 clusters (remote + home fallback), got %d", len(clusters))
+		t.Fatalf("expected 2 clusters (remote + home), got %d", len(clusters))
 	}
 	if clusters[0] != remote {
 		t.Error("expected remote cluster first")
 	}
 	if clusters[1] != homeCluster {
-		t.Error("expected home cluster as fallback")
+		t.Error("expected home cluster second")
 	}
 }
 
-func TestClient_clusterForWrite_NoRemoteClusters(t *testing.T) {
+func TestClient_clusterForWrite_HomeGVK(t *testing.T) {
 	scheme := newTestScheme(t)
 	homeCluster := newFakeCluster(scheme)
 	c := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
+		homeGVKs:    map[schema.GroupVersionKind]bool{configMapGVK: true},
 	}
 
 	cl, err := c.clusterForWrite(configMapGVK, &corev1.ConfigMap{})
@@ -263,7 +290,20 @@ func TestClient_clusterForWrite_NoRemoteClusters(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cl != homeCluster {
-		t.Error("expected home cluster when no remotes configured")
+		t.Error("expected home cluster for home GVK")
+	}
+}
+
+func TestClient_clusterForWrite_UnknownGVK(t *testing.T) {
+	scheme := newTestScheme(t)
+	c := &Client{
+		HomeCluster: newFakeCluster(scheme),
+		HomeScheme:  scheme,
+	}
+
+	_, err := c.clusterForWrite(configMapGVK, &corev1.ConfigMap{})
+	if err == nil {
+		t.Error("expected error for unknown GVK")
 	}
 }
 
@@ -319,40 +359,7 @@ func TestClient_clusterForWrite_RouterMatches(t *testing.T) {
 	}
 }
 
-func TestClient_clusterForWrite_NoMatchWithFallback(t *testing.T) {
-	scheme := newTestScheme(t)
-	homeCluster := newFakeCluster(scheme)
-	remote1 := newFakeCluster(scheme)
-	remote2 := newFakeCluster(scheme)
-	c := &Client{
-		HomeCluster: homeCluster,
-		HomeScheme:  scheme,
-		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
-			configMapGVK: testRouter{},
-		},
-		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
-			configMapGVK: {
-				{cluster: remote1, labels: map[string]string{"az": "az-1"}},
-				{cluster: remote2, labels: map[string]string{"az": "az-2"}},
-			},
-		},
-		fallbackGVKs: map[schema.GroupVersionKind]bool{configMapGVK: true},
-	}
-
-	// Object with az-3 doesn't match any remote cluster.
-	obj := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"az": "az-3"}},
-	}
-	cl, err := c.clusterForWrite(configMapGVK, obj)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cl != homeCluster {
-		t.Error("expected home cluster as fallback")
-	}
-}
-
-func TestClient_clusterForWrite_NoMatchNoFallback(t *testing.T) {
+func TestClient_clusterForWrite_NoMatch(t *testing.T) {
 	scheme := newTestScheme(t)
 	homeCluster := newFakeCluster(scheme)
 	remote1 := newFakeCluster(scheme)
@@ -375,7 +382,7 @@ func TestClient_clusterForWrite_NoMatchNoFallback(t *testing.T) {
 	}
 	_, err := c.clusterForWrite(configMapGVK, obj)
 	if err == nil {
-		t.Error("expected error when no match and no fallback")
+		t.Error("expected error when no remote cluster matches")
 	}
 }
 
@@ -517,7 +524,7 @@ func TestClient_Get_MultiCluster_FirstFound(t *testing.T) {
 }
 
 func TestClient_Get_MultiCluster_NotFound(t *testing.T) {
-	// Iterate all remote clusters and return NotFound if object is not found in any cluster (including home cluster if fallback is enabled).
+	// Iterate all remote clusters and return NotFound if object is not found in any cluster.
 	// In this test, the object doesn't exist in any cluster, so NotFound should be returned.
 
 	scheme := newTestScheme(t)
@@ -555,7 +562,7 @@ func TestClient_Get_UnknownType(t *testing.T) {
 	}
 }
 
-func TestClient_Get_FallbackCluster(t *testing.T) {
+func TestClient_Get_HomeGVKCluster(t *testing.T) {
 	scheme := newTestScheme(t)
 	homeCluster := newFakeCluster(scheme, &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "home-cm", Namespace: "default"},
@@ -569,7 +576,7 @@ func TestClient_Get_FallbackCluster(t *testing.T) {
 		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
 			configMapGVK: {{cluster: remote}},
 		},
-		fallbackGVKs: map[schema.GroupVersionKind]bool{configMapGVK: true},
+		homeGVKs: map[schema.GroupVersionKind]bool{configMapGVK: true},
 	}
 
 	cm := &corev1.ConfigMap{}
@@ -638,7 +645,7 @@ func TestClient_List_MultipleClusters_CombinesResults(t *testing.T) {
 	}
 }
 
-func TestClient_List_FallbackIncludesHome(t *testing.T) {
+func TestClient_List_HomeGVKIncludesHome(t *testing.T) {
 	scheme := newTestScheme(t)
 	remote := newFakeCluster(scheme,
 		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "remote-cm", Namespace: "default"}},
@@ -653,7 +660,7 @@ func TestClient_List_FallbackIncludesHome(t *testing.T) {
 		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
 			configMapListGVK: {{cluster: remote}},
 		},
-		fallbackGVKs: map[schema.GroupVersionKind]bool{configMapListGVK: true},
+		homeGVKs: map[schema.GroupVersionKind]bool{configMapListGVK: true},
 	}
 
 	cmList := &corev1.ConfigMapList{}
@@ -675,6 +682,7 @@ func TestClient_List_HomeClusterOnly(t *testing.T) {
 	c := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
+		homeGVKs:    map[schema.GroupVersionKind]bool{configMapListGVK: true},
 	}
 
 	cmList := &corev1.ConfigMapList{}
@@ -760,7 +768,7 @@ func TestClient_Create_RouterMatchesCluster(t *testing.T) {
 	}
 }
 
-func TestClient_Create_FallbackToHome(t *testing.T) {
+func TestClient_Create_NoMatchReturnsError(t *testing.T) {
 	scheme := newTestScheme(t)
 	homeCluster := newFakeCluster(scheme)
 
@@ -775,27 +783,20 @@ func TestClient_Create_FallbackToHome(t *testing.T) {
 				{cluster: newFakeCluster(scheme), labels: map[string]string{"az": "az-1"}},
 			},
 		},
-		fallbackGVKs: map[schema.GroupVersionKind]bool{configMapGVK: true},
 	}
 
-	// Object with az-99 doesn't match any remote — should fall back to home.
+	// Object with az-99 doesn't match any remote — should error.
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "fallback-cm",
+			Name:      "no-match-cm",
 			Namespace: "default",
 			Labels:    map[string]string{"az": "az-99"},
 		},
 	}
 
 	err := c.Create(context.Background(), cm)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	result := &corev1.ConfigMap{}
-	err = homeCluster.GetClient().Get(context.Background(), client.ObjectKey{Name: "fallback-cm", Namespace: "default"}, result)
-	if err != nil {
-		t.Fatalf("expected to find in home cluster (fallback): %v", err)
+	if err == nil {
+		t.Error("expected error when no remote cluster matches")
 	}
 }
 
@@ -982,7 +983,7 @@ func TestStatusClient_Update(t *testing.T) {
 		Status:     corev1.PodStatus{Phase: corev1.PodPending},
 	}
 	homeCluster := newFakeCluster(scheme, pod)
-	c := &Client{HomeCluster: homeCluster, HomeScheme: scheme}
+	c := &Client{HomeCluster: homeCluster, HomeScheme: scheme, homeGVKs: map[schema.GroupVersionKind]bool{podGVK: true}}
 
 	ctx := context.Background()
 	existingPod := &corev1.Pod{}
@@ -1011,7 +1012,7 @@ func TestStatusClient_Patch(t *testing.T) {
 		Status:     corev1.PodStatus{Phase: corev1.PodPending},
 	}
 	homeCluster := newFakeCluster(scheme, pod)
-	c := &Client{HomeCluster: homeCluster, HomeScheme: scheme}
+	c := &Client{HomeCluster: homeCluster, HomeScheme: scheme, homeGVKs: map[schema.GroupVersionKind]bool{podGVK: true}}
 
 	ctx := context.Background()
 	existingPod := &corev1.Pod{}
@@ -1204,6 +1205,10 @@ func TestClient_IndexField_HomeClusterOnly(t *testing.T) {
 	c := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
+		homeGVKs: map[schema.GroupVersionKind]bool{
+			configMapGVK:     true,
+			configMapListGVK: true,
+		},
 	}
 
 	err := c.IndexField(context.Background(), &corev1.ConfigMap{}, &corev1.ConfigMapList{}, "metadata.name", func(obj client.Object) []string {
@@ -1232,7 +1237,7 @@ func TestClient_ConcurrentAddRemoteAndRead(t *testing.T) {
 	for range 10 {
 		wg.Go(func() {
 			for range 100 {
-				_ = c.ClustersForGVK(configMapGVK)
+				_, _ = c.ClustersForGVK(configMapGVK)
 			}
 		})
 	}
@@ -1285,7 +1290,7 @@ func TestClient_InitFromConf_EmptyConfig(t *testing.T) {
 	}
 }
 
-func TestClient_InitFromConf_UnregisteredGVK(t *testing.T) {
+func TestClient_InitFromConf_UnregisteredRemoteGVK(t *testing.T) {
 	scheme := newTestScheme(t)
 	c := &Client{
 		HomeCluster: newFakeCluster(scheme),
@@ -1293,21 +1298,23 @@ func TestClient_InitFromConf_UnregisteredGVK(t *testing.T) {
 	}
 	mgr := &fakeManager{}
 	conf := ClientConfig{
-		APIServerOverrides: []APIServerOverride{
-			{
-				Host: "https://remote-api:6443",
-				GVKs: []string{"unregistered.group/v1/UnknownKind"},
+		APIServers: APIServersConfig{
+			Remotes: []RemoteConfig{
+				{
+					Host: "https://remote-api:6443",
+					GVKs: []string{"unregistered.group/v1/UnknownKind"},
+				},
 			},
 		},
 	}
 
 	err := c.InitFromConf(context.Background(), mgr, conf)
 	if err == nil {
-		t.Fatal("expected error for unregistered GVK")
+		t.Fatal("expected error for unregistered remote GVK")
 	}
 }
 
-func TestClient_InitFromConf_UnregisteredFallbackGVK(t *testing.T) {
+func TestClient_InitFromConf_UnregisteredHomeGVK(t *testing.T) {
 	scheme := newTestScheme(t)
 	c := &Client{
 		HomeCluster: newFakeCluster(scheme),
@@ -1315,12 +1322,14 @@ func TestClient_InitFromConf_UnregisteredFallbackGVK(t *testing.T) {
 	}
 	mgr := &fakeManager{}
 	conf := ClientConfig{
-		Fallbacks: []FallbackConfig{{GVK: "unregistered.group/v1/UnknownKind"}},
+		APIServers: APIServersConfig{
+			Home: HomeConfig{GVKs: []string{"unregistered.group/v1/UnknownKind"}},
+		},
 	}
 
 	err := c.InitFromConf(context.Background(), mgr, conf)
 	if err == nil {
-		t.Fatal("expected error for unregistered fallback GVK")
+		t.Fatal("expected error for unregistered home GVK")
 	}
 }
 

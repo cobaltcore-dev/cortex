@@ -4,6 +4,8 @@
 package multicluster
 
 import (
+	"fmt"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,19 +35,19 @@ type MulticlusterBuilder struct {
 
 // WatchesMulticluster watches a resource across all clusters that serve its GVK.
 // If the GVK is served by multiple remote clusters, a watch is set up on each.
-func (b MulticlusterBuilder) WatchesMulticluster(object client.Object, eventHandler handler.TypedEventHandler[client.Object, reconcile.Request], predicates ...predicate.Predicate) MulticlusterBuilder {
+// Returns an error if the GVK is not configured in any cluster.
+func (b MulticlusterBuilder) WatchesMulticluster(object client.Object, eventHandler handler.TypedEventHandler[client.Object, reconcile.Request], predicates ...predicate.Predicate) (MulticlusterBuilder, error) {
 	gvk, err := b.multiclusterClient.GVKFromHomeScheme(object)
 	if err != nil {
-		// Fall back to home cluster if GVK lookup fails.
-		clusterCache := b.multiclusterClient.HomeCluster.GetCache()
-		b.Builder = b.WatchesRawSource(source.Kind(clusterCache, object, eventHandler, predicates...))
-		return b
+		return b, fmt.Errorf("failed to resolve GVK for %T: %w", object, err)
 	}
-
-	// Add a watch for each remote cluster serving the GVK
-	for _, cl := range b.multiclusterClient.ClustersForGVK(gvk) {
+	clusters, err := b.multiclusterClient.ClustersForGVK(gvk)
+	if err != nil {
+		return b, fmt.Errorf("no clusters configured for GVK %s: %w", gvk, err)
+	}
+	for _, cl := range clusters {
 		clusterCache := cl.GetCache()
 		b.Builder = b.WatchesRawSource(source.Kind(clusterCache, object, eventHandler, predicates...))
 	}
-	return b
+	return b, nil
 }

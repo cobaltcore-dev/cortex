@@ -185,43 +185,55 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
-	return multicluster.BuildController(mcl, mgr).
-		// Watch pipeline changes so that we can reconfigure pipelines as needed.
-		WatchesMulticluster(
-			&v1alpha1.Pipeline{},
-			handler.Funcs{
-				CreateFunc: c.HandlePipelineCreated,
-				UpdateFunc: c.HandlePipelineUpdated,
-				DeleteFunc: c.HandlePipelineDeleted,
-			},
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				pipeline := obj.(*v1alpha1.Pipeline)
-				// Only react to pipelines matching the scheduling domain.
-				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
-					return false
-				}
-				return pipeline.Spec.Type == c.PipelineType()
-			}),
-		).
-		// Watch knowledge changes so that we can reconfigure pipelines as needed.
-		WatchesMulticluster(
-			&v1alpha1.Knowledge{},
-			handler.Funcs{
-				CreateFunc: c.HandleKnowledgeCreated,
-				UpdateFunc: c.HandleKnowledgeUpdated,
-				DeleteFunc: c.HandleKnowledgeDeleted,
-			},
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				knowledge := obj.(*v1alpha1.Knowledge)
-				// Only react to knowledge matching the scheduling domain.
-				return knowledge.Spec.SchedulingDomain == v1alpha1.SchedulingDomainNova
-			}),
-		).
-		// Watch hypervisor changes so the cache gets updated.
-		WatchesMulticluster(&hv1.Hypervisor{}, handler.Funcs{}).
-		// Watch reservation changes so the cache gets updated.
-		WatchesMulticluster(&v1alpha1.Reservation{}, handler.Funcs{}).
-		Named("cortex-nova-decisions").
+	bldr := multicluster.BuildController(mcl, mgr)
+	// Watch pipeline changes so that we can reconfigure pipelines as needed.
+	bldr, err := bldr.WatchesMulticluster(
+		&v1alpha1.Pipeline{},
+		handler.Funcs{
+			CreateFunc: c.HandlePipelineCreated,
+			UpdateFunc: c.HandlePipelineUpdated,
+			DeleteFunc: c.HandlePipelineDeleted,
+		},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			pipeline := obj.(*v1alpha1.Pipeline)
+			// Only react to pipelines matching the scheduling domain.
+			if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
+				return false
+			}
+			return pipeline.Spec.Type == c.PipelineType()
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	// Watch knowledge changes so that we can reconfigure pipelines as needed.
+	bldr, err = bldr.WatchesMulticluster(
+		&v1alpha1.Knowledge{},
+		handler.Funcs{
+			CreateFunc: c.HandleKnowledgeCreated,
+			UpdateFunc: c.HandleKnowledgeUpdated,
+			DeleteFunc: c.HandleKnowledgeDeleted,
+		},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			knowledge := obj.(*v1alpha1.Knowledge)
+			// Only react to knowledge matching the scheduling domain.
+			return knowledge.Spec.SchedulingDomain == v1alpha1.SchedulingDomainNova
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	// Watch hypervisor changes so the cache gets updated.
+	bldr, err = bldr.WatchesMulticluster(&hv1.Hypervisor{}, handler.Funcs{})
+	if err != nil {
+		return err
+	}
+	// Watch reservation changes so the cache gets updated.
+	bldr, err = bldr.WatchesMulticluster(&v1alpha1.Reservation{}, handler.Funcs{})
+	if err != nil {
+		return err
+	}
+	return bldr.Named("cortex-nova-decisions").
 		For(
 			&v1alpha1.Decision{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {

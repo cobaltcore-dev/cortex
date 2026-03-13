@@ -44,29 +44,35 @@ type Client struct {
 	// Mutex to protect access to remoteClusters.
 	remoteClustersMu sync.RWMutex
 
-	// GVKs for which a write operation falls back to the home cluster
-	// when no remote cluster matches.
-	fallbackGVKs map[schema.GroupVersionKind]bool
+	// GVKs explicitly configured for the home cluster.
+	homeGVKs map[schema.GroupVersionKind]bool
 }
 
 type ClientConfig struct {
-	// Fallback GVKs that are written to the home cluster if no router match is found.
-	Fallbacks []FallbackConfig `json:"fallbacks,omitempty"`
-	// Apiserver overrides that map GVKs to remote clusters.
-	APIServerOverrides []APIServerOverride `json:"apiservers,omitempty"`
+	// Apiserver configuration mapping GVKs to home or remote clusters.
+	// Every GVK used through the multicluster client must be listed
+	// in either Home or Remotes. Unknown GVKs will cause an error.
+	APIServers APIServersConfig `json:"apiservers"`
 }
 
-// FallbackConfig specifies a GVK that falls back to the home cluster for writes
-// when no remote cluster matches.
-type FallbackConfig struct {
-	// The resource GVK formatted as "<group>/<version>/<Kind>".
-	GVK string `json:"gvk"`
+// APIServersConfig separates resources into home and remote clusters.
+type APIServersConfig struct {
+	// Resources managed in the cluster where cortex is deployed.
+	Home HomeConfig `json:"home"`
+	// Resources managed in remote clusters.
+	Remotes []RemoteConfig `json:"remotes,omitempty"`
 }
 
-// APIServerOverride maps multiple GVKs to a remote kubernetes apiserver with
+// HomeConfig lists GVKs that are managed in the home cluster.
+type HomeConfig struct {
+	// The resource GVKs formatted as "<group>/<version>/<Kind>".
+	GVKs []string `json:"gvks"`
+}
+
+// RemoteConfig maps multiple GVKs to a remote kubernetes apiserver with
 // routing labels. It is assumed that the remote apiserver accepts the
 // serviceaccount tokens issued by the local cluster.
-type APIServerOverride struct {
+type RemoteConfig struct {
 	// The remote kubernetes apiserver url, e.g. "https://my-apiserver:6443".
 	Host string `json:"host"`
 	// The root CA certificate to verify the remote apiserver.
@@ -93,27 +99,27 @@ func (c *Client) InitFromConf(ctx context.Context, mgr ctrl.Manager, conf Client
 	for gvkStr := range gvksByConfStr {
 		log.Info("scheme gvk registered", "gvk", gvkStr)
 	}
-	// Parse fallback GVKs.
-	c.fallbackGVKs = make(map[schema.GroupVersionKind]bool)
-	for _, fb := range conf.Fallbacks {
-		gvk, ok := gvksByConfStr[fb.GVK]
+	// Parse home GVKs.
+	c.homeGVKs = make(map[schema.GroupVersionKind]bool)
+	for _, gvkStr := range conf.APIServers.Home.GVKs {
+		gvk, ok := gvksByConfStr[gvkStr]
 		if !ok {
-			return errors.New("no gvk registered for fallback " + fb.GVK)
+			return errors.New("no gvk registered for home " + gvkStr)
 		}
-		log.Info("registering fallback gvk", "gvk", gvk)
-		c.fallbackGVKs[gvk] = true
+		log.Info("registering home gvk", "gvk", gvk)
+		c.homeGVKs[gvk] = true
 	}
-	// Parse apiserver overrides.
-	for _, override := range conf.APIServerOverrides {
+	// Parse remote apiserver configs.
+	for _, remote := range conf.APIServers.Remotes {
 		var resolvedGVKs []schema.GroupVersionKind
-		for _, gvkStr := range override.GVKs {
+		for _, gvkStr := range remote.GVKs {
 			gvk, ok := gvksByConfStr[gvkStr]
 			if !ok {
-				return errors.New("no gvk registered for API server override " + gvkStr)
+				return errors.New("no gvk registered for remote apiserver " + gvkStr)
 			}
 			resolvedGVKs = append(resolvedGVKs, gvk)
 		}
-		cl, err := c.AddRemote(ctx, override.Host, override.CACert, override.Labels, resolvedGVKs...)
+		cl, err := c.AddRemote(ctx, remote.Host, remote.CACert, remote.Labels, resolvedGVKs...)
 		if err != nil {
 			return err
 		}
@@ -173,44 +179,45 @@ func (c *Client) GVKFromHomeScheme(obj runtime.Object) (gvk schema.GroupVersionK
 }
 
 // ClustersForGVK returns all clusters that serve the given GVK.
-// If no remote clusters are configured, only the home cluster is returned.
-// For fallback GVKs with remote clusters, the home cluster is appended
-// because resources might have been written there as a fallback.
-func (c *Client) ClustersForGVK(gvk schema.GroupVersionKind) []cluster.Cluster {
+// The GVK must be explicitly configured in either homeGVKs or remoteClusters.
+// Returns an error if the GVK is unknown.
+func (c *Client) ClustersForGVK(gvk schema.GroupVersionKind) ([]cluster.Cluster, error) {
 	c.remoteClustersMu.RLock()
 	defer c.remoteClustersMu.RUnlock()
 	remotes := c.remoteClusters[gvk]
-	if len(remotes) == 0 {
-		return []cluster.Cluster{c.HomeCluster}
+	isHome := c.homeGVKs[gvk]
+	if len(remotes) == 0 && !isHome {
+		return nil, fmt.Errorf("GVK %s is not configured in home or any remote cluster", gvk)
 	}
 	clusters := make([]cluster.Cluster, 0, len(remotes)+1)
 	for _, r := range remotes {
 		clusters = append(clusters, r.cluster)
 	}
-	if c.fallbackGVKs[gvk] {
+	if isHome {
 		clusters = append(clusters, c.HomeCluster)
 	}
-	return clusters
+	return clusters, nil
 }
 
 // clusterForWrite uses a ResourceRouter to determine which remote cluster
 // a resource should be written to based on the resource content and cluster labels.
 //
-// If no remote clusters are configured for the GVK, the home cluster is returned.
-// If a ResourceRouter is configured and matches a cluster, that cluster is returned.
-// If no match is found and the GVK has a fallback configured, the home cluster is returned.
-// Otherwise an error is returned.
+// The GVK must be explicitly configured. If configured for home, the home cluster
+// is returned. If configured for remotes, the ResourceRouter determines the target.
+// Returns an error if the GVK is unknown or no remote cluster matches.
 func (c *Client) clusterForWrite(gvk schema.GroupVersionKind, obj any) (cluster.Cluster, error) {
 	c.remoteClustersMu.RLock()
 	defer c.remoteClustersMu.RUnlock()
 	remotes := c.remoteClusters[gvk]
 	if len(remotes) == 0 {
-		return c.HomeCluster, nil
+		if c.homeGVKs[gvk] {
+			return c.HomeCluster, nil
+		}
+		return nil, fmt.Errorf("GVK %s is not configured in home or any remote cluster", gvk)
 	}
 	router, ok := c.ResourceRouters[gvk]
 	if !ok {
 		// If there are more than one remote cluster and no router, we don't know which one to write to.
-		// That's why we need to return an error in that case. If there's only one remote cluster, we can safely assume
 		if len(remotes) == 1 {
 			return remotes[0].cluster, nil
 		}
@@ -225,12 +232,7 @@ func (c *Client) clusterForWrite(gvk schema.GroupVersionKind, obj any) (cluster.
 			return r.cluster, nil
 		}
 	}
-
-	// If we can't match any remote cluster but the GVK is configured to fall back to the home cluster, return the home cluster.
-	if c.fallbackGVKs[gvk] {
-		return c.HomeCluster, nil
-	}
-	return nil, fmt.Errorf("no cluster matched for GVK %s and no fallback configured", gvk)
+	return nil, fmt.Errorf("no cluster matched for GVK %s", gvk)
 }
 
 // Get iterates over all clusters with the GVK and returns the first result found.
@@ -240,7 +242,10 @@ func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Objec
 	if err != nil {
 		return err
 	}
-	clusters := c.ClustersForGVK(gvk)
+	clusters, err := c.ClustersForGVK(gvk)
+	if err != nil {
+		return err
+	}
 	var lastErr error
 	for _, cl := range clusters {
 		err := cl.GetClient().Get(ctx, key, obj, opts...)
@@ -261,7 +266,10 @@ func (c *Client) List(ctx context.Context, list client.ObjectList, opts ...clien
 	if err != nil {
 		return err
 	}
-	clusters := c.ClustersForGVK(gvk)
+	clusters, err := c.ClustersForGVK(gvk)
+	if err != nil {
+		return err
+	}
 
 	var allItems []runtime.Object
 	for _, cl := range clusters {
@@ -346,7 +354,11 @@ func (c *Client) DeleteAllOf(ctx context.Context, obj client.Object, opts ...cli
 	if err != nil {
 		return err
 	}
-	for _, cl := range c.ClustersForGVK(gvk) {
+	clusters, err := c.ClustersForGVK(gvk)
+	if err != nil {
+		return err
+	}
+	for _, cl := range clusters {
 		if err := cl.GetClient().DeleteAllOf(ctx, obj, opts...); err != nil {
 			return err
 		}
@@ -447,7 +459,10 @@ func (c *subResourceClient) Get(ctx context.Context, obj, subResource client.Obj
 	if err != nil {
 		return err
 	}
-	clusters := c.multiclusterClient.ClustersForGVK(gvk)
+	clusters, err := c.multiclusterClient.ClustersForGVK(gvk)
+	if err != nil {
+		return err
+	}
 	var lastErr error
 	for _, cl := range clusters {
 		err := cl.GetClient().SubResource(c.subResource).Get(ctx, obj, subResource, opts...)
@@ -511,7 +526,7 @@ func (c *subResourceClient) Apply(ctx context.Context, obj runtime.ApplyConfigur
 // Usually, you want to index the same field in both the object and list type,
 // as both would be mapped to individual clients based on their GVK.
 func (c *Client) IndexField(ctx context.Context, obj client.Object, list client.ObjectList, field string, extractValue client.IndexerFunc) error {
-	gvkObj, err := c.GVKFromHomeScheme(obj)
+	gvk, err := c.GVKFromHomeScheme(obj)
 	if err != nil {
 		return err
 	}
@@ -521,7 +536,11 @@ func (c *Client) IndexField(ctx context.Context, obj client.Object, list client.
 	}
 	// Collect all unique caches to index.
 	indexed := make(map[any]bool)
-	for _, cl := range c.ClustersForGVK(gvkObj) {
+	clusters, err := c.ClustersForGVK(gvk)
+	if err != nil {
+		return err
+	}
+	for _, cl := range clusters {
 		ch := cl.GetCache()
 		if indexed[ch] {
 			continue
@@ -531,7 +550,11 @@ func (c *Client) IndexField(ctx context.Context, obj client.Object, list client.
 			return err
 		}
 	}
-	for _, cl := range c.ClustersForGVK(gvkList) {
+	clustersList, err := c.ClustersForGVK(gvkList)
+	if err != nil {
+		return err
+	}
+	for _, cl := range clustersList {
 		ch := cl.GetCache()
 		if indexed[ch] {
 			continue
