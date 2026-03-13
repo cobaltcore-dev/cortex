@@ -16,7 +16,7 @@ import (
 
 var log = logf.Log.WithName("scheduler-client").WithValues("module", "reservations")
 
-// NOTE+FIXME: we should not send ourself rest api calls. This needs to be replace by direct go call (if possible) or communication via crds
+// NOTE+FIXME: we should not send ourselves REST API calls. This needs to be replaced by direct Go call (if possible) or communication via CRDs
 
 // SchedulerClient is a client for the external scheduler API.
 // It can be used by both the ReservationReconciler and FailoverReservationController.

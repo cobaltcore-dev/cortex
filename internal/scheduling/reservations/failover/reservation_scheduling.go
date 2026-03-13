@@ -119,12 +119,12 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 	allHypervisors []string,
 ) *v1alpha1.Reservation {
 
-	valid_hypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineReuseFailoverReservation)
+	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineReuseFailoverReservation)
 	if err != nil {
 		log.Error(err, "failed to get potential hypervisors for VM", "vmUUID", vm.UUID)
 		return nil
 	}
-	if len(valid_hypervisors) == 0 {
+	if len(validHypervisors) == 0 {
 		log.Info("no potential hypervisors returned by scheduler for VM", "vmUUID", vm.UUID)
 		return nil
 	}
@@ -147,7 +147,7 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 			"vmUUID", vm.UUID,
 			"reservationName", reservation.Name,
 			"reservationHypervisor", reservation.Status.Host)
-		if slices.Contains(valid_hypervisors, reservation.Status.Host) {
+		if slices.Contains(validHypervisors, reservation.Status.Host) {
 			// Create a copy of the reservation with the VM added
 			updatedRes := addVMToReservation(reservation, vm)
 			log.V(1).Info("found reusable reservation for VM",
@@ -160,10 +160,10 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 	return nil
 }
 
-// validateVmViaSchedulerEvacuation sends an evacuation-style scheduling request to validate
+// validateVMViaSchedulerEvacuation sends an evacuation-style scheduling request to validate
 // that a VM can use the reservation host.
 // TODO this is a bit of a hack. Ideally we have a special kind of request for that which would also verify that we equally are using the reservation
-func (c *FailoverReservationController) validateVmViaSchedulerEvacuation(
+func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 	ctx context.Context,
 	vm VM,
 	reservationHost string,

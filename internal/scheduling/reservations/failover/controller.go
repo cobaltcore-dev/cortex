@@ -173,7 +173,7 @@ func (c *FailoverReservationController) validateReservation(ctx context.Context,
 		}
 
 		// Validate the VM can use the reservation host via scheduler evacuation
-		valid, err := c.validateVmViaSchedulerEvacuation(ctx, *vm, reservationHost, vmCurrentHost)
+		valid, err := c.validateVMViaSchedulerEvacuation(ctx, *vm, reservationHost, vmCurrentHost)
 		if err != nil {
 			log.Error(err, "failed to validate VM for reservation host",
 				"reservationName", res.Name,
