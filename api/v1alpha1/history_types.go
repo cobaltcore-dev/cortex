@@ -27,7 +27,7 @@ type SchedulingHistoryEntry struct {
 	// The top hosts ordered by score for the decision (limited to 3).
 	// This is not a complete list of all candidates — only the highest-ranked
 	// hosts are retained to keep the history compact.
-	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Optional,MaxItems=3
 	OrderedHosts []string `json:"orderedHosts"`
 	// Whether the scheduling decision was successful.
 	// +kubebuilder:validation:Optional
