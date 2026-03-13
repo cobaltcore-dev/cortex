@@ -84,7 +84,7 @@ func (c *FilterWeigherPipelineController) ProcessNewPod(ctx context.Context, pod
 		},
 		Spec: v1alpha1.DecisionSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainPods,
-			ResourceID:       pod.Name,
+			ResourceID:       pod.Namespace + "-" + pod.Name,
 			PipelineRef: corev1.ObjectReference{
 				Name: "pods-scheduler",
 			},
@@ -223,7 +223,7 @@ func (c *FilterWeigherPipelineController) handlePod() handler.EventHandler {
 			c.processMu.Lock()
 			defer c.processMu.Unlock()
 			pod := evt.Object.(*corev1.Pod)
-			if err := c.HistoryManager.Delete(ctx, v1alpha1.SchedulingDomainPods, pod.Name); err != nil {
+			if err := c.HistoryManager.Delete(ctx, v1alpha1.SchedulingDomainPods, pod.Namespace+"-"+pod.Name); err != nil {
 				log := ctrl.LoggerFrom(ctx)
 				log.Error(err, "failed to delete history CRD for pod", "pod", pod.Name)
 			}
