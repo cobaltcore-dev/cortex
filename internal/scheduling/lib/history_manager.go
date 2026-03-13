@@ -207,7 +207,7 @@ func (h *HistoryManager) Upsert(
 	if decision.Status.Result != nil {
 		current.TargetHost = decision.Status.Result.TargetHost
 		hosts := decision.Status.Result.OrderedHosts
-		if hosts != nil && len(hosts) > maxHostsInOrderedList {
+		if len(hosts) > maxHostsInOrderedList {
 			hosts = hosts[:maxHostsInOrderedList]
 		}
 		current.OrderedHosts = hosts
