@@ -241,42 +241,48 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
-	return multicluster.BuildController(mcl, mgr).
-		WatchesMulticluster(
-			&ironcorev1alpha1.Machine{},
-			c.handleMachine(),
-			// Only schedule machines that have the custom scheduler set.
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				machine := obj.(*ironcorev1alpha1.Machine)
-				if machine.Spec.MachinePoolRef != nil {
-					// Skip machines that already have a machine pool assigned.
-					return false
-				}
-				// The machine spec currently doesn't support this field yet.
-				// Thus the resource will be deserialized to an empty string.
-				// We subscribe to all machines without a scheduler set for now.
-				// Otherwise when deployed the machine scheduler won't do anything.
-				return machine.Spec.Scheduler == ""
-			}),
-		).
-		// Watch pipeline changes so that we can reconfigure pipelines as needed.
-		WatchesMulticluster(
-			&v1alpha1.Pipeline{},
-			handler.Funcs{
-				CreateFunc: c.HandlePipelineCreated,
-				UpdateFunc: c.HandlePipelineUpdated,
-				DeleteFunc: c.HandlePipelineDeleted,
-			},
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				pipeline := obj.(*v1alpha1.Pipeline)
-				// Only react to pipelines matching the scheduling domain.
-				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainMachines {
-					return false
-				}
-				return pipeline.Spec.Type == c.PipelineType()
-			}),
-		).
-		Named("cortex-machine-scheduler").
+	bldr := multicluster.BuildController(mcl, mgr)
+	bldr, err := bldr.WatchesMulticluster(
+		&ironcorev1alpha1.Machine{},
+		c.handleMachine(),
+		// Only schedule machines that have the custom scheduler set.
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			machine := obj.(*ironcorev1alpha1.Machine)
+			if machine.Spec.MachinePoolRef != nil {
+				// Skip machines that already have a machine pool assigned.
+				return false
+			}
+			// The machine spec currently doesn't support this field yet.
+			// Thus the resource will be deserialized to an empty string.
+			// We subscribe to all machines without a scheduler set for now.
+			// Otherwise when deployed the machine scheduler won't do anything.
+			return machine.Spec.Scheduler == ""
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	// Watch pipeline changes so that we can reconfigure pipelines as needed.
+	bldr, err = bldr.WatchesMulticluster(
+		&v1alpha1.Pipeline{},
+		handler.Funcs{
+			CreateFunc: c.HandlePipelineCreated,
+			UpdateFunc: c.HandlePipelineUpdated,
+			DeleteFunc: c.HandlePipelineDeleted,
+		},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			pipeline := obj.(*v1alpha1.Pipeline)
+			// Only react to pipelines matching the scheduling domain.
+			if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainMachines {
+				return false
+			}
+			return pipeline.Spec.Type == c.PipelineType()
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	return bldr.Named("cortex-machine-scheduler").
 		For(
 			&v1alpha1.Decision{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {

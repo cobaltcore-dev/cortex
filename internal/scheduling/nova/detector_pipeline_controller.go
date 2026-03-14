@@ -135,39 +135,45 @@ func (c *DetectorPipelineController) SetupWithManager(mgr ctrl.Manager, mcl *mul
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
-	return multicluster.BuildController(mcl, mgr).
-		// Watch pipeline changes so that we can reconfigure pipelines as needed.
-		WatchesMulticluster(
-			&v1alpha1.Pipeline{},
-			handler.Funcs{
-				CreateFunc: c.HandlePipelineCreated,
-				UpdateFunc: c.HandlePipelineUpdated,
-				DeleteFunc: c.HandlePipelineDeleted,
-			},
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				pipeline := obj.(*v1alpha1.Pipeline)
-				// Only react to pipelines matching the scheduling domain.
-				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
-					return false
-				}
-				return pipeline.Spec.Type == c.PipelineType()
-			}),
-		).
-		// Watch knowledge changes so that we can reconfigure pipelines as needed.
-		WatchesMulticluster(
-			&v1alpha1.Knowledge{},
-			handler.Funcs{
-				CreateFunc: c.HandleKnowledgeCreated,
-				UpdateFunc: c.HandleKnowledgeUpdated,
-				DeleteFunc: c.HandleKnowledgeDeleted,
-			},
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				knowledge := obj.(*v1alpha1.Knowledge)
-				// Only react to knowledge matching the scheduling domain.
-				return knowledge.Spec.SchedulingDomain == v1alpha1.SchedulingDomainNova
-			}),
-		).
-		Named("cortex-nova-deschedulings").
+	bldr := multicluster.BuildController(mcl, mgr)
+	// Watch pipeline changes so that we can reconfigure pipelines as needed.
+	bldr, err := bldr.WatchesMulticluster(
+		&v1alpha1.Pipeline{},
+		handler.Funcs{
+			CreateFunc: c.HandlePipelineCreated,
+			UpdateFunc: c.HandlePipelineUpdated,
+			DeleteFunc: c.HandlePipelineDeleted,
+		},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			pipeline := obj.(*v1alpha1.Pipeline)
+			// Only react to pipelines matching the scheduling domain.
+			if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
+				return false
+			}
+			return pipeline.Spec.Type == c.PipelineType()
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	// Watch knowledge changes so that we can reconfigure pipelines as needed.
+	bldr, err = bldr.WatchesMulticluster(
+		&v1alpha1.Knowledge{},
+		handler.Funcs{
+			CreateFunc: c.HandleKnowledgeCreated,
+			UpdateFunc: c.HandleKnowledgeUpdated,
+			DeleteFunc: c.HandleKnowledgeDeleted,
+		},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			knowledge := obj.(*v1alpha1.Knowledge)
+			// Only react to knowledge matching the scheduling domain.
+			return knowledge.Spec.SchedulingDomain == v1alpha1.SchedulingDomainNova
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	return bldr.Named("cortex-nova-deschedulings").
 		For(
 			&v1alpha1.Descheduling{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {

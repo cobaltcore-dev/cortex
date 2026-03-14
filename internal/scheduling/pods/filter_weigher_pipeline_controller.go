@@ -252,38 +252,44 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
-	return multicluster.BuildController(mcl, mgr).
-		WatchesMulticluster(
-			&corev1.Pod{},
-			c.handlePod(),
-			// Only schedule pods that have a custom scheduler set.
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				pod := obj.(*corev1.Pod)
-				if pod.Spec.NodeName != "" {
-					// Skip pods that already have a node assigned.
-					return false
-				}
-				return pod.Spec.SchedulerName == string(v1alpha1.SchedulingDomainPods)
-			}),
-		).
-		// Watch pipeline changes so that we can reconfigure pipelines as needed.
-		WatchesMulticluster(
-			&v1alpha1.Pipeline{},
-			handler.Funcs{
-				CreateFunc: c.HandlePipelineCreated,
-				UpdateFunc: c.HandlePipelineUpdated,
-				DeleteFunc: c.HandlePipelineDeleted,
-			},
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				pipeline := obj.(*v1alpha1.Pipeline)
-				// Only react to pipelines matching the scheduling domain.
-				if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainPods {
-					return false
-				}
-				return pipeline.Spec.Type == v1alpha1.PipelineTypeFilterWeigher
-			}),
-		).
-		Named("cortex-pod-scheduler").
+	bldr := multicluster.BuildController(mcl, mgr)
+	bldr, err := bldr.WatchesMulticluster(
+		&corev1.Pod{},
+		c.handlePod(),
+		// Only schedule pods that have a custom scheduler set.
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			pod := obj.(*corev1.Pod)
+			if pod.Spec.NodeName != "" {
+				// Skip pods that already have a node assigned.
+				return false
+			}
+			return pod.Spec.SchedulerName == string(v1alpha1.SchedulingDomainPods)
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	// Watch pipeline changes so that we can reconfigure pipelines as needed.
+	bldr, err = bldr.WatchesMulticluster(
+		&v1alpha1.Pipeline{},
+		handler.Funcs{
+			CreateFunc: c.HandlePipelineCreated,
+			UpdateFunc: c.HandlePipelineUpdated,
+			DeleteFunc: c.HandlePipelineDeleted,
+		},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			pipeline := obj.(*v1alpha1.Pipeline)
+			// Only react to pipelines matching the scheduling domain.
+			if pipeline.Spec.SchedulingDomain != v1alpha1.SchedulingDomainPods {
+				return false
+			}
+			return pipeline.Spec.Type == v1alpha1.PipelineTypeFilterWeigher
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	return bldr.Named("cortex-pod-scheduler").
 		For(
 			&v1alpha1.Decision{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {

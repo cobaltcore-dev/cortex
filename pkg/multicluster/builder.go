@@ -4,6 +4,8 @@
 package multicluster
 
 import (
+	"fmt"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,21 +33,21 @@ type MulticlusterBuilder struct {
 	multiclusterClient *Client
 }
 
-// Watch resources across multiple clusters.
-//
-// If the object implements Resource, we pick the right cluster based on the
-// resource URI. If your builder needs this method, pass it to the builder
-// Watch resources, potentially in a remote cluster.
-//
-// Determines the appropriate cluster by looking up the object's GroupVersionKind (GVK)
-// in the home scheme. If your builder needs this method, pass it to the builder
-// as the first call and then proceed with other builder methods.
-func (b MulticlusterBuilder) WatchesMulticluster(object client.Object, eventHandler handler.TypedEventHandler[client.Object, reconcile.Request], predicates ...predicate.Predicate) MulticlusterBuilder {
-	cl := b.multiclusterClient.HomeCluster // default cluster
-	if gvk, err := b.multiclusterClient.GVKFromHomeScheme(object); err == nil {
-		cl = b.multiclusterClient.ClusterForResource(gvk)
+// WatchesMulticluster watches a resource across all clusters that serve its GVK.
+// If the GVK is served by multiple remote clusters, a watch is set up on each.
+// Returns an error if the GVK is not configured in any cluster.
+func (b MulticlusterBuilder) WatchesMulticluster(object client.Object, eventHandler handler.TypedEventHandler[client.Object, reconcile.Request], predicates ...predicate.Predicate) (MulticlusterBuilder, error) {
+	gvk, err := b.multiclusterClient.GVKFromHomeScheme(object)
+	if err != nil {
+		return b, fmt.Errorf("failed to resolve GVK for %T: %w", object, err)
 	}
-	clusterCache := cl.GetCache()
-	b.Builder = b.WatchesRawSource(source.Kind(clusterCache, object, eventHandler, predicates...))
-	return b
+	clusters, err := b.multiclusterClient.ClustersForGVK(gvk)
+	if err != nil {
+		return b, fmt.Errorf("no clusters configured for GVK %s: %w", gvk, err)
+	}
+	for _, cl := range clusters {
+		clusterCache := cl.GetCache()
+		b.Builder = b.WatchesRawSource(source.Kind(clusterCache, object, eventHandler, predicates...))
+	}
+	return b, nil
 }

@@ -253,25 +253,31 @@ func (r *TriggerReconciler) mapKnowledgeToKnowledge(ctx context.Context, obj cli
 
 // SetupWithManager sets up the controller with the Manager
 func (r *TriggerReconciler) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
-	return multicluster.BuildController(mcl, mgr).
-		// Watch datasource changes and map them to trigger reconciliation
-		WatchesMulticluster(
-			&v1alpha1.Datasource{},
-			handler.EnqueueRequestsFromMapFunc(r.mapDatasourceToKnowledge),
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				ds := obj.(*v1alpha1.Datasource)
-				return ds.Spec.SchedulingDomain == r.Conf.SchedulingDomain
-			}),
-		).
-		// Watch knowledge changes and map them to trigger reconciliation
-		WatchesMulticluster(
-			&v1alpha1.Knowledge{},
-			handler.EnqueueRequestsFromMapFunc(r.mapKnowledgeToKnowledge),
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				k := obj.(*v1alpha1.Knowledge)
-				return k.Spec.SchedulingDomain == r.Conf.SchedulingDomain
-			}),
-		).
-		Named("cortex-knowledge-trigger").
+	bldr := multicluster.BuildController(mcl, mgr)
+	// Watch datasource changes and map them to trigger reconciliation
+	bldr, err := bldr.WatchesMulticluster(
+		&v1alpha1.Datasource{},
+		handler.EnqueueRequestsFromMapFunc(r.mapDatasourceToKnowledge),
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			ds := obj.(*v1alpha1.Datasource)
+			return ds.Spec.SchedulingDomain == r.Conf.SchedulingDomain
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	// Watch knowledge changes and map them to trigger reconciliation
+	bldr, err = bldr.WatchesMulticluster(
+		&v1alpha1.Knowledge{},
+		handler.EnqueueRequestsFromMapFunc(r.mapKnowledgeToKnowledge),
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			k := obj.(*v1alpha1.Knowledge)
+			return k.Spec.SchedulingDomain == r.Conf.SchedulingDomain
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	return bldr.Named("cortex-knowledge-trigger").
 		Complete(r)
 }
