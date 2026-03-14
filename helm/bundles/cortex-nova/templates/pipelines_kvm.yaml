@@ -74,7 +74,6 @@ spec:
       description: |
         This weigher implements the "soft affinity" and "soft anti-affinity" policy
         for instance groups in nova.
-
         It assigns a weight to each host based on how many instances of the same
         instance group are already running on that host. The more instances of the
         same group on a host, the lower (for soft-anti-affinity) or higher
@@ -359,4 +358,153 @@ spec:
         the observed time span.
       params:
         - {key: maxStealPctOverObservedTimeSpan, floatValue: 20.0}
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: kvm-valid-host-new-failover-reservation
+spec:
+  schedulingDomain: nova
+  description: |
+    This pipeline is used by the failover reservation controller to find a suitable
+    host for creating a new failover reservation. It validates host compatibility
+    and checks capacity to ensure the host can accommodate the reservation.
+
+    Use case: When a VM needs failover protection and no existing reservation can
+    be reused, this pipeline finds the best host for a new reservation.
+  type: filter-weigher
+  createDecisions: false
+  filters:
+    - name: filter_host_instructions
+      description: |
+        This step will consider the `ignore_hosts` and `force_hosts` instructions
+        from the nova scheduler request spec to filter out or exclusively allow
+        certain hosts.
+    - name: filter_has_enough_capacity
+      description: |
+        This step will filter out hosts that do not have enough available capacity
+        to host the requested flavor. Reservations are considered to ensure we
+        don't double-book capacity.
+      params:
+        - {key: lockReserved, boolValue: true}
+    - name: filter_has_requested_traits
+      description: |
+        This step filters hosts that do not have the requested traits given by the
+        nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
+        not have the specified trait. "trait:<trait>": "required" means the host
+        must have the specified trait.
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone. This ensures failover
+        reservations are created in the same AZ as the VM they protect.
+    - name: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
+    - name: filter_capabilities
+      description: |
+        This step will filter out hosts that do not meet the compute capabilities
+        requested by the nova flavor extra specs, like `{"arch": "x86_64",
+        "maxphysaddr:bits": 46, ...}`.
+  weighers: []
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: kvm-valid-host-reuse-failover-reservation
+spec:
+  schedulingDomain: nova
+  description: |
+    This pipeline is used by the failover reservation controller to check if a VM
+    can reuse an existing failover reservation. It validates that the reservation
+    host is compatible with the VM's requirements (traits, capabilities, etc.)
+    without checking capacity, since the reservation already has capacity reserved.
+
+    Use case: When a VM needs failover protection and there's an existing reservation
+    on a host, this pipeline validates the host is still suitable for the VM.
+  type: filter-weigher
+  createDecisions: false
+  filters:
+    - name: filter_host_instructions
+      description: |
+        This step will consider the `ignore_hosts` and `force_hosts` instructions
+        from the nova scheduler request spec to filter out or exclusively allow
+        certain hosts.
+    - name: filter_has_requested_traits
+      description: |
+        This step filters hosts that do not have the requested traits given by the
+        nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
+        not have the specified trait. "trait:<trait>": "required" means the host
+        must have the specified trait.
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone. This ensures VMs can
+        only reuse reservations in their own AZ.
+    - name: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
+    - name: filter_capabilities
+      description: |
+        This step will filter out hosts that do not meet the compute capabilities
+        requested by the nova flavor extra specs, like `{"arch": "x86_64",
+        "maxphysaddr:bits": 46, ...}`.
+  weighers: []
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: kvm-acknowledge-failover-reservation
+spec:
+  schedulingDomain: nova
+  description: |
+    This pipeline is used by the failover reservation controller to validate that
+    a failover reservation is still valid for all its allocated VMs. It sends an
+    evacuation-style scheduling request for each VM with only the reservation's
+    host as the eligible target.
+
+    Use case: After a reservation is created or modified, this pipeline validates
+    that the reservation host can still accommodate all allocated VMs. If validation
+    fails for any VM, the reservation is deleted (nack).
+  type: filter-weigher
+  createDecisions: false
+  filters:
+    - name: filter_host_instructions
+      description: |
+        This step will consider the `ignore_hosts` and `force_hosts` instructions
+        from the nova scheduler request spec to filter out or exclusively allow
+        certain hosts.
+    - name: filter_has_enough_capacity
+      description: |
+        This step will filter out hosts that do not have enough available capacity
+        to host the requested flavor. Reservations are considered to ensure we
+        don't double-book capacity.
+      params:
+        - {key: lockReserved, boolValue: true}
+    - name: filter_has_requested_traits
+      description: |
+        This step filters hosts that do not have the requested traits given by the
+        nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
+        not have the specified trait. "trait:<trait>": "required" means the host
+        must have the specified trait.
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone. This ensures reservation
+        validation respects AZ boundaries.
+    - name: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
+    - name: filter_capabilities
+      description: |
+        This step will filter out hosts that do not meet the compute capabilities
+        requested by the nova flavor extra specs, like `{"arch": "x86_64",
+        "maxphysaddr:bits": 46, ...}`.
+  weighers: []
 {{- end }}

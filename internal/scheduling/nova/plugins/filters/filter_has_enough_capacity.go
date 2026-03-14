@@ -57,7 +57,16 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 	}
 	for _, hv := range hvs.Items {
 		// Start with the total capacity.
-		freeResourcesByHost[hv.Name] = hv.Status.Capacity
+		// Skip hypervisors with nil or empty capacity.
+		if len(hv.Status.Capacity) == 0 {
+			traceLog.Info("skipping hypervisor with nil or empty capacity", "host", hv.Name)
+			continue
+		}
+		// Make a copy of the capacity map to avoid modifying the original.
+		freeResourcesByHost[hv.Name] = make(map[string]resource.Quantity)
+		for k, v := range hv.Status.Capacity {
+			freeResourcesByHost[hv.Name][k] = v.DeepCopy()
+		}
 
 		// Subtract allocated resources.
 		for resourceName, allocated := range hv.Status.Allocation {
@@ -185,33 +194,43 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 
 		// Block the calculated resources on each host
 		for host := range hostsToBlock {
+			// Skip hosts that don't have a corresponding Hypervisor resource.
+			// This can happen if a reservation references a host that was removed.
+			if _, hostExists := freeResourcesByHost[host]; !hostExists {
+				traceLog.Debug("skipping reservation for unknown host",
+					"reservation", reservation.Name,
+					"host", host)
+				continue
+			}
 			if cpu, ok := resourcesToBlock["cpu"]; ok {
-				freeCPU := freeResourcesByHost[host]["cpu"]
-				freeCPU.Sub(cpu)
-				if freeCPU.Value() < 0 {
-					traceLog.Warn("negative free CPU after blocking reservation",
-						"host", host,
-						"reservation", reservation.Name,
-						"reservationType", reservation.Spec.Type,
-						"freeCPU", freeCPU.String(),
-						"blocked", cpu.String())
-					freeCPU = resource.MustParse("0")
+				if freeCPU, exists := freeResourcesByHost[host]["cpu"]; exists {
+					freeCPU.Sub(cpu)
+					if freeCPU.Value() < 0 {
+						traceLog.Warn("negative free CPU after blocking reservation",
+							"host", host,
+							"reservation", reservation.Name,
+							"reservationType", reservation.Spec.Type,
+							"freeCPU", freeCPU.String(),
+							"blocked", cpu.String())
+						freeCPU = resource.MustParse("0")
+					}
+					freeResourcesByHost[host]["cpu"] = freeCPU
 				}
-				freeResourcesByHost[host]["cpu"] = freeCPU
 			}
 			if memory, ok := resourcesToBlock["memory"]; ok {
-				freeMemory := freeResourcesByHost[host]["memory"]
-				freeMemory.Sub(memory)
-				if freeMemory.Value() < 0 {
-					traceLog.Warn("negative free memory after blocking reservation",
-						"host", host,
-						"reservation", reservation.Name,
-						"reservationType", reservation.Spec.Type,
-						"freeMemory", freeMemory.String(),
-						"blocked", memory.String())
-					freeMemory = resource.MustParse("0")
+				if freeMemory, exists := freeResourcesByHost[host]["memory"]; exists {
+					freeMemory.Sub(memory)
+					if freeMemory.Value() < 0 {
+						traceLog.Warn("negative free memory after blocking reservation",
+							"host", host,
+							"reservation", reservation.Name,
+							"reservationType", reservation.Spec.Type,
+							"freeMemory", freeMemory.String(),
+							"blocked", memory.String())
+						freeMemory = resource.MustParse("0")
+					}
+					freeResourcesByHost[host]["memory"] = freeMemory
 				}
-				freeResourcesByHost[host]["memory"] = freeMemory
 			}
 		}
 	}

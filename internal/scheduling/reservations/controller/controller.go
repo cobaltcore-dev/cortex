@@ -19,8 +19,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -73,6 +75,8 @@ type ReservationReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
+// Note: Failover reservations are filtered out at the watch level by the predicate
+// in SetupWithManager, so this function only handles non-failover reservations.
 func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 	// Fetch the reservation object.
@@ -466,6 +470,41 @@ func (r *ReservationReconciler) listServersByProjectID(ctx context.Context, proj
 	return serverMap, nil
 }
 
+// notFailoverReservationPredicate filters out failover reservations at the watch level.
+// This prevents the controller from being notified about failover reservations,
+// which are managed by the separate failover controller.
+// Failover reservations are identified by the label v1alpha1.LabelReservationType.
+var notFailoverReservationPredicate = predicate.Funcs{
+	CreateFunc: func(e event.CreateEvent) bool {
+		res, ok := e.Object.(*v1alpha1.Reservation)
+		if !ok {
+			return false
+		}
+		return res.Labels[v1alpha1.LabelReservationType] != v1alpha1.ReservationTypeLabelFailover
+	},
+	UpdateFunc: func(e event.UpdateEvent) bool {
+		res, ok := e.ObjectNew.(*v1alpha1.Reservation)
+		if !ok {
+			return false
+		}
+		return res.Labels[v1alpha1.LabelReservationType] != v1alpha1.ReservationTypeLabelFailover
+	},
+	DeleteFunc: func(e event.DeleteEvent) bool {
+		res, ok := e.Object.(*v1alpha1.Reservation)
+		if !ok {
+			return false
+		}
+		return res.Labels[v1alpha1.LabelReservationType] != v1alpha1.ReservationTypeLabelFailover
+	},
+	GenericFunc: func(e event.GenericEvent) bool {
+		res, ok := e.Object.(*v1alpha1.Reservation)
+		if !ok {
+			return false
+		}
+		return res.Labels[v1alpha1.LabelReservationType] != v1alpha1.ReservationTypeLabelFailover
+	},
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *ReservationReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
@@ -478,6 +517,7 @@ func (r *ReservationReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multiclu
 	}
 	return multicluster.BuildController(mcl, mgr).
 		For(&v1alpha1.Reservation{}).
+		WithEventFilter(notFailoverReservationPredicate).
 		Named("reservation").
 		WithOptions(controller.Options{
 			// We want to process reservations one at a time to avoid overbooking.
