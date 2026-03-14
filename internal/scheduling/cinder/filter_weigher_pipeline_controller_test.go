@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -247,13 +248,13 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 	}
 
 	tests := []struct {
-		name                  string
-		decision              *v1alpha1.Decision
-		pipelineConfig        *v1alpha1.Pipeline
-		createDecisions       bool
-		expectError           bool
-		expectDecisionCreated bool
-		expectResult          bool
+		name                 string
+		decision             *v1alpha1.Decision
+		pipelineConfig       *v1alpha1.Pipeline
+		createDecisions      bool
+		expectError          bool
+		expectHistoryCreated bool
+		expectResult         bool
 	}{
 		{
 			name: "successful decision processing with creation",
@@ -264,6 +265,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				},
 				Spec: v1alpha1.DecisionSpec{
 					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
+					ResourceID:       "test-uuid-1",
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline",
 					},
@@ -284,10 +286,10 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createDecisions:       true,
-			expectError:           false,
-			expectDecisionCreated: true,
-			expectResult:          true,
+			createDecisions:      true,
+			expectError:          false,
+			expectHistoryCreated: true,
+			expectResult:         true,
 		},
 		{
 			name: "successful decision processing without creation",
@@ -318,10 +320,10 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createDecisions:       false,
-			expectError:           false,
-			expectDecisionCreated: false,
-			expectResult:          true,
+			createDecisions:      false,
+			expectError:          false,
+			expectHistoryCreated: false,
+			expectResult:         true,
 		},
 		{
 			name: "pipeline not configured",
@@ -340,10 +342,10 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					},
 				},
 			},
-			pipelineConfig:        nil,
-			expectError:           true,
-			expectDecisionCreated: false,
-			expectResult:          false,
+			pipelineConfig:       nil,
+			expectError:          true,
+			expectHistoryCreated: false,
+			expectResult:         false,
 		},
 		{
 			name: "decision without cinderRaw spec",
@@ -372,10 +374,10 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createDecisions:       true,
-			expectError:           true,
-			expectDecisionCreated: false,
-			expectResult:          false,
+			createDecisions:      true,
+			expectError:          true,
+			expectHistoryCreated: true,
+			expectResult:         false,
 		},
 	}
 
@@ -389,7 +391,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 			client := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(objects...).
-				WithStatusSubresource(&v1alpha1.Decision{}).
+				WithStatusSubresource(&v1alpha1.Decision{}, &v1alpha1.History{}).
 				Build()
 
 			controller := &FilterWeigherPipelineController{
@@ -397,6 +399,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					Client:          client,
 					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
+					HistoryManager:  lib.HistoryManager{Client: client},
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
@@ -419,41 +422,23 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				t.Errorf("Expected no error but got: %v", err)
 			}
 
-			// Check if decision was created (if expected)
-			if tt.expectDecisionCreated {
-				var decisions v1alpha1.DecisionList
-				err := client.List(context.Background(), &decisions)
-				if err != nil {
-					t.Errorf("Failed to list decisions: %v", err)
-					return
-				}
-
-				found := false
-				for _, decision := range decisions.Items {
-					if decision.Spec.SchedulingDomain == v1alpha1.SchedulingDomainCinder {
-						found = true
-
-						// Verify decision properties
-						if decision.Spec.PipelineRef.Name != "test-pipeline" {
-							t.Errorf("expected pipeline ref %q, got %q", "test-pipeline", decision.Spec.PipelineRef.Name)
-						}
-
-						// Check if result was set
-						if tt.expectResult {
-							if decision.Status.Result == nil {
-								t.Error("expected decision result to be set")
-								return
-							}
-						}
+			// Check if history CRD was created when expected
+			if tt.expectHistoryCreated {
+				var histories v1alpha1.HistoryList
+				deadline := time.Now().Add(2 * time.Second)
+				for {
+					if err := client.List(context.Background(), &histories); err != nil {
+						t.Fatalf("Failed to list histories: %v", err)
+					}
+					if len(histories.Items) > 0 {
 						break
 					}
-				}
-
-				if !found {
-					t.Error("expected decision to be created but was not found")
+					if time.Now().After(deadline) {
+						t.Fatal("timed out waiting for history CRD to be created")
+					}
+					time.Sleep(5 * time.Millisecond)
 				}
 			} else if !tt.expectError {
-				// For cases without creation, check that the decision has the right status
 				if tt.expectResult && tt.decision.Status.Result == nil {
 					t.Error("expected decision result to be set in original decision object")
 				}

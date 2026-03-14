@@ -84,7 +84,7 @@ func (c *FilterWeigherPipelineController) ProcessNewPod(ctx context.Context, pod
 		},
 		Spec: v1alpha1.DecisionSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainPods,
-			ResourceID:       pod.Name,
+			ResourceID:       pod.Namespace + "--" + pod.Name,
 			PipelineRef: corev1.ObjectReference{
 				Name: "pods-scheduler",
 			},
@@ -99,12 +99,6 @@ func (c *FilterWeigherPipelineController) ProcessNewPod(ctx context.Context, pod
 	if !ok {
 		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
 	}
-	if pipelineConf.Spec.CreateDecisions {
-		if err := c.Create(ctx, decision); err != nil {
-			return err
-		}
-	}
-	old := decision.DeepCopy()
 	err := c.process(ctx, decision)
 	if err != nil {
 		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
@@ -122,9 +116,8 @@ func (c *FilterWeigherPipelineController) ProcessNewPod(ctx context.Context, pod
 		})
 	}
 	if pipelineConf.Spec.CreateDecisions {
-		patch := client.MergeFrom(old)
-		if err := c.Status().Patch(ctx, decision, patch); err != nil {
-			return err
+		if upsertErr := c.HistoryManager.Upsert(ctx, decision, v1alpha1.SchedulingIntentUnknown, nil, err); upsertErr != nil {
+			ctrl.LoggerFrom(ctx).Error(upsertErr, "failed to create/update history")
 		}
 	}
 	return err
@@ -227,20 +220,12 @@ func (c *FilterWeigherPipelineController) handlePod() handler.EventHandler {
 			}
 		},
 		DeleteFunc: func(ctx context.Context, evt event.DeleteEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			// Delete the associated decision(s).
-			log := ctrl.LoggerFrom(ctx)
+			c.processMu.Lock()
+			defer c.processMu.Unlock()
 			pod := evt.Object.(*corev1.Pod)
-			var decisions v1alpha1.DecisionList
-			if err := c.List(ctx, &decisions); err != nil {
-				log.Error(err, "failed to list decisions for deleted pod")
-				return
-			}
-			for _, decision := range decisions.Items {
-				if decision.Spec.PodRef.Name == pod.Name && decision.Spec.PodRef.Namespace == pod.Namespace {
-					if err := c.Delete(ctx, &decision); err != nil {
-						log.Error(err, "failed to delete decision for deleted pod")
-					}
-				}
+			if err := c.HistoryManager.Delete(ctx, v1alpha1.SchedulingDomainPods, pod.Namespace+"--"+pod.Name); err != nil {
+				log := ctrl.LoggerFrom(ctx)
+				log.Error(err, "failed to delete history CRD for pod", "pod", pod.Name)
 			}
 		},
 	}
@@ -249,6 +234,7 @@ func (c *FilterWeigherPipelineController) handlePod() handler.EventHandler {
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainPods
+	c.HistoryManager = lib.HistoryManager{Client: mgr.GetClient(), Recorder: mgr.GetEventRecorder("cortex-pods-scheduler")}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

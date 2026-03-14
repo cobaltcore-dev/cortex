@@ -100,12 +100,6 @@ func (c *FilterWeigherPipelineController) ProcessNewMachine(ctx context.Context,
 	if !ok {
 		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
 	}
-	if pipelineConf.Spec.CreateDecisions {
-		if err := c.Create(ctx, decision); err != nil {
-			return err
-		}
-	}
-	old := decision.DeepCopy()
 	err := c.process(ctx, decision)
 	if err != nil {
 		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
@@ -123,9 +117,8 @@ func (c *FilterWeigherPipelineController) ProcessNewMachine(ctx context.Context,
 		})
 	}
 	if pipelineConf.Spec.CreateDecisions {
-		patch := client.MergeFrom(old)
-		if err := c.Status().Patch(ctx, decision, patch); err != nil {
-			return err
+		if upsertErr := c.HistoryManager.Upsert(ctx, decision, v1alpha1.SchedulingIntentUnknown, nil, err); upsertErr != nil {
+			ctrl.LoggerFrom(ctx).Error(upsertErr, "failed to create/update history")
 		}
 	}
 	return err
@@ -216,20 +209,12 @@ func (c *FilterWeigherPipelineController) handleMachine() handler.EventHandler {
 			}
 		},
 		DeleteFunc: func(ctx context.Context, evt event.DeleteEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			// Delete the associated decision(s).
-			log := ctrl.LoggerFrom(ctx)
+			c.processMu.Lock()
+			defer c.processMu.Unlock()
 			machine := evt.Object.(*ironcorev1alpha1.Machine)
-			var decisions v1alpha1.DecisionList
-			if err := c.List(ctx, &decisions); err != nil {
-				log.Error(err, "failed to list decisions for deleted machine")
-				return
-			}
-			for _, decision := range decisions.Items {
-				if decision.Spec.MachineRef.Name == machine.Name && decision.Spec.MachineRef.Namespace == machine.Namespace {
-					if err := c.Delete(ctx, &decision); err != nil {
-						log.Error(err, "failed to delete decision for deleted machine")
-					}
-				}
+			if err := c.HistoryManager.Delete(ctx, v1alpha1.SchedulingDomainMachines, machine.Name); err != nil {
+				log := ctrl.LoggerFrom(ctx)
+				log.Error(err, "failed to delete history CRD for machine", "machine", machine.Name)
 			}
 		},
 	}
@@ -238,6 +223,7 @@ func (c *FilterWeigherPipelineController) handleMachine() handler.EventHandler {
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainMachines
+	c.HistoryManager = lib.HistoryManager{Client: mgr.GetClient(), Recorder: mgr.GetEventRecorder("cortex-machines-scheduler")}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

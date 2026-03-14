@@ -33,7 +33,7 @@ func TestCleanupNova(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		decisions       []v1alpha1.Decision
+		histories       []v1alpha1.History
 		reservations    []v1alpha1.Reservation
 		mockServers     []mockServer
 		authError       bool
@@ -45,45 +45,45 @@ func TestCleanupNova(t *testing.T) {
 	}{
 		{
 			name:        "authentication error",
-			decisions:   []v1alpha1.Decision{},
+			histories:   []v1alpha1.History{},
 			authError:   true,
 			expectError: true,
 		},
 		{
 			name:          "endpoint discovery error",
-			decisions:     []v1alpha1.Decision{},
+			histories:     []v1alpha1.History{},
 			endpointError: true,
 			expectError:   true,
 		},
 		{
 			name:        "nova server error",
-			decisions:   []v1alpha1.Decision{},
+			histories:   []v1alpha1.History{},
 			serverError: true,
 			expectError: true,
 		},
 		{
 			name:         "no servers found",
-			decisions:    []v1alpha1.Decision{},
+			histories:    []v1alpha1.History{},
 			emptyServers: true,
 			expectError:  false,
 		},
 		{
-			name: "delete decisions for non-existent servers",
-			decisions: []v1alpha1.Decision{
+			name: "delete histories for non-existent servers",
+			histories: []v1alpha1.History{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-existing-server",
+						Name: "history-existing-server",
 					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						ResourceID:       "server-exists",
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-deleted-server",
+						Name: "history-deleted-server",
 					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						ResourceID:       "server-deleted",
 					},
@@ -92,26 +92,26 @@ func TestCleanupNova(t *testing.T) {
 			mockServers: []mockServer{
 				{ID: "server-exists"},
 			},
-			expectedDeleted: []string{"decision-deleted-server"},
+			expectedDeleted: []string{"history-deleted-server"},
 			expectError:     false,
 		},
 		{
-			name: "keep decisions for existing servers",
-			decisions: []v1alpha1.Decision{
+			name: "keep histories for existing servers",
+			histories: []v1alpha1.History{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-server-1",
+						Name: "history-server-1",
 					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						ResourceID:       "server-1",
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-server-2",
+						Name: "history-server-2",
 					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						ResourceID:       "server-2",
 					},
@@ -125,22 +125,22 @@ func TestCleanupNova(t *testing.T) {
 			expectError:     false,
 		},
 		{
-			name: "skip decisions with linked reservations",
-			decisions: []v1alpha1.Decision{
+			name: "skip histories with linked reservations",
+			histories: []v1alpha1.History{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-reserved-server",
+						Name: "history-reserved-server",
 					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						ResourceID:       "server-reserved",
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-unreserved-server",
+						Name: "history-unreserved-server",
 					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						ResourceID:       "server-unreserved",
 					},
@@ -154,26 +154,26 @@ func TestCleanupNova(t *testing.T) {
 				},
 			},
 			mockServers:     []mockServer{},
-			expectedDeleted: []string{"decision-unreserved-server"},
+			expectedDeleted: []string{"history-unreserved-server"},
 			expectError:     false,
 		},
 		{
-			name: "skip non-nova decisions",
-			decisions: []v1alpha1.Decision{
+			name: "skip non-nova histories",
+			histories: []v1alpha1.History{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-cinder",
+						Name: "history-cinder",
 					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
 						ResourceID:       "volume-1",
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-wrong-operator",
+						Name: "history-wrong-operator",
 					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: "other-operator",
 						ResourceID:       "server-1",
 					},
@@ -187,9 +187,9 @@ func TestCleanupNova(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			objects := make([]client.Object, 0, len(tt.decisions)+len(tt.reservations))
-			for i := range tt.decisions {
-				objects = append(objects, &tt.decisions[i])
+			objects := make([]client.Object, 0, len(tt.histories)+len(tt.reservations))
+			for i := range tt.histories {
+				objects = append(objects, &tt.histories[i])
 			}
 			for i := range tt.reservations {
 				objects = append(objects, &tt.reservations[i])
@@ -360,22 +360,22 @@ func TestCleanupNova(t *testing.T) {
 					}
 				}
 
-				// Verify other decisions still exist
-				for _, originalDecision := range tt.decisions {
+				// Verify other histories still exist
+				for _, originalHistory := range tt.histories {
 					shouldBeDeleted := false
 					for _, expectedDeleted := range tt.expectedDeleted {
-						if originalDecision.Name == expectedDeleted {
+						if originalHistory.Name == expectedDeleted {
 							shouldBeDeleted = true
 							break
 						}
 					}
 					if !shouldBeDeleted {
-						var decision v1alpha1.Decision
+						var history v1alpha1.History
 						err := client.Get(context.Background(),
-							types.NamespacedName{Name: originalDecision.Name}, &decision)
+							types.NamespacedName{Name: originalHistory.Name}, &history)
 						if err != nil {
-							t.Errorf("Expected decision %s to still exist but got error: %v",
-								originalDecision.Name, err)
+							t.Errorf("Expected history %s to still exist but got error: %v",
+								originalHistory.Name, err)
 						}
 					}
 				}

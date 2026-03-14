@@ -79,12 +79,6 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 	if !ok {
 		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
 	}
-	if pipelineConf.Spec.CreateDecisions {
-		if err := c.Create(ctx, decision); err != nil {
-			return err
-		}
-	}
-	old := decision.DeepCopy()
 	err := c.process(ctx, decision)
 	if err != nil {
 		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
@@ -102,10 +96,13 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 		})
 	}
 	if pipelineConf.Spec.CreateDecisions {
-		patch := client.MergeFrom(old)
-		if err := c.Status().Patch(ctx, decision, patch); err != nil {
-			return err
-		}
+		decisionForHistory := decision.DeepCopy()
+		histCtx := context.WithoutCancel(ctx)
+		go func(dec *v1alpha1.Decision, ctx context.Context, processErr error) {
+			if upsertErr := c.HistoryManager.Upsert(ctx, dec, v1alpha1.SchedulingIntentUnknown, nil, processErr); upsertErr != nil {
+				ctrl.LoggerFrom(ctx).Error(upsertErr, "failed to create/update history")
+			}
+		}(decisionForHistory, histCtx, err)
 	}
 	return err
 }
@@ -156,6 +153,7 @@ func (c *FilterWeigherPipelineController) InitPipeline(
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainCinder
+	c.HistoryManager = lib.HistoryManager{Client: mgr.GetClient(), Recorder: mgr.GetEventRecorder("cortex-cinder-scheduler")}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

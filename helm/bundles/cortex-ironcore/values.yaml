@@ -32,7 +32,6 @@ cortex:
     schedulingDomain: machines
     enabledControllers:
       - ironcore-decisions-pipeline-controller
-      - explanation-controller
     monitoring:
       labels:
         github_org: cobaltcore-dev

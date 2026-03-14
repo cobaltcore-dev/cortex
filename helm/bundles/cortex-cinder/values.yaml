@@ -97,7 +97,6 @@ cortex-scheduling-controllers:
         component: cinder-scheduling
     enabledControllers:
       - cinder-decisions-pipeline-controller
-      - explanation-controller
     enabledTasks:
       - cinder-decisions-cleanup-task
 
