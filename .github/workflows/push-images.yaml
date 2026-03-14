@@ -41,7 +41,7 @@ jobs:
       - name: Docker Meta (Cortex Postgres)
         if: steps.changed_postgres_files.outputs.all_changed_files != ''
         id: meta_cortex_postgres
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}-postgres
           tags: |
@@ -75,7 +75,7 @@ jobs:
       # Build & push new cortex image
       - name: Docker Meta (Cortex)
         id: meta_cortex
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}
           tags: |
