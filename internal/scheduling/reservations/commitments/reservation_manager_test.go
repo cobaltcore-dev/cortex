@@ -65,7 +65,7 @@ func TestApplyCommitmentState_CreatesNewReservations(t *testing.T) {
 	// Verify created reservations sum to desired state
 	totalMemory := int64(0)
 	for _, res := range touched {
-		memQuantity := res.Spec.Resources["memory"]
+		memQuantity := res.Spec.Resources[hv1.ResourceMemory]
 		totalMemory += memQuantity.Value()
 	}
 
@@ -169,7 +169,7 @@ func TestApplyCommitmentState_DeletesExcessReservations(t *testing.T) {
 
 	totalMemory := int64(0)
 	for _, res := range remainingList.Items {
-		memQuantity := res.Spec.Resources["memory"]
+		memQuantity := res.Spec.Resources[hv1.ResourceMemory]
 		totalMemory += memQuantity.Value()
 	}
 
@@ -531,7 +531,7 @@ func TestNewReservation_SelectsAppropriateFlavor(t *testing.T) {
 			}
 
 			// Verify CPU allocation
-			cpuQuantity := reservation.Spec.Resources["cpu"]
+			cpuQuantity := reservation.Spec.Resources[hv1.ResourceCPU]
 			if cpuQuantity.Value() != tt.expectedCores {
 				t.Errorf("expected %d cores, got %d",
 					tt.expectedCores, cpuQuantity.Value())

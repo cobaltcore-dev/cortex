@@ -294,13 +294,13 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 	// Check resource values - should be sized for the flavor that fits
 	// With 2048MB total capacity, we can fit 2x 1024MB flavors
 	expectedMemory := resource.MustParse("1073741824") // 1024MB in bytes
-	if !res.Spec.Resources["memory"].Equal(expectedMemory) {
-		t.Errorf("Expected memory %v, got %v", expectedMemory, res.Spec.Resources["memory"])
+	if !res.Spec.Resources[hv1.ResourceMemory].Equal(expectedMemory) {
+		t.Errorf("Expected memory %v, got %v", expectedMemory, res.Spec.Resources[hv1.ResourceMemory])
 	}
 
 	expectedVCPUs := resource.MustParse("2")
-	if !res.Spec.Resources["cpu"].Equal(expectedVCPUs) {
-		t.Errorf("Expected vCPUs %v, got %v", expectedVCPUs, res.Spec.Resources["cpu"])
+	if !res.Spec.Resources[hv1.ResourceCPU].Equal(expectedVCPUs) {
+		t.Errorf("Expected vCPUs %v, got %v", expectedVCPUs, res.Spec.Resources[hv1.ResourceCPU])
 	}
 }
 

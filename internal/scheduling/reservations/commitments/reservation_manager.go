@@ -78,7 +78,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 	}
 	deltaMemoryBytes := desiredState.TotalMemoryBytes
 	for _, res := range existing {
-		memoryQuantity := res.Spec.Resources["memory"]
+		memoryQuantity := res.Spec.Resources[hv1.ResourceMemory]
 		deltaMemoryBytes -= memoryQuantity.Value()
 	}
 
@@ -105,7 +105,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 				"expectedProjectID", desiredState.ProjectID,
 				"actualProjectID", res.Spec.CommittedResourceReservation.ProjectID)
 			removedReservations = append(removedReservations, res)
-			memValue := res.Spec.Resources["memory"]
+			memValue := res.Spec.Resources[hv1.ResourceMemory]
 			deltaMemoryBytes += memValue.Value()
 
 			if err := m.Delete(ctx, &res); err != nil {
@@ -133,7 +133,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 			existing = existing[:len(existing)-1] // remove from existing list
 		}
 		removedReservations = append(removedReservations, *reservationToDelete)
-		memValue := reservationToDelete.Spec.Resources["memory"]
+		memValue := reservationToDelete.Spec.Resources[hv1.ResourceMemory]
 		deltaMemoryBytes += memValue.Value()
 
 		log.Info("deleting reservation",
@@ -154,7 +154,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 		// TODO more sophisticated flavor selection, especially with flavors of different cpu/memory ratio
 		reservation := m.newReservation(desiredState, nextSlotIndex, deltaMemoryBytes, flavorGroup, creator)
 		touchedReservations = append(touchedReservations, *reservation)
-		memValue := reservation.Spec.Resources["memory"]
+		memValue := reservation.Spec.Resources[hv1.ResourceMemory]
 		deltaMemoryBytes -= memValue.Value()
 
 		log.Info("creating reservation",
