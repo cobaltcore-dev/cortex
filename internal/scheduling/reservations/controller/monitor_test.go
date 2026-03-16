@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 )
@@ -98,9 +99,9 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 					ResourceName: "test-flavor",
 				},
-				Resources: map[string]resource.Quantity{
-					"memory": resource.MustParse("1Gi"),
-					"cpu":    resource.MustParse("2"),
+				Resources: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: resource.MustParse("1Gi"),
+					hv1.ResourceCPU:    resource.MustParse("2"),
 				},
 			},
 			Status: v1alpha1.ReservationStatus{
@@ -123,9 +124,9 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 					ResourceName: "test-flavor",
 				},
-				Resources: map[string]resource.Quantity{
-					"memory": resource.MustParse("2Gi"),
-					"cpu":    resource.MustParse("4"),
+				Resources: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: resource.MustParse("2Gi"),
+					hv1.ResourceCPU:    resource.MustParse("4"),
 				},
 			},
 			Status: v1alpha1.ReservationStatus{
@@ -148,9 +149,9 @@ func TestMonitor_Collect_WithReservations(t *testing.T) {
 				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 					ResourceName: "test-flavor",
 				},
-				Resources: map[string]resource.Quantity{
-					"memory": resource.MustParse("4Gi"),
-					"cpu":    resource.MustParse("4"),
+				Resources: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: resource.MustParse("4Gi"),
+					hv1.ResourceCPU:    resource.MustParse("4"),
 				},
 			},
 			Status: v1alpha1.ReservationStatus{
@@ -244,9 +245,9 @@ func TestMonitor_Collect_ResourceMetrics(t *testing.T) {
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 				ResourceName: "test-flavor",
 			},
-			Resources: map[string]resource.Quantity{
-				"memory": resource.MustParse("1000Mi"),
-				"cpu":    resource.MustParse("2"),
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: resource.MustParse("1000Mi"),
+				hv1.ResourceCPU:    resource.MustParse("2"),
 			},
 		},
 		Status: v1alpha1.ReservationStatus{
@@ -367,9 +368,9 @@ func TestMonitor_Collect_LabelSanitization(t *testing.T) {
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 				ResourceName: "test-flavor",
 			},
-			Resources: map[string]resource.Quantity{
-				"memory": resource.MustParse("1Gi"),
-				"cpu":    resource.MustParse("2"),
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: resource.MustParse("1Gi"),
+				hv1.ResourceCPU:    resource.MustParse("2"),
 			},
 		},
 		Status: v1alpha1.ReservationStatus{

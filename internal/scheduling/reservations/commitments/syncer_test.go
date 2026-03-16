@@ -9,6 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -338,9 +339,9 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 				ResourceGroup: "old_group",
 				Creator:       CreatorValue,
 			},
-			Resources: map[string]resource.Quantity{
-				"memory": resource.MustParse("512Mi"),
-				"cpu":    resource.MustParse("1"),
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: resource.MustParse("512Mi"),
+				hv1.ResourceCPU:    resource.MustParse("1"),
 			},
 		},
 	}

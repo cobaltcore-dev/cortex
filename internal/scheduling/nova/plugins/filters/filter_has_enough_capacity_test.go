@@ -40,12 +40,12 @@ func newHypervisor(name, cpuCap, cpuAlloc, memCap, memAlloc string) *hv1.Hypervi
 		},
 		Status: hv1.HypervisorStatus{
 			Capacity: map[hv1.ResourceName]resource.Quantity{
-				"cpu":    resource.MustParse(cpuCap),
-				"memory": resource.MustParse(memCap),
+				hv1.ResourceCPU:    resource.MustParse(cpuCap),
+				hv1.ResourceMemory: resource.MustParse(memCap),
 			},
 			Allocation: map[hv1.ResourceName]resource.Quantity{
-				"cpu":    resource.MustParse(cpuAlloc),
-				"memory": resource.MustParse(memAlloc),
+				hv1.ResourceCPU:    resource.MustParse(cpuAlloc),
+				hv1.ResourceMemory: resource.MustParse(memAlloc),
 			},
 		},
 	}
@@ -64,9 +64,9 @@ func newCommittedReservation(
 		Spec: v1alpha1.ReservationSpec{
 			Type:       v1alpha1.ReservationTypeCommittedResource,
 			TargetHost: targetHost,
-			Resources: map[string]resource.Quantity{
-				"cpu":    resource.MustParse(cpu),
-				"memory": resource.MustParse(memory),
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceCPU:    resource.MustParse(cpu),
+				hv1.ResourceMemory: resource.MustParse(memory),
 			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 				ProjectID:     projectID,
@@ -104,9 +104,9 @@ func newFailoverReservation(name, targetHost, cpu, memory string, allocations ma
 		Spec: v1alpha1.ReservationSpec{
 			Type:       v1alpha1.ReservationTypeFailover,
 			TargetHost: targetHost,
-			Resources: map[string]resource.Quantity{
-				"cpu":    resource.MustParse(cpu),
-				"memory": resource.MustParse(memory),
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceCPU:    resource.MustParse(cpu),
+				hv1.ResourceMemory: resource.MustParse(memory),
 			},
 			FailoverReservation: &v1alpha1.FailoverReservationSpec{
 				ResourceGroup: "m1.large",
@@ -150,9 +150,9 @@ func crSpecAllocs(vms ...crVmAlloc) map[string]v1alpha1.CommittedResourceAllocat
 	for _, v := range vms {
 		allocs[v.uuid] = v1alpha1.CommittedResourceAllocation{
 			CreationTimestamp: metav1.Now(),
-			Resources: map[string]resource.Quantity{
-				"cpu":    resource.MustParse(v.cpu),
-				"memory": resource.MustParse(v.mem),
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceCPU:    resource.MustParse(v.cpu),
+				hv1.ResourceMemory: resource.MustParse(v.mem),
 			},
 		}
 	}

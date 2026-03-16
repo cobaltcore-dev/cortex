@@ -9,6 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -265,12 +266,12 @@ func (m *ReservationManager) newReservation(
 
 	spec := v1alpha1.ReservationSpec{
 		Type: v1alpha1.ReservationTypeCommittedResource,
-		Resources: map[string]resource.Quantity{
-			"memory": *resource.NewQuantity(
+		Resources: map[hv1.ResourceName]resource.Quantity{
+			hv1.ResourceMemory: *resource.NewQuantity(
 				memoryBytes,
 				resource.BinarySI,
 			),
-			"cpu": *resource.NewQuantity(
+			hv1.ResourceCPU: *resource.NewQuantity(
 				cpus,
 				resource.DecimalSI,
 			),

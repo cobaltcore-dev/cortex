@@ -23,12 +23,12 @@ func newHypervisor(name, capacityCPU, capacityMem, allocationCPU, allocationMem 
 		},
 		Status: hv1.HypervisorStatus{
 			Capacity: map[hv1.ResourceName]resource.Quantity{
-				"cpu":    resource.MustParse(capacityCPU),
-				"memory": resource.MustParse(capacityMem),
+				hv1.ResourceCPU:    resource.MustParse(capacityCPU),
+				hv1.ResourceMemory: resource.MustParse(capacityMem),
 			},
 			Allocation: map[hv1.ResourceName]resource.Quantity{
-				"cpu":    resource.MustParse(allocationCPU),
-				"memory": resource.MustParse(allocationMem),
+				hv1.ResourceCPU:    resource.MustParse(allocationCPU),
+				hv1.ResourceMemory: resource.MustParse(allocationMem),
 			},
 		},
 	}
@@ -344,12 +344,12 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
 					Status: hv1.HypervisorStatus{
 						Capacity: map[hv1.ResourceName]resource.Quantity{
-							"cpu":    resource.MustParse("0"),
-							"memory": resource.MustParse("100Gi"),
+							hv1.ResourceCPU:    resource.MustParse("0"),
+							hv1.ResourceMemory: resource.MustParse("100Gi"),
 						},
 						Allocation: map[hv1.ResourceName]resource.Quantity{
-							"cpu":    resource.MustParse("0"),
-							"memory": resource.MustParse("80Gi"),
+							hv1.ResourceCPU:    resource.MustParse("0"),
+							hv1.ResourceMemory: resource.MustParse("80Gi"),
 						},
 					},
 				},
@@ -372,7 +372,7 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
 					Status: hv1.HypervisorStatus{
 						Capacity: map[hv1.ResourceName]resource.Quantity{
-							"cpu": resource.MustParse("100"),
+							hv1.ResourceCPU: resource.MustParse("100"),
 						},
 						Allocation: map[hv1.ResourceName]resource.Quantity{
 							// No CPU allocation
@@ -401,7 +401,7 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 							// No CPU capacity
 						},
 						Allocation: map[hv1.ResourceName]resource.Quantity{
-							"cpu": resource.MustParse("80"),
+							hv1.ResourceCPU: resource.MustParse("80"),
 						},
 					},
 				},

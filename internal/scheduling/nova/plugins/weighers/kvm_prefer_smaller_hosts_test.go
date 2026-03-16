@@ -23,8 +23,8 @@ func newHypervisorWithCapacity(name, capacityCPU, capacityMem string) *hv1.Hyper
 		},
 		Status: hv1.HypervisorStatus{
 			Capacity: map[hv1.ResourceName]resource.Quantity{
-				"cpu":    resource.MustParse(capacityCPU),
-				"memory": resource.MustParse(capacityMem),
+				hv1.ResourceCPU:    resource.MustParse(capacityCPU),
+				hv1.ResourceMemory: resource.MustParse(capacityMem),
 			},
 		},
 	}
@@ -377,7 +377,7 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
 					Status: hv1.HypervisorStatus{
 						Capacity: map[hv1.ResourceName]resource.Quantity{
-							"cpu": resource.MustParse("100"),
+							hv1.ResourceCPU: resource.MustParse("100"),
 							// No memory capacity
 						},
 					},
@@ -535,7 +535,7 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
 					Status: hv1.HypervisorStatus{
 						Capacity: map[hv1.ResourceName]resource.Quantity{
-							"memory": resource.MustParse("64Gi"),
+							hv1.ResourceMemory: resource.MustParse("64Gi"),
 							// No CPU
 						},
 					},
@@ -544,7 +544,7 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
 					Status: hv1.HypervisorStatus{
 						Capacity: map[hv1.ResourceName]resource.Quantity{
-							"memory": resource.MustParse("128Gi"),
+							hv1.ResourceMemory: resource.MustParse("128Gi"),
 							// No CPU
 						},
 					},

@@ -49,9 +49,9 @@ func newFailoverReservation(name, targetHost string, failed bool, allocations ma
 		Spec: v1alpha1.ReservationSpec{
 			Type:       v1alpha1.ReservationTypeFailover,
 			TargetHost: targetHost,
-			Resources: map[string]resource.Quantity{
-				"cpu":    resource.MustParse("4"),
-				"memory": resource.MustParse("8Gi"),
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceCPU:    resource.MustParse("4"),
+				hv1.ResourceMemory: resource.MustParse("8Gi"),
 			},
 			FailoverReservation: &v1alpha1.FailoverReservationSpec{
 				ResourceGroup: "m1.large",
@@ -84,9 +84,9 @@ func newCommittedReservation(name, targetHost string) *v1alpha1.Reservation {
 		Spec: v1alpha1.ReservationSpec{
 			Type:       v1alpha1.ReservationTypeCommittedResource,
 			TargetHost: targetHost,
-			Resources: map[string]resource.Quantity{
-				"cpu":    resource.MustParse("4"),
-				"memory": resource.MustParse("8Gi"),
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceCPU:    resource.MustParse("4"),
+				hv1.ResourceMemory: resource.MustParse("8Gi"),
 			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 				ProjectID:    "project-A",
