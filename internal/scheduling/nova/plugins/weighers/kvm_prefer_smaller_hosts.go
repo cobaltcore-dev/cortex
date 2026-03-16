@@ -13,7 +13,6 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -23,7 +22,7 @@ type KVMPreferSmallerHostsStepOpts struct {
 	// of the normalized distances from the smallest capacity for each resource.
 	// If a resource is not specified, it is ignored in the score calculation
 	// (equivalent to a weight of 0).
-	ResourceWeights map[corev1.ResourceName]float64 `json:"resourceWeights"`
+	ResourceWeights map[hv1.ResourceName]float64 `json:"resourceWeights"`
 }
 
 // Validate the options to ensure they are correct before running the weigher.
@@ -31,9 +30,9 @@ func (o KVMPreferSmallerHostsStepOpts) Validate() error {
 	if len(o.ResourceWeights) == 0 {
 		return errors.New("at least one resource weight must be specified")
 	}
-	supportedResources := []corev1.ResourceName{
-		corev1.ResourceMemory,
-		corev1.ResourceCPU,
+	supportedResources := []hv1.ResourceName{
+		hv1.ResourceMemory,
+		hv1.ResourceCPU,
 	}
 	for resourceName, val := range o.ResourceWeights {
 		if val < 0 {
@@ -73,8 +72,8 @@ func (s *KVMPreferSmallerHostsStep) Run(traceLog *slog.Logger, request api.Exter
 	}
 
 	// Calculate smallest and largest capacity for each resource across active hosts
-	smallest := make(map[corev1.ResourceName]*resource.Quantity)
-	largest := make(map[corev1.ResourceName]*resource.Quantity)
+	smallest := make(map[hv1.ResourceName]*resource.Quantity)
+	largest := make(map[hv1.ResourceName]*resource.Quantity)
 
 	for resourceName := range s.Options.ResourceWeights {
 		for _, hv := range hvs.Items {
@@ -82,7 +81,7 @@ func (s *KVMPreferSmallerHostsStep) Run(traceLog *slog.Logger, request api.Exter
 			if _, ok := result.Activations[hv.Name]; !ok {
 				continue
 			}
-			capacity, ok := hv.Status.Capacity[resourceName.String()]
+			capacity, ok := hv.Status.Capacity[resourceName]
 			if !ok {
 				traceLog.Warn("hypervisor has no capacity for resource, skipping",
 					"host", hv.Name, "resource", resourceName)
@@ -107,7 +106,7 @@ func (s *KVMPreferSmallerHostsStep) Run(traceLog *slog.Logger, request api.Exter
 		var totalWeightedScore, totalWeight float64
 
 		for resourceName, weight := range s.Options.ResourceWeights {
-			capacity, ok := hv.Status.Capacity[resourceName.String()]
+			capacity, ok := hv.Status.Capacity[resourceName]
 			if !ok {
 				traceLog.Warn("hypervisor has no capacity for resource, skipping",
 					"host", hv.Name, "resource", resourceName)

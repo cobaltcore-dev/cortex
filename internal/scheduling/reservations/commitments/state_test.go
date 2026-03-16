@@ -8,6 +8,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -84,8 +85,8 @@ func TestFromReservations_SumsMemoryCorrectly(t *testing.T) {
 				Name: "commitment-abc123-0",
 			},
 			Spec: v1alpha1.ReservationSpec{
-				Resources: map[string]resource.Quantity{
-					"memory": *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI), // 8 GiB
+				Resources: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI), // 8 GiB
 				},
 				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 					ProjectID:     "project-1",
@@ -98,8 +99,8 @@ func TestFromReservations_SumsMemoryCorrectly(t *testing.T) {
 				Name: "commitment-abc123-1",
 			},
 			Spec: v1alpha1.ReservationSpec{
-				Resources: map[string]resource.Quantity{
-					"memory": *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI), // 16 GiB
+				Resources: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI), // 16 GiB
 				},
 				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 					ProjectID:     "project-1",
@@ -146,8 +147,8 @@ func TestFromReservations_SkipsInconsistentFlavorGroup(t *testing.T) {
 				Name: "commitment-abc123-0",
 			},
 			Spec: v1alpha1.ReservationSpec{
-				Resources: map[string]resource.Quantity{
-					"memory": *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
+				Resources: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
 				},
 				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 					ProjectID:     "project-1",
@@ -160,8 +161,8 @@ func TestFromReservations_SkipsInconsistentFlavorGroup(t *testing.T) {
 				Name: "commitment-abc123-1",
 			},
 			Spec: v1alpha1.ReservationSpec{
-				Resources: map[string]resource.Quantity{
-					"memory": *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
+				Resources: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
 				},
 				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 					ProjectID:     "project-1",

@@ -8,6 +8,7 @@
 package v1alpha1
 
 import (
+	apiv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,7 +36,7 @@ func (in *CommittedResourceAllocation) DeepCopyInto(out *CommittedResourceAlloca
 	in.CreationTimestamp.DeepCopyInto(&out.CreationTimestamp)
 	if in.Resources != nil {
 		in, out := &in.Resources, &out.Resources
-		*out = make(map[string]resource.Quantity, len(*in))
+		*out = make(map[apiv1.ResourceName]resource.Quantity, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val.DeepCopy()
 		}
@@ -1226,7 +1227,7 @@ func (in *ReservationSpec) DeepCopyInto(out *ReservationSpec) {
 	*out = *in
 	if in.Resources != nil {
 		in, out := &in.Resources, &out.Resources
-		*out = make(map[string]resource.Quantity, len(*in))
+		*out = make(map[apiv1.ResourceName]resource.Quantity, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val.DeepCopy()
 		}
