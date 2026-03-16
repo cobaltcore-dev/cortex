@@ -12,8 +12,12 @@ rules:
   resources:
   - hypervisors
   verbs:
+  - create
+  - delete
   - get
   - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - kvm.cloud.sap
