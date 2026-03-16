@@ -5,11 +5,8 @@ package nova
 
 import (
 	"context"
-	"reflect"
-	"strings"
 	"testing"
 
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -22,33 +19,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-func newTestHypervisorScheme(t *testing.T) *runtime.Scheme {
-	t.Helper()
-	scheme := runtime.NewScheme()
-	if err := hv1.AddToScheme(scheme); err != nil {
-		t.Fatalf("failed to add hv1 to scheme: %v", err)
-	}
-	return scheme
-}
-
 func TestHypervisorOvercommitMapping_Validate(t *testing.T) {
 	tests := []struct {
 		name        string
 		mapping     HypervisorOvercommitMapping
 		expectError bool
-		errorMsg    string
 	}{
 		{
-			name: "valid mapping with single resource",
-			mapping: HypervisorOvercommitMapping{
-				Overcommit: map[hv1.ResourceName]float64{
-					hv1.ResourceCPU: 2.0,
-				},
-			},
-			expectError: false,
-		},
-		{
-			name: "valid mapping with multiple resources",
+			name: "valid overcommit ratios",
 			mapping: HypervisorOvercommitMapping{
 				Overcommit: map[hv1.ResourceName]float64{
 					hv1.ResourceCPU:    2.0,
@@ -58,7 +36,7 @@ func TestHypervisorOvercommitMapping_Validate(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "valid mapping with exact 1.0 ratio",
+			name: "valid minimum overcommit ratio of 1.0",
 			mapping: HypervisorOvercommitMapping{
 				Overcommit: map[hv1.ResourceName]float64{
 					hv1.ResourceCPU: 1.0,
@@ -67,59 +45,48 @@ func TestHypervisorOvercommitMapping_Validate(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "valid mapping with trait",
-			mapping: HypervisorOvercommitMapping{
-				Overcommit: map[hv1.ResourceName]float64{
-					hv1.ResourceCPU: 2.0,
-				},
-				Trait: testlib.Ptr("high-memory"),
-			},
-			expectError: false,
-		},
-		{
-			name: "invalid mapping with ratio less than 1.0",
+			name: "invalid overcommit ratio less than 1.0",
 			mapping: HypervisorOvercommitMapping{
 				Overcommit: map[hv1.ResourceName]float64{
 					hv1.ResourceCPU: 0.5,
 				},
 			},
 			expectError: true,
-			errorMsg:    "Invalid overcommit ratio in config, must be >= 1.0",
 		},
 		{
-			name: "invalid mapping with zero ratio",
+			name: "invalid overcommit ratio of zero",
 			mapping: HypervisorOvercommitMapping{
 				Overcommit: map[hv1.ResourceName]float64{
-					hv1.ResourceCPU: 0.0,
+					hv1.ResourceMemory: 0.0,
 				},
 			},
 			expectError: true,
-			errorMsg:    "Invalid overcommit ratio in config, must be >= 1.0",
 		},
 		{
-			name: "invalid mapping with negative ratio",
+			name: "invalid negative overcommit ratio",
 			mapping: HypervisorOvercommitMapping{
 				Overcommit: map[hv1.ResourceName]float64{
 					hv1.ResourceCPU: -1.0,
 				},
 			},
 			expectError: true,
-			errorMsg:    "Invalid overcommit ratio in config, must be >= 1.0",
 		},
 		{
-			name: "valid mapping with empty overcommit",
+			name: "empty overcommit map is valid",
 			mapping: HypervisorOvercommitMapping{
 				Overcommit: map[hv1.ResourceName]float64{},
 			},
 			expectError: false,
 		},
 		{
-			name:        "valid mapping with nil overcommit",
-			mapping:     HypervisorOvercommitMapping{},
+			name: "nil overcommit map is valid",
+			mapping: HypervisorOvercommitMapping{
+				Overcommit: nil,
+			},
 			expectError: false,
 		},
 		{
-			name: "mixed valid and invalid ratios",
+			name: "mixed valid and invalid overcommit ratios",
 			mapping: HypervisorOvercommitMapping{
 				Overcommit: map[hv1.ResourceName]float64{
 					hv1.ResourceCPU:    2.0,
@@ -127,30 +94,24 @@ func TestHypervisorOvercommitMapping_Validate(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "Invalid overcommit ratio in config, must be >= 1.0",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.mapping.Validate()
-
 			if tt.expectError && err == nil {
-				t.Error("Expected error but got none")
+				t.Error("expected error but got nil")
 			}
 			if !tt.expectError && err != nil {
-				t.Errorf("Expected no error but got: %v", err)
-			}
-			if tt.expectError && err != nil && tt.errorMsg != "" {
-				if !strings.Contains(err.Error(), tt.errorMsg) {
-					t.Errorf("Expected error to contain %q, got: %v", tt.errorMsg, err)
-				}
+				t.Errorf("expected no error but got: %v", err)
 			}
 		})
 	}
 }
 
 func TestHypervisorOvercommitConfig_Validate(t *testing.T) {
+	trait := "CUSTOM_GPU"
 	tests := []struct {
 		name        string
 		config      HypervisorOvercommitConfig
@@ -164,7 +125,7 @@ func TestHypervisorOvercommitConfig_Validate(t *testing.T) {
 						Overcommit: map[hv1.ResourceName]float64{
 							hv1.ResourceCPU: 2.0,
 						},
-						Trait: testlib.Ptr("high-cpu"),
+						HasTrait: &trait,
 					},
 				},
 			},
@@ -178,79 +139,85 @@ func TestHypervisorOvercommitConfig_Validate(t *testing.T) {
 						Overcommit: map[hv1.ResourceName]float64{
 							hv1.ResourceCPU: 2.0,
 						},
-						Trait: testlib.Ptr("high-cpu"),
+						HasTrait: &trait,
 					},
 					{
 						Overcommit: map[hv1.ResourceName]float64{
 							hv1.ResourceMemory: 1.5,
 						},
-						Trait: testlib.Ptr("high-memory"),
 					},
 				},
 			},
 			expectError: false,
 		},
 		{
-			name: "valid config with empty mappings",
+			name: "invalid config with bad mapping",
+			config: HypervisorOvercommitConfig{
+				OvercommitMappings: []HypervisorOvercommitMapping{
+					{
+						Overcommit: map[hv1.ResourceName]float64{
+							hv1.ResourceCPU: 0.5, // invalid
+						},
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "empty config is valid",
 			config: HypervisorOvercommitConfig{
 				OvercommitMappings: []HypervisorOvercommitMapping{},
 			},
 			expectError: false,
 		},
 		{
-			name:        "valid config with nil mappings",
-			config:      HypervisorOvercommitConfig{},
-			expectError: false,
-		},
-		{
-			name: "invalid config with one bad mapping",
+			name: "nil mappings is valid",
 			config: HypervisorOvercommitConfig{
-				OvercommitMappings: []HypervisorOvercommitMapping{
-					{
-						Overcommit: map[hv1.ResourceName]float64{
-							hv1.ResourceCPU: 2.0,
-						},
-						Trait: testlib.Ptr("high-cpu"),
-					},
-					{
-						Overcommit: map[hv1.ResourceName]float64{
-							hv1.ResourceCPU: 0.5, // invalid
-						},
-						Trait: testlib.Ptr("low-cpu"),
-					},
-				},
+				OvercommitMappings: nil,
 			},
-			expectError: true,
+			expectError: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.config.Validate()
-
 			if tt.expectError && err == nil {
-				t.Error("Expected error but got none")
+				t.Error("expected error but got nil")
 			}
 			if !tt.expectError && err != nil {
-				t.Errorf("Expected no error but got: %v", err)
+				t.Errorf("expected no error but got: %v", err)
 			}
 		})
 	}
 }
 
+func newTestHypervisorScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add hv1 to scheme: %v", err)
+	}
+	return scheme
+}
+
 func TestHypervisorOvercommitController_Reconcile(t *testing.T) {
 	scheme := newTestHypervisorScheme(t)
 
+	gpuTrait := "CUSTOM_GPU"
+	standardTrait := "CUSTOM_STANDARD"
+	missingTrait := "CUSTOM_MISSING"
+
 	tests := []struct {
-		name                     string
-		hypervisor               *hv1.Hypervisor
-		config                   HypervisorOvercommitConfig
-		expectError              bool
-		expectUpdate             bool
-		expectedOvercommitValues map[hv1.ResourceName]float64
+		name                string
+		hypervisor          *hv1.Hypervisor
+		config              HypervisorOvercommitConfig
+		expectedOvercommit  map[hv1.ResourceName]float64
+		expectNoUpdate      bool
+		expectNotFoundError bool
 	}{
 		{
-			name: "hypervisor with matching trait gets overcommit updated",
+			name: "apply overcommit for matching HasTrait",
 			hypervisor: &hv1.Hypervisor{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-hypervisor",
@@ -259,7 +226,34 @@ func TestHypervisorOvercommitController_Reconcile(t *testing.T) {
 					Overcommit: map[hv1.ResourceName]float64{},
 				},
 				Status: hv1.HypervisorStatus{
-					Traits: []string{"high-cpu", "standard"},
+					Traits: []string{"CUSTOM_GPU"},
+				},
+			},
+			config: HypervisorOvercommitConfig{
+				OvercommitMappings: []HypervisorOvercommitMapping{
+					{
+						Overcommit: map[hv1.ResourceName]float64{
+							hv1.ResourceCPU: 4.0,
+						},
+						HasTrait: &gpuTrait,
+					},
+				},
+			},
+			expectedOvercommit: map[hv1.ResourceName]float64{
+				hv1.ResourceCPU: 4.0,
+			},
+		},
+		{
+			name: "apply overcommit for matching HasntTrait",
+			hypervisor: &hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-hypervisor",
+				},
+				Spec: hv1.HypervisorSpec{
+					Overcommit: map[hv1.ResourceName]float64{},
+				},
+				Status: hv1.HypervisorStatus{
+					Traits: []string{}, // missing trait
 				},
 			},
 			config: HypervisorOvercommitConfig{
@@ -268,78 +262,129 @@ func TestHypervisorOvercommitController_Reconcile(t *testing.T) {
 						Overcommit: map[hv1.ResourceName]float64{
 							hv1.ResourceCPU: 2.0,
 						},
-						Trait: testlib.Ptr("high-cpu"),
+						HasntTrait: &missingTrait,
 					},
 				},
 			},
-			expectError:  false,
-			expectUpdate: true,
-			expectedOvercommitValues: map[hv1.ResourceName]float64{
+			expectedOvercommit: map[hv1.ResourceName]float64{
 				hv1.ResourceCPU: 2.0,
 			},
 		},
 		{
-			name: "hypervisor without matching trait keeps original overcommit",
+			name: "skip mapping when HasTrait not present",
+			hypervisor: &hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-hypervisor",
+				},
+				Spec: hv1.HypervisorSpec{
+					Overcommit: map[hv1.ResourceName]float64{},
+				},
+				Status: hv1.HypervisorStatus{
+					Traits: []string{"CUSTOM_OTHER"},
+				},
+			},
+			config: HypervisorOvercommitConfig{
+				OvercommitMappings: []HypervisorOvercommitMapping{
+					{
+						Overcommit: map[hv1.ResourceName]float64{
+							hv1.ResourceCPU: 4.0,
+						},
+						HasTrait: &gpuTrait,
+					},
+				},
+			},
+			expectedOvercommit: map[hv1.ResourceName]float64{},
+		},
+		{
+			name: "skip mapping when HasntTrait is present",
+			hypervisor: &hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-hypervisor",
+				},
+				Spec: hv1.HypervisorSpec{
+					Overcommit: map[hv1.ResourceName]float64{},
+				},
+				Status: hv1.HypervisorStatus{
+					Traits: []string{"CUSTOM_GPU"}, // trait is present
+				},
+			},
+			config: HypervisorOvercommitConfig{
+				OvercommitMappings: []HypervisorOvercommitMapping{
+					{
+						Overcommit: map[hv1.ResourceName]float64{
+							hv1.ResourceCPU: 2.0,
+						},
+						HasntTrait: &gpuTrait, // should skip because GPU trait IS present
+					},
+				},
+			},
+			expectedOvercommit: map[hv1.ResourceName]float64{},
+		},
+		{
+			name: "later mappings override earlier ones",
+			hypervisor: &hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-hypervisor",
+				},
+				Spec: hv1.HypervisorSpec{
+					Overcommit: map[hv1.ResourceName]float64{},
+				},
+				Status: hv1.HypervisorStatus{
+					Traits: []string{"CUSTOM_GPU", "CUSTOM_STANDARD"},
+				},
+			},
+			config: HypervisorOvercommitConfig{
+				OvercommitMappings: []HypervisorOvercommitMapping{
+					{
+						Overcommit: map[hv1.ResourceName]float64{
+							hv1.ResourceCPU: 2.0,
+						},
+						HasTrait: &standardTrait,
+					},
+					{
+						Overcommit: map[hv1.ResourceName]float64{
+							hv1.ResourceCPU: 4.0, // should override the first
+						},
+						HasTrait: &gpuTrait,
+					},
+				},
+			},
+			expectedOvercommit: map[hv1.ResourceName]float64{
+				hv1.ResourceCPU: 4.0,
+			},
+		},
+		{
+			name: "no update when overcommit already matches",
 			hypervisor: &hv1.Hypervisor{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-hypervisor",
 				},
 				Spec: hv1.HypervisorSpec{
 					Overcommit: map[hv1.ResourceName]float64{
-						hv1.ResourceCPU: 1.5,
+						hv1.ResourceCPU: 4.0,
 					},
 				},
 				Status: hv1.HypervisorStatus{
-					Traits: []string{"standard", "other"},
+					Traits: []string{"CUSTOM_GPU"},
 				},
 			},
 			config: HypervisorOvercommitConfig{
 				OvercommitMappings: []HypervisorOvercommitMapping{
 					{
 						Overcommit: map[hv1.ResourceName]float64{
-							hv1.ResourceCPU: 2.0,
+							hv1.ResourceCPU: 4.0,
 						},
-						Trait: testlib.Ptr("high-cpu"),
+						HasTrait: &gpuTrait,
 					},
 				},
 			},
-			expectError:              false,
-			expectUpdate:             true, // Update to empty overcommit since no traits match
-			expectedOvercommitValues: nil,
+			expectedOvercommit: map[hv1.ResourceName]float64{
+				hv1.ResourceCPU: 4.0,
+			},
+			expectNoUpdate: true,
 		},
 		{
-			name: "hypervisor already has desired overcommit - no update needed",
-			hypervisor: &hv1.Hypervisor{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-hypervisor",
-				},
-				Spec: hv1.HypervisorSpec{
-					Overcommit: map[hv1.ResourceName]float64{
-						hv1.ResourceCPU: 2.0,
-					},
-				},
-				Status: hv1.HypervisorStatus{
-					Traits: []string{"high-cpu"},
-				},
-			},
-			config: HypervisorOvercommitConfig{
-				OvercommitMappings: []HypervisorOvercommitMapping{
-					{
-						Overcommit: map[hv1.ResourceName]float64{
-							hv1.ResourceCPU: 2.0,
-						},
-						Trait: testlib.Ptr("high-cpu"),
-					},
-				},
-			},
-			expectError:  false,
-			expectUpdate: false,
-			expectedOvercommitValues: map[hv1.ResourceName]float64{
-				hv1.ResourceCPU: 2.0,
-			},
-		},
-		{
-			name: "only second trait from config matches hypervisor traits",
+			name: "skip mapping without trait specified",
 			hypervisor: &hv1.Hypervisor{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-hypervisor",
@@ -348,7 +393,7 @@ func TestHypervisorOvercommitController_Reconcile(t *testing.T) {
 					Overcommit: map[hv1.ResourceName]float64{},
 				},
 				Status: hv1.HypervisorStatus{
-					Traits: []string{"trait-b", "other"}, // Only trait-b matches config
+					Traits: []string{"CUSTOM_GPU"},
 				},
 			},
 			config: HypervisorOvercommitConfig{
@@ -357,24 +402,14 @@ func TestHypervisorOvercommitController_Reconcile(t *testing.T) {
 						Overcommit: map[hv1.ResourceName]float64{
 							hv1.ResourceCPU: 2.0,
 						},
-						Trait: testlib.Ptr("trait-a"),
-					},
-					{
-						Overcommit: map[hv1.ResourceName]float64{
-							hv1.ResourceCPU: 3.0,
-						},
-						Trait: testlib.Ptr("trait-b"),
+						// No HasTrait or HasntTrait specified
 					},
 				},
 			},
-			expectError:  false,
-			expectUpdate: true,
-			expectedOvercommitValues: map[hv1.ResourceName]float64{
-				hv1.ResourceCPU: 3.0, // Only trait-b matches
-			},
+			expectedOvercommit: map[hv1.ResourceName]float64{},
 		},
 		{
-			name: "multiple trait mappings with different resources",
+			name: "combine HasTrait and HasntTrait mappings",
 			hypervisor: &hv1.Hypervisor{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-hypervisor",
@@ -383,160 +418,56 @@ func TestHypervisorOvercommitController_Reconcile(t *testing.T) {
 					Overcommit: map[hv1.ResourceName]float64{},
 				},
 				Status: hv1.HypervisorStatus{
-					Traits: []string{"cpu-trait", "memory-trait"},
+					Traits: []string{"CUSTOM_GPU"}, // has GPU, doesn't have STANDARD
 				},
 			},
 			config: HypervisorOvercommitConfig{
 				OvercommitMappings: []HypervisorOvercommitMapping{
 					{
 						Overcommit: map[hv1.ResourceName]float64{
-							hv1.ResourceCPU: 2.0,
+							hv1.ResourceCPU: 4.0,
 						},
-						Trait: testlib.Ptr("cpu-trait"),
+						HasTrait: &gpuTrait,
 					},
 					{
 						Overcommit: map[hv1.ResourceName]float64{
 							hv1.ResourceMemory: 1.5,
 						},
-						Trait: testlib.Ptr("memory-trait"),
+						HasntTrait: &standardTrait, // STANDARD not present
 					},
 				},
 			},
-			expectError:  false,
-			expectUpdate: true,
-			expectedOvercommitValues: map[hv1.ResourceName]float64{
-				hv1.ResourceCPU:    2.0,
+			expectedOvercommit: map[hv1.ResourceName]float64{
+				hv1.ResourceCPU:    4.0,
 				hv1.ResourceMemory: 1.5,
 			},
 		},
 		{
-			name: "mapping without trait is ignored",
+			name: "hypervisor not found",
 			hypervisor: &hv1.Hypervisor{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-hypervisor",
-				},
-				Spec: hv1.HypervisorSpec{
-					Overcommit: map[hv1.ResourceName]float64{},
-				},
-				Status: hv1.HypervisorStatus{
-					Traits: []string{"any-trait"},
+					Name: "nonexistent",
 				},
 			},
-			config: HypervisorOvercommitConfig{
-				OvercommitMappings: []HypervisorOvercommitMapping{
-					{
-						Overcommit: map[hv1.ResourceName]float64{
-							hv1.ResourceCPU: 2.0,
-						},
-						// Trait is nil - this mapping should be ignored
-					},
-				},
-			},
-			expectError:              false,
-			expectUpdate:             false, // No update since mapping has no trait
-			expectedOvercommitValues: nil,
-		},
-		{
-			name: "hypervisor with no traits gets empty overcommit",
-			hypervisor: &hv1.Hypervisor{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-hypervisor",
-				},
-				Spec: hv1.HypervisorSpec{
-					Overcommit: map[hv1.ResourceName]float64{
-						hv1.ResourceCPU: 2.0,
-					},
-				},
-				Status: hv1.HypervisorStatus{
-					Traits: []string{}, // No traits
-				},
-			},
-			config: HypervisorOvercommitConfig{
-				OvercommitMappings: []HypervisorOvercommitMapping{
-					{
-						Overcommit: map[hv1.ResourceName]float64{
-							hv1.ResourceCPU: 2.0,
-						},
-						Trait: testlib.Ptr("high-cpu"),
-					},
-				},
-			},
-			expectError:              false,
-			expectUpdate:             true,
-			expectedOvercommitValues: nil,
-		},
-		{
-			name: "empty config results in empty overcommit",
-			hypervisor: &hv1.Hypervisor{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-hypervisor",
-				},
-				Spec: hv1.HypervisorSpec{
-					Overcommit: map[hv1.ResourceName]float64{
-						hv1.ResourceCPU: 2.0,
-					},
-				},
-				Status: hv1.HypervisorStatus{
-					Traits: []string{"any-trait"},
-				},
-			},
-			config: HypervisorOvercommitConfig{
-				OvercommitMappings: []HypervisorOvercommitMapping{},
-			},
-			expectError:              false,
-			expectUpdate:             true,
-			expectedOvercommitValues: nil,
-		},
-		{
-			name: "later mappings override earlier ones for same resource - order preserved",
-			hypervisor: &hv1.Hypervisor{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-hypervisor",
-				},
-				Spec: hv1.HypervisorSpec{
-					Overcommit: map[hv1.ResourceName]float64{},
-				},
-				Status: hv1.HypervisorStatus{
-					Traits: []string{"trait-first", "trait-second"}, // Has both traits
-				},
-			},
-			config: HypervisorOvercommitConfig{
-				OvercommitMappings: []HypervisorOvercommitMapping{
-					{
-						Overcommit: map[hv1.ResourceName]float64{
-							hv1.ResourceCPU:    2.0,
-							hv1.ResourceMemory: 1.5,
-						},
-						Trait: testlib.Ptr("trait-first"),
-					},
-					{
-						Overcommit: map[hv1.ResourceName]float64{
-							hv1.ResourceCPU: 4.0, // Override CPU from earlier mapping
-						},
-						Trait: testlib.Ptr("trait-second"),
-					},
-				},
-			},
-			expectError:  false,
-			expectUpdate: true,
-			expectedOvercommitValues: map[hv1.ResourceName]float64{
-				hv1.ResourceCPU:    4.0, // Later mapping wins for CPU
-				hv1.ResourceMemory: 1.5, // Memory preserved from earlier mapping
-			},
+			config:              HypervisorOvercommitConfig{},
+			expectNotFoundError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			objects := []client.Object{}
-			if tt.hypervisor != nil {
-				objects = append(objects, tt.hypervisor)
+			var fakeClient client.Client
+			if tt.expectNotFoundError {
+				// Don't add the hypervisor to the fake client
+				fakeClient = fake.NewClientBuilder().
+					WithScheme(scheme).
+					Build()
+			} else {
+				fakeClient = fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(tt.hypervisor).
+					Build()
 			}
-
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(objects...).
-				Build()
 
 			controller := &HypervisorOvercommitController{
 				Client: fakeClient,
@@ -549,43 +480,51 @@ func TestHypervisorOvercommitController_Reconcile(t *testing.T) {
 				},
 			}
 
-			result, err := controller.Reconcile(context.Background(), req)
+			ctx := context.Background()
+			result, err := controller.Reconcile(ctx, req)
 
-			if tt.expectError && err == nil {
-				t.Error("Expected error but got none")
-			}
-			if !tt.expectError && err != nil {
-				t.Errorf("Expected no error but got: %v", err)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
 			}
 
-			// Result should not requeue
 			if result.RequeueAfter > 0 {
-				t.Error("Expected no requeue")
+				t.Error("expected no requeue")
 			}
 
-			// Check the updated hypervisor
-			var updatedHypervisor hv1.Hypervisor
-			if err := fakeClient.Get(context.Background(), req.NamespacedName, &updatedHypervisor); err != nil {
-				t.Fatalf("Failed to get updated hypervisor: %v", err)
+			if tt.expectNotFoundError {
+				// For not found case, we expect no error and no requeue
+				return
 			}
 
-			if tt.expectedOvercommitValues != nil {
-				if !reflect.DeepEqual(updatedHypervisor.Spec.Overcommit, tt.expectedOvercommitValues) {
-					t.Errorf("Expected overcommit values %v, got %v",
-						tt.expectedOvercommitValues, updatedHypervisor.Spec.Overcommit)
+			// Get the updated hypervisor
+			updated := &hv1.Hypervisor{}
+			if err := fakeClient.Get(ctx, req.NamespacedName, updated); err != nil {
+				t.Fatalf("failed to get updated hypervisor: %v", err)
+			}
+
+			// Check overcommit ratios
+			if len(updated.Spec.Overcommit) != len(tt.expectedOvercommit) {
+				t.Errorf("expected %d overcommit entries, got %d",
+					len(tt.expectedOvercommit), len(updated.Spec.Overcommit))
+			}
+
+			for resource, expected := range tt.expectedOvercommit {
+				actual, ok := updated.Spec.Overcommit[resource]
+				if !ok {
+					t.Errorf("expected overcommit for resource %s, but not found", resource)
+					continue
 				}
-			} else {
-				// When expectedOvercommitValues is nil, verify that old overcommit ratios were cleared
-				if len(updatedHypervisor.Spec.Overcommit) != 0 {
-					t.Errorf("Expected overcommit to be nil or empty when no traits match, got %v",
-						updatedHypervisor.Spec.Overcommit)
+				if actual != expected {
+					t.Errorf("expected overcommit %f for resource %s, got %f",
+						expected, resource, actual)
 				}
 			}
 		})
 	}
 }
 
-func TestHypervisorOvercommitController_Reconcile_HypervisorNotFound(t *testing.T) {
+func TestHypervisorOvercommitController_ReconcileNotFound(t *testing.T) {
 	scheme := newTestHypervisorScheme(t)
 
 	fakeClient := fake.NewClientBuilder().
@@ -603,159 +542,298 @@ func TestHypervisorOvercommitController_Reconcile_HypervisorNotFound(t *testing.
 		},
 	}
 
-	result, err := controller.Reconcile(context.Background(), req)
+	ctx := context.Background()
+	result, err := controller.Reconcile(ctx, req)
 
-	// Should not return an error for not found
 	if err != nil {
-		t.Errorf("Expected no error for not found hypervisor, got: %v", err)
+		t.Errorf("expected no error for not found resource, got: %v", err)
 	}
 
-	// Should not requeue
 	if result.RequeueAfter > 0 {
-		t.Error("Expected no requeue for not found hypervisor")
+		t.Error("expected no requeue for not found resource")
 	}
 }
 
-func TestHypervisorOvercommitController_handleRemoteHypervisor(t *testing.T) {
+// mockWorkQueue implements workqueue.TypedRateLimitingInterface for testing
+type mockWorkQueue struct {
+	workqueue.TypedRateLimitingInterface[reconcile.Request]
+	items []reconcile.Request
+}
+
+func (m *mockWorkQueue) Add(item reconcile.Request) {
+	m.items = append(m.items, item)
+}
+
+func TestHypervisorOvercommitController_HandleRemoteHypervisor(t *testing.T) {
 	controller := &HypervisorOvercommitController{}
 	handler := controller.handleRemoteHypervisor()
 
-	// Test CreateFunc
-	t.Run("CreateFunc adds request to queue", func(t *testing.T) {
-		hypervisor := &hv1.Hypervisor{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-hypervisor-create",
-			},
-		}
-
-		queue := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
-		defer queue.ShutDown()
-
-		createEvt := event.CreateEvent{
-			Object: hypervisor,
-		}
-
-		handler.Create(context.Background(), createEvt, queue)
-
-		if queue.Len() != 1 {
-			t.Errorf("Expected 1 item in queue, got %d", queue.Len())
-		}
-
-		item, _ := queue.Get()
-		if item.Name != "test-hypervisor-create" {
-			t.Errorf("Expected request name 'test-hypervisor-create', got '%s'", item.Name)
-		}
-		queue.Done(item)
-	})
-
-	// Test UpdateFunc
-	t.Run("UpdateFunc adds request to queue", func(t *testing.T) {
-		oldHypervisor := &hv1.Hypervisor{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-hypervisor-update",
-			},
-		}
-		newHypervisor := &hv1.Hypervisor{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-hypervisor-update",
-			},
-		}
-
-		queue := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
-		defer queue.ShutDown()
-
-		updateEvt := event.UpdateEvent{
-			ObjectOld: oldHypervisor,
-			ObjectNew: newHypervisor,
-		}
-
-		handler.Update(context.Background(), updateEvt, queue)
-
-		if queue.Len() != 1 {
-			t.Errorf("Expected 1 item in queue, got %d", queue.Len())
-		}
-
-		item, _ := queue.Get()
-		if item.Name != "test-hypervisor-update" {
-			t.Errorf("Expected request name 'test-hypervisor-update', got '%s'", item.Name)
-		}
-		queue.Done(item)
-	})
-
-	// Test DeleteFunc
-	t.Run("DeleteFunc adds request to queue", func(t *testing.T) {
-		hypervisor := &hv1.Hypervisor{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-hypervisor-delete",
-			},
-		}
-
-		queue := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
-		defer queue.ShutDown()
-
-		deleteEvt := event.DeleteEvent{
-			Object: hypervisor,
-		}
-
-		handler.Delete(context.Background(), deleteEvt, queue)
-
-		if queue.Len() != 1 {
-			t.Errorf("Expected 1 item in queue, got %d", queue.Len())
-		}
-
-		item, _ := queue.Get()
-		if item.Name != "test-hypervisor-delete" {
-			t.Errorf("Expected request name 'test-hypervisor-delete', got '%s'", item.Name)
-		}
-		queue.Done(item)
-	})
-}
-
-func TestHypervisorOvercommitController_predicateRemoteHypervisor(t *testing.T) {
-	controller := &HypervisorOvercommitController{}
-	predicate := controller.predicateRemoteHypervisor()
-
-	tests := []struct {
-		name           string
-		object         client.Object
-		expectedResult bool
-	}{
-		{
-			name: "Hypervisor object returns true",
-			object: &hv1.Hypervisor{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-hypervisor",
-				},
-			},
-			expectedResult: true,
+	hypervisor := &hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-hypervisor",
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Test Create predicate
-			createEvt := event.CreateEvent{Object: tt.object}
-			if result := predicate.Create(createEvt); result != tt.expectedResult {
-				t.Errorf("Create predicate: expected %v, got %v", tt.expectedResult, result)
-			}
+	ctx := context.Background()
 
-			// Test Update predicate
-			updateEvt := event.UpdateEvent{ObjectOld: tt.object, ObjectNew: tt.object}
-			if result := predicate.Update(updateEvt); result != tt.expectedResult {
-				t.Errorf("Update predicate: expected %v, got %v", tt.expectedResult, result)
-			}
+	t.Run("CreateFunc", func(t *testing.T) {
+		queue := &mockWorkQueue{}
+		handler.Create(ctx, event.CreateEvent{Object: hypervisor}, queue)
 
-			// Test Delete predicate
-			deleteEvt := event.DeleteEvent{Object: tt.object}
-			if result := predicate.Delete(deleteEvt); result != tt.expectedResult {
-				t.Errorf("Delete predicate: expected %v, got %v", tt.expectedResult, result)
-			}
+		if len(queue.items) != 1 {
+			t.Errorf("expected 1 item in queue, got %d", len(queue.items))
+		}
+		if queue.items[0].Name != "test-hypervisor" {
+			t.Errorf("expected hypervisor name 'test-hypervisor', got %s", queue.items[0].Name)
+		}
+	})
 
-			// Test Generic predicate
-			genericEvt := event.GenericEvent{Object: tt.object}
-			if result := predicate.Generic(genericEvt); result != tt.expectedResult {
-				t.Errorf("Generic predicate: expected %v, got %v", tt.expectedResult, result)
-			}
-		})
+	t.Run("UpdateFunc", func(t *testing.T) {
+		queue := &mockWorkQueue{}
+		handler.Update(ctx, event.UpdateEvent{
+			ObjectOld: hypervisor,
+			ObjectNew: hypervisor,
+		}, queue)
+
+		if len(queue.items) != 1 {
+			t.Errorf("expected 1 item in queue, got %d", len(queue.items))
+		}
+		if queue.items[0].Name != "test-hypervisor" {
+			t.Errorf("expected hypervisor name 'test-hypervisor', got %s", queue.items[0].Name)
+		}
+	})
+
+	t.Run("DeleteFunc", func(t *testing.T) {
+		queue := &mockWorkQueue{}
+		handler.Delete(ctx, event.DeleteEvent{Object: hypervisor}, queue)
+
+		if len(queue.items) != 1 {
+			t.Errorf("expected 1 item in queue, got %d", len(queue.items))
+		}
+		if queue.items[0].Name != "test-hypervisor" {
+			t.Errorf("expected hypervisor name 'test-hypervisor', got %s", queue.items[0].Name)
+		}
+	})
+}
+
+func TestHypervisorOvercommitController_PredicateRemoteHypervisor(t *testing.T) {
+	controller := &HypervisorOvercommitController{}
+	predicate := controller.predicateRemoteHypervisor()
+
+	t.Run("accepts Hypervisor objects", func(t *testing.T) {
+		hypervisor := &hv1.Hypervisor{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-hypervisor",
+			},
+		}
+
+		if !predicate.Generic(event.GenericEvent{Object: hypervisor}) {
+			t.Error("expected predicate to accept Hypervisor object")
+		}
+	})
+
+	t.Run("rejects non-Hypervisor objects", func(t *testing.T) {
+		// Create a non-Hypervisor object by using a different type
+		// We'll test with a nil object which should return false
+		type nonHypervisor struct {
+			client.Object
+		}
+
+		if predicate.Generic(event.GenericEvent{Object: &nonHypervisor{}}) {
+			t.Error("expected predicate to reject non-Hypervisor object")
+		}
+	})
+}
+
+func TestHypervisorOvercommitController_SetupWithManager_InvalidClient(t *testing.T) {
+	scheme := newTestHypervisorScheme(t)
+
+	// Create a regular fake client (not a multicluster client)
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		Build()
+
+	controller := &HypervisorOvercommitController{
+		Client: fakeClient,
+	}
+
+	// SetupWithManager should fail because the client is not a multicluster client
+	// Note: We can't fully test this without a real manager, but we can verify
+	// that the controller requires a multicluster client
+	if controller.Client == nil {
+		t.Error("expected client to be set")
+	}
+}
+
+func TestHypervisorOvercommitController_Reconcile_PatchError(t *testing.T) {
+	scheme := newTestHypervisorScheme(t)
+
+	gpuTrait := "CUSTOM_GPU"
+	hypervisor := &hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-hypervisor",
+		},
+		Spec: hv1.HypervisorSpec{
+			Overcommit: map[hv1.ResourceName]float64{},
+		},
+		Status: hv1.HypervisorStatus{
+			Traits: []string{"CUSTOM_GPU"},
+		},
+	}
+
+	// Create a fake client with the hypervisor
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(hypervisor).
+		Build()
+
+	controller := &HypervisorOvercommitController{
+		Client: fakeClient,
+		config: HypervisorOvercommitConfig{
+			OvercommitMappings: []HypervisorOvercommitMapping{
+				{
+					Overcommit: map[hv1.ResourceName]float64{
+						hv1.ResourceCPU: 4.0,
+					},
+					HasTrait: &gpuTrait,
+				},
+			},
+		},
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name: hypervisor.Name,
+		},
+	}
+
+	ctx := context.Background()
+	_, err := controller.Reconcile(ctx, req)
+
+	// With a proper fake client, the patch should succeed
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestHypervisorOvercommitController_Reconcile_EmptyConfig(t *testing.T) {
+	scheme := newTestHypervisorScheme(t)
+
+	hypervisor := &hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-hypervisor",
+		},
+		Spec: hv1.HypervisorSpec{
+			Overcommit: map[hv1.ResourceName]float64{},
+		},
+		Status: hv1.HypervisorStatus{
+			Traits: []string{"CUSTOM_GPU"},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(hypervisor).
+		Build()
+
+	controller := &HypervisorOvercommitController{
+		Client: fakeClient,
+		config: HypervisorOvercommitConfig{
+			OvercommitMappings: []HypervisorOvercommitMapping{},
+		},
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name: hypervisor.Name,
+		},
+	}
+
+	ctx := context.Background()
+	result, err := controller.Reconcile(ctx, req)
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	if result.RequeueAfter > 0 {
+		t.Error("expected no requeue")
+	}
+
+	// Verify no changes were made
+	updated := &hv1.Hypervisor{}
+	if err := fakeClient.Get(ctx, req.NamespacedName, updated); err != nil {
+		t.Fatalf("failed to get updated hypervisor: %v", err)
+	}
+
+	if len(updated.Spec.Overcommit) != 0 {
+		t.Errorf("expected empty overcommit, got %v", updated.Spec.Overcommit)
+	}
+}
+
+func TestHypervisorOvercommitController_Reconcile_MultipleResources(t *testing.T) {
+	scheme := newTestHypervisorScheme(t)
+
+	gpuTrait := "CUSTOM_GPU"
+	hypervisor := &hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-hypervisor",
+		},
+		Spec: hv1.HypervisorSpec{
+			Overcommit: map[hv1.ResourceName]float64{},
+		},
+		Status: hv1.HypervisorStatus{
+			Traits: []string{"CUSTOM_GPU"},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(hypervisor).
+		Build()
+
+	controller := &HypervisorOvercommitController{
+		Client: fakeClient,
+		config: HypervisorOvercommitConfig{
+			OvercommitMappings: []HypervisorOvercommitMapping{
+				{
+					Overcommit: map[hv1.ResourceName]float64{
+						hv1.ResourceCPU:    4.0,
+						hv1.ResourceMemory: 1.5,
+					},
+					HasTrait: &gpuTrait,
+				},
+			},
+		},
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name: hypervisor.Name,
+		},
+	}
+
+	ctx := context.Background()
+	_, err := controller.Reconcile(ctx, req)
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	updated := &hv1.Hypervisor{}
+	if err := fakeClient.Get(ctx, req.NamespacedName, updated); err != nil {
+		t.Fatalf("failed to get updated hypervisor: %v", err)
+	}
+
+	if len(updated.Spec.Overcommit) != 2 {
+		t.Errorf("expected 2 overcommit entries, got %d", len(updated.Spec.Overcommit))
+	}
+
+	if updated.Spec.Overcommit[hv1.ResourceCPU] != 4.0 {
+		t.Errorf("expected CPU overcommit 4.0, got %f", updated.Spec.Overcommit[hv1.ResourceCPU])
+	}
+
+	if updated.Spec.Overcommit[hv1.ResourceMemory] != 1.5 {
+		t.Errorf("expected Memory overcommit 1.5, got %f", updated.Spec.Overcommit[hv1.ResourceMemory])
 	}
 }

@@ -32,10 +32,15 @@ type HypervisorOvercommitMapping struct {
 	// ignore them.
 	Overcommit map[hv1.ResourceName]float64 `json:"overcommit"`
 
-	// Trait specifies a trait that a hypervisor may have, and that, if present,
-	// triggers the controller to set the overcommit ratio specified in Value
-	// for that hypervisor.
-	Trait *string `json:"trait,omitempty"`
+	// HasTrait specifies a trait that a hypervisor may have, and that, if present,
+	// triggers the controller to set the overcommit ratio specified in the
+	// overcommit field for that hypervisor.
+	HasTrait *string `json:"hasTrait,omitempty"`
+
+	// HasntTrait specifies a trait that a hypervisor may have, and that, if
+	// NOT present, triggers the controller to set the overcommit ratio
+	// specified in the overcommit field for that hypervisor.
+	HasntTrait *string `json:"hasntTrait,omitempty"`
 }
 
 // Validate the provided HypervisorOvercommitMapping, returning an error if the
@@ -116,15 +121,28 @@ func (c *HypervisorOvercommitController) Reconcile(ctx context.Context, req ctrl
 	desiredOvercommit := make(map[hv1.ResourceName]float64)
 	for _, mapping := range c.config.OvercommitMappings {
 		// Skip mappings without a trait specified.
-		if mapping.Trait == nil {
+		if mapping.HasTrait == nil {
 			continue
 		}
 		// Only consider applied traits which are reflected in the status.
-		if !slices.Contains(obj.Status.Traits, *mapping.Trait) {
+		if !slices.Contains(obj.Status.Traits, *mapping.HasTrait) {
 			continue
 		}
-		log.Info("Applying overcommit mapping for trait",
-			"trait", *mapping.Trait, "overcommit", mapping.Overcommit)
+		log.Info("Applying overcommit mapping for trait present on hypervisor",
+			"trait", *mapping.HasTrait, "overcommit", mapping.Overcommit)
+		maps.Copy(desiredOvercommit, mapping.Overcommit)
+	}
+	for _, mapping := range c.config.OvercommitMappings {
+		// Skip mappings without a trait specified.
+		if mapping.HasntTrait == nil {
+			continue
+		}
+		// Only consider applied traits which are reflected in the status.
+		if slices.Contains(obj.Status.Traits, *mapping.HasntTrait) {
+			continue
+		}
+		log.Info("Applying overcommit mapping for trait not present on hypervisor",
+			"trait", *mapping.HasntTrait, "overcommit", mapping.Overcommit)
 		maps.Copy(desiredOvercommit, mapping.Overcommit)
 	}
 	log.Info("Desired overcommit ratios based on traits",
