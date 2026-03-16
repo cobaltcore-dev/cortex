@@ -31,7 +31,11 @@ General:
 - Don’t document trivial steps you do and avoid unnecessary empty lines between code segments
 - When adding imports, keep in mind that the autoformatter will remove them if you don't use them
 - `fmt.Errorf` should not be used when there are no parameters. Use `errors.New`
-- Errors should always be lowercase like `errors.New("this is an error")`
+- Errors should always be lowercase like `errors.New("this is an error")` to conform to linting rules
+- You can use `maps.Copy` instead of iteratively copying a map
+- You can use `strings.Contains` to check if some string is in another
+- You can use `slices.Contains` to check if an element is part of a slice
+- And definitely use `testlib.Ptr` for test cases that require pointer values
 
 Testing:
 - Ideally test files should be short and contain only the necessary cases
