@@ -5,6 +5,8 @@ package nova
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -657,12 +659,38 @@ func TestHypervisorOvercommitController_SetupWithManager_InvalidClient(t *testin
 		Client: fakeClient,
 	}
 
-	// SetupWithManager should fail because the client is not a multicluster client
-	// Note: We can't fully test this without a real manager, but we can verify
-	// that the controller requires a multicluster client
-	if controller.Client == nil {
-		t.Error("expected client to be set")
+	// Create a minimal mock manager for testing
+	mgr := &mockManager{scheme: scheme}
+
+	// SetupWithManager should fail - either because config loading fails
+	// (in test environment without config files) or because the client
+	// is not a multicluster client.
+	err := controller.SetupWithManager(mgr)
+	if err == nil {
+		t.Error("expected error when calling SetupWithManager, got nil")
 	}
+	// The error could be either about missing config or about multicluster client
+	// depending on the test environment. We just verify an error is returned.
+}
+
+// mockManager implements ctrl.Manager for testing SetupWithManager
+type mockManager struct {
+	ctrl.Manager
+	scheme *runtime.Scheme
+}
+
+func (m *mockManager) GetScheme() *runtime.Scheme {
+	return m.scheme
+}
+
+// patchFailingClient wraps a client.Client and returns an error on Patch calls
+type patchFailingClient struct {
+	client.Client
+	patchErr error
+}
+
+func (c *patchFailingClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	return c.patchErr
 }
 
 func TestHypervisorOvercommitController_Reconcile_PatchError(t *testing.T) {
@@ -681,14 +709,20 @@ func TestHypervisorOvercommitController_Reconcile_PatchError(t *testing.T) {
 		},
 	}
 
-	// Create a fake client with the hypervisor
-	fakeClient := fake.NewClientBuilder().
+	// Create a fake client with the hypervisor, then wrap it to fail on Patch
+	baseClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(hypervisor).
 		Build()
 
+	patchErr := errors.New("patch failed")
+	failingClient := &patchFailingClient{
+		Client:   baseClient,
+		patchErr: patchErr,
+	}
+
 	controller := &HypervisorOvercommitController{
-		Client: fakeClient,
+		Client: failingClient,
 		config: HypervisorOvercommitConfig{
 			OvercommitMappings: []HypervisorOvercommitMapping{
 				{
@@ -710,9 +744,12 @@ func TestHypervisorOvercommitController_Reconcile_PatchError(t *testing.T) {
 	ctx := context.Background()
 	_, err := controller.Reconcile(ctx, req)
 
-	// With a proper fake client, the patch should succeed
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+	// Reconcile should return an error when Patch fails
+	if err == nil {
+		t.Error("expected error when Patch fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "patch failed") {
+		t.Errorf("expected error message to contain 'patch failed', got: %v", err)
 	}
 }
 
