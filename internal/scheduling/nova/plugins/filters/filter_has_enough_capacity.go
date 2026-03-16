@@ -56,8 +56,14 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		return nil, err
 	}
 	for _, hv := range hvs.Items {
-		// Start with the total capacity.
-		freeResourcesByHost[hv.Name] = hv.Status.Capacity
+		// This case would be caught below, but we want to log this explicitly.
+		if hv.Status.EffectiveCapacity == nil {
+			traceLog.Warn("hypervisor with nil effective capacity, skipping", "host", hv.Name)
+			continue
+		}
+
+		// Start with the total effective capacity which is capacity * overcommit ratio.
+		freeResourcesByHost[hv.Name] = hv.Status.EffectiveCapacity
 
 		// Subtract allocated resources.
 		for resourceName, allocated := range hv.Status.Allocation {

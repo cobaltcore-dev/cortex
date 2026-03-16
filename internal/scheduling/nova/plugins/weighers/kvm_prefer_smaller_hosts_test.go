@@ -22,7 +22,7 @@ func newHypervisorWithCapacity(name, capacityCPU, capacityMem string) *hv1.Hyper
 			Name: name,
 		},
 		Status: hv1.HypervisorStatus{
-			Capacity: map[hv1.ResourceName]resource.Quantity{
+			EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
 				hv1.ResourceCPU:    resource.MustParse(capacityCPU),
 				hv1.ResourceMemory: resource.MustParse(capacityMem),
 			},
@@ -376,7 +376,7 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[hv1.ResourceName]resource.Quantity{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU: resource.MustParse("100"),
 							// No memory capacity
 						},
@@ -466,13 +466,13 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[hv1.ResourceName]resource.Quantity{},
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{},
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[hv1.ResourceName]resource.Quantity{},
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{},
 					},
 				},
 			},
@@ -534,7 +534,7 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[hv1.ResourceName]resource.Quantity{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceMemory: resource.MustParse("64Gi"),
 							// No CPU
 						},
@@ -543,7 +543,7 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[hv1.ResourceName]resource.Quantity{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceMemory: resource.MustParse("128Gi"),
 							// No CPU
 						},

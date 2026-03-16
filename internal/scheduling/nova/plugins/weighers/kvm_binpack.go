@@ -93,14 +93,15 @@ func (s *KVMBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSchedule
 		var totalWeightedUtilization, totalWeight float64
 
 		for resourceName, weight := range s.Options.ResourceWeights {
-			capacity, ok := hv.Status.Capacity[resourceName]
+			// Effective capacity = capacity * overcommit ratio.
+			capacity, ok := hv.Status.EffectiveCapacity[resourceName]
 			if !ok {
-				traceLog.Warn("no capacity in status, skipping",
+				traceLog.Warn("no effective capacity in status, skipping",
 					"host", host, "resource", resourceName)
 				continue
 			}
 			if capacity.IsZero() {
-				traceLog.Warn("capacity is zero, skipping",
+				traceLog.Warn("effective capacity is zero, skipping",
 					"host", host, "resource", resourceName)
 				continue
 			}
