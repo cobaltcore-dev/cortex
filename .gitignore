@@ -35,3 +35,4 @@ cortex.secrets.yaml
 !.golangci.yaml
 !.license-scan-overrides.jsonl
 !.license-scan-rules.json
+!.coderabbit.yaml
