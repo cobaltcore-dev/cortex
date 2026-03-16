@@ -1,3 +1,2 @@
 reviews:
-  description:
-    enabled: false
+  high_level_summary: false
