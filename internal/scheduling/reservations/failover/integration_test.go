@@ -1392,8 +1392,8 @@ func newHypervisorWithAZ(name string, cpuCap, memoryGi, cpuAlloc, memoryGiAlloc 
 			Labels: labels,
 		},
 		Status: hv1.HypervisorStatus{
-			Capacity:     map[string]resource.Quantity{"cpu": resource.MustParse(strconv.Itoa(cpuCap)), "memory": resource.MustParse(strconv.Itoa(memoryGi) + "Gi")},
-			Allocation:   map[string]resource.Quantity{"cpu": resource.MustParse(strconv.Itoa(cpuAlloc)), "memory": resource.MustParse(strconv.Itoa(memoryGiAlloc) + "Gi")},
+			Capacity:     map[hv1.ResourceName]resource.Quantity{"cpu": resource.MustParse(strconv.Itoa(cpuCap)), "memory": resource.MustParse(strconv.Itoa(memoryGi) + "Gi")},
+			Allocation:   map[hv1.ResourceName]resource.Quantity{"cpu": resource.MustParse(strconv.Itoa(cpuAlloc)), "memory": resource.MustParse(strconv.Itoa(memoryGiAlloc) + "Gi")},
 			NumInstances: len(instances),
 			Instances:    instances,
 			Traits:       traits,
@@ -1414,7 +1414,7 @@ func newReservation(name, host string, memoryMB, vcpus uint64, allocations map[s
 		Spec: v1alpha1.ReservationSpec{
 			Type:       v1alpha1.ReservationTypeFailover,
 			TargetHost: host,
-			Resources: map[string]resource.Quantity{
+			Resources: map[hv1.ResourceName]resource.Quantity{
 				"memory": resource.MustParse(strconv.FormatUint(memoryMB, 10) + "Mi"),
 				"cpu":    resource.MustParse(strconv.FormatUint(vcpus, 10)),
 			},

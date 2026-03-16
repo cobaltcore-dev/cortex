@@ -1122,7 +1122,7 @@ func printHypervisorSummary(hypervisors []hv1.Hypervisor, reservations []v1alpha
 		}
 
 		for name, qty := range res.Spec.Resources {
-			targetMap[host][name] += qty.Value()
+			targetMap[host][string(name)] += qty.Value()
 		}
 	}
 

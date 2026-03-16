@@ -43,14 +43,6 @@ func NewPostgresReader(ctx context.Context, c client.Client, datasourceName stri
 	}, nil
 }
 
-// NewPostgresReaderFromSecretRef creates a new PostgresReader with a direct secret reference.
-func NewPostgresReaderFromSecretRef(c client.Client, secretRef corev1.SecretReference) *PostgresReader {
-	return &PostgresReader{
-		Client:            c,
-		DatabaseSecretRef: secretRef,
-	}
-}
-
 // DB returns the database connection, initializing it if necessary.
 // This method is safe for concurrent use.
 func (r *PostgresReader) DB(ctx context.Context) (*db.DB, error) {

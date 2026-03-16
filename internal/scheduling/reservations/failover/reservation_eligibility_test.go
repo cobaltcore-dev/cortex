@@ -7,13 +7,14 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // Default resources for test VMs and reservations (4GB memory, 2 vcpus)
 // Note: Reservations use "cpu" as the canonical key, VMs use "vcpus"
-var defaultResources = map[string]resource.Quantity{
+var defaultResources = map[hv1.ResourceName]resource.Quantity{
 	"memory": resource.MustParse("4Gi"),
 	"cpu":    resource.MustParse("2"),
 }
@@ -42,7 +43,7 @@ func makeReservation(name, host string, usedBy map[string]string) v1alpha1.Reser
 }
 
 // makeReservationWithResources creates a test reservation with custom resources.
-func makeReservationWithResources(name, host string, usedBy map[string]string, resources map[string]resource.Quantity) v1alpha1.Reservation { //nolint:unparam // name is always "res-1" in tests but kept for clarity
+func makeReservationWithResources(name, host string, usedBy map[string]string, resources map[hv1.ResourceName]resource.Quantity) v1alpha1.Reservation { //nolint:unparam // name is always "res-1" in tests but kept for clarity
 	return v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec: v1alpha1.ReservationSpec{
@@ -609,7 +610,7 @@ func TestIsVMEligibleForReservation(t *testing.T) {
 	}
 }
 
-// TestDoesVMFitInReservation tests the DoesVMFitInReservation function.
+// TestDoesVMFitInReservation tests the doesVMFitInReservation function.
 func TestDoesVMFitInReservation(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -623,7 +624,7 @@ func TestDoesVMFitInReservation(t *testing.T) {
 				"memory": resource.MustParse("4Gi"),
 				"vcpus":  resource.MustParse("2"),
 			}),
-			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[string]resource.Quantity{
+			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[hv1.ResourceName]resource.Quantity{
 				"memory": resource.MustParse("4Gi"),
 				"cpu":    resource.MustParse("2"),
 			}),
@@ -635,7 +636,7 @@ func TestDoesVMFitInReservation(t *testing.T) {
 				"memory": resource.MustParse("2Gi"),
 				"vcpus":  resource.MustParse("1"),
 			}),
-			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[string]resource.Quantity{
+			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[hv1.ResourceName]resource.Quantity{
 				"memory": resource.MustParse("4Gi"),
 				"cpu":    resource.MustParse("2"),
 			}),
@@ -647,7 +648,7 @@ func TestDoesVMFitInReservation(t *testing.T) {
 				"memory": resource.MustParse("8Gi"),
 				"vcpus":  resource.MustParse("2"),
 			}),
-			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[string]resource.Quantity{
+			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[hv1.ResourceName]resource.Quantity{
 				"memory": resource.MustParse("4Gi"),
 				"cpu":    resource.MustParse("2"),
 			}),
@@ -659,7 +660,7 @@ func TestDoesVMFitInReservation(t *testing.T) {
 				"memory": resource.MustParse("4Gi"),
 				"vcpus":  resource.MustParse("4"),
 			}),
-			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[string]resource.Quantity{
+			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[hv1.ResourceName]resource.Quantity{
 				"memory": resource.MustParse("4Gi"),
 				"cpu":    resource.MustParse("2"),
 			}),
@@ -668,7 +669,7 @@ func TestDoesVMFitInReservation(t *testing.T) {
 		{
 			name: "fits: VM has no resources defined",
 			vm:   makeVMWithResources("vm-1", "host1", map[string]resource.Quantity{}),
-			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[string]resource.Quantity{
+			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[hv1.ResourceName]resource.Quantity{
 				"memory": resource.MustParse("4Gi"),
 				"cpu":    resource.MustParse("2"),
 			}),
@@ -680,7 +681,7 @@ func TestDoesVMFitInReservation(t *testing.T) {
 				"memory": resource.MustParse("4Gi"),
 				"vcpus":  resource.MustParse("2"),
 			}),
-			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[string]resource.Quantity{
+			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[hv1.ResourceName]resource.Quantity{
 				"cpu": resource.MustParse("2"),
 			}),
 			expected: false,
@@ -691,7 +692,7 @@ func TestDoesVMFitInReservation(t *testing.T) {
 				"memory": resource.MustParse("4Gi"),
 				"vcpus":  resource.MustParse("2"),
 			}),
-			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[string]resource.Quantity{
+			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[hv1.ResourceName]resource.Quantity{
 				"memory": resource.MustParse("4Gi"),
 			}),
 			expected: false,
@@ -700,10 +701,10 @@ func TestDoesVMFitInReservation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := DoesVMFitInReservation(tc.vm, tc.reservation)
+			result := doesVMFitInReservation(tc.vm, tc.reservation)
 
 			if result != tc.expected {
-				t.Errorf("DoesVMFitInReservation() = %v, expected %v", result, tc.expected)
+				t.Errorf("doesVMFitInReservation() = %v, expected %v", result, tc.expected)
 			}
 		})
 	}
@@ -1140,57 +1141,104 @@ func TestAddingVMDoesNotMakeOthersIneligible(t *testing.T) {
 // (assuming they have equivalent reservation setups).
 func TestSymmetryOfEligibility(t *testing.T) {
 	testCases := []struct {
-		name            string
-		vm1             VM
-		vm2             VM
-		reservation     v1alpha1.Reservation
-		allReservations []v1alpha1.Reservation
-		vm1Eligible     bool
-		vm2Eligible     bool
+		name string
+		vm1  VM
+		vm2  VM
+		// vm1Reservation is the reservation to check for vm1's eligibility
+		vm1Reservation v1alpha1.Reservation
+		// vm2Reservation is the reservation to check for vm2's eligibility
+		vm2Reservation v1alpha1.Reservation
+		// allReservationsForVM1 is the context when checking vm1's eligibility
+		allReservationsForVM1 []v1alpha1.Reservation
+		// allReservationsForVM2 is the context when checking vm2's eligibility
+		allReservationsForVM2 []v1alpha1.Reservation
+		vm1Eligible           bool
+		vm2Eligible           bool
 	}{
 		{
-			name:        "symmetric: both VMs can join empty reservation",
-			vm1:         makeVM("vm-1", "host1"),
-			vm2:         makeVM("vm-2", "host2"),
-			reservation: makeReservation("res-1", "host3", map[string]string{}),
-			allReservations: []v1alpha1.Reservation{
+			name:           "symmetric: both VMs can join empty reservation",
+			vm1:            makeVM("vm-1", "host1"),
+			vm2:            makeVM("vm-2", "host2"),
+			vm1Reservation: makeReservation("res-1", "host3", map[string]string{}),
+			vm2Reservation: makeReservation("res-1", "host3", map[string]string{}),
+			allReservationsForVM1: []v1alpha1.Reservation{
+				makeReservation("res-1", "host3", map[string]string{}),
+			},
+			allReservationsForVM2: []v1alpha1.Reservation{
 				makeReservation("res-1", "host3", map[string]string{}),
 			},
 			vm1Eligible: true,
 			vm2Eligible: true,
 		},
 		{
-			name:        "symmetric: vm-1 in res, vm-2 can join; vm-2 in res, vm-1 can join",
-			vm1:         makeVM("vm-1", "host1"),
-			vm2:         makeVM("vm-2", "host2"),
-			reservation: makeReservation("res-1", "host3", map[string]string{}),
-			allReservations: []v1alpha1.Reservation{
-				makeReservation("res-1", "host3", map[string]string{}),
+			name: "symmetric: vm-1 in res, vm-2 can join; vm-2 in res, vm-1 can join",
+			vm1:  makeVM("vm-1", "host1"),
+			vm2:  makeVM("vm-2", "host2"),
+			// Check if vm-1 can join res-1 when vm-2 is already in it
+			vm1Reservation: makeReservation("res-1", "host3", map[string]string{"vm-2": "host2"}),
+			// Check if vm-2 can join res-1 when vm-1 is already in it
+			vm2Reservation: makeReservation("res-1", "host3", map[string]string{"vm-1": "host1"}),
+			allReservationsForVM1: []v1alpha1.Reservation{
+				makeReservation("res-1", "host3", map[string]string{"vm-2": "host2"}),
+			},
+			allReservationsForVM2: []v1alpha1.Reservation{
+				makeReservation("res-1", "host3", map[string]string{"vm-1": "host1"}),
 			},
 			vm1Eligible: true,
 			vm2Eligible: true,
 		},
 		{
-			name:        "asymmetric: vm-1 has res on host2, vm-2 cannot join res on host3 with vm-1",
-			vm1:         makeVM("vm-1", "host1"),
-			vm2:         makeVM("vm-2", "host2"),
-			reservation: makeReservation("res-2", "host3", map[string]string{"vm-1": "host1"}),
-			allReservations: []v1alpha1.Reservation{
+			name: "asymmetric: vm-1 has res on host2, vm-2 cannot join res on host3 with vm-1",
+			vm1:  makeVM("vm-1", "host1"),
+			vm2:  makeVM("vm-2", "host2"),
+			// vm-1 is already in res-2, so we check if vm-1 can join a different reservation
+			// For this test, vm-1 is already in res-2, so vm1Eligible is about whether vm-1 could join res-2 (it can't, it's already in it)
+			vm1Reservation: makeReservation("res-2", "host3", map[string]string{"vm-1": "host1"}),
+			vm2Reservation: makeReservation("res-2", "host3", map[string]string{"vm-1": "host1"}),
+			allReservationsForVM1: []v1alpha1.Reservation{
 				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
 				makeReservation("res-2", "host3", map[string]string{"vm-1": "host1"}),
 			},
+			allReservationsForVM2: []v1alpha1.Reservation{
+				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
+				makeReservation("res-2", "host3", map[string]string{"vm-1": "host1"}),
+			},
+			// vm-1 is already in res-2, so it's not eligible to join again
+			vm1Eligible: false,
 			// vm-2 wants to join res-2 which has vm-1
 			// has res-1 on host2, vm-2 is on host2
 			// Constraint 4: vm-2 runs on vm-1's slot host (host2) -> VIOLATION
-			vm1Eligible: true, // vm-1 is already in res-2
 			vm2Eligible: false,
+		},
+		{
+			name: "symmetric: both VMs on different hosts can share reservation",
+			vm1:  makeVM("vm-1", "host1"),
+			vm2:  makeVM("vm-2", "host2"),
+			// Check if vm-1 can join res-1 when vm-2 is already in it
+			vm1Reservation: makeReservation("res-1", "host3", map[string]string{"vm-2": "host2"}),
+			// Check if vm-2 can join res-1 when vm-1 is already in it
+			vm2Reservation: makeReservation("res-1", "host3", map[string]string{"vm-1": "host1"}),
+			allReservationsForVM1: []v1alpha1.Reservation{
+				makeReservation("res-1", "host3", map[string]string{"vm-2": "host2"}),
+			},
+			allReservationsForVM2: []v1alpha1.Reservation{
+				makeReservation("res-1", "host3", map[string]string{"vm-1": "host1"}),
+			},
+			vm1Eligible: true,
+			vm2Eligible: true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Check vm1's eligibility to join the reservation
+			vm1Result := IsVMEligibleForReservation(tc.vm1, tc.vm1Reservation, tc.allReservationsForVM1)
+			if vm1Result != tc.vm1Eligible {
+				t.Errorf("vm1 eligibility: got %v, expected %v", vm1Result, tc.vm1Eligible)
+			}
+
 			// Check vm2's eligibility to join the reservation
-			vm2Result := IsVMEligibleForReservation(tc.vm2, tc.reservation, tc.allReservations)
+			vm2Result := IsVMEligibleForReservation(tc.vm2, tc.vm2Reservation, tc.allReservationsForVM2)
 			if vm2Result != tc.vm2Eligible {
 				t.Errorf("vm2 eligibility: got %v, expected %v", vm2Result, tc.vm2Eligible)
 			}

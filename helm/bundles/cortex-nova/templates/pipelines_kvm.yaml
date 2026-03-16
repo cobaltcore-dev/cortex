@@ -362,57 +362,6 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
-  name: kvm-valid-host-new-failover-reservation
-spec:
-  schedulingDomain: nova
-  description: |
-    This pipeline is used by the failover reservation controller to find a suitable
-    host for creating a new failover reservation. It validates host compatibility
-    and checks capacity to ensure the host can accommodate the reservation.
-
-    Use case: When a VM needs failover protection and no existing reservation can
-    be reused, this pipeline finds the best host for a new reservation.
-  type: filter-weigher
-  createDecisions: false
-  filters:
-    - name: filter_host_instructions
-      description: |
-        This step will consider the `ignore_hosts` and `force_hosts` instructions
-        from the nova scheduler request spec to filter out or exclusively allow
-        certain hosts.
-    - name: filter_has_enough_capacity
-      description: |
-        This step will filter out hosts that do not have enough available capacity
-        to host the requested flavor. Reservations are considered to ensure we
-        don't double-book capacity.
-      params:
-        - {key: lockReserved, boolValue: true}
-    - name: filter_has_requested_traits
-      description: |
-        This step filters hosts that do not have the requested traits given by the
-        nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
-        not have the specified trait. "trait:<trait>": "required" means the host
-        must have the specified trait.
-    - name: filter_correct_az
-      description: |
-        This step will filter out hosts whose aggregate information indicates they
-        are not placed in the requested availability zone. This ensures failover
-        reservations are created in the same AZ as the VM they protect.
-    - name: filter_status_conditions
-      description: |
-        This step will filter out hosts for which the hypervisor status conditions
-        do not meet the expected values, for example, that the hypervisor is ready
-        and not disabled.
-    - name: filter_capabilities
-      description: |
-        This step will filter out hosts that do not meet the compute capabilities
-        requested by the nova flavor extra specs, like `{"arch": "x86_64",
-        "maxphysaddr:bits": 46, ...}`.
-  weighers: []
----
-apiVersion: cortex.cloud/v1alpha1
-kind: Pipeline
-metadata:
   name: kvm-valid-host-reuse-failover-reservation
 spec:
   schedulingDomain: nova

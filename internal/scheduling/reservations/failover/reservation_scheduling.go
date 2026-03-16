@@ -22,7 +22,7 @@ const (
 
 	// PipelineNewFailoverReservation is used to find a host for creating a new reservation.
 	// It validates host compatibility AND checks capacity.
-	PipelineNewFailoverReservation = "kvm-valid-host-new-failover-reservation"
+	PipelineNewFailoverReservation = "kvm-general-purpose-load-balancing-all-filters-enabled"
 
 	// PipelineAcknowledgeFailoverReservation is used to validate that a failover reservation
 	// is still valid for all its allocated VMs. It sends an evacuation-style scheduling request
@@ -167,7 +167,6 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 	ctx context.Context,
 	vm VM,
 	reservationHost string,
-	vmCurrentHost string,
 ) (bool, error) {
 	// Get memory and vcpus from VM resources
 	var memoryMB uint64
@@ -189,6 +188,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 	}
 
 	// Build a single-host request to validate the VM can use the reservation host
+	// Use vm.CurrentHypervisor directly instead of a separate parameter to avoid stale data
 	scheduleReq := reservations.ScheduleReservationRequest{
 		InstanceUUID:     "validate-" + vm.UUID,
 		ProjectID:        vm.ProjectID,
@@ -197,7 +197,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		MemoryMB:         memoryMB,
 		VCPUs:            vcpus,
 		EligibleHosts:    []api.ExternalSchedulerHost{{ComputeHost: reservationHost}},
-		IgnoreHosts:      []string{vmCurrentHost},
+		IgnoreHosts:      []string{vm.CurrentHypervisor},
 		Pipeline:         PipelineAcknowledgeFailoverReservation,
 		AvailabilityZone: vm.AvailabilityZone,
 	}
@@ -205,7 +205,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 	log.V(1).Info("validating VM via scheduler evacuation",
 		"vmUUID", vm.UUID,
 		"reservationHost", reservationHost,
-		"vmCurrentHost", vmCurrentHost,
+		"vmCurrentHost", vm.CurrentHypervisor,
 		"pipeline", PipelineAcknowledgeFailoverReservation)
 
 	resp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq)
@@ -275,7 +275,7 @@ func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 		"allReturnedHypervisors", validHypervisors)
 
 	// Build the failover reservation on the selected hypervisor (in-memory only)
-	reservation := buildFailoverReservation(vm, selectedHypervisor, c.Config.Creator)
+	reservation := newFailoverReservation(vm, selectedHypervisor, c.Config.Creator)
 
 	return reservation, nil
 }

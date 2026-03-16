@@ -63,7 +63,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			continue
 		}
 		// Make a copy of the capacity map to avoid modifying the original.
-		freeResourcesByHost[hv.Name] = make(map[string]resource.Quantity)
+		freeResourcesByHost[hv.Name] = make(map[hv1.ResourceName]resource.Quantity)
 		for k, v := range hv.Status.Capacity {
 			freeResourcesByHost[hv.Name][k] = v.DeepCopy()
 		}

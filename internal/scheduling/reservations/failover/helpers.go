@@ -7,13 +7,10 @@ import (
 	"fmt"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-// ============================================================================
-// Reservation Helpers
-// ============================================================================
 
 // getFailoverAllocations safely returns the allocations map from a failover reservation.
 // Returns an empty map if the reservation has no failover status or allocations.
@@ -72,10 +69,6 @@ func addVMToReservation(reservation v1alpha1.Reservation, vm VM) *v1alpha1.Reser
 	return updatedRes
 }
 
-// ============================================================================
-// Reservation Building
-// ============================================================================
-
 // ValidateFailoverReservationResources validates that a failover reservation has valid resource keys.
 // Returns an error if the reservation has invalid resource keys (only "cpu" and "memory" are allowed).
 // This ensures reservations are properly considered by the scheduling filters.
@@ -84,7 +77,7 @@ func ValidateFailoverReservationResources(res *v1alpha1.Reservation) error {
 		return nil // No resources is valid (will be caught elsewhere if needed)
 	}
 
-	allowedKeys := map[string]bool{"cpu": true, "memory": true}
+	allowedKeys := map[hv1.ResourceName]bool{"cpu": true, "memory": true}
 	for key := range res.Spec.Resources {
 		if !allowedKeys[key] {
 			return fmt.Errorf("invalid resource key %q: only 'cpu' and 'memory' are allowed", key)
@@ -93,17 +86,17 @@ func ValidateFailoverReservationResources(res *v1alpha1.Reservation) error {
 	return nil
 }
 
-// buildFailoverReservation builds a new failover reservation for a VM on a specific hypervisor.
+// newFailoverReservation creates a new failover reservation for a VM on a specific hypervisor.
 // This does NOT persist the reservation to the cluster - it only creates the in-memory object.
 // The caller is responsible for persisting the reservation.
-func buildFailoverReservation(vm VM, hypervisor, creator string) *v1alpha1.Reservation {
+func newFailoverReservation(vm VM, hypervisor, creator string) *v1alpha1.Reservation {
 	// Build resources from VM's Resources map
 	// The VM struct uses "vcpus" and "memory" keys (see vm_source.go)
 	// We convert "vcpus" to "cpu" for the reservation because the scheduling capacity logic
 	// (e.g., nova filter_has_enough_capacity) uses "cpu" as the canonical key.
 
 	// TODO we may want to use different resource (bigger) to enable better sharing
-	resources := make(map[string]resource.Quantity)
+	resources := make(map[hv1.ResourceName]resource.Quantity)
 	if memory, ok := vm.Resources["memory"]; ok {
 		resources["memory"] = memory
 	}

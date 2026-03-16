@@ -10,6 +10,15 @@ import (
 	nova "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
 )
 
+// NovaReaderInterface defines the methods needed to read Nova data.
+// This interface allows mocking the NovaReader in tests.
+type NovaReaderInterface interface {
+	GetAllServers(ctx context.Context) ([]nova.Server, error)
+	GetAllFlavors(ctx context.Context) ([]nova.Flavor, error)
+	GetServerByID(ctx context.Context, serverID string) (*nova.Server, error)
+	GetFlavorByName(ctx context.Context, flavorName string) (*nova.Flavor, error)
+}
+
 // NovaReader provides read access to Nova data stored in the database.
 // It uses a PostgresReader to connect to the database.
 type NovaReader struct {

@@ -51,11 +51,11 @@ type VMSource interface {
 // DBVMSource implements VMSource by reading directly from the database.
 // This is the preferred implementation as it avoids the size limitations of Knowledge CRDs.
 type DBVMSource struct {
-	NovaReader *external.NovaReader
+	NovaReader external.NovaReaderInterface
 }
 
 // NewDBVMSource creates a new DBVMSource.
-func NewDBVMSource(novaReader *external.NovaReader) *DBVMSource {
+func NewDBVMSource(novaReader external.NovaReaderInterface) *DBVMSource {
 	return &DBVMSource{NovaReader: novaReader}
 }
 
@@ -260,6 +260,7 @@ func (s *DBVMSource) ListVMsOnHypervisors(
 // 1. Iterates through all hypervisor instances to get VM UUIDs and their actual location
 // 2. Looks up each VM in the postgres-sourced vms list to get flavor/size/extra specs/AZ
 // 3. Returns VMs that exist in both hypervisor instances AND postgres (need postgres for scheduling data)
+// 4. Deduplicates VMs that appear on multiple hypervisors (transient state during live migration)
 func buildVMsFromHypervisors(hypervisorList *hv1.HypervisorList, postgresVMs []VM) []VM {
 	// Build a map of VM UUID -> VM data from postgres for quick lookup
 	vmDataByUUID := make(map[string]VM, len(postgresVMs))
@@ -268,7 +269,11 @@ func buildVMsFromHypervisors(hypervisorList *hv1.HypervisorList, postgresVMs []V
 	}
 
 	var result []VM
-	var enrichedCount, notInPostgresCount int
+	var enrichedCount, notInPostgresCount, duplicateCount int
+
+	// Track seen UUIDs to deduplicate VMs that appear on multiple hypervisors
+	// This can happen transiently during live migration
+	seen := make(map[string]string) // vmUUID -> first hypervisor seen
 
 	// Iterate through hypervisor instances
 	for _, hv := range hypervisorList.Items {
@@ -276,6 +281,17 @@ func buildVMsFromHypervisors(hypervisorList *hv1.HypervisorList, postgresVMs []V
 			if !inst.Active {
 				continue
 			}
+
+			// Check for duplicate UUIDs (same VM on multiple hypervisors)
+			if firstHypervisor, alreadySeen := seen[inst.ID]; alreadySeen {
+				log.Info("duplicate VM UUID on multiple hypervisors, skipping",
+					"uuid", inst.ID,
+					"hypervisor", hv.Name,
+					"firstSeenOn", firstHypervisor)
+				duplicateCount++
+				continue
+			}
+			seen[inst.ID] = hv.Name
 
 			// Look up VM data from postgres
 			pgVM, existsInPostgres := vmDataByUUID[inst.ID]
@@ -301,9 +317,10 @@ func buildVMsFromHypervisors(hypervisorList *hv1.HypervisorList, postgresVMs []V
 	}
 
 	log.Info("buildVMsFromHypervisors statistics",
-		"totalHypervisorInstances", enrichedCount+notInPostgresCount,
+		"totalHypervisorInstances", enrichedCount+notInPostgresCount+duplicateCount,
 		"enrichedWithPostgresData", enrichedCount,
-		"notInPostgres", notInPostgresCount)
+		"notInPostgres", notInPostgresCount,
+		"duplicatesSkipped", duplicateCount)
 
 	return result
 }

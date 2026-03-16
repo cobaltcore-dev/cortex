@@ -223,7 +223,7 @@ func (c *FailoverReservationController) validateReservation(ctx context.Context,
 		}
 
 		// Validate the VM can use the reservation host via scheduler evacuation
-		valid, err := c.validateVMViaSchedulerEvacuation(ctx, *vm, reservationHost, vmCurrentHost)
+		valid, err := c.validateVMViaSchedulerEvacuation(ctx, *vm, reservationHost)
 		if err != nil {
 			// Transient error - could be scheduler unavailable, don't delete the reservation
 			log.Error(err, "transient error validating VM for reservation host",
@@ -858,26 +858,35 @@ func (c *FailoverReservationController) SetupWithManager(mgr ctrl.Manager, mcl *
 func (c *FailoverReservationController) Start(ctx context.Context) error {
 	log.Info("starting failover reservation controller (periodic)",
 		"reconcileInterval", c.Config.ReconcileInterval,
+		"shortReconcileInterval", c.Config.ShortReconcileInterval,
 		"creator", c.Config.Creator,
 		"datasourceName", c.Config.DatasourceName,
 		"schedulerURL", c.Config.SchedulerURL,
 		"flavorFailoverRequirements", c.Config.FlavorFailoverRequirements,
 		"maxVMsToProcess", c.Config.MaxVMsToProcess)
 
-	// Set up periodic reconciliation
-	ticker := time.NewTicker(c.Config.ReconcileInterval)
-	defer ticker.Stop()
+	// Set up periodic reconciliation using a timer that respects RequeueAfter
+	// This allows ShortReconcileInterval to take effect when MaxVMsToProcess is hit
+	timer := time.NewTimer(c.Config.ReconcileInterval)
+	defer timer.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			log.Info("stopping failover reservation controller")
 			return nil
-		case <-ticker.C:
-			if _, err := c.ReconcilePeriodic(ctx); err != nil {
+		case <-timer.C:
+			result, err := c.ReconcilePeriodic(ctx)
+			if err != nil {
 				log.Error(err, "failover reconciliation failed")
 				// Continue with next iteration even if this one failed
 			}
+			// Honor the RequeueAfter from ReconcilePeriodic (e.g., ShortReconcileInterval)
+			next := c.Config.ReconcileInterval
+			if result.RequeueAfter > 0 {
+				next = result.RequeueAfter
+			}
+			timer.Reset(next)
 		}
 	}
 }

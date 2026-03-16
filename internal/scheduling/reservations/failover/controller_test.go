@@ -824,7 +824,7 @@ func newTestReservationWithResources(name, host string, allocations map[string]s
 		Spec: v1alpha1.ReservationSpec{
 			Type:       v1alpha1.ReservationTypeFailover,
 			TargetHost: host,
-			Resources: map[string]resource.Quantity{
+			Resources: map[hv1.ResourceName]resource.Quantity{
 				"memory": *resource.NewQuantity(8192*1024*1024, resource.BinarySI),
 				"vcpus":  *resource.NewQuantity(4, resource.DecimalSI),
 			},
