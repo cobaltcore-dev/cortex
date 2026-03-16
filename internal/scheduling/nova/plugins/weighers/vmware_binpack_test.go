@@ -10,7 +10,7 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -24,9 +24,9 @@ func TestVMwareBinpackStepOpts_Validate(t *testing.T) {
 		{
 			name: "valid opts with memory and cpu",
 			opts: VMwareBinpackStepOpts{
-				ResourceWeights: map[hv1.ResourceName]float64{
-					hv1.ResourceMemory: 1.0,
-					hv1.ResourceCPU:    1.0,
+				ResourceWeights: map[corev1.ResourceName]float64{
+					corev1.ResourceMemory: 1.0,
+					corev1.ResourceCPU:    1.0,
 				},
 			},
 			wantError: false,
@@ -34,8 +34,8 @@ func TestVMwareBinpackStepOpts_Validate(t *testing.T) {
 		{
 			name: "valid opts with only memory",
 			opts: VMwareBinpackStepOpts{
-				ResourceWeights: map[hv1.ResourceName]float64{
-					hv1.ResourceMemory: 2.0,
+				ResourceWeights: map[corev1.ResourceName]float64{
+					corev1.ResourceMemory: 2.0,
 				},
 			},
 			wantError: false,
@@ -43,8 +43,8 @@ func TestVMwareBinpackStepOpts_Validate(t *testing.T) {
 		{
 			name: "valid opts with only cpu",
 			opts: VMwareBinpackStepOpts{
-				ResourceWeights: map[hv1.ResourceName]float64{
-					hv1.ResourceCPU: 0.5,
+				ResourceWeights: map[corev1.ResourceName]float64{
+					corev1.ResourceCPU: 0.5,
 				},
 			},
 			wantError: false,
@@ -52,15 +52,24 @@ func TestVMwareBinpackStepOpts_Validate(t *testing.T) {
 		{
 			name: "invalid opts - empty resource weights",
 			opts: VMwareBinpackStepOpts{
-				ResourceWeights: map[hv1.ResourceName]float64{},
+				ResourceWeights: map[corev1.ResourceName]float64{},
+			},
+			wantError: true,
+		},
+		{
+			name: "invalid opts - unsupported resource",
+			opts: VMwareBinpackStepOpts{
+				ResourceWeights: map[corev1.ResourceName]float64{
+					corev1.ResourceStorage: 1.0,
+				},
 			},
 			wantError: true,
 		},
 		{
 			name: "invalid opts - zero weight",
 			opts: VMwareBinpackStepOpts{
-				ResourceWeights: map[hv1.ResourceName]float64{
-					hv1.ResourceMemory: 0.0,
+				ResourceWeights: map[corev1.ResourceName]float64{
+					corev1.ResourceMemory: 0.0,
 				},
 			},
 			wantError: true,
@@ -68,8 +77,8 @@ func TestVMwareBinpackStepOpts_Validate(t *testing.T) {
 		{
 			name: "invalid opts - negative weight",
 			opts: VMwareBinpackStepOpts{
-				ResourceWeights: map[hv1.ResourceName]float64{
-					hv1.ResourceCPU: -1.0,
+				ResourceWeights: map[corev1.ResourceName]float64{
+					corev1.ResourceCPU: -1.0,
 				},
 			},
 			wantError: true,
@@ -133,9 +142,9 @@ func TestVMwareBinpackStep_Run(t *testing.T) {
 	}
 
 	step := &VMwareBinpackStep{}
-	step.Options.ResourceWeights = map[hv1.ResourceName]float64{
-		hv1.ResourceMemory: 1.0,
-		hv1.ResourceCPU:    1.0,
+	step.Options.ResourceWeights = map[corev1.ResourceName]float64{
+		corev1.ResourceMemory: 1.0,
+		corev1.ResourceCPU:    1.0,
 	}
 	step.Client = fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -233,7 +242,7 @@ func TestVMwareBinpackStep_CalcHostCapacity(t *testing.T) {
 
 	// Memory capacity: 6000 * 1_000_000 = 6_000_000_000 bytes
 	expectedMemoryBytes := int64(6000) * 1_000_000
-	memoryCapacity := capacity[hv1.ResourceMemory]
+	memoryCapacity := capacity[corev1.ResourceMemory]
 	if memoryCapacity.Value() != expectedMemoryBytes {
 		t.Errorf("expected memory capacity %d, got %d",
 			expectedMemoryBytes, memoryCapacity.Value())
@@ -241,7 +250,7 @@ func TestVMwareBinpackStep_CalcHostCapacity(t *testing.T) {
 
 	// CPU capacity: 6
 	expectedCPU := int64(6)
-	cpuCapacity := capacity[hv1.ResourceCPU]
+	cpuCapacity := capacity[corev1.ResourceCPU]
 	if cpuCapacity.Value() != expectedCPU {
 		t.Errorf("expected CPU capacity %d, got %d",
 			expectedCPU, cpuCapacity.Value())
@@ -263,7 +272,7 @@ func TestVMwareBinpackStep_CalcHostAllocation(t *testing.T) {
 
 	// Memory allocation: 4000 * 1_000_000 = 4_000_000_000 bytes
 	expectedMemoryBytes := int64(4000) * 1_000_000
-	memoryAllocation := allocation[hv1.ResourceMemory]
+	memoryAllocation := allocation[corev1.ResourceMemory]
 	if memoryAllocation.Value() != expectedMemoryBytes {
 		t.Errorf("expected memory allocation %d, got %d",
 			expectedMemoryBytes, memoryAllocation.Value())
@@ -271,7 +280,7 @@ func TestVMwareBinpackStep_CalcHostAllocation(t *testing.T) {
 
 	// CPU allocation: 4
 	expectedCPU := int64(4)
-	cpuAllocation := allocation[hv1.ResourceCPU]
+	cpuAllocation := allocation[corev1.ResourceCPU]
 	if cpuAllocation.Value() != expectedCPU {
 		t.Errorf("expected CPU allocation %d, got %d",
 			expectedCPU, cpuAllocation.Value())
@@ -329,13 +338,13 @@ func TestVMwareBinpackStep_CalcVMResources(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			resources := step.calcVMResources(tt.request)
 
-			memoryResources := resources[hv1.ResourceMemory]
+			memoryResources := resources[corev1.ResourceMemory]
 			if memoryResources.Value() != tt.expectedMemory {
 				t.Errorf("expected memory %d, got %d",
 					tt.expectedMemory, memoryResources.Value())
 			}
 
-			cpuResources := resources[hv1.ResourceCPU]
+			cpuResources := resources[corev1.ResourceCPU]
 			if cpuResources.Value() != tt.expectedCPU {
 				t.Errorf("expected CPU %d, got %d",
 					tt.expectedCPU, cpuResources.Value())
