@@ -45,7 +45,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 	result := s.IncludeAllHostsFromRequest(request)
 
 	// This map holds the free resources per host.
-	freeResourcesByHost := make(map[string]map[string]resource.Quantity)
+	freeResourcesByHost := make(map[string]map[hv1.ResourceName]resource.Quantity)
 
 	// The hypervisor resource auto-discovers its current utilization.
 	// We can use the hypervisor status to calculate the total capacity

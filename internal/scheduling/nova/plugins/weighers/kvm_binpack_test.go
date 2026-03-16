@@ -10,7 +10,6 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,11 +22,11 @@ func newHypervisor(name, capacityCPU, capacityMem, allocationCPU, allocationMem 
 			Name: name,
 		},
 		Status: hv1.HypervisorStatus{
-			Capacity: map[string]resource.Quantity{
+			Capacity: map[hv1.ResourceName]resource.Quantity{
 				"cpu":    resource.MustParse(capacityCPU),
 				"memory": resource.MustParse(capacityMem),
 			},
-			Allocation: map[string]resource.Quantity{
+			Allocation: map[hv1.ResourceName]resource.Quantity{
 				"cpu":    resource.MustParse(allocationCPU),
 				"memory": resource.MustParse(allocationMem),
 			},
@@ -81,9 +80,9 @@ func TestKVMBinpackStepOpts_Validate(t *testing.T) {
 		{
 			name: "valid opts with memory and cpu weights",
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
-					corev1.ResourceCPU:    1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
+					hv1.ResourceCPU:    1.0,
 				},
 			},
 			wantErr: false,
@@ -91,9 +90,9 @@ func TestKVMBinpackStepOpts_Validate(t *testing.T) {
 		{
 			name: "inverted weights should raise error",
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: -1.0,
-					corev1.ResourceCPU:    -1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: -1.0,
+					hv1.ResourceCPU:    -1.0,
 				},
 			},
 			wantErr: true,
@@ -101,9 +100,9 @@ func TestKVMBinpackStepOpts_Validate(t *testing.T) {
 		{
 			name: "zero weights should raise error",
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 0.0,
-					corev1.ResourceCPU:    0.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 0.0,
+					hv1.ResourceCPU:    0.0,
 				},
 			},
 			wantErr: true,
@@ -111,8 +110,8 @@ func TestKVMBinpackStepOpts_Validate(t *testing.T) {
 		{
 			name: "valid opts with only memory weight",
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 2.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 2.0,
 				},
 			},
 			wantErr: false,
@@ -120,8 +119,8 @@ func TestKVMBinpackStepOpts_Validate(t *testing.T) {
 		{
 			name: "valid opts with only cpu weight",
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceCPU: 0.5,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceCPU: 0.5,
 				},
 			},
 			wantErr: false,
@@ -129,9 +128,9 @@ func TestKVMBinpackStepOpts_Validate(t *testing.T) {
 		{
 			name: "zero weights should raise error",
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 0.0,
-					corev1.ResourceCPU:    0.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 0.0,
+					hv1.ResourceCPU:    0.0,
 				},
 			},
 			wantErr: true,
@@ -139,7 +138,7 @@ func TestKVMBinpackStepOpts_Validate(t *testing.T) {
 		{
 			name: "valid opts with empty resource weights",
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{},
+				ResourceWeights: map[hv1.ResourceName]float64{},
 			},
 			wantErr: true,
 		},
@@ -149,29 +148,9 @@ func TestKVMBinpackStepOpts_Validate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "invalid opts with unsupported resource",
-			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceStorage: 1.0,
-				},
-			},
-			wantErr: true,
-			errMsg:  "unsupported resource",
-		},
-		{
-			name: "invalid opts with unsupported ephemeral-storage resource",
-			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceEphemeralStorage: 1.0,
-				},
-			},
-			wantErr: true,
-			errMsg:  "unsupported resource",
-		},
-		{
 			name: "invalid opts with custom unsupported resource",
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
+				ResourceWeights: map[hv1.ResourceName]float64{
 					"nvidia.com/gpu": 1.0,
 				},
 			},
@@ -221,8 +200,8 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 			},
 			request: newBinpackRequest(8192, 4, 1, []string{"host1", "host2"}), // 8Gi memory
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{ // with 0.1 tolerance
@@ -243,8 +222,8 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 			},
 			request: newBinpackRequest(8192, 4, 1, []string{"host1", "host2"}),
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceCPU: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceCPU: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{ // with 0.1 tolerance
@@ -261,9 +240,9 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 			},
 			request: newBinpackRequest(8192, 4, 1, []string{"host1", "host2"}),
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceCPU:    1.0,
-					corev1.ResourceMemory: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceCPU:    1.0,
+					hv1.ResourceMemory: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{ // with 0.1 tolerance
@@ -281,9 +260,9 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 			},
 			request: newBinpackRequest(8192, 4, 1, []string{"host1"}),
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceCPU:    2.0,
-					corev1.ResourceMemory: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceCPU:    2.0,
+					hv1.ResourceMemory: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{ // with 0.1 tolerance
@@ -299,8 +278,8 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 			},
 			request: newBinpackRequest(8192, 4, 2, []string{"host1"}), // 2 instances
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceCPU: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceCPU: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{ // with 0.1 tolerance
@@ -314,8 +293,8 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 			hypervisors: []*hv1.Hypervisor{},
 			request:     newBinpackRequest(8192, 4, 1, []string{"host1", "host2"}),
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceCPU: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceCPU: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -333,8 +312,8 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 			},
 			request: newBinpackRequest(8192, 4, 1, []string{"host1", "host2"}),
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceCPU: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceCPU: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -351,7 +330,7 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 			},
 			request: newBinpackRequest(8192, 4, 1, []string{"host1"}),
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{},
+				ResourceWeights: map[hv1.ResourceName]float64{},
 			},
 			expectedWeights: map[string]float64{
 				"host1": 0, // No weights configured, score is 0
@@ -364,11 +343,11 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[string]resource.Quantity{
+						Capacity: map[hv1.ResourceName]resource.Quantity{
 							"cpu":    resource.MustParse("0"),
 							"memory": resource.MustParse("100Gi"),
 						},
-						Allocation: map[string]resource.Quantity{
+						Allocation: map[hv1.ResourceName]resource.Quantity{
 							"cpu":    resource.MustParse("0"),
 							"memory": resource.MustParse("80Gi"),
 						},
@@ -377,8 +356,8 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 			},
 			request: newBinpackRequest(8192, 4, 1, []string{"host1"}),
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceCPU: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceCPU: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -392,10 +371,10 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[string]resource.Quantity{
+						Capacity: map[hv1.ResourceName]resource.Quantity{
 							"cpu": resource.MustParse("100"),
 						},
-						Allocation: map[string]resource.Quantity{
+						Allocation: map[hv1.ResourceName]resource.Quantity{
 							// No CPU allocation
 						},
 					},
@@ -403,8 +382,8 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 			},
 			request: newBinpackRequest(8192, 4, 1, []string{"host1"}),
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceCPU: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceCPU: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -418,10 +397,10 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[string]resource.Quantity{
+						Capacity: map[hv1.ResourceName]resource.Quantity{
 							// No CPU capacity
 						},
-						Allocation: map[string]resource.Quantity{
+						Allocation: map[hv1.ResourceName]resource.Quantity{
 							"cpu": resource.MustParse("80"),
 						},
 					},
@@ -429,8 +408,8 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 			},
 			request: newBinpackRequest(8192, 4, 1, []string{"host1"}),
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceCPU: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceCPU: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -446,8 +425,8 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 			},
 			request: newBinpackRequest(20480, 20, 1, []string{"host1"}), // 20Gi, 20 CPUs - more than available
 			opts: KVMBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceCPU: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceCPU: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -547,7 +526,7 @@ func TestKVMBinpackStep_calcVMResources(t *testing.T) {
 			step := &KVMBinpackStep{}
 			resources := step.calcVMResources(tt.request)
 
-			memResource, ok := resources[corev1.ResourceMemory]
+			memResource, ok := resources[hv1.ResourceMemory]
 			if !ok {
 				t.Error("expected memory resource to be present")
 			} else {
@@ -557,7 +536,7 @@ func TestKVMBinpackStep_calcVMResources(t *testing.T) {
 				}
 			}
 
-			cpuResource, ok := resources[corev1.ResourceCPU]
+			cpuResource, ok := resources[hv1.ResourceCPU]
 			if !ok {
 				t.Error("expected CPU resource to be present")
 			} else {

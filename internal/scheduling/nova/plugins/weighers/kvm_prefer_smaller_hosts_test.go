@@ -10,7 +10,6 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,7 +22,7 @@ func newHypervisorWithCapacity(name, capacityCPU, capacityMem string) *hv1.Hyper
 			Name: name,
 		},
 		Status: hv1.HypervisorStatus{
-			Capacity: map[string]resource.Quantity{
+			Capacity: map[hv1.ResourceName]resource.Quantity{
 				"cpu":    resource.MustParse(capacityCPU),
 				"memory": resource.MustParse(capacityMem),
 			},
@@ -77,9 +76,9 @@ func TestKVMPreferSmallerHostsStepOpts_Validate(t *testing.T) {
 		{
 			name: "valid opts with memory and cpu weights",
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
-					corev1.ResourceCPU:    1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
+					hv1.ResourceCPU:    1.0,
 				},
 			},
 			wantErr: false,
@@ -87,8 +86,8 @@ func TestKVMPreferSmallerHostsStepOpts_Validate(t *testing.T) {
 		{
 			name: "valid opts with only memory weight",
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 2.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 2.0,
 				},
 			},
 			wantErr: false,
@@ -96,8 +95,8 @@ func TestKVMPreferSmallerHostsStepOpts_Validate(t *testing.T) {
 		{
 			name: "valid opts with only cpu weight",
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceCPU: 0.5,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceCPU: 0.5,
 				},
 			},
 			wantErr: false,
@@ -105,9 +104,9 @@ func TestKVMPreferSmallerHostsStepOpts_Validate(t *testing.T) {
 		{
 			name: "valid opts with zero weights",
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 0.0,
-					corev1.ResourceCPU:    0.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 0.0,
+					hv1.ResourceCPU:    0.0,
 				},
 			},
 			wantErr: false,
@@ -115,7 +114,7 @@ func TestKVMPreferSmallerHostsStepOpts_Validate(t *testing.T) {
 		{
 			name: "invalid opts with empty resource weights",
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{},
+				ResourceWeights: map[hv1.ResourceName]float64{},
 			},
 			wantErr: true,
 			errMsg:  "at least one resource weight must be specified",
@@ -129,8 +128,8 @@ func TestKVMPreferSmallerHostsStepOpts_Validate(t *testing.T) {
 		{
 			name: "invalid opts with negative weight",
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: -1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: -1.0,
 				},
 			},
 			wantErr: true,
@@ -139,37 +138,17 @@ func TestKVMPreferSmallerHostsStepOpts_Validate(t *testing.T) {
 		{
 			name: "invalid opts with negative cpu weight",
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceCPU: -0.5,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceCPU: -0.5,
 				},
 			},
 			wantErr: true,
 			errMsg:  "resource weights must be greater than or equal to zero",
 		},
 		{
-			name: "invalid opts with unsupported resource",
-			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceStorage: 1.0,
-				},
-			},
-			wantErr: true,
-			errMsg:  "unsupported resource",
-		},
-		{
-			name: "invalid opts with unsupported ephemeral-storage resource",
-			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceEphemeralStorage: 1.0,
-				},
-			},
-			wantErr: true,
-			errMsg:  "unsupported resource",
-		},
-		{
 			name: "invalid opts with custom unsupported resource",
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
+				ResourceWeights: map[hv1.ResourceName]float64{
 					"nvidia.com/gpu": 1.0,
 				},
 			},
@@ -216,8 +195,8 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 			},
 			request: newPreferSmallerHostsRequest([]string{"host1", "host2", "host3"}),
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -236,8 +215,8 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 			},
 			request: newPreferSmallerHostsRequest([]string{"host1", "host2", "host3"}),
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceCPU: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceCPU: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -259,9 +238,9 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 			},
 			request: newPreferSmallerHostsRequest([]string{"host1", "host2", "host3"}),
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
-					corev1.ResourceCPU:    1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
+					hv1.ResourceCPU:    1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -284,9 +263,9 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 			},
 			request: newPreferSmallerHostsRequest([]string{"host1", "host2"}),
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 2.0, // memory is weighted 2x
-					corev1.ResourceCPU:    1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 2.0, // memory is weighted 2x
+					hv1.ResourceCPU:    1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -305,8 +284,8 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 			},
 			request: newPreferSmallerHostsRequest([]string{"host1", "host2"}),
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -324,8 +303,8 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 			},
 			request: newPreferSmallerHostsRequest([]string{"host1", "host2", "host3"}),
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -343,8 +322,8 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 			},
 			request: newPreferSmallerHostsRequest([]string{"host1"}),
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -358,8 +337,8 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 			hypervisors: []*hv1.Hypervisor{},
 			request:     newPreferSmallerHostsRequest([]string{"host1", "host2"}),
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -378,8 +357,8 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 			},
 			request: newPreferSmallerHostsRequest([]string{"host1", "host2", "host3"}),
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -397,7 +376,7 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[string]resource.Quantity{
+						Capacity: map[hv1.ResourceName]resource.Quantity{
 							"cpu": resource.MustParse("100"),
 							// No memory capacity
 						},
@@ -406,8 +385,8 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 			},
 			request: newPreferSmallerHostsRequest([]string{"host1", "host2", "host3"}),
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -427,8 +406,8 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 			// Only host1 and host2 in the request (host3 was filtered out)
 			request: newPreferSmallerHostsRequest([]string{"host1", "host2"}),
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -446,8 +425,8 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 			},
 			request: newPreferSmallerHostsRequest([]string{"host1", "host2", "host3"}),
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -468,8 +447,8 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 			},
 			request: newPreferSmallerHostsRequest([]string{"host1", "host2", "host3", "host4"}),
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -487,20 +466,20 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[string]resource.Quantity{},
+						Capacity: map[hv1.ResourceName]resource.Quantity{},
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[string]resource.Quantity{},
+						Capacity: map[hv1.ResourceName]resource.Quantity{},
 					},
 				},
 			},
 			request: newPreferSmallerHostsRequest([]string{"host1", "host2"}),
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -518,8 +497,8 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 			},
 			request: newPreferSmallerHostsRequest([]string{"host1", "host2"}),
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -538,8 +517,8 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 			},
 			request: newPreferSmallerHostsRequest([]string{"host1", "host2"}),
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -555,7 +534,7 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[string]resource.Quantity{
+						Capacity: map[hv1.ResourceName]resource.Quantity{
 							"memory": resource.MustParse("64Gi"),
 							// No CPU
 						},
@@ -564,7 +543,7 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[string]resource.Quantity{
+						Capacity: map[hv1.ResourceName]resource.Quantity{
 							"memory": resource.MustParse("128Gi"),
 							// No CPU
 						},
@@ -573,9 +552,9 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 			},
 			request: newPreferSmallerHostsRequest([]string{"host1", "host2"}),
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
-					corev1.ResourceCPU:    1.0, // CPU requested but not available
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
+					hv1.ResourceCPU:    1.0, // CPU requested but not available
 				},
 			},
 			expectedWeights: map[string]float64{
@@ -594,9 +573,9 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 			},
 			request: newPreferSmallerHostsRequest([]string{"host1", "host2", "host3"}),
 			opts: KVMPreferSmallerHostsStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 0.0, // zero weight - ignored
-					corev1.ResourceCPU:    1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 0.0, // zero weight - ignored
+					hv1.ResourceCPU:    1.0,
 				},
 			},
 			expectedWeights: map[string]float64{

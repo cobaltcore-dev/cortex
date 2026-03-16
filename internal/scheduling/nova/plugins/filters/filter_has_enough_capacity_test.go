@@ -39,11 +39,11 @@ func newHypervisor(name, cpuCap, cpuAlloc, memCap, memAlloc string) *hv1.Hypervi
 			Name: name,
 		},
 		Status: hv1.HypervisorStatus{
-			Capacity: map[string]resource.Quantity{
+			Capacity: map[hv1.ResourceName]resource.Quantity{
 				"cpu":    resource.MustParse(cpuCap),
 				"memory": resource.MustParse(memCap),
 			},
-			Allocation: map[string]resource.Quantity{
+			Allocation: map[hv1.ResourceName]resource.Quantity{
 				"cpu":    resource.MustParse(cpuAlloc),
 				"memory": resource.MustParse(memAlloc),
 			},
