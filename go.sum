@@ -22,6 +22,8 @@ github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UF
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/cobaltcore-dev/openstack-hypervisor-operator v0.0.0-20260313132145-05f22f69d9fd h1:IzxramZZRC/9FtQQqpbgf8KIpH4soD9cliCFs2+zPd4=
 github.com/cobaltcore-dev/openstack-hypervisor-operator v0.0.0-20260313132145-05f22f69d9fd/go.mod h1:b0KmJdxvRI8UXlGe8cRm5BD8Tm2WhF7zSKMSIRGyVL4=
+github.com/cobaltcore-dev/openstack-hypervisor-operator v0.0.0-20260316070528-80f53bbce409 h1:hiTMLk6JZsmFF+ECBJnOVcDAw2d+iCXhk4eDvVpYHYM=
+github.com/cobaltcore-dev/openstack-hypervisor-operator v0.0.0-20260316070528-80f53bbce409/go.mod h1:b0KmJdxvRI8UXlGe8cRm5BD8Tm2WhF7zSKMSIRGyVL4=
 github.com/containerd/continuity v0.4.5 h1:ZRoN1sXq9u7V6QoHMcVWGhOwDFqZ4B9i5H6un1Wh0x4=
 github.com/containerd/continuity v0.4.5/go.mod h1:/lNJvtJKUQStBzpVQ1+rasXO1LAWtUQssk28EZvJ3nE=
 github.com/containerd/errdefs v1.0.0 h1:tg5yIfIlQIrxYtu9ajqY42W3lpS19XqdxRQeEwYG8PI=

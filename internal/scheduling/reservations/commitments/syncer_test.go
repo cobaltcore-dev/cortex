@@ -9,6 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -293,13 +294,13 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 	// Check resource values - should be sized for the flavor that fits
 	// With 2048MB total capacity, we can fit 2x 1024MB flavors
 	expectedMemory := resource.MustParse("1073741824") // 1024MB in bytes
-	if !res.Spec.Resources["memory"].Equal(expectedMemory) {
-		t.Errorf("Expected memory %v, got %v", expectedMemory, res.Spec.Resources["memory"])
+	if !res.Spec.Resources[hv1.ResourceMemory].Equal(expectedMemory) {
+		t.Errorf("Expected memory %v, got %v", expectedMemory, res.Spec.Resources[hv1.ResourceMemory])
 	}
 
 	expectedVCPUs := resource.MustParse("2")
-	if !res.Spec.Resources["cpu"].Equal(expectedVCPUs) {
-		t.Errorf("Expected vCPUs %v, got %v", expectedVCPUs, res.Spec.Resources["cpu"])
+	if !res.Spec.Resources[hv1.ResourceCPU].Equal(expectedVCPUs) {
+		t.Errorf("Expected vCPUs %v, got %v", expectedVCPUs, res.Spec.Resources[hv1.ResourceCPU])
 	}
 }
 
@@ -338,9 +339,9 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 				ResourceGroup: "old_group",
 				Creator:       CreatorValue,
 			},
-			Resources: map[string]resource.Quantity{
-				"memory": resource.MustParse("512Mi"),
-				"cpu":    resource.MustParse("1"),
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: resource.MustParse("512Mi"),
+				hv1.ResourceCPU:    resource.MustParse("1"),
 			},
 		},
 	}

@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -148,9 +149,9 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 				ProjectID:    "test-project",
 				ResourceName: "test-flavor",
 			},
-			Resources: map[string]resource.Quantity{
-				"memory": resource.MustParse("1Gi"),
-				"cpu":    resource.MustParse("2"),
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: resource.MustParse("1Gi"),
+				hv1.ResourceCPU:    resource.MustParse("2"),
 			},
 		},
 	}

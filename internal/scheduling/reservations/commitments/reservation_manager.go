@@ -9,6 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -77,7 +78,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 	}
 	deltaMemoryBytes := desiredState.TotalMemoryBytes
 	for _, res := range existing {
-		memoryQuantity := res.Spec.Resources["memory"]
+		memoryQuantity := res.Spec.Resources[hv1.ResourceMemory]
 		deltaMemoryBytes -= memoryQuantity.Value()
 	}
 
@@ -104,7 +105,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 				"expectedProjectID", desiredState.ProjectID,
 				"actualProjectID", res.Spec.CommittedResourceReservation.ProjectID)
 			removedReservations = append(removedReservations, res)
-			memValue := res.Spec.Resources["memory"]
+			memValue := res.Spec.Resources[hv1.ResourceMemory]
 			deltaMemoryBytes += memValue.Value()
 
 			if err := m.Delete(ctx, &res); err != nil {
@@ -132,7 +133,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 			existing = existing[:len(existing)-1] // remove from existing list
 		}
 		removedReservations = append(removedReservations, *reservationToDelete)
-		memValue := reservationToDelete.Spec.Resources["memory"]
+		memValue := reservationToDelete.Spec.Resources[hv1.ResourceMemory]
 		deltaMemoryBytes += memValue.Value()
 
 		log.Info("deleting reservation",
@@ -153,7 +154,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 		// TODO more sophisticated flavor selection, especially with flavors of different cpu/memory ratio
 		reservation := m.newReservation(desiredState, nextSlotIndex, deltaMemoryBytes, flavorGroup, creator)
 		touchedReservations = append(touchedReservations, *reservation)
-		memValue := reservation.Spec.Resources["memory"]
+		memValue := reservation.Spec.Resources[hv1.ResourceMemory]
 		deltaMemoryBytes -= memValue.Value()
 
 		log.Info("creating reservation",
@@ -265,12 +266,12 @@ func (m *ReservationManager) newReservation(
 
 	spec := v1alpha1.ReservationSpec{
 		Type: v1alpha1.ReservationTypeCommittedResource,
-		Resources: map[string]resource.Quantity{
-			"memory": *resource.NewQuantity(
+		Resources: map[hv1.ResourceName]resource.Quantity{
+			hv1.ResourceMemory: *resource.NewQuantity(
 				memoryBytes,
 				resource.BinarySI,
 			),
-			"cpu": *resource.NewQuantity(
+			hv1.ResourceCPU: *resource.NewQuantity(
 				cpus,
 				resource.DecimalSI,
 			),
