@@ -487,6 +487,43 @@ func TestHypervisorOvercommitController_Reconcile(t *testing.T) {
 			expectUpdate:             true,
 			expectedOvercommitValues: nil,
 		},
+		{
+			name: "later mappings override earlier ones for same resource - order preserved",
+			hypervisor: &hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-hypervisor",
+				},
+				Spec: hv1.HypervisorSpec{
+					Overcommit: map[hv1.ResourceName]float64{},
+				},
+				Status: hv1.HypervisorStatus{
+					Traits: []string{"trait-first", "trait-second"}, // Has both traits
+				},
+			},
+			config: HypervisorOvercommitConfig{
+				OvercommitMappings: []HypervisorOvercommitMapping{
+					{
+						Overcommit: map[hv1.ResourceName]float64{
+							hv1.ResourceCPU:    2.0,
+							hv1.ResourceMemory: 1.5,
+						},
+						Trait: testlib.Ptr("trait-first"),
+					},
+					{
+						Overcommit: map[hv1.ResourceName]float64{
+							hv1.ResourceCPU: 4.0, // Override CPU from earlier mapping
+						},
+						Trait: testlib.Ptr("trait-second"),
+					},
+				},
+			},
+			expectError:  false,
+			expectUpdate: true,
+			expectedOvercommitValues: map[hv1.ResourceName]float64{
+				hv1.ResourceCPU:    4.0, // Later mapping wins for CPU
+				hv1.ResourceMemory: 1.5, // Memory preserved from earlier mapping
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -536,6 +573,12 @@ func TestHypervisorOvercommitController_Reconcile(t *testing.T) {
 				if !reflect.DeepEqual(updatedHypervisor.Spec.Overcommit, tt.expectedOvercommitValues) {
 					t.Errorf("Expected overcommit values %v, got %v",
 						tt.expectedOvercommitValues, updatedHypervisor.Spec.Overcommit)
+				}
+			} else {
+				// When expectedOvercommitValues is nil, verify that old overcommit ratios were cleared
+				if len(updatedHypervisor.Spec.Overcommit) != 0 {
+					t.Errorf("Expected overcommit to be nil or empty when no traits match, got %v",
+						updatedHypervisor.Spec.Overcommit)
 				}
 			}
 		})

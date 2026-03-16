@@ -110,22 +110,22 @@ func (c *HypervisorOvercommitController) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, err
 	}
 
-	// Map traits to desired overcommit ratios and apply them if they
-	// differ from the current overcommit ratios on the hypervisor.
-	traitMappings := make(map[string]map[hv1.ResourceName]float64)
-	for _, mapping := range c.config.OvercommitMappings {
-		if mapping.Trait != nil {
-			traitMappings[*mapping.Trait] = mapping.Overcommit
-		}
-	}
+	// Build desired overcommit ratios by iterating mappings in order.
+	// Later mappings override earlier ones for the same resource, preserving
+	// non-overlapping resources from previous mappings.
 	desiredOvercommit := make(map[hv1.ResourceName]float64)
-	for trait, overcommit := range traitMappings {
-		// Only consider applied traits which are reflected in the status.
-		if slices.Contains(obj.Status.Traits, trait) {
-			log.Info("Applying overcommit mapping for trait",
-				"trait", trait, "overcommit", overcommit)
-			maps.Copy(desiredOvercommit, overcommit)
+	for _, mapping := range c.config.OvercommitMappings {
+		// Skip mappings without a trait specified.
+		if mapping.Trait == nil {
+			continue
 		}
+		// Only consider applied traits which are reflected in the status.
+		if !slices.Contains(obj.Status.Traits, *mapping.Trait) {
+			continue
+		}
+		log.Info("Applying overcommit mapping for trait",
+			"trait", *mapping.Trait, "overcommit", mapping.Overcommit)
+		maps.Copy(desiredOvercommit, mapping.Overcommit)
 	}
 	log.Info("Desired overcommit ratios based on traits",
 		"desiredOvercommit", desiredOvercommit)
