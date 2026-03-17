@@ -115,6 +115,13 @@ func newTestScheme(t *testing.T) *runtime.Scheme {
 // testRouter is a simple ResourceRouter for testing.
 type testRouter struct{}
 
+// alwaysMatchRouter matches any object to any cluster.
+type alwaysMatchRouter struct{}
+
+func (r alwaysMatchRouter) Match(any, map[string]string) (bool, error) {
+	return true, nil
+}
+
 func (r testRouter) Match(obj any, labels map[string]string) (bool, error) {
 	cm, ok := obj.(*corev1.ConfigMap)
 	if !ok {
@@ -314,17 +321,64 @@ func TestClient_clusterForWrite_SingleRemoteCluster(t *testing.T) {
 	c := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
+		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
+			configMapGVK: testRouter{},
+		},
 		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
 			configMapGVK: {{cluster: remote, labels: map[string]string{"az": "az-1"}}},
 		},
 	}
 
-	cl, err := c.clusterForWrite(configMapGVK, &corev1.ConfigMap{})
+	cl, err := c.clusterForWrite(configMapGVK, &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"az": "az-1"}},
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cl != remote {
 		t.Error("expected remote cluster for single remote")
+	}
+}
+
+func TestClient_clusterForWrite_NoRouterSingleRemote(t *testing.T) {
+	scheme := newTestScheme(t)
+	c := &Client{
+		HomeCluster: newFakeCluster(scheme),
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {{cluster: newFakeCluster(scheme)}},
+		},
+	}
+
+	_, err := c.clusterForWrite(configMapGVK, &corev1.ConfigMap{})
+	if err == nil {
+		t.Error("expected error when no router configured for remote cluster")
+	}
+}
+
+func TestClient_clusterForWrite_NoMatchFallsBackToHome(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
+			configMapGVK: testRouter{},
+		},
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {{cluster: newFakeCluster(scheme), labels: map[string]string{"az": "az-1"}}},
+		},
+		homeGVKs: map[schema.GroupVersionKind]bool{configMapGVK: true},
+	}
+
+	cl, err := c.clusterForWrite(configMapGVK, &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"az": "az-99"}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cl != homeCluster {
+		t.Error("expected home cluster as fallback when no remote matches")
 	}
 }
 
@@ -703,6 +757,9 @@ func TestClient_Create_SingleRemoteCluster(t *testing.T) {
 	c := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
+		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
+			configMapGVK: alwaysMatchRouter{},
+		},
 		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
 			configMapGVK: {{cluster: remote}},
 		},
@@ -811,6 +868,9 @@ func TestClient_Delete_SingleRemoteCluster(t *testing.T) {
 	c := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
+		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
+			configMapGVK: alwaysMatchRouter{},
+		},
 		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
 			configMapGVK: {{cluster: remote}},
 		},
@@ -841,6 +901,9 @@ func TestClient_Update_SingleRemoteCluster(t *testing.T) {
 	c := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
+		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
+			configMapGVK: alwaysMatchRouter{},
+		},
 		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
 			configMapGVK: {{cluster: remote}},
 		},
@@ -881,6 +944,9 @@ func TestClient_Patch_SingleRemoteCluster(t *testing.T) {
 	c := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
+		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
+			configMapGVK: alwaysMatchRouter{},
+		},
 		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
 			configMapGVK: {{cluster: remote}},
 		},
@@ -1047,6 +1113,9 @@ func TestStatusClient_RoutesToRemoteCluster(t *testing.T) {
 	c := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
+		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
+			podGVK: alwaysMatchRouter{},
+		},
 		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
 			podGVK: {{cluster: remote}},
 		},
@@ -1102,6 +1171,9 @@ func TestSubResourceClient_RoutesToRemoteCluster(t *testing.T) {
 	c := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
+		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
+			podGVK: alwaysMatchRouter{},
+		},
 		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
 			podGVK: {{cluster: remote}},
 		},

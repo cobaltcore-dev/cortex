@@ -208,29 +208,28 @@ func (c *Client) ClustersForGVK(gvk schema.GroupVersionKind) ([]cluster.Cluster,
 func (c *Client) clusterForWrite(gvk schema.GroupVersionKind, obj any) (cluster.Cluster, error) {
 	c.remoteClustersMu.RLock()
 	defer c.remoteClustersMu.RUnlock()
+
 	remotes := c.remoteClusters[gvk]
-	if len(remotes) == 0 {
-		if c.homeGVKs[gvk] {
-			return c.HomeCluster, nil
+
+	if len(remotes) > 0 {
+		router, ok := c.ResourceRouters[gvk]
+		if !ok {
+			return nil, fmt.Errorf("no ResourceRouter configured for GVK %s with %d remote clusters", gvk, len(remotes))
 		}
-		return nil, fmt.Errorf("GVK %s is not configured in home or any remote cluster", gvk)
+		for _, r := range remotes {
+			match, err := router.Match(obj, r.labels)
+			if err != nil {
+				return nil, fmt.Errorf("ResourceRouter match error for GVK %s: %w", gvk, err)
+			}
+			if match {
+				return r.cluster, nil
+			}
+		}
 	}
-	router, ok := c.ResourceRouters[gvk]
-	if !ok {
-		// If there are more than one remote cluster and no router, we don't know which one to write to.
-		if len(remotes) == 1 {
-			return remotes[0].cluster, nil
-		}
-		return nil, fmt.Errorf("no ResourceRouter configured for GVK %s with %d clusters", gvk, len(remotes))
-	}
-	for _, r := range remotes {
-		match, err := router.Match(obj, r.labels)
-		if err != nil {
-			return nil, fmt.Errorf("ResourceRouter match error for GVK %s: %w", gvk, err)
-		}
-		if match {
-			return r.cluster, nil
-		}
+
+	// If we couldn't find a matching remote cluster (not configured or not found) but the GVK is configured for home, return the home cluster.
+	if c.homeGVKs[gvk] {
+		return c.HomeCluster, nil
 	}
 	return nil, fmt.Errorf("no cluster matched for GVK %s", gvk)
 }
