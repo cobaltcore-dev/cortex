@@ -1,5 +1,8 @@
 # Cortex Multi-Cluster Testing
 
+> [!NOTE]
+> If you want to skip the reading part, there's `run.sh` and `cleanup.sh` scripts in this directory that will set up and tear down the multi-cluster environment for you.
+
 Cortex provides support for multi-cluster deployments, where a "home" cluster hosts the cortex pods and one or more "remote" clusters are used to persist CRDs. A typical use case for this would be to offload the etcd storage for Cortex CRDs to a remote cluster, reducing the resource usage on the home cluster. Similarly, another use case is to have multiple remote clusters that maintain all the compute workloads and expose resources that Cortex needs to access, such as the `Hypervisor` resource.
 
 This guide will walk you through setting up a multi-cluster Cortex deployment using [kind](https://kind.sigs.k8s.io/). We will create three kind clusters: `cortex-home`, `cortex-remote-az-a`, and `cortex-remote-az-b`. The `cortex-home` cluster will host the Cortex control plane, while the `cortex-remote-az-a` and `cortex-remote-az-b` clusters will be used to store hypervisor CRDs.
@@ -71,6 +74,14 @@ kubectl config use-context kind-cortex-remote-az-b
 helm install helm/bundles/cortex-crds --generate-name
 ```
 
+Let's also install the hypervisor crd to all three cluster which is needed as an external dependency for this example:
+```bash
+curl -L https://raw.githubusercontent.com/cobaltcore-dev/openstack-hypervisor-operator/refs/heads/main/charts/openstack-hypervisor-operator/crds/kvm.cloud.sap_hypervisors.yaml > /tmp/hypervisor-crd.yaml
+kubectl --context kind-cortex-home apply -f /tmp/hypervisor-crd.yaml
+kubectl --context kind-cortex-remote-az-a apply -f /tmp/hypervisor-crd.yaml
+kubectl --context kind-cortex-remote-az-b apply -f /tmp/hypervisor-crd.yaml
+```
+
 Also, we need to extract the root CA certificate used by the `cortex-remote-*` clusters' API servers, so that we can configure the cortex pods in the `cortex-home` cluster to trust them.
 
 ```bash
@@ -91,22 +102,22 @@ global:
   conf:
     apiservers:
       remotes:
-      - host: https://host.docker.internal:8443
+      - host: https://host.docker.internal:8444
         gvks:
         - kvm.cloud.sap/v1/Hypervisor
         - kvm.cloud.sap/v1/HypervisorList
         labels:
           az: cortex-remote-az-a
         caCert: |
-          $(cat /tmp/root-ca-home.pem | sed 's/^/        /')
-      - host: https://host.docker.internal:8444
+$(cat /tmp/root-ca-home.pem | sed 's/^/          /')
+      - host: https://host.docker.internal:8445
         gvks:
         - kvm.cloud.sap/v1/Hypervisor
         - kvm.cloud.sap/v1/HypervisorList
         labels:
           az: cortex-remote-az-b
         caCert: |
-          $(cat /tmp/root-ca-remote-az-b.pem | sed 's/^/        /')
+$(cat /tmp/root-ca-remote-az-b.pem | sed 's/^/          /')
 EOF
 ```
 
