@@ -10,15 +10,16 @@ groups:
       context: liveness
       dashboard: cortex/cortex
       service: cortex
-      severity: warning
+      severity: critical
       support_group: workload-management
       playbook: docs/support/playbook/cortex/down
     annotations:
       summary: "Cortex Scheduling for Nova is down"
       description: >
         The Cortex scheduling service is down. Scheduling requests from Nova will
-        not be served. This is no immediate problem, since Nova will continue
-        placing new VMs. However, the placement will be less desirable.
+        not be served. This is non-critical for vmware virtual machines, but
+        blocks kvm virtual machines from being scheduled. Thus, it is
+        recommended to immediately investigate and resolve the issue.
 
   - alert: CortexNovaKnowledgeDown
     expr: |

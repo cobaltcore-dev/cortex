@@ -22,7 +22,7 @@ func newHypervisor(name, capacityCPU, capacityMem, allocationCPU, allocationMem 
 			Name: name,
 		},
 		Status: hv1.HypervisorStatus{
-			Capacity: map[hv1.ResourceName]resource.Quantity{
+			EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
 				hv1.ResourceCPU:    resource.MustParse(capacityCPU),
 				hv1.ResourceMemory: resource.MustParse(capacityMem),
 			},
@@ -343,7 +343,7 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[hv1.ResourceName]resource.Quantity{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("0"),
 							hv1.ResourceMemory: resource.MustParse("100Gi"),
 						},
@@ -371,7 +371,7 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[hv1.ResourceName]resource.Quantity{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU: resource.MustParse("100"),
 						},
 						Allocation: map[hv1.ResourceName]resource.Quantity{
@@ -397,7 +397,7 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[hv1.ResourceName]resource.Quantity{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
 							// No CPU capacity
 						},
 						Allocation: map[hv1.ResourceName]resource.Quantity{

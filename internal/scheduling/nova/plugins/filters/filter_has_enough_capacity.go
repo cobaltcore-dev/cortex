@@ -56,10 +56,9 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		return nil, err
 	}
 	for _, hv := range hvs.Items {
-		// Start with the total capacity.
-		// Skip hypervisors with nil or empty capacity.
-		if len(hv.Status.Capacity) == 0 {
-			traceLog.Info("skipping hypervisor with nil or empty capacity", "host", hv.Name)
+// This case would be caught below, but we want to log this explicitly.
+		if hv.Status.EffectiveCapacity == nil {
+			traceLog.Warn("hypervisor with nil effective capacity, skipping", "host", hv.Name)
 			continue
 		}
 		// Make a copy of the capacity map to avoid modifying the original.

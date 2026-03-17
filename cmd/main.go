@@ -379,6 +379,15 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	if slices.Contains(mainConfig.EnabledControllers, "hypervisor-overcommit-controller") {
+		hypervisorOvercommitController := &nova.HypervisorOvercommitController{}
+		hypervisorOvercommitController.Client = multiclusterClient
+		if err := hypervisorOvercommitController.SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller",
+				"controller", "HypervisorOvercommitController")
+			os.Exit(1)
+		}
+	}
 	if slices.Contains(mainConfig.EnabledControllers, "manila-decisions-pipeline-controller") {
 		setupLog.Info("enabling controller", "controller", "manila-decisions-pipeline-controller")
 		controller := &manila.FilterWeigherPipelineController{
