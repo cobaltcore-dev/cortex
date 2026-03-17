@@ -1226,9 +1226,11 @@ func TestClient_IndexField_HomeClusterOnly(t *testing.T) {
 func TestClient_ConcurrentAddRemoteAndRead(t *testing.T) {
 	scheme := newTestScheme(t)
 	c := &Client{
-		HomeCluster:    newFakeCluster(scheme),
-		HomeScheme:     scheme,
-		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{},
+		HomeCluster: newFakeCluster(scheme),
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {{}},
+		},
 	}
 
 	var wg sync.WaitGroup
