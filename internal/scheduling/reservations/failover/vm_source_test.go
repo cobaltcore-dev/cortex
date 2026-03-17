@@ -6,6 +6,7 @@ package failover
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	nova "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
@@ -83,7 +84,7 @@ func TestDBVMSource_ListVMs(t *testing.T) {
 				if err == nil {
 					t.Fatal("expected error, got nil")
 				}
-				if tt.wantErrContains != "" && !contains(err.Error(), tt.wantErrContains) {
+				if tt.wantErrContains != "" && !strings.Contains(err.Error(), tt.wantErrContains) {
 					t.Errorf("expected error to contain %q, got: %v", tt.wantErrContains, err)
 				}
 				if tt.wantWrappedErr != nil && !errors.Is(err, tt.wantWrappedErr) {
@@ -194,7 +195,7 @@ func TestDBVMSource_GetVM(t *testing.T) {
 				if err == nil {
 					t.Fatal("expected error, got nil")
 				}
-				if tt.wantErrContains != "" && !contains(err.Error(), tt.wantErrContains) {
+				if tt.wantErrContains != "" && !strings.Contains(err.Error(), tt.wantErrContains) {
 					t.Errorf("expected error to contain %q, got: %v", tt.wantErrContains, err)
 				}
 				if tt.wantWrappedErr != nil && !errors.Is(err, tt.wantWrappedErr) {
@@ -361,20 +362,6 @@ func TestFilterVMsOnKnownHypervisors_NilInputs(t *testing.T) {
 			}
 		})
 	}
-}
-
-// contains checks if s contains substr (helper to avoid importing strings).
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || s != "" && containsAt(s, substr))
-}
-
-func containsAt(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 // mockNovaReader implements NovaReader for testing.

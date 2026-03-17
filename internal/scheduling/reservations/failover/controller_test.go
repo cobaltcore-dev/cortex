@@ -826,7 +826,7 @@ func newTestReservationWithResources(name, host string, allocations map[string]s
 			TargetHost: host,
 			Resources: map[hv1.ResourceName]resource.Quantity{
 				"memory": *resource.NewQuantity(8192*1024*1024, resource.BinarySI),
-				"vcpus":  *resource.NewQuantity(4, resource.DecimalSI),
+				"cpu":    *resource.NewQuantity(4, resource.DecimalSI),
 			},
 		},
 		Status: v1alpha1.ReservationStatus{

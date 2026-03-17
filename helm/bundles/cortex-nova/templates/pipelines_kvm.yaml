@@ -387,6 +387,10 @@ spec:
         nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
         not have the specified trait. "trait:<trait>": "required" means the host
         must have the specified trait.
+    - name: filter_has_accelerators
+      description: |
+        This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
+        the nova flavor extra specs request accelerators via "accel:device_profile".
     - name: filter_correct_az
       description: |
         This step will filter out hosts whose aggregate information indicates they
@@ -397,6 +401,20 @@ spec:
         This step will filter out hosts for which the hypervisor status conditions
         do not meet the expected values, for example, that the hypervisor is ready
         and not disabled.
+    - name: filter_external_customer
+      description: |
+        This step prefix-matches the domain name for external customer domains and
+        filters out hosts that are not intended for external customers. It considers
+        the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+        `domain_name` scheduler hint from the nova request spec.
+      params:
+        - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
+    - name: filter_allowed_projects
+      description: |
+        This step filters hosts based on allowed projects defined in the
+        hypervisor resource. Note that hosts allowing all projects are still
+        accessible and will not be filtered out. In this way some hypervisors
+        are made accessible to some projects only.
     - name: filter_capabilities
       description: |
         This step will filter out hosts that do not meet the compute capabilities
@@ -440,6 +458,10 @@ spec:
         nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
         not have the specified trait. "trait:<trait>": "required" means the host
         must have the specified trait.
+    - name: filter_has_accelerators
+      description: |
+        This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
+        the nova flavor extra specs request accelerators via "accel:device_profile".
     - name: filter_correct_az
       description: |
         This step will filter out hosts whose aggregate information indicates they
@@ -450,6 +472,20 @@ spec:
         This step will filter out hosts for which the hypervisor status conditions
         do not meet the expected values, for example, that the hypervisor is ready
         and not disabled.
+    - name: filter_external_customer
+      description: |
+        This step prefix-matches the domain name for external customer domains and
+        filters out hosts that are not intended for external customers. It considers
+        the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+        `domain_name` scheduler hint from the nova request spec.
+      params:
+        - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
+    - name: filter_allowed_projects
+      description: |
+        This step filters hosts based on allowed projects defined in the
+        hypervisor resource. Note that hosts allowing all projects are still
+        accessible and will not be filtered out. In this way some hypervisors
+        are made accessible to some projects only.
     - name: filter_capabilities
       description: |
         This step will filter out hosts that do not meet the compute capabilities
