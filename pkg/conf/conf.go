@@ -17,35 +17,51 @@ import (
 //
 // The values read from secrets.json will override the values in conf.json
 func GetConfigOrDie[C any]() C {
+	c, err := GetConfig[C]()
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
+// Create a new configuration from the default config json file.
+// Return an error if the config cannot be read or parsed.
+//
+// This will read two files:
+//   - /etc/config/conf.json
+//   - /etc/secrets/secrets.json
+//
+// The values read from secrets.json will override the values in conf.json
+func GetConfig[C any]() (C, error) {
 	// Note: We need to read the config as a raw map first, to avoid golang
 	// unmarshalling default values for the fields.
 
 	// Read the base config from the configmap (not including secrets).
 	cmConf, err := readRawConfig("/etc/config/conf.json")
 	if err != nil {
-		panic(err)
+		return *new(C), err
 	}
 	// Read the secrets config from the kubernetes secret.
 	secretConf, err := readRawConfig("/etc/secrets/secrets.json")
 	if err != nil {
-		panic(err)
+		return *new(C), err
 	}
 	return newConfigFromMaps[C](cmConf, secretConf)
 }
 
-func newConfigFromMaps[C any](base, override map[string]any) C {
+func newConfigFromMaps[C any](base, override map[string]any) (C, error) {
 	// Merge the base config with the override config.
 	mergedConf := mergeMaps(base, override)
 	// Marshal again, and then unmarshal into the config struct.
 	mergedBytes, err := json.Marshal(mergedConf)
 	if err != nil {
-		panic(err)
+		return *new(C), err
 	}
 	var c C
 	if err := json.Unmarshal(mergedBytes, &c); err != nil {
-		panic(err)
+		return *new(C), err
 	}
-	return c
+	return c, nil
 }
 
 // Read the json as a map from the given file path.

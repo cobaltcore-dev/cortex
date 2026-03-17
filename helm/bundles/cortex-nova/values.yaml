@@ -113,6 +113,7 @@ cortex-scheduling-controllers:
     enabledControllers:
       - nova-pipeline-controllers
       - nova-deschedulings-executor
+      - hypervisor-overcommit-controller
       - explanation-controller
       - reservations-controller
     enabledTasks:
@@ -120,6 +121,11 @@ cortex-scheduling-controllers:
     # Endpoints configuration for reservations controller
     endpoints:
       novaExternalScheduler: "http://localhost:8080/scheduler/nova/external"
+    # OvercommitMappings is a list of mappings that map hypervisor traits to
+    # overcommit ratios. Note that this list is applied in order, so if there
+    # are multiple mappings applying to the same hypervisors, the last mapping
+    # in this list will override the previous ones.
+    overcommitMappings: []
 
 cortex-knowledge-controllers:
   <<: *cortex
