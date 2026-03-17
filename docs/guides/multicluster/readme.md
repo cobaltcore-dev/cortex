@@ -109,7 +109,7 @@ global:
         labels:
           az: cortex-remote-az-a
         caCert: |
-$(cat /tmp/root-ca-home.pem | sed 's/^/          /')
+$(cat /tmp/root-ca-remote-az-a.pem | sed 's/^/          /')
       - host: https://host.docker.internal:8445
         gvks:
         - kvm.cloud.sap/v1/Hypervisor

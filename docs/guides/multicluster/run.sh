@@ -8,8 +8,6 @@ kind create cluster --config docs/guides/multicluster/cortex-home.yaml
 echo "Applying cluster role binding for oidc endpoint access"
 kubectl --context kind-cortex-home apply -f docs/guides/multicluster/cortex-home-crb.yaml
 
-echo "Installing hypervisor crd in home cluster"
-
 echo "Storing home cluster cert under /tmp/root-ca-home.pem"
 kubectl --context kind-cortex-home --namespace kube-system \
   get configmap extension-apiserver-authentication \
@@ -35,7 +33,7 @@ kubectl --context kind-cortex-home apply -f /tmp/hypervisor-crd.yaml
 kubectl --context kind-cortex-remote-az-a apply -f /tmp/hypervisor-crd.yaml
 kubectl --context kind-cortex-remote-az-b apply -f /tmp/hypervisor-crd.yaml
 
-echo "Storing az-a and az-b cluster certs under /tmp/root-ca-az-a.pem and /tmp/root-ca-az-b.pem"
+echo "Storing az-a and az-b cluster certs under /tmp/root-ca-remote-az-a.pem and /tmp/root-ca-remote-az-b.pem"
 kubectl --context kind-cortex-remote-az-a --namespace kube-system \
   get configmap extension-apiserver-authentication \
   -o jsonpath="{.data['client-ca-file']}" > /tmp/root-ca-remote-az-a.pem
@@ -57,7 +55,7 @@ global:
         labels:
           az: cortex-remote-az-a
         caCert: |
-$(cat /tmp/root-ca-home.pem | sed 's/^/          /')
+$(cat /tmp/root-ca-remote-az-a.pem | sed 's/^/          /')
       - host: https://host.docker.internal:8445
         gvks:
         - kvm.cloud.sap/v1/Hypervisor
