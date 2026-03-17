@@ -482,9 +482,9 @@ func (c *Controller) SetupWithManager(mgr manager.Manager, mcl *multicluster.Cli
 		For(
 			&v1alpha1.KPI{},
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				// Only react to datasources matching the scheduling domain.
-				ds := obj.(*v1alpha1.KPI)
-				return ds.Spec.SchedulingDomain == c.Config.SchedulingDomain
+				// Only react to kpis matching the scheduling domain.
+				kpi := obj.(*v1alpha1.KPI)
+				return kpi.Spec.SchedulingDomain == c.Config.SchedulingDomain
 			})),
 		).
 		Complete(c)
