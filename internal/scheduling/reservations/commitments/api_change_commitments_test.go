@@ -179,6 +179,25 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			ExpectedAPIResponse: newAPIResponse(),
 		},
 		{
+			Name:    "New commitment creation - large batch",
+			Flavors: []*TestFlavor{m1Small},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("ram_hana_1", "project-A", "uuid-new", "confirmed", 200),
+			),
+			ExpectedReservations: func() []*TestReservation {
+				var reservations []*TestReservation
+				for range 200 {
+					reservations = append(reservations, &TestReservation{
+						CommitmentID: "uuid-new",
+						Flavor:       m1Small,
+						ProjectID:    "project-A",
+					})
+				}
+				return reservations
+			}(),
+			ExpectedAPIResponse: newAPIResponse(),
+		},
+		{
 			Name: "With reservations of custom size - total unchanged",
 			// Preserves custom-sized reservations when total matches (2×2GB = 4GB)
 			Flavors: []*TestFlavor{m1Small},
@@ -744,6 +763,9 @@ func (c *FakeReservationController) OnReservationDeleted(res *v1alpha1.Reservati
 				memoryMB, res.Status.Host, c.env.availableResources[res.Status.Host], res.Name)
 		}
 	}
+
+	// Clear tracking so recreated reservations with same name are processed
+	delete(c.env.processedReserv, res.Name)
 }
 
 // operationInterceptorClient routes reservation events to FakeReservationController.

@@ -309,6 +309,7 @@ func watchReservationsUntilReady(
 	copy(reservationsToWatch, reservations)
 
 	for {
+		var stillWaiting []v1alpha1.Reservation
 		if time.Now().After(deadline) {
 			errors = append(errors, fmt.Errorf("timeout after %v waiting for reservations to become ready", timeout))
 			return failedReservations, errors
@@ -316,8 +317,7 @@ func watchReservationsUntilReady(
 
 		allChecked := true
 
-	check:
-		for i, res := range reservationsToWatch {
+		for _, res := range reservationsToWatch {
 			// Fetch current state
 			var current v1alpha1.Reservation
 			nn := types.NamespacedName{
@@ -329,13 +329,13 @@ func watchReservationsUntilReady(
 				allChecked = false
 				if apierrors.IsNotFound(err) {
 					// Reservation is still in process of being created, continue waiting for it
+					stillWaiting = append(stillWaiting, res)
 					continue
 				}
 				// remove reservation from waiting
 				failedReservations = append(failedReservations, res)
-				reservationsToWatch = append(reservationsToWatch[:i], reservationsToWatch[i+1:]...)
 				errors = append(errors, fmt.Errorf("failed to get reservation %s: %w", res.Name, err))
-				break check // break because iterating list was modified
+				continue
 			}
 
 			// Check Ready condition
@@ -347,23 +347,19 @@ func watchReservationsUntilReady(
 			if readyCond == nil {
 				// Condition not set yet, keep waiting
 				allChecked = false
+				stillWaiting = append(stillWaiting, res)
 				continue
 			}
 
 			switch readyCond.Status {
 			case metav1.ConditionTrue:
-				// This reservation is ready
 				// TODO use more than readyCondition
-				allChecked = false
-				reservationsToWatch = append(reservationsToWatch[:i], reservationsToWatch[i+1:]...)
-				break check // break because iterating list was modified
 			case metav1.ConditionFalse:
 				allChecked = false
 				failedReservations = append(failedReservations, res)
-				reservationsToWatch = append(reservationsToWatch[:i], reservationsToWatch[i+1:]...)
-				break check // break because iterating list was modified
 			case metav1.ConditionUnknown:
 				allChecked = false
+				stillWaiting = append(stillWaiting, res)
 			}
 		}
 
@@ -373,6 +369,7 @@ func watchReservationsUntilReady(
 			return failedReservations, errors
 		}
 
+		reservationsToWatch = stillWaiting
 		// Log progress
 		log.Info("waiting for reservations to become ready",
 			"notReady", len(reservationsToWatch),
