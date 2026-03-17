@@ -19,8 +19,13 @@ type ResourceRouter interface {
 type HypervisorResourceRouter struct{}
 
 func (h HypervisorResourceRouter) Match(obj any, labels map[string]string) (bool, error) {
-	hv, ok := obj.(hv1.Hypervisor)
-	if !ok {
+	var hv hv1.Hypervisor
+	switch v := obj.(type) {
+	case *hv1.Hypervisor:
+		hv = *v
+	case hv1.Hypervisor:
+		hv = v
+	default:
 		return false, errors.New("object is not a Hypervisor")
 	}
 	az, ok := labels["az"]

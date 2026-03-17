@@ -31,6 +31,16 @@ func TestHypervisorResourceRouter_Match(t *testing.T) {
 			wantMatch: true,
 		},
 		{
+			name: "matching AZ pointer",
+			obj: &hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"topology.kubernetes.io/zone": "qa-de-1a"},
+				},
+			},
+			labels:    map[string]string{"az": "qa-de-1a"},
+			wantMatch: true,
+		},
+		{
 			name: "non-matching AZ",
 			obj: hv1.Hypervisor{
 				ObjectMeta: metav1.ObjectMeta{
