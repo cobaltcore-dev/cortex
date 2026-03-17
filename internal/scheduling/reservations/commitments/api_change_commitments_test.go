@@ -377,8 +377,12 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 				createCommitment("ram_hana_1", "project-A", "uuid-knowledge", "confirmed", 2),
 			),
 			ExpectedReservations: []*TestReservation{},
-			ExpectedAPIResponse:  newAPIResponse("caches not ready"),
-			EnvInfoVersion:       -1, // Skip Knowledge CRD creation
+			ExpectedAPIResponse: APIResponseExpectation{
+				StatusCode:             200,
+				RejectReasonSubstrings: []string{"caches not ready"},
+				RetryAtPresent:         true,
+			},
+			EnvInfoVersion: -1, // Skip Knowledge CRD creation
 		},
 		{
 			Name: "Multiple commitments insufficient capacity - all listed in error",
@@ -446,13 +450,13 @@ func runCommitmentChangeTest(t *testing.T, tc CommitmentChangeTestCase) {
 
 	// Call commitment change API
 	reqJSON := buildRequestJSON(tc.CommitmentRequest)
-	resp, statusCode := env.CallChangeCommitmentsAPI(reqJSON)
+	resp, respJSON, statusCode := env.CallChangeCommitmentsAPI(reqJSON)
 
 	t.Log("After API call:")
 	env.LogStateSummary()
 
 	// Verify API response
-	env.VerifyAPIResponse(tc.ExpectedAPIResponse, resp, statusCode)
+	env.VerifyAPIResponse(tc.ExpectedAPIResponse, resp, respJSON, statusCode)
 
 	// Verify reservations using content-based matching
 	env.VerifyReservationsMatch(tc.ExpectedReservations)
@@ -915,7 +919,7 @@ func (env *CommitmentTestEnv) LogStateSummary() {
 
 // CallChangeCommitmentsAPI calls the change commitments API endpoint with JSON.
 // It uses a hybrid approach: fast polling during API execution + synchronous final pass.
-func (env *CommitmentTestEnv) CallChangeCommitmentsAPI(reqJSON string) (resp liquid.CommitmentChangeResponse, statusCode int) {
+func (env *CommitmentTestEnv) CallChangeCommitmentsAPI(reqJSON string) (resp liquid.CommitmentChangeResponse, respJSON string, statusCode int) {
 	env.T.Helper()
 
 	// Start fast polling in background to handle reservations during API execution
@@ -955,6 +959,8 @@ func (env *CommitmentTestEnv) CallChangeCommitmentsAPI(reqJSON string) (resp liq
 		env.T.Fatalf("Failed to read response body: %v", err)
 	}
 
+	respJSON = string(respBytes)
+
 	// Parse response - only for 200 OK responses
 	// Non-200 responses (like 409 Conflict for version mismatch) use plain text via http.Error()
 	if httpResp.StatusCode == http.StatusOK {
@@ -974,7 +980,7 @@ func (env *CommitmentTestEnv) CallChangeCommitmentsAPI(reqJSON string) (resp liq
 	env.processReservations()
 
 	statusCode = httpResp.StatusCode
-	return resp, statusCode
+	return resp, respJSON, statusCode
 }
 
 // processReservations handles all reservation lifecycle events synchronously.
@@ -1140,7 +1146,7 @@ func (env *CommitmentTestEnv) markReservationFailed(res *v1alpha1.Reservation, r
 
 // VerifyAPIResponse verifies the API response matches expectations.
 // For rejection reasons, it checks if ALL expected substrings are present in the actual rejection reason.
-func (env *CommitmentTestEnv) VerifyAPIResponse(expected APIResponseExpectation, actual liquid.CommitmentChangeResponse, statusCode int) {
+func (env *CommitmentTestEnv) VerifyAPIResponse(expected APIResponseExpectation, actual liquid.CommitmentChangeResponse, respJSON string, statusCode int) {
 	env.T.Helper()
 
 	if statusCode != expected.StatusCode {
@@ -1161,6 +1167,18 @@ func (env *CommitmentTestEnv) VerifyAPIResponse(expected APIResponseExpectation,
 	} else {
 		if actual.RejectionReason != "" {
 			env.T.Errorf("Expected no rejection reason, got %q", actual.RejectionReason)
+		}
+	}
+
+	// Check RetryAt field presence in JSON (avoids dealing with option.Option type)
+	retryAtPresent := strings.Contains(respJSON, `"retryAt"`)
+	if expected.RetryAtPresent {
+		if !retryAtPresent {
+			env.T.Error("Expected retryAt field to be present in JSON response, but it was not found")
+		}
+	} else {
+		if retryAtPresent {
+			env.T.Error("Expected retryAt field to be absent from JSON response, but it was found")
 		}
 	}
 }
