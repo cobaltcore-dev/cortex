@@ -230,13 +230,15 @@ func (c *HypervisorOvercommitController) SetupWithManager(mgr ctrl.Manager) (err
 	if !ok {
 		return errors.New("provided client must be a multicluster client")
 	}
-	return multicluster.
-		BuildController(mcl, mgr).
-		// The hypervisor crd may be distributed across multiple remote clusters.
-		WatchesMulticluster(&hv1.Hypervisor{},
-			c.handleRemoteHypervisor(),
-			c.predicateRemoteHypervisor(),
-		).
-		Named("hypervisor-overcommit-controller").
+	bldr := multicluster.BuildController(mcl, mgr)
+	// The hypervisor crd may be distributed across multiple remote clusters.
+	bldr, err = bldr.WatchesMulticluster(&hv1.Hypervisor{},
+		c.handleRemoteHypervisor(),
+		c.predicateRemoteHypervisor(),
+	)
+	if err != nil {
+		return err
+	}
+	return bldr.Named("hypervisor-overcommit-controller").
 		Complete(c)
 }
