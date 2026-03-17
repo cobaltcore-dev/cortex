@@ -38,6 +38,7 @@ import (
 // ============================================================================
 
 func TestCommitmentChangeIntegration(t *testing.T) {
+	m1Tiny := &TestFlavor{Name: "m1.tiny", Group: "gp_1", MemoryMB: 256, VCPUs: 1}
 	m1Small := &TestFlavor{Name: "m1.small", Group: "hana_1", MemoryMB: 1024, VCPUs: 4}
 	m1Large := &TestFlavor{Name: "m1.large", Group: "hana_1", MemoryMB: 4096, VCPUs: 16}
 	m1XL := &TestFlavor{Name: "m1.xl", Group: "hana_1", MemoryMB: 8192, VCPUs: 32}
@@ -67,7 +68,7 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			CommitmentRequest:    newCommitmentRequest("az-a", false, 1234, createCommitment("ram_hana_1", "project-A", "uuid-456", "confirmed", 3)),
 			AvailableResources:   &AvailableResources{PerHost: map[string]int64{"host-1": 1024, "host-2": 0}},
 			ExpectedReservations: []*TestReservation{{CommitmentID: "uuid-456", Host: "", Flavor: m1Small, ProjectID: "project-A"}},
-			ExpectedAPIResponse:  newAPIResponse("uuid-456", "not sufficient capacity"),
+			ExpectedAPIResponse:  newAPIResponse("1 commitment(s) failed", "commitment uuid-456: not sufficient capacity"),
 		},
 		{
 			Name:    "Swap capacity between CRs - order dependent - delete-first succeeds",
@@ -99,7 +100,7 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			ExpectedReservations: []*TestReservation{
 				{CommitmentID: "uuid-123", Host: "host-1", Flavor: m1Small, ProjectID: "project-B"},
 				{CommitmentID: "uuid-123", Host: "host-2", Flavor: m1Small, ProjectID: "project-B"}},
-			ExpectedAPIResponse: newAPIResponse("uuid-456", "not sufficient capacity"),
+			ExpectedAPIResponse: newAPIResponse("1 commitment(s) failed", "commitment uuid-456: not sufficient capacity"),
 		},
 		{
 			Name: "Flavor bin-packing - mixed sizes when largest doesn't fit",
@@ -378,6 +379,19 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			ExpectedReservations: []*TestReservation{},
 			ExpectedAPIResponse:  newAPIResponse("caches not ready"),
 			EnvInfoVersion:       -1, // Skip Knowledge CRD creation
+		},
+		{
+			Name: "Multiple commitments insufficient capacity - all listed in error",
+			// Tests that multiple failed commitments are all mentioned in the rejection reason
+			Flavors: []*TestFlavor{m1Small, m1Tiny},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("ram_hana_1", "project-A", "uuid-multi-fail-1", "confirmed", 3),
+				createCommitment("ram_hana_1", "project-B", "uuid-multi-fail-2", "confirmed", 3),
+				createCommitment("ram_gp_1", "project-C", "uuid-would-not-fail", "confirmed", 1), // would be rolled back, but not part of the reject reason
+			),
+			AvailableResources:   &AvailableResources{PerHost: map[string]int64{"host-1": 256}},
+			ExpectedReservations: []*TestReservation{},
+			ExpectedAPIResponse:  newAPIResponse("2 commitment(s) failed", "commitment uuid-multi-fail-1: not sufficient capacity", "commitment uuid-multi-fail-2: not sufficient capacity"),
 		},
 	}
 

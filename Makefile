@@ -25,8 +25,19 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	"$(GOLANGCI_LINT)" run --fix
 
 .PHONY: test
-test: gotestsum ## Run all tests with summary.
-	$(GOTESTSUM) --format testname ./...
+test: ## Run all tests.
+	go test ./...
+
+.PHONY: testsum
+testsum: gotestsum ## Run all tests (clean output for passing, verbose for failing). Options: WATCH=1, RUN=<pattern>, PACKAGE=<pkg>, FORMAT=<fmt> (e.g., standard-verbose for all output)
+	$(GOTESTSUM) \
+		$(if $(WATCH),--watch) \
+		--format $(if $(FORMAT),$(FORMAT),testname) \
+		--hide-summary=all \
+		-- \
+		$(if $(VERBOSE),-v) \
+		$(if $(RUN),-run $(RUN)) \
+		$(if $(PACKAGE),$(PACKAGE),./...)
 
 .PHONY: generate
 generate: deepcopy crds ## Regenerate CRDs and DeepCopy after API type changes.
