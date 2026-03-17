@@ -50,7 +50,7 @@ func TestClient_ClustersForGVK_UnknownGVKReturnsError(t *testing.T) {
 	}
 }
 
-func TestClient_ClustersForGVK_HomeGVKReturnsHomeCluster(t *testing.T) {
+func TestClient_ClustersForGVK_HomeGVKNilHomeClusterReturnsEmpty(t *testing.T) {
 	gvk := schema.GroupVersionKind{
 		Group:   "apps",
 		Version: "v1",
@@ -62,7 +62,30 @@ func TestClient_ClustersForGVK_HomeGVKReturnsHomeCluster(t *testing.T) {
 		homeGVKs:       map[schema.GroupVersionKind]bool{gvk: true},
 	}
 
-	// GVK is in homeGVKs, returns home cluster (nil).
+	// GVK is in homeGVKs but HomeCluster is nil, so no clusters are returned.
+	result, err := c.ClustersForGVK(gvk)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected 0 clusters when HomeCluster is nil, got %d", len(result))
+	}
+}
+
+func TestClient_ClustersForGVK_HomeGVKReturnsHomeCluster(t *testing.T) {
+	gvk := schema.GroupVersionKind{
+		Group:   "apps",
+		Version: "v1",
+		Kind:    "Deployment",
+	}
+
+	home := &fakeCluster{}
+	c := &Client{
+		HomeCluster:    home,
+		remoteClusters: make(map[schema.GroupVersionKind][]remoteCluster),
+		homeGVKs:       map[schema.GroupVersionKind]bool{gvk: true},
+	}
+
 	result, err := c.ClustersForGVK(gvk)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -70,7 +93,7 @@ func TestClient_ClustersForGVK_HomeGVKReturnsHomeCluster(t *testing.T) {
 	if len(result) != 1 {
 		t.Errorf("expected 1 cluster, got %d", len(result))
 	}
-	if result[0] != nil {
-		t.Error("expected nil HomeCluster")
+	if result[0] != home {
+		t.Error("expected HomeCluster to be returned")
 	}
 }

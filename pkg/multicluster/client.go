@@ -193,7 +193,7 @@ func (c *Client) ClustersForGVK(gvk schema.GroupVersionKind) ([]cluster.Cluster,
 	for _, r := range remotes {
 		clusters = append(clusters, r.cluster)
 	}
-	if isHome {
+	if isHome && c.HomeCluster != nil {
 		clusters = append(clusters, c.HomeCluster)
 	}
 	return clusters, nil
