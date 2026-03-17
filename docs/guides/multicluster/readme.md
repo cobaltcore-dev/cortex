@@ -136,8 +136,24 @@ export ACTIVE_DEPLOYMENTS="nova" && tilt up
 
 ## Outcome
 
-With Cortex running in the `cortex-home` cluster and configured to use the `cortex-remote-*` clusters for hypervisors, we can verify that everything is working as expected with the following command:
+With Cortex running in the `cortex-home` cluster and configured to use the `cortex-remote-*` clusters for hypervisors, you can see it's processing your resources in multiple remotes:
 
-```bash
-TODO
+```
+2026-03-17T13:55:48Z	INFO	adding remote cluster for resource	{"gvk": "kvm.cloud.sap/v1, Kind=Hypervisor", "host": "https://host.docker.internal:8444", "labels": {"az":"cortex-remote-az-a"}}
+2026-03-17T13:55:48Z	INFO	adding remote cluster for resource	{"gvk": "kvm.cloud.sap/v1, Kind=HypervisorList", "host": "https://host.docker.internal:8444", "labels": {"az":"cortex-remote-az-a"}}
+2026-03-17T13:55:48Z	INFO	adding remote cluster for resource	{"gvk": "kvm.cloud.sap/v1, Kind=Hypervisor", "host": "https://host.docker.internal:8445", "labels": {"az":"cortex-remote-az-b"}}
+2026-03-17T13:55:48Z	INFO	adding remote cluster for resource	{"gvk": "kvm.cloud.sap/v1, Kind=HypervisorList", "host": "https://host.docker.internal:8445", "labels": {"az":"cortex-remote-az-b"}}
+...
+2026-03-17T13:56:06Z	INFO	Reconciling resource	{"controller": "hypervisor-overcommit-controller", "namespace": "", "name": "hypervisor-1-az-b", "reconcileID": "283342c3-5efe-4afc-a906-67d4c17dcba9"}
+2026-03-17T13:56:06Z	INFO	Desired overcommit ratios based on traits	{"controller": "hypervisor-overcommit-controller", "namespace": "", "name": "hypervisor-1-az-b", "reconcileID": "283342c3-5efe-4afc-a906-67d4c17dcba9", "desiredOvercommit": {}}
+2026-03-17T13:56:06Z	INFO	Overcommit ratios are up to date, no update needed	{"controller": "hypervisor-overcommit-controller", "namespace": "", "name": "hypervisor-1-az-b", "reconcileID": "283342c3-5efe-4afc-a906-67d4c17dcba9"}
+2026-03-17T13:56:06Z	INFO	Reconciling resource	{"controller": "hypervisor-overcommit-controller", "namespace": "", "name": "hypervisor-2-az-b", "reconcileID": "87d2937c-e0b0-415d-8fbf-c31d60a39370"}
+2026-03-17T13:56:06Z	INFO	Desired overcommit ratios based on traits	{"controller": "hypervisor-overcommit-controller", "namespace": "", "name": "hypervisor-2-az-b", "reconcileID": "87d2937c-e0b0-415d-8fbf-c31d60a39370", "desiredOvercommit": {}}
+2026-03-17T13:56:06Z	INFO	Overcommit ratios are up to date, no update needed	{"controller": "hypervisor-overcommit-controller", "namespace": "", "name": "hypervisor-2-az-b", "reconcileID": "87d2937c-e0b0-415d-8fbf-c31d60a39370"}
+2026-03-17T13:56:06Z	INFO	Reconciling resource	{"controller": "hypervisor-overcommit-controller", "namespace": "", "name": "hypervisor-1-az-a", "reconcileID": "d44c7d72-d994-46f3-8f32-04b0aa550ac3"}
+2026-03-17T13:56:06Z	INFO	Desired overcommit ratios based on traits	{"controller": "hypervisor-overcommit-controller", "namespace": "", "name": "hypervisor-1-az-a", "reconcileID": "d44c7d72-d994-46f3-8f32-04b0aa550ac3", "desiredOvercommit": {}}
+2026-03-17T13:56:06Z	INFO	Overcommit ratios are up to date, no update needed	{"controller": "hypervisor-overcommit-controller", "namespace": "", "name": "hypervisor-1-az-a", "reconcileID": "d44c7d72-d994-46f3-8f32-04b0aa550ac3"}
+2026-03-17T13:56:06Z	INFO	Reconciling resource	{"controller": "hypervisor-overcommit-controller", "namespace": "", "name": "hypervisor-2-az-a", "reconcileID": "10cc780b-a44c-4a59-8cc5-518a88146088"}
+2026-03-17T13:56:06Z	INFO	Desired overcommit ratios based on traits	{"controller": "hypervisor-overcommit-controller", "namespace": "", "name": "hypervisor-2-az-a", "reconcileID": "10cc780b-a44c-4a59-8cc5-518a88146088", "desiredOvercommit": {}}
+2026-03-17T13:56:06Z	INFO	Overcommit ratios are up to date, no update needed	{"controller": "hypervisor-overcommit-controller", "namespace": "", "name": "hypervisor-2-az-a", "reconcileID": "10cc780b-a44c-4a59-8cc5-518a88146088"}
 ```
