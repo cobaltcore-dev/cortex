@@ -24,6 +24,9 @@ spec:
     - jsonPath: .status.lastExtracted
       name: Extracted
       type: date
+    - jsonPath: .status.lastContentChange
+      name: Changed
+      type: date
     - jsonPath: .spec.recency
       name: Recency
       type: string
@@ -248,6 +251,12 @@ spec:
                   - type
                   type: object
                 type: array
+              lastContentChange:
+                description: |-
+                  When the extracted knowledge content last changed.
+                  Updated only when the Raw data actually changes, not on every reconcile.
+                format: date-time
+                type: string
               lastExtracted:
                 description: When the knowledge was last successfully extracted.
                 format: date-time

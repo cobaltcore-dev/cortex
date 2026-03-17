@@ -58,13 +58,13 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						},
 					},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[string]resource.Quantity{
-							"cpu":    resource.MustParse("128"),
-							"memory": resource.MustParse("512Gi"),
+						Capacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("128"),
+							hv1.ResourceMemory: resource.MustParse("512Gi"),
 						},
-						Allocation: map[string]resource.Quantity{
-							"cpu":    resource.MustParse("64"),
-							"memory": resource.MustParse("256Gi"),
+						Allocation: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("64"),
+							hv1.ResourceMemory: resource.MustParse("256Gi"),
 						},
 						Traits: []string{},
 					},
@@ -148,13 +148,13 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						},
 					},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[string]resource.Quantity{
-							"cpu":    resource.MustParse("256"),
-							"memory": resource.MustParse("1Ti"),
+						Capacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("256"),
+							hv1.ResourceMemory: resource.MustParse("1Ti"),
 						},
-						Allocation: map[string]resource.Quantity{
-							"cpu":    resource.MustParse("128"),
-							"memory": resource.MustParse("512Gi"),
+						Allocation: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("128"),
+							hv1.ResourceMemory: resource.MustParse("512Gi"),
 						},
 						Traits: []string{
 							"CUSTOM_HW_SAPPHIRE_RAPIDS",
@@ -209,13 +209,13 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						},
 					},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[string]resource.Quantity{
-							"cpu":    resource.MustParse("64"),
-							"memory": resource.MustParse("256Gi"),
+						Capacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("64"),
+							hv1.ResourceMemory: resource.MustParse("256Gi"),
 						},
-						Allocation: map[string]resource.Quantity{
-							"cpu":    resource.MustParse("32"),
-							"memory": resource.MustParse("128Gi"),
+						Allocation: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("32"),
+							hv1.ResourceMemory: resource.MustParse("128Gi"),
 						},
 						Traits: []string{
 							"CUSTOM_DECOMMISSIONING",
@@ -255,13 +255,13 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						},
 					},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[string]resource.Quantity{
-							"cpu":    resource.MustParse("100"),
-							"memory": resource.MustParse("200Gi"),
+						Capacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("100"),
+							hv1.ResourceMemory: resource.MustParse("200Gi"),
 						},
-						Allocation: map[string]resource.Quantity{
-							"cpu":    resource.MustParse("50"),
-							"memory": resource.MustParse("100Gi"),
+						Allocation: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("50"),
+							hv1.ResourceMemory: resource.MustParse("100Gi"),
 						},
 						Traits: []string{},
 					},
@@ -274,13 +274,13 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						},
 					},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[string]resource.Quantity{
-							"cpu":    resource.MustParse("200"),
-							"memory": resource.MustParse("400Gi"),
+						Capacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("200"),
+							hv1.ResourceMemory: resource.MustParse("400Gi"),
 						},
-						Allocation: map[string]resource.Quantity{
-							"cpu":    resource.MustParse("150"),
-							"memory": resource.MustParse("300Gi"),
+						Allocation: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("150"),
+							hv1.ResourceMemory: resource.MustParse("300Gi"),
 						},
 						Traits: []string{"CUSTOM_HW_SAPPHIRE_RAPIDS"},
 					},
@@ -332,9 +332,9 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						},
 					},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[string]resource.Quantity{
-							"cpu":    resource.MustParse("96"),
-							"memory": resource.MustParse("384Gi"),
+						Capacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("96"),
+							hv1.ResourceMemory: resource.MustParse("384Gi"),
 						},
 						// No Allocation field - simulating missing data
 						Allocation: nil,

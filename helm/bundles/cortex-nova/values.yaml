@@ -8,7 +8,7 @@ owner-info:
     - "arno.uhlig@sap.com"
     - "julius.clausnitzer@sap.com"
     - "malte.viering@sap.com"
-    - "marcel.bloecher@sap.com"
+    - "marcel.gute@sap.com"
     - "markus.wieland@sap.com"
     - "p.matthes@sap.com"
   support-group: "workload-management"
@@ -133,9 +133,19 @@ cortex-scheduling-controllers:
     enabledControllers:
       - nova-pipeline-controllers
       - nova-deschedulings-executor
+      - hypervisor-overcommit-controller
       - explanation-controller
+      - reservations-controller
     enabledTasks:
       - nova-decisions-cleanup-task
+    # Endpoints configuration for reservations controller
+    endpoints:
+      novaExternalScheduler: "http://localhost:8080/scheduler/nova/external"
+    # OvercommitMappings is a list of mappings that map hypervisor traits to
+    # overcommit ratios. Note that this list is applied in order, so if there
+    # are multiple mappings applying to the same hypervisors, the last mapping
+    # in this list will override the previous ones.
+    overcommitMappings: []
 
 cortex-knowledge-controllers:
   <<: *cortex
@@ -154,7 +164,6 @@ cortex-knowledge-controllers:
       - datasource-controllers
       - knowledge-controllers
       - kpis-controller
-      - reservations-controller
     enabledTasks:
       - commitments-sync-task
 

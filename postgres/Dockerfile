@@ -1,5 +1,5 @@
-# Last updated: 19 Feb 2026
-FROM debian:trixie-slim
+# Last updated: 17 Mar 2026
+FROM debian:trixie-slim@sha256:26f98ccd92fd0a44d6928ce8ff8f4921b4d2f535bfa07555ee5d18f61429cf0c
 
 # explicitly set user/group IDs
 RUN set -eux; \

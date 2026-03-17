@@ -61,12 +61,15 @@ func (p *DetectorPipeline[DetectionType]) Init(
 // Execute the descheduler steps in parallel and collect the decisions made by
 // each step.
 func (p *DetectorPipeline[DetectionType]) Run() map[string][]DetectionType {
+	lock := sync.Mutex{}
+	decisionsByStep := map[string][]DetectionType{}
+	metricErrLabel := "false"
 	if p.Monitor.pipelineRunTimer != nil {
-		timer := prometheus.NewTimer(p.Monitor.pipelineRunTimer)
+		timer := prometheus.NewTimer(prometheus.ObserverFunc(func(v float64) {
+			p.Monitor.pipelineRunTimer.WithLabelValues(metricErrLabel).Observe(v)
+		}))
 		defer timer.ObserveDuration()
 	}
-	var lock sync.Mutex
-	decisionsByStep := map[string][]DetectionType{}
 	var wg sync.WaitGroup
 	for stepName, step := range p.steps {
 		wg.Go(func() {
@@ -76,13 +79,14 @@ func (p *DetectorPipeline[DetectionType]) Run() map[string][]DetectionType {
 				slog.Info("descheduler: step skipped")
 				return
 			}
+			lock.Lock()
+			defer lock.Unlock()
 			if err != nil {
 				slog.Error("descheduler: failed to run step", "error", err)
+				metricErrLabel = "true"
 				return
 			}
 			slog.Info("descheduler: finished step")
-			lock.Lock()
-			defer lock.Unlock()
 			decisionsByStep[stepName] = decisions
 		})
 	}

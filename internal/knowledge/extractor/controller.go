@@ -5,6 +5,8 @@ package extractor
 
 import (
 	"context"
+	"encoding/json"
+	"reflect"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -202,9 +204,27 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		Reason:  "KnowledgeExtracted",
 		Message: "knowledge extracted successfully",
 	})
+
+	// Check if content actually changed by comparing deserialized data structures.
+	// This avoids false positives from JSON serialization non-determinism (e.g., map key ordering).
+	contentChanged := true
+	if len(knowledge.Status.Raw.Raw) > 0 {
+		var oldData, newData interface{}
+		if err := json.Unmarshal(knowledge.Status.Raw.Raw, &oldData); err == nil {
+			if err := json.Unmarshal(raw.Raw, &newData); err == nil {
+				contentChanged = !reflect.DeepEqual(oldData, newData)
+			}
+		}
+	}
+
 	knowledge.Status.Raw = raw
 	knowledge.Status.LastExtracted = metav1.NewTime(time.Now())
 	knowledge.Status.RawLength = len(features)
+
+	if contentChanged {
+		log.Info("content of knowledge has changed", "name", knowledge.Name)
+		knowledge.Status.LastContentChange = metav1.NewTime(time.Now())
+	}
 	patch := client.MergeFrom(old)
 	if err := r.Status().Patch(ctx, knowledge, patch); err != nil {
 		log.Error(err, "failed to patch knowledge status")
