@@ -81,9 +81,10 @@ func (s *KVMPreferSmallerHostsStep) Run(traceLog *slog.Logger, request api.Exter
 			if _, ok := result.Activations[hv.Name]; !ok {
 				continue
 			}
-			capacity, ok := hv.Status.Capacity[resourceName]
+			// Effective capacity = capacity * overcommit ratio.
+			capacity, ok := hv.Status.EffectiveCapacity[resourceName]
 			if !ok {
-				traceLog.Warn("hypervisor has no capacity for resource, skipping",
+				traceLog.Warn("hypervisor has no effective capacity for resource, skipping",
 					"host", hv.Name, "resource", resourceName)
 				continue
 			}
@@ -106,9 +107,9 @@ func (s *KVMPreferSmallerHostsStep) Run(traceLog *slog.Logger, request api.Exter
 		var totalWeightedScore, totalWeight float64
 
 		for resourceName, weight := range s.Options.ResourceWeights {
-			capacity, ok := hv.Status.Capacity[resourceName]
+			capacity, ok := hv.Status.EffectiveCapacity[resourceName]
 			if !ok {
-				traceLog.Warn("hypervisor has no capacity for resource, skipping",
+				traceLog.Warn("hypervisor has no effective capacity for resource, skipping",
 					"host", hv.Name, "resource", resourceName)
 				continue
 			}
@@ -117,14 +118,14 @@ func (s *KVMPreferSmallerHostsStep) Run(traceLog *slog.Logger, request api.Exter
 			largestCap := largest[resourceName]
 
 			if smallestCap == nil || largestCap == nil {
-				traceLog.Warn("no capacity range found for resource, skipping",
+				traceLog.Warn("no effective capacity range found for resource, skipping",
 					"resource", resourceName)
 				continue
 			}
 
-			// If all hosts have the same capacity for this resource, skip it
+			// If all hosts have the same effective capacity for this resource, skip it
 			if smallestCap.Cmp(*largestCap) == 0 {
-				traceLog.Info("all hypervisors have the same capacity for resource, skipping",
+				traceLog.Info("all hypervisors have the same effective capacity for resource, skipping",
 					"resource", resourceName)
 				continue
 			}
