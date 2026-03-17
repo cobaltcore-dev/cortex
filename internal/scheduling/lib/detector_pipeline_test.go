@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -377,5 +379,108 @@ func TestDetectorPipeline_RunWithMonitor(t *testing.T) {
 
 	if len(result) != 1 {
 		t.Errorf("expected 1 step result, got %d", len(result))
+	}
+}
+
+func TestDetectorPipeline_Run_MetricErrorLabel(t *testing.T) {
+	tests := []struct {
+		name             string
+		steps            map[string]Detector[mockDetection]
+		expectedErrLabel string
+	}{
+		{
+			name: "successful run has error=false label",
+			steps: map[string]Detector[mockDetection]{
+				"step1": &mockDetectorStep{
+					decisions: []mockDetection{
+						{resource: "vm1", host: "host1", reason: "reason1"},
+					},
+				},
+			},
+			expectedErrLabel: "false",
+		},
+		{
+			name: "failed step sets error=true label",
+			steps: map[string]Detector[mockDetection]{
+				"failing_step": &mockDetectorStep{
+					runErr: errors.New("run failed"),
+				},
+			},
+			expectedErrLabel: "true",
+		},
+		{
+			name: "one failing step among multiple sets error=true label",
+			steps: map[string]Detector[mockDetection]{
+				"failing_step": &mockDetectorStep{
+					runErr: errors.New("run failed"),
+				},
+				"working_step": &mockDetectorStep{
+					decisions: []mockDetection{
+						{resource: "vm1", host: "host1", reason: "reason1"},
+					},
+				},
+			},
+			expectedErrLabel: "true",
+		},
+		{
+			name: "skipped step does not set error=true label",
+			steps: map[string]Detector[mockDetection]{
+				"skipped_step": &mockDetectorStep{
+					runErr: ErrStepSkipped,
+				},
+			},
+			expectedErrLabel: "false",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			monitor := NewDetectorPipelineMonitor()
+			pipeline := &DetectorPipeline[mockDetection]{
+				steps:   tt.steps,
+				Monitor: monitor,
+			}
+
+			pipeline.Run()
+
+			// Verify the histogram has observations
+			count := testutil.CollectAndCount(monitor.pipelineRunTimer, "cortex_detector_pipeline_run_duration_seconds")
+			if count == 0 {
+				t.Errorf("expected histogram to have observations")
+			}
+
+			// Gather metrics from the histogram and check the labels
+			reg := prometheus.NewRegistry()
+			reg.MustRegister(monitor.pipelineRunTimer)
+			families, err := reg.Gather()
+			if err != nil {
+				t.Fatalf("failed to gather metrics: %v", err)
+			}
+
+			found := false
+			for _, family := range families {
+				if family.GetName() != "cortex_detector_pipeline_run_duration_seconds" {
+					continue
+				}
+				for _, metric := range family.GetMetric() {
+					for _, label := range metric.GetLabel() {
+						if label.GetName() == "error" && label.GetValue() == tt.expectedErrLabel {
+							found = true
+						}
+						// Verify opposite label is not present
+						oppositeLabel := "true"
+						if tt.expectedErrLabel == "true" {
+							oppositeLabel = "false"
+						}
+						if label.GetName() == "error" && label.GetValue() == oppositeLabel {
+							t.Errorf("expected metric to NOT have error=%s label", oppositeLabel)
+						}
+					}
+				}
+			}
+			if !found {
+				t.Errorf("expected metric to have error=%s label", tt.expectedErrLabel)
+			}
+		})
 	}
 }

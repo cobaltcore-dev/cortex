@@ -40,7 +40,7 @@ groups:
         but the quality of the responses may be affected.
 
   - alert: CortexNovaDeschedulerPipelineErroring
-    expr: delta(cortex_descheduler_pipeline_vm_descheduling_duration_seconds_count{component="nova-scheduling", error="true"}[2m]) > 0
+    expr: delta(cortex_detector_pipeline_run_duration_seconds_count{component="nova-scheduling", error="true"}[2m]) > 0
     for: 5m
     labels:
       context: descheduler
