@@ -43,15 +43,23 @@ func buildTestScheme(t *testing.T) *runtime.Scheme {
 }
 
 func newHypervisor(name, cpuCap, cpuAlloc, memCap, memAlloc string) *hv1.Hypervisor {
+	capacity := map[hv1.ResourceName]resource.Quantity{
+		hv1.ResourceCPU:    resource.MustParse(cpuCap),
+		hv1.ResourceMemory: resource.MustParse(memCap),
+	}
 	return &hv1.Hypervisor{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
-		Status: hv1.HypervisorStatus{
-			EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
-				hv1.ResourceCPU:    resource.MustParse(cpuCap),
-				hv1.ResourceMemory: resource.MustParse(memCap),
+		Spec: hv1.HypervisorSpec{
+			Overcommit: map[hv1.ResourceName]float64{
+				hv1.ResourceCPU:    1.0,
+				hv1.ResourceMemory: 1.0,
 			},
+		},
+		Status: hv1.HypervisorStatus{
+			Capacity:          capacity,
+			EffectiveCapacity: capacity,
 			Allocation: map[hv1.ResourceName]resource.Quantity{
 				hv1.ResourceCPU:    resource.MustParse(cpuAlloc),
 				hv1.ResourceMemory: resource.MustParse(memAlloc),

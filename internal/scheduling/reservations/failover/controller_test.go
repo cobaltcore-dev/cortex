@@ -4,6 +4,7 @@
 package failover
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -102,7 +103,9 @@ func TestReconcileRemoveNoneligibleVMFromReservations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
 			updatedReservations, reservationsToUpdate := reconcileRemoveNoneligibleVMFromReservations(
+				ctx,
 				tt.vms,
 				tt.reservations,
 			)
@@ -726,7 +729,9 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
 			updatedReservations, reservationsToUpdate := reconcileRemoveInvalidVMFromReservations(
+				ctx,
 				tt.vms,
 				tt.reservations,
 			)
@@ -980,12 +985,13 @@ func TestSelectVMsToProcess(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
 			controller := &FailoverReservationController{
 				reconcileCount: tt.reconcileCount,
 			}
 
 			vms := createVMs(tt.vmCount)
-			selected, hitLimit := controller.selectVMsToProcess(vms, tt.maxToProcess)
+			selected, hitLimit := controller.selectVMsToProcess(ctx, vms, tt.maxToProcess)
 
 			if hitLimit != tt.expectedHit {
 				t.Errorf("expected hitLimit=%v, got %v", tt.expectedHit, hitLimit)

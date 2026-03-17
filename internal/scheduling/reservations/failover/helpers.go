@@ -4,6 +4,7 @@
 package failover
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -89,7 +90,9 @@ func ValidateFailoverReservationResources(res *v1alpha1.Reservation) error {
 // newFailoverReservation creates a new failover reservation for a VM on a specific hypervisor.
 // This does NOT persist the reservation to the cluster - it only creates the in-memory object.
 // The caller is responsible for persisting the reservation.
-func newFailoverReservation(vm VM, hypervisor, creator string) *v1alpha1.Reservation {
+func newFailoverReservation(ctx context.Context, vm VM, hypervisor, creator string) *v1alpha1.Reservation {
+	logger := LoggerFromContext(ctx)
+
 	// Build resources from VM's Resources map
 	// The VM struct uses "vcpus" and "memory" keys (see vm_source.go)
 	// We convert "vcpus" to "cpu" for the reservation because the scheduling capacity logic
@@ -144,7 +147,7 @@ func newFailoverReservation(vm VM, hypervisor, creator string) *v1alpha1.Reserva
 		},
 	}
 
-	log.V(1).Info("built new failover reservation",
+	logger.V(1).Info("built new failover reservation",
 		"vmUUID", vm.UUID,
 		"hypervisor", hypervisor,
 		"resources", resources)

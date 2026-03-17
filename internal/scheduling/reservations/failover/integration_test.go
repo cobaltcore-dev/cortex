@@ -1386,17 +1386,28 @@ func newHypervisorWithAZ(name string, cpuCap, memoryGi, cpuAlloc, memoryGiAlloc 
 	if az != "" {
 		labels[corev1.LabelTopologyZone] = az
 	}
+	capacity := map[hv1.ResourceName]resource.Quantity{
+		"cpu":    resource.MustParse(strconv.Itoa(cpuCap)),
+		"memory": resource.MustParse(strconv.Itoa(memoryGi) + "Gi"),
+	}
 	return &hv1.Hypervisor{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   name,
 			Labels: labels,
 		},
+		Spec: hv1.HypervisorSpec{
+			Overcommit: map[hv1.ResourceName]float64{
+				"cpu":    1.0,
+				"memory": 1.0,
+			},
+		},
 		Status: hv1.HypervisorStatus{
-			Capacity:     map[hv1.ResourceName]resource.Quantity{"cpu": resource.MustParse(strconv.Itoa(cpuCap)), "memory": resource.MustParse(strconv.Itoa(memoryGi) + "Gi")},
-			Allocation:   map[hv1.ResourceName]resource.Quantity{"cpu": resource.MustParse(strconv.Itoa(cpuAlloc)), "memory": resource.MustParse(strconv.Itoa(memoryGiAlloc) + "Gi")},
-			NumInstances: len(instances),
-			Instances:    instances,
-			Traits:       traits,
+			Capacity:          capacity,
+			EffectiveCapacity: capacity,
+			Allocation:        map[hv1.ResourceName]resource.Quantity{"cpu": resource.MustParse(strconv.Itoa(cpuAlloc)), "memory": resource.MustParse(strconv.Itoa(memoryGiAlloc) + "Gi")},
+			NumInstances:      len(instances),
+			Instances:         instances,
+			Traits:            traits,
 		},
 	}
 }

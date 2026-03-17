@@ -4,6 +4,7 @@
 package failover
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -134,9 +135,10 @@ func TestBuildNewFailoverReservation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
 			creator := "test-creator"
 
-			result := newFailoverReservation(tt.vm, tt.hypervisor, creator)
+			result := newFailoverReservation(ctx, tt.vm, tt.hypervisor, creator)
 
 			// Verify Status.Host
 			if result.Status.Host != tt.wantHost {

@@ -31,6 +31,8 @@ const (
 )
 
 func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm VM, allHypervisors []string, pipeline string) ([]string, error) {
+	logger := LoggerFromContext(ctx)
+
 	// Build list of eligible hypervisors (excluding VM's current hypervisor)
 	eligibleHypervisors := make([]api.ExternalSchedulerHost, 0, len(allHypervisors))
 	for _, hypervisor := range allHypervisors {
@@ -43,6 +45,8 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 	}
 
 	if len(eligibleHypervisors) == 0 {
+		logger.Info("no eligible hypervisors for failover reservation",
+			"vmCurrentHypervisor", vm.CurrentHypervisor)
 		return nil, fmt.Errorf("no eligible hypervisors for failover reservation (VM is on %s)", vm.CurrentHypervisor)
 	}
 
@@ -87,7 +91,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		AvailabilityZone: vm.AvailabilityZone,
 	}
 
-	log.V(1).Info("scheduling failover reservation",
+	logger.V(1).Info("scheduling failover reservation",
 		"vmUUID", vm.UUID,
 		"pipeline", pipeline,
 		"eligibleHypervisors", len(eligibleHypervisors),
@@ -95,10 +99,11 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 
 	scheduleResp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq)
 	if err != nil {
+		logger.Error(err, "failed to schedule failover reservation", "vmUUID", vm.UUID, "pipeline", pipeline)
 		return nil, fmt.Errorf("failed to schedule failover reservation: %w", err)
 	}
 
-	log.V(1).Info("scheduling failover reservation",
+	logger.V(1).Info("scheduler returned hypervisors for failover reservation",
 		"vmUUID", vm.UUID,
 		"pipeline", pipeline,
 		"eligibleHypervisors", len(eligibleHypervisors),
@@ -119,19 +124,21 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 	allHypervisors []string,
 ) *v1alpha1.Reservation {
 
+	logger := LoggerFromContext(ctx)
+
 	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineReuseFailoverReservation)
 	if err != nil {
-		log.Error(err, "failed to get potential hypervisors for VM", "vmUUID", vm.UUID)
+		logger.Error(err, "failed to get potential hypervisors for VM", "vmUUID", vm.UUID)
 		return nil
 	}
 	if len(validHypervisors) == 0 {
-		log.Info("no potential hypervisors returned by scheduler for VM", "vmUUID", vm.UUID)
+		logger.Info("no potential hypervisors returned by scheduler for VM", "vmUUID", vm.UUID)
 		return nil
 	}
 
 	eligibleReservations := FindEligibleReservations(vm, failoverReservations)
 	if len(eligibleReservations) == 0 {
-		log.Info("no eligible reservations found for VM", "vmUUID", vm.UUID)
+		logger.Info("no eligible reservations found for VM", "vmUUID", vm.UUID)
 		return nil
 	}
 
@@ -143,20 +150,25 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 	})
 
 	for _, reservation := range eligibleReservations {
-		log.V(2).Info("checking existing reservation for eligibility",
+		logger.V(2).Info("checking existing reservation for eligibility",
 			"vmUUID", vm.UUID,
 			"reservationName", reservation.Name,
 			"reservationHypervisor", reservation.Status.Host)
 		if slices.Contains(validHypervisors, reservation.Status.Host) {
 			// Create a copy of the reservation with the VM added
 			updatedRes := addVMToReservation(reservation, vm)
-			log.V(1).Info("found reusable reservation for VM",
+			logger.V(1).Info("found reusable reservation for VM",
 				"vmUUID", vm.UUID,
 				"reservationName", updatedRes.Name,
 				"hypervisor", updatedRes.Status.Host)
 			return updatedRes
 		}
 	}
+
+	logger.V(1).Info("no reusable reservation found for VM",
+		"vmUUID", vm.UUID,
+		"eligibleReservationsCount", len(eligibleReservations),
+		"validHypervisorsCount", len(validHypervisors))
 	return nil
 }
 
@@ -168,6 +180,9 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 	vm VM,
 	reservationHost string,
 ) (bool, error) {
+
+	logger := LoggerFromContext(ctx)
+
 	// Get memory and vcpus from VM resources
 	var memoryMB uint64
 	var vcpus uint64
@@ -202,7 +217,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		AvailabilityZone: vm.AvailabilityZone,
 	}
 
-	log.V(1).Info("validating VM via scheduler evacuation",
+	logger.V(1).Info("validating VM via scheduler evacuation",
 		"vmUUID", vm.UUID,
 		"reservationHost", reservationHost,
 		"vmCurrentHost", vm.CurrentHypervisor,
@@ -210,17 +225,19 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 
 	resp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq)
 	if err != nil {
+		logger.Error(err, "failed to validate VM for reservation host", "vmUUID", vm.UUID, "reservationHost", reservationHost)
 		return false, fmt.Errorf("failed to validate VM for reservation host: %w", err)
 	}
 
 	// Handle empty response - no hosts returned
 	if len(resp.Hosts) < 1 {
+		logger.V(1).Info("scheduler returned no hosts for VM validation", "vmUUID", vm.UUID, "reservationHost", reservationHost)
 		return false, nil
 	}
 
 	// Log unexpected scheduler responses
 	if len(resp.Hosts) > 1 || resp.Hosts[0] != reservationHost {
-		log.Error(nil, "scheduler returned unexpected hosts for single-host validation request",
+		logger.Error(nil, "scheduler returned unexpected hosts for single-host validation request",
 			"vmUUID", vm.UUID,
 			"reservationHost", reservationHost,
 			"returnedHosts", resp.Hosts)
@@ -239,6 +256,9 @@ func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 	allHypervisors []string,
 	failoverReservations []v1alpha1.Reservation,
 ) (*v1alpha1.Reservation, error) {
+
+	logger := LoggerFromContext(ctx)
+
 	// Get potential hypervisors from scheduler
 	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineNewFailoverReservation)
 	if err != nil {
@@ -258,24 +278,23 @@ func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 		// todo we should update the API to not create a partial reservation object here
 		if IsVMEligibleForReservation(vm, hypotheticalRes, failoverReservations) {
 			selectedHypervisor = candidateHypervisor
-			log.V(1).Info("VM can create new reservation on hypervisor",
-				"vmUUID", vm.UUID,
-				"hypervisor", candidateHypervisor)
+			logger.V(1).Info("VM can create new reservation on hypervisor", "vmUUID", vm.UUID, "hypervisor", candidateHypervisor)
 			break
 		}
 	}
 
 	if selectedHypervisor == "" {
+		logger.Info("no eligible hypervisors after constraint checking", "vmUUID", vm.UUID, "schedulerReturnedCount", len(validHypervisors))
 		return nil, fmt.Errorf("no eligible hypervisors after constraint checking (scheduler returned %d hypervisors, all rejected)", len(validHypervisors))
 	}
 
-	log.V(1).Info("scheduler selected hypervisor for failover reservation",
+	logger.V(1).Info("scheduler selected hypervisor for failover reservation",
 		"vmUUID", vm.UUID,
 		"selectedHypervisor", selectedHypervisor,
 		"allReturnedHypervisors", validHypervisors)
 
 	// Build the failover reservation on the selected hypervisor (in-memory only)
-	reservation := newFailoverReservation(vm, selectedHypervisor, c.Config.Creator)
+	reservation := newFailoverReservation(ctx, vm, selectedHypervisor, c.Config.Creator)
 
 	return reservation, nil
 }
