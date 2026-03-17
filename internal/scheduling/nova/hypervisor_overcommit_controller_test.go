@@ -22,27 +22,32 @@ import (
 )
 
 func TestHypervisorOvercommitMapping_Validate(t *testing.T) {
+	gpuTrait := "CUSTOM_GPU"
+	standardTrait := "CUSTOM_STANDARD"
+
 	tests := []struct {
 		name        string
 		mapping     HypervisorOvercommitMapping
 		expectError bool
 	}{
 		{
-			name: "valid overcommit ratios",
+			name: "valid overcommit ratios with HasTrait",
 			mapping: HypervisorOvercommitMapping{
 				Overcommit: map[hv1.ResourceName]float64{
 					hv1.ResourceCPU:    2.0,
 					hv1.ResourceMemory: 1.5,
 				},
+				HasTrait: &gpuTrait,
 			},
 			expectError: false,
 		},
 		{
-			name: "valid minimum overcommit ratio of 1.0",
+			name: "valid minimum overcommit ratio of 1.0 with HasntTrait",
 			mapping: HypervisorOvercommitMapping{
 				Overcommit: map[hv1.ResourceName]float64{
 					hv1.ResourceCPU: 1.0,
 				},
+				HasntTrait: &gpuTrait,
 			},
 			expectError: false,
 		},
@@ -52,6 +57,7 @@ func TestHypervisorOvercommitMapping_Validate(t *testing.T) {
 				Overcommit: map[hv1.ResourceName]float64{
 					hv1.ResourceCPU: 0.5,
 				},
+				HasTrait: &gpuTrait,
 			},
 			expectError: true,
 		},
@@ -61,6 +67,7 @@ func TestHypervisorOvercommitMapping_Validate(t *testing.T) {
 				Overcommit: map[hv1.ResourceName]float64{
 					hv1.ResourceMemory: 0.0,
 				},
+				HasTrait: &gpuTrait,
 			},
 			expectError: true,
 		},
@@ -70,6 +77,7 @@ func TestHypervisorOvercommitMapping_Validate(t *testing.T) {
 				Overcommit: map[hv1.ResourceName]float64{
 					hv1.ResourceCPU: -1.0,
 				},
+				HasTrait: &gpuTrait,
 			},
 			expectError: true,
 		},
@@ -94,6 +102,27 @@ func TestHypervisorOvercommitMapping_Validate(t *testing.T) {
 					hv1.ResourceCPU:    2.0,
 					hv1.ResourceMemory: 0.5, // invalid
 				},
+				HasTrait: &gpuTrait,
+			},
+			expectError: true,
+		},
+		{
+			name: "invalid: both HasTrait and HasntTrait set",
+			mapping: HypervisorOvercommitMapping{
+				Overcommit: map[hv1.ResourceName]float64{
+					hv1.ResourceCPU: 2.0,
+				},
+				HasTrait:   &gpuTrait,
+				HasntTrait: &standardTrait,
+			},
+			expectError: true,
+		},
+		{
+			name: "invalid: neither HasTrait nor HasntTrait set with non-empty overcommit",
+			mapping: HypervisorOvercommitMapping{
+				Overcommit: map[hv1.ResourceName]float64{
+					hv1.ResourceCPU: 2.0,
+				},
 			},
 			expectError: true,
 		},
@@ -113,7 +142,8 @@ func TestHypervisorOvercommitMapping_Validate(t *testing.T) {
 }
 
 func TestHypervisorOvercommitConfig_Validate(t *testing.T) {
-	trait := "CUSTOM_GPU"
+	gpuTrait := "CUSTOM_GPU"
+	standardTrait := "CUSTOM_STANDARD"
 	tests := []struct {
 		name        string
 		config      HypervisorOvercommitConfig
@@ -127,7 +157,7 @@ func TestHypervisorOvercommitConfig_Validate(t *testing.T) {
 						Overcommit: map[hv1.ResourceName]float64{
 							hv1.ResourceCPU: 2.0,
 						},
-						HasTrait: &trait,
+						HasTrait: &gpuTrait,
 					},
 				},
 			},
@@ -141,24 +171,54 @@ func TestHypervisorOvercommitConfig_Validate(t *testing.T) {
 						Overcommit: map[hv1.ResourceName]float64{
 							hv1.ResourceCPU: 2.0,
 						},
-						HasTrait: &trait,
+						HasTrait: &gpuTrait,
 					},
 					{
 						Overcommit: map[hv1.ResourceName]float64{
 							hv1.ResourceMemory: 1.5,
 						},
+						HasntTrait: &standardTrait,
 					},
 				},
 			},
 			expectError: false,
 		},
 		{
-			name: "invalid config with bad mapping",
+			name: "invalid config with bad overcommit ratio",
 			config: HypervisorOvercommitConfig{
 				OvercommitMappings: []HypervisorOvercommitMapping{
 					{
 						Overcommit: map[hv1.ResourceName]float64{
-							hv1.ResourceCPU: 0.5, // invalid
+							hv1.ResourceCPU: 0.5, // invalid ratio
+						},
+						HasTrait: &gpuTrait,
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "invalid config with both HasTrait and HasntTrait",
+			config: HypervisorOvercommitConfig{
+				OvercommitMappings: []HypervisorOvercommitMapping{
+					{
+						Overcommit: map[hv1.ResourceName]float64{
+							hv1.ResourceCPU: 2.0,
+						},
+						HasTrait:   &gpuTrait,
+						HasntTrait: &standardTrait,
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "invalid config with neither HasTrait nor HasntTrait",
+			config: HypervisorOvercommitConfig{
+				OvercommitMappings: []HypervisorOvercommitMapping{
+					{
+						Overcommit: map[hv1.ResourceName]float64{
+							hv1.ResourceCPU: 2.0,
 						},
 					},
 				},

@@ -48,9 +48,19 @@ type HypervisorOvercommitMapping struct {
 func (m *HypervisorOvercommitMapping) Validate() error {
 	for resource, overcommit := range m.Overcommit {
 		if overcommit < 1.0 {
-			return errors.New("Invalid overcommit ratio in config, must be >= 1.0. " +
+			return errors.New("invalid overcommit ratio in config, must be >= 1.0. " +
 				"Invalid value for resource " + string(resource) + ": " +
 				fmt.Sprintf("%f", overcommit))
+		}
+		// Has trait and hasn't trait are mutually exclusive, so if both are set
+		// we return an error.
+		if m.HasTrait != nil && m.HasntTrait != nil {
+			return errors.New("invalid overcommit mapping, hasTrait and hasntTrait are mutually exclusive")
+		}
+		// At least one of has trait and hasn't trait must be set,
+		// otherwise we don't know when to apply this mapping.
+		if m.HasTrait == nil && m.HasntTrait == nil {
+			return errors.New("invalid overcommit mapping, at least one of hasTrait and hasntTrait must be set")
 		}
 	}
 	return nil
@@ -120,29 +130,24 @@ func (c *HypervisorOvercommitController) Reconcile(ctx context.Context, req ctrl
 	// non-overlapping resources from previous mappings.
 	desiredOvercommit := make(map[hv1.ResourceName]float64)
 	for _, mapping := range c.config.OvercommitMappings {
-		// Skip mappings without a trait specified.
-		if mapping.HasTrait == nil {
+		var applyMapping bool
+		switch {
+		// These are mutually exclusive.
+		case mapping.HasTrait != nil:
+			applyMapping = slices.Contains(obj.Status.Traits, *mapping.HasTrait)
+		case mapping.HasntTrait != nil:
+			applyMapping = !slices.Contains(obj.Status.Traits, *mapping.HasntTrait)
+		default:
+			// This should never happen due to validation, but we check it just in case.
+			log.Info("Skipping overcommit mapping with no trait specified",
+				"overcommit", mapping.Overcommit)
 			continue
 		}
-		// Only consider applied traits which are reflected in the status.
-		if !slices.Contains(obj.Status.Traits, *mapping.HasTrait) {
+		if !applyMapping {
 			continue
 		}
-		log.Info("Applying overcommit mapping for trait present on hypervisor",
-			"trait", *mapping.HasTrait, "overcommit", mapping.Overcommit)
-		maps.Copy(desiredOvercommit, mapping.Overcommit)
-	}
-	for _, mapping := range c.config.OvercommitMappings {
-		// Skip mappings without a trait specified.
-		if mapping.HasntTrait == nil {
-			continue
-		}
-		// Only consider applied traits which are reflected in the status.
-		if slices.Contains(obj.Status.Traits, *mapping.HasntTrait) {
-			continue
-		}
-		log.Info("Applying overcommit mapping for trait not present on hypervisor",
-			"trait", *mapping.HasntTrait, "overcommit", mapping.Overcommit)
+		log.Info("Applying overcommit mapping on hypervisor",
+			"overcommit", mapping.Overcommit)
 		maps.Copy(desiredOvercommit, mapping.Overcommit)
 	}
 	log.Info("Desired overcommit ratios based on traits",
