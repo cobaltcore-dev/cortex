@@ -11,8 +11,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -208,14 +208,19 @@ func (c *Controller) SetupWithManager(mgr manager.Manager, mcl *multicluster.Cli
 	if err := mgr.Add(manager.RunnableFunc(c.StartupCallback)); err != nil {
 		return err
 	}
-	return multicluster.BuildController(mcl, mgr).
-		Named("explanation-controller").
-		For(
-			&v1alpha1.Decision{},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				decision := obj.(*v1alpha1.Decision)
-				return c.shouldReconcileDecision(decision)
-			})),
-		).
+	bldr := multicluster.BuildController(mcl, mgr)
+	// Watch decision changes across all clusters.
+	bldr, err := bldr.WatchesMulticluster(
+		&v1alpha1.Decision{},
+		&handler.EnqueueRequestForObject{},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			decision := obj.(*v1alpha1.Decision)
+			return c.shouldReconcileDecision(decision)
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	return bldr.Named("explanation-controller").
 		Complete(c)
 }

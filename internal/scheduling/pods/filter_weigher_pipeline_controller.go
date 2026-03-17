@@ -22,7 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -289,20 +288,25 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	if err != nil {
 		return err
 	}
+	// Watch decision changes across all clusters.
+	bldr, err = bldr.WatchesMulticluster(
+		&v1alpha1.Decision{},
+		&handler.EnqueueRequestForObject{},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			decision := obj.(*v1alpha1.Decision)
+			if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainPods {
+				return false
+			}
+			// Ignore already decided schedulings.
+			if decision.Status.Result != nil {
+				return false
+			}
+			return true
+		}),
+	)
+	if err != nil {
+		return err
+	}
 	return bldr.Named("cortex-pod-scheduler").
-		For(
-			&v1alpha1.Decision{},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				decision := obj.(*v1alpha1.Decision)
-				if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainPods {
-					return false
-				}
-				// Ignore already decided schedulings.
-				if decision.Status.Result != nil {
-					return false
-				}
-				return true
-			})),
-		).
 		Complete(c)
 }

@@ -18,7 +18,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -478,14 +477,19 @@ func (c *Controller) SetupWithManager(mgr manager.Manager, mcl *multicluster.Cli
 	if err != nil {
 		return err
 	}
+	// Watch kpi changes across all clusters.
+	bldr, err = bldr.WatchesMulticluster(
+		&v1alpha1.KPI{},
+		&handler.EnqueueRequestForObject{},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			// Only react to kpis matching the scheduling domain.
+			kpi := obj.(*v1alpha1.KPI)
+			return kpi.Spec.SchedulingDomain == c.Config.SchedulingDomain
+		}),
+	)
+	if err != nil {
+		return err
+	}
 	return bldr.Named("cortex-kpis").
-		For(
-			&v1alpha1.KPI{},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				// Only react to kpis matching the scheduling domain.
-				kpi := obj.(*v1alpha1.KPI)
-				return kpi.Spec.SchedulingDomain == c.Config.SchedulingDomain
-			})),
-		).
 		Complete(c)
 }

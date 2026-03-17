@@ -16,8 +16,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -254,23 +254,27 @@ func (e *DeschedulingsExecutor) Reconcile(ctx context.Context, req ctrl.Request)
 }
 
 func (s *DeschedulingsExecutor) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
-	return multicluster.BuildController(mcl, mgr).
-		Named("cortex-nova-deschedulings-executor").
-		For(
-			&v1alpha1.Descheduling{},
-			// Only schedule machines that have the custom scheduler set.
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				deschedulings := obj.(*v1alpha1.Descheduling)
-				// We only care about deschedulings that are not completed yet.
-				if meta.IsStatusConditionTrue(deschedulings.Status.Conditions, v1alpha1.DeschedulingConditionInProgress) {
-					return false
-				}
-				// We don't care about deschedulings that failed.
-				if meta.IsStatusConditionFalse(deschedulings.Status.Conditions, v1alpha1.DeschedulingConditionReady) {
-					return false
-				}
-				return true
-			})),
-		).
+	bldr := multicluster.BuildController(mcl, mgr)
+	// Watch descheduling changes across all clusters.
+	bldr, err := bldr.WatchesMulticluster(
+		&v1alpha1.Descheduling{},
+		&handler.EnqueueRequestForObject{},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			deschedulings := obj.(*v1alpha1.Descheduling)
+			// We only care about deschedulings that are not completed yet.
+			if meta.IsStatusConditionTrue(deschedulings.Status.Conditions, v1alpha1.DeschedulingConditionInProgress) {
+				return false
+			}
+			// We don't care about deschedulings that failed.
+			if meta.IsStatusConditionFalse(deschedulings.Status.Conditions, v1alpha1.DeschedulingConditionReady) {
+				return false
+			}
+			return true
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	return bldr.Named("cortex-nova-deschedulings-executor").
 		Complete(s)
 }

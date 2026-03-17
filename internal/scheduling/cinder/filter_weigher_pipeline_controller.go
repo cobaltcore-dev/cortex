@@ -21,7 +21,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -197,9 +196,11 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	if err != nil {
 		return err
 	}
-	return bldr.For(
+	// Watch decision changes across all clusters.
+	bldr, err = bldr.WatchesMulticluster(
 		&v1alpha1.Decision{},
-		builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+		&handler.EnqueueRequestForObject{},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
 			decision := obj.(*v1alpha1.Decision)
 			if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainCinder {
 				return false
@@ -209,8 +210,11 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 				return false
 			}
 			return true
-		})),
-	).
-		Named("cortex-cinder-decisions").
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	return bldr.Named("cortex-cinder-decisions").
 		Complete(c)
 }

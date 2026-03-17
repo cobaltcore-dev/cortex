@@ -25,6 +25,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 )
 
 // Endpoints for the reservations operator.
@@ -242,9 +243,16 @@ func (r *ReservationReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multiclu
 	})); err != nil {
 		return err
 	}
-	return multicluster.BuildController(mcl, mgr).
-		For(&v1alpha1.Reservation{}).
-		Named("reservation").
+	bldr := multicluster.BuildController(mcl, mgr)
+	// Watch reservation changes across all clusters.
+	bldr, err := bldr.WatchesMulticluster(
+		&v1alpha1.Reservation{},
+		&handler.EnqueueRequestForObject{},
+	)
+	if err != nil {
+		return err
+	}
+	return bldr.Named("reservation").
 		WithOptions(controller.Options{
 			// We want to process reservations one at a time to avoid overbooking.
 			MaxConcurrentReconciles: 1,

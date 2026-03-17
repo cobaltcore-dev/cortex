@@ -16,7 +16,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/sapcc/go-bits/jobloop"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -173,12 +172,17 @@ func (c *DetectorPipelineController) SetupWithManager(mgr ctrl.Manager, mcl *mul
 	if err != nil {
 		return err
 	}
+	// Watch descheduling changes across all clusters.
+	bldr, err = bldr.WatchesMulticluster(
+		&v1alpha1.Descheduling{},
+		&handler.EnqueueRequestForObject{},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			return false // This controller does not reconcile Descheduling resources directly.
+		}),
+	)
+	if err != nil {
+		return err
+	}
 	return bldr.Named("cortex-nova-deschedulings").
-		For(
-			&v1alpha1.Descheduling{},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				return false // This controller does not reconcile Descheduling resources directly.
-			})),
-		).
 		Complete(c)
 }
