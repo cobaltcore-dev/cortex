@@ -58,7 +58,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						},
 					},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[hv1.ResourceName]resource.Quantity{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("128"),
 							hv1.ResourceMemory: resource.MustParse("512Gi"),
 						},
@@ -148,7 +148,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						},
 					},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[hv1.ResourceName]resource.Quantity{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("256"),
 							hv1.ResourceMemory: resource.MustParse("1Ti"),
 						},
@@ -209,7 +209,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						},
 					},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[hv1.ResourceName]resource.Quantity{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("64"),
 							hv1.ResourceMemory: resource.MustParse("256Gi"),
 						},
@@ -255,7 +255,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						},
 					},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[hv1.ResourceName]resource.Quantity{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("100"),
 							hv1.ResourceMemory: resource.MustParse("200Gi"),
 						},
@@ -274,7 +274,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						},
 					},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[hv1.ResourceName]resource.Quantity{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("200"),
 							hv1.ResourceMemory: resource.MustParse("400Gi"),
 						},
@@ -332,7 +332,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						},
 					},
 					Status: hv1.HypervisorStatus{
-						Capacity: map[hv1.ResourceName]resource.Quantity{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("96"),
 							hv1.ResourceMemory: resource.MustParse("384Gi"),
 						},
