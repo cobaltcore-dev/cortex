@@ -10,7 +10,7 @@ groups:
       context: liveness
       dashboard: cortex/cortex
       service: cortex
-      severity: warning
+      severity: critical
       support_group: workload-management
       playbook: docs/support/playbook/cortex/down
     annotations:
