@@ -13,8 +13,6 @@ rules:
   resources:
   - hypervisors
   verbs:
-  - create
-  - delete
   - get
   - list
   - patch
