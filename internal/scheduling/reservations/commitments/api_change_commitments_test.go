@@ -416,6 +416,20 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			ExpectedReservations: []*TestReservation{},
 			ExpectedAPIResponse:  newAPIResponse("2 commitment(s) failed", "commitment uuid-multi-fail-1: not sufficient capacity", "commitment uuid-multi-fail-2: not sufficient capacity"),
 		},
+		{
+			Name:    "Watch timeout with custom config - triggers rollback with timeout error",
+			Flavors: []*TestFlavor{m1Small},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("ram_hana_1", "project-A", "uuid-timeout", "confirmed", 2),
+			),
+			// With 0ms timeout, the watch will timeout immediately before reservations become ready
+			CustomConfig: &Config{
+				ChangeAPIWatchReservationsTimeout:      0 * time.Millisecond,
+				ChangeAPIWatchReservationsPollInterval: 100 * time.Millisecond,
+			},
+			ExpectedReservations: []*TestReservation{}, // Rollback removes all reservations
+			ExpectedAPIResponse:  newAPIResponse("timeout reached while processing commitment changes"),
+		},
 	}
 
 	for _, tc := range testCases {
@@ -460,8 +474,8 @@ func runCommitmentChangeTest(t *testing.T, tc CommitmentChangeTestCase) {
 		existingReservations = append(existingReservations, testRes.toReservation(number))
 	}
 
-	// Create test environment with available resources
-	env := newCommitmentTestEnv(t, vms, nil, existingReservations, flavorGroups, tc.AvailableResources)
+	// Create test environment with available resources and custom config if provided
+	env := newCommitmentTestEnv(t, vms, nil, existingReservations, flavorGroups, tc.AvailableResources, tc.CustomConfig)
 	defer env.Close()
 
 	t.Log("Initial state:")
@@ -509,6 +523,7 @@ type CommitmentChangeTestCase struct {
 	ExpectedAPIResponse  APIResponseExpectation
 	AvailableResources   *AvailableResources // If nil, all reservations accepted without checks
 	EnvInfoVersion       int64               // Override InfoVersion for version mismatch tests
+	CustomConfig         *Config             // Override default config for testing timeout behavior
 }
 
 // AvailableResources defines available memory per host (MB).
@@ -808,6 +823,7 @@ func newCommitmentTestEnv(
 	reservations []*v1alpha1.Reservation,
 	flavorGroups FlavorGroupsKnowledge,
 	resources *AvailableResources,
+	customConfig *Config,
 ) *CommitmentTestEnv {
 
 	t.Helper()
@@ -874,7 +890,13 @@ func newCommitmentTestEnv(
 	}
 	env.K8sClient = wrappedClient
 
-	api := NewAPI(wrappedClient)
+	// Use custom config if provided, otherwise use default
+	var api *HTTPAPI
+	if customConfig != nil {
+		api = NewAPIWithConfig(wrappedClient, *customConfig)
+	} else {
+		api = NewAPI(wrappedClient)
+	}
 	mux := http.NewServeMux()
 	api.Init(mux)
 	httpServer := httptest.NewServer(mux)

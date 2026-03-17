@@ -37,14 +37,6 @@ func sortedKeys[K ~string, V any](m map[K]V) []K {
 	return keys
 }
 
-const (
-	// watchTimeout is how long to wait for all reservations to become ready
-	watchTimeout = 2 * time.Second
-
-	// pollInterval is how frequently to poll reservation status
-	pollInterval = 100 * time.Millisecond
-)
-
 // implements POST /v1/change-commitments from Limes LIQUID API:
 // See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/commitment.go
 // See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid
@@ -246,13 +238,16 @@ ProcessLoop:
 
 		time_start := time.Now()
 
-		if failedReservations, errors := watchReservationsUntilReady(ctx, log, api.client, reservationsToWatch, watchTimeout); len(failedReservations) > 0 || len(errors) > 0 {
+		if failedReservations, errors := watchReservationsUntilReady(ctx, log, api.client, reservationsToWatch, api.config.ChangeAPIWatchReservationsTimeout, api.config.ChangeAPIWatchReservationsPollInterval); len(failedReservations) > 0 || len(errors) > 0 {
 			log.Info("reservations failed to become ready, initiating rollback",
 				"failedReservations", len(failedReservations),
 				"errors", errors)
 
 			for _, res := range failedReservations {
 				failedCommitments[res.Spec.CommittedResourceReservation.CommitmentUUID] = "not sufficient capacity"
+			}
+			if len(failedReservations) == 0 {
+				resp.RejectionReason += "timeout reached while processing commitment changes"
 			}
 			requireRollback = true
 		}
@@ -297,6 +292,7 @@ func watchReservationsUntilReady(
 	k8sClient client.Client,
 	reservations []v1alpha1.Reservation,
 	timeout time.Duration,
+	pollInterval time.Duration,
 ) (failedReservations []v1alpha1.Reservation, errors []error) {
 
 	if len(reservations) == 0 {

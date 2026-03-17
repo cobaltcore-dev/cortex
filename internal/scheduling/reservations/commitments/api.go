@@ -14,13 +14,19 @@ import (
 // HTTPAPI implements Limes LIQUID commitment validation endpoints.
 type HTTPAPI struct {
 	client client.Client
+	config Config
 	// Mutex to serialize change-commitments requests
 	changeMutex sync.Mutex
 }
 
 func NewAPI(client client.Client) *HTTPAPI {
+	return NewAPIWithConfig(client, DefaultConfig())
+}
+
+func NewAPIWithConfig(client client.Client, config Config) *HTTPAPI {
 	return &HTTPAPI{
 		client: client,
+		config: config,
 	}
 }
 
