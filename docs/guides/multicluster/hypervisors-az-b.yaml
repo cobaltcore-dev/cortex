@@ -1,0 +1,13 @@
+apiVersion: kvm.cloud.sap/v1
+kind: Hypervisor
+metadata:
+  name: hypervisor-1-az-b
+  labels:
+    topology.kubernetes.io/zone: cortex-remote-az-b
+---
+apiVersion: kvm.cloud.sap/v1
+kind: Hypervisor
+metadata:
+  name: hypervisor-2-az-b
+  labels:
+    topology.kubernetes.io/zone: cortex-remote-az-b
