@@ -238,6 +238,7 @@ func (c *Client) clusterForWrite(gvk schema.GroupVersionKind, obj any) (cluster.
 // Returns an error if the resource is found in multiple clusters (duplicate).
 // If no cluster has the resource, the last NotFound error is returned.
 func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	log := ctrl.LoggerFrom(ctx)
 	gvk, err := c.GVKFromHomeScheme(obj)
 	if err != nil {
 		return err
@@ -256,7 +257,7 @@ func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Objec
 				return fmt.Errorf("duplicate resource found: %s %s/%s exists in multiple clusters", gvk, key.Namespace, key.Name)
 			}
 			if !apierrors.IsNotFound(err) {
-				return err
+				log.Error(err, "error checking for duplicate resource in cluster", "gvk", gvk, "namespace", key.Namespace, "name", key.Name)
 			}
 			continue
 		}
@@ -267,7 +268,7 @@ func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Objec
 			continue
 		}
 		if !apierrors.IsNotFound(err) {
-			return err
+			log.Error(err, "error getting resource from cluster", "gvk", gvk, "namespace", key.Namespace, "name", key.Name)
 		}
 	}
 	if !found {
@@ -493,6 +494,8 @@ type subResourceClient struct {
 // Get iterates over all clusters with the GVK and returns the result.
 // Returns an error if the resource is found in multiple clusters (duplicate).
 func (c *subResourceClient) Get(ctx context.Context, obj, subResource client.Object, opts ...client.SubResourceGetOption) error {
+	log := ctrl.LoggerFrom(ctx)
+
 	gvk, err := c.multiclusterClient.GVKFromHomeScheme(obj)
 	if err != nil {
 		return err
@@ -512,7 +515,7 @@ func (c *subResourceClient) Get(ctx context.Context, obj, subResource client.Obj
 				return fmt.Errorf("duplicate sub-resource found: %s %s/%s exists in multiple clusters", gvk, obj.GetNamespace(), obj.GetName())
 			}
 			if !apierrors.IsNotFound(err) {
-				return err
+				log.Error(err, "error checking for duplicate sub-resource in cluster", "gvk", gvk, "namespace", obj.GetNamespace(), "name", obj.GetName(), "subresource", c.subResource)
 			}
 			continue
 		}
@@ -523,7 +526,7 @@ func (c *subResourceClient) Get(ctx context.Context, obj, subResource client.Obj
 			continue
 		}
 		if !apierrors.IsNotFound(err) {
-			return err
+			log.Error(err, "error getting sub-resource from cluster", "gvk", gvk, "namespace", obj.GetNamespace(), "name", obj.GetName(), "subresource", c.subResource)
 		}
 	}
 	if !found {
