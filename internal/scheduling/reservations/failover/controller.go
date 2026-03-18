@@ -19,7 +19,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -38,7 +38,7 @@ type FailoverReservationController struct {
 	VMSource        VMSource
 	Config          FailoverConfig
 	SchedulerClient *reservations.SchedulerClient
-	Recorder        record.EventRecorder // Event recorder for emitting Kubernetes events
+	Recorder        events.EventRecorder // Event recorder for emitting Kubernetes events
 	reconcileCount  int64                // Track reconciliation count for rotating VM selection
 }
 
@@ -146,9 +146,9 @@ func (c *FailoverReservationController) reconcileValidateAndAcknowledge(ctx cont
 	}
 
 	// Emit event for successful validation (doesn't trigger watch reconciliation)
-	c.Recorder.Event(res, corev1.EventTypeNormal, "ValidationPassed",
-		fmt.Sprintf("Reservation validated successfully for host %s with %d VMs",
-			res.Status.Host, len(getFailoverAllocations(res))))
+	c.Recorder.Eventf(res, nil, corev1.EventTypeNormal, "ValidationPassed", "Validated",
+		"Reservation validated successfully for host %s with %d VMs",
+		res.Status.Host, len(getFailoverAllocations(res)))
 
 	// Only update AcknowledgedAt if there are unacknowledged changes
 	lastChanged := res.Status.FailoverReservation.LastChanged
@@ -740,7 +740,7 @@ func (c *FailoverReservationController) patchReservationStatus(ctx context.Conte
 // SetupWithManager sets up the watch-based reconciler with the Manager.
 // This handles per-reservation reconciliation triggered by CRD changes.
 func (c *FailoverReservationController) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
-	c.Recorder = mgr.GetEventRecorderFor("failover-reservation-controller")
+	c.Recorder = mgr.GetEventRecorder("failover-reservation-controller")
 
 	return multicluster.BuildController(mcl, mgr).
 		For(&v1alpha1.Reservation{}).
