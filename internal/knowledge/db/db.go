@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"reflect"
@@ -108,14 +109,15 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 	// Retry connecting to the database for up to 10 seconds.
 	maxRetries := 10
 	for i := range maxRetries {
-		err := db.PingContext(ctx)
-		if err == nil {
+		lastErr := db.PingContext(ctx)
+		if lastErr == nil {
 			break
 		}
 		if i == maxRetries-1 {
-			return nil, errors.New("giving up connecting to database")
+			db.Close()
+			return nil, fmt.Errorf("giving up connecting to database: %w", lastErr)
 		}
-		slog.Error("failed to connect to database, retrying...", "error", err)
+		slog.Error("failed to connect to database, retrying...", "error", lastErr)
 		time.Sleep(1 * time.Second)
 	}
 
