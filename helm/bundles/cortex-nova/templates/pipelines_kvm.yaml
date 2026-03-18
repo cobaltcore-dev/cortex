@@ -15,7 +15,11 @@ spec:
     Specifically, this pipeline is used for general purpose workloads.
   type: filter-weigher
   createDecisions: true
-  filters: []
+  filters:
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -61,7 +65,11 @@ spec:
     Specifically, this pipeline is used for hana virtual machines.
   type: filter-weigher
   createDecisions: true
-  filters: []
+  filters:
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -151,11 +159,6 @@ spec:
         `domain_name` scheduler hint from the nova request spec.
       params:
         - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
-    - name: filter_packed_virtqueue
-      description: |
-        If the flavor extra specs contain the `hw:virtio_packed_ring` key, or the
-        image properties contain the `hw_virtio_packed_ring` key, this step will
-        filter out hosts that do not have the `COMPUTE_NET_VIRTIO_PACKED` trait.
     - name: filter_allowed_projects
       description: |
         This step filters hosts based on allowed projects defined in the
@@ -282,11 +285,6 @@ spec:
         `domain_name` scheduler hint from the nova request spec.
       params:
         - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
-    - name: filter_packed_virtqueue
-      description: |
-        If the flavor extra specs contain the `hw:virtio_packed_ring` key, or the
-        image properties contain the `hw_virtio_packed_ring` key, this step will
-        filter out hosts that do not have the `COMPUTE_NET_VIRTIO_PACKED` trait.
     - name: filter_allowed_projects
       description: |
         This step filters hosts based on allowed projects defined in the

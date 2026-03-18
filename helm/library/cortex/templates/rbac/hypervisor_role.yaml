@@ -1,5 +1,6 @@
 {{- if .Values.rbac.hypervisor.enable }}
 ---
+# TODO: Check if this role can be part of the nova bundle, not the core library
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -14,6 +15,8 @@ rules:
   verbs:
   - get
   - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - kvm.cloud.sap

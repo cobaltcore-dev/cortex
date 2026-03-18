@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,7 +37,7 @@ func TestReservationReconciler_Reconcile(t *testing.T) {
 		shouldRequeue bool
 	}{
 		{
-			name: "skip already active reservation",
+			name: "expect already active reservation",
 			reservation: &v1alpha1.Reservation{
 				ObjectMeta: ctrl.ObjectMeta{
 					Name: "test-reservation",
@@ -59,7 +60,7 @@ func TestReservationReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			expectedReady: true,
-			shouldRequeue: false,
+			shouldRequeue: true,
 		},
 		{
 			name: "skip reservation without resource name",
@@ -148,17 +149,78 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 				ProjectID:    "test-project",
 				ResourceName: "test-flavor",
 			},
-			Resources: map[string]resource.Quantity{
-				"memory": resource.MustParse("1Gi"),
-				"cpu":    resource.MustParse("2"),
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: resource.MustParse("1Gi"),
+				hv1.ResourceCPU:    resource.MustParse("2"),
+			},
+		},
+	}
+
+	// Create flavor group knowledge CRD for the test
+	// Need to import compute package for FlavorGroupFeature
+	flavorGroups := []struct {
+		Name    string `json:"name"`
+		Flavors []struct {
+			Name       string            `json:"name"`
+			MemoryMB   uint64            `json:"memoryMB"`
+			VCPUs      uint64            `json:"vcpus"`
+			ExtraSpecs map[string]string `json:"extraSpecs"`
+		} `json:"flavors"`
+	}{
+		{
+			Name: "test-group",
+			Flavors: []struct {
+				Name       string            `json:"name"`
+				MemoryMB   uint64            `json:"memoryMB"`
+				VCPUs      uint64            `json:"vcpus"`
+				ExtraSpecs map[string]string `json:"extraSpecs"`
+			}{
+				{
+					Name:       "test-flavor",
+					MemoryMB:   1024,
+					VCPUs:      2,
+					ExtraSpecs: map[string]string{},
+				},
+			},
+		},
+	}
+
+	// Marshal flavor groups into runtime.RawExtension
+	flavorGroupsJSON, err := json.Marshal(map[string]interface{}{
+		"features": flavorGroups,
+	})
+	if err != nil {
+		t.Fatalf("Failed to marshal flavor groups: %v", err)
+	}
+
+	flavorGroupKnowledge := &v1alpha1.Knowledge{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "flavor-groups",
+		},
+		Spec: v1alpha1.KnowledgeSpec{
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			Extractor: v1alpha1.KnowledgeExtractorSpec{
+				Name: "flavor_groups", // Note: underscore not hyphen
+			},
+			Recency: metav1.Duration{Duration: 0},
+		},
+		Status: v1alpha1.KnowledgeStatus{
+			Raw:       runtime.RawExtension{Raw: flavorGroupsJSON},
+			RawLength: 1,
+			Conditions: []metav1.Condition{
+				{
+					Type:   v1alpha1.KnowledgeConditionReady,
+					Status: metav1.ConditionTrue,
+					Reason: "TestReady",
+				},
 			},
 		},
 	}
 
 	client := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(reservation).
-		WithStatusSubresource(&v1alpha1.Reservation{}).
+		WithObjects(reservation, flavorGroupKnowledge).
+		WithStatusSubresource(&v1alpha1.Reservation{}, &v1alpha1.Knowledge{}).
 		Build()
 
 	// Create a mock server that returns a successful response
@@ -196,28 +258,6 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 		Client: client,
 		Scheme: scheme,
 		Conf:   config,
-		HypervisorClient: &mockHypervisorClient{
-			hypervisorsToReturn: []Hypervisor{
-				{
-					Hostname: "test-host-1",
-					Type:     "qemu",
-					Service: struct {
-						Host string `json:"host"`
-					}{
-						Host: "compute1",
-					},
-				},
-				{
-					Hostname: "test-host-2",
-					Type:     "qemu",
-					Service: struct {
-						Host string `json:"host"`
-					}{
-						Host: "compute2",
-					},
-				},
-			},
-		},
 	}
 
 	req := ctrl.Request{

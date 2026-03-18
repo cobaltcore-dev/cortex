@@ -17,7 +17,7 @@ type DetectorPipelineMonitor struct {
 	// A counter to measure how many vm ids are selected for descheduling by each step.
 	stepDeschedulingCounter *prometheus.GaugeVec
 	// A histogram to measure how long the pipeline takes to run in total.
-	pipelineRunTimer prometheus.Histogram
+	pipelineRunTimer *prometheus.HistogramVec
 
 	// The name of the pipeline being monitored.
 	PipelineName string
@@ -34,11 +34,11 @@ func NewDetectorPipelineMonitor() DetectorPipelineMonitor {
 			Name: "cortex_detector_pipeline_step_detections",
 			Help: "Number of resources detected by a detector pipeline step",
 		}, []string{"step"}),
-		pipelineRunTimer: prometheus.NewHistogram(prometheus.HistogramOpts{
+		pipelineRunTimer: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "cortex_detector_pipeline_run_duration_seconds",
 			Help:    "Duration of descheduler pipeline run",
 			Buckets: prometheus.DefBuckets,
-		}),
+		}, []string{"error"}),
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/tools/spawner/defaults"
+	"github.com/cobaltcore-dev/cortex/tools/spawner/types"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/hypervisors"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/domains"
@@ -28,6 +29,8 @@ type CLI interface {
 	ChooseImage([]images.Image) images.Image
 	ChooseHypervisorType([]string) string
 	ChooseHypervisor([]hypervisors.Hypervisor) hypervisors.Hypervisor
+	ChooseServerGroupPolicy([]string) string
+	ChooseServerGroup([]types.ServerGroup) types.ServerGroup
 }
 
 type cli struct {
@@ -90,6 +93,20 @@ func (c *cli) ChooseHypervisor(hs []hypervisors.Hypervisor) hypervisors.Hypervis
 		return fmt.Sprintf("%s (%s) id:%s", h.Service.Host, h.HypervisorType, h.ID[:5])
 	}
 	return choose(c.defaults, "WS_HYPERVISOR", "📂 Hypervisors", hs, f)
+}
+
+func (c *cli) ChooseServerGroupPolicy(ps []string) string {
+	f := func(p string) string {
+		return p
+	}
+	return choose(c.defaults, "WS_SERVER_GROUP_POLICY", "📂 Server Group Policies", ps, f)
+}
+
+func (c *cli) ChooseServerGroup(sgs []types.ServerGroup) types.ServerGroup {
+	f := func(sg types.ServerGroup) string {
+		return fmt.Sprintf("%s (%s) id:%s", sg.Name, sg.Policy, sg.ID[:5])
+	}
+	return choose(c.defaults, "WS_SERVER_GROUP", "📂 Server Groups", sgs, f)
 }
 
 // Choose asks the user to choose one of the given options.

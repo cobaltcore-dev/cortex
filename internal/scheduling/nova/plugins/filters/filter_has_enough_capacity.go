@@ -45,7 +45,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 	result := s.IncludeAllHostsFromRequest(request)
 
 	// This map holds the free resources per host.
-	freeResourcesByHost := make(map[string]map[string]resource.Quantity)
+	freeResourcesByHost := make(map[string]map[hv1.ResourceName]resource.Quantity)
 
 	// The hypervisor resource auto-discovers its current utilization.
 	// We can use the hypervisor status to calculate the total capacity
@@ -56,8 +56,13 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		return nil, err
 	}
 	for _, hv := range hvs.Items {
-		// Start with the total capacity.
-		freeResourcesByHost[hv.Name] = hv.Status.Capacity
+		if hv.Status.EffectiveCapacity == nil {
+			traceLog.Warn("hypervisor with nil effective capacity, use capacity instead (overprovisioning not considered)", "host", hv.Name)
+			freeResourcesByHost[hv.Name] = hv.Status.Capacity
+		} else {
+			// Start with the total effective capacity which is capacity * overcommit ratio.
+			freeResourcesByHost[hv.Name] = hv.Status.EffectiveCapacity
+		}
 
 		// Subtract allocated resources.
 		for resourceName, allocated := range hv.Status.Allocation {
@@ -145,7 +150,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 
 		// For CR reservations with allocations, calculate remaining (unallocated) resources to block.
 		// This prevents double-blocking of resources already consumed by running instances.
-		var resourcesToBlock map[string]resource.Quantity
+		var resourcesToBlock map[hv1.ResourceName]resource.Quantity
 		if reservation.Spec.Type == v1alpha1.ReservationTypeCommittedResource &&
 			// if the reservation is not being migrated, block only unused resources
 			reservation.Spec.TargetHost == reservation.Status.Host &&
@@ -154,7 +159,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			len(reservation.Spec.CommittedResourceReservation.Allocations) > 0 &&
 			len(reservation.Status.CommittedResourceReservation.Allocations) > 0 {
 			// Start with full reservation resources
-			resourcesToBlock = make(map[string]resource.Quantity)
+			resourcesToBlock = make(map[hv1.ResourceName]resource.Quantity)
 			for k, v := range reservation.Spec.Resources {
 				resourcesToBlock[k] = v.DeepCopy()
 			}

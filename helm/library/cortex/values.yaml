@@ -44,9 +44,6 @@ controllerManager:
   terminationGracePeriodSeconds: 10
   serviceAccountName: controller-manager
 
-# Use this to unambiguate multiple cortex deployments in the same cluster.
-namePrefix: cortex
-
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:
   enable: true

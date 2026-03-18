@@ -4,6 +4,7 @@
 package v1alpha1
 
 import (
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -21,6 +22,20 @@ const (
 	ReservationTypeFailover ReservationType = "FailoverReservation"
 )
 
+// Label keys for Reservation metadata.
+// Labels follow Kubernetes naming conventions using reverse-DNS notation
+const (
+	// ===== Common Reservation Labels =====
+
+	// LabelReservationType identifies the type of reservation.
+	// This label is present on all reservations to enable type-based filtering.
+	LabelReservationType = "reservations.cortex.sap.com/type"
+
+	// Reservation type label values
+	ReservationTypeLabelCommittedResource = "committed-resource"
+	ReservationTypeLabelFailover          = "failover"
+)
+
 // CommittedResourceAllocation represents a workload's assignment to a committed resource reservation slot.
 // The workload could be a VM (Nova/IronCore), Pod (Kubernetes), or other resource.
 type CommittedResourceAllocation struct {
@@ -30,7 +45,7 @@ type CommittedResourceAllocation struct {
 
 	// Resources consumed by this instance.
 	// +kubebuilder:validation:Required
-	Resources map[string]resource.Quantity `json:"resources"`
+	Resources map[hv1.ResourceName]resource.Quantity `json:"resources"`
 }
 
 // CommittedResourceReservationSpec defines the spec fields specific to committed resource reservations.
@@ -38,6 +53,10 @@ type CommittedResourceReservationSpec struct {
 	// ResourceName is the name of the resource to reserve. (e.g. flavor name for Nova)
 	// +kubebuilder:validation:Optional
 	ResourceName string `json:"resourceName,omitempty"`
+
+	// CommitmentUUID is the UUID of the commitment that this reservation corresponds to.
+	// +kubebuilder:validation:Optional
+	CommitmentUUID string `json:"commitmentUUID,omitempty"`
 
 	// ResourceGroup is the group/category of the resource (e.g., flavor group for Nova)
 	// +kubebuilder:validation:Optional
@@ -79,9 +98,13 @@ type ReservationSpec struct {
 	// +kubebuilder:validation:Optional
 	SchedulingDomain string `json:"schedulingDomain,omitempty"`
 
+	// AvailabilityZone specifies the availability zone for this reservation, if restricted to a specific AZ.
+	// +kubebuilder:validation:Optional
+	AvailabilityZone string `json:"availabilityZone,omitempty"`
+
 	// Resources to reserve for this instance.
 	// +kubebuilder:validation:Optional
-	Resources map[string]resource.Quantity `json:"resources,omitempty"`
+	Resources map[hv1.ResourceName]resource.Quantity `json:"resources,omitempty"`
 
 	// StartTime is the time when the reservation becomes active.
 	// +kubebuilder:validation:Optional
@@ -166,7 +189,7 @@ type ReservationStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
-// +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
+// +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".metadata.labels['reservations\\.cortex\\.sap\\.com/type']"
 // +kubebuilder:printcolumn:name="Host",type="string",JSONPath=".status.host"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 

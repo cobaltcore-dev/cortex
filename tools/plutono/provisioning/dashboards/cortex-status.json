@@ -2124,9 +2124,9 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by(error, skipped) (rate(cortex_descheduler_pipeline_vm_descheduling_duration_seconds_count{}[2m]))",
+          "expr": "sum by(error) (rate(cortex_detector_pipeline_run_duration_seconds_count{}[2m]))",
           "interval": "",
-          "legendFormat": "Error: {{error}}, Skipped: {{skipped}}",
+          "legendFormat": "Error: {{error}}",
           "refId": "A"
         }
       ],
@@ -2321,11 +2321,11 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by (error, skipped, source_host, target_host, vm_id) (delta(cortex_descheduler_pipeline_vm_descheduling_duration_seconds_count{}[2m]))",
+          "expr": "sum by (error) (delta(cortex_detector_pipeline_run_duration_seconds_count{}[2m]))",
           "format": "time_series",
           "instant": false,
           "interval": "",
-          "legendFormat": "{{vm_id}}: ({{source_host}}) -> ({{target_host}}), Error: {{error}}, Skipped: {{skipped}}",
+          "legendFormat": "Error: {{error}}",
           "refId": "A"
         }
       ],

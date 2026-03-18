@@ -101,7 +101,7 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 			resourcesByLabels[key] = map[string]uint64{}
 		}
 		for resourceName, resourceQuantity := range reservation.Spec.Resources {
-			resourcesByLabels[key][resourceName] += resourceQuantity.AsDec().UnscaledBig().Uint64()
+			resourcesByLabels[key][string(resourceName)] += resourceQuantity.AsDec().UnscaledBig().Uint64()
 		}
 	}
 	for key, resources := range resourcesByLabels {

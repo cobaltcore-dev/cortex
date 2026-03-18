@@ -39,13 +39,56 @@ func newHypervisor(name, cpuCap, cpuAlloc, memCap, memAlloc string) *hv1.Hypervi
 			Name: name,
 		},
 		Status: hv1.HypervisorStatus{
-			Capacity: map[string]resource.Quantity{
-				"cpu":    resource.MustParse(cpuCap),
-				"memory": resource.MustParse(memCap),
+			EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceCPU:    resource.MustParse(cpuCap),
+				hv1.ResourceMemory: resource.MustParse(memCap),
 			},
-			Allocation: map[string]resource.Quantity{
-				"cpu":    resource.MustParse(cpuAlloc),
-				"memory": resource.MustParse(memAlloc),
+			Allocation: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceCPU:    resource.MustParse(cpuAlloc),
+				hv1.ResourceMemory: resource.MustParse(memAlloc),
+			},
+		},
+	}
+}
+
+// newHypervisorWithCapacityOnly creates a hypervisor with only Capacity set (no EffectiveCapacity).
+func newHypervisorWithCapacityOnly(name, cpuCap, memCap string) *hv1.Hypervisor {
+	return &hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Status: hv1.HypervisorStatus{
+			Capacity: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceCPU:    resource.MustParse(cpuCap),
+				hv1.ResourceMemory: resource.MustParse(memCap),
+			},
+			Allocation: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceCPU:    resource.MustParse("0"),
+				hv1.ResourceMemory: resource.MustParse("0"),
+			},
+		},
+	}
+}
+
+// newHypervisorWithBothCapacities creates a hypervisor with both Capacity and EffectiveCapacity set.
+// EffectiveCapacity is typically >= Capacity due to overcommit ratio.
+func newHypervisorWithBothCapacities(name, cpuCap, cpuEffCap, memCap, memEffCap string) *hv1.Hypervisor {
+	return &hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Status: hv1.HypervisorStatus{
+			Capacity: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceCPU:    resource.MustParse(cpuCap),
+				hv1.ResourceMemory: resource.MustParse(memCap),
+			},
+			EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceCPU:    resource.MustParse(cpuEffCap),
+				hv1.ResourceMemory: resource.MustParse(memEffCap),
+			},
+			Allocation: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceCPU:    resource.MustParse("0"),
+				hv1.ResourceMemory: resource.MustParse("0"),
 			},
 		},
 	}
@@ -64,9 +107,9 @@ func newCommittedReservation(
 		Spec: v1alpha1.ReservationSpec{
 			Type:       v1alpha1.ReservationTypeCommittedResource,
 			TargetHost: targetHost,
-			Resources: map[string]resource.Quantity{
-				"cpu":    resource.MustParse(cpu),
-				"memory": resource.MustParse(memory),
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceCPU:    resource.MustParse(cpu),
+				hv1.ResourceMemory: resource.MustParse(memory),
 			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 				ProjectID:     projectID,
@@ -104,9 +147,9 @@ func newFailoverReservation(name, targetHost, cpu, memory string, allocations ma
 		Spec: v1alpha1.ReservationSpec{
 			Type:       v1alpha1.ReservationTypeFailover,
 			TargetHost: targetHost,
-			Resources: map[string]resource.Quantity{
-				"cpu":    resource.MustParse(cpu),
-				"memory": resource.MustParse(memory),
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceCPU:    resource.MustParse(cpu),
+				hv1.ResourceMemory: resource.MustParse(memory),
 			},
 			FailoverReservation: &v1alpha1.FailoverReservationSpec{
 				ResourceGroup: "m1.large",
@@ -150,9 +193,9 @@ func crSpecAllocs(vms ...crVmAlloc) map[string]v1alpha1.CommittedResourceAllocat
 	for _, v := range vms {
 		allocs[v.uuid] = v1alpha1.CommittedResourceAllocation{
 			CreationTimestamp: metav1.Now(),
-			Resources: map[string]resource.Quantity{
-				"cpu":    resource.MustParse(v.cpu),
-				"memory": resource.MustParse(v.mem),
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceCPU:    resource.MustParse(v.cpu),
+				hv1.ResourceMemory: resource.MustParse(v.mem),
 			},
 		}
 	}
@@ -440,7 +483,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			objects := make([]client.Object, 0, len(hypervisors)+len(tt.reservations))
 			for _, h := range hypervisors {
-				objects = append(objects, h)
+				objects = append(objects, h.DeepCopy())
 			}
 			for _, r := range tt.reservations {
 				objects = append(objects, r)
@@ -449,6 +492,90 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 			step := &FilterHasEnoughCapacity{}
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			step.Options = tt.opts
+
+			result, err := step.Run(slog.Default(), tt.request)
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+
+			for _, host := range tt.expectedHosts {
+				if _, ok := result.Activations[host]; !ok {
+					t.Errorf("expected host %s to be present in activations, but got %+v", host, result.Activations)
+				}
+			}
+
+			for _, host := range tt.filteredHosts {
+				if _, ok := result.Activations[host]; ok {
+					t.Errorf("expected host %s to be filtered out", host)
+				}
+			}
+		})
+	}
+}
+
+func TestFilterHasEnoughCapacity_NilEffectiveCapacityFallback(t *testing.T) {
+	scheme := buildTestScheme(t)
+
+	tests := []struct {
+		name          string
+		hypervisors   []*hv1.Hypervisor
+		request       api.ExternalSchedulerRequest
+		expectedHosts []string
+		filteredHosts []string
+	}{
+		{
+			name: "Hypervisor with nil EffectiveCapacity uses Capacity fallback",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "16", "8", "32Gi", "16Gi"),    // has EffectiveCapacity: 8 CPU free, 16Gi free
+				newHypervisorWithCapacityOnly("host2", "8", "16Gi"),  // nil EffectiveCapacity, uses Capacity: 8 CPU free, 16Gi free
+				newHypervisorWithCapacityOnly("host3", "2", "4Gi"),   // nil EffectiveCapacity, uses Capacity: 2 CPU free (not enough)
+				newHypervisorWithCapacityOnly("host4", "16", "32Gi"), // nil EffectiveCapacity, uses Capacity: 16 CPU free, 32Gi free
+			},
+			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			expectedHosts: []string{"host1", "host2", "host4"},
+			filteredHosts: []string{"host3"},
+		},
+		{
+			name: "All hypervisors with nil EffectiveCapacity use Capacity fallback",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisorWithCapacityOnly("host1", "8", "16Gi"),
+				newHypervisorWithCapacityOnly("host2", "4", "8Gi"),
+			},
+			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2"}),
+			expectedHosts: []string{"host1", "host2"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "EffectiveCapacity used when both are set (overcommit scenario)",
+			hypervisors: []*hv1.Hypervisor{
+				// host1: Capacity=8 CPU, EffectiveCapacity=16 CPU (2x overcommit)
+				// With Capacity only: 8 free -> passes
+				// With EffectiveCapacity: 16 free -> passes (more capacity available)
+				newHypervisorWithBothCapacities("host1", "8", "16", "16Gi", "32Gi"),
+				// host2: Capacity=4 CPU, EffectiveCapacity=8 CPU (2x overcommit)
+				// With Capacity only: 4 free -> would be filtered (need 5)
+				// With EffectiveCapacity: 8 free -> passes
+				newHypervisorWithBothCapacities("host2", "4", "8", "8Gi", "16Gi"),
+				// host3: Capacity=4 CPU, EffectiveCapacity=4 CPU (no overcommit)
+				// Both: 4 free -> filtered (need 5)
+				newHypervisorWithBothCapacities("host3", "4", "4", "8Gi", "8Gi"),
+			},
+			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 5, "8Gi", false, []string{"host1", "host2", "host3"}),
+			expectedHosts: []string{"host1", "host2"},
+			filteredHosts: []string{"host3"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objects := make([]client.Object, 0, len(tt.hypervisors))
+			for _, h := range tt.hypervisors {
+				objects = append(objects, h.DeepCopy())
+			}
+
+			step := &FilterHasEnoughCapacity{}
+			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+			step.Options = FilterHasEnoughCapacityOpts{LockReserved: false}
 
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {

@@ -93,6 +93,11 @@ type KnowledgeStatus struct {
 	// +kubebuilder:validation:Optional
 	LastExtracted metav1.Time `json:"lastExtracted"`
 
+	// When the extracted knowledge content last changed.
+	// Updated only when the Raw data actually changes, not on every reconcile.
+	// +kubebuilder:validation:Optional
+	LastContentChange metav1.Time `json:"lastContentChange,omitempty"`
+
 	// The raw data behind the extracted knowledge, e.g. a list of features.
 	// +kubebuilder:validation:Optional
 	Raw runtime.RawExtension `json:"raw"`
@@ -111,6 +116,7 @@ type KnowledgeStatus struct {
 // +kubebuilder:printcolumn:name="Domain",type="string",JSONPath=".spec.schedulingDomain"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Extracted",type="date",JSONPath=".status.lastExtracted"
+// +kubebuilder:printcolumn:name="Changed",type="date",JSONPath=".status.lastContentChange"
 // +kubebuilder:printcolumn:name="Recency",type="string",JSONPath=".spec.recency"
 // +kubebuilder:printcolumn:name="Features",type="integer",JSONPath=".status.rawLength"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
