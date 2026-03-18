@@ -87,6 +87,10 @@ spec:
                       Key: Workload UUID (VM UUID for Nova, Pod UID for Pods, Machine UID for IronCore, etc.)
                       Value: allocation state and metadata
                     type: object
+                  commitmentUUID:
+                    description: CommitmentUUID is the UUID of the commitment that
+                      this reservation corresponds to.
+                    type: string
                   creator:
                     description: |-
                       Creator identifies the system or component that created this reservation.

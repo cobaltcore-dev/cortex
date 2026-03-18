@@ -34,6 +34,21 @@ Cortex is developed using the Go programming language. To get started with the d
 
 Run `make` in your terminal from the cortex root directory to perform linting and testing tasks.
 
+### Working on Tests
+
+```bash
+# Watch mode for continuous testing; print logs for failed tests only
+make testsum WATCH=1
+```
+
+The `testsum` target provides cleaner output by showing only full verbose output for failing tests.
+
+**Available options:**
+- `WATCH=1` - Automatically re-run tests when files change
+- `RUN=<pattern>` - Run specific tests matching the pattern
+- `PACKAGE=<pkg>` - Test specific package(s)
+- `FORMAT=<fmt>` - Change output format (e.g., `standard-verbose` for verbose output on all tests)
+
 ## Helm Charts
 
 Helm charts bundle the application into a package, containing all the [Kubernetes](https://kubernetes.io/docs/tutorials/hello-minikube/) resources needed to run the application. The configuration for the application is specified in the [Helm `values.yaml`](cortex.secrets.example.yaml).

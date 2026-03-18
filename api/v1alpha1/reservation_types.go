@@ -54,6 +54,10 @@ type CommittedResourceReservationSpec struct {
 	// +kubebuilder:validation:Optional
 	ResourceName string `json:"resourceName,omitempty"`
 
+	// CommitmentUUID is the UUID of the commitment that this reservation corresponds to.
+	// +kubebuilder:validation:Optional
+	CommitmentUUID string `json:"commitmentUUID,omitempty"`
+
 	// ResourceGroup is the group/category of the resource (e.g., flavor group for Nova)
 	// +kubebuilder:validation:Optional
 	ResourceGroup string `json:"resourceGroup,omitempty"`
