@@ -14,6 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/google/uuid"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -63,10 +64,11 @@ type vmFailoverNeed struct {
 // It validates the reservation and acknowledges it if valid, or deletes it if invalid.
 // After processing, it requeues for periodic re-validation.
 func (c *FailoverReservationController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// Set up context with global request ID (reservation name for watch-based reconciliation)
-	ctx = WithGlobalRequestID(ctx, req.Name)
+	// Generate a random UUID for request tracking
+	globalReqID := uuid.New().String()
+	ctx = reservations.WithGlobalRequestID(ctx, globalReqID)
 	logger := LoggerFromContext(ctx).WithValues("reservation", req.Name, "namespace", req.Namespace)
-	logger.V(1).Info("reconciling failover reservation")
+	logger.Info("reconciling failover reservation", "reservation", req.Name)
 
 	// Fetch the reservation
 	var res v1alpha1.Reservation
@@ -190,7 +192,7 @@ func (c *FailoverReservationController) validateReservation(ctx context.Context,
 	logger.V(1).Info("validating reservation", "host", reservationHost, "vmCount", len(allocations))
 
 	for vmUUID, vmCurrentHost := range allocations {
-		vmCtx := WithRequestID(ctx, vmUUID)
+		vmCtx := reservations.WithRequestID(ctx, vmUUID)
 		vmLogger := LoggerFromContext(vmCtx).WithValues("vmUUID", vmUUID, "reservationName", res.Name)
 
 		vm, err := c.VMSource.GetVM(vmCtx, vmUUID)
@@ -229,8 +231,8 @@ func (c *FailoverReservationController) validateReservation(ctx context.Context,
 // TODO consider moving Step 3-5 (particularly) to the watch-based reconciliation
 func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (ctrl.Result, error) {
 	c.reconcileCount++
-	globalRequestID := fmt.Sprintf("periodic-%d", c.reconcileCount)
-	ctx = WithGlobalRequestID(ctx, globalRequestID)
+	globalReqID := uuid.New().String()
+	ctx = reservations.WithGlobalRequestID(ctx, globalReqID)
 	logger := LoggerFromContext(ctx)
 
 	logger.Info("running periodic reconciliation", "reconcileCount", c.reconcileCount)
@@ -562,8 +564,10 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 		vmCreated := 0
 		vmFailed := 0
 
-		vmCtx := WithRequestID(ctx, need.VM.UUID)
+		reqID := uuid.New().String()
+		vmCtx := reservations.WithRequestID(ctx, reqID)
 		vmLogger := LoggerFromContext(vmCtx).WithValues("vmUUID", need.VM.UUID)
+		vmLogger.Info("processing VM for failover reservation")
 
 		for i := range need.Count {
 			reusedRes := c.tryReuseExistingReservation(vmCtx, need.VM, failoverReservations, allHypervisors)

@@ -37,8 +37,8 @@ func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.Exte
 	result := s.IncludeAllHostsFromRequest(request)
 	domainName, err := request.Spec.Data.GetSchedulerHintStr("domain_name")
 	if err != nil {
-		traceLog.Error("failed to get domain_name scheduler hint", "error", err)
-		return nil, err
+		traceLog.Info("domain_name scheduler hint not found, skipping filter", "error", err)
+		return result, nil
 	}
 	if slices.Contains(s.Options.CustomerIgnoredDomainNames, domainName) {
 		traceLog.Info("domain is no external customer domain, skipping filter", "domain", domainName)

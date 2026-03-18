@@ -21,39 +21,11 @@ const DefaultHTTPTimeout = 30 * time.Second
 
 var log = logf.Log.WithName("scheduler-client").WithValues("module", "reservations")
 
-// Context keys for request tracking (same as failover package)
-type contextKey string
-
-const (
-	globalRequestIDKey contextKey = "globalRequestID"
-	requestIDKey       contextKey = "requestID"
-)
-
-// globalRequestIDFromContext retrieves the global request ID from the context.
-func globalRequestIDFromContext(ctx context.Context) string {
-	if v := ctx.Value(globalRequestIDKey); v != nil {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	return ""
-}
-
-// requestIDFromContext retrieves the request ID from the context.
-func requestIDFromContext(ctx context.Context) string {
-	if v := ctx.Value(requestIDKey); v != nil {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	return ""
-}
-
 // loggerFromContext returns a logger with greq and req values from the context.
 func loggerFromContext(ctx context.Context) logr.Logger {
 	return log.WithValues(
-		"greq", globalRequestIDFromContext(ctx),
-		"req", requestIDFromContext(ctx),
+		"greq", GlobalRequestIDFromContext(ctx),
+		"req", RequestIDFromContext(ctx),
 	)
 }
 
@@ -129,12 +101,22 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 		ignoreHosts = &req.IgnoreHosts
 	}
 
+	// Build the context with request IDs
+	var globalReqID *string
+	if greq := GlobalRequestIDFromContext(ctx); greq != "" {
+		globalReqID = &greq
+	}
+
 	// Build the external scheduler request
 	externalSchedulerRequest := api.ExternalSchedulerRequest{
 		Reservation: true,
 		Pipeline:    req.Pipeline,
 		Hosts:       req.EligibleHosts,
 		Weights:     weights,
+		Context: api.NovaRequestContext{
+			RequestID:       RequestIDFromContext(ctx),
+			GlobalRequestID: globalReqID,
+		},
 		Spec: api.NovaObject[api.NovaSpec]{
 			Data: api.NovaSpec{
 				InstanceUUID:     req.InstanceUUID,
@@ -142,6 +124,7 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 				ProjectID:        req.ProjectID,
 				AvailabilityZone: req.AvailabilityZone,
 				IgnoreHosts:      ignoreHosts,
+				SchedulerHints:   make(map[string]any), // Initialize to empty map for consistent behavior
 				Flavor: api.NovaObject[api.NovaFlavor]{
 					Data: api.NovaFlavor{
 						Name:       req.FlavorName,
