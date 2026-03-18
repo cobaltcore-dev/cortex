@@ -234,7 +234,8 @@ func (c *Client) clusterForWrite(gvk schema.GroupVersionKind, obj any) (cluster.
 	return nil, fmt.Errorf("no cluster matched for GVK %s", gvk)
 }
 
-// Get iterates over all clusters with the GVK and returns the first result found.
+// Get iterates over all clusters with the GVK and returns the result.
+// Returns an error if the resource is found in multiple clusters (duplicate).
 // If no cluster has the resource, the last NotFound error is returned.
 func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	gvk, err := c.GVKFromHomeScheme(obj)
@@ -245,21 +246,38 @@ func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Objec
 	if err != nil {
 		return err
 	}
-	var lastErr error
+	found := false
 	for _, cl := range clusters {
+		// If we already found the resource in a previous cluster, we want to check if it also exists in this cluster to detect duplicates.
+		if found {
+			candidate := obj.DeepCopyObject().(client.Object)
+			err := cl.GetClient().Get(ctx, key, candidate, opts...)
+			if err == nil {
+				return fmt.Errorf("duplicate resource found: %s %s/%s exists in multiple clusters", gvk, key.Namespace, key.Name)
+			}
+			if !apierrors.IsNotFound(err) {
+				return err
+			}
+			continue
+		}
+
 		err := cl.GetClient().Get(ctx, key, obj, opts...)
 		if err == nil {
-			return nil
+			found = true
+			continue
 		}
 		if !apierrors.IsNotFound(err) {
 			return err
 		}
-		lastErr = err
 	}
-	return lastErr
+	if !found {
+		return apierrors.NewNotFound(schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind}, key.Name)
+	}
+	return nil
 }
 
 // List iterates over all clusters with the GVK and returns a combined list.
+// Returns an error if any resources share the same namespace/name across clusters.
 func (c *Client) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	gvk, err := c.GVKFromHomeScheme(list)
 	if err != nil {
@@ -282,6 +300,26 @@ func (c *Client) List(ctx context.Context, list client.ObjectList, opts ...clien
 		}
 		allItems = append(allItems, items...)
 	}
+
+	// Check for duplicate namespace/name pairs across clusters.
+	seen := make(map[string]bool, len(allItems))
+	var duplicates []string
+	for _, item := range allItems {
+		accessor, err := meta.Accessor(item)
+		if err != nil {
+			return fmt.Errorf("failed to access object metadata: %w", err)
+		}
+		key := accessor.GetNamespace() + "/" + accessor.GetName()
+		if _, exists := seen[key]; exists {
+			duplicates = append(duplicates, key)
+			continue
+		}
+		seen[key] = true
+	}
+	if len(duplicates) > 0 {
+		return fmt.Errorf("duplicate resources found in multiple clusters for %s: %v", gvk, duplicates)
+	}
+
 	return meta.SetList(list, allItems)
 }
 
@@ -452,7 +490,8 @@ type subResourceClient struct {
 	subResource        string
 }
 
-// Get iterates over all clusters with the GVK and returns the first result found.
+// Get iterates over all clusters with the GVK and returns the result.
+// Returns an error if the resource is found in multiple clusters (duplicate).
 func (c *subResourceClient) Get(ctx context.Context, obj, subResource client.Object, opts ...client.SubResourceGetOption) error {
 	gvk, err := c.multiclusterClient.GVKFromHomeScheme(obj)
 	if err != nil {
@@ -462,18 +501,35 @@ func (c *subResourceClient) Get(ctx context.Context, obj, subResource client.Obj
 	if err != nil {
 		return err
 	}
-	var lastErr error
+
+	found := false
 	for _, cl := range clusters {
+		if found {
+			candidateObj := obj.DeepCopyObject().(client.Object)
+			candidateSub := subResource.DeepCopyObject().(client.Object)
+			err := cl.GetClient().SubResource(c.subResource).Get(ctx, candidateObj, candidateSub, opts...)
+			if err == nil {
+				return fmt.Errorf("duplicate sub-resource found: %s %s/%s exists in multiple clusters", gvk, obj.GetNamespace(), obj.GetName())
+			}
+			if !apierrors.IsNotFound(err) {
+				return err
+			}
+			continue
+		}
+
 		err := cl.GetClient().SubResource(c.subResource).Get(ctx, obj, subResource, opts...)
 		if err == nil {
-			return nil
+			found = true
+			continue
 		}
 		if !apierrors.IsNotFound(err) {
 			return err
 		}
-		lastErr = err
 	}
-	return lastErr
+	if !found {
+		return apierrors.NewNotFound(schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind}, obj.GetName())
+	}
+	return nil
 }
 
 // Create routes the subresource create to the matching cluster using the ResourceRouter.

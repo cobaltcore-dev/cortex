@@ -5,6 +5,7 @@ package multicluster
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 
@@ -545,8 +546,8 @@ func TestClient_Get_SingleRemoteCluster(t *testing.T) {
 	}
 }
 
-func TestClient_Get_MultiCluster_FirstFound(t *testing.T) {
-	// Iterate all remote clusters and return the first found object. In this test, only remote2 has the object, so it should be returned.
+func TestClient_Get_MultiCluster_SingleResult(t *testing.T) {
+	// Iterate all remote clusters and return the object. In this test, only remote2 has the object, so it should be returned.
 
 	scheme := newTestScheme(t)
 	existingCM := &corev1.ConfigMap{
@@ -640,6 +641,66 @@ func TestClient_Get_HomeGVKCluster(t *testing.T) {
 	}
 	if cm.Data["key"] != "from-home" {
 		t.Errorf("expected 'from-home', got '%s'", cm.Data["key"])
+	}
+}
+
+func TestClient_Get_MultiCluster_DuplicateError(t *testing.T) {
+	// If the same resource exists in multiple remote clusters, Get should return a duplicate error.
+	scheme := newTestScheme(t)
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "shared-cm", Namespace: "default"},
+		Data:       map[string]string{"key": "value"},
+	}
+	remote1 := newFakeCluster(scheme, cm.DeepCopy())
+	remote2 := newFakeCluster(scheme, cm.DeepCopy())
+
+	c := &Client{
+		HomeCluster: newFakeCluster(scheme),
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {
+				{cluster: remote1, labels: map[string]string{"az": "az-1"}},
+				{cluster: remote2, labels: map[string]string{"az": "az-2"}},
+			},
+		},
+	}
+
+	result := &corev1.ConfigMap{}
+	err := c.Get(context.Background(), client.ObjectKey{Name: "shared-cm", Namespace: "default"}, result)
+	if err == nil {
+		t.Fatal("expected duplicate error, got nil")
+	}
+	if !strings.Contains(err.Error(), "duplicate") {
+		t.Errorf("expected duplicate error, got: %v", err)
+	}
+}
+
+func TestClient_Get_HomeAndRemote_DuplicateError(t *testing.T) {
+	// If the same resource exists in both home and a remote cluster, Get should return a duplicate error.
+	scheme := newTestScheme(t)
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "shared-cm", Namespace: "default"},
+		Data:       map[string]string{"key": "value"},
+	}
+	homeCluster := newFakeCluster(scheme, cm.DeepCopy())
+	remote := newFakeCluster(scheme, cm.DeepCopy())
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {{cluster: remote, labels: map[string]string{"az": "az-1"}}},
+		},
+		homeGVKs: map[schema.GroupVersionKind]bool{configMapGVK: true},
+	}
+
+	result := &corev1.ConfigMap{}
+	err := c.Get(context.Background(), client.ObjectKey{Name: "shared-cm", Namespace: "default"}, result)
+	if err == nil {
+		t.Fatal("expected duplicate error, got nil")
+	}
+	if !strings.Contains(err.Error(), "duplicate") {
+		t.Errorf("expected duplicate error, got: %v", err)
 	}
 }
 
@@ -746,6 +807,69 @@ func TestClient_List_HomeClusterOnly(t *testing.T) {
 	}
 	if len(cmList.Items) != 1 {
 		t.Errorf("expected 1 item, got %d", len(cmList.Items))
+	}
+}
+
+func TestClient_List_MultipleClusters_DuplicateError(t *testing.T) {
+	// If the same namespace/name exists in multiple remote clusters, List should return a duplicate error.
+	scheme := newTestScheme(t)
+	remote1 := newFakeCluster(scheme,
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "shared-cm", Namespace: "default"}},
+	)
+	remote2 := newFakeCluster(scheme,
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "shared-cm", Namespace: "default"}},
+	)
+
+	c := &Client{
+		HomeCluster: newFakeCluster(scheme),
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapListGVK: {
+				{cluster: remote1, labels: map[string]string{"az": "az-1"}},
+				{cluster: remote2, labels: map[string]string{"az": "az-2"}},
+			},
+		},
+	}
+
+	cmList := &corev1.ConfigMapList{}
+	err := c.List(context.Background(), cmList, client.InNamespace("default"))
+	if err == nil {
+		t.Fatal("expected duplicate error, got nil")
+	}
+	if !strings.Contains(err.Error(), "duplicate") {
+		t.Errorf("expected duplicate error, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "default/shared-cm") {
+		t.Errorf("expected error to contain duplicated resource name, got: %v", err)
+	}
+}
+
+func TestClient_List_HomeAndRemote_DuplicateError(t *testing.T) {
+	// If the same namespace/name exists in both home and remote, List should return a duplicate error.
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme,
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "shared-cm", Namespace: "default"}},
+	)
+	remote := newFakeCluster(scheme,
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "shared-cm", Namespace: "default"}},
+	)
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapListGVK: {{cluster: remote, labels: map[string]string{"az": "az-1"}}},
+		},
+		homeGVKs: map[schema.GroupVersionKind]bool{configMapListGVK: true},
+	}
+
+	cmList := &corev1.ConfigMapList{}
+	err := c.List(context.Background(), cmList, client.InNamespace("default"))
+	if err == nil {
+		t.Fatal("expected duplicate error, got nil")
+	}
+	if !strings.Contains(err.Error(), "duplicate") {
+		t.Errorf("expected duplicate error, got: %v", err)
 	}
 }
 
