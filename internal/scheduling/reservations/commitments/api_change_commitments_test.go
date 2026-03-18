@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -755,6 +756,7 @@ type CommitmentTestEnv struct {
 	API                *HTTPAPI
 	availableResources map[string]int64 // host -> available memory MB
 	processedReserv    map[string]bool  // track processed reservations
+	mu                 sync.Mutex       // protects availableResources and processedReserv
 }
 
 // FakeReservationController simulates synchronous reservation controller.
@@ -767,6 +769,10 @@ func (c *FakeReservationController) OnReservationCreated(res *v1alpha1.Reservati
 }
 
 func (c *FakeReservationController) OnReservationDeleted(res *v1alpha1.Reservation) {
+	c.env.mu.Lock()
+	defer c.env.mu.Unlock()
+
+	// Return memory when Delete() is called directly (before deletion timestamp is set)
 	if c.env.availableResources != nil && res.Status.Host != "" {
 		memoryQuantity := res.Spec.Resources["memory"]
 		memoryBytes := memoryQuantity.Value()
@@ -774,7 +780,7 @@ func (c *FakeReservationController) OnReservationDeleted(res *v1alpha1.Reservati
 
 		if _, exists := c.env.availableResources[res.Status.Host]; exists {
 			c.env.availableResources[res.Status.Host] += memoryMB
-			c.env.T.Logf("↩ Returned %d MB to %s (now %d MB available) before deleting reservation %s",
+			c.env.T.Logf("↩ Returned %d MB to %s (now %d MB available) via OnReservationDeleted for %s",
 				memoryMB, res.Status.Host, c.env.availableResources[res.Status.Host], res.Name)
 		}
 	}
@@ -1038,6 +1044,7 @@ func (env *CommitmentTestEnv) processReservations() {
 		if !res.DeletionTimestamp.IsZero() {
 			env.T.Logf("Processing deletion for reservation %s (host: %s)", res.Name, res.Status.Host)
 
+			env.mu.Lock()
 			// Return memory to host if resource tracking is enabled
 			if env.availableResources != nil {
 				env.T.Logf("Resource tracking enabled, returning memory for %s", res.Name)
@@ -1049,6 +1056,7 @@ func (env *CommitmentTestEnv) processReservations() {
 
 				// Check if host exists in our tracking
 				if _, exists := env.availableResources[res.Status.Host]; !exists {
+					env.mu.Unlock()
 					env.T.Fatalf("Host %s not found in available resources for reservation %s - this indicates an inconsistency",
 						res.Status.Host, res.Name)
 				}
@@ -1060,6 +1068,10 @@ func (env *CommitmentTestEnv) processReservations() {
 			} else {
 				env.T.Logf("Resource tracking NOT enabled for %s", res.Name)
 			}
+
+			// Clear tracking so recreated reservations with same name are processed
+			delete(env.processedReserv, res.Name)
+			env.mu.Unlock()
 
 			// Remove finalizers to allow deletion
 			if len(res.Finalizers) > 0 {
@@ -1077,8 +1089,12 @@ func (env *CommitmentTestEnv) processReservations() {
 			continue
 		}
 
+		env.mu.Lock()
+		alreadyProcessed := env.processedReserv[res.Name]
+		env.mu.Unlock()
+
 		// Skip if already tracked as processed
-		if env.processedReserv[res.Name] {
+		if alreadyProcessed {
 			continue
 		}
 
@@ -1100,6 +1116,9 @@ func (env *CommitmentTestEnv) hasCondition(res *v1alpha1.Reservation) bool {
 // processNewReservation implements first-come-first-serve scheduling based on available resources.
 // It tries to find a host with enough memory capacity and assigns the reservation to that host.
 func (env *CommitmentTestEnv) processNewReservation(res *v1alpha1.Reservation) {
+	env.mu.Lock()
+	defer env.mu.Unlock()
+
 	env.processedReserv[res.Name] = true
 
 	// If no available resources configured, accept all reservations without host assignment
@@ -1114,9 +1133,16 @@ func (env *CommitmentTestEnv) processNewReservation(res *v1alpha1.Reservation) {
 	memoryMB := memoryBytes / (1024 * 1024)
 
 	// First-come-first-serve: find first host with enough capacity
+	// Sort hosts to ensure deterministic behavior (Go map iteration is random)
+	hosts := make([]string, 0, len(env.availableResources))
+	for host := range env.availableResources {
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+
 	var selectedHost string
-	for host, availableMB := range env.availableResources {
-		if availableMB >= memoryMB {
+	for _, host := range hosts {
+		if env.availableResources[host] >= memoryMB {
 			selectedHost = host
 			break
 		}

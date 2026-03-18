@@ -18,7 +18,6 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -323,14 +322,9 @@ func watchReservationsUntilReady(
 
 			if err := k8sClient.Get(ctx, nn, &current); err != nil {
 				allChecked = false
-				if apierrors.IsNotFound(err) {
-					// Reservation is still in process of being created, continue waiting for it
-					stillWaiting = append(stillWaiting, res)
-					continue
-				}
-				// remove reservation from waiting
-				failedReservations = append(failedReservations, res)
-				errors = append(errors, fmt.Errorf("failed to get reservation %s: %w", res.Name, err))
+				// Reservation is still in process of being created, or there is a transient error, continue waiting for it
+				log.V(1).Info("transient error getting reservation, will retry", "reservation", res.Name, "error", err)
+				stillWaiting = append(stillWaiting, res)
 				continue
 			}
 
@@ -359,7 +353,7 @@ func watchReservationsUntilReady(
 			}
 		}
 
-		if allChecked {
+		if allChecked || len(stillWaiting) == 0 {
 			log.Info("all reservations checked",
 				"failed", len(failedReservations))
 			return failedReservations, errors
