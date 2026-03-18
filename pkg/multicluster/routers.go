@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // ResourceRouter determines which remote cluster a resource should be written to
@@ -32,7 +33,7 @@ func (h HypervisorResourceRouter) Match(obj any, labels map[string]string) (bool
 	if !ok {
 		return false, errors.New("cluster does not have availability zone label")
 	}
-	hvAZ, ok := hv.Labels["topology.kubernetes.io/zone"]
+	hvAZ, ok := hv.Labels[corev1.LabelTopologyZone]
 	if !ok {
 		return false, errors.New("hypervisor does not have availability zone label")
 	}
