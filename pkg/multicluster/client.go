@@ -236,7 +236,9 @@ func (c *Client) clusterForWrite(gvk schema.GroupVersionKind, obj any) (cluster.
 
 // Get iterates over all clusters with the GVK and returns the result.
 // Returns an error if the resource is found in multiple clusters (duplicate).
-// If no cluster has the resource, the last NotFound error is returned.
+// If no cluster has the resource, a NotFound error is returned.
+// Non-NotFound errors from individual clusters are logged and silently skipped
+// so that a single unavailable cluster does not block the entire read path.
 func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	log := ctrl.LoggerFrom(ctx)
 	gvk, err := c.GVKFromHomeScheme(obj)
@@ -279,7 +281,10 @@ func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Objec
 
 // List iterates over all clusters with the GVK and returns a combined list.
 // Returns an error if any resources share the same namespace/name across clusters.
+// Errors from individual clusters are logged and silently skipped so that a
+// single unavailable cluster does not block the entire read path.
 func (c *Client) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	log := ctrl.LoggerFrom(ctx)
 	gvk, err := c.GVKFromHomeScheme(list)
 	if err != nil {
 		return err
@@ -293,7 +298,8 @@ func (c *Client) List(ctx context.Context, list client.ObjectList, opts ...clien
 	for _, cl := range clusters {
 		listCopy := list.DeepCopyObject().(client.ObjectList)
 		if err := cl.GetClient().List(ctx, listCopy, opts...); err != nil {
-			return err
+			log.Error(err, "error listing resources from cluster", "gvk", gvk)
+			continue
 		}
 		items, err := meta.ExtractList(listCopy)
 		if err != nil {
