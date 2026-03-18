@@ -15,7 +15,11 @@ spec:
     Specifically, this pipeline is used for general purpose workloads.
   type: filter-weigher
   createDecisions: true
-  filters: []
+  filters:
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -61,7 +65,11 @@ spec:
     Specifically, this pipeline is used for hana virtual machines.
   type: filter-weigher
   createDecisions: true
-  filters: []
+  filters:
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
