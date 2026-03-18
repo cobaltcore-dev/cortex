@@ -13,7 +13,6 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -23,7 +22,7 @@ type KVMBinpackStepOpts struct {
 	// node's resource utilizations after placing the VM.
 	// If a resource is not specified, is ignored in the score calculation
 	// (equivalent to a weight of 0).
-	ResourceWeights map[corev1.ResourceName]float64 `json:"resourceWeights"`
+	ResourceWeights map[hv1.ResourceName]float64 `json:"resourceWeights"`
 }
 
 // Validate the options to ensure they are correct before running the weigher.
@@ -31,9 +30,9 @@ func (o KVMBinpackStepOpts) Validate() error {
 	if len(o.ResourceWeights) == 0 {
 		return errors.New("at least one resource weight must be specified")
 	}
-	supportedResources := []corev1.ResourceName{
-		corev1.ResourceMemory,
-		corev1.ResourceCPU,
+	supportedResources := []hv1.ResourceName{
+		hv1.ResourceMemory,
+		hv1.ResourceCPU,
 	}
 	for resourceName, value := range o.ResourceWeights {
 		if !slices.Contains(supportedResources, resourceName) {
@@ -94,18 +93,19 @@ func (s *KVMBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSchedule
 		var totalWeightedUtilization, totalWeight float64
 
 		for resourceName, weight := range s.Options.ResourceWeights {
-			capacity, ok := hv.Status.Capacity[resourceName.String()]
+			// Effective capacity = capacity * overcommit ratio.
+			capacity, ok := hv.Status.EffectiveCapacity[resourceName]
 			if !ok {
-				traceLog.Warn("no capacity in status, skipping",
+				traceLog.Warn("no effective capacity in status, skipping",
 					"host", host, "resource", resourceName)
 				continue
 			}
 			if capacity.IsZero() {
-				traceLog.Warn("capacity is zero, skipping",
+				traceLog.Warn("effective capacity is zero, skipping",
 					"host", host, "resource", resourceName)
 				continue
 			}
-			allocation, ok := hv.Status.Allocation[resourceName.String()]
+			allocation, ok := hv.Status.Allocation[resourceName]
 			if !ok {
 				traceLog.Warn("no allocation in status, skipping",
 					"host", host, "resource", resourceName)
@@ -138,15 +138,15 @@ func (s *KVMBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSchedule
 }
 
 // calcVMResources calculates the total resource requests for the VM to be scheduled.
-func (s *KVMBinpackStep) calcVMResources(req api.ExternalSchedulerRequest) map[corev1.ResourceName]resource.Quantity {
-	resources := make(map[corev1.ResourceName]resource.Quantity)
+func (s *KVMBinpackStep) calcVMResources(req api.ExternalSchedulerRequest) map[hv1.ResourceName]resource.Quantity {
+	resources := make(map[hv1.ResourceName]resource.Quantity)
 	resourcesMemBytes := int64(req.Spec.Data.Flavor.Data.MemoryMB * 1_000_000) //nolint:gosec // memory values are bounded by Nova
 	resourcesMemBytes *= int64(req.Spec.Data.NumInstances)                     //nolint:gosec // instance count is bounded by Nova
-	resources[corev1.ResourceMemory] = *resource.
+	resources[hv1.ResourceMemory] = *resource.
 		NewQuantity(resourcesMemBytes, resource.DecimalSI)
 	resourcesCPU := int64(req.Spec.Data.Flavor.Data.VCPUs) //nolint:gosec // vCPU values are bounded by Nova
 	resourcesCPU *= int64(req.Spec.Data.NumInstances)      //nolint:gosec // instance count is bounded by Nova
-	resources[corev1.ResourceCPU] = *resource.
+	resources[hv1.ResourceCPU] = *resource.
 		NewQuantity(resourcesCPU, resource.DecimalSI)
 	return resources
 }

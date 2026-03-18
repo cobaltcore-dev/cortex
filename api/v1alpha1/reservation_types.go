@@ -4,6 +4,7 @@
 package v1alpha1
 
 import (
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -44,7 +45,7 @@ type CommittedResourceAllocation struct {
 
 	// Resources consumed by this instance.
 	// +kubebuilder:validation:Required
-	Resources map[string]resource.Quantity `json:"resources"`
+	Resources map[hv1.ResourceName]resource.Quantity `json:"resources"`
 }
 
 // CommittedResourceReservationSpec defines the spec fields specific to committed resource reservations.
@@ -99,7 +100,7 @@ type ReservationSpec struct {
 
 	// Resources to reserve for this instance.
 	// +kubebuilder:validation:Optional
-	Resources map[string]resource.Quantity `json:"resources,omitempty"`
+	Resources map[hv1.ResourceName]resource.Quantity `json:"resources,omitempty"`
 
 	// StartTime is the time when the reservation becomes active.
 	// +kubebuilder:validation:Optional

@@ -9,6 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -64,7 +65,7 @@ func TestApplyCommitmentState_CreatesNewReservations(t *testing.T) {
 	// Verify created reservations sum to desired state
 	totalMemory := int64(0)
 	for _, res := range touched {
-		memQuantity := res.Spec.Resources["memory"]
+		memQuantity := res.Spec.Resources[hv1.ResourceMemory]
 		totalMemory += memQuantity.Value()
 	}
 
@@ -89,8 +90,8 @@ func TestApplyCommitmentState_DeletesExcessReservations(t *testing.T) {
 				},
 			},
 			Spec: v1alpha1.ReservationSpec{
-				Resources: map[string]resource.Quantity{
-					"memory": *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
+				Resources: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
 				},
 				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 					ProjectID:     "project-1",
@@ -108,8 +109,8 @@ func TestApplyCommitmentState_DeletesExcessReservations(t *testing.T) {
 				},
 			},
 			Spec: v1alpha1.ReservationSpec{
-				Resources: map[string]resource.Quantity{
-					"memory": *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
+				Resources: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
 				},
 				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 					ProjectID:     "project-1",
@@ -168,7 +169,7 @@ func TestApplyCommitmentState_DeletesExcessReservations(t *testing.T) {
 
 	totalMemory := int64(0)
 	for _, res := range remainingList.Items {
-		memQuantity := res.Spec.Resources["memory"]
+		memQuantity := res.Spec.Resources[hv1.ResourceMemory]
 		totalMemory += memQuantity.Value()
 	}
 
@@ -193,8 +194,8 @@ func TestApplyCommitmentState_PreservesAllocatedReservations(t *testing.T) {
 				},
 			},
 			Spec: v1alpha1.ReservationSpec{
-				Resources: map[string]resource.Quantity{
-					"memory": *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
+				Resources: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
 				},
 				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 					ProjectID:     "project-1",
@@ -214,8 +215,8 @@ func TestApplyCommitmentState_PreservesAllocatedReservations(t *testing.T) {
 				},
 			},
 			Spec: v1alpha1.ReservationSpec{
-				Resources: map[string]resource.Quantity{
-					"memory": *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
+				Resources: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
 				},
 				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 					ProjectID:     "project-1",
@@ -299,8 +300,8 @@ func TestApplyCommitmentState_HandlesZeroCapacity(t *testing.T) {
 			},
 		},
 		Spec: v1alpha1.ReservationSpec{
-			Resources: map[string]resource.Quantity{
-				"memory": *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
 			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 				ProjectID:     "project-1",
@@ -377,8 +378,8 @@ func TestApplyCommitmentState_FixesWrongFlavorGroup(t *testing.T) {
 			},
 		},
 		Spec: v1alpha1.ReservationSpec{
-			Resources: map[string]resource.Quantity{
-				"memory": *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
 			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 				ProjectID:     "project-1",
@@ -530,7 +531,7 @@ func TestNewReservation_SelectsAppropriateFlavor(t *testing.T) {
 			}
 
 			// Verify CPU allocation
-			cpuQuantity := reservation.Spec.Resources["cpu"]
+			cpuQuantity := reservation.Spec.Resources[hv1.ResourceCPU]
 			if cpuQuantity.Value() != tt.expectedCores {
 				t.Errorf("expected %d cores, got %d",
 					tt.expectedCores, cpuQuantity.Value())
