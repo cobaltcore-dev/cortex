@@ -22,7 +22,7 @@ const (
 
 	// PipelineNewFailoverReservation is used to find a host for creating a new reservation.
 	// It validates host compatibility AND checks capacity.
-	PipelineNewFailoverReservation = "kvm-general-purpose-load-balancing-all-filters-enabled"
+	PipelineNewFailoverReservation = "kvm-new-failover-reservation"
 
 	// PipelineAcknowledgeFailoverReservation is used to validate that a failover reservation
 	// is still valid for all its allocated VMs. It sends an evacuation-style scheduling request
