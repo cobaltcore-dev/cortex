@@ -219,7 +219,7 @@ func (c *Client) clusterForWrite(gvk schema.GroupVersionKind, obj any) (cluster.
 		for _, r := range remotes {
 			match, err := router.Match(obj, r.labels)
 			if err != nil {
-				return nil, fmt.Errorf("ResourceRouter match error for GVK %s: %w", gvk, err)
+				return nil, fmt.Errorf("resource router match error for GVK %s: %w", gvk, err)
 			}
 			if match {
 				return r.cluster, nil
