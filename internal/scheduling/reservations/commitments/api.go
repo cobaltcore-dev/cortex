@@ -31,9 +31,9 @@ func NewAPIWithConfig(client client.Client, config Config) *HTTPAPI {
 }
 
 func (api *HTTPAPI) Init(mux *http.ServeMux) {
-	mux.HandleFunc("/v1/change-commitments", api.HandleChangeCommitments)
+	mux.HandleFunc("/v1/commitments/change-commitments", api.HandleChangeCommitments)
 	// mux.HandleFunc("/v1/report-capacity", api.HandleReportCapacity)
-	mux.HandleFunc("/v1/info", api.HandleInfo)
+	mux.HandleFunc("/v1/commitments/info", api.HandleInfo)
 }
 
 var commitmentApiLog = ctrl.Log.WithName("commitment_api")

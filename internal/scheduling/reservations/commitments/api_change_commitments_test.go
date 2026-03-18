@@ -992,7 +992,7 @@ func (env *CommitmentTestEnv) CallChangeCommitmentsAPI(reqJSON string) (resp liq
 	}()
 
 	// Make HTTP request
-	url := env.HTTPServer.URL + "/v1/change-commitments"
+	url := env.HTTPServer.URL + "/v1/commitments/change-commitments"
 	httpResp, err := http.Post(url, "application/json", bytes.NewReader([]byte(reqJSON))) //nolint:gosec,noctx // test server URL, not user input
 	if err != nil {
 		cancel()
