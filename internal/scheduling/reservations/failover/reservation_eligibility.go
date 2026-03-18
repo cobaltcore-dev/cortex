@@ -5,6 +5,7 @@ package failover
 
 import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 // DependencyGraph encapsulates the data structures needed for eligibility checking.
@@ -215,7 +216,7 @@ func IsVMEligibleForReservation(vm VM, reservation v1alpha1.Reservation, allFail
 func doesVMFitInReservation(vm VM, reservation v1alpha1.Reservation) bool {
 	// Check memory: VM's memory must be <= reservation's memory
 	if vmMemory, ok := vm.Resources["memory"]; ok {
-		if resMemory, ok := reservation.Spec.Resources["memory"]; ok {
+		if resMemory, ok := reservation.Spec.Resources[hv1.ResourceMemory]; ok {
 			if vmMemory.Cmp(resMemory) > 0 {
 				return false // VM memory exceeds reservation memory
 			}
@@ -227,7 +228,7 @@ func doesVMFitInReservation(vm VM, reservation v1alpha1.Reservation) bool {
 	// Check CPU: VM's vcpus must be <= reservation's cpu
 	// Note: VM uses "vcpus" key, but reservations use "cpu" as the canonical key.
 	if vmVCPUs, ok := vm.Resources["vcpus"]; ok {
-		if resCPU, ok := reservation.Spec.Resources["cpu"]; ok {
+		if resCPU, ok := reservation.Spec.Resources[hv1.ResourceCPU]; ok {
 			if vmVCPUs.Cmp(resCPU) > 0 {
 				return false // VM vcpus exceeds reservation cpu
 			}

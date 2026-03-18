@@ -56,7 +56,7 @@ type FailoverConfig struct {
 func DefaultConfig() FailoverConfig {
 	return FailoverConfig{
 		FlavorFailoverRequirements: map[string]int{"*": 2}, // by default all VMs get 2 failover reservations
-		ReconcileInterval:          5 * time.Second,
+		ReconcileInterval:          30 * time.Second,
 		ShortReconcileInterval:     100 * time.Millisecond,
 		Creator:                    "cortex-failover-controller",
 		DatasourceName:             "nova-servers", // we have the server and flavor data source (both store in same postgres and same secret but still)

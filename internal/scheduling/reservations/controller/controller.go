@@ -31,6 +31,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -186,7 +187,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Convert resource.Quantity to integers for the API
 	var memoryMB uint64
-	if memory, ok := res.Spec.Resources["memory"]; ok {
+	if memory, ok := res.Spec.Resources[hv1.ResourceMemory]; ok {
 		memoryValue := memory.ScaledValue(resource.Mega)
 		if memoryValue < 0 {
 			return ctrl.Result{}, fmt.Errorf("invalid memory value: %d", memoryValue)
@@ -195,7 +196,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	var cpu uint64
-	if cpuQuantity, ok := res.Spec.Resources["cpu"]; ok {
+	if cpuQuantity, ok := res.Spec.Resources[hv1.ResourceCPU]; ok {
 		cpuValue := cpuQuantity.ScaledValue(resource.Milli)
 		if cpuValue < 0 {
 			return ctrl.Result{}, fmt.Errorf("invalid cpu value: %d", cpuValue)

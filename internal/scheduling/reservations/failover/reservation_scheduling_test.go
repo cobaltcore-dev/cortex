@@ -171,7 +171,7 @@ func TestBuildNewFailoverReservation(t *testing.T) {
 			// Note: VM uses "vcpus" but reservation uses "cpu" as the canonical key
 			if tt.vm.Resources != nil {
 				if memory, ok := tt.vm.Resources["memory"]; ok {
-					if resMemory, ok := result.Spec.Resources["memory"]; !ok {
+					if resMemory, ok := result.Spec.Resources[hv1.ResourceMemory]; !ok {
 						t.Error("reservation missing memory resource")
 					} else if !memory.Equal(resMemory) {
 						t.Errorf("memory resource = %v, want %v", resMemory, memory)
@@ -179,7 +179,7 @@ func TestBuildNewFailoverReservation(t *testing.T) {
 				}
 				if vcpus, ok := tt.vm.Resources["vcpus"]; ok {
 					// VM uses "vcpus" but reservation should use "cpu"
-					if resCPU, ok := result.Spec.Resources["cpu"]; !ok {
+					if resCPU, ok := result.Spec.Resources[hv1.ResourceCPU]; !ok {
 						t.Error("reservation missing cpu resource")
 					} else if !vcpus.Equal(resCPU) {
 						t.Errorf("cpu resource = %v, want %v", resCPU, vcpus)

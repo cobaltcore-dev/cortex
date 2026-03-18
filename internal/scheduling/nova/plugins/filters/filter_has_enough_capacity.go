@@ -191,7 +191,6 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		// Block the calculated resources on each host
 		for host := range hostsToBlock {
 			// Skip hosts that don't have a corresponding Hypervisor resource.
-			// This can happen if a reservation references a host that was removed.
 			if _, hostExists := freeResourcesByHost[host]; !hostExists {
 				traceLog.Debug("skipping reservation for unknown host",
 					"reservation", reservation.Name,

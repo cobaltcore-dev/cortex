@@ -127,15 +127,15 @@ func (s *DBVMSource) ListVMs(ctx context.Context) ([]VM, error) {
 		})
 	}
 
-	// Log filtering statistics
-	log.Info("ListVMs filtering statistics",
+	// Log filtering statistics at debug level (verbose)
+	log.V(1).Info("ListVMs filtering statistics",
 		"totalServersInDB", len(servers),
 		"skippedNoHost", skippedNoHost,
 		"skippedUnknownFlavor", skippedUnknownFlavor,
 		"totalFlavorsInDB", len(flavors),
 		"returnedVMs", len(vms))
 	if len(unknownFlavors) > 0 {
-		log.Info("ListVMs unknown flavors", "unknownFlavors", unknownFlavors)
+		log.V(1).Info("ListVMs unknown flavors", "unknownFlavors", unknownFlavors)
 	}
 
 	return vms, nil
@@ -234,7 +234,7 @@ func (s *DBVMSource) ListVMsOnHypervisors(
 	if trustHypervisorLocation {
 		// Use hypervisor CRD as source of truth for VM location
 		result := buildVMsFromHypervisors(hypervisorList, vms)
-		log.Info("built VMs from hypervisor instances (TrustHypervisorLocation=true)",
+		log.V(1).Info("built VMs from hypervisor instances (TrustHypervisorLocation=true)",
 			"count", len(result),
 			"knownHypervisors", len(hypervisorList.Items))
 		return result, nil
@@ -242,7 +242,7 @@ func (s *DBVMSource) ListVMsOnHypervisors(
 
 	// Use postgres as source of truth, but filter to VMs on known hypervisors
 	result := filterVMsOnKnownHypervisors(vms, hypervisorList)
-	log.Info("filtered VMs to those on known hypervisors and in hypervisor instances",
+	log.V(1).Info("filtered VMs to those on known hypervisors and in hypervisor instances",
 		"count", len(result),
 		"knownHypervisors", len(hypervisorList.Items))
 	return result, nil
@@ -316,7 +316,7 @@ func buildVMsFromHypervisors(hypervisorList *hv1.HypervisorList, postgresVMs []V
 		}
 	}
 
-	log.Info("buildVMsFromHypervisors statistics",
+	log.V(1).Info("buildVMsFromHypervisors statistics",
 		"totalHypervisorInstances", enrichedCount+notInPostgresCount+duplicateCount,
 		"enrichedWithPostgresData", enrichedCount,
 		"notInPostgres", notInPostgresCount,
@@ -439,13 +439,13 @@ func warnUnknownVMsOnHypervisors(hypervisors *hv1.HypervisorList, vms []VM) {
 	}
 
 	if vmsOnHypervisorsNotInListVMs > 0 {
-		log.Info("WARNING: VMs on hypervisors not found in ListVMs",
+		log.V(1).Info("VMs on hypervisors not found in ListVMs",
 			"count", vmsOnHypervisorsNotInListVMs,
 			"hint", "This may indicate a data sync issue between hypervisor operator and nova servers")
 	}
 
 	if vmsInListVMsNotOnHypervisors > 0 {
-		log.Info("WARNING: VMs in ListVMs not found on any hypervisor",
+		log.V(1).Info("VMs in ListVMs not found on any hypervisor",
 			"count", vmsInListVMsNotOnHypervisors,
 			"hint", "This may indicate a data sync issue between nova servers and hypervisor operator")
 	}

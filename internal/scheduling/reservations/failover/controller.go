@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-var log = ctrl.Log.WithName("failover-reservation-controller").WithValues("module", "reservations/failover")
+var log = ctrl.Log.WithName("failover-reservation-controller").WithValues("module", "failover-reservations")
 
 // FailoverReservationController manages failover reservations for VMs.
 // It provides two reconciliation modes:
@@ -226,16 +226,28 @@ func (c *FailoverReservationController) validateReservation(ctx context.Context,
 // Periodic Bulk Reconciliation
 // ============================================================================
 
+// reconcileSummary holds statistics from the reconciliation cycle.
+type reconcileSummary struct {
+	vmsProcessed        int
+	reservationsNeeded  int
+	totalReused         int
+	totalCreated        int
+	totalFailed         int
+	reservationsUpdated int
+	reservationsDeleted int
+}
+
 // ReconcilePeriodic handles the periodic bulk reconciliation of all VMs and reservations.
 // This ensures VMs have proper failover coverage by creating, reusing, and cleaning up reservations.
 // TODO consider moving Step 3-5 (particularly) to the watch-based reconciliation
 func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (ctrl.Result, error) {
+	startTime := time.Now()
 	c.reconcileCount++
 	globalReqID := uuid.New().String()
 	ctx = reservations.WithGlobalRequestID(ctx, globalReqID)
 	logger := LoggerFromContext(ctx)
 
-	logger.Info("running periodic reconciliation", "reconcileCount", c.reconcileCount)
+	var summary reconcileSummary
 
 	// 1. Get hypervisors from the cluster
 	var hypervisorList hv1.HypervisorList
@@ -255,7 +267,7 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 		logger.Error(err, "failed to list VMs")
 		return ctrl.Result{}, err
 	}
-	logger.Info("found VMs from source", "count", len(vms))
+	logger.V(1).Info("found VMs from source", "count", len(vms))
 
 	// List only failover reservations using label selector
 	var reservationList v1alpha1.ReservationList
@@ -266,7 +278,7 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 		return ctrl.Result{}, err
 	}
 	failoverReservations := reservationList.Items
-	logger.Info("found failover reservations", "count", len(failoverReservations))
+	logger.V(1).Info("found failover reservations", "count", len(failoverReservations))
 
 	// 3. Remove VMs from reservations if they are no longer valid
 	failoverReservations, reservationsToUpdate := reconcileRemoveInvalidVMFromReservations(ctx, vms, failoverReservations)
@@ -276,9 +288,7 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 			logger.Error(err, "failed to update reservation after removing invalid VMs", "reservationName", res.Name)
 		}
 	}
-	if len(reservationsToUpdate) > 0 {
-		logger.Info("updated reservations after removing invalid VMs", "count", len(reservationsToUpdate))
-	}
+	summary.reservationsUpdated += len(reservationsToUpdate)
 
 	// 4. Remove VMs from reservations if they no longer meet eligibility criteria
 	failoverReservations, nonEligibleReservationsToUpdate := reconcileRemoveNoneligibleVMFromReservations(ctx, vms, failoverReservations)
@@ -288,9 +298,7 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 			logger.Error(err, "failed to update reservation after removing non-eligible VMs", "reservationName", res.Name)
 		}
 	}
-	if len(nonEligibleReservationsToUpdate) > 0 {
-		logger.Info("updated reservations after removing non-eligible VMs", "count", len(nonEligibleReservationsToUpdate))
-	}
+	summary.reservationsUpdated += len(nonEligibleReservationsToUpdate)
 
 	// 5. Remove empty failover reservations
 	failoverReservations, emptyReservationsToDelete := reconcileRemoveEmptyReservations(ctx, failoverReservations)
@@ -299,20 +307,31 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 		if err := c.Delete(ctx, res); err != nil {
 			logger.Error(err, "failed to delete empty failover reservation", "reservationName", res.Name)
 		} else {
-			logger.Info("deleted empty failover reservation", "reservationName", res.Name, "hypervisor", res.Status.Host)
+			logger.V(1).Info("deleted empty failover reservation", "reservationName", res.Name, "hypervisor", res.Status.Host)
 		}
 	}
-	if len(emptyReservationsToDelete) > 0 {
-		logger.Info("deleted empty failover reservations", "count", len(emptyReservationsToDelete))
-	}
+	summary.reservationsDeleted = len(emptyReservationsToDelete)
 
 	// 6. Create and assign reservations for VMs that need them
-	err, hitMaxVMsLimit := c.reconcileCreateAndAssignReservations(ctx, vms, failoverReservations, allHypervisors)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
+	assignSummary, hitMaxVMsLimit := c.reconcileCreateAndAssignReservations(ctx, vms, failoverReservations, allHypervisors)
+	summary.vmsProcessed = assignSummary.vmsProcessed
+	summary.reservationsNeeded = assignSummary.reservationsNeeded
+	summary.totalReused = assignSummary.totalReused
+	summary.totalCreated = assignSummary.totalCreated
+	summary.totalFailed = assignSummary.totalFailed
 
-	logger.Info("completed periodic reconciliation")
+	// Log summary
+	duration := time.Since(startTime)
+	logger.Info("periodic reconciliation completed",
+		"reconcileCount", c.reconcileCount,
+		"duration", duration.Round(time.Millisecond),
+		"vmsProcessed", summary.vmsProcessed,
+		"reservationsNeeded", summary.reservationsNeeded,
+		"reused", summary.totalReused,
+		"created", summary.totalCreated,
+		"failed", summary.totalFailed,
+		"updated", summary.reservationsUpdated,
+		"deleted", summary.reservationsDeleted)
 
 	if hitMaxVMsLimit && c.Config.ShortReconcileInterval > 0 {
 		logger.Info("requeuing with short interval due to MaxVMsToProcess limit", "shortReconcileInterval", c.Config.ShortReconcileInterval)
@@ -532,23 +551,21 @@ func sortVMsByMemory(vms []vmFailoverNeed) {
 }
 
 // reconcileCreateAndAssignReservations creates and assigns failover reservations for VMs that need them.
-//
-//nolint:unparam // error return is intentionally always nil - we log errors but continue processing
 func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 	ctx context.Context,
 	vms []VM,
 	failoverReservations []v1alpha1.Reservation,
 	allHypervisors []string,
-) (error, bool) {
+) (reconcileSummary, bool) {
 
 	logger := LoggerFromContext(ctx)
 
 	vmsMissingFailover := c.calculateVMsMissingFailover(ctx, vms, failoverReservations)
-	logger.Info("VMs missing failover reservations", "count", len(vmsMissingFailover))
+	logger.V(1).Info("VMs missing failover reservations", "count", len(vmsMissingFailover))
 
 	vmsMissingFailover, hitMaxVMsLimit := c.selectVMsToProcess(ctx, vmsMissingFailover, c.Config.MaxVMsToProcess)
 
-	logger.Info("found hypervisors and vm missing failover reservation",
+	logger.V(1).Info("found hypervisors and vm missing failover reservation",
 		"countHypervisors", len(allHypervisors),
 		"countVMsMissingFailover", len(vmsMissingFailover))
 
@@ -630,14 +647,13 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 		totalFailed += vmFailed
 	}
 
-	logger.Info("failover reservation assignment summary",
-		"vmsProcessed", len(vmsMissingFailover),
-		"reservationsNeeded", totalReservationsNeeded,
-		"totalReused", totalReused,
-		"totalCreated", totalCreated,
-		"totalFailed", totalFailed)
-
-	return nil, hitMaxVMsLimit
+	return reconcileSummary{
+		vmsProcessed:       len(vmsMissingFailover),
+		reservationsNeeded: totalReservationsNeeded,
+		totalReused:        totalReused,
+		totalCreated:       totalCreated,
+		totalFailed:        totalFailed,
+	}, hitMaxVMsLimit
 }
 
 // calculateVMsMissingFailover calculates which VMs need failover reservations and how many.

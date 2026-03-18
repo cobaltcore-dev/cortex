@@ -881,9 +881,78 @@ func main() {
 		}
 	}
 
+	// Validation: Check for VMs with reservations on their own host
+	if views.has(viewValidation) {
+		printHeader("Validation: VMs with reservations on same host (ERRORS)")
+		errorsFound := 0
+		for _, res := range failoverReservations {
+			resHost := res.Status.Host
+			if resHost == "" {
+				resHost = res.Spec.TargetHost
+			}
+			if res.Status.FailoverReservation != nil && res.Status.FailoverReservation.Allocations != nil {
+				for vmUUID, vmHost := range res.Status.FailoverReservation.Allocations {
+					if vmHost == resHost {
+						fmt.Printf("  ❌ ERROR: VM %s is on host %s, but has reservation %s on SAME host %s\n",
+							vmUUID, vmHost, res.Name, resHost)
+						errorsFound++
+					}
+				}
+			}
+		}
+		if errorsFound == 0 {
+			fmt.Println("  ✅ No errors found - all VMs have reservations on different hosts")
+		} else {
+			fmt.Printf("\n  Total errors: %d\n", errorsFound)
+		}
+		fmt.Println()
+	}
+
+	// Reservations by Host
+	if views.has(viewByHost) {
+		printHeader("Reservations by Host")
+		hostCounts := make(map[string]int)
+		for _, res := range failoverReservations {
+			host := res.Status.Host
+			if host == "" {
+				host = res.Spec.TargetHost
+			}
+			if host == "" {
+				host = "N/A"
+			}
+			hostCounts[host]++
+		}
+
+		// Sort hosts by count (descending)
+		type hostCount struct {
+			host  string
+			count int
+		}
+		hostCountList := make([]hostCount, 0, len(hostCounts))
+		for host, count := range hostCounts {
+			hostCountList = append(hostCountList, hostCount{host, count})
+		}
+		sort.Slice(hostCountList, func(i, j int) bool {
+			return hostCountList[i].count > hostCountList[j].count
+		})
+
+		for _, hc := range hostCountList {
+			fmt.Printf("  %s: %d reservation(s)\n", hc.host, hc.count)
+		}
+		fmt.Println()
+	}
+
 	// Summary Statistics
 	if views.has(viewSummary) {
 		printHeader("Summary Statistics")
+
+		// Database connection status
+		if db != nil {
+			fmt.Printf("Database: ✅ connected (servers: %d, flavors: %d)\n", len(serverMap), len(flavorMap))
+		} else {
+			fmt.Printf("Database: ❌ not connected\n")
+		}
+		fmt.Println()
 
 		readyCount := 0
 		notReadyCount := 0
@@ -1016,70 +1085,9 @@ func main() {
 		fmt.Println()
 	}
 
-	// Validation: Check for VMs with reservations on their own host
-	if views.has(viewValidation) {
-		printHeader("Validation: VMs with reservations on same host (ERRORS)")
-		errorsFound := 0
-		for _, res := range failoverReservations {
-			resHost := res.Status.Host
-			if resHost == "" {
-				resHost = res.Spec.TargetHost
-			}
-			if res.Status.FailoverReservation != nil && res.Status.FailoverReservation.Allocations != nil {
-				for vmUUID, vmHost := range res.Status.FailoverReservation.Allocations {
-					if vmHost == resHost {
-						fmt.Printf("  ❌ ERROR: VM %s is on host %s, but has reservation %s on SAME host %s\n",
-							vmUUID, vmHost, res.Name, resHost)
-						errorsFound++
-					}
-				}
-			}
-		}
-		if errorsFound == 0 {
-			fmt.Println("  ✅ No errors found - all VMs have reservations on different hosts")
-		} else {
-			fmt.Printf("\n  Total errors: %d\n", errorsFound)
-		}
-		fmt.Println()
-	}
-
 	// Print all servers from postgres (for debugging data sync issues)
 	if db != nil && views.has(viewAllServers) {
 		printAllServers(serverMap, flavorMap, allVMs, filteredHosts)
-	}
-
-	// Reservations by Host
-	if views.has(viewByHost) {
-		printHeader("Reservations by Host")
-		hostCounts := make(map[string]int)
-		for _, res := range failoverReservations {
-			host := res.Status.Host
-			if host == "" {
-				host = res.Spec.TargetHost
-			}
-			if host == "" {
-				host = "N/A"
-			}
-			hostCounts[host]++
-		}
-
-		// Sort hosts by count (descending)
-		type hostCount struct {
-			host  string
-			count int
-		}
-		hostCountList := make([]hostCount, 0, len(hostCounts))
-		for host, count := range hostCounts {
-			hostCountList = append(hostCountList, hostCount{host, count})
-		}
-		sort.Slice(hostCountList, func(i, j int) bool {
-			return hostCountList[i].count > hostCountList[j].count
-		})
-
-		for _, hc := range hostCountList {
-			fmt.Printf("  %s: %d reservation(s)\n", hc.host, hc.count)
-		}
-		fmt.Println()
 	}
 }
 

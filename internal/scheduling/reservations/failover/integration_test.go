@@ -634,10 +634,10 @@ func (env *IntegrationTestEnv) LogStateSummary() {
 		for _, res := range resByHypervisor[hypervisorName] {
 			memoryMB := int64(0)
 			vcpus := int64(0)
-			if mem, ok := res.Spec.Resources["memory"]; ok {
+			if mem, ok := res.Spec.Resources[hv1.ResourceMemory]; ok {
 				memoryMB = mem.Value() / (1024 * 1024)
 			}
-			if cpu, ok := res.Spec.Resources["cpu"]; ok {
+			if cpu, ok := res.Spec.Resources[hv1.ResourceCPU]; ok {
 				vcpus = cpu.Value()
 			}
 
