@@ -136,6 +136,7 @@ cortex-scheduling-controllers:
       - hypervisor-overcommit-controller
       - explanation-controller
       - reservations-controller
+      - failover-reservations-controller
     enabledTasks:
       - nova-decisions-cleanup-task
     # Endpoints configuration for reservations controller
@@ -146,6 +147,30 @@ cortex-scheduling-controllers:
     # are multiple mappings applying to the same hypervisors, the last mapping
     # in this list will override the previous ones.
     overcommitMappings: []
+    # Failover reservations controller configuration
+    # Name of the Datasource CRD that provides database connection info for Nova VM data
+    datasourceName: nova-servers
+    # URL of the nova external scheduler API for placement decisions
+    schedulerURL: "http://localhost:8080/scheduler/nova/external"
+    # Maps flavor name patterns (glob) to required failover count
+    # Example: {"hana_*": 2, "m1.xlarge": 1}
+    flavorFailoverRequirements:
+      "*": 2
+    # How often to check for missing failover reservations (periodic bulk reconciliation)
+    # 35s = 35000000000 nanoseconds
+    reconcileInterval: 35000000000
+    # Used when maxVMsToProcess limits processing, allows faster catch-up
+    # 100ms = 100000000 nanoseconds
+    shortReconcileInterval: 100000000
+    # Tag for failover reservations (for identification and cleanup)
+    creator: cortex-failover-controller
+    # Limits VMs processed per cycle. Set to 0 to process all VMs.
+    maxVMsToProcess: 25
+    # If true, uses hypervisor CRD as source of truth for VM location instead of postgres
+    trustHypervisorLocation: true
+    # How often to re-validate acknowledged failover reservations
+    # 30m = 1800000000000 nanoseconds
+    revalidationInterval: 1800000000000
 
 cortex-knowledge-controllers:
   <<: *cortex
