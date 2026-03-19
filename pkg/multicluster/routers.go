@@ -30,15 +30,15 @@ func (h HypervisorResourceRouter) Match(obj any, labels map[string]string) (bool
 	default:
 		return false, errors.New("object is not a Hypervisor")
 	}
-	az, ok := labels["az"]
+	availabilityZone, ok := labels["availability_zone"]
 	if !ok {
 		return false, errors.New("cluster does not have availability zone label")
 	}
-	hvAZ, ok := hv.Labels[corev1.LabelTopologyZone]
+	hvAvailabilityZone, ok := hv.Labels[corev1.LabelTopologyZone]
 	if !ok {
 		return false, errors.New("hypervisor does not have availability zone label")
 	}
-	return hvAZ == az, nil
+	return hvAvailabilityZone == availabilityZone, nil
 }
 
 // ReservationsResourceRouter routes reservations to clusters based on availability zone.
@@ -54,15 +54,15 @@ func (r ReservationsResourceRouter) Match(obj any, labels map[string]string) (bo
 	default:
 		return false, errors.New("object is not a Reservation")
 	}
-	az, ok := labels["az"]
+	availabilityZone, ok := labels["availability_zone"]
 	if !ok {
-		return false, errors.New("cluster does not have availability zone label")
+		return false, errors.New("cluster does not have availability zone in spec")
 	}
-	resAZ := res.Spec.AvailabilityZone
-	if resAZ == "" {
-		return false, errors.New("reservation does not have availability zone label")
+	reservationAvailabilityZone := res.Spec.AvailabilityZone
+	if reservationAvailabilityZone == "" {
+		return false, errors.New("reservation does not have availability zone in spec")
 	}
-	return resAZ == az, nil
+	return reservationAvailabilityZone == availabilityZone, nil
 }
 
 // TODO: Add router for Decision CRD and reservations after their refactoring is done.
