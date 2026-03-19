@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -33,11 +34,11 @@ func TestHypervisorResourceRouter_Match(t *testing.T) {
 		},
 		{
 			name: "matching AZ pointer",
-			obj: &hv1.Hypervisor{
+			obj: testlib.Ptr(hv1.Hypervisor{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{"topology.kubernetes.io/zone": "qa-de-1a"},
 				},
-			},
+			}),
 			labels:    map[string]string{"availability_zone": "qa-de-1a"},
 			wantMatch: true,
 		},
@@ -78,10 +79,17 @@ func TestHypervisorResourceRouter_Match(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "nil pointer doesn't dereference",
-			obj:     nil,
+			name:    "typed nil pointer doesn't panic",
+			obj:     (*hv1.Hypervisor)(nil),
 			labels:  map[string]string{"availability_zone": "qa-de-1a"},
 			wantErr: true,
+		},
+		{
+			name:      "nil object doesn't panic",
+			obj:       nil,
+			labels:    map[string]string{"availability_zone": "qa-de-1a"},
+			wantErr:   true,
+			wantMatch: false,
 		},
 	}
 
@@ -123,11 +131,11 @@ func TestReservationsResourceRouter_Match(t *testing.T) {
 		},
 		{
 			name: "matching AZ pointer",
-			obj: &v1alpha1.Reservation{
+			obj: testlib.Ptr(v1alpha1.Reservation{
 				Spec: v1alpha1.ReservationSpec{
 					AvailabilityZone: "qa-de-1a",
 				},
-			},
+			}),
 			labels:    map[string]string{"availability_zone": "qa-de-1a"},
 			wantMatch: true,
 		},
@@ -168,10 +176,17 @@ func TestReservationsResourceRouter_Match(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "nil pointer doesn't dereference",
-			obj:     nil,
+			name:    "typed nil pointer doesn't panic",
+			obj:     (*v1alpha1.Reservation)(nil),
 			labels:  map[string]string{"availability_zone": "qa-de-1a"},
 			wantErr: true,
+		},
+		{
+			name:      "nil object doesn't panic",
+			obj:       nil,
+			labels:    map[string]string{"availability_zone": "qa-de-1a"},
+			wantErr:   true,
+			wantMatch: false,
 		},
 	}
 
