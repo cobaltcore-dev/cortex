@@ -29,7 +29,7 @@ func TestHypervisorResourceRouter_Match(t *testing.T) {
 					Labels: map[string]string{"topology.kubernetes.io/zone": "qa-de-1a"},
 				},
 			},
-			labels:    map[string]string{"availability_zone": "qa-de-1a"},
+			labels:    map[string]string{"availabilityZone": "qa-de-1a"},
 			wantMatch: true,
 		},
 		{
@@ -39,7 +39,7 @@ func TestHypervisorResourceRouter_Match(t *testing.T) {
 					Labels: map[string]string{"topology.kubernetes.io/zone": "qa-de-1a"},
 				},
 			}),
-			labels:    map[string]string{"availability_zone": "qa-de-1a"},
+			labels:    map[string]string{"availabilityZone": "qa-de-1a"},
 			wantMatch: true,
 		},
 		{
@@ -49,17 +49,17 @@ func TestHypervisorResourceRouter_Match(t *testing.T) {
 					Labels: map[string]string{"topology.kubernetes.io/zone": "qa-de-1a"},
 				},
 			},
-			labels:    map[string]string{"availability_zone": "qa-de-1b"},
+			labels:    map[string]string{"availabilityZone": "qa-de-1b"},
 			wantMatch: false,
 		},
 		{
 			name:    "not a Hypervisor",
 			obj:     "not-a-hypervisor",
-			labels:  map[string]string{"availability_zone": "qa-de-1a"},
+			labels:  map[string]string{"availabilityZone": "qa-de-1a"},
 			wantErr: true,
 		},
 		{
-			name: "cluster missing availability_zone label",
+			name: "cluster missing availabilityZone label",
 			obj: hv1.Hypervisor{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{"topology.kubernetes.io/zone": "qa-de-1a"},
@@ -75,19 +75,19 @@ func TestHypervisorResourceRouter_Match(t *testing.T) {
 					Labels: map[string]string{},
 				},
 			},
-			labels:  map[string]string{"availability_zone": "qa-de-1a"},
+			labels:  map[string]string{"availabilityZone": "qa-de-1a"},
 			wantErr: true,
 		},
 		{
 			name:    "typed nil pointer doesn't panic",
 			obj:     (*hv1.Hypervisor)(nil),
-			labels:  map[string]string{"availability_zone": "qa-de-1a"},
+			labels:  map[string]string{"availabilityZone": "qa-de-1a"},
 			wantErr: true,
 		},
 		{
 			name:      "nil object doesn't panic",
 			obj:       nil,
-			labels:    map[string]string{"availability_zone": "qa-de-1a"},
+			labels:    map[string]string{"availabilityZone": "qa-de-1a"},
 			wantErr:   true,
 			wantMatch: false,
 		},
@@ -126,7 +126,7 @@ func TestReservationsResourceRouter_Match(t *testing.T) {
 					AvailabilityZone: "qa-de-1a",
 				},
 			},
-			labels:    map[string]string{"availability_zone": "qa-de-1a"},
+			labels:    map[string]string{"availabilityZone": "qa-de-1a"},
 			wantMatch: true,
 		},
 		{
@@ -136,7 +136,7 @@ func TestReservationsResourceRouter_Match(t *testing.T) {
 					AvailabilityZone: "qa-de-1a",
 				},
 			}),
-			labels:    map[string]string{"availability_zone": "qa-de-1a"},
+			labels:    map[string]string{"availabilityZone": "qa-de-1a"},
 			wantMatch: true,
 		},
 		{
@@ -146,17 +146,17 @@ func TestReservationsResourceRouter_Match(t *testing.T) {
 					AvailabilityZone: "qa-de-1a",
 				},
 			},
-			labels:    map[string]string{"availability_zone": "qa-de-1b"},
+			labels:    map[string]string{"availabilityZone": "qa-de-1b"},
 			wantMatch: false,
 		},
 		{
 			name:    "not a Reservation",
 			obj:     "not-a-reservation",
-			labels:  map[string]string{"availability_zone": "qa-de-1a"},
+			labels:  map[string]string{"availabilityZone": "qa-de-1a"},
 			wantErr: true,
 		},
 		{
-			name: "cluster missing availability_zone label",
+			name: "cluster missing availabilityZone label",
 			obj: v1alpha1.Reservation{
 				Spec: v1alpha1.ReservationSpec{
 					AvailabilityZone: "qa-de-1a",
@@ -172,19 +172,19 @@ func TestReservationsResourceRouter_Match(t *testing.T) {
 					AvailabilityZone: "",
 				},
 			},
-			labels:  map[string]string{"availability_zone": "qa-de-1a"},
+			labels:  map[string]string{"availabilityZone": "qa-de-1a"},
 			wantErr: true,
 		},
 		{
 			name:    "typed nil pointer doesn't panic",
 			obj:     (*v1alpha1.Reservation)(nil),
-			labels:  map[string]string{"availability_zone": "qa-de-1a"},
+			labels:  map[string]string{"availabilityZone": "qa-de-1a"},
 			wantErr: true,
 		},
 		{
 			name:      "nil object doesn't panic",
 			obj:       nil,
-			labels:    map[string]string{"availability_zone": "qa-de-1a"},
+			labels:    map[string]string{"availabilityZone": "qa-de-1a"},
 			wantErr:   true,
 			wantMatch: false,
 		},

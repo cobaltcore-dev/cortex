@@ -34,9 +34,9 @@ func (h HypervisorResourceRouter) Match(obj any, labels map[string]string) (bool
 	default:
 		return false, errors.New("object is not a Hypervisor")
 	}
-	availabilityZone, ok := labels["availability_zone"]
+	availabilityZone, ok := labels["availabilityZone"]
 	if !ok {
-		return false, errors.New("cluster does not have availability zone label")
+		return false, errors.New("cluster does not have availabilityZone label")
 	}
 	hvAvailabilityZone, ok := hv.Labels[corev1.LabelTopologyZone]
 	if !ok {
@@ -62,9 +62,9 @@ func (r ReservationsResourceRouter) Match(obj any, labels map[string]string) (bo
 	default:
 		return false, errors.New("object is not a Reservation")
 	}
-	availabilityZone, ok := labels["availability_zone"]
+	availabilityZone, ok := labels["availabilityZone"]
 	if !ok {
-		return false, errors.New("cluster does not have availability_zone label")
+		return false, errors.New("cluster does not have availability zone label")
 	}
 	reservationAvailabilityZone := res.Spec.AvailabilityZone
 	if reservationAvailabilityZone == "" {
