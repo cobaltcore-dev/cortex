@@ -29,6 +29,14 @@ spec:
         Note: currently, advanced boolean/numeric operators for the capabilities
         like `>`, `!`, ... are not supported because they are not used by any of our
         flavors in production.
+    - name: filter_external_customer
+      description: |
+        This step prefix-matches the domain name for external customer domains and
+        filters out hosts that are not intended for external customers. It considers
+        the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+        `domain_name` scheduler hint from the nova request spec.
+      params:
+        - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -88,6 +96,14 @@ spec:
         Note: currently, advanced boolean/numeric operators for the capabilities
         like `>`, `!`, ... are not supported because they are not used by any of our
         flavors in production.
+    - name: filter_external_customer
+      description: |
+        This step prefix-matches the domain name for external customer domains and
+        filters out hosts that are not intended for external customers. It considers
+        the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+        `domain_name` scheduler hint from the nova request spec.
+      params:
+        - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
