@@ -51,7 +51,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
-	reservationscontroller "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/controller"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
@@ -487,16 +486,16 @@ func main() {
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "reservations-controller") {
 		setupLog.Info("enabling controller", "controller", "reservations-controller")
-		monitor := reservationscontroller.NewControllerMonitor(multiclusterClient)
+		monitor := reservations.NewMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&monitor)
-		reservationsControllerConfig := conf.GetConfigOrDie[reservationscontroller.Config]()
+		commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
 
-		if err := (&reservationscontroller.ReservationReconciler{
+		if err := (&commitments.CommitmentReservationController{
 			Client: multiclusterClient,
 			Scheme: mgr.GetScheme(),
-			Conf:   reservationsControllerConfig,
+			Conf:   commitmentsConfig,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "Reservation")
+			setupLog.Error(err, "unable to create controller", "controller", "CommitmentReservation")
 			os.Exit(1)
 		}
 	}

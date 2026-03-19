@@ -141,6 +141,12 @@ cortex-scheduling-controllers:
     # Endpoints configuration for reservations controller
     endpoints:
       novaExternalScheduler: "http://localhost:8080/scheduler/nova/external"
+    # FlavorGroupPipelines maps flavor group IDs to pipeline names for CR reservations
+    # This allows different scheduling strategies per flavor group (e.g., HANA vs GP)
+    flavorGroupPipelines:
+      "2152": "kvm-committed-resource-reservation-hana"  # HANA flavor group
+      "2101": "kvm-committed-resource-reservation-general-purpose"    # General Purpose flavor group
+      "*": "kvm-committed-resource-reservation-general-purpose"  # Catch-all fallback
     # OvercommitMappings is a list of mappings that map hypervisor traits to
     # overcommit ratios. Note that this list is applied in order, so if there
     # are multiple mappings applying to the same hypervisors, the last mapping
