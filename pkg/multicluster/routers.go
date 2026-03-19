@@ -6,6 +6,7 @@ package multicluster
 import (
 	"errors"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -21,23 +22,55 @@ type HypervisorResourceRouter struct{}
 
 func (h HypervisorResourceRouter) Match(obj any, labels map[string]string) (bool, error) {
 	var hv hv1.Hypervisor
+
 	switch v := obj.(type) {
 	case *hv1.Hypervisor:
+		if v == nil {
+			return false, errors.New("object is nil")
+		}
 		hv = *v
 	case hv1.Hypervisor:
 		hv = v
 	default:
 		return false, errors.New("object is not a Hypervisor")
 	}
-	az, ok := labels["az"]
+	availabilityZone, ok := labels["availabilityZone"]
 	if !ok {
-		return false, errors.New("cluster does not have availability zone label")
+		return false, errors.New("cluster does not have availabilityZone label")
 	}
-	hvAZ, ok := hv.Labels[corev1.LabelTopologyZone]
+	hvAvailabilityZone, ok := hv.Labels[corev1.LabelTopologyZone]
 	if !ok {
 		return false, errors.New("hypervisor does not have availability zone label")
 	}
-	return hvAZ == az, nil
+	return hvAvailabilityZone == availabilityZone, nil
+}
+
+// ReservationsResourceRouter routes reservations to clusters based on availability zone.
+type ReservationsResourceRouter struct{}
+
+func (r ReservationsResourceRouter) Match(obj any, labels map[string]string) (bool, error) {
+	var res v1alpha1.Reservation
+
+	switch v := obj.(type) {
+	case *v1alpha1.Reservation:
+		if v == nil {
+			return false, errors.New("object is nil")
+		}
+		res = *v
+	case v1alpha1.Reservation:
+		res = v
+	default:
+		return false, errors.New("object is not a Reservation")
+	}
+	availabilityZone, ok := labels["availabilityZone"]
+	if !ok {
+		return false, errors.New("cluster does not have availability zone label")
+	}
+	reservationAvailabilityZone := res.Spec.AvailabilityZone
+	if reservationAvailabilityZone == "" {
+		return false, errors.New("reservation does not have availability zone in spec")
+	}
+	return reservationAvailabilityZone == availabilityZone, nil
 }
 
 // TODO: Add router for Decision CRD and reservations after their refactoring is done.
