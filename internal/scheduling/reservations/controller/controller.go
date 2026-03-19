@@ -517,20 +517,20 @@ func (r *ReservationReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multiclu
 	})); err != nil {
 		return err
 	}
-  bldr := multicluster.BuildController(mcl, mgr)
-  // Watch reservation changes across all clusters.
-  bldr, err := bldr.WatchesMulticluster(
-      &v1alpha1.Reservation{},
-      &handler.EnqueueRequestForObject{},
-      notFailoverReservationPredicate,
-  )
-  if err != nil {
-      return err
-  }
-  return bldr.Named("reservation").
-      WithOptions(controller.Options{
-          // We want to process reservations one at a time to avoid overbooking.
-          MaxConcurrentReconciles: 1,
-      }).
-      Complete(r)
+	bldr := multicluster.BuildController(mcl, mgr)
+	// Watch reservation changes across all clusters.
+	bldr, err := bldr.WatchesMulticluster(
+		&v1alpha1.Reservation{},
+		&handler.EnqueueRequestForObject{},
+		notFailoverReservationPredicate,
+	)
+	if err != nil {
+		return err
+	}
+	return bldr.Named("reservation").
+		WithOptions(controller.Options{
+			// We want to process reservations one at a time to avoid overbooking.
+			MaxConcurrentReconciles: 1,
+		}).
+		Complete(r)
 }
