@@ -59,6 +59,33 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	// filter for CR reservations
+	resourceName := ""
+	if res.Spec.CommittedResourceReservation != nil {
+		resourceName = res.Spec.CommittedResourceReservation.ResourceName
+	}
+	if resourceName == "" {
+		logger.Info("reservation has no resource name, skipping")
+		old := res.DeepCopy()
+		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.ReservationConditionReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "MissingResourceName",
+			Message: "reservation has no resource name",
+		})
+		patch := client.MergeFrom(old)
+		if err := r.Status().Patch(ctx, &res, patch); err != nil {
+			// Ignore not-found errors during background deletion
+			if client.IgnoreNotFound(err) != nil {
+				logger.Error(err, "failed to patch reservation status")
+				return ctrl.Result{}, err
+			}
+			// Object was deleted, no need to continue
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, nil // Don't need to requeue.
+	}
+
 	if meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ReservationConditionReady) {
 		logger.Info("reservation is active, verifying allocations")
 
@@ -127,33 +154,6 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			return ctrl.Result{}, nil
 		}
 		logger.Info("synced spec to status", "host", res.Status.Host)
-	}
-
-	// filter for CR reservations
-	resourceName := ""
-	if res.Spec.CommittedResourceReservation != nil {
-		resourceName = res.Spec.CommittedResourceReservation.ResourceName
-	}
-	if resourceName == "" {
-		logger.Info("reservation has no resource name, skipping")
-		old := res.DeepCopy()
-		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.ReservationConditionReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "MissingResourceName",
-			Message: "reservation has no resource name",
-		})
-		patch := client.MergeFrom(old)
-		if err := r.Status().Patch(ctx, &res, patch); err != nil {
-			// Ignore not-found errors during background deletion
-			if client.IgnoreNotFound(err) != nil {
-				logger.Error(err, "failed to patch reservation status")
-				return ctrl.Result{}, err
-			}
-			// Object was deleted, no need to continue
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, nil // Don't need to requeue.
 	}
 
 	// Get project ID from CommittedResourceReservation spec if available.
