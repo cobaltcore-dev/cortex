@@ -29,7 +29,7 @@ const (
 
 	// LabelReservationType identifies the type of reservation.
 	// This label is present on all reservations to enable type-based filtering.
-	LabelReservationType = "reservations.cortex.sap.com/type"
+	LabelReservationType = "reservations.cortex.cloud/type"
 
 	// Reservation type label values
 	ReservationTypeLabelCommittedResource = "committed-resource"
@@ -152,6 +152,18 @@ type FailoverReservationStatus struct {
 	// Key: VM/instance UUID, Value: Host name where the VM is currently running.
 	// +kubebuilder:validation:Optional
 	Allocations map[string]string `json:"allocations,omitempty"`
+
+	// LastChanged tracks when the reservation was last modified.
+	// This is used to track pending changes that need acknowledgment.
+	// +kubebuilder:validation:Optional
+	LastChanged *metav1.Time `json:"lastChanged,omitempty"`
+
+	// AcknowledgedAt is the timestamp when the last change was acknowledged.
+	// When nil, the reservation is in a pending state awaiting acknowledgment.
+	// This does not affect the Ready condition - reservations are still considered
+	// ready even when not yet acknowledged.
+	// +kubebuilder:validation:Optional
+	AcknowledgedAt *metav1.Time `json:"acknowledgedAt,omitempty"`
 }
 
 // ReservationStatus defines the observed state of Reservation.
@@ -189,7 +201,7 @@ type ReservationStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
-// +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".metadata.labels['reservations\\.cortex\\.sap\\.com/type']"
+// +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".metadata.labels['reservations\\.cortex\\.cloud/type']"
 // +kubebuilder:printcolumn:name="Host",type="string",JSONPath=".status.host"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 

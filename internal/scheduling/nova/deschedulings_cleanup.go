@@ -13,6 +13,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -95,15 +96,20 @@ func (r *DeschedulingsCleanup) SetupWithManager(mgr ctrl.Manager, mcl *multiclus
 	if err := mgr.Add(&DeschedulingsCleanupOnStartup{r}); err != nil {
 		return err
 	}
-	return multicluster.BuildController(mcl, mgr).
-		For(&v1alpha1.Descheduling{}).
-		Named("descheduler-cleanup").
+	bldr := multicluster.BuildController(mcl, mgr)
+	// Watch descheduling changes across all clusters.
+	bldr, err := bldr.WatchesMulticluster(
+		&v1alpha1.Descheduling{},
+		&handler.EnqueueRequestForObject{},
+		// Watch for spec changes (when decisions are added/modified)
+		predicate.GenerationChangedPredicate{},
+	)
+	if err != nil {
+		return err
+	}
+	return bldr.Named("descheduler-cleanup").
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 10,
 		}).
-		WithEventFilter(
-			// Watch for spec changes (when decisions are added/modified)
-			predicate.GenerationChangedPredicate{},
-		).
 		Complete(r)
 }

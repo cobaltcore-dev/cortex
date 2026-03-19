@@ -19,8 +19,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -199,19 +199,24 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 }
 
 func (r *PrometheusDatasourceReconciler) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
-	return multicluster.BuildController(mcl, mgr).
-		Named("cortex-prometheus-datasource").
-		For(
-			&v1alpha1.Datasource{},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				// Only react to datasources matching the operator.
-				ds := obj.(*v1alpha1.Datasource)
-				if ds.Spec.SchedulingDomain != r.Conf.SchedulingDomain {
-					return false
-				}
-				// Only react to prometheus datasources.
-				return ds.Spec.Type == v1alpha1.DatasourceTypePrometheus
-			})),
-		).
+	bldr := multicluster.BuildController(mcl, mgr)
+	// Watch datasource changes across all clusters.
+	bldr, err := bldr.WatchesMulticluster(
+		&v1alpha1.Datasource{},
+		&handler.EnqueueRequestForObject{},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			// Only react to datasources matching the operator.
+			ds := obj.(*v1alpha1.Datasource)
+			if ds.Spec.SchedulingDomain != r.Conf.SchedulingDomain {
+				return false
+			}
+			// Only react to prometheus datasources.
+			return ds.Spec.Type == v1alpha1.DatasourceTypePrometheus
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	return bldr.Named("cortex-prometheus-datasource").
 		Complete(r)
 }

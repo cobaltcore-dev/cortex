@@ -18,6 +18,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -42,13 +43,16 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/cinder"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/explanation"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/external"
 	schedulinglib "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/machines"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	reservationscontroller "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/controller"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
@@ -141,6 +145,12 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	// Log the main configuration
+	setupLog.Info("loaded main configuration",
+		"enabledControllers", mainConfig.EnabledControllers,
+		"enabledTasks", mainConfig.EnabledTasks,
+		"leaderElectionID", mainConfig.LeaderElectionID)
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
@@ -264,10 +274,14 @@ func main() {
 		setupLog.Error(err, "unable to add home cluster")
 		os.Exit(1)
 	}
+	hvGVK := schema.GroupVersionKind{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}
 	multiclusterClient := &multicluster.Client{
 		HomeCluster:    homeCluster,
 		HomeRestConfig: restConfig,
 		HomeScheme:     scheme,
+		ResourceRouters: map[schema.GroupVersionKind]multicluster.ResourceRouter{
+			hvGVK: multicluster.HypervisorResourceRouter{},
+		},
 	}
 	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
 	if err := multiclusterClient.InitFromConf(ctx, mgr, multiclusterClientConfig); err != nil {
@@ -350,6 +364,7 @@ func main() {
 		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "nova-deschedulings-executor") {
+		setupLog.Info("enabling controller", "controller", "nova-deschedulings-executor")
 		executorConfig := conf.GetConfigOrDie[nova.DeschedulingsExecutorConfig]()
 		novaClient := nova.NewNovaClient()
 		novaClientConfig := conf.GetConfigOrDie[nova.NovaClientConfig]()
@@ -379,6 +394,7 @@ func main() {
 		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "manila-decisions-pipeline-controller") {
+		setupLog.Info("enabling controller", "controller", "manila-decisions-pipeline-controller")
 		controller := &manila.FilterWeigherPipelineController{
 			Monitor: filterWeigherPipelineMonitor,
 		}
@@ -398,6 +414,7 @@ func main() {
 		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "cinder-decisions-pipeline-controller") {
+		setupLog.Info("enabling controller", "controller", "cinder-decisions-pipeline-controller")
 		controller := &cinder.FilterWeigherPipelineController{
 			Monitor: filterWeigherPipelineMonitor,
 		}
@@ -417,6 +434,7 @@ func main() {
 		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "ironcore-decisions-pipeline-controller") {
+		setupLog.Info("enabling controller", "controller", "ironcore-decisions-pipeline-controller")
 		controller := &machines.FilterWeigherPipelineController{
 			Monitor: filterWeigherPipelineMonitor,
 		}
@@ -435,6 +453,7 @@ func main() {
 		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "pods-decisions-pipeline-controller") {
+		setupLog.Info("enabling controller", "controller", "pods-decisions-pipeline-controller")
 		controller := &pods.FilterWeigherPipelineController{
 			Monitor: filterWeigherPipelineMonitor,
 		}
@@ -453,6 +472,7 @@ func main() {
 		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "explanation-controller") {
+		setupLog.Info("enabling controller", "controller", "explanation-controller")
 		// Setup a controller which will reconcile the history and explanation for
 		// decision resources.
 		explanationControllerConfig := conf.GetConfigOrDie[explanation.ControllerConfig]()
@@ -466,6 +486,7 @@ func main() {
 		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "reservations-controller") {
+		setupLog.Info("enabling controller", "controller", "reservations-controller")
 		monitor := reservationscontroller.NewControllerMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&monitor)
 		reservationsControllerConfig := conf.GetConfigOrDie[reservationscontroller.Config]()
@@ -480,6 +501,7 @@ func main() {
 		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "datasource-controllers") {
+		setupLog.Info("enabling controller", "controller", "datasource-controllers")
 		monitor := datasources.NewMonitor()
 		metrics.Registry.MustRegister(&monitor)
 		if err := (&openstack.OpenStackDatasourceReconciler{
@@ -502,6 +524,7 @@ func main() {
 		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "knowledge-controllers") {
+		setupLog.Info("enabling controller", "controller", "knowledge-controllers")
 		monitor := extractor.NewMonitor()
 		metrics.Registry.MustRegister(&monitor)
 		if err := (&extractor.KnowledgeReconciler{
@@ -523,6 +546,7 @@ func main() {
 		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "kpis-controller") {
+		setupLog.Info("enabling controller", "controller", "kpis-controller")
 		kpisControllerConfig := conf.GetConfigOrDie[kpis.ControllerConfig]()
 		if err := (&kpis.Controller{
 			Client: multiclusterClient,
@@ -531,6 +555,93 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "KPIController")
 			os.Exit(1)
 		}
+	}
+	if slices.Contains(mainConfig.EnabledControllers, "failover-reservations-controller") {
+		setupLog.Info("enabling controller", "controller", "failover-reservations-controller")
+		failoverConfig := conf.GetConfigOrDie[failover.FailoverConfig]()
+
+		// Apply defaults for unset values
+		defaults := failover.DefaultConfig()
+		if failoverConfig.DatasourceName == "" {
+			failoverConfig.DatasourceName = defaults.DatasourceName
+		}
+		if failoverConfig.SchedulerURL == "" {
+			failoverConfig.SchedulerURL = defaults.SchedulerURL
+		}
+		if failoverConfig.ReconcileInterval == 0 {
+			failoverConfig.ReconcileInterval = defaults.ReconcileInterval
+		}
+		if failoverConfig.Creator == "" {
+			failoverConfig.Creator = defaults.Creator
+		}
+		if failoverConfig.FlavorFailoverRequirements == nil {
+			failoverConfig.FlavorFailoverRequirements = defaults.FlavorFailoverRequirements
+		}
+		if failoverConfig.RevalidationInterval == 0 {
+			failoverConfig.RevalidationInterval = defaults.RevalidationInterval
+		}
+
+		// DatasourceName is still required - check after applying defaults
+		if failoverConfig.DatasourceName == "" {
+			setupLog.Error(nil, "failover-reservations-controller requires datasourceName to be configured")
+			os.Exit(1)
+		}
+
+		// The scheduler client calls the nova external scheduler API to get placement decisions
+		schedulerClient := reservations.NewSchedulerClient(failoverConfig.SchedulerURL)
+
+		// Defer the initialization of PostgresReader until the manager starts
+		// because the cache is not ready during setup
+		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+			// Create PostgresReader from the configured Datasource CRD
+			// This runs after the cache is started
+			postgresReader, err := external.NewPostgresReader(ctx, multiclusterClient, failoverConfig.DatasourceName)
+			if err != nil {
+				setupLog.Error(err, "unable to create postgres reader for failover controller",
+					"datasourceName", failoverConfig.DatasourceName)
+				return err
+			}
+
+			// Create NovaReader and DBVMSource
+			novaReader := external.NewNovaReader(postgresReader)
+			vmSource := failover.NewDBVMSource(novaReader)
+
+			// Create the unified failover controller
+			// It handles both:
+			// 1. Watch-based per-reservation reconciliation (acknowledgment, validation)
+			// 2. Periodic bulk VM processing (creating/assigning reservations)
+			failoverController := failover.NewFailoverReservationController(
+				multiclusterClient,
+				vmSource,
+				failoverConfig,
+				schedulerClient,
+			)
+
+			// Set up the watch-based reconciler for per-reservation reconciliation
+			if err := failoverController.SetupWithManager(mgr, multiclusterClient); err != nil {
+				setupLog.Error(err, "unable to set up failover reservation controller")
+				return err
+			}
+
+			setupLog.Info("failover-reservations-controller starting",
+				"datasourceName", failoverConfig.DatasourceName,
+				"schedulerURL", failoverConfig.SchedulerURL,
+				"reconcileInterval", failoverConfig.ReconcileInterval,
+				"revalidationInterval", failoverConfig.RevalidationInterval)
+
+			// Start the controller's periodic reconciliation loop
+			return failoverController.Start(ctx)
+		})); err != nil {
+			setupLog.Error(err, "unable to add failover controller to manager")
+			os.Exit(1)
+		}
+		setupLog.Info("failover-reservations-controller registered",
+			"datasourceName", failoverConfig.DatasourceName,
+			"schedulerURL", failoverConfig.SchedulerURL,
+			"reconcileInterval", failoverConfig.ReconcileInterval,
+			"revalidationInterval", failoverConfig.RevalidationInterval,
+			"trustHypervisorLocation", failoverConfig.TrustHypervisorLocation,
+			"maxVMsToProcess", failoverConfig.MaxVMsToProcess)
 	}
 
 	// +kubebuilder:scaffold:builder

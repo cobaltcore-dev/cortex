@@ -18,7 +18,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -443,43 +442,54 @@ func (c *Controller) SetupWithManager(mgr manager.Manager, mcl *multicluster.Cli
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllKPIs)); err != nil {
 		return err
 	}
-	return multicluster.BuildController(mcl, mgr).
-		// Watch datasource changes so that we can reconfigure kpis as needed.
-		WatchesMulticluster(
-			&v1alpha1.Datasource{},
-			handler.Funcs{
-				CreateFunc: c.handleDatasourceCreated,
-				UpdateFunc: c.handleDatasourceUpdated,
-				DeleteFunc: c.handleDatasourceDeleted,
-			},
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				// Only react to datasources matching the scheduling domain.
-				ds := obj.(*v1alpha1.Datasource)
-				return ds.Spec.SchedulingDomain == c.Config.SchedulingDomain
-			}),
-		).
-		// Watch knowledge changes so that we can reconfigure kpis as needed.
-		WatchesMulticluster(
-			&v1alpha1.Knowledge{},
-			handler.Funcs{
-				CreateFunc: c.handleKnowledgeCreated,
-				UpdateFunc: c.handleKnowledgeUpdated,
-				DeleteFunc: c.handleKnowledgeDeleted,
-			},
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				// Only react to knowledges matching the scheduling domain.
-				kn := obj.(*v1alpha1.Knowledge)
-				return kn.Spec.SchedulingDomain == c.Config.SchedulingDomain
-			}),
-		).
-		Named("cortex-kpis").
-		For(
-			&v1alpha1.KPI{},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				// Only react to datasources matching the scheduling domain.
-				ds := obj.(*v1alpha1.KPI)
-				return ds.Spec.SchedulingDomain == c.Config.SchedulingDomain
-			})),
-		).
+	bldr := multicluster.BuildController(mcl, mgr)
+	// Watch datasource changes so that we can reconfigure kpis as needed.
+	bldr, err := bldr.WatchesMulticluster(
+		&v1alpha1.Datasource{},
+		handler.Funcs{
+			CreateFunc: c.handleDatasourceCreated,
+			UpdateFunc: c.handleDatasourceUpdated,
+			DeleteFunc: c.handleDatasourceDeleted,
+		},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			// Only react to datasources matching the scheduling domain.
+			ds := obj.(*v1alpha1.Datasource)
+			return ds.Spec.SchedulingDomain == c.Config.SchedulingDomain
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	// Watch knowledge changes so that we can reconfigure kpis as needed.
+	bldr, err = bldr.WatchesMulticluster(
+		&v1alpha1.Knowledge{},
+		handler.Funcs{
+			CreateFunc: c.handleKnowledgeCreated,
+			UpdateFunc: c.handleKnowledgeUpdated,
+			DeleteFunc: c.handleKnowledgeDeleted,
+		},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			// Only react to knowledges matching the scheduling domain.
+			kn := obj.(*v1alpha1.Knowledge)
+			return kn.Spec.SchedulingDomain == c.Config.SchedulingDomain
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	// Watch kpi changes across all clusters.
+	bldr, err = bldr.WatchesMulticluster(
+		&v1alpha1.KPI{},
+		&handler.EnqueueRequestForObject{},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			// Only react to kpis matching the scheduling domain.
+			kpi := obj.(*v1alpha1.KPI)
+			return kpi.Spec.SchedulingDomain == c.Config.SchedulingDomain
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	return bldr.Named("cortex-kpis").
 		Complete(c)
 }
