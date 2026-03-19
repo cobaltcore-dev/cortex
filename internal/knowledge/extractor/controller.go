@@ -18,8 +18,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -235,15 +235,20 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 func (r *KnowledgeReconciler) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
-	return multicluster.BuildController(mcl, mgr).
-		Named("cortex-knowledge").
-		For(
-			&v1alpha1.Knowledge{},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				// Only react to datasources matching the operator.
-				ds := obj.(*v1alpha1.Knowledge)
-				return ds.Spec.SchedulingDomain == r.Conf.SchedulingDomain
-			})),
-		).
+	bldr := multicluster.BuildController(mcl, mgr)
+	// Watch knowledge changes across all clusters.
+	bldr, err := bldr.WatchesMulticluster(
+		&v1alpha1.Knowledge{},
+		&handler.EnqueueRequestForObject{},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			// Only react to datasources matching the operator.
+			ds := obj.(*v1alpha1.Knowledge)
+			return ds.Spec.SchedulingDomain == r.Conf.SchedulingDomain
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	return bldr.Named("cortex-knowledge").
 		Complete(r)
 }

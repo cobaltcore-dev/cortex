@@ -1,11 +1,11 @@
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-name: cortex-remote
+name: cortex-remote-az-b
 nodes:
   - role: control-plane
     extraPortMappings:
     - containerPort: 6443
-      hostPort: 8444
+      hostPort: 8445
     extraMounts:
       - hostPath: /tmp/root-ca-home.pem
         containerPath: /etc/ca-certificates/root-ca.pem

@@ -245,7 +245,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			filteredHosts: []string{"host3"},
 		},
 		{
-			name: "Missing domain_name in scheduler hints - error",
+			name: "Missing domain_name in scheduler hints - skips filter, all hosts pass",
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
@@ -257,12 +257,14 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 				},
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
+					{ComputeHost: "host3"},
 				},
 			},
-			expectError: true,
+			expectedHosts: []string{"host1", "host3"},
+			filteredHosts: []string{},
 		},
 		{
-			name: "Nil scheduler hints - error",
+			name: "Nil scheduler hints - skips filter, all hosts pass",
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
@@ -274,9 +276,11 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 				},
 				Hosts: []api.ExternalSchedulerHost{
 					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
 				},
 			},
-			expectError: true,
+			expectedHosts: []string{"host1", "host2"},
+			filteredHosts: []string{},
 		},
 		{
 			name: "Case sensitive prefix matching",

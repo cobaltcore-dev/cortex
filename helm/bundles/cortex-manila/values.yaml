@@ -70,6 +70,24 @@ cortex: &cortex
   prometheus: {enable: false}
   conf: &cortexConf
     schedulingDomain: manila
+    apiservers:
+      home:
+        gvks:
+          - cortex.cloud/v1alpha1/Decision
+          - cortex.cloud/v1alpha1/DecisionList
+          - cortex.cloud/v1alpha1/Descheduling
+          - cortex.cloud/v1alpha1/DeschedulingList
+          - cortex.cloud/v1alpha1/Pipeline
+          - cortex.cloud/v1alpha1/PipelineList
+          - cortex.cloud/v1alpha1/Knowledge
+          - cortex.cloud/v1alpha1/KnowledgeList
+          - cortex.cloud/v1alpha1/Datasource
+          - cortex.cloud/v1alpha1/DatasourceList
+          - cortex.cloud/v1alpha1/KPI
+          - cortex.cloud/v1alpha1/KPIList
+          - cortex.cloud/v1alpha1/Reservation
+          - cortex.cloud/v1alpha1/ReservationList
+          - v1/Secret
     keystoneSecretRef:
       name: cortex-manila-openstack-keystone
       namespace: default

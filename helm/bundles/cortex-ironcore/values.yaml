@@ -30,6 +30,30 @@ cortex:
   conf:
     # The operator will only touch CRs with this scheduling domain name.
     schedulingDomain: machines
+    apiservers:
+      home:
+        gvks:
+          - cortex.cloud/v1alpha1/Decision
+          - cortex.cloud/v1alpha1/DecisionList
+          - cortex.cloud/v1alpha1/Descheduling
+          - cortex.cloud/v1alpha1/DeschedulingList
+          - cortex.cloud/v1alpha1/Pipeline
+          - cortex.cloud/v1alpha1/PipelineList
+          - cortex.cloud/v1alpha1/Knowledge
+          - cortex.cloud/v1alpha1/KnowledgeList
+          - cortex.cloud/v1alpha1/Datasource
+          - cortex.cloud/v1alpha1/DatasourceList
+          - cortex.cloud/v1alpha1/KPI
+          - cortex.cloud/v1alpha1/KPIList
+          - cortex.cloud/v1alpha1/Reservation
+          - cortex.cloud/v1alpha1/ReservationList
+          - compute.ironcore.dev/v1alpha1/Machine
+          - compute.ironcore.dev/v1alpha1/MachineList
+          - compute.ironcore.dev/v1alpha1/MachinePool
+          - compute.ironcore.dev/v1alpha1/MachinePoolList
+          - compute.ironcore.dev/v1alpha1/MachineClass
+          - compute.ironcore.dev/v1alpha1/MachineClassList
+          - v1/Secret
     enabledControllers:
       - ironcore-decisions-pipeline-controller
     monitoring:

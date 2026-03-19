@@ -6,7 +6,7 @@ GOBIN=$(shell go env GOBIN)
 endif
 
 .PHONY: all
-all: crds deepcopy lint test
+all: crds deepcopy lint-fix format lint test
 
 .PHONY: help
 help: ## Display this help.
@@ -28,6 +28,17 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 test: ## Run all tests.
 	go test ./...
 
+.PHONY: testsum
+testsum: gotestsum ## Run all tests (clean output for passing, verbose for failing). Options: WATCH=1, RUN=<pattern>, PACKAGE=<pkg>, FORMAT=<fmt> (e.g., standard-verbose for all output)
+	$(GOTESTSUM) \
+		$(if $(WATCH),--watch) \
+		--format $(if $(FORMAT),$(FORMAT),testname) \
+		--hide-summary=all \
+		-- \
+		$(if $(VERBOSE),-v) \
+		$(if $(RUN),-run $(RUN)) \
+		$(if $(PACKAGE),$(PACKAGE),./...)
+
 .PHONY: generate
 generate: deepcopy crds ## Regenerate CRDs and DeepCopy after API type changes.
 
@@ -45,9 +56,11 @@ $(LOCALBIN):
 
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+GOTESTSUM = $(LOCALBIN)/gotestsum
 
 CONTROLLER_TOOLS_VERSION ?= v0.20.0
 GOLANGCI_LINT_VERSION ?= v2.9.0
+GOTESTSUM_VERSION ?= v1.13.0
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
@@ -58,6 +71,11 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+
+.PHONY: gotestsum
+gotestsum: $(GOTESTSUM) ## Download gotestsum locally if necessary.
+$(GOTESTSUM): $(LOCALBIN)
+	$(call go-install-tool,$(GOTESTSUM),gotest.tools/gotestsum,$(GOTESTSUM_VERSION))
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary

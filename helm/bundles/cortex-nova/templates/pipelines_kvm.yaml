@@ -15,7 +15,32 @@ spec:
     Specifically, this pipeline is used for general purpose workloads.
   type: filter-weigher
   createDecisions: true
-  filters: []
+  filters:
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone.
+    - name: filter_capabilities
+      description: |
+        This step will filter out hosts that do not meet the compute capabilities
+        requested by the nova flavor extra specs, like `{"arch": "x86_64",
+        "maxphysaddr:bits": 46, ...}`.
+
+        Note: currently, advanced boolean/numeric operators for the capabilities
+        like `>`, `!`, ... are not supported because they are not used by any of our
+        flavors in production.
+    - name: filter_external_customer
+      description: |
+        This step prefix-matches the domain name for external customer domains and
+        filters out hosts that are not intended for external customers. It considers
+        the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+        `domain_name` scheduler hint from the nova request spec.
+      params:
+        - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
+    - name: filter_has_accelerators
+      description: |
+        This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
+        the nova flavor extra specs request accelerators via "accel:device_profile".
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -61,7 +86,32 @@ spec:
     Specifically, this pipeline is used for hana virtual machines.
   type: filter-weigher
   createDecisions: true
-  filters: []
+  filters:
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone.
+    - name: filter_capabilities
+      description: |
+        This step will filter out hosts that do not meet the compute capabilities
+        requested by the nova flavor extra specs, like `{"arch": "x86_64",
+        "maxphysaddr:bits": 46, ...}`.
+
+        Note: currently, advanced boolean/numeric operators for the capabilities
+        like `>`, `!`, ... are not supported because they are not used by any of our
+        flavors in production.
+    - name: filter_external_customer
+      description: |
+        This step prefix-matches the domain name for external customer domains and
+        filters out hosts that are not intended for external customers. It considers
+        the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+        `domain_name` scheduler hint from the nova request spec.
+      params:
+        - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
+    - name: filter_has_accelerators
+      description: |
+        This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
+        the nova flavor extra specs request accelerators via "accel:device_profile".
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -74,7 +124,6 @@ spec:
       description: |
         This weigher implements the "soft affinity" and "soft anti-affinity" policy
         for instance groups in nova.
-
         It assigns a weight to each host based on how many instances of the same
         instance group are already running on that host. The more instances of the
         same group on a host, the lower (for soft-anti-affinity) or higher
@@ -343,6 +392,128 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
+  name: kvm-new-failover-reservation
+spec:
+  schedulingDomain: nova
+  description: |
+    This pipeline is used by the failover reservation controller to find a host
+    for creating a new failover reservation. It validates host compatibility AND
+    checks capacity.
+
+    Note: Domain filtering (filter_external_customer) is not applied for failover
+    reservations because domains are currently not considered in failover scheduling.
+
+    This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
+  type: filter-weigher
+  createDecisions: true
+  # Fetch all placement candidates, ignoring nova's preselection.
+  ignorePreselection: true
+  filters:
+    - name: filter_host_instructions
+      description: |
+        This step will consider the `ignore_hosts` and `force_hosts` instructions
+        from the nova scheduler request spec to filter out or exclusively allow
+        certain hosts.
+    - name: filter_has_enough_capacity
+      description: |
+        This step will filter out hosts that do not have enough available capacity
+        to host the requested flavor. If enabled, this step will subtract the
+        current reservations residing on this host from the available capacity.
+      params:
+        # If reserved space should be locked even for matching requests.
+        # For the reservations pipeline, we don't want to unlock
+        # reserved space, to avoid reservations for the same project
+        # and flavor to overlap.
+        - {key: lockReserved, boolValue: true}
+    - name: filter_has_requested_traits
+      description: |
+        This step filters hosts that do not have the requested traits given by the
+        nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
+        not have the specified trait. "trait:<trait>": "required" means the host
+        must have the specified trait.
+    - name: filter_has_accelerators
+      description: |
+        This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
+        the nova flavor extra specs request accelerators via "accel:device_profile".
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone.
+    - name: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
+    # Note: filter_external_customer is intentionally omitted.
+    # Domains are currently not considered in failover reservations.
+    - name: filter_allowed_projects
+      description: |
+        This step filters hosts based on allowed projects defined in the
+        hypervisor resource. Note that hosts allowing all projects are still
+        accessible and will not be filtered out. In this way some hypervisors
+        are made accessible to some projects only.
+    - name: filter_capabilities
+      description: |
+        This step will filter out hosts that do not meet the compute capabilities
+        requested by the nova flavor extra specs, like `{"arch": "x86_64",
+        "maxphysaddr:bits": 46, ...}`.
+
+        Note: currently, advanced boolean/numeric operators for the capabilities
+        like `>`, `!`, ... are not supported because they are not used by any of our
+        flavors in production.
+    - name: filter_instance_group_affinity
+      description: |
+        This step selects hosts in the instance group specified in the nova
+        scheduler request spec.
+    - name: filter_instance_group_anti_affinity
+      description: |
+        This step selects hosts not in the instance group specified in the nova
+        scheduler request spec, but only until the max_server_per_host limit is
+        reached (default = 1).
+    - name: filter_live_migratable
+      description: |
+        This step ensures that the target host of a live migration can accept
+        the migrating VM, by checking cpu architecture, cpu features, emulated
+        devices, and cpu modes.
+    - name: filter_requested_destination
+      params: {{ .Values.kvm.filterRequestedDestinationParams | toYaml | nindent 8 }}
+      description: |
+        This step filters hosts based on the `requested_destination` instruction
+        from the nova scheduler request spec. It supports filtering by host and
+        by aggregates.
+  weighers:
+    - name: kvm_prefer_smaller_hosts
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step pulls virtual machines onto smaller hosts (by capacity). This
+        ensures that larger hosts are not overly fragmented with small VMs,
+        and can still accommodate larger VMs when they need to be scheduled.
+    - name: kvm_instance_group_soft_affinity
+      description: |
+        This weigher implements the "soft affinity" and "soft anti-affinity" policy
+        for instance groups in nova.
+
+        It assigns a weight to each host based on how many instances of the same
+        instance group are already running on that host. The more instances of the
+        same group on a host, the lower (for soft-anti-affinity) or higher
+        (for soft-affinity) the weight, which makes it less likely or more likely,
+        respectively, for the scheduler to choose that host for new instances of
+        the same group.
+    - name: kvm_binpack
+      multiplier: -1.0 # inverted = balancing
+      params:
+        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
+      description: |
+        This step implements a balancing weigher for workloads on kvm hypervisors,
+        which is the opposite of binpacking. Instead of pulling the requested vm
+        into the smallest gaps possible, it spreads the load to ensure
+        workloads are balanced across hosts. In this pipeline, the balancing will
+        focus on general purpose virtual machines.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
   name: kvm-descheduler
 spec:
   schedulingDomain: nova
@@ -359,4 +530,138 @@ spec:
         the observed time span.
       params:
         - {key: maxStealPctOverObservedTimeSpan, floatValue: 20.0}
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: kvm-valid-host-reuse-failover-reservation
+spec:
+  schedulingDomain: nova
+  description: |
+    This pipeline is used by the failover reservation controller to check if a VM
+    can reuse an existing failover reservation. It validates that the reservation
+    host is compatible with the VM's requirements (traits, capabilities, etc.)
+    without checking capacity, since the reservation already has capacity reserved.
+
+    Use case: When a VM needs failover protection and there's an existing reservation
+    on a host, this pipeline validates the host is still suitable for the VM.
+  type: filter-weigher
+  createDecisions: false
+  filters:
+    - name: filter_host_instructions
+      description: |
+        This step will consider the `ignore_hosts` and `force_hosts` instructions
+        from the nova scheduler request spec to filter out or exclusively allow
+        certain hosts.
+    - name: filter_has_requested_traits
+      description: |
+        This step filters hosts that do not have the requested traits given by the
+        nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
+        not have the specified trait. "trait:<trait>": "required" means the host
+        must have the specified trait.
+    - name: filter_has_accelerators
+      description: |
+        This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
+        the nova flavor extra specs request accelerators via "accel:device_profile".
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone. This ensures VMs can
+        only reuse reservations in their own AZ.
+    - name: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
+    - name: filter_external_customer
+      description: |
+        This step prefix-matches the domain name for external customer domains and
+        filters out hosts that are not intended for external customers. It considers
+        the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+        `domain_name` scheduler hint from the nova request spec.
+      params:
+        - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
+    - name: filter_allowed_projects
+      description: |
+        This step filters hosts based on allowed projects defined in the
+        hypervisor resource. Note that hosts allowing all projects are still
+        accessible and will not be filtered out. In this way some hypervisors
+        are made accessible to some projects only.
+    - name: filter_capabilities
+      description: |
+        This step will filter out hosts that do not meet the compute capabilities
+        requested by the nova flavor extra specs, like `{"arch": "x86_64",
+        "maxphysaddr:bits": 46, ...}`.
+  weighers: []
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: kvm-acknowledge-failover-reservation
+spec:
+  schedulingDomain: nova
+  description: |
+    This pipeline is used by the failover reservation controller to validate that
+    a failover reservation is still valid for all its allocated VMs. It sends an
+    evacuation-style scheduling request for each VM with only the reservation's
+    host as the eligible target.
+
+    Use case: After a reservation is created or modified, this pipeline validates
+    that the reservation host can still accommodate all allocated VMs. If validation
+    fails for any VM, the reservation is deleted (nack).
+  type: filter-weigher
+  createDecisions: false
+  filters:
+    - name: filter_host_instructions
+      description: |
+        This step will consider the `ignore_hosts` and `force_hosts` instructions
+        from the nova scheduler request spec to filter out or exclusively allow
+        certain hosts.
+    - name: filter_has_enough_capacity
+      description: |
+        This step will filter out hosts that do not have enough available capacity
+        to host the requested flavor. Reservations are considered to ensure we
+        don't double-book capacity.
+      params:
+        - {key: lockReserved, boolValue: true}
+    - name: filter_has_requested_traits
+      description: |
+        This step filters hosts that do not have the requested traits given by the
+        nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
+        not have the specified trait. "trait:<trait>": "required" means the host
+        must have the specified trait.
+    - name: filter_has_accelerators
+      description: |
+        This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
+        the nova flavor extra specs request accelerators via "accel:device_profile".
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone. This ensures reservation
+        validation respects AZ boundaries.
+    - name: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
+    - name: filter_external_customer
+      description: |
+        This step prefix-matches the domain name for external customer domains and
+        filters out hosts that are not intended for external customers. It considers
+        the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+        `domain_name` scheduler hint from the nova request spec.
+      params:
+        - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
+    - name: filter_allowed_projects
+      description: |
+        This step filters hosts based on allowed projects defined in the
+        hypervisor resource. Note that hosts allowing all projects are still
+        accessible and will not be filtered out. In this way some hypervisors
+        are made accessible to some projects only.
+    - name: filter_capabilities
+      description: |
+        This step will filter out hosts that do not meet the compute capabilities
+        requested by the nova flavor extra specs, like `{"arch": "x86_64",
+        "maxphysaddr:bits": 46, ...}`.
+  weighers: []
 {{- end }}
