@@ -15,8 +15,8 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
-// commitmentUUIDPattern validates commitment UUID format
-var commitmentUUIDPattern = regexp.MustCompile(`^[a-zA-Z0-9-]{6,64}$`)
+// commitmentUUIDPattern validates commitment UUID format.
+var commitmentUUIDPattern = regexp.MustCompile(`^[a-zA-Z0-9-]{6,40}$`)
 
 // Limes LIQUID resource naming convention: ram_<flavorgroup>
 const commitmentResourceNamePrefix = "ram_"

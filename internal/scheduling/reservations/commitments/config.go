@@ -18,8 +18,8 @@ type Config struct {
 	// PipelineDefault is the default pipeline used for scheduling committed resource reservations.
 	PipelineDefault string `json:"pipelineDefault"`
 
-	// The endpoint where to find the nova external scheduler endpoint.
-	Endpoints EndpointsConfig `json:"endpoints"`
+	// NovaExternalScheduler is the endpoint where to find the nova external scheduler endpoint.
+	NovaExternalScheduler string `json:"novaExternalScheduler"`
 
 	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
 	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
@@ -49,16 +49,12 @@ type Config struct {
 	EnableChangeCommitmentsAPI bool `json:"enableChangeCommitmentsAPI"`
 }
 
-type EndpointsConfig struct {
-	// The nova external scheduler endpoint.
-	NovaExternalScheduler string `json:"novaExternalScheduler"`
-}
-
 func DefaultConfig() Config {
 	return Config{
 		RequeueIntervalActive:                  5 * time.Minute,
 		RequeueIntervalRetry:                   1 * time.Minute,
 		PipelineDefault:                        "kvm-committed-resource-reservation-general-purpose",
+		NovaExternalScheduler:                  "http://localhost:8080/scheduler/nova/external",
 		ChangeAPIWatchReservationsTimeout:      10 * time.Second,
 		ChangeAPIWatchReservationsPollInterval: 500 * time.Millisecond,
 		EnableChangeCommitmentsAPI:             true,

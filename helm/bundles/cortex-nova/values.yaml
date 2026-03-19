@@ -138,9 +138,8 @@ cortex-scheduling-controllers:
       - reservations-controller
     enabledTasks:
       - nova-decisions-cleanup-task
-    # Endpoints configuration for reservations controller
-    endpoints:
-      novaExternalScheduler: "http://localhost:8080/scheduler/nova/external"
+    # NovaExternalScheduler is the URL of the nova external scheduler API for CR reservations
+    novaExternalScheduler: "http://localhost:8080/scheduler/nova/external"
     # FlavorGroupPipelines maps flavor group IDs to pipeline names for CR reservations
     # This allows different scheduling strategies per flavor group (e.g., HANA vs GP)
     flavorGroupPipelines:

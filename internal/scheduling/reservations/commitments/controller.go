@@ -429,8 +429,8 @@ func (r *CommitmentReservationController) Init(ctx context.Context, client clien
 	}
 
 	// Initialize scheduler client
-	r.SchedulerClient = reservations.NewSchedulerClient(conf.Endpoints.NovaExternalScheduler)
-	logf.FromContext(ctx).Info("scheduler client initialized for commitment reservation controller", "url", conf.Endpoints.NovaExternalScheduler)
+	r.SchedulerClient = reservations.NewSchedulerClient(conf.NovaExternalScheduler)
+	logf.FromContext(ctx).Info("scheduler client initialized for commitment reservation controller", "url", conf.NovaExternalScheduler)
 
 	return nil
 }
