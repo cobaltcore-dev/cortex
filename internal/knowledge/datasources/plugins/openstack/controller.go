@@ -21,8 +21,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -237,19 +237,24 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 }
 
 func (r *OpenStackDatasourceReconciler) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
-	return multicluster.BuildController(mcl, mgr).
-		Named("cortex-openstack-datasource").
-		For(
-			&v1alpha1.Datasource{},
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				// Only react to datasources matching the operator.
-				ds := obj.(*v1alpha1.Datasource)
-				if ds.Spec.SchedulingDomain != r.Conf.SchedulingDomain {
-					return false
-				}
-				// Only react to openstack datasources.
-				return ds.Spec.Type == v1alpha1.DatasourceTypeOpenStack
-			})),
-		).
+	bldr := multicluster.BuildController(mcl, mgr)
+	// Watch datasource changes across all clusters.
+	bldr, err := bldr.WatchesMulticluster(
+		&v1alpha1.Datasource{},
+		&handler.EnqueueRequestForObject{},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			// Only react to datasources matching the operator.
+			ds := obj.(*v1alpha1.Datasource)
+			if ds.Spec.SchedulingDomain != r.Conf.SchedulingDomain {
+				return false
+			}
+			// Only react to openstack datasources.
+			return ds.Spec.Type == v1alpha1.DatasourceTypeOpenStack
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	return bldr.Named("cortex-openstack-datasource").
 		Complete(r)
 }
