@@ -20,6 +20,15 @@ spec:
       description: |
         This step will filter out hosts whose aggregate information indicates they
         are not placed in the requested availability zone.
+    - name: filter_capabilities
+      description: |
+        This step will filter out hosts that do not meet the compute capabilities
+        requested by the nova flavor extra specs, like `{"arch": "x86_64",
+        "maxphysaddr:bits": 46, ...}`.
+
+        Note: currently, advanced boolean/numeric operators for the capabilities
+        like `>`, `!`, ... are not supported because they are not used by any of our
+        flavors in production.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -70,6 +79,15 @@ spec:
       description: |
         This step will filter out hosts whose aggregate information indicates they
         are not placed in the requested availability zone.
+    - name: filter_capabilities
+      description: |
+        This step will filter out hosts that do not meet the compute capabilities
+        requested by the nova flavor extra specs, like `{"arch": "x86_64",
+        "maxphysaddr:bits": 46, ...}`.
+
+        Note: currently, advanced boolean/numeric operators for the capabilities
+        like `>`, `!`, ... are not supported because they are not used by any of our
+        flavors in production.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
