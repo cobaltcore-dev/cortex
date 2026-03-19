@@ -64,7 +64,7 @@ func (r ReservationsResourceRouter) Match(obj any, labels map[string]string) (bo
 	}
 	availabilityZone, ok := labels["availability_zone"]
 	if !ok {
-		return false, errors.New("cluster does not have availability zone in spec")
+		return false, errors.New("cluster does not have availability_zone label")
 	}
 	reservationAvailabilityZone := res.Spec.AvailabilityZone
 	if reservationAvailabilityZone == "" {
