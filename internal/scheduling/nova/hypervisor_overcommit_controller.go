@@ -52,16 +52,16 @@ func (m *HypervisorOvercommitMapping) Validate() error {
 				"Invalid value for resource " + string(resource) + ": " +
 				fmt.Sprintf("%f", overcommit))
 		}
-		// Has trait and hasn't trait are mutually exclusive, so if both are set
-		// we return an error.
-		if m.HasTrait != nil && m.HasntTrait != nil {
-			return errors.New("invalid overcommit mapping, hasTrait and hasntTrait are mutually exclusive")
-		}
-		// At least one of has trait and hasn't trait must be set,
-		// otherwise we don't know when to apply this mapping.
-		if m.HasTrait == nil && m.HasntTrait == nil {
-			return errors.New("invalid overcommit mapping, at least one of hasTrait and hasntTrait must be set")
-		}
+	}
+	// Has trait and hasn't trait are mutually exclusive, so if both are set
+	// we return an error.
+	if m.HasTrait != nil && m.HasntTrait != nil {
+		return errors.New("invalid overcommit mapping, hasTrait and hasntTrait are mutually exclusive")
+	}
+	// At least one of has trait and hasn't trait must be set,
+	// otherwise we don't know when to apply this mapping.
+	if m.HasTrait == nil && m.HasntTrait == nil {
+		return errors.New("invalid overcommit mapping, at least one of hasTrait and hasntTrait must be set")
 	}
 	return nil
 }
@@ -130,6 +130,9 @@ func (c *HypervisorOvercommitController) Reconcile(ctx context.Context, req ctrl
 	// non-overlapping resources from previous mappings.
 	desiredOvercommit := make(map[hv1.ResourceName]float64)
 	for _, mapping := range c.config.OvercommitMappings {
+		log.Info("Processing overcommit mapping",
+			"mapping", mapping,
+			"hypervisorTraits", obj.Status.Traits)
 		var applyMapping bool
 		switch {
 		// These are mutually exclusive.

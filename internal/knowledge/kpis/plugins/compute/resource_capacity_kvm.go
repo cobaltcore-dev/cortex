@@ -154,20 +154,30 @@ func (k *KVMResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	for _, hypervisor := range hvs.Items {
-		cpuTotal, hasCPUTotal := hypervisor.Status.Capacity["cpu"]
-		ramTotal, hasRAMTotal := hypervisor.Status.Capacity["memory"]
+		if hypervisor.Status.EffectiveCapacity == nil {
+			slog.Warn("hypervisor with nil effective capacity, skipping", "host", hypervisor.Name)
+			continue
+		}
+
+		cpuTotal, hasCPUTotal := hypervisor.Status.EffectiveCapacity[hv1.ResourceCPU]
+		ramTotal, hasRAMTotal := hypervisor.Status.EffectiveCapacity[hv1.ResourceMemory]
 
 		if !hasCPUTotal || !hasRAMTotal {
 			slog.Error("hypervisor missing cpu or ram total capacity", "hypervisor", hypervisor.Name)
 			continue
 		}
 
-		cpuUsed, hasCPUUtilized := hypervisor.Status.Allocation["cpu"]
+		if cpuTotal.IsZero() || ramTotal.IsZero() {
+			slog.Warn("hypervisor with zero cpu or ram total capacity, skipping", "host", hypervisor.Name)
+			continue
+		}
+
+		cpuUsed, hasCPUUtilized := hypervisor.Status.Allocation[hv1.ResourceCPU]
 		if !hasCPUUtilized {
 			cpuUsed = resource.MustParse("0")
 		}
 
-		ramUsed, hasRAMUtilized := hypervisor.Status.Allocation["memory"]
+		ramUsed, hasRAMUtilized := hypervisor.Status.Allocation[hv1.ResourceMemory]
 		if !hasRAMUtilized {
 			ramUsed = resource.MustParse("0")
 		}

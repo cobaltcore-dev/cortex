@@ -19,8 +19,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -29,6 +31,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 )
@@ -74,6 +77,8 @@ type ReservationReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
+// Note: Failover reservations are filtered out at the watch level by the predicate
+// in SetupWithManager, so this function only handles non-failover reservations.
 func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 	// Fetch the reservation object.
@@ -183,7 +188,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Convert resource.Quantity to integers for the API
 	var memoryMB uint64
-	if memory, ok := res.Spec.Resources["memory"]; ok {
+	if memory, ok := res.Spec.Resources[hv1.ResourceMemory]; ok {
 		memoryValue := memory.ScaledValue(resource.Mega)
 		if memoryValue < 0 {
 			return ctrl.Result{}, fmt.Errorf("invalid memory value: %d", memoryValue)
@@ -192,7 +197,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	var cpu uint64
-	if cpuQuantity, ok := res.Spec.Resources["cpu"]; ok {
+	if cpuQuantity, ok := res.Spec.Resources[hv1.ResourceCPU]; ok {
 		cpuValue := cpuQuantity.ScaledValue(resource.Milli)
 		if cpuValue < 0 {
 			return ctrl.Result{}, fmt.Errorf("invalid cpu value: %d", cpuValue)
@@ -467,6 +472,41 @@ func (r *ReservationReconciler) listServersByProjectID(ctx context.Context, proj
 	return serverMap, nil
 }
 
+// notFailoverReservationPredicate filters out failover reservations at the watch level.
+// This prevents the controller from being notified about failover reservations,
+// which are managed by the separate failover controller.
+// Failover reservations are identified by the label v1alpha1.LabelReservationType.
+var notFailoverReservationPredicate = predicate.Funcs{
+	CreateFunc: func(e event.CreateEvent) bool {
+		res, ok := e.Object.(*v1alpha1.Reservation)
+		if !ok {
+			return false
+		}
+		return res.Labels[v1alpha1.LabelReservationType] != v1alpha1.ReservationTypeLabelFailover
+	},
+	UpdateFunc: func(e event.UpdateEvent) bool {
+		res, ok := e.ObjectNew.(*v1alpha1.Reservation)
+		if !ok {
+			return false
+		}
+		return res.Labels[v1alpha1.LabelReservationType] != v1alpha1.ReservationTypeLabelFailover
+	},
+	DeleteFunc: func(e event.DeleteEvent) bool {
+		res, ok := e.Object.(*v1alpha1.Reservation)
+		if !ok {
+			return false
+		}
+		return res.Labels[v1alpha1.LabelReservationType] != v1alpha1.ReservationTypeLabelFailover
+	},
+	GenericFunc: func(e event.GenericEvent) bool {
+		res, ok := e.Object.(*v1alpha1.Reservation)
+		if !ok {
+			return false
+		}
+		return res.Labels[v1alpha1.LabelReservationType] != v1alpha1.ReservationTypeLabelFailover
+	},
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *ReservationReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
@@ -477,19 +517,20 @@ func (r *ReservationReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multiclu
 	})); err != nil {
 		return err
 	}
-	bldr := multicluster.BuildController(mcl, mgr)
-	// Watch reservation changes across all clusters.
-	bldr, err := bldr.WatchesMulticluster(
-		&v1alpha1.Reservation{},
-		&handler.EnqueueRequestForObject{},
-	)
-	if err != nil {
-		return err
-	}
-	return bldr.Named("reservation").
-		WithOptions(controller.Options{
-			// We want to process reservations one at a time to avoid overbooking.
-			MaxConcurrentReconciles: 1,
-		}).
-		Complete(r)
+  bldr := multicluster.BuildController(mcl, mgr)
+  // Watch reservation changes across all clusters.
+  bldr, err := bldr.WatchesMulticluster(
+      &v1alpha1.Reservation{},
+      &handler.EnqueueRequestForObject{},
+      notFailoverReservationPredicate,
+  )
+  if err != nil {
+      return err
+  }
+  return bldr.Named("reservation").
+      WithOptions(controller.Options{
+          // We want to process reservations one at a time to avoid overbooking.
+          MaxConcurrentReconciles: 1,
+      }).
+      Complete(r)
 }

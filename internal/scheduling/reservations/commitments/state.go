@@ -29,7 +29,7 @@ func getFlavorGroupNameFromResource(resourceName string) (string, error) {
 
 // CommitmentState represents desired or current commitment resource allocation.
 type CommitmentState struct {
-	// CommitmentUUID uniquely identifies this commitment
+	// CommitmentUUID is the UUID of the commitment this state corresponds to.
 	CommitmentUUID string
 	// ProjectID is the OpenStack project this commitment belongs to
 	ProjectID string

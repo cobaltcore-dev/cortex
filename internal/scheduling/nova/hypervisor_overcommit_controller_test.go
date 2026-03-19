@@ -82,18 +82,18 @@ func TestHypervisorOvercommitMapping_Validate(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name: "empty overcommit map is valid",
+			name: "empty overcommit map is invalid",
 			mapping: HypervisorOvercommitMapping{
 				Overcommit: map[hv1.ResourceName]float64{},
 			},
-			expectError: false,
+			expectError: true,
 		},
 		{
-			name: "nil overcommit map is valid",
+			name: "nil overcommit map is invalid",
 			mapping: HypervisorOvercommitMapping{
 				Overcommit: nil,
 			},
-			expectError: false,
+			expectError: true,
 		},
 		{
 			name: "mixed valid and invalid overcommit ratios",

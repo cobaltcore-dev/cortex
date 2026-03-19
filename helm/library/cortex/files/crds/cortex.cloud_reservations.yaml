@@ -15,7 +15,7 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .metadata.labels['reservations\.cortex\.sap\.com/type']
+    - jsonPath: .metadata.labels['reservations\.cortex\.cloud/type']
       name: Type
       type: string
     - jsonPath: .status.host
@@ -87,6 +87,10 @@ spec:
                       Key: Workload UUID (VM UUID for Nova, Pod UID for Pods, Machine UID for IronCore, etc.)
                       Value: allocation state and metadata
                     type: object
+                  commitmentUUID:
+                    description: CommitmentUUID is the UUID of the commitment that
+                      this reservation corresponds to.
+                    type: string
                   creator:
                     description: |-
                       Creator identifies the system or component that created this reservation.
@@ -238,6 +242,14 @@ spec:
                   FailoverReservation contains status fields specific to failover reservations.
                   Only used when Type is FailoverReservation.
                 properties:
+                  acknowledgedAt:
+                    description: |-
+                      AcknowledgedAt is the timestamp when the last change was acknowledged.
+                      When nil, the reservation is in a pending state awaiting acknowledgment.
+                      This does not affect the Ready condition - reservations are still considered
+                      ready even when not yet acknowledged.
+                    format: date-time
+                    type: string
                   allocations:
                     additionalProperties:
                       type: string
@@ -245,6 +257,12 @@ spec:
                       Allocations maps VM/instance UUIDs to the host they are currently allocated on.
                       Key: VM/instance UUID, Value: Host name where the VM is currently running.
                     type: object
+                  lastChanged:
+                    description: |-
+                      LastChanged tracks when the reservation was last modified.
+                      This is used to track pending changes that need acknowledgment.
+                    format: date-time
+                    type: string
                 type: object
               host:
                 description: |-
