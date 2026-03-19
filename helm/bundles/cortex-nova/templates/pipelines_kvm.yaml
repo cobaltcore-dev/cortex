@@ -37,6 +37,10 @@ spec:
         `domain_name` scheduler hint from the nova request spec.
       params:
         - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
+    - name: filter_has_accelerators
+      description: |
+        This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
+        the nova flavor extra specs request accelerators via "accel:device_profile".
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -104,6 +108,10 @@ spec:
         `domain_name` scheduler hint from the nova request spec.
       params:
         - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
+    - name: filter_has_accelerators
+      description: |
+        This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
+        the nova flavor extra specs request accelerators via "accel:device_profile".
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
