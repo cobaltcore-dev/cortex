@@ -23,12 +23,11 @@ type HypervisorResourceRouter struct{}
 func (h HypervisorResourceRouter) Match(obj any, labels map[string]string) (bool, error) {
 	var hv hv1.Hypervisor
 
-	if obj == nil {
-		return false, errors.New("object is nil")
-	}
-
 	switch v := obj.(type) {
 	case *hv1.Hypervisor:
+		if v == nil {
+			return false, errors.New("object is nil")
+		}
 		hv = *v
 	case hv1.Hypervisor:
 		hv = v
@@ -52,12 +51,11 @@ type ReservationsResourceRouter struct{}
 func (r ReservationsResourceRouter) Match(obj any, labels map[string]string) (bool, error) {
 	var res v1alpha1.Reservation
 
-	if obj == nil {
-		return false, errors.New("object is nil")
-	}
-
 	switch v := obj.(type) {
 	case *v1alpha1.Reservation:
+		if v == nil {
+			return false, errors.New("object is nil")
+		}
 		res = *v
 	case v1alpha1.Reservation:
 		res = v
