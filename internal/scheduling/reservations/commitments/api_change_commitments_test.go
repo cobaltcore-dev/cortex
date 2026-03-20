@@ -68,8 +68,32 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			ExistingReservations: []*TestReservation{{CommitmentID: "uuid-456", Host: "host-1", Flavor: m1Small, ProjectID: "project-A"}},
 			CommitmentRequest:    newCommitmentRequest("az-a", false, 1234, createCommitment("ram_hana_1", "project-A", "uuid-456", "confirmed", 3)),
 			AvailableResources:   &AvailableResources{PerHost: map[string]int64{"host-1": 1024, "host-2": 0}},
-			ExpectedReservations: []*TestReservation{{CommitmentID: "uuid-456", Host: "", Flavor: m1Small, ProjectID: "project-A"}},
+			ExpectedReservations: []*TestReservation{{CommitmentID: "uuid-456", Host: "host-1", Flavor: m1Small, ProjectID: "project-A"}},
 			ExpectedAPIResponse:  newAPIResponse("1 commitment(s) failed", "commitment uuid-456: not sufficient capacity"),
+		},
+		{
+			Name:                 "Invalid CR name - too long",
+			VMs:                  []*TestVM{},
+			Flavors:              []*TestFlavor{m1Small},
+			ExistingReservations: []*TestReservation{},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("ram_hana_1", "project-A", strings.Repeat("long-", 13), "confirmed", 3),
+			),
+			AvailableResources:   &AvailableResources{},
+			ExpectedReservations: []*TestReservation{},
+			ExpectedAPIResponse:  newAPIResponse("1 commitment(s) failed", "commitment long-long-long-long-long-long-long-long-long-long-long-long-long-: unexpected commitment format"),
+		},
+		{
+			Name:                 "Invalid CR name - spaces",
+			VMs:                  []*TestVM{},
+			Flavors:              []*TestFlavor{m1Small},
+			ExistingReservations: []*TestReservation{},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("ram_hana_1", "project-A", "uuid with space", "confirmed", 3),
+			),
+			AvailableResources:   &AvailableResources{},
+			ExpectedReservations: []*TestReservation{},
+			ExpectedAPIResponse:  newAPIResponse("1 commitment(s) failed", "commitment uuid with space: unexpected commitment format"),
 		},
 		{
 			Name:    "Swap capacity between CRs - order dependent - delete-first succeeds",
@@ -405,6 +429,22 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			EnvInfoVersion: -1, // Skip Knowledge CRD creation
 		},
 		{
+			Name:    "API disabled - returns 503 Service Unavailable",
+			Flavors: []*TestFlavor{m1Small},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("ram_hana_1", "project-A", "uuid-disabled", "confirmed", 2),
+			),
+			CustomConfig: func() *Config {
+				cfg := DefaultConfig()
+				cfg.EnableChangeCommitmentsAPI = false
+				return &cfg
+			}(),
+			ExpectedReservations: []*TestReservation{},
+			ExpectedAPIResponse: APIResponseExpectation{
+				StatusCode: 503,
+			},
+		},
+		{
 			Name: "Multiple commitments insufficient capacity - all listed in error",
 			// Tests that multiple failed commitments are all mentioned in the rejection reason
 			Flavors: []*TestFlavor{m1Small, m1Tiny},
@@ -418,16 +458,42 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			ExpectedAPIResponse:  newAPIResponse("2 commitment(s) failed", "commitment uuid-multi-fail-1: not sufficient capacity", "commitment uuid-multi-fail-2: not sufficient capacity"),
 		},
 		{
+			Name: "Deletion priority during rollback - unscheduled removed first",
+			// Tests that during rollback, unscheduled reservations (no TargetHost) are deleted first,
+			// preserving scheduled reservations (with TargetHost), especially those with VM allocations
+			VMs:     []*TestVM{{UUID: "vm-priority", Flavor: m1Small, ProjectID: "project-A", Host: "host-1", AZ: "az-a"}},
+			Flavors: []*TestFlavor{m1Small},
+			ExistingReservations: []*TestReservation{
+				// Reservation with VM allocation - should be preserved (lowest deletion priority)
+				{CommitmentID: "commitment-1", Host: "host-1", Flavor: m1Small, ProjectID: "project-A", VMs: []string{"vm-priority"}},
+				// Scheduled but unused - medium deletion priority
+				{CommitmentID: "commitment-1", Host: "host-2", Flavor: m1Small, ProjectID: "project-A"},
+			},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("ram_hana_1", "project-A", "commitment-1", "confirmed", 4),
+			),
+			AvailableResources: &AvailableResources{PerHost: map[string]int64{"host-1": 0, "host-2": 1024}},
+			ExpectedReservations: []*TestReservation{
+				// After rollback, should preserve the scheduled reservations (especially with VMs)
+				// and remove unscheduled ones first
+				{CommitmentID: "commitment-1", Host: "host-1", Flavor: m1Small, ProjectID: "project-A", VMs: []string{"vm-priority"}},
+				{CommitmentID: "commitment-1", Host: "host-2", Flavor: m1Small, ProjectID: "project-A"},
+			},
+			ExpectedAPIResponse: newAPIResponse("commitment commitment-1: not sufficient capacity"),
+		},
+		{
 			Name:    "Watch timeout with custom config - triggers rollback with timeout error",
 			Flavors: []*TestFlavor{m1Small},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
 				createCommitment("ram_hana_1", "project-A", "uuid-timeout", "confirmed", 2),
 			),
 			// With 0ms timeout, the watch will timeout immediately before reservations become ready
-			CustomConfig: &Config{
-				ChangeAPIWatchReservationsTimeout:      0 * time.Millisecond,
-				ChangeAPIWatchReservationsPollInterval: 100 * time.Millisecond,
-			},
+			CustomConfig: func() *Config {
+				cfg := DefaultConfig()
+				cfg.ChangeAPIWatchReservationsTimeout = 0 * time.Millisecond
+				cfg.ChangeAPIWatchReservationsPollInterval = 100 * time.Millisecond
+				return &cfg
+			}(),
 			ExpectedReservations: []*TestReservation{}, // Rollback removes all reservations
 			ExpectedAPIResponse:  newAPIResponse("timeout reached while processing commitment changes"),
 		},
@@ -1121,9 +1187,16 @@ func (env *CommitmentTestEnv) processNewReservation(res *v1alpha1.Reservation) {
 
 	env.processedReserv[res.Name] = true
 
+	if res.Spec.CommittedResourceReservation == nil || res.Spec.CommittedResourceReservation.ResourceGroup == "" || res.Spec.Resources == nil || res.Spec.Resources["memory"] == (resource.Quantity{}) {
+		env.markReservationFailedStatus(res, "invalid reservation spec")
+		env.T.Logf("✗ Invalid reservation spec for %s: marking as failed (resource group: %s, resources: %v)", res.Name, res.Spec.CommittedResourceReservation.ResourceGroup, res.Spec.Resources)
+		return
+	}
+
 	// If no available resources configured, accept all reservations without host assignment
 	if env.availableResources == nil {
-		env.markReservationReady(res)
+		env.T.Logf("✓ Scheduled reservation %s - no resource tracking, simply accept", res.Name)
+		env.markReservationSchedulerProcessedStatus(res, "some-host")
 		return
 	}
 
@@ -1167,19 +1240,29 @@ func (env *CommitmentTestEnv) processNewReservation(res *v1alpha1.Reservation) {
 			env.T.Logf("Warning: Failed to update reservation status host: %v", err)
 		}
 
-		env.markReservationReady(res)
+		env.markReservationSchedulerProcessedStatus(res, selectedHost)
 		env.T.Logf("✓ Scheduled reservation %s on %s (%d MB used, %d MB remaining)",
 			res.Name, selectedHost, memoryMB, env.availableResources[selectedHost])
 	} else {
-		// FAILURE: No host has enough capacity
-		env.markReservationFailed(res, "Insufficient capacity on all hosts")
+		env.markReservationSchedulerProcessedStatus(res, "")
 		env.T.Logf("✗ Failed to schedule reservation %s (needs %d MB, no host has capacity)",
 			res.Name, memoryMB)
 	}
 }
 
-// markReservationReady updates a reservation to have Ready=True status.
-func (env *CommitmentTestEnv) markReservationReady(res *v1alpha1.Reservation) {
+// markReservationSchedulerProcessedStatus updates a reservation to have Ready=True status (scheduling can be succeeded or not - depending on host status)
+func (env *CommitmentTestEnv) markReservationSchedulerProcessedStatus(res *v1alpha1.Reservation, host string) {
+	ctx := context.Background()
+
+	// Update spec first
+	res.Spec.TargetHost = host
+	if err := env.K8sClient.Update(ctx, res); err != nil {
+		env.T.Logf("Warning: Failed to update reservation spec: %v", err)
+		return
+	}
+
+	// Then update status
+	res.Status.Host = host
 	res.Status.Conditions = []metav1.Condition{
 		{
 			Type:               v1alpha1.ReservationConditionReady,
@@ -1189,20 +1272,18 @@ func (env *CommitmentTestEnv) markReservationReady(res *v1alpha1.Reservation) {
 			LastTransitionTime: metav1.Now(),
 		},
 	}
-
-	if err := env.K8sClient.Status().Update(context.Background(), res); err != nil {
-		// Ignore errors - might be deleted during update
-		return
+	if err := env.K8sClient.Status().Update(ctx, res); err != nil {
+		env.T.Logf("Warning: Failed to update reservation status: %v", err)
 	}
 }
 
-// markReservationFailed updates a reservation to have Ready=False status (scheduling failed).
-func (env *CommitmentTestEnv) markReservationFailed(res *v1alpha1.Reservation, reason string) {
+// markReservationFailedStatus updates a reservation to have Ready=False status
+func (env *CommitmentTestEnv) markReservationFailedStatus(res *v1alpha1.Reservation, reason string) {
 	res.Status.Conditions = []metav1.Condition{
 		{
 			Type:               v1alpha1.ReservationConditionReady,
 			Status:             metav1.ConditionFalse,
-			Reason:             "SchedulingFailed",
+			Reason:             "Reservation invalid",
 			Message:            reason,
 			LastTransitionTime: metav1.Now(),
 		},
