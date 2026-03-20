@@ -20,6 +20,11 @@ spec:
       description: |
         This step will filter out hosts whose aggregate information indicates they
         are not placed in the requested availability zone.
+    - name: filter_host_instructions
+      description: |
+        This step will consider the `ignore_hosts` and `force_hosts` instructions
+        from the nova scheduler request spec to filter out or exclusively allow
+        certain hosts.
     - name: filter_capabilities
       description: |
         This step will filter out hosts that do not meet the compute capabilities
@@ -29,6 +34,12 @@ spec:
         Note: currently, advanced boolean/numeric operators for the capabilities
         like `>`, `!`, ... are not supported because they are not used by any of our
         flavors in production.
+    - name: filter_has_requested_traits
+      description: |
+        This step filters hosts that do not have the requested traits given by the
+        nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
+        not have the specified trait. "trait:<trait>": "required" means the host
+        must have the specified trait.
     - name: filter_external_customer
       description: |
         This step prefix-matches the domain name for external customer domains and
@@ -41,6 +52,15 @@ spec:
       description: |
         This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
         the nova flavor extra specs request accelerators via "accel:device_profile".
+    - name: filter_instance_group_affinity
+      description: |
+        This step selects hosts in the instance group specified in the nova
+        scheduler request spec.
+    - name: filter_instance_group_anti_affinity
+      description: |
+        This step selects hosts not in the instance group specified in the nova
+        scheduler request spec, but only until the max_server_per_host limit is
+        reached (default = 1).
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -91,6 +111,11 @@ spec:
       description: |
         This step will filter out hosts whose aggregate information indicates they
         are not placed in the requested availability zone.
+    - name: filter_host_instructions
+      description: |
+        This step will consider the `ignore_hosts` and `force_hosts` instructions
+        from the nova scheduler request spec to filter out or exclusively allow
+        certain hosts.
     - name: filter_capabilities
       description: |
         This step will filter out hosts that do not meet the compute capabilities
@@ -100,6 +125,12 @@ spec:
         Note: currently, advanced boolean/numeric operators for the capabilities
         like `>`, `!`, ... are not supported because they are not used by any of our
         flavors in production.
+    - name: filter_has_requested_traits
+      description: |
+        This step filters hosts that do not have the requested traits given by the
+        nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
+        not have the specified trait. "trait:<trait>": "required" means the host
+        must have the specified trait.
     - name: filter_external_customer
       description: |
         This step prefix-matches the domain name for external customer domains and
@@ -112,6 +143,15 @@ spec:
       description: |
         This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
         the nova flavor extra specs request accelerators via "accel:device_profile".
+    - name: filter_instance_group_affinity
+      description: |
+        This step selects hosts in the instance group specified in the nova
+        scheduler request spec.
+    - name: filter_instance_group_anti_affinity
+      description: |
+        This step selects hosts not in the instance group specified in the nova
+        scheduler request spec, but only until the max_server_per_host limit is
+        reached (default = 1).
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
