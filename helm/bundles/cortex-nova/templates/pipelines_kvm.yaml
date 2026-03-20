@@ -20,6 +20,11 @@ spec:
       description: |
         This step will filter out hosts whose aggregate information indicates they
         are not placed in the requested availability zone.
+    - name: filter_host_instructions
+      description: |
+        This step will consider the `ignore_hosts` and `force_hosts` instructions
+        from the nova scheduler request spec to filter out or exclusively allow
+        certain hosts.
     - name: filter_capabilities
       description: |
         This step will filter out hosts that do not meet the compute capabilities
@@ -91,6 +96,11 @@ spec:
       description: |
         This step will filter out hosts whose aggregate information indicates they
         are not placed in the requested availability zone.
+    - name: filter_host_instructions
+      description: |
+        This step will consider the `ignore_hosts` and `force_hosts` instructions
+        from the nova scheduler request spec to filter out or exclusively allow
+        certain hosts.
     - name: filter_capabilities
       description: |
         This step will filter out hosts that do not meet the compute capabilities
