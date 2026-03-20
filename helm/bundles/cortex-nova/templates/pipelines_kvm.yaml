@@ -34,6 +34,12 @@ spec:
         Note: currently, advanced boolean/numeric operators for the capabilities
         like `>`, `!`, ... are not supported because they are not used by any of our
         flavors in production.
+    - name: filter_has_requested_traits
+      description: |
+        This step filters hosts that do not have the requested traits given by the
+        nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
+        not have the specified trait. "trait:<trait>": "required" means the host
+        must have the specified trait.
     - name: filter_external_customer
       description: |
         This step prefix-matches the domain name for external customer domains and
@@ -119,6 +125,12 @@ spec:
         Note: currently, advanced boolean/numeric operators for the capabilities
         like `>`, `!`, ... are not supported because they are not used by any of our
         flavors in production.
+    - name: filter_has_requested_traits
+      description: |
+        This step filters hosts that do not have the requested traits given by the
+        nova flavor extra spec: "trait:<trait>": "forbidden" means the host must
+        not have the specified trait. "trait:<trait>": "required" means the host
+        must have the specified trait.
     - name: filter_external_customer
       description: |
         This step prefix-matches the domain name for external customer domains and
