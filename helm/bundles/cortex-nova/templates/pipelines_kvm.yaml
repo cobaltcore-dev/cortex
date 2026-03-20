@@ -61,6 +61,12 @@ spec:
         This step selects hosts not in the instance group specified in the nova
         scheduler request spec, but only until the max_server_per_host limit is
         reached (default = 1).
+    - name: filter_requested_destination
+      params: {{ .Values.kvm.filterRequestedDestinationParams | toYaml | nindent 8 }}
+      description: |
+        This step filters hosts based on the `requested_destination` instruction
+        from the nova scheduler request spec. It supports filtering by host and
+        by aggregates.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -152,6 +158,12 @@ spec:
         This step selects hosts not in the instance group specified in the nova
         scheduler request spec, but only until the max_server_per_host limit is
         reached (default = 1).
+    - name: filter_requested_destination
+      params: {{ .Values.kvm.filterRequestedDestinationParams | toYaml | nindent 8 }}
+      description: |
+        This step filters hosts based on the `requested_destination` instruction
+        from the nova scheduler request spec. It supports filtering by host and
+        by aggregates.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
