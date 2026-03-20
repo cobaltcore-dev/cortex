@@ -134,7 +134,6 @@ cortex-scheduling-controllers:
       - nova-pipeline-controllers
       - nova-deschedulings-executor
       - hypervisor-overcommit-controller
-      - explanation-controller
       - reservations-controller
       - failover-reservations-controller
     enabledTasks:

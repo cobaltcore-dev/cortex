@@ -32,7 +32,7 @@ func TestCleanupCinder(t *testing.T) {
 
 	tests := []struct {
 		name              string
-		decisions         []v1alpha1.Decision
+		histories         []v1alpha1.History
 		expectError       bool
 		authError         bool
 		endpointError     bool
@@ -43,36 +43,36 @@ func TestCleanupCinder(t *testing.T) {
 	}{
 		{
 			name:        "handle authentication error",
-			decisions:   []v1alpha1.Decision{},
+			histories:   []v1alpha1.History{},
 			authError:   true,
 			expectError: true,
 		},
 		{
 			name:          "handle endpoint error",
-			decisions:     []v1alpha1.Decision{},
+			histories:     []v1alpha1.History{},
 			endpointError: true,
 			expectError:   true,
 		},
 		{
 			name:            "handle server error",
-			decisions:       []v1alpha1.Decision{},
+			histories:       []v1alpha1.History{},
 			mockServerError: true,
 			expectError:     true,
 		},
 		{
 			name:              "handle empty volumes case",
-			decisions:         []v1alpha1.Decision{},
+			histories:         []v1alpha1.History{},
 			emptyVolumesError: true,
 			expectError:       false,
 		},
 		{
 			name: "delete decisions for non-existent volumes",
-			decisions: []v1alpha1.Decision{
+			histories: []v1alpha1.History{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "decision-existing-volume",
 					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
 						ResourceID:       "volume-exists",
 					},
@@ -81,7 +81,7 @@ func TestCleanupCinder(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "decision-deleted-volume",
 					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
 						ResourceID:       "volume-deleted",
 					},
@@ -95,12 +95,12 @@ func TestCleanupCinder(t *testing.T) {
 		},
 		{
 			name: "keep decisions for existing volumes",
-			decisions: []v1alpha1.Decision{
+			histories: []v1alpha1.History{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "decision-volume-1",
 					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
 						ResourceID:       "volume-1",
 					},
@@ -109,7 +109,7 @@ func TestCleanupCinder(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "decision-volume-2",
 					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
 						ResourceID:       "volume-2",
 					},
@@ -126,9 +126,9 @@ func TestCleanupCinder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			objects := make([]client.Object, len(tt.decisions))
-			for i := range tt.decisions {
-				objects[i] = &tt.decisions[i]
+			objects := make([]client.Object, len(tt.histories))
+			for i := range tt.histories {
+				objects[i] = &tt.histories[i]
 			}
 
 			// Create mock Cinder server first
@@ -308,21 +308,21 @@ func TestCleanupCinder(t *testing.T) {
 				}
 
 				// Verify other decisions still exist
-				for _, originalDecision := range tt.decisions {
+				for _, originalHistory := range tt.histories {
 					shouldBeDeleted := false
 					for _, expectedDeleted := range tt.expectedDeleted {
-						if originalDecision.Name == expectedDeleted {
+						if originalHistory.Name == expectedDeleted {
 							shouldBeDeleted = true
 							break
 						}
 					}
 					if !shouldBeDeleted {
-						var decision v1alpha1.Decision
+						var history v1alpha1.History
 						err := client.Get(context.Background(),
-							types.NamespacedName{Name: originalDecision.Name}, &decision)
+							types.NamespacedName{Name: originalHistory.Name}, &history)
 						if err != nil {
-							t.Errorf("Expected decision %s to still exist but got error: %v",
-								originalDecision.Name, err)
+							t.Errorf("Expected history %s to still exist but got error: %v",
+								originalHistory.Name, err)
 						}
 					}
 				}

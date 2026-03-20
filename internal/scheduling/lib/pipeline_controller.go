@@ -30,6 +30,8 @@ type BasePipelineController[PipelineType any] struct {
 	client.Client
 	// The scheduling domain to scope resources to.
 	SchedulingDomain v1alpha1.SchedulingDomain
+	// Manager for creating, updating, and deleting History CRDs.
+	HistoryManager HistoryManager
 }
 
 // Handle the startup of the manager by initializing the pipeline map.
