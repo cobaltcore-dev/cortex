@@ -50,6 +50,11 @@ spec:
       description: |
         This step selects hosts in the instance group specified in the nova
         scheduler request spec.
+    - name: filter_instance_group_anti_affinity
+      description: |
+        This step selects hosts not in the instance group specified in the nova
+        scheduler request spec, but only until the max_server_per_host limit is
+        reached (default = 1).
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -130,6 +135,11 @@ spec:
       description: |
         This step selects hosts in the instance group specified in the nova
         scheduler request spec.
+    - name: filter_instance_group_anti_affinity
+      description: |
+        This step selects hosts not in the instance group specified in the nova
+        scheduler request spec, but only until the max_server_per_host limit is
+        reached (default = 1).
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
