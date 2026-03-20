@@ -46,6 +46,10 @@ spec:
       description: |
         This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
         the nova flavor extra specs request accelerators via "accel:device_profile".
+    - name: filter_instance_group_affinity
+      description: |
+        This step selects hosts in the instance group specified in the nova
+        scheduler request spec.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -122,6 +126,10 @@ spec:
       description: |
         This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
         the nova flavor extra specs request accelerators via "accel:device_profile".
+    - name: filter_instance_group_affinity
+      description: |
+        This step selects hosts in the instance group specified in the nova
+        scheduler request spec.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
