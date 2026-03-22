@@ -457,7 +457,7 @@ spec:
 
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
   type: filter-weigher
-  createDecisions: true
+  createDecisions: false
   # Fetch all placement candidates, ignoring nova's preselection.
   ignorePreselection: true
   filters:

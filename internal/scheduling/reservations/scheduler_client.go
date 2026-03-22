@@ -164,8 +164,10 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	// Send the request
+	// Send the request and measure duration
+	startTime := time.Now()
 	response, err := c.HTTPClient.Do(httpReq)
+	duration := time.Since(startTime)
 	if err != nil {
 		logger.Error(err, "failed to send external scheduler request")
 		return nil, fmt.Errorf("failed to send external scheduler request: %w", err)
@@ -185,7 +187,9 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 		return nil, fmt.Errorf("failed to decode external scheduler response: %w", err)
 	}
 
-	logger.V(1).Info("received external scheduler response", "hostsCount", len(externalSchedulerResponse.Hosts))
+	logger.V(1).Info("received external scheduler response",
+		"hostsCount", len(externalSchedulerResponse.Hosts),
+		"duration", duration.Round(time.Millisecond))
 
 	return &ScheduleReservationResponse{
 		Hosts: externalSchedulerResponse.Hosts,

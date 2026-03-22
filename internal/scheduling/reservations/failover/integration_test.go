@@ -229,6 +229,8 @@ func TestIntegration(t *testing.T) {
 				newHypervisor("host5", 16, 32, 4, 8, []hv1.Instance{{ID: "vm-5", Name: "vm-5", Active: true}}, nil),
 				newHypervisor("host6", 32, 64, 0, 0, nil, nil),
 				newHypervisor("host7", 32, 64, 0, 0, nil, nil),
+				newHypervisor("host8", 32, 64, 0, 0, nil, nil),
+				newHypervisor("host9", 32, 64, 0, 0, nil, nil),
 			},
 			VMs: []VM{
 				newVM("vm-1", "m1.large", "project-A", "host1", 8192, 4),
@@ -680,10 +682,11 @@ func (env *IntegrationTestEnv) TriggerFailoverReconcile(flavorRequirements map[s
 	schedulerClient := reservations.NewSchedulerClient(env.SchedulerBaseURL + "/scheduler/nova/external")
 
 	config := FailoverConfig{
-		ReconcileInterval:          time.Minute,
+		ReconcileInterval:          metav1.Duration{Duration: time.Minute},
 		Creator:                    "test-failover-controller",
 		FlavorFailoverRequirements: flavorRequirements,
 	}
+	config.ApplyDefaults()
 
 	controller := NewFailoverReservationController(
 		env.K8sClient,
@@ -944,13 +947,14 @@ func (env *IntegrationTestEnv) simulateHostFailure(failedHosts, allHosts []strin
 		}
 
 		request := novaapi.ExternalSchedulerRequest{
-			Pipeline: "nova-external-scheduler-kvm-all-filters-enabled",
+			Pipeline: "test-filter-pipeline",
 			Hosts:    externalHosts,
 			Weights:  weights,
 			Spec: novaapi.NovaObject[novaapi.NovaSpec]{
 				Data: novaapi.NovaSpec{
-					InstanceUUID: vm.UUID,
-					ProjectID:    vm.ProjectID,
+					InstanceUUID:   vm.UUID,
+					ProjectID:      vm.ProjectID,
+					SchedulerHints: map[string]any{"_nova_check_type": []any{"evacuate"}},
 					Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
 						Data: novaapi.NovaFlavor{
 							Name:       vm.FlavorName,
@@ -974,7 +978,12 @@ func (env *IntegrationTestEnv) simulateHostFailure(failedHosts, allHosts []strin
 
 		selectedHost := ""
 		selectedReservation := ""
-		for _, candidateHost := range response.Hosts {
+		// Only consider the first 3 hosts (simulating Nova's behavior of using top hosts)
+		hostsToCheck := response.Hosts
+		if len(hostsToCheck) > 3 {
+			hostsToCheck = hostsToCheck[:3]
+		}
+		for _, candidateHost := range hostsToCheck {
 			for _, res := range reservationsByHost[candidateHost] {
 				if res.Status.FailoverReservation != nil {
 					if _, vmUsesThis := res.Status.FailoverReservation.Allocations[vm.UUID]; vmUsesThis {
@@ -1102,132 +1111,12 @@ func newIntegrationTestEnv(t *testing.T, vms []VM, hypervisors []*hv1.Hypervisor
 	pipelines := []v1alpha1.Pipeline{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "nova-external-scheduler-kvm-all-filters-enabled",
+				Name: "test-filter-pipeline",
 			},
 			Spec: v1alpha1.PipelineSpec{
 				Type: v1alpha1.PipelineTypeFilterWeigher,
 				Filters: []v1alpha1.FilterSpec{
 					{Name: "filter_has_enough_capacity"},
-					{Name: "filter_correct_az"},
-				},
-				Weighers: []v1alpha1.WeigherSpec{
-					{Name: "kvm_failover_evacuation"},
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: PipelineReuseFailoverReservation,
-			},
-			Spec: v1alpha1.PipelineSpec{
-				Type: v1alpha1.PipelineTypeFilterWeigher,
-				Filters: []v1alpha1.FilterSpec{
-					{Name: "filter_has_requested_traits"},
-					{Name: "filter_correct_az"},
-				},
-				Weighers: []v1alpha1.WeigherSpec{},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: PipelineNewFailoverReservation,
-			},
-			Spec: v1alpha1.PipelineSpec{
-				Type: v1alpha1.PipelineTypeFilterWeigher,
-				Filters: []v1alpha1.FilterSpec{
-					{Name: "filter_has_enough_capacity"},
-					{Name: "filter_has_requested_traits"},
-					{Name: "filter_correct_az"},
-				},
-				Weighers: []v1alpha1.WeigherSpec{
-					{Name: "kvm_failover_evacuation"},
-				},
-			},
-		},
-	}
-
-	ctx := context.Background()
-	for _, pipeline := range pipelines {
-		result := lib.InitNewFilterWeigherPipeline(
-			ctx, k8sClient, pipeline.Name,
-			filters.Index, pipeline.Spec.Filters,
-			weighers.Index, pipeline.Spec.Weighers,
-			novaController.Monitor,
-		)
-		if len(result.FilterErrors) > 0 || len(result.WeigherErrors) > 0 {
-			t.Fatalf("Failed to init pipeline %s: filters=%v, weighers=%v", pipeline.Name, result.FilterErrors, result.WeigherErrors)
-		}
-		novaController.Pipelines[pipeline.Name] = result.Pipeline
-		novaController.PipelineConfigs[pipeline.Name] = pipeline
-	}
-
-	api := &testHTTPAPI{delegate: novaController}
-	mux := http.NewServeMux()
-	mux.HandleFunc("/scheduler/nova/external", api.NovaExternalScheduler)
-	server := httptest.NewServer(mux)
-
-	return &IntegrationTestEnv{
-		T:                t,
-		Scheme:           scheme,
-		K8sClient:        k8sClient,
-		Server:           server,
-		NovaController:   novaController,
-		VMSource:         NewMockVMSource(vms),
-		SchedulerBaseURL: server.URL,
-	}
-}
-
-// newIntegrationTestEnvWithTraitsFilter creates a test environment with the filter_has_requested_traits filter enabled.
-func newIntegrationTestEnvWithTraitsFilter(t *testing.T, vms []VM, hypervisors []*hv1.Hypervisor, reservations []*v1alpha1.Reservation) *IntegrationTestEnv {
-	t.Helper()
-
-	// Combine hypervisors and reservations into a single objects slice
-	objects := make([]client.Object, 0, len(hypervisors)+len(reservations))
-	for _, hv := range hypervisors {
-		objects = append(objects, hv)
-	}
-	for _, res := range reservations {
-		objects = append(objects, res)
-	}
-
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
-	}
-	if err := hv1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add hv1 scheme: %v", err)
-	}
-
-	k8sClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(objects...).
-		WithStatusSubresource(&v1alpha1.Reservation{}).
-		WithIndex(&v1alpha1.Reservation{}, "spec.type", func(obj client.Object) []string {
-			res := obj.(*v1alpha1.Reservation)
-			return []string{string(res.Spec.Type)}
-		}).
-		Build()
-
-	novaController := &nova.FilterWeigherPipelineController{
-		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]]{
-			Client:          k8sClient,
-			Pipelines:       make(map[string]lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]),
-			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
-		},
-		Monitor: getSharedMonitor(),
-	}
-
-	// Register all pipelines needed for testing (with traits filter enabled)
-	pipelines := []v1alpha1.Pipeline{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "nova-external-scheduler-kvm-all-filters-enabled",
-			},
-			Spec: v1alpha1.PipelineSpec{
-				Type: v1alpha1.PipelineTypeFilterWeigher,
-				Filters: []v1alpha1.FilterSpec{
-					{Name: "filter_has_enough_capacity"},
-					{Name: "filter_has_requested_traits"},
 					{Name: "filter_correct_az"},
 				},
 				Weighers: []v1alpha1.WeigherSpec{
@@ -1298,6 +1187,7 @@ func newIntegrationTestEnvWithTraitsFilter(t *testing.T, vms []VM, hypervisors [
 }
 
 // testHTTPAPI is a simplified HTTP API for testing that delegates to the controller.
+// It does NOT shuffle evacuation hosts, ensuring deterministic test results.
 type testHTTPAPI struct {
 	delegate nova.HTTPAPIDelegate
 }
@@ -1326,7 +1216,7 @@ func (api *testHTTPAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 
 	pipelineName := requestData.Pipeline
 	if pipelineName == "" {
-		pipelineName = "nova-external-scheduler-kvm-all-filters-enabled"
+		pipelineName = "test-filter-pipeline"
 	}
 
 	decision := &v1alpha1.Decision{
@@ -1364,6 +1254,126 @@ func (api *testHTTPAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 		return
+	}
+}
+
+// newIntegrationTestEnvWithTraitsFilter creates a test environment with the filter_has_requested_traits filter enabled.
+func newIntegrationTestEnvWithTraitsFilter(t *testing.T, vms []VM, hypervisors []*hv1.Hypervisor, reservations []*v1alpha1.Reservation) *IntegrationTestEnv {
+	t.Helper()
+
+	// Combine hypervisors and reservations into a single objects slice
+	objects := make([]client.Object, 0, len(hypervisors)+len(reservations))
+	for _, hv := range hypervisors {
+		objects = append(objects, hv)
+	}
+	for _, res := range reservations {
+		objects = append(objects, res)
+	}
+
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add hv1 scheme: %v", err)
+	}
+
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(objects...).
+		WithStatusSubresource(&v1alpha1.Reservation{}).
+		WithIndex(&v1alpha1.Reservation{}, "spec.type", func(obj client.Object) []string {
+			res := obj.(*v1alpha1.Reservation)
+			return []string{string(res.Spec.Type)}
+		}).
+		Build()
+
+	novaController := &nova.FilterWeigherPipelineController{
+		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]]{
+			Client:          k8sClient,
+			Pipelines:       make(map[string]lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]),
+			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
+		},
+		Monitor: getSharedMonitor(),
+	}
+
+	// Register all pipelines needed for testing (with traits filter enabled)
+	pipelines := []v1alpha1.Pipeline{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-filter-pipeline",
+			},
+			Spec: v1alpha1.PipelineSpec{
+				Type: v1alpha1.PipelineTypeFilterWeigher,
+				Filters: []v1alpha1.FilterSpec{
+					{Name: "filter_has_enough_capacity"},
+					{Name: "filter_has_requested_traits"},
+					{Name: "filter_correct_az"},
+				},
+				Weighers: []v1alpha1.WeigherSpec{
+					{Name: "kvm_failover_evacuation"},
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: PipelineReuseFailoverReservation,
+			},
+			Spec: v1alpha1.PipelineSpec{
+				Type: v1alpha1.PipelineTypeFilterWeigher,
+				Filters: []v1alpha1.FilterSpec{
+					{Name: "filter_has_requested_traits"},
+					{Name: "filter_correct_az"},
+				},
+				Weighers: []v1alpha1.WeigherSpec{},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: PipelineNewFailoverReservation,
+			},
+			Spec: v1alpha1.PipelineSpec{
+				Type: v1alpha1.PipelineTypeFilterWeigher,
+				Filters: []v1alpha1.FilterSpec{
+					{Name: "filter_has_enough_capacity"},
+					{Name: "filter_has_requested_traits"},
+					{Name: "filter_correct_az"},
+				},
+				Weighers: []v1alpha1.WeigherSpec{
+					{Name: "kvm_failover_evacuation"},
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	for _, pipeline := range pipelines {
+		result := lib.InitNewFilterWeigherPipeline(
+			ctx, k8sClient, pipeline.Name,
+			filters.Index, pipeline.Spec.Filters,
+			weighers.Index, pipeline.Spec.Weighers,
+			novaController.Monitor,
+		)
+		if len(result.FilterErrors) > 0 || len(result.WeigherErrors) > 0 {
+			t.Fatalf("Failed to init pipeline %s: filters=%v, weighers=%v", pipeline.Name, result.FilterErrors, result.WeigherErrors)
+		}
+		novaController.Pipelines[pipeline.Name] = result.Pipeline
+		novaController.PipelineConfigs[pipeline.Name] = pipeline
+	}
+
+	api := &testHTTPAPI{delegate: novaController}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/scheduler/nova/external", api.NovaExternalScheduler)
+	server := httptest.NewServer(mux)
+
+	return &IntegrationTestEnv{
+		T:                t,
+		Scheme:           scheme,
+		K8sClient:        k8sClient,
+		Server:           server,
+		NovaController:   novaController,
+		VMSource:         NewMockVMSource(vms),
+		SchedulerBaseURL: server.URL,
 	}
 }
 
