@@ -283,8 +283,9 @@ func NewIntegrationTestServer(t *testing.T, pipelineConfig PipelineConfig, objec
 	controller.PipelineConfigs[testPipeline.Name] = testPipeline
 
 	// Create the HTTP API with the controller as delegate - skip metrics registration
+	// Set EvacuationShuffleK=1 to disable shuffle for deterministic test results
 	api := &httpAPI{
-		config:   HTTPAPIConfig{},
+		config:   HTTPAPIConfig{EvacuationShuffleK: 1},
 		monitor:  lib.NewSchedulerMonitor(), // Create new monitor but don't register
 		delegate: controller,
 	}

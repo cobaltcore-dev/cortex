@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"slices"
 
@@ -29,6 +30,8 @@ import (
 type HTTPAPIConfig struct {
 	// OpenStack projects that use experimental features.
 	ExperimentalProjectIDs []string `json:"experimentalProjectIDs,omitempty"`
+	// Number of top hosts to shuffle for evacuation requests. Defaults to 3.
+	EvacuationShuffleK int `json:"evacuationShuffleK,omitempty"`
 }
 
 type HTTPAPIDelegate interface {
@@ -135,6 +138,30 @@ func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerReque
 	default:
 		return "", fmt.Errorf("unsupported hypervisor_type: %s", hvType)
 	}
+}
+
+// shuffleTopHostsForEvacuation randomly reorders the first k hosts if the request
+// is an evacuation. This helps distribute evacuated VMs across multiple hosts
+// rather than concentrating them on the single "best" host.
+func shuffleTopHostsForEvacuation(request api.ExternalSchedulerRequest, hosts []string, k int) []string {
+	intent, err := request.GetIntent()
+	if err != nil || intent != api.EvacuateIntent {
+		return hosts
+	}
+	if k <= 0 {
+		k = 3
+	}
+	n := min(k, len(hosts))
+	if n <= 1 {
+		return hosts
+	}
+	result := make([]string, len(hosts))
+	copy(result, hosts)
+	rand.Shuffle(n, func(i, j int) {
+		result[i], result[j] = result[j], result[i]
+	})
+	slog.Info("shuffled top hosts for evacuation", "k", n, "hosts", result[:n])
+	return result
 }
 
 // Limit the external scheduler response to the hosts provided in the  external
@@ -251,6 +278,10 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	}
 	hosts := decision.Status.Result.OrderedHosts
 	hosts = limitHostsToRequest(requestData, hosts)
+
+	// This is a hack to address the problem that Nova only uses the first host in hosts for evacuation requests.
+	// Only for evacuation we shuffle the first k hosts to ensure that we do not get stuck on a single host
+	hosts = shuffleTopHostsForEvacuation(requestData, hosts, httpAPI.config.EvacuationShuffleK)
 	response := api.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(response); err != nil {
