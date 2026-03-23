@@ -38,17 +38,17 @@ func TestChangeCommitmentsAPIMonitor_MetricsRegistration(t *testing.T) {
 
 	for _, family := range families {
 		switch *family.Name {
-		case "cortex_cr_change_api_requests_total":
+		case "cortex_committed_resource_change_api_requests_total":
 			foundRequestCounter = true
 			if *family.Type != dto.MetricType_COUNTER {
 				t.Errorf("Expected counter metric type, got %v", *family.Type)
 			}
-		case "cortex_cr_change_api_request_duration_seconds":
+		case "cortex_committed_resource_change_api_request_duration_seconds":
 			foundRequestDuration = true
 			if *family.Type != dto.MetricType_HISTOGRAM {
 				t.Errorf("Expected histogram metric type, got %v", *family.Type)
 			}
-		case "cortex_cr_change_api_commitment_changes_total":
+		case "cortex_committed_resource_change_api_commitment_changes_total":
 			foundCommitmentChanges = true
 			if *family.Type != dto.MetricType_COUNTER {
 				t.Errorf("Expected counter metric type, got %v", *family.Type)
@@ -91,7 +91,7 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 
 	// Verify request counter has correct labels
 	for _, family := range families {
-		if *family.Name == "cortex_cr_change_api_requests_total" {
+		if *family.Name == "cortex_committed_resource_change_api_requests_total" {
 			if len(family.Metric) != 3 {
 				t.Errorf("Expected 3 request counter metrics, got %d", len(family.Metric))
 			}
@@ -109,7 +109,7 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 			}
 		}
 
-		if *family.Name == "cortex_cr_change_api_request_duration_seconds" {
+		if *family.Name == "cortex_committed_resource_change_api_request_duration_seconds" {
 			if len(family.Metric) != 1 {
 				t.Errorf("Expected 1 histogram metric, got %d", len(family.Metric))
 			}
@@ -127,7 +127,7 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 			}
 		}
 
-		if *family.Name == "cortex_cr_change_api_commitment_changes_total" {
+		if *family.Name == "cortex_committed_resource_change_api_commitment_changes_total" {
 			if len(family.Metric) != 2 {
 				t.Errorf("Expected 2 commitment changes metrics, got %d", len(family.Metric))
 			}

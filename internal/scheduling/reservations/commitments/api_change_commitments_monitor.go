@@ -18,15 +18,15 @@ type ChangeCommitmentsAPIMonitor struct {
 func NewChangeCommitmentsAPIMonitor() ChangeCommitmentsAPIMonitor {
 	return ChangeCommitmentsAPIMonitor{
 		requestCounter: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "cortex_cr_change_api_requests_total",
-			Help: "Total number of CR change API requests by HTTP status code",
+			Name: "cortex_committed_resource_change_api_requests_total",
+			Help: "Total number of committed resource change API requests by HTTP status code",
 		}, []string{"status_code"}),
 		requestDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name: "cortex_cr_change_api_request_duration_seconds",
-			Help: "Duration of CR change API requests in seconds by HTTP status code",
+			Name: "cortex_committed_resource_change_api_request_duration_seconds",
+			Help: "Duration of committed resource change API requests in seconds by HTTP status code",
 		}, []string{"status_code"}),
 		commitmentChanges: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "cortex_cr_change_api_commitment_changes_total",
+			Name: "cortex_committed_resource_change_api_commitment_changes_total",
 			Help: "Total number of commitment changes processed by result",
 		}, []string{"result"}),
 	}

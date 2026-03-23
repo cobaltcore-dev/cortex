@@ -275,3 +275,53 @@ groups:
         This may indicate issues with the pipeline
         configuration. It is recommended to investigate the
         pipeline status and logs for more details.
+
+  # Committed Resource (Limes Integration) Alerts
+  - alert: CortexNovaCommittedResourceHttpRequest500sTooHigh
+    expr: rate(cortex_committed_resource_change_api_requests_total{service="cortex-nova-metrics", status_code=~"5.."}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource change API HTTP 500 errors too high"
+      description: >
+        The committed resource change API (Limes LIQUID integration) is responding
+        with HTTP 5xx errors. This indicates that Cortex is having issues
+        processing commitment changes from Limes.
+
+  - alert: CortexNovaCommittedResourceLatencyTooHigh
+    expr: histogram_quantile(0.95, rate(cortex_committed_resource_change_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) > 30
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource change API latency too high"
+      description: >
+        The committed resource change API (Limes LIQUID integration) is experiencing
+        high latency (p95 > 30s).
+
+  - alert: CortexNovaCommittedResourceRejectionRateTooHigh
+    expr: |
+      rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected"}[1h])
+      / rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[1h]) > 0.5
+    for: 15m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource rejection rate too high"
+      description: >
+        More than 50% of commitment change requests are being rejected.
+        This may indicate insufficient capacity to fulfill new commitments
+        or issues with the commitment scheduling logic.
