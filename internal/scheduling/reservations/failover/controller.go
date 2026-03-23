@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"time"
 
@@ -64,9 +65,7 @@ type vmFailoverNeed struct {
 // It validates the reservation and acknowledges it if valid, or deletes it if invalid.
 // After processing, it requeues for periodic re-validation.
 func (c *FailoverReservationController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// Generate a random UUID for request tracking
-	globalReqID := uuid.New().String()
-	ctx = reservations.WithGlobalRequestID(ctx, globalReqID)
+	ctx = WithNewGlobalRequestID(ctx)
 	logger := LoggerFromContext(ctx).WithValues("reservation", req.Name, "namespace", req.Namespace)
 	logger.Info("reconciling failover reservation", "reservation", req.Name)
 
@@ -90,7 +89,7 @@ func (c *FailoverReservationController) Reconcile(ctx context.Context, req ctrl.
 	// Skip if no failover status (reservation not yet initialized by periodic controller)
 	if res.Status.FailoverReservation == nil {
 		logger.V(1).Info("skipping reservation without failover status")
-		return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval}, nil
+		return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval.Duration}, nil
 	}
 
 	// Validate and acknowledge the reservation
@@ -122,7 +121,7 @@ func (c *FailoverReservationController) reconcileValidateAndAcknowledge(ctx cont
 			return ctrl.Result{}, patchErr
 		}
 
-		return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval}, nil
+		return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval.Duration}, nil
 	}
 
 	// Validate the reservation
@@ -130,7 +129,7 @@ func (c *FailoverReservationController) reconcileValidateAndAcknowledge(ctx cont
 
 	if validationErr != nil {
 		logger.Error(validationErr, "transient error during reservation validation, will retry", "host", res.Status.Host)
-		return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval}, nil
+		return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval.Duration}, nil
 	}
 
 	if !valid {
@@ -168,7 +167,7 @@ func (c *FailoverReservationController) reconcileValidateAndAcknowledge(ctx cont
 		logger.V(1).Info("reservation validation passed (no new changes to acknowledge)", "host", res.Status.Host)
 	}
 
-	return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval}, nil
+	return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval.Duration}, nil
 }
 
 // validateReservation validates that a reservation is still valid for all its allocated VMs.
@@ -243,8 +242,7 @@ type reconcileSummary struct {
 func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (ctrl.Result, error) {
 	startTime := time.Now()
 	c.reconcileCount++
-	globalReqID := uuid.New().String()
-	ctx = reservations.WithGlobalRequestID(ctx, globalReqID)
+	ctx = WithNewGlobalRequestID(ctx)
 	logger := LoggerFromContext(ctx)
 
 	var summary reconcileSummary
@@ -322,9 +320,17 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 
 	// Log summary
 	duration := time.Since(startTime)
+	requeueAfter := c.Config.ReconcileInterval.Duration
+	successCount := summary.totalCreated + summary.totalReused
+	madeProgress := successCount >= *c.Config.MinSuccessForShortInterval
+	lowFailures := summary.totalFailed <= *c.Config.MaxFailuresForShortInterval
+	if hitMaxVMsLimit && madeProgress && lowFailures && c.Config.ShortReconcileInterval.Duration > 0 {
+		requeueAfter = c.Config.ShortReconcileInterval.Duration
+	}
 	logger.Info("periodic reconciliation completed",
 		"reconcileCount", c.reconcileCount,
 		"duration", duration.Round(time.Millisecond),
+		"requeueAfter", requeueAfter,
 		"vmsProcessed", summary.vmsProcessed,
 		"reservationsNeeded", summary.reservationsNeeded,
 		"reused", summary.totalReused,
@@ -333,12 +339,7 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 		"updated", summary.reservationsUpdated,
 		"deleted", summary.reservationsDeleted)
 
-	if hitMaxVMsLimit && c.Config.ShortReconcileInterval > 0 {
-		logger.Info("requeuing with short interval due to MaxVMsToProcess limit", "shortReconcileInterval", c.Config.ShortReconcileInterval)
-		return ctrl.Result{RequeueAfter: c.Config.ShortReconcileInterval}, nil
-	}
-
-	return ctrl.Result{RequeueAfter: c.Config.ReconcileInterval}, nil
+	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
 
 // reconcileRemoveInvalidVMFromReservations removes VMs from reservation allocations if:
@@ -418,56 +419,47 @@ func reconcileRemoveNoneligibleVMFromReservations(
 		vmByUUID[vm.UUID] = vm
 	}
 
+	nonEligibleVMs := CheckVMsStillEligible(vmByUUID, failoverReservations)
+
 	updatedReservations = make([]v1alpha1.Reservation, 0, len(failoverReservations))
 
 	for _, res := range failoverReservations {
+		vmsToRemove, needsUpdate := nonEligibleVMs[res.Name]
+		if !needsUpdate {
+			updatedReservations = append(updatedReservations, res)
+			continue
+		}
+
+		removeSet := make(map[string]bool)
+		for _, vmUUID := range vmsToRemove {
+			removeSet[vmUUID] = true
+		}
+
 		allocations := getFailoverAllocations(&res)
 		updatedAllocations := make(map[string]string)
-		needsUpdate := false
-
 		for vmUUID, allocatedHypervisor := range allocations {
-			vm, vmExists := vmByUUID[vmUUID]
-			if !vmExists {
+			if !removeSet[vmUUID] {
 				updatedAllocations[vmUUID] = allocatedHypervisor
-				continue
 			}
-
-			tempRes := res.DeepCopy()
-			delete(tempRes.Status.FailoverReservation.Allocations, vmUUID)
-
-			tempReservations := make([]v1alpha1.Reservation, 0, len(failoverReservations))
-			for _, r := range failoverReservations {
-				if r.Name == res.Name {
-					tempReservations = append(tempReservations, *tempRes)
-				} else {
-					tempReservations = append(tempReservations, r)
-				}
-			}
-
-			if !IsVMEligibleForReservation(vm, *tempRes, tempReservations) {
-				logger.Info("removing VM from reservation allocations because it no longer meets eligibility criteria",
-					"vmUUID", vmUUID, "reservation", res.Name,
-					"vmHypervisor", vm.CurrentHypervisor, "reservationHypervisor", res.Status.Host)
-				needsUpdate = true
-				continue
-			}
-			updatedAllocations[vmUUID] = allocatedHypervisor
 		}
 
-		if needsUpdate {
-			updatedRes := res.DeepCopy()
-			if updatedRes.Status.FailoverReservation == nil {
-				updatedRes.Status.FailoverReservation = &v1alpha1.FailoverReservationStatus{}
-			}
-			updatedRes.Status.FailoverReservation.Allocations = updatedAllocations
-			now := metav1.Now()
-			updatedRes.Status.FailoverReservation.LastChanged = &now
-			updatedRes.Status.FailoverReservation.AcknowledgedAt = nil
-			updatedReservations = append(updatedReservations, *updatedRes)
-			reservationsToUpdate = append(reservationsToUpdate, updatedRes)
-		} else {
-			updatedReservations = append(updatedReservations, res)
+		logger.Info("removing non-eligible VMs from reservation",
+			"reservation", res.Name,
+			"host", res.Status.Host,
+			"before", len(allocations),
+			"after", len(updatedAllocations),
+			"removed", vmsToRemove)
+
+		updatedRes := res.DeepCopy()
+		if updatedRes.Status.FailoverReservation == nil {
+			updatedRes.Status.FailoverReservation = &v1alpha1.FailoverReservationStatus{}
 		}
+		updatedRes.Status.FailoverReservation.Allocations = updatedAllocations
+		now := metav1.Now()
+		updatedRes.Status.FailoverReservation.LastChanged = &now
+		updatedRes.Status.FailoverReservation.AcknowledgedAt = nil
+		updatedReservations = append(updatedReservations, *updatedRes)
+		reservationsToUpdate = append(reservationsToUpdate, updatedRes)
 	}
 
 	return updatedReservations, reservationsToUpdate
@@ -517,7 +509,8 @@ func (c *FailoverReservationController) selectVMsToProcess(
 	}
 
 	offset := 0
-	if c.reconcileCount%4 == 0 {
+	rotationInterval := *c.Config.VMSelectionRotationInterval
+	if rotationInterval > 0 && c.reconcileCount%int64(rotationInterval) == 0 {
 		offset = int(c.reconcileCount) % len(vmsMissingFailover)
 	}
 
@@ -575,6 +568,7 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 	}
 
 	var totalReused, totalCreated, totalFailed int
+	excludeHypervisors := make(map[string]bool)
 
 	for _, need := range vmsMissingFailover {
 		vmReused := 0
@@ -592,6 +586,11 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 			if reusedRes != nil {
 				if err := c.patchReservationStatus(vmCtx, reusedRes); err != nil {
 					vmLogger.Error(err, "failed to persist reused reservation", "reservationName", reusedRes.Name)
+					// Remove the stale reservation from the in-memory list to prevent
+					// other VMs from trying to reuse it in this reconcile cycle
+					failoverReservations = slices.DeleteFunc(failoverReservations, func(r v1alpha1.Reservation) bool {
+						return r.Name == reusedRes.Name
+					})
 					vmFailed++
 					continue
 				}
@@ -605,7 +604,7 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 				continue
 			}
 
-			newRes, err := c.scheduleAndBuildNewFailoverReservation(vmCtx, need.VM, allHypervisors, failoverReservations)
+			newRes, err := c.scheduleAndBuildNewFailoverReservation(vmCtx, need.VM, allHypervisors, failoverReservations, excludeHypervisors)
 			if err != nil {
 				vmLogger.V(1).Info("failed to schedule failover reservation", "error", err, "iteration", i+1, "needed", need.Count)
 				vmFailed++
@@ -633,6 +632,7 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 
 			vmCreated++
 			failoverReservations = append(failoverReservations, *newRes)
+			excludeHypervisors[newRes.Status.Host] = true
 		}
 
 		vmLogger.Info("processed VM failover reservations",
@@ -728,13 +728,22 @@ func (c *FailoverReservationController) getRequiredFailoverCount(flavorName stri
 }
 
 // patchReservationStatus patches the status of a reservation using MergeFrom.
+// If the reservation is not found in the cache (e.g., just created), it uses the
+// passed-in object directly as the base for the patch.
 func (c *FailoverReservationController) patchReservationStatus(ctx context.Context, res *v1alpha1.Reservation) error {
 	logger := LoggerFromContext(ctx).WithValues("reservationName", res.Name)
 
 	current := &v1alpha1.Reservation{}
 	if err := c.Get(ctx, client.ObjectKeyFromObject(res), current); err != nil {
-		logger.Error(err, "failed to get current reservation state")
-		return fmt.Errorf("failed to get current reservation state: %w", err)
+		if apierrors.IsNotFound(err) {
+			// Cache hasn't synced yet for newly created reservation, use the passed-in object
+			logger.V(1).Info("reservation not in cache yet, using passed-in object for status patch")
+			current = res.DeepCopy()
+			current.Status = v1alpha1.ReservationStatus{} // Clear status to create proper diff
+		} else {
+			logger.Error(err, "failed to get current reservation state")
+			return fmt.Errorf("failed to get current reservation state: %w", err)
+		}
 	}
 
 	old := current.DeepCopy()
@@ -773,15 +782,20 @@ func (c *FailoverReservationController) SetupWithManager(mgr ctrl.Manager, mcl *
 // This can be called directly when the controller is created after the manager starts.
 func (c *FailoverReservationController) Start(ctx context.Context) error {
 	log.Info("starting failover reservation controller (periodic)",
-		"reconcileInterval", c.Config.ReconcileInterval,
-		"shortReconcileInterval", c.Config.ShortReconcileInterval,
+		"reconcileInterval", c.Config.ReconcileInterval.Duration,
+		"shortReconcileInterval", c.Config.ShortReconcileInterval.Duration,
+		"minSuccessForShortInterval", c.Config.MinSuccessForShortInterval,
+		"maxFailuresForShortInterval", c.Config.MaxFailuresForShortInterval,
 		"creator", c.Config.Creator,
 		"datasourceName", c.Config.DatasourceName,
 		"schedulerURL", c.Config.SchedulerURL,
 		"flavorFailoverRequirements", c.Config.FlavorFailoverRequirements,
-		"maxVMsToProcess", c.Config.MaxVMsToProcess)
+		"maxVMsToProcess", c.Config.MaxVMsToProcess,
+		"trustHypervisorLocation", c.Config.TrustHypervisorLocation,
+		"revalidationInterval", c.Config.RevalidationInterval.Duration,
+		"limitOneNewReservationPerHypervisor", c.Config.LimitOneNewReservationPerHypervisor)
 
-	timer := time.NewTimer(c.Config.ReconcileInterval)
+	timer := time.NewTimer(c.Config.ShortReconcileInterval.Duration)
 	defer timer.Stop()
 
 	for {
@@ -794,7 +808,7 @@ func (c *FailoverReservationController) Start(ctx context.Context) error {
 			if err != nil {
 				log.Error(err, "failover reconciliation failed")
 			}
-			next := c.Config.ReconcileInterval
+			next := c.Config.ReconcileInterval.Duration
 			if result.RequeueAfter > 0 {
 				next = result.RequeueAfter
 			}

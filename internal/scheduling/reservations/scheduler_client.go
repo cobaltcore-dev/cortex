@@ -75,6 +75,9 @@ type ScheduleReservationRequest struct {
 	// AvailabilityZone is the availability zone to schedule in.
 	// This is used by the filter_correct_az filter to ensure hosts are in the correct AZ.
 	AvailabilityZone string
+	// SchedulerHints are hints passed to the scheduler pipeline.
+	// Used to set _nova_check_type for evacuation intent detection.
+	SchedulerHints map[string]any
 }
 
 // ScheduleReservationResponse contains the result of scheduling a reservation.
@@ -124,7 +127,7 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 				ProjectID:        req.ProjectID,
 				AvailabilityZone: req.AvailabilityZone,
 				IgnoreHosts:      ignoreHosts,
-				SchedulerHints:   make(map[string]any), // Initialize to empty map for consistent behavior
+				SchedulerHints:   req.getSchedulerHints(),
 				Flavor: api.NovaObject[api.NovaFlavor]{
 					Data: api.NovaFlavor{
 						Name:       req.FlavorName,
@@ -147,7 +150,8 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 		"memoryMB", req.MemoryMB,
 		"vcpus", req.VCPUs,
 		"eligibleHostsCount", len(req.EligibleHosts),
-		"ignoreHosts", req.IgnoreHosts)
+		"ignoreHosts", req.IgnoreHosts,
+		"isEvacuation", req.isEvacuation())
 
 	// Marshal the request
 	reqBody, err := json.Marshal(externalSchedulerRequest)
@@ -164,8 +168,10 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	// Send the request
+	// Send the request and measure duration
+	startTime := time.Now()
 	response, err := c.HTTPClient.Do(httpReq)
+	duration := time.Since(startTime)
 	if err != nil {
 		logger.Error(err, "failed to send external scheduler request")
 		return nil, fmt.Errorf("failed to send external scheduler request: %w", err)
@@ -185,9 +191,27 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 		return nil, fmt.Errorf("failed to decode external scheduler response: %w", err)
 	}
 
-	logger.V(1).Info("received external scheduler response", "hostsCount", len(externalSchedulerResponse.Hosts))
+	logger.V(1).Info("received external scheduler response",
+		"hostsCount", len(externalSchedulerResponse.Hosts),
+		"duration", duration.Round(time.Millisecond))
 
 	return &ScheduleReservationResponse{
 		Hosts: externalSchedulerResponse.Hosts,
 	}, nil
+}
+
+// getSchedulerHints returns the scheduler hints, or an empty map if nil.
+func (req ScheduleReservationRequest) getSchedulerHints() map[string]any {
+	if req.SchedulerHints == nil {
+		return make(map[string]any)
+	}
+	return req.SchedulerHints
+}
+
+// isEvacuation returns true if the request has the evacuation intent hint set.
+func (req ScheduleReservationRequest) isEvacuation() bool {
+	if req.SchedulerHints == nil {
+		return false
+	}
+	return req.SchedulerHints["_nova_check_type"] == "evacuate"
 }

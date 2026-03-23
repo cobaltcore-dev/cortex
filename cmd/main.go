@@ -579,27 +579,7 @@ func main() {
 	if slices.Contains(mainConfig.EnabledControllers, "failover-reservations-controller") {
 		setupLog.Info("enabling controller", "controller", "failover-reservations-controller")
 		failoverConfig := conf.GetConfigOrDie[failover.FailoverConfig]()
-
-		// Apply defaults for unset values
-		defaults := failover.DefaultConfig()
-		if failoverConfig.DatasourceName == "" {
-			failoverConfig.DatasourceName = defaults.DatasourceName
-		}
-		if failoverConfig.SchedulerURL == "" {
-			failoverConfig.SchedulerURL = defaults.SchedulerURL
-		}
-		if failoverConfig.ReconcileInterval == 0 {
-			failoverConfig.ReconcileInterval = defaults.ReconcileInterval
-		}
-		if failoverConfig.Creator == "" {
-			failoverConfig.Creator = defaults.Creator
-		}
-		if failoverConfig.FlavorFailoverRequirements == nil {
-			failoverConfig.FlavorFailoverRequirements = defaults.FlavorFailoverRequirements
-		}
-		if failoverConfig.RevalidationInterval == 0 {
-			failoverConfig.RevalidationInterval = defaults.RevalidationInterval
-		}
+		failoverConfig.ApplyDefaults()
 
 		// DatasourceName is still required - check after applying defaults
 		if failoverConfig.DatasourceName == "" {
