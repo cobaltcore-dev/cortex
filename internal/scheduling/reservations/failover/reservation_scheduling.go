@@ -204,8 +204,11 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 
 	// Build a single-host request to validate the VM can use the reservation host
 	// Use vm.CurrentHypervisor directly instead of a separate parameter to avoid stale data
+	// Set _nova_check_type to "evacuate" so that filter_has_enough_capacity unlocks
+	// the failover reservation's resources for this VM (avoiding self-blocking).
+	// Use the actual VM UUID (not prefixed) so the filter can match it in the reservation's allocations.
 	scheduleReq := reservations.ScheduleReservationRequest{
-		InstanceUUID:     "validate-" + vm.UUID,
+		InstanceUUID:     vm.UUID,
 		ProjectID:        vm.ProjectID,
 		FlavorName:       vm.FlavorName,
 		FlavorExtraSpecs: flavorExtraSpecs,
@@ -215,6 +218,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		IgnoreHosts:      []string{vm.CurrentHypervisor},
 		Pipeline:         PipelineAcknowledgeFailoverReservation,
 		AvailabilityZone: vm.AvailabilityZone,
+		SchedulerHints:   map[string]any{"_nova_check_type": "evacuate"},
 	}
 
 	logger.V(1).Info("validating VM via scheduler evacuation",
