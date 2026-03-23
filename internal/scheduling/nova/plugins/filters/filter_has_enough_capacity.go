@@ -21,11 +21,11 @@ type FilterHasEnoughCapacityOpts struct {
 	// If reserved space should be locked even for matching requests.
 	LockReserved bool `json:"lockReserved"`
 
-	// IgnoreReservationTypes is a list of reservation types to ignore when calculating capacity.
+	// IgnoredReservationTypes is a list of reservation types to ignore when calculating capacity.
 	// Valid values: "CommittedResourceReservation", "FailoverReservation"
 	// When a reservation type is in this list, its capacity is not blocked.
 	// Default: empty (all reservation types are considered)
-	IgnoreReservationTypes []v1alpha1.ReservationType `json:"ignoreReservationTypes,omitempty"`
+	IgnoredReservationTypes []v1alpha1.ReservationType `json:"ignoredReservationTypes,omitempty"`
 }
 
 func (FilterHasEnoughCapacityOpts) Validate() error { return nil }
@@ -97,7 +97,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		}
 
 		// Check if this reservation type should be ignored
-		if slices.Contains(s.Options.IgnoreReservationTypes, reservation.Spec.Type) {
+		if slices.Contains(s.Options.IgnoredReservationTypes, reservation.Spec.Type) {
 			traceLog.Debug("ignoring reservation type", "type", reservation.Spec.Type, "reservation", reservation.Name)
 			continue
 		}

@@ -513,17 +513,17 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 	}
 }
 
-func TestFilterHasEnoughCapacity_IgnoreReservationTypes(t *testing.T) {
+func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 	scheme := buildTestScheme(t)
 
 	tests := []struct {
-		name                   string
-		hypervisors            []*hv1.Hypervisor
-		reservations           []*v1alpha1.Reservation
-		request                api.ExternalSchedulerRequest
-		ignoreReservationTypes []v1alpha1.ReservationType
-		expectedHosts          []string
-		filteredHosts          []string
+		name                    string
+		hypervisors             []*hv1.Hypervisor
+		reservations            []*v1alpha1.Reservation
+		request                 api.ExternalSchedulerRequest
+		ignoredReservationTypes []v1alpha1.ReservationType
+		expectedHosts           []string
+		filteredHosts           []string
 	}{
 		// Two-host scenario tests (CR on host1, Failover on host2)
 		// host1: 8 CPU free, host2: 8 CPU free, CR blocks 4 on host1, Failover blocks 4 on host2
@@ -537,10 +537,10 @@ func TestFilterHasEnoughCapacity_IgnoreReservationTypes(t *testing.T) {
 				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 				newFailoverReservation("failover-res", "host2", "4", "8Gi", map[string]string{"other-vm": "host3"}),
 			},
-			request:                newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
-			ignoreReservationTypes: nil,
-			expectedHosts:          []string{},
-			filteredHosts:          []string{"host1", "host2"},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
+			ignoredReservationTypes: nil,
+			expectedHosts:           []string{},
+			filteredHosts:           []string{"host1", "host2"},
 		},
 		{
 			name: "Two hosts: Ignore CR only - host1 passes, host2 blocked by failover",
@@ -552,10 +552,10 @@ func TestFilterHasEnoughCapacity_IgnoreReservationTypes(t *testing.T) {
 				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 				newFailoverReservation("failover-res", "host2", "4", "8Gi", map[string]string{"other-vm": "host3"}),
 			},
-			request:                newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
-			ignoreReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
-			expectedHosts:          []string{"host1"},
-			filteredHosts:          []string{"host2"},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
+			expectedHosts:           []string{"host1"},
+			filteredHosts:           []string{"host2"},
 		},
 		{
 			name: "Two hosts: Ignore Failover only - host2 passes, host1 blocked by CR",
@@ -567,10 +567,10 @@ func TestFilterHasEnoughCapacity_IgnoreReservationTypes(t *testing.T) {
 				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 				newFailoverReservation("failover-res", "host2", "4", "8Gi", map[string]string{"other-vm": "host3"}),
 			},
-			request:                newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
-			ignoreReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
-			expectedHosts:          []string{"host2"},
-			filteredHosts:          []string{"host1"},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
+			expectedHosts:           []string{"host2"},
+			filteredHosts:           []string{"host1"},
 		},
 		{
 			name: "Two hosts: Ignore both - both hosts pass",
@@ -582,10 +582,10 @@ func TestFilterHasEnoughCapacity_IgnoreReservationTypes(t *testing.T) {
 				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 				newFailoverReservation("failover-res", "host2", "4", "8Gi", map[string]string{"other-vm": "host3"}),
 			},
-			request:                newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
-			ignoreReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
-			expectedHosts:          []string{"host1", "host2"},
-			filteredHosts:          []string{},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
+			expectedHosts:           []string{"host1", "host2"},
+			filteredHosts:           []string{},
 		},
 
 		// Single-host scenario tests (both CR and Failover on host1)
@@ -600,10 +600,10 @@ func TestFilterHasEnoughCapacity_IgnoreReservationTypes(t *testing.T) {
 				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
 			},
-			request:                newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 12, "24Gi", false, []string{"host1"}),
-			ignoreReservationTypes: nil,
-			expectedHosts:          []string{},
-			filteredHosts:          []string{"host1"},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 12, "24Gi", false, []string{"host1"}),
+			ignoredReservationTypes: nil,
+			expectedHosts:           []string{},
+			filteredHosts:           []string{"host1"},
 		},
 		{
 			name: "Single host, Large VM (12 CPU): Ignore CR - blocked (10 free < 12 needed)",
@@ -614,10 +614,10 @@ func TestFilterHasEnoughCapacity_IgnoreReservationTypes(t *testing.T) {
 				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
 			},
-			request:                newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 12, "24Gi", false, []string{"host1"}),
-			ignoreReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
-			expectedHosts:          []string{},
-			filteredHosts:          []string{"host1"},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 12, "24Gi", false, []string{"host1"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
+			expectedHosts:           []string{},
+			filteredHosts:           []string{"host1"},
 		},
 		{
 			name: "Single host, Large VM (12 CPU): Ignore Failover - blocked (8 free < 12 needed)",
@@ -628,10 +628,10 @@ func TestFilterHasEnoughCapacity_IgnoreReservationTypes(t *testing.T) {
 				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
 			},
-			request:                newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 12, "24Gi", false, []string{"host1"}),
-			ignoreReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
-			expectedHosts:          []string{},
-			filteredHosts:          []string{"host1"},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 12, "24Gi", false, []string{"host1"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
+			expectedHosts:           []string{},
+			filteredHosts:           []string{"host1"},
 		},
 		{
 			name: "Single host, Large VM (12 CPU): Ignore both - passes (12 free = 12 needed)",
@@ -642,10 +642,10 @@ func TestFilterHasEnoughCapacity_IgnoreReservationTypes(t *testing.T) {
 				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
 			},
-			request:                newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 12, "24Gi", false, []string{"host1"}),
-			ignoreReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
-			expectedHosts:          []string{"host1"},
-			filteredHosts:          []string{},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 12, "24Gi", false, []string{"host1"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
+			expectedHosts:           []string{"host1"},
+			filteredHosts:           []string{},
 		},
 
 		// Failover-size VM (10 CPU) - fits if CR is ignored (10 free = 10 needed)
@@ -658,10 +658,10 @@ func TestFilterHasEnoughCapacity_IgnoreReservationTypes(t *testing.T) {
 				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
 			},
-			request:                newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 10, "20Gi", false, []string{"host1"}),
-			ignoreReservationTypes: nil,
-			expectedHosts:          []string{},
-			filteredHosts:          []string{"host1"},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 10, "20Gi", false, []string{"host1"}),
+			ignoredReservationTypes: nil,
+			expectedHosts:           []string{},
+			filteredHosts:           []string{"host1"},
 		},
 		{
 			name: "Single host, Failover-size VM (10 CPU): Ignore CR - passes (10 free = 10 needed)",
@@ -672,10 +672,10 @@ func TestFilterHasEnoughCapacity_IgnoreReservationTypes(t *testing.T) {
 				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
 			},
-			request:                newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 10, "20Gi", false, []string{"host1"}),
-			ignoreReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
-			expectedHosts:          []string{"host1"},
-			filteredHosts:          []string{},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 10, "20Gi", false, []string{"host1"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
+			expectedHosts:           []string{"host1"},
+			filteredHosts:           []string{},
 		},
 		{
 			name: "Single host, Failover-size VM (10 CPU): Ignore Failover - blocked (8 free < 10 needed)",
@@ -686,10 +686,10 @@ func TestFilterHasEnoughCapacity_IgnoreReservationTypes(t *testing.T) {
 				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
 			},
-			request:                newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 10, "20Gi", false, []string{"host1"}),
-			ignoreReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
-			expectedHosts:          []string{},
-			filteredHosts:          []string{"host1"},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 10, "20Gi", false, []string{"host1"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
+			expectedHosts:           []string{},
+			filteredHosts:           []string{"host1"},
 		},
 		{
 			name: "Single host, Failover-size VM (10 CPU): Ignore both - passes (12 free > 10 needed)",
@@ -700,10 +700,10 @@ func TestFilterHasEnoughCapacity_IgnoreReservationTypes(t *testing.T) {
 				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
 			},
-			request:                newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 10, "20Gi", false, []string{"host1"}),
-			ignoreReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
-			expectedHosts:          []string{"host1"},
-			filteredHosts:          []string{},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 10, "20Gi", false, []string{"host1"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
+			expectedHosts:           []string{"host1"},
+			filteredHosts:           []string{},
 		},
 
 		// CR-size VM (8 CPU) - fits if Failover is ignored (8 free = 8 needed)
@@ -716,10 +716,10 @@ func TestFilterHasEnoughCapacity_IgnoreReservationTypes(t *testing.T) {
 				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
 			},
-			request:                newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1"}),
-			ignoreReservationTypes: nil,
-			expectedHosts:          []string{},
-			filteredHosts:          []string{"host1"},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1"}),
+			ignoredReservationTypes: nil,
+			expectedHosts:           []string{},
+			filteredHosts:           []string{"host1"},
 		},
 		{
 			name: "Single host, CR-size VM (8 CPU): Ignore CR - passes (10 free > 8 needed)",
@@ -730,10 +730,10 @@ func TestFilterHasEnoughCapacity_IgnoreReservationTypes(t *testing.T) {
 				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
 			},
-			request:                newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1"}),
-			ignoreReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
-			expectedHosts:          []string{"host1"},
-			filteredHosts:          []string{},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
+			expectedHosts:           []string{"host1"},
+			filteredHosts:           []string{},
 		},
 		{
 			name: "Single host, CR-size VM (8 CPU): Ignore Failover - passes (8 free = 8 needed)",
@@ -744,10 +744,10 @@ func TestFilterHasEnoughCapacity_IgnoreReservationTypes(t *testing.T) {
 				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
 			},
-			request:                newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1"}),
-			ignoreReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
-			expectedHosts:          []string{"host1"},
-			filteredHosts:          []string{},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
+			expectedHosts:           []string{"host1"},
+			filteredHosts:           []string{},
 		},
 		{
 			name: "Single host, CR-size VM (8 CPU): Ignore both - passes (12 free > 8 needed)",
@@ -758,10 +758,10 @@ func TestFilterHasEnoughCapacity_IgnoreReservationTypes(t *testing.T) {
 				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
 			},
-			request:                newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1"}),
-			ignoreReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
-			expectedHosts:          []string{"host1"},
-			filteredHosts:          []string{},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
+			expectedHosts:           []string{"host1"},
+			filteredHosts:           []string{},
 		},
 	}
 
@@ -778,8 +778,8 @@ func TestFilterHasEnoughCapacity_IgnoreReservationTypes(t *testing.T) {
 			step := &FilterHasEnoughCapacity{}
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			step.Options = FilterHasEnoughCapacityOpts{
-				LockReserved:           true,
-				IgnoreReservationTypes: tt.ignoreReservationTypes,
+				LockReserved:            true,
+				IgnoredReservationTypes: tt.ignoredReservationTypes,
 			}
 
 			result, err := step.Run(slog.Default(), tt.request)
