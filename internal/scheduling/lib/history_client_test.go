@@ -214,7 +214,6 @@ func TestHistoryManager_Upsert(t *testing.T) {
 		setup func(t *testing.T) client.Client
 		// decision to upsert.
 		decision    *v1alpha1.Decision
-		intent      v1alpha1.SchedulingIntent
 		pipelineErr error
 		// assertions on the history list (archived entries only).
 		expectHistoryLen int
@@ -239,6 +238,7 @@ func TestHistoryManager_Upsert(t *testing.T) {
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					ResourceID:       "uuid-1",
 					PipelineRef:      corev1.ObjectReference{Name: "nova-pipeline"},
+					Intent:           v1alpha1.SchedulingIntentUnknown,
 				},
 				Status: v1alpha1.DecisionStatus{
 					Result: &v1alpha1.DecisionResult{
@@ -246,7 +246,6 @@ func TestHistoryManager_Upsert(t *testing.T) {
 					},
 				},
 			},
-			intent:           v1alpha1.SchedulingIntentUnknown,
 			expectHistoryLen: 0,
 			expectTargetHost: testlib.Ptr("compute-1"),
 			expectSuccessful: true,
@@ -285,6 +284,7 @@ func TestHistoryManager_Upsert(t *testing.T) {
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					ResourceID:       "uuid-2",
 					PipelineRef:      corev1.ObjectReference{Name: "nova-pipeline"},
+					Intent:           v1alpha1.SchedulingIntentUnknown,
 				},
 				Status: v1alpha1.DecisionStatus{
 					Result: &v1alpha1.DecisionResult{
@@ -292,7 +292,6 @@ func TestHistoryManager_Upsert(t *testing.T) {
 					},
 				},
 			},
-			intent:           v1alpha1.SchedulingIntentUnknown,
 			expectHistoryLen: 1, // pre-existing entry preserved, no current to archive
 			expectTargetHost: testlib.Ptr("compute-2"),
 			expectSuccessful: true,
@@ -330,6 +329,7 @@ func TestHistoryManager_Upsert(t *testing.T) {
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					ResourceID:       "uuid-3",
 					PipelineRef:      corev1.ObjectReference{Name: "new-pipeline"},
+					Intent:           v1alpha1.SchedulingIntentUnknown,
 				},
 				Status: v1alpha1.DecisionStatus{
 					Result: &v1alpha1.DecisionResult{
@@ -337,7 +337,6 @@ func TestHistoryManager_Upsert(t *testing.T) {
 					},
 				},
 			},
-			intent:           v1alpha1.SchedulingIntentUnknown,
 			expectHistoryLen: 1, // old current archived
 			expectTargetHost: testlib.Ptr("new-host"),
 			expectSuccessful: true,
@@ -357,9 +356,9 @@ func TestHistoryManager_Upsert(t *testing.T) {
 					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
 					ResourceID:       "vol-1",
 					PipelineRef:      corev1.ObjectReference{Name: "cinder-pipeline"},
+					Intent:           v1alpha1.SchedulingIntentUnknown,
 				},
 			},
-			intent:           v1alpha1.SchedulingIntentUnknown,
 			pipelineErr:      errors.New("no hosts available"),
 			expectHistoryLen: 0,
 			expectTargetHost: nil,
@@ -385,6 +384,7 @@ func TestHistoryManager_Upsert(t *testing.T) {
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					ResourceID:       "uuid-nohost",
 					PipelineRef:      corev1.ObjectReference{Name: "nova-pipeline"},
+					Intent:           v1alpha1.SchedulingIntentUnknown,
 				},
 				Status: v1alpha1.DecisionStatus{
 					Result: &v1alpha1.DecisionResult{
@@ -393,7 +393,6 @@ func TestHistoryManager_Upsert(t *testing.T) {
 					},
 				},
 			},
-			intent:           v1alpha1.SchedulingIntentUnknown,
 			expectHistoryLen: 0,
 			expectTargetHost: nil,
 			expectSuccessful: false,
@@ -438,6 +437,7 @@ func TestHistoryManager_Upsert(t *testing.T) {
 					SchedulingDomain: v1alpha1.SchedulingDomainManila,
 					ResourceID:       "share-1",
 					PipelineRef:      corev1.ObjectReference{Name: "manila-pipeline"},
+					Intent:           v1alpha1.SchedulingIntentUnknown,
 				},
 				Status: v1alpha1.DecisionStatus{
 					Result: &v1alpha1.DecisionResult{
@@ -445,7 +445,6 @@ func TestHistoryManager_Upsert(t *testing.T) {
 					},
 				},
 			},
-			intent:           v1alpha1.SchedulingIntentUnknown,
 			expectHistoryLen: 10, // 10 existing + 1 archived current, capped to 10
 			expectTargetHost: testlib.Ptr("backend-1"),
 			expectSuccessful: true,
@@ -465,6 +464,7 @@ func TestHistoryManager_Upsert(t *testing.T) {
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
 					ResourceID:       "uuid-cap",
 					PipelineRef:      corev1.ObjectReference{Name: "nova-pipeline"},
+					Intent:           v1alpha1.SchedulingIntentUnknown,
 				},
 				Status: v1alpha1.DecisionStatus{
 					Result: &v1alpha1.DecisionResult{
@@ -473,7 +473,6 @@ func TestHistoryManager_Upsert(t *testing.T) {
 					},
 				},
 			},
-			intent:           v1alpha1.SchedulingIntentUnknown,
 			expectHistoryLen: 0,
 			expectTargetHost: testlib.Ptr("h1"),
 			expectSuccessful: true,
@@ -492,7 +491,7 @@ func TestHistoryManager_Upsert(t *testing.T) {
 			c := tt.setup(t)
 			hm := HistoryClient{Client: c}
 
-			err := hm.CreateOrUpdateHistory(context.Background(), tt.decision, tt.intent, nil, tt.pipelineErr)
+			err := hm.CreateOrUpdateHistory(context.Background(), tt.decision, nil, tt.pipelineErr)
 			if err != nil {
 				t.Fatalf("Upsert() returned error: %v", err)
 			}
@@ -576,6 +575,7 @@ func TestHistoryManager_UpsertFromGoroutine(t *testing.T) {
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
 			ResourceID:       "async-uuid",
 			PipelineRef:      corev1.ObjectReference{Name: "nova-pipeline"},
+			Intent:           v1alpha1.SchedulingIntentUnknown,
 		},
 		Status: v1alpha1.DecisionStatus{
 			Result: &v1alpha1.DecisionResult{
@@ -588,7 +588,7 @@ func TestHistoryManager_UpsertFromGoroutine(t *testing.T) {
 	var wg sync.WaitGroup
 	var upsertErr error
 	wg.Go(func() {
-		upsertErr = hm.CreateOrUpdateHistory(context.Background(), decision, v1alpha1.SchedulingIntentUnknown, nil, nil)
+		upsertErr = hm.CreateOrUpdateHistory(context.Background(), decision, nil, nil)
 	})
 
 	// Poll for history creation.

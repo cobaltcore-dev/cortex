@@ -107,7 +107,6 @@ func (c *FilterWeigherPipelineController) upsertHistory(ctx context.Context, dec
 	log := ctrl.LoggerFrom(ctx)
 
 	var az *string
-	intent := v1alpha1.SchedulingIntentUnknown
 
 	if decision.Spec.NovaRaw != nil {
 		var request api.ExternalSchedulerRequest
@@ -117,15 +116,10 @@ func (c *FilterWeigherPipelineController) upsertHistory(ctx context.Context, dec
 		} else {
 			azStr := request.Spec.Data.AvailabilityZone
 			az = &azStr
-			if parsedIntent, intentErr := request.GetIntent(); intentErr != nil {
-				log.Error(intentErr, "failed to get intent from nova request, using Unknown")
-			} else {
-				intent = parsedIntent
-			}
 		}
 	}
 
-	if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, intent, az, pipelineErr); upsertErr != nil {
+	if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, az, pipelineErr); upsertErr != nil {
 		log.Error(upsertErr, "failed to create/update history")
 	}
 }
@@ -147,6 +141,13 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	if err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request); err != nil {
 		log.Error(err, "failed to unmarshal novaRaw spec")
 		return err
+	}
+
+	if intent, err := request.GetIntent(); err != nil {
+		log.Error(err, "failed to get intent from nova request, using Unknown")
+		decision.Spec.Intent = v1alpha1.SchedulingIntentUnknown
+	} else {
+		decision.Spec.Intent = intent
 	}
 
 	// If necessary gather all placement candidates before filtering.

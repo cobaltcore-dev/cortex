@@ -9,6 +9,15 @@ import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
+// SchedulingIntent defines the intent of a scheduling decision.
+type SchedulingIntent string
+
+// Other intents can be defined by the operators.
+const (
+	// Used as default intent if the operator does not specify one.
+	SchedulingIntentUnknown SchedulingIntent = "Unknown"
+)
+
 type DecisionSpec struct {
 	// SchedulingDomain defines in which scheduling domain this decision
 	// was or is processed (e.g., nova, cinder, manila).
@@ -39,6 +48,10 @@ type DecisionSpec struct {
 	// If the type is "pod", this field contains the pod reference.
 	// +kubebuilder:validation:Optional
 	PodRef *corev1.ObjectReference `json:"podRef,omitempty"`
+
+	// The intent of the scheduling decision (e.g., initial scheduling, rescheduling, etc.).
+	// +kubebuilder:validation:Optional
+	Intent SchedulingIntent `json:"intent,omitempty"`
 }
 
 type StepResult struct {

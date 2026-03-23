@@ -132,7 +132,6 @@ type HistoryClient struct {
 func (h *HistoryClient) CreateOrUpdateHistory(
 	ctx context.Context,
 	decision *v1alpha1.Decision,
-	intent v1alpha1.SchedulingIntent,
 	az *string,
 	pipelineErr error,
 ) error {
@@ -216,7 +215,7 @@ func (h *HistoryClient) CreateOrUpdateHistory(
 		current := v1alpha1.CurrentDecision{
 			Timestamp:   metav1.Now(),
 			PipelineRef: decision.Spec.PipelineRef,
-			Intent:      intent,
+			Intent:      decision.Spec.Intent,
 			Successful:  successful,
 			Explanation: generateExplanation(decision.Status.Result, pipelineErr),
 		}

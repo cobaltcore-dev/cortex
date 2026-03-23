@@ -8,15 +8,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// SchedulingIntent defines the intent of a scheduling decision.
-type SchedulingIntent string
-
-// Other intents can be defined by the operators.
-const (
-	// Used as default intent if the operator does not specify one.
-	SchedulingIntentUnknown SchedulingIntent = "Unknown"
-)
-
 type SchedulingHistoryEntry struct {
 	// The timestamp of when the decision was made.
 	Timestamp metav1.Time `json:"timestamp"`
