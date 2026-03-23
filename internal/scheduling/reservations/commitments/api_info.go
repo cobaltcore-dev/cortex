@@ -54,6 +54,13 @@ func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// resourceAttributes holds the custom attributes for a resource in the info API response.
+type resourceAttributes struct {
+	RamCoreRatio    *uint64 `json:"ramCoreRatio,omitempty"`
+	RamCoreRatioMin *uint64 `json:"ramCoreRatioMin,omitempty"`
+	RamCoreRatioMax *uint64 `json:"ramCoreRatioMax,omitempty"`
+}
+
 // buildServiceInfo constructs the ServiceInfo response with metadata for all flavor groups.
 func (api *HTTPAPI) buildServiceInfo(ctx context.Context, log logr.Logger) (liquid.ServiceInfo, error) {
 	// Get all flavor groups from Knowledge CRDs
@@ -82,14 +89,30 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, log logr.Logger) (liqu
 			strings.Join(flavorNames, ", "),
 		)
 
+		// Only handle commitments for groups with a fixed RAM/core ratio
+		handlesCommitments := FlavorGroupAcceptsCommitments(&groupData)
+
+		// Build attributes JSON with ratio info
+		attrs := resourceAttributes{
+			RamCoreRatio:    groupData.RamCoreRatio,
+			RamCoreRatioMin: groupData.RamCoreRatioMin,
+			RamCoreRatioMax: groupData.RamCoreRatioMax,
+		}
+		attrsJSON, err := json.Marshal(attrs)
+		if err != nil {
+			log.Error(err, "failed to marshal resource attributes", "resourceName", resourceName)
+			attrsJSON = nil
+		}
+
 		resources[resourceName] = liquid.ResourceInfo{
 			DisplayName:         displayName,
 			Unit:                liquid.UnitNone,        // Countable: multiples of smallest flavor instances
 			Topology:            liquid.AZAwareTopology, // Commitments are per-AZ
 			NeedsResourceDemand: false,                  // Capacity planning out of scope for now
-			HasCapacity:         true,                   // We report capacity via /v1/report-capacity
+			HasCapacity:         handlesCommitments,     // We report capacity via /v1/report-capacity only for groups that accept commitments
 			HasQuota:            false,                  // No quota enforcement as of now
-			HandlesCommitments:  true,                   // We handle commitment changes via /v1/change-commitments
+			HandlesCommitments:  handlesCommitments,     // Only for groups with fixed RAM/core ratio
+			Attributes:          attrsJSON,
 		}
 
 		log.V(1).Info("registered flavor group resource",
@@ -97,7 +120,11 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, log logr.Logger) (liqu
 			"flavorGroup", groupName,
 			"displayName", displayName,
 			"smallestFlavor", groupData.SmallestFlavor.Name,
-			"smallestRamMB", groupData.SmallestFlavor.MemoryMB)
+			"smallestRamMB", groupData.SmallestFlavor.MemoryMB,
+			"handlesCommitments", handlesCommitments,
+			"ramCoreRatio", groupData.RamCoreRatio,
+			"ramCoreRatioMin", groupData.RamCoreRatioMin,
+			"ramCoreRatioMax", groupData.RamCoreRatioMax)
 	}
 
 	// Get last content changed from flavor group knowledge and treat it as version

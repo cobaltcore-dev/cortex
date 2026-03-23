@@ -628,11 +628,37 @@ func (tfg TestFlavorGroup) ToFlavorGroupsKnowledge() FlavorGroupsKnowledge {
 		smallest := groupFlavors[len(groupFlavors)-1]
 		largest := groupFlavors[0]
 
+		// Compute RAM/core ratio (MiB per vCPU)
+		var minRatio, maxRatio uint64 = ^uint64(0), 0
+		for _, f := range groupFlavors {
+			if f.VCPUs == 0 {
+				continue
+			}
+			ratio := f.MemoryMB / f.VCPUs
+			if ratio < minRatio {
+				minRatio = ratio
+			}
+			if ratio > maxRatio {
+				maxRatio = ratio
+			}
+		}
+
+		var ramCoreRatio, ramCoreRatioMin, ramCoreRatioMax *uint64
+		if minRatio == maxRatio && maxRatio != 0 {
+			ramCoreRatio = &minRatio
+		} else if maxRatio != 0 {
+			ramCoreRatioMin = &minRatio
+			ramCoreRatioMax = &maxRatio
+		}
+
 		groups = append(groups, compute.FlavorGroupFeature{
-			Name:           groupName,
-			Flavors:        groupFlavors,
-			SmallestFlavor: smallest,
-			LargestFlavor:  largest,
+			Name:            groupName,
+			Flavors:         groupFlavors,
+			SmallestFlavor:  smallest,
+			LargestFlavor:   largest,
+			RamCoreRatio:    ramCoreRatio,
+			RamCoreRatioMin: ramCoreRatioMin,
+			RamCoreRatioMax: ramCoreRatioMax,
 		})
 	}
 

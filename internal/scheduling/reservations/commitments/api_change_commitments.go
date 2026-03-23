@@ -168,6 +168,13 @@ ProcessLoop:
 				break ProcessLoop
 			}
 
+			// Reject commitments for flavor groups that don't accept CRs
+			if !FlavorGroupAcceptsCommitments(&flavorGroup) {
+				resp.RejectionReason = FlavorGroupCommitmentRejectionReason(&flavorGroup)
+				requireRollback = true
+				break ProcessLoop
+			}
+
 			for _, commitment := range resourceChanges.Commitments {
 				// Additional per-commitment validation if needed
 				logger.Info("processing commitment change", "commitmentUUID", commitment.UUID, "projectID", projectID, "resourceName", resourceName, "oldStatus", commitment.OldStatus.UnwrapOr("none"), "newStatus", commitment.NewStatus.UnwrapOr("none"))
