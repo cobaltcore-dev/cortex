@@ -8,7 +8,12 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/go-logr/logr"
+	"github.com/google/uuid"
 )
+
+func WithNewGlobalRequestID(ctx context.Context) context.Context {
+	return reservations.WithGlobalRequestID(ctx, "committed-resource-"+uuid.New().String())
+}
 
 func LoggerFromContext(ctx context.Context) logr.Logger {
 	return commitmentLog.WithValues(
