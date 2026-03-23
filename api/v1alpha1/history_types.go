@@ -35,6 +35,17 @@ type SchedulingHistoryEntry struct {
 	Successful bool `json:"successful"`
 }
 
+const (
+	// The scheduling decision is ready (a host was successfully selected).
+	HistoryConditionReady = "Ready"
+	// The scheduling decision selected a target host.
+	HistoryReasonSchedulingSucceeded = "SchedulingSucceeded"
+	// The pipeline run failed before a host could be selected.
+	HistoryReasonPipelineRunFailed = "PipelineRunFailed"
+	// The pipeline completed but no suitable host was found.
+	HistoryReasonNoHostFound = "NoHostFound"
+)
+
 type HistorySpec struct {
 	// The scheduling domain this object with the history belongs to.
 	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`

@@ -234,19 +234,19 @@ func (h *HistoryClient) CreateOrUpdateHistory(
 
 		// Set Ready condition — True only when a host was successfully selected.
 		condStatus := metav1.ConditionTrue
-		reason := "SchedulingSucceeded"
+		reason := v1alpha1.HistoryReasonSchedulingSucceeded
 		message := "scheduling decision selected a target host"
 		if pipelineErr != nil {
 			condStatus = metav1.ConditionFalse
-			reason = "PipelineRunFailed"
+			reason = v1alpha1.HistoryReasonPipelineRunFailed
 			message = "pipeline run failed: " + pipelineErr.Error()
 		} else if !successful {
 			condStatus = metav1.ConditionFalse
-			reason = "NoHostFound"
+			reason = v1alpha1.HistoryReasonNoHostFound
 			message = "pipeline completed but no suitable host was found"
 		}
 		meta.SetStatusCondition(&history.Status.Conditions, metav1.Condition{
-			Type:    "Ready",
+			Type:    v1alpha1.HistoryConditionReady,
 			Status:  condStatus,
 			Reason:  reason,
 			Message: message,
@@ -263,7 +263,7 @@ func (h *HistoryClient) CreateOrUpdateHistory(
 	// devops short-term visibility into individual scheduling runs.
 	if h.Recorder != nil {
 		eventType := corev1.EventTypeNormal
-		eventReason := "SchedulingSucceeded"
+		eventReason := v1alpha1.HistoryReasonSchedulingSucceeded
 		action := "Scheduled"
 		if !successful {
 			eventType = corev1.EventTypeWarning

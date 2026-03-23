@@ -251,7 +251,7 @@ func TestHistoryManager_Upsert(t *testing.T) {
 			expectTargetHost: testlib.Ptr("compute-1"),
 			expectSuccessful: true,
 			expectCondStatus: metav1.ConditionTrue,
-			expectReason:     "SchedulingSucceeded",
+			expectReason:     v1alpha1.HistoryReasonSchedulingSucceeded,
 			checkExplanation: func(t *testing.T, explanation string) {
 				if !strings.Contains(explanation, "Selected host: compute-1") {
 					t.Errorf("expected explanation to contain selected host, got: %q", explanation)
@@ -297,7 +297,7 @@ func TestHistoryManager_Upsert(t *testing.T) {
 			expectTargetHost: testlib.Ptr("compute-2"),
 			expectSuccessful: true,
 			expectCondStatus: metav1.ConditionTrue,
-			expectReason:     "SchedulingSucceeded",
+			expectReason:     v1alpha1.HistoryReasonSchedulingSucceeded,
 		},
 		{
 			name: "archive current to history on second upsert",
@@ -342,7 +342,7 @@ func TestHistoryManager_Upsert(t *testing.T) {
 			expectTargetHost: testlib.Ptr("new-host"),
 			expectSuccessful: true,
 			expectCondStatus: metav1.ConditionTrue,
-			expectReason:     "SchedulingSucceeded",
+			expectReason:     v1alpha1.HistoryReasonSchedulingSucceeded,
 		},
 		{
 			name: "pipeline error",
@@ -365,7 +365,7 @@ func TestHistoryManager_Upsert(t *testing.T) {
 			expectTargetHost: nil,
 			expectSuccessful: false,
 			expectCondStatus: metav1.ConditionFalse,
-			expectReason:     "PipelineRunFailed",
+			expectReason:     v1alpha1.HistoryReasonPipelineRunFailed,
 			checkExplanation: func(t *testing.T, explanation string) {
 				if !strings.Contains(explanation, "no hosts available") {
 					t.Errorf("expected explanation to contain error text, got: %q", explanation)
@@ -398,7 +398,7 @@ func TestHistoryManager_Upsert(t *testing.T) {
 			expectTargetHost: nil,
 			expectSuccessful: false,
 			expectCondStatus: metav1.ConditionFalse,
-			expectReason:     "NoHostFound",
+			expectReason:     v1alpha1.HistoryReasonNoHostFound,
 		},
 		{
 			name: "history capped at 10 entries",
@@ -450,7 +450,7 @@ func TestHistoryManager_Upsert(t *testing.T) {
 			expectTargetHost: testlib.Ptr("backend-1"),
 			expectSuccessful: true,
 			expectCondStatus: metav1.ConditionTrue,
-			expectReason:     "SchedulingSucceeded",
+			expectReason:     v1alpha1.HistoryReasonSchedulingSucceeded,
 		},
 		{
 			name: "ordered hosts capped at 3",
@@ -478,7 +478,7 @@ func TestHistoryManager_Upsert(t *testing.T) {
 			expectTargetHost: testlib.Ptr("h1"),
 			expectSuccessful: true,
 			expectCondStatus: metav1.ConditionTrue,
-			expectReason:     "SchedulingSucceeded",
+			expectReason:     v1alpha1.HistoryReasonSchedulingSucceeded,
 			checkCurrentHosts: func(t *testing.T, hosts []string) {
 				if len(hosts) != 3 {
 					t.Errorf("ordered hosts length = %d, want 3", len(hosts))
