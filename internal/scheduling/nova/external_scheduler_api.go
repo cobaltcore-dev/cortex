@@ -12,7 +12,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -25,12 +24,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
-// Custom configuration for the Nova external scheduler api.
-type HTTPAPIConfig struct {
-	// OpenStack projects that use experimental features.
-	ExperimentalProjectIDs []string `json:"experimentalProjectIDs,omitempty"`
-}
-
 type HTTPAPIDelegate interface {
 	// Process the decision from the API. Should create and return the updated decision.
 	ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error
@@ -42,14 +35,12 @@ type HTTPAPI interface {
 }
 
 type httpAPI struct {
-	config   HTTPAPIConfig
 	monitor  scheduling.APIMonitor
 	delegate HTTPAPIDelegate
 }
 
-func NewAPI(config HTTPAPIConfig, delegate HTTPAPIDelegate) HTTPAPI {
+func NewAPI(delegate HTTPAPIDelegate) HTTPAPI {
 	return &httpAPI{
-		config:   config,
 		monitor:  scheduling.NewSchedulerMonitor(),
 		delegate: delegate,
 	}
@@ -99,23 +90,6 @@ func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerReque
 	}
 	switch hvType {
 	case api.HypervisorTypeCH, api.HypervisorTypeQEMU:
-		enableAllFilters := false
-		// If the nova request matches a configurable openstack project,
-		// use a different pipeline that has all filters enabled.
-		if slices.Contains(httpAPI.config.ExperimentalProjectIDs, requestData.Spec.Data.ProjectID) {
-			enableAllFilters = true
-		}
-		if requestData.Reservation {
-			enableAllFilters = true
-		}
-		if enableAllFilters {
-			switch flavorType {
-			case api.FlavorTypeHANA:
-				return "kvm-hana-bin-packing-all-filters-enabled", nil
-			default:
-				return "kvm-general-purpose-load-balancing-all-filters-enabled", nil
-			}
-		}
 		switch flavorType {
 		case api.FlavorTypeHANA:
 			return "kvm-hana-bin-packing", nil
@@ -123,9 +97,6 @@ func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerReque
 			return "kvm-general-purpose-load-balancing", nil
 		}
 	case api.HypervisorTypeVMware:
-		if requestData.Reservation {
-			return "", errors.New("reservations are not supported on vmware hypervisors")
-		}
 		switch flavorType {
 		case api.FlavorTypeHANA:
 			return "vmware-hana-bin-packing", nil

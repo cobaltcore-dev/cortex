@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package controller
+package reservations
 
 import (
 	"context"
@@ -29,7 +29,7 @@ type Monitor struct {
 	reservedResources    *prometheus.GaugeVec
 }
 
-func NewControllerMonitor(k8sClient client.Client) Monitor {
+func NewMonitor(k8sClient client.Client) Monitor {
 	return Monitor{
 		Client: k8sClient,
 		numberOfReservations: prometheus.NewGaugeVec(prometheus.GaugeOpts{
