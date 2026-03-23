@@ -209,6 +209,9 @@ cortex-knowledge-controllers:
       - datasource-controllers
       - knowledge-controllers
       - kpis-controller
+    # How often the commitments syncer reconciles Limes commitments to Reservation CRDs
+    # 1h = 3600000000000 nanoseconds
+    committedResourceSyncInterval: 3600000000000
     enabledTasks:
       - commitments-sync-task
 

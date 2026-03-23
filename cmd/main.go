@@ -695,9 +695,13 @@ func main() {
 		setupLog.Info("starting commitments syncer")
 		syncer := commitments.NewSyncer(multiclusterClient)
 		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
+		syncerDefaults := commitments.DefaultSyncerConfig()
+		if syncerConfig.SyncInterval == 0 {
+			syncerConfig.SyncInterval = syncerDefaults.SyncInterval
+		}
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
-			Interval: time.Hour,
+			Interval: syncerConfig.SyncInterval,
 			Name:     "commitments-sync-task",
 			Run:      func(ctx context.Context) error { return syncer.SyncReservations(ctx) },
 			Init:     func(ctx context.Context) error { return syncer.Init(ctx, syncerConfig) },
