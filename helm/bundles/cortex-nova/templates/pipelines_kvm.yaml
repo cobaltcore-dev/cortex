@@ -25,6 +25,11 @@ spec:
         This step will consider the `ignore_hosts` and `force_hosts` instructions
         from the nova scheduler request spec to filter out or exclusively allow
         certain hosts.
+    - name: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
     - name: filter_capabilities
       description: |
         This step will filter out hosts that do not meet the compute capabilities
@@ -122,6 +127,11 @@ spec:
         This step will consider the `ignore_hosts` and `force_hosts` instructions
         from the nova scheduler request spec to filter out or exclusively allow
         certain hosts.
+    - name: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
     - name: filter_capabilities
       description: |
         This step will filter out hosts that do not meet the compute capabilities
