@@ -236,6 +236,7 @@ spec:
 
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
     Specifically, this pipeline is used for general purpose workloads.
+    It is also used for (CR/HA) reservation requests.
   type: filter-weigher
   createDecisions: false
   # Fetch all placement candidates, ignoring nova's preselection.

@@ -135,13 +135,33 @@ cortex-scheduling-controllers:
       - nova-deschedulings-executor
       - hypervisor-overcommit-controller
       - explanation-controller
-      - reservations-controller
+      - committed-resource-reservations-controller
       - failover-reservations-controller
     enabledTasks:
       - nova-decisions-cleanup-task
-    # Endpoints configuration for reservations controller
-    endpoints:
-      novaExternalScheduler: "http://localhost:8080/scheduler/nova/external"
+    # CommittedResourceFlavorGroupPipelines maps flavor group IDs to pipeline names for CR reservations
+    # This allows different scheduling strategies per flavor group (e.g., HANA vs GP)
+    committedResourceFlavorGroupPipelines:
+      "2152": "kvm-hana-bin-packing-all-filters-enabled"  # HANA flavor group
+      "2101": "kvm-general-purpose-load-balancing-all-filters-enabled"  # General Purpose flavor group
+      "*": "kvm-general-purpose-load-balancing-all-filters-enabled"  # Catch-all fallback
+    # Default pipeline for CR reservations when no CommittedResourceFlavorGroupPipelines entry matches
+    committedResourcePipelineDefault: "kvm-general-purpose-load-balancing-all-filters-enabled"
+    # How often to re-verify active reservations
+    # 5m = 300000000000 nanoseconds
+    committedResourceRequeueIntervalActive: 300000000000
+    # How often to retry when knowledge is not ready
+    # 1m = 60000000000 nanoseconds
+    committedResourceRequeueIntervalRetry: 60000000000
+    # Timeout for watching reservations to become ready before rolling back
+    # 10s = 10000000000 nanoseconds
+    committedResourceChangeAPIWatchReservationsTimeout: 10000000000
+    # How often to poll reservation status during watch
+    # 500ms = 500000000 nanoseconds
+    committedResourceChangeAPIWatchReservationsPollInterval: 500000000
+    # Whether the change-commitments API endpoint is active
+    # When false, the endpoint returns HTTP 503. The info endpoint remains available.
+    committedResourceEnableChangeCommitmentsAPI: true
     # OvercommitMappings is a list of mappings that map hypervisor traits to
     # overcommit ratios. Note that this list is applied in order, so if there
     # are multiple mappings applying to the same hypervisors, the last mapping
@@ -189,6 +209,9 @@ cortex-knowledge-controllers:
       - datasource-controllers
       - knowledge-controllers
       - kpis-controller
+    # How often the commitments syncer reconciles Limes commitments to Reservation CRDs
+    # 1h = 3600000000000 nanoseconds
+    committedResourceSyncInterval: 3600000000000
     enabledTasks:
       - commitments-sync-task
 

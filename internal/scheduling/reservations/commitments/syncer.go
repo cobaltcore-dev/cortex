@@ -28,6 +28,14 @@ type SyncerConfig struct {
 	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
 	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
 	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
+	// SyncInterval defines how often the syncer reconciles Limes commitments to Reservation CRDs.
+	SyncInterval time.Duration `json:"committedResourceSyncInterval"`
+}
+
+func DefaultSyncerConfig() SyncerConfig {
+	return SyncerConfig{
+		SyncInterval: time.Hour,
+	}
 }
 
 type Syncer struct {
@@ -128,7 +136,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	runID := fmt.Sprintf("sync-%d", time.Now().Unix())
 	log := ctrl.Log.WithName("CommitmentSyncer").WithValues("runID", runID)
 
-	log.Info("starting commitment sync")
+	log.Info("starting commitment sync with sync interval", "interval", DefaultSyncerConfig().SyncInterval)
 
 	// Check if flavor group knowledge is ready
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: s.Client}
