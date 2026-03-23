@@ -91,6 +91,7 @@ func (c *FilterWeigherPipelineController) ProcessNewPod(ctx context.Context, pod
 				Name:      pod.Name,
 				Namespace: pod.Namespace,
 			},
+			Intent: v1alpha1.SchedulingIntentUnknown,
 		},
 	}
 
@@ -115,7 +116,7 @@ func (c *FilterWeigherPipelineController) ProcessNewPod(ctx context.Context, pod
 		})
 	}
 	if pipelineConf.Spec.CreateHistory {
-		if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, v1alpha1.SchedulingIntentUnknown, nil, err); upsertErr != nil {
+		if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, nil, err); upsertErr != nil {
 			ctrl.LoggerFrom(ctx).Error(upsertErr, "failed to create/update history")
 		}
 	}
