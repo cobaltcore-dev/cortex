@@ -4,6 +4,8 @@
 package failover
 
 import (
+	"slices"
+
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
@@ -71,7 +73,14 @@ func CheckVMsStillEligible(
 		allocations := getFailoverAllocations(&res)
 		resKey := reservationKey(res.Namespace, res.Name)
 
+		// Sort VM UUIDs for deterministic iteration order
+		vmUUIDs := make([]string, 0, len(allocations))
 		for vmUUID := range allocations {
+			vmUUIDs = append(vmUUIDs, vmUUID)
+		}
+		slices.Sort(vmUUIDs)
+
+		for _, vmUUID := range vmUUIDs {
 			vm, vmExists := vms[vmUUID]
 			if !vmExists {
 				continue
