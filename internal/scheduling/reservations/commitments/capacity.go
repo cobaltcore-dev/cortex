@@ -69,6 +69,7 @@ func (c *CapacityCalculator) calculateAZCapacity(
 	groupName string,
 	groupData compute.FlavorGroupFeature,
 ) (map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, error) {
+
 	azs, err := c.getAvailabilityZones(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get availability zones: %w", err)
@@ -148,7 +149,8 @@ func (c *CapacityCalculator) calculateInstanceCapacity(
 	groupName string,
 	groupData compute.FlavorGroupFeature,
 	az string,
-) (capacity uint64, usage uint64, err error) {
+) (capacity, usage uint64, err error) {
+
 	smallestFlavor := groupData.SmallestFlavor
 
 	// Request 1: currently available — how many instances can be placed right now.
@@ -156,8 +158,8 @@ func (c *CapacityCalculator) calculateInstanceCapacity(
 		InstanceUUID:     fmt.Sprintf("capacity-current-%s-%s-%d", groupName, az, time.Now().UnixNano()),
 		ProjectID:        "cortex-capacity-check",
 		FlavorName:       smallestFlavor.Name,
-		MemoryMB:         uint64(smallestFlavor.MemoryMB),
-		VCPUs:            uint64(smallestFlavor.VCPUs),
+		MemoryMB:         smallestFlavor.MemoryMB,
+		VCPUs:            smallestFlavor.VCPUs,
 		FlavorExtraSpecs: map[string]string{"hw_version": groupName},
 		AvailabilityZone: az,
 		Pipeline:         "kvm-general-purpose-load-balancing-all-filters-enabled",
@@ -173,8 +175,8 @@ func (c *CapacityCalculator) calculateInstanceCapacity(
 		InstanceUUID:     fmt.Sprintf("capacity-total-%s-%s-%d", groupName, az, time.Now().UnixNano()),
 		ProjectID:        "cortex-capacity-check",
 		FlavorName:       smallestFlavor.Name,
-		MemoryMB:         uint64(smallestFlavor.MemoryMB),
-		VCPUs:            uint64(smallestFlavor.VCPUs),
+		MemoryMB:         smallestFlavor.MemoryMB,
+		VCPUs:            smallestFlavor.VCPUs,
 		FlavorExtraSpecs: map[string]string{"hw_version": groupName},
 		AvailabilityZone: az,
 		Pipeline:         "kvm-report-capacity",
