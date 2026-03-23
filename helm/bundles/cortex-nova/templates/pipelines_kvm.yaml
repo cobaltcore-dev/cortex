@@ -66,6 +66,12 @@ spec:
         This step selects hosts not in the instance group specified in the nova
         scheduler request spec, but only until the max_server_per_host limit is
         reached (default = 1).
+    - name: filter_allowed_projects
+      description: |
+        This step filters hosts based on allowed projects defined in the
+        hypervisor resource. Note that hosts allowing all projects are still
+        accessible and will not be filtered out. In this way some hypervisors
+        are made accessible to some projects only.
     - name: filter_requested_destination
       params: {{ .Values.kvm.filterRequestedDestinationParams | toYaml | nindent 8 }}
       description: |
@@ -168,6 +174,12 @@ spec:
         This step selects hosts not in the instance group specified in the nova
         scheduler request spec, but only until the max_server_per_host limit is
         reached (default = 1).
+    - name: filter_allowed_projects
+      description: |
+        This step filters hosts based on allowed projects defined in the
+        hypervisor resource. Note that hosts allowing all projects are still
+        accessible and will not be filtered out. In this way some hypervisors
+        are made accessible to some projects only.
     - name: filter_requested_destination
       params: {{ .Values.kvm.filterRequestedDestinationParams | toYaml | nindent 8 }}
       description: |
