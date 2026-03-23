@@ -272,7 +272,7 @@ func TestCommitmentReservationController_reconcileInstanceReservation_Success(t 
 	defer server.Close()
 
 	config := Config{
-		NovaExternalScheduler: server.URL,
+		SchedulerURL: server.URL,
 	}
 
 	reconciler := &CommitmentReservationController{

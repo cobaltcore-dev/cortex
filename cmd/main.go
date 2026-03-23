@@ -491,6 +491,25 @@ func main() {
 		monitor := reservations.NewMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&monitor)
 		commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
+		commitmentsDefaults := commitments.DefaultConfig()
+		if commitmentsConfig.RequeueIntervalActive == 0 {
+			commitmentsConfig.RequeueIntervalActive = commitmentsDefaults.RequeueIntervalActive
+		}
+		if commitmentsConfig.RequeueIntervalRetry == 0 {
+			commitmentsConfig.RequeueIntervalRetry = commitmentsDefaults.RequeueIntervalRetry
+		}
+		if commitmentsConfig.PipelineDefault == "" {
+			commitmentsConfig.PipelineDefault = commitmentsDefaults.PipelineDefault
+		}
+		if commitmentsConfig.SchedulerURL == "" {
+			commitmentsConfig.SchedulerURL = commitmentsDefaults.SchedulerURL
+		}
+		if commitmentsConfig.ChangeAPIWatchReservationsTimeout == 0 {
+			commitmentsConfig.ChangeAPIWatchReservationsTimeout = commitmentsDefaults.ChangeAPIWatchReservationsTimeout
+		}
+		if commitmentsConfig.ChangeAPIWatchReservationsPollInterval == 0 {
+			commitmentsConfig.ChangeAPIWatchReservationsPollInterval = commitmentsDefaults.ChangeAPIWatchReservationsPollInterval
+		}
 
 		if err := (&commitments.CommitmentReservationController{
 			Client: multiclusterClient,
