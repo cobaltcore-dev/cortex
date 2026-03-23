@@ -46,9 +46,17 @@ func sortedKeys[K ~string, V any](m map[K]V) []K {
 // This endpoint handles commitment changes by creating/updating/deleting Reservation CRDs based on the commitment lifecycle.
 // A request may contain multiple commitment changes which are processed in a single transaction. If any change fails, all changes are rolled back.
 func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	// Initialize
+	resp := liquid.CommitmentChangeResponse{}
+	req := liquid.CommitmentChangeRequest{}
+	statusCode := http.StatusOK
+
 	// Check if API is enabled
 	if !api.config.EnableChangeCommitmentsAPI {
-		http.Error(w, "change-commitments API is disabled", http.StatusServiceUnavailable)
+		statusCode = http.StatusServiceUnavailable
+		http.Error(w, "change-commitments API is disabled", statusCode)
+		api.recordMetrics(req, resp, statusCode, startTime)
 		return
 	}
 
@@ -66,26 +74,27 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 
 	// Only accept POST method
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		statusCode = http.StatusMethodNotAllowed
+		http.Error(w, "Method not allowed", statusCode)
+		api.recordMetrics(req, resp, statusCode, startTime)
 		return
 	}
 
 	// Parse request body
-	var req liquid.CommitmentChangeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		logger.Error(err, "invalid request body")
-		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
+		statusCode = http.StatusBadRequest
+		http.Error(w, "Invalid request body: "+err.Error(), statusCode)
+		api.recordMetrics(req, resp, statusCode, startTime)
 		return
 	}
 
 	logger.Info("received change commitments request", "affectedProjects", len(req.ByProject), "dryRun", req.DryRun, "availabilityZone", req.AZ)
 
-	// Initialize response
-	resp := liquid.CommitmentChangeResponse{}
-
 	// Check for dry run -> early reject, not supported yet
 	if req.DryRun {
 		resp.RejectionReason = "Dry run not supported yet"
+		api.recordMetrics(req, resp, statusCode, startTime)
 		logger.Info("rejecting dry run request")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -97,14 +106,26 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 
 	// Process commitment changes
 	// For now, we'll implement a simplified path that checks capacity for immediate start CRs
+
 	if err := api.processCommitmentChanges(ctx, w, logger, req, &resp); err != nil {
 		// Error already written to response by processCommitmentChanges
+		// Determine status code from error context (409 or 503)
+		if strings.Contains(err.Error(), "version mismatch") {
+			statusCode = http.StatusConflict
+		} else if strings.Contains(err.Error(), "caches not ready") {
+			statusCode = http.StatusServiceUnavailable
+		}
+		// Record metrics for error cases
+		api.recordMetrics(req, resp, statusCode, startTime)
 		return
 	}
 
+	// Record metrics
+	api.recordMetrics(req, resp, statusCode, startTime)
+
 	// Return response
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(statusCode)
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		return
 	}
