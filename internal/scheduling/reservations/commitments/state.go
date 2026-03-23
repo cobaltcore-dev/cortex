@@ -6,16 +6,17 @@ package commitments
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/sapcc/go-api-declarations/liquid"
-	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-var stateLog = ctrl.Log.WithName("commitment_state")
+// commitmentUUIDPattern validates commitment UUID format.
+var commitmentUUIDPattern = regexp.MustCompile(`^[a-zA-Z0-9-]{6,40}$`)
 
 // Limes LIQUID resource naming convention: ram_<flavorgroup>
 const commitmentResourceNamePrefix = "ram_"
@@ -52,6 +53,10 @@ func FromCommitment(
 	commitment Commitment,
 	flavorGroup compute.FlavorGroupFeature,
 ) (*CommitmentState, error) {
+	// Validate commitment UUID format
+	if !commitmentUUIDPattern.MatchString(commitment.UUID) {
+		return nil, errors.New("unexpected commitment format")
+	}
 
 	flavorGroupName, err := getFlavorGroupNameFromResource(commitment.ResourceName)
 	if err != nil {
@@ -99,6 +104,11 @@ func FromChangeCommitmentTargetState(
 	flavorGroup compute.FlavorGroupFeature,
 	az string,
 ) (*CommitmentState, error) {
+	// Validate commitment UUID format
+	commitmentUUID := string(commitment.UUID)
+	if !commitmentUUIDPattern.MatchString(commitmentUUID) {
+		return nil, errors.New("unexpected commitment format")
+	}
 
 	amountMultiple := uint64(0)
 	var startTime *time.Time
@@ -108,9 +118,15 @@ func FromChangeCommitmentTargetState(
 	// guaranteed and confirmed commitments are honored with start time now
 	case liquid.CommitmentStatusGuaranteed, liquid.CommitmentStatusConfirmed:
 		amountMultiple = commitment.Amount
-		// Set start time to now for active commitments
-		now := time.Now()
-		startTime = &now
+		// Set start time: use ConfirmBy if available (when the commitment was confirmed),
+		// otherwise use time.Now() for immediate confirmation
+		confirmByTime := commitment.ConfirmBy.UnwrapOr(time.Time{})
+		if !confirmByTime.IsZero() {
+			startTime = &confirmByTime
+		} else {
+			now := time.Now()
+			startTime = &now
+		}
 	}
 
 	// ConfirmBy is ignored for now
@@ -184,7 +200,7 @@ func FromReservations(reservations []v1alpha1.Reservation) (*CommitmentState, er
 		// check flavor group consistency, ignore if not matching to repair corrupted state in k8s
 		if res.Spec.CommittedResourceReservation.ResourceGroup != state.FlavorGroupName {
 			// log message
-			stateLog.Error(errors.New("inconsistent flavor group in reservation"),
+			commitmentLog.Error(errors.New("inconsistent flavor group in reservation"),
 				"reservation belongs to same commitment but has different flavor group - ignoring reservation for capacity calculation",
 				"reservationName", res.Name,
 				"expectedFlavorGroup", state.FlavorGroupName,

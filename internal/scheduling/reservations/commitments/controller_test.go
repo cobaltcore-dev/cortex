@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package controller
+package commitments
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -23,10 +24,13 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
 
-func TestReservationReconciler_Reconcile(t *testing.T) {
+func TestCommitmentReservationController_Reconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheme: %v", err)
+	}
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add hypervisor scheme: %v", err)
 	}
 
 	tests := []struct {
@@ -84,9 +88,12 @@ func TestReservationReconciler_Reconcile(t *testing.T) {
 				WithStatusSubresource(&v1alpha1.Reservation{}).
 				Build()
 
-			reconciler := &ReservationReconciler{
+			reconciler := &CommitmentReservationController{
 				Client: client,
 				Scheme: scheme,
+				Conf: Config{
+					RequeueIntervalActive: 5 * time.Minute,
+				},
 			}
 
 			req := ctrl.Request{
@@ -133,10 +140,13 @@ func TestReservationReconciler_Reconcile(t *testing.T) {
 	}
 }
 
-func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T) {
+func TestCommitmentReservationController_reconcileInstanceReservation_Success(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheme: %v", err)
+	}
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add hypervisor scheme: %v", err)
 	}
 
 	reservation := &v1alpha1.Reservation{
@@ -157,7 +167,6 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 	}
 
 	// Create flavor group knowledge CRD for the test
-	// Need to import compute package for FlavorGroupFeature
 	flavorGroups := []struct {
 		Name    string `json:"name"`
 		Flavors []struct {
@@ -200,7 +209,7 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 		Spec: v1alpha1.KnowledgeSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
 			Extractor: v1alpha1.KnowledgeExtractorSpec{
-				Name: "flavor_groups", // Note: underscore not hyphen
+				Name: "flavor_groups",
 			},
 			Recency: metav1.Duration{Duration: 0},
 		},
@@ -217,9 +226,23 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 		},
 	}
 
+	// Create mock hypervisors
+	hypervisor1 := &hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-host-1",
+		},
+		Spec: hv1.HypervisorSpec{},
+	}
+	hypervisor2 := &hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-host-2",
+		},
+		Spec: hv1.HypervisorSpec{},
+	}
+
 	client := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(reservation, flavorGroupKnowledge).
+		WithObjects(reservation, flavorGroupKnowledge, hypervisor1, hypervisor2).
 		WithStatusSubresource(&v1alpha1.Reservation{}, &v1alpha1.Knowledge{}).
 		Build()
 
@@ -249,15 +272,18 @@ func TestReservationReconciler_reconcileInstanceReservation_Success(t *testing.T
 	defer server.Close()
 
 	config := Config{
-		Endpoints: EndpointsConfig{
-			NovaExternalScheduler: server.URL,
-		},
+		SchedulerURL: server.URL,
 	}
 
-	reconciler := &ReservationReconciler{
+	reconciler := &CommitmentReservationController{
 		Client: client,
 		Scheme: scheme,
 		Conf:   config,
+	}
+
+	// Initialize the reconciler (this sets up SchedulerClient)
+	if err := reconciler.Init(context.Background(), client, config); err != nil {
+		t.Fatalf("Failed to initialize reconciler: %v", err)
 	}
 
 	req := ctrl.Request{

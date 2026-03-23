@@ -117,9 +117,10 @@ func newFailoverReservation(ctx context.Context, vm VM, hypervisor, creator stri
 			},
 		},
 		Spec: v1alpha1.ReservationSpec{
-			Type:       v1alpha1.ReservationTypeFailover,
-			Resources:  resources,
-			TargetHost: hypervisor, // Set the desired hypervisor from scheduler response
+			Type:             v1alpha1.ReservationTypeFailover,
+			AvailabilityZone: vm.AvailabilityZone,
+			Resources:        resources,
+			TargetHost:       hypervisor, // Set the desired hypervisor from scheduler response
 			FailoverReservation: &v1alpha1.FailoverReservationSpec{
 				ResourceGroup: vm.FlavorName,
 			},

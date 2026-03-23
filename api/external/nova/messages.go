@@ -31,9 +31,6 @@ type ExternalSchedulerRequest struct {
 	// Request context from Nova that contains additional meta information.
 	Context NovaRequestContext `json:"context"`
 
-	// Whether the request is a reservation.
-	Reservation bool `json:"reservation"`
-
 	Hosts   []ExternalSchedulerHost `json:"hosts"`
 	Weights map[string]float64      `json:"weights"`
 

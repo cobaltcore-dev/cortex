@@ -51,7 +51,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
-	reservationscontroller "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/controller"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
@@ -322,8 +321,7 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "nova FilterWeigherPipelineController")
 			os.Exit(1)
 		}
-		httpAPIConf := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
-		nova.NewAPI(httpAPIConf, filterWeigherController).Init(mux)
+		nova.NewAPI(filterWeigherController).Init(mux)
 
 		// Initialize commitments API for LIQUID interface
 		commitmentsAPI := commitments.NewAPI(multiclusterClient)
@@ -487,18 +485,37 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(mainConfig.EnabledControllers, "reservations-controller") {
-		setupLog.Info("enabling controller", "controller", "reservations-controller")
-		monitor := reservationscontroller.NewControllerMonitor(multiclusterClient)
+	if slices.Contains(mainConfig.EnabledControllers, "committed-resource-reservations-controller") {
+		setupLog.Info("enabling controller", "controller", "committed-resource-reservations-controller")
+		monitor := reservations.NewMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&monitor)
-		reservationsControllerConfig := conf.GetConfigOrDie[reservationscontroller.Config]()
+		commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
+		commitmentsDefaults := commitments.DefaultConfig()
+		if commitmentsConfig.RequeueIntervalActive == 0 {
+			commitmentsConfig.RequeueIntervalActive = commitmentsDefaults.RequeueIntervalActive
+		}
+		if commitmentsConfig.RequeueIntervalRetry == 0 {
+			commitmentsConfig.RequeueIntervalRetry = commitmentsDefaults.RequeueIntervalRetry
+		}
+		if commitmentsConfig.PipelineDefault == "" {
+			commitmentsConfig.PipelineDefault = commitmentsDefaults.PipelineDefault
+		}
+		if commitmentsConfig.SchedulerURL == "" {
+			commitmentsConfig.SchedulerURL = commitmentsDefaults.SchedulerURL
+		}
+		if commitmentsConfig.ChangeAPIWatchReservationsTimeout == 0 {
+			commitmentsConfig.ChangeAPIWatchReservationsTimeout = commitmentsDefaults.ChangeAPIWatchReservationsTimeout
+		}
+		if commitmentsConfig.ChangeAPIWatchReservationsPollInterval == 0 {
+			commitmentsConfig.ChangeAPIWatchReservationsPollInterval = commitmentsDefaults.ChangeAPIWatchReservationsPollInterval
+		}
 
-		if err := (&reservationscontroller.ReservationReconciler{
+		if err := (&commitments.CommitmentReservationController{
 			Client: multiclusterClient,
 			Scheme: mgr.GetScheme(),
-			Conf:   reservationsControllerConfig,
+			Conf:   commitmentsConfig,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "Reservation")
+			setupLog.Error(err, "unable to create controller", "controller", "CommitmentReservation")
 			os.Exit(1)
 		}
 	}
@@ -561,27 +578,7 @@ func main() {
 	if slices.Contains(mainConfig.EnabledControllers, "failover-reservations-controller") {
 		setupLog.Info("enabling controller", "controller", "failover-reservations-controller")
 		failoverConfig := conf.GetConfigOrDie[failover.FailoverConfig]()
-
-		// Apply defaults for unset values
-		defaults := failover.DefaultConfig()
-		if failoverConfig.DatasourceName == "" {
-			failoverConfig.DatasourceName = defaults.DatasourceName
-		}
-		if failoverConfig.SchedulerURL == "" {
-			failoverConfig.SchedulerURL = defaults.SchedulerURL
-		}
-		if failoverConfig.ReconcileInterval == 0 {
-			failoverConfig.ReconcileInterval = defaults.ReconcileInterval
-		}
-		if failoverConfig.Creator == "" {
-			failoverConfig.Creator = defaults.Creator
-		}
-		if failoverConfig.FlavorFailoverRequirements == nil {
-			failoverConfig.FlavorFailoverRequirements = defaults.FlavorFailoverRequirements
-		}
-		if failoverConfig.RevalidationInterval == 0 {
-			failoverConfig.RevalidationInterval = defaults.RevalidationInterval
-		}
+		failoverConfig.ApplyDefaults()
 
 		// DatasourceName is still required - check after applying defaults
 		if failoverConfig.DatasourceName == "" {
@@ -677,9 +674,13 @@ func main() {
 		setupLog.Info("starting commitments syncer")
 		syncer := commitments.NewSyncer(multiclusterClient)
 		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
+		syncerDefaults := commitments.DefaultSyncerConfig()
+		if syncerConfig.SyncInterval == 0 {
+			syncerConfig.SyncInterval = syncerDefaults.SyncInterval
+		}
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
-			Interval: time.Hour,
+			Interval: syncerConfig.SyncInterval,
 			Name:     "commitments-sync-task",
 			Run:      func(ctx context.Context) error { return syncer.SyncReservations(ctx) },
 			Init:     func(ctx context.Context) error { return syncer.Init(ctx, syncerConfig) },

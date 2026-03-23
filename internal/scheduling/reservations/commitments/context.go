@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package failover
+package commitments
 
 import (
 	"context"
@@ -11,16 +11,19 @@ import (
 	"github.com/google/uuid"
 )
 
-// WithNewGlobalRequestID creates a new context with a failover-prefixed global request ID.
 func WithNewGlobalRequestID(ctx context.Context) context.Context {
-	return reservations.WithGlobalRequestID(ctx, "failover-"+uuid.New().String())
+	return reservations.WithGlobalRequestID(ctx, "committed-resource-"+uuid.New().String())
 }
 
-// LoggerFromContext returns a logger with greq and req values from the context.
-// This creates a child logger with the request tracking values pre-attached,
-// so you don't need to repeat them in every log call.
 func LoggerFromContext(ctx context.Context) logr.Logger {
-	return log.WithValues(
+	return commitmentLog.WithValues(
+		"greq", reservations.GlobalRequestIDFromContext(ctx),
+		"req", reservations.RequestIDFromContext(ctx),
+	)
+}
+
+func APILoggerFromContext(ctx context.Context) logr.Logger {
+	return apiLog.WithValues(
 		"greq", reservations.GlobalRequestIDFromContext(ctx),
 		"req", reservations.RequestIDFromContext(ctx),
 	)
