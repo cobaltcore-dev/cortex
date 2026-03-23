@@ -53,7 +53,7 @@ func DefaultConfig() Config {
 	return Config{
 		RequeueIntervalActive:                  5 * time.Minute,
 		RequeueIntervalRetry:                   1 * time.Minute,
-		PipelineDefault:                        "kvm-committed-resource-reservation-general-purpose",
+		PipelineDefault:                        "kvm-general-purpose-load-balancing-all-filters-enabled",
 		NovaExternalScheduler:                  "http://localhost:8080/scheduler/nova/external",
 		ChangeAPIWatchReservationsTimeout:      10 * time.Second,
 		ChangeAPIWatchReservationsPollInterval: 500 * time.Millisecond,
