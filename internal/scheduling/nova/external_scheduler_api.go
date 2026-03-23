@@ -140,14 +140,10 @@ func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerReque
 	}
 }
 
-// shuffleTopHostsForEvacuation randomly reorders the first k hosts if the request
+// shuffleTopHosts randomly reorders the first k hosts if the request
 // is an evacuation. This helps distribute evacuated VMs across multiple hosts
 // rather than concentrating them on the single "best" host.
-func shuffleTopHostsForEvacuation(request api.ExternalSchedulerRequest, hosts []string, k int) []string {
-	intent, err := request.GetIntent()
-	if err != nil || intent != api.EvacuateIntent {
-		return hosts
-	}
+func shuffleTopHosts(hosts []string, k int) []string {
 	if k <= 0 {
 		k = 3
 	}
@@ -281,7 +277,10 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 
 	// This is a hack to address the problem that Nova only uses the first host in hosts for evacuation requests.
 	// Only for evacuation we shuffle the first k hosts to ensure that we do not get stuck on a single host
-	hosts = shuffleTopHostsForEvacuation(requestData, hosts, httpAPI.config.EvacuationShuffleK)
+	intent, err := requestData.GetIntent()
+	if err == nil && intent == api.EvacuateIntent {
+		hosts = shuffleTopHosts(hosts, httpAPI.config.EvacuationShuffleK)
+	}
 	response := api.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(response); err != nil {

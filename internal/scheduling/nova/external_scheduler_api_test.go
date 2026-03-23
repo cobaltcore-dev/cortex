@@ -511,73 +511,44 @@ func TestLimitHostsToRequest(t *testing.T) {
 	}
 }
 
-func TestShuffleTopHostsForEvacuation(t *testing.T) {
-	evacuateRequest := novaapi.ExternalSchedulerRequest{
-		Spec: novaapi.NovaObject[novaapi.NovaSpec]{
-			Data: novaapi.NovaSpec{
-				SchedulerHints: map[string]any{"_nova_check_type": "evacuate"},
-			},
-		},
-	}
-	createRequest := novaapi.ExternalSchedulerRequest{
-		Spec: novaapi.NovaObject[novaapi.NovaSpec]{
-			Data: novaapi.NovaSpec{
-				SchedulerHints: map[string]any{"_nova_check_type": "create"},
-			},
-		},
-	}
-
+func TestShuffleTopHosts(t *testing.T) {
 	tests := []struct {
 		name              string
-		request           novaapi.ExternalSchedulerRequest
 		hosts             []string
 		k                 int
 		unchangedTailFrom int // index from which hosts should be unchanged (-1 if all can change)
 	}{
 		{
-			name:              "non-evacuation request returns hosts unchanged",
-			request:           createRequest,
-			hosts:             []string{"host1", "host2", "host3"},
-			k:                 3,
-			unchangedTailFrom: 0,
+			name:  "empty hosts returns empty",
+			hosts: []string{},
+			k:     3,
 		},
 		{
-			name:    "evacuation with empty hosts returns empty",
-			request: evacuateRequest,
-			hosts:   []string{},
-			k:       3,
-		},
-		{
-			name:              "evacuation with single host returns unchanged",
-			request:           evacuateRequest,
+			name:              "single host returns unchanged",
 			hosts:             []string{"host1"},
 			k:                 3,
 			unchangedTailFrom: 0,
 		},
 		{
-			name:              "evacuation shuffles only first k hosts",
-			request:           evacuateRequest,
+			name:              "shuffles only first k hosts",
 			hosts:             []string{"host1", "host2", "host3", "host4", "host5"},
 			k:                 3,
 			unchangedTailFrom: 3,
 		},
 		{
-			name:              "evacuation with k=0 uses default of 3",
-			request:           evacuateRequest,
+			name:              "k=0 uses default of 3",
 			hosts:             []string{"host1", "host2", "host3", "host4", "host5"},
 			k:                 0,
 			unchangedTailFrom: 3,
 		},
 		{
-			name:              "evacuation with negative k uses default of 3",
-			request:           evacuateRequest,
+			name:              "negative k uses default of 3",
 			hosts:             []string{"host1", "host2", "host3", "host4", "host5"},
 			k:                 -1,
 			unchangedTailFrom: 3,
 		},
 		{
-			name:              "evacuation with k larger than hosts shuffles all",
-			request:           evacuateRequest,
+			name:              "k larger than hosts shuffles all",
 			hosts:             []string{"host1", "host2"},
 			k:                 10,
 			unchangedTailFrom: -1,
@@ -589,7 +560,7 @@ func TestShuffleTopHostsForEvacuation(t *testing.T) {
 			original := make([]string, len(tt.hosts))
 			copy(original, tt.hosts)
 
-			result := shuffleTopHostsForEvacuation(tt.request, tt.hosts, tt.k)
+			result := shuffleTopHosts(tt.hosts, tt.k)
 
 			if len(result) != len(tt.hosts) {
 				t.Fatalf("expected %d hosts, got %d", len(tt.hosts), len(result))
