@@ -17,7 +17,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 )
 
 func TestHandleReportCapacity(t *testing.T) {
@@ -280,6 +282,307 @@ func createTestFlavorGroupKnowledge(t *testing.T, groupName string) *v1alpha1.Kn
 				},
 			},
 			Raw: raw,
+		},
+	}
+}
+
+func TestCapacityCalculatorWithScheduler(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+
+	const (
+		flavorGroup = "test-group"
+		az          = "az-a"
+		flavorMemMB = uint64(32768)
+		flavorVCPUs = uint64(8)
+	)
+
+	flavorGroupKnowledge := createTestFlavorGroupKnowledgeWithSmallest(t, flavorGroup, flavorMemMB, flavorVCPUs)
+	hostDetailsKnowledge := createTestHostDetailsKnowledge(t, map[string]string{
+		"host-1": az,
+		"host-2": az,
+	})
+
+	t.Run("computes capacity and usage via two scheduler calls", func(t *testing.T) {
+		// kvm-report-capacity returns 5 hosts (total capacity).
+		// kvm-general-purpose-load-balancing-all-filters-enabled returns 3 hosts (currently available).
+		// usage = 5 - 3 = 2.
+		server := newPipelineMockSchedulerServer(t, map[string][]string{
+			"kvm-report-capacity": {"h1", "h2", "h3", "h4", "h5"},
+			"kvm-general-purpose-load-balancing-all-filters-enabled": {"h1", "h2", "h3"},
+		})
+		defer server.Close()
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(flavorGroupKnowledge, hostDetailsKnowledge).
+			Build()
+
+		calculator := &CapacityCalculator{
+			client:          fakeClient,
+			schedulerClient: reservations.NewSchedulerClient(server.URL),
+		}
+
+		report, err := calculator.CalculateCapacity(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		res, ok := report.Resources[liquid.ResourceName("ram_"+flavorGroup)]
+		if !ok {
+			t.Fatal("expected ram_test-group resource")
+		}
+		azReport, ok := res.PerAZ[liquid.AvailabilityZone(az)]
+		if !ok {
+			t.Fatalf("expected %s in perAZ", az)
+		}
+
+		if azReport.Capacity != 5 {
+			t.Errorf("expected capacity = 5, got %d", azReport.Capacity)
+		}
+		usageVal, ok := azReport.Usage.Unpack()
+		if !ok {
+			t.Fatal("expected usage to be set")
+		}
+		if usageVal != 2 {
+			t.Errorf("expected usage = 2, got %d", usageVal)
+		}
+	})
+
+	t.Run("usage is zero when total equals currently available", func(t *testing.T) {
+		server := newPipelineMockSchedulerServer(t, map[string][]string{
+			"kvm-report-capacity": {"h1", "h2"},
+			"kvm-general-purpose-load-balancing-all-filters-enabled": {"h1", "h2"},
+		})
+		defer server.Close()
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(flavorGroupKnowledge, hostDetailsKnowledge).
+			Build()
+
+		calculator := &CapacityCalculator{
+			client:          fakeClient,
+			schedulerClient: reservations.NewSchedulerClient(server.URL),
+		}
+
+		report, err := calculator.CalculateCapacity(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		azReport := report.Resources[liquid.ResourceName("ram_"+flavorGroup)].PerAZ[liquid.AvailabilityZone(az)]
+		usageVal, ok := azReport.Usage.Unpack()
+		if !ok {
+			t.Fatal("expected usage to be set")
+		}
+		if usageVal != 0 {
+			t.Errorf("expected usage = 0, got %d", usageVal)
+		}
+	})
+
+	t.Run("usage is clamped to zero when currently available exceeds total", func(t *testing.T) {
+		// Pathological: currently-available call returns more hosts than total capacity call.
+		server := newPipelineMockSchedulerServer(t, map[string][]string{
+			"kvm-report-capacity": {"h1"},
+			"kvm-general-purpose-load-balancing-all-filters-enabled": {"h1", "h2", "h3"},
+		})
+		defer server.Close()
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(flavorGroupKnowledge, hostDetailsKnowledge).
+			Build()
+
+		calculator := &CapacityCalculator{
+			client:          fakeClient,
+			schedulerClient: reservations.NewSchedulerClient(server.URL),
+		}
+
+		report, err := calculator.CalculateCapacity(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		azReport := report.Resources[liquid.ResourceName("ram_"+flavorGroup)].PerAZ[liquid.AvailabilityZone(az)]
+		usageVal, ok := azReport.Usage.Unpack()
+		if !ok {
+			t.Fatal("expected usage to be set")
+		}
+		if usageVal != 0 {
+			t.Errorf("expected usage = 0 (clamped), got %d", usageVal)
+		}
+	})
+
+	t.Run("scheduler failure yields empty AZ report without aborting", func(t *testing.T) {
+		failServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+		}))
+		defer failServer.Close()
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(flavorGroupKnowledge, hostDetailsKnowledge).
+			Build()
+
+		calculator := &CapacityCalculator{
+			client:          fakeClient,
+			schedulerClient: reservations.NewSchedulerClient(failServer.URL),
+		}
+
+		report, err := calculator.CalculateCapacity(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		res, ok := report.Resources[liquid.ResourceName("ram_"+flavorGroup)]
+		if !ok {
+			t.Fatal("expected resource to exist")
+		}
+		azReport := res.PerAZ[liquid.AvailabilityZone(az)]
+		if azReport == nil {
+			t.Fatal("expected non-nil AZ report on scheduler failure")
+		}
+		if azReport.Capacity != 0 {
+			t.Errorf("expected capacity = 0 on failure, got %d", azReport.Capacity)
+		}
+	})
+
+	t.Run("multiple AZs are reported independently", func(t *testing.T) {
+		twoAZHostDetails := createTestHostDetailsKnowledge(t, map[string]string{
+			"host-1": "az-a",
+			"host-2": "az-b",
+		})
+		// Both calls always return 3 hosts regardless of AZ (pipeline-routing mock).
+		server := newPipelineMockSchedulerServer(t, map[string][]string{
+			"kvm-report-capacity": {"h1", "h2", "h3"},
+			"kvm-general-purpose-load-balancing-all-filters-enabled": {"h1"},
+		})
+		defer server.Close()
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(flavorGroupKnowledge, twoAZHostDetails).
+			Build()
+
+		calculator := &CapacityCalculator{
+			client:          fakeClient,
+			schedulerClient: reservations.NewSchedulerClient(server.URL),
+		}
+
+		report, err := calculator.CalculateCapacity(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		res := report.Resources[liquid.ResourceName("ram_"+flavorGroup)]
+		if len(res.PerAZ) != 2 {
+			t.Errorf("expected 2 AZs, got %d", len(res.PerAZ))
+		}
+		if _, ok := res.PerAZ[liquid.AvailabilityZone("az-a")]; !ok {
+			t.Error("expected az-a in report")
+		}
+		if _, ok := res.PerAZ[liquid.AvailabilityZone("az-b")]; !ok {
+			t.Error("expected az-b in report")
+		}
+	})
+}
+
+// newPipelineMockSchedulerServer starts a test HTTP server that returns different
+// host lists depending on the pipeline name in the request body.
+func newPipelineMockSchedulerServer(t *testing.T, hostsByPipeline map[string][]string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req novaapi.ExternalSchedulerRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		hosts := hostsByPipeline[req.Pipeline]
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(novaapi.ExternalSchedulerResponse{Hosts: hosts}); err != nil {
+			t.Errorf("mock scheduler: encode error: %v", err)
+		}
+	}))
+}
+
+// createTestFlavorGroupKnowledgeWithSmallest creates a Knowledge CRD where smallestFlavor
+// is explicitly set so the capacity calculator uses the correct memory unit.
+func createTestFlavorGroupKnowledgeWithSmallest(t *testing.T, groupName string, memMB, vcpus uint64) *v1alpha1.Knowledge {
+	t.Helper()
+
+	features := []map[string]interface{}{
+		{
+			"name": groupName,
+			"flavors": []map[string]interface{}{
+				{
+					"name":     "test_flavor",
+					"vcpus":    vcpus,
+					"memoryMB": memMB,
+					"diskGB":   50,
+				},
+			},
+			"smallestFlavor": map[string]interface{}{
+				"name":     "test_flavor",
+				"vcpus":    vcpus,
+				"memoryMB": memMB,
+				"diskGB":   50,
+			},
+			"largestFlavor": map[string]interface{}{
+				"name":     "test_flavor",
+				"vcpus":    vcpus,
+				"memoryMB": memMB,
+				"diskGB":   50,
+			},
+		},
+	}
+
+	raw, err := v1alpha1.BoxFeatureList(features)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return &v1alpha1.Knowledge{
+		ObjectMeta: v1.ObjectMeta{Name: "flavor-groups"},
+		Spec: v1alpha1.KnowledgeSpec{
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			Extractor:        v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
+		},
+		Status: v1alpha1.KnowledgeStatus{
+			Conditions: []v1.Condition{{Type: v1alpha1.KnowledgeConditionReady, Status: "True"}},
+			Raw:        raw,
+		},
+	}
+}
+
+// createTestHostDetailsKnowledge creates a Knowledge CRD with host→AZ mappings.
+func createTestHostDetailsKnowledge(t *testing.T, hostToAZ map[string]string) *v1alpha1.Knowledge {
+	t.Helper()
+
+	features := make([]map[string]interface{}, 0, len(hostToAZ))
+	for host, az := range hostToAZ {
+		features = append(features, map[string]interface{}{
+			"computeHost":      host,
+			"availabilityZone": az,
+		})
+	}
+
+	raw, err := v1alpha1.BoxFeatureList(features)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return &v1alpha1.Knowledge{
+		ObjectMeta: v1.ObjectMeta{Name: "host-details"},
+		Spec: v1alpha1.KnowledgeSpec{
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			Extractor:        v1alpha1.KnowledgeExtractorSpec{Name: "host_details"},
+		},
+		Status: v1alpha1.KnowledgeStatus{
+			Conditions: []v1.Condition{{Type: v1alpha1.KnowledgeConditionReady, Status: "True"}},
+			Raw:        raw,
 		},
 	}
 }
