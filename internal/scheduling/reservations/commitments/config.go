@@ -31,7 +31,7 @@ type Config struct {
 	DatabaseSecretRef *corev1.SecretReference `json:"databaseSecretRef,omitempty"`
 
 	// FlavorGroupPipelines maps flavor group names to pipeline names.
-	// Example: {"2152": "kvm-hana-bin-packing-all-filters-enabled", "2101": "kvm-general-purpose-load-balancing-all-filters-enabled", "*": "kvm-general-purpose-load-balancing-all-filters-enabled"}
+	// Example: {"2152": "kvm-hana-bin-packing", "2101": "kvm-general-purpose-load-balancing", "*": "kvm-general-purpose-load-balancing"}
 	// Used to select different scheduling pipelines based on flavor group characteristics.
 	FlavorGroupPipelines map[string]string `json:"committedResourceFlavorGroupPipelines,omitempty"`
 
@@ -53,7 +53,7 @@ func DefaultConfig() Config {
 	return Config{
 		RequeueIntervalActive:                  5 * time.Minute,
 		RequeueIntervalRetry:                   1 * time.Minute,
-		PipelineDefault:                        "kvm-general-purpose-load-balancing-all-filters-enabled",
+		PipelineDefault:                        "kvm-general-purpose-load-balancing",
 		SchedulerURL:                           "http://localhost:8080/scheduler/nova/external",
 		ChangeAPIWatchReservationsTimeout:      10 * time.Second,
 		ChangeAPIWatchReservationsPollInterval: 500 * time.Millisecond,

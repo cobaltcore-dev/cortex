@@ -124,8 +124,6 @@ cortex-scheduling-controllers:
   conf:
     <<: *cortexConf
     leaderElectionID: cortex-nova-scheduling
-    # OpenStack projects that use experimental features.
-    experimentalProjectIDs: []
     monitoring:
       labels:
         <<: *cortexMonitoringLabels
@@ -142,11 +140,11 @@ cortex-scheduling-controllers:
     # CommittedResourceFlavorGroupPipelines maps flavor group IDs to pipeline names for CR reservations
     # This allows different scheduling strategies per flavor group (e.g., HANA vs GP)
     committedResourceFlavorGroupPipelines:
-      "2152": "kvm-hana-bin-packing-all-filters-enabled"  # HANA flavor group
-      "2101": "kvm-general-purpose-load-balancing-all-filters-enabled"  # General Purpose flavor group
-      "*": "kvm-general-purpose-load-balancing-all-filters-enabled"  # Catch-all fallback
+      "2152": "kvm-hana-bin-packing"  # HANA flavor group
+      "2101": "kvm-general-purpose-load-balancing"  # General Purpose flavor group
+      "*": "kvm-general-purpose-load-balancing"  # Catch-all fallback
     # Default pipeline for CR reservations when no CommittedResourceFlavorGroupPipelines entry matches
-    committedResourcePipelineDefault: "kvm-general-purpose-load-balancing-all-filters-enabled"
+    committedResourcePipelineDefault: "kvm-general-purpose-load-balancing"
     # How often to re-verify active reservations
     # 5m = 300000000000 nanoseconds
     committedResourceRequeueIntervalActive: 300000000000
