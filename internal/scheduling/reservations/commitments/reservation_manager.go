@@ -119,13 +119,22 @@ func (m *ReservationManager) ApplyCommitmentState(
 
 	// Phase 4 (DELETE): Remove reservations (capacity decreased)
 	for deltaMemoryBytes < 0 && len(existing) > 0 {
-		// prefer unused reservation slot or simply remove last one
+		// prefer ones that are not scheduled, or alternatively, unused reservation slot, or simply remove last one
 		var reservationToDelete *v1alpha1.Reservation
 		for i, res := range existing {
-			if len(res.Spec.CommittedResourceReservation.Allocations) == 0 {
+			if res.Spec.TargetHost == "" {
 				reservationToDelete = &res
 				existing = append(existing[:i], existing[i+1:]...) // remove from existing list
 				break
+			}
+		}
+		if reservationToDelete == nil {
+			for i, res := range existing {
+				if len(res.Spec.CommittedResourceReservation.Allocations) == 0 {
+					reservationToDelete = &res
+					existing = append(existing[:i], existing[i+1:]...) // remove from existing list
+					break
+				}
 			}
 		}
 		if reservationToDelete == nil {
@@ -160,6 +169,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 		log.Info("creating reservation",
 			"commitmentUUID", desiredState.CommitmentUUID,
 			"deltaMemoryBytes", deltaMemoryBytes,
+			"flavorName", reservation.Spec.CommittedResourceReservation.ResourceName,
 			"name", reservation.Name,
 			"memoryBytes", memValue.Value())
 
@@ -200,7 +210,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 // syncReservationMetadata updates reservation metadata if it differs from desired state.
 func (m *ReservationManager) syncReservationMetadata(
 	ctx context.Context,
-	log logr.Logger,
+	logger logr.Logger,
 	reservation *v1alpha1.Reservation,
 	state *CommitmentState,
 ) (*v1alpha1.Reservation, error) {
@@ -211,7 +221,7 @@ func (m *ReservationManager) syncReservationMetadata(
 		(state.StartTime != nil && (reservation.Spec.StartTime == nil || !reservation.Spec.StartTime.Time.Equal(*state.StartTime))) ||
 		(state.EndTime != nil && (reservation.Spec.EndTime == nil || !reservation.Spec.EndTime.Time.Equal(*state.EndTime))) {
 		// Apply patch
-		log.Info("syncing reservation metadata",
+		logger.Info("syncing reservation metadata",
 			"reservation", reservation,
 			"desired commitmentUUID", state.CommitmentUUID,
 			"desired availabilityZone", state.AvailabilityZone,

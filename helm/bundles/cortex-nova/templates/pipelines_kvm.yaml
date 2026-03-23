@@ -14,7 +14,7 @@ spec:
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
     Specifically, this pipeline is used for general purpose workloads.
   type: filter-weigher
-  createDecisions: true
+  createDecisions: false
   filters:
     - name: filter_correct_az
       description: |
@@ -25,6 +25,11 @@ spec:
         This step will consider the `ignore_hosts` and `force_hosts` instructions
         from the nova scheduler request spec to filter out or exclusively allow
         certain hosts.
+    - name: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
     - name: filter_capabilities
       description: |
         This step will filter out hosts that do not meet the compute capabilities
@@ -61,6 +66,17 @@ spec:
         This step selects hosts not in the instance group specified in the nova
         scheduler request spec, but only until the max_server_per_host limit is
         reached (default = 1).
+    - name: filter_allowed_projects
+      description: |
+        This step filters hosts based on allowed projects defined in the
+        hypervisor resource. Note that hosts allowing all projects are still
+        accessible and will not be filtered out. In this way some hypervisors
+        are made accessible to some projects only.
+    - name: filter_live_migratable
+      description: |
+        This step ensures that the target host of a live migration can accept
+        the migrating VM, by checking cpu architecture, cpu features, emulated
+        devices, and cpu modes.
     - name: filter_requested_destination
       params: {{ .Values.kvm.filterRequestedDestinationParams | toYaml | nindent 8 }}
       description: |
@@ -111,7 +127,7 @@ spec:
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
     Specifically, this pipeline is used for hana virtual machines.
   type: filter-weigher
-  createDecisions: true
+  createDecisions: false
   filters:
     - name: filter_correct_az
       description: |
@@ -122,6 +138,11 @@ spec:
         This step will consider the `ignore_hosts` and `force_hosts` instructions
         from the nova scheduler request spec to filter out or exclusively allow
         certain hosts.
+    - name: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
     - name: filter_capabilities
       description: |
         This step will filter out hosts that do not meet the compute capabilities
@@ -158,6 +179,17 @@ spec:
         This step selects hosts not in the instance group specified in the nova
         scheduler request spec, but only until the max_server_per_host limit is
         reached (default = 1).
+    - name: filter_allowed_projects
+      description: |
+        This step filters hosts based on allowed projects defined in the
+        hypervisor resource. Note that hosts allowing all projects are still
+        accessible and will not be filtered out. In this way some hypervisors
+        are made accessible to some projects only.
+    - name: filter_live_migratable
+      description: |
+        This step ensures that the target host of a live migration can accept
+        the migrating VM, by checking cpu architecture, cpu features, emulated
+        devices, and cpu modes.
     - name: filter_requested_destination
       params: {{ .Values.kvm.filterRequestedDestinationParams | toYaml | nindent 8 }}
       description: |
@@ -204,8 +236,9 @@ spec:
 
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
     Specifically, this pipeline is used for general purpose workloads.
+    It is also used for (CR/HA) reservation requests.
   type: filter-weigher
-  createDecisions: true
+  createDecisions: false
   # Fetch all placement candidates, ignoring nova's preselection.
   ignorePreselection: true
   filters:
@@ -331,7 +364,7 @@ spec:
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
     Specifically, this pipeline is used for hana virtual machines.
   type: filter-weigher
-  createDecisions: true
+  createDecisions: false
   # Fetch all placement candidates, ignoring nova's preselection.
   ignorePreselection: true
   filters:
@@ -574,7 +607,7 @@ spec:
     compute hosts in order to optimize resource usage and performance.
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
   type: detector
-  createDecisions: true
+  createDecisions: false
   detectors:
     - name: avoid_high_steal_pct
       description: |

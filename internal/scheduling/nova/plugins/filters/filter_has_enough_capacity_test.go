@@ -513,6 +513,295 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 	}
 }
 
+func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
+	scheme := buildTestScheme(t)
+
+	tests := []struct {
+		name                    string
+		hypervisors             []*hv1.Hypervisor
+		reservations            []*v1alpha1.Reservation
+		request                 api.ExternalSchedulerRequest
+		ignoredReservationTypes []v1alpha1.ReservationType
+		expectedHosts           []string
+		filteredHosts           []string
+	}{
+		// Two-host scenario tests (CR on host1, Failover on host2)
+		// host1: 8 CPU free, host2: 8 CPU free, CR blocks 4 on host1, Failover blocks 4 on host2
+		{
+			name: "Two hosts: No ignore - both hosts blocked by reservations",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "16", "8", "32Gi", "16Gi"), // 8 CPU free
+				newHypervisor("host2", "16", "8", "32Gi", "16Gi"), // 8 CPU free
+			},
+			reservations: []*v1alpha1.Reservation{
+				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
+				newFailoverReservation("failover-res", "host2", "4", "8Gi", map[string]string{"other-vm": "host3"}),
+			},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
+			ignoredReservationTypes: nil,
+			expectedHosts:           []string{},
+			filteredHosts:           []string{"host1", "host2"},
+		},
+		{
+			name: "Two hosts: Ignore CR only - host1 passes, host2 blocked by failover",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "16", "8", "32Gi", "16Gi"),
+				newHypervisor("host2", "16", "8", "32Gi", "16Gi"),
+			},
+			reservations: []*v1alpha1.Reservation{
+				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
+				newFailoverReservation("failover-res", "host2", "4", "8Gi", map[string]string{"other-vm": "host3"}),
+			},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
+			expectedHosts:           []string{"host1"},
+			filteredHosts:           []string{"host2"},
+		},
+		{
+			name: "Two hosts: Ignore Failover only - host2 passes, host1 blocked by CR",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "16", "8", "32Gi", "16Gi"),
+				newHypervisor("host2", "16", "8", "32Gi", "16Gi"),
+			},
+			reservations: []*v1alpha1.Reservation{
+				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
+				newFailoverReservation("failover-res", "host2", "4", "8Gi", map[string]string{"other-vm": "host3"}),
+			},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
+			expectedHosts:           []string{"host2"},
+			filteredHosts:           []string{"host1"},
+		},
+		{
+			name: "Two hosts: Ignore both - both hosts pass",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "16", "8", "32Gi", "16Gi"),
+				newHypervisor("host2", "16", "8", "32Gi", "16Gi"),
+			},
+			reservations: []*v1alpha1.Reservation{
+				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
+				newFailoverReservation("failover-res", "host2", "4", "8Gi", map[string]string{"other-vm": "host3"}),
+			},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
+			expectedHosts:           []string{"host1", "host2"},
+			filteredHosts:           []string{},
+		},
+
+		// Single-host scenario tests (both CR and Failover on host1)
+		// host1: 12 CPU free, CR blocks 4, Failover blocks 2 → 6 free when both active
+		// Large VM (12 CPU) - only fits if BOTH reservations are ignored
+		{
+			name: "Single host, Large VM (12 CPU): No ignore - blocked (6 free < 12 needed)",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "12", "0", "24Gi", "0"), // 12 CPU free
+			},
+			reservations: []*v1alpha1.Reservation{
+				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
+				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
+			},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 12, "24Gi", false, []string{"host1"}),
+			ignoredReservationTypes: nil,
+			expectedHosts:           []string{},
+			filteredHosts:           []string{"host1"},
+		},
+		{
+			name: "Single host, Large VM (12 CPU): Ignore CR - blocked (10 free < 12 needed)",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "12", "0", "24Gi", "0"),
+			},
+			reservations: []*v1alpha1.Reservation{
+				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
+				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
+			},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 12, "24Gi", false, []string{"host1"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
+			expectedHosts:           []string{},
+			filteredHosts:           []string{"host1"},
+		},
+		{
+			name: "Single host, Large VM (12 CPU): Ignore Failover - blocked (8 free < 12 needed)",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "12", "0", "24Gi", "0"),
+			},
+			reservations: []*v1alpha1.Reservation{
+				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
+				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
+			},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 12, "24Gi", false, []string{"host1"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
+			expectedHosts:           []string{},
+			filteredHosts:           []string{"host1"},
+		},
+		{
+			name: "Single host, Large VM (12 CPU): Ignore both - passes (12 free = 12 needed)",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "12", "0", "24Gi", "0"),
+			},
+			reservations: []*v1alpha1.Reservation{
+				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
+				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
+			},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 12, "24Gi", false, []string{"host1"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
+			expectedHosts:           []string{"host1"},
+			filteredHosts:           []string{},
+		},
+
+		// Failover-size VM (10 CPU) - fits if CR is ignored (10 free = 10 needed)
+		{
+			name: "Single host, Failover-size VM (10 CPU): No ignore - blocked (6 free < 10 needed)",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "12", "0", "24Gi", "0"),
+			},
+			reservations: []*v1alpha1.Reservation{
+				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
+				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
+			},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 10, "20Gi", false, []string{"host1"}),
+			ignoredReservationTypes: nil,
+			expectedHosts:           []string{},
+			filteredHosts:           []string{"host1"},
+		},
+		{
+			name: "Single host, Failover-size VM (10 CPU): Ignore CR - passes (10 free = 10 needed)",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "12", "0", "24Gi", "0"),
+			},
+			reservations: []*v1alpha1.Reservation{
+				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
+				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
+			},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 10, "20Gi", false, []string{"host1"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
+			expectedHosts:           []string{"host1"},
+			filteredHosts:           []string{},
+		},
+		{
+			name: "Single host, Failover-size VM (10 CPU): Ignore Failover - blocked (8 free < 10 needed)",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "12", "0", "24Gi", "0"),
+			},
+			reservations: []*v1alpha1.Reservation{
+				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
+				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
+			},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 10, "20Gi", false, []string{"host1"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
+			expectedHosts:           []string{},
+			filteredHosts:           []string{"host1"},
+		},
+		{
+			name: "Single host, Failover-size VM (10 CPU): Ignore both - passes (12 free > 10 needed)",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "12", "0", "24Gi", "0"),
+			},
+			reservations: []*v1alpha1.Reservation{
+				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
+				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
+			},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 10, "20Gi", false, []string{"host1"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
+			expectedHosts:           []string{"host1"},
+			filteredHosts:           []string{},
+		},
+
+		// CR-size VM (8 CPU) - fits if Failover is ignored (8 free = 8 needed)
+		{
+			name: "Single host, CR-size VM (8 CPU): No ignore - blocked (6 free < 8 needed)",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "12", "0", "24Gi", "0"),
+			},
+			reservations: []*v1alpha1.Reservation{
+				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
+				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
+			},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1"}),
+			ignoredReservationTypes: nil,
+			expectedHosts:           []string{},
+			filteredHosts:           []string{"host1"},
+		},
+		{
+			name: "Single host, CR-size VM (8 CPU): Ignore CR - passes (10 free > 8 needed)",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "12", "0", "24Gi", "0"),
+			},
+			reservations: []*v1alpha1.Reservation{
+				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
+				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
+			},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
+			expectedHosts:           []string{"host1"},
+			filteredHosts:           []string{},
+		},
+		{
+			name: "Single host, CR-size VM (8 CPU): Ignore Failover - passes (8 free = 8 needed)",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "12", "0", "24Gi", "0"),
+			},
+			reservations: []*v1alpha1.Reservation{
+				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
+				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
+			},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
+			expectedHosts:           []string{"host1"},
+			filteredHosts:           []string{},
+		},
+		{
+			name: "Single host, CR-size VM (8 CPU): Ignore both - passes (12 free > 8 needed)",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "12", "0", "24Gi", "0"),
+			},
+			reservations: []*v1alpha1.Reservation{
+				newCommittedReservation("cr-res", "host1", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
+				newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
+			},
+			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1"}),
+			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
+			expectedHosts:           []string{"host1"},
+			filteredHosts:           []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objects := make([]client.Object, 0, len(tt.hypervisors)+len(tt.reservations))
+			for _, h := range tt.hypervisors {
+				objects = append(objects, h.DeepCopy())
+			}
+			for _, r := range tt.reservations {
+				objects = append(objects, r.DeepCopy())
+			}
+
+			step := &FilterHasEnoughCapacity{}
+			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+			step.Options = FilterHasEnoughCapacityOpts{
+				LockReserved:            true,
+				IgnoredReservationTypes: tt.ignoredReservationTypes,
+			}
+
+			result, err := step.Run(slog.Default(), tt.request)
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+
+			for _, host := range tt.expectedHosts {
+				if _, ok := result.Activations[host]; !ok {
+					t.Errorf("expected host %s to be present in activations, but got %+v", host, result.Activations)
+				}
+			}
+
+			for _, host := range tt.filteredHosts {
+				if _, ok := result.Activations[host]; ok {
+					t.Errorf("expected host %s to be filtered out, but it was present", host)
+				}
+			}
+		})
+	}
+}
+
 func TestFilterHasEnoughCapacity_NilEffectiveCapacityFallback(t *testing.T) {
 	scheme := buildTestScheme(t)
 
