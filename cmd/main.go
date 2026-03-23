@@ -486,8 +486,8 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(mainConfig.EnabledControllers, "reservations-controller") {
-		setupLog.Info("enabling controller", "controller", "reservations-controller")
+	if slices.Contains(mainConfig.EnabledControllers, "committed-resource-reservations-controller") {
+		setupLog.Info("enabling controller", "controller", "committed-resource-reservations-controller")
 		monitor := reservations.NewMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&monitor)
 		commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
