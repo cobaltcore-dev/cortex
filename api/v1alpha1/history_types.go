@@ -95,7 +95,9 @@ type HistoryStatus struct {
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].reason"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 
-// History is the Schema for the history API
+// The history is a CRD that provides a record of past scheduling decisions for a given resource (e.g., a nova instance).
+// A new history entry is created for each scheduling decision, and the most recent decision is stored in the status.current field. The history is capped at 10 entries to prevent unbounded growth.
+// This CRD is designed to be used by an operations team to troubleshoot scheduling decisions and understand the context around why a particular host was selected (or not selected) for a resource.
 type History struct {
 	metav1.TypeMeta `json:",inline"`
 
