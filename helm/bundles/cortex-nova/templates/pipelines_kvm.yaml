@@ -72,6 +72,11 @@ spec:
         hypervisor resource. Note that hosts allowing all projects are still
         accessible and will not be filtered out. In this way some hypervisors
         are made accessible to some projects only.
+    - name: filter_live_migratable
+      description: |
+        This step ensures that the target host of a live migration can accept
+        the migrating VM, by checking cpu architecture, cpu features, emulated
+        devices, and cpu modes.
     - name: filter_requested_destination
       params: {{ .Values.kvm.filterRequestedDestinationParams | toYaml | nindent 8 }}
       description: |
@@ -180,6 +185,11 @@ spec:
         hypervisor resource. Note that hosts allowing all projects are still
         accessible and will not be filtered out. In this way some hypervisors
         are made accessible to some projects only.
+    - name: filter_live_migratable
+      description: |
+        This step ensures that the target host of a live migration can accept
+        the migrating VM, by checking cpu architecture, cpu features, emulated
+        devices, and cpu modes.
     - name: filter_requested_destination
       params: {{ .Values.kvm.filterRequestedDestinationParams | toYaml | nindent 8 }}
       description: |
