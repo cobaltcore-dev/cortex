@@ -17,7 +17,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
-	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -121,10 +120,8 @@ func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.Respons
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		logger.Info("failed to get flavor groups from knowledge extractor", "error", err)
-		resp.RejectionReason = "caches not ready"
-		retryTime := time.Now().Add(1 * time.Minute)
-		resp.RetryAt = Some(retryTime)
-		return nil
+		http.Error(w, "caches not ready, please retry later", http.StatusServiceUnavailable)
+		return errors.New("caches not ready")
 	}
 
 	// Validate InfoVersion from request matches current version (= last content change of flavor group knowledge)

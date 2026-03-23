@@ -422,9 +422,8 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			),
 			ExpectedReservations: []*TestReservation{},
 			ExpectedAPIResponse: APIResponseExpectation{
-				StatusCode:             200,
-				RejectReasonSubstrings: []string{"caches not ready"},
-				RetryAtPresent:         true,
+				StatusCode:     503,
+				RetryAtPresent: false,
 			},
 			EnvInfoVersion: -1, // Skip Knowledge CRD creation
 		},
