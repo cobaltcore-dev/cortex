@@ -98,9 +98,7 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 		})
 	}
 	if pipelineConf.Spec.CreateDecisions {
-		decisionForHistory := decision.DeepCopy()
-		histCtx := context.WithoutCancel(ctx)
-		go c.upsertHistory(histCtx, decisionForHistory, err)
+		c.upsertHistory(ctx, decision, err)
 	}
 	return err
 }
