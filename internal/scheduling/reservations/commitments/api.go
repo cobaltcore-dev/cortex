@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -39,5 +38,3 @@ func (api *HTTPAPI) Init(mux *http.ServeMux, registry prometheus.Registerer) {
 	// mux.HandleFunc("/v1/report-capacity", api.HandleReportCapacity)
 	mux.HandleFunc("/v1/commitments/info", api.HandleInfo)
 }
-
-var commitmentApiLog = ctrl.Log.WithName("commitment_api")

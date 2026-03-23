@@ -21,11 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-var apiLog = ctrl.Log.WithName("commitment-reservation-api")
 
 // sortedKeys returns map keys sorted alphabetically for deterministic iteration.
 func sortedKeys[K ~string, V any](m map[K]V) []K {
@@ -69,8 +66,8 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	if requestID == "" {
 		requestID = uuid.New().String()
 	}
-	ctx := reservations.WithGlobalRequestID(context.Background(), requestID)
-	logger := APILoggerFromContext(ctx).WithValues("endpoint", "/v1/change-commitments")
+	ctx := reservations.WithGlobalRequestID(context.Background(), "committed-resource-"+requestID)
+	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/v1/change-commitments")
 
 	// Only accept POST method
 	if r.Method != http.MethodPost {
