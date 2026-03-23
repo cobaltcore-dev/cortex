@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package cinder
+package manila
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -19,9 +18,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
-func TestCleanupCinder(t *testing.T) {
+func TestCleanupManila(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheme: %v", err)
@@ -31,15 +32,15 @@ func TestCleanupCinder(t *testing.T) {
 	}
 
 	tests := []struct {
-		name              string
-		histories         []v1alpha1.History
-		expectError       bool
-		authError         bool
-		endpointError     bool
-		mockServerError   bool
-		emptyVolumesError bool
-		mockVolumes       []mockVolume
-		expectedDeleted   []string
+		name             string
+		histories        []v1alpha1.History
+		expectError      bool
+		authError        bool
+		endpointError    bool
+		mockServerError  bool
+		emptySharesError bool
+		mockShares       []mockShare
+		expectedDeleted  []string
 	}{
 		{
 			name:        "handle authentication error",
@@ -60,65 +61,91 @@ func TestCleanupCinder(t *testing.T) {
 			expectError:     true,
 		},
 		{
-			name:              "handle empty volumes case",
-			histories:         []v1alpha1.History{},
-			emptyVolumesError: true,
-			expectError:       false,
+			name:             "handle empty shares case",
+			histories:        []v1alpha1.History{},
+			emptySharesError: true,
+			expectError:      true,
 		},
 		{
-			name: "delete decisions for non-existent volumes",
+			name: "delete history for non-existent shares",
 			histories: []v1alpha1.History{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-existing-volume",
+						Name: "history-existing-share",
 					},
 					Spec: v1alpha1.HistorySpec{
-						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-						ResourceID:       "volume-exists",
+						SchedulingDomain: v1alpha1.SchedulingDomainManila,
+						ResourceID:       "share-exists",
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-deleted-volume",
+						Name: "history-deleted-share",
 					},
 					Spec: v1alpha1.HistorySpec{
-						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-						ResourceID:       "volume-deleted",
+						SchedulingDomain: v1alpha1.SchedulingDomainManila,
+						ResourceID:       "share-deleted",
 					},
 				},
 			},
-			mockVolumes: []mockVolume{
-				{ID: "volume-exists"},
+			mockShares: []mockShare{
+				{ID: "share-exists"},
 			},
-			expectedDeleted: []string{"decision-deleted-volume"},
+			expectedDeleted: []string{"history-deleted-share"},
 			expectError:     false,
 		},
 		{
-			name: "keep decisions for existing volumes",
+			name: "keep history for existing shares",
 			histories: []v1alpha1.History{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-volume-1",
+						Name: "history-share-1",
 					},
 					Spec: v1alpha1.HistorySpec{
-						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-						ResourceID:       "volume-1",
+						SchedulingDomain: v1alpha1.SchedulingDomainManila,
+						ResourceID:       "share-1",
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-volume-2",
+						Name: "history-share-2",
 					},
 					Spec: v1alpha1.HistorySpec{
-						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-						ResourceID:       "volume-2",
+						SchedulingDomain: v1alpha1.SchedulingDomainManila,
+						ResourceID:       "share-2",
 					},
 				},
 			},
-			mockVolumes: []mockVolume{
-				{ID: "volume-1"},
-				{ID: "volume-2"},
+			mockShares: []mockShare{
+				{ID: "share-1"},
+				{ID: "share-2"},
 			},
+			expectedDeleted: []string{},
+			expectError:     false,
+		},
+		{
+			name: "skip non-manila histories",
+			histories: []v1alpha1.History{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "history-other-type",
+					},
+					Spec: v1alpha1.HistorySpec{
+						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
+						ResourceID:       "some-resource",
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "history-other-operator",
+					},
+					Spec: v1alpha1.HistorySpec{
+						SchedulingDomain: "other-operator",
+						ResourceID:       "share-1",
+					},
+				},
+			},
+			mockShares:      []mockShare{{ID: "dummy-share"}}, // Add at least one share to avoid "no shares found" error
 			expectedDeleted: []string{},
 			expectError:     false,
 		},
@@ -131,34 +158,58 @@ func TestCleanupCinder(t *testing.T) {
 				objects[i] = &tt.histories[i]
 			}
 
-			// Create mock Cinder server first
-			cinderServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Create mock Manila server
+			manilaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if tt.mockServerError {
 					w.WriteHeader(http.StatusInternalServerError)
 					return
 				}
 
-				// Handle volumes list endpoint
-				if r.URL.Path == "/volumes" || r.URL.Path == "/volumes/detail" {
+				// Handle shares list endpoint
+				if r.URL.Path == "/shares" || r.URL.Path == "/shares/detail" {
 					w.Header().Set("Content-Type", "application/json")
-					if tt.emptyVolumesError {
-						// Return empty volumes list
-						volumesResponse := map[string]any{
-							"volumes": []mockVolume{},
+					if tt.emptySharesError {
+						// Return empty shares list
+						sharesResponse := map[string]any{
+							"shares": []mockShare{},
 						}
-						err := json.NewEncoder(w).Encode(volumesResponse)
+						err := json.NewEncoder(w).Encode(sharesResponse)
 						if err != nil {
-							t.Errorf("Failed to encode volumes response: %v", err)
+							t.Errorf("Failed to encode shares response: %v", err)
 						}
 						return
 					}
 
-					volumesResponse := map[string]any{
-						"volumes": tt.mockVolumes,
+					sharesResponse := map[string]any{
+						"shares": tt.mockShares,
 					}
-					err := json.NewEncoder(w).Encode(volumesResponse)
+					err := json.NewEncoder(w).Encode(sharesResponse)
 					if err != nil {
-						t.Errorf("Failed to encode volumes response: %v", err)
+						t.Errorf("Failed to encode shares response: %v", err)
+					}
+					return
+				}
+
+				// Handle root path for service discovery
+				if r.URL.Path == "/" {
+					w.Header().Set("Content-Type", "application/json")
+					versionResponse := map[string]any{
+						"versions": []map[string]any{
+							{
+								"status": "CURRENT",
+								"id":     "v2.0",
+								"links": []map[string]any{
+									{
+										"href": "http://" + r.Host + "/v2/",
+										"rel":  "self",
+									},
+								},
+							},
+						},
+					}
+					err := json.NewEncoder(w).Encode(versionResponse)
+					if err != nil {
+						t.Errorf("Failed to encode version response: %v", err)
 					}
 					return
 				}
@@ -166,7 +217,7 @@ func TestCleanupCinder(t *testing.T) {
 				// Default response for other endpoints
 				w.WriteHeader(http.StatusNotFound)
 			}))
-			defer cinderServer.Close()
+			defer manilaServer.Close()
 
 			// Create mock Keystone server
 			keystoneServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +231,7 @@ func TestCleanupCinder(t *testing.T) {
 				// Handle different Keystone API endpoints
 				switch r.URL.Path {
 				case "/", "/v3", "/v3/":
-					// Handle version discovery - return supported versions
+					// Handle version discovery
 					versionResponse := map[string]any{
 						"versions": map[string]any{
 							"values": []map[string]any{
@@ -202,10 +253,9 @@ func TestCleanupCinder(t *testing.T) {
 						t.Errorf("Failed to encode version response: %v", err)
 					}
 				case "/v3/auth/tokens":
-					// Set the correct status code that gophercloud expects
 					w.WriteHeader(http.StatusCreated)
 
-					// Mock token response with proper structure for gophercloud
+					// Mock token response
 					tokenResponse := map[string]any{
 						"token": map[string]any{
 							"methods":    []string{"password"},
@@ -220,16 +270,16 @@ func TestCleanupCinder(t *testing.T) {
 							},
 							"catalog": []map[string]any{
 								{
-									"type": "volumev3",
-									"id":   "cinder-service-id",
-									"name": "cinderv3",
+									"type": "sharev2",
+									"id":   "manila-service-id",
+									"name": "manilav2",
 									"endpoints": []map[string]any{
 										{
 											"region_id": "RegionOne",
-											"url":       cinderServer.URL,
+											"url":       manilaServer.URL,
 											"region":    "RegionOne",
 											"interface": "public",
-											"id":        "cinder-endpoint-id",
+											"id":        "manila-endpoint-id",
 										},
 									},
 								},
@@ -245,11 +295,11 @@ func TestCleanupCinder(t *testing.T) {
 						},
 					}
 					if tt.endpointError {
-						// Don't include volumev3 service in catalog
+						// Don't include sharev2 service in catalog
 						tokenResponse["token"].(map[string]any)["catalog"] = []map[string]any{}
 					}
 
-					// Set the token in the header for gophercloud
+					// Set the token in the header
 					w.Header().Set("X-Subject-Token", "mock-token-id")
 					err := json.NewEncoder(w).Encode(tokenResponse)
 					if err != nil {
@@ -281,13 +331,13 @@ func TestCleanupCinder(t *testing.T) {
 				WithScheme(scheme).
 				WithObjects(objects...).
 				Build()
-			config := DecisionsCleanupConfig{
+			config := HistoryCleanupConfig{
 				KeystoneSecretRef: corev1.SecretReference{
 					Name:      "keystone-secret",
 					Namespace: "default",
 				},
 			}
-			err := DecisionsCleanup(context.Background(), client, config)
+			err := HistoryCleanup(context.Background(), client, config)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -297,17 +347,17 @@ func TestCleanupCinder(t *testing.T) {
 			}
 
 			if !tt.expectError {
-				// Verify expected decisions were deleted
+				// Verify expected history entries were deleted
 				for _, expectedDeleted := range tt.expectedDeleted {
-					var decision v1alpha1.Decision
+					var history v1alpha1.History
 					err := client.Get(context.Background(),
-						types.NamespacedName{Name: expectedDeleted}, &decision)
+						types.NamespacedName{Name: expectedDeleted}, &history)
 					if err == nil {
-						t.Errorf("Expected decision %s to be deleted but it still exists", expectedDeleted)
+						t.Errorf("Expected history %s to be deleted but it still exists", expectedDeleted)
 					}
 				}
 
-				// Verify other decisions still exist
+				// Verify other histories still exist
 				for _, originalHistory := range tt.histories {
 					shouldBeDeleted := false
 					for _, expectedDeleted := range tt.expectedDeleted {
@@ -331,7 +381,7 @@ func TestCleanupCinder(t *testing.T) {
 	}
 }
 
-func TestCleanupCinderDecisionsCancel(t *testing.T) {
+func TestCleanupManilaHistoryCancel(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheme: %v", err)
@@ -363,7 +413,7 @@ func TestCleanupCinderDecisionsCancel(t *testing.T) {
 		WithObjects(objects...).
 		Build()
 
-	config := DecisionsCleanupConfig{
+	config := HistoryCleanupConfig{
 		KeystoneSecretRef: corev1.SecretReference{
 			Name:      "keystone-secret",
 			Namespace: "default",
@@ -374,7 +424,7 @@ func TestCleanupCinderDecisionsCancel(t *testing.T) {
 	defer cancel()
 
 	// This should exit quickly due to context cancellation
-	if err := DecisionsCleanup(ctx, client, config); err != nil {
+	if err := HistoryCleanup(ctx, client, config); err != nil {
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Errorf("Unexpected error during cleanup: %v", err)
 		}
@@ -383,6 +433,6 @@ func TestCleanupCinderDecisionsCancel(t *testing.T) {
 	// If we reach here without hanging, the test passed
 }
 
-type mockVolume struct {
+type mockShare struct {
 	ID string `json:"id"`
 }

@@ -290,14 +290,14 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 		machine                   *ironcorev1alpha1.Machine
 		machinePools              []ironcorev1alpha1.MachinePool
 		pipelineConfig            *v1alpha1.Pipeline
-		createDecisions           bool
+		createHistory             bool
 		expectError               bool
 		expectHistoryCreated      bool
 		expectMachinePoolAssigned bool
 		expectTargetHost          string
 	}{
 		{
-			name: "successful machine processing with decision creation",
+			name: "successful machine processing with history creation",
 			machine: &ironcorev1alpha1.Machine{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-machine",
@@ -322,22 +322,22 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
-					CreateDecisions:  true,
+					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createDecisions:           true,
+			createHistory:             true,
 			expectError:               false,
 			expectHistoryCreated:      true,
 			expectMachinePoolAssigned: true,
 			expectTargetHost:          "pool1",
 		},
 		{
-			name: "successful machine processing without decision creation",
+			name: "successful machine processing without history creation",
 			machine: &ironcorev1alpha1.Machine{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-machine-no-decision",
+					Name:      "test-machine-no-history",
 					Namespace: "default",
 				},
 				Spec: ironcorev1alpha1.MachineSpec{
@@ -356,12 +356,12 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
-					CreateDecisions:  false,
+					CreateHistory:    false,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createDecisions:           false,
+			createHistory:             false,
 			expectError:               false,
 			expectHistoryCreated:      false,
 			expectMachinePoolAssigned: true,
@@ -403,12 +403,12 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
-					CreateDecisions:  true,
+					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createDecisions:           true,
+			createHistory:             true,
 			expectError:               true,
 			expectHistoryCreated:      true, // Decision is created but processing fails
 			expectMachinePoolAssigned: false,
@@ -435,7 +435,7 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]]{
 					Pipelines:       map[string]lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]{},
 					PipelineConfigs: map[string]v1alpha1.Pipeline{},
-					HistoryManager:  lib.HistoryManager{Client: client},
+					HistoryManager:  lib.HistoryClient{Client: client},
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}

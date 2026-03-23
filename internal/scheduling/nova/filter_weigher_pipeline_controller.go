@@ -97,7 +97,7 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 			Message: "pipeline run succeeded",
 		})
 	}
-	if pipelineConf.Spec.CreateDecisions {
+	if pipelineConf.Spec.CreateHistory {
 		c.upsertHistory(ctx, decision, err)
 	}
 	return err
@@ -125,7 +125,7 @@ func (c *FilterWeigherPipelineController) upsertHistory(ctx context.Context, dec
 		}
 	}
 
-	if upsertErr := c.HistoryManager.Upsert(ctx, decision, intent, az, pipelineErr); upsertErr != nil {
+	if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, intent, az, pipelineErr); upsertErr != nil {
 		log.Error(upsertErr, "failed to create/update history")
 	}
 }
@@ -198,7 +198,7 @@ func (c *FilterWeigherPipelineController) InitPipeline(
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainNova
-	c.HistoryManager = lib.HistoryManager{Client: mgr.GetClient(), Recorder: mgr.GetEventRecorder("cortex-nova-scheduler")}
+	c.HistoryManager = lib.HistoryClient{Client: mgr.GetClient(), Recorder: mgr.GetEventRecorder("cortex-nova-scheduler")}
 	c.gatherer = &candidateGatherer{Client: mcl}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err

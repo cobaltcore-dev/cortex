@@ -58,7 +58,7 @@ spec:
           spec:
             description: spec defines the desired state of Pipeline
             properties:
-              createDecisions:
+              createHistory:
                 default: false
                 description: |-
                   If this pipeline should create decision objects.

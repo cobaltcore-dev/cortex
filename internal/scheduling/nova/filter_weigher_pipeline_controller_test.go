@@ -399,7 +399,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 		pipeline             *v1alpha1.Pipeline
 		pipelineConf         *v1alpha1.Pipeline
 		setupPipelineConfigs bool
-		createDecisions      bool
+		createHistory        bool
 		expectError          bool
 		expectResult         bool
 		expectHistoryCreated bool
@@ -431,7 +431,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  true,
+					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -443,13 +443,13 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  true,
+					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			setupPipelineConfigs: true,
-			createDecisions:      true,
+			createHistory:        true,
 			expectError:          false,
 			expectResult:         true,
 			expectHistoryCreated: true,
@@ -480,7 +480,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  false,
+					CreateHistory:    false,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -492,13 +492,13 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  false,
+					CreateHistory:    false,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			setupPipelineConfigs: true,
-			createDecisions:      false,
+			createHistory:        false,
 			expectError:          false,
 			expectResult:         true,
 			expectHistoryCreated: false,
@@ -552,7 +552,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  true,
+					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -564,13 +564,13 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  true,
+					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			setupPipelineConfigs: true,
-			createDecisions:      true,
+			createHistory:        true,
 			expectError:          true,
 			expectResult:         false,
 			expectHistoryCreated: true,
@@ -602,13 +602,13 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  true,
+					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			setupPipelineConfigs: true,
-			createDecisions:      true,
+			createHistory:        true,
 			expectError:          true,
 			expectResult:         false,
 			expectHistoryCreated: true,
@@ -640,13 +640,13 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  true,
+					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			setupPipelineConfigs: true,
-			createDecisions:      true,
+			createHistory:        true,
 			expectError:          true,
 			expectResult:         false,
 			expectHistoryCreated: true,
@@ -673,7 +673,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					Client:          client,
 					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
-					HistoryManager:  lib.HistoryManager{Client: client},
+					HistoryManager:  lib.HistoryClient{Client: client},
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
@@ -864,7 +864,7 @@ func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					Type:               v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain:   v1alpha1.SchedulingDomainNova,
-					CreateDecisions:    false,
+					CreateHistory:      false,
 					IgnorePreselection: tt.ignorePreselection,
 					Filters:            []v1alpha1.FilterSpec{},
 					Weighers:           []v1alpha1.WeigherSpec{},

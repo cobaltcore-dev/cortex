@@ -19,15 +19,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type DecisionsCleanupConfig struct {
+type HistoryCleanupConfig struct {
 	// Secret ref to keystone credentials stored in a k8s secret.
 	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
 	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
 	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
 }
 
-// Delete all decisions for nova servers that have been deleted.
-func DecisionsCleanup(ctx context.Context, client client.Client, conf DecisionsCleanupConfig) error {
+// Delete all histories for nova servers that have been deleted.
+func HistoryCleanup(ctx context.Context, client client.Client, conf HistoryCleanupConfig) error {
 	var authenticatedHTTP = http.DefaultClient
 	if conf.SSOSecretRef != nil {
 		var err error

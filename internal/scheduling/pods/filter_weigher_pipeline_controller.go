@@ -114,8 +114,8 @@ func (c *FilterWeigherPipelineController) ProcessNewPod(ctx context.Context, pod
 			Message: "pipeline run succeeded",
 		})
 	}
-	if pipelineConf.Spec.CreateDecisions {
-		if upsertErr := c.HistoryManager.Upsert(ctx, decision, v1alpha1.SchedulingIntentUnknown, nil, err); upsertErr != nil {
+	if pipelineConf.Spec.CreateHistory {
+		if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, v1alpha1.SchedulingIntentUnknown, nil, err); upsertErr != nil {
 			ctrl.LoggerFrom(ctx).Error(upsertErr, "failed to create/update history")
 		}
 	}
@@ -233,7 +233,7 @@ func (c *FilterWeigherPipelineController) handlePod() handler.EventHandler {
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainPods
-	c.HistoryManager = lib.HistoryManager{Client: mgr.GetClient(), Recorder: mgr.GetEventRecorder("cortex-pods-scheduler")}
+	c.HistoryManager = lib.HistoryClient{Client: mgr.GetClient(), Recorder: mgr.GetEventRecorder("cortex-pods-scheduler")}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

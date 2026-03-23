@@ -334,13 +334,13 @@ func TestCleanupNova(t *testing.T) {
 				WithScheme(scheme).
 				WithObjects(objects...).
 				Build()
-			config := DecisionsCleanupConfig{
+			config := HistoryCleanupConfig{
 				KeystoneSecretRef: corev1.SecretReference{
 					Name:      "keystone-secret",
 					Namespace: "default",
 				},
 			}
-			err := DecisionsCleanup(context.Background(), client, config)
+			err := HistoryCleanup(context.Background(), client, config)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -350,13 +350,13 @@ func TestCleanupNova(t *testing.T) {
 			}
 
 			if !tt.expectError {
-				// Verify expected decisions were deleted
+				// Verify expected histories were deleted
 				for _, expectedDeleted := range tt.expectedDeleted {
-					var decision v1alpha1.Decision
+					var history v1alpha1.History
 					err := client.Get(context.Background(),
-						types.NamespacedName{Name: expectedDeleted}, &decision)
+						types.NamespacedName{Name: expectedDeleted}, &history)
 					if err == nil {
-						t.Errorf("Expected decision %s to be deleted but it still exists", expectedDeleted)
+						t.Errorf("Expected history %s to be deleted but it still exists", expectedDeleted)
 					}
 				}
 
@@ -384,7 +384,7 @@ func TestCleanupNova(t *testing.T) {
 	}
 }
 
-func TestCleanupNovaDecisionsCancel(t *testing.T) {
+func TestCleanupNovaHistoriesCancel(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheme: %v", err)
@@ -415,7 +415,7 @@ func TestCleanupNovaDecisionsCancel(t *testing.T) {
 		WithObjects(objects...).
 		Build()
 
-	config := DecisionsCleanupConfig{
+	config := HistoryCleanupConfig{
 		KeystoneSecretRef: corev1.SecretReference{
 			Name:      "keystone-secret",
 			Namespace: "default",
@@ -426,7 +426,7 @@ func TestCleanupNovaDecisionsCancel(t *testing.T) {
 	defer cancel()
 
 	// This should exit quickly due to context cancellation
-	if err := DecisionsCleanup(ctx, client, config); err != nil {
+	if err := HistoryCleanup(ctx, client, config); err != nil {
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Errorf("Unexpected error during cleanup: %v", err)
 		}

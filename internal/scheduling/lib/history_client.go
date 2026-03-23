@@ -21,9 +21,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const maxHostsInExplanation = 10
-const maxHistoryEntries = 10
-const maxHostsInOrderedList = 3
+const (
+	maxHostsInExplanation = 10
+	maxHistoryEntries     = 10
+	maxHostsInOrderedList = 3
+)
 
 // joinHostsCapped joins up to max host names. If hosts exceeds max, it appends
 // a count of the omitted entries, e.g. "host-a, host-b (and 48 more)".
@@ -114,20 +116,20 @@ func generateExplanation(result *v1alpha1.DecisionResult, pipelineErr error) str
 	return strings.TrimSpace(sb.String())
 }
 
-// HistoryManager manages History CRDs for scheduling decisions. It holds the
+// HistoryClient manages History CRDs for scheduling decisions. It holds the
 // Kubernetes client and event recorder so callers don't have to pass them on
 // every invocation.
-type HistoryManager struct {
+type HistoryClient struct {
 	Client   client.Client
 	Recorder events.EventRecorder
 }
 
-// Upsert creates or updates a History CRD for the given decision.
+// CreateOrUpdateHistory creates or updates a History CRD for the given decision.
 // It is called after every pipeline run (success and failure). The pipelineErr
 // parameter is used to generate a meaningful explanation when the pipeline fails.
 // If a non-nil Recorder is set, a Kubernetes Event is emitted on the History
 // object to short-term persist the scheduling decision.
-func (h *HistoryManager) Upsert(
+func (h *HistoryClient) CreateOrUpdateHistory(
 	ctx context.Context,
 	decision *v1alpha1.Decision,
 	intent v1alpha1.SchedulingIntent,
@@ -277,7 +279,7 @@ func (h *HistoryManager) Upsert(
 
 // Delete deletes the History CRD associated with the given scheduling domain
 // and resource ID. It is a no-op if the History CRD does not exist.
-func (h *HistoryManager) Delete(
+func (h *HistoryClient) Delete(
 	ctx context.Context,
 	schedulingDomain v1alpha1.SchedulingDomain,
 	resourceID string,

@@ -14,7 +14,7 @@ spec:
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
     Specifically, this pipeline is used for general purpose workloads.
   type: filter-weigher
-  createDecisions: true
+  createHistory: true
   filters:
     - name: filter_correct_az
       description: |
@@ -105,7 +105,7 @@ spec:
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
     Specifically, this pipeline is used for hana virtual machines.
   type: filter-weigher
-  createDecisions: true
+  createHistory: true
   filters:
     - name: filter_correct_az
       description: |
@@ -193,7 +193,7 @@ spec:
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
     Specifically, this pipeline is used for general purpose workloads.
   type: filter-weigher
-  createDecisions: true
+  createHistory: true
   # Fetch all placement candidates, ignoring nova's preselection.
   ignorePreselection: true
   filters:
@@ -319,7 +319,7 @@ spec:
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
     Specifically, this pipeline is used for hana virtual machines.
   type: filter-weigher
-  createDecisions: true
+  createHistory: true
   # Fetch all placement candidates, ignoring nova's preselection.
   ignorePreselection: true
   filters:
@@ -445,7 +445,7 @@ spec:
 
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
   type: filter-weigher
-  createDecisions: true
+  createHistory: true
   # Fetch all placement candidates, ignoring nova's preselection.
   ignorePreselection: true
   filters:
@@ -562,7 +562,7 @@ spec:
     compute hosts in order to optimize resource usage and performance.
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
   type: detector
-  createDecisions: true
+  createHistory: true
   detectors:
     - name: avoid_high_steal_pct
       description: |
@@ -586,7 +586,7 @@ spec:
     Use case: When a VM needs failover protection and there's an existing reservation
     on a host, this pipeline validates the host is still suitable for the VM.
   type: filter-weigher
-  createDecisions: false
+  createHistory: false
   filters:
     - name: filter_host_instructions
       description: |
@@ -650,7 +650,7 @@ spec:
     that the reservation host can still accommodate all allocated VMs. If validation
     fails for any VM, the reservation is deleted (nack).
   type: filter-weigher
-  createDecisions: false
+  createHistory: false
   filters:
     - name: filter_host_instructions
       description: |

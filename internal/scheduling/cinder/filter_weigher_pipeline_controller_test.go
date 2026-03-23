@@ -251,7 +251,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 		name                 string
 		decision             *v1alpha1.Decision
 		pipelineConfig       *v1alpha1.Pipeline
-		createDecisions      bool
+		createHistory        bool
 		expectError          bool
 		expectHistoryCreated bool
 		expectResult         bool
@@ -281,12 +281,12 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					CreateDecisions:  true,
+					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createDecisions:      true,
+			createHistory:        true,
 			expectError:          false,
 			expectHistoryCreated: true,
 			expectResult:         true,
@@ -315,12 +315,12 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					CreateDecisions:  false,
+					CreateHistory:    false,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createDecisions:      false,
+			createHistory:        false,
 			expectError:          false,
 			expectHistoryCreated: false,
 			expectResult:         true,
@@ -369,12 +369,12 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					CreateDecisions:  true,
+					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createDecisions:      true,
+			createHistory:        true,
 			expectError:          true,
 			expectHistoryCreated: true,
 			expectResult:         false,
@@ -399,7 +399,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					Client:          client,
 					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
-					HistoryManager:  lib.HistoryManager{Client: client},
+					HistoryManager:  lib.HistoryClient{Client: client},
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}

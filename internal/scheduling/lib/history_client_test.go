@@ -490,9 +490,9 @@ func TestHistoryManager_Upsert(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := tt.setup(t)
-			hm := HistoryManager{Client: c}
+			hm := HistoryClient{Client: c}
 
-			err := hm.Upsert(context.Background(), tt.decision, tt.intent, nil, tt.pipelineErr)
+			err := hm.CreateOrUpdateHistory(context.Background(), tt.decision, tt.intent, nil, tt.pipelineErr)
 			if err != nil {
 				t.Fatalf("Upsert() returned error: %v", err)
 			}
@@ -569,7 +569,7 @@ func TestHistoryManager_UpsertFromGoroutine(t *testing.T) {
 		WithScheme(newTestScheme(t)).
 		WithStatusSubresource(&v1alpha1.History{}).
 		Build()
-	hm := HistoryManager{Client: c}
+	hm := HistoryClient{Client: c}
 
 	decision := &v1alpha1.Decision{
 		Spec: v1alpha1.DecisionSpec{
@@ -588,7 +588,7 @@ func TestHistoryManager_UpsertFromGoroutine(t *testing.T) {
 	var wg sync.WaitGroup
 	var upsertErr error
 	wg.Go(func() {
-		upsertErr = hm.Upsert(context.Background(), decision, v1alpha1.SchedulingIntentUnknown, nil, nil)
+		upsertErr = hm.CreateOrUpdateHistory(context.Background(), decision, v1alpha1.SchedulingIntentUnknown, nil, nil)
 	})
 
 	// Poll for history creation.
@@ -659,7 +659,7 @@ func TestHistoryManager_Delete(t *testing.T) {
 				WithScheme(scheme).
 				WithObjects(objects...).
 				Build()
-			hm := HistoryManager{Client: c}
+			hm := HistoryClient{Client: c}
 
 			err := hm.Delete(context.Background(), tt.domain, tt.resourceID)
 			if err != nil {
