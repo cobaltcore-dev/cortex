@@ -321,8 +321,7 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "nova FilterWeigherPipelineController")
 			os.Exit(1)
 		}
-		httpAPIConf := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
-		nova.NewAPI(httpAPIConf, filterWeigherController).Init(mux)
+		nova.NewAPI(filterWeigherController).Init(mux)
 
 		// Initialize commitments API for LIQUID interface
 		commitmentsAPI := commitments.NewAPI(multiclusterClient)

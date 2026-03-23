@@ -112,10 +112,9 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 
 	// Build the external scheduler request
 	externalSchedulerRequest := api.ExternalSchedulerRequest{
-		Reservation: true,
-		Pipeline:    req.Pipeline,
-		Hosts:       req.EligibleHosts,
-		Weights:     weights,
+		Pipeline: req.Pipeline,
+		Hosts:    req.EligibleHosts,
+		Weights:  weights,
 		Context: api.NovaRequestContext{
 			RequestID:       RequestIDFromContext(ctx),
 			GlobalRequestID: globalReqID,
