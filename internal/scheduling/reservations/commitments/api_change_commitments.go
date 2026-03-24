@@ -376,18 +376,26 @@ func watchReservationsUntilReady(
 
 			switch readyCond.Status {
 			case metav1.ConditionTrue:
-				// check if host is not set in spec or status: if so, no capacity left to schedule the reservation
+				// Only consider truly ready if Status.Host is populated
+				// This handles the two-phase reconcile pattern where Ready=True
+				// is set atomically with Status.Host in the controller
 				if current.Spec.TargetHost == "" || current.Status.Host == "" {
 					allAreReady = false
-					failedReservations = append(failedReservations, current)
-					logger.Info("insufficient capacity for reservation", "reservation", current.Name, "reason", readyCond.Reason, "message", readyCond.Message, "targetHostInSpec", current.Spec.TargetHost, "hostInStatus", current.Status.Host)
-				} else {
-					// Reservation is successfully scheduled, no further action needed
-					logger.Info("reservation ready", "reservation", current.Name, "host", current.Spec.TargetHost)
+					stillWaiting = append(stillWaiting, res)
+					continue
 				}
+				// Reservation is successfully scheduled
+				logger.Info("reservation ready", "reservation", current.Name, "host", current.Status.Host)
 
 			case metav1.ConditionFalse:
-				failedReservations = append(failedReservations, res)
+				// Check the reason - NoHostsFound means no capacity
+				if readyCond.Reason == "NoHostsFound" || readyCond.Reason == "NoHostsAvailable" {
+					failedReservations = append(failedReservations, current)
+					logger.Info("insufficient capacity for reservation", "reservation", current.Name, "reason", readyCond.Reason, "message", readyCond.Message)
+				} else {
+					// Other failure reasons
+					logger.Info("reservation failed", "reservation", current.Name, "reason", readyCond.Reason, "message", readyCond.Message)
+				}
 			case metav1.ConditionUnknown:
 				allAreReady = false
 				stillWaiting = append(stillWaiting, res)
