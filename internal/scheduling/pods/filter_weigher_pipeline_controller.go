@@ -234,7 +234,7 @@ func (c *FilterWeigherPipelineController) handlePod() handler.EventHandler {
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainPods
-	c.HistoryManager = lib.HistoryClient{Client: mcl, Recorder: mgr.GetEventRecorder("cortex-pods-scheduler")}
+	c.HistoryManager = lib.HistoryClient{Client: mcl, Recorder: mcl.GetEventRecorder("cortex-pods-scheduler")}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

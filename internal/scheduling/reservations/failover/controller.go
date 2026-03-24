@@ -765,7 +765,7 @@ func (c *FailoverReservationController) patchReservationStatus(ctx context.Conte
 // SetupWithManager sets up the watch-based reconciler with the Manager.
 // This handles per-reservation reconciliation triggered by CRD changes.
 func (c *FailoverReservationController) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
-	c.Recorder = mgr.GetEventRecorder("failover-reservation-controller")
+	c.Recorder = mcl.GetEventRecorder("failover-reservation-controller")
 
 	return multicluster.BuildController(mcl, mgr).
 		For(&v1alpha1.Reservation{}).
