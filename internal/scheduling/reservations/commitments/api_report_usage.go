@@ -24,7 +24,7 @@ func (api *HTTPAPI) HandleReportUsage(w http.ResponseWriter, r *http.Request) {
 	if requestID == "" {
 		requestID = fmt.Sprintf("req-%d", time.Now().UnixNano())
 	}
-	log := commitmentApiLog.WithValues("requestID", requestID, "endpoint", "report-usage")
+	log := baseLog.WithValues("requestID", requestID, "endpoint", "report-usage")
 
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

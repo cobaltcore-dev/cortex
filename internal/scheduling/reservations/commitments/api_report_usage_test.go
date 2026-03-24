@@ -20,6 +20,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -538,7 +539,8 @@ func newUsageTestEnv(
 	// Create API with mock Nova client
 	api := NewAPIWithConfig(k8sClient, DefaultConfig(), novaClient)
 	mux := http.NewServeMux()
-	api.Init(mux)
+	registry := prometheus.NewRegistry()
+	api.Init(mux, registry)
 	httpServer := httptest.NewServer(mux)
 
 	return &UsageTestEnv{

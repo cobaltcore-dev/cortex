@@ -87,7 +87,7 @@ func (c *UsageCalculator) CalculateUsage(
 		"vmCount", len(vms),
 		"assignedToCommitments", assignedToCommitments,
 		"payg", len(vms)-assignedToCommitments,
-		"commitments", countCommitments(commitmentsByAZFlavorGroup),
+		"commitments", countCommitmentStates(commitmentsByAZFlavorGroup),
 		"resources", len(report.Resources))
 
 	return report, nil
@@ -427,8 +427,8 @@ func buildVMAttributes(vm VMUsageInfo, commitmentID string) map[string]any {
 	return attributes
 }
 
-// countCommitments returns the total number of commitments across all az:flavorGroup keys.
-func countCommitments(m map[string][]*CommitmentStateWithUsage) int {
+// countCommitmentStates returns the total number of commitments across all az:flavorGroup keys.
+func countCommitmentStates(m map[string][]*CommitmentStateWithUsage) int {
 	count := 0
 	for _, list := range m {
 		count += len(list)

@@ -370,7 +370,7 @@ func TestBuildVMAttributes(t *testing.T) {
 	})
 }
 
-func TestCountCommitments(t *testing.T) {
+func TestCountCommitmentStates(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    map[string][]*CommitmentStateWithUsage
@@ -420,9 +420,9 @@ func TestCountCommitments(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := countCommitments(tt.input)
+			result := countCommitmentStates(tt.input)
 			if result != tt.expected {
-				t.Errorf("countCommitments() = %d, expected %d", result, tt.expected)
+				t.Errorf("countCommitmentStates() = %d, expected %d", result, tt.expected)
 			}
 		})
 	}
