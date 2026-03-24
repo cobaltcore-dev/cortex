@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
+	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -46,7 +47,7 @@ func NewAPIWithConfig(client client.Client, config Config, novaClient UsageNovaC
 	}
 }
 
-func (api *HTTPAPI) Init(mux *http.ServeMux, registry prometheus.Registerer) {
+func (api *HTTPAPI) Init(mux *http.ServeMux, registry prometheus.Registerer, log logr.Logger) {
 	registry.MustRegister(&api.monitor)
 	registry.MustRegister(&api.usageMonitor)
 	registry.MustRegister(&api.capacityMonitor)
@@ -54,4 +55,9 @@ func (api *HTTPAPI) Init(mux *http.ServeMux, registry prometheus.Registerer) {
 	mux.HandleFunc("/v1/commitments/report-capacity", api.HandleReportCapacity)
 	mux.HandleFunc("/v1/commitments/info", api.HandleInfo)
 	mux.HandleFunc("/v1/commitments/projects/", api.HandleReportUsage) // matches /v1/commitments/projects/:project_id/report-usage
+
+	log.Info("commitments API initialized",
+		"changeCommitmentsEnabled", api.config.EnableChangeCommitmentsAPI,
+		"reportUsageEnabled", api.config.EnableReportUsageAPI,
+		"reportCapacityEnabled", api.config.EnableReportCapacityAPI)
 }

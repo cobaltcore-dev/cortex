@@ -997,7 +997,7 @@ func newCommitmentTestEnv(
 	}
 	mux := http.NewServeMux()
 	registry := prometheus.NewRegistry()
-	api.Init(mux, registry)
+	api.Init(mux, registry, log.Log)
 	httpServer := httptest.NewServer(mux)
 
 	env.HTTPServer = httpServer
