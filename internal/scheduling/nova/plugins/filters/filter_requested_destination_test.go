@@ -803,6 +803,49 @@ func TestFilterRequestedDestinationStepOpts_Combined(t *testing.T) {
 			expectedHosts:     []string{"host1"},
 			filteredHosts:     []string{"host2", "host3"},
 		},
+		{
+			// Regression test: when all requested aggregates are ignored, the aggregate
+			// filtering short-circuits but the explicit host filtering must still apply.
+			// This ensures the explicit host is kept even when aggregate filtering is skipped.
+			name: "All aggregates ignored with explicit host - host filtering still applies",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
+							Data: api.NovaRequestedDestination{
+								Aggregates: []string{"az-west", "az-east"},
+								Host:       "host2",
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+				},
+			},
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "az-west"}}},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "az-east"}}},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "az-west"}}},
+				},
+			},
+			// All aggregates (az-west, az-east) are ignored, so aggregate filtering is skipped
+			// But host filtering still applies and only host2 should remain
+			ignoredAggregates: []string{"az-west", "az-east"},
+			ignoredHostnames:  []string{},
+			expectedHosts:     []string{"host2"},
+			filteredHosts:     []string{"host1", "host3"},
+		},
 	}
 
 	for _, tt := range tests {
