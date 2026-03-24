@@ -138,6 +138,9 @@ cortex-scheduling-controllers:
       - failover-reservations-controller
     enabledTasks:
       - nova-history-cleanup-task
+    # If true, the external scheduler API will limit the list of hosts in its
+    # response to those included in the scheduling request.
+    novaLimitHostsToRequest: true
     # CommittedResourceFlavorGroupPipelines maps flavor group IDs to pipeline names for CR reservations
     # This allows different scheduling strategies per flavor group (e.g., HANA vs GP)
     committedResourceFlavorGroupPipelines:
