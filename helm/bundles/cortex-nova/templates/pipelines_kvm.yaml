@@ -14,6 +14,8 @@ spec:
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
     Specifically, this pipeline is used for general purpose workloads.
   type: filter-weigher
+  # Fetch all placement candidates, ignoring nova's preselection.
+  ignorePreselection: true
   createDecisions: false
   filters:
     - name: filter_correct_az
@@ -138,6 +140,8 @@ spec:
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
     Specifically, this pipeline is used for hana virtual machines.
   type: filter-weigher
+  # Fetch all placement candidates, ignoring nova's preselection.
+  ignorePreselection: true
   createDecisions: false
   filters:
     - name: filter_correct_az
