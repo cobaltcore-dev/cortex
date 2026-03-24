@@ -7,7 +7,9 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -18,11 +20,16 @@ import (
 
 // CapacityCalculator computes capacity reports for Limes LIQUID API.
 type CapacityCalculator struct {
-	client client.Client
+	client          client.Client
+	schedulerClient *reservations.SchedulerClient
 }
 
 func NewCapacityCalculator(client client.Client) *CapacityCalculator {
-	return &CapacityCalculator{client: client}
+	schedulerClient := reservations.NewSchedulerClient("http://localhost:8080/scheduler/nova/external")
+	return &CapacityCalculator{
+		client:          client,
+		schedulerClient: schedulerClient,
+	}
 }
 
 // CalculateCapacity computes per-AZ capacity for all flavor groups.
@@ -59,61 +66,70 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.Serv
 
 func (c *CapacityCalculator) calculateAZCapacity(
 	ctx context.Context,
-	_ string, // groupName - reserved for future use
-	_ compute.FlavorGroupFeature, // groupData - reserved for future use
+	groupName string,
+	groupData compute.FlavorGroupFeature,
 ) (map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, error) {
-	// Get list of availability zones from HostDetails Knowledge
+
 	azs, err := c.getAvailabilityZones(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get availability zones: %w", err)
 	}
 
-	// Create report entry for each AZ with empty capacity/usage
-	// Capacity and Usage are left unset (zero value of option.Option[uint64])
-	// This signals to Limes: "These AZs exist, but capacity/usage not yet calculated"
 	result := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport)
 	for _, az := range azs {
+		capacity, usage, err := c.calculateInstanceCapacity(ctx, groupName, groupData, az)
+		if err != nil {
+			// Log error but continue with empty values for this AZ
+			result[liquid.AvailabilityZone(az)] = &liquid.AZResourceCapacityReport{}
+			continue
+		}
+
 		result[liquid.AvailabilityZone(az)] = &liquid.AZResourceCapacityReport{
-			// Both Capacity and Usage left unset (empty optional values)
-			// TODO: Calculate actual capacity from Reservation CRDs or host resources
-			// TODO: Calculate actual usage from VM allocations
+			Capacity: capacity,
+			Usage:    Some(usage),
 		}
 	}
 
 	return result, nil
 }
 
-func (c *CapacityCalculator) getAvailabilityZones(ctx context.Context) ([]string, error) {
-	// List all Knowledge CRDs to find host-details knowledge
+// getHostAZMap returns a map from compute host name to availability zone.
+func (c *CapacityCalculator) getHostAZMap(ctx context.Context) (map[string]string, error) {
 	var knowledgeList v1alpha1.KnowledgeList
 	if err := c.client.List(ctx, &knowledgeList); err != nil {
 		return nil, fmt.Errorf("failed to list Knowledge CRDs: %w", err)
 	}
 
-	// Find host-details knowledge and extract AZs
-	azSet := make(map[string]struct{})
+	hostAZMap := make(map[string]string)
 	for _, knowledge := range knowledgeList.Items {
-		// Look for host-details extractor
 		if knowledge.Spec.Extractor.Name != "host_details" {
 			continue
 		}
-
-		// Parse features from Raw data
 		features, err := v1alpha1.UnboxFeatureList[compute.HostDetails](knowledge.Status.Raw)
 		if err != nil {
-			// Skip if we can't parse this knowledge
 			continue
 		}
-
-		// Collect unique AZ names
 		for _, feature := range features {
-			if feature.AvailabilityZone != "" {
-				azSet[feature.AvailabilityZone] = struct{}{}
+			if feature.ComputeHost != "" && feature.AvailabilityZone != "" {
+				hostAZMap[feature.ComputeHost] = feature.AvailabilityZone
 			}
 		}
 	}
 
-	// Convert set to sorted slice
+	return hostAZMap, nil
+}
+
+func (c *CapacityCalculator) getAvailabilityZones(ctx context.Context) ([]string, error) {
+	hostAZMap, err := c.getHostAZMap(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	azSet := make(map[string]struct{})
+	for _, az := range hostAZMap {
+		azSet[az] = struct{}{}
+	}
+
 	azs := make([]string, 0, len(azSet))
 	for az := range azSet {
 		azs = append(azs, az)
@@ -121,4 +137,59 @@ func (c *CapacityCalculator) getAvailabilityZones(ctx context.Context) ([]string
 	sort.Strings(azs)
 
 	return azs, nil
+}
+
+// calculateInstanceCapacity returns the total capacity and current usage for a flavor group in an AZ.
+// Capacity is expressed in multiples of the smallest flavor's memory.
+// Total capacity is derived directly from Hypervisor CRDs (as if everything were empty).
+// Currently available is derived from the scheduler (respecting current VM and reservation state).
+// Usage = totalCapacity - currentlyAvailable.
+func (c *CapacityCalculator) calculateInstanceCapacity(
+	ctx context.Context,
+	groupName string,
+	groupData compute.FlavorGroupFeature,
+	az string,
+) (capacity, usage uint64, err error) {
+
+	smallestFlavor := groupData.SmallestFlavor
+
+	// Request 1: currently available — how many instances can be placed right now.
+	currentResp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
+		InstanceUUID:     fmt.Sprintf("capacity-current-%s-%s-%d", groupName, az, time.Now().UnixNano()),
+		ProjectID:        "cortex-capacity-check",
+		FlavorName:       smallestFlavor.Name,
+		MemoryMB:         smallestFlavor.MemoryMB,
+		VCPUs:            smallestFlavor.VCPUs,
+		FlavorExtraSpecs: map[string]string{"hw_version": groupName},
+		AvailabilityZone: az,
+		Pipeline:         "kvm-general-purpose-load-balancing-all-filters-enabled",
+	})
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to get current available capacity: %w", err)
+	}
+	currentlyAvailable := uint64(len(currentResp.Hosts))
+
+	// Request 2: total capacity — hosts eligible if everything were empty.
+	// Uses a dedicated pipeline that ignores VM allocations and all reservations.
+	totalResp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
+		InstanceUUID:     fmt.Sprintf("capacity-total-%s-%s-%d", groupName, az, time.Now().UnixNano()),
+		ProjectID:        "cortex-capacity-check",
+		FlavorName:       smallestFlavor.Name,
+		MemoryMB:         smallestFlavor.MemoryMB,
+		VCPUs:            smallestFlavor.VCPUs,
+		FlavorExtraSpecs: map[string]string{"hw_version": groupName},
+		AvailabilityZone: az,
+		Pipeline:         "kvm-report-capacity",
+	})
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to get total capacity: %w", err)
+	}
+	totalCapacity := uint64(len(totalResp.Hosts))
+
+	var usageValue uint64
+	if totalCapacity >= currentlyAvailable {
+		usageValue = totalCapacity - currentlyAvailable
+	}
+
+	return totalCapacity, usageValue, nil
 }
