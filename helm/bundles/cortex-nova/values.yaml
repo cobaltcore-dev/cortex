@@ -85,6 +85,8 @@ cortex: &cortex
         gvks:
           - cortex.cloud/v1alpha1/Decision
           - cortex.cloud/v1alpha1/DecisionList
+          - cortex.cloud/v1alpha1/History
+          - cortex.cloud/v1alpha1/HistoryList
           - cortex.cloud/v1alpha1/Descheduling
           - cortex.cloud/v1alpha1/DeschedulingList
           - cortex.cloud/v1alpha1/Pipeline
@@ -132,11 +134,13 @@ cortex-scheduling-controllers:
       - nova-pipeline-controllers
       - nova-deschedulings-executor
       - hypervisor-overcommit-controller
-      - explanation-controller
       - committed-resource-reservations-controller
       - failover-reservations-controller
     enabledTasks:
-      - nova-decisions-cleanup-task
+      - nova-history-cleanup-task
+    # If true, the external scheduler API will limit the list of hosts in its
+    # response to those included in the scheduling request.
+    novaLimitHostsToRequest: true
     # CommittedResourceFlavorGroupPipelines maps flavor group IDs to pipeline names for CR reservations
     # This allows different scheduling strategies per flavor group (e.g., HANA vs GP)
     committedResourceFlavorGroupPipelines:

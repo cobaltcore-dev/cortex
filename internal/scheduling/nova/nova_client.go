@@ -38,6 +38,21 @@ type migration struct {
 	DestCompute   string `json:"dest_compute"`
 }
 
+// ServerDetail contains extended server information for usage reporting.
+type ServerDetail struct {
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	Status           string `json:"status"`
+	TenantID         string `json:"tenant_id"`
+	Created          string `json:"created"`
+	AvailabilityZone string `json:"OS-EXT-AZ:availability_zone"`
+	Hypervisor       string `json:"OS-EXT-SRV-ATTR:hypervisor_hostname"`
+	FlavorName       string // Populated from nested flavor.original_name
+	FlavorRAM        uint64 // Populated from nested flavor.ram
+	FlavorVCPUs      uint64 // Populated from nested flavor.vcpus
+	FlavorDisk       uint64 // Populated from nested flavor.disk
+}
+
 type NovaClient interface {
 	// Initialize the Nova API with the Keystone authentication.
 	Init(ctx context.Context, client client.Client, conf NovaClientConfig) error
@@ -47,6 +62,8 @@ type NovaClient interface {
 	LiveMigrate(ctx context.Context, id string) error
 	// Get migrations for a server by ID.
 	GetServerMigrations(ctx context.Context, id string) ([]migration, error)
+	// List all servers for a project with detailed info.
+	ListProjectServers(ctx context.Context, projectID string) ([]ServerDetail, error)
 }
 
 type novaClient struct {
@@ -159,4 +176,87 @@ func (api *novaClient) GetServerMigrations(ctx context.Context, id string) ([]mi
 	}
 	slog.Info("fetched migrations for vm", "id", id, "count", len(migrations))
 	return migrations, nil
+}
+
+// ListProjectServers retrieves all servers for a project with detailed info.
+func (api *novaClient) ListProjectServers(ctx context.Context, projectID string) ([]ServerDetail, error) {
+	// Build URL with pagination support
+	initialURL := api.sc.Endpoint + "servers/detail?all_tenants=true&tenant_id=" + projectID
+	var nextURL = &initialURL
+	var result []ServerDetail
+
+	for nextURL != nil {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("X-Auth-Token", api.sc.Token())
+		req.Header.Set("X-OpenStack-Nova-API-Version", api.sc.Microversion)
+
+		resp, err := api.sc.HTTPClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+
+		// Response structure with nested flavor
+		var list struct {
+			Servers []struct {
+				ID               string `json:"id"`
+				Name             string `json:"name"`
+				Status           string `json:"status"`
+				TenantID         string `json:"tenant_id"`
+				Created          string `json:"created"`
+				AvailabilityZone string `json:"OS-EXT-AZ:availability_zone"`
+				Hypervisor       string `json:"OS-EXT-SRV-ATTR:hypervisor_hostname"`
+				Flavor           struct {
+					OriginalName string `json:"original_name"`
+					RAM          uint64 `json:"ram"`
+					VCPUs        uint64 `json:"vcpus"`
+					Disk         uint64 `json:"disk"`
+				} `json:"flavor"`
+			} `json:"servers"`
+			Links []struct {
+				Rel  string `json:"rel"`
+				Href string `json:"href"`
+			} `json:"servers_links"`
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+			return nil, err
+		}
+
+		// Convert to ServerDetail
+		for _, s := range list.Servers {
+			result = append(result, ServerDetail{
+				ID:               s.ID,
+				Name:             s.Name,
+				Status:           s.Status,
+				TenantID:         s.TenantID,
+				Created:          s.Created,
+				AvailabilityZone: s.AvailabilityZone,
+				Hypervisor:       s.Hypervisor,
+				FlavorName:       s.Flavor.OriginalName,
+				FlavorRAM:        s.Flavor.RAM,
+				FlavorVCPUs:      s.Flavor.VCPUs,
+				FlavorDisk:       s.Flavor.Disk,
+			})
+		}
+
+		// Check for next page
+		nextURL = nil
+		for _, link := range list.Links {
+			if link.Rel == "next" {
+				nextURL = &link.Href
+				break
+			}
+		}
+	}
+
+	slog.Info("fetched servers for project", "projectID", projectID, "count", len(result))
+	return result, nil
 }

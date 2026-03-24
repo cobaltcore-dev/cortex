@@ -33,7 +33,7 @@ func TestCleanupManila(t *testing.T) {
 
 	tests := []struct {
 		name             string
-		decisions        []v1alpha1.Decision
+		histories        []v1alpha1.History
 		expectError      bool
 		authError        bool
 		endpointError    bool
@@ -44,45 +44,45 @@ func TestCleanupManila(t *testing.T) {
 	}{
 		{
 			name:        "handle authentication error",
-			decisions:   []v1alpha1.Decision{},
+			histories:   []v1alpha1.History{},
 			authError:   true,
 			expectError: true,
 		},
 		{
 			name:          "handle endpoint error",
-			decisions:     []v1alpha1.Decision{},
+			histories:     []v1alpha1.History{},
 			endpointError: true,
 			expectError:   true,
 		},
 		{
 			name:            "handle server error",
-			decisions:       []v1alpha1.Decision{},
+			histories:       []v1alpha1.History{},
 			mockServerError: true,
 			expectError:     true,
 		},
 		{
 			name:             "handle empty shares case",
-			decisions:        []v1alpha1.Decision{},
+			histories:        []v1alpha1.History{},
 			emptySharesError: true,
 			expectError:      true,
 		},
 		{
-			name: "delete decisions for non-existent shares",
-			decisions: []v1alpha1.Decision{
+			name: "delete history for non-existent shares",
+			histories: []v1alpha1.History{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-existing-share",
+						Name: "history-existing-share",
 					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainManila,
 						ResourceID:       "share-exists",
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-deleted-share",
+						Name: "history-deleted-share",
 					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainManila,
 						ResourceID:       "share-deleted",
 					},
@@ -91,26 +91,26 @@ func TestCleanupManila(t *testing.T) {
 			mockShares: []mockShare{
 				{ID: "share-exists"},
 			},
-			expectedDeleted: []string{"decision-deleted-share"},
+			expectedDeleted: []string{"history-deleted-share"},
 			expectError:     false,
 		},
 		{
-			name: "keep decisions for existing shares",
-			decisions: []v1alpha1.Decision{
+			name: "keep history for existing shares",
+			histories: []v1alpha1.History{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-share-1",
+						Name: "history-share-1",
 					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainManila,
 						ResourceID:       "share-1",
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-share-2",
+						Name: "history-share-2",
 					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainManila,
 						ResourceID:       "share-2",
 					},
@@ -124,22 +124,22 @@ func TestCleanupManila(t *testing.T) {
 			expectError:     false,
 		},
 		{
-			name: "skip non-manila decisions",
-			decisions: []v1alpha1.Decision{
+			name: "skip non-manila histories",
+			histories: []v1alpha1.History{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-other-type",
+						Name: "history-other-type",
 					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
 						ResourceID:       "some-resource",
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-other-operator",
+						Name: "history-other-operator",
 					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: "other-operator",
 						ResourceID:       "share-1",
 					},
@@ -153,9 +153,9 @@ func TestCleanupManila(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			objects := make([]client.Object, len(tt.decisions))
-			for i := range tt.decisions {
-				objects[i] = &tt.decisions[i]
+			objects := make([]client.Object, len(tt.histories))
+			for i := range tt.histories {
+				objects[i] = &tt.histories[i]
 			}
 
 			// Create mock Manila server
@@ -331,13 +331,13 @@ func TestCleanupManila(t *testing.T) {
 				WithScheme(scheme).
 				WithObjects(objects...).
 				Build()
-			config := DecisionsCleanupConfig{
+			config := HistoryCleanupConfig{
 				KeystoneSecretRef: corev1.SecretReference{
 					Name:      "keystone-secret",
 					Namespace: "default",
 				},
 			}
-			err := DecisionsCleanup(context.Background(), client, config)
+			err := HistoryCleanup(context.Background(), client, config)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -347,32 +347,32 @@ func TestCleanupManila(t *testing.T) {
 			}
 
 			if !tt.expectError {
-				// Verify expected decisions were deleted
+				// Verify expected history entries were deleted
 				for _, expectedDeleted := range tt.expectedDeleted {
-					var decision v1alpha1.Decision
+					var history v1alpha1.History
 					err := client.Get(context.Background(),
-						types.NamespacedName{Name: expectedDeleted}, &decision)
+						types.NamespacedName{Name: expectedDeleted}, &history)
 					if err == nil {
-						t.Errorf("Expected decision %s to be deleted but it still exists", expectedDeleted)
+						t.Errorf("Expected history %s to be deleted but it still exists", expectedDeleted)
 					}
 				}
 
-				// Verify other decisions still exist
-				for _, originalDecision := range tt.decisions {
+				// Verify other histories still exist
+				for _, originalHistory := range tt.histories {
 					shouldBeDeleted := false
 					for _, expectedDeleted := range tt.expectedDeleted {
-						if originalDecision.Name == expectedDeleted {
+						if originalHistory.Name == expectedDeleted {
 							shouldBeDeleted = true
 							break
 						}
 					}
 					if !shouldBeDeleted {
-						var decision v1alpha1.Decision
+						var history v1alpha1.History
 						err := client.Get(context.Background(),
-							types.NamespacedName{Name: originalDecision.Name}, &decision)
+							types.NamespacedName{Name: originalHistory.Name}, &history)
 						if err != nil {
-							t.Errorf("Expected decision %s to still exist but got error: %v",
-								originalDecision.Name, err)
+							t.Errorf("Expected history %s to still exist but got error: %v",
+								originalHistory.Name, err)
 						}
 					}
 				}
@@ -381,7 +381,7 @@ func TestCleanupManila(t *testing.T) {
 	}
 }
 
-func TestCleanupManilaDecisionsCancel(t *testing.T) {
+func TestCleanupManilaHistoryCancel(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheme: %v", err)
@@ -413,7 +413,7 @@ func TestCleanupManilaDecisionsCancel(t *testing.T) {
 		WithObjects(objects...).
 		Build()
 
-	config := DecisionsCleanupConfig{
+	config := HistoryCleanupConfig{
 		KeystoneSecretRef: corev1.SecretReference{
 			Name:      "keystone-secret",
 			Namespace: "default",
@@ -424,7 +424,7 @@ func TestCleanupManilaDecisionsCancel(t *testing.T) {
 	defer cancel()
 
 	// This should exit quickly due to context cancellation
-	if err := DecisionsCleanup(ctx, client, config); err != nil {
+	if err := HistoryCleanup(ctx, client, config); err != nil {
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Errorf("Unexpected error during cleanup: %v", err)
 		}

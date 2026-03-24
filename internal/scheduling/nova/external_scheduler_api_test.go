@@ -33,7 +33,7 @@ func (m *mockHTTPAPIDelegate) ProcessNewDecisionFromAPI(ctx context.Context, dec
 func TestNewAPI(t *testing.T) {
 	delegate := &mockHTTPAPIDelegate{}
 
-	api := NewAPI(delegate)
+	api := NewAPI(HTTPAPIConfig{}, delegate)
 
 	if api == nil {
 		t.Fatal("NewAPI returned nil")
@@ -55,7 +55,7 @@ func TestNewAPI(t *testing.T) {
 
 func TestHTTPAPI_Init(t *testing.T) {
 	delegate := &mockHTTPAPIDelegate{}
-	api := NewAPI(delegate)
+	api := NewAPI(HTTPAPIConfig{}, delegate)
 
 	mux := http.NewServeMux()
 	api.Init(mux)
@@ -73,7 +73,7 @@ func TestHTTPAPI_Init(t *testing.T) {
 
 func TestHTTPAPI_canRunScheduler(t *testing.T) {
 	delegate := &mockHTTPAPIDelegate{}
-	api := NewAPI(delegate).(*httpAPI)
+	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
 
 	tests := []struct {
 		name        string
@@ -276,7 +276,7 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 				},
 			}
 
-			api := NewAPI(delegate).(*httpAPI)
+			api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
 
 			var body *strings.Reader
 			if tt.body != "" {
@@ -327,7 +327,7 @@ func TestHTTPAPI_NovaExternalScheduler_DecisionCreation(t *testing.T) {
 		},
 	}
 
-	api := NewAPI(delegate).(*httpAPI)
+	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
 
 	requestData := novaapi.ExternalSchedulerRequest{
 		Spec: novaapi.NovaObject[novaapi.NovaSpec]{
@@ -508,7 +508,7 @@ func TestLimitHostsToRequest(t *testing.T) {
 
 func TestHTTPAPI_inferPipelineName(t *testing.T) {
 	delegate := &mockHTTPAPIDelegate{}
-	api := NewAPI(delegate).(*httpAPI)
+	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
 
 	tests := []struct {
 		name           string

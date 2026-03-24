@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/sapcc/go-api-declarations/liquid"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	. "github.com/majewsky/gg/option"
+	"github.com/sapcc/go-api-declarations/liquid"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // CapacityCalculator computes capacity reports for Limes LIQUID API.
@@ -25,7 +25,8 @@ func NewCapacityCalculator(client client.Client) *CapacityCalculator {
 	return &CapacityCalculator{client: client}
 }
 
-// CalculateCapacity computes per-AZ capacity for all flavor groups.
+// CalculateCapacity computes per-AZ capacity for all flavor groups that accept commitments.
+// Only flavor groups with a fixed RAM/core ratio are included in the report.
 func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.ServiceCapacityReport, error) {
 	// Get all flavor groups from Knowledge CRDs
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
@@ -34,14 +35,26 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.Serv
 		return liquid.ServiceCapacityReport{}, fmt.Errorf("failed to get flavor groups: %w", err)
 	}
 
-	// Build capacity report per flavor group
+	// Get version from Knowledge CRD (same as info API version)
+	var infoVersion int64 = -1
+	if knowledgeCRD, err := knowledge.Get(ctx); err == nil && knowledgeCRD != nil && !knowledgeCRD.Status.LastContentChange.IsZero() {
+		infoVersion = knowledgeCRD.Status.LastContentChange.Unix()
+	}
+
+	// Build capacity report per flavor group (only for groups that accept CRs)
 	report := liquid.ServiceCapacityReport{
-		Resources: make(map[liquid.ResourceName]*liquid.ResourceCapacityReport),
+		InfoVersion: infoVersion,
+		Resources:   make(map[liquid.ResourceName]*liquid.ResourceCapacityReport),
 	}
 
 	for groupName, groupData := range flavorGroups {
+		// Only report capacity for flavor groups that accept commitments
+		if !FlavorGroupAcceptsCommitments(&groupData) {
+			continue
+		}
+
 		// Resource name follows pattern: ram_<flavorgroup>
-		resourceName := liquid.ResourceName("ram_" + groupName)
+		resourceName := liquid.ResourceName(commitmentResourceNamePrefix + groupName)
 
 		// Calculate per-AZ capacity and usage
 		azCapacity, err := c.calculateAZCapacity(ctx, groupName, groupData)
@@ -68,15 +81,14 @@ func (c *CapacityCalculator) calculateAZCapacity(
 		return nil, fmt.Errorf("failed to get availability zones: %w", err)
 	}
 
-	// Create report entry for each AZ with empty capacity/usage
-	// Capacity and Usage are left unset (zero value of option.Option[uint64])
-	// This signals to Limes: "These AZs exist, but capacity/usage not yet calculated"
+	// Create report entry for each AZ with placeholder capacity=0
+	// TODO: Calculate actual capacity from Reservation CRDs or host resources
+	// TODO: Calculate actual usage from VM allocations
 	result := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport)
 	for _, az := range azs {
 		result[liquid.AvailabilityZone(az)] = &liquid.AZResourceCapacityReport{
-			// Both Capacity and Usage left unset (empty optional values)
-			// TODO: Calculate actual capacity from Reservation CRDs or host resources
-			// TODO: Calculate actual usage from VM allocations
+			Capacity: 0,               // Placeholder: capacity=0 until actual calculation is implemented
+			Usage:    Some[uint64](0), // Placeholder: usage=0 until actual calculation is implemented
 		}
 	}
 

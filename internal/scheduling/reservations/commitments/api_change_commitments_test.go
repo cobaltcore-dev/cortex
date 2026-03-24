@@ -23,6 +23,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -628,11 +629,37 @@ func (tfg TestFlavorGroup) ToFlavorGroupsKnowledge() FlavorGroupsKnowledge {
 		smallest := groupFlavors[len(groupFlavors)-1]
 		largest := groupFlavors[0]
 
+		// Compute RAM/core ratio (MiB per vCPU)
+		var minRatio, maxRatio uint64 = ^uint64(0), 0
+		for _, f := range groupFlavors {
+			if f.VCPUs == 0 {
+				continue
+			}
+			ratio := f.MemoryMB / f.VCPUs
+			if ratio < minRatio {
+				minRatio = ratio
+			}
+			if ratio > maxRatio {
+				maxRatio = ratio
+			}
+		}
+
+		var ramCoreRatio, ramCoreRatioMin, ramCoreRatioMax *uint64
+		if minRatio == maxRatio && maxRatio != 0 {
+			ramCoreRatio = &minRatio
+		} else if maxRatio != 0 {
+			ramCoreRatioMin = &minRatio
+			ramCoreRatioMax = &maxRatio
+		}
+
 		groups = append(groups, compute.FlavorGroupFeature{
-			Name:           groupName,
-			Flavors:        groupFlavors,
-			SmallestFlavor: smallest,
-			LargestFlavor:  largest,
+			Name:            groupName,
+			Flavors:         groupFlavors,
+			SmallestFlavor:  smallest,
+			LargestFlavor:   largest,
+			RamCoreRatio:    ramCoreRatio,
+			RamCoreRatioMin: ramCoreRatioMin,
+			RamCoreRatioMax: ramCoreRatioMax,
 		})
 	}
 
@@ -964,12 +991,13 @@ func newCommitmentTestEnv(
 	// Use custom config if provided, otherwise use default
 	var api *HTTPAPI
 	if customConfig != nil {
-		api = NewAPIWithConfig(wrappedClient, *customConfig)
+		api = NewAPIWithConfig(wrappedClient, *customConfig, nil)
 	} else {
 		api = NewAPI(wrappedClient)
 	}
 	mux := http.NewServeMux()
-	api.Init(mux)
+	registry := prometheus.NewRegistry()
+	api.Init(mux, registry)
 	httpServer := httptest.NewServer(mux)
 
 	env.HTTPServer = httpServer

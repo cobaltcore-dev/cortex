@@ -17,6 +17,7 @@ rules:
   - deschedulings
   - pipelines
   - kpis
+  - histories
   verbs:
   - create
   - delete
@@ -35,6 +36,7 @@ rules:
   - deschedulings/finalizers
   - pipelines/finalizers
   - kpis/finalizers
+  - histories/finalizers
   verbs:
   - update
 - apiGroups:
@@ -47,6 +49,7 @@ rules:
   - deschedulings/status
   - pipelines/status
   - kpis/status
+  - histories/status
   verbs:
   - get
   - patch

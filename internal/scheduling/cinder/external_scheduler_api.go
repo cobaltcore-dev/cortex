@@ -149,6 +149,7 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 			},
 			ResourceID: "", // TODO
 			CinderRaw:  &raw,
+			Intent:     v1alpha1.SchedulingIntentUnknown,
 		},
 	}
 	ctx := r.Context()

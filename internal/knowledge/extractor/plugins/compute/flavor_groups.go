@@ -37,6 +37,18 @@ type FlavorGroupFeature struct {
 
 	// The smallest flavor in the group (used for CR size quantification)
 	SmallestFlavor FlavorInGroup `json:"smallestFlavor"`
+
+	// RAM-to-core ratio in MiB per vCPU (MemoryMB / VCPUs).
+	// If all flavors have the same ratio: RamCoreRatio is set, RamCoreRatioMin/Max are nil.
+	// If flavors have different ratios: RamCoreRatio is nil, RamCoreRatioMin/Max are set.
+	RamCoreRatio    *uint64 `json:"ramCoreRatio,omitempty"`
+	RamCoreRatioMin *uint64 `json:"ramCoreRatioMin,omitempty"`
+	RamCoreRatioMax *uint64 `json:"ramCoreRatioMax,omitempty"`
+}
+
+// HasFixedRamCoreRatio returns true if all flavors in this group have the same RAM/core ratio.
+func (f *FlavorGroupFeature) HasFixedRamCoreRatio() bool {
+	return f.RamCoreRatio != nil
 }
 
 // flavorRow represents a row from the SQL query.
@@ -128,6 +140,31 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 		largest := flavors[0]
 		smallest := flavors[len(flavors)-1]
 
+		// Compute RAM/core ratio (MiB per vCPU)
+		var minRatio, maxRatio uint64 = ^uint64(0), 0
+		for _, f := range flavors {
+			if f.VCPUs == 0 {
+				continue // Skip flavors with 0 vCPUs to avoid division by zero
+			}
+			ratio := f.MemoryMB / f.VCPUs
+			if ratio < minRatio {
+				minRatio = ratio
+			}
+			if ratio > maxRatio {
+				maxRatio = ratio
+			}
+		}
+
+		var ramCoreRatio, ramCoreRatioMin, ramCoreRatioMax *uint64
+		if minRatio == maxRatio && maxRatio != 0 {
+			// All flavors have the same ratio
+			ramCoreRatio = &minRatio
+		} else if maxRatio != 0 {
+			// Flavors have different ratios
+			ramCoreRatioMin = &minRatio
+			ramCoreRatioMax = &maxRatio
+		}
+
 		flavorGroupLog.Info("identified largest and smallest flavors",
 			"groupName", groupName,
 			"largestFlavor", largest.Name,
@@ -135,13 +172,19 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 			"largestVCPUs", largest.VCPUs,
 			"smallestFlavor", smallest.Name,
 			"smallestMemoryMB", smallest.MemoryMB,
-			"smallestVCPUs", smallest.VCPUs)
+			"smallestVCPUs", smallest.VCPUs,
+			"ramCoreRatio", ramCoreRatio,
+			"ramCoreRatioMin", ramCoreRatioMin,
+			"ramCoreRatioMax", ramCoreRatioMax)
 
 		features = append(features, FlavorGroupFeature{
-			Name:           groupName,
-			Flavors:        flavors,
-			LargestFlavor:  largest,
-			SmallestFlavor: smallest,
+			Name:            groupName,
+			Flavors:         flavors,
+			LargestFlavor:   largest,
+			SmallestFlavor:  smallest,
+			RamCoreRatio:    ramCoreRatio,
+			RamCoreRatioMin: ramCoreRatioMin,
+			RamCoreRatioMax: ramCoreRatioMax,
 		})
 	}
 

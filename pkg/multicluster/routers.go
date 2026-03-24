@@ -73,4 +73,29 @@ func (r ReservationsResourceRouter) Match(obj any, labels map[string]string) (bo
 	return reservationAvailabilityZone == availabilityZone, nil
 }
 
-// TODO: Add router for Decision CRD and reservations after their refactoring is done.
+// HistoryResourceRouter routes histories to clusters based on availability zone.
+type HistoryResourceRouter struct{}
+
+func (h HistoryResourceRouter) Match(obj any, labels map[string]string) (bool, error) {
+	var hist v1alpha1.History
+
+	switch v := obj.(type) {
+	case *v1alpha1.History:
+		if v == nil {
+			return false, errors.New("object is nil")
+		}
+		hist = *v
+	case v1alpha1.History:
+		hist = v
+	default:
+		return false, errors.New("object is not a History")
+	}
+	availabilityZone, ok := labels["availabilityZone"]
+	if !ok {
+		return false, errors.New("cluster does not have availabilityZone label")
+	}
+	if hist.Spec.AvailabilityZone == nil || *hist.Spec.AvailabilityZone == "" {
+		return false, errors.New("history does not have availability zone in spec")
+	}
+	return *hist.Spec.AvailabilityZone == availabilityZone, nil
+}

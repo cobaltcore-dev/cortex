@@ -42,8 +42,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/cinder"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/explanation"
+
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/external"
+
 	schedulinglib "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/machines"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila"
@@ -275,6 +276,7 @@ func main() {
 	}
 	hvGVK := schema.GroupVersionKind{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}
 	reservationGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}
+	historyGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}
 	multiclusterClient := &multicluster.Client{
 		HomeCluster:    homeCluster,
 		HomeRestConfig: restConfig,
@@ -282,6 +284,7 @@ func main() {
 		ResourceRouters: map[schema.GroupVersionKind]multicluster.ResourceRouter{
 			hvGVK:          multicluster.HypervisorResourceRouter{},
 			reservationGVK: multicluster.ReservationsResourceRouter{},
+			historyGVK:     multicluster.HistoryResourceRouter{},
 		},
 	}
 	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
@@ -321,11 +324,8 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "nova FilterWeigherPipelineController")
 			os.Exit(1)
 		}
-		nova.NewAPI(filterWeigherController).Init(mux)
-
-		// Initialize commitments API for LIQUID interface
-		commitmentsAPI := commitments.NewAPI(multiclusterClient)
-		commitmentsAPI.Init(mux)
+		novaAPIConfig := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
+		nova.NewAPI(novaAPIConfig, filterWeigherController).Init(mux)
 
 		// Detector pipeline controller setup.
 		novaClient := nova.NewNovaClient()
@@ -336,6 +336,12 @@ func main() {
 			setupLog.Error(err, "unable to initialize nova client")
 			os.Exit(1)
 		}
+
+		// Initialize commitments API for LIQUID interface (with Nova client for usage reporting)
+		commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
+		commitmentsAPI := commitments.NewAPIWithConfig(multiclusterClient, commitmentsConfig, novaClient)
+		commitmentsAPI.Init(mux, metrics.Registry)
+
 		deschedulingsController := &nova.DetectorPipelineController{
 			Monitor: detectorPipelineMonitor,
 			Breaker: &nova.DetectorCycleBreaker{NovaClient: novaClient},
@@ -471,20 +477,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(mainConfig.EnabledControllers, "explanation-controller") {
-		setupLog.Info("enabling controller", "controller", "explanation-controller")
-		// Setup a controller which will reconcile the history and explanation for
-		// decision resources.
-		explanationControllerConfig := conf.GetConfigOrDie[explanation.ControllerConfig]()
-		explanationController := &explanation.Controller{
-			Client: multiclusterClient,
-			Config: explanationControllerConfig,
-		}
-		if err := explanationController.SetupWithManager(mgr, multiclusterClient); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "ExplanationController")
-			os.Exit(1)
-		}
-	}
+
 	if slices.Contains(mainConfig.EnabledControllers, "committed-resource-reservations-controller") {
 		setupLog.Info("enabling controller", "controller", "committed-resource-reservations-controller")
 		monitor := reservations.NewMonitor(multiclusterClient)
@@ -689,48 +682,48 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(mainConfig.EnabledTasks, "nova-decisions-cleanup-task") {
-		setupLog.Info("starting nova decisions cleanup task")
-		decisionsCleanupConfig := conf.GetConfigOrDie[nova.DecisionsCleanupConfig]()
+	if slices.Contains(mainConfig.EnabledTasks, "nova-history-cleanup-task") {
+		setupLog.Info("starting nova history cleanup task")
+		historyCleanupConfig := conf.GetConfigOrDie[nova.HistoryCleanupConfig]()
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: time.Hour,
-			Name:     "nova-decisions-cleanup-task",
+			Name:     "nova-history-cleanup-task",
 			Run: func(ctx context.Context) error {
-				return nova.DecisionsCleanup(ctx, multiclusterClient, decisionsCleanupConfig)
+				return nova.HistoryCleanup(ctx, multiclusterClient, historyCleanupConfig)
 			},
 		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to add nova decisions cleanup task to manager")
+			setupLog.Error(err, "unable to add nova history cleanup task to manager")
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(mainConfig.EnabledTasks, "manila-decisions-cleanup-task") {
-		setupLog.Info("starting manila decisions cleanup task")
-		decisionsCleanupConfig := conf.GetConfigOrDie[manila.DecisionsCleanupConfig]()
+	if slices.Contains(mainConfig.EnabledTasks, "manila-history-cleanup-task") {
+		setupLog.Info("starting manila history cleanup task")
+		historyCleanupConfig := conf.GetConfigOrDie[manila.HistoryCleanupConfig]()
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: time.Hour,
-			Name:     "manila-decisions-cleanup-task",
+			Name:     "manila-history-cleanup-task",
 			Run: func(ctx context.Context) error {
-				return manila.DecisionsCleanup(ctx, multiclusterClient, decisionsCleanupConfig)
+				return manila.HistoryCleanup(ctx, multiclusterClient, historyCleanupConfig)
 			},
 		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to add manila decisions cleanup task to manager")
+			setupLog.Error(err, "unable to add manila history cleanup task to manager")
 			os.Exit(1)
 		}
 	}
-	if slices.Contains(mainConfig.EnabledTasks, "cinder-decisions-cleanup-task") {
-		setupLog.Info("starting cinder decisions cleanup task")
-		decisionsCleanupConfig := conf.GetConfigOrDie[cinder.DecisionsCleanupConfig]()
+	if slices.Contains(mainConfig.EnabledTasks, "cinder-history-cleanup-task") {
+		setupLog.Info("starting cinder history cleanup task")
+		historyCleanupConfig := conf.GetConfigOrDie[cinder.HistoryCleanupConfig]()
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: time.Hour,
-			Name:     "cinder-decisions-cleanup-task",
+			Name:     "cinder-history-cleanup-task",
 			Run: func(ctx context.Context) error {
-				return cinder.DecisionsCleanup(ctx, multiclusterClient, decisionsCleanupConfig)
+				return cinder.HistoryCleanup(ctx, multiclusterClient, historyCleanupConfig)
 			},
 		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to add cinder decisions cleanup task to manager")
+			setupLog.Error(err, "unable to add cinder history cleanup task to manager")
 			os.Exit(1)
 		}
 	}

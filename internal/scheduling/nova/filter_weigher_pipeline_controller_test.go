@@ -9,6 +9,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -393,17 +394,17 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 	}
 
 	tests := []struct {
-		name                  string
-		decision              *v1alpha1.Decision
-		pipeline              *v1alpha1.Pipeline
-		pipelineConf          *v1alpha1.Pipeline
-		setupPipelineConfigs  bool
-		createDecisions       bool
-		expectError           bool
-		expectResult          bool
-		expectCreatedDecision bool
-		expectUpdatedStatus   bool
-		errorContains         string
+		name                 string
+		decision             *v1alpha1.Decision
+		pipeline             *v1alpha1.Pipeline
+		pipelineConf         *v1alpha1.Pipeline
+		setupPipelineConfigs bool
+		createHistory        bool
+		expectError          bool
+		expectResult         bool
+		expectHistoryCreated bool
+		expectUpdatedStatus  bool
+		errorContains        string
 	}{
 		{
 			name: "successful processing with decision creation enabled",
@@ -414,6 +415,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				},
 				Spec: v1alpha1.DecisionSpec{
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					ResourceID:       "test-uuid-1",
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline",
 					},
@@ -429,7 +431,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  true,
+					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -441,17 +443,17 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  true,
+					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			setupPipelineConfigs:  true,
-			createDecisions:       true,
-			expectError:           false,
-			expectResult:          true,
-			expectCreatedDecision: true,
-			expectUpdatedStatus:   true,
+			setupPipelineConfigs: true,
+			createHistory:        true,
+			expectError:          false,
+			expectResult:         true,
+			expectHistoryCreated: true,
+			expectUpdatedStatus:  true,
 		},
 		{
 			name: "successful processing with decision creation disabled",
@@ -462,6 +464,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				},
 				Spec: v1alpha1.DecisionSpec{
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					ResourceID:       "test-uuid-2",
 					PipelineRef: corev1.ObjectReference{
 						Name: "test-pipeline-no-create",
 					},
@@ -477,7 +480,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  false,
+					CreateHistory:    false,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -489,17 +492,17 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  false,
+					CreateHistory:    false,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			setupPipelineConfigs:  true,
-			createDecisions:       false,
-			expectError:           false,
-			expectResult:          true,
-			expectCreatedDecision: false,
-			expectUpdatedStatus:   false,
+			setupPipelineConfigs: true,
+			createHistory:        false,
+			expectError:          false,
+			expectResult:         true,
+			expectHistoryCreated: false,
+			expectUpdatedStatus:  false,
 		},
 		{
 			name: "pipeline not configured",
@@ -518,14 +521,14 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					},
 				},
 			},
-			pipeline:              nil,
-			pipelineConf:          nil,
-			setupPipelineConfigs:  false,
-			expectError:           true,
-			expectResult:          false,
-			expectCreatedDecision: false,
-			expectUpdatedStatus:   false,
-			errorContains:         "pipeline nonexistent-pipeline not configured",
+			pipeline:             nil,
+			pipelineConf:         nil,
+			setupPipelineConfigs: false,
+			expectError:          true,
+			expectResult:         false,
+			expectHistoryCreated: false,
+			expectUpdatedStatus:  false,
+			errorContains:        "pipeline nonexistent-pipeline not configured",
 		},
 		{
 			name: "decision without novaRaw spec",
@@ -549,7 +552,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  true,
+					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -561,18 +564,18 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  true,
+					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			setupPipelineConfigs:  true,
-			createDecisions:       true,
-			expectError:           true,
-			expectResult:          false,
-			expectCreatedDecision: true,
-			expectUpdatedStatus:   false,
-			errorContains:         "no novaRaw spec defined",
+			setupPipelineConfigs: true,
+			createHistory:        true,
+			expectError:          true,
+			expectResult:         false,
+			expectHistoryCreated: true,
+			expectUpdatedStatus:  false,
+			errorContains:        "no novaRaw spec defined",
 		},
 		{
 			name: "processing fails after decision creation",
@@ -599,18 +602,18 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  true,
+					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			setupPipelineConfigs:  true,
-			createDecisions:       true,
-			expectError:           true,
-			expectResult:          false,
-			expectCreatedDecision: true,
-			expectUpdatedStatus:   false,
-			errorContains:         "pipeline not found or not ready",
+			setupPipelineConfigs: true,
+			createHistory:        true,
+			expectError:          true,
+			expectResult:         false,
+			expectHistoryCreated: true,
+			expectUpdatedStatus:  false,
+			errorContains:        "pipeline not found or not ready",
 		},
 		{
 			name: "pipeline not found in runtime map",
@@ -637,18 +640,18 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateDecisions:  true,
+					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			setupPipelineConfigs:  true,
-			createDecisions:       true,
-			expectError:           true,
-			expectResult:          false,
-			expectCreatedDecision: true,
-			expectUpdatedStatus:   false,
-			errorContains:         "pipeline not found or not ready",
+			setupPipelineConfigs: true,
+			createHistory:        true,
+			expectError:          true,
+			expectResult:         false,
+			expectHistoryCreated: true,
+			expectUpdatedStatus:  false,
+			errorContains:        "pipeline not found or not ready",
 		},
 	}
 
@@ -662,7 +665,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 			client := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(objects...).
-				WithStatusSubresource(&v1alpha1.Decision{}).
+				WithStatusSubresource(&v1alpha1.Decision{}, &v1alpha1.History{}).
 				Build()
 
 			controller := &FilterWeigherPipelineController{
@@ -670,6 +673,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					Client:          client,
 					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
+					HistoryManager:  lib.HistoryClient{Client: client},
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
@@ -707,24 +711,33 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				t.Errorf("Expected error to contain %q, got: %v", tt.errorContains, err)
 			}
 
-			// Check if decision was created in the cluster when expected
-			if tt.expectCreatedDecision {
-				var createdDecision v1alpha1.Decision
-				key := types.NamespacedName{Name: tt.decision.Name, Namespace: tt.decision.Namespace}
-				err := client.Get(context.Background(), key, &createdDecision)
-				if err != nil {
-					t.Errorf("Expected decision to be created but got error: %v", err)
+			// Check if history CRD was created when expected
+			if tt.expectHistoryCreated {
+				var histories v1alpha1.HistoryList
+				deadline := time.Now().Add(2 * time.Second)
+				for {
+					if err := client.List(context.Background(), &histories); err != nil {
+						t.Fatalf("Failed to list histories: %v", err)
+					}
+					if len(histories.Items) > 0 {
+						break
+					}
+					if time.Now().After(deadline) {
+						t.Fatal("timed out waiting for history CRD to be created")
+					}
+					time.Sleep(5 * time.Millisecond)
 				}
 			} else {
-				var createdDecision v1alpha1.Decision
-				key := types.NamespacedName{Name: tt.decision.Name, Namespace: tt.decision.Namespace}
-				err := client.Get(context.Background(), key, &createdDecision)
-				if err == nil {
-					t.Error("Expected decision not to be created but it was found")
+				var histories v1alpha1.HistoryList
+				if err := client.List(context.Background(), &histories); err != nil {
+					t.Fatalf("Failed to list histories: %v", err)
+				}
+				if len(histories.Items) != 0 {
+					t.Error("Expected no history CRD but found one")
 				}
 			}
 
-			// Validate result and duration expectations
+			// Validate result expectations
 			if tt.expectResult && tt.decision.Status.Result == nil {
 				t.Error("Expected result to be set but was nil")
 			}
@@ -851,7 +864,7 @@ func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					Type:               v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain:   v1alpha1.SchedulingDomainNova,
-					CreateDecisions:    false,
+					CreateHistory:      false,
 					IgnorePreselection: tt.ignorePreselection,
 					Filters:            []v1alpha1.FilterSpec{},
 					Weighers:           []v1alpha1.WeigherSpec{},

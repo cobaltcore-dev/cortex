@@ -160,6 +160,41 @@ func FromChangeCommitmentTargetState(
 	}, nil
 }
 
+// CommitmentStateWithUsage extends CommitmentState with usage tracking for billing calculations.
+// Used by the report-usage API to track remaining capacity during VM-to-commitment assignment.
+type CommitmentStateWithUsage struct {
+	CommitmentState
+	// RemainingMemoryBytes is the uncommitted capacity left for VM assignment
+	RemainingMemoryBytes int64
+	// AssignedVMs tracks which VMs have been assigned to this commitment
+	AssignedVMs []string
+}
+
+// NewCommitmentStateWithUsage creates a CommitmentStateWithUsage from a CommitmentState.
+func NewCommitmentStateWithUsage(state *CommitmentState) *CommitmentStateWithUsage {
+	return &CommitmentStateWithUsage{
+		CommitmentState:      *state,
+		RemainingMemoryBytes: state.TotalMemoryBytes,
+		AssignedVMs:          []string{},
+	}
+}
+
+// AssignVM attempts to assign a VM to this commitment if there's enough capacity.
+// Returns true if the VM was assigned, false if not enough capacity.
+func (c *CommitmentStateWithUsage) AssignVM(vmUUID string, vmMemoryBytes int64) bool {
+	if c.RemainingMemoryBytes >= vmMemoryBytes {
+		c.RemainingMemoryBytes -= vmMemoryBytes
+		c.AssignedVMs = append(c.AssignedVMs, vmUUID)
+		return true
+	}
+	return false
+}
+
+// HasRemainingCapacity returns true if the commitment has any remaining capacity.
+func (c *CommitmentStateWithUsage) HasRemainingCapacity() bool {
+	return c.RemainingMemoryBytes > 0
+}
+
 // FromReservations reconstructs CommitmentState from existing Reservation CRDs.
 func FromReservations(reservations []v1alpha1.Reservation) (*CommitmentState, error) {
 	if len(reservations) == 0 {
@@ -199,8 +234,8 @@ func FromReservations(reservations []v1alpha1.Reservation) (*CommitmentState, er
 		}
 		// check flavor group consistency, ignore if not matching to repair corrupted state in k8s
 		if res.Spec.CommittedResourceReservation.ResourceGroup != state.FlavorGroupName {
-			// log message
-			commitmentLog.Error(errors.New("inconsistent flavor group in reservation"),
+			// log message using baseLog since this is a static function without context
+			baseLog.Error(errors.New("inconsistent flavor group in reservation"),
 				"reservation belongs to same commitment but has different flavor group - ignoring reservation for capacity calculation",
 				"reservationName", res.Name,
 				"expectedFlavorGroup", state.FlavorGroupName,
