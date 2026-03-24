@@ -20,6 +20,14 @@ func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request)
 	startTime := time.Now()
 	statusCode := http.StatusOK
 
+	// Check if API is enabled
+	if !api.config.EnableReportCapacityAPI {
+		statusCode = http.StatusServiceUnavailable
+		http.Error(w, "report-capacity API is disabled", statusCode)
+		api.recordCapacityMetrics(statusCode, startTime)
+		return
+	}
+
 	ctx := WithNewGlobalRequestID(r.Context())
 	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/v1/commitments/report-capacity")
 

@@ -24,6 +24,14 @@ func (api *HTTPAPI) HandleReportUsage(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	statusCode := http.StatusOK
 
+	// Check if API is enabled
+	if !api.config.EnableReportUsageAPI {
+		statusCode = http.StatusServiceUnavailable
+		http.Error(w, "report-usage API is disabled", statusCode)
+		api.recordUsageMetrics(statusCode, startTime)
+		return
+	}
+
 	requestID := r.Header.Get("X-Request-ID")
 	if requestID == "" {
 		requestID = fmt.Sprintf("req-%d", time.Now().UnixNano())
