@@ -14,7 +14,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -28,6 +27,14 @@ type SyncerConfig struct {
 	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
 	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
 	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
+	// SyncInterval defines how often the syncer reconciles Limes commitments to Reservation CRDs.
+	SyncInterval time.Duration `json:"committedResourceSyncInterval"`
+}
+
+func DefaultSyncerConfig() SyncerConfig {
+	return SyncerConfig{
+		SyncInterval: time.Hour,
+	}
 }
 
 type Syncer struct {
@@ -124,35 +131,36 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 func (s *Syncer) SyncReservations(ctx context.Context) error {
 	// TODO handle concurrency with change API: consider creation time of reservations and status ready
 
-	// Create logger with run ID for this sync execution
+	// Create context with request ID for this sync execution
 	runID := fmt.Sprintf("sync-%d", time.Now().Unix())
-	log := ctrl.Log.WithName("CommitmentSyncer").WithValues("runID", runID)
+	ctx = WithNewGlobalRequestID(ctx)
+	logger := LoggerFromContext(ctx).WithValues("component", "syncer", "runID", runID)
 
-	log.Info("starting commitment sync")
+	logger.Info("starting commitment sync with sync interval", "interval", DefaultSyncerConfig().SyncInterval)
 
 	// Check if flavor group knowledge is ready
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: s.Client}
 	knowledgeCRD, err := knowledge.Get(ctx)
 	if err != nil {
-		log.Error(err, "failed to check flavor group knowledge readiness")
+		logger.Error(err, "failed to check flavor group knowledge readiness")
 		return err
 	}
 	if knowledgeCRD == nil {
-		log.Info("skipping commitment sync - flavor group knowledge not ready yet")
+		logger.Info("skipping commitment sync - flavor group knowledge not ready yet")
 		return nil
 	}
 
 	// Get flavor groups using the CRD we already fetched
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, knowledgeCRD)
 	if err != nil {
-		log.Error(err, "failed to get flavor groups from knowledge")
+		logger.Error(err, "failed to get flavor groups from knowledge")
 		return err
 	}
 
 	// Get all commitments as states
-	commitmentStates, err := s.getCommitmentStates(ctx, log, flavorGroups)
+	commitmentStates, err := s.getCommitmentStates(ctx, logger, flavorGroups)
 	if err != nil {
-		log.Error(err, "failed to get compute commitments")
+		logger.Error(err, "failed to get compute commitments")
 		return err
 	}
 
@@ -161,15 +169,15 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 
 	// Apply each commitment state using the manager
 	for _, state := range commitmentStates {
-		log.Info("applying commitment state",
+		logger.Info("applying commitment state",
 			"commitmentUUID", state.CommitmentUUID,
 			"projectID", state.ProjectID,
 			"flavorGroup", state.FlavorGroupName,
 			"totalMemoryBytes", state.TotalMemoryBytes)
 
-		_, _, err := manager.ApplyCommitmentState(ctx, log, state, flavorGroups, CreatorValue)
+		_, _, err := manager.ApplyCommitmentState(ctx, logger, state, flavorGroups, CreatorValue)
 		if err != nil {
-			log.Error(err, "failed to apply commitment state",
+			logger.Error(err, "failed to apply commitment state",
 				"commitmentUUID", state.CommitmentUUID)
 			// Continue with other commitments even if one fails
 			continue
@@ -182,7 +190,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	if err := s.List(ctx, &existingReservations, client.MatchingLabels{
 		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
 	}); err != nil {
-		log.Error(err, "failed to list existing committed resource reservations")
+		logger.Error(err, "failed to list existing committed resource reservations")
 		return err
 	}
 
@@ -197,22 +205,22 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		// Extract commitment UUID from reservation name
 		commitmentUUID := extractCommitmentUUID(existing.Name)
 		if commitmentUUID == "" {
-			log.Info("skipping reservation with unparseable name", "name", existing.Name)
+			logger.Info("skipping reservation with unparseable name", "name", existing.Name)
 			continue
 		}
 
 		if !activeCommitments[commitmentUUID] {
 			// This commitment no longer exists, delete the reservation
 			if err := s.Delete(ctx, &existing); err != nil {
-				log.Error(err, "failed to delete reservation", "name", existing.Name)
+				logger.Error(err, "failed to delete reservation", "name", existing.Name)
 				return err
 			}
-			log.Info("deleted reservation for expired commitment",
+			logger.Info("deleted reservation for expired commitment",
 				"name", existing.Name,
 				"commitmentUUID", commitmentUUID)
 		}
 	}
 
-	log.Info("synced reservations", "commitmentCount", len(commitmentStates))
+	logger.Info("synced reservations", "commitmentCount", len(commitmentStates))
 	return nil
 }

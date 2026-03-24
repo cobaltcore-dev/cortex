@@ -1,19 +1,15 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package controller
+package commitments
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
-	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -32,39 +28,11 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
-	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"github.com/go-logr/logr"
 )
 
-const (
-	// RequeueIntervalActive is the interval for requeueing active reservations for verification.
-	RequeueIntervalActive = 5 * time.Minute
-	// RequeueIntervalRetry is the interval for requeueing when retrying after knowledge is not ready.
-	RequeueIntervalRetry = 1 * time.Minute
-)
-
-// Endpoints for the reservations operator.
-type EndpointsConfig struct {
-	// The nova external scheduler endpoint.
-	NovaExternalScheduler string `json:"novaExternalScheduler"`
-}
-
-type Config struct {
-	// The endpoint where to find the nova external scheduler endpoint.
-	Endpoints EndpointsConfig `json:"endpoints"`
-
-	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
-	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
-
-	// Secret ref to keystone credentials stored in a k8s secret.
-	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
-
-	// Secret ref to the database credentials for querying VM state.
-	DatabaseSecretRef *corev1.SecretReference `json:"databaseSecretRef,omitempty"`
-}
-
-// ReservationReconciler reconciles a Reservation object
-type ReservationReconciler struct {
+// CommitmentReservationController reconciles commitment Reservation objects
+type CommitmentReservationController struct {
 	// Client for the kubernetes API.
 	client.Client
 	// Kubernetes scheme to use for the reservations.
@@ -73,14 +41,16 @@ type ReservationReconciler struct {
 	Conf Config
 	// Database connection for querying VM state from Knowledge cache.
 	DB *db.DB
+	// SchedulerClient for making scheduler API calls.
+	SchedulerClient *reservations.SchedulerClient
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// Note: Failover reservations are filtered out at the watch level by the predicate
-// in SetupWithManager, so this function only handles non-failover reservations.
-func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := logf.FromContext(ctx)
+// Note: This controller only handles commitment reservations, as filtered by the predicate.
+func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ctx = WithNewGlobalRequestID(ctx)
+	logger := LoggerFromContext(ctx).WithValues("component", "controller", "reservation", req.Name, "namespace", req.Namespace)
 	// Fetch the reservation object.
 	var res v1alpha1.Reservation
 	if err := r.Get(ctx, req.NamespacedName, &res); err != nil {
@@ -88,17 +58,44 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	// filter for CR reservations
+	resourceName := ""
+	if res.Spec.CommittedResourceReservation != nil {
+		resourceName = res.Spec.CommittedResourceReservation.ResourceName
+	}
+	if resourceName == "" {
+		logger.Info("reservation has no resource name, skipping")
+		old := res.DeepCopy()
+		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.ReservationConditionReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "MissingResourceName",
+			Message: "reservation has no resource name",
+		})
+		patch := client.MergeFrom(old)
+		if err := r.Status().Patch(ctx, &res, patch); err != nil {
+			// Ignore not-found errors during background deletion
+			if client.IgnoreNotFound(err) != nil {
+				logger.Error(err, "failed to patch reservation status")
+				return ctrl.Result{}, err
+			}
+			// Object was deleted, no need to continue
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, nil // Don't need to requeue.
+	}
+
 	if meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ReservationConditionReady) {
-		log.Info("reservation is active, verifying allocations", "reservation", req.Name)
+		logger.Info("reservation is active, verifying allocations")
 
 		// Verify all allocations in Spec against actual VM state from database
 		if err := r.reconcileAllocations(ctx, &res); err != nil {
-			log.Error(err, "failed to reconcile allocations")
+			logger.Error(err, "failed to reconcile allocations")
 			return ctrl.Result{}, err
 		}
 
 		// Requeue periodically to keep verifying allocations
-		return ctrl.Result{RequeueAfter: RequeueIntervalActive}, nil
+		return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalActive}, nil
 	}
 
 	// TODO trigger re-placement of unused reservations over time
@@ -108,8 +105,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		len(res.Spec.CommittedResourceReservation.Allocations) > 0 &&
 		res.Spec.TargetHost != "" {
 		// mark as ready without calling the placement API
-		log.Info("detected pre-allocated reservation",
-			"reservation", req.Name,
+		logger.Info("detected pre-allocated reservation",
 			"targetHost", res.Spec.TargetHost,
 			"allocatedVMs", len(res.Spec.CommittedResourceReservation.Allocations))
 
@@ -125,14 +121,14 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			// Ignore not-found errors during background deletion
 			if client.IgnoreNotFound(err) != nil {
-				log.Error(err, "failed to patch pre-allocated reservation status")
+				logger.Error(err, "failed to patch pre-allocated reservation status")
 				return ctrl.Result{}, err
 			}
 			// Object was deleted, no need to continue
 			return ctrl.Result{}, nil
 		}
 
-		log.Info("marked pre-allocated reservation as ready", "reservation", req.Name, "host", res.Status.Host)
+		logger.Info("marked pre-allocated reservation as ready", "host", res.Status.Host)
 		// Requeue immediately to run verification in next reconcile loop
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -150,59 +146,13 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			// Ignore not-found errors during background deletion
 			if client.IgnoreNotFound(err) != nil {
-				log.Error(err, "failed to sync spec to status")
+				logger.Error(err, "failed to sync spec to status")
 				return ctrl.Result{}, err
 			}
 			// Object was deleted, no need to continue
 			return ctrl.Result{}, nil
 		}
-		log.Info("synced spec to status", "reservation", req.Name, "host", res.Status.Host)
-	}
-
-	// filter for CR reservations
-	resourceName := ""
-	if res.Spec.CommittedResourceReservation != nil {
-		resourceName = res.Spec.CommittedResourceReservation.ResourceName
-	}
-	if resourceName == "" {
-		log.Info("reservation has no resource name, skipping", "reservation", req.Name)
-		old := res.DeepCopy()
-		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.ReservationConditionReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "MissingResourceName",
-			Message: "reservation has no resource name",
-		})
-		patch := client.MergeFrom(old)
-		if err := r.Status().Patch(ctx, &res, patch); err != nil {
-			// Ignore not-found errors during background deletion
-			if client.IgnoreNotFound(err) != nil {
-				log.Error(err, "failed to patch reservation status")
-				return ctrl.Result{}, err
-			}
-			// Object was deleted, no need to continue
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, nil // Don't need to requeue.
-	}
-
-	// Convert resource.Quantity to integers for the API
-	var memoryMB uint64
-	if memory, ok := res.Spec.Resources[hv1.ResourceMemory]; ok {
-		memoryValue := memory.ScaledValue(resource.Mega)
-		if memoryValue < 0 {
-			return ctrl.Result{}, fmt.Errorf("invalid memory value: %d", memoryValue)
-		}
-		memoryMB = uint64(memoryValue)
-	}
-
-	var cpu uint64
-	if cpuQuantity, ok := res.Spec.Resources[hv1.ResourceCPU]; ok {
-		cpuValue := cpuQuantity.ScaledValue(resource.Milli)
-		if cpuValue < 0 {
-			return ctrl.Result{}, fmt.Errorf("invalid cpu value: %d", cpuValue)
-		}
-		cpu = uint64(cpuValue)
+		logger.Info("synced spec to status", "host", res.Status.Host)
 	}
 
 	// Get project ID from CommittedResourceReservation spec if available.
@@ -221,18 +171,21 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: r.Client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
-		log.Info("flavor knowledge not ready, requeueing",
+		logger.Info("flavor knowledge not ready, requeueing",
 			"resourceName", resourceName,
 			"error", err)
-		return ctrl.Result{RequeueAfter: RequeueIntervalRetry}, nil
+		return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalRetry}, nil
 	}
 
 	// Search for the flavor across all flavor groups
+	// Also capture the flavor group name for pipeline selection
 	var flavorDetails *compute.FlavorInGroup
-	for _, fg := range flavorGroups {
+	var flavorGroupName string
+	for groupName, fg := range flavorGroups {
 		for _, flavor := range fg.Flavors {
 			if flavor.Name == resourceName {
 				flavorDetails = &flavor
+				flavorGroupName = groupName
 				break
 			}
 		}
@@ -243,67 +196,70 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Check if flavor was found
 	if flavorDetails == nil {
-		log.Error(errors.New("flavor not found"), "flavor not found in any flavor group",
+		logger.Error(errors.New("flavor not found"), "flavor not found in any flavor group",
 			"resourceName", resourceName)
 		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 	}
 
-	// Call the external scheduler delegation API to get a host for the reservation.
-	// Cortex will fetch candidate hosts and weights itself from its knowledge state.
-	externalSchedulerRequest := schedulerdelegationapi.ExternalSchedulerRequest{
-		Reservation: true,
-		Spec: schedulerdelegationapi.NovaObject[schedulerdelegationapi.NovaSpec]{
-			Data: schedulerdelegationapi.NovaSpec{
-				InstanceUUID:     res.Name,
-				NumInstances:     1, // One for each reservation.
-				ProjectID:        projectID,
-				AvailabilityZone: availabilityZone,
-				Flavor: schedulerdelegationapi.NovaObject[schedulerdelegationapi.NovaFlavor]{
-					Data: schedulerdelegationapi.NovaFlavor{
-						Name:       flavorDetails.Name,
-						MemoryMB:   memoryMB, // take the memory from the reservation spec, not from the flavor - reservation might be bigger
-						VCPUs:      cpu,      // take the cpu from the reservation spec, not from the flavor - reservation might be bigger
-						ExtraSpecs: flavorDetails.ExtraSpecs,
-						// Disk is currently not considered.
-
-					},
-				},
-			},
-		},
+	// Get hypervisors from the cluster
+	var hypervisorList hv1.HypervisorList
+	if err := r.List(ctx, &hypervisorList); err != nil {
+		logger.Error(err, "failed to list hypervisors")
+		return ctrl.Result{}, err
 	}
-	httpClient := http.Client{}
-	url := r.Conf.Endpoints.NovaExternalScheduler
-	reqBody, err := json.Marshal(externalSchedulerRequest)
+
+	// Build list of eligible hosts
+	eligibleHosts := make([]schedulerdelegationapi.ExternalSchedulerHost, 0, len(hypervisorList.Items))
+	for _, hv := range hypervisorList.Items {
+		eligibleHosts = append(eligibleHosts, schedulerdelegationapi.ExternalSchedulerHost{
+			ComputeHost: hv.Name,
+		})
+	}
+
+	if len(eligibleHosts) == 0 {
+		logger.Info("no hypervisors available for scheduling")
+		old := res.DeepCopy()
+		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.ReservationConditionReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "NoHostsAvailable",
+			Message: "no hypervisors available for scheduling",
+		})
+		patch := client.MergeFrom(old)
+		if err := r.Status().Patch(ctx, &res, patch); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+		return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalRetry}, nil
+	}
+
+	// Select appropriate pipeline based on flavor group
+	pipelineName := r.getPipelineForFlavorGroup(flavorGroupName, logger)
+	logger.Info("selected pipeline for CR reservation",
+		"flavorName", resourceName,
+		"flavorGroup", flavorGroupName,
+		"pipeline", pipelineName)
+
+	// Use the SchedulerClient to schedule the reservation
+	scheduleReq := reservations.ScheduleReservationRequest{
+		InstanceUUID:     res.Name,
+		ProjectID:        projectID,
+		FlavorName:       flavorDetails.Name,
+		FlavorExtraSpecs: flavorDetails.ExtraSpecs,
+		MemoryMB:         flavorDetails.MemoryMB,
+		VCPUs:            flavorDetails.VCPUs,
+		EligibleHosts:    eligibleHosts,
+		Pipeline:         pipelineName,
+		AvailabilityZone: availabilityZone,
+	}
+
+	scheduleResp, err := r.SchedulerClient.ScheduleReservation(ctx, scheduleReq)
 	if err != nil {
-		log.Error(err, "failed to marshal external scheduler request")
-		return ctrl.Result{}, err
-	}
-	response, err := httpClient.Post(url, "application/json", strings.NewReader(string(reqBody)))
-	if err != nil {
-		log.Error(err, "failed to send external scheduler request", "url", url)
-		return ctrl.Result{}, err
-	}
-	defer response.Body.Close()
-
-	// Check HTTP status code before attempting to decode JSON
-	if response.StatusCode != http.StatusOK {
-		err := fmt.Errorf("unexpected HTTP status code: %d", response.StatusCode)
-		log.Error(err, "external scheduler returned non-OK status",
-			"url", url,
-			"statusCode", response.StatusCode,
-			"status", response.Status)
+		logger.Error(err, "failed to schedule reservation")
 		return ctrl.Result{}, err
 	}
 
-	var externalSchedulerResponse schedulerdelegationapi.ExternalSchedulerResponse
-	if err := json.NewDecoder(response.Body).Decode(&externalSchedulerResponse); err != nil {
-		log.Error(err, "failed to decode external scheduler response",
-			"url", url,
-			"statusCode", response.StatusCode)
-		return ctrl.Result{}, err
-	}
-	if len(externalSchedulerResponse.Hosts) == 0 {
-		log.Info("no hosts found for reservation", "reservation", req.Name)
+	if len(scheduleResp.Hosts) == 0 {
+		logger.Info("no hosts found for reservation")
 		old := res.DeepCopy()
 		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.ReservationConditionReady,
@@ -315,7 +271,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			// Ignore not-found errors during background deletion
 			if client.IgnoreNotFound(err) != nil {
-				log.Error(err, "failed to patch reservation status")
+				logger.Error(err, "failed to patch reservation status")
 				return ctrl.Result{}, err
 			}
 			// Object was deleted, no need to continue
@@ -325,9 +281,24 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Update the reservation with the found host (idx 0)
-	host := externalSchedulerResponse.Hosts[0]
-	log.Info("found host for reservation", "reservation", req.Name, "host", host)
+	host := scheduleResp.Hosts[0]
+	logger.Info("found host for reservation", "host", host)
+
+	// First update Spec
 	old := res.DeepCopy()
+	res.Spec.TargetHost = host
+	if err := r.Patch(ctx, &res, client.MergeFrom(old)); err != nil {
+		// Ignore not-found errors during background deletion
+		if client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "failed to patch reservation spec")
+			return ctrl.Result{}, err
+		}
+		// Object was deleted, no need to continue
+		return ctrl.Result{}, nil
+	}
+
+	// Then update Status
+	old = res.DeepCopy()
 	meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
 		Type:    v1alpha1.ReservationConditionReady,
 		Status:  metav1.ConditionTrue,
@@ -339,7 +310,7 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err := r.Status().Patch(ctx, &res, patch); err != nil {
 		// Ignore not-found errors during background deletion
 		if client.IgnoreNotFound(err) != nil {
-			log.Error(err, "failed to patch reservation status")
+			logger.Error(err, "failed to patch reservation status")
 			return ctrl.Result{}, err
 		}
 		// Object was deleted, no need to continue
@@ -350,8 +321,8 @@ func (r *ReservationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 // reconcileAllocations verifies all allocations in Spec against actual Nova VM state.
 // It updates Status.Allocations based on the actual host location of each VM.
-func (r *ReservationReconciler) reconcileAllocations(ctx context.Context, res *v1alpha1.Reservation) error {
-	log := logf.FromContext(ctx)
+func (r *CommitmentReservationController) reconcileAllocations(ctx context.Context, res *v1alpha1.Reservation) error {
+	logger := LoggerFromContext(ctx).WithValues("component", "controller")
 
 	// Skip if no CommittedResourceReservation
 	if res.Spec.CommittedResourceReservation == nil {
@@ -362,7 +333,7 @@ func (r *ReservationReconciler) reconcileAllocations(ctx context.Context, res *v
 
 	// Skip if no allocations to verify
 	if len(res.Spec.CommittedResourceReservation.Allocations) == 0 {
-		log.Info("no allocations to verify", "reservation", res.Name)
+		logger.Info("no allocations to verify", "reservation", res.Name)
 		return nil
 	}
 
@@ -388,14 +359,14 @@ func (r *ReservationReconciler) reconcileAllocations(ctx context.Context, res *v
 			actualHost := server.OSEXTSRVATTRHost
 			newStatusAllocations[vmUUID] = actualHost
 
-			log.Info("verified VM allocation",
+			logger.Info("verified VM allocation",
 				"vm", vmUUID,
 				"reservation", res.Name,
 				"actualHost", actualHost,
 				"expectedHost", res.Status.Host)
 		} else {
 			// VM not found in database
-			log.Info("VM not found in database",
+			logger.Info("VM not found in database",
 				"vm", vmUUID,
 				"reservation", res.Name,
 				"projectID", projectID)
@@ -420,7 +391,7 @@ func (r *ReservationReconciler) reconcileAllocations(ctx context.Context, res *v
 		return fmt.Errorf("failed to patch reservation status: %w", err)
 	}
 
-	log.Info("reconciled allocations",
+	logger.Info("reconciled allocations",
 		"reservation", res.Name,
 		"specAllocations", len(res.Spec.CommittedResourceReservation.Allocations),
 		"statusAllocations", len(newStatusAllocations))
@@ -428,8 +399,24 @@ func (r *ReservationReconciler) reconcileAllocations(ctx context.Context, res *v
 	return nil
 }
 
+// getPipelineForFlavorGroup returns the pipeline name for a given flavor group.
+func (r *CommitmentReservationController) getPipelineForFlavorGroup(flavorGroupName string, logger logr.Logger) string {
+	// Try exact match first (e.g., "2152" -> "kvm-cr-hana")
+	if pipeline, ok := r.Conf.FlavorGroupPipelines[flavorGroupName]; ok {
+		return pipeline
+	}
+
+	// Try wildcard fallback
+	if pipeline, ok := r.Conf.FlavorGroupPipelines["*"]; ok {
+		return pipeline
+	}
+
+	logger.Info("no pipeline configured for flavor group, using default", "flavorGroup", flavorGroupName, "defaultPipeline", r.Conf.PipelineDefault)
+	return r.Conf.PipelineDefault
+}
+
 // Init initializes the reconciler with required clients and DB connection.
-func (r *ReservationReconciler) Init(ctx context.Context, client client.Client, conf Config) error {
+func (r *CommitmentReservationController) Init(ctx context.Context, client client.Client, conf Config) error {
 	// Initialize database connection if DatabaseSecretRef is provided.
 	if conf.DatabaseSecretRef != nil {
 		var err error
@@ -437,18 +424,22 @@ func (r *ReservationReconciler) Init(ctx context.Context, client client.Client, 
 		if err != nil {
 			return fmt.Errorf("failed to initialize database connection: %w", err)
 		}
-		logf.FromContext(ctx).Info("database connection initialized for reservation controller")
+		logf.FromContext(ctx).Info("database connection initialized for commitment reservation controller")
 	}
+
+	// Initialize scheduler client
+	r.SchedulerClient = reservations.NewSchedulerClient(conf.SchedulerURL)
+	logf.FromContext(ctx).Info("scheduler client initialized for commitment reservation controller", "url", conf.SchedulerURL)
 
 	return nil
 }
 
-func (r *ReservationReconciler) listServersByProjectID(ctx context.Context, projectID string) (map[string]*nova.Server, error) {
+func (r *CommitmentReservationController) listServersByProjectID(ctx context.Context, projectID string) (map[string]*nova.Server, error) {
 	if r.DB == nil {
 		return nil, errors.New("database connection not initialized")
 	}
 
-	log := logf.FromContext(ctx)
+	logger := LoggerFromContext(ctx).WithValues("component", "controller")
 
 	// Query servers from the database cache.
 	var servers []nova.Server
@@ -459,7 +450,7 @@ func (r *ReservationReconciler) listServersByProjectID(ctx context.Context, proj
 		return nil, fmt.Errorf("failed to query servers from database: %w", err)
 	}
 
-	log.V(1).Info("queried servers from database",
+	logger.V(1).Info("queried servers from database",
 		"projectID", projectID,
 		"serverCount", len(servers))
 
@@ -472,43 +463,42 @@ func (r *ReservationReconciler) listServersByProjectID(ctx context.Context, proj
 	return serverMap, nil
 }
 
-// notFailoverReservationPredicate filters out failover reservations at the watch level.
-// This prevents the controller from being notified about failover reservations,
-// which are managed by the separate failover controller.
-// Failover reservations are identified by the label v1alpha1.LabelReservationType.
-var notFailoverReservationPredicate = predicate.Funcs{
+// commitmentReservationPredicate filters to only watch commitment reservations.
+// This controller explicitly handles only commitment reservations (CR reservations),
+// while failover reservations are handled by the separate failover controller.
+var commitmentReservationPredicate = predicate.Funcs{
 	CreateFunc: func(e event.CreateEvent) bool {
 		res, ok := e.Object.(*v1alpha1.Reservation)
 		if !ok {
 			return false
 		}
-		return res.Labels[v1alpha1.LabelReservationType] != v1alpha1.ReservationTypeLabelFailover
+		return res.Spec.Type == v1alpha1.ReservationTypeCommittedResource
 	},
 	UpdateFunc: func(e event.UpdateEvent) bool {
 		res, ok := e.ObjectNew.(*v1alpha1.Reservation)
 		if !ok {
 			return false
 		}
-		return res.Labels[v1alpha1.LabelReservationType] != v1alpha1.ReservationTypeLabelFailover
+		return res.Spec.Type == v1alpha1.ReservationTypeCommittedResource
 	},
 	DeleteFunc: func(e event.DeleteEvent) bool {
 		res, ok := e.Object.(*v1alpha1.Reservation)
 		if !ok {
 			return false
 		}
-		return res.Labels[v1alpha1.LabelReservationType] != v1alpha1.ReservationTypeLabelFailover
+		return res.Spec.Type == v1alpha1.ReservationTypeCommittedResource
 	},
 	GenericFunc: func(e event.GenericEvent) bool {
 		res, ok := e.Object.(*v1alpha1.Reservation)
 		if !ok {
 			return false
 		}
-		return res.Labels[v1alpha1.LabelReservationType] != v1alpha1.ReservationTypeLabelFailover
+		return res.Spec.Type == v1alpha1.ReservationTypeCommittedResource
 	},
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *ReservationReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
+func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		if err := r.Init(ctx, mgr.GetClient(), r.Conf); err != nil {
 			return err
@@ -517,17 +507,10 @@ func (r *ReservationReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multiclu
 	})); err != nil {
 		return err
 	}
-	bldr := multicluster.BuildController(mcl, mgr)
-	// Watch reservation changes across all clusters.
-	bldr, err := bldr.WatchesMulticluster(
-		&v1alpha1.Reservation{},
-		&handler.EnqueueRequestForObject{},
-		notFailoverReservationPredicate,
-	)
-	if err != nil {
-		return err
-	}
-	return bldr.Named("reservation").
+	return multicluster.BuildController(mcl, mgr).
+		For(&v1alpha1.Reservation{}).
+		WithEventFilter(commitmentReservationPredicate).
+		Named("commitment-reservation").
 		WithOptions(controller.Options{
 			// We want to process reservations one at a time to avoid overbooking.
 			MaxConcurrentReconciles: 1,

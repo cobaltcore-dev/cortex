@@ -1302,6 +1302,590 @@ func TestDataStructureConsistency(t *testing.T) {
 	}
 }
 
+// TestNewBaseDependencyGraph tests the newBaseDependencyGraph function.
+func TestNewBaseDependencyGraph(t *testing.T) {
+	testCases := []struct {
+		name                 string
+		reservations         []v1alpha1.Reservation
+		expectedVMCount      int
+		expectedResCount     int
+		expectedVMToRes      map[string][]string // vmUUID -> list of reservation keys
+		expectedResToVMs     map[string][]string // resKey -> list of vmUUIDs
+		expectedVMHypervisor map[string]string   // vmUUID -> hypervisor
+	}{
+		{
+			name:                 "empty reservations",
+			reservations:         []v1alpha1.Reservation{},
+			expectedVMCount:      0,
+			expectedResCount:     0,
+			expectedVMToRes:      map[string][]string{},
+			expectedResToVMs:     map[string][]string{},
+			expectedVMHypervisor: map[string]string{},
+		},
+		{
+			name: "single reservation with no VMs",
+			reservations: []v1alpha1.Reservation{
+				makeReservation("res-1", "host1", map[string]string{}),
+			},
+			expectedVMCount:      0,
+			expectedResCount:     1,
+			expectedVMToRes:      map[string][]string{},
+			expectedResToVMs:     map[string][]string{"/res-1": {}},
+			expectedVMHypervisor: map[string]string{},
+		},
+		{
+			name: "single reservation with one VM",
+			reservations: []v1alpha1.Reservation{
+				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
+			},
+			expectedVMCount:      1,
+			expectedResCount:     1,
+			expectedVMToRes:      map[string][]string{"vm-1": {"/res-1"}},
+			expectedResToVMs:     map[string][]string{"/res-1": {"vm-1"}},
+			expectedVMHypervisor: map[string]string{"vm-1": "host1"},
+		},
+		{
+			name: "single reservation with multiple VMs",
+			reservations: []v1alpha1.Reservation{
+				makeReservation("res-1", "host3", map[string]string{"vm-1": "host1", "vm-2": "host2"}),
+			},
+			expectedVMCount:      2,
+			expectedResCount:     1,
+			expectedVMToRes:      map[string][]string{"vm-1": {"/res-1"}, "vm-2": {"/res-1"}},
+			expectedResToVMs:     map[string][]string{"/res-1": {"vm-1", "vm-2"}},
+			expectedVMHypervisor: map[string]string{"vm-1": "host1", "vm-2": "host2"},
+		},
+		{
+			name: "multiple reservations with shared VMs",
+			reservations: []v1alpha1.Reservation{
+				makeReservation("res-1", "host3", map[string]string{"vm-1": "host1"}),
+				makeReservation("res-2", "host4", map[string]string{"vm-1": "host1", "vm-2": "host2"}),
+			},
+			expectedVMCount:      2,
+			expectedResCount:     2,
+			expectedVMToRes:      map[string][]string{"vm-1": {"/res-1", "/res-2"}, "vm-2": {"/res-2"}},
+			expectedResToVMs:     map[string][]string{"/res-1": {"vm-1"}, "/res-2": {"vm-1", "vm-2"}},
+			expectedVMHypervisor: map[string]string{"vm-1": "host1", "vm-2": "host2"},
+		},
+		{
+			name: "VM in multiple reservations tracks all hosts",
+			reservations: []v1alpha1.Reservation{
+				makeReservation("res-1", "host3", map[string]string{"vm-1": "host1"}),
+				makeReservation("res-2", "host4", map[string]string{"vm-1": "host1"}),
+				makeReservation("res-3", "host5", map[string]string{"vm-1": "host1"}),
+			},
+			expectedVMCount:      1,
+			expectedResCount:     3,
+			expectedVMToRes:      map[string][]string{"vm-1": {"/res-1", "/res-2", "/res-3"}},
+			expectedResToVMs:     map[string][]string{"/res-1": {"vm-1"}, "/res-2": {"vm-1"}, "/res-3": {"vm-1"}},
+			expectedVMHypervisor: map[string]string{"vm-1": "host1"},
+		},
+		{
+			name: "complex: 3 reservations with 1-3 VMs each, 4 different VMs",
+			reservations: []v1alpha1.Reservation{
+				makeReservation("res-1", "host5", map[string]string{"vm-1": "host1"}),
+				makeReservation("res-2", "host6", map[string]string{"vm-1": "host1", "vm-2": "host2"}),
+				makeReservation("res-3", "host7", map[string]string{"vm-2": "host2", "vm-3": "host3", "vm-4": "host4"}),
+			},
+			expectedVMCount:  4,
+			expectedResCount: 3,
+			expectedVMToRes: map[string][]string{
+				"vm-1": {"/res-1", "/res-2"},
+				"vm-2": {"/res-2", "/res-3"},
+				"vm-3": {"/res-3"},
+				"vm-4": {"/res-3"},
+			},
+			expectedResToVMs: map[string][]string{
+				"/res-1": {"vm-1"},
+				"/res-2": {"vm-1", "vm-2"},
+				"/res-3": {"vm-2", "vm-3", "vm-4"},
+			},
+			expectedVMHypervisor: map[string]string{
+				"vm-1": "host1",
+				"vm-2": "host2",
+				"vm-3": "host3",
+				"vm-4": "host4",
+			},
+		},
+		{
+			// This tests the case where a VM has different host allocations across reservations.
+			// This can happen when a VM migrates - the old allocation in one reservation might
+			// have a stale host while another reservation has the current host.
+			// The graph uses the LAST seen hypervisor for each VM (order depends on map iteration).
+			name: "VM with different host allocations across reservations (stale data)",
+			reservations: []v1alpha1.Reservation{
+				makeReservation("res-1", "host5", map[string]string{"vm-1": "host1-old"}),
+				makeReservation("res-2", "host6", map[string]string{"vm-1": "host1-new", "vm-2": "host2"}),
+			},
+			expectedVMCount:  2,
+			expectedResCount: 2,
+			expectedVMToRes: map[string][]string{
+				"vm-1": {"/res-1", "/res-2"},
+				"vm-2": {"/res-2"},
+			},
+			expectedResToVMs: map[string][]string{
+				"/res-1": {"vm-1"},
+				"/res-2": {"vm-1", "vm-2"},
+			},
+			// Note: The hypervisor stored depends on iteration order, but both reservations
+			// track the VM.
+			expectedVMHypervisor: map[string]string{
+				// We can't predict which one wins due to map iteration order,
+				// so we skip this check for vm-1 in this test case
+				"vm-2": "host2",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			graph := newBaseDependencyGraph(tc.reservations)
+
+			// Check VM count
+			if len(graph.vmToReservations) != tc.expectedVMCount {
+				t.Errorf("vmToReservations has %d VMs, expected %d", len(graph.vmToReservations), tc.expectedVMCount)
+			}
+
+			// Check reservation count
+			if len(graph.reservationToVMs) != tc.expectedResCount {
+				t.Errorf("reservationToVMs has %d reservations, expected %d", len(graph.reservationToVMs), tc.expectedResCount)
+			}
+
+			// Check VM to reservations mapping
+			for vmUUID, expectedResKeys := range tc.expectedVMToRes {
+				actualResKeys := graph.vmToReservations[vmUUID]
+				if len(actualResKeys) != len(expectedResKeys) {
+					t.Errorf("VM %s has %d reservations, expected %d", vmUUID, len(actualResKeys), len(expectedResKeys))
+				}
+				for _, resKey := range expectedResKeys {
+					if !actualResKeys[resKey] {
+						t.Errorf("VM %s missing reservation %s", vmUUID, resKey)
+					}
+				}
+			}
+
+			// Check reservation to VMs mapping
+			for resKey, expectedVMs := range tc.expectedResToVMs {
+				actualVMs := graph.reservationToVMs[resKey]
+				if len(actualVMs) != len(expectedVMs) {
+					t.Errorf("Reservation %s has %d VMs, expected %d", resKey, len(actualVMs), len(expectedVMs))
+				}
+				for _, vmUUID := range expectedVMs {
+					if !actualVMs[vmUUID] {
+						t.Errorf("Reservation %s missing VM %s", resKey, vmUUID)
+					}
+				}
+			}
+
+			// Check VM hypervisors
+			for vmUUID, expectedHypervisor := range tc.expectedVMHypervisor {
+				actualHypervisor := graph.vmToCurrentHypervisor[vmUUID]
+				if actualHypervisor != expectedHypervisor {
+					t.Errorf("VM %s has hypervisor %s, expected %s", vmUUID, actualHypervisor, expectedHypervisor)
+				}
+			}
+		})
+	}
+}
+
+// makeGraph creates a DependencyGraph from reservations for testing.
+func makeGraph(reservations []v1alpha1.Reservation) *DependencyGraph {
+	return newBaseDependencyGraph(reservations)
+}
+
+// graphsEqual compares two DependencyGraphs for equality.
+// VMs with empty reservation sets are considered equivalent to not being in the graph.
+func graphsEqual(t *testing.T, actual, expected *DependencyGraph) {
+	t.Helper()
+
+	// Count VMs with non-empty reservations
+	countActiveVMs := func(g *DependencyGraph) int {
+		count := 0
+		for _, res := range g.vmToReservations {
+			if len(res) > 0 {
+				count++
+			}
+		}
+		return count
+	}
+
+	actualActiveVMs := countActiveVMs(actual)
+	expectedActiveVMs := countActiveVMs(expected)
+	if actualActiveVMs != expectedActiveVMs {
+		t.Errorf("vmToReservations: got %d active VMs, want %d", actualActiveVMs, expectedActiveVMs)
+	}
+
+	// Compare vmToReservations (only for VMs with reservations)
+	for vmUUID, expectedRes := range expected.vmToReservations {
+		if len(expectedRes) == 0 {
+			continue // Skip VMs with no reservations
+		}
+		actualRes := actual.vmToReservations[vmUUID]
+		if len(actualRes) != len(expectedRes) {
+			t.Errorf("vmToReservations[%s]: got %d reservations, want %d", vmUUID, len(actualRes), len(expectedRes))
+		}
+		for resKey := range expectedRes {
+			if !actualRes[resKey] {
+				t.Errorf("vmToReservations[%s]: missing reservation %s", vmUUID, resKey)
+			}
+		}
+	}
+
+	// Compare vmToCurrentHypervisor (only for VMs with reservations)
+	for vmUUID, expectedHV := range expected.vmToCurrentHypervisor {
+		if len(expected.vmToReservations[vmUUID]) == 0 {
+			continue // Skip VMs with no reservations
+		}
+		if actualHV := actual.vmToCurrentHypervisor[vmUUID]; actualHV != expectedHV {
+			t.Errorf("vmToCurrentHypervisor[%s]: got %s, want %s", vmUUID, actualHV, expectedHV)
+		}
+	}
+
+	// Compare vmToReservationHosts (only for VMs with reservations)
+	for vmUUID, expectedHosts := range expected.vmToReservationHosts {
+		if len(expected.vmToReservations[vmUUID]) == 0 {
+			continue // Skip VMs with no reservations
+		}
+		actualHosts := actual.vmToReservationHosts[vmUUID]
+		if len(actualHosts) != len(expectedHosts) {
+			t.Errorf("vmToReservationHosts[%s]: got %d hosts, want %d", vmUUID, len(actualHosts), len(expectedHosts))
+		}
+		for host := range expectedHosts {
+			if !actualHosts[host] {
+				t.Errorf("vmToReservationHosts[%s]: missing host %s", vmUUID, host)
+			}
+		}
+	}
+
+	// Compare reservationToVMs
+	if len(actual.reservationToVMs) != len(expected.reservationToVMs) {
+		t.Errorf("reservationToVMs: got %d reservations, want %d", len(actual.reservationToVMs), len(expected.reservationToVMs))
+	}
+	for resKey, expectedVMs := range expected.reservationToVMs {
+		actualVMs := actual.reservationToVMs[resKey]
+		if len(actualVMs) != len(expectedVMs) {
+			t.Errorf("reservationToVMs[%s]: got %d VMs, want %d", resKey, len(actualVMs), len(expectedVMs))
+		}
+		for vmUUID := range expectedVMs {
+			if !actualVMs[vmUUID] {
+				t.Errorf("reservationToVMs[%s]: missing VM %s", resKey, vmUUID)
+			}
+		}
+	}
+}
+
+// TestNewDependencyGraph tests the newDependencyGraph function.
+func TestNewDependencyGraph(t *testing.T) {
+	testCases := []struct {
+		name            string
+		vm              VM
+		candidateRes    v1alpha1.Reservation
+		allReservations []v1alpha1.Reservation
+		expectGraph     *DependencyGraph
+	}{
+		{
+			name:         "VM added to empty reservation with no other reservations",
+			vm:           makeVM("vm-1", "host1"),
+			candidateRes: makeReservation("res-1", "host2", map[string]string{}),
+			allReservations: []v1alpha1.Reservation{
+				makeReservation("res-1", "host2", map[string]string{}),
+			},
+			expectGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
+			}),
+		},
+		{
+			name:         "VM added to reservation with existing VM",
+			vm:           makeVM("vm-2", "host2"),
+			candidateRes: makeReservation("res-1", "host3", map[string]string{"vm-1": "host1"}),
+			allReservations: []v1alpha1.Reservation{
+				makeReservation("res-1", "host3", map[string]string{"vm-1": "host1"}),
+			},
+			expectGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host3", map[string]string{"vm-1": "host1", "vm-2": "host2"}),
+			}),
+		},
+		{
+			name:         "VM added to one of multiple reservations",
+			vm:           makeVM("vm-3", "host3"),
+			candidateRes: makeReservation("res-2", "host5", map[string]string{}),
+			allReservations: []v1alpha1.Reservation{
+				makeReservation("res-1", "host4", map[string]string{"vm-1": "host1"}),
+				makeReservation("res-2", "host5", map[string]string{}),
+			},
+			expectGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host4", map[string]string{"vm-1": "host1"}),
+				makeReservation("res-2", "host5", map[string]string{"vm-3": "host3"}),
+			}),
+		},
+		{
+			name:         "VM already in other reservations, added to new one",
+			vm:           makeVM("vm-1", "host1"),
+			candidateRes: makeReservation("res-2", "host5", map[string]string{}),
+			allReservations: []v1alpha1.Reservation{
+				makeReservation("res-1", "host4", map[string]string{"vm-1": "host1"}),
+				makeReservation("res-2", "host5", map[string]string{}),
+			},
+			expectGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host4", map[string]string{"vm-1": "host1"}),
+				makeReservation("res-2", "host5", map[string]string{"vm-1": "host1"}),
+			}),
+		},
+		{
+			name:         "complex: 3 reservations with 4 VMs, add vm-5 to res-2",
+			vm:           makeVM("vm-5", "host8"),
+			candidateRes: makeReservation("res-2", "host6", map[string]string{"vm-1": "host1", "vm-2": "host2"}),
+			allReservations: []v1alpha1.Reservation{
+				makeReservation("res-1", "host5", map[string]string{"vm-1": "host1"}),
+				makeReservation("res-2", "host6", map[string]string{"vm-1": "host1", "vm-2": "host2"}),
+				makeReservation("res-3", "host7", map[string]string{"vm-2": "host2", "vm-3": "host3", "vm-4": "host4"}),
+			},
+			expectGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host5", map[string]string{"vm-1": "host1"}),
+				makeReservation("res-2", "host6", map[string]string{"vm-1": "host1", "vm-2": "host2", "vm-5": "host8"}),
+				makeReservation("res-3", "host7", map[string]string{"vm-2": "host2", "vm-3": "host3", "vm-4": "host4"}),
+			}),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			graph := newDependencyGraph(tc.vm, tc.candidateRes, tc.allReservations)
+			graphsEqual(t, graph, tc.expectGraph)
+		})
+	}
+}
+
+// TestAddVMToReservation tests the addVMToReservation method.
+func TestAddVMToReservation(t *testing.T) {
+	testCases := []struct {
+		name         string
+		initGraph    *DependencyGraph
+		vmUUID       string
+		vmHypervisor string
+		resKey       string
+		resHost      string
+		expectGraph  *DependencyGraph
+	}{
+		{
+			name:         "add VM to empty graph",
+			initGraph:    makeGraph(nil),
+			vmUUID:       "vm-1",
+			vmHypervisor: "host1",
+			resKey:       "/res-1",
+			resHost:      "host2",
+			expectGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
+			}),
+		},
+		{
+			name: "add VM to existing reservation with one VM",
+			initGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
+			}),
+			vmUUID:       "vm-2",
+			vmHypervisor: "host3",
+			resKey:       "/res-1",
+			resHost:      "host2",
+			expectGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1", "vm-2": "host3"}),
+			}),
+		},
+		{
+			name: "add existing VM to second reservation",
+			initGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
+			}),
+			vmUUID:       "vm-1",
+			vmHypervisor: "host1",
+			resKey:       "/res-2",
+			resHost:      "host3",
+			expectGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
+				makeReservation("res-2", "host3", map[string]string{"vm-1": "host1"}),
+			}),
+		},
+		{
+			name: "add VM to complex graph with 3 reservations and 4 VMs",
+			initGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host5", map[string]string{"vm-1": "host1"}),
+				makeReservation("res-2", "host6", map[string]string{"vm-1": "host1", "vm-2": "host2"}),
+				makeReservation("res-3", "host7", map[string]string{"vm-2": "host2", "vm-3": "host3"}),
+			}),
+			vmUUID:       "vm-4",
+			vmHypervisor: "host4",
+			resKey:       "/res-3",
+			resHost:      "host7",
+			expectGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host5", map[string]string{"vm-1": "host1"}),
+				makeReservation("res-2", "host6", map[string]string{"vm-1": "host1", "vm-2": "host2"}),
+				makeReservation("res-3", "host7", map[string]string{"vm-2": "host2", "vm-3": "host3", "vm-4": "host4"}),
+			}),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.initGraph.addVMToReservation(tc.vmUUID, tc.vmHypervisor, tc.resKey, tc.resHost)
+			graphsEqual(t, tc.initGraph, tc.expectGraph)
+		})
+	}
+}
+
+// TestRemoveVMFromReservation tests the removeVMFromReservation method.
+func TestRemoveVMFromReservation(t *testing.T) {
+	testCases := []struct {
+		name        string
+		initGraph   *DependencyGraph
+		vmUUID      string
+		resKey      string
+		resHost     string
+		expectGraph *DependencyGraph
+	}{
+		{
+			name: "remove VM from single reservation",
+			initGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
+			}),
+			vmUUID:  "vm-1",
+			resKey:  "/res-1",
+			resHost: "host2",
+			expectGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host2", map[string]string{}),
+			}),
+		},
+		{
+			name: "remove VM from one of two reservations",
+			initGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
+				makeReservation("res-2", "host3", map[string]string{"vm-1": "host1"}),
+			}),
+			vmUUID:  "vm-1",
+			resKey:  "/res-1",
+			resHost: "host2",
+			expectGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host2", map[string]string{}),
+				makeReservation("res-2", "host3", map[string]string{"vm-1": "host1"}),
+			}),
+		},
+		{
+			name: "remove one VM from reservation with multiple VMs",
+			initGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host3", map[string]string{"vm-1": "host1", "vm-2": "host2"}),
+			}),
+			vmUUID:  "vm-1",
+			resKey:  "/res-1",
+			resHost: "host3",
+			expectGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host3", map[string]string{"vm-2": "host2"}),
+			}),
+		},
+		{
+			name: "remove VM from complex graph with 3 reservations and 4 VMs",
+			initGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host5", map[string]string{"vm-1": "host1"}),
+				makeReservation("res-2", "host6", map[string]string{"vm-1": "host1", "vm-2": "host2"}),
+				makeReservation("res-3", "host7", map[string]string{"vm-2": "host2", "vm-3": "host3", "vm-4": "host4"}),
+			}),
+			vmUUID:  "vm-2",
+			resKey:  "/res-3",
+			resHost: "host7",
+			expectGraph: makeGraph([]v1alpha1.Reservation{
+				makeReservation("res-1", "host5", map[string]string{"vm-1": "host1"}),
+				makeReservation("res-2", "host6", map[string]string{"vm-1": "host1", "vm-2": "host2"}),
+				makeReservation("res-3", "host7", map[string]string{"vm-3": "host3", "vm-4": "host4"}),
+			}),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.initGraph.removeVMFromReservation(tc.vmUUID, tc.resKey, tc.resHost)
+			graphsEqual(t, tc.initGraph, tc.expectGraph)
+		})
+	}
+}
+
+// TestAddRemoveVMRoundTrip tests that adding and removing a VM leaves the graph unchanged.
+func TestAddRemoveVMRoundTrip(t *testing.T) {
+	testCases := []struct {
+		name         string
+		initialRes   []v1alpha1.Reservation
+		vmUUID       string
+		vmHypervisor string
+		resKey       string
+		resHost      string
+	}{
+		{
+			name: "add and remove VM from existing reservation",
+			initialRes: []v1alpha1.Reservation{
+				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
+			},
+			vmUUID:       "vm-2",
+			vmHypervisor: "host3",
+			resKey:       "/res-1",
+			resHost:      "host2",
+		},
+		{
+			name:         "add and remove VM from empty graph",
+			initialRes:   []v1alpha1.Reservation{},
+			vmUUID:       "vm-1",
+			vmHypervisor: "host1",
+			resKey:       "/res-1",
+			resHost:      "host2",
+		},
+		{
+			name: "add and remove VM from complex graph with 3 reservations and 4 VMs",
+			initialRes: []v1alpha1.Reservation{
+				makeReservation("res-1", "host5", map[string]string{"vm-1": "host1"}),
+				makeReservation("res-2", "host6", map[string]string{"vm-1": "host1", "vm-2": "host2"}),
+				makeReservation("res-3", "host7", map[string]string{"vm-2": "host2", "vm-3": "host3", "vm-4": "host4"}),
+			},
+			vmUUID:       "vm-5",
+			vmHypervisor: "host8",
+			resKey:       "/res-2",
+			resHost:      "host6",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			graph := newBaseDependencyGraph(tc.initialRes)
+
+			// Capture initial state
+			initialVMCount := len(graph.vmToReservations)
+			initialResVMCount := len(graph.reservationToVMs[tc.resKey])
+
+			// Add VM
+			graph.addVMToReservation(tc.vmUUID, tc.vmHypervisor, tc.resKey, tc.resHost)
+
+			// Verify VM was added
+			if !graph.vmToReservations[tc.vmUUID][tc.resKey] {
+				t.Errorf("VM %s not added to reservation %s", tc.vmUUID, tc.resKey)
+			}
+
+			// Remove VM
+			graph.removeVMFromReservation(tc.vmUUID, tc.resKey, tc.resHost)
+
+			// Verify VM was removed from reservation
+			if graph.vmToReservations[tc.vmUUID][tc.resKey] {
+				t.Errorf("VM %s still in reservation %s after removal", tc.vmUUID, tc.resKey)
+			}
+
+			// Verify reservation VM count is back to initial (for existing reservations)
+			if len(tc.initialRes) > 0 {
+				if len(graph.reservationToVMs[tc.resKey]) != initialResVMCount {
+					t.Errorf("Reservation %s has %d VMs, expected %d", tc.resKey, len(graph.reservationToVMs[tc.resKey]), initialResVMCount)
+				}
+			}
+
+			// Note: VM entry may still exist in vmToReservations with empty map
+			// This is expected behavior - we don't clean up empty VM entries
+			_ = initialVMCount
+		})
+	}
+}
+
 // TestFindEligibleReservations tests the FindEligibleReservations function.
 func TestFindEligibleReservations(t *testing.T) {
 	testCases := []struct {
