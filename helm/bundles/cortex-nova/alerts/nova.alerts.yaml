@@ -311,7 +311,7 @@ groups:
   - alert: CortexNovaCommittedResourceRejectionRateTooHigh
     expr: |
       rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected"}[1h])
-      / rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[1h]) > 0.5
+      / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[1h])) > 0.5
     for: 15m
     labels:
       context: committed-resource-api
