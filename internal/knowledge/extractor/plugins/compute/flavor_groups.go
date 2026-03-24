@@ -141,11 +141,7 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 		smallest := flavors[len(flavors)-1]
 
 		// Compute RAM/core ratio (MiB per vCPU)
-		// Use cross-multiplication to detect if ratios truly differ, avoiding integer truncation.
-		// Two ratios mem1/vcpus1 == mem2/vcpus2 iff mem1*vcpus2 == mem2*vcpus1
-		var refMemory, refVCPUs uint64
 		var minRatio, maxRatio uint64 = ^uint64(0), 0
-		allSameRatio := true
 		for _, f := range flavors {
 			if f.VCPUs == 0 {
 				continue // Skip flavors with 0 vCPUs to avoid division by zero
@@ -157,19 +153,12 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 			if ratio > maxRatio {
 				maxRatio = ratio
 			}
-			// Check if ratio matches reference using cross-multiplication
-			if refVCPUs == 0 {
-				refMemory, refVCPUs = f.MemoryMB, f.VCPUs
-			} else if refMemory*f.VCPUs != f.MemoryMB*refVCPUs {
-				allSameRatio = false
-			}
 		}
 
 		var ramCoreRatio, ramCoreRatioMin, ramCoreRatioMax *uint64
-		if allSameRatio && refVCPUs != 0 {
+		if minRatio == maxRatio && maxRatio != 0 {
 			// All flavors have the same ratio
-			computedRatio := refMemory / refVCPUs
-			ramCoreRatio = &computedRatio
+			ramCoreRatio = &minRatio
 		} else if maxRatio != 0 {
 			// Flavors have different ratios
 			ramCoreRatioMin = &minRatio
