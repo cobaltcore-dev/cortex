@@ -85,6 +85,8 @@ cortex: &cortex
         gvks:
           - cortex.cloud/v1alpha1/Decision
           - cortex.cloud/v1alpha1/DecisionList
+          - cortex.cloud/v1alpha1/History
+          - cortex.cloud/v1alpha1/HistoryList
           - cortex.cloud/v1alpha1/Descheduling
           - cortex.cloud/v1alpha1/DeschedulingList
           - cortex.cloud/v1alpha1/Pipeline
