@@ -270,4 +270,122 @@ func TestFlavorGroupExtractor_Extract(t *testing.T) {
 	if !foundCH {
 		t.Error("Cloud-Hypervisor flavor should have been included but was not found")
 	}
+
+	// Verify RAM/core ratio for v2 group
+	// v2 group has flavors with different ratios:
+	// - hana flavors: 491520/30=16384, 983040/60=16384, 3932160/240=16384 MiB/vCPU
+	// - gp_c8_m32_v2: 32768/8=4096, gp_c16_m64_v2: 65536/16=4096 MiB/vCPU
+	// - gp_c12_m32_v2: 32768/12=2730, gp_c12_m32_alt: 32768/12=2730 MiB/vCPU
+	// So min=2730, max=16384 (variable ratio)
+	if v2Group.RamCoreRatio != nil {
+		t.Errorf("expected v2 group to have variable ratio (nil RamCoreRatio), got %d", *v2Group.RamCoreRatio)
+	}
+	if v2Group.RamCoreRatioMin == nil || *v2Group.RamCoreRatioMin != 2730 {
+		var got any = nil
+		if v2Group.RamCoreRatioMin != nil {
+			got = *v2Group.RamCoreRatioMin
+		}
+		t.Errorf("expected v2 group RamCoreRatioMin=2730, got %v", got)
+	}
+	if v2Group.RamCoreRatioMax == nil || *v2Group.RamCoreRatioMax != 16384 {
+		var got any = nil
+		if v2Group.RamCoreRatioMax != nil {
+			got = *v2Group.RamCoreRatioMax
+		}
+		t.Errorf("expected v2 group RamCoreRatioMax=16384, got %v", got)
+	}
+
+	// Verify RAM/core ratio for ch group (single flavor = fixed ratio)
+	// gp_c4_m16_ch: 16384/4=4096 MiB/vCPU
+	if chGroup.RamCoreRatio == nil || *chGroup.RamCoreRatio != 4096 {
+		var got any = nil
+		if chGroup.RamCoreRatio != nil {
+			got = *chGroup.RamCoreRatio
+		}
+		t.Errorf("expected ch group RamCoreRatio=4096, got %v", got)
+	}
+	if chGroup.RamCoreRatioMin != nil {
+		t.Errorf("expected ch group RamCoreRatioMin=nil (fixed ratio), got %d", *chGroup.RamCoreRatioMin)
+	}
+	if chGroup.RamCoreRatioMax != nil {
+		t.Errorf("expected ch group RamCoreRatioMax=nil (fixed ratio), got %d", *chGroup.RamCoreRatioMax)
+	}
+}
+
+func TestFlavorGroupExtractor_RamCoreRatio_FixedRatio(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	defer dbEnv.Close()
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+
+	if err := testDB.CreateTable(
+		testDB.AddTable(nova.Flavor{}),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert flavors with same RAM/core ratio (4096 MiB/vCPU)
+	flavors := []any{
+		&nova.Flavor{
+			ID:         "1",
+			Name:       "fixed_c2_m8",
+			VCPUs:      2,
+			RAM:        8192, // 8GB
+			Disk:       50,
+			ExtraSpecs: `{"capabilities:hypervisor_type":"qemu","quota:hw_version":"fixed"}`,
+		},
+		&nova.Flavor{
+			ID:         "2",
+			Name:       "fixed_c4_m16",
+			VCPUs:      4,
+			RAM:        16384, // 16GB
+			Disk:       50,
+			ExtraSpecs: `{"capabilities:hypervisor_type":"qemu","quota:hw_version":"fixed"}`,
+		},
+		&nova.Flavor{
+			ID:         "3",
+			Name:       "fixed_c8_m32",
+			VCPUs:      8,
+			RAM:        32768, // 32GB
+			Disk:       50,
+			ExtraSpecs: `{"capabilities:hypervisor_type":"qemu","quota:hw_version":"fixed"}`,
+		},
+	}
+
+	if err := testDB.Insert(flavors...); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := &FlavorGroupExtractor{}
+	if err := extractor.Init(&testDB, nil, v1alpha1.KnowledgeSpec{}); err != nil {
+		t.Fatal(err)
+	}
+
+	features, err := extractor.Extract()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(features) != 1 {
+		t.Fatalf("expected 1 flavor group, got %d", len(features))
+	}
+
+	fg := features[0].(FlavorGroupFeature)
+	if fg.Name != "fixed" {
+		t.Errorf("expected group name 'fixed', got %s", fg.Name)
+	}
+
+	// All flavors have ratio 4096 MiB/vCPU
+	if fg.RamCoreRatio == nil || *fg.RamCoreRatio != 4096 {
+		var got any = nil
+		if fg.RamCoreRatio != nil {
+			got = *fg.RamCoreRatio
+		}
+		t.Errorf("expected RamCoreRatio=4096, got %v", got)
+	}
+	if fg.RamCoreRatioMin != nil {
+		t.Errorf("expected RamCoreRatioMin=nil for fixed ratio, got %d", *fg.RamCoreRatioMin)
+	}
+	if fg.RamCoreRatioMax != nil {
+		t.Errorf("expected RamCoreRatioMax=nil for fixed ratio, got %d", *fg.RamCoreRatioMax)
+	}
 }
