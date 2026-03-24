@@ -221,12 +221,9 @@ func (m *ReservationManager) syncReservationMetadata(
 		(state.StartTime != nil && (reservation.Spec.StartTime == nil || !reservation.Spec.StartTime.Time.Equal(*state.StartTime))) ||
 		(state.EndTime != nil && (reservation.Spec.EndTime == nil || !reservation.Spec.EndTime.Time.Equal(*state.EndTime))) {
 		// Apply patch
-		logger.Info("syncing reservation metadata",
-			"reservation", reservation,
-			"desired commitmentUUID", state.CommitmentUUID,
-			"desired availabilityZone", state.AvailabilityZone,
-			"desired startTime", state.StartTime,
-			"desired endTime", state.EndTime)
+		logger.V(1).Info("syncing reservation metadata",
+			"reservation", reservation.Name,
+			"commitmentUUID", state.CommitmentUUID)
 
 		patch := client.MergeFrom(reservation.DeepCopy())
 
@@ -321,6 +318,9 @@ func (m *ReservationManager) newReservation(
 			Name: name,
 			Labels: map[string]string{
 				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+			},
+			Annotations: map[string]string{
+				v1alpha1.AnnotationCreatorRequestID: state.CreatorRequestID,
 			},
 		},
 		Spec: spec,

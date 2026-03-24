@@ -132,7 +132,7 @@ func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.Respons
 	manager := NewReservationManager(api.client)
 	requireRollback := false
 	failedCommitments := make(map[string]string) // commitmentUUID to reason for failure, for better response messages in case of rollback
-	logger.Info("processing commitment change request", "availabilityZone", req.AZ, "dryRun", req.DryRun, "affectedProjects", len(req.ByProject))
+	creatorRequestID := reservations.GlobalRequestIDFromContext(ctx)
 
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
@@ -194,8 +194,7 @@ ProcessLoop:
 			}
 
 			for _, commitment := range resourceChanges.Commitments {
-				// Additional per-commitment validation if needed
-				logger.Info("processing commitment change", "commitmentUUID", commitment.UUID, "projectID", projectID, "resourceName", resourceName, "oldStatus", commitment.OldStatus.UnwrapOr("none"), "newStatus", commitment.NewStatus.UnwrapOr("none"))
+				logger.V(1).Info("processing commitment", "commitmentUUID", commitment.UUID, "oldStatus", commitment.OldStatus.UnwrapOr("none"), "newStatus", commitment.NewStatus.UnwrapOr("none"))
 
 				// TODO add configurable upper limit validation for commitment size (number of instances) to prevent excessive reservation creation
 				// TODO add domain
@@ -247,8 +246,10 @@ ProcessLoop:
 					requireRollback = true
 					break ProcessLoop
 				}
+				// Set creator request ID for traceability across controller reconciles
+				stateDesired.CreatorRequestID = creatorRequestID
 
-				logger.Info("applying commitment state change", "commitmentUUID", commitment.UUID, "oldState", stateBefore, "desiredState", stateDesired)
+				logger.V(1).Info("applying commitment state change", "commitmentUUID", commitment.UUID, "oldMemory", stateBefore.TotalMemoryBytes, "desiredMemory", stateDesired.TotalMemoryBytes)
 
 				touchedReservations, deletedReservations, err := manager.ApplyCommitmentState(ctx, logger, stateDesired, flavorGroups, "changeCommitmentsApi")
 				if err != nil {
@@ -257,7 +258,7 @@ ProcessLoop:
 					requireRollback = true
 					break ProcessLoop
 				}
-				logger.Info("applied commitment state change", "commitmentUUID", commitment.UUID, "touchedReservations", len(touchedReservations), "deletedReservations", len(deletedReservations))
+				logger.V(1).Info("applied commitment state change", "commitmentUUID", commitment.UUID, "touchedReservations", len(touchedReservations), "deletedReservations", len(deletedReservations))
 				reservationsToWatch = append(reservationsToWatch, touchedReservations...)
 			}
 		}

@@ -50,12 +50,18 @@ type CommitmentReservationController struct {
 // Note: This controller only handles commitment reservations, as filtered by the predicate.
 func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	ctx = WithNewGlobalRequestID(ctx)
-	logger := LoggerFromContext(ctx).WithValues("component", "controller", "reservation", req.Name, "namespace", req.Namespace)
+	logger := LoggerFromContext(ctx).WithValues("component", "controller", "reservation", req.Name)
+
 	// Fetch the reservation object.
 	var res v1alpha1.Reservation
 	if err := r.Get(ctx, req.NamespacedName, &res); err != nil {
 		// Ignore not-found errors, since they can't be fixed by an immediate requeue
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	// Extract creator request ID from annotation for end-to-end traceability
+	if creatorReq := res.Annotations[v1alpha1.AnnotationCreatorRequestID]; creatorReq != "" {
+		logger = logger.WithValues("creatorReq", creatorReq)
 	}
 
 	// filter for CR reservations
@@ -86,7 +92,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	}
 
 	if meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ReservationConditionReady) {
-		logger.Info("reservation is active, verifying allocations")
+		logger.V(1).Info("reservation is active, verifying allocations")
 
 		// Verify all allocations in Spec against actual VM state from database
 		if err := r.reconcileAllocations(ctx, &res); err != nil {
@@ -323,7 +329,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 
 	// Skip if no allocations to verify
 	if len(res.Spec.CommittedResourceReservation.Allocations) == 0 {
-		logger.Info("no allocations to verify", "reservation", res.Name)
+		logger.V(1).Info("no allocations to verify", "reservation", res.Name)
 		return nil
 	}
 
@@ -349,9 +355,8 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 			actualHost := server.OSEXTSRVATTRHost
 			newStatusAllocations[vmUUID] = actualHost
 
-			logger.Info("verified VM allocation",
+			logger.V(1).Info("verified VM allocation",
 				"vm", vmUUID,
-				"reservation", res.Name,
 				"actualHost", actualHost,
 				"expectedHost", res.Status.Host)
 		} else {
@@ -381,8 +386,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		return fmt.Errorf("failed to patch reservation status: %w", err)
 	}
 
-	logger.Info("reconciled allocations",
-		"reservation", res.Name,
+	logger.V(1).Info("reconciled allocations",
 		"specAllocations", len(res.Spec.CommittedResourceReservation.Allocations),
 		"statusAllocations", len(newStatusAllocations))
 
