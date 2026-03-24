@@ -125,6 +125,13 @@ spec:
         into the smallest gaps possible, it spreads the load to ensure
         workloads are balanced across hosts. In this pipeline, the balancing will
         focus on general purpose virtual machines.
+    - name: kvm_failover_evacuation
+      description: |
+        This weigher prefers hosts with active failover reservations during
+        evacuation requests. Hosts matching a failover reservation where the
+        VM is allocated get a higher weight, encouraging placement on
+        pre-reserved failover capacity. For non-evacuation requests, this
+        weigher has no effect.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -248,6 +255,13 @@ spec:
         It pulls the requested vm into the smallest gaps possible, to ensure
         other hosts with less allocation stay free for bigger vms.
         In this pipeline, the binpacking will focus on hana virtual machines.
+    - name: kvm_failover_evacuation
+      description: |
+        This weigher prefers hosts with active failover reservations during
+        evacuation requests. Hosts matching a failover reservation where the
+        VM is allocated get a higher weight, encouraging placement on
+        pre-reserved failover capacity. For non-evacuation requests, this
+        weigher has no effect.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -523,5 +537,12 @@ spec:
         This step will filter out hosts that do not meet the compute capabilities
         requested by the nova flavor extra specs, like `{"arch": "x86_64",
         "maxphysaddr:bits": 46, ...}`.
-  weighers: []
+  weighers:
+    - name: kvm_failover_evacuation
+      description: |
+        This weigher prefers hosts with active failover reservations during
+        evacuation requests. Hosts matching a failover reservation where the
+        VM is allocated get a higher weight, encouraging placement on
+        pre-reserved failover capacity. For non-evacuation requests, this
+        weigher has no effect.
 {{- end }}
