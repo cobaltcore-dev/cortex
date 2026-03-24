@@ -332,9 +332,9 @@ groups:
 
   - alert: CortexNovaCommittedResourceRejectionRateTooHigh
     expr: |
-      rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected"}[1h])
-      / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[1h])) > 0.5
-    for: 15m
+      rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected"}[5m])
+      / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[5m])) > 0.5
+    for: 5m
     labels:
       context: committed-resource-api
       dashboard: cortex/cortex
@@ -351,7 +351,7 @@ groups:
         and may retry or report the failure to users.
 
   - alert: CortexNovaCommittedResourceTimeoutsTooHigh
-    expr: increase(cortex_committed_resource_change_api_timeouts_total{service="cortex-nova-metrics"}[1h]) > 0
+    expr: increase(cortex_committed_resource_change_api_timeouts_total{service="cortex-nova-metrics"}[5m]) > 0
     for: 5m
     labels:
       context: committed-resource-api
