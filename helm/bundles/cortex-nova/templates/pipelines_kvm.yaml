@@ -16,7 +16,7 @@ spec:
   type: filter-weigher
   # Fetch all placement candidates, ignoring nova's preselection.
   ignorePreselection: true
-  createDecisions: true
+  createHistory: true
   filters:
     - name: filter_correct_az
       description: |
