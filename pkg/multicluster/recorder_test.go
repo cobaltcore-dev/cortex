@@ -29,7 +29,7 @@ type eventfCall struct {
 	note      string
 }
 
-func (f *fakeEventRecorder) Eventf(regarding runtime.Object, _ runtime.Object, eventtype, reason, action, note string, args ...interface{}) {
+func (f *fakeEventRecorder) Eventf(regarding, _ runtime.Object, eventtype, reason, action, note string, args ...any) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, eventfCall{
@@ -239,7 +239,7 @@ func TestMultiClusterRecorder_ConcurrentEventf(t *testing.T) {
 	const goroutines = 20
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		go func(n int) {
 			defer wg.Done()
 			history := &v1alpha1.History{

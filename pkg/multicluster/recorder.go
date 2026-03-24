@@ -50,7 +50,7 @@ func (c *Client) GetEventRecorder(name string) events.EventRecorder {
 
 // Eventf routes the event to the cluster that owns the "regarding" object.
 // Falls back to the home cluster recorder if routing fails.
-func (r *MultiClusterRecorder) Eventf(regarding runtime.Object, related runtime.Object, eventtype, reason, action, note string, args ...interface{}) {
+func (r *MultiClusterRecorder) Eventf(regarding, related runtime.Object, eventtype, reason, action, note string, args ...any) {
 	recorder := r.recorderFor(regarding)
 	recorder.Eventf(regarding, related, eventtype, reason, action, note, args...)
 }
