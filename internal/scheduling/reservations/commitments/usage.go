@@ -127,11 +127,29 @@ func (c *UsageCalculator) buildCommitmentCapacityMap(
 	}
 
 	// Build CommitmentState for each commitment and group by az:flavorGroup
+	// Only include commitments that are currently active (started and not expired)
+	now := time.Now()
 	result := make(map[string][]*CommitmentStateWithUsage)
 	for _, reservations := range reservationsByCommitment {
 		state, err := FromReservations(reservations)
 		if err != nil {
 			log.Error(err, "failed to build commitment state from reservations")
+			continue
+		}
+
+		// Skip commitments that haven't started yet
+		if state.StartTime != nil && state.StartTime.After(now) {
+			log.V(1).Info("skipping commitment that hasn't started yet",
+				"commitmentUUID", state.CommitmentUUID,
+				"startTime", state.StartTime)
+			continue
+		}
+
+		// Skip commitments that have already expired
+		if state.EndTime != nil && state.EndTime.Before(now) {
+			log.V(1).Info("skipping expired commitment",
+				"commitmentUUID", state.CommitmentUUID,
+				"endTime", state.EndTime)
 			continue
 		}
 
@@ -186,16 +204,12 @@ func (c *UsageCalculator) getProjectVMs(
 	// Convert to VMUsageInfo
 	var vms []VMUsageInfo
 	for _, server := range servers {
-		// Parse creation time
+		// Parse creation time (Nova returns ISO 8601/RFC3339 format)
 		createdAt, err := time.Parse(time.RFC3339, server.Created)
 		if err != nil {
-			// Try alternate format used by Nova
-			createdAt, err = time.Parse("2006-01-02T15:04:05Z", server.Created)
-			if err != nil {
-				log.V(1).Info("failed to parse server creation time, using zero time",
-					"server", server.ID, "created", server.Created)
-				createdAt = time.Time{}
-			}
+			log.V(1).Info("failed to parse server creation time, using zero time",
+				"server", server.ID, "created", server.Created, "error", err.Error())
+			createdAt = time.Time{}
 		}
 
 		// Determine flavor group

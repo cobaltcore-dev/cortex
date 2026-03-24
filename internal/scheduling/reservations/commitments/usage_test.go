@@ -6,6 +6,7 @@ package commitments
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
@@ -428,6 +429,196 @@ func TestCountCommitmentStates(t *testing.T) {
 	}
 }
 
+func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
+	log.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
+	ctx := context.Background()
+	baseTime := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	now := time.Now()
+
+	m1Small := &TestFlavor{Name: "m1.small", Group: "hana_1", MemoryMB: 1024, VCPUs: 4}
+	m1Large := &TestFlavor{Name: "m1.large", Group: "hana_1", MemoryMB: 4096, VCPUs: 16}
+
+	tests := []struct {
+		name                     string
+		projectID                string
+		vms                      []nova.ServerDetail
+		reservations             []*v1alpha1.Reservation
+		allAZs                   []liquid.AvailabilityZone
+		expectedActiveCommitment string // non-empty if VM should be assigned to a commitment
+	}{
+		{
+			name:      "active commitment - within time range",
+			projectID: "project-A",
+			vms: []nova.ServerDetail{
+				{
+					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
+					TenantID: "project-A", AvailabilityZone: "az-a",
+					Created:    baseTime.Format(time.RFC3339),
+					FlavorName: "m1.large", FlavorRAM: 4096, FlavorVCPUs: 16,
+				},
+			},
+			reservations: func() []*v1alpha1.Reservation {
+				past := now.Add(-1 * time.Hour)
+				future := now.Add(1 * time.Hour)
+				return []*v1alpha1.Reservation{
+					makeUsageTestReservationWithTimes("commit-active", "project-A", "hana_1", "az-a", 4*1024*1024*1024, 0, &past, &future),
+					makeUsageTestReservationWithTimes("commit-active", "project-A", "hana_1", "az-a", 4*1024*1024*1024, 1, &past, &future),
+					makeUsageTestReservationWithTimes("commit-active", "project-A", "hana_1", "az-a", 4*1024*1024*1024, 2, &past, &future),
+					makeUsageTestReservationWithTimes("commit-active", "project-A", "hana_1", "az-a", 4*1024*1024*1024, 3, &past, &future),
+				}
+			}(),
+			allAZs:                   []liquid.AvailabilityZone{"az-a"},
+			expectedActiveCommitment: "commit-active",
+		},
+		{
+			name:      "expired commitment - should be ignored (VM goes to PAYG)",
+			projectID: "project-A",
+			vms: []nova.ServerDetail{
+				{
+					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
+					TenantID: "project-A", AvailabilityZone: "az-a",
+					Created:    baseTime.Format(time.RFC3339),
+					FlavorName: "m1.large", FlavorRAM: 4096, FlavorVCPUs: 16,
+				},
+			},
+			reservations: func() []*v1alpha1.Reservation {
+				past := now.Add(-2 * time.Hour)
+				expired := now.Add(-1 * time.Hour) // Already expired
+				return []*v1alpha1.Reservation{
+					makeUsageTestReservationWithTimes("commit-expired", "project-A", "hana_1", "az-a", 4*1024*1024*1024, 0, &past, &expired),
+				}
+			}(),
+			allAZs:                   []liquid.AvailabilityZone{"az-a"},
+			expectedActiveCommitment: "", // PAYG - expired commitment ignored
+		},
+		{
+			name:      "future commitment - should be ignored (VM goes to PAYG)",
+			projectID: "project-A",
+			vms: []nova.ServerDetail{
+				{
+					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
+					TenantID: "project-A", AvailabilityZone: "az-a",
+					Created:    baseTime.Format(time.RFC3339),
+					FlavorName: "m1.large", FlavorRAM: 4096, FlavorVCPUs: 16,
+				},
+			},
+			reservations: func() []*v1alpha1.Reservation {
+				futureStart := now.Add(1 * time.Hour) // Hasn't started yet
+				futureEnd := now.Add(24 * time.Hour)
+				return []*v1alpha1.Reservation{
+					makeUsageTestReservationWithTimes("commit-future", "project-A", "hana_1", "az-a", 4*1024*1024*1024, 0, &futureStart, &futureEnd),
+				}
+			}(),
+			allAZs:                   []liquid.AvailabilityZone{"az-a"},
+			expectedActiveCommitment: "", // PAYG - future commitment ignored
+		},
+		{
+			name:      "mixed - only active commitment is used",
+			projectID: "project-A",
+			vms: []nova.ServerDetail{
+				{
+					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
+					TenantID: "project-A", AvailabilityZone: "az-a",
+					Created:    baseTime.Format(time.RFC3339),
+					FlavorName: "m1.large", FlavorRAM: 4096, FlavorVCPUs: 16,
+				},
+			},
+			reservations: func() []*v1alpha1.Reservation {
+				// Expired commitment
+				expiredStart := now.Add(-48 * time.Hour)
+				expiredEnd := now.Add(-24 * time.Hour)
+				// Active commitment
+				activeStart := now.Add(-1 * time.Hour)
+				activeEnd := now.Add(24 * time.Hour)
+				// Future commitment
+				futureStart := now.Add(24 * time.Hour)
+				futureEnd := now.Add(48 * time.Hour)
+
+				return []*v1alpha1.Reservation{
+					makeUsageTestReservationWithTimes("commit-expired", "project-A", "hana_1", "az-a", 4*1024*1024*1024, 0, &expiredStart, &expiredEnd),
+					makeUsageTestReservationWithTimes("commit-active", "project-A", "hana_1", "az-a", 4*1024*1024*1024, 0, &activeStart, &activeEnd),
+					makeUsageTestReservationWithTimes("commit-active", "project-A", "hana_1", "az-a", 4*1024*1024*1024, 1, &activeStart, &activeEnd),
+					makeUsageTestReservationWithTimes("commit-active", "project-A", "hana_1", "az-a", 4*1024*1024*1024, 2, &activeStart, &activeEnd),
+					makeUsageTestReservationWithTimes("commit-active", "project-A", "hana_1", "az-a", 4*1024*1024*1024, 3, &activeStart, &activeEnd),
+					makeUsageTestReservationWithTimes("commit-future", "project-A", "hana_1", "az-a", 4*1024*1024*1024, 0, &futureStart, &futureEnd),
+				}
+			}(),
+			allAZs:                   []liquid.AvailabilityZone{"az-a"},
+			expectedActiveCommitment: "commit-active", // Only active commitment is used
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			_ = v1alpha1.AddToScheme(scheme)
+			_ = hv1.AddToScheme(scheme)
+
+			objects := make([]client.Object, 0, len(tt.reservations)+1)
+			for _, r := range tt.reservations {
+				objects = append(objects, r)
+			}
+
+			flavorGroups := TestFlavorGroup{
+				infoVersion: 1234,
+				flavors:     []compute.FlavorInGroup{m1Small.ToFlavorInGroup(), m1Large.ToFlavorInGroup()},
+			}.ToFlavorGroupsKnowledge()
+			objects = append(objects, createKnowledgeCRD(flavorGroups))
+
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objects...).
+				Build()
+
+			novaClient := &mockUsageNovaClient{
+				servers: map[string][]nova.ServerDetail{
+					tt.projectID: tt.vms,
+				},
+			}
+
+			calc := NewUsageCalculator(k8sClient, novaClient)
+			logger := log.FromContext(ctx)
+			report, err := calc.CalculateUsage(ctx, logger, tt.projectID, tt.allAZs)
+			if err != nil {
+				t.Fatalf("CalculateUsage failed: %v", err)
+			}
+
+			// Find the VM in subresources and check its commitment assignment
+			res, ok := report.Resources["ram_hana_1"]
+			if !ok {
+				t.Fatal("Resource ram_hana_1 not found")
+			}
+
+			var foundCommitment any
+			for _, azReport := range res.PerAZ {
+				for _, sub := range azReport.Subresources {
+					if sub.Attributes == nil {
+						continue
+					}
+					// Parse JSON attributes
+					var attrMap map[string]any
+					if err := json.Unmarshal(sub.Attributes, &attrMap); err != nil {
+						continue
+					}
+					foundCommitment = attrMap["commitment_id"]
+				}
+			}
+
+			if tt.expectedActiveCommitment == "" {
+				// Expect PAYG (nil commitment_id)
+				if foundCommitment != nil {
+					t.Errorf("Expected PAYG (nil commitment_id), got %v", foundCommitment)
+				}
+			} else {
+				// Expect specific commitment
+				if foundCommitment != tt.expectedActiveCommitment {
+					t.Errorf("Expected commitment %s, got %v", tt.expectedActiveCommitment, foundCommitment)
+				}
+			}
+		})
+	}
+}
+
 func TestUsageCalculator_AssignVMsToCommitments(t *testing.T) {
 	tests := []struct {
 		name                string
@@ -548,9 +739,14 @@ func TestUsageCalculator_AssignVMsToCommitments(t *testing.T) {
 
 // makeUsageTestReservation creates a test reservation for UsageCalculator tests.
 func makeUsageTestReservation(commitmentUUID, projectID, flavorGroup, az string, memoryBytes int64, slot int) *v1alpha1.Reservation {
+	return makeUsageTestReservationWithTimes(commitmentUUID, projectID, flavorGroup, az, memoryBytes, slot, nil, nil)
+}
+
+// makeUsageTestReservationWithTimes creates a test reservation with start and end times.
+func makeUsageTestReservationWithTimes(commitmentUUID, projectID, flavorGroup, az string, memoryBytes int64, slot int, startTime, endTime *time.Time) *v1alpha1.Reservation {
 	name := "commitment-" + commitmentUUID + "-" + string(rune('0'+slot))
 
-	return &v1alpha1.Reservation{
+	res := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			Labels: map[string]string{
@@ -570,4 +766,14 @@ func makeUsageTestReservation(commitmentUUID, projectID, flavorGroup, az string,
 			},
 		},
 	}
+
+	// StartTime and EndTime are on ReservationSpec, not CommittedResourceReservationSpec
+	if startTime != nil {
+		res.Spec.StartTime = &metav1.Time{Time: *startTime}
+	}
+	if endTime != nil {
+		res.Spec.EndTime = &metav1.Time{Time: *endTime}
+	}
+
+	return res
 }
