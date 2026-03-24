@@ -665,7 +665,9 @@ func main() {
 
 	if slices.Contains(mainConfig.EnabledTasks, "commitments-sync-task") {
 		setupLog.Info("starting commitments syncer")
-		syncer := commitments.NewSyncer(multiclusterClient)
+		syncerMonitor := commitments.NewSyncerMonitor()
+		must.Succeed(metrics.Registry.Register(syncerMonitor))
+		syncer := commitments.NewSyncer(multiclusterClient, syncerMonitor)
 		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
 		syncerDefaults := commitments.DefaultSyncerConfig()
 		if syncerConfig.SyncInterval == 0 {
