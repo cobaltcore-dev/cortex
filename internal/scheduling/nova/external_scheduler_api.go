@@ -204,6 +204,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 			},
 			ResourceID: requestData.Spec.Data.InstanceUUID,
 			NovaRaw:    &raw,
+			Intent:     v1alpha1.SchedulingIntentUnknown,
 		},
 	}
 	ctx := r.Context()

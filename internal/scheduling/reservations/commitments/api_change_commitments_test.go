@@ -23,6 +23,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -995,7 +996,8 @@ func newCommitmentTestEnv(
 		api = NewAPI(wrappedClient)
 	}
 	mux := http.NewServeMux()
-	api.Init(mux)
+	registry := prometheus.NewRegistry()
+	api.Init(mux, registry)
 	httpServer := httptest.NewServer(mux)
 
 	env.HTTPServer = httpServer

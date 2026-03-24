@@ -31,8 +31,6 @@ import (
 	"github.com/go-logr/logr"
 )
 
-var commitmentLog = ctrl.Log.WithName("commitment-reservation-controller")
-
 // CommitmentReservationController reconciles commitment Reservation objects
 type CommitmentReservationController struct {
 	// Client for the kubernetes API.
@@ -51,7 +49,8 @@ type CommitmentReservationController struct {
 // move the current state of the cluster closer to the desired state.
 // Note: This controller only handles commitment reservations, as filtered by the predicate.
 func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := LoggerFromContext(ctx).WithValues("reservation", req.Name, "namespace", req.Namespace)
+	ctx = WithNewGlobalRequestID(ctx)
+	logger := LoggerFromContext(ctx).WithValues("component", "controller", "reservation", req.Name, "namespace", req.Namespace)
 	// Fetch the reservation object.
 	var res v1alpha1.Reservation
 	if err := r.Get(ctx, req.NamespacedName, &res); err != nil {
@@ -323,7 +322,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 // reconcileAllocations verifies all allocations in Spec against actual Nova VM state.
 // It updates Status.Allocations based on the actual host location of each VM.
 func (r *CommitmentReservationController) reconcileAllocations(ctx context.Context, res *v1alpha1.Reservation) error {
-	logger := LoggerFromContext(ctx)
+	logger := LoggerFromContext(ctx).WithValues("component", "controller")
 
 	// Skip if no CommittedResourceReservation
 	if res.Spec.CommittedResourceReservation == nil {
@@ -440,7 +439,7 @@ func (r *CommitmentReservationController) listServersByProjectID(ctx context.Con
 		return nil, errors.New("database connection not initialized")
 	}
 
-	log := logf.FromContext(ctx)
+	logger := LoggerFromContext(ctx).WithValues("component", "controller")
 
 	// Query servers from the database cache.
 	var servers []nova.Server
@@ -451,7 +450,7 @@ func (r *CommitmentReservationController) listServersByProjectID(ctx context.Con
 		return nil, fmt.Errorf("failed to query servers from database: %w", err)
 	}
 
-	log.V(1).Info("queried servers from database",
+	logger.V(1).Info("queried servers from database",
 		"projectID", projectID,
 		"serverCount", len(servers))
 

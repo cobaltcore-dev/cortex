@@ -6,13 +6,15 @@ package api
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
 
 func TestGetIntent(t *testing.T) {
 	tests := []struct {
 		name           string
 		schedulerHints map[string]any
-		expectedIntent RequestIntent
+		expectedIntent v1alpha1.SchedulingIntent
 		expectError    bool
 	}{
 		{

@@ -1,11 +1,12 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package cinder
+package manila
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -15,19 +16,20 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type DecisionsCleanupConfig struct {
+type HistoryCleanupConfig struct {
 	// Secret ref to keystone credentials stored in a k8s secret.
 	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
 	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
 	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
 }
 
-// Delete all decisions for cinder volumes that have been deleted.
-func DecisionsCleanup(ctx context.Context, client client.Client, conf DecisionsCleanupConfig) error {
+// Delete all history entries for manila shares that have been deleted.
+func HistoryCleanup(ctx context.Context, client client.Client, conf HistoryCleanupConfig) error {
 	var authenticatedHTTP = http.DefaultClient
 	if conf.SSOSecretRef != nil {
 		var err error
@@ -43,22 +45,21 @@ func DecisionsCleanup(ctx context.Context, client client.Client, conf DecisionsC
 		return err
 	}
 	pc := authenticatedKeystone.Client()
-	cinderURL, err := pc.EndpointLocator(gophercloud.EndpointOpts{
-		Type:         "volumev3",
+	// Workaround to find the v2 service of manila.
+	// See: https://github.com/gophercloud/gophercloud/issues/3347
+	gophercloud.ServiceTypeAliases["shared-file-system"] = []string{"sharev2"}
+	manilaSC, err := openstack.NewSharedFileSystemV2(pc, gophercloud.EndpointOpts{
+		Type:         "sharev2",
 		Availability: gophercloud.Availability(authenticatedKeystone.Availability()),
 	})
 	if err != nil {
 		return err
 	}
-	cinderSC := &gophercloud.ServiceClient{
-		ProviderClient: pc,
-		Endpoint:       cinderURL,
-		Microversion:   "3.70",
-	}
+	manilaSC.Microversion = "2.65"
 
-	initialURL := cinderSC.Endpoint + "volumes/detail?all_tenants=true"
+	initialURL := manilaSC.Endpoint + "shares/detail?all_tenants=true"
 	var nextURL = &initialURL
-	var volumes []struct {
+	var shares []struct {
 		ID string `json:"id"`
 	}
 
@@ -67,9 +68,9 @@ func DecisionsCleanup(ctx context.Context, client client.Client, conf DecisionsC
 		if err != nil {
 			return err
 		}
-		req.Header.Set("X-Auth-Token", cinderSC.Token())
-		req.Header.Set("OpenStack-API-Version", "volume "+cinderSC.Microversion)
-		resp, err := cinderSC.HTTPClient.Do(req)
+		req.Header.Set("X-Auth-Token", manilaSC.Token())
+		req.Header.Set("X-OpenStack-Manila-API-Version", manilaSC.Microversion)
+		resp, err := manilaSC.HTTPClient.Do(req)
 		if err != nil {
 			return err
 		}
@@ -78,19 +79,19 @@ func DecisionsCleanup(ctx context.Context, client client.Client, conf DecisionsC
 			return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 		}
 		var list struct {
-			Volumes []struct {
+			Shares []struct {
 				ID string `json:"id"`
-			} `json:"volumes"`
+			} `json:"shares"`
 			Links []struct {
 				Rel  string `json:"rel"`
 				Href string `json:"href"`
-			} `json:"volumes_links"`
+			} `json:"shares_links"`
 		}
 		err = json.NewDecoder(resp.Body).Decode(&list)
 		if err != nil {
 			return err
 		}
-		volumes = append(volumes, list.Volumes...)
+		shares = append(shares, list.Shares...)
 		nextURL = nil
 		for _, link := range list.Links {
 			if link.Rel == "next" {
@@ -100,29 +101,32 @@ func DecisionsCleanup(ctx context.Context, client client.Client, conf DecisionsC
 		}
 	}
 
-	slog.Info("found volumes", "count", len(volumes))
-	volumesByID := make(map[string]struct{})
-	for _, volume := range volumes {
-		volumesByID[volume.ID] = struct{}{}
+	if len(shares) == 0 {
+		return errors.New("no shares found")
+	}
+	slog.Info("found shares", "count", len(shares))
+	sharesByID := make(map[string]struct{})
+	for _, share := range shares {
+		sharesByID[share.ID] = struct{}{}
 	}
 
-	// List all decisions and delete those whose volume no longer exists.
-	decisionList := &v1alpha1.DecisionList{}
-	if err := client.List(ctx, decisionList); err != nil {
+	// List all history and delete those whose share no longer exists.
+	historyList := &v1alpha1.HistoryList{}
+	if err := client.List(ctx, historyList); err != nil {
 		return err
 	}
-	for _, decision := range decisionList.Items {
-		// Skip non-cinder decisions.
-		if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainCinder {
+	for _, history := range historyList.Items {
+		// Skip non-manila histories.
+		if history.Spec.SchedulingDomain != v1alpha1.SchedulingDomainManila {
 			continue
 		}
-		// Skip decisions for which the volume still exists.
-		if _, ok := volumesByID[decision.Spec.ResourceID]; ok {
+		// Skip histories for which the share still exists.
+		if _, ok := sharesByID[history.Spec.ResourceID]; ok {
 			continue
 		}
-		// Delete the decision since the volume no longer exists.
-		slog.Info("deleting decision for deleted volume", "decision", decision.Name, "volumeID", decision.Spec.ResourceID)
-		if err := client.Delete(ctx, &decision); err != nil {
+		// Delete the history entry since the share no longer exists.
+		slog.Info("deleting history entry for deleted share", "history", history.Name, "shareID", history.Spec.ResourceID)
+		if err := client.Delete(ctx, &history); err != nil {
 			return err
 		}
 	}

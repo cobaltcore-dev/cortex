@@ -149,6 +149,7 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 			},
 			ResourceID: "", // TODO model out the spec.
 			ManilaRaw:  &raw,
+			Intent:     v1alpha1.SchedulingIntentUnknown,
 		},
 	}
 	ctx := r.Context()
