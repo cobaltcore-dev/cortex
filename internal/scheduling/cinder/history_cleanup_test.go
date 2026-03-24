@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package nova
+package cinder
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -18,168 +19,106 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-
-	corev1 "k8s.io/api/core/v1"
 )
 
-func TestCleanupNova(t *testing.T) {
+func TestCleanupCinder(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+		t.Fatalf("Failed to add scheme: %v", err)
 	}
 	if err := corev1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add corev1 scheme: %v", err)
 	}
 
 	tests := []struct {
-		name            string
-		decisions       []v1alpha1.Decision
-		reservations    []v1alpha1.Reservation
-		mockServers     []mockServer
-		authError       bool
-		endpointError   bool
-		serverError     bool
-		emptyServers    bool
-		expectedDeleted []string
-		expectError     bool
+		name              string
+		histories         []v1alpha1.History
+		expectError       bool
+		authError         bool
+		endpointError     bool
+		mockServerError   bool
+		emptyVolumesError bool
+		mockVolumes       []mockVolume
+		expectedDeleted   []string
 	}{
 		{
-			name:        "authentication error",
-			decisions:   []v1alpha1.Decision{},
+			name:        "handle authentication error",
+			histories:   []v1alpha1.History{},
 			authError:   true,
 			expectError: true,
 		},
 		{
-			name:          "endpoint discovery error",
-			decisions:     []v1alpha1.Decision{},
+			name:          "handle endpoint error",
+			histories:     []v1alpha1.History{},
 			endpointError: true,
 			expectError:   true,
 		},
 		{
-			name:        "nova server error",
-			decisions:   []v1alpha1.Decision{},
-			serverError: true,
-			expectError: true,
+			name:            "handle server error",
+			histories:       []v1alpha1.History{},
+			mockServerError: true,
+			expectError:     true,
 		},
 		{
-			name:         "no servers found",
-			decisions:    []v1alpha1.Decision{},
-			emptyServers: true,
-			expectError:  false,
+			name:              "handle empty volumes case",
+			histories:         []v1alpha1.History{},
+			emptyVolumesError: true,
+			expectError:       false,
 		},
 		{
-			name: "delete decisions for non-existent servers",
-			decisions: []v1alpha1.Decision{
+			name: "delete history for non-existent volumes",
+			histories: []v1alpha1.History{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-existing-server",
+						Name: "history-existing-volume",
 					},
-					Spec: v1alpha1.DecisionSpec{
-						SchedulingDomain: v1alpha1.SchedulingDomainNova,
-						ResourceID:       "server-exists",
+					Spec: v1alpha1.HistorySpec{
+						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
+						ResourceID:       "volume-exists",
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-deleted-server",
+						Name: "history-deleted-volume",
 					},
-					Spec: v1alpha1.DecisionSpec{
-						SchedulingDomain: v1alpha1.SchedulingDomainNova,
-						ResourceID:       "server-deleted",
+					Spec: v1alpha1.HistorySpec{
+						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
+						ResourceID:       "volume-deleted",
 					},
 				},
 			},
-			mockServers: []mockServer{
-				{ID: "server-exists"},
+			mockVolumes: []mockVolume{
+				{ID: "volume-exists"},
 			},
-			expectedDeleted: []string{"decision-deleted-server"},
+			expectedDeleted: []string{"history-deleted-volume"},
 			expectError:     false,
 		},
 		{
-			name: "keep decisions for existing servers",
-			decisions: []v1alpha1.Decision{
+			name: "keep history for existing volumes",
+			histories: []v1alpha1.History{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-server-1",
+						Name: "history-volume-1",
 					},
-					Spec: v1alpha1.DecisionSpec{
-						SchedulingDomain: v1alpha1.SchedulingDomainNova,
-						ResourceID:       "server-1",
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-server-2",
-					},
-					Spec: v1alpha1.DecisionSpec{
-						SchedulingDomain: v1alpha1.SchedulingDomainNova,
-						ResourceID:       "server-2",
-					},
-				},
-			},
-			mockServers: []mockServer{
-				{ID: "server-1"},
-				{ID: "server-2"},
-			},
-			expectedDeleted: []string{},
-			expectError:     false,
-		},
-		{
-			name: "skip decisions with linked reservations",
-			decisions: []v1alpha1.Decision{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-reserved-server",
-					},
-					Spec: v1alpha1.DecisionSpec{
-						SchedulingDomain: v1alpha1.SchedulingDomainNova,
-						ResourceID:       "server-reserved",
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-unreserved-server",
-					},
-					Spec: v1alpha1.DecisionSpec{
-						SchedulingDomain: v1alpha1.SchedulingDomainNova,
-						ResourceID:       "server-unreserved",
-					},
-				},
-			},
-			reservations: []v1alpha1.Reservation{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "server-reserved",
-					},
-				},
-			},
-			mockServers:     []mockServer{},
-			expectedDeleted: []string{"decision-unreserved-server"},
-			expectError:     false,
-		},
-		{
-			name: "skip non-nova decisions",
-			decisions: []v1alpha1.Decision{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-cinder",
-					},
-					Spec: v1alpha1.DecisionSpec{
+					Spec: v1alpha1.HistorySpec{
 						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
 						ResourceID:       "volume-1",
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "decision-wrong-operator",
+						Name: "history-volume-2",
 					},
-					Spec: v1alpha1.DecisionSpec{
-						SchedulingDomain: "other-operator",
-						ResourceID:       "server-1",
+					Spec: v1alpha1.HistorySpec{
+						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
+						ResourceID:       "volume-2",
 					},
 				},
 			},
-			mockServers:     []mockServer{},
+			mockVolumes: []mockVolume{
+				{ID: "volume-1"},
+				{ID: "volume-2"},
+			},
 			expectedDeleted: []string{},
 			expectError:     false,
 		},
@@ -187,47 +126,49 @@ func TestCleanupNova(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			objects := make([]client.Object, 0, len(tt.decisions)+len(tt.reservations))
-			for i := range tt.decisions {
-				objects = append(objects, &tt.decisions[i])
-			}
-			for i := range tt.reservations {
-				objects = append(objects, &tt.reservations[i])
+			objects := make([]client.Object, len(tt.histories))
+			for i := range tt.histories {
+				objects[i] = &tt.histories[i]
 			}
 
-			novaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if tt.serverError {
+			// Create mock Cinder server first
+			cinderServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tt.mockServerError {
 					w.WriteHeader(http.StatusInternalServerError)
 					return
 				}
 
-				if r.URL.Path == "/servers" || r.URL.Path == "/servers/detail" {
+				// Handle volumes list endpoint
+				if r.URL.Path == "/volumes" || r.URL.Path == "/volumes/detail" {
 					w.Header().Set("Content-Type", "application/json")
-					if tt.emptyServers {
-						serversResponse := map[string]any{
-							"servers": []mockServer{},
+					if tt.emptyVolumesError {
+						// Return empty volumes list
+						volumesResponse := map[string]any{
+							"volumes": []mockVolume{},
 						}
-						err := json.NewEncoder(w).Encode(serversResponse)
+						err := json.NewEncoder(w).Encode(volumesResponse)
 						if err != nil {
-							t.Errorf("Failed to encode servers response: %v", err)
+							t.Errorf("Failed to encode volumes response: %v", err)
 						}
 						return
 					}
 
-					serversResponse := map[string]any{
-						"servers": tt.mockServers,
+					volumesResponse := map[string]any{
+						"volumes": tt.mockVolumes,
 					}
-					err := json.NewEncoder(w).Encode(serversResponse)
+					err := json.NewEncoder(w).Encode(volumesResponse)
 					if err != nil {
-						t.Errorf("Failed to encode servers response: %v", err)
+						t.Errorf("Failed to encode volumes response: %v", err)
 					}
 					return
 				}
 
+				// Default response for other endpoints
 				w.WriteHeader(http.StatusNotFound)
 			}))
-			defer novaServer.Close()
+			defer cinderServer.Close()
 
+			// Create mock Keystone server
 			keystoneServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if tt.authError {
 					w.WriteHeader(http.StatusUnauthorized)
@@ -236,8 +177,10 @@ func TestCleanupNova(t *testing.T) {
 
 				w.Header().Set("Content-Type", "application/json")
 
+				// Handle different Keystone API endpoints
 				switch r.URL.Path {
 				case "/", "/v3", "/v3/":
+					// Handle version discovery - return supported versions
 					versionResponse := map[string]any{
 						"versions": map[string]any{
 							"values": []map[string]any{
@@ -259,8 +202,10 @@ func TestCleanupNova(t *testing.T) {
 						t.Errorf("Failed to encode version response: %v", err)
 					}
 				case "/v3/auth/tokens":
+					// Set the correct status code that gophercloud expects
 					w.WriteHeader(http.StatusCreated)
 
+					// Mock token response with proper structure for gophercloud
 					tokenResponse := map[string]any{
 						"token": map[string]any{
 							"methods":    []string{"password"},
@@ -275,16 +220,16 @@ func TestCleanupNova(t *testing.T) {
 							},
 							"catalog": []map[string]any{
 								{
-									"type": "compute",
-									"id":   "nova-service-id",
-									"name": "nova",
+									"type": "volumev3",
+									"id":   "cinder-service-id",
+									"name": "cinderv3",
 									"endpoints": []map[string]any{
 										{
 											"region_id": "RegionOne",
-											"url":       novaServer.URL,
+											"url":       cinderServer.URL,
 											"region":    "RegionOne",
 											"interface": "public",
-											"id":        "nova-endpoint-id",
+											"id":        "cinder-endpoint-id",
 										},
 									},
 								},
@@ -300,9 +245,11 @@ func TestCleanupNova(t *testing.T) {
 						},
 					}
 					if tt.endpointError {
+						// Don't include volumev3 service in catalog
 						tokenResponse["token"].(map[string]any)["catalog"] = []map[string]any{}
 					}
 
+					// Set the token in the header for gophercloud
 					w.Header().Set("X-Subject-Token", "mock-token-id")
 					err := json.NewEncoder(w).Encode(tokenResponse)
 					if err != nil {
@@ -334,13 +281,13 @@ func TestCleanupNova(t *testing.T) {
 				WithScheme(scheme).
 				WithObjects(objects...).
 				Build()
-			config := DecisionsCleanupConfig{
+			config := HistoryCleanupConfig{
 				KeystoneSecretRef: corev1.SecretReference{
 					Name:      "keystone-secret",
 					Namespace: "default",
 				},
 			}
-			err := DecisionsCleanup(context.Background(), client, config)
+			err := HistoryCleanup(context.Background(), client, config)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -350,32 +297,32 @@ func TestCleanupNova(t *testing.T) {
 			}
 
 			if !tt.expectError {
-				// Verify expected decisions were deleted
+				// Verify expected history entries were deleted
 				for _, expectedDeleted := range tt.expectedDeleted {
-					var decision v1alpha1.Decision
+					var history v1alpha1.History
 					err := client.Get(context.Background(),
-						types.NamespacedName{Name: expectedDeleted}, &decision)
+						types.NamespacedName{Name: expectedDeleted}, &history)
 					if err == nil {
-						t.Errorf("Expected decision %s to be deleted but it still exists", expectedDeleted)
+						t.Errorf("Expected history %s to be deleted but it still exists", expectedDeleted)
 					}
 				}
 
-				// Verify other decisions still exist
-				for _, originalDecision := range tt.decisions {
+				// Verify other history entries still exist
+				for _, originalHistory := range tt.histories {
 					shouldBeDeleted := false
 					for _, expectedDeleted := range tt.expectedDeleted {
-						if originalDecision.Name == expectedDeleted {
+						if originalHistory.Name == expectedDeleted {
 							shouldBeDeleted = true
 							break
 						}
 					}
 					if !shouldBeDeleted {
-						var decision v1alpha1.Decision
+						var history v1alpha1.History
 						err := client.Get(context.Background(),
-							types.NamespacedName{Name: originalDecision.Name}, &decision)
+							types.NamespacedName{Name: originalHistory.Name}, &history)
 						if err != nil {
-							t.Errorf("Expected decision %s to still exist but got error: %v",
-								originalDecision.Name, err)
+							t.Errorf("Expected history %s to still exist but got error: %v",
+								originalHistory.Name, err)
 						}
 					}
 				}
@@ -384,7 +331,7 @@ func TestCleanupNova(t *testing.T) {
 	}
 }
 
-func TestCleanupNovaDecisionsCancel(t *testing.T) {
+func TestCleanupCinderHistoryCancel(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add scheme: %v", err)
@@ -392,6 +339,7 @@ func TestCleanupNovaDecisionsCancel(t *testing.T) {
 	if err := corev1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add corev1 scheme: %v", err)
 	}
+
 	objects := []client.Object{
 		&corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -415,7 +363,7 @@ func TestCleanupNovaDecisionsCancel(t *testing.T) {
 		WithObjects(objects...).
 		Build()
 
-	config := DecisionsCleanupConfig{
+	config := HistoryCleanupConfig{
 		KeystoneSecretRef: corev1.SecretReference{
 			Name:      "keystone-secret",
 			Namespace: "default",
@@ -426,7 +374,7 @@ func TestCleanupNovaDecisionsCancel(t *testing.T) {
 	defer cancel()
 
 	// This should exit quickly due to context cancellation
-	if err := DecisionsCleanup(ctx, client, config); err != nil {
+	if err := HistoryCleanup(ctx, client, config); err != nil {
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Errorf("Unexpected error during cleanup: %v", err)
 		}
@@ -435,6 +383,6 @@ func TestCleanupNovaDecisionsCancel(t *testing.T) {
 	// If we reach here without hanging, the test passed
 }
 
-type mockServer struct {
+type mockVolume struct {
 	ID string `json:"id"`
 }

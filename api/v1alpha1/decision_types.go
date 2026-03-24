@@ -9,6 +9,15 @@ import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
+// SchedulingIntent defines the intent of a scheduling decision.
+type SchedulingIntent string
+
+// Other intents can be defined by the operators.
+const (
+	// Used as default intent if the operator does not specify one.
+	SchedulingIntentUnknown SchedulingIntent = "Unknown"
+)
+
 type DecisionSpec struct {
 	// SchedulingDomain defines in which scheduling domain this decision
 	// was or is processed (e.g., nova, cinder, manila).
@@ -39,6 +48,10 @@ type DecisionSpec struct {
 	// If the type is "pod", this field contains the pod reference.
 	// +kubebuilder:validation:Optional
 	PodRef *corev1.ObjectReference `json:"podRef,omitempty"`
+
+	// The intent of the scheduling decision (e.g., initial scheduling, rescheduling, etc.).
+	// +kubebuilder:validation:Optional
+	Intent SchedulingIntent `json:"intent,omitempty"`
 }
 
 type StepResult struct {
@@ -110,7 +123,12 @@ type DecisionStatus struct {
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:selectablefield:JSONPath=".spec.resourceID"
 
-// Decision is the Schema for the decisions API
+// Currently the Decision CRD is an in-memory scheduling object used by the external scheduler API
+// and filter-weigher pipelines to compute a placement result. It is currently NOT persisted
+// to etcd — the scheduling outcome is recorded in the History CRD instead.
+// The long-term shape of this CRD is still under discussion; until that is
+// settled the Decision serves only as a transient carrier within a single
+// scheduling run.
 type Decision struct {
 	metav1.TypeMeta `json:",inline"`
 
