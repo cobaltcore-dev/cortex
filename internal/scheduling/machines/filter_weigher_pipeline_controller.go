@@ -222,7 +222,7 @@ func (c *FilterWeigherPipelineController) handleMachine() handler.EventHandler {
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainMachines
-	c.HistoryManager = lib.HistoryClient{Client: mgr.GetClient(), Recorder: mgr.GetEventRecorder("cortex-machines-scheduler")}
+	c.HistoryManager = lib.HistoryClient{Client: mcl, Recorder: mgr.GetEventRecorder("cortex-machines-scheduler")}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

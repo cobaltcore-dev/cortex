@@ -148,7 +148,7 @@ func (c *FilterWeigherPipelineController) InitPipeline(
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainCinder
-	c.HistoryManager = lib.HistoryClient{Client: mgr.GetClient(), Recorder: mgr.GetEventRecorder("cortex-cinder-scheduler")}
+	c.HistoryManager = lib.HistoryClient{Client: mcl, Recorder: mgr.GetEventRecorder("cortex-cinder-scheduler")}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
