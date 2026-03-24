@@ -319,6 +319,7 @@ ProcessLoop:
 }
 
 // watchReservationsUntilReady polls until all reservations reach Ready=True or timeout.
+// Returns failed reservations and any errors encountered.
 func watchReservationsUntilReady(
 	ctx context.Context,
 	logger logr.Logger,
@@ -333,18 +334,31 @@ func watchReservationsUntilReady(
 	}
 
 	deadline := time.Now().Add(timeout)
+	startTime := time.Now()
+	totalReservations := len(reservations)
 
 	reservationsToWatch := make([]v1alpha1.Reservation, len(reservations))
 	copy(reservationsToWatch, reservations)
 
+	// Track successful reservations for summary
+	var successfulReservations []string
+	pollCount := 0
+
 	for {
+		pollCount++
 		var stillWaiting []v1alpha1.Reservation
 		if time.Now().After(deadline) {
 			errors = append(errors, fmt.Errorf("timeout after %v waiting for reservations to become ready", timeout))
+			// Log summary on timeout
+			logger.Info("reservation watch completed (timeout)",
+				"total", totalReservations,
+				"ready", len(successfulReservations),
+				"failed", len(failedReservations),
+				"timedOut", len(reservationsToWatch),
+				"duration", time.Since(startTime).Round(time.Millisecond),
+				"polls", pollCount)
 			return failedReservations, errors
 		}
-
-		allAreReady := true
 
 		for _, res := range reservationsToWatch {
 			// Fetch current state
@@ -355,9 +369,7 @@ func watchReservationsUntilReady(
 			}
 
 			if err := k8sClient.Get(ctx, nn, &current); err != nil {
-				allAreReady = false
-				// Reservation is still in process of being created, or there is a transient error, continue waiting for it
-				logger.V(1).Info("transient error getting reservation, will retry", "reservation", res.Name, "error", err)
+				// Reservation is still in process of being created, or there is a transient error
 				stillWaiting = append(stillWaiting, res)
 				continue
 			}
@@ -370,7 +382,6 @@ func watchReservationsUntilReady(
 
 			if readyCond == nil {
 				// Condition not set yet, keep waiting
-				allAreReady = false
 				stillWaiting = append(stillWaiting, res)
 				continue
 			}
@@ -378,43 +389,33 @@ func watchReservationsUntilReady(
 			switch readyCond.Status {
 			case metav1.ConditionTrue:
 				// Only consider truly ready if Status.Host is populated
-				// This handles the two-phase reconcile pattern where Ready=True
-				// is set atomically with Status.Host in the controller
 				if current.Spec.TargetHost == "" || current.Status.Host == "" {
-					allAreReady = false
 					stillWaiting = append(stillWaiting, res)
 					continue
 				}
-				// Reservation is successfully scheduled
-				logger.Info("reservation ready", "reservation", current.Name, "host", current.Status.Host)
+				// Reservation is successfully scheduled - track for summary
+				successfulReservations = append(successfulReservations, current.Name)
 
 			case metav1.ConditionFalse:
-				// Check the reason - NoHostsFound means no capacity
-				if readyCond.Reason == "NoHostsFound" || readyCond.Reason == "NoHostsAvailable" {
-					failedReservations = append(failedReservations, current)
-					logger.Info("insufficient capacity for reservation", "reservation", current.Name, "reason", readyCond.Reason, "message", readyCond.Message)
-				} else {
-					// Other failure reasons
-					logger.Info("reservation failed", "reservation", current.Name, "reason", readyCond.Reason, "message", readyCond.Message)
-				}
+				// Any failure reason counts as failed
+				failedReservations = append(failedReservations, current)
 			case metav1.ConditionUnknown:
-				allAreReady = false
 				stillWaiting = append(stillWaiting, res)
 			}
 		}
 
-		if allAreReady || len(stillWaiting) == 0 {
-			logger.Info("all reservations checked",
-				"failed", len(failedReservations))
+		if len(stillWaiting) == 0 {
+			// All reservations have reached a terminal state - log summary
+			logger.Info("reservation watch completed",
+				"total", totalReservations,
+				"ready", len(successfulReservations),
+				"failed", len(failedReservations),
+				"duration", time.Since(startTime).Round(time.Millisecond),
+				"polls", pollCount)
 			return failedReservations, errors
 		}
 
 		reservationsToWatch = stillWaiting
-		// Log progress
-		logger.V(1).Info("waiting for reservations to become ready",
-			"notReady", len(reservationsToWatch),
-			"total", len(reservations),
-			"timeRemaining", time.Until(deadline).Round(time.Second))
 
 		// Wait before next poll
 		select {
