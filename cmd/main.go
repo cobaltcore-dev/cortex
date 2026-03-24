@@ -327,10 +327,6 @@ func main() {
 		novaAPIConfig := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
 		nova.NewAPI(novaAPIConfig, filterWeigherController).Init(mux)
 
-		// Initialize commitments API for LIQUID interface
-		commitmentsAPI := commitments.NewAPI(multiclusterClient)
-		commitmentsAPI.Init(mux, metrics.Registry)
-
 		// Detector pipeline controller setup.
 		novaClient := nova.NewNovaClient()
 		novaClientConfig := conf.GetConfigOrDie[nova.NovaClientConfig]()
@@ -340,6 +336,12 @@ func main() {
 			setupLog.Error(err, "unable to initialize nova client")
 			os.Exit(1)
 		}
+
+		// Initialize commitments API for LIQUID interface (with Nova client for usage reporting)
+		commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
+		commitmentsAPI := commitments.NewAPIWithConfig(multiclusterClient, commitmentsConfig, novaClient)
+		commitmentsAPI.Init(mux, metrics.Registry)
+
 		deschedulingsController := &nova.DetectorPipelineController{
 			Monitor: detectorPipelineMonitor,
 			Breaker: &nova.DetectorCycleBreaker{NovaClient: novaClient},
