@@ -232,6 +232,7 @@ func createEmptyFlavorGroupKnowledge() *v1alpha1.Knowledge {
 }
 
 // createTestFlavorGroupKnowledge creates a test Knowledge CRD with flavor group data
+// that accepts commitments (has fixed RAM/core ratio)
 func createTestFlavorGroupKnowledge(t *testing.T, groupName string) *v1alpha1.Knowledge {
 	t.Helper()
 
@@ -252,6 +253,14 @@ func createTestFlavorGroupKnowledge(t *testing.T, groupName string) *v1alpha1.Kn
 				"memoryMB": 32768,
 				"diskGB":   50,
 			},
+			"smallestFlavor": map[string]interface{}{
+				"name":     "test_c8_m32",
+				"vcpus":    8,
+				"memoryMB": 32768,
+				"diskGB":   50,
+			},
+			// Fixed RAM/core ratio (4096 MiB per vCPU) - required for group to accept commitments
+			"ramCoreRatio": 4096,
 		},
 	}
 
