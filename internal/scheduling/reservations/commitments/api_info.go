@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/go-logr/logr"
@@ -20,12 +19,8 @@ import (
 // See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/commitment.go
 // See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid
 func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
-	// Extract or generate request ID for tracing
-	requestID := r.Header.Get("X-Request-ID")
-	if requestID == "" {
-		requestID = fmt.Sprintf("req-%d", time.Now().UnixNano())
-	}
-	log := commitmentApiLog.WithValues("requestID", requestID, "endpoint", "/v1/info")
+	ctx := WithNewGlobalRequestID(r.Context())
+	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/v1/info")
 
 	// Only accept GET method
 	if r.Method != http.MethodGet {
@@ -33,13 +28,13 @@ func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.V(1).Info("processing info request")
+	logger.V(1).Info("processing info request")
 
 	// Build info response
-	info, err := api.buildServiceInfo(r.Context(), log)
+	info, err := api.buildServiceInfo(ctx, logger)
 	if err != nil {
 		// Use Info level for expected conditions like knowledge not being ready yet
-		log.Info("service info not available yet", "error", err.Error())
+		logger.Info("service info not available yet", "error", err.Error())
 		http.Error(w, "Service temporarily unavailable: "+err.Error(),
 			http.StatusServiceUnavailable)
 		return
@@ -49,13 +44,13 @@ func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(info); err != nil {
-		log.Error(err, "failed to encode service info")
+		logger.Error(err, "failed to encode service info")
 		return
 	}
 }
 
 // buildServiceInfo constructs the ServiceInfo response with metadata for all flavor groups.
-func (api *HTTPAPI) buildServiceInfo(ctx context.Context, log logr.Logger) (liquid.ServiceInfo, error) {
+func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (liquid.ServiceInfo, error) {
 	// Get all flavor groups from Knowledge CRDs
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
@@ -92,7 +87,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, log logr.Logger) (liqu
 			HandlesCommitments:  true,                   // We handle commitment changes via /v1/change-commitments
 		}
 
-		log.V(1).Info("registered flavor group resource",
+		logger.V(1).Info("registered flavor group resource",
 			"resourceName", resourceName,
 			"flavorGroup", groupName,
 			"displayName", displayName,
@@ -106,7 +101,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, log logr.Logger) (liqu
 		version = knowledgeCRD.Status.LastContentChange.Unix()
 	}
 
-	log.Info("built service info",
+	logger.Info("built service info",
 		"resourceCount", len(resources),
 		"version", version)
 

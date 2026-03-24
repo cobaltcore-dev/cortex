@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
-	ctrl "sigs.k8s.io/controller-runtime"
+	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -24,6 +24,7 @@ type HTTPAPI struct {
 	client     client.Client
 	config     Config
 	novaClient UsageNovaClient
+	monitor    ChangeCommitmentsAPIMonitor
 	// Mutex to serialize change-commitments requests
 	changeMutex sync.Mutex
 }
@@ -37,14 +38,14 @@ func NewAPIWithConfig(client client.Client, config Config, novaClient UsageNovaC
 		client:     client,
 		config:     config,
 		novaClient: novaClient,
+		monitor:    NewChangeCommitmentsAPIMonitor(),
 	}
 }
 
-func (api *HTTPAPI) Init(mux *http.ServeMux) {
+func (api *HTTPAPI) Init(mux *http.ServeMux, registry prometheus.Registerer) {
+	registry.MustRegister(&api.monitor)
 	mux.HandleFunc("/v1/commitments/change-commitments", api.HandleChangeCommitments)
 	// mux.HandleFunc("/v1/report-capacity", api.HandleReportCapacity)
 	mux.HandleFunc("/v1/commitments/info", api.HandleInfo)
 	mux.HandleFunc("/v1/commitments/projects/", api.HandleReportUsage) // matches /v1/commitments/projects/:project_id/report-usage
 }
-
-var commitmentApiLog = ctrl.Log.WithName("commitment_api")

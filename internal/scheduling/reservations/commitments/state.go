@@ -234,8 +234,8 @@ func FromReservations(reservations []v1alpha1.Reservation) (*CommitmentState, er
 		}
 		// check flavor group consistency, ignore if not matching to repair corrupted state in k8s
 		if res.Spec.CommittedResourceReservation.ResourceGroup != state.FlavorGroupName {
-			// log message
-			commitmentLog.Error(errors.New("inconsistent flavor group in reservation"),
+			// log message using baseLog since this is a static function without context
+			baseLog.Error(errors.New("inconsistent flavor group in reservation"),
 				"reservation belongs to same commitment but has different flavor group - ignoring reservation for capacity calculation",
 				"reservationName", res.Name,
 				"expectedFlavorGroup", state.FlavorGroupName,

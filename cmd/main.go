@@ -324,7 +324,6 @@ func main() {
 		nova.NewAPI(filterWeigherController).Init(mux)
 
 		// Detector pipeline controller setup.
-		// Nova client is created first so it can be passed to the commitments API
 		novaClient := nova.NewNovaClient()
 		novaClientConfig := conf.GetConfigOrDie[nova.NovaClientConfig]()
 		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
@@ -337,7 +336,7 @@ func main() {
 		// Initialize commitments API for LIQUID interface (with Nova client for usage reporting)
 		commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
 		commitmentsAPI := commitments.NewAPIWithConfig(multiclusterClient, commitmentsConfig, novaClient)
-		commitmentsAPI.Init(mux)
+		commitmentsAPI.Init(mux, metrics.Registry)
 
 		deschedulingsController := &nova.DetectorPipelineController{
 			Monitor: detectorPipelineMonitor,
