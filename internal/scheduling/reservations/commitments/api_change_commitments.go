@@ -49,6 +49,13 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	req := liquid.CommitmentChangeRequest{}
 	statusCode := http.StatusOK
 
+	// Extract or generate request ID for tracing - always set in response header
+	requestID := r.Header.Get("X-Request-ID")
+	if requestID == "" {
+		requestID = uuid.New().String()
+	}
+	w.Header().Set("X-Request-ID", requestID)
+
 	// Check if API is enabled
 	if !api.config.EnableChangeCommitmentsAPI {
 		statusCode = http.StatusServiceUnavailable
@@ -61,11 +68,6 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	api.changeMutex.Lock()
 	defer api.changeMutex.Unlock()
 
-	// Extract or generate request ID for tracing
-	requestID := r.Header.Get("X-Request-ID")
-	if requestID == "" {
-		requestID = uuid.New().String()
-	}
 	ctx := reservations.WithGlobalRequestID(context.Background(), "committed-resource-"+requestID)
 	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/v1/change-commitments")
 

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -24,19 +25,23 @@ func (api *HTTPAPI) HandleReportUsage(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	statusCode := http.StatusOK
 
+	// Extract or generate request ID for tracing - always set in response header
+	requestID := r.Header.Get("X-Request-ID")
+	if requestID == "" {
+		requestID = uuid.New().String()
+	}
+	w.Header().Set("X-Request-ID", requestID)
+
+	log := baseLog.WithValues("requestID", requestID, "endpoint", "report-usage")
+
 	// Check if API is enabled
 	if !api.config.EnableReportUsageAPI {
 		statusCode = http.StatusServiceUnavailable
+		log.Info("report-usage API is disabled, rejecting request")
 		http.Error(w, "report-usage API is disabled", statusCode)
 		api.recordUsageMetrics(statusCode, startTime)
 		return
 	}
-
-	requestID := r.Header.Get("X-Request-ID")
-	if requestID == "" {
-		requestID = fmt.Sprintf("req-%d", time.Now().UnixNano())
-	}
-	log := baseLog.WithValues("requestID", requestID, "endpoint", "report-usage")
 
 	if r.Method != http.MethodPost {
 		statusCode = http.StatusMethodNotAllowed

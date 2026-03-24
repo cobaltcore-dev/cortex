@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/google/uuid"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -20,6 +22,13 @@ func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request)
 	startTime := time.Now()
 	statusCode := http.StatusOK
 
+	// Extract or generate request ID for tracing - always set in response header
+	requestID := r.Header.Get("X-Request-ID")
+	if requestID == "" {
+		requestID = uuid.New().String()
+	}
+	w.Header().Set("X-Request-ID", requestID)
+
 	// Check if API is enabled
 	if !api.config.EnableReportCapacityAPI {
 		statusCode = http.StatusServiceUnavailable
@@ -28,7 +37,7 @@ func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	ctx := WithNewGlobalRequestID(r.Context())
+	ctx := reservations.WithGlobalRequestID(r.Context(), "committed-resource-"+requestID)
 	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/v1/commitments/report-capacity")
 
 	// Only accept POST method
