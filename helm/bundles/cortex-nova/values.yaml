@@ -164,6 +164,12 @@ cortex-scheduling-controllers:
     # Whether the change-commitments API endpoint is active
     # When false, the endpoint returns HTTP 503. The info endpoint remains available.
     committedResourceEnableChangeCommitmentsAPI: true
+    # Whether the report-usage API endpoint is active
+    # When false, the endpoint returns HTTP 503.
+    committedResourceEnableReportUsageAPI: true
+    # Whether the report-capacity API endpoint is active
+    # When false, the endpoint returns HTTP 503.
+    committedResourceEnableReportCapacityAPI: true
     # OvercommitMappings is a list of mappings that map hypervisor traits to
     # overcommit ratios. Note that this list is applied in order, so if there
     # are multiple mappings applying to the same hypervisors, the last mapping
