@@ -316,13 +316,14 @@ func (c *UsageCalculator) assignVMsToCommitments(
 }
 
 // buildUsageResponse constructs the Liquid API ServiceUsageReport.
+// Only flavor groups that accept commitments are included in the report.
 func (c *UsageCalculator) buildUsageResponse(
 	vms []VMUsageInfo,
 	vmAssignments map[string]string,
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	allAZs []liquid.AvailabilityZone,
 ) liquid.ServiceUsageReport {
-	// Initialize resources map with all flavor groups
+	// Initialize resources map for flavor groups that accept commitments
 	resources := make(map[liquid.ResourceName]*liquid.ResourceUsageReport)
 
 	// Group VMs by flavor group and AZ for aggregation
@@ -368,8 +369,12 @@ func (c *UsageCalculator) buildUsageResponse(
 		)
 	}
 
-	// Build ResourceUsageReport for each flavor group
-	for flavorGroupName := range flavorGroups {
+	// Build ResourceUsageReport for each flavor group that accepts commitments
+	for flavorGroupName, groupData := range flavorGroups {
+		// Only report usage for flavor groups that accept commitments
+		if !FlavorGroupAcceptsCommitments(&groupData) {
+			continue
+		}
 		resourceName := liquid.ResourceName(commitmentResourceNamePrefix + flavorGroupName)
 
 		perAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
