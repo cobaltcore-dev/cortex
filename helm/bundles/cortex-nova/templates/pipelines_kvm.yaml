@@ -85,6 +85,12 @@ spec:
         hypervisor resource. Note that hosts allowing all projects are still
         accessible and will not be filtered out. In this way some hypervisors
         are made accessible to some projects only.
+    - name: filter_aggregate_metadata
+      description: |
+        This step filters hosts based on metadata defined in their aggregates. For
+        example, if an aggregate has the metadata "filter_tenant_id": "<project_id>",
+        only hosts in that aggregate that match the project ID in the nova request
+        will pass this filter.
     - name: filter_live_migratable
       description: |
         This step ensures that the target host of a live migration can accept
@@ -218,6 +224,12 @@ spec:
         hypervisor resource. Note that hosts allowing all projects are still
         accessible and will not be filtered out. In this way some hypervisors
         are made accessible to some projects only.
+    - name: filter_aggregate_metadata
+      description: |
+        This step filters hosts based on metadata defined in their aggregates. For
+        example, if an aggregate has the metadata "filter_tenant_id": "<project_id>",
+        only hosts in that aggregate that match the project ID in the nova request
+        will pass this filter.
     - name: filter_live_migratable
       description: |
         This step ensures that the target host of a live migration can accept
