@@ -24,6 +24,7 @@ func TestChangeCommitmentsAPIMonitor_MetricsRegistration(t *testing.T) {
 	monitor.requestCounter.WithLabelValues("200").Inc()
 	monitor.requestDuration.WithLabelValues("200").Observe(0.1)
 	monitor.commitmentChanges.WithLabelValues("success").Inc()
+	monitor.timeouts.Inc()
 
 	// Verify metrics can be gathered
 	families, err := registry.Gather()
@@ -31,10 +32,11 @@ func TestChangeCommitmentsAPIMonitor_MetricsRegistration(t *testing.T) {
 		t.Fatalf("Failed to gather metrics: %v", err)
 	}
 
-	// Check that all three metrics are present
+	// Check that all metrics are present
 	foundRequestCounter := false
 	foundRequestDuration := false
 	foundCommitmentChanges := false
+	foundTimeouts := false
 
 	for _, family := range families {
 		switch *family.Name {
@@ -53,6 +55,11 @@ func TestChangeCommitmentsAPIMonitor_MetricsRegistration(t *testing.T) {
 			if *family.Type != dto.MetricType_COUNTER {
 				t.Errorf("Expected counter metric type, got %v", *family.Type)
 			}
+		case "cortex_committed_resource_change_api_timeouts_total":
+			foundTimeouts = true
+			if *family.Type != dto.MetricType_COUNTER {
+				t.Errorf("Expected counter metric type, got %v", *family.Type)
+			}
 		}
 	}
 
@@ -64,6 +71,9 @@ func TestChangeCommitmentsAPIMonitor_MetricsRegistration(t *testing.T) {
 	}
 	if !foundCommitmentChanges {
 		t.Error("Commitment changes counter not found in registry")
+	}
+	if !foundTimeouts {
+		t.Error("Timeouts counter not found in registry")
 	}
 }
 

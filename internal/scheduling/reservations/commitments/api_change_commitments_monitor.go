@@ -12,6 +12,7 @@ type ChangeCommitmentsAPIMonitor struct {
 	requestCounter    *prometheus.CounterVec
 	requestDuration   *prometheus.HistogramVec
 	commitmentChanges *prometheus.CounterVec
+	timeouts          prometheus.Counter
 }
 
 // NewChangeCommitmentsAPIMonitor creates a new monitor with Prometheus metrics.
@@ -29,6 +30,10 @@ func NewChangeCommitmentsAPIMonitor() ChangeCommitmentsAPIMonitor {
 			Name: "cortex_committed_resource_change_api_commitment_changes_total",
 			Help: "Total number of commitment changes processed by result",
 		}, []string{"result"}),
+		timeouts: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "cortex_committed_resource_change_api_timeouts_total",
+			Help: "Total number of commitment change requests that timed out while waiting for reservations to become ready",
+		}),
 	}
 }
 
@@ -37,6 +42,7 @@ func (m *ChangeCommitmentsAPIMonitor) Describe(ch chan<- *prometheus.Desc) {
 	m.requestCounter.Describe(ch)
 	m.requestDuration.Describe(ch)
 	m.commitmentChanges.Describe(ch)
+	m.timeouts.Describe(ch)
 }
 
 // Collect implements prometheus.Collector.
@@ -44,4 +50,5 @@ func (m *ChangeCommitmentsAPIMonitor) Collect(ch chan<- prometheus.Metric) {
 	m.requestCounter.Collect(ch)
 	m.requestDuration.Collect(ch)
 	m.commitmentChanges.Collect(ch)
+	m.timeouts.Collect(ch)
 }

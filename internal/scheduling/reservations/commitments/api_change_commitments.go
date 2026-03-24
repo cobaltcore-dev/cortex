@@ -272,6 +272,7 @@ ProcessLoop:
 			}
 			if len(failedReservations) == 0 {
 				resp.RejectionReason += "timeout reached while processing commitment changes"
+				api.monitor.timeouts.Inc()
 			}
 			requireRollback = true
 		}
