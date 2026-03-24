@@ -258,11 +258,12 @@ func main() {
 	// Create postgres client (for reading the secret)
 	// This is typically the local cluster where cortex runs
 	var pgClient client.Client
-	if *postgresContext == *hypervisorContext {
+	switch *postgresContext {
+	case *hypervisorContext:
 		pgClient = hvClient
-	} else if *postgresContext == *reservationContext {
+	case *reservationContext:
 		pgClient = resClient
-	} else {
+	default:
 		pgClient, err = getClientForContext(*postgresContext)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating postgres client: %v\n", err)
@@ -1727,7 +1728,11 @@ func printAllServers(serverMap map[string]serverInfo, _ map[string]flavorInfo, a
 		}
 
 		// Check if VM is in postgres
-		if server, ok := serverMap[uuid]; ok {
+		server, inPostgres := serverMap[uuid]
+		switch {
+		case !inPostgres:
+			info.Status = "NOT_IN_PG"
+		default:
 			info.InPostgres = true
 			info.PGHost = server.OSEXTSRVATTRHost
 			if info.FlavorName == "" {
@@ -1744,8 +1749,6 @@ func printAllServers(serverMap map[string]serverInfo, _ map[string]flavorInfo, a
 			default:
 				info.Status = "WRONG_HOST"
 			}
-		} else {
-			info.Status = "NOT_IN_PG"
 		}
 
 		vms = append(vms, info)
