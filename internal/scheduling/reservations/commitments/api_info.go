@@ -95,7 +95,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 		}
 		attrsJSON, err := json.Marshal(attrs)
 		if err != nil {
-			log.Error(err, "failed to marshal resource attributes", "resourceName", resourceName)
+			logger.Error(err, "failed to marshal resource attributes", "resourceName", resourceName)
 			attrsJSON = nil
 		}
 
