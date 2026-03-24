@@ -108,9 +108,19 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 			attrsJSON = nil
 		}
 
+		// Build unit from smallest flavor memory (e.g., "131072 MiB" for 128 GiB)
+		unit, err := liquid.UnitMebibytes.MultiplyBy(groupData.SmallestFlavor.MemoryMB)
+		if err != nil {
+			logger.Error(err, "failed to create unit for flavor group",
+				"flavorGroup", groupName,
+				"smallestFlavorMemoryMB", groupData.SmallestFlavor.MemoryMB)
+			// Fall back to UnitNone if unit creation fails (should not happen in practice)
+			unit = liquid.UnitNone
+		}
+
 		resources[resourceName] = liquid.ResourceInfo{
 			DisplayName:         displayName,
-			Unit:                liquid.UnitNone,        // Countable: multiples of smallest flavor instances
+			Unit:                unit,                   // Non-standard unit: multiples of smallest flavor RAM
 			Topology:            liquid.AZAwareTopology, // Commitments are per-AZ
 			NeedsResourceDemand: false,                  // Capacity planning out of scope for now
 			HasCapacity:         handlesCommitments,     // We report capacity via /v1/report-capacity only for groups that accept commitments

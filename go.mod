@@ -72,7 +72,7 @@ require (
 	github.com/poy/onpar v0.3.5 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.17.0 // indirect
-	github.com/sapcc/go-api-declarations v1.20.2
+	github.com/sapcc/go-api-declarations v1.20.3-0.20260320144929-b2da5d83efdf
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/cobra v1.10.1 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
