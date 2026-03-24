@@ -102,7 +102,7 @@ func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
 			"ramCoreRatio":   4096, // Fixed: 4096 MiB per vCPU for all flavors
 		},
 		{
-			// Group with variable ratio - should NOT accept commitments (HasCapacity=true, HandlesCommitments=false)
+			// Group with variable ratio - should NOT accept commitments (HasCapacity=false, HandlesCommitments=false)
 			"name": "v2_variable",
 			"flavors": []map[string]interface{}{
 				{"name": "v2_c4_m8", "vcpus": 4, "memoryMB": 8192, "diskGB": 50},    // 2048 MiB/vCPU
