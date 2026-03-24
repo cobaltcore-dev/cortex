@@ -46,6 +46,8 @@ type CommitmentState struct {
 	StartTime *time.Time
 	// EndTime is when the commitment expires
 	EndTime *time.Time
+	// CreatorRequestID is the request ID that triggered this state change (for traceability)
+	CreatorRequestID string
 }
 
 // FromCommitment converts Limes commitment to CommitmentState.

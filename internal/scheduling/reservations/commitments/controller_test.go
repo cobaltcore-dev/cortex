@@ -292,21 +292,39 @@ func TestCommitmentReservationController_reconcileInstanceReservation_Success(t 
 		},
 	}
 
+	// First reconcile: schedules the reservation and sets Spec.TargetHost
 	result, err := reconciler.Reconcile(context.Background(), req)
-
 	if err != nil {
-		t.Errorf("reconcileInstanceReservation() error = %v", err)
+		t.Errorf("First reconcile error = %v", err)
 		return
 	}
-
 	if result.RequeueAfter > 0 {
-		t.Errorf("Expected no requeue but got %v", result.RequeueAfter)
+		t.Errorf("Expected no requeue after first reconcile but got %v", result.RequeueAfter)
 	}
 
-	// Verify the reservation status
-	var updated v1alpha1.Reservation
-	err = client.Get(context.Background(), req.NamespacedName, &updated)
+	// Verify Spec.TargetHost is set after first reconcile
+	var afterFirstReconcile v1alpha1.Reservation
+	if err = client.Get(context.Background(), req.NamespacedName, &afterFirstReconcile); err != nil {
+		t.Errorf("Failed to get reservation after first reconcile: %v", err)
+		return
+	}
+	if afterFirstReconcile.Spec.TargetHost != "test-host-1" {
+		t.Errorf("Expected Spec.TargetHost=%v after first reconcile, got %v", "test-host-1", afterFirstReconcile.Spec.TargetHost)
+	}
+
+	// Second reconcile: syncs Spec.TargetHost to Status and sets Ready=True
+	result, err = reconciler.Reconcile(context.Background(), req)
 	if err != nil {
+		t.Errorf("Second reconcile error = %v", err)
+		return
+	}
+	if result.RequeueAfter > 0 {
+		t.Errorf("Expected no requeue after second reconcile but got %v", result.RequeueAfter)
+	}
+
+	// Verify the reservation status after second reconcile
+	var updated v1alpha1.Reservation
+	if err = client.Get(context.Background(), req.NamespacedName, &updated); err != nil {
 		t.Errorf("Failed to get updated reservation: %v", err)
 		return
 	}

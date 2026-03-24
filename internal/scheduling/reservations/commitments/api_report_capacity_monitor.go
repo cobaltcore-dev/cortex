@@ -14,8 +14,10 @@ type ReportCapacityAPIMonitor struct {
 }
 
 // NewReportCapacityAPIMonitor creates a new monitor with Prometheus metrics.
+// Metrics are pre-initialized with zero values for common HTTP status codes
+// to ensure they appear in Prometheus before the first request.
 func NewReportCapacityAPIMonitor() ReportCapacityAPIMonitor {
-	return ReportCapacityAPIMonitor{
+	m := ReportCapacityAPIMonitor{
 		requestCounter: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "cortex_committed_resource_capacity_api_requests_total",
 			Help: "Total number of committed resource capacity API requests by HTTP status code",
@@ -26,6 +28,16 @@ func NewReportCapacityAPIMonitor() ReportCapacityAPIMonitor {
 			Buckets: []float64{0.1, 0.25, 0.5, 1, 2.5, 5, 10},
 		}, []string{"status_code"}),
 	}
+
+	// Pre-initialize metrics with zero values for common HTTP status codes.
+	// This ensures metrics exist in Prometheus before the first request,
+	// preventing "metric missing" warnings in alerting rules.
+	for _, statusCode := range []string{"200", "500", "503"} {
+		m.requestCounter.WithLabelValues(statusCode)
+		m.requestDuration.WithLabelValues(statusCode)
+	}
+
+	return m
 }
 
 // Describe implements prometheus.Collector.

@@ -82,18 +82,15 @@ func (m *ReservationManager) ApplyCommitmentState(
 		deltaMemoryBytes -= memoryQuantity.Value()
 	}
 
-	log.Info("applying commitment state",
-		"commitmentUUID", desiredState.CommitmentUUID,
-		"desiredMemoryBytes", desiredState.TotalMemoryBytes,
-		"deltaMemoryBytes", deltaMemoryBytes,
-		"existingSlots", len(existing),
-	)
+	// Log only if there's actual work to do (delta != 0)
+	hasChanges := deltaMemoryBytes != 0
 
 	nextSlotIndex := GetNextSlotIndex(existing)
 
 	// Phase 3 (DELETE): Delete inconsistent reservations (wrong flavor group/project)
 	// They will be recreated with correct metadata in subsequent phases.
 	var validReservations []v1alpha1.Reservation
+	var repairedCount int
 	for _, res := range existing {
 		if res.Spec.CommittedResourceReservation.ResourceGroup != desiredState.FlavorGroupName ||
 			res.Spec.CommittedResourceReservation.ProjectID != desiredState.ProjectID {
@@ -104,6 +101,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 				"actualFlavorGroup", res.Spec.CommittedResourceReservation.ResourceGroup,
 				"expectedProjectID", desiredState.ProjectID,
 				"actualProjectID", res.Spec.CommittedResourceReservation.ProjectID)
+			repairedCount++
 			removedReservations = append(removedReservations, res)
 			memValue := res.Spec.Resources[hv1.ResourceMemory]
 			deltaMemoryBytes += memValue.Value()
@@ -145,19 +143,13 @@ func (m *ReservationManager) ApplyCommitmentState(
 		memValue := reservationToDelete.Spec.Resources[hv1.ResourceMemory]
 		deltaMemoryBytes += memValue.Value()
 
-		log.Info("deleting reservation (capacity decrease)",
-			"commitmentUUID", desiredState.CommitmentUUID,
-			"deltaMemoryBytes", deltaMemoryBytes,
-			"name", reservationToDelete.Name,
-			"numAllocations", len(reservationToDelete.Spec.CommittedResourceReservation.Allocations),
-			"memoryBytes", memValue.Value())
-
 		if err := m.Delete(ctx, reservationToDelete); err != nil {
 			return touchedReservations, removedReservations, fmt.Errorf("failed to delete reservation %s: %w", reservationToDelete.Name, err)
 		}
 	}
 
 	// Phase 5 (CREATE): Create new reservations (capacity increased)
+	var createdCount int
 	for deltaMemoryBytes > 0 {
 		// Need to create new reservation slots, always prefer largest flavor within the group
 		// TODO more sophisticated flavor selection, especially with flavors of different cpu/memory ratio
@@ -165,13 +157,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 		touchedReservations = append(touchedReservations, *reservation)
 		memValue := reservation.Spec.Resources[hv1.ResourceMemory]
 		deltaMemoryBytes -= memValue.Value()
-
-		log.Info("creating reservation",
-			"commitmentUUID", desiredState.CommitmentUUID,
-			"deltaMemoryBytes", deltaMemoryBytes,
-			"flavorName", reservation.Spec.CommittedResourceReservation.ResourceName,
-			"name", reservation.Name,
-			"memoryBytes", memValue.Value())
+		createdCount++
 
 		if err := m.Create(ctx, reservation); err != nil {
 			if apierrors.IsAlreadyExists(err) {
@@ -198,11 +184,15 @@ func (m *ReservationManager) ApplyCommitmentState(
 		}
 	}
 
-	log.Info("completed commitment state sync",
-		"commitmentUUID", desiredState.CommitmentUUID,
-		"totalReservations", len(existing),
-		"created", len(touchedReservations)-len(existing),
-		"deleted", len(removedReservations))
+	// Only log if there were actual changes
+	if hasChanges || createdCount > 0 || len(removedReservations) > 0 || repairedCount > 0 {
+		log.Info("commitment state sync completed",
+			"commitmentUUID", desiredState.CommitmentUUID,
+			"created", createdCount,
+			"deleted", len(removedReservations),
+			"repaired", repairedCount,
+			"total", len(existing)+createdCount)
+	}
 
 	return touchedReservations, removedReservations, nil
 }
@@ -221,12 +211,9 @@ func (m *ReservationManager) syncReservationMetadata(
 		(state.StartTime != nil && (reservation.Spec.StartTime == nil || !reservation.Spec.StartTime.Time.Equal(*state.StartTime))) ||
 		(state.EndTime != nil && (reservation.Spec.EndTime == nil || !reservation.Spec.EndTime.Time.Equal(*state.EndTime))) {
 		// Apply patch
-		logger.Info("syncing reservation metadata",
-			"reservation", reservation,
-			"desired commitmentUUID", state.CommitmentUUID,
-			"desired availabilityZone", state.AvailabilityZone,
-			"desired startTime", state.StartTime,
-			"desired endTime", state.EndTime)
+		logger.V(1).Info("syncing reservation metadata",
+			"reservation", reservation.Name,
+			"commitmentUUID", state.CommitmentUUID)
 
 		patch := client.MergeFrom(reservation.DeepCopy())
 
@@ -321,6 +308,9 @@ func (m *ReservationManager) newReservation(
 			Name: name,
 			Labels: map[string]string{
 				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+			},
+			Annotations: map[string]string{
+				v1alpha1.AnnotationCreatorRequestID: state.CreatorRequestID,
 			},
 		},
 		Spec: spec,
