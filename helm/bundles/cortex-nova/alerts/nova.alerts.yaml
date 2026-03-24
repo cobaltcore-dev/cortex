@@ -314,7 +314,7 @@ groups:
         issue is resolved.
 
   - alert: CortexNovaCommittedResourceLatencyTooHigh
-    expr: histogram_quantile(0.95, rate(cortex_committed_resource_change_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) > 30
+    expr: histogram_quantile(0.95, sum(rate(cortex_committed_resource_change_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) > 30
     for: 5m
     labels:
       context: committed-resource-api
