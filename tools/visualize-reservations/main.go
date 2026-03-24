@@ -20,6 +20,9 @@
 //	--hide=view1,view2,...      Comma-separated list of views to hide (applied after --views)
 //	--filter-name=pattern       Filter hypervisors by name (substring match)
 //	--filter-trait=trait        Filter hypervisors by trait (e.g., CUSTOM_HANA_EXCLUSIVE_HOST)
+//	--hypervisor-context=name   Kubernetes context for reading Hypervisors (default: current context)
+//	--reservation-context=name  Kubernetes context for reading Reservations (default: current context)
+//	--postgres-context=name     Kubernetes context for reading postgres secret (default: current context)
 //
 // To connect to postgres when running locally, use kubectl port-forward:
 //
@@ -45,6 +48,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
@@ -177,6 +182,38 @@ func applyHideViews(views viewSet, hideFlag string) {
 	}
 }
 
+// getClientForContext creates a kubernetes client for the specified context.
+// If contextName is empty, it uses the current/default context.
+func getClientForContext(contextName string) (client.Client, error) {
+	var cfg *rest.Config
+	var err error
+
+	if contextName == "" {
+		// Use default context
+		cfg, err = config.GetConfig()
+		if err != nil {
+			return nil, fmt.Errorf("getting default kubeconfig: %w", err)
+		}
+	} else {
+		// Use specified context
+		loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+		configOverrides := &clientcmd.ConfigOverrides{
+			CurrentContext: contextName,
+		}
+		kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
+		cfg, err = kubeConfig.ClientConfig()
+		if err != nil {
+			return nil, fmt.Errorf("getting kubeconfig for context %q: %w", contextName, err)
+		}
+	}
+
+	k8sClient, err := client.New(cfg, client.Options{Scheme: scheme})
+	if err != nil {
+		return nil, fmt.Errorf("creating client: %w", err)
+	}
+	return k8sClient, nil
+}
+
 func main() {
 	// Parse command line flags
 	sortBy := flag.String("sort", "vm", "Sort VMs by: vm (UUID), vm-host (VM's host), res-host (reservation host)")
@@ -188,6 +225,9 @@ func main() {
 	hideFlag := flag.String("hide", "", "Comma-separated list of views to hide (applied after --views)")
 	filterName := flag.String("filter-name", "", "Filter hypervisors by name (substring match)")
 	filterTrait := flag.String("filter-trait", "", "Filter hypervisors by trait (e.g., CUSTOM_HANA_EXCLUSIVE_HOST)")
+	hypervisorContext := flag.String("hypervisor-context", "", "Kubernetes context for reading Hypervisors (default: current context)")
+	reservationContext := flag.String("reservation-context", "", "Kubernetes context for reading Reservations (default: current context)")
+	postgresContext := flag.String("postgres-context", "", "Kubernetes context for reading postgres secret (default: current context)")
 	flag.Parse()
 
 	views := parseViews(*viewsFlag)
@@ -195,17 +235,39 @@ func main() {
 
 	ctx := context.Background()
 
-	// Create kubernetes client
-	cfg, err := config.GetConfig()
+	// Create kubernetes clients for hypervisors and reservations
+	// They may use different contexts if specified
+	hvClient, err := getClientForContext(*hypervisorContext)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error getting kubeconfig: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error creating hypervisor client: %v\n", err)
 		os.Exit(1)
 	}
 
-	k8sClient, err := client.New(cfg, client.Options{Scheme: scheme})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating client: %v\n", err)
-		os.Exit(1)
+	// Reuse the same client if contexts are the same, otherwise create a new one
+	var resClient client.Client
+	if *reservationContext == *hypervisorContext {
+		resClient = hvClient
+	} else {
+		resClient, err = getClientForContext(*reservationContext)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating reservation client: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	// Create postgres client (for reading the secret)
+	// This is typically the local cluster where cortex runs
+	var pgClient client.Client
+	if *postgresContext == *hypervisorContext {
+		pgClient = hvClient
+	} else if *postgresContext == *reservationContext {
+		pgClient = resClient
+	} else {
+		pgClient, err = getClientForContext(*postgresContext)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating postgres client: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	// Determine namespace
@@ -214,19 +276,19 @@ func main() {
 		ns = "default" // Default fallback
 	}
 
-	// Try to connect to postgres
+	// Try to connect to postgres (use pgClient for reading the secret)
 	var db *sql.DB
 	var serverMap map[string]serverInfo
 	var flavorMap map[string]flavorInfo
 
-	db, serverMap, flavorMap = connectToPostgres(ctx, k8sClient, *postgresSecret, ns, *postgresHostOverride, *postgresPortOverride)
+	db, serverMap, flavorMap = connectToPostgres(ctx, pgClient, *postgresSecret, ns, *postgresHostOverride, *postgresPortOverride, *postgresContext)
 	if db != nil {
 		defer db.Close()
 	}
 
-	// Get all hypervisors to find all VMs
+	// Get all hypervisors to find all VMs (use hvClient)
 	var allHypervisors hv1.HypervisorList
-	if err := k8sClient.List(ctx, &allHypervisors); err != nil {
+	if err := hvClient.List(ctx, &allHypervisors); err != nil {
 		fmt.Fprintf(os.Stderr, "Error listing hypervisors: %v\n", err)
 		return
 	}
@@ -270,9 +332,9 @@ func main() {
 		}
 	}
 
-	// Get all reservations (both failover and committed)
+	// Get all reservations (both failover and committed) (use resClient)
 	var allReservations v1alpha1.ReservationList
-	if err := k8sClient.List(ctx, &allReservations); err != nil {
+	if err := resClient.List(ctx, &allReservations); err != nil {
 		fmt.Fprintf(os.Stderr, "Error listing reservations: %v\n", err)
 		return
 	}
@@ -946,6 +1008,24 @@ func main() {
 	if views.has(viewSummary) {
 		printHeader("Summary Statistics")
 
+		// Kubernetes context information
+		hvCtx := *hypervisorContext
+		if hvCtx == "" {
+			hvCtx = "(current context)"
+		}
+		resCtx := *reservationContext
+		if resCtx == "" {
+			resCtx = "(current context)"
+		}
+		pgCtx := *postgresContext
+		if pgCtx == "" {
+			pgCtx = "(current context)"
+		}
+		fmt.Printf("Hypervisor context:   %s\n", hvCtx)
+		fmt.Printf("Reservation context:  %s\n", resCtx)
+		fmt.Printf("Postgres context:     %s\n", pgCtx)
+		fmt.Println()
+
 		// Database connection status
 		if db != nil {
 			fmt.Printf("Database: ✅ connected (servers: %d, flavors: %d)\n", len(serverMap), len(flavorMap))
@@ -1265,16 +1345,22 @@ func printHypervisorSummary(hypervisors []hv1.Hypervisor, reservations []v1alpha
 	fmt.Println()
 }
 
-func connectToPostgres(ctx context.Context, k8sClient client.Client, secretName, namespace, hostOverride, portOverride string) (db *sql.DB, serverMap map[string]serverInfo, flavorMap map[string]flavorInfo) {
+func connectToPostgres(ctx context.Context, k8sClient client.Client, secretName, namespace, hostOverride, portOverride, contextName string) (db *sql.DB, serverMap map[string]serverInfo, flavorMap map[string]flavorInfo) {
+	ctxDisplay := contextName
+	if ctxDisplay == "" {
+		ctxDisplay = "(current context)"
+	}
+	fmt.Fprintf(os.Stderr, "Postgres: Reading secret '%s' from namespace '%s' using context '%s'\n", secretName, namespace, ctxDisplay)
+
 	// Get the postgres secret
 	secret := &corev1.Secret{}
 	if err := k8sClient.Get(ctx, client.ObjectKey{
 		Namespace: namespace,
 		Name:      secretName,
 	}, secret); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Could not get postgres secret '%s' in namespace '%s': %v\n", secretName, namespace, err)
+		fmt.Fprintf(os.Stderr, "Warning: Could not get postgres secret '%s' in namespace '%s' (context: %s): %v\n", secretName, namespace, ctxDisplay, err)
 		fmt.Fprintf(os.Stderr, "         Postgres features will be disabled.\n")
-		fmt.Fprintf(os.Stderr, "         Use --postgres-secret and --namespace flags to specify the secret.\n\n")
+		fmt.Fprintf(os.Stderr, "         Use --postgres-secret, --namespace, and --postgres-context flags to specify the secret location.\n\n")
 		return nil, nil, nil
 	}
 
