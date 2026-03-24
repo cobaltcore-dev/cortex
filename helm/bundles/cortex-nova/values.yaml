@@ -173,13 +173,13 @@ cortex-scheduling-controllers:
     # Maps flavor name patterns (glob) to required failover count
     # Example: {"hana_*": 2, "m1.xlarge": 1}
     flavorFailoverRequirements:
-      "*": 1
+      "*": 2
     # How often to check for missing failover reservations (periodic bulk reconciliation)
-    reconcileInterval: 15m
+    reconcileInterval: 5m
     # Used when maxVMsToProcess limits processing, allows faster catch-up and for the first reconcile
     shortReconcileInterval: 1m
     # Number of max VMs to process in one periodic reconciliation loop
-    maxVMsToProcess: 5
+    maxVMsToProcess: 25
     # Minimum successful reservations to use short interval
     minSuccessForShortInterval: 1
     # Maximum failures allowed to still use short interval
