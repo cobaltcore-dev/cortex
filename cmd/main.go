@@ -325,7 +325,7 @@ func main() {
 
 		// Initialize commitments API for LIQUID interface
 		commitmentsAPI := commitments.NewAPI(multiclusterClient)
-		commitmentsAPI.Init(mux)
+		commitmentsAPI.Init(mux, metrics.Registry)
 
 		// Detector pipeline controller setup.
 		novaClient := nova.NewNovaClient()

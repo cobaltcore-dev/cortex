@@ -275,3 +275,96 @@ groups:
         This may indicate issues with the pipeline
         configuration. It is recommended to investigate the
         pipeline status and logs for more details.
+
+  # Committed Resource (Limes Integration) Alerts
+  - alert: CortexNovaCommittedResourceHttpRequest400sTooHigh
+    expr: rate(cortex_committed_resource_change_api_requests_total{service="cortex-nova-metrics", status_code=~"4.."}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource change API HTTP 400 errors too high"
+      description: >
+        The committed resource change API (Limes LIQUID integration) is responding
+        with HTTP 4xx errors. This may happen when Limes sends a request with
+        an outdated info version (409), the API is temporarily unavailable,
+        or the request format is invalid. Limes will typically retry these
+        requests, so no immediate action is needed unless the errors persist.
+
+  - alert: CortexNovaCommittedResourceHttpRequest500sTooHigh
+    expr: rate(cortex_committed_resource_change_api_requests_total{service="cortex-nova-metrics", status_code=~"5.."}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource change API HTTP 500 errors too high"
+      description: >
+        The committed resource change API (Limes LIQUID integration) is responding
+        with HTTP 5xx errors. This is not expected and indicates that Cortex
+        is having an internal problem processing commitment changes. Limes will
+        continue to retry, but new commitments may not be fulfilled until the
+        issue is resolved.
+
+  - alert: CortexNovaCommittedResourceLatencyTooHigh
+    expr: histogram_quantile(0.95, sum(rate(cortex_committed_resource_change_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) > 30
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource change API latency too high"
+      description: >
+        The committed resource change API (Limes LIQUID integration) is experiencing
+        high latency (p95 > 30s). This may indicate that the scheduling pipeline
+        is under heavy load or that reservation scheduling is taking longer than
+        expected. Limes requests may time out, causing commitment changes to fail.
+
+  - alert: CortexNovaCommittedResourceRejectionRateTooHigh
+    expr: |
+      rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected"}[5m])
+      / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[5m])) > 0.5
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource rejection rate too high"
+      description: >
+        More than 50% of commitment change requests are being rejected.
+        This may indicate insufficient capacity in the datacenter to fulfill
+        new commitments, or issues with the commitment scheduling logic.
+        Rejected commitments are rolled back, so Limes will see them as failed
+        and may retry or report the failure to users.
+
+  - alert: CortexNovaCommittedResourceTimeoutsTooHigh
+    expr: increase(cortex_committed_resource_change_api_timeouts_total{service="cortex-nova-metrics"}[5m]) > 0
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource change API timeouts too high"
+      description: >
+        The committed resource change API (Limes LIQUID integration) timed out
+        while waiting for reservations to become ready. This indicates that the
+        scheduling pipeline is overloaded or reservations are taking too long
+        to be scheduled. Affected commitment changes are rolled back and Limes
+        will see them as failed. Consider investigating the scheduler performance
+        or increasing the timeout configuration.
