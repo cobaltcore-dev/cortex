@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +21,9 @@ import (
 // This endpoint reports usage information for a specific project's committed resources,
 // including per-AZ usage, physical usage, and detailed VM subresources.
 func (api *HTTPAPI) HandleReportUsage(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	statusCode := http.StatusOK
+
 	requestID := r.Header.Get("X-Request-ID")
 	if requestID == "" {
 		requestID = fmt.Sprintf("req-%d", time.Now().UnixNano())
@@ -27,7 +31,9 @@ func (api *HTTPAPI) HandleReportUsage(w http.ResponseWriter, r *http.Request) {
 	log := baseLog.WithValues("requestID", requestID, "endpoint", "report-usage")
 
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		statusCode = http.StatusMethodNotAllowed
+		http.Error(w, "Method not allowed", statusCode)
+		api.recordUsageMetrics(statusCode, startTime)
 		return
 	}
 
@@ -36,7 +42,9 @@ func (api *HTTPAPI) HandleReportUsage(w http.ResponseWriter, r *http.Request) {
 	projectID, err := extractProjectIDFromPath(r.URL.Path)
 	if err != nil {
 		log.Error(err, "failed to extract project ID from path")
-		http.Error(w, "Invalid URL path: "+err.Error(), http.StatusBadRequest)
+		statusCode = http.StatusBadRequest
+		http.Error(w, "Invalid URL path: "+err.Error(), statusCode)
+		api.recordUsageMetrics(statusCode, startTime)
 		return
 	}
 
@@ -44,7 +52,9 @@ func (api *HTTPAPI) HandleReportUsage(w http.ResponseWriter, r *http.Request) {
 	var req liquid.ServiceUsageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Error(err, "failed to decode request body")
-		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
+		statusCode = http.StatusBadRequest
+		http.Error(w, "Invalid request body: "+err.Error(), statusCode)
+		api.recordUsageMetrics(statusCode, startTime)
 		return
 	}
 
@@ -53,15 +63,26 @@ func (api *HTTPAPI) HandleReportUsage(w http.ResponseWriter, r *http.Request) {
 	report, err := calculator.CalculateUsage(r.Context(), log, projectID, req.AllAZs)
 	if err != nil {
 		log.Error(err, "failed to calculate usage report", "projectID", projectID)
-		http.Error(w, "Failed to generate usage report: "+err.Error(), http.StatusInternalServerError)
+		statusCode = http.StatusInternalServerError
+		http.Error(w, "Failed to generate usage report: "+err.Error(), statusCode)
+		api.recordUsageMetrics(statusCode, startTime)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(statusCode)
 	if err := json.NewEncoder(w).Encode(report); err != nil {
 		log.Error(err, "failed to encode usage report")
 	}
+	api.recordUsageMetrics(statusCode, startTime)
+}
+
+// recordUsageMetrics records Prometheus metrics for a report-usage request.
+func (api *HTTPAPI) recordUsageMetrics(statusCode int, startTime time.Time) {
+	duration := time.Since(startTime).Seconds()
+	statusCodeStr := strconv.Itoa(statusCode)
+	api.usageMonitor.requestCounter.WithLabelValues(statusCodeStr).Inc()
+	api.usageMonitor.requestDuration.WithLabelValues(statusCodeStr).Observe(duration)
 }
 
 // extractProjectIDFromPath extracts the project UUID from the URL path.

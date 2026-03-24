@@ -368,3 +368,100 @@ groups:
         to be scheduled. Affected commitment changes are rolled back and Limes
         will see them as failed. Consider investigating the scheduler performance
         or increasing the timeout configuration.
+
+  # Committed Resource Usage API Alerts
+  - alert: CortexNovaCommittedResourceUsageHttpRequest400sTooHigh
+    expr: rate(cortex_committed_resource_usage_api_requests_total{service="cortex-nova-metrics", status_code=~"4.."}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource usage API HTTP 400 errors too high"
+      description: >
+        The committed resource usage API (Limes LIQUID integration) is responding
+        with HTTP 4xx errors. This may indicate invalid project IDs or malformed
+        requests from Limes. Limes will typically retry these requests.
+
+  - alert: CortexNovaCommittedResourceUsageHttpRequest500sTooHigh
+    expr: rate(cortex_committed_resource_usage_api_requests_total{service="cortex-nova-metrics", status_code=~"5.."}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource usage API HTTP 500 errors too high"
+      description: >
+        The committed resource usage API (Limes LIQUID integration) is responding
+        with HTTP 5xx errors. This indicates internal problems fetching reservations
+        or Nova server data. Limes may receive stale or incomplete usage data.
+
+  - alert: CortexNovaCommittedResourceUsageLatencyTooHigh
+    expr: histogram_quantile(0.95, sum(rate(cortex_committed_resource_usage_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) > 5
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource usage API latency too high"
+      description: >
+        The committed resource usage API (Limes LIQUID integration) is experiencing
+        high latency (p95 > 5s). This may indicate slow Nova API responses or
+        database queries. Limes scrapes may time out, affecting quota reporting.
+
+  # Committed Resource Capacity API Alerts
+  - alert: CortexNovaCommittedResourceCapacityHttpRequest400sTooHigh
+    expr: rate(cortex_committed_resource_capacity_api_requests_total{service="cortex-nova-metrics", status_code=~"4.."}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource capacity API HTTP 400 errors too high"
+      description: >
+        The committed resource capacity API (Limes LIQUID integration) is responding
+        with HTTP 4xx errors. This may indicate malformed requests from Limes.
+
+  - alert: CortexNovaCommittedResourceCapacityHttpRequest500sTooHigh
+    expr: rate(cortex_committed_resource_capacity_api_requests_total{service="cortex-nova-metrics", status_code=~"5.."}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource capacity API HTTP 500 errors too high"
+      description: >
+        The committed resource capacity API (Limes LIQUID integration) is responding
+        with HTTP 5xx errors. This indicates internal problems calculating cluster
+        capacity. Limes may receive stale or incomplete capacity data.
+
+  - alert: CortexNovaCommittedResourceCapacityLatencyTooHigh
+    expr: histogram_quantile(0.95, sum(rate(cortex_committed_resource_capacity_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) > 5
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource capacity API latency too high"
+      description: >
+        The committed resource capacity API (Limes LIQUID integration) is experiencing
+        high latency (p95 > 5s). This may indicate slow database queries or knowledge
+        CRD retrieval. Limes scrapes may time out, affecting capacity reporting.

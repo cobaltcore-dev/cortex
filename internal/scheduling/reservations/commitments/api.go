@@ -21,10 +21,12 @@ type UsageNovaClient interface {
 
 // HTTPAPI implements Limes LIQUID commitment validation endpoints.
 type HTTPAPI struct {
-	client     client.Client
-	config     Config
-	novaClient UsageNovaClient
-	monitor    ChangeCommitmentsAPIMonitor
+	client          client.Client
+	config          Config
+	novaClient      UsageNovaClient
+	monitor         ChangeCommitmentsAPIMonitor
+	usageMonitor    ReportUsageAPIMonitor
+	capacityMonitor ReportCapacityAPIMonitor
 	// Mutex to serialize change-commitments requests
 	changeMutex sync.Mutex
 }
@@ -35,17 +37,21 @@ func NewAPI(client client.Client) *HTTPAPI {
 
 func NewAPIWithConfig(client client.Client, config Config, novaClient UsageNovaClient) *HTTPAPI {
 	return &HTTPAPI{
-		client:     client,
-		config:     config,
-		novaClient: novaClient,
-		monitor:    NewChangeCommitmentsAPIMonitor(),
+		client:          client,
+		config:          config,
+		novaClient:      novaClient,
+		monitor:         NewChangeCommitmentsAPIMonitor(),
+		usageMonitor:    NewReportUsageAPIMonitor(),
+		capacityMonitor: NewReportCapacityAPIMonitor(),
 	}
 }
 
 func (api *HTTPAPI) Init(mux *http.ServeMux, registry prometheus.Registerer) {
 	registry.MustRegister(&api.monitor)
+	registry.MustRegister(&api.usageMonitor)
+	registry.MustRegister(&api.capacityMonitor)
 	mux.HandleFunc("/v1/commitments/change-commitments", api.HandleChangeCommitments)
-	// mux.HandleFunc("/v1/report-capacity", api.HandleReportCapacity)
+	mux.HandleFunc("/v1/commitments/report-capacity", api.HandleReportCapacity)
 	mux.HandleFunc("/v1/commitments/info", api.HandleInfo)
 	mux.HandleFunc("/v1/commitments/projects/", api.HandleReportUsage) // matches /v1/commitments/projects/:project_id/report-usage
 }
