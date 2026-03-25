@@ -171,14 +171,16 @@ func TestMultiClusterRecorder_MultipleRemotes(t *testing.T) {
 	}
 	recorder.Eventf(res, nil, corev1.EventTypeWarning, "SchedulingFailed", "FailedScheduling", "no host found")
 
-	if len(remoteARecorder.getCalls()) != 0 {
-		t.Errorf("expected 0 calls to remote-a, got %d", len(remoteARecorder.getCalls()))
+	remoteCallsA := remoteARecorder.getCalls()
+	if len(remoteCallsA) != 0 {
+		t.Errorf("expected 0 calls to remote-a, got %d", len(remoteCallsA))
 	}
-	if len(remoteBRecorder.getCalls()) != 1 {
-		t.Fatalf("expected 1 call to remote-b, got %d", len(remoteBRecorder.getCalls()))
+	remoteCallsB := remoteBRecorder.getCalls()
+	if len(remoteCallsB) != 1 {
+		t.Fatalf("expected 1 call to remote-b, got %d", len(remoteCallsB))
 	}
-	if remoteBRecorder.getCalls()[0].reason != "SchedulingFailed" {
-		t.Errorf("expected reason %q, got %q", "SchedulingFailed", remoteBRecorder.getCalls()[0].reason)
+	if remoteCallsB[0].reason != "SchedulingFailed" {
+		t.Errorf("expected reason %q, got %q", "SchedulingFailed", remoteCallsB[0].reason)
 	}
 }
 
@@ -250,7 +252,8 @@ func TestMultiClusterRecorder_ConcurrentEventf(t *testing.T) {
 	}
 	wg.Wait()
 
-	if len(homeRecorder.getCalls()) != goroutines {
-		t.Errorf("expected %d calls, got %d", goroutines, len(homeRecorder.getCalls()))
+	homeCalls := homeRecorder.getCalls()
+	if len(homeCalls) != goroutines {
+		t.Errorf("expected %d calls, got %d", goroutines, len(homeCalls))
 	}
 }

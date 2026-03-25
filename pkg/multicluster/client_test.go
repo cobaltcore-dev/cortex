@@ -78,7 +78,7 @@ type fakeCluster struct {
 	cluster.Cluster
 	fakeClient   client.Client
 	fakeCache    *fakeCache
-	fakeRecorder *fakeEventRecorder
+	fakeRecorder events.EventRecorder
 }
 
 func (f *fakeCluster) GetClient() client.Client {
