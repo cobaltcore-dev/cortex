@@ -79,7 +79,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 	// Note: We pass all hypervisors (from all AZs) in EligibleHosts. The scheduler pipeline's
 	// filter_correct_az filter will exclude hosts that are not in the VM's availability zone.
 	scheduleReq := reservations.ScheduleReservationRequest{
-		InstanceUUID:     "failover-" + vm.UUID,
+		InstanceUUID:     vm.UUID,
 		ProjectID:        vm.ProjectID,
 		FlavorName:       vm.FlavorName,
 		FlavorExtraSpecs: flavorExtraSpecs,
@@ -89,6 +89,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		IgnoreHosts:      ignoreHypervisors,
 		Pipeline:         pipeline,
 		AvailabilityZone: vm.AvailabilityZone,
+		SchedulerHints:   map[string]any{"_nova_check_type": string(api.ReserveForFailoverIntent)},
 	}
 
 	logger.V(1).Info("scheduling failover reservation",
@@ -218,7 +219,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		IgnoreHosts:      []string{vm.CurrentHypervisor},
 		Pipeline:         PipelineAcknowledgeFailoverReservation,
 		AvailabilityZone: vm.AvailabilityZone,
-		SchedulerHints:   map[string]any{"_nova_check_type": "evacuate"},
+		SchedulerHints:   map[string]any{"_nova_check_type": string(api.EvacuateIntent)},
 	}
 
 	logger.V(1).Info("validating VM via scheduler evacuation",
