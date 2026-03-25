@@ -17,6 +17,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// ApplyResult contains the result of applying a commitment state.
+type ApplyResult struct {
+	// Created is the number of reservations created
+	Created int
+	// Deleted is the number of reservations deleted
+	Deleted int
+	// Repaired is the number of reservations repaired (metadata sync or recreated due to wrong config)
+	Repaired int
+	// TouchedReservations are reservations that were created or updated
+	TouchedReservations []v1alpha1.Reservation
+	// RemovedReservations are reservations that were deleted
+	RemovedReservations []v1alpha1.Reservation
+}
+
 // ReservationManager handles CRUD operations for Reservation CRDs.
 type ReservationManager struct {
 	client.Client
@@ -42,14 +56,16 @@ func NewReservationManager(k8sClient client.Client) *ReservationManager {
 //   - Deleting unused/excess slots when capacity decreases
 //   - Syncing reservation metadata for all remaining slots
 //
-// Returns touched reservations (created/updated) and removed reservations for caller tracking.
+// Returns ApplyResult containing touched/removed reservations and counts for metrics.
 func (m *ReservationManager) ApplyCommitmentState(
 	ctx context.Context,
 	log logr.Logger,
 	desiredState *CommitmentState,
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	creator string,
-) (touchedReservations, removedReservations []v1alpha1.Reservation, err error) {
+) (*ApplyResult, error) {
+
+	result := &ApplyResult{}
 
 	log = log.WithName("ReservationManager")
 
@@ -58,7 +74,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 	if err := m.List(ctx, &allReservations, client.MatchingLabels{
 		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
 	}); err != nil {
-		return nil, nil, fmt.Errorf("failed to list reservations: %w", err)
+		return nil, fmt.Errorf("failed to list reservations: %w", err)
 	}
 
 	// Filter by name prefix to find reservations for this commitment
@@ -74,7 +90,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 	flavorGroup, exists := flavorGroups[desiredState.FlavorGroupName]
 
 	if !exists {
-		return nil, nil, fmt.Errorf("flavor group not found: %s", desiredState.FlavorGroupName)
+		return nil, fmt.Errorf("flavor group not found: %s", desiredState.FlavorGroupName)
 	}
 	deltaMemoryBytes := desiredState.TotalMemoryBytes
 	for _, res := range existing {
@@ -90,7 +106,6 @@ func (m *ReservationManager) ApplyCommitmentState(
 	// Phase 3 (DELETE): Delete inconsistent reservations (wrong flavor group/project)
 	// They will be recreated with correct metadata in subsequent phases.
 	var validReservations []v1alpha1.Reservation
-	var repairedCount int
 	for _, res := range existing {
 		if res.Spec.CommittedResourceReservation.ResourceGroup != desiredState.FlavorGroupName ||
 			res.Spec.CommittedResourceReservation.ProjectID != desiredState.ProjectID {
@@ -101,13 +116,13 @@ func (m *ReservationManager) ApplyCommitmentState(
 				"actualFlavorGroup", res.Spec.CommittedResourceReservation.ResourceGroup,
 				"expectedProjectID", desiredState.ProjectID,
 				"actualProjectID", res.Spec.CommittedResourceReservation.ProjectID)
-			repairedCount++
-			removedReservations = append(removedReservations, res)
+			result.Repaired++
+			result.RemovedReservations = append(result.RemovedReservations, res)
 			memValue := res.Spec.Resources[hv1.ResourceMemory]
 			deltaMemoryBytes += memValue.Value()
 
 			if err := m.Delete(ctx, &res); err != nil {
-				return touchedReservations, removedReservations, fmt.Errorf("failed to delete reservation %s: %w", res.Name, err)
+				return result, fmt.Errorf("failed to delete reservation %s: %w", res.Name, err)
 			}
 		} else {
 			validReservations = append(validReservations, res)
@@ -139,33 +154,33 @@ func (m *ReservationManager) ApplyCommitmentState(
 			reservationToDelete = &existing[len(existing)-1]
 			existing = existing[:len(existing)-1] // remove from existing list
 		}
-		removedReservations = append(removedReservations, *reservationToDelete)
+		result.RemovedReservations = append(result.RemovedReservations, *reservationToDelete)
+		result.Deleted++
 		memValue := reservationToDelete.Spec.Resources[hv1.ResourceMemory]
 		deltaMemoryBytes += memValue.Value()
 
 		if err := m.Delete(ctx, reservationToDelete); err != nil {
-			return touchedReservations, removedReservations, fmt.Errorf("failed to delete reservation %s: %w", reservationToDelete.Name, err)
+			return result, fmt.Errorf("failed to delete reservation %s: %w", reservationToDelete.Name, err)
 		}
 	}
 
 	// Phase 5 (CREATE): Create new reservations (capacity increased)
-	var createdCount int
 	for deltaMemoryBytes > 0 {
 		// Need to create new reservation slots, always prefer largest flavor within the group
 		// TODO more sophisticated flavor selection, especially with flavors of different cpu/memory ratio
 		reservation := m.newReservation(desiredState, nextSlotIndex, deltaMemoryBytes, flavorGroup, creator)
-		touchedReservations = append(touchedReservations, *reservation)
+		result.TouchedReservations = append(result.TouchedReservations, *reservation)
 		memValue := reservation.Spec.Resources[hv1.ResourceMemory]
 		deltaMemoryBytes -= memValue.Value()
-		createdCount++
+		result.Created++
 
 		if err := m.Create(ctx, reservation); err != nil {
 			if apierrors.IsAlreadyExists(err) {
-				return touchedReservations, removedReservations, fmt.Errorf(
+				return result, fmt.Errorf(
 					"reservation %s already exists (collision detected): %w",
 					reservation.Name, err)
 			}
-			return touchedReservations, removedReservations, fmt.Errorf(
+			return result, fmt.Errorf(
 				"failed to create reservation slot %d: %w",
 				nextSlotIndex, err)
 		}
@@ -177,24 +192,25 @@ func (m *ReservationManager) ApplyCommitmentState(
 	for i := range existing {
 		updated, err := m.syncReservationMetadata(ctx, log, &existing[i], desiredState)
 		if err != nil {
-			return touchedReservations, removedReservations, err
+			return result, err
 		}
 		if updated != nil {
-			touchedReservations = append(touchedReservations, *updated)
+			result.TouchedReservations = append(result.TouchedReservations, *updated)
+			result.Repaired++
 		}
 	}
 
 	// Only log if there were actual changes
-	if hasChanges || createdCount > 0 || len(removedReservations) > 0 || repairedCount > 0 {
+	if hasChanges || result.Created > 0 || len(result.RemovedReservations) > 0 || result.Repaired > 0 {
 		log.Info("commitment state sync completed",
 			"commitmentUUID", desiredState.CommitmentUUID,
-			"created", createdCount,
-			"deleted", len(removedReservations),
-			"repaired", repairedCount,
-			"total", len(existing)+createdCount)
+			"created", result.Created,
+			"deleted", result.Deleted,
+			"repaired", result.Repaired,
+			"total", len(existing)+result.Created)
 	}
 
-	return touchedReservations, removedReservations, nil
+	return result, nil
 }
 
 // syncReservationMetadata updates reservation metadata if it differs from desired state.

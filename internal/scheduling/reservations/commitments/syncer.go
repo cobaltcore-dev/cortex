@@ -85,8 +85,16 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 		skippedUUIDs: make(map[string]bool),
 	}
 	for id, commitment := range commitments {
+		// Record each commitment seen from Limes
+		if s.monitor != nil {
+			s.monitor.RecordCommitmentSeen()
+		}
+
 		if commitment.ServiceType != "compute" {
 			log.Info("skipping non-compute commitment", "id", id, "serviceType", commitment.ServiceType)
+			if s.monitor != nil {
+				s.monitor.RecordCommitmentSkipped(SkipReasonNonCompute)
+			}
 			continue
 		}
 
@@ -97,6 +105,9 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 				"id", id,
 				"resourceName", commitment.ResourceName,
 				"error", err)
+			if s.monitor != nil {
+				s.monitor.RecordCommitmentSkipped(SkipReasonInvalidResource)
+			}
 			continue
 		}
 
@@ -106,6 +117,9 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 			log.Info("skipping commitment with unknown flavor group",
 				"id", id,
 				"flavorGroup", flavorGroupName)
+			if s.monitor != nil {
+				s.monitor.RecordCommitmentSkipped(SkipReasonUnknownFlavorGroup)
+			}
 			continue
 		}
 
@@ -136,6 +150,9 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 		if commitment.UUID == "" {
 			log.Info("skipping commitment with empty UUID",
 				"id", id)
+			if s.monitor != nil {
+				s.monitor.RecordCommitmentSkipped(SkipReasonEmptyUUID)
+			}
 			continue
 		}
 
@@ -155,6 +172,11 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 			"totalMemoryBytes", state.TotalMemoryBytes)
 
 		result.states = append(result.states, state)
+
+		// Record successfully processed commitment
+		if s.monitor != nil {
+			s.monitor.RecordCommitmentProcessed()
+		}
 	}
 
 	return result, nil
@@ -170,6 +192,11 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	logger := LoggerFromContext(ctx).WithValues("component", "syncer", "runID", runID)
 
 	logger.Info("starting commitment sync with sync interval", "interval", DefaultSyncerConfig().SyncInterval)
+
+	// Record sync run
+	if s.monitor != nil {
+		s.monitor.RecordSyncRun()
+	}
 
 	// Check if flavor group knowledge is ready
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: s.Client}
@@ -201,6 +228,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	manager := NewReservationManager(s.Client)
 
 	// Apply each commitment state using the manager
+	var totalCreated, totalDeleted, totalRepaired int
 	for _, state := range commitmentResult.states {
 		logger.Info("applying commitment state",
 			"commitmentUUID", state.CommitmentUUID,
@@ -208,13 +236,17 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 			"flavorGroup", state.FlavorGroupName,
 			"totalMemoryBytes", state.TotalMemoryBytes)
 
-		_, _, err := manager.ApplyCommitmentState(ctx, logger, state, flavorGroups, CreatorValue)
+		applyResult, err := manager.ApplyCommitmentState(ctx, logger, state, flavorGroups, CreatorValue)
 		if err != nil {
 			logger.Error(err, "failed to apply commitment state",
 				"commitmentUUID", state.CommitmentUUID)
 			// Continue with other commitments even if one fails
 			continue
 		}
+
+		totalCreated += applyResult.Created
+		totalDeleted += applyResult.Deleted
+		totalRepaired += applyResult.Repaired
 	}
 
 	// Delete reservations that are no longer in commitments
@@ -255,11 +287,28 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 			logger.Info("deleted reservation for expired commitment",
 				"name", existing.Name,
 				"commitmentUUID", commitmentUUID)
+			totalDeleted++
+		}
+	}
+
+	// Record reservation change metrics
+	if s.monitor != nil {
+		if totalCreated > 0 {
+			s.monitor.RecordReservationsCreated(totalCreated)
+		}
+		if totalDeleted > 0 {
+			s.monitor.RecordReservationsDeleted(totalDeleted)
+		}
+		if totalRepaired > 0 {
+			s.monitor.RecordReservationsRepaired(totalRepaired)
 		}
 	}
 
 	logger.Info("synced reservations",
 		"processedCount", len(commitmentResult.states),
-		"skippedCount", len(commitmentResult.skippedUUIDs))
+		"skippedCount", len(commitmentResult.skippedUUIDs),
+		"created", totalCreated,
+		"deleted", totalDeleted,
+		"repaired", totalRepaired)
 	return nil
 }
