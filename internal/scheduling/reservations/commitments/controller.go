@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -502,10 +503,22 @@ func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl
 	})); err != nil {
 		return err
 	}
-	return multicluster.BuildController(mcl, mgr).
-		For(&v1alpha1.Reservation{}).
-		WithEventFilter(commitmentReservationPredicate).
-		Named("commitment-reservation").
+
+	// Use WatchesMulticluster to watch Reservations across all configured clusters
+	// (home + remotes). This is required because Reservation CRDs may be stored
+	// in remote clusters, not just the home cluster. Without this, the controller
+	// would only see reservations in the home cluster's cache.
+	bldr := multicluster.BuildController(mcl, mgr)
+	bldr, err := bldr.WatchesMulticluster(
+		&v1alpha1.Reservation{},
+		&handler.EnqueueRequestForObject{},
+		commitmentReservationPredicate,
+	)
+	if err != nil {
+		return err
+	}
+
+	return bldr.Named("commitment-reservation").
 		WithOptions(controller.Options{
 			// We want to process reservations one at a time to avoid overbooking.
 			MaxConcurrentReconciles: 1,
