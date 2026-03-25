@@ -1,0 +1,12 @@
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: multicluster-test
+spec:
+  schedulingDomain: nova
+  description: Minimal test pipeline for the multicluster guide.
+  type: filter-weigher
+  createHistory: true
+  filters:
+    - name: filter_correct_az
+  weighers: []
