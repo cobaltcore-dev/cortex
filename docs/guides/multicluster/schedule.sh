@@ -4,14 +4,37 @@ set -e
 
 API_URL="http://localhost:8001/scheduler/nova/external"
 INSTANCE_UUID="cortex-test-instance-001"
+HISTORY_NAME="nova-$INSTANCE_UUID"
 
-echo "Applying test pipeline to home cluster"
+# --- Step 1: Apply the test pipeline -----------------------------------------
+
+echo "=== Step 1: Apply test pipeline ==="
+echo ""
+echo "The test pipeline is a minimal filter-weigher pipeline with:"
+echo "  - createHistory: true  (so a History CRD is created for each decision)"
+echo "  - filter_correct_az    (filters hosts not matching the requested AZ)"
+echo "  - no weighers          (hosts are returned in their original order)"
+echo ""
+
 kubectl --context kind-cortex-home apply -f docs/guides/multicluster/test-pipeline.yaml
 
 echo ""
-echo "Sending scheduling request for instance $INSTANCE_UUID"
-echo "The test pipeline will schedule the instance on one of the hosts in cortex-remote-az-b".
-echo "Hosts: hypervisor-1-az-a, hypervisor-2-az-a, hypervisor-1-az-b, hypervisor-2-az-b"
+echo "Press enter to send a scheduling request..."
+read -r
+
+# --- Step 2: Send scheduling request -----------------------------------------
+
+echo "=== Step 2: Send scheduling request ==="
+echo ""
+echo "Sending a Nova external scheduler request to the cortex API."
+echo ""
+echo "  Instance UUID:      $INSTANCE_UUID"
+echo "  Availability Zone:  cortex-remote-az-b"
+echo "  Pipeline:           multicluster-test"
+echo "  Candidate hosts:    hypervisor-{1,2}-az-{a,b}  (4 hosts across 2 AZs)"
+echo ""
+echo "The pipeline's filter_correct_az step should filter out the az-a hosts,"
+echo "leaving only hypervisor-1-az-b and hypervisor-2-az-b."
 echo ""
 
 RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$API_URL" \
@@ -167,30 +190,64 @@ EOF
 HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 
-echo "Response from scheduler:"
-echo "HTTP $HTTP_CODE"
+echo "Response (HTTP $HTTP_CODE):"
 echo "$BODY" | python3 -m json.tool 2>/dev/null || echo "$BODY"
 
-sleep 1
-echo ""
-echo "--- Check History CRDs in cortex-home ---"
-kubectl --context kind-cortex-home get histories
-kubectl --context kind-cortex-home get events --field-selector reason=SchedulingSucceeded
-echo ""
-echo "--- Check History CRDs in cortex-remote-az-a ---"
-kubectl --context kind-cortex-remote-az-a get histories
-kubectl --context kind-cortex-remote-az-a get events --field-selector reason=SchedulingSucceeded
+if [ "$HTTP_CODE" != "200" ]; then
+  echo ""
+  echo "ERROR: Scheduling request failed. Check the controller logs:"
+  echo "  kubectl --context kind-cortex-home logs deploy/cortex-nova-scheduling-controller-manager"
+  exit 1
+fi
 
 echo ""
-echo "--- Check History CRDs in cortex-remote-az-b ---"
-kubectl --context kind-cortex-remote-az-b get histories
-kubectl --context kind-cortex-remote-az-b get events --field-selector reason=SchedulingSucceeded
-
-echo "---"
-echo "Press enter to describe the History CRD in cortex-remote-az-b and see the details of the scheduling result"
+echo "Press enter to check History CRDs and events across all clusters..."
 read -r
 
-echo "--- Describe History CRD in cortex-remote-az-b ---"
-kubectl --context kind-cortex-remote-az-b describe history nova-cortex-test-instance-001
+# --- Step 3: Check History and Events ----------------------------------------
 
+echo "=== Step 3: Check History CRDs and Events ==="
+echo ""
+echo "The pipeline has createHistory: true, so a History CRD named '$HISTORY_NAME'"
+echo "should have been created. An event should also have been recorded on it."
+echo "Based on the multicluster config, this should be on the remote cluster cortex-remote-az-b."
+echo ""
 
+sleep 1
+
+for CLUSTER in kind-cortex-home kind-cortex-remote-az-a kind-cortex-remote-az-b; do
+  echo "--- $CLUSTER ---"
+  echo "Histories:"
+  kubectl --context "$CLUSTER" get histories 2>/dev/null || echo "  (none)"
+  echo "Events:"
+  kubectl --context "$CLUSTER" get events --field-selector reason=SchedulingSucceeded 2>/dev/null || echo "  (none)"
+  echo ""
+done
+
+echo "Press enter to describe the History CRD and see the full scheduling result..."
+read -r
+
+# --- Step 4: Describe History ------------------------------------------------
+
+echo "=== Step 4: Describe History CRD ==="
+echo ""
+echo "The History CRD contains the full scheduling decision context:"
+echo "  - Which pipeline was used"
+echo "  - The target host that was selected"
+echo "  - An explanation of each filter/weigher step"
+echo "  - The Ready condition (True = host selected, False = no host found)"
+echo ""
+
+# Try all clusters to find where the History ended up.
+for CLUSTER in kind-cortex-home kind-cortex-remote-az-a kind-cortex-remote-az-b; do
+  if kubectl --context "$CLUSTER" get history "$HISTORY_NAME" &>/dev/null; then
+    echo "Found History '$HISTORY_NAME' in $CLUSTER:"
+    echo ""
+    kubectl --context "$CLUSTER" describe history "$HISTORY_NAME"
+    exit 0
+  fi
+done
+
+echo "WARNING: History '$HISTORY_NAME' was not found in any cluster."
+echo "Check the controller logs for errors:"
+echo "  kubectl --context kind-cortex-home logs deploy/cortex-nova-scheduling-controller-manager | grep -i history"
