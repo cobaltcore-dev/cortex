@@ -14,7 +14,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
-// handles POST /v1/commitments/report-capacity requests from Limes:
+// handles POST /commitments/v1/report-capacity requests from Limes:
 // See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/commitment.go
 // See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid
 // Reports available capacity across all flavor group resources. Note, unit is specified in the Info API response with multiple of the smallest memory resource unit within a flavor group.
@@ -38,7 +38,7 @@ func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request)
 	}
 
 	ctx := reservations.WithGlobalRequestID(r.Context(), "committed-resource-"+requestID)
-	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/v1/commitments/report-capacity")
+	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/report-capacity")
 
 	// Only accept POST method
 	if r.Method != http.MethodPost {
