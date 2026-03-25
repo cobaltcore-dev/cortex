@@ -615,8 +615,16 @@ func (tfg TestFlavorGroup) ToFlavorGroupsKnowledge() FlavorGroupsKnowledge {
 		groupMap[groupName] = append(groupMap[groupName], flavor)
 	}
 
+	// Sort group names for deterministic iteration
+	sortedGroupNames := make([]string, 0, len(groupMap))
+	for groupName := range groupMap {
+		sortedGroupNames = append(sortedGroupNames, groupName)
+	}
+	sort.Strings(sortedGroupNames)
+
 	var groups []compute.FlavorGroupFeature
-	for groupName, groupFlavors := range groupMap {
+	for _, groupName := range sortedGroupNames {
+		groupFlavors := groupMap[groupName]
 		if len(groupFlavors) == 0 {
 			continue
 		}
@@ -1765,6 +1773,7 @@ func newAPIResponse(rejectReasonSubstrings ...string) APIResponseExpectation {
 
 // buildRequestJSON converts a test CommitmentChangeRequest to JSON string.
 // Builds the nested JSON structure directly for simplicity.
+// Uses sorted iteration to ensure deterministic JSON output.
 func buildRequestJSON(req CommitmentChangeRequest) string {
 	// Group commitments by project and resource for nested structure
 	type projectResources map[liquid.ResourceName][]TestCommitment
@@ -1780,11 +1789,30 @@ func buildRequestJSON(req CommitmentChangeRequest) string {
 		)
 	}
 
-	// Build nested JSON structure
+	// Sort projects for deterministic iteration
+	sortedProjects := make([]string, 0, len(byProject))
+	for projectID := range byProject {
+		sortedProjects = append(sortedProjects, projectID)
+	}
+	sort.Strings(sortedProjects)
+
+	// Build nested JSON structure with sorted iteration
 	var projectParts []string
-	for projectID, resources := range byProject {
+	for _, projectID := range sortedProjects {
+		resources := byProject[projectID]
+
+		// Sort resource names for deterministic iteration
+		sortedResources := make([]liquid.ResourceName, 0, len(resources))
+		for resourceName := range resources {
+			sortedResources = append(sortedResources, resourceName)
+		}
+		sort.Slice(sortedResources, func(i, j int) bool {
+			return string(sortedResources[i]) < string(sortedResources[j])
+		})
+
 		var resourceParts []string
-		for resourceName, commits := range resources {
+		for _, resourceName := range sortedResources {
+			commits := resources[resourceName]
 			var commitParts []string
 			for _, c := range commits {
 				expiryTime := time.Now().Add(time.Duration(defaultCommitmentExpiryYears) * 365 * 24 * time.Hour)
