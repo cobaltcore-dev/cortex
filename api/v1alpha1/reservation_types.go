@@ -219,7 +219,8 @@ type ReservationStatus struct {
 // +kubebuilder:printcolumn:name="Resources",type="string",JSONPath=".spec.resources",priority=1
 // +kubebuilder:printcolumn:name="LastChanged",type="date",JSONPath=".status.failoverReservation.lastChanged",priority=1
 // +kubebuilder:printcolumn:name="AcknowledgedAt",type="date",JSONPath=".status.failoverReservation.acknowledgedAt",priority=1
-// +kubebuilder:printcolumn:name="Allocations",type="string",JSONPath=".status.failoverReservation.allocations",priority=1
+// +kubebuilder:printcolumn:name="CR Allocations",type="string",JSONPath=".status.committedResourceReservation.allocations",priority=1
+// +kubebuilder:printcolumn:name="HA Allocations",type="string",JSONPath=".status.failoverReservation.allocations",priority=1
 
 // Reservation is the Schema for the reservations API
 type Reservation struct {

@@ -52,8 +52,12 @@ spec:
       name: AcknowledgedAt
       priority: 1
       type: date
+    - jsonPath: .status.committedResourceReservation.allocations
+      name: CR Allocations
+      priority: 1
+      type: string
     - jsonPath: .status.failoverReservation.allocations
-      name: Allocations
+      name: HA Allocations
       priority: 1
       type: string
     name: v1alpha1
