@@ -3,7 +3,7 @@
 set -e
 
 API_URL="http://localhost:8001/scheduler/nova/external"
-INSTANCE_UUID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+INSTANCE_UUID="cortex-test-instance-001"
 
 echo "Applying test pipeline to home cluster"
 kubectl --context kind-cortex-home apply -f docs/guides/multicluster/test-pipeline.yaml
@@ -186,5 +186,11 @@ echo "--- Check History CRDs in cortex-remote-az-b ---"
 kubectl --context kind-cortex-remote-az-b get histories
 kubectl --context kind-cortex-remote-az-b get events --field-selector reason=SchedulingSucceeded
 
+echo "---"
+echo "Press enter to describe the History CRD in cortex-remote-az-b and see the details of the scheduling result"
+read -r
+
+echo "--- Describe History CRD in cortex-remote-az-b ---"
+kubectl --context kind-cortex-remote-az-b describe history nova-cortex-test-instance-001
 
 
