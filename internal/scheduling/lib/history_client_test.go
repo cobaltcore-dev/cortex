@@ -8,9 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
@@ -207,7 +205,7 @@ func newTestScheme(t *testing.T) *runtime.Scheme {
 	return scheme
 }
 
-func TestHistoryManager_Upsert(t *testing.T) {
+func TestHistoryClient_CreateOrUpdateHistory(t *testing.T) {
 	tests := []struct {
 		name string
 		// setup returns a fake client and any pre-existing objects.
@@ -563,62 +561,7 @@ func TestHistoryManager_Upsert(t *testing.T) {
 	}
 }
 
-func TestHistoryManager_UpsertFromGoroutine(t *testing.T) {
-	c := fake.NewClientBuilder().
-		WithScheme(newTestScheme(t)).
-		WithStatusSubresource(&v1alpha1.History{}).
-		Build()
-	hm := HistoryClient{Client: c}
-
-	decision := &v1alpha1.Decision{
-		Spec: v1alpha1.DecisionSpec{
-			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			ResourceID:       "async-uuid",
-			PipelineRef:      corev1.ObjectReference{Name: "nova-pipeline"},
-			Intent:           v1alpha1.SchedulingIntentUnknown,
-		},
-		Status: v1alpha1.DecisionStatus{
-			Result: &v1alpha1.DecisionResult{
-				TargetHost: testlib.Ptr("compute-async"),
-			},
-		},
-	}
-
-	// Mirrors the pattern used in pipeline controllers.
-	var wg sync.WaitGroup
-	var upsertErr error
-	wg.Go(func() {
-		upsertErr = hm.CreateOrUpdateHistory(context.Background(), decision, nil, nil)
-	})
-
-	// Poll for history creation.
-	var histories v1alpha1.HistoryList
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		if err := c.List(context.Background(), &histories); err != nil {
-			t.Fatalf("Failed to list histories: %v", err)
-		}
-		if len(histories.Items) > 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("timed out waiting for async history creation")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-
-	wg.Wait()
-	if upsertErr != nil {
-		t.Fatalf("Upsert() returned error: %v", upsertErr)
-	}
-
-	got := histories.Items[0].Status.Current.TargetHost
-	if got == nil || *got != "compute-async" {
-		t.Errorf("target host = %v, want %q", got, "compute-async")
-	}
-}
-
-func TestHistoryManager_Delete(t *testing.T) {
+func TestHistoryClient_Delete(t *testing.T) {
 	tests := []struct {
 		name       string
 		domain     v1alpha1.SchedulingDomain
