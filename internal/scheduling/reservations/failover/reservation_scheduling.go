@@ -78,8 +78,10 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 	// Schedule the reservation using the SchedulerClient.
 	// Note: We pass all hypervisors (from all AZs) in EligibleHosts. The scheduler pipeline's
 	// filter_correct_az filter will exclude hosts that are not in the VM's availability zone.
+	// FIXME: Using "create" intent as a workaround to avoid ERROR logs for missing
+	// _nova_check_type hint. Consider adding a dedicated intent during pipeline refactoring.
 	scheduleReq := reservations.ScheduleReservationRequest{
-		InstanceUUID:     "failover-" + vm.UUID,
+		InstanceUUID:     vm.UUID,
 		ProjectID:        vm.ProjectID,
 		FlavorName:       vm.FlavorName,
 		FlavorExtraSpecs: flavorExtraSpecs,
@@ -89,6 +91,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		IgnoreHosts:      ignoreHypervisors,
 		Pipeline:         pipeline,
 		AvailabilityZone: vm.AvailabilityZone,
+		SchedulerHints:   map[string]any{"_nova_check_type": "create"},
 	}
 
 	logger.V(1).Info("scheduling failover reservation",
