@@ -93,6 +93,7 @@ type HistoryStatus struct {
 // +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
 // +kubebuilder:printcolumn:name="Target Host",type="string",JSONPath=".status.current.targetHost"
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].reason"
+// +kubebuilder:printcolumn:name="Last Scheduled",type="date",JSONPath=".status.current.timestamp"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 
 // The history is a CRD that provides a record of past scheduling decisions for a given resource (e.g., a nova instance).

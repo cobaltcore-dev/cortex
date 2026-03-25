@@ -30,6 +30,9 @@ spec:
     - jsonPath: .status.conditions[?(@.type=='Ready')].reason
       name: Status
       type: string
+    - jsonPath: .status.current.timestamp
+      name: Last Scheduled
+      type: date
     - jsonPath: .metadata.creationTimestamp
       name: Created
       type: date
