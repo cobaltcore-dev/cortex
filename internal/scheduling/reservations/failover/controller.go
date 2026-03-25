@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
@@ -765,12 +766,18 @@ func (c *FailoverReservationController) patchReservationStatus(ctx context.Conte
 // SetupWithManager sets up the watch-based reconciler with the Manager.
 // This handles per-reservation reconciliation triggered by CRD changes.
 func (c *FailoverReservationController) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
-	c.Recorder = mgr.GetEventRecorder("failover-reservation-controller")
+	c.Recorder = mcl.GetEventRecorder("failover-reservation-controller")
 
-	return multicluster.BuildController(mcl, mgr).
-		For(&v1alpha1.Reservation{}).
-		WithEventFilter(failoverReservationPredicate).
-		Named("failover-reservation").
+	bldr := multicluster.BuildController(mcl, mgr)
+	bldr, err := bldr.WatchesMulticluster(
+		&v1alpha1.Reservation{},
+		&handler.EnqueueRequestForObject{},
+		failoverReservationPredicate,
+	)
+	if err != nil {
+		return err
+	}
+	return bldr.Named("failover-reservation").
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1,
 		}).

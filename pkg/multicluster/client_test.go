@@ -13,6 +13,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/tools/events"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -74,8 +76,9 @@ func (f *fakeCache) getIndexFieldCalls() []indexFieldCall {
 // fakeCluster implements cluster.Cluster interface for testing.
 type fakeCluster struct {
 	cluster.Cluster
-	fakeClient client.Client
-	fakeCache  *fakeCache
+	fakeClient   client.Client
+	fakeCache    *fakeCache
+	fakeRecorder events.EventRecorder
 }
 
 func (f *fakeCluster) GetClient() client.Client {
@@ -84,6 +87,17 @@ func (f *fakeCluster) GetClient() client.Client {
 
 func (f *fakeCluster) GetCache() cache.Cache {
 	return f.fakeCache
+}
+
+func (f *fakeCluster) GetEventRecorder(_ string) events.EventRecorder {
+	if f.fakeRecorder != nil {
+		return f.fakeRecorder
+	}
+	return &fakeEventRecorder{}
+}
+
+func (f *fakeCluster) GetEventRecorderFor(_ string) record.EventRecorder {
+	return record.NewFakeRecorder(100)
 }
 
 func newFakeCluster(scheme *runtime.Scheme, objs ...client.Object) *fakeCluster {
