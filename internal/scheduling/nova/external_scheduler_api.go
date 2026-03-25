@@ -27,10 +27,11 @@ import (
 
 // Custom configuration for the Nova external scheduler api.
 type HTTPAPIConfig struct {
-	// OpenStack projects that use experimental features.
-	ExperimentalProjectIDs []string `json:"experimentalProjectIDs,omitempty"`
 	// Number of top hosts to shuffle for evacuation requests. Defaults to 3.
 	EvacuationShuffleK int `json:"evacuationShuffleK,omitempty"`
+	// NovaLimitHostsToRequest, if true, will filter the Nova scheduler response
+	// to only include hosts that were in the original request.
+	NovaLimitHostsToRequest bool `json:"novaLimitHostsToRequest,omitempty"`
 }
 
 type HTTPAPIDelegate interface {
@@ -41,12 +42,6 @@ type HTTPAPIDelegate interface {
 type HTTPAPI interface {
 	// Bind the server handlers.
 	Init(*http.ServeMux)
-}
-
-type HTTPAPIConfig struct {
-	// NovaLimitHostsToRequest, if true, will filter the Nova scheduler response
-	// to only include hosts that were in the original request.
-	NovaLimitHostsToRequest bool `json:"novaLimitHostsToRequest,omitempty"`
 }
 
 type httpAPI struct {
