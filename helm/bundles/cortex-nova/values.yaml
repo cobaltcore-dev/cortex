@@ -138,6 +138,9 @@ cortex-scheduling-controllers:
       - failover-reservations-controller
     enabledTasks:
       - nova-history-cleanup-task
+    # If true, the external scheduler API will limit the list of hosts in its
+    # response to those included in the scheduling request.
+    novaLimitHostsToRequest: true
     # CommittedResourceFlavorGroupPipelines maps flavor group IDs to pipeline names for CR reservations
     # This allows different scheduling strategies per flavor group (e.g., HANA vs GP)
     committedResourceFlavorGroupPipelines:
@@ -161,6 +164,12 @@ cortex-scheduling-controllers:
     # Whether the change-commitments API endpoint is active
     # When false, the endpoint returns HTTP 503. The info endpoint remains available.
     committedResourceEnableChangeCommitmentsAPI: true
+    # Whether the report-usage API endpoint is active
+    # When false, the endpoint returns HTTP 503.
+    committedResourceEnableReportUsageAPI: true
+    # Whether the report-capacity API endpoint is active
+    # When false, the endpoint returns HTTP 503.
+    committedResourceEnableReportCapacityAPI: true
     # OvercommitMappings is a list of mappings that map hypervisor traits to
     # overcommit ratios. Note that this list is applied in order, so if there
     # are multiple mappings applying to the same hypervisors, the last mapping
@@ -174,13 +183,13 @@ cortex-scheduling-controllers:
     # Maps flavor name patterns (glob) to required failover count
     # Example: {"hana_*": 2, "m1.xlarge": 1}
     flavorFailoverRequirements:
-      "*": 1
+      "*": 2
     # How often to check for missing failover reservations (periodic bulk reconciliation)
-    reconcileInterval: 15m
+    reconcileInterval: 5m
     # Used when maxVMsToProcess limits processing, allows faster catch-up and for the first reconcile
     shortReconcileInterval: 1m
     # Number of max VMs to process in one periodic reconciliation loop
-    maxVMsToProcess: 5
+    maxVMsToProcess: 25
     # Minimum successful reservations to use short interval
     minSuccessForShortInterval: 1
     # Maximum failures allowed to still use short interval

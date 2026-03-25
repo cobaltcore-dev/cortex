@@ -26,14 +26,22 @@ func (s *FilterHasRequestedTraits) Run(traceLog *slog.Logger, request api.Extern
 	var requiredTraits, forbiddenTraits []string
 	for key, value := range request.Spec.Data.Flavor.Data.ExtraSpecs {
 		if !strings.HasPrefix(key, "trait:") {
+			traceLog.Info("ignoring extra spec that does not start with trait:", "key", key)
 			continue
 		}
 		traitName := strings.TrimPrefix(key, "trait:")
 		switch value {
 		case "forbidden":
 			forbiddenTraits = append(forbiddenTraits, traitName)
+			traceLog.Info("trait marked forbidden, will filter out hosts with this trait",
+				"trait", traitName)
 		case "required":
 			requiredTraits = append(requiredTraits, traitName)
+			traceLog.Info("trait marked required, will filter out hosts without this trait",
+				"trait", traitName)
+		default:
+			traceLog.Info("ignoring trait with unsupported value",
+				"trait", traitName, "value", value)
 		}
 	}
 	if len(requiredTraits) == 0 && len(forbiddenTraits) == 0 {

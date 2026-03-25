@@ -47,6 +47,16 @@ type Config struct {
 	// When false, the endpoint will return HTTP 503 Service Unavailable.
 	// The info endpoint remains available for health checks.
 	EnableChangeCommitmentsAPI bool `json:"committedResourceEnableChangeCommitmentsAPI"`
+
+	// EnableReportUsageAPI controls whether the report-usage API endpoint is active.
+	// When false, the endpoint will return HTTP 503 Service Unavailable.
+	// This can be used as an emergency switch if the usage reporting is causing issues.
+	EnableReportUsageAPI bool `json:"committedResourceEnableReportUsageAPI"`
+
+	// EnableReportCapacityAPI controls whether the report-capacity API endpoint is active.
+	// When false, the endpoint will return HTTP 503 Service Unavailable.
+	// This can be used as an emergency switch if the capacity reporting is causing issues.
+	EnableReportCapacityAPI bool `json:"committedResourceEnableReportCapacityAPI"`
 }
 
 func DefaultConfig() Config {
@@ -58,5 +68,7 @@ func DefaultConfig() Config {
 		ChangeAPIWatchReservationsTimeout:      10 * time.Second,
 		ChangeAPIWatchReservationsPollInterval: 500 * time.Millisecond,
 		EnableChangeCommitmentsAPI:             true,
+		EnableReportUsageAPI:                   true,
+		EnableReportCapacityAPI:                true,
 	}
 }

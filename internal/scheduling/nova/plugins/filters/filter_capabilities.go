@@ -47,9 +47,22 @@ func hvToNovaCapabilities(hv hv1.Hypervisor) (map[string]string, error) {
 // in the request spec flavor.
 func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
-	requestedCapabilities := request.Spec.Data.Flavor.Data.ExtraSpecs
-	if len(requestedCapabilities) == 0 {
+	extraSpecs := request.Spec.Data.Flavor.Data.ExtraSpecs
+	if len(extraSpecs) == 0 {
 		traceLog.Debug("no flavor extra spec capabilities in request, skipping filter")
+		return result, nil
+	}
+
+	// Extract only capability-related extra specs into a separate map.
+	// We must not modify the original ExtraSpecs map as it's shared across filters.
+	requestedCapabilities := make(map[string]string)
+	for key, value := range extraSpecs {
+		if strings.HasPrefix(key, "capabilities:") {
+			requestedCapabilities[key] = value
+		}
+	}
+	if len(requestedCapabilities) == 0 {
+		traceLog.Debug("no capabilities in flavor extra specs, skipping filter")
 		return result, nil
 	}
 
@@ -61,9 +74,6 @@ func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.External
 		"s==", "s!=", "s<", "s<=", "s>", "s>=", "<or>", // or is special
 	}
 	for key, expr := range requestedCapabilities {
-		if !strings.HasPrefix(key, "capabilities:") {
-			delete(requestedCapabilities, key) // Remove non-capability keys.
-		}
 		for _, op := range unsupportedOps {
 			if strings.Contains(expr, op) {
 				traceLog.Warn(

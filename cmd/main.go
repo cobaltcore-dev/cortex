@@ -276,6 +276,7 @@ func main() {
 	}
 	hvGVK := schema.GroupVersionKind{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}
 	reservationGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}
+	historyGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}
 	multiclusterClient := &multicluster.Client{
 		HomeCluster:    homeCluster,
 		HomeRestConfig: restConfig,
@@ -283,6 +284,7 @@ func main() {
 		ResourceRouters: map[schema.GroupVersionKind]multicluster.ResourceRouter{
 			hvGVK:          multicluster.HypervisorResourceRouter{},
 			reservationGVK: multicluster.ReservationsResourceRouter{},
+			historyGVK:     multicluster.HistoryResourceRouter{},
 		},
 	}
 	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
@@ -322,11 +324,8 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "nova FilterWeigherPipelineController")
 			os.Exit(1)
 		}
-		nova.NewAPI(filterWeigherController).Init(mux)
-
-		// Initialize commitments API for LIQUID interface
-		commitmentsAPI := commitments.NewAPI(multiclusterClient)
-		commitmentsAPI.Init(mux, metrics.Registry)
+		novaAPIConfig := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
+		nova.NewAPI(novaAPIConfig, filterWeigherController).Init(mux)
 
 		// Detector pipeline controller setup.
 		novaClient := nova.NewNovaClient()
@@ -337,6 +336,12 @@ func main() {
 			setupLog.Error(err, "unable to initialize nova client")
 			os.Exit(1)
 		}
+
+		// Initialize commitments API for LIQUID interface (with Nova client for usage reporting)
+		commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
+		commitmentsAPI := commitments.NewAPIWithConfig(multiclusterClient, commitmentsConfig, novaClient)
+		commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
+
 		deschedulingsController := &nova.DetectorPipelineController{
 			Monitor: detectorPipelineMonitor,
 			Breaker: &nova.DetectorCycleBreaker{NovaClient: novaClient},

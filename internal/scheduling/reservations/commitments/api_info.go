@@ -12,6 +12,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/go-logr/logr"
+	"github.com/google/uuid"
 	liquid "github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -19,7 +20,15 @@ import (
 // See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/commitment.go
 // See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid
 func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
-	ctx := WithNewGlobalRequestID(r.Context())
+	// Extract or generate request ID for tracing
+	requestID := r.Header.Get("X-Request-ID")
+	if requestID == "" {
+		requestID = uuid.New().String()
+	}
+	// Set request ID in response header for client correlation
+	w.Header().Set("X-Request-ID", requestID)
+
+	ctx := reservations.WithGlobalRequestID(r.Context(), "committed-resource-"+requestID)
 	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/v1/info")
 
 	// Only accept GET method
@@ -72,7 +81,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 	// Build resources map
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo)
 	for groupName, groupData := range flavorGroups {
-		resourceName := liquid.ResourceName("ram_" + groupName)
+		resourceName := liquid.ResourceName(commitmentResourceNamePrefix + groupName)
 
 		flavorNames := make([]string, 0, len(groupData.Flavors))
 		for _, flavor := range groupData.Flavors {

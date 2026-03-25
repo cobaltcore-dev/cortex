@@ -36,6 +36,13 @@ const (
 	ReservationTypeLabelFailover          = "failover"
 )
 
+// Annotation keys for Reservation metadata.
+const (
+	// AnnotationCreatorRequestID tracks the request ID that created this reservation.
+	// Used for end-to-end traceability across API calls, controller reconciles, and scheduler invocations.
+	AnnotationCreatorRequestID = "reservations.cortex.cloud/creator-request-id"
+)
+
 // CommittedResourceAllocation represents a workload's assignment to a committed resource reservation slot.
 // The workload could be a VM (Nova/IronCore), Pod (Kubernetes), or other resource.
 type CommittedResourceAllocation struct {

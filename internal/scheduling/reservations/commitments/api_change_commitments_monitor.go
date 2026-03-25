@@ -16,8 +16,10 @@ type ChangeCommitmentsAPIMonitor struct {
 }
 
 // NewChangeCommitmentsAPIMonitor creates a new monitor with Prometheus metrics.
+// Metrics are pre-initialized with zero values for common HTTP status codes
+// to ensure they appear in Prometheus before the first request.
 func NewChangeCommitmentsAPIMonitor() ChangeCommitmentsAPIMonitor {
-	return ChangeCommitmentsAPIMonitor{
+	m := ChangeCommitmentsAPIMonitor{
 		requestCounter: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "cortex_committed_resource_change_api_requests_total",
 			Help: "Total number of committed resource change API requests by HTTP status code",
@@ -35,6 +37,21 @@ func NewChangeCommitmentsAPIMonitor() ChangeCommitmentsAPIMonitor {
 			Help: "Total number of commitment change requests that timed out while waiting for reservations to become ready",
 		}),
 	}
+
+	// Pre-initialize metrics with zero values for common HTTP status codes.
+	// This ensures metrics exist in Prometheus before the first request,
+	// preventing "metric missing" warnings in alerting rules.
+	for _, statusCode := range []string{"200", "400", "409", "500", "503"} {
+		m.requestCounter.WithLabelValues(statusCode)
+		m.requestDuration.WithLabelValues(statusCode)
+	}
+
+	// Pre-initialize commitment change result labels
+	for _, result := range []string{"accepted", "rejected"} {
+		m.commitmentChanges.WithLabelValues(result)
+	}
+
+	return m
 }
 
 // Describe implements prometheus.Collector.

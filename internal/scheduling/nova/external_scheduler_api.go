@@ -34,15 +34,23 @@ type HTTPAPI interface {
 	Init(*http.ServeMux)
 }
 
+type HTTPAPIConfig struct {
+	// NovaLimitHostsToRequest, if true, will filter the Nova scheduler response
+	// to only include hosts that were in the original request.
+	NovaLimitHostsToRequest bool `json:"novaLimitHostsToRequest,omitempty"`
+}
+
 type httpAPI struct {
 	monitor  scheduling.APIMonitor
 	delegate HTTPAPIDelegate
+	config   HTTPAPIConfig
 }
 
-func NewAPI(delegate HTTPAPIDelegate) HTTPAPI {
+func NewAPI(config HTTPAPIConfig, delegate HTTPAPIDelegate) HTTPAPI {
 	return &httpAPI{
 		monitor:  scheduling.NewSchedulerMonitor(),
 		delegate: delegate,
+		config:   config,
 	}
 }
 
@@ -222,7 +230,11 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		return
 	}
 	hosts := decision.Status.Result.OrderedHosts
-	hosts = limitHostsToRequest(requestData, hosts)
+	if httpAPI.config.NovaLimitHostsToRequest {
+		hosts = limitHostsToRequest(requestData, hosts)
+		slog.Info("limited hosts to request",
+			"hosts", hosts, "originalHosts", decision.Status.Result.OrderedHosts)
+	}
 	response := api.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(response); err != nil {

@@ -46,6 +46,8 @@ type CommitmentState struct {
 	StartTime *time.Time
 	// EndTime is when the commitment expires
 	EndTime *time.Time
+	// CreatorRequestID is the request ID that triggered this state change (for traceability)
+	CreatorRequestID string
 }
 
 // FromCommitment converts Limes commitment to CommitmentState.
@@ -158,6 +160,41 @@ func FromChangeCommitmentTargetState(
 		StartTime:        startTime,
 		EndTime:          endTime,
 	}, nil
+}
+
+// CommitmentStateWithUsage extends CommitmentState with usage tracking for billing calculations.
+// Used by the report-usage API to track remaining capacity during VM-to-commitment assignment.
+type CommitmentStateWithUsage struct {
+	CommitmentState
+	// RemainingMemoryBytes is the uncommitted capacity left for VM assignment
+	RemainingMemoryBytes int64
+	// AssignedVMs tracks which VMs have been assigned to this commitment
+	AssignedVMs []string
+}
+
+// NewCommitmentStateWithUsage creates a CommitmentStateWithUsage from a CommitmentState.
+func NewCommitmentStateWithUsage(state *CommitmentState) *CommitmentStateWithUsage {
+	return &CommitmentStateWithUsage{
+		CommitmentState:      *state,
+		RemainingMemoryBytes: state.TotalMemoryBytes,
+		AssignedVMs:          []string{},
+	}
+}
+
+// AssignVM attempts to assign a VM to this commitment if there's enough capacity.
+// Returns true if the VM was assigned, false if not enough capacity.
+func (c *CommitmentStateWithUsage) AssignVM(vmUUID string, vmMemoryBytes int64) bool {
+	if c.RemainingMemoryBytes >= vmMemoryBytes {
+		c.RemainingMemoryBytes -= vmMemoryBytes
+		c.AssignedVMs = append(c.AssignedVMs, vmUUID)
+		return true
+	}
+	return false
+}
+
+// HasRemainingCapacity returns true if the commitment has any remaining capacity.
+func (c *CommitmentStateWithUsage) HasRemainingCapacity() bool {
+	return c.RemainingMemoryBytes > 0
 }
 
 // FromReservations reconstructs CommitmentState from existing Reservation CRDs.
