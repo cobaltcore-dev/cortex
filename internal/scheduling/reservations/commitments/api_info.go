@@ -107,7 +107,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 	// Build resources map
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo)
 	for groupName, groupData := range flavorGroups {
-		resourceName := liquid.ResourceName(commitmentResourceNamePrefix + groupName)
+		resourceName := liquid.ResourceName(ResourceNameFromFlavorGroup(groupName))
 
 		flavorNames := make([]string, 0, len(groupData.Flavors))
 		for _, flavor := range groupData.Flavors {

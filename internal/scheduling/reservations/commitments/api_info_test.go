@@ -218,38 +218,38 @@ func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
 		t.Fatalf("expected 2 resources, got %d", len(serviceInfo.Resources))
 	}
 
-	// Test fixed ratio group: ram_hana_fixed
-	fixedResource, ok := serviceInfo.Resources["ram_hana_fixed"]
+	// Test fixed ratio group: hw_version_hana_fixed_ram
+	fixedResource, ok := serviceInfo.Resources["hw_version_hana_fixed_ram"]
 	if !ok {
-		t.Fatal("expected ram_hana_fixed resource to exist")
+		t.Fatal("expected hw_version_hana_fixed_ram resource to exist")
 	}
 	if !fixedResource.HasCapacity {
-		t.Error("ram_hana_fixed: expected HasCapacity=true")
+		t.Error("hw_version_hana_fixed_ram: expected HasCapacity=true")
 	}
 	if !fixedResource.HandlesCommitments {
-		t.Error("ram_hana_fixed: expected HandlesCommitments=true (fixed ratio group)")
+		t.Error("hw_version_hana_fixed_ram: expected HandlesCommitments=true (fixed ratio group)")
 	}
 	if fixedResource.HasCapacity != fixedResource.HandlesCommitments {
-		t.Errorf("ram_hana_fixed: HasCapacity (%v) should equal HandlesCommitments (%v)",
+		t.Errorf("hw_version_hana_fixed_ram: HasCapacity (%v) should equal HandlesCommitments (%v)",
 			fixedResource.HasCapacity, fixedResource.HandlesCommitments)
 	}
 
-	// Test variable ratio group: ram_v2_variable
-	variableResource, ok := serviceInfo.Resources["ram_v2_variable"]
+	// Test variable ratio group: hw_version_v2_variable_ram
+	variableResource, ok := serviceInfo.Resources["hw_version_v2_variable_ram"]
 	if !ok {
-		t.Fatal("expected ram_v2_variable resource to exist")
+		t.Fatal("expected hw_version_v2_variable_ram resource to exist")
 	}
 	// Variable ratio groups don't accept commitments, and we only report capacity for groups
 	// that accept commitments, so both HasCapacity and HandlesCommitments should be false
 	if variableResource.HasCapacity {
-		t.Error("ram_v2_variable: expected HasCapacity=false (variable ratio groups don't report capacity)")
+		t.Error("hw_version_v2_variable_ram: expected HasCapacity=false (variable ratio groups don't report capacity)")
 	}
 	if variableResource.HandlesCommitments {
-		t.Error("ram_v2_variable: expected HandlesCommitments=false (variable ratio group)")
+		t.Error("hw_version_v2_variable_ram: expected HandlesCommitments=false (variable ratio group)")
 	}
 	// Verify HasCapacity == HandlesCommitments for consistency
 	if variableResource.HasCapacity != variableResource.HandlesCommitments {
-		t.Errorf("ram_v2_variable: HasCapacity (%v) should equal HandlesCommitments (%v)",
+		t.Errorf("hw_version_v2_variable_ram: HasCapacity (%v) should equal HandlesCommitments (%v)",
 			variableResource.HasCapacity, variableResource.HandlesCommitments)
 	}
 }
