@@ -93,9 +93,9 @@ func TestHandleReportCapacity(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				req = httptest.NewRequest(tt.method, "/v1/report-capacity", bytes.NewReader(bodyBytes))
+				req = httptest.NewRequest(tt.method, "/commitments/v1/report-capacity", bytes.NewReader(bodyBytes))
 			} else {
-				req = httptest.NewRequest(tt.method, "/v1/report-capacity", http.NoBody)
+				req = httptest.NewRequest(tt.method, "/commitments/v1/report-capacity", http.NoBody)
 			}
 			req = req.WithContext(context.Background())
 

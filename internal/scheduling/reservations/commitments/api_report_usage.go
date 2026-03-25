@@ -99,15 +99,16 @@ func (api *HTTPAPI) recordUsageMetrics(statusCode int, startTime time.Time) {
 }
 
 // extractProjectIDFromPath extracts the project UUID from the URL path.
-// Expected path format: /commitments/v1/projects/:project_id/report-usage
+// Expected path format: /commitments/v1/projects/:project_id/<endpoint>
+// where <endpoint> is "report-usage" or "quota"
 func extractProjectIDFromPath(path string) (string, error) {
-	// Path: /commitments/v1/projects/<uuid>/report-usage
+	// Path: /commitments/v1/projects/<uuid>/<endpoint>
 	parts := strings.Split(strings.Trim(path, "/"), "/")
-	// Expected: ["v1", "commitments", "projects", "<uuid>", "report-usage"]
+	// Expected: ["commitments", "v1", "projects", "<uuid>", "<endpoint>"]
 	if len(parts) < 5 {
 		return "", fmt.Errorf("path too short: %s", path)
 	}
-	if parts[2] != "projects" || parts[4] != "report-usage" {
+	if parts[0] != "commitments" || parts[1] != "v1" || parts[2] != "projects" {
 		return "", fmt.Errorf("unexpected path format: %s", path)
 	}
 	projectID := parts[3]

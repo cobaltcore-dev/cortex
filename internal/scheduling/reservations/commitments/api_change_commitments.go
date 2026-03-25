@@ -36,7 +36,7 @@ func sortedKeys[K ~string, V any](m map[K]V) []K {
 	return keys
 }
 
-// implements POST /v1/change-commitments from Limes LIQUID API:
+// implements POST /commitments/v1/change-commitments from Limes LIQUID API:
 // See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/commitment.go
 // See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid
 //
@@ -69,7 +69,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	defer api.changeMutex.Unlock()
 
 	ctx := reservations.WithGlobalRequestID(context.Background(), "committed-resource-"+requestID)
-	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/v1/change-commitments")
+	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/change-commitments")
 
 	// Only accept POST method
 	if r.Method != http.MethodPost {

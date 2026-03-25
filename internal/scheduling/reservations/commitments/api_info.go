@@ -22,7 +22,7 @@ import (
 // errInternalServiceInfo indicates an internal error while building service info (e.g., invalid unit configuration)
 var errInternalServiceInfo = errors.New("internal error building service info")
 
-// handles GET /v1/info requests from Limes:
+// handles GET /commitments/v1/info requests from Limes:
 // See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/commitment.go
 // See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid
 func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +38,7 @@ func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Request-ID", requestID)
 
 	ctx := reservations.WithGlobalRequestID(r.Context(), "committed-resource-"+requestID)
-	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/v1/info")
+	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/info")
 
 	// Only accept GET method
 	if r.Method != http.MethodGet {
@@ -152,7 +152,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 			Unit:                unit,                   // Non-standard unit: multiples of smallest flavor RAM
 			Topology:            liquid.AZAwareTopology, // Commitments are per-AZ
 			NeedsResourceDemand: false,                  // Capacity planning out of scope for now
-			HasCapacity:         handlesCommitments,     // We report capacity via /v1/report-capacity only for groups that accept commitments
+			HasCapacity:         handlesCommitments,     // We report capacity via /commitments/v1/report-capacity only for groups that accept commitments
 			HasQuota:            false,                  // No quota enforcement as of now
 			HandlesCommitments:  handlesCommitments,     // Only for groups with fixed RAM/core ratio
 			Attributes:          attrsJSON,
