@@ -276,7 +276,25 @@ groups:
         configuration. It is recommended to investigate the
         pipeline status and logs for more details.
 
-  # Committed Resource (Limes Integration) Alerts
+  # Committed Resource Info API Alerts
+  - alert: CortexNovaCommittedResourceInfoHttpRequest500sTooHigh
+    expr: rate(cortex_committed_resource_info_api_requests_total{service="cortex-nova-metrics", status_code=~"5.."}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource info API HTTP 500 errors too high"
+      description: >
+        The committed resource info API (Limes LIQUID integration) is responding
+        with HTTP 5xx errors. This indicates internal problems building service info,
+        such as invalid flavor group data. Limes will not be able to discover available
+        resources until the issue is resolved.
+
+  # Committed Resource Change API Alerts
   - alert: CortexNovaCommittedResourceHttpRequest400sTooHigh
     expr: rate(cortex_committed_resource_change_api_requests_total{service="cortex-nova-metrics", status_code=~"4.."}[5m]) > 0.1
     for: 5m
