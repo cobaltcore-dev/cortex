@@ -211,6 +211,11 @@ type ReservationStatus struct {
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".metadata.labels['reservations\\.cortex\\.cloud/type']"
 // +kubebuilder:printcolumn:name="Host",type="string",JSONPath=".status.host"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
+// +kubebuilder:printcolumn:name="ResourceGroup",type="string",JSONPath=".spec.committedResourceReservation.resourceGroup"
+// +kubebuilder:printcolumn:name="Project",type="string",JSONPath=".spec.committedResourceReservation.projectID"
+// +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
+// +kubebuilder:printcolumn:name="StartTime",type="string",JSONPath=".spec.startTime",priority=1
+// +kubebuilder:printcolumn:name="EndTime",type="string",JSONPath=".spec.endTime"
 // +kubebuilder:printcolumn:name="Resources",type="string",JSONPath=".spec.resources",priority=1
 // +kubebuilder:printcolumn:name="LastChanged",type="date",JSONPath=".status.failoverReservation.lastChanged",priority=1
 // +kubebuilder:printcolumn:name="AcknowledgedAt",type="date",JSONPath=".status.failoverReservation.acknowledgedAt",priority=1

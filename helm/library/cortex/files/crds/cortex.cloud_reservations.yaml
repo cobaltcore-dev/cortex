@@ -24,6 +24,22 @@ spec:
     - jsonPath: .status.conditions[?(@.type=='Ready')].status
       name: Ready
       type: string
+    - jsonPath: .spec.committedResourceReservation.resourceGroup
+      name: ResourceGroup
+      type: string
+    - jsonPath: .spec.committedResourceReservation.projectID
+      name: Project
+      type: string
+    - jsonPath: .spec.availabilityZone
+      name: AZ
+      type: string
+    - jsonPath: .spec.startTime
+      name: StartTime
+      priority: 1
+      type: string
+    - jsonPath: .spec.endTime
+      name: EndTime
+      type: string
     - jsonPath: .spec.resources
       name: Resources
       priority: 1
