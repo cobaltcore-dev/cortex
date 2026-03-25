@@ -211,6 +211,10 @@ type ReservationStatus struct {
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".metadata.labels['reservations\\.cortex\\.cloud/type']"
 // +kubebuilder:printcolumn:name="Host",type="string",JSONPath=".status.host"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
+// +kubebuilder:printcolumn:name="Resources",type="string",JSONPath=".spec.resources",priority=1
+// +kubebuilder:printcolumn:name="LastChanged",type="date",JSONPath=".status.failoverReservation.lastChanged",priority=1
+// +kubebuilder:printcolumn:name="AcknowledgedAt",type="date",JSONPath=".status.failoverReservation.acknowledgedAt",priority=1
+// +kubebuilder:printcolumn:name="Allocations",type="string",JSONPath=".status.failoverReservation.allocations",priority=1
 
 // Reservation is the Schema for the reservations API
 type Reservation struct {

@@ -24,6 +24,22 @@ spec:
     - jsonPath: .status.conditions[?(@.type=='Ready')].status
       name: Ready
       type: string
+    - jsonPath: .spec.resources
+      name: Resources
+      priority: 1
+      type: string
+    - jsonPath: .status.failoverReservation.lastChanged
+      name: LastChanged
+      priority: 1
+      type: date
+    - jsonPath: .status.failoverReservation.acknowledgedAt
+      name: AcknowledgedAt
+      priority: 1
+      type: date
+    - jsonPath: .status.failoverReservation.allocations
+      name: Allocations
+      priority: 1
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
