@@ -6,6 +6,7 @@ package commitments
 import (
 	"context"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
@@ -28,6 +29,7 @@ type HTTPAPI struct {
 	monitor         ChangeCommitmentsAPIMonitor
 	usageMonitor    ReportUsageAPIMonitor
 	capacityMonitor ReportCapacityAPIMonitor
+	infoMonitor     InfoAPIMonitor
 	// Mutex to serialize change-commitments requests
 	changeMutex sync.Mutex
 }
@@ -44,6 +46,7 @@ func NewAPIWithConfig(client client.Client, config Config, novaClient UsageNovaC
 		monitor:         NewChangeCommitmentsAPIMonitor(),
 		usageMonitor:    NewReportUsageAPIMonitor(),
 		capacityMonitor: NewReportCapacityAPIMonitor(),
+		infoMonitor:     NewInfoAPIMonitor(),
 	}
 }
 
@@ -51,13 +54,27 @@ func (api *HTTPAPI) Init(mux *http.ServeMux, registry prometheus.Registerer, log
 	registry.MustRegister(&api.monitor)
 	registry.MustRegister(&api.usageMonitor)
 	registry.MustRegister(&api.capacityMonitor)
-	mux.HandleFunc("/v1/commitments/change-commitments", api.HandleChangeCommitments)
-	mux.HandleFunc("/v1/commitments/report-capacity", api.HandleReportCapacity)
-	mux.HandleFunc("/v1/commitments/info", api.HandleInfo)
-	mux.HandleFunc("/v1/commitments/projects/", api.HandleReportUsage) // matches /v1/commitments/projects/:project_id/report-usage
+	registry.MustRegister(&api.infoMonitor)
+	mux.HandleFunc("/commitments/v1/change-commitments", api.HandleChangeCommitments)
+	mux.HandleFunc("/commitments/v1/report-capacity", api.HandleReportCapacity)
+	mux.HandleFunc("/commitments/v1/info", api.HandleInfo)
+	mux.HandleFunc("/commitments/v1/projects/", api.handleProjectEndpoint) // routes to report-usage or quota
 
 	log.Info("commitments API initialized",
 		"changeCommitmentsEnabled", api.config.EnableChangeCommitmentsAPI,
 		"reportUsageEnabled", api.config.EnableReportUsageAPI,
 		"reportCapacityEnabled", api.config.EnableReportCapacityAPI)
+}
+
+// handleProjectEndpoint routes /commitments/v1/projects/:project_id/... requests to the appropriate handler.
+func (api *HTTPAPI) handleProjectEndpoint(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path
+	switch {
+	case strings.HasSuffix(path, "/report-usage"):
+		api.HandleReportUsage(w, r)
+	case strings.HasSuffix(path, "/quota"):
+		api.HandleQuota(w, r)
+	default:
+		http.Error(w, "Not found", http.StatusNotFound)
+	}
 }

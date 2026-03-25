@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 	"slices"
+	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
@@ -38,8 +39,11 @@ type FilterRequestedDestinationStep struct {
 }
 
 // processRequestedAggregates filters hosts based on the requested aggregates.
-// It removes hosts that are not part of any of the requested aggregates,
-// respecting the IgnoredAggregates option. Returns early without filtering
+// The aggregates list uses AND logic between elements, meaning a host must match
+// ALL elements to pass. Each element can contain comma-separated UUIDs which use
+// OR logic, meaning the host only needs to match ONE of the UUIDs in that group.
+// Example: ["agg1", "agg2,agg3"] means host must be in agg1 AND (agg2 OR agg3).
+// Respects the IgnoredAggregates option and returns early without filtering
 // if all requested aggregates are in the ignored list.
 func (s *FilterRequestedDestinationStep) processRequestedAggregates(
 	traceLog *slog.Logger,
@@ -51,13 +55,12 @@ func (s *FilterRequestedDestinationStep) processRequestedAggregates(
 	if len(aggregates) == 0 {
 		return
 	}
+	// Filter out ignored aggregates
 	aggregatesToConsider := make([]string, 0, len(aggregates))
 	for _, agg := range aggregates {
-		if slices.Contains(s.Options.IgnoredAggregates, agg) {
-			traceLog.Info("ignoring aggregate in requested_destination as it is in the ignored list", "aggregate", agg)
-			continue
+		if !slices.Contains(s.Options.IgnoredAggregates, agg) {
+			aggregatesToConsider = append(aggregatesToConsider, agg)
 		}
-		aggregatesToConsider = append(aggregatesToConsider, agg)
 	}
 	if len(aggregatesToConsider) == 0 {
 		traceLog.Info("all aggregates in requested_destination are in the ignored list, skipping aggregate filtering")
@@ -74,14 +77,24 @@ func (s *FilterRequestedDestinationStep) processRequestedAggregates(
 		for _, agg := range hv.Status.Aggregates {
 			hvAggregateUUIDs = append(hvAggregateUUIDs, agg.UUID)
 		}
-		found := false
-		for _, reqAgg := range aggregatesToConsider {
-			if slices.Contains(hvAggregateUUIDs, reqAgg) {
-				found = true
+		// All outer elements must match (AND logic)
+		// Each element can be comma-separated UUIDs (OR logic within the group)
+		allMatch := true
+		for _, reqAggGroup := range aggregatesToConsider {
+			reqAggs := strings.Split(reqAggGroup, ",")
+			groupMatch := false
+			for _, reqAgg := range reqAggs {
+				if slices.Contains(hvAggregateUUIDs, reqAgg) {
+					groupMatch = true
+					break
+				}
+			}
+			if !groupMatch {
+				allMatch = false
 				break
 			}
 		}
-		if !found {
+		if !allMatch {
 			delete(activations, host)
 			traceLog.Info(
 				"filtered out host not in requested_destination aggregates",

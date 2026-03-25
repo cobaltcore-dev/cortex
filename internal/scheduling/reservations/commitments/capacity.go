@@ -53,8 +53,8 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.Serv
 			continue
 		}
 
-		// Resource name follows pattern: ram_<flavorgroup>
-		resourceName := liquid.ResourceName(commitmentResourceNamePrefix + groupName)
+		// Resource name follows pattern: hw_version_<flavorgroup>_ram
+		resourceName := liquid.ResourceName(ResourceNameFromFlavorGroup(groupName))
 
 		// Calculate per-AZ capacity and usage
 		azCapacity, err := c.calculateAZCapacity(ctx, groupName, groupData)

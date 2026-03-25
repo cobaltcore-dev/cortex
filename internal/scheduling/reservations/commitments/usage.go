@@ -396,7 +396,7 @@ func (c *UsageCalculator) buildUsageResponse(
 		if !FlavorGroupAcceptsCommitments(&groupData) {
 			continue
 		}
-		resourceName := liquid.ResourceName(commitmentResourceNamePrefix + flavorGroupName)
+		resourceName := liquid.ResourceName(ResourceNameFromFlavorGroup(flavorGroupName))
 
 		perAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
 

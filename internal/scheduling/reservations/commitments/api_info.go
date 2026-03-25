@@ -6,9 +6,12 @@ package commitments
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/go-logr/logr"
@@ -16,10 +19,16 @@ import (
 	liquid "github.com/sapcc/go-api-declarations/liquid"
 )
 
-// handles GET /v1/info requests from Limes:
+// errInternalServiceInfo indicates an internal error while building service info (e.g., invalid unit configuration)
+var errInternalServiceInfo = errors.New("internal error building service info")
+
+// handles GET /commitments/v1/info requests from Limes:
 // See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/commitment.go
 // See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid
 func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	statusCode := http.StatusOK
+
 	// Extract or generate request ID for tracing
 	requestID := r.Header.Get("X-Request-ID")
 	if requestID == "" {
@@ -29,11 +38,13 @@ func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Request-ID", requestID)
 
 	ctx := reservations.WithGlobalRequestID(r.Context(), "committed-resource-"+requestID)
-	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/v1/info")
+	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/info")
 
 	// Only accept GET method
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		statusCode = http.StatusMethodNotAllowed
+		http.Error(w, "Method not allowed", statusCode)
+		api.recordInfoMetrics(statusCode, startTime)
 		return
 	}
 
@@ -42,20 +53,35 @@ func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
 	// Build info response
 	info, err := api.buildServiceInfo(ctx, logger)
 	if err != nil {
-		// Use Info level for expected conditions like knowledge not being ready yet
-		logger.Info("service info not available yet", "error", err.Error())
-		http.Error(w, "Service temporarily unavailable: "+err.Error(),
-			http.StatusServiceUnavailable)
+		if errors.Is(err, errInternalServiceInfo) {
+			logger.Error(err, "internal error building service info")
+			statusCode = http.StatusInternalServerError
+			http.Error(w, "Internal server error: "+err.Error(), statusCode)
+		} else {
+			// Use Info level for expected conditions like knowledge not being ready yet
+			logger.Info("service info not available yet", "error", err.Error())
+			statusCode = http.StatusServiceUnavailable
+			http.Error(w, "Service temporarily unavailable: "+err.Error(), statusCode)
+		}
+		api.recordInfoMetrics(statusCode, startTime)
 		return
 	}
 
 	// Return response
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(statusCode)
 	if err := json.NewEncoder(w).Encode(info); err != nil {
 		logger.Error(err, "failed to encode service info")
-		return
 	}
+	api.recordInfoMetrics(statusCode, startTime)
+}
+
+// recordInfoMetrics records Prometheus metrics for an info API request.
+func (api *HTTPAPI) recordInfoMetrics(statusCode int, startTime time.Time) {
+	duration := time.Since(startTime).Seconds()
+	statusCodeStr := strconv.Itoa(statusCode)
+	api.infoMonitor.requestCounter.WithLabelValues(statusCodeStr).Inc()
+	api.infoMonitor.requestDuration.WithLabelValues(statusCodeStr).Observe(duration)
 }
 
 // resourceAttributes holds the custom attributes for a resource in the info API response.
@@ -81,7 +107,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 	// Build resources map
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo)
 	for groupName, groupData := range flavorGroups {
-		resourceName := liquid.ResourceName(commitmentResourceNamePrefix + groupName)
+		resourceName := liquid.ResourceName(ResourceNameFromFlavorGroup(groupName))
 
 		flavorNames := make([]string, 0, len(groupData.Flavors))
 		for _, flavor := range groupData.Flavors {
@@ -108,12 +134,25 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 			attrsJSON = nil
 		}
 
+		// Build unit from smallest flavor memory (e.g., "131072 MiB" for 128 GiB)
+		// Validate memory is positive to avoid panic in MultiplyBy (which panics on factor=0)
+		if groupData.SmallestFlavor.MemoryMB == 0 {
+			return liquid.ServiceInfo{}, fmt.Errorf("%w: flavor group %q has invalid smallest flavor with memoryMB=0",
+				errInternalServiceInfo, groupName)
+		}
+		unit, err := liquid.UnitMebibytes.MultiplyBy(groupData.SmallestFlavor.MemoryMB)
+		if err != nil {
+			// Note: This error only occurs on uint64 overflow, which is unrealistic for memory values
+			return liquid.ServiceInfo{}, fmt.Errorf("%w: failed to create unit for flavor group %q: %w",
+				errInternalServiceInfo, groupName, err)
+		}
+
 		resources[resourceName] = liquid.ResourceInfo{
 			DisplayName:         displayName,
-			Unit:                liquid.UnitNone,        // Countable: multiples of smallest flavor instances
+			Unit:                unit,                   // Non-standard unit: multiples of smallest flavor RAM
 			Topology:            liquid.AZAwareTopology, // Commitments are per-AZ
 			NeedsResourceDemand: false,                  // Capacity planning out of scope for now
-			HasCapacity:         handlesCommitments,     // We report capacity via /v1/report-capacity only for groups that accept commitments
+			HasCapacity:         handlesCommitments,     // We report capacity via /commitments/v1/report-capacity only for groups that accept commitments
 			HasQuota:            false,                  // No quota enforcement as of now
 			HandlesCommitments:  handlesCommitments,     // Only for groups with fixed RAM/core ratio
 			Attributes:          attrsJSON,

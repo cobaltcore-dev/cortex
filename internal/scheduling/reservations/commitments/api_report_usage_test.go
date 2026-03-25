@@ -57,7 +57,7 @@ func TestReportUsageIntegration(t *testing.T) {
 			Reservations: []*UsageTestReservation{},
 			AllAZs:       []string{"az-a"},
 			Expected: map[string]ExpectedResourceUsage{
-				"ram_hana_1": {
+				"hw_version_hana_1_ram": {
 					PerAZ: map[string]ExpectedAZUsage{
 						"az-a": {Usage: 0, VMs: []ExpectedVMUsage{}},
 					},
@@ -77,7 +77,7 @@ func TestReportUsageIntegration(t *testing.T) {
 			},
 			AllAZs: []string{"az-a"},
 			Expected: map[string]ExpectedResourceUsage{
-				"ram_hana_1": {
+				"hw_version_hana_1_ram": {
 					PerAZ: map[string]ExpectedAZUsage{
 						"az-a": {
 							Usage: 4, // 4096 MB / 1024 MB = 4 units
@@ -99,7 +99,7 @@ func TestReportUsageIntegration(t *testing.T) {
 			Reservations: []*UsageTestReservation{}, // No commitments
 			AllAZs:       []string{"az-a"},
 			Expected: map[string]ExpectedResourceUsage{
-				"ram_hana_1": {
+				"hw_version_hana_1_ram": {
 					PerAZ: map[string]ExpectedAZUsage{
 						"az-a": {
 							Usage: 4,
@@ -127,7 +127,7 @@ func TestReportUsageIntegration(t *testing.T) {
 			},
 			AllAZs: []string{"az-a"},
 			Expected: map[string]ExpectedResourceUsage{
-				"ram_hana_1": {
+				"hw_version_hana_1_ram": {
 					PerAZ: map[string]ExpectedAZUsage{
 						"az-a": {
 							Usage: 12, // 12 units total
@@ -157,7 +157,7 @@ func TestReportUsageIntegration(t *testing.T) {
 			},
 			AllAZs: []string{"az-a"},
 			Expected: map[string]ExpectedResourceUsage{
-				"ram_hana_1": {
+				"hw_version_hana_1_ram": {
 					PerAZ: map[string]ExpectedAZUsage{
 						"az-a": {
 							Usage: 12,
@@ -187,7 +187,7 @@ func TestReportUsageIntegration(t *testing.T) {
 			},
 			AllAZs: []string{"az-a"},
 			Expected: map[string]ExpectedResourceUsage{
-				"ram_hana_1": {
+				"hw_version_hana_1_ram": {
 					PerAZ: map[string]ExpectedAZUsage{
 						"az-a": {
 							Usage: 13, // 1 + 4 + 8 = 13 units
@@ -216,7 +216,7 @@ func TestReportUsageIntegration(t *testing.T) {
 			},
 			AllAZs: []string{"az-a"},
 			Expected: map[string]ExpectedResourceUsage{
-				"ram_hana_1": {
+				"hw_version_hana_1_ram": {
 					PerAZ: map[string]ExpectedAZUsage{
 						"az-a": {
 							Usage: 8,
@@ -243,7 +243,7 @@ func TestReportUsageIntegration(t *testing.T) {
 			},
 			AllAZs: []string{"az-a", "az-b"},
 			Expected: map[string]ExpectedResourceUsage{
-				"ram_hana_1": {
+				"hw_version_hana_1_ram": {
 					PerAZ: map[string]ExpectedAZUsage{
 						"az-a": {
 							Usage: 4,
@@ -275,7 +275,7 @@ func TestReportUsageIntegration(t *testing.T) {
 			},
 			AllAZs: []string{"az-a"},
 			Expected: map[string]ExpectedResourceUsage{
-				"ram_hana_1": {
+				"hw_version_hana_1_ram": {
 					PerAZ: map[string]ExpectedAZUsage{
 						"az-a": {
 							Usage: 4, // 4096 MB / 1024 MB = 4 units
@@ -285,7 +285,7 @@ func TestReportUsageIntegration(t *testing.T) {
 						},
 					},
 				},
-				"ram_gp_1": {
+				"hw_version_gp_1_ram": {
 					PerAZ: map[string]ExpectedAZUsage{
 						"az-a": {
 							Usage: 4, // 2048 MB / 512 MB = 4 units
@@ -332,7 +332,7 @@ func TestReportUsageIntegration(t *testing.T) {
 			},
 			AllAZs: []string{"az-a"},
 			Expected: map[string]ExpectedResourceUsage{
-				"ram_hana_1": {
+				"hw_version_hana_1_ram": {
 					PerAZ: map[string]ExpectedAZUsage{
 						"az-a": {
 							Usage: 4,
@@ -576,7 +576,7 @@ func (env *UsageTestEnv) CallReportUsageAPI(projectID string, allAZs []string, u
 	}
 
 	// Build URL
-	url := env.HTTPServer.URL + "/v1/commitments/projects/" + projectID + "/report-usage"
+	url := env.HTTPServer.URL + "/commitments/v1/projects/" + projectID + "/report-usage"
 
 	method := http.MethodPost
 	if useGET {

@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -49,20 +50,21 @@ type CommitmentReservationController struct {
 // move the current state of the cluster closer to the desired state.
 // Note: This controller only handles commitment reservations, as filtered by the predicate.
 func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx = WithNewGlobalRequestID(ctx)
-	logger := LoggerFromContext(ctx).WithValues("component", "controller", "reservation", req.Name)
-
-	// Fetch the reservation object.
+	// Fetch the reservation object first to check for creator request ID.
 	var res v1alpha1.Reservation
 	if err := r.Get(ctx, req.NamespacedName, &res); err != nil {
 		// Ignore not-found errors, since they can't be fixed by an immediate requeue
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// Extract creator request ID from annotation for end-to-end traceability
+	// Use creator request ID from annotation for end-to-end traceability if available,
+	// otherwise generate a new one for this reconcile loop.
 	if creatorReq := res.Annotations[v1alpha1.AnnotationCreatorRequestID]; creatorReq != "" {
-		logger = logger.WithValues("creatorReq", creatorReq)
+		ctx = WithGlobalRequestID(ctx, creatorReq)
+	} else {
+		ctx = WithNewGlobalRequestID(ctx)
 	}
+	logger := LoggerFromContext(ctx).WithValues("component", "controller", "reservation", req.Name)
 
 	// filter for CR reservations
 	resourceName := ""
@@ -501,10 +503,22 @@ func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl
 	})); err != nil {
 		return err
 	}
-	return multicluster.BuildController(mcl, mgr).
-		For(&v1alpha1.Reservation{}).
-		WithEventFilter(commitmentReservationPredicate).
-		Named("commitment-reservation").
+
+	// Use WatchesMulticluster to watch Reservations across all configured clusters
+	// (home + remotes). This is required because Reservation CRDs may be stored
+	// in remote clusters, not just the home cluster. Without this, the controller
+	// would only see reservations in the home cluster's cache.
+	bldr := multicluster.BuildController(mcl, mgr)
+	bldr, err := bldr.WatchesMulticluster(
+		&v1alpha1.Reservation{},
+		&handler.EnqueueRequestForObject{},
+		commitmentReservationPredicate,
+	)
+	if err != nil {
+		return err
+	}
+
+	return bldr.Named("commitment-reservation").
 		WithOptions(controller.Options{
 			// We want to process reservations one at a time to avoid overbooking.
 			MaxConcurrentReconciles: 1,

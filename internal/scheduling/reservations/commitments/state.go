@@ -18,14 +18,30 @@ import (
 // commitmentUUIDPattern validates commitment UUID format.
 var commitmentUUIDPattern = regexp.MustCompile(`^[a-zA-Z0-9-]{6,40}$`)
 
-// Limes LIQUID resource naming convention: ram_<flavorgroup>
-const commitmentResourceNamePrefix = "ram_"
+// Limes LIQUID resource naming convention: hw_version_<flavorgroup>_ram
+const (
+	resourceNamePrefix = "hw_version_"
+	resourceNameSuffix = "_ram"
+)
+
+// ResourceNameFromFlavorGroup creates a LIQUID resource name from a flavor group name.
+// Format: hw_version_<flavorgroup>_ram
+func ResourceNameFromFlavorGroup(flavorGroup string) string {
+	return resourceNamePrefix + flavorGroup + resourceNameSuffix
+}
 
 func getFlavorGroupNameFromResource(resourceName string) (string, error) {
-	if !strings.HasPrefix(resourceName, commitmentResourceNamePrefix) {
+	if !strings.HasPrefix(resourceName, resourceNamePrefix) || !strings.HasSuffix(resourceName, resourceNameSuffix) {
 		return "", fmt.Errorf("invalid resource name: %s", resourceName)
 	}
-	return strings.TrimPrefix(resourceName, commitmentResourceNamePrefix), nil
+	// Remove prefix and suffix
+	name := strings.TrimPrefix(resourceName, resourceNamePrefix)
+	name = strings.TrimSuffix(name, resourceNameSuffix)
+	// Validate that the extracted group name is not empty
+	if name == "" {
+		return "", fmt.Errorf("invalid resource name: %s (empty group name)", resourceName)
+	}
+	return name, nil
 }
 
 // CommitmentState represents desired or current commitment resource allocation.

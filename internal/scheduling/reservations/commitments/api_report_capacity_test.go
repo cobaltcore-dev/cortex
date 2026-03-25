@@ -93,9 +93,9 @@ func TestHandleReportCapacity(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				req = httptest.NewRequest(tt.method, "/v1/report-capacity", bytes.NewReader(bodyBytes))
+				req = httptest.NewRequest(tt.method, "/commitments/v1/report-capacity", bytes.NewReader(bodyBytes))
 			} else {
-				req = httptest.NewRequest(tt.method, "/v1/report-capacity", http.NoBody)
+				req = httptest.NewRequest(tt.method, "/commitments/v1/report-capacity", http.NoBody)
 			}
 			req = req.WithContext(context.Background())
 
@@ -187,9 +187,9 @@ func TestCapacityCalculator(t *testing.T) {
 			t.Fatalf("Expected 1 resource, got %d", len(report.Resources))
 		}
 
-		resource := report.Resources[liquid.ResourceName("ram_test-group")]
+		resource := report.Resources[liquid.ResourceName("hw_version_test-group_ram")]
 		if resource == nil {
-			t.Fatal("Expected ram_test-group resource to exist")
+			t.Fatal("Expected hw_version_test-group_ram resource to exist")
 		}
 
 		// Should have empty perAZ map when no host details

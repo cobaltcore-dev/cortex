@@ -53,7 +53,7 @@ func TestUsageCalculator_CalculateUsage(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{},
 			allAZs:       []liquid.AvailabilityZone{"az-a"},
 			expectedUsage: map[string]uint64{
-				"ram_hana_1": 0,
+				"hw_version_hana_1_ram": 0,
 			},
 		},
 		{
@@ -75,7 +75,7 @@ func TestUsageCalculator_CalculateUsage(t *testing.T) {
 			},
 			allAZs: []liquid.AvailabilityZone{"az-a"},
 			expectedUsage: map[string]uint64{
-				"ram_hana_1": 4, // 4096 MB / 1024 MB = 4 units
+				"hw_version_hana_1_ram": 4, // 4096 MB / 1024 MB = 4 units
 			},
 		},
 		{
@@ -92,7 +92,7 @@ func TestUsageCalculator_CalculateUsage(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{}, // No commitments
 			allAZs:       []liquid.AvailabilityZone{"az-a"},
 			expectedUsage: map[string]uint64{
-				"ram_hana_1": 4,
+				"hw_version_hana_1_ram": 4,
 			},
 		},
 	}
@@ -584,9 +584,9 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 			}
 
 			// Find the VM in subresources and check its commitment assignment
-			res, ok := report.Resources["ram_hana_1"]
+			res, ok := report.Resources["hw_version_hana_1_ram"]
 			if !ok {
-				t.Fatal("Resource ram_hana_1 not found")
+				t.Fatal("Resource hw_version_hana_1_ram not found")
 			}
 
 			var foundCommitment any

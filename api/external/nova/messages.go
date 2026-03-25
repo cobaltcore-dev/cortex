@@ -138,6 +138,8 @@ const (
 	EvacuateIntent v1alpha1.SchedulingIntent = "evacuate"
 	// CreateIntent indicates that the request is intended for creating a new VM.
 	CreateIntent v1alpha1.SchedulingIntent = "create"
+	// ReserveForFailoverIntent indicates that the request is for failover reservation scheduling.
+	ReserveForFailoverIntent v1alpha1.SchedulingIntent = "reserve_for_failover"
 )
 
 // GetIntent analyzes the request spec and determines the intent of the scheduling request.
@@ -160,6 +162,9 @@ func (req ExternalSchedulerRequest) GetIntent() (v1alpha1.SchedulingIntent, erro
 	// See: https://github.com/sapcc/nova/blob/c88393/nova/compute/api.py#L5770
 	case "evacuate":
 		return EvacuateIntent, nil
+	// Used by cortex failover reservation controller
+	case "reserve_for_failover":
+		return ReserveForFailoverIntent, nil
 	default:
 		return CreateIntent, nil
 	}

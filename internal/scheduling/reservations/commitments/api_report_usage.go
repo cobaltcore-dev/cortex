@@ -15,7 +15,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
-// HandleReportUsage implements POST /v1/commitments/projects/:project_id/report-usage from Limes LIQUID API.
+// HandleReportUsage implements POST /commitments/v1/projects/:project_id/report-usage from Limes LIQUID API.
 // See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/report_usage.go
 // See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid
 //
@@ -51,7 +51,7 @@ func (api *HTTPAPI) HandleReportUsage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Extract project UUID from URL path
-	// URL pattern: /v1/commitments/projects/:project_id/report-usage
+	// URL pattern: /commitments/v1/projects/:project_id/report-usage
 	projectID, err := extractProjectIDFromPath(r.URL.Path)
 	if err != nil {
 		log.Error(err, "failed to extract project ID from path")
@@ -99,15 +99,16 @@ func (api *HTTPAPI) recordUsageMetrics(statusCode int, startTime time.Time) {
 }
 
 // extractProjectIDFromPath extracts the project UUID from the URL path.
-// Expected path format: /v1/commitments/projects/:project_id/report-usage
+// Expected path format: /commitments/v1/projects/:project_id/<endpoint>
+// where <endpoint> is "report-usage" or "quota"
 func extractProjectIDFromPath(path string) (string, error) {
-	// Path: /v1/commitments/projects/<uuid>/report-usage
+	// Path: /commitments/v1/projects/<uuid>/<endpoint>
 	parts := strings.Split(strings.Trim(path, "/"), "/")
-	// Expected: ["v1", "commitments", "projects", "<uuid>", "report-usage"]
+	// Expected: ["commitments", "v1", "projects", "<uuid>", "<endpoint>"]
 	if len(parts) < 5 {
 		return "", fmt.Errorf("path too short: %s", path)
 	}
-	if parts[2] != "projects" || parts[4] != "report-usage" {
+	if parts[0] != "commitments" || parts[1] != "v1" || parts[2] != "projects" {
 		return "", fmt.Errorf("unexpected path format: %s", path)
 	}
 	projectID := parts[3]
