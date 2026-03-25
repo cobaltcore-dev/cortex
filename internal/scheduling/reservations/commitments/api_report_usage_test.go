@@ -576,7 +576,7 @@ func (env *UsageTestEnv) CallReportUsageAPI(projectID string, allAZs []string, u
 	}
 
 	// Build URL
-	url := env.HTTPServer.URL + "/v1/commitments/projects/" + projectID + "/report-usage"
+	url := env.HTTPServer.URL + "/commitments/v1/projects/" + projectID + "/report-usage"
 
 	method := http.MethodPost
 	if useGET {

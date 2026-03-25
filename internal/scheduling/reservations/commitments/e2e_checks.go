@@ -27,14 +27,14 @@ type E2EChecksConfig struct {
 	BaseURL string `json:"baseURL"`
 }
 
-// CheckCommitmentsInfoEndpoint sends a GET request to the /v1/commitments/info endpoint
+// CheckCommitmentsInfoEndpoint sends a GET request to the /commitments/v1/info endpoint
 // and verifies that it returns HTTP 200 with a valid ServiceInfo response.
 func CheckCommitmentsInfoEndpoint(ctx context.Context, config E2EChecksConfig) {
 	baseURL := config.BaseURL
 	if baseURL == "" {
 		baseURL = defaultCommitmentsAPIURL
 	}
-	apiURL := baseURL + "/v1/commitments/info"
+	apiURL := baseURL + "/commitments/v1/info"
 	slog.Info("checking commitments info endpoint", "apiURL", apiURL)
 
 	httpReq := must.Return(http.NewRequestWithContext(ctx, http.MethodGet, apiURL, http.NoBody))

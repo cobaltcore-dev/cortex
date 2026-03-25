@@ -54,10 +54,10 @@ func (api *HTTPAPI) Init(mux *http.ServeMux, registry prometheus.Registerer, log
 	registry.MustRegister(&api.usageMonitor)
 	registry.MustRegister(&api.capacityMonitor)
 	registry.MustRegister(&api.infoMonitor)
-	mux.HandleFunc("/v1/commitments/change-commitments", api.HandleChangeCommitments)
-	mux.HandleFunc("/v1/commitments/report-capacity", api.HandleReportCapacity)
-	mux.HandleFunc("/v1/commitments/info", api.HandleInfo)
-	mux.HandleFunc("/v1/commitments/projects/", api.HandleReportUsage) // matches /v1/commitments/projects/:project_id/report-usage
+	mux.HandleFunc("/commitments/v1/change-commitments", api.HandleChangeCommitments)
+	mux.HandleFunc("/commitments/v1/report-capacity", api.HandleReportCapacity)
+	mux.HandleFunc("/commitments/v1/info", api.HandleInfo)
+	mux.HandleFunc("/commitments/v1/projects/", api.HandleReportUsage) // matches /commitments/v1/projects/:project_id/report-usage
 
 	log.Info("commitments API initialized",
 		"changeCommitmentsEnabled", api.config.EnableChangeCommitmentsAPI,
