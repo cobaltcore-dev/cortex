@@ -5,32 +5,50 @@ package commitments
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/google/uuid"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
-// handles POST /v1/report-capacity requests from Limes:
+// handles POST /commitments/v1/report-capacity requests from Limes:
 // See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/commitment.go
 // See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid
 // Reports available capacity across all flavor group resources. Note, unit is specified in the Info API response with multiple of the smallest memory resource unit within a flavor group.
 func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request) {
-	// Extract or generate request ID for tracing
+	startTime := time.Now()
+	statusCode := http.StatusOK
+
+	// Extract or generate request ID for tracing - always set in response header
 	requestID := r.Header.Get("X-Request-ID")
 	if requestID == "" {
-		requestID = fmt.Sprintf("req-%d", time.Now().UnixNano())
+		requestID = uuid.New().String()
 	}
-	log := commitmentApiLog.WithValues("requestID", requestID, "endpoint", "/v1/report-capacity")
+	w.Header().Set("X-Request-ID", requestID)
 
-	// Only accept POST method
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	// Check if API is enabled
+	if !api.config.EnableReportCapacityAPI {
+		statusCode = http.StatusServiceUnavailable
+		http.Error(w, "report-capacity API is disabled", statusCode)
+		api.recordCapacityMetrics(statusCode, startTime)
 		return
 	}
 
-	log.V(1).Info("processing report capacity request")
+	ctx := reservations.WithGlobalRequestID(r.Context(), "committed-resource-"+requestID)
+	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/report-capacity")
+
+	// Only accept POST method
+	if r.Method != http.MethodPost {
+		statusCode = http.StatusMethodNotAllowed
+		http.Error(w, "Method not allowed", statusCode)
+		api.recordCapacityMetrics(statusCode, startTime)
+		return
+	}
+
+	logger.V(1).Info("processing report capacity request")
 
 	// Parse request body (may be empty or contain ServiceCapacityRequest)
 	var req liquid.ServiceCapacityRequest
@@ -41,21 +59,30 @@ func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request)
 
 	// Calculate capacity
 	calculator := NewCapacityCalculator(api.client)
-	report, err := calculator.CalculateCapacity(r.Context())
+	report, err := calculator.CalculateCapacity(ctx)
 	if err != nil {
-		log.Error(err, "failed to calculate capacity")
-		http.Error(w, "Failed to calculate capacity: "+err.Error(),
-			http.StatusInternalServerError)
+		logger.Error(err, "failed to calculate capacity")
+		statusCode = http.StatusInternalServerError
+		http.Error(w, "Failed to calculate capacity: "+err.Error(), statusCode)
+		api.recordCapacityMetrics(statusCode, startTime)
 		return
 	}
 
-	log.Info("calculated capacity report", "resourceCount", len(report.Resources))
+	logger.Info("calculated capacity report", "resourceCount", len(report.Resources))
 
 	// Return response
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(statusCode)
 	if err := json.NewEncoder(w).Encode(report); err != nil {
-		log.Error(err, "failed to encode capacity report")
-		return
+		logger.Error(err, "failed to encode capacity report")
 	}
+	api.recordCapacityMetrics(statusCode, startTime)
+}
+
+// recordCapacityMetrics records Prometheus metrics for a report-capacity request.
+func (api *HTTPAPI) recordCapacityMetrics(statusCode int, startTime time.Time) {
+	duration := time.Since(startTime).Seconds()
+	statusCodeStr := strconv.Itoa(statusCode)
+	api.capacityMonitor.requestCounter.WithLabelValues(statusCodeStr).Inc()
+	api.capacityMonitor.requestDuration.WithLabelValues(statusCodeStr).Observe(duration)
 }

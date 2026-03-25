@@ -19,15 +19,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type DecisionsCleanupConfig struct {
+type HistoryCleanupConfig struct {
 	// Secret ref to keystone credentials stored in a k8s secret.
 	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
 	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
 	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
 }
 
-// Delete all decisions for nova servers that have been deleted.
-func DecisionsCleanup(ctx context.Context, client client.Client, conf DecisionsCleanupConfig) error {
+// Delete all histories for nova servers that have been deleted.
+func HistoryCleanup(ctx context.Context, client client.Client, conf HistoryCleanupConfig) error {
 	var authenticatedHTTP = http.DefaultClient
 	if conf.SSOSecretRef != nil {
 		var err error
@@ -119,27 +119,27 @@ func DecisionsCleanup(ctx context.Context, client client.Client, conf DecisionsC
 		reservationsByName[reservation.Name] = reservation
 	}
 
-	// List all decisions and check if the server still exists.
-	decisionList := &v1alpha1.DecisionList{}
-	if err := client.List(ctx, decisionList); err != nil {
+	// List all histories and check if the server still exists.
+	historyList := &v1alpha1.HistoryList{}
+	if err := client.List(ctx, historyList); err != nil {
 		return err
 	}
-	for _, decision := range decisionList.Items {
-		// Skip non-nova decisions.
-		if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
+	for _, history := range historyList.Items {
+		// Skip non-nova histories.
+		if history.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
 			continue
 		}
-		// Skip decisions that are linked to existing reservations.
-		if _, ok := reservationsByName[decision.Spec.ResourceID]; ok {
+		// Skip histories that are linked to existing reservations.
+		if _, ok := reservationsByName[history.Spec.ResourceID]; ok {
 			continue
 		}
-		// Skip decisions for which the server still exists.
-		if _, ok := serversByID[decision.Spec.ResourceID]; ok {
+		// Skip histories for which the server still exists.
+		if _, ok := serversByID[history.Spec.ResourceID]; ok {
 			continue
 		}
-		// Delete the decision since the server no longer exists.
-		slog.Info("deleting decision for deleted server", "decision", decision.Name, "serverID", decision.Spec.ResourceID)
-		if err := client.Delete(ctx, &decision); err != nil {
+		// Delete the history since the server no longer exists.
+		slog.Info("deleting history for deleted server", "history", history.Name, "serverID", history.Spec.ResourceID)
+		if err := client.Delete(ctx, &history); err != nil {
 			return err
 		}
 	}

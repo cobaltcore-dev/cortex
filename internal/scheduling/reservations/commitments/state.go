@@ -6,25 +6,42 @@ package commitments
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/sapcc/go-api-declarations/liquid"
-	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-var stateLog = ctrl.Log.WithName("commitment_state")
+// commitmentUUIDPattern validates commitment UUID format.
+var commitmentUUIDPattern = regexp.MustCompile(`^[a-zA-Z0-9-]{6,40}$`)
 
-// Limes LIQUID resource naming convention: ram_<flavorgroup>
-const commitmentResourceNamePrefix = "ram_"
+// Limes LIQUID resource naming convention: hw_version_<flavorgroup>_ram
+const (
+	resourceNamePrefix = "hw_version_"
+	resourceNameSuffix = "_ram"
+)
+
+// ResourceNameFromFlavorGroup creates a LIQUID resource name from a flavor group name.
+// Format: hw_version_<flavorgroup>_ram
+func ResourceNameFromFlavorGroup(flavorGroup string) string {
+	return resourceNamePrefix + flavorGroup + resourceNameSuffix
+}
 
 func getFlavorGroupNameFromResource(resourceName string) (string, error) {
-	if !strings.HasPrefix(resourceName, commitmentResourceNamePrefix) {
+	if !strings.HasPrefix(resourceName, resourceNamePrefix) || !strings.HasSuffix(resourceName, resourceNameSuffix) {
 		return "", fmt.Errorf("invalid resource name: %s", resourceName)
 	}
-	return strings.TrimPrefix(resourceName, commitmentResourceNamePrefix), nil
+	// Remove prefix and suffix
+	name := strings.TrimPrefix(resourceName, resourceNamePrefix)
+	name = strings.TrimSuffix(name, resourceNameSuffix)
+	// Validate that the extracted group name is not empty
+	if name == "" {
+		return "", fmt.Errorf("invalid resource name: %s (empty group name)", resourceName)
+	}
+	return name, nil
 }
 
 // CommitmentState represents desired or current commitment resource allocation.
@@ -45,6 +62,8 @@ type CommitmentState struct {
 	StartTime *time.Time
 	// EndTime is when the commitment expires
 	EndTime *time.Time
+	// CreatorRequestID is the request ID that triggered this state change (for traceability)
+	CreatorRequestID string
 }
 
 // FromCommitment converts Limes commitment to CommitmentState.
@@ -52,6 +71,10 @@ func FromCommitment(
 	commitment Commitment,
 	flavorGroup compute.FlavorGroupFeature,
 ) (*CommitmentState, error) {
+	// Validate commitment UUID format
+	if !commitmentUUIDPattern.MatchString(commitment.UUID) {
+		return nil, errors.New("unexpected commitment format")
+	}
 
 	flavorGroupName, err := getFlavorGroupNameFromResource(commitment.ResourceName)
 	if err != nil {
@@ -99,6 +122,11 @@ func FromChangeCommitmentTargetState(
 	flavorGroup compute.FlavorGroupFeature,
 	az string,
 ) (*CommitmentState, error) {
+	// Validate commitment UUID format
+	commitmentUUID := string(commitment.UUID)
+	if !commitmentUUIDPattern.MatchString(commitmentUUID) {
+		return nil, errors.New("unexpected commitment format")
+	}
 
 	amountMultiple := uint64(0)
 	var startTime *time.Time
@@ -108,9 +136,15 @@ func FromChangeCommitmentTargetState(
 	// guaranteed and confirmed commitments are honored with start time now
 	case liquid.CommitmentStatusGuaranteed, liquid.CommitmentStatusConfirmed:
 		amountMultiple = commitment.Amount
-		// Set start time to now for active commitments
-		now := time.Now()
-		startTime = &now
+		// Set start time: use ConfirmBy if available (when the commitment was confirmed),
+		// otherwise use time.Now() for immediate confirmation
+		confirmByTime := commitment.ConfirmBy.UnwrapOr(time.Time{})
+		if !confirmByTime.IsZero() {
+			startTime = &confirmByTime
+		} else {
+			now := time.Now()
+			startTime = &now
+		}
 	}
 
 	// ConfirmBy is ignored for now
@@ -142,6 +176,41 @@ func FromChangeCommitmentTargetState(
 		StartTime:        startTime,
 		EndTime:          endTime,
 	}, nil
+}
+
+// CommitmentStateWithUsage extends CommitmentState with usage tracking for billing calculations.
+// Used by the report-usage API to track remaining capacity during VM-to-commitment assignment.
+type CommitmentStateWithUsage struct {
+	CommitmentState
+	// RemainingMemoryBytes is the uncommitted capacity left for VM assignment
+	RemainingMemoryBytes int64
+	// AssignedVMs tracks which VMs have been assigned to this commitment
+	AssignedVMs []string
+}
+
+// NewCommitmentStateWithUsage creates a CommitmentStateWithUsage from a CommitmentState.
+func NewCommitmentStateWithUsage(state *CommitmentState) *CommitmentStateWithUsage {
+	return &CommitmentStateWithUsage{
+		CommitmentState:      *state,
+		RemainingMemoryBytes: state.TotalMemoryBytes,
+		AssignedVMs:          []string{},
+	}
+}
+
+// AssignVM attempts to assign a VM to this commitment if there's enough capacity.
+// Returns true if the VM was assigned, false if not enough capacity.
+func (c *CommitmentStateWithUsage) AssignVM(vmUUID string, vmMemoryBytes int64) bool {
+	if c.RemainingMemoryBytes >= vmMemoryBytes {
+		c.RemainingMemoryBytes -= vmMemoryBytes
+		c.AssignedVMs = append(c.AssignedVMs, vmUUID)
+		return true
+	}
+	return false
+}
+
+// HasRemainingCapacity returns true if the commitment has any remaining capacity.
+func (c *CommitmentStateWithUsage) HasRemainingCapacity() bool {
+	return c.RemainingMemoryBytes > 0
 }
 
 // FromReservations reconstructs CommitmentState from existing Reservation CRDs.
@@ -183,8 +252,8 @@ func FromReservations(reservations []v1alpha1.Reservation) (*CommitmentState, er
 		}
 		// check flavor group consistency, ignore if not matching to repair corrupted state in k8s
 		if res.Spec.CommittedResourceReservation.ResourceGroup != state.FlavorGroupName {
-			// log message
-			stateLog.Error(errors.New("inconsistent flavor group in reservation"),
+			// log message using baseLog since this is a static function without context
+			baseLog.Error(errors.New("inconsistent flavor group in reservation"),
 				"reservation belongs to same commitment but has different flavor group - ignoring reservation for capacity calculation",
 				"reservationName", res.Name,
 				"expectedFlavorGroup", state.FlavorGroupName,

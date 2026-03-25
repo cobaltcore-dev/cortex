@@ -79,7 +79,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 	// Note: We pass all hypervisors (from all AZs) in EligibleHosts. The scheduler pipeline's
 	// filter_correct_az filter will exclude hosts that are not in the VM's availability zone.
 	scheduleReq := reservations.ScheduleReservationRequest{
-		InstanceUUID:     "failover-" + vm.UUID,
+		InstanceUUID:     vm.UUID,
 		ProjectID:        vm.ProjectID,
 		FlavorName:       vm.FlavorName,
 		FlavorExtraSpecs: flavorExtraSpecs,
@@ -89,6 +89,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		IgnoreHosts:      ignoreHypervisors,
 		Pipeline:         pipeline,
 		AvailabilityZone: vm.AvailabilityZone,
+		SchedulerHints:   map[string]any{"_nova_check_type": string(api.ReserveForFailoverIntent)},
 	}
 
 	logger.V(1).Info("scheduling failover reservation",
@@ -204,8 +205,11 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 
 	// Build a single-host request to validate the VM can use the reservation host
 	// Use vm.CurrentHypervisor directly instead of a separate parameter to avoid stale data
+	// Set _nova_check_type to "evacuate" so that filter_has_enough_capacity unlocks
+	// the failover reservation's resources for this VM (avoiding self-blocking).
+	// Use the actual VM UUID (not prefixed) so the filter can match it in the reservation's allocations.
 	scheduleReq := reservations.ScheduleReservationRequest{
-		InstanceUUID:     "validate-" + vm.UUID,
+		InstanceUUID:     vm.UUID,
 		ProjectID:        vm.ProjectID,
 		FlavorName:       vm.FlavorName,
 		FlavorExtraSpecs: flavorExtraSpecs,
@@ -215,6 +219,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		IgnoreHosts:      []string{vm.CurrentHypervisor},
 		Pipeline:         PipelineAcknowledgeFailoverReservation,
 		AvailabilityZone: vm.AvailabilityZone,
+		SchedulerHints:   map[string]any{"_nova_check_type": string(api.EvacuateIntent)},
 	}
 
 	logger.V(1).Info("validating VM via scheduler evacuation",
@@ -250,11 +255,14 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 // scheduleAndBuildNewFailoverReservation schedules a failover reservation for a VM.
 // Returns the built reservation (in-memory only, not persisted).
 // The caller is responsible for persisting the reservation to the cluster.
+// excludeHypervisors is a set of hypervisors to exclude from consideration (e.g., hypervisors
+// that already had a new reservation created in this reconcile cycle).
 func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 	ctx context.Context,
 	vm VM,
 	allHypervisors []string,
 	failoverReservations []v1alpha1.Reservation,
+	excludeHypervisors map[string]bool,
 ) (*v1alpha1.Reservation, error) {
 
 	logger := LoggerFromContext(ctx)
@@ -268,6 +276,12 @@ func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 	// Iterate through scheduler-returned hypervisors to find one that passes eligibility constraints
 	var selectedHypervisor string
 	for _, candidateHypervisor := range validHypervisors {
+		// Skip hypervisors that already had a new reservation created in this reconcile cycle
+		if c.Config.LimitOneNewReservationPerHypervisor && excludeHypervisors[candidateHypervisor] {
+			logger.V(1).Info("skipping hypervisor (already has new reservation this cycle)",
+				"vmUUID", vm.UUID, "hypervisor", candidateHypervisor)
+			continue
+		}
 		// Check if the VM can create a new reservation on this hypervisor
 		hypotheticalRes := v1alpha1.Reservation{
 			Status: v1alpha1.ReservationStatus{

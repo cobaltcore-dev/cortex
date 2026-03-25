@@ -81,12 +81,6 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 	if !ok {
 		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
 	}
-	if pipelineConf.Spec.CreateDecisions {
-		if err := c.Create(ctx, decision); err != nil {
-			return err
-		}
-	}
-	old := decision.DeepCopy()
 	err := c.process(ctx, decision)
 	if err != nil {
 		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
@@ -103,13 +97,31 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 			Message: "pipeline run succeeded",
 		})
 	}
-	if pipelineConf.Spec.CreateDecisions {
-		patch := client.MergeFrom(old)
-		if err := c.Status().Patch(ctx, decision, patch); err != nil {
-			return err
-		}
+	if pipelineConf.Spec.CreateHistory {
+		c.upsertHistory(ctx, decision, err)
 	}
 	return err
+}
+
+func (c *FilterWeigherPipelineController) upsertHistory(ctx context.Context, decision *v1alpha1.Decision, pipelineErr error) {
+	log := ctrl.LoggerFrom(ctx)
+
+	var az *string
+
+	if decision.Spec.NovaRaw != nil {
+		var request api.ExternalSchedulerRequest
+		err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request)
+		if err != nil {
+			log.Error(err, "failed to unmarshal novaRaw for history, using defaults")
+		} else {
+			azStr := request.Spec.Data.AvailabilityZone
+			az = &azStr
+		}
+	}
+
+	if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, az, pipelineErr); upsertErr != nil {
+		log.Error(upsertErr, "failed to create/update history")
+	}
 }
 
 func (c *FilterWeigherPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
@@ -129,6 +141,13 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	if err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request); err != nil {
 		log.Error(err, "failed to unmarshal novaRaw spec")
 		return err
+	}
+
+	if intent, err := request.GetIntent(); err != nil {
+		log.Error(err, "failed to get intent from nova request, using Unknown")
+		decision.Spec.Intent = v1alpha1.SchedulingIntentUnknown
+	} else {
+		decision.Spec.Intent = intent
 	}
 
 	// If necessary gather all placement candidates before filtering.
@@ -180,6 +199,7 @@ func (c *FilterWeigherPipelineController) InitPipeline(
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainNova
+	c.HistoryManager = lib.HistoryClient{Client: mcl, Recorder: mcl.GetEventRecorder("cortex-nova-scheduler")}
 	c.gatherer = &candidateGatherer{Client: mcl}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err

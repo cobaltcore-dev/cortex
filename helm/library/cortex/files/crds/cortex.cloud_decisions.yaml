@@ -39,7 +39,13 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Decision is the Schema for the decisions API
+        description: |-
+          Currently the Decision CRD is an in-memory scheduling object used by the external scheduler API
+          and filter-weigher pipelines to compute a placement result. It is currently NOT persisted
+          to etcd — the scheduling outcome is recorded in the History CRD instead.
+          The long-term shape of this CRD is still under discussion; until that is
+          settled the Decision serves only as a transient carrier within a single
+          scheduling run.
         properties:
           apiVersion:
             description: |-
@@ -66,6 +72,10 @@ spec:
                   cinder decision request.
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
+              intent:
+                description: The intent of the scheduling decision (e.g., initial
+                  scheduling, rescheduling, etc.).
+                type: string
               machineRef:
                 description: If the type is "machine", this field contains the machine
                   reference.

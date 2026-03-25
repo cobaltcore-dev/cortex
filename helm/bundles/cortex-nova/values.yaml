@@ -85,6 +85,8 @@ cortex: &cortex
         gvks:
           - cortex.cloud/v1alpha1/Decision
           - cortex.cloud/v1alpha1/DecisionList
+          - cortex.cloud/v1alpha1/History
+          - cortex.cloud/v1alpha1/HistoryList
           - cortex.cloud/v1alpha1/Descheduling
           - cortex.cloud/v1alpha1/DeschedulingList
           - cortex.cloud/v1alpha1/Pipeline
@@ -124,8 +126,6 @@ cortex-scheduling-controllers:
   conf:
     <<: *cortexConf
     leaderElectionID: cortex-nova-scheduling
-    # OpenStack projects that use experimental features.
-    experimentalProjectIDs: []
     monitoring:
       labels:
         <<: *cortexMonitoringLabels
@@ -134,14 +134,42 @@ cortex-scheduling-controllers:
       - nova-pipeline-controllers
       - nova-deschedulings-executor
       - hypervisor-overcommit-controller
-      - explanation-controller
-      - reservations-controller
+      - committed-resource-reservations-controller
       - failover-reservations-controller
     enabledTasks:
-      - nova-decisions-cleanup-task
-    # Endpoints configuration for reservations controller
-    endpoints:
-      novaExternalScheduler: "http://localhost:8080/scheduler/nova/external"
+      - nova-history-cleanup-task
+    # If true, the external scheduler API will limit the list of hosts in its
+    # response to those included in the scheduling request.
+    novaLimitHostsToRequest: true
+    # CommittedResourceFlavorGroupPipelines maps flavor group IDs to pipeline names for CR reservations
+    # This allows different scheduling strategies per flavor group (e.g., HANA vs GP)
+    committedResourceFlavorGroupPipelines:
+      "2152": "kvm-hana-bin-packing"  # HANA flavor group
+      "2101": "kvm-general-purpose-load-balancing"  # General Purpose flavor group
+      "*": "kvm-general-purpose-load-balancing"  # Catch-all fallback
+    # Default pipeline for CR reservations when no CommittedResourceFlavorGroupPipelines entry matches
+    committedResourcePipelineDefault: "kvm-general-purpose-load-balancing"
+    # How often to re-verify active reservations
+    # 5m = 300000000000 nanoseconds
+    committedResourceRequeueIntervalActive: 300000000000
+    # How often to retry when knowledge is not ready
+    # 1m = 60000000000 nanoseconds
+    committedResourceRequeueIntervalRetry: 60000000000
+    # Timeout for watching reservations to become ready before rolling back
+    # 10s = 10000000000 nanoseconds
+    committedResourceChangeAPIWatchReservationsTimeout: 10000000000
+    # How often to poll reservation status during watch
+    # 500ms = 500000000 nanoseconds
+    committedResourceChangeAPIWatchReservationsPollInterval: 500000000
+    # Whether the change-commitments API endpoint is active
+    # When false, the endpoint returns HTTP 503. The info endpoint remains available.
+    committedResourceEnableChangeCommitmentsAPI: true
+    # Whether the report-usage API endpoint is active
+    # When false, the endpoint returns HTTP 503.
+    committedResourceEnableReportUsageAPI: true
+    # Whether the report-capacity API endpoint is active
+    # When false, the endpoint returns HTTP 503.
+    committedResourceEnableReportCapacityAPI: true
     # OvercommitMappings is a list of mappings that map hypervisor traits to
     # overcommit ratios. Note that this list is applied in order, so if there
     # are multiple mappings applying to the same hypervisors, the last mapping
@@ -157,20 +185,21 @@ cortex-scheduling-controllers:
     flavorFailoverRequirements:
       "*": 2
     # How often to check for missing failover reservations (periodic bulk reconciliation)
-    # 35s = 35000000000 nanoseconds
-    reconcileInterval: 35000000000
-    # Used when maxVMsToProcess limits processing, allows faster catch-up
-    # 100ms = 100000000 nanoseconds
-    shortReconcileInterval: 100000000
-    # Tag for failover reservations (for identification and cleanup)
-    creator: cortex-failover-controller
-    # Limits VMs processed per cycle. Set to 0 to process all VMs.
+    reconcileInterval: 5m
+    # Used when maxVMsToProcess limits processing, allows faster catch-up and for the first reconcile
+    shortReconcileInterval: 1m
+    # Number of max VMs to process in one periodic reconciliation loop
     maxVMsToProcess: 25
+    # Minimum successful reservations to use short interval
+    minSuccessForShortInterval: 1
+    # Maximum failures allowed to still use short interval
+    maxFailuresForShortInterval: 99
     # If true, uses hypervisor CRD as source of truth for VM location instead of postgres
     trustHypervisorLocation: true
     # How often to re-validate acknowledged failover reservations
-    # 30m = 1800000000000 nanoseconds
-    revalidationInterval: 1800000000000
+    revalidationInterval: 30m
+    # Prevents creating multiple new reservations on the same hypervisor per cycle
+    limitOneNewReservationPerHypervisor: false
 
 cortex-knowledge-controllers:
   <<: *cortex
@@ -189,6 +218,9 @@ cortex-knowledge-controllers:
       - datasource-controllers
       - knowledge-controllers
       - kpis-controller
+    # How often the commitments syncer reconciles Limes commitments to Reservation CRDs
+    # 1h = 3600000000000 nanoseconds
+    committedResourceSyncInterval: 3600000000000
     enabledTasks:
       - commitments-sync-task
 

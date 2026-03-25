@@ -109,6 +109,115 @@ func TestHypervisorResourceRouter_Match(t *testing.T) {
 	}
 }
 
+func TestHistoryResourceRouter_Match(t *testing.T) {
+	router := HistoryResourceRouter{}
+
+	az := "qa-west"
+	azOther := "qa-east^"
+	empty := ""
+
+	tests := []struct {
+		name      string
+		obj       any
+		labels    map[string]string
+		wantMatch bool
+		wantErr   bool
+	}{
+		{
+			name: "matching AZ",
+			obj: v1alpha1.History{
+				Spec: v1alpha1.HistorySpec{
+					AvailabilityZone: &az,
+				},
+			},
+			labels:    map[string]string{"availabilityZone": az},
+			wantMatch: true,
+		},
+		{
+			name: "matching AZ pointer",
+			obj: testlib.Ptr(v1alpha1.History{
+				Spec: v1alpha1.HistorySpec{
+					AvailabilityZone: &az,
+				},
+			}),
+			labels:    map[string]string{"availabilityZone": az},
+			wantMatch: true,
+		},
+		{
+			name: "non-matching AZ",
+			obj: v1alpha1.History{
+				Spec: v1alpha1.HistorySpec{
+					AvailabilityZone: &az,
+				},
+			},
+			labels:    map[string]string{"availabilityZone": azOther},
+			wantMatch: false,
+		},
+		{
+			name:    "not a History",
+			obj:     "not-a-history",
+			labels:  map[string]string{"availabilityZone": az},
+			wantErr: true,
+		},
+		{
+			name: "cluster missing availabilityZone label",
+			obj: v1alpha1.History{
+				Spec: v1alpha1.HistorySpec{
+					AvailabilityZone: &az,
+				},
+			},
+			labels:  map[string]string{},
+			wantErr: true,
+		},
+		{
+			name: "history missing availability zone (nil)",
+			obj: v1alpha1.History{
+				Spec: v1alpha1.HistorySpec{},
+			},
+			labels:  map[string]string{"availabilityZone": az},
+			wantErr: true,
+		},
+		{
+			name: "history missing availability zone (empty)",
+			obj: v1alpha1.History{
+				Spec: v1alpha1.HistorySpec{
+					AvailabilityZone: &empty,
+				},
+			},
+			labels:  map[string]string{"availabilityZone": az},
+			wantErr: true,
+		},
+		{
+			name:    "typed nil pointer doesn't panic",
+			obj:     (*v1alpha1.History)(nil),
+			labels:  map[string]string{"availabilityZone": az},
+			wantErr: true,
+		},
+		{
+			name:      "nil object doesn't panic",
+			obj:       nil,
+			labels:    map[string]string{"availabilityZone": az},
+			wantErr:   true,
+			wantMatch: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			match, err := router.Match(tt.obj, tt.labels)
+			if tt.wantErr && err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if match != tt.wantMatch {
+				t.Errorf("expected match=%v, got %v", tt.wantMatch, match)
+			}
+		})
+	}
+}
+
 func TestReservationsResourceRouter_Match(t *testing.T) {
 	router := ReservationsResourceRouter{}
 

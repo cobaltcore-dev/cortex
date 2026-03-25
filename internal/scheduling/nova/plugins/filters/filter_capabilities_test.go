@@ -579,3 +579,77 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		})
 	}
 }
+
+// TestFilterCapabilitiesStep_DoesNotMutateExtraSpecs verifies that the filter
+// does not modify the original ExtraSpecs map from the request. This is important
+// because subsequent filters (like filter_has_requested_traits) also need to access
+// the full ExtraSpecs including non-capability keys like trait:*.
+func TestFilterCapabilitiesStep_DoesNotMutateExtraSpecs(t *testing.T) {
+	scheme, err := hv1.SchemeBuilder.Build()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	hvs := []client.Object{
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{Name: "host1"},
+			Status: hv1.HypervisorStatus{
+				DomainCapabilities: hv1.DomainCapabilities{HypervisorType: "ch"},
+				Capabilities:       hv1.Capabilities{HostCpuArch: "x86_64"},
+			},
+		},
+	}
+
+	// Create a request with mixed extra specs (capabilities + traits + other)
+	originalExtraSpecs := map[string]string{
+		"capabilities:hypervisor_type":     "CH",
+		"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "forbidden",
+		"trait:CUSTOM_HW_SAPPHIRE_RAPIDS":  "required",
+		"hw:mem_page_size":                 "large",
+		"hw:numa_nodes":                    "1",
+	}
+
+	request := api.ExternalSchedulerRequest{
+		Spec: api.NovaObject[api.NovaSpec]{
+			Data: api.NovaSpec{
+				Flavor: api.NovaObject[api.NovaFlavor]{
+					Data: api.NovaFlavor{
+						ExtraSpecs: originalExtraSpecs,
+					},
+				},
+			},
+		},
+		Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}},
+	}
+
+	step := &FilterCapabilitiesStep{}
+	step.Client = fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(hvs...).
+		Build()
+
+	_, err = step.Run(slog.Default(), request)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Verify that the original ExtraSpecs map was NOT mutated
+	expectedKeys := []string{
+		"capabilities:hypervisor_type",
+		"trait:CUSTOM_HANA_EXCLUSIVE_HOST",
+		"trait:CUSTOM_HW_SAPPHIRE_RAPIDS",
+		"hw:mem_page_size",
+		"hw:numa_nodes",
+	}
+
+	if len(request.Spec.Data.Flavor.Data.ExtraSpecs) != len(expectedKeys) {
+		t.Errorf("ExtraSpecs was mutated: expected %d keys, got %d",
+			len(expectedKeys), len(request.Spec.Data.Flavor.Data.ExtraSpecs))
+	}
+
+	for _, key := range expectedKeys {
+		if _, ok := request.Spec.Data.Flavor.Data.ExtraSpecs[key]; !ok {
+			t.Errorf("ExtraSpecs was mutated: key %q was deleted", key)
+		}
+	}
+}

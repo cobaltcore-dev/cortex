@@ -1,7 +1,7 @@
 # Cortex Multi-Cluster Testing
 
 > [!NOTE]
-> If you want to skip the reading part, there's `run.sh` and `cleanup.sh` scripts in this directory that will set up and tear down the multi-cluster environment for you.
+> If you want to skip the reading part, there's `run.sh` and `cleanup.sh` scripts in this directory that will set up and tear down the multi-cluster environment for you. If you want to test the multi-cluster setup you can run the `schedule.sh` script, which will create a scheduling request and show you how it gets processed across the clusters.
 
 Cortex provides support for multi-cluster deployments, where a "home" cluster hosts the cortex pods and one or more "remote" clusters are used to persist CRDs. A typical use case for this would be to offload the etcd storage for Cortex CRDs to a remote cluster, reducing the resource usage on the home cluster. Similarly, another use case is to have multiple remote clusters that maintain all the compute workloads and expose resources that Cortex needs to access, such as the `Hypervisor` resource.
 

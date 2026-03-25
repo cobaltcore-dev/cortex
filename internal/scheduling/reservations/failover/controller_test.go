@@ -988,6 +988,9 @@ func TestSelectVMsToProcess(t *testing.T) {
 			ctx := context.Background()
 			controller := &FailoverReservationController{
 				reconcileCount: tt.reconcileCount,
+				Config: FailoverConfig{
+					VMSelectionRotationInterval: intPtr(4), // Default rotation interval
+				},
 			}
 
 			vms := createVMs(tt.vmCount)

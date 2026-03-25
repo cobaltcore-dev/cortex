@@ -221,7 +221,7 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 			ID:               1,
 			UUID:             "12345-67890-abcdef",
 			ServiceType:      "compute",
-			ResourceName:     "ram_test_group_v1",
+			ResourceName:     "hw_version_test_group_v1_ram",
 			AvailabilityZone: "az1",
 			Amount:           2, // 2 multiples of smallest flavor (2 * 1024MB = 2048MB total)
 			Unit:             "",
@@ -357,7 +357,7 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 			ID:               1,
 			UUID:             "12345-67890-abcdef",
 			ServiceType:      "compute",
-			ResourceName:     "ram_new_group_v1",
+			ResourceName:     "hw_version_new_group_v1_ram",
 			AvailabilityZone: "az1",
 			Amount:           1,
 			Unit:             "",
@@ -429,6 +429,171 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 	}
 }
 
+func TestSyncer_SyncReservations_UnitMismatch(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheme: %v", err)
+	}
+
+	// Create flavor group knowledge CRD with smallest flavor of 1024MB
+	flavorGroupsKnowledge := createFlavorGroupKnowledge(t, map[string]FlavorGroupData{
+		"test_group_v1": {
+			LargestFlavorName:      "test-flavor-large",
+			LargestFlavorVCPUs:     8,
+			LargestFlavorMemoryMB:  8192,
+			SmallestFlavorName:     "test-flavor-small",
+			SmallestFlavorVCPUs:    2,
+			SmallestFlavorMemoryMB: 1024,
+		},
+	})
+
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(flavorGroupsKnowledge).
+		Build()
+
+	// Create mock commitment with a unit that doesn't match Cortex's understanding
+	// Limes says "2048 MiB" but Cortex's smallest flavor is 1024 MB
+	mockCommitments := []Commitment{
+		{
+			ID:               1,
+			UUID:             "unit-mismatch-test-uuid",
+			ServiceType:      "compute",
+			ResourceName:     "hw_version_test_group_v1_ram",
+			AvailabilityZone: "az1",
+			Amount:           2,
+			Unit:             "2048 MiB", // Mismatched unit - should be "1024 MiB"
+			ProjectID:        "test-project",
+			DomainID:         "test-domain",
+		},
+	}
+
+	// Create monitor to capture the mismatch metric
+	monitor := NewSyncerMonitor()
+
+	mockClient := &mockCommitmentsClient{
+		listCommitmentsByIDFunc: func(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
+			result := make(map[string]Commitment)
+			for _, c := range mockCommitments {
+				result[c.UUID] = c
+			}
+			return result, nil
+		},
+		listProjectsFunc: func(ctx context.Context) ([]Project, error) {
+			return []Project{
+				{ID: "test-project", DomainID: "test-domain", Name: "Test Project"},
+			}, nil
+		},
+	}
+
+	syncer := &Syncer{
+		CommitmentsClient: mockClient,
+		Client:            k8sClient,
+		monitor:           monitor,
+	}
+
+	err := syncer.SyncReservations(context.Background())
+	if err != nil {
+		t.Errorf("SyncReservations() error = %v", err)
+		return
+	}
+
+	// Verify that NO reservations were created due to unit mismatch
+	// The commitment is skipped and Cortex trusts existing CRDs
+	var reservations v1alpha1.ReservationList
+	err = k8sClient.List(context.Background(), &reservations)
+	if err != nil {
+		t.Errorf("Failed to list reservations: %v", err)
+		return
+	}
+
+	// Should have 0 reservations - commitment is skipped due to unit mismatch
+	// Cortex waits for Limes to update the unit before processing
+	if len(reservations.Items) != 0 {
+		t.Errorf("Expected 0 reservations (commitment skipped due to unit mismatch), got %d", len(reservations.Items))
+	}
+}
+
+func TestSyncer_SyncReservations_UnitMatch(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheme: %v", err)
+	}
+
+	// Create flavor group knowledge CRD with smallest flavor of 1024MB
+	flavorGroupsKnowledge := createFlavorGroupKnowledge(t, map[string]FlavorGroupData{
+		"test_group_v1": {
+			LargestFlavorName:      "test-flavor-large",
+			LargestFlavorVCPUs:     8,
+			LargestFlavorMemoryMB:  8192,
+			SmallestFlavorName:     "test-flavor-small",
+			SmallestFlavorVCPUs:    2,
+			SmallestFlavorMemoryMB: 1024,
+		},
+	})
+
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(flavorGroupsKnowledge).
+		Build()
+
+	// Create mock commitment with correct unit matching Cortex's smallest flavor
+	mockCommitments := []Commitment{
+		{
+			ID:               1,
+			UUID:             "unit-match-test-uuid",
+			ServiceType:      "compute",
+			ResourceName:     "hw_version_test_group_v1_ram",
+			AvailabilityZone: "az1",
+			Amount:           2,
+			Unit:             "1024 MiB", // Correct unit matching smallest flavor
+			ProjectID:        "test-project",
+			DomainID:         "test-domain",
+		},
+	}
+
+	monitor := NewSyncerMonitor()
+
+	mockClient := &mockCommitmentsClient{
+		listCommitmentsByIDFunc: func(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
+			result := make(map[string]Commitment)
+			for _, c := range mockCommitments {
+				result[c.UUID] = c
+			}
+			return result, nil
+		},
+		listProjectsFunc: func(ctx context.Context) ([]Project, error) {
+			return []Project{
+				{ID: "test-project", DomainID: "test-domain", Name: "Test Project"},
+			}, nil
+		},
+	}
+
+	syncer := &Syncer{
+		CommitmentsClient: mockClient,
+		Client:            k8sClient,
+		monitor:           monitor,
+	}
+
+	err := syncer.SyncReservations(context.Background())
+	if err != nil {
+		t.Errorf("SyncReservations() error = %v", err)
+		return
+	}
+
+	// Verify that reservations were created
+	var reservations v1alpha1.ReservationList
+	err = k8sClient.List(context.Background(), &reservations)
+	if err != nil {
+		t.Errorf("Failed to list reservations: %v", err)
+		return
+	}
+
+	if len(reservations.Items) != 2 {
+		t.Errorf("Expected 2 reservations, got %d", len(reservations.Items))
+	}
+}
+
 func TestSyncer_SyncReservations_EmptyUUID(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
@@ -458,7 +623,7 @@ func TestSyncer_SyncReservations_EmptyUUID(t *testing.T) {
 			ID:               1,
 			UUID:             "", // Empty UUID
 			ServiceType:      "compute",
-			ResourceName:     "ram_test_group_v1",
+			ResourceName:     "hw_version_test_group_v1_ram",
 			AvailabilityZone: "az1",
 			Amount:           1,
 			Unit:             "",

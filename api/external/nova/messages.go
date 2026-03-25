@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
@@ -30,9 +31,6 @@ type ExternalSchedulerRequest struct {
 
 	// Request context from Nova that contains additional meta information.
 	Context NovaRequestContext `json:"context"`
-
-	// Whether the request is a reservation.
-	Reservation bool `json:"reservation"`
 
 	Hosts   []ExternalSchedulerHost `json:"hosts"`
 	Weights map[string]float64      `json:"weights"`
@@ -129,23 +127,23 @@ func (req ExternalSchedulerRequest) GetHypervisorType() (HypervisorType, error) 
 	return "", errors.New("hypervisor type not specified in flavor extra specs")
 }
 
-type RequestIntent string
-
 const (
 	// LiveMigrationIntent indicates that the request is intended for live migration.
-	LiveMigrationIntent RequestIntent = "live_migration"
+	LiveMigrationIntent v1alpha1.SchedulingIntent = "live_migration"
 	// RebuildIntent indicates that the request is intended for rebuilding a VM.
-	RebuildIntent RequestIntent = "rebuild"
+	RebuildIntent v1alpha1.SchedulingIntent = "rebuild"
 	// ResizeIntent indicates that the request is intended for resizing a VM.
-	ResizeIntent RequestIntent = "resize"
+	ResizeIntent v1alpha1.SchedulingIntent = "resize"
 	// EvacuateIntent indicates that the request is intended for evacuating a VM.
-	EvacuateIntent RequestIntent = "evacuate"
+	EvacuateIntent v1alpha1.SchedulingIntent = "evacuate"
 	// CreateIntent indicates that the request is intended for creating a new VM.
-	CreateIntent RequestIntent = "create"
+	CreateIntent v1alpha1.SchedulingIntent = "create"
+	// ReserveForFailoverIntent indicates that the request is for failover reservation scheduling.
+	ReserveForFailoverIntent v1alpha1.SchedulingIntent = "reserve_for_failover"
 )
 
 // GetIntent analyzes the request spec and determines the intent of the scheduling request.
-func (req ExternalSchedulerRequest) GetIntent() (RequestIntent, error) {
+func (req ExternalSchedulerRequest) GetIntent() (v1alpha1.SchedulingIntent, error) {
 	str, err := req.Spec.Data.GetSchedulerHintStr("_nova_check_type")
 	if err != nil {
 		return "", err
@@ -164,6 +162,9 @@ func (req ExternalSchedulerRequest) GetIntent() (RequestIntent, error) {
 	// See: https://github.com/sapcc/nova/blob/c88393/nova/compute/api.py#L5770
 	case "evacuate":
 		return EvacuateIntent, nil
+	// Used by cortex failover reservation controller
+	case "reserve_for_failover":
+		return ReserveForFailoverIntent, nil
 	default:
 		return CreateIntent, nil
 	}

@@ -13,7 +13,6 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/http"
-	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -44,17 +43,23 @@ type HTTPAPI interface {
 	Init(*http.ServeMux)
 }
 
+type HTTPAPIConfig struct {
+	// NovaLimitHostsToRequest, if true, will filter the Nova scheduler response
+	// to only include hosts that were in the original request.
+	NovaLimitHostsToRequest bool `json:"novaLimitHostsToRequest,omitempty"`
+}
+
 type httpAPI struct {
-	config   HTTPAPIConfig
 	monitor  scheduling.APIMonitor
 	delegate HTTPAPIDelegate
+	config   HTTPAPIConfig
 }
 
 func NewAPI(config HTTPAPIConfig, delegate HTTPAPIDelegate) HTTPAPI {
 	return &httpAPI{
-		config:   config,
 		monitor:  scheduling.NewSchedulerMonitor(),
 		delegate: delegate,
+		config:   config,
 	}
 }
 
@@ -102,23 +107,6 @@ func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerReque
 	}
 	switch hvType {
 	case api.HypervisorTypeCH, api.HypervisorTypeQEMU:
-		enableAllFilters := false
-		// If the nova request matches a configurable openstack project,
-		// use a different pipeline that has all filters enabled.
-		if slices.Contains(httpAPI.config.ExperimentalProjectIDs, requestData.Spec.Data.ProjectID) {
-			enableAllFilters = true
-		}
-		if requestData.Reservation {
-			enableAllFilters = true
-		}
-		if enableAllFilters {
-			switch flavorType {
-			case api.FlavorTypeHANA:
-				return "kvm-hana-bin-packing-all-filters-enabled", nil
-			default:
-				return "kvm-general-purpose-load-balancing-all-filters-enabled", nil
-			}
-		}
 		switch flavorType {
 		case api.FlavorTypeHANA:
 			return "kvm-hana-bin-packing", nil
@@ -126,9 +114,6 @@ func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerReque
 			return "kvm-general-purpose-load-balancing", nil
 		}
 	case api.HypervisorTypeVMware:
-		if requestData.Reservation {
-			return "", errors.New("reservations are not supported on vmware hypervisors")
-		}
 		switch flavorType {
 		case api.FlavorTypeHANA:
 			return "vmware-hana-bin-packing", nil
@@ -256,6 +241,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 			},
 			ResourceID: requestData.Spec.Data.InstanceUUID,
 			NovaRaw:    &raw,
+			Intent:     v1alpha1.SchedulingIntentUnknown,
 		},
 	}
 	ctx := r.Context()
@@ -273,8 +259,11 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		return
 	}
 	hosts := decision.Status.Result.OrderedHosts
-	hosts = limitHostsToRequest(requestData, hosts)
-
+	if httpAPI.config.NovaLimitHostsToRequest {
+		hosts = limitHostsToRequest(requestData, hosts)
+		slog.Info("limited hosts to request",
+			"hosts", hosts, "originalHosts", decision.Status.Result.OrderedHosts)
+	}
 	// This is a hack to address the problem that Nova only uses the first host in hosts for evacuation requests.
 	// Only for evacuation we shuffle the first k hosts to ensure that we do not get stuck on a single host
 	intent, err := requestData.GetIntent()

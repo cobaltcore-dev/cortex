@@ -78,10 +78,10 @@ type PipelineSpec struct {
 	// +kubebuilder:validation:Optional
 	Description string `json:"description,omitempty"`
 
-	// If this pipeline should create decision objects.
+	// If this pipeline should create history objects.
 	// When this is false, the pipeline will still process requests.
 	// +kubebuilder:default=false
-	CreateDecisions bool `json:"createDecisions,omitempty"`
+	CreateHistory bool `json:"createHistory,omitempty"`
 
 	// If this pipeline should ignore host preselection and gather all
 	// available placement candidates before applying filters, instead of

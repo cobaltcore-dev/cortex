@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -41,7 +42,7 @@ func TestApplyCommitmentState_CreatesNewReservations(t *testing.T) {
 		TotalMemoryBytes: 3 * 8192 * 1024 * 1024,
 	}
 
-	touched, removed, err := manager.ApplyCommitmentState(
+	applyResult, err := manager.ApplyCommitmentState(
 		context.Background(),
 		logr.Discard(),
 		desiredState,
@@ -53,18 +54,18 @@ func TestApplyCommitmentState_CreatesNewReservations(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(removed) != 0 {
-		t.Errorf("expected 0 removed reservations, got %d", len(removed))
+	if len(applyResult.RemovedReservations) != 0 {
+		t.Errorf("expected 0 applyResult.RemovedReservations reservations, got %d", len(applyResult.RemovedReservations))
 	}
 
 	// Should create reservations to fulfill the commitment
-	if len(touched) == 0 {
+	if len(applyResult.TouchedReservations) == 0 {
 		t.Fatal("expected at least one reservation to be created")
 	}
 
 	// Verify created reservations sum to desired state
 	totalMemory := int64(0)
-	for _, res := range touched {
+	for _, res := range applyResult.TouchedReservations {
 		memQuantity := res.Spec.Resources[hv1.ResourceMemory]
 		totalMemory += memQuantity.Value()
 	}
@@ -141,7 +142,7 @@ func TestApplyCommitmentState_DeletesExcessReservations(t *testing.T) {
 		TotalMemoryBytes: 8 * 1024 * 1024 * 1024,
 	}
 
-	_, removed, err := manager.ApplyCommitmentState(
+	applyResult, err := manager.ApplyCommitmentState(
 		context.Background(),
 		logr.Discard(),
 		desiredState,
@@ -157,7 +158,7 @@ func TestApplyCommitmentState_DeletesExcessReservations(t *testing.T) {
 	// This is expected behavior based on the slot sizing algorithm
 
 	// Should remove excess reservations
-	if len(removed) == 0 {
+	if len(applyResult.RemovedReservations) == 0 {
 		t.Fatal("expected reservations to be removed")
 	}
 
@@ -178,110 +179,338 @@ func TestApplyCommitmentState_DeletesExcessReservations(t *testing.T) {
 	}
 }
 
-func TestApplyCommitmentState_PreservesAllocatedReservations(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
-
-	// Create reservations: one with allocation, one without
-	existingReservations := []v1alpha1.Reservation{
+func TestApplyCommitmentState_DeletionPriority(t *testing.T) {
+	tests := []struct {
+		name                 string
+		existingReservations []v1alpha1.Reservation
+		desiredMemoryBytes   int64
+		expectedRemovedCount int
+		validateRemoved      func(t *testing.T, removed []v1alpha1.Reservation)
+		validateRemaining    func(t *testing.T, remaining []v1alpha1.Reservation)
+	}{
 		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "commitment-abc123-0",
-				Labels: map[string]string{
-					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+			name: "Priority 1: Unscheduled reservations (no TargetHost) deleted first",
+			existingReservations: []v1alpha1.Reservation{
+				// Reservation 0: Has TargetHost and allocations - lowest priority (should remain)
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "commitment-abc123-0",
+						Labels: map[string]string{
+							v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+						},
+					},
+					Spec: v1alpha1.ReservationSpec{
+						TargetHost: "host-1",
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceMemory: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
+						},
+						CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+							ProjectID:     "project-1",
+							ResourceGroup: "test-group",
+							Creator:       "syncer",
+							Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+								"vm-123": {},
+							},
+						},
+					},
 				},
-			},
-			Spec: v1alpha1.ReservationSpec{
-				Resources: map[hv1.ResourceName]resource.Quantity{
-					hv1.ResourceMemory: *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
-				},
-				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-					ProjectID:     "project-1",
-					ResourceGroup: "test-group",
-					Creator:       "syncer",
-					Allocations: map[string]v1alpha1.CommittedResourceAllocation{
-						"vm-123": {}, // Has allocation
+				// Reservation 1: No TargetHost and no allocations - highest priority (should be deleted)
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "commitment-abc123-1",
+						Labels: map[string]string{
+							v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+						},
+					},
+					Spec: v1alpha1.ReservationSpec{
+						TargetHost: "",
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceMemory: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
+						},
+						CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+							ProjectID:     "project-1",
+							ResourceGroup: "test-group",
+							Creator:       "syncer",
+							Allocations:   map[string]v1alpha1.CommittedResourceAllocation{},
+						},
 					},
 				},
 			},
+			desiredMemoryBytes:   8 * 1024 * 1024 * 1024, // Need to delete one
+			expectedRemovedCount: 1,
+			validateRemoved: func(t *testing.T, removed []v1alpha1.Reservation) {
+				// Should have removed the unscheduled one (no TargetHost)
+				if removed[0].Spec.TargetHost != "" {
+					t.Errorf("expected unscheduled reservation to be removed, but removed %s with TargetHost %s",
+						removed[0].Name, removed[0].Spec.TargetHost)
+				}
+			},
+			validateRemaining: func(t *testing.T, remaining []v1alpha1.Reservation) {
+				if len(remaining) != 1 {
+					t.Fatalf("expected 1 remaining reservation, got %d", len(remaining))
+				}
+				// Should have kept the scheduled one with allocations
+				if remaining[0].Spec.TargetHost == "" {
+					t.Error("expected scheduled reservation to remain")
+				}
+				if len(remaining[0].Spec.CommittedResourceReservation.Allocations) == 0 {
+					t.Error("expected reservation with allocations to remain")
+				}
+			},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "commitment-abc123-1",
-				Labels: map[string]string{
-					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+			name: "Priority 2: Unused scheduled reservations (no allocations) deleted next",
+			existingReservations: []v1alpha1.Reservation{
+				// Has TargetHost AND allocations - lowest priority for deletion
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "commitment-abc123-0",
+						Labels: map[string]string{
+							v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+						},
+					},
+					Spec: v1alpha1.ReservationSpec{
+						TargetHost: "host-1",
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceMemory: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
+						},
+						CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+							ProjectID:     "project-1",
+							ResourceGroup: "test-group",
+							Creator:       "syncer",
+							Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+								"vm-123": {},
+							},
+						},
+					},
+				},
+				// Has TargetHost but NO allocations - medium priority
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "commitment-abc123-1",
+						Labels: map[string]string{
+							v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+						},
+					},
+					Spec: v1alpha1.ReservationSpec{
+						TargetHost: "host-2",
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceMemory: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
+						},
+						CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+							ProjectID:     "project-1",
+							ResourceGroup: "test-group",
+							Creator:       "syncer",
+							Allocations:   map[string]v1alpha1.CommittedResourceAllocation{},
+						},
+					},
 				},
 			},
-			Spec: v1alpha1.ReservationSpec{
-				Resources: map[hv1.ResourceName]resource.Quantity{
-					hv1.ResourceMemory: *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
+			desiredMemoryBytes:   8 * 1024 * 1024 * 1024,
+			expectedRemovedCount: 1,
+			validateRemoved: func(t *testing.T, removed []v1alpha1.Reservation) {
+				// Should have removed the one without allocations
+				if len(removed[0].Spec.CommittedResourceReservation.Allocations) != 0 {
+					t.Error("expected reservation without allocations to be removed")
+				}
+			},
+			validateRemaining: func(t *testing.T, remaining []v1alpha1.Reservation) {
+				if len(remaining) != 1 {
+					t.Fatalf("expected 1 remaining reservation, got %d", len(remaining))
+				}
+				// Should have kept the one with allocations
+				if len(remaining[0].Spec.CommittedResourceReservation.Allocations) == 0 {
+					t.Error("expected reservation with allocations to remain")
+				}
+			},
+		},
+		{
+			name: "Mixed scenario: comprehensive deletion priority test",
+			existingReservations: []v1alpha1.Reservation{
+				// Reservation 0: Has TargetHost + has allocations (lowest priority - should remain)
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "commitment-abc123-0",
+						Labels: map[string]string{
+							v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+						},
+					},
+					Spec: v1alpha1.ReservationSpec{
+						TargetHost: "host-1",
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceMemory: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
+						},
+						CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+							ProjectID:     "project-1",
+							ResourceGroup: "test-group",
+							Creator:       "syncer",
+							Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+								"vm-allocated": {},
+							},
+						},
+					},
 				},
-				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-					ProjectID:     "project-1",
-					ResourceGroup: "test-group",
-					Creator:       "syncer",
-					Allocations:   map[string]v1alpha1.CommittedResourceAllocation{}, // No allocation
+				// Reservation 1: Has TargetHost + no allocations (medium priority - should remain)
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "commitment-abc123-1",
+						Labels: map[string]string{
+							v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+						},
+					},
+					Spec: v1alpha1.ReservationSpec{
+						TargetHost: "host-2",
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceMemory: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
+						},
+						CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+							ProjectID:     "project-1",
+							ResourceGroup: "test-group",
+							Creator:       "syncer",
+							Allocations:   map[string]v1alpha1.CommittedResourceAllocation{},
+						},
+					},
 				},
+				// Reservation 2: No TargetHost + no allocations (highest priority - should be deleted)
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "commitment-abc123-2",
+						Labels: map[string]string{
+							v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+						},
+					},
+					Spec: v1alpha1.ReservationSpec{
+						TargetHost: "",
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceMemory: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
+						},
+						CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+							ProjectID:     "project-1",
+							ResourceGroup: "test-group",
+							Creator:       "syncer",
+							Allocations:   map[string]v1alpha1.CommittedResourceAllocation{},
+						},
+					},
+				},
+				// Reservation 3: No TargetHost + no allocations (highest priority - should be deleted)
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "commitment-abc123-3",
+						Labels: map[string]string{
+							v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+						},
+					},
+					Spec: v1alpha1.ReservationSpec{
+						TargetHost: "",
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceMemory: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
+						},
+						CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+							ProjectID:     "project-1",
+							ResourceGroup: "test-group",
+							Creator:       "syncer",
+							Allocations:   map[string]v1alpha1.CommittedResourceAllocation{},
+						},
+					},
+				},
+			},
+			desiredMemoryBytes:   16 * 1024 * 1024 * 1024, // Need to delete 2 out of 4
+			expectedRemovedCount: 2,
+			validateRemoved: func(t *testing.T, removed []v1alpha1.Reservation) {
+				// Both removed should have no TargetHost (highest priority for deletion)
+				for _, res := range removed {
+					if res.Spec.TargetHost != "" {
+						t.Errorf("expected unscheduled reservations to be removed first, but removed %s with TargetHost %s",
+							res.Name, res.Spec.TargetHost)
+					}
+				}
+			},
+			validateRemaining: func(t *testing.T, remaining []v1alpha1.Reservation) {
+				if len(remaining) != 2 {
+					t.Fatalf("expected 2 remaining reservations, got %d", len(remaining))
+				}
+				// Both remaining should have TargetHost
+				for _, res := range remaining {
+					if res.Spec.TargetHost == "" {
+						t.Errorf("expected scheduled reservations to remain, but %s has no TargetHost", res.Name)
+					}
+				}
+				// At least one should have allocations (the one with lowest deletion priority)
+				hasAllocations := false
+				for _, res := range remaining {
+					if len(res.Spec.CommittedResourceReservation.Allocations) > 0 {
+						hasAllocations = true
+						break
+					}
+				}
+				if !hasAllocations {
+					t.Error("expected at least one remaining reservation to have allocations")
+				}
 			},
 		},
 	}
 
-	client := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(&existingReservations[0], &existingReservations[1]).
-		Build()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			if err := v1alpha1.AddToScheme(scheme); err != nil {
+				t.Fatal(err)
+			}
 
-	manager := NewReservationManager(client)
-	flavorGroup := testFlavorGroup()
-	flavorGroups := map[string]compute.FlavorGroupFeature{
-		"test-group": flavorGroup,
-	}
+			// Convert slice to individual objects for WithObjects
+			objects := make([]client.Object, len(tt.existingReservations))
+			for i := range tt.existingReservations {
+				objects[i] = &tt.existingReservations[i]
+			}
 
-	// Desired state: only 16 GiB (need to reduce by one slot)
-	desiredState := &CommitmentState{
-		CommitmentUUID:   "abc123",
-		ProjectID:        "project-1",
-		FlavorGroupName:  "test-group",
-		TotalMemoryBytes: 16 * 1024 * 1024 * 1024,
-	}
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objects...).
+				Build()
 
-	_, removed, err := manager.ApplyCommitmentState(
-		context.Background(),
-		logr.Discard(),
-		desiredState,
-		flavorGroups,
-		"syncer",
-	)
+			manager := NewReservationManager(client)
+			flavorGroup := testFlavorGroup()
+			flavorGroups := map[string]compute.FlavorGroupFeature{
+				"test-group": flavorGroup,
+			}
 
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+			desiredState := &CommitmentState{
+				CommitmentUUID:   "abc123",
+				ProjectID:        "project-1",
+				FlavorGroupName:  "test-group",
+				TotalMemoryBytes: tt.desiredMemoryBytes,
+			}
 
-	// Should remove the unallocated reservation, not the allocated one
-	if len(removed) != 1 {
-		t.Fatalf("expected 1 removed reservation, got %d", len(removed))
-	}
+			applyResult, err := manager.ApplyCommitmentState(
+				context.Background(),
+				logr.Discard(),
+				desiredState,
+				flavorGroups,
+				"syncer",
+			)
 
-	// Verify the removed one had no allocations
-	if len(removed[0].Spec.CommittedResourceReservation.Allocations) != 0 {
-		t.Error("expected unallocated reservation to be removed first")
-	}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
-	// Verify the allocated reservation still exists
-	var remainingList v1alpha1.ReservationList
-	if err := client.List(context.Background(), &remainingList); err != nil {
-		t.Fatal(err)
-	}
+			if len(applyResult.RemovedReservations) != tt.expectedRemovedCount {
+				t.Fatalf("expected %d removed reservations, got %d", tt.expectedRemovedCount, len(applyResult.RemovedReservations))
+			}
 
-	if len(remainingList.Items) != 1 {
-		t.Fatalf("expected 1 remaining reservation, got %d", len(remainingList.Items))
-	}
+			if tt.validateRemoved != nil {
+				tt.validateRemoved(t, applyResult.RemovedReservations)
+			}
 
-	// Verify the remaining one has the allocation
-	if len(remainingList.Items[0].Spec.CommittedResourceReservation.Allocations) == 0 {
-		t.Error("expected allocated reservation to be preserved")
+			// Get remaining reservations
+			var remainingList v1alpha1.ReservationList
+			if err := client.List(context.Background(), &remainingList); err != nil {
+				t.Fatal(err)
+			}
+
+			if tt.validateRemaining != nil {
+				tt.validateRemaining(t, remainingList.Items)
+			}
+		})
 	}
 }
 
@@ -331,7 +560,7 @@ func TestApplyCommitmentState_HandlesZeroCapacity(t *testing.T) {
 		TotalMemoryBytes: 0,
 	}
 
-	touched, removed, err := manager.ApplyCommitmentState(
+	applyResult, err := manager.ApplyCommitmentState(
 		context.Background(),
 		logr.Discard(),
 		desiredState,
@@ -343,13 +572,13 @@ func TestApplyCommitmentState_HandlesZeroCapacity(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(touched) != 0 {
-		t.Errorf("expected 0 new reservations, got %d", len(touched))
+	if len(applyResult.TouchedReservations) != 0 {
+		t.Errorf("expected 0 new reservations, got %d", len(applyResult.TouchedReservations))
 	}
 
 	// Should remove all reservations
-	if len(removed) != 1 {
-		t.Fatalf("expected 1 removed reservation, got %d", len(removed))
+	if len(applyResult.RemovedReservations) != 1 {
+		t.Fatalf("expected 1 removed reservation, got %d", len(applyResult.RemovedReservations))
 	}
 
 	// Verify no reservations remain
@@ -409,7 +638,7 @@ func TestApplyCommitmentState_FixesWrongFlavorGroup(t *testing.T) {
 		TotalMemoryBytes: 8 * 1024 * 1024 * 1024,
 	}
 
-	touched, removed, err := manager.ApplyCommitmentState(
+	applyResult, err := manager.ApplyCommitmentState(
 		context.Background(),
 		logr.Discard(),
 		desiredState,
@@ -422,18 +651,18 @@ func TestApplyCommitmentState_FixesWrongFlavorGroup(t *testing.T) {
 	}
 
 	// Should remove wrong reservation and create new one
-	if len(removed) != 1 {
-		t.Fatalf("expected 1 removed reservation, got %d", len(removed))
+	if len(applyResult.RemovedReservations) != 1 {
+		t.Fatalf("expected 1 removed reservation, got %d", len(applyResult.RemovedReservations))
 	}
 
-	if len(touched) != 1 {
-		t.Fatalf("expected 1 new reservation, got %d", len(touched))
+	if len(applyResult.TouchedReservations) != 1 {
+		t.Fatalf("expected 1 new reservation, got %d", len(applyResult.TouchedReservations))
 	}
 
 	// Verify new reservation has correct flavor group
-	if touched[0].Spec.CommittedResourceReservation.ResourceGroup != "test-group" {
+	if applyResult.TouchedReservations[0].Spec.CommittedResourceReservation.ResourceGroup != "test-group" {
 		t.Errorf("expected flavor group test-group, got %s",
-			touched[0].Spec.CommittedResourceReservation.ResourceGroup)
+			applyResult.TouchedReservations[0].Spec.CommittedResourceReservation.ResourceGroup)
 	}
 }
 
@@ -457,7 +686,7 @@ func TestApplyCommitmentState_UnknownFlavorGroup(t *testing.T) {
 		TotalMemoryBytes: 8 * 1024 * 1024 * 1024,
 	}
 
-	_, _, err := manager.ApplyCommitmentState(
+	_, err := manager.ApplyCommitmentState(
 		context.Background(),
 		logr.Discard(),
 		desiredState,

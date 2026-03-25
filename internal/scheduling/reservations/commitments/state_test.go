@@ -36,7 +36,7 @@ func TestFromCommitment_CalculatesMemoryCorrectly(t *testing.T) {
 	commitment := Commitment{
 		UUID:         "test-uuid",
 		ProjectID:    "project-1",
-		ResourceName: "ram_test-group",
+		ResourceName: "hw_version_test-group_ram",
 		Amount:       5, // 5 multiples of smallest flavor
 	}
 
@@ -236,7 +236,8 @@ func TestFromReservations_NonCommittedResourceType(t *testing.T) {
 }
 
 func TestGetFlavorGroupNameFromResource_Valid(t *testing.T) {
-	name, err := getFlavorGroupNameFromResource("ram_hana_medium_v2")
+	// Test valid resource names with underscores in flavor group
+	name, err := getFlavorGroupNameFromResource("hw_version_hana_medium_v2_ram")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -246,8 +247,29 @@ func TestGetFlavorGroupNameFromResource_Valid(t *testing.T) {
 }
 
 func TestGetFlavorGroupNameFromResource_Invalid(t *testing.T) {
-	_, err := getFlavorGroupNameFromResource("invalid_resource")
-	if err == nil {
-		t.Fatal("expected error for invalid resource name, got nil")
+	invalidCases := []string{
+		"ram_2101",        // old format
+		"invalid",         // completely wrong
+		"hw_version__ram", // empty group name
+		"hw_version_2101", // missing suffix
+	}
+	for _, input := range invalidCases {
+		if _, err := getFlavorGroupNameFromResource(input); err == nil {
+			t.Errorf("expected error for %q, got nil", input)
+		}
+	}
+}
+
+func TestResourceNameRoundTrip(t *testing.T) {
+	// Test that ResourceNameFromFlavorGroup and getFlavorGroupNameFromResource are inverses
+	for _, groupName := range []string{"2101", "hana_1", "hana_medium_v2"} {
+		resourceName := ResourceNameFromFlavorGroup(groupName)
+		recovered, err := getFlavorGroupNameFromResource(resourceName)
+		if err != nil {
+			t.Fatalf("round-trip failed for %q: %v", groupName, err)
+		}
+		if recovered != groupName {
+			t.Errorf("round-trip mismatch: %q -> %q -> %q", groupName, resourceName, recovered)
+		}
 	}
 }

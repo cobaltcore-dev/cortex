@@ -23,6 +23,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -54,7 +55,7 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 				{CommitmentID: "uuid-123", Host: "host-2", Flavor: m1Small, ProjectID: "project-A"},
 				{CommitmentID: "uuid-123", Host: "host-3", Flavor: m1Small, ProjectID: "project-A"},
 			},
-			CommitmentRequest: newCommitmentRequest("az-a", false, 1234, createCommitment("ram_hana_1", "project-A", "uuid-123", "confirmed", 2)),
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234, createCommitment("hw_version_hana_1_ram", "project-A", "uuid-123", "confirmed", 2)),
 			ExpectedReservations: []*TestReservation{
 				{CommitmentID: "uuid-123", Host: "host-1", Flavor: m1Small, ProjectID: "project-A", VMs: []string{"vm-a1"}},
 				{CommitmentID: "uuid-123", Host: "host-3", Flavor: m1Small, ProjectID: "project-A"},
@@ -66,10 +67,34 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			VMs:                  []*TestVM{},
 			Flavors:              []*TestFlavor{m1Small},
 			ExistingReservations: []*TestReservation{{CommitmentID: "uuid-456", Host: "host-1", Flavor: m1Small, ProjectID: "project-A"}},
-			CommitmentRequest:    newCommitmentRequest("az-a", false, 1234, createCommitment("ram_hana_1", "project-A", "uuid-456", "confirmed", 3)),
+			CommitmentRequest:    newCommitmentRequest("az-a", false, 1234, createCommitment("hw_version_hana_1_ram", "project-A", "uuid-456", "confirmed", 3)),
 			AvailableResources:   &AvailableResources{PerHost: map[string]int64{"host-1": 1024, "host-2": 0}},
-			ExpectedReservations: []*TestReservation{{CommitmentID: "uuid-456", Host: "", Flavor: m1Small, ProjectID: "project-A"}},
+			ExpectedReservations: []*TestReservation{{CommitmentID: "uuid-456", Host: "host-1", Flavor: m1Small, ProjectID: "project-A"}},
 			ExpectedAPIResponse:  newAPIResponse("1 commitment(s) failed", "commitment uuid-456: not sufficient capacity"),
+		},
+		{
+			Name:                 "Invalid CR name - too long",
+			VMs:                  []*TestVM{},
+			Flavors:              []*TestFlavor{m1Small},
+			ExistingReservations: []*TestReservation{},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", strings.Repeat("long-", 13), "confirmed", 3),
+			),
+			AvailableResources:   &AvailableResources{},
+			ExpectedReservations: []*TestReservation{},
+			ExpectedAPIResponse:  newAPIResponse("1 commitment(s) failed", "commitment long-long-long-long-long-long-long-long-long-long-long-long-long-: unexpected commitment format"),
+		},
+		{
+			Name:                 "Invalid CR name - spaces",
+			VMs:                  []*TestVM{},
+			Flavors:              []*TestFlavor{m1Small},
+			ExistingReservations: []*TestReservation{},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid with space", "confirmed", 3),
+			),
+			AvailableResources:   &AvailableResources{},
+			ExpectedReservations: []*TestReservation{},
+			ExpectedAPIResponse:  newAPIResponse("1 commitment(s) failed", "commitment uuid with space: unexpected commitment format"),
 		},
 		{
 			Name:    "Swap capacity between CRs - order dependent - delete-first succeeds",
@@ -78,8 +103,8 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 				{CommitmentID: "uuid-456", Host: "host-1", Flavor: m1Small, ProjectID: "project-A"},
 				{CommitmentID: "uuid-456", Host: "host-2", Flavor: m1Small, ProjectID: "project-A"}},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-456", "confirmed", 0),
-				createCommitment("ram_hana_1", "project-B", "uuid-123", "confirmed", 2),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-456", "confirmed", 0),
+				createCommitment("hw_version_hana_1_ram", "project-B", "uuid-123", "confirmed", 2),
 			),
 			AvailableResources: &AvailableResources{PerHost: map[string]int64{"host-1": 0, "host-2": 0}},
 			ExpectedReservations: []*TestReservation{
@@ -94,8 +119,8 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 				{CommitmentID: "uuid-123", Host: "host-1", Flavor: m1Small, ProjectID: "project-B"},
 				{CommitmentID: "uuid-123", Host: "host-2", Flavor: m1Small, ProjectID: "project-B"}},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-456", "confirmed", 2),
-				createCommitment("ram_hana_1", "project-B", "uuid-123", "confirmed", 0),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-456", "confirmed", 2),
+				createCommitment("hw_version_hana_1_ram", "project-B", "uuid-123", "confirmed", 0),
 			),
 			AvailableResources: &AvailableResources{PerHost: map[string]int64{"host-1": 0, "host-2": 0}},
 			ExpectedReservations: []*TestReservation{
@@ -108,7 +133,7 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			// Greedy selection: 10GB request with 8/4/1GB flavors → picks 1×8GB + 2×1GB
 			Flavors: []*TestFlavor{m1XL, m1Large, m1Small},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-binpack", "confirmed", 10),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-binpack", "confirmed", 10),
 			),
 			ExpectedReservations: []*TestReservation{
 				{CommitmentID: "uuid-binpack", Flavor: m1XL, ProjectID: "project-A"},
@@ -122,7 +147,7 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			// InfoVersion validation prevents stale requests (1233 vs 1234)
 			Flavors: []*TestFlavor{m1Small},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1233,
-				createCommitment("ram_hana_1", "project-A", "uuid-version", "confirmed", 2),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-version", "confirmed", 2),
 			),
 			EnvInfoVersion:       1234,
 			ExpectedReservations: []*TestReservation{},
@@ -136,8 +161,8 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 				{CommitmentID: "uuid-project-a", Host: "host-1", Flavor: m1Small, ProjectID: "project-A"},
 			},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-project-a", "confirmed", 2),
-				createCommitment("ram_hana_1", "project-B", "uuid-project-b", "confirmed", 2),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-project-a", "confirmed", 2),
+				createCommitment("hw_version_hana_1_ram", "project-B", "uuid-project-b", "confirmed", 2),
 			),
 			AvailableResources: &AvailableResources{PerHost: map[string]int64{"host-1": 1024, "host-2": 0}},
 			ExpectedReservations: []*TestReservation{
@@ -155,8 +180,8 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 				{CommitmentID: "commitment-A", Host: "host-1", Flavor: m1Small, ProjectID: "project-A"},
 			},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "commitment-A", "confirmed", 0),
-				createCommitment("ram_hana_1", "project-B", "commitment-B", "confirmed", 6),
+				createCommitment("hw_version_hana_1_ram", "project-A", "commitment-A", "confirmed", 0),
+				createCommitment("hw_version_hana_1_ram", "project-B", "commitment-B", "confirmed", 6),
 			),
 			AvailableResources: &AvailableResources{PerHost: map[string]int64{"host-1": 0}},
 			ExpectedReservations: []*TestReservation{
@@ -170,7 +195,7 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			Name:    "New commitment creation - from zero to N reservations",
 			Flavors: []*TestFlavor{m1Small},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-new", "confirmed", 3),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-new", "confirmed", 3),
 			),
 			ExpectedReservations: []*TestReservation{
 				{CommitmentID: "uuid-new", Flavor: m1Small, ProjectID: "project-A"},
@@ -183,7 +208,7 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			Name:    "New commitment creation - large batch",
 			Flavors: []*TestFlavor{m1Small},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-new", "confirmed", 200),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-new", "confirmed", 200),
 			),
 			ExpectedReservations: func() []*TestReservation {
 				var reservations []*TestReservation
@@ -207,7 +232,7 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 				{CommitmentID: "uuid-custom", Host: "host-2", Flavor: m1Small, ProjectID: "project-A", MemoryMB: 2048},
 			},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-custom", "confirmed", 4),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-custom", "confirmed", 4),
 			),
 			ExpectedReservations: []*TestReservation{
 				{CommitmentID: "uuid-custom", Host: "host-1", Flavor: m1Small, ProjectID: "project-A", MemoryMB: 2048},
@@ -224,7 +249,7 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 				{CommitmentID: "uuid-custom", Host: "host-2", Flavor: m1Small, ProjectID: "project-A", MemoryMB: 2048},
 			},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-custom", "confirmed", 6),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-custom", "confirmed", 6),
 			),
 			ExpectedReservations: []*TestReservation{
 				{CommitmentID: "uuid-custom", Host: "host-1", Flavor: m1Small, ProjectID: "project-A", MemoryMB: 2048},
@@ -243,7 +268,7 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 				{CommitmentID: "uuid-custom", Host: "host-2", Flavor: m1Small, ProjectID: "project-A", MemoryMB: 2048},
 			},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-custom", "confirmed", 3),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-custom", "confirmed", 3),
 			),
 			ExpectedReservations: []*TestReservation{
 				{CommitmentID: "uuid-custom", Flavor: m1Small, ProjectID: "project-A", MemoryMB: 2048},
@@ -262,7 +287,7 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 				{CommitmentID: "uuid-a-1", Host: "host-3", Flavor: m1Small, ProjectID: "project-A"},
 			},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-delete", "confirmed", 0),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-delete", "confirmed", 0),
 			),
 			ExpectedReservations: []*TestReservation{
 				{CommitmentID: "uuid-b-1", Host: "host-3", Flavor: m1Small, ProjectID: "project-B"},
@@ -279,7 +304,7 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 				{CommitmentID: "uuid-growth", Host: "host-2", Flavor: m1Small, ProjectID: "project-A"},
 			},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-growth", "confirmed", 3),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-growth", "confirmed", 3),
 			),
 			ExpectedReservations: []*TestReservation{
 				{CommitmentID: "uuid-growth", Host: "host-1", Flavor: m1Small, ProjectID: "project-A", VMs: []string{"vm-existing"}},
@@ -292,8 +317,8 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			Name:    "Multi-project success - both projects succeed",
 			Flavors: []*TestFlavor{m1Small},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-a", "confirmed", 2),
-				createCommitment("ram_hana_1", "project-B", "uuid-b", "confirmed", 2),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-a", "confirmed", 2),
+				createCommitment("hw_version_hana_1_ram", "project-B", "uuid-b", "confirmed", 2),
 			),
 			ExpectedReservations: []*TestReservation{
 				{CommitmentID: "uuid-a", Flavor: m1Small, ProjectID: "project-A"},
@@ -304,15 +329,15 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			ExpectedAPIResponse: newAPIResponse(),
 		},
 		{
-			Name: "Multiple flavor groups - ram_hana_1 and ram_hana_2",
+			Name: "Multiple flavor groups - hw_version_hana_1_ram and hw_version_hana_2_ram",
 			// Amount in multiples of smallest flavor: hana_1 (2×1GB), hana_2 (2×2GB)
 			Flavors: []*TestFlavor{
 				m1Small,
 				{Name: "m2.small", Group: "hana_2", MemoryMB: 2048, VCPUs: 8},
 			},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-hana1", "confirmed", 2),
-				createCommitment("ram_hana_2", "project-A", "uuid-hana2", "confirmed", 2),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-hana1", "confirmed", 2),
+				createCommitment("hw_version_hana_2_ram", "project-A", "uuid-hana2", "confirmed", 2),
 			),
 			ExpectedReservations: []*TestReservation{
 				{CommitmentID: "uuid-hana1", Flavor: m1Small, ProjectID: "project-A"},
@@ -326,7 +351,7 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			Name:    "Unknown flavor group - clear rejection message",
 			Flavors: []*TestFlavor{m1Small},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_nonexistent", "project-A", "uuid-unknown", "confirmed", 2),
+				createCommitment("hw_version_nonexistent_ram", "project-A", "uuid-unknown", "confirmed", 2),
 			),
 			ExpectedReservations: []*TestReservation{},
 			ExpectedAPIResponse:  newAPIResponse("flavor group not found"),
@@ -341,9 +366,9 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 				{CommitmentID: "uuid-b", Host: "host-3", Flavor: m1Small, ProjectID: "project-B"},
 			},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-a", "confirmed", 0),
-				createCommitment("ram_hana_1", "project-B", "uuid-b", "confirmed", 0),
-				createCommitment("ram_hana_1", "project-C", "uuid-c", "confirmed", 3),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-a", "confirmed", 0),
+				createCommitment("hw_version_hana_1_ram", "project-B", "uuid-b", "confirmed", 0),
+				createCommitment("hw_version_hana_1_ram", "project-C", "uuid-c", "confirmed", 3),
 			),
 			AvailableResources: &AvailableResources{PerHost: map[string]int64{"host-1": 0, "host-2": 0, "host-3": 0}},
 			ExpectedReservations: []*TestReservation{
@@ -363,7 +388,7 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 				{CommitmentID: "uuid-repair", Host: "host-4", Flavor: m1Small, ProjectID: "project-A", AZ: "wrong-az"},
 			},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-repair", "confirmed", 8, "az-a"),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-repair", "confirmed", 8, "az-a"),
 			),
 			ExpectedReservations: []*TestReservation{
 				{CommitmentID: "uuid-repair", Host: "host-preserved", Flavor: m1Small, ProjectID: "project-A", AZ: "az-a"},
@@ -385,7 +410,7 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			Name:    "Dry run request - feature not yet implemented",
 			Flavors: []*TestFlavor{m1Small},
 			CommitmentRequest: newCommitmentRequest("az-a", true, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-dryrun", "confirmed", 2),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-dryrun", "confirmed", 2),
 			),
 			ExpectedReservations: []*TestReservation{},
 			ExpectedAPIResponse:  newAPIResponse("Dry run not supported"),
@@ -394,40 +419,81 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			Name:    "Knowledge not ready - clear rejection with RetryAt",
 			Flavors: []*TestFlavor{m1Small},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-knowledge", "confirmed", 2),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-knowledge", "confirmed", 2),
 			),
 			ExpectedReservations: []*TestReservation{},
 			ExpectedAPIResponse: APIResponseExpectation{
-				StatusCode:             200,
-				RejectReasonSubstrings: []string{"caches not ready"},
-				RetryAtPresent:         true,
+				StatusCode:     503,
+				RetryAtPresent: false,
 			},
 			EnvInfoVersion: -1, // Skip Knowledge CRD creation
+		},
+		{
+			Name:    "API disabled - returns 503 Service Unavailable",
+			Flavors: []*TestFlavor{m1Small},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-disabled", "confirmed", 2),
+			),
+			CustomConfig: func() *Config {
+				cfg := DefaultConfig()
+				cfg.EnableChangeCommitmentsAPI = false
+				return &cfg
+			}(),
+			ExpectedReservations: []*TestReservation{},
+			ExpectedAPIResponse: APIResponseExpectation{
+				StatusCode: 503,
+			},
 		},
 		{
 			Name: "Multiple commitments insufficient capacity - all listed in error",
 			// Tests that multiple failed commitments are all mentioned in the rejection reason
 			Flavors: []*TestFlavor{m1Small, m1Tiny},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-multi-fail-1", "confirmed", 3),
-				createCommitment("ram_hana_1", "project-B", "uuid-multi-fail-2", "confirmed", 3),
-				createCommitment("ram_gp_1", "project-C", "uuid-would-not-fail", "confirmed", 1), // would be rolled back, but not part of the reject reason
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-multi-fail-1", "confirmed", 3),
+				createCommitment("hw_version_hana_1_ram", "project-B", "uuid-multi-fail-2", "confirmed", 3),
+				createCommitment("hw_version_gp_1_ram", "project-C", "uuid-would-not-fail", "confirmed", 1), // would be rolled back, but not part of the reject reason
 			),
 			AvailableResources:   &AvailableResources{PerHost: map[string]int64{"host-1": 256}},
 			ExpectedReservations: []*TestReservation{},
 			ExpectedAPIResponse:  newAPIResponse("2 commitment(s) failed", "commitment uuid-multi-fail-1: not sufficient capacity", "commitment uuid-multi-fail-2: not sufficient capacity"),
 		},
 		{
+			Name: "Deletion priority during rollback - unscheduled removed first",
+			// Tests that during rollback, unscheduled reservations (no TargetHost) are deleted first,
+			// preserving scheduled reservations (with TargetHost), especially those with VM allocations
+			VMs:     []*TestVM{{UUID: "vm-priority", Flavor: m1Small, ProjectID: "project-A", Host: "host-1", AZ: "az-a"}},
+			Flavors: []*TestFlavor{m1Small},
+			ExistingReservations: []*TestReservation{
+				// Reservation with VM allocation - should be preserved (lowest deletion priority)
+				{CommitmentID: "commitment-1", Host: "host-1", Flavor: m1Small, ProjectID: "project-A", VMs: []string{"vm-priority"}},
+				// Scheduled but unused - medium deletion priority
+				{CommitmentID: "commitment-1", Host: "host-2", Flavor: m1Small, ProjectID: "project-A"},
+			},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "commitment-1", "confirmed", 4),
+			),
+			AvailableResources: &AvailableResources{PerHost: map[string]int64{"host-1": 0, "host-2": 1024}},
+			ExpectedReservations: []*TestReservation{
+				// After rollback, should preserve the scheduled reservations (especially with VMs)
+				// and remove unscheduled ones first
+				{CommitmentID: "commitment-1", Host: "host-1", Flavor: m1Small, ProjectID: "project-A", VMs: []string{"vm-priority"}},
+				{CommitmentID: "commitment-1", Host: "host-2", Flavor: m1Small, ProjectID: "project-A"},
+			},
+			ExpectedAPIResponse: newAPIResponse("commitment commitment-1: not sufficient capacity"),
+		},
+		{
 			Name:    "Watch timeout with custom config - triggers rollback with timeout error",
 			Flavors: []*TestFlavor{m1Small},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
-				createCommitment("ram_hana_1", "project-A", "uuid-timeout", "confirmed", 2),
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-timeout", "confirmed", 2),
 			),
 			// With 0ms timeout, the watch will timeout immediately before reservations become ready
-			CustomConfig: &Config{
-				ChangeAPIWatchReservationsTimeout:      0 * time.Millisecond,
-				ChangeAPIWatchReservationsPollInterval: 100 * time.Millisecond,
-			},
+			CustomConfig: func() *Config {
+				cfg := DefaultConfig()
+				cfg.ChangeAPIWatchReservationsTimeout = 0 * time.Millisecond
+				cfg.ChangeAPIWatchReservationsPollInterval = 100 * time.Millisecond
+				return &cfg
+			}(),
 			ExpectedReservations: []*TestReservation{}, // Rollback removes all reservations
 			ExpectedAPIResponse:  newAPIResponse("timeout reached while processing commitment changes"),
 		},
@@ -563,11 +629,37 @@ func (tfg TestFlavorGroup) ToFlavorGroupsKnowledge() FlavorGroupsKnowledge {
 		smallest := groupFlavors[len(groupFlavors)-1]
 		largest := groupFlavors[0]
 
+		// Compute RAM/core ratio (MiB per vCPU)
+		var minRatio, maxRatio uint64 = ^uint64(0), 0
+		for _, f := range groupFlavors {
+			if f.VCPUs == 0 {
+				continue
+			}
+			ratio := f.MemoryMB / f.VCPUs
+			if ratio < minRatio {
+				minRatio = ratio
+			}
+			if ratio > maxRatio {
+				maxRatio = ratio
+			}
+		}
+
+		var ramCoreRatio, ramCoreRatioMin, ramCoreRatioMax *uint64
+		if minRatio == maxRatio && maxRatio != 0 {
+			ramCoreRatio = &minRatio
+		} else if maxRatio != 0 {
+			ramCoreRatioMin = &minRatio
+			ramCoreRatioMax = &maxRatio
+		}
+
 		groups = append(groups, compute.FlavorGroupFeature{
-			Name:           groupName,
-			Flavors:        groupFlavors,
-			SmallestFlavor: smallest,
-			LargestFlavor:  largest,
+			Name:            groupName,
+			Flavors:         groupFlavors,
+			SmallestFlavor:  smallest,
+			LargestFlavor:   largest,
+			RamCoreRatio:    ramCoreRatio,
+			RamCoreRatioMin: ramCoreRatioMin,
+			RamCoreRatioMax: ramCoreRatioMax,
 		})
 	}
 
@@ -899,12 +991,13 @@ func newCommitmentTestEnv(
 	// Use custom config if provided, otherwise use default
 	var api *HTTPAPI
 	if customConfig != nil {
-		api = NewAPIWithConfig(wrappedClient, *customConfig)
+		api = NewAPIWithConfig(wrappedClient, *customConfig, nil)
 	} else {
 		api = NewAPI(wrappedClient)
 	}
 	mux := http.NewServeMux()
-	api.Init(mux)
+	registry := prometheus.NewRegistry()
+	api.Init(mux, registry, log.Log)
 	httpServer := httptest.NewServer(mux)
 
 	env.HTTPServer = httpServer
@@ -992,7 +1085,7 @@ func (env *CommitmentTestEnv) CallChangeCommitmentsAPI(reqJSON string) (resp liq
 	}()
 
 	// Make HTTP request
-	url := env.HTTPServer.URL + "/v1/commitments/change-commitments"
+	url := env.HTTPServer.URL + "/commitments/v1/change-commitments"
 	httpResp, err := http.Post(url, "application/json", bytes.NewReader([]byte(reqJSON))) //nolint:gosec,noctx // test server URL, not user input
 	if err != nil {
 		cancel()
@@ -1121,9 +1214,16 @@ func (env *CommitmentTestEnv) processNewReservation(res *v1alpha1.Reservation) {
 
 	env.processedReserv[res.Name] = true
 
+	if res.Spec.CommittedResourceReservation == nil || res.Spec.CommittedResourceReservation.ResourceGroup == "" || res.Spec.Resources == nil || res.Spec.Resources["memory"] == (resource.Quantity{}) {
+		env.markReservationFailedStatus(res, "invalid reservation spec")
+		env.T.Logf("✗ Invalid reservation spec for %s: marking as failed (resource group: %s, resources: %v)", res.Name, res.Spec.CommittedResourceReservation.ResourceGroup, res.Spec.Resources)
+		return
+	}
+
 	// If no available resources configured, accept all reservations without host assignment
 	if env.availableResources == nil {
-		env.markReservationReady(res)
+		env.T.Logf("✓ Scheduled reservation %s - no resource tracking, simply accept", res.Name)
+		env.markReservationSchedulerProcessedStatus(res, "some-host")
 		return
 	}
 
@@ -1167,42 +1267,63 @@ func (env *CommitmentTestEnv) processNewReservation(res *v1alpha1.Reservation) {
 			env.T.Logf("Warning: Failed to update reservation status host: %v", err)
 		}
 
-		env.markReservationReady(res)
+		env.markReservationSchedulerProcessedStatus(res, selectedHost)
 		env.T.Logf("✓ Scheduled reservation %s on %s (%d MB used, %d MB remaining)",
 			res.Name, selectedHost, memoryMB, env.availableResources[selectedHost])
 	} else {
-		// FAILURE: No host has enough capacity
-		env.markReservationFailed(res, "Insufficient capacity on all hosts")
+		env.markReservationSchedulerProcessedStatus(res, "")
 		env.T.Logf("✗ Failed to schedule reservation %s (needs %d MB, no host has capacity)",
 			res.Name, memoryMB)
 	}
 }
 
-// markReservationReady updates a reservation to have Ready=True status.
-func (env *CommitmentTestEnv) markReservationReady(res *v1alpha1.Reservation) {
-	res.Status.Conditions = []metav1.Condition{
-		{
-			Type:               v1alpha1.ReservationConditionReady,
-			Status:             metav1.ConditionTrue,
-			Reason:             "ReservationActive",
-			Message:            "Reservation is ready (set by test controller)",
-			LastTransitionTime: metav1.Now(),
-		},
+// markReservationSchedulerProcessedStatus updates a reservation status based on scheduling result.
+// If host is non-empty, sets Ready=True (success). If host is empty, sets Ready=False with NoHostsFound (failure).
+func (env *CommitmentTestEnv) markReservationSchedulerProcessedStatus(res *v1alpha1.Reservation, host string) {
+	ctx := context.Background()
+
+	// Update spec first
+	res.Spec.TargetHost = host
+	if err := env.K8sClient.Update(ctx, res); err != nil {
+		env.T.Logf("Warning: Failed to update reservation spec: %v", err)
+		return
 	}
 
-	if err := env.K8sClient.Status().Update(context.Background(), res); err != nil {
-		// Ignore errors - might be deleted during update
-		return
+	// Then update status - Ready=True only if host was found, Ready=False otherwise
+	res.Status.Host = host
+	if host != "" {
+		res.Status.Conditions = []metav1.Condition{
+			{
+				Type:               v1alpha1.ReservationConditionReady,
+				Status:             metav1.ConditionTrue,
+				Reason:             "ReservationActive",
+				Message:            "Reservation is ready (set by test controller)",
+				LastTransitionTime: metav1.Now(),
+			},
+		}
+	} else {
+		res.Status.Conditions = []metav1.Condition{
+			{
+				Type:               v1alpha1.ReservationConditionReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             "NoHostsFound",
+				Message:            "No hosts with sufficient capacity (set by test controller)",
+				LastTransitionTime: metav1.Now(),
+			},
+		}
+	}
+	if err := env.K8sClient.Status().Update(ctx, res); err != nil {
+		env.T.Logf("Warning: Failed to update reservation status: %v", err)
 	}
 }
 
-// markReservationFailed updates a reservation to have Ready=False status (scheduling failed).
-func (env *CommitmentTestEnv) markReservationFailed(res *v1alpha1.Reservation, reason string) {
+// markReservationFailedStatus updates a reservation to have Ready=False status
+func (env *CommitmentTestEnv) markReservationFailedStatus(res *v1alpha1.Reservation, reason string) {
 	res.Status.Conditions = []metav1.Condition{
 		{
 			Type:               v1alpha1.ReservationConditionReady,
 			Status:             metav1.ConditionFalse,
-			Reason:             "SchedulingFailed",
+			Reason:             "Reservation invalid",
 			Message:            reason,
 			LastTransitionTime: metav1.Now(),
 		},

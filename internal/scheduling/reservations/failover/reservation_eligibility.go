@@ -4,9 +4,15 @@
 package failover
 
 import (
+	"slices"
+
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
+
+// TODO: The dependency graph does not capture that we can have a senario where the VM=>Host mapping is different across multipel reservations.
+// We currently set  vmToCurrentHypervisor based on the last vm => host mapping we see in a reservation
+// the periodic reconciler should remove all vm : host mapping that do not match the current host of a vm before we end up here.
 
 // DependencyGraph encapsulates the data structures needed for eligibility checking.
 // It tracks relationships between VMs, reservations, and hypervisors.
@@ -23,20 +29,119 @@ type DependencyGraph struct {
 	reservationToHost map[string]string
 }
 
+// IsVMEligibleForReservation checks if a VM is eligible to use a specific reservation.
+// A VM is eligible if it satisfies all the following constraints:
+// (1) A VM cannot reserve a slot on its own hypervisor.
+// (2) A VM's N reservation slots must be placed on N distinct hypervisors.
+// (3) For any reservation r, no two VMs that use r may be on the same hypervisor.
+// (4) For VM v with slots R, any other VM that uses any slot must not run on v's host or slot hosts.
+// (5) For VM v with slots R, no two other VMs using v's slots can be on the same hypervisor.
+func IsVMEligibleForReservation(vm VM, reservation v1alpha1.Reservation, allFailoverReservations []v1alpha1.Reservation) bool {
+	// Check if VM is already using this reservation
+	resAllocations := getFailoverAllocations(&reservation)
+	if _, exists := resAllocations[vm.UUID]; exists {
+		return false
+	}
+
+	// Ensure the candidate reservation is included in allFailoverReservations
+	reservationInList := false
+	for _, res := range allFailoverReservations {
+		if res.Name == reservation.Name && res.Namespace == reservation.Namespace {
+			reservationInList = true
+			break
+		}
+	}
+	if !reservationInList {
+		allFailoverReservations = append(append([]v1alpha1.Reservation{}, allFailoverReservations...), reservation)
+	}
+
+	graph := newDependencyGraph(vm, reservation, allFailoverReservations)
+	return graph.isVMEligibleForReservation(reservationKey(reservation.Namespace, reservation.Name))
+}
+
+// CheckVMsStillEligible checks if VMs in reservations are still eligible.
+// Returns a map of reservation name -> list of VM UUIDs that are no longer eligible.
+func CheckVMsStillEligible(
+	vms map[string]VM,
+	failoverReservations []v1alpha1.Reservation,
+) map[string][]string {
+
+	baseGraph := newBaseDependencyGraph(failoverReservations)
+	result := make(map[string][]string)
+
+	for _, res := range failoverReservations {
+		allocations := getFailoverAllocations(&res)
+		resKey := reservationKey(res.Namespace, res.Name)
+
+		// Sort VM UUIDs for deterministic iteration order
+		vmUUIDs := make([]string, 0, len(allocations))
+		for vmUUID := range allocations {
+			vmUUIDs = append(vmUUIDs, vmUUID)
+		}
+		slices.Sort(vmUUIDs)
+
+		for _, vmUUID := range vmUUIDs {
+			vm, vmExists := vms[vmUUID]
+			if !vmExists {
+				continue
+			}
+
+			isEligible := false
+			if vm.CurrentHypervisor == baseGraph.vmToCurrentHypervisor[vmUUID] {
+				isEligible = baseGraph.isVMEligibleForReservation(resKey)
+			}
+
+			if !isEligible {
+				result[res.Name] = append(result[res.Name], vmUUID)
+				baseGraph.removeVMFromReservation(vm.UUID, resKey, res.Status.Host)
+			}
+		}
+	}
+
+	return result
+}
+
+// FindEligibleReservations finds all reservations that a VM is eligible to use.
+func FindEligibleReservations(
+	vm VM,
+	failoverReservations []v1alpha1.Reservation,
+) []v1alpha1.Reservation {
+
+	baseGraph := newBaseDependencyGraph(failoverReservations)
+
+	var eligible []v1alpha1.Reservation
+	for _, res := range failoverReservations {
+		if !doesVMFitInReservation(vm, res) {
+			continue
+		}
+
+		resAllocations := getFailoverAllocations(&res)
+		if _, exists := resAllocations[vm.UUID]; exists {
+			continue
+		}
+
+		candidateResKey := reservationKey(res.Namespace, res.Name)
+		candidateResHost := res.Status.Host
+
+		baseGraph.addVMToReservation(vm.UUID, vm.CurrentHypervisor, candidateResKey, candidateResHost)
+		isEligible := baseGraph.isVMEligibleForReservation(candidateResKey)
+		baseGraph.removeVMFromReservation(vm.UUID, candidateResKey, candidateResHost)
+
+		if isEligible {
+			eligible = append(eligible, res)
+		}
+	}
+
+	return eligible
+}
+
 // reservationKey returns a unique key for a reservation (namespace/name).
-// This prevents collisions between same-named reservations in different namespaces.
 func reservationKey(namespace, name string) string {
 	return namespace + "/" + name
 }
 
-// newDependencyGraph builds a DependencyGraph for eligibility checking.
-// The VM is treated as already being part of the candidate reservation.
-func newDependencyGraph(
-	vm VM,
-	candidateReservation v1alpha1.Reservation,
-	allFailoverReservations []v1alpha1.Reservation,
-) *DependencyGraph {
-
+// newBaseDependencyGraph builds a base DependencyGraph from all reservations.
+func newBaseDependencyGraph(allFailoverReservations []v1alpha1.Reservation) *DependencyGraph {
 	g := &DependencyGraph{
 		vmToReservations:      make(map[string]map[string]bool),
 		vmToCurrentHypervisor: make(map[string]string),
@@ -45,7 +150,6 @@ func newDependencyGraph(
 		reservationToHost:     make(map[string]string),
 	}
 
-	// Process all reservations
 	for _, res := range allFailoverReservations {
 		resKey := reservationKey(res.Namespace, res.Name)
 		resHost := res.Status.Host
@@ -63,30 +167,22 @@ func newDependencyGraph(
 		}
 	}
 
-	// Process candidate reservation (may not be in allFailoverReservations)
+	return g
+}
+
+// newDependencyGraph builds a DependencyGraph with the VM added to the candidate reservation.
+func newDependencyGraph(
+	vm VM,
+	candidateReservation v1alpha1.Reservation,
+	allFailoverReservations []v1alpha1.Reservation,
+) *DependencyGraph {
+
+	g := newBaseDependencyGraph(allFailoverReservations)
+
 	candidateResKey := reservationKey(candidateReservation.Namespace, candidateReservation.Name)
 	candidateResHost := candidateReservation.Status.Host
 
-	g.ensureResInMaps(candidateResKey)
-	g.reservationToHost[candidateResKey] = candidateResHost
-
-	candidateAllocations := getFailoverAllocations(&candidateReservation)
-	for vmUUID, vmHypervisor := range candidateAllocations {
-		g.ensureVMInMaps(vmUUID)
-		g.vmToReservations[vmUUID][candidateResKey] = true
-		g.vmToCurrentHypervisor[vmUUID] = vmHypervisor
-		g.vmToReservationHosts[vmUUID][candidateResHost] = true
-		g.reservationToVMs[candidateResKey][vmUUID] = true
-	}
-
-	// Add the VM we're checking with its current hypervisor
-	g.ensureVMInMaps(vm.UUID)
-	g.vmToCurrentHypervisor[vm.UUID] = vm.CurrentHypervisor
-
-	// KEY: Treat VM as already in the candidate reservation
-	g.vmToReservations[vm.UUID][candidateResKey] = true
-	g.vmToReservationHosts[vm.UUID][candidateResHost] = true
-	g.reservationToVMs[candidateResKey][vm.UUID] = true
+	g.addVMToReservation(vm.UUID, vm.CurrentHypervisor, candidateResKey, candidateResHost)
 
 	return g
 }
@@ -106,8 +202,24 @@ func (g *DependencyGraph) ensureResInMaps(resName string) {
 	}
 }
 
+// addVMToReservation adds a VM to a reservation in the graph.
+func (g *DependencyGraph) addVMToReservation(vmUUID, vmHypervisor, resKey, resHost string) {
+	g.ensureVMInMaps(vmUUID)
+	g.ensureResInMaps(resKey)
+	g.vmToCurrentHypervisor[vmUUID] = vmHypervisor
+	g.vmToReservations[vmUUID][resKey] = true
+	g.vmToReservationHosts[vmUUID][resHost] = true
+	g.reservationToVMs[resKey][vmUUID] = true
+}
+
+// removeVMFromReservation removes a VM from a reservation in the graph.
+func (g *DependencyGraph) removeVMFromReservation(vmUUID, resKey, resHost string) {
+	delete(g.vmToReservations[vmUUID], resKey)
+	delete(g.vmToReservationHosts[vmUUID], resHost)
+	delete(g.reservationToVMs[resKey], vmUUID)
+}
+
 // checkAllVMConstraints checks if a single VM satisfies all constraints (1-5).
-// Returns true if the VM satisfies all constraints.
 func (g *DependencyGraph) checkAllVMConstraints(vmUUID string) bool {
 	vmCurrentHypervisor := g.vmToCurrentHypervisor[vmUUID]
 	vmSlotHypervisors := g.vmToReservationHosts[vmUUID]
@@ -176,83 +288,27 @@ func (g *DependencyGraph) isVMEligibleForReservation(candidateResName string) bo
 	return true
 }
 
-// IsVMEligibleForReservation checks if a VM is eligible to use a specific reservation.
-// A VM is eligible if it satisfies all the following constraints:
-// (1) A VM cannot reserve a slot on its own hypervisor.
-// (2) A VM's N reservation slots must be placed on N distinct hypervisors (no hypervisor overlap among slots).
-// (3) For any reservation r, no two VMs that use r may be on the same hypervisor (directly or potentially via a reservation).
-// (4) For VM v with slots R = {r1..rn}, any other VM vi that uses any rj must not run on hs(v) nor on any hs(rj).
-// (5) For VM v with slots R = {r1..rn}, there exist no vm_1, vm_2 (vm_1 != v and vm_2 != v)
-//
-//	with vm_1 uses r_j and vm_2 uses r_k and hypervisor(vm_1) = hypervisor(vm_2).
-func IsVMEligibleForReservation(vm VM, reservation v1alpha1.Reservation, allFailoverReservations []v1alpha1.Reservation) bool {
-	// Check if VM is already using this reservation
-	resAllocations := getFailoverAllocations(&reservation)
-	if _, exists := resAllocations[vm.UUID]; exists {
-		return false
-	}
-
-	// Ensure the candidate reservation is included in allFailoverReservations
-	reservationInList := false
-	for _, res := range allFailoverReservations {
-		if res.Name == reservation.Name && res.Namespace == reservation.Namespace {
-			reservationInList = true
-			break
-		}
-	}
-	if !reservationInList {
-		allFailoverReservations = append(append([]v1alpha1.Reservation{}, allFailoverReservations...), reservation)
-	}
-
-	// Build dependency graph (with VM already in the candidate reservation)
-	graph := newDependencyGraph(vm, reservation, allFailoverReservations)
-
-	// Check all constraints for all VMs in the reservation
-	return graph.isVMEligibleForReservation(reservationKey(reservation.Namespace, reservation.Name))
-}
-
 // doesVMFitInReservation checks if a VM's resources fit within a reservation's resources.
-// Returns true if all VM resources are less than or equal to the reservation's resources.
 func doesVMFitInReservation(vm VM, reservation v1alpha1.Reservation) bool {
-	// Check memory: VM's memory must be <= reservation's memory
 	if vmMemory, ok := vm.Resources["memory"]; ok {
 		if resMemory, ok := reservation.Spec.Resources[hv1.ResourceMemory]; ok {
 			if vmMemory.Cmp(resMemory) > 0 {
-				return false // VM memory exceeds reservation memory
+				return false
 			}
 		} else {
-			return false // Reservation has no memory resource defined
+			return false
 		}
 	}
 
-	// Check CPU: VM's vcpus must be <= reservation's cpu
-	// Note: VM uses "vcpus" key, but reservations use "cpu" as the canonical key.
 	if vmVCPUs, ok := vm.Resources["vcpus"]; ok {
 		if resCPU, ok := reservation.Spec.Resources[hv1.ResourceCPU]; ok {
 			if vmVCPUs.Cmp(resCPU) > 0 {
-				return false // VM vcpus exceeds reservation cpu
+				return false
 			}
 		} else {
-			return false // Reservation has no cpu resource defined
+			return false
 		}
 	}
 
 	return true
-}
-
-// FindEligibleReservations finds all reservations that a VM is eligible to use.
-// It checks both resource fit and eligibility constraints.
-func FindEligibleReservations(
-	vm VM,
-	failoverReservations []v1alpha1.Reservation,
-) []v1alpha1.Reservation {
-	//TODO: we create data mappings inside IsVMEligibleForReservation those should probably be done already on this level to avoid redundant work
-	var eligible []v1alpha1.Reservation
-	for _, res := range failoverReservations {
-		if doesVMFitInReservation(vm, res) && IsVMEligibleForReservation(vm, res, failoverReservations) {
-			eligible = append(eligible, res)
-		}
-	}
-
-	return eligible
 }
