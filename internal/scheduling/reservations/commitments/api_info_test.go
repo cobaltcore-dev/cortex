@@ -28,9 +28,7 @@ func TestHandleInfo_KnowledgeNotReady(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	api := &HTTPAPI{
-		client: k8sClient,
-	}
+	api := NewAPI(k8sClient)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/info", http.NoBody)
 	w := httptest.NewRecorder()
@@ -62,9 +60,7 @@ func TestHandleInfo_MethodNotAllowed(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	api := &HTTPAPI{
-		client: k8sClient,
-	}
+	api := NewAPI(k8sClient)
 
 	// Use POST instead of GET
 	req := httptest.NewRequest(http.MethodPost, "/v1/info", http.NoBody)
@@ -77,6 +73,67 @@ func TestHandleInfo_MethodNotAllowed(t *testing.T) {
 
 	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("expected status code %d (Method Not Allowed), got %d", http.StatusMethodNotAllowed, resp.StatusCode)
+	}
+}
+
+func TestHandleInfo_InvalidFlavorMemory(t *testing.T) {
+	// Test that a 500 Internal Server Error is returned when a flavor group has invalid data.
+	//
+	// A flavor with memoryMB=0 is invalid and should trigger an HTTP 500 error.
+	// Such data could occur from a bug in the flavor groups extractor.
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	// Create flavor group with memoryMB=0 (invalid data that could come from a buggy extractor)
+	features := []map[string]interface{}{
+		{
+			"name": "invalid_group",
+			"flavors": []map[string]interface{}{
+				{"name": "zero_memory_flavor", "vcpus": 4, "memoryMB": 0, "diskGB": 50},
+			},
+			"largestFlavor":  map[string]interface{}{"name": "zero_memory_flavor", "vcpus": 4, "memoryMB": 0, "diskGB": 50},
+			"smallestFlavor": map[string]interface{}{"name": "zero_memory_flavor", "vcpus": 4, "memoryMB": 0, "diskGB": 50},
+			"ramCoreRatio":   4096,
+		},
+	}
+
+	raw, err := v1alpha1.BoxFeatureList(features)
+	if err != nil {
+		t.Fatalf("failed to box features: %v", err)
+	}
+
+	knowledge := &v1alpha1.Knowledge{
+		ObjectMeta: v1.ObjectMeta{Name: "flavor-groups"},
+		Spec: v1alpha1.KnowledgeSpec{
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			Extractor:        v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
+		},
+		Status: v1alpha1.KnowledgeStatus{
+			Conditions:        []v1.Condition{{Type: v1alpha1.KnowledgeConditionReady, Status: "True"}},
+			Raw:               raw,
+			LastContentChange: v1.Now(),
+		},
+	}
+
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(knowledge).
+		Build()
+
+	api := NewAPI(k8sClient)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/info", http.NoBody)
+	w := httptest.NewRecorder()
+	api.HandleInfo(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	// Should return 500 Internal Server Error when unit creation fails
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("expected status code %d (Internal Server Error), got %d", http.StatusInternalServerError, resp.StatusCode)
 	}
 }
 
@@ -138,7 +195,7 @@ func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
 		WithObjects(knowledge).
 		Build()
 
-	api := &HTTPAPI{client: k8sClient}
+	api := NewAPI(k8sClient)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/info", http.NoBody)
 	w := httptest.NewRecorder()

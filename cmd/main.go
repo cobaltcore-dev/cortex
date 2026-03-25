@@ -110,6 +110,10 @@ func main() {
 			manilaChecksConfig := conf.GetConfigOrDie[manila.ChecksConfig]()
 			manila.RunChecks(ctx, client, manilaChecksConfig)
 			return
+		case "e2e-commitments":
+			commitmentsChecksConfig := conf.GetConfigOrDie[commitments.E2EChecksConfig]()
+			commitments.RunCommitmentsE2EChecks(ctx, commitmentsChecksConfig)
+			return
 		}
 	}
 
@@ -665,7 +669,9 @@ func main() {
 
 	if slices.Contains(mainConfig.EnabledTasks, "commitments-sync-task") {
 		setupLog.Info("starting commitments syncer")
-		syncer := commitments.NewSyncer(multiclusterClient)
+		syncerMonitor := commitments.NewSyncerMonitor()
+		must.Succeed(metrics.Registry.Register(syncerMonitor))
+		syncer := commitments.NewSyncer(multiclusterClient, syncerMonitor)
 		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
 		syncerDefaults := commitments.DefaultSyncerConfig()
 		if syncerConfig.SyncInterval == 0 {

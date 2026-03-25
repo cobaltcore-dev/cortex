@@ -21,6 +21,12 @@ func WithNewGlobalRequestID(ctx context.Context) context.Context {
 	return reservations.WithGlobalRequestID(ctx, "committed-resource-"+uuid.New().String())
 }
 
+// WithGlobalRequestID creates a new context with the specified global request ID.
+// This is used to propagate existing request IDs (e.g., from the creator annotation).
+func WithGlobalRequestID(ctx context.Context, greq string) context.Context {
+	return reservations.WithGlobalRequestID(ctx, greq)
+}
+
 // LoggerFromContext returns a logger with greq and req values from the context.
 // This creates a child logger with the request tracking values pre-attached,
 // so you don't need to repeat them in every log call.

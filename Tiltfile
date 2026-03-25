@@ -189,6 +189,13 @@ if 'nova' in ACTIVE_DEPLOYMENTS:
         trigger_mode=TRIGGER_MODE_MANUAL,
         auto_init=False,
     )
+    local_resource(
+        'Commitments E2E Tests',
+        '/bin/sh -c "kubectl exec deploy/cortex-nova-scheduling-controller-manager -- /manager e2e-commitments"',
+        labels=['Cortex-Nova'],
+        trigger_mode=TRIGGER_MODE_MANUAL,
+        auto_init=False,
+    )
 
 if 'manila' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Manila bundle")

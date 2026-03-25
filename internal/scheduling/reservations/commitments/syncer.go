@@ -42,12 +42,15 @@ type Syncer struct {
 	CommitmentsClient
 	// Kubernetes client for CRD operations
 	client.Client
+	// Monitor for metrics
+	monitor *SyncerMonitor
 }
 
-func NewSyncer(k8sClient client.Client) *Syncer {
+func NewSyncer(k8sClient client.Client, monitor *SyncerMonitor) *Syncer {
 	return &Syncer{
 		CommitmentsClient: NewCommitmentsClient(),
 		Client:            k8sClient,
+		monitor:           monitor,
 	}
 }
 
@@ -58,7 +61,16 @@ func (s *Syncer) Init(ctx context.Context, config SyncerConfig) error {
 	return nil
 }
 
-func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavorGroups map[string]compute.FlavorGroupFeature) ([]*CommitmentState, error) {
+// getCommitmentStatesResult holds both processed and skipped commitment UUIDs
+type getCommitmentStatesResult struct {
+	// states are the commitments that were successfully processed
+	states []*CommitmentState
+	// skippedUUIDs are commitment UUIDs that were skipped (e.g., due to unit mismatch)
+	// but should NOT have their existing CRDs deleted
+	skippedUUIDs map[string]bool
+}
+
+func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavorGroups map[string]compute.FlavorGroupFeature) (*getCommitmentStatesResult, error) {
 	allProjects, err := s.ListProjects(ctx)
 	if err != nil {
 		return nil, err
@@ -69,7 +81,10 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 	}
 
 	// Filter for compute commitments with RAM flavor group resources
-	var commitmentStates []*CommitmentState
+	result := &getCommitmentStatesResult{
+		states:       []*CommitmentState{},
+		skippedUUIDs: make(map[string]bool),
+	}
 	for id, commitment := range commitments {
 		if commitment.ServiceType != "compute" {
 			log.Info("skipping non-compute commitment", "id", id, "serviceType", commitment.ServiceType)
@@ -99,6 +114,29 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 			continue
 		}
 
+		// Validate unit matches between Limes commitment and Cortex flavor group
+		// Expected format: "<memoryMB> MiB" e.g. "131072 MiB" for 128 GiB
+		expectedUnit := fmt.Sprintf("%d MiB", flavorGroup.SmallestFlavor.MemoryMB)
+		if commitment.Unit != "" && commitment.Unit != expectedUnit {
+			// Unit mismatch: Limes has not yet updated this commitment to the new unit.
+			// Skip this commitment - trust what Cortex already has stored in CRDs.
+			// On the next sync cycle after Limes updates, this will be processed.
+			log.V(0).Info("WARNING: skipping commitment due to unit mismatch - Limes unit differs from Cortex flavor group, waiting for Limes to update",
+				"commitmentUUID", commitment.UUID,
+				"flavorGroup", flavorGroupName,
+				"limesUnit", commitment.Unit,
+				"expectedUnit", expectedUnit,
+				"smallestFlavorMemoryMB", flavorGroup.SmallestFlavor.MemoryMB)
+			if s.monitor != nil {
+				s.monitor.RecordUnitMismatch(flavorGroupName)
+			}
+			// Track skipped commitment so its existing CRDs won't be deleted
+			if commitment.UUID != "" {
+				result.skippedUUIDs[commitment.UUID] = true
+			}
+			continue
+		}
+
 		// Skip commitments with empty UUID
 		if commitment.UUID == "" {
 			log.Info("skipping commitment with empty UUID",
@@ -121,10 +159,10 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 			"amount", commitment.Amount,
 			"totalMemoryBytes", state.TotalMemoryBytes)
 
-		commitmentStates = append(commitmentStates, state)
+		result.states = append(result.states, state)
 	}
 
-	return commitmentStates, nil
+	return result, nil
 }
 
 // SyncReservations fetches commitments from Limes and synchronizes Reservation CRDs.
@@ -158,7 +196,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	}
 
 	// Get all commitments as states
-	commitmentStates, err := s.getCommitmentStates(ctx, logger, flavorGroups)
+	commitmentResult, err := s.getCommitmentStates(ctx, logger, flavorGroups)
 	if err != nil {
 		logger.Error(err, "failed to get compute commitments")
 		return err
@@ -168,7 +206,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	manager := NewReservationManager(s.Client)
 
 	// Apply each commitment state using the manager
-	for _, state := range commitmentStates {
+	for _, state := range commitmentResult.states {
 		logger.Info("applying commitment state",
 			"commitmentUUID", state.CommitmentUUID,
 			"projectID", state.ProjectID,
@@ -194,10 +232,14 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		return err
 	}
 
-	// Build set of commitment UUIDs we should have
+	// Build set of commitment UUIDs we should have (processed + skipped)
 	activeCommitments := make(map[string]bool)
-	for _, state := range commitmentStates {
+	for _, state := range commitmentResult.states {
 		activeCommitments[state.CommitmentUUID] = true
+	}
+	// Also include skipped commitments - don't delete their CRDs
+	for uuid := range commitmentResult.skippedUUIDs {
+		activeCommitments[uuid] = true
 	}
 
 	// Delete reservations for commitments that no longer exist
@@ -221,6 +263,8 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		}
 	}
 
-	logger.Info("synced reservations", "commitmentCount", len(commitmentStates))
+	logger.Info("synced reservations",
+		"processedCount", len(commitmentResult.states),
+		"skippedCount", len(commitmentResult.skippedUUIDs))
 	return nil
 }

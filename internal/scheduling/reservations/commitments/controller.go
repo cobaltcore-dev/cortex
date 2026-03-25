@@ -49,20 +49,21 @@ type CommitmentReservationController struct {
 // move the current state of the cluster closer to the desired state.
 // Note: This controller only handles commitment reservations, as filtered by the predicate.
 func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx = WithNewGlobalRequestID(ctx)
-	logger := LoggerFromContext(ctx).WithValues("component", "controller", "reservation", req.Name)
-
-	// Fetch the reservation object.
+	// Fetch the reservation object first to check for creator request ID.
 	var res v1alpha1.Reservation
 	if err := r.Get(ctx, req.NamespacedName, &res); err != nil {
 		// Ignore not-found errors, since they can't be fixed by an immediate requeue
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// Extract creator request ID from annotation for end-to-end traceability
+	// Use creator request ID from annotation for end-to-end traceability if available,
+	// otherwise generate a new one for this reconcile loop.
 	if creatorReq := res.Annotations[v1alpha1.AnnotationCreatorRequestID]; creatorReq != "" {
-		logger = logger.WithValues("creatorReq", creatorReq)
+		ctx = WithGlobalRequestID(ctx, creatorReq)
+	} else {
+		ctx = WithNewGlobalRequestID(ctx)
 	}
+	logger := LoggerFromContext(ctx).WithValues("component", "controller", "reservation", req.Name)
 
 	// filter for CR reservations
 	resourceName := ""
