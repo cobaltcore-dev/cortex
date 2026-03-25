@@ -5,6 +5,7 @@ package commitments
 
 import (
 	"context"
+	"sort"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -32,9 +33,17 @@ type FlavorGroupData struct {
 func createFlavorGroupKnowledge(t *testing.T, groups map[string]FlavorGroupData) *v1alpha1.Knowledge {
 	t.Helper()
 
-	// Build flavor group features
+	// Sort group names for deterministic iteration
+	sortedGroupNames := make([]string, 0, len(groups))
+	for groupName := range groups {
+		sortedGroupNames = append(sortedGroupNames, groupName)
+	}
+	sort.Strings(sortedGroupNames)
+
+	// Build flavor group features with sorted iteration
 	features := make([]compute.FlavorGroupFeature, 0, len(groups))
-	for groupName, data := range groups {
+	for _, groupName := range sortedGroupNames {
+		data := groups[groupName]
 		features = append(features, compute.FlavorGroupFeature{
 			Name: groupName,
 			Flavors: []compute.FlavorInGroup{
