@@ -340,7 +340,7 @@ func main() {
 		// Initialize commitments API for LIQUID interface (with Nova client for usage reporting)
 		commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
 		commitmentsAPI := commitments.NewAPIWithConfig(multiclusterClient, commitmentsConfig, novaClient)
-		commitmentsAPI.Init(mux, metrics.Registry)
+		commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
 
 		deschedulingsController := &nova.DetectorPipelineController{
 			Monitor: detectorPipelineMonitor,

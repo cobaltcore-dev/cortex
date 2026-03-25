@@ -997,7 +997,7 @@ func newCommitmentTestEnv(
 	}
 	mux := http.NewServeMux()
 	registry := prometheus.NewRegistry()
-	api.Init(mux, registry)
+	api.Init(mux, registry, log.Log)
 	httpServer := httptest.NewServer(mux)
 
 	env.HTTPServer = httpServer
@@ -1277,7 +1277,8 @@ func (env *CommitmentTestEnv) processNewReservation(res *v1alpha1.Reservation) {
 	}
 }
 
-// markReservationSchedulerProcessedStatus updates a reservation to have Ready=True status (scheduling can be succeeded or not - depending on host status)
+// markReservationSchedulerProcessedStatus updates a reservation status based on scheduling result.
+// If host is non-empty, sets Ready=True (success). If host is empty, sets Ready=False with NoHostsFound (failure).
 func (env *CommitmentTestEnv) markReservationSchedulerProcessedStatus(res *v1alpha1.Reservation, host string) {
 	ctx := context.Background()
 
@@ -1288,16 +1289,28 @@ func (env *CommitmentTestEnv) markReservationSchedulerProcessedStatus(res *v1alp
 		return
 	}
 
-	// Then update status
+	// Then update status - Ready=True only if host was found, Ready=False otherwise
 	res.Status.Host = host
-	res.Status.Conditions = []metav1.Condition{
-		{
-			Type:               v1alpha1.ReservationConditionReady,
-			Status:             metav1.ConditionTrue,
-			Reason:             "ReservationActive",
-			Message:            "Reservation is ready (set by test controller)",
-			LastTransitionTime: metav1.Now(),
-		},
+	if host != "" {
+		res.Status.Conditions = []metav1.Condition{
+			{
+				Type:               v1alpha1.ReservationConditionReady,
+				Status:             metav1.ConditionTrue,
+				Reason:             "ReservationActive",
+				Message:            "Reservation is ready (set by test controller)",
+				LastTransitionTime: metav1.Now(),
+			},
+		}
+	} else {
+		res.Status.Conditions = []metav1.Condition{
+			{
+				Type:               v1alpha1.ReservationConditionReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             "NoHostsFound",
+				Message:            "No hosts with sufficient capacity (set by test controller)",
+				LastTransitionTime: metav1.Now(),
+			},
+		}
 	}
 	if err := env.K8sClient.Status().Update(ctx, res); err != nil {
 		env.T.Logf("Warning: Failed to update reservation status: %v", err)

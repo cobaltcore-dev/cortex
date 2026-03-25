@@ -63,6 +63,12 @@ func (c *UsageCalculator) CalculateUsage(
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to get flavor groups: %w", err)
 	}
 
+	// Get info version from Knowledge CRD (used by Limes to detect metadata changes)
+	var infoVersion int64 = -1
+	if knowledgeCRD, err := knowledge.Get(ctx); err == nil && knowledgeCRD != nil && !knowledgeCRD.Status.LastContentChange.IsZero() {
+		infoVersion = knowledgeCRD.Status.LastContentChange.Unix()
+	}
+
 	// Step 2: Build commitment capacity map from K8s Reservation CRDs
 	commitmentsByAZFlavorGroup, err := c.buildCommitmentCapacityMap(ctx, log, projectID)
 	if err != nil {
@@ -80,7 +86,7 @@ func (c *UsageCalculator) CalculateUsage(
 	vmAssignments, assignedToCommitments := c.assignVMsToCommitments(vms, commitmentsByAZFlavorGroup)
 
 	// Step 5: Build the response
-	report := c.buildUsageResponse(vms, vmAssignments, flavorGroups, allAZs)
+	report := c.buildUsageResponse(vms, vmAssignments, flavorGroups, allAZs, infoVersion)
 
 	log.Info("completed usage report",
 		"projectID", projectID,
@@ -336,6 +342,7 @@ func (c *UsageCalculator) buildUsageResponse(
 	vmAssignments map[string]string,
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	allAZs []liquid.AvailabilityZone,
+	infoVersion int64,
 ) liquid.ServiceUsageReport {
 	// Initialize resources map for flavor groups that accept commitments
 	resources := make(map[liquid.ResourceName]*liquid.ResourceUsageReport)
@@ -420,7 +427,8 @@ func (c *UsageCalculator) buildUsageResponse(
 	}
 
 	return liquid.ServiceUsageReport{
-		Resources: resources,
+		InfoVersion: infoVersion,
+		Resources:   resources,
 	}
 }
 

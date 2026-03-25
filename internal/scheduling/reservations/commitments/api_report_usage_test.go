@@ -540,7 +540,7 @@ func newUsageTestEnv(
 	api := NewAPIWithConfig(k8sClient, DefaultConfig(), novaClient)
 	mux := http.NewServeMux()
 	registry := prometheus.NewRegistry()
-	api.Init(mux, registry)
+	api.Init(mux, registry, log.Log)
 	httpServer := httptest.NewServer(mux)
 
 	return &UsageTestEnv{
