@@ -6,7 +6,6 @@ package commitments
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -90,12 +89,8 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 			log.Info("skipping non-compute commitment", "id", id, "serviceType", commitment.ServiceType)
 			continue
 		}
-		if !strings.HasPrefix(commitment.ResourceName, commitmentResourceNamePrefix) {
-			log.Info("skipping non-RAM-flavor-group commitment", "id", id, "resourceName", commitment.ResourceName)
-			continue
-		}
 
-		// Extract flavor group name from resource name
+		// Extract flavor group name from resource name (validates format: hw_version_<group>_ram)
 		flavorGroupName, err := getFlavorGroupNameFromResource(commitment.ResourceName)
 		if err != nil {
 			log.Info("skipping commitment with invalid resource name",

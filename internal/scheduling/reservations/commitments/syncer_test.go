@@ -221,7 +221,7 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 			ID:               1,
 			UUID:             "12345-67890-abcdef",
 			ServiceType:      "compute",
-			ResourceName:     "ram_test_group_v1",
+			ResourceName:     "hw_version_test_group_v1_ram",
 			AvailabilityZone: "az1",
 			Amount:           2, // 2 multiples of smallest flavor (2 * 1024MB = 2048MB total)
 			Unit:             "",
@@ -357,7 +357,7 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 			ID:               1,
 			UUID:             "12345-67890-abcdef",
 			ServiceType:      "compute",
-			ResourceName:     "ram_new_group_v1",
+			ResourceName:     "hw_version_new_group_v1_ram",
 			AvailabilityZone: "az1",
 			Amount:           1,
 			Unit:             "",
@@ -459,7 +459,7 @@ func TestSyncer_SyncReservations_UnitMismatch(t *testing.T) {
 			ID:               1,
 			UUID:             "unit-mismatch-test-uuid",
 			ServiceType:      "compute",
-			ResourceName:     "ram_test_group_v1",
+			ResourceName:     "hw_version_test_group_v1_ram",
 			AvailabilityZone: "az1",
 			Amount:           2,
 			Unit:             "2048 MiB", // Mismatched unit - should be "1024 MiB"
@@ -543,7 +543,7 @@ func TestSyncer_SyncReservations_UnitMatch(t *testing.T) {
 			ID:               1,
 			UUID:             "unit-match-test-uuid",
 			ServiceType:      "compute",
-			ResourceName:     "ram_test_group_v1",
+			ResourceName:     "hw_version_test_group_v1_ram",
 			AvailabilityZone: "az1",
 			Amount:           2,
 			Unit:             "1024 MiB", // Correct unit matching smallest flavor
@@ -623,7 +623,7 @@ func TestSyncer_SyncReservations_EmptyUUID(t *testing.T) {
 			ID:               1,
 			UUID:             "", // Empty UUID
 			ServiceType:      "compute",
-			ResourceName:     "ram_test_group_v1",
+			ResourceName:     "hw_version_test_group_v1_ram",
 			AvailabilityZone: "az1",
 			Amount:           1,
 			Unit:             "",

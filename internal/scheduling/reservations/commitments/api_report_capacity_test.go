@@ -187,9 +187,9 @@ func TestCapacityCalculator(t *testing.T) {
 			t.Fatalf("Expected 1 resource, got %d", len(report.Resources))
 		}
 
-		resource := report.Resources[liquid.ResourceName("ram_test-group")]
+		resource := report.Resources[liquid.ResourceName("hw_version_test-group_ram")]
 		if resource == nil {
-			t.Fatal("Expected ram_test-group resource to exist")
+			t.Fatal("Expected hw_version_test-group_ram resource to exist")
 		}
 
 		// Should have empty perAZ map when no host details
