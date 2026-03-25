@@ -253,15 +253,15 @@ ProcessLoop:
 
 				logger.V(1).Info("applying commitment state change", "commitmentUUID", commitment.UUID, "oldMemory", stateBefore.TotalMemoryBytes, "desiredMemory", stateDesired.TotalMemoryBytes)
 
-				touchedReservations, deletedReservations, err := manager.ApplyCommitmentState(ctx, logger, stateDesired, flavorGroups, "changeCommitmentsApi")
+				applyResult, err := manager.ApplyCommitmentState(ctx, logger, stateDesired, flavorGroups, "changeCommitmentsApi")
 				if err != nil {
 					failedCommitments[string(commitment.UUID)] = "failed to apply commitment state"
 					logger.Info("failed to apply commitment state for commitment", "commitmentUUID", commitment.UUID, "error", err)
 					requireRollback = true
 					break ProcessLoop
 				}
-				logger.V(1).Info("applied commitment state change", "commitmentUUID", commitment.UUID, "touchedReservations", len(touchedReservations), "deletedReservations", len(deletedReservations))
-				reservationsToWatch = append(reservationsToWatch, touchedReservations...)
+				logger.V(1).Info("applied commitment state change", "commitmentUUID", commitment.UUID, "touchedReservations", len(applyResult.TouchedReservations), "deletedReservations", len(applyResult.RemovedReservations))
+				reservationsToWatch = append(reservationsToWatch, applyResult.TouchedReservations...)
 			}
 		}
 	}
@@ -305,7 +305,7 @@ ProcessLoop:
 		for commitmentUUID, state := range statesBefore {
 			// Rollback to statesBefore for this commitment
 			logger.Info("applying rollback for commitment", "commitmentUUID", commitmentUUID, "stateBefore", state)
-			_, _, err := manager.ApplyCommitmentState(ctx, logger, state, flavorGroups, "changeCommitmentsApiRollback")
+			_, err := manager.ApplyCommitmentState(ctx, logger, state, flavorGroups, "changeCommitmentsApiRollback")
 			if err != nil {
 				logger.Info("failed to apply rollback state for commitment", "commitmentUUID", commitmentUUID, "error", err)
 				// continue with best effort rollback for other projects

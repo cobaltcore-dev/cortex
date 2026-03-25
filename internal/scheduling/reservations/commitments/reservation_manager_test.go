@@ -42,7 +42,7 @@ func TestApplyCommitmentState_CreatesNewReservations(t *testing.T) {
 		TotalMemoryBytes: 3 * 8192 * 1024 * 1024,
 	}
 
-	touched, removed, err := manager.ApplyCommitmentState(
+	applyResult, err := manager.ApplyCommitmentState(
 		context.Background(),
 		logr.Discard(),
 		desiredState,
@@ -54,18 +54,18 @@ func TestApplyCommitmentState_CreatesNewReservations(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(removed) != 0 {
-		t.Errorf("expected 0 removed reservations, got %d", len(removed))
+	if len(applyResult.RemovedReservations) != 0 {
+		t.Errorf("expected 0 applyResult.RemovedReservations reservations, got %d", len(applyResult.RemovedReservations))
 	}
 
 	// Should create reservations to fulfill the commitment
-	if len(touched) == 0 {
+	if len(applyResult.TouchedReservations) == 0 {
 		t.Fatal("expected at least one reservation to be created")
 	}
 
 	// Verify created reservations sum to desired state
 	totalMemory := int64(0)
-	for _, res := range touched {
+	for _, res := range applyResult.TouchedReservations {
 		memQuantity := res.Spec.Resources[hv1.ResourceMemory]
 		totalMemory += memQuantity.Value()
 	}
@@ -142,7 +142,7 @@ func TestApplyCommitmentState_DeletesExcessReservations(t *testing.T) {
 		TotalMemoryBytes: 8 * 1024 * 1024 * 1024,
 	}
 
-	_, removed, err := manager.ApplyCommitmentState(
+	applyResult, err := manager.ApplyCommitmentState(
 		context.Background(),
 		logr.Discard(),
 		desiredState,
@@ -158,7 +158,7 @@ func TestApplyCommitmentState_DeletesExcessReservations(t *testing.T) {
 	// This is expected behavior based on the slot sizing algorithm
 
 	// Should remove excess reservations
-	if len(removed) == 0 {
+	if len(applyResult.RemovedReservations) == 0 {
 		t.Fatal("expected reservations to be removed")
 	}
 
@@ -481,7 +481,7 @@ func TestApplyCommitmentState_DeletionPriority(t *testing.T) {
 				TotalMemoryBytes: tt.desiredMemoryBytes,
 			}
 
-			_, removed, err := manager.ApplyCommitmentState(
+			applyResult, err := manager.ApplyCommitmentState(
 				context.Background(),
 				logr.Discard(),
 				desiredState,
@@ -493,12 +493,12 @@ func TestApplyCommitmentState_DeletionPriority(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if len(removed) != tt.expectedRemovedCount {
-				t.Fatalf("expected %d removed reservations, got %d", tt.expectedRemovedCount, len(removed))
+			if len(applyResult.RemovedReservations) != tt.expectedRemovedCount {
+				t.Fatalf("expected %d removed reservations, got %d", tt.expectedRemovedCount, len(applyResult.RemovedReservations))
 			}
 
 			if tt.validateRemoved != nil {
-				tt.validateRemoved(t, removed)
+				tt.validateRemoved(t, applyResult.RemovedReservations)
 			}
 
 			// Get remaining reservations
@@ -560,7 +560,7 @@ func TestApplyCommitmentState_HandlesZeroCapacity(t *testing.T) {
 		TotalMemoryBytes: 0,
 	}
 
-	touched, removed, err := manager.ApplyCommitmentState(
+	applyResult, err := manager.ApplyCommitmentState(
 		context.Background(),
 		logr.Discard(),
 		desiredState,
@@ -572,13 +572,13 @@ func TestApplyCommitmentState_HandlesZeroCapacity(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(touched) != 0 {
-		t.Errorf("expected 0 new reservations, got %d", len(touched))
+	if len(applyResult.TouchedReservations) != 0 {
+		t.Errorf("expected 0 new reservations, got %d", len(applyResult.TouchedReservations))
 	}
 
 	// Should remove all reservations
-	if len(removed) != 1 {
-		t.Fatalf("expected 1 removed reservation, got %d", len(removed))
+	if len(applyResult.RemovedReservations) != 1 {
+		t.Fatalf("expected 1 removed reservation, got %d", len(applyResult.RemovedReservations))
 	}
 
 	// Verify no reservations remain
@@ -638,7 +638,7 @@ func TestApplyCommitmentState_FixesWrongFlavorGroup(t *testing.T) {
 		TotalMemoryBytes: 8 * 1024 * 1024 * 1024,
 	}
 
-	touched, removed, err := manager.ApplyCommitmentState(
+	applyResult, err := manager.ApplyCommitmentState(
 		context.Background(),
 		logr.Discard(),
 		desiredState,
@@ -651,18 +651,18 @@ func TestApplyCommitmentState_FixesWrongFlavorGroup(t *testing.T) {
 	}
 
 	// Should remove wrong reservation and create new one
-	if len(removed) != 1 {
-		t.Fatalf("expected 1 removed reservation, got %d", len(removed))
+	if len(applyResult.RemovedReservations) != 1 {
+		t.Fatalf("expected 1 removed reservation, got %d", len(applyResult.RemovedReservations))
 	}
 
-	if len(touched) != 1 {
-		t.Fatalf("expected 1 new reservation, got %d", len(touched))
+	if len(applyResult.TouchedReservations) != 1 {
+		t.Fatalf("expected 1 new reservation, got %d", len(applyResult.TouchedReservations))
 	}
 
 	// Verify new reservation has correct flavor group
-	if touched[0].Spec.CommittedResourceReservation.ResourceGroup != "test-group" {
+	if applyResult.TouchedReservations[0].Spec.CommittedResourceReservation.ResourceGroup != "test-group" {
 		t.Errorf("expected flavor group test-group, got %s",
-			touched[0].Spec.CommittedResourceReservation.ResourceGroup)
+			applyResult.TouchedReservations[0].Spec.CommittedResourceReservation.ResourceGroup)
 	}
 }
 
@@ -686,7 +686,7 @@ func TestApplyCommitmentState_UnknownFlavorGroup(t *testing.T) {
 		TotalMemoryBytes: 8 * 1024 * 1024 * 1024,
 	}
 
-	_, _, err := manager.ApplyCommitmentState(
+	_, err := manager.ApplyCommitmentState(
 		context.Background(),
 		logr.Discard(),
 		desiredState,
