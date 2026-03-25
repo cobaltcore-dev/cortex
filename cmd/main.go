@@ -110,6 +110,10 @@ func main() {
 			manilaChecksConfig := conf.GetConfigOrDie[manila.ChecksConfig]()
 			manila.RunChecks(ctx, client, manilaChecksConfig)
 			return
+		case "e2e-commitments":
+			commitmentsChecksConfig := conf.GetConfigOrDie[commitments.E2EChecksConfig]()
+			commitments.RunCommitmentsE2EChecks(ctx, commitmentsChecksConfig)
+			return
 		}
 	}
 
