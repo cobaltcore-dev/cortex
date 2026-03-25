@@ -28,6 +28,7 @@ type HTTPAPI struct {
 	monitor         ChangeCommitmentsAPIMonitor
 	usageMonitor    ReportUsageAPIMonitor
 	capacityMonitor ReportCapacityAPIMonitor
+	infoMonitor     InfoAPIMonitor
 	// Mutex to serialize change-commitments requests
 	changeMutex sync.Mutex
 }
@@ -44,6 +45,7 @@ func NewAPIWithConfig(client client.Client, config Config, novaClient UsageNovaC
 		monitor:         NewChangeCommitmentsAPIMonitor(),
 		usageMonitor:    NewReportUsageAPIMonitor(),
 		capacityMonitor: NewReportCapacityAPIMonitor(),
+		infoMonitor:     NewInfoAPIMonitor(),
 	}
 }
 
@@ -51,6 +53,7 @@ func (api *HTTPAPI) Init(mux *http.ServeMux, registry prometheus.Registerer, log
 	registry.MustRegister(&api.monitor)
 	registry.MustRegister(&api.usageMonitor)
 	registry.MustRegister(&api.capacityMonitor)
+	registry.MustRegister(&api.infoMonitor)
 	mux.HandleFunc("/v1/commitments/change-commitments", api.HandleChangeCommitments)
 	mux.HandleFunc("/v1/commitments/report-capacity", api.HandleReportCapacity)
 	mux.HandleFunc("/v1/commitments/info", api.HandleInfo)
