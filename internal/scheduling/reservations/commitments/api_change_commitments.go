@@ -64,9 +64,9 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Serialize all change-commitments requests
-	api.changeMutex.Lock()
-	defer api.changeMutex.Unlock()
+	// Serialize all change-commitments requests (shared with syncer)
+	api.crMutex.Lock()
+	defer api.crMutex.Unlock()
 
 	ctx := reservations.WithGlobalRequestID(context.Background(), "committed-resource-"+requestID)
 	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/change-commitments")

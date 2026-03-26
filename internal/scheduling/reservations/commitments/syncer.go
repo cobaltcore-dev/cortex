@@ -43,13 +43,20 @@ type Syncer struct {
 	client.Client
 	// Monitor for metrics
 	monitor *SyncerMonitor
+	// Shared mutex to serialize CR state changes with the change-commitments API
+	crMutex *CRMutex
 }
 
-func NewSyncer(k8sClient client.Client, monitor *SyncerMonitor) *Syncer {
+func NewSyncer(k8sClient client.Client, monitor *SyncerMonitor, crMutex *CRMutex) *Syncer {
+	// If no shared mutex provided, create a local one (for backwards compatibility in tests)
+	if crMutex == nil {
+		crMutex = &CRMutex{}
+	}
 	return &Syncer{
 		CommitmentsClient: NewCommitmentsClient(),
 		Client:            k8sClient,
 		monitor:           monitor,
+		crMutex:           crMutex,
 	}
 }
 
@@ -183,8 +190,13 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 }
 
 // SyncReservations fetches commitments from Limes and synchronizes Reservation CRDs.
+// The mutex is held for the entire operation to ensure atomicity - the Limes state
+// snapshot must be applied without interference from concurrent change-commitments API calls.
 func (s *Syncer) SyncReservations(ctx context.Context) error {
-	// TODO handle concurrency with change API: consider creation time of reservations and status ready
+	// Acquire the shared CR mutex for the entire sync operation.
+	// This ensures the Limes state snapshot is applied atomically.
+	s.crMutex.Lock()
+	defer s.crMutex.Unlock()
 
 	// Create context with request ID for this sync execution
 	runID := fmt.Sprintf("sync-%d", time.Now().Unix())

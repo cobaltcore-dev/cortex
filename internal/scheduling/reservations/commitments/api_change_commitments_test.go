@@ -999,7 +999,7 @@ func newCommitmentTestEnv(
 	// Use custom config if provided, otherwise use default
 	var api *HTTPAPI
 	if customConfig != nil {
-		api = NewAPIWithConfig(wrappedClient, *customConfig, nil)
+		api = NewAPIWithConfig(wrappedClient, *customConfig, nil, nil)
 	} else {
 		api = NewAPI(wrappedClient)
 	}
