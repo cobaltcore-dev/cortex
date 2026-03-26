@@ -350,7 +350,7 @@ groups:
 
   - alert: CortexNovaCommittedResourceRejectionRateTooHigh
     expr: |
-      rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected"}[5m])
+      sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected"}[5m]))
       / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[5m])) > 0.5
     for: 5m
     labels:
@@ -486,7 +486,10 @@ groups:
 
   # Committed Resource Syncer Alerts
   - alert: CortexNovaCommittedResourceSyncerNotRunning
-    expr: increase(cortex_committed_resource_syncer_runs_total{service="cortex-nova-metrics"}[2h]) == 0
+    expr: |
+      increase(cortex_committed_resource_syncer_runs_total{service="cortex-nova-metrics"}[2h]) == 0
+      or
+      absent(cortex_committed_resource_syncer_runs_total{service="cortex-nova-metrics"})
     for: 5m
     labels:
       context: committed-resource-syncer
@@ -497,8 +500,10 @@ groups:
     annotations:
       summary: "Committed Resource syncer not running"
       description: >
-        The committed resource syncer has not run in the last 2 hours. This indicates
-        that the syncer may have stopped or is encountering errors. Check the syncer logs for errors.
+        The committed resource syncer has not run in the last 2 hours or the metric is missing.
+        This indicates that the syncer may have stopped, is encountering errors, or the feature
+        is not enabled. Check the syncer logs for errors or verify the commitments-sync-task is
+        in the enabledTasks configuration.
 
   - alert: CortexNovaCommittedResourceSyncerErrorsHigh
     expr: increase(cortex_committed_resource_syncer_errors_total{service="cortex-nova-metrics"}[1h]) > 3
@@ -517,8 +522,11 @@ groups:
 
   - alert: CortexNovaCommittedResourceSyncerUnitMismatchRateHigh
     expr: |
-      rate(cortex_committed_resource_syncer_commitments_skipped_total{service="cortex-nova-metrics", reason="unit_mismatch"}[1h])
-      / rate(cortex_committed_resource_syncer_commitments_total{service="cortex-nova-metrics"}[1h]) > 0.05
+      (
+        sum(rate(cortex_committed_resource_syncer_commitments_skipped_total{service="cortex-nova-metrics", reason="unit_mismatch"}[1h]))
+        / sum(rate(cortex_committed_resource_syncer_commitments_total{service="cortex-nova-metrics"}[1h]))
+      ) > 0.05
+      and on() sum(rate(cortex_committed_resource_syncer_commitments_total{service="cortex-nova-metrics"}[1h])) > 0
     for: 15m
     labels:
       context: committed-resource-syncer
@@ -537,8 +545,11 @@ groups:
 
   - alert: CortexNovaCommittedResourceSyncerUnknownFlavorGroupRateHigh
     expr: |
-      rate(cortex_committed_resource_syncer_commitments_skipped_total{service="cortex-nova-metrics", reason="unknown_flavor_group"}[1h])
-      / rate(cortex_committed_resource_syncer_commitments_total{service="cortex-nova-metrics"}[1h]) > 0
+      (
+        sum(rate(cortex_committed_resource_syncer_commitments_skipped_total{service="cortex-nova-metrics", reason="unknown_flavor_group"}[1h]))
+        / sum(rate(cortex_committed_resource_syncer_commitments_total{service="cortex-nova-metrics"}[1h]))
+      ) > 0
+      and on() sum(rate(cortex_committed_resource_syncer_commitments_total{service="cortex-nova-metrics"}[1h])) > 0
     for: 15m
     labels:
       context: committed-resource-syncer
@@ -557,10 +568,13 @@ groups:
   - alert: CortexNovaCommittedResourceSyncerLocalChangeRateHigh
     expr: |
       (
-        rate(cortex_committed_resource_syncer_reservations_created_total{service="cortex-nova-metrics"}[1h]) +
-        rate(cortex_committed_resource_syncer_reservations_deleted_total{service="cortex-nova-metrics"}[1h]) +
-        rate(cortex_committed_resource_syncer_reservations_repaired_total{service="cortex-nova-metrics"}[1h])
-      ) / rate(cortex_committed_resource_syncer_commitments_processed_total{service="cortex-nova-metrics"}[1h]) > 0.01
+        (
+          rate(cortex_committed_resource_syncer_reservations_created_total{service="cortex-nova-metrics"}[1h]) +
+          rate(cortex_committed_resource_syncer_reservations_deleted_total{service="cortex-nova-metrics"}[1h]) +
+          rate(cortex_committed_resource_syncer_reservations_repaired_total{service="cortex-nova-metrics"}[1h])
+        ) / rate(cortex_committed_resource_syncer_commitments_processed_total{service="cortex-nova-metrics"}[1h])
+      ) > 0.01
+      and on() rate(cortex_committed_resource_syncer_commitments_processed_total{service="cortex-nova-metrics"}[1h]) > 0
     for: 15m
     labels:
       context: committed-resource-syncer
@@ -578,8 +592,11 @@ groups:
 
   - alert: CortexNovaCommittedResourceSyncerRepairRateHigh
     expr: |
-      rate(cortex_committed_resource_syncer_reservations_repaired_total{service="cortex-nova-metrics"}[1h])
-      / rate(cortex_committed_resource_syncer_commitments_processed_total{service="cortex-nova-metrics"}[1h]) > 0
+      (
+        rate(cortex_committed_resource_syncer_reservations_repaired_total{service="cortex-nova-metrics"}[1h])
+        / rate(cortex_committed_resource_syncer_commitments_processed_total{service="cortex-nova-metrics"}[1h])
+      ) > 0
+      and on() rate(cortex_committed_resource_syncer_commitments_processed_total{service="cortex-nova-metrics"}[1h]) > 0
     for: 15m
     labels:
       context: committed-resource-syncer
