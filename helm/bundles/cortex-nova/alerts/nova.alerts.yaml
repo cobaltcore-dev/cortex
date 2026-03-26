@@ -350,7 +350,7 @@ groups:
 
   - alert: CortexNovaCommittedResourceRejectionRateTooHigh
     expr: |
-      rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected"}[5m])
+      sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected"}[5m]))
       / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[5m])) > 0.5
     for: 5m
     labels:
@@ -523,10 +523,10 @@ groups:
   - alert: CortexNovaCommittedResourceSyncerUnitMismatchRateHigh
     expr: |
       (
-        rate(cortex_committed_resource_syncer_commitments_skipped_total{service="cortex-nova-metrics", reason="unit_mismatch"}[1h])
-        / rate(cortex_committed_resource_syncer_commitments_total{service="cortex-nova-metrics"}[1h])
+        sum(rate(cortex_committed_resource_syncer_commitments_skipped_total{service="cortex-nova-metrics", reason="unit_mismatch"}[1h]))
+        / sum(rate(cortex_committed_resource_syncer_commitments_total{service="cortex-nova-metrics"}[1h]))
       ) > 0.05
-      and on() rate(cortex_committed_resource_syncer_commitments_total{service="cortex-nova-metrics"}[1h]) > 0
+      and on() sum(rate(cortex_committed_resource_syncer_commitments_total{service="cortex-nova-metrics"}[1h])) > 0
     for: 15m
     labels:
       context: committed-resource-syncer
@@ -546,10 +546,10 @@ groups:
   - alert: CortexNovaCommittedResourceSyncerUnknownFlavorGroupRateHigh
     expr: |
       (
-        rate(cortex_committed_resource_syncer_commitments_skipped_total{service="cortex-nova-metrics", reason="unknown_flavor_group"}[1h])
-        / rate(cortex_committed_resource_syncer_commitments_total{service="cortex-nova-metrics"}[1h])
+        sum(rate(cortex_committed_resource_syncer_commitments_skipped_total{service="cortex-nova-metrics", reason="unknown_flavor_group"}[1h]))
+        / sum(rate(cortex_committed_resource_syncer_commitments_total{service="cortex-nova-metrics"}[1h]))
       ) > 0
-      and on() rate(cortex_committed_resource_syncer_commitments_total{service="cortex-nova-metrics"}[1h]) > 0
+      and on() sum(rate(cortex_committed_resource_syncer_commitments_total{service="cortex-nova-metrics"}[1h])) > 0
     for: 15m
     labels:
       context: committed-resource-syncer
