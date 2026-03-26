@@ -331,34 +331,61 @@ func TestBuildVMAttributes(t *testing.T) {
 		MemoryMB:   4096,
 		VCPUs:      16,
 		DiskGB:     100,
+		Metadata:   map[string]string{"env": "prod"},
+		Tags:       []string{"important"},
 	}
 
 	t.Run("with commitment", func(t *testing.T) {
 		attrs := buildVMAttributes(vm, "commit-456")
 
-		if attrs["name"] != "my-vm" {
-			t.Errorf("name = %v, expected my-vm", attrs["name"])
-		}
-		if attrs["flavor"] != "m1.large" {
-			t.Errorf("flavor = %v, expected m1.large", attrs["flavor"])
-		}
+		// Status at top level
 		if attrs["status"] != "ACTIVE" {
 			t.Errorf("status = %v, expected ACTIVE", attrs["status"])
 		}
-		if attrs["hypervisor"] != "host-1" {
-			t.Errorf("hypervisor = %v, expected host-1", attrs["hypervisor"])
+
+		// Metadata at top level
+		metadata, ok := attrs["metadata"].(map[string]string)
+		if !ok {
+			t.Errorf("metadata is not map[string]string: %T", attrs["metadata"])
+		} else if metadata["env"] != "prod" {
+			t.Errorf("metadata[env] = %v, expected prod", metadata["env"])
 		}
-		if attrs["ram"] != uint64(4096) {
-			t.Errorf("ram = %v, expected 4096", attrs["ram"])
+
+		// Tags at top level
+		tags, ok := attrs["tags"].([]string)
+		if !ok {
+			t.Errorf("tags is not []string: %T", attrs["tags"])
+		} else if len(tags) != 1 || tags[0] != "important" {
+			t.Errorf("tags = %v, expected [important]", tags)
 		}
-		if attrs["vcpu"] != uint64(16) {
-			t.Errorf("vcpu = %v, expected 16", attrs["vcpu"])
+
+		// Flavor is now nested
+		flavor, ok := attrs["flavor"].(map[string]any)
+		if !ok {
+			t.Errorf("flavor is not map[string]any: %T", attrs["flavor"])
+		} else {
+			if flavor["name"] != "m1.large" {
+				t.Errorf("flavor.name = %v, expected m1.large", flavor["name"])
+			}
+			if flavor["vcpu"] != uint64(16) {
+				t.Errorf("flavor.vcpu = %v, expected 16", flavor["vcpu"])
+			}
+			if flavor["ram_mib"] != uint64(4096) {
+				t.Errorf("flavor.ram_mib = %v, expected 4096", flavor["ram_mib"])
+			}
+			if flavor["disk_gib"] != uint64(100) {
+				t.Errorf("flavor.disk_gib = %v, expected 100", flavor["disk_gib"])
+			}
 		}
-		if attrs["disk"] != uint64(100) {
-			t.Errorf("disk = %v, expected 100", attrs["disk"])
-		}
+
+		// Commitment ID
 		if attrs["commitment_id"] != "commit-456" {
 			t.Errorf("commitment_id = %v, expected commit-456", attrs["commitment_id"])
+		}
+
+		// OS type (empty for now)
+		if attrs["os_type"] != "" {
+			t.Errorf("os_type = %v, expected empty string", attrs["os_type"])
 		}
 	})
 
@@ -367,6 +394,32 @@ func TestBuildVMAttributes(t *testing.T) {
 
 		if attrs["commitment_id"] != nil {
 			t.Errorf("commitment_id = %v, expected nil", attrs["commitment_id"])
+		}
+	})
+
+	t.Run("with nil metadata and tags", func(t *testing.T) {
+		vmEmpty := VMUsageInfo{
+			UUID:       "vm-empty",
+			Name:       "empty-vm",
+			FlavorName: "m1.small",
+			Status:     "ACTIVE",
+			MemoryMB:   1024,
+			VCPUs:      2,
+			DiskGB:     10,
+			Metadata:   nil,
+			Tags:       nil,
+		}
+		attrs := buildVMAttributes(vmEmpty, "")
+
+		// Should have empty map and slice, not nil (for JSON serialization)
+		metadata, ok := attrs["metadata"].(map[string]string)
+		if !ok || metadata == nil {
+			t.Errorf("metadata should be empty map, got %T: %v", attrs["metadata"], attrs["metadata"])
+		}
+
+		tags, ok := attrs["tags"].([]string)
+		if !ok || tags == nil {
+			t.Errorf("tags should be empty slice, got %T: %v", attrs["tags"], attrs["tags"])
 		}
 	})
 }

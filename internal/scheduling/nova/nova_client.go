@@ -40,17 +40,19 @@ type migration struct {
 
 // ServerDetail contains extended server information for usage reporting.
 type ServerDetail struct {
-	ID               string `json:"id"`
-	Name             string `json:"name"`
-	Status           string `json:"status"`
-	TenantID         string `json:"tenant_id"`
-	Created          string `json:"created"`
-	AvailabilityZone string `json:"OS-EXT-AZ:availability_zone"`
-	Hypervisor       string `json:"OS-EXT-SRV-ATTR:hypervisor_hostname"`
-	FlavorName       string // Populated from nested flavor.original_name
-	FlavorRAM        uint64 // Populated from nested flavor.ram
-	FlavorVCPUs      uint64 // Populated from nested flavor.vcpus
-	FlavorDisk       uint64 // Populated from nested flavor.disk
+	ID               string            `json:"id"`
+	Name             string            `json:"name"`
+	Status           string            `json:"status"`
+	TenantID         string            `json:"tenant_id"`
+	Created          string            `json:"created"`
+	AvailabilityZone string            `json:"OS-EXT-AZ:availability_zone"`
+	Hypervisor       string            `json:"OS-EXT-SRV-ATTR:hypervisor_hostname"`
+	FlavorName       string            // Populated from nested flavor.original_name
+	FlavorRAM        uint64            // Populated from nested flavor.ram
+	FlavorVCPUs      uint64            // Populated from nested flavor.vcpus
+	FlavorDisk       uint64            // Populated from nested flavor.disk
+	Metadata         map[string]string // Server metadata key-value pairs
+	Tags             []string          // Server tags
 }
 
 type NovaClient interface {
@@ -203,16 +205,18 @@ func (api *novaClient) ListProjectServers(ctx context.Context, projectID string)
 			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 		}
 
-		// Response structure with nested flavor
+		// Response structure with nested flavor, metadata, and tags
 		var list struct {
 			Servers []struct {
-				ID               string `json:"id"`
-				Name             string `json:"name"`
-				Status           string `json:"status"`
-				TenantID         string `json:"tenant_id"`
-				Created          string `json:"created"`
-				AvailabilityZone string `json:"OS-EXT-AZ:availability_zone"`
-				Hypervisor       string `json:"OS-EXT-SRV-ATTR:hypervisor_hostname"`
+				ID               string            `json:"id"`
+				Name             string            `json:"name"`
+				Status           string            `json:"status"`
+				TenantID         string            `json:"tenant_id"`
+				Created          string            `json:"created"`
+				AvailabilityZone string            `json:"OS-EXT-AZ:availability_zone"`
+				Hypervisor       string            `json:"OS-EXT-SRV-ATTR:hypervisor_hostname"`
+				Metadata         map[string]string `json:"metadata"`
+				Tags             []string          `json:"tags"`
 				Flavor           struct {
 					OriginalName string `json:"original_name"`
 					RAM          uint64 `json:"ram"`
@@ -244,6 +248,8 @@ func (api *novaClient) ListProjectServers(ctx context.Context, projectID string)
 				FlavorRAM:        s.Flavor.RAM,
 				FlavorVCPUs:      s.Flavor.VCPUs,
 				FlavorDisk:       s.Flavor.Disk,
+				Metadata:         s.Metadata,
+				Tags:             s.Tags,
 			})
 		}
 

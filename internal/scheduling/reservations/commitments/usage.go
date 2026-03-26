@@ -32,7 +32,29 @@ type VMUsageInfo struct {
 	AZ            string
 	Hypervisor    string
 	CreatedAt     time.Time
-	UsageMultiple uint64 // Memory in multiples of smallest flavor in the group
+	UsageMultiple uint64            // Memory in multiples of smallest flavor in the group
+	Metadata      map[string]string // Server metadata from Nova
+	Tags          []string          // Server tags from Nova
+}
+
+// flavorAttributes represents flavor information for a VM subresource.
+// Matches the format used by liquid-nova for consistency.
+type flavorAttributes struct {
+	Name           string  `json:"name"`
+	VCPUs          uint64  `json:"vcpu"`
+	MemoryMiB      uint64  `json:"ram_mib"`
+	DiskGiB        uint64  `json:"disk_gib"`
+	VideoMemoryMiB *uint64 `json:"video_ram_mib,omitempty"` // Not available yet
+}
+
+// subresourceAttributes is the Attributes payload for a VM subresource.
+// Matches the format used by liquid-nova for consistency.
+type subresourceAttributes struct {
+	Status   string            `json:"status"`
+	Metadata map[string]string `json:"metadata"`
+	Tags     []string          `json:"tags"`
+	Flavor   flavorAttributes  `json:"flavor"`
+	OSType   string            `json:"os_type"` // Not available yet, left empty
 }
 
 // UsageCalculator computes usage reports for Limes LIQUID API.
@@ -243,6 +265,8 @@ func (c *UsageCalculator) getProjectVMs(
 			Hypervisor:    server.Hypervisor,
 			CreatedAt:     createdAt,
 			UsageMultiple: usageMultiple,
+			Metadata:      server.Metadata,
+			Tags:          server.Tags,
 		}
 
 		vms = append(vms, vm)
@@ -481,25 +505,57 @@ func (c *UsageCalculator) buildUsageResponse(
 }
 
 // buildVMAttributes creates the attributes map for a VM subresource.
+// Follows the liquid-nova format with nested flavor structure.
 func buildVMAttributes(vm VMUsageInfo, commitmentID string) map[string]any {
-	attributes := map[string]any{
-		"name":       vm.Name,
-		"flavor":     vm.FlavorName,
-		"status":     vm.Status,
-		"hypervisor": vm.Hypervisor,
-		"ram":        vm.MemoryMB,
-		"vcpu":       vm.VCPUs,
-		"disk":       vm.DiskGB,
+	// Build metadata map (never nil for JSON)
+	metadata := vm.Metadata
+	if metadata == nil {
+		metadata = map[string]string{}
+	}
+
+	// Build tags slice (never nil for JSON)
+	tags := vm.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+
+	attributes := subresourceAttributes{
+		Status:   vm.Status,
+		Metadata: metadata,
+		Tags:     tags,
+		Flavor: flavorAttributes{
+			Name:      vm.FlavorName,
+			VCPUs:     vm.VCPUs,
+			MemoryMiB: vm.MemoryMB,
+			DiskGiB:   vm.DiskGB,
+			// VideoMemoryMiB: nil - not available yet
+		},
+		OSType: "", // Not available yet
+	}
+
+	// Convert to map[string]any and add extra fields
+	result := map[string]any{
+		"status":   attributes.Status,
+		"metadata": attributes.Metadata,
+		"tags":     attributes.Tags,
+		"flavor": map[string]any{
+			"name":     attributes.Flavor.Name,
+			"vcpu":     attributes.Flavor.VCPUs,
+			"ram_mib":  attributes.Flavor.MemoryMiB,
+			"disk_gib": attributes.Flavor.DiskGiB,
+			// video_ram_mib omitted when nil
+		},
+		"os_type": attributes.OSType,
 	}
 
 	// Add commitment_id - nil for PAYG, string for committed
 	if commitmentID != "" {
-		attributes["commitment_id"] = commitmentID
+		result["commitment_id"] = commitmentID
 	} else {
-		attributes["commitment_id"] = nil
+		result["commitment_id"] = nil
 	}
 
-	return attributes
+	return result
 }
 
 // countCommitmentStates returns the total number of commitments across all az:flavorGroup keys.

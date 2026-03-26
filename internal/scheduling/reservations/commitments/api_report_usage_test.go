@@ -735,10 +735,10 @@ func verifyUsageReport(t *testing.T, tc UsageReportTestCase, actual liquid.Servi
 					}
 				}
 
-				// Verify memory
-				if actualVM.RAM != expectedVM.MemoryMB {
+				// Verify memory (now nested in flavor)
+				if actualVM.Flavor.MemoryMiB != expectedVM.MemoryMB {
 					t.Errorf("Resource %s AZ %s VM %s: expected RAM %d MB, got %d MB",
-						instancesResourceName, azName, expectedVM.UUID, expectedVM.MemoryMB, actualVM.RAM)
+						instancesResourceName, azName, expectedVM.UUID, expectedVM.MemoryMB, actualVM.Flavor.MemoryMiB)
 				}
 			}
 		}
@@ -746,16 +746,23 @@ func verifyUsageReport(t *testing.T, tc UsageReportTestCase, actual liquid.Servi
 }
 
 // vmAttributes is used to parse the subresource attributes JSON.
+// Uses the liquid-nova format with nested flavor structure.
 type vmAttributes struct {
-	ID           string `json:"-"` // set from Subresource.ID
-	Name         string `json:"name"`
-	Flavor       string `json:"flavor"`
-	Status       string `json:"status"`
-	Hypervisor   string `json:"hypervisor"`
-	RAM          uint64 `json:"ram"`
-	VCPU         uint64 `json:"vcpu"`
-	Disk         uint64 `json:"disk"`
-	CommitmentID string `json:"commitment_id,omitempty"`
+	ID           string            `json:"-"` // set from Subresource.ID
+	Status       string            `json:"status"`
+	Metadata     map[string]string `json:"metadata"`
+	Tags         []string          `json:"tags"`
+	Flavor       vmFlavorAttrs     `json:"flavor"`
+	OSType       string            `json:"os_type"`
+	CommitmentID string            `json:"commitment_id,omitempty"`
+}
+
+// vmFlavorAttrs is the nested flavor info within vm attributes.
+type vmFlavorAttrs struct {
+	Name      string `json:"name"`
+	VCPUs     uint64 `json:"vcpu"`
+	MemoryMiB uint64 `json:"ram_mib"`
+	DiskGiB   uint64 `json:"disk_gib"`
 }
 
 // ============================================================================
