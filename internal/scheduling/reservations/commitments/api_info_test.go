@@ -30,7 +30,7 @@ func TestHandleInfo_KnowledgeNotReady(t *testing.T) {
 
 	api := NewAPI(k8sClient)
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/info", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/commitments/v1/info", http.NoBody)
 	w := httptest.NewRecorder()
 
 	api.HandleInfo(w, req)
@@ -63,7 +63,7 @@ func TestHandleInfo_MethodNotAllowed(t *testing.T) {
 	api := NewAPI(k8sClient)
 
 	// Use POST instead of GET
-	req := httptest.NewRequest(http.MethodPost, "/v1/info", http.NoBody)
+	req := httptest.NewRequest(http.MethodPost, "/commitments/v1/info", http.NoBody)
 	w := httptest.NewRecorder()
 
 	api.HandleInfo(w, req)
@@ -124,7 +124,7 @@ func TestHandleInfo_InvalidFlavorMemory(t *testing.T) {
 
 	api := NewAPI(k8sClient)
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/info", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/commitments/v1/info", http.NoBody)
 	w := httptest.NewRecorder()
 	api.HandleInfo(w, req)
 
@@ -197,7 +197,7 @@ func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
 
 	api := NewAPI(k8sClient)
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/info", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/commitments/v1/info", http.NoBody)
 	w := httptest.NewRecorder()
 	api.HandleInfo(w, req)
 

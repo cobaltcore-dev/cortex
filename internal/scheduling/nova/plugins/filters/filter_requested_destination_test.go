@@ -200,13 +200,14 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 			expectErr:     false,
 		},
 		{
-			name: "Filter by multiple aggregates",
+			name: "Filter by multiple aggregates with OR syntax (comma-separated)",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
 							Data: api.NovaRequestedDestination{
-								Aggregates: []string{"aggregate1", "aggregate3"},
+								// "aggregate1,aggregate3" means host must be in aggregate1 OR aggregate3
+								Aggregates: []string{"aggregate1,aggregate3"},
 							},
 						},
 					},
@@ -241,13 +242,93 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 			expectErr:     false,
 		},
 		{
-			name: "Filter by aggregates - hosts in both spec and status",
+			name: "Filter by multiple aggregates with AND logic",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
 							Data: api.NovaRequestedDestination{
+								// ["aggregate1", "aggregate2"] means host must be in aggregate1 AND aggregate2
 								Aggregates: []string{"aggregate1", "aggregate2"},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+				},
+			},
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}, {UUID: "aggregate2"}}},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate2"}}},
+				},
+			},
+			expectedHosts: []string{"host2"},
+			filteredHosts: []string{"host1", "host3"},
+			expectErr:     false,
+		},
+		{
+			name: "Filter by mixed AND/OR aggregates",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
+							Data: api.NovaRequestedDestination{
+								// Host must be in (aggregate1 OR aggregate2) AND aggregate3
+								Aggregates: []string{"aggregate1,aggregate2", "aggregate3"},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host2"},
+					{ComputeHost: "host3"},
+					{ComputeHost: "host4"},
+				},
+			},
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}, {UUID: "aggregate3"}}},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate2"}, {UUID: "aggregate3"}}},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate1"}}},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "host4"},
+					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "aggregate3"}}},
+				},
+			},
+			expectedHosts: []string{"host1", "host2"},
+			filteredHosts: []string{"host3", "host4"},
+			expectErr:     false,
+		},
+		{
+			name: "Filter by aggregates with OR syntax - hosts in both spec and status",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
+							Data: api.NovaRequestedDestination{
+								// "aggregate1,aggregate2" means host must be in aggregate1 OR aggregate2
+								Aggregates: []string{"aggregate1,aggregate2"},
 							},
 						},
 					},

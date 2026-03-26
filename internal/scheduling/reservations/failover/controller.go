@@ -684,7 +684,7 @@ func (c *FailoverReservationController) calculateVMsMissingFailover(
 		needed := requiredCount - currentCount
 		totalReservationsNeeded += needed
 
-		logger.V(2).Info("VM needs more failover reservations",
+		logger.V(1).Info("VM needs more failover reservations",
 			"vmUUID", vm.UUID,
 			"flavorName", vm.FlavorName,
 			"currentCount", currentCount,
