@@ -368,11 +368,10 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 			// Hypervisor not found - all older allocations will be checked via Nova API fallback
 			logger.Info("hypervisor CRD not found", "host", expectedHost)
 		} else {
-			// Build set of active VM UUIDs on this hypervisor for O(1) lookup
+			// Build set of all VM UUIDs on this hypervisor for O(1) lookup
+			// Include both active and inactive VMs - stopped/shelved VMs still consume the reservation slot
 			for _, inst := range hypervisor.Status.Instances {
-				if inst.Active {
-					hvInstanceSet[inst.ID] = true
-				}
+				hvInstanceSet[inst.ID] = true
 			}
 			logger.V(1).Info("fetched hypervisor instances", "host", expectedHost, "instanceCount", len(hvInstanceSet))
 		}

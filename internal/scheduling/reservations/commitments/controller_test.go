@@ -184,6 +184,18 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 			expectedHasGracePeriodAllocs: false,
 		},
 		{
+			name: "old allocation - inactive VM still counted (stopped/shelved)",
+			reservation: newTestCRReservation(map[string]metav1.Time{
+				"vm-stopped": oldTime,
+			}),
+			hypervisor: newTestHypervisorCRD("host-1", []hv1.Instance{
+				{ID: "vm-stopped", Name: "vm-stopped", Active: false}, // Inactive VM should still be found
+			}),
+			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
+			expectedStatusAllocations:    map[string]string{"vm-stopped": "host-1"},
+			expectedHasGracePeriodAllocs: false,
+		},
+		{
 			name: "old allocation - VM not on hypervisor CRD (no NovaClient fallback)",
 			reservation: newTestCRReservation(map[string]metav1.Time{
 				"vm-1": oldTime,
@@ -331,6 +343,8 @@ func newTestCRReservation(allocations map[string]metav1.Time) *v1alpha1.Reservat
 }
 
 // newTestHypervisorCRD creates a test Hypervisor CRD with instances.
+//
+//nolint:unparam // name parameter allows future test flexibility
 func newTestHypervisorCRD(name string, instances []hv1.Instance) *hv1.Hypervisor {
 	return &hv1.Hypervisor{
 		ObjectMeta: metav1.ObjectMeta{
