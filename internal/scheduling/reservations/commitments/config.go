@@ -59,6 +59,31 @@ type Config struct {
 	EnableReportCapacityAPI bool `json:"committedResourceEnableReportCapacityAPI"`
 }
 
+// ApplyDefaults fills in any unset values with defaults.
+func (c *Config) ApplyDefaults() {
+	defaults := DefaultConfig()
+	if c.RequeueIntervalActive == 0 {
+		c.RequeueIntervalActive = defaults.RequeueIntervalActive
+	}
+	if c.RequeueIntervalRetry == 0 {
+		c.RequeueIntervalRetry = defaults.RequeueIntervalRetry
+	}
+	if c.PipelineDefault == "" {
+		c.PipelineDefault = defaults.PipelineDefault
+	}
+	if c.SchedulerURL == "" {
+		c.SchedulerURL = defaults.SchedulerURL
+	}
+	if c.ChangeAPIWatchReservationsTimeout == 0 {
+		c.ChangeAPIWatchReservationsTimeout = defaults.ChangeAPIWatchReservationsTimeout
+	}
+	if c.ChangeAPIWatchReservationsPollInterval == 0 {
+		c.ChangeAPIWatchReservationsPollInterval = defaults.ChangeAPIWatchReservationsPollInterval
+	}
+	// Note: EnableChangeCommitmentsAPI, EnableReportUsageAPI, EnableReportCapacityAPI
+	// are booleans where false is a valid value, so we don't apply defaults for them
+}
+
 func DefaultConfig() Config {
 	return Config{
 		RequeueIntervalActive:                  5 * time.Minute,
