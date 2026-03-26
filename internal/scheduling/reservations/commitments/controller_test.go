@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -139,6 +140,211 @@ func TestCommitmentReservationController_Reconcile(t *testing.T) {
 		})
 	}
 }
+
+// ============================================================================
+// Test: reconcileAllocations
+// ============================================================================
+
+// Note: Full reconcileAllocations tests require mocking NovaClient, which uses
+// unexported types (nova.server, nova.migration). Tests for the Nova API path
+// would need to be placed in the nova package or the types would need to be exported.
+// For now, we test only the Hypervisor CRD path (when NovaClient is nil).
+
+func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheme: %v", err)
+	}
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add hypervisor scheme: %v", err)
+	}
+
+	now := time.Now()
+	recentTime := metav1.NewTime(now.Add(-5 * time.Minute)) // 5 minutes ago (within grace period)
+	oldTime := metav1.NewTime(now.Add(-30 * time.Minute))   // 30 minutes ago (past grace period)
+
+	tests := []struct {
+		name                         string
+		reservation                  *v1alpha1.Reservation
+		hypervisor                   *hv1.Hypervisor
+		config                       Config
+		expectedStatusAllocations    map[string]string
+		expectedHasGracePeriodAllocs bool
+	}{
+		{
+			name: "old allocation - VM found on hypervisor CRD",
+			reservation: newTestCRReservation(map[string]metav1.Time{
+				"vm-1": oldTime,
+			}),
+			hypervisor: newTestHypervisorCRD("host-1", []hv1.Instance{
+				{ID: "vm-1", Name: "vm-1", Active: true},
+			}),
+			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
+			expectedStatusAllocations:    map[string]string{"vm-1": "host-1"},
+			expectedHasGracePeriodAllocs: false,
+		},
+		{
+			name: "old allocation - VM not on hypervisor CRD (no NovaClient fallback)",
+			reservation: newTestCRReservation(map[string]metav1.Time{
+				"vm-1": oldTime,
+			}),
+			hypervisor:                   newTestHypervisorCRD("host-1", []hv1.Instance{}), // Empty
+			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
+			expectedStatusAllocations:    map[string]string{}, // Not confirmed
+			expectedHasGracePeriodAllocs: false,
+		},
+		{
+			name: "new allocation within grace period - no Nova client",
+			reservation: newTestCRReservation(map[string]metav1.Time{
+				"vm-1": recentTime,
+			}),
+			hypervisor:                   nil,
+			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
+			expectedStatusAllocations:    map[string]string{}, // Can't verify without Nova
+			expectedHasGracePeriodAllocs: true,
+		},
+		{
+			name: "mixed allocations - old verified via CRD, new in grace period",
+			reservation: newTestCRReservation(map[string]metav1.Time{
+				"vm-new": recentTime, // In grace period
+				"vm-old": oldTime,    // Past grace period
+			}),
+			hypervisor: newTestHypervisorCRD("host-1", []hv1.Instance{
+				{ID: "vm-old", Name: "vm-old", Active: true},
+			}),
+			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
+			expectedStatusAllocations:    map[string]string{"vm-old": "host-1"}, // Only old one confirmed via CRD
+			expectedHasGracePeriodAllocs: true,
+		},
+		{
+			name:                         "empty allocations - no work to do",
+			reservation:                  newTestCRReservation(map[string]metav1.Time{}),
+			hypervisor:                   nil,
+			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
+			expectedStatusAllocations:    map[string]string{},
+			expectedHasGracePeriodAllocs: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Build fake client with objects
+			objects := []client.Object{tt.reservation}
+			if tt.hypervisor != nil {
+				objects = append(objects, tt.hypervisor)
+			}
+
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objects...).
+				WithStatusSubresource(&v1alpha1.Reservation{}).
+				Build()
+
+			controller := &CommitmentReservationController{
+				Client:     k8sClient,
+				Scheme:     scheme,
+				Conf:       tt.config,
+				NovaClient: nil, // No NovaClient - testing Hypervisor CRD path only
+			}
+
+			ctx := WithNewGlobalRequestID(context.Background())
+			result, err := controller.reconcileAllocations(ctx, tt.reservation)
+			if err != nil {
+				t.Fatalf("reconcileAllocations() error = %v", err)
+			}
+
+			// Check grace period result
+			if result.HasAllocationsInGracePeriod != tt.expectedHasGracePeriodAllocs {
+				t.Errorf("expected HasAllocationsInGracePeriod=%v, got %v",
+					tt.expectedHasGracePeriodAllocs, result.HasAllocationsInGracePeriod)
+			}
+
+			// Re-fetch reservation to check updates
+			var updated v1alpha1.Reservation
+			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(tt.reservation), &updated); err != nil {
+				t.Fatalf("failed to get updated reservation: %v", err)
+			}
+
+			// Check status allocations
+			actualStatusAllocs := map[string]string{}
+			if updated.Status.CommittedResourceReservation != nil {
+				actualStatusAllocs = updated.Status.CommittedResourceReservation.Allocations
+			}
+
+			if len(actualStatusAllocs) != len(tt.expectedStatusAllocations) {
+				t.Errorf("expected %d status allocations, got %d: %v",
+					len(tt.expectedStatusAllocations), len(actualStatusAllocs), actualStatusAllocs)
+			}
+
+			for vmUUID, expectedHost := range tt.expectedStatusAllocations {
+				if actualHost, ok := actualStatusAllocs[vmUUID]; !ok {
+					t.Errorf("expected VM %s in status allocations", vmUUID)
+				} else if actualHost != expectedHost {
+					t.Errorf("VM %s: expected host %s, got %s", vmUUID, expectedHost, actualHost)
+				}
+			}
+		})
+	}
+}
+
+// newTestCRReservation creates a test CR reservation with allocations on "host-1".
+func newTestCRReservation(allocations map[string]metav1.Time) *v1alpha1.Reservation {
+	const host = "host-1"
+	specAllocs := make(map[string]v1alpha1.CommittedResourceAllocation)
+	for vmUUID, timestamp := range allocations {
+		specAllocs[vmUUID] = v1alpha1.CommittedResourceAllocation{
+			CreationTimestamp: timestamp,
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				"memory": resource.MustParse("4Gi"),
+				"cpu":    resource.MustParse("2"),
+			},
+		}
+	}
+
+	return &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-reservation",
+		},
+		Spec: v1alpha1.ReservationSpec{
+			Type:       v1alpha1.ReservationTypeCommittedResource,
+			TargetHost: host,
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				ProjectID:    "test-project",
+				ResourceName: "test-flavor",
+				Allocations:  specAllocs,
+			},
+		},
+		Status: v1alpha1.ReservationStatus{
+			Host: host,
+			Conditions: []metav1.Condition{
+				{
+					Type:   v1alpha1.ReservationConditionReady,
+					Status: metav1.ConditionTrue,
+					Reason: "ReservationActive",
+				},
+			},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
+				Allocations: make(map[string]string),
+			},
+		},
+	}
+}
+
+// newTestHypervisorCRD creates a test Hypervisor CRD with instances.
+func newTestHypervisorCRD(name string, instances []hv1.Instance) *hv1.Hypervisor {
+	return &hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Status: hv1.HypervisorStatus{
+			Instances: instances,
+		},
+	}
+}
+
+// ============================================================================
+// Test: reconcileInstanceReservation_Success (existing test)
+// ============================================================================
 
 func TestCommitmentReservationController_reconcileInstanceReservation_Success(t *testing.T) {
 	scheme := runtime.NewScheme()
