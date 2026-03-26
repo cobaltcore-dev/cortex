@@ -210,6 +210,12 @@ func parseMemoryToMB(memory string) uint64 {
 }
 
 func newNovaRequest(instanceUUID, projectID, flavorName, flavorGroup string, vcpus int, memory string, evacuation bool, hosts []string) api.ExternalSchedulerRequest { //nolint:unparam // vcpus varies in real usage
+	return newNovaRequestWithIntent(instanceUUID, projectID, flavorName, flavorGroup, vcpus, memory, "", evacuation, hosts)
+}
+
+// newNovaRequestWithIntent creates a nova request with a specific intent.
+// intentHint can be: "evacuate", "reserve_for_committed_resource", "reserve_for_failover", or "" for create.
+func newNovaRequestWithIntent(instanceUUID, projectID, flavorName, flavorGroup string, vcpus int, memory, intentHint string, evacuation bool, hosts []string) api.ExternalSchedulerRequest {
 	hostList := make([]api.ExternalSchedulerHost, len(hosts))
 	for i, h := range hosts {
 		hostList[i] = api.ExternalSchedulerHost{ComputeHost: h}
@@ -224,6 +230,10 @@ func newNovaRequest(instanceUUID, projectID, flavorName, flavorGroup string, vcp
 	if evacuation {
 		schedulerHints = map[string]any{
 			"_nova_check_type": []any{"evacuate"},
+		}
+	} else if intentHint != "" {
+		schedulerHints = map[string]any{
+			"_nova_check_type": intentHint,
 		}
 	}
 
@@ -781,6 +791,180 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 				LockReserved:            true,
 				IgnoredReservationTypes: tt.ignoredReservationTypes,
 			}
+
+			result, err := step.Run(slog.Default(), tt.request)
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+
+			for _, host := range tt.expectedHosts {
+				if _, ok := result.Activations[host]; !ok {
+					t.Errorf("expected host %s to be present in activations, but got %+v", host, result.Activations)
+				}
+			}
+
+			for _, host := range tt.filteredHosts {
+				if _, ok := result.Activations[host]; ok {
+					t.Errorf("expected host %s to be filtered out, but it was present", host)
+				}
+			}
+		})
+	}
+}
+
+func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T) {
+	scheme := buildTestScheme(t)
+
+	// Test that when scheduling a CR reservation (with reserve_for_committed_resource intent),
+	// other CR reservations from the same project+flavor group are NOT unlocked.
+	// This prevents overbooking when scheduling multiple CR reservations.
+	tests := []struct {
+		name          string
+		hypervisors   []*hv1.Hypervisor
+		reservations  []*v1alpha1.Reservation
+		request       api.ExternalSchedulerRequest
+		opts          FilterHasEnoughCapacityOpts
+		expectedHosts []string
+		filteredHosts []string
+	}{
+		{
+			name: "CR reservation scheduling: same project+flavor reservations stay locked (prevents overbooking)",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "16", "8", "32Gi", "16Gi"), // 8 CPU free
+				newHypervisor("host2", "16", "8", "32Gi", "16Gi"), // 8 CPU free
+			},
+			reservations: []*v1alpha1.Reservation{
+				// Existing CR reservation on host1 for same project+flavor group
+				newCommittedReservation("existing-cr", "host1", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil, nil),
+			},
+			// Request with reserve_for_committed_resource intent (scheduling a new CR reservation)
+			request:       newNovaRequestWithIntent("new-reservation-uuid", "project-A", "m1.large", "gp-1", 4, "8Gi", "reserve_for_committed_resource", false, []string{"host1", "host2"}),
+			opts:          FilterHasEnoughCapacityOpts{LockReserved: false}, // Note: LockReserved is false, but intent overrides
+			expectedHosts: []string{"host2"},                                // host1 blocked because existing-cr stays locked
+			filteredHosts: []string{"host1"},
+		},
+		{
+			name: "Normal VM scheduling: same project+flavor reservations ARE unlocked",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "16", "8", "32Gi", "16Gi"), // 8 CPU free
+				newHypervisor("host2", "16", "8", "32Gi", "16Gi"), // 8 CPU free
+			},
+			reservations: []*v1alpha1.Reservation{
+				// Existing CR reservation on host1 for same project+flavor group
+				newCommittedReservation("existing-cr", "host1", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil, nil),
+			},
+			// Normal VM create request (no special intent) - CR reservation should be unlocked
+			request:       newNovaRequest("vm-instance-123", "project-A", "m1.large", "gp-1", 4, "8Gi", false, []string{"host1", "host2"}),
+			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
+			expectedHosts: []string{"host1", "host2"}, // host1 passes because existing-cr is unlocked for matching project+flavor
+			filteredHosts: []string{},
+		},
+		{
+			name: "CR reservation scheduling: different project reservations stay locked (as expected)",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "16", "8", "32Gi", "16Gi"), // 8 CPU free
+				newHypervisor("host2", "16", "8", "32Gi", "16Gi"), // 8 CPU free
+			},
+			reservations: []*v1alpha1.Reservation{
+				// Existing CR reservation on host1 for different project
+				newCommittedReservation("other-project-cr", "host1", "host1", "project-B", "m1.large", "gp-1", "8", "16Gi", nil, nil),
+			},
+			// Request with reserve_for_committed_resource intent
+			request:       newNovaRequestWithIntent("new-reservation-uuid", "project-A", "m1.large", "gp-1", 4, "8Gi", "reserve_for_committed_resource", false, []string{"host1", "host2"}),
+			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
+			expectedHosts: []string{"host2"},
+			filteredHosts: []string{"host1"}, // host1 blocked by other project's reservation (would be blocked anyway)
+		},
+		{
+			name: "CR reservation scheduling: multiple reservations - none unlocked",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "32", "0", "64Gi", "0"), // 32 CPU free
+			},
+			reservations: []*v1alpha1.Reservation{
+				// Three existing CR reservations on host1 for same project+flavor group
+				newCommittedReservation("cr-1", "host1", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil, nil),
+				newCommittedReservation("cr-2", "host1", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil, nil),
+				newCommittedReservation("cr-3", "host1", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil, nil),
+			},
+			// Request with reserve_for_committed_resource intent, needs 10 CPU
+			// After blocking all 3 reservations (24 CPU), only 8 CPU free -> should fail
+			request:       newNovaRequestWithIntent("new-reservation-uuid", "project-A", "m1.large", "gp-1", 10, "20Gi", "reserve_for_committed_resource", false, []string{"host1"}),
+			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
+			expectedHosts: []string{},
+			filteredHosts: []string{"host1"}, // All reservations stay locked, not enough capacity
+		},
+		{
+			name: "Normal VM scheduling: multiple reservations - all unlocked for same project+flavor",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "32", "0", "64Gi", "0"), // 32 CPU free
+			},
+			reservations: []*v1alpha1.Reservation{
+				// Three existing CR reservations on host1 for same project+flavor group
+				newCommittedReservation("cr-1", "host1", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil, nil),
+				newCommittedReservation("cr-2", "host1", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil, nil),
+				newCommittedReservation("cr-3", "host1", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil, nil),
+			},
+			// Normal VM create request, needs 10 CPU
+			// All 3 reservations unlocked for matching project+flavor -> 32 CPU free -> should pass
+			request:       newNovaRequest("vm-instance-123", "project-A", "m1.large", "gp-1", 10, "20Gi", false, []string{"host1"}),
+			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
+			expectedHosts: []string{"host1"}, // All reservations unlocked, enough capacity
+			filteredHosts: []string{},
+		},
+		{
+			name: "CR reservation scheduling: IgnoredReservationTypes config CANNOT bypass intent protection",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "16", "8", "32Gi", "16Gi"), // 8 CPU free
+			},
+			reservations: []*v1alpha1.Reservation{
+				// Existing CR reservation on host1 blocks all 8 free CPU
+				newCommittedReservation("existing-cr", "host1", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil, nil),
+			},
+			// Request with reserve_for_committed_resource intent
+			// Even with IgnoredReservationTypes set to ignore CR, the intent should still block
+			request: newNovaRequestWithIntent("new-reservation-uuid", "project-A", "m1.large", "gp-1", 4, "8Gi", "reserve_for_committed_resource", false, []string{"host1"}),
+			opts: FilterHasEnoughCapacityOpts{
+				LockReserved: false,
+				// Normally this would ignore CR reservations, but intent should override this
+				IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
+			},
+			expectedHosts: []string{},        // host1 blocked because intent overrides IgnoredReservationTypes
+			filteredHosts: []string{"host1"}, // The CR reservation stays locked despite IgnoredReservationTypes
+		},
+		{
+			name: "Normal VM scheduling: IgnoredReservationTypes config DOES work for normal VMs",
+			hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", "16", "8", "32Gi", "16Gi"), // 8 CPU free
+			},
+			reservations: []*v1alpha1.Reservation{
+				// Existing CR reservation on host1 blocks all 8 free CPU
+				newCommittedReservation("existing-cr", "host1", "host1", "project-B", "m1.large", "gp-1", "8", "16Gi", nil, nil),
+			},
+			// Normal VM create request (different project, so unlocking via project match won't work)
+			// But IgnoredReservationTypes should make it work
+			request: newNovaRequest("vm-instance-123", "project-A", "m1.large", "gp-1", 4, "8Gi", false, []string{"host1"}),
+			opts: FilterHasEnoughCapacityOpts{
+				LockReserved:            false,
+				IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
+			},
+			expectedHosts: []string{"host1"}, // CR reservation ignored via IgnoredReservationTypes
+			filteredHosts: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objects := make([]client.Object, 0, len(tt.hypervisors)+len(tt.reservations))
+			for _, h := range tt.hypervisors {
+				objects = append(objects, h.DeepCopy())
+			}
+			for _, r := range tt.reservations {
+				objects = append(objects, r.DeepCopy())
+			}
+
+			step := &FilterHasEnoughCapacity{}
+			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+			step.Options = tt.opts
 
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {

@@ -96,12 +96,6 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			continue // Only consider active reservations (Ready=True).
 		}
 
-		// Check if this reservation type should be ignored
-		if slices.Contains(s.Options.IgnoredReservationTypes, reservation.Spec.Type) {
-			traceLog.Debug("ignoring reservation type", "type", reservation.Spec.Type, "reservation", reservation.Name)
-			continue
-		}
-
 		// Handle reservation based on its type.
 		switch reservation.Spec.Type {
 		case v1alpha1.ReservationTypeCommittedResource, "": // Empty string for backward compatibility
@@ -110,12 +104,29 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 				continue // Not handled by us (no resource group set).
 			}
 
-			// For committed resource reservations: unlock resources only if:
-			// 1. Project ID matches
-			// 2. ResourceGroup matches the flavor's hw_version
-			if !s.Options.LockReserved &&
+			// Check if this is a CR reservation scheduling request.
+			// If so, we should NOT unlock any CR reservations to prevent overbooking.
+			// CR capacity should only be unlocked for actual VM scheduling.
+			// IMPORTANT: This check MUST happen before IgnoredReservationTypes check
+			// to ensure CR reservation scheduling cannot bypass reservation locking.
+			intent, err := request.GetIntent()
+			switch {
+			case err == nil && intent == api.ReserveForCommittedResourceIntent:
+				traceLog.Debug("keeping CR reservation locked for CR reservation scheduling",
+					"reservation", reservation.Name,
+					"intent", intent)
+				// Don't continue - fall through to block the resources
+			case slices.Contains(s.Options.IgnoredReservationTypes, reservation.Spec.Type):
+				// Check IgnoredReservationTypes AFTER intent check for CR reservations.
+				// This ensures CR reservation scheduling always respects existing CR reservations.
+				traceLog.Debug("ignoring CR reservation type per config", "reservation", reservation.Name)
+				continue
+			case !s.Options.LockReserved &&
+				// For committed resource reservations: unlock resources only if:
+				// 1. Project ID matches
+				// 2. ResourceGroup matches the flavor's hw_version
 				reservation.Spec.CommittedResourceReservation.ProjectID == request.Spec.Data.ProjectID &&
-				reservation.Spec.CommittedResourceReservation.ResourceGroup == request.Spec.Data.Flavor.Data.ExtraSpecs["hw_version"] {
+				reservation.Spec.CommittedResourceReservation.ResourceGroup == request.Spec.Data.Flavor.Data.ExtraSpecs["hw_version"]:
 				traceLog.Info("unlocking resources reserved by matching committed resource reservation with allocation",
 					"reservation", reservation.Name,
 					"instanceUUID", request.Spec.Data.InstanceUUID,
@@ -125,6 +136,11 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			}
 
 		case v1alpha1.ReservationTypeFailover:
+			// Check if failover reservations should be ignored
+			if slices.Contains(s.Options.IgnoredReservationTypes, reservation.Spec.Type) {
+				traceLog.Debug("ignoring failover reservation type per config", "reservation", reservation.Name)
+				continue
+			}
 			// For failover reservations: if the requested VM is contained in the allocations map
 			// AND this is an evacuation request, unlock the resources.
 			// We only unlock during evacuations because:
