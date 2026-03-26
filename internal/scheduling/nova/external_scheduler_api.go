@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand"
 	"net/http"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -24,6 +25,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
+// Custom configuration for the Nova external scheduler api.
+type HTTPAPIConfig struct {
+	// Number of top hosts to shuffle for evacuation requests.
+	// Set to 0 or negative to disable shuffling.
+	EvacuationShuffleK int `json:"evacuationShuffleK,omitempty"`
+	// NovaLimitHostsToRequest, if true, will filter the Nova scheduler response
+	// to only include hosts that were in the original request.
+	NovaLimitHostsToRequest bool `json:"novaLimitHostsToRequest,omitempty"`
+}
+
 type HTTPAPIDelegate interface {
 	// Process the decision from the API. Should create and return the updated decision.
 	ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error
@@ -32,12 +43,6 @@ type HTTPAPIDelegate interface {
 type HTTPAPI interface {
 	// Bind the server handlers.
 	Init(*http.ServeMux)
-}
-
-type HTTPAPIConfig struct {
-	// NovaLimitHostsToRequest, if true, will filter the Nova scheduler response
-	// to only include hosts that were in the original request.
-	NovaLimitHostsToRequest bool `json:"novaLimitHostsToRequest,omitempty"`
 }
 
 type httpAPI struct {
@@ -114,6 +119,26 @@ func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerReque
 	default:
 		return "", fmt.Errorf("unsupported hypervisor_type: %s", hvType)
 	}
+}
+
+// shuffleTopHosts randomly reorders the first k hosts if the request
+// is an evacuation. This helps distribute evacuated VMs across multiple hosts
+// rather than concentrating them on the single "best" host.
+func shuffleTopHosts(hosts []string, k int) []string {
+	if k <= 0 {
+		return hosts
+	}
+	n := min(k, len(hosts))
+	if n <= 1 {
+		return hosts
+	}
+	result := make([]string, len(hosts))
+	copy(result, hosts)
+	rand.Shuffle(n, func(i, j int) {
+		result[i], result[j] = result[j], result[i]
+	})
+	slog.Info("shuffled top hosts for evacuation", "k", n, "hosts", result[:n])
+	return result
 }
 
 // Limit the external scheduler response to the hosts provided in the  external
@@ -234,6 +259,12 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		hosts = limitHostsToRequest(requestData, hosts)
 		slog.Info("limited hosts to request",
 			"hosts", hosts, "originalHosts", decision.Status.Result.OrderedHosts)
+	}
+	// This is a hack to address the problem that Nova only uses the first host in hosts for evacuation requests.
+	// Only for evacuation we shuffle the first k hosts to ensure that we do not get stuck on a single host
+	intent, err := requestData.GetIntent()
+	if err == nil && intent == api.EvacuateIntent {
+		hosts = shuffleTopHosts(hosts, httpAPI.config.EvacuationShuffleK)
 	}
 	response := api.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")

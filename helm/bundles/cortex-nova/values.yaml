@@ -141,6 +141,9 @@ cortex-scheduling-controllers:
     # If true, the external scheduler API will limit the list of hosts in its
     # response to those included in the scheduling request.
     novaLimitHostsToRequest: true
+    # Number of top hosts to shuffle for evacuation requests.
+    # Set to 0 or negative to disable shuffling.
+    evacuationShuffleK: 3
     # CommittedResourceFlavorGroupPipelines maps flavor group IDs to pipeline names for CR reservations
     # This allows different scheduling strategies per flavor group (e.g., HANA vs GP)
     committedResourceFlavorGroupPipelines:
