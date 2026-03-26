@@ -64,11 +64,19 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Serialize all change-commitments requests (shared with syncer)
-	api.crMutex.Lock()
-	defer api.crMutex.Unlock()
-
+	// Serialize all change-commitments requests (shared with syncer via distributed lock)
 	ctx := reservations.WithGlobalRequestID(context.Background(), "committed-resource-"+requestID)
+	_, unlock, err := api.crMutex.Lock(ctx)
+	if err != nil {
+		logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/change-commitments")
+		logger.Error(err, "failed to acquire distributed lock for change-commitments")
+		statusCode = http.StatusServiceUnavailable
+		http.Error(w, "Failed to acquire lock, please retry later: "+err.Error(), statusCode)
+		api.recordMetrics(req, resp, statusCode, startTime)
+		return
+	}
+	defer unlock()
+
 	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/change-commitments")
 
 	// Only accept POST method

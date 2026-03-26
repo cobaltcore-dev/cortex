@@ -43,14 +43,14 @@ type Syncer struct {
 	client.Client
 	// Monitor for metrics
 	monitor *SyncerMonitor
-	// Shared mutex to serialize CR state changes with the change-commitments API
-	crMutex *CRMutex
+	// Shared mutex to serialize CR state changes with the change-commitments API (distributed across pods)
+	crMutex CRMutexInterface
 }
 
-func NewSyncer(k8sClient client.Client, monitor *SyncerMonitor, crMutex *CRMutex) *Syncer {
+func NewSyncer(k8sClient client.Client, monitor *SyncerMonitor, crMutex CRMutexInterface) *Syncer {
 	// If no shared mutex provided, create a local one (for backwards compatibility in tests)
 	if crMutex == nil {
-		crMutex = &CRMutex{}
+		crMutex = &LocalCRMutex{}
 	}
 	return &Syncer{
 		CommitmentsClient: NewCommitmentsClient(),
@@ -193,14 +193,20 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 // The mutex is held for the entire operation to ensure atomicity - the Limes state
 // snapshot must be applied without interference from concurrent change-commitments API calls.
 func (s *Syncer) SyncReservations(ctx context.Context) error {
-	// Acquire the shared CR mutex for the entire sync operation.
-	// This ensures the Limes state snapshot is applied atomically.
-	s.crMutex.Lock()
-	defer s.crMutex.Unlock()
-
 	// Create context with request ID for this sync execution
 	runID := fmt.Sprintf("sync-%d", time.Now().Unix())
 	ctx = WithNewGlobalRequestID(ctx)
+
+	// Acquire the shared CR mutex for the entire sync operation (distributed across pods).
+	// This ensures the Limes state snapshot is applied atomically.
+	_, unlock, err := s.crMutex.Lock(ctx)
+	if err != nil {
+		logger := LoggerFromContext(ctx).WithValues("component", "syncer", "runID", runID)
+		logger.Error(err, "failed to acquire distributed lock for sync")
+		return fmt.Errorf("failed to acquire distributed lock: %w", err)
+	}
+	defer unlock()
+
 	logger := LoggerFromContext(ctx).WithValues("component", "syncer", "runID", runID)
 
 	logger.Info("starting commitment sync with sync interval", "interval", DefaultSyncerConfig().SyncInterval)

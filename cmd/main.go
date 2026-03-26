@@ -309,8 +309,20 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Shared mutex for serializing CR state changes between the syncer and change-commitments API.
-	// This ensures atomicity when applying Limes state snapshots.
-	crMutex := &commitments.CRMutex{}
+	// This uses Kubernetes Leases for distributed coordination across pods/deployments.
+	// Both cortex-nova-scheduling (API) and cortex-nova-knowledge (syncer) pods will
+	// use the same Lease resource to serialize CR state changes.
+	crMutexConfig := commitments.DefaultDistributedMutexConfig()
+	// Use the scheduling domain namespace for the lease (typically where cortex CRDs live)
+	crMutexConfig.LeaseNamespace = "default" // Will be overridden by pod's namespace
+	if ns := os.Getenv("POD_NAMESPACE"); ns != "" {
+		crMutexConfig.LeaseNamespace = ns
+	}
+	// Use pod name as holder identity for debugging
+	if podName := os.Getenv("POD_NAME"); podName != "" {
+		crMutexConfig.HolderIdentity = podName
+	}
+	var crMutex commitments.CRMutexInterface = commitments.NewDistributedMutex(multiclusterClient, crMutexConfig)
 
 	// The pipeline monitor is a bucket for all metrics produced during the
 	// execution of individual steps (see step monitor below) and the overall
