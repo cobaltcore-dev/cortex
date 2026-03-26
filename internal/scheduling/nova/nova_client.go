@@ -14,6 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+	"github.com/sapcc/go-bits/liquidapi"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -53,6 +54,7 @@ type ServerDetail struct {
 	FlavorDisk       uint64            // Populated from nested flavor.disk
 	Metadata         map[string]string // Server metadata key-value pairs
 	Tags             []string          // Server tags
+	OSType           string            // OS type determined by OSTypeProber
 }
 
 type NovaClient interface {
@@ -71,6 +73,8 @@ type NovaClient interface {
 type novaClient struct {
 	// Authenticated OpenStack service client to fetch the data.
 	sc *gophercloud.ServiceClient
+	// OS type prober for determining VM operating system type (for billing).
+	osTypeProber *liquidapi.OSTypeProber
 }
 
 func NewNovaClient() NovaClient {
@@ -111,6 +115,16 @@ func (api *novaClient) Init(ctx context.Context, client client.Client, conf Nova
 		// We need that to find placement resource providers for hypervisors.
 		Microversion: "2.53",
 	}
+
+	// Initialize OS type prober for determining VM operating system type.
+	// Uses existing provider client to access Glance (image) and Cinder (volume) APIs.
+	eo := gophercloud.EndpointOpts{Availability: gophercloud.Availability(authenticatedKeystone.Availability())}
+	api.osTypeProber, err = liquidapi.NewOSTypeProber(provider, eo)
+	if err != nil {
+		slog.Warn("failed to initialize OS type prober - os_type will be empty", "error", err)
+		// Non-fatal - continue without OS type probing
+	}
+
 	return nil
 }
 
@@ -205,7 +219,7 @@ func (api *novaClient) ListProjectServers(ctx context.Context, projectID string)
 			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 		}
 
-		// Response structure with nested flavor, metadata, and tags
+		// Response structure with nested flavor, metadata, tags, image, and volumes
 		var list struct {
 			Servers []struct {
 				ID               string            `json:"id"`
@@ -223,6 +237,12 @@ func (api *novaClient) ListProjectServers(ctx context.Context, projectID string)
 					VCPUs        uint64 `json:"vcpus"`
 					Disk         uint64 `json:"disk"`
 				} `json:"flavor"`
+				// For OS type probing
+				Image           map[string]any `json:"image"`
+				AttachedVolumes []struct {
+					ID                  string `json:"id"`
+					DeleteOnTermination bool   `json:"delete_on_termination"`
+				} `json:"os-extended-volumes:volumes_attached"`
 			} `json:"servers"`
 			Links []struct {
 				Rel  string `json:"rel"`
@@ -236,6 +256,22 @@ func (api *novaClient) ListProjectServers(ctx context.Context, projectID string)
 
 		// Convert to ServerDetail
 		for _, s := range list.Servers {
+			// Probe OS type if prober is available
+			osType := ""
+			if api.osTypeProber != nil {
+				// Build a minimal servers.Server for the prober
+				vols := make([]servers.AttachedVolume, len(s.AttachedVolumes))
+				for i, v := range s.AttachedVolumes {
+					vols[i] = servers.AttachedVolume{ID: v.ID}
+				}
+				proberServer := servers.Server{
+					ID:              s.ID,
+					Image:           s.Image,
+					AttachedVolumes: vols,
+				}
+				osType = api.osTypeProber.Get(ctx, proberServer)
+			}
+
 			result = append(result, ServerDetail{
 				ID:               s.ID,
 				Name:             s.Name,
@@ -250,6 +286,7 @@ func (api *novaClient) ListProjectServers(ctx context.Context, projectID string)
 				FlavorDisk:       s.Flavor.Disk,
 				Metadata:         s.Metadata,
 				Tags:             s.Tags,
+				OSType:           osType,
 			})
 		}
 

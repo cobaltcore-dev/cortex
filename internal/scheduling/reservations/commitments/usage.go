@@ -35,6 +35,7 @@ type VMUsageInfo struct {
 	UsageMultiple uint64            // Memory in multiples of smallest flavor in the group
 	Metadata      map[string]string // Server metadata from Nova
 	Tags          []string          // Server tags from Nova
+	OSType        string            // OS type from OSTypeProber (for billing)
 }
 
 // flavorAttributes represents flavor information for a VM subresource.
@@ -267,6 +268,7 @@ func (c *UsageCalculator) getProjectVMs(
 			UsageMultiple: usageMultiple,
 			Metadata:      server.Metadata,
 			Tags:          server.Tags,
+			OSType:        server.OSType,
 		}
 
 		vms = append(vms, vm)
@@ -530,7 +532,7 @@ func buildVMAttributes(vm VMUsageInfo, commitmentID string) map[string]any {
 			DiskGiB:   vm.DiskGB,
 			// VideoMemoryMiB: nil - not available yet
 		},
-		OSType: "", // Not available yet
+		OSType: vm.OSType,
 	}
 
 	// Convert to map[string]any and add extra fields
@@ -545,7 +547,7 @@ func buildVMAttributes(vm VMUsageInfo, commitmentID string) map[string]any {
 			"disk_gib": attributes.Flavor.DiskGiB,
 			// video_ram_mib omitted when nil
 		},
-		"os_type": attributes.OSType,
+		"os_type": vm.OSType,
 	}
 
 	// Add commitment_id - nil for PAYG, string for committed
