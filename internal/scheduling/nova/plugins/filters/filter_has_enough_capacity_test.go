@@ -912,7 +912,7 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 			filteredHosts: []string{},
 		},
 		{
-			name: "CR reservation scheduling: IgnoredReservationTypes config CANNOT bypass intent protection",
+			name: "CR reservation scheduling: IgnoredReservationTypes config DOES bypass intent protection (safety override)",
 			hypervisors: []*hv1.Hypervisor{
 				newHypervisor("host1", "16", "8", "32Gi", "16Gi"), // 8 CPU free
 			},
@@ -921,15 +921,15 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 				newCommittedReservation("existing-cr", "host1", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil, nil),
 			},
 			// Request with reserve_for_committed_resource intent
-			// Even with IgnoredReservationTypes set to ignore CR, the intent should still block
+			// IgnoredReservationTypes is a safety flag that overrides everything, including intent
 			request: newNovaRequestWithIntent("new-reservation-uuid", "project-A", "m1.large", "gp-1", 4, "8Gi", "reserve_for_committed_resource", false, []string{"host1"}),
 			opts: FilterHasEnoughCapacityOpts{
 				LockReserved: false,
-				// Normally this would ignore CR reservations, but intent should override this
+				// IgnoredReservationTypes is a safety override - ignores CR even for CR scheduling
 				IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
 			},
-			expectedHosts: []string{},        // host1 blocked because intent overrides IgnoredReservationTypes
-			filteredHosts: []string{"host1"}, // The CR reservation stays locked despite IgnoredReservationTypes
+			expectedHosts: []string{"host1"}, // CR reservation is ignored via IgnoredReservationTypes (safety override)
+			filteredHosts: []string{},
 		},
 		{
 			name: "Normal VM scheduling: IgnoredReservationTypes config DOES work for normal VMs",
