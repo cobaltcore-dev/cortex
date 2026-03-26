@@ -196,6 +196,9 @@ func (api *novaClient) GetServerMigrations(ctx context.Context, id string) ([]mi
 
 // ListProjectServers retrieves all servers for a project with detailed info.
 func (api *novaClient) ListProjectServers(ctx context.Context, projectID string) ([]ServerDetail, error) {
+	if api.sc == nil {
+		return nil, fmt.Errorf("nova client not initialized - call Init first")
+	}
 	// Build URL with pagination support
 	initialURL := api.sc.Endpoint + "servers/detail?all_tenants=true&tenant_id=" + projectID
 	var nextURL = &initialURL
@@ -237,8 +240,9 @@ func (api *novaClient) ListProjectServers(ctx context.Context, projectID string)
 					VCPUs        uint64 `json:"vcpus"`
 					Disk         uint64 `json:"disk"`
 				} `json:"flavor"`
-				// For OS type probing
-				Image           map[string]any `json:"image"`
+				// For OS type probing - use json.RawMessage because Nova returns
+				// either a map (for image-booted VMs) or empty string "" (for volume-booted VMs)
+				Image           json.RawMessage `json:"image"`
 				AttachedVolumes []struct {
 					ID                  string `json:"id"`
 					DeleteOnTermination bool   `json:"delete_on_termination"`
@@ -259,6 +263,11 @@ func (api *novaClient) ListProjectServers(ctx context.Context, projectID string)
 			// Probe OS type if prober is available
 			osType := ""
 			if api.osTypeProber != nil {
+				// Parse image field - Nova returns either a map or empty string ""
+				var imageMap map[string]any
+				if len(s.Image) > 0 && s.Image[0] == '{' {
+					_ = json.Unmarshal(s.Image, &imageMap)
+				}
 				// Build a minimal servers.Server for the prober
 				vols := make([]servers.AttachedVolume, len(s.AttachedVolumes))
 				for i, v := range s.AttachedVolumes {
@@ -266,7 +275,7 @@ func (api *novaClient) ListProjectServers(ctx context.Context, projectID string)
 				}
 				proberServer := servers.Server{
 					ID:              s.ID,
-					Image:           s.Image,
+					Image:           imageMap,
 					AttachedVolumes: vols,
 				}
 				osType = api.osTypeProber.Get(ctx, proberServer)
