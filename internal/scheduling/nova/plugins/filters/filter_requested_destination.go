@@ -14,28 +14,8 @@ import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
-type FilterRequestedDestinationStepOpts struct {
-	// IgnoredAggregates specifies a list of aggregates to ignore when filtering
-	// hosts based on the requested destination. This can be used to exclude
-	// certain aggregates from consideration, for example AZ aggregates
-	// that are already considered by the availability zone filter.
-	IgnoredAggregates []string
-	// IgnoredHostnames specifies a list of hostnames to ignore when filtering
-	// hosts based on the requested destination. This can be used to exclude
-	// certain hosts from consideration, for example if they are known to be
-	// unsuitable for the workload.
-	IgnoredHostnames []string
-}
-
-// Validate the options to ensure they are correct before running the weigher.
-func (o FilterRequestedDestinationStepOpts) Validate() error {
-	// No specific validation needed for this filter, but we could add checks here
-	// if we wanted to enforce certain constraints on the options.
-	return nil
-}
-
 type FilterRequestedDestinationStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, FilterRequestedDestinationStepOpts]
+	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // processRequestedAggregates filters hosts based on the requested aggregates.
@@ -43,8 +23,6 @@ type FilterRequestedDestinationStep struct {
 // ALL elements to pass. Each element can contain comma-separated UUIDs which use
 // OR logic, meaning the host only needs to match ONE of the UUIDs in that group.
 // Example: ["agg1", "agg2,agg3"] means host must be in agg1 AND (agg2 OR agg3).
-// Respects the IgnoredAggregates option and returns early without filtering
-// if all requested aggregates are in the ignored list.
 func (s *FilterRequestedDestinationStep) processRequestedAggregates(
 	traceLog *slog.Logger,
 	aggregates []string,
@@ -53,17 +31,6 @@ func (s *FilterRequestedDestinationStep) processRequestedAggregates(
 ) {
 
 	if len(aggregates) == 0 {
-		return
-	}
-	// Filter out ignored aggregates
-	aggregatesToConsider := make([]string, 0, len(aggregates))
-	for _, agg := range aggregates {
-		if !slices.Contains(s.Options.IgnoredAggregates, agg) {
-			aggregatesToConsider = append(aggregatesToConsider, agg)
-		}
-	}
-	if len(aggregatesToConsider) == 0 {
-		traceLog.Info("all aggregates in requested_destination are in the ignored list, skipping aggregate filtering")
 		return
 	}
 	for host := range activations {
@@ -80,7 +47,7 @@ func (s *FilterRequestedDestinationStep) processRequestedAggregates(
 		// All outer elements must match (AND logic)
 		// Each element can be comma-separated UUIDs (OR logic within the group)
 		allMatch := true
-		for _, reqAggGroup := range aggregatesToConsider {
+		for _, reqAggGroup := range aggregates {
 			reqAggs := strings.Split(reqAggGroup, ",")
 			groupMatch := false
 			for _, reqAgg := range reqAggs {
@@ -100,8 +67,6 @@ func (s *FilterRequestedDestinationStep) processRequestedAggregates(
 				"filtered out host not in requested_destination aggregates",
 				"host", host, "hostAggregates", hvAggregateUUIDs,
 				"requestedAggregates", aggregates,
-				"ignoredAggregates", s.Options.IgnoredAggregates,
-				"aggregatesConsidered", aggregatesToConsider,
 			)
 			continue
 		}
@@ -110,8 +75,7 @@ func (s *FilterRequestedDestinationStep) processRequestedAggregates(
 }
 
 // processRequestedHost filters hosts based on the requested specific host.
-// It removes all hosts except the one matching the requested hostname,
-// respecting the IgnoredHostnames option.
+// It removes all hosts except the one matching the requested hostname.
 func (s *FilterRequestedDestinationStep) processRequestedHost(
 	traceLog *slog.Logger,
 	host string,
@@ -120,10 +84,6 @@ func (s *FilterRequestedDestinationStep) processRequestedHost(
 
 	if host == "" {
 		traceLog.Info("no specific host in requested_destination, skipping host filtering")
-		return
-	}
-	if slices.Contains(s.Options.IgnoredHostnames, host) {
-		traceLog.Info("requested_destination host is in the ignored hostnames list, skipping host filtering", "host", host)
 		return
 	}
 	for h := range activations {
@@ -139,8 +99,7 @@ func (s *FilterRequestedDestinationStep) processRequestedHost(
 // Run filters hosts based on the requested destination specified in the request.
 // The requested destination can include a specific host, aggregates, or both.
 // When both are specified, aggregate filtering is applied first, followed by
-// host filtering. This filter respects the IgnoredAggregates and IgnoredHostnames
-// options to skip filtering for specific aggregates or hosts.
+// host filtering.
 func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	rd := request.Spec.Data.RequestedDestination
