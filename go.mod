@@ -18,6 +18,13 @@ require (
 )
 
 require (
+	github.com/databus23/goslo.policy v0.0.0-20250326134918-4afc2c56a903 // indirect
+	github.com/gofrs/uuid/v5 v5.4.0 // indirect
+	github.com/gorilla/mux v1.8.1 // indirect
+	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
+)
+
+require (
 	cel.dev/expr v0.25.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect

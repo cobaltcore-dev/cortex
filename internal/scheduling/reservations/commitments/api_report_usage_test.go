@@ -656,11 +656,21 @@ func verifyUsageReport(t *testing.T, tc UsageReportTestCase, actual liquid.Servi
 	t.Helper()
 
 	for resourceName, expectedResource := range tc.Expected {
+		// The test uses _ram resources in Expected, but:
+		// - _ram resource has usage but NO subresources
+		// - _instances resource has usage (count) AND subresources (VM details)
+		// So we check _ram for usage and derive _instances for VM subresources
+
 		actualResource, exists := actual.Resources[liquid.ResourceName(resourceName)]
 		if !exists {
 			t.Errorf("Resource %s not found in response", resourceName)
 			continue
 		}
+
+		// Derive the instances resource name from the ram resource name
+		// hw_version_hana_1_ram -> hw_version_hana_1_instances
+		instancesResourceName := resourceName[:len(resourceName)-4] + "_instances" // replace "_ram" with "_instances"
+		actualInstancesResource := actual.Resources[liquid.ResourceName(instancesResourceName)]
 
 		for azName, expectedAZ := range expectedResource.PerAZ {
 			az := liquid.AvailabilityZone(azName)
@@ -670,22 +680,33 @@ func verifyUsageReport(t *testing.T, tc UsageReportTestCase, actual liquid.Servi
 				continue
 			}
 
-			// Verify usage
+			// Verify RAM usage
 			if actualAZ.Usage != expectedAZ.Usage {
 				t.Errorf("Resource %s AZ %s: expected usage %d, got %d",
 					resourceName, azName, expectedAZ.Usage, actualAZ.Usage)
 			}
 
+			// VM subresources are on the _instances resource, not _ram
+			if actualInstancesResource == nil {
+				t.Errorf("Instances resource %s not found", instancesResourceName)
+				continue
+			}
+			actualInstancesAZ, exists := actualInstancesResource.PerAZ[az]
+			if !exists {
+				t.Errorf("AZ %s not found in instances resource %s", azName, instancesResourceName)
+				continue
+			}
+
 			// Verify VM count
-			if len(actualAZ.Subresources) != len(expectedAZ.VMs) {
+			if len(actualInstancesAZ.Subresources) != len(expectedAZ.VMs) {
 				t.Errorf("Resource %s AZ %s: expected %d VMs, got %d",
-					resourceName, azName, len(expectedAZ.VMs), len(actualAZ.Subresources))
+					instancesResourceName, azName, len(expectedAZ.VMs), len(actualInstancesAZ.Subresources))
 				continue
 			}
 
 			// Build actual VM map for comparison (parse attributes)
 			actualVMs := make(map[string]vmAttributes)
-			for _, sub := range actualAZ.Subresources {
+			for _, sub := range actualInstancesAZ.Subresources {
 				var attrs vmAttributes
 				attrs.ID = sub.ID
 				if err := json.Unmarshal(sub.Attributes, &attrs); err != nil {
@@ -699,7 +720,7 @@ func verifyUsageReport(t *testing.T, tc UsageReportTestCase, actual liquid.Servi
 			for _, expectedVM := range expectedAZ.VMs {
 				actualVM, exists := actualVMs[expectedVM.UUID]
 				if !exists {
-					t.Errorf("Resource %s AZ %s: VM %s not found", resourceName, azName, expectedVM.UUID)
+					t.Errorf("Resource %s AZ %s: VM %s not found", instancesResourceName, azName, expectedVM.UUID)
 					continue
 				}
 
@@ -707,17 +728,17 @@ func verifyUsageReport(t *testing.T, tc UsageReportTestCase, actual liquid.Servi
 				if actualVM.CommitmentID != expectedVM.CommitmentID {
 					if expectedVM.CommitmentID == "" {
 						t.Errorf("Resource %s AZ %s VM %s: expected PAYG (empty), got commitment %s",
-							resourceName, azName, expectedVM.UUID, actualVM.CommitmentID)
+							instancesResourceName, azName, expectedVM.UUID, actualVM.CommitmentID)
 					} else {
 						t.Errorf("Resource %s AZ %s VM %s: expected commitment %s, got %s",
-							resourceName, azName, expectedVM.UUID, expectedVM.CommitmentID, actualVM.CommitmentID)
+							instancesResourceName, azName, expectedVM.UUID, expectedVM.CommitmentID, actualVM.CommitmentID)
 					}
 				}
 
-				// Verify memory
-				if actualVM.RAM != expectedVM.MemoryMB {
+				// Verify memory (now nested in flavor)
+				if actualVM.Flavor.MemoryMiB != expectedVM.MemoryMB {
 					t.Errorf("Resource %s AZ %s VM %s: expected RAM %d MB, got %d MB",
-						resourceName, azName, expectedVM.UUID, expectedVM.MemoryMB, actualVM.RAM)
+						instancesResourceName, azName, expectedVM.UUID, expectedVM.MemoryMB, actualVM.Flavor.MemoryMiB)
 				}
 			}
 		}
@@ -725,16 +746,23 @@ func verifyUsageReport(t *testing.T, tc UsageReportTestCase, actual liquid.Servi
 }
 
 // vmAttributes is used to parse the subresource attributes JSON.
+// Uses the liquid-nova format with nested flavor structure.
 type vmAttributes struct {
-	ID           string `json:"-"` // set from Subresource.ID
-	Name         string `json:"name"`
-	Flavor       string `json:"flavor"`
-	Status       string `json:"status"`
-	Hypervisor   string `json:"hypervisor"`
-	RAM          uint64 `json:"ram"`
-	VCPU         uint64 `json:"vcpu"`
-	Disk         uint64 `json:"disk"`
-	CommitmentID string `json:"commitment_id,omitempty"`
+	ID           string            `json:"-"` // set from Subresource.ID
+	Status       string            `json:"status"`
+	Metadata     map[string]string `json:"metadata"`
+	Tags         []string          `json:"tags"`
+	Flavor       vmFlavorAttrs     `json:"flavor"`
+	OSType       string            `json:"os_type"`
+	CommitmentID string            `json:"commitment_id,omitempty"`
+}
+
+// vmFlavorAttrs is the nested flavor info within vm attributes.
+type vmFlavorAttrs struct {
+	Name      string `json:"name"`
+	VCPUs     uint64 `json:"vcpu"`
+	MemoryMiB uint64 `json:"ram_mib"`
+	DiskGiB   uint64 `json:"disk_gib"`
 }
 
 // ============================================================================
