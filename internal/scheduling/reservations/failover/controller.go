@@ -269,6 +269,7 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 	}
 	logger.V(1).Info("found VMs from source", "count", len(vms))
 
+	// todo: vms are vms from all AZs, we should consdier processing them by AZ (sequencial or in parallel) but not mixing them together
 	// List only failover reservations using label selector
 	var reservationList v1alpha1.ReservationList
 	if err := c.List(ctx, &reservationList, client.MatchingLabels{
@@ -335,6 +336,7 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 		"duration", duration.Round(time.Millisecond),
 		"requeueAfter", requeueAfter,
 		"totalVMs", len(vms),
+		"totalReservations", len(failoverReservations),
 		"vmsMissingFailover", summary.vmsMissingFailover,
 		"vmsProcessed", summary.vmsProcessed,
 		"reservationsNeeded", summary.reservationsNeeded,
