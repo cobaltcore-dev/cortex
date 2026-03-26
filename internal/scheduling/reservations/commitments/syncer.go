@@ -203,7 +203,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	ctx = WithNewGlobalRequestID(ctx)
 	logger := LoggerFromContext(ctx).WithValues("component", "syncer", "runID", runID)
 
-	logger.Info("starting commitment sync", "syncInterval", s.syncInterval)
+	logger.Info("starting commitment sync")
 
 	// Record sync run
 	if s.monitor != nil {
