@@ -53,12 +53,26 @@ func (r *Runner) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, 
 	return ctrl.Result{}, nil
 }
 
+// MinInterval is the minimum allowed interval for task runners to prevent panics from time.NewTicker(0).
+const MinInterval = 1 * time.Millisecond
+
 // Start starts the task runner, which will send events at the specified interval.
 func (r *Runner) Start(ctx context.Context) error {
 	log := log.FromContext(ctx)
-	log.Info("starting task runner", "name", r.Name, "interval", r.Interval)
 
-	ticker := time.NewTicker(r.Interval)
+	// Safety: ensure interval is at least MinInterval to prevent tight loops or panics
+	interval := r.Interval
+	if interval < MinInterval {
+		log.Info("task runner interval too low, using minimum",
+			"name", r.Name,
+			"configuredInterval", r.Interval,
+			"minInterval", MinInterval)
+		interval = MinInterval
+	}
+
+	log.Info("starting task runner", "name", r.Name, "interval", interval)
+
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	defer close(r.eventCh)
 

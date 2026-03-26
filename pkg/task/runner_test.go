@@ -251,6 +251,33 @@ func TestRunner_SetupWithManager_EventChannelCreation(t *testing.T) {
 	}
 }
 
+func TestRunner_Start_ZeroInterval_UsesMinimum(t *testing.T) {
+	runner := &Runner{
+		Name:     "test-task",
+		Interval: 0, // Zero interval should use MinInterval (1ms)
+		eventCh:  make(chan event.GenericEvent, 10),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	// Run Start in goroutine since it blocks until context is cancelled
+	go func() {
+		// This should NOT panic even with 0 interval
+		if err := runner.Start(ctx); err != nil {
+			t.Logf("Start returned error: %v (expected on context cancellation)", err)
+		}
+	}()
+
+	// Wait for initial event with generous timeout to avoid flakiness on slow machines
+	select {
+	case <-runner.eventCh:
+		// Success - got initial event without panic
+	case <-time.After(1 * time.Second):
+		t.Error("Expected to receive initial event")
+	}
+}
+
 func TestRunner_EventStructure(t *testing.T) {
 	runner := &Runner{
 		Name:     "test-task",

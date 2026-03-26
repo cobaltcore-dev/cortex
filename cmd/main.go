@@ -490,25 +490,7 @@ func main() {
 		monitor := reservations.NewMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&monitor)
 		commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
-		commitmentsDefaults := commitments.DefaultConfig()
-		if commitmentsConfig.RequeueIntervalActive == 0 {
-			commitmentsConfig.RequeueIntervalActive = commitmentsDefaults.RequeueIntervalActive
-		}
-		if commitmentsConfig.RequeueIntervalRetry == 0 {
-			commitmentsConfig.RequeueIntervalRetry = commitmentsDefaults.RequeueIntervalRetry
-		}
-		if commitmentsConfig.PipelineDefault == "" {
-			commitmentsConfig.PipelineDefault = commitmentsDefaults.PipelineDefault
-		}
-		if commitmentsConfig.SchedulerURL == "" {
-			commitmentsConfig.SchedulerURL = commitmentsDefaults.SchedulerURL
-		}
-		if commitmentsConfig.ChangeAPIWatchReservationsTimeout == 0 {
-			commitmentsConfig.ChangeAPIWatchReservationsTimeout = commitmentsDefaults.ChangeAPIWatchReservationsTimeout
-		}
-		if commitmentsConfig.ChangeAPIWatchReservationsPollInterval == 0 {
-			commitmentsConfig.ChangeAPIWatchReservationsPollInterval = commitmentsDefaults.ChangeAPIWatchReservationsPollInterval
-		}
+		commitmentsConfig.ApplyDefaults()
 
 		if err := (&commitments.CommitmentReservationController{
 			Client: multiclusterClient,
@@ -676,10 +658,7 @@ func main() {
 		must.Succeed(metrics.Registry.Register(syncerMonitor))
 		syncer := commitments.NewSyncer(multiclusterClient, syncerMonitor)
 		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
-		syncerDefaults := commitments.DefaultSyncerConfig()
-		if syncerConfig.SyncInterval == 0 {
-			syncerConfig.SyncInterval = syncerDefaults.SyncInterval
-		}
+		syncerConfig.ApplyDefaults()
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: syncerConfig.SyncInterval,
