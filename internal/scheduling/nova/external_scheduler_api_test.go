@@ -512,6 +512,7 @@ func TestShuffleTopHosts(t *testing.T) {
 		hosts             []string
 		k                 int
 		unchangedTailFrom int // index from which hosts should be unchanged (-1 if all can change)
+		expectUnchanged   bool
 	}{
 		{
 			name:  "empty hosts returns empty",
@@ -531,16 +532,16 @@ func TestShuffleTopHosts(t *testing.T) {
 			unchangedTailFrom: 3,
 		},
 		{
-			name:              "k=0 uses default of 3",
-			hosts:             []string{"host1", "host2", "host3", "host4", "host5"},
-			k:                 0,
-			unchangedTailFrom: 3,
+			name:            "k=0 disables shuffling",
+			hosts:           []string{"host1", "host2", "host3", "host4", "host5"},
+			k:               0,
+			expectUnchanged: true,
 		},
 		{
-			name:              "negative k uses default of 3",
-			hosts:             []string{"host1", "host2", "host3", "host4", "host5"},
-			k:                 -1,
-			unchangedTailFrom: 3,
+			name:            "negative k disables shuffling",
+			hosts:           []string{"host1", "host2", "host3", "host4", "host5"},
+			k:               -1,
+			expectUnchanged: true,
 		},
 		{
 			name:              "k larger than hosts shuffles all",
@@ -565,6 +566,13 @@ func TestShuffleTopHosts(t *testing.T) {
 				if tt.hosts[i] != h {
 					t.Errorf("original slice modified at %d: expected %s, got %s", i, h, tt.hosts[i])
 				}
+			}
+			// When k <= 0, expect the same slice returned (no copy)
+			if tt.expectUnchanged {
+				if len(result) > 0 && &result[0] != &tt.hosts[0] {
+					t.Error("expected same slice returned when k <= 0")
+				}
+				return
 			}
 			// Verify tail unchanged
 			if tt.unchangedTailFrom >= 0 {

@@ -27,7 +27,8 @@ import (
 
 // Custom configuration for the Nova external scheduler api.
 type HTTPAPIConfig struct {
-	// Number of top hosts to shuffle for evacuation requests. Defaults to 3.
+	// Number of top hosts to shuffle for evacuation requests.
+	// Set to 0 or negative to disable shuffling.
 	EvacuationShuffleK int `json:"evacuationShuffleK,omitempty"`
 	// NovaLimitHostsToRequest, if true, will filter the Nova scheduler response
 	// to only include hosts that were in the original request.
@@ -125,7 +126,7 @@ func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerReque
 // rather than concentrating them on the single "best" host.
 func shuffleTopHosts(hosts []string, k int) []string {
 	if k <= 0 {
-		k = 3
+		return hosts
 	}
 	n := min(k, len(hosts))
 	if n <= 1 {

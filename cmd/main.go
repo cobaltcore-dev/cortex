@@ -329,6 +329,9 @@ func main() {
 			os.Exit(1)
 		}
 		novaAPIConfig := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
+		setupLog.Info("loaded nova API config",
+			"evacuationShuffleK", novaAPIConfig.EvacuationShuffleK,
+			"novaLimitHostsToRequest", novaAPIConfig.NovaLimitHostsToRequest)
 		nova.NewAPI(novaAPIConfig, filterWeigherController).Init(mux)
 
 		// Detector pipeline controller setup.
