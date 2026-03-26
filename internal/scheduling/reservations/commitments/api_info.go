@@ -92,10 +92,11 @@ type resourceAttributes struct {
 }
 
 // buildServiceInfo constructs the ServiceInfo response with metadata for all flavor groups.
-// For each flavor group that accepts commitments, three resources are registered:
-// - _ram: RAM resource (unit = multiples of smallest flavor RAM, HandlesCommitments=true)
+// For each flavor group, three resources are registered:
+// - _ram: RAM resource (unit = multiples of smallest flavor RAM, HandlesCommitments=true only if fixed ratio)
 // - _cores: CPU cores resource (unit = 1, HandlesCommitments=false)
 // - _instances: Instance count resource (unit = 1, HandlesCommitments=false)
+// All flavor groups report usage; only those with fixed RAM/core ratio accept commitments.
 func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (liquid.ServiceInfo, error) {
 	// Get all flavor groups from Knowledge CRDs
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
@@ -111,11 +112,11 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 	// Build resources map
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo)
 	for groupName, groupData := range flavorGroups {
-		// Only handle commitments for groups with a fixed RAM/core ratio
+		// Determine if this group accepts commitments (requires fixed RAM/core ratio)
 		handlesCommitments := FlavorGroupAcceptsCommitments(&groupData)
-		if !handlesCommitments {
-			continue // Skip groups that don't accept commitments
-		}
+
+		// All flavor groups are registered for usage reporting.
+		// Only those with a fixed RAM/core ratio have HandlesCommitments=true.
 
 		flavorNames := make([]string, 0, len(groupData.Flavors))
 		for _, flavor := range groupData.Flavors {
@@ -155,12 +156,12 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 				groupData.SmallestFlavor.MemoryMB,
 				flavorListStr,
 			),
-			Unit:                ramUnit,                // Non-standard unit: multiples of smallest flavor RAM
-			Topology:            liquid.AZAwareTopology, // Commitments are per-AZ
-			NeedsResourceDemand: false,                  // Capacity planning out of scope for now
-			HasCapacity:         true,                   // We report capacity via /commitments/v1/report-capacity
-			HasQuota:            false,                  // No quota enforcement as of now
-			HandlesCommitments:  true,                   // RAM is the primary commitment resource
+			Unit:                ramUnit, // Non-standard unit: multiples of smallest flavor RAM
+			Topology:            liquid.AZAwareTopology,
+			NeedsResourceDemand: false,
+			HasCapacity:         true, // We report capacity via /commitments/v1/report-capacity
+			HasQuota:            false,
+			HandlesCommitments:  handlesCommitments, // Only groups with fixed ratio accept commitments
 			Attributes:          attrsJSON,
 		}
 

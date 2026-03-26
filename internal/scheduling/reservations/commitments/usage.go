@@ -350,7 +350,8 @@ type azUsageData struct {
 }
 
 // buildUsageResponse constructs the Liquid API ServiceUsageReport.
-// Only flavor groups that accept commitments are included in the report.
+// All flavor groups are included in the report; commitment assignment only applies
+// to groups with fixed RAM/core ratio (those that accept commitments).
 // For each flavor group, three resources are reported: _ram, _cores, _instances.
 func (c *UsageCalculator) buildUsageResponse(
 	vms []VMUsageInfo,
@@ -359,7 +360,7 @@ func (c *UsageCalculator) buildUsageResponse(
 	allAZs []liquid.AvailabilityZone,
 	infoVersion int64,
 ) liquid.ServiceUsageReport {
-	// Initialize resources map for flavor groups that accept commitments
+	// Initialize resources map for all flavor groups
 	resources := make(map[liquid.ResourceName]*liquid.ResourceUsageReport)
 
 	// Group VMs by flavor group and AZ for aggregation
@@ -403,12 +404,9 @@ func (c *UsageCalculator) buildUsageResponse(
 		)
 	}
 
-	// Build ResourceUsageReport for each flavor group that accepts commitments
-	for flavorGroupName, groupData := range flavorGroups {
-		// Only report usage for flavor groups that accept commitments
-		if !FlavorGroupAcceptsCommitments(&groupData) {
-			continue
-		}
+	// Build ResourceUsageReport for all flavor groups (not just those with fixed ratio)
+	for flavorGroupName := range flavorGroups {
+		// All flavor groups are included in usage reporting.
 
 		// === 1. RAM Resource ===
 		ramResourceName := liquid.ResourceName(ResourceNameRAM(flavorGroupName))

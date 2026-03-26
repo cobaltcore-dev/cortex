@@ -25,9 +25,9 @@ func NewCapacityCalculator(client client.Client) *CapacityCalculator {
 	return &CapacityCalculator{client: client}
 }
 
-// CalculateCapacity computes per-AZ capacity for all flavor groups that accept commitments.
-// Only flavor groups with a fixed RAM/core ratio are included in the report.
+// CalculateCapacity computes per-AZ capacity for all flavor groups.
 // For each flavor group, three resources are reported: _ram, _cores, _instances.
+// All flavor groups are included, not just those with fixed RAM/core ratio.
 func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.ServiceCapacityReport, error) {
 	// Get all flavor groups from Knowledge CRDs
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
@@ -42,17 +42,14 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.Serv
 		infoVersion = knowledgeCRD.Status.LastContentChange.Unix()
 	}
 
-	// Build capacity report per flavor group (only for groups that accept CRs)
+	// Build capacity report for all flavor groups
 	report := liquid.ServiceCapacityReport{
 		InfoVersion: infoVersion,
 		Resources:   make(map[liquid.ResourceName]*liquid.ResourceCapacityReport),
 	}
 
 	for groupName, groupData := range flavorGroups {
-		// Only report capacity for flavor groups that accept commitments
-		if !FlavorGroupAcceptsCommitments(&groupData) {
-			continue
-		}
+		// All flavor groups are included in capacity reporting (not just those with fixed ratio).
 
 		// Calculate per-AZ capacity (placeholder: capacity=0 for all resources)
 		azCapacity, err := c.calculateAZCapacity(ctx, groupName, groupData)
