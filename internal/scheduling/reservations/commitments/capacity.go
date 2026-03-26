@@ -67,12 +67,17 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.Serv
 		}
 
 		// === 2. Cores Resource ===
+		// NOTE: Copying RAM capacity is only valid while capacity=0 (placeholder).
+		// When real capacity is implemented, derive cores capacity with unit conversion
+		// (e.g., cores = RAM / ramCoreRatio). See calculateAZCapacity for details.
 		coresResourceName := liquid.ResourceName(ResourceNameCores(groupName))
 		report.Resources[coresResourceName] = &liquid.ResourceCapacityReport{
 			PerAZ: c.copyAZCapacity(azCapacity),
 		}
 
 		// === 3. Instances Resource ===
+		// NOTE: Same as cores - copying is only valid while capacity=0 (placeholder).
+		// When real capacity is implemented, derive instances capacity appropriately.
 		instancesResourceName := liquid.ResourceName(ResourceNameInstances(groupName))
 		report.Resources[instancesResourceName] = &liquid.ResourceCapacityReport{
 			PerAZ: c.copyAZCapacity(azCapacity),
@@ -109,7 +114,15 @@ func (c *CapacityCalculator) calculateAZCapacity(
 		return nil, fmt.Errorf("failed to get availability zones: %w", err)
 	}
 
-	// Create report entry for each AZ with placeholder capacity=0
+	// Create report entry for each AZ with placeholder capacity=0.
+	//
+	// NOTE: When implementing real capacity calculation here, you MUST also update
+	// the copying logic in CalculateCapacity() for _cores and _instances resources.
+	// Those resources use different units (vCPUs and VM count) than _ram (memory multiples),
+	// so the capacity values cannot be simply copied - they require unit conversion:
+	//   - _cores capacity = RAM capacity / ramCoreRatio
+	//   - _instances capacity = needs its own derivation logic
+	//
 	// TODO: Calculate actual capacity from Reservation CRDs or host resources
 	// TODO: Calculate actual usage from VM allocations
 	result := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport)
