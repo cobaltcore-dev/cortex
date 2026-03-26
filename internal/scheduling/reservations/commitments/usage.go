@@ -38,26 +38,6 @@ type VMUsageInfo struct {
 	OSType        string            // OS type from OSTypeProber (for billing)
 }
 
-// flavorAttributes represents flavor information for a VM subresource.
-// Matches the format used by liquid-nova for consistency.
-type flavorAttributes struct {
-	Name           string  `json:"name"`
-	VCPUs          uint64  `json:"vcpu"`
-	MemoryMiB      uint64  `json:"ram_mib"`
-	DiskGiB        uint64  `json:"disk_gib"`
-	VideoMemoryMiB *uint64 `json:"video_ram_mib,omitempty"` // Not available yet
-}
-
-// subresourceAttributes is the Attributes payload for a VM subresource.
-// Matches the format used by liquid-nova for consistency.
-type subresourceAttributes struct {
-	Status   string            `json:"status"`
-	Metadata map[string]string `json:"metadata"`
-	Tags     []string          `json:"tags"`
-	Flavor   flavorAttributes  `json:"flavor"`
-	OSType   string            `json:"os_type"` // Not available yet, left empty
-}
-
 // UsageCalculator computes usage reports for Limes LIQUID API.
 type UsageCalculator struct {
 	client     client.Client
@@ -521,30 +501,15 @@ func buildVMAttributes(vm VMUsageInfo, commitmentID string) map[string]any {
 		tags = []string{}
 	}
 
-	attributes := subresourceAttributes{
-		Status:   vm.Status,
-		Metadata: metadata,
-		Tags:     tags,
-		Flavor: flavorAttributes{
-			Name:      vm.FlavorName,
-			VCPUs:     vm.VCPUs,
-			MemoryMiB: vm.MemoryMB,
-			DiskGiB:   vm.DiskGB,
-			// VideoMemoryMiB: nil - not available yet
-		},
-		OSType: vm.OSType,
-	}
-
-	// Convert to map[string]any and add extra fields
 	result := map[string]any{
-		"status":   attributes.Status,
-		"metadata": attributes.Metadata,
-		"tags":     attributes.Tags,
+		"status":   vm.Status,
+		"metadata": metadata,
+		"tags":     tags,
 		"flavor": map[string]any{
-			"name":     attributes.Flavor.Name,
-			"vcpu":     attributes.Flavor.VCPUs,
-			"ram_mib":  attributes.Flavor.MemoryMiB,
-			"disk_gib": attributes.Flavor.DiskGiB,
+			"name":     vm.FlavorName,
+			"vcpu":     vm.VCPUs,
+			"ram_mib":  vm.MemoryMB,
+			"disk_gib": vm.DiskGB,
 			// video_ram_mib omitted when nil
 		},
 		"os_type": vm.OSType,
