@@ -264,6 +264,7 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 	syncer := &Syncer{
 		CommitmentsClient: mockClient,
 		Client:            k8sClient,
+		crMutex:           &CRMutex{},
 	}
 
 	err := syncer.SyncReservations(context.Background())
@@ -400,6 +401,7 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 	syncer := &Syncer{
 		CommitmentsClient: mockClient,
 		Client:            k8sClient,
+		crMutex:           &CRMutex{},
 	}
 
 	err := syncer.SyncReservations(context.Background())
@@ -499,6 +501,7 @@ func TestSyncer_SyncReservations_UnitMismatch(t *testing.T) {
 		CommitmentsClient: mockClient,
 		Client:            k8sClient,
 		monitor:           monitor,
+		crMutex:           &CRMutex{},
 	}
 
 	err := syncer.SyncReservations(context.Background())
@@ -582,6 +585,7 @@ func TestSyncer_SyncReservations_UnitMatch(t *testing.T) {
 		CommitmentsClient: mockClient,
 		Client:            k8sClient,
 		monitor:           monitor,
+		crMutex:           &CRMutex{},
 	}
 
 	err := syncer.SyncReservations(context.Background())
@@ -666,6 +670,7 @@ func TestSyncer_SyncReservations_EmptyUUID(t *testing.T) {
 	syncer := &Syncer{
 		CommitmentsClient: mockClient,
 		Client:            k8sClient,
+		crMutex:           &CRMutex{},
 	}
 
 	err := syncer.SyncReservations(context.Background())

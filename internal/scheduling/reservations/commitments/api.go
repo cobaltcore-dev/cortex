@@ -21,6 +21,31 @@ type UsageNovaClient interface {
 	ListProjectServers(ctx context.Context, projectID string) ([]nova.ServerDetail, error)
 }
 
+// CRMutex serializes CR state changes between the syncer and change-commitments API.
+// This ensures that the syncer's Limes state snapshot is applied atomically without
+// interference from concurrent change-commitments API calls. The Lock and Unlock
+// methods are no-ops if the receiver is nil, allowing safe use when either component
+// is disabled.
+// TODO: If the syncer and API are moved to separate pods, replace with a K8s
+// distributed lock (e.g., Lease-based coordination).
+type CRMutex struct {
+	mu sync.Mutex
+}
+
+// Lock acquires the mutex. No-op if receiver is nil.
+func (m *CRMutex) Lock() {
+	if m != nil {
+		m.mu.Lock()
+	}
+}
+
+// Unlock releases the mutex. No-op if receiver is nil.
+func (m *CRMutex) Unlock() {
+	if m != nil {
+		m.mu.Unlock()
+	}
+}
+
 // HTTPAPI implements Limes LIQUID commitment validation endpoints.
 type HTTPAPI struct {
 	client          client.Client
@@ -30,15 +55,19 @@ type HTTPAPI struct {
 	usageMonitor    ReportUsageAPIMonitor
 	capacityMonitor ReportCapacityAPIMonitor
 	infoMonitor     InfoAPIMonitor
-	// Mutex to serialize change-commitments requests
-	changeMutex sync.Mutex
+	// Shared mutex to serialize CR state changes with the syncer
+	crMutex *CRMutex
 }
 
 func NewAPI(client client.Client) *HTTPAPI {
-	return NewAPIWithConfig(client, DefaultConfig(), nil)
+	return NewAPIWithConfig(client, DefaultConfig(), nil, nil)
 }
 
-func NewAPIWithConfig(client client.Client, config Config, novaClient UsageNovaClient) *HTTPAPI {
+func NewAPIWithConfig(client client.Client, config Config, novaClient UsageNovaClient, crMutex *CRMutex) *HTTPAPI {
+	// If no shared mutex provided, create a local one (for backwards compatibility in tests)
+	if crMutex == nil {
+		crMutex = &CRMutex{}
+	}
 	return &HTTPAPI{
 		client:          client,
 		config:          config,
@@ -47,6 +76,7 @@ func NewAPIWithConfig(client client.Client, config Config, novaClient UsageNovaC
 		usageMonitor:    NewReportUsageAPIMonitor(),
 		capacityMonitor: NewReportCapacityAPIMonitor(),
 		infoMonitor:     NewInfoAPIMonitor(),
+		crMutex:         crMutex,
 	}
 }
 

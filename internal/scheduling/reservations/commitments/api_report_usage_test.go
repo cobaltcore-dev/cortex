@@ -537,7 +537,7 @@ func newUsageTestEnv(
 	}
 
 	// Create API with mock Nova client
-	api := NewAPIWithConfig(k8sClient, DefaultConfig(), novaClient)
+	api := NewAPIWithConfig(k8sClient, DefaultConfig(), novaClient, nil)
 	mux := http.NewServeMux()
 	registry := prometheus.NewRegistry()
 	api.Init(mux, registry, log.Log)

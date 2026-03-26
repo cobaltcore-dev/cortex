@@ -308,6 +308,10 @@ func main() {
 	// API endpoint.
 	mux := http.NewServeMux()
 
+	// Shared mutex for serializing CR state changes between the syncer and change-commitments API.
+	// This ensures atomicity when applying Limes state snapshots.
+	crMutex := &commitments.CRMutex{}
+
 	// The pipeline monitor is a bucket for all metrics produced during the
 	// execution of individual steps (see step monitor below) and the overall
 	// pipeline.
@@ -343,7 +347,7 @@ func main() {
 
 		// Initialize commitments API for LIQUID interface (with Nova client for usage reporting)
 		commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
-		commitmentsAPI := commitments.NewAPIWithConfig(multiclusterClient, commitmentsConfig, novaClient)
+		commitmentsAPI := commitments.NewAPIWithConfig(multiclusterClient, commitmentsConfig, novaClient, crMutex)
 		commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
 
 		deschedulingsController := &nova.DetectorPipelineController{
@@ -671,7 +675,7 @@ func main() {
 		setupLog.Info("starting commitments syncer")
 		syncerMonitor := commitments.NewSyncerMonitor()
 		must.Succeed(metrics.Registry.Register(syncerMonitor))
-		syncer := commitments.NewSyncer(multiclusterClient, syncerMonitor)
+		syncer := commitments.NewSyncer(multiclusterClient, syncerMonitor, crMutex)
 		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
 		syncerDefaults := commitments.DefaultSyncerConfig()
 		if syncerConfig.SyncInterval == 0 {
