@@ -47,27 +47,30 @@ func ResourceNameInstances(flavorGroup string) string {
 }
 
 // getFlavorGroupNameFromResource extracts the flavor group name from a LIQUID resource name.
-// Supports all resource types: _ram, _cores, _instances
+// Only accepts _ram resources since CommitmentState is RAM-based.
+// Callers handling _cores or _instances must use a different approach.
 func getFlavorGroupNameFromResource(resourceName string) (string, error) {
 	if !strings.HasPrefix(resourceName, resourceNamePrefix) {
 		return "", fmt.Errorf("invalid resource name: %s (missing prefix)", resourceName)
 	}
 
-	// Try each known suffix
-	for _, suffix := range []string{ResourceSuffixRAM, ResourceSuffixCores, ResourceSuffixInstances} {
-		if strings.HasSuffix(resourceName, suffix) {
-			// Remove prefix and suffix
-			name := strings.TrimPrefix(resourceName, resourceNamePrefix)
-			name = strings.TrimSuffix(name, suffix)
-			// Validate that the extracted group name is not empty
-			if name == "" {
-				return "", fmt.Errorf("invalid resource name: %s (empty group name)", resourceName)
-			}
-			return name, nil
-		}
+	// Only accept _ram suffix - commitments are RAM-based and CommitmentState
+	// carries TotalMemoryBytes. Accepting _cores or _instances here would
+	// silently reinterpret non-RAM amounts as RAM, producing wrong state.
+	if !strings.HasSuffix(resourceName, ResourceSuffixRAM) {
+		return "", fmt.Errorf("invalid resource name: %s (only _ram resources are supported for commitments)", resourceName)
 	}
 
-	return "", fmt.Errorf("invalid resource name: %s (unknown suffix)", resourceName)
+	// Remove prefix and suffix
+	name := strings.TrimPrefix(resourceName, resourceNamePrefix)
+	name = strings.TrimSuffix(name, ResourceSuffixRAM)
+
+	// Validate that the extracted group name is not empty
+	if name == "" {
+		return "", fmt.Errorf("invalid resource name: %s (empty group name)", resourceName)
+	}
+
+	return name, nil
 }
 
 // CommitmentState represents desired or current commitment resource allocation.
