@@ -6,6 +6,7 @@ package nova
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -197,7 +198,7 @@ func (api *novaClient) GetServerMigrations(ctx context.Context, id string) ([]mi
 // ListProjectServers retrieves all servers for a project with detailed info.
 func (api *novaClient) ListProjectServers(ctx context.Context, projectID string) ([]ServerDetail, error) {
 	if api.sc == nil {
-		return nil, fmt.Errorf("nova client not initialized - call Init first")
+		return nil, errors.New("nova client not initialized - call Init first")
 	}
 	// Build URL with pagination support
 	initialURL := api.sc.Endpoint + "servers/detail?all_tenants=true&tenant_id=" + projectID
@@ -266,7 +267,8 @@ func (api *novaClient) ListProjectServers(ctx context.Context, projectID string)
 				// Parse image field - Nova returns either a map or empty string ""
 				var imageMap map[string]any
 				if len(s.Image) > 0 && s.Image[0] == '{' {
-					_ = json.Unmarshal(s.Image, &imageMap)
+					// Intentionally ignore parse errors - imageMap will remain nil for volume-booted VMs
+					json.Unmarshal(s.Image, &imageMap) //nolint:errcheck // error expected for non-JSON values
 				}
 				// Build a minimal servers.Server for the prober
 				vols := make([]servers.AttachedVolume, len(s.AttachedVolumes))

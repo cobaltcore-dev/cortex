@@ -225,9 +225,10 @@ func (c *UsageCalculator) getProjectVMs(
 		flavorGroup := flavorToGroup[server.FlavorName]
 
 		// Calculate usage multiple (memory in units of smallest flavor)
+		// Use floor division (truncate) - actual consumption, not billing
 		var usageMultiple uint64
 		if smallestMem := flavorToSmallestMemory[server.FlavorName]; smallestMem > 0 {
-			usageMultiple = (server.FlavorRAM + smallestMem - 1) / smallestMem // Round up
+			usageMultiple = server.FlavorRAM / smallestMem // Floor division (truncate)
 		}
 
 		// Normalize AZ - empty or unknown AZs become "unknown" (consistent with limes liquid-nova)

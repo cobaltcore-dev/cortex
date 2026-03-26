@@ -172,7 +172,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 				"CPU cores (usable by: %s)",
 				flavorListStr,
 			),
-			Unit:                liquid.UnitNone,        // Unit = 1 (count of cores)
+			Unit:                liquid.UnitNone,        // Countable unit (omitted in JSON = "1")
 			Topology:            liquid.AZAwareTopology, // Same topology as RAM
 			NeedsResourceDemand: false,
 			HasCapacity:         true,      // We report capacity (as 0 for now)
@@ -188,7 +188,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 				"instances (usable by: %s)",
 				flavorListStr,
 			),
-			Unit:                liquid.UnitNone,        // Unit = 1 (count of instances)
+			Unit:                liquid.UnitNone,        // Countable unit (omitted in JSON = "1")
 			Topology:            liquid.AZAwareTopology, // Same topology as RAM
 			NeedsResourceDemand: false,
 			HasCapacity:         true,      // We report capacity (as 0 for now)
