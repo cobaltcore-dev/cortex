@@ -329,6 +329,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			)
 		}
 	}
+
 	return result, nil
 }
 

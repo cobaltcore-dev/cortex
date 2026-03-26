@@ -102,6 +102,20 @@ spec:
         from the nova scheduler request spec. It supports filtering by host and
         by aggregates. Aggregates use AND logic between list elements, with
         comma-separated UUIDs within an element using OR logic.
+    - name: filter_committed_resource_bookkeeping
+      description: |
+        Bookkeeping for committed resource (CR) reservations. Note that unlocking
+        of CR capacity happens in filter_has_enough_capacity when project ID and
+        resource group (hw_version) match. This filter handles additional tasks:
+        tracking which VMs are expected to land on which CR reservations by
+        updating reservation spec allocations. In the future, this filter will
+        also enforce that VMs use available CR reservation slots when sufficient
+        slots exist among candidates.
+      params:
+        # Enable updating CR reservation allocations with VM assignments
+        - {key: updateReservationAllocations, boolValue: true}
+        # Future: enforce reservation slots (not yet implemented)
+        - {key: enforceReservationSlots, boolValue: false}
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -241,6 +255,20 @@ spec:
         from the nova scheduler request spec. It supports filtering by host and
         by aggregates. Aggregates use AND logic between list elements, with
         comma-separated UUIDs within an element using OR logic.
+    - name: filter_committed_resource_bookkeeping
+      description: |
+        Bookkeeping for committed resource (CR) reservations. Note that unlocking
+        of CR capacity happens in filter_has_enough_capacity when project ID and
+        resource group (hw_version) match. This filter handles additional tasks:
+        tracking which VMs are expected to land on which CR reservations by
+        updating reservation spec allocations. In the future, this filter will
+        also enforce that VMs use available CR reservation slots when sufficient
+        slots exist among candidates.
+      params:
+        # Enable updating CR reservation allocations with VM assignments
+        - {key: updateReservationAllocations, boolValue: true}
+        # Future: enforce reservation slots (not yet implemented)
+        - {key: enforceReservationSlots, boolValue: false}
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
