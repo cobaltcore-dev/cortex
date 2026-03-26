@@ -526,6 +526,24 @@ func TestShuffleTopHosts(t *testing.T) {
 			unchangedTailFrom: 0,
 		},
 		{
+			name:              "two hosts with k=3 shuffles all",
+			hosts:             []string{"host1", "host2"},
+			k:                 3,
+			unchangedTailFrom: -1,
+		},
+		{
+			name:              "three hosts with k=3 shuffles all",
+			hosts:             []string{"host1", "host2", "host3"},
+			k:                 3,
+			unchangedTailFrom: -1,
+		},
+		{
+			name:              "four hosts with k=3 shuffles first 3",
+			hosts:             []string{"host1", "host2", "host3", "host4"},
+			k:                 3,
+			unchangedTailFrom: 3,
+		},
+		{
 			name:              "shuffles only first k hosts",
 			hosts:             []string{"host1", "host2", "host3", "host4", "host5"},
 			k:                 3,
