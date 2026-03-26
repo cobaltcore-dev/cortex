@@ -138,8 +138,11 @@ func TestHandleInfo_InvalidFlavorMemory(t *testing.T) {
 }
 
 func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
-	// Test that HasCapacity == HandlesCommitments for all resources
-	// Both should be true only for groups with fixed RAM/core ratio
+	// Test that for flavor groups that accept commitments:
+	// - Three resources are created: _ram, _cores, _instances
+	// - Only _ram has HandlesCommitments=true
+	// - All three have HasCapacity=true
+	// Groups that DON'T accept commitments are skipped entirely
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add scheme: %v", err)
@@ -148,7 +151,8 @@ func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
 	// Create flavor groups knowledge with both fixed and variable ratio groups
 	features := []map[string]interface{}{
 		{
-			// Group with fixed ratio - should accept commitments (HasCapacity=true, HandlesCommitments=true)
+			// Group with fixed ratio - should accept commitments
+			// Creates 3 resources: _ram, _cores, _instances
 			"name": "hana_fixed",
 			"flavors": []map[string]interface{}{
 				{"name": "hana_c4_m16", "vcpus": 4, "memoryMB": 16384, "diskGB": 50},
@@ -159,7 +163,8 @@ func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
 			"ramCoreRatio":   4096, // Fixed: 4096 MiB per vCPU for all flavors
 		},
 		{
-			// Group with variable ratio - should NOT accept commitments (HasCapacity=false, HandlesCommitments=false)
+			// Group with variable ratio - should NOT accept commitments
+			// Will be SKIPPED entirely (no resources created)
 			"name": "v2_variable",
 			"flavors": []map[string]interface{}{
 				{"name": "v2_c4_m8", "vcpus": 4, "memoryMB": 8192, "diskGB": 50},    // 2048 MiB/vCPU
@@ -213,43 +218,56 @@ func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	// Verify we have both resources
-	if len(serviceInfo.Resources) != 2 {
-		t.Fatalf("expected 2 resources, got %d", len(serviceInfo.Resources))
+	// Verify we have 3 resources for the fixed ratio group (variable ratio is skipped)
+	// hana_fixed generates: _ram, _cores, _instances
+	if len(serviceInfo.Resources) != 3 {
+		t.Fatalf("expected 3 resources (_ram, _cores, _instances for hana_fixed), got %d", len(serviceInfo.Resources))
 	}
 
-	// Test fixed ratio group: hw_version_hana_fixed_ram
-	fixedResource, ok := serviceInfo.Resources["hw_version_hana_fixed_ram"]
+	// Test RAM resource: hw_version_hana_fixed_ram
+	ramResource, ok := serviceInfo.Resources["hw_version_hana_fixed_ram"]
 	if !ok {
 		t.Fatal("expected hw_version_hana_fixed_ram resource to exist")
 	}
-	if !fixedResource.HasCapacity {
+	if !ramResource.HasCapacity {
 		t.Error("hw_version_hana_fixed_ram: expected HasCapacity=true")
 	}
-	if !fixedResource.HandlesCommitments {
-		t.Error("hw_version_hana_fixed_ram: expected HandlesCommitments=true (fixed ratio group)")
-	}
-	if fixedResource.HasCapacity != fixedResource.HandlesCommitments {
-		t.Errorf("hw_version_hana_fixed_ram: HasCapacity (%v) should equal HandlesCommitments (%v)",
-			fixedResource.HasCapacity, fixedResource.HandlesCommitments)
+	if !ramResource.HandlesCommitments {
+		t.Error("hw_version_hana_fixed_ram: expected HandlesCommitments=true (RAM is primary commitment resource)")
 	}
 
-	// Test variable ratio group: hw_version_v2_variable_ram
-	variableResource, ok := serviceInfo.Resources["hw_version_v2_variable_ram"]
+	// Test Cores resource: hw_version_hana_fixed_cores
+	coresResource, ok := serviceInfo.Resources["hw_version_hana_fixed_cores"]
 	if !ok {
-		t.Fatal("expected hw_version_v2_variable_ram resource to exist")
+		t.Fatal("expected hw_version_hana_fixed_cores resource to exist")
 	}
-	// Variable ratio groups don't accept commitments, and we only report capacity for groups
-	// that accept commitments, so both HasCapacity and HandlesCommitments should be false
-	if variableResource.HasCapacity {
-		t.Error("hw_version_v2_variable_ram: expected HasCapacity=false (variable ratio groups don't report capacity)")
+	if !coresResource.HasCapacity {
+		t.Error("hw_version_hana_fixed_cores: expected HasCapacity=true")
 	}
-	if variableResource.HandlesCommitments {
-		t.Error("hw_version_v2_variable_ram: expected HandlesCommitments=false (variable ratio group)")
+	if coresResource.HandlesCommitments {
+		t.Error("hw_version_hana_fixed_cores: expected HandlesCommitments=false (cores are derived)")
 	}
-	// Verify HasCapacity == HandlesCommitments for consistency
-	if variableResource.HasCapacity != variableResource.HandlesCommitments {
-		t.Errorf("hw_version_v2_variable_ram: HasCapacity (%v) should equal HandlesCommitments (%v)",
-			variableResource.HasCapacity, variableResource.HandlesCommitments)
+
+	// Test Instances resource: hw_version_hana_fixed_instances
+	instancesResource, ok := serviceInfo.Resources["hw_version_hana_fixed_instances"]
+	if !ok {
+		t.Fatal("expected hw_version_hana_fixed_instances resource to exist")
+	}
+	if !instancesResource.HasCapacity {
+		t.Error("hw_version_hana_fixed_instances: expected HasCapacity=true")
+	}
+	if instancesResource.HandlesCommitments {
+		t.Error("hw_version_hana_fixed_instances: expected HandlesCommitments=false (instances are derived)")
+	}
+
+	// Variable ratio group should NOT have any resources (skipped entirely)
+	if _, ok := serviceInfo.Resources["hw_version_v2_variable_ram"]; ok {
+		t.Error("hw_version_v2_variable_ram should NOT exist (variable ratio groups are skipped)")
+	}
+	if _, ok := serviceInfo.Resources["hw_version_v2_variable_cores"]; ok {
+		t.Error("hw_version_v2_variable_cores should NOT exist (variable ratio groups are skipped)")
+	}
+	if _, ok := serviceInfo.Resources["hw_version_v2_variable_instances"]; ok {
+		t.Error("hw_version_v2_variable_instances should NOT exist (variable ratio groups are skipped)")
 	}
 }

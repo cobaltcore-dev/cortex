@@ -27,6 +27,7 @@ func NewCapacityCalculator(client client.Client) *CapacityCalculator {
 
 // CalculateCapacity computes per-AZ capacity for all flavor groups that accept commitments.
 // Only flavor groups with a fixed RAM/core ratio are included in the report.
+// For each flavor group, three resources are reported: _ram, _cores, _instances.
 func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.ServiceCapacityReport, error) {
 	// Get all flavor groups from Knowledge CRDs
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
@@ -53,21 +54,48 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.Serv
 			continue
 		}
 
-		// Resource name follows pattern: hw_version_<flavorgroup>_ram
-		resourceName := liquid.ResourceName(ResourceNameFromFlavorGroup(groupName))
-
-		// Calculate per-AZ capacity and usage
+		// Calculate per-AZ capacity (placeholder: capacity=0 for all resources)
 		azCapacity, err := c.calculateAZCapacity(ctx, groupName, groupData)
 		if err != nil {
 			return liquid.ServiceCapacityReport{}, fmt.Errorf("failed to calculate capacity for %s: %w", groupName, err)
 		}
 
-		report.Resources[resourceName] = &liquid.ResourceCapacityReport{
+		// === 1. RAM Resource ===
+		ramResourceName := liquid.ResourceName(ResourceNameRAM(groupName))
+		report.Resources[ramResourceName] = &liquid.ResourceCapacityReport{
 			PerAZ: azCapacity,
+		}
+
+		// === 2. Cores Resource ===
+		coresResourceName := liquid.ResourceName(ResourceNameCores(groupName))
+		report.Resources[coresResourceName] = &liquid.ResourceCapacityReport{
+			PerAZ: c.copyAZCapacity(azCapacity),
+		}
+
+		// === 3. Instances Resource ===
+		instancesResourceName := liquid.ResourceName(ResourceNameInstances(groupName))
+		report.Resources[instancesResourceName] = &liquid.ResourceCapacityReport{
+			PerAZ: c.copyAZCapacity(azCapacity),
 		}
 	}
 
 	return report, nil
+}
+
+// copyAZCapacity creates a deep copy of the AZ capacity map.
+// This is needed because each resource needs its own map instance.
+func (c *CapacityCalculator) copyAZCapacity(
+	src map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport,
+) map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport {
+
+	result := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(src))
+	for az, report := range src {
+		result[az] = &liquid.AZResourceCapacityReport{
+			Capacity: report.Capacity,
+			Usage:    report.Usage,
+		}
+	}
+	return result
 }
 
 func (c *CapacityCalculator) calculateAZCapacity(

@@ -584,9 +584,10 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 			}
 
 			// Find the VM in subresources and check its commitment assignment
-			res, ok := report.Resources["hw_version_hana_1_ram"]
+			// Subresources are now on the instances resource, not RAM
+			res, ok := report.Resources["hw_version_hana_1_instances"]
 			if !ok {
-				t.Fatal("Resource hw_version_hana_1_ram not found")
+				t.Fatal("Resource hw_version_hana_1_instances not found")
 			}
 
 			var foundCommitment any

@@ -92,6 +92,10 @@ type resourceAttributes struct {
 }
 
 // buildServiceInfo constructs the ServiceInfo response with metadata for all flavor groups.
+// For each flavor group that accepts commitments, three resources are registered:
+// - _ram: RAM resource (unit = multiples of smallest flavor RAM, HandlesCommitments=true)
+// - _cores: CPU cores resource (unit = 1, HandlesCommitments=false)
+// - _instances: Instance count resource (unit = 1, HandlesCommitments=false)
 func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (liquid.ServiceInfo, error) {
 	// Get all flavor groups from Knowledge CRDs
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
@@ -107,22 +111,19 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 	// Build resources map
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo)
 	for groupName, groupData := range flavorGroups {
-		resourceName := liquid.ResourceName(ResourceNameFromFlavorGroup(groupName))
+		// Only handle commitments for groups with a fixed RAM/core ratio
+		handlesCommitments := FlavorGroupAcceptsCommitments(&groupData)
+		if !handlesCommitments {
+			continue // Skip groups that don't accept commitments
+		}
 
 		flavorNames := make([]string, 0, len(groupData.Flavors))
 		for _, flavor := range groupData.Flavors {
 			flavorNames = append(flavorNames, flavor.Name)
 		}
-		displayName := fmt.Sprintf(
-			"multiples of %d MiB (usable by: %s)",
-			groupData.SmallestFlavor.MemoryMB,
-			strings.Join(flavorNames, ", "),
-		)
+		flavorListStr := strings.Join(flavorNames, ", ")
 
-		// Only handle commitments for groups with a fixed RAM/core ratio
-		handlesCommitments := FlavorGroupAcceptsCommitments(&groupData)
-
-		// Build attributes JSON with ratio info
+		// Build attributes JSON with ratio info (shared across all resource types)
 		attrs := resourceAttributes{
 			RamCoreRatio:    groupData.RamCoreRatio,
 			RamCoreRatioMin: groupData.RamCoreRatioMin,
@@ -130,44 +131,79 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 		}
 		attrsJSON, err := json.Marshal(attrs)
 		if err != nil {
-			logger.Error(err, "failed to marshal resource attributes", "resourceName", resourceName)
+			logger.Error(err, "failed to marshal resource attributes", "flavorGroup", groupName)
 			attrsJSON = nil
 		}
 
-		// Build unit from smallest flavor memory (e.g., "131072 MiB" for 128 GiB)
 		// Validate memory is positive to avoid panic in MultiplyBy (which panics on factor=0)
 		if groupData.SmallestFlavor.MemoryMB == 0 {
 			return liquid.ServiceInfo{}, fmt.Errorf("%w: flavor group %q has invalid smallest flavor with memoryMB=0",
 				errInternalServiceInfo, groupName)
 		}
-		unit, err := liquid.UnitMebibytes.MultiplyBy(groupData.SmallestFlavor.MemoryMB)
+
+		// === 1. RAM Resource ===
+		ramResourceName := liquid.ResourceName(ResourceNameRAM(groupName))
+		ramUnit, err := liquid.UnitMebibytes.MultiplyBy(groupData.SmallestFlavor.MemoryMB)
 		if err != nil {
 			// Note: This error only occurs on uint64 overflow, which is unrealistic for memory values
 			return liquid.ServiceInfo{}, fmt.Errorf("%w: failed to create unit for flavor group %q: %w",
 				errInternalServiceInfo, groupName, err)
 		}
-
-		resources[resourceName] = liquid.ResourceInfo{
-			DisplayName:         displayName,
-			Unit:                unit,                   // Non-standard unit: multiples of smallest flavor RAM
+		resources[ramResourceName] = liquid.ResourceInfo{
+			DisplayName: fmt.Sprintf(
+				"multiples of %d MiB (usable by: %s)",
+				groupData.SmallestFlavor.MemoryMB,
+				flavorListStr,
+			),
+			Unit:                ramUnit,                // Non-standard unit: multiples of smallest flavor RAM
 			Topology:            liquid.AZAwareTopology, // Commitments are per-AZ
 			NeedsResourceDemand: false,                  // Capacity planning out of scope for now
-			HasCapacity:         handlesCommitments,     // We report capacity via /commitments/v1/report-capacity only for groups that accept commitments
+			HasCapacity:         true,                   // We report capacity via /commitments/v1/report-capacity
 			HasQuota:            false,                  // No quota enforcement as of now
-			HandlesCommitments:  handlesCommitments,     // Only for groups with fixed RAM/core ratio
+			HandlesCommitments:  true,                   // RAM is the primary commitment resource
 			Attributes:          attrsJSON,
 		}
 
-		logger.V(1).Info("registered flavor group resource",
-			"resourceName", resourceName,
+		// === 2. Cores Resource ===
+		coresResourceName := liquid.ResourceName(ResourceNameCores(groupName))
+		resources[coresResourceName] = liquid.ResourceInfo{
+			DisplayName: fmt.Sprintf(
+				"CPU cores (usable by: %s)",
+				flavorListStr,
+			),
+			Unit:                liquid.UnitNone,        // Unit = 1 (count of cores)
+			Topology:            liquid.AZAwareTopology, // Same topology as RAM
+			NeedsResourceDemand: false,
+			HasCapacity:         true,      // We report capacity (as 0 for now)
+			HasQuota:            false,     // No quota enforcement
+			HandlesCommitments:  false,     // Cores are derived from RAM commitments
+			Attributes:          attrsJSON, // Same attributes (ratio info)
+		}
+
+		// === 3. Instances Resource ===
+		instancesResourceName := liquid.ResourceName(ResourceNameInstances(groupName))
+		resources[instancesResourceName] = liquid.ResourceInfo{
+			DisplayName: fmt.Sprintf(
+				"instances (usable by: %s)",
+				flavorListStr,
+			),
+			Unit:                liquid.UnitNone,        // Unit = 1 (count of instances)
+			Topology:            liquid.AZAwareTopology, // Same topology as RAM
+			NeedsResourceDemand: false,
+			HasCapacity:         true,      // We report capacity (as 0 for now)
+			HasQuota:            false,     // No quota enforcement
+			HandlesCommitments:  false,     // Instances are derived from RAM commitments
+			Attributes:          attrsJSON, // Same attributes
+		}
+
+		logger.V(1).Info("registered flavor group resources",
 			"flavorGroup", groupName,
-			"displayName", displayName,
+			"ramResource", ramResourceName,
+			"coresResource", coresResourceName,
+			"instancesResource", instancesResourceName,
 			"smallestFlavor", groupData.SmallestFlavor.Name,
 			"smallestRamMB", groupData.SmallestFlavor.MemoryMB,
-			"handlesCommitments", handlesCommitments,
-			"ramCoreRatio", groupData.RamCoreRatio,
-			"ramCoreRatioMin", groupData.RamCoreRatioMin,
-			"ramCoreRatioMax", groupData.RamCoreRatioMax)
+			"ramCoreRatio", groupData.RamCoreRatio)
 	}
 
 	// Get last content changed from flavor group knowledge and treat it as version

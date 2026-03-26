@@ -335,8 +335,17 @@ func (c *UsageCalculator) assignVMsToCommitments(
 	return vmAssignments, assignedCount
 }
 
+// azUsageData aggregates usage data for a specific flavor group and AZ.
+type azUsageData struct {
+	ramUsage      uint64               // RAM usage in multiples of smallest flavor
+	coresUsage    uint64               // Total vCPU count
+	instanceCount uint64               // Number of VMs
+	subresources  []liquid.Subresource // VM details for subresource reporting
+}
+
 // buildUsageResponse constructs the Liquid API ServiceUsageReport.
 // Only flavor groups that accept commitments are included in the report.
+// For each flavor group, three resources are reported: _ram, _cores, _instances.
 func (c *UsageCalculator) buildUsageResponse(
 	vms []VMUsageInfo,
 	vmAssignments map[string]string,
@@ -348,10 +357,6 @@ func (c *UsageCalculator) buildUsageResponse(
 	resources := make(map[liquid.ResourceName]*liquid.ResourceUsageReport)
 
 	// Group VMs by flavor group and AZ for aggregation
-	type azUsageData struct {
-		usage        uint64
-		subresources []liquid.Subresource
-	}
 	usageByFlavorGroupAZ := make(map[string]map[liquid.AvailabilityZone]*azUsageData)
 
 	for _, vm := range vms {
@@ -368,8 +373,10 @@ func (c *UsageCalculator) buildUsageResponse(
 			usageByFlavorGroupAZ[vm.FlavorGroup][az] = &azUsageData{}
 		}
 
-		// Accumulate usage
-		usageByFlavorGroupAZ[vm.FlavorGroup][az].usage += vm.UsageMultiple
+		// Accumulate usage for all resource types
+		usageByFlavorGroupAZ[vm.FlavorGroup][az].ramUsage += vm.UsageMultiple
+		usageByFlavorGroupAZ[vm.FlavorGroup][az].coresUsage += vm.VCPUs
+		usageByFlavorGroupAZ[vm.FlavorGroup][az].instanceCount++
 
 		// Build subresource attributes
 		commitmentID := vmAssignments[vm.UUID]
@@ -396,33 +403,74 @@ func (c *UsageCalculator) buildUsageResponse(
 		if !FlavorGroupAcceptsCommitments(&groupData) {
 			continue
 		}
-		resourceName := liquid.ResourceName(ResourceNameFromFlavorGroup(flavorGroupName))
 
-		perAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
-
-		// Initialize all AZs with zero usage
+		// === 1. RAM Resource ===
+		ramResourceName := liquid.ResourceName(ResourceNameRAM(flavorGroupName))
+		ramPerAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
 		for _, az := range allAZs {
-			perAZ[az] = &liquid.AZResourceUsageReport{
+			ramPerAZ[az] = &liquid.AZResourceUsageReport{
 				Usage:        0,
 				Subresources: []liquid.Subresource{},
 			}
 		}
-
-		// Fill in actual usage data
 		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
 			for az, data := range azData {
-				if _, known := perAZ[az]; !known {
-					// AZ not in allAZs, add it anyway
-					perAZ[az] = &liquid.AZResourceUsageReport{}
+				if _, known := ramPerAZ[az]; !known {
+					ramPerAZ[az] = &liquid.AZResourceUsageReport{}
 				}
-				perAZ[az].Usage = data.usage
-				perAZ[az].PhysicalUsage = Some(data.usage) // No overcommit for RAM
-				perAZ[az].Subresources = data.subresources
+				ramPerAZ[az].Usage = data.ramUsage
+				ramPerAZ[az].PhysicalUsage = Some(data.ramUsage) // No overcommit for RAM
+				// Subresources are only on instances resource
 			}
 		}
+		resources[ramResourceName] = &liquid.ResourceUsageReport{
+			PerAZ: ramPerAZ,
+		}
 
-		resources[resourceName] = &liquid.ResourceUsageReport{
-			PerAZ: perAZ,
+		// === 2. Cores Resource ===
+		coresResourceName := liquid.ResourceName(ResourceNameCores(flavorGroupName))
+		coresPerAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
+		for _, az := range allAZs {
+			coresPerAZ[az] = &liquid.AZResourceUsageReport{
+				Usage:        0,
+				Subresources: []liquid.Subresource{},
+			}
+		}
+		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
+			for az, data := range azData {
+				if _, known := coresPerAZ[az]; !known {
+					coresPerAZ[az] = &liquid.AZResourceUsageReport{}
+				}
+				coresPerAZ[az].Usage = data.coresUsage
+				coresPerAZ[az].PhysicalUsage = Some(data.coresUsage) // No overcommit for cores
+				// Subresources are only on instances resource
+			}
+		}
+		resources[coresResourceName] = &liquid.ResourceUsageReport{
+			PerAZ: coresPerAZ,
+		}
+
+		// === 3. Instances Resource ===
+		instancesResourceName := liquid.ResourceName(ResourceNameInstances(flavorGroupName))
+		instancesPerAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
+		for _, az := range allAZs {
+			instancesPerAZ[az] = &liquid.AZResourceUsageReport{
+				Usage:        0,
+				Subresources: []liquid.Subresource{},
+			}
+		}
+		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
+			for az, data := range azData {
+				if _, known := instancesPerAZ[az]; !known {
+					instancesPerAZ[az] = &liquid.AZResourceUsageReport{}
+				}
+				instancesPerAZ[az].Usage = data.instanceCount
+				instancesPerAZ[az].PhysicalUsage = Some(data.instanceCount)
+				instancesPerAZ[az].Subresources = data.subresources // VM details on instances resource
+			}
+		}
+		resources[instancesResourceName] = &liquid.ResourceUsageReport{
+			PerAZ: instancesPerAZ,
 		}
 	}
 
