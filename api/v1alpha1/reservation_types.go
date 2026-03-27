@@ -103,7 +103,7 @@ type ReservationSpec struct {
 
 	// SchedulingDomain specifies the scheduling domain for this reservation (e.g., "nova", "ironcore").
 	// +kubebuilder:validation:Optional
-	SchedulingDomain string `json:"schedulingDomain,omitempty"`
+	SchedulingDomain SchedulingDomain `json:"schedulingDomain,omitempty"`
 
 	// AvailabilityZone specifies the availability zone for this reservation, if restricted to a specific AZ.
 	// +kubebuilder:validation:Optional
