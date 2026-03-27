@@ -186,9 +186,12 @@ cortex-scheduling-controllers:
     # Used when maxVMsToProcess limits processing, allows faster catch-up and for the first reconcile
     shortReconcileInterval: 1m
     # Number of max VMs to process in one periodic reconciliation loop
-    maxVMsToProcess: 25
+    maxVMsToProcess: 50
+    # How often to rotate VM selection offset when maxVMsToProcess limits processing
+    # Every N reconcile cycles, the offset rotates to process different VMs
+    vmSelectionRotationInterval: 3
     # Minimum successful reservations to use short interval
-    minSuccessForShortInterval: 1
+    minSuccessForShortInterval: 0
     # Maximum failures allowed to still use short interval
     maxFailuresForShortInterval: 99
     # If true, uses hypervisor CRD as source of truth for VM location instead of postgres
