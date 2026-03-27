@@ -51,10 +51,7 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 		// All flavor groups are included in capacity reporting (not just those with fixed ratio).
 
 		// Calculate per-AZ capacity (placeholder: capacity=0 for all resources)
-		azCapacity, err := c.calculateAZCapacity(ctx, groupName, groupData, req.AllAZs)
-		if err != nil {
-			return liquid.ServiceCapacityReport{}, fmt.Errorf("failed to calculate capacity for %s: %w", groupName, err)
-		}
+		azCapacity := c.calculateAZCapacity(groupName, groupData, req.AllAZs)
 
 		// === 1. RAM Resource ===
 		ramResourceName := liquid.ResourceName(ResourceNameRAM(groupName))
@@ -100,11 +97,10 @@ func (c *CapacityCalculator) copyAZCapacity(
 }
 
 func (c *CapacityCalculator) calculateAZCapacity(
-	_ context.Context,
 	_ string, // groupName - reserved for future use
 	_ compute.FlavorGroupFeature, // groupData - reserved for future use
 	allAZs []liquid.AvailabilityZone, // list of all AZs from Limes request
-) (map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, error) {
+) map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport {
 
 	// Create report entry for each AZ with placeholder capacity=0.
 	//
@@ -125,5 +121,5 @@ func (c *CapacityCalculator) calculateAZCapacity(
 		}
 	}
 
-	return result, nil
+	return result
 }
