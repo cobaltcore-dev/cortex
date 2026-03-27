@@ -180,7 +180,7 @@ spec:
                     type: object
                     x-kubernetes-map-type: atomic
                   syncInterval:
-                    default: 60s
+                    default: 600s
                     description: How often to sync the datasource.
                     type: string
                   type:
