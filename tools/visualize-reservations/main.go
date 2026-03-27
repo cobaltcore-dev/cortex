@@ -41,6 +41,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -303,8 +304,8 @@ func startPortForward(namespace, contextName, service, localPort, remotePort str
 	}
 
 	cleanup := func() {
-		_ = cmd.Process.Kill()
-		_, _ = cmd.Process.Wait()
+		_ = cmd.Process.Kill()    //nolint:errcheck // best-effort cleanup
+		_, _ = cmd.Process.Wait() //nolint:errcheck // best-effort cleanup
 	}
 
 	readyDeadline := time.Now().Add(5 * time.Second)
