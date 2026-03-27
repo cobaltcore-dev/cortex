@@ -228,6 +228,7 @@ func (c *FailoverReservationController) validateReservation(ctx context.Context,
 
 // reconcileSummary holds statistics from the reconciliation cycle.
 type reconcileSummary struct {
+	vmsMissingFailover  int
 	vmsProcessed        int
 	reservationsNeeded  int
 	totalReused         int
@@ -268,6 +269,7 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 	}
 	logger.V(1).Info("found VMs from source", "count", len(vms))
 
+	// todo: vms are vms from all AZs, we should consdier processing them by AZ (sequencial or in parallel) but not mixing them together
 	// List only failover reservations using label selector
 	var reservationList v1alpha1.ReservationList
 	if err := c.List(ctx, &reservationList, client.MatchingLabels{
@@ -313,6 +315,7 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 
 	// 6. Create and assign reservations for VMs that need them
 	assignSummary, hitMaxVMsLimit := c.reconcileCreateAndAssignReservations(ctx, vms, failoverReservations, allHypervisors)
+	summary.vmsMissingFailover = assignSummary.vmsMissingFailover
 	summary.vmsProcessed = assignSummary.vmsProcessed
 	summary.reservationsNeeded = assignSummary.reservationsNeeded
 	summary.totalReused = assignSummary.totalReused
@@ -332,6 +335,9 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 		"reconcileCount", c.reconcileCount,
 		"duration", duration.Round(time.Millisecond),
 		"requeueAfter", requeueAfter,
+		"totalVMs", len(vms),
+		"totalReservations", len(failoverReservations),
+		"vmsMissingFailover", summary.vmsMissingFailover,
 		"vmsProcessed", summary.vmsProcessed,
 		"reservationsNeeded", summary.reservationsNeeded,
 		"reused", summary.totalReused,
@@ -557,11 +563,12 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 	vmsMissingFailover := c.calculateVMsMissingFailover(ctx, vms, failoverReservations)
 	logger.V(1).Info("VMs missing failover reservations", "count", len(vmsMissingFailover))
 
+	totalVMsMissingFailover := len(vmsMissingFailover)
 	vmsMissingFailover, hitMaxVMsLimit := c.selectVMsToProcess(ctx, vmsMissingFailover, c.Config.MaxVMsToProcess)
 
 	logger.V(1).Info("found hypervisors and vm missing failover reservation",
 		"countHypervisors", len(allHypervisors),
-		"countVMsMissingFailover", len(vmsMissingFailover))
+		"countVMsMissingFailover", totalVMsMissingFailover)
 
 	totalReservationsNeeded := 0
 	for _, need := range vmsMissingFailover {
@@ -649,6 +656,7 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 	}
 
 	return reconcileSummary{
+		vmsMissingFailover: totalVMsMissingFailover,
 		vmsProcessed:       len(vmsMissingFailover),
 		reservationsNeeded: totalReservationsNeeded,
 		totalReused:        totalReused,
