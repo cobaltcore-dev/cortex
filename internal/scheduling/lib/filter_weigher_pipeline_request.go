@@ -12,6 +12,7 @@ type FilterWeigherPipelineRequest interface {
 	// of the request with only the given hosts remaining. This is helpful
 	// for steps that filter out hosts. Hosts not included in the map
 	// are considered as filtered out, and won't be reconsidered in later steps.
+	// TODO filter hosts should also filter the weights.
 	FilterHosts(includedHosts map[string]float64) FilterWeigherPipelineRequest
 	// Get the weights for the hosts.
 	GetWeights() map[string]float64
