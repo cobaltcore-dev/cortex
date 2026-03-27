@@ -17,12 +17,14 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	"github.com/sapcc/go-bits/jobloop"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -257,6 +259,27 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 	return ctrl.Result{RequeueAfter: datasource.Spec.OpenStack.SyncInterval.Duration}, nil
 }
 
+// predicateIgnoreStatusConditions returns a predicate that ignores changes to
+// the status conditions, because these are only updated by the controller
+// itself and should not trigger a new reconciliation.
+func predicateIgnoreStatusConditions() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			// Remove the status conditions from the old and new object
+			// before comparing them. This is fine for now, because
+			// the controller itself doesn't need to react to status
+			// condition changes.
+			oldObj := e.ObjectOld.DeepCopyObject().(*v1alpha1.Datasource)
+			newObj := e.ObjectNew.DeepCopyObject().(*v1alpha1.Datasource)
+			oldObj.Status.Conditions = nil
+			newObj.Status.Conditions = nil
+			// If anything else in the object has changed except the status
+			// conditions, then trigger a reconciliation.
+			return !equality.Semantic.DeepEqual(oldObj, newObj)
+		},
+	}
+}
+
 func (r *OpenStackDatasourceReconciler) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	bldr := multicluster.BuildController(mcl, mgr)
 	// Watch datasource changes across all clusters.
@@ -266,12 +289,17 @@ func (r *OpenStackDatasourceReconciler) SetupWithManager(mgr manager.Manager, mc
 		predicate.NewPredicateFuncs(func(obj client.Object) bool {
 			// Only react to datasources matching the operator.
 			ds := obj.(*v1alpha1.Datasource)
+			// Ignore all datasources outside our scheduling domain.
 			if ds.Spec.SchedulingDomain != r.Conf.SchedulingDomain {
 				return false
 			}
-			// Only react to openstack datasources.
-			return ds.Spec.Type == v1alpha1.DatasourceTypeOpenStack
+			// Ignore all datasources that are not of type openstack.
+			if ds.Spec.Type != v1alpha1.DatasourceTypeOpenStack {
+				return false
+			}
+			return true
 		}),
+		predicateIgnoreStatusConditions(),
 	)
 	if err != nil {
 		return err
