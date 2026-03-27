@@ -107,6 +107,10 @@ func aggregateReservationsByHost(reservations []v1alpha1.Reservation) (
 	committedNotInUseByHost = make(map[string]hostReservationResources)
 
 	for _, reservation := range reservations {
+		if reservation.Spec.SchedulingDomain != string(v1alpha1.SchedulingDomainNova) {
+			continue
+		}
+
 		readyCondition := meta.FindStatusCondition(reservation.Status.Conditions, v1alpha1.ReservationConditionReady)
 		if readyCondition == nil || readyCondition.Status != metav1.ConditionTrue {
 			continue

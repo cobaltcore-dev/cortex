@@ -39,15 +39,14 @@ type kvmMetricLabels struct {
 }
 
 type kvmExpectedMetric struct {
+	Name   string // metric family name (e.g. "cortex_kvm_host_capacity_total")
 	Labels kvmMetricLabels
 	Value  float64
 }
 
-func defaultLabels(host, res, capacityType, az, bb string) kvmMetricLabels {
+func defaultHostLabels(host, az, bb string) kvmMetricLabels {
 	return kvmMetricLabels{
 		ComputeHost:      host,
-		Resource:         res,
-		Type:             capacityType,
 		AvailabilityZone: az,
 		BuildingBlock:    bb,
 		CPUArchitecture:  "cascade-lake",
@@ -57,6 +56,19 @@ func defaultLabels(host, res, capacityType, az, bb string) kvmMetricLabels {
 		ExternalCustomer: "false",
 		Maintenance:      "false",
 	}
+}
+
+func totalMetric(host, res, az, bb string, value float64) kvmExpectedMetric {
+	l := defaultHostLabels(host, az, bb)
+	l.Resource = res
+	return kvmExpectedMetric{Name: "cortex_kvm_host_capacity_total", Labels: l, Value: value}
+}
+
+func usageMetric(host, res, capacityType, az, bb string, value float64) kvmExpectedMetric {
+	l := defaultHostLabels(host, az, bb)
+	l.Resource = res
+	l.Type = capacityType
+	return kvmExpectedMetric{Name: "cortex_kvm_host_capacity_usage", Labels: l, Value: value}
 }
 
 func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
@@ -137,16 +149,16 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				},
 			},
 			expectedMetrics: []kvmExpectedMetric{
-				{Labels: defaultLabels("node001-bb088", "cpu", "", "qa-1a", "bb088"), Value: 128},
-				{Labels: defaultLabels("node001-bb088", "ram", "", "qa-1a", "bb088"), Value: 549755813888},
-				{Labels: defaultLabels("node001-bb088", "cpu", "utilized", "qa-1a", "bb088"), Value: 64},
-				{Labels: defaultLabels("node001-bb088", "ram", "utilized", "qa-1a", "bb088"), Value: 274877906944},
-				{Labels: defaultLabels("node001-bb088", "cpu", "reserved", "qa-1a", "bb088"), Value: 0},
-				{Labels: defaultLabels("node001-bb088", "ram", "reserved", "qa-1a", "bb088"), Value: 0},
-				{Labels: defaultLabels("node001-bb088", "cpu", "failover", "qa-1a", "bb088"), Value: 0},
-				{Labels: defaultLabels("node001-bb088", "ram", "failover", "qa-1a", "bb088"), Value: 0},
-				{Labels: defaultLabels("node001-bb088", "cpu", "payg", "qa-1a", "bb088"), Value: 64},           // 128-64-0-0
-				{Labels: defaultLabels("node001-bb088", "ram", "payg", "qa-1a", "bb088"), Value: 274877906944}, // 512Gi-256Gi
+				totalMetric("node001-bb088", "cpu", "qa-1a", "bb088", 128),
+				totalMetric("node001-bb088", "ram", "qa-1a", "bb088", 549755813888),
+				usageMetric("node001-bb088", "cpu", "utilized", "qa-1a", "bb088", 64),
+				usageMetric("node001-bb088", "ram", "utilized", "qa-1a", "bb088", 274877906944),
+				usageMetric("node001-bb088", "cpu", "reserved", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "ram", "reserved", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "cpu", "failover", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "cpu", "payg", "qa-1a", "bb088", 64),           // 128-64-0-0
+				usageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 274877906944), // 512Gi-256Gi
 			},
 		},
 		{
@@ -177,6 +189,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 			},
 			expectedMetrics: []kvmExpectedMetric{
 				{
+					Name: "cortex_kvm_host_capacity_total",
 					Labels: kvmMetricLabels{
 						ComputeHost: "node002-bb089", Resource: "cpu",
 						AvailabilityZone: "qa-1b", BuildingBlock: "bb089",
@@ -186,6 +199,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					Value: 256,
 				},
 				{
+					Name: "cortex_kvm_host_capacity_total",
 					Labels: kvmMetricLabels{
 						ComputeHost: "node002-bb089", Resource: "ram",
 						AvailabilityZone: "qa-1b", BuildingBlock: "bb089",
@@ -224,6 +238,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 			},
 			expectedMetrics: []kvmExpectedMetric{
 				{
+					Name: "cortex_kvm_host_capacity_total",
 					Labels: kvmMetricLabels{
 						ComputeHost: "node003-bb090", Resource: "cpu",
 						AvailabilityZone: "qa-1c", BuildingBlock: "bb090",
@@ -277,8 +292,9 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				},
 			},
 			expectedMetrics: []kvmExpectedMetric{
-				{Labels: defaultLabels("node010-bb100", "cpu", "", "qa-1a", "bb100"), Value: 100},
+				totalMetric("node010-bb100", "cpu", "qa-1a", "bb100", 100),
 				{
+					Name: "cortex_kvm_host_capacity_total",
 					Labels: kvmMetricLabels{
 						ComputeHost: "node020-bb200", Resource: "cpu",
 						AvailabilityZone: "qa-1b", BuildingBlock: "bb200",
@@ -310,10 +326,10 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				},
 			},
 			expectedMetrics: []kvmExpectedMetric{
-				{Labels: defaultLabels("node004-bb091", "cpu", "", "qa-1d", "bb091"), Value: 96},
-				{Labels: defaultLabels("node004-bb091", "ram", "", "qa-1d", "bb091"), Value: 412316860416},
-				{Labels: defaultLabels("node004-bb091", "cpu", "utilized", "qa-1d", "bb091"), Value: 0},
-				{Labels: defaultLabels("node004-bb091", "ram", "utilized", "qa-1d", "bb091"), Value: 0},
+				totalMetric("node004-bb091", "cpu", "qa-1d", "bb091", 96),
+				totalMetric("node004-bb091", "ram", "qa-1d", "bb091", 412316860416),
+				usageMetric("node004-bb091", "cpu", "utilized", "qa-1d", "bb091", 0),
+				usageMetric("node004-bb091", "ram", "utilized", "qa-1d", "bb091", 0),
 			},
 		},
 		{
@@ -361,16 +377,16 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				},
 			},
 			expectedMetrics: []kvmExpectedMetric{
-				{Labels: defaultLabels("node001-bb088", "cpu", "", "qa-1a", "bb088"), Value: 128},
-				{Labels: defaultLabels("node001-bb088", "ram", "", "qa-1a", "bb088"), Value: 549755813888},
-				{Labels: defaultLabels("node001-bb088", "cpu", "utilized", "qa-1a", "bb088"), Value: 64},
-				{Labels: defaultLabels("node001-bb088", "ram", "utilized", "qa-1a", "bb088"), Value: 274877906944},
-				{Labels: defaultLabels("node001-bb088", "cpu", "reserved", "qa-1a", "bb088"), Value: 0},
-				{Labels: defaultLabels("node001-bb088", "ram", "reserved", "qa-1a", "bb088"), Value: 0},
-				{Labels: defaultLabels("node001-bb088", "cpu", "failover", "qa-1a", "bb088"), Value: 16},
-				{Labels: defaultLabels("node001-bb088", "ram", "failover", "qa-1a", "bb088"), Value: 68719476736}, // 64Gi
-				{Labels: defaultLabels("node001-bb088", "cpu", "payg", "qa-1a", "bb088"), Value: 48},              // 128-64-0-16
-				{Labels: defaultLabels("node001-bb088", "ram", "payg", "qa-1a", "bb088"), Value: 206158430208},    // 512Gi-256Gi-0-64Gi = 192Gi
+				totalMetric("node001-bb088", "cpu", "qa-1a", "bb088", 128),
+				totalMetric("node001-bb088", "ram", "qa-1a", "bb088", 549755813888),
+				usageMetric("node001-bb088", "cpu", "utilized", "qa-1a", "bb088", 64),
+				usageMetric("node001-bb088", "ram", "utilized", "qa-1a", "bb088", 274877906944),
+				usageMetric("node001-bb088", "cpu", "reserved", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "ram", "reserved", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "cpu", "failover", "qa-1a", "bb088", 16),
+				usageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 68719476736), // 64Gi
+				usageMetric("node001-bb088", "cpu", "payg", "qa-1a", "bb088", 48),              // 128-64-0-16
+				usageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 206158430208),    // 512Gi-256Gi-0-64Gi = 192Gi
 			},
 		},
 		{
@@ -428,12 +444,12 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 			},
 			expectedMetrics: []kvmExpectedMetric{
 				// reserved = 32-8=24 CPU, 128Gi-32Gi=96Gi RAM (not in use)
-				{Labels: defaultLabels("node001-bb088", "cpu", "reserved", "qa-1a", "bb088"), Value: 24},
-				{Labels: defaultLabels("node001-bb088", "ram", "reserved", "qa-1a", "bb088"), Value: 103079215104}, // 96Gi
-				{Labels: defaultLabels("node001-bb088", "cpu", "failover", "qa-1a", "bb088"), Value: 0},
-				{Labels: defaultLabels("node001-bb088", "ram", "failover", "qa-1a", "bb088"), Value: 0},
-				{Labels: defaultLabels("node001-bb088", "cpu", "payg", "qa-1a", "bb088"), Value: 40},           // 128-64-24-0
-				{Labels: defaultLabels("node001-bb088", "ram", "payg", "qa-1a", "bb088"), Value: 171798691840}, // 512Gi-256Gi-96Gi-0 = 160Gi
+				usageMetric("node001-bb088", "cpu", "reserved", "qa-1a", "bb088", 24),
+				usageMetric("node001-bb088", "ram", "reserved", "qa-1a", "bb088", 103079215104), // 96Gi
+				usageMetric("node001-bb088", "cpu", "failover", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "cpu", "payg", "qa-1a", "bb088", 40),           // 128-64-24-0
+				usageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 171798691840), // 512Gi-256Gi-96Gi-0 = 160Gi
 			},
 		},
 		{
@@ -482,10 +498,10 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 			},
 			expectedMetrics: []kvmExpectedMetric{
 				// Non-ready reservation ignored, so failover = 0
-				{Labels: defaultLabels("node001-bb088", "cpu", "failover", "qa-1a", "bb088"), Value: 0},
-				{Labels: defaultLabels("node001-bb088", "ram", "failover", "qa-1a", "bb088"), Value: 0},
-				{Labels: defaultLabels("node001-bb088", "cpu", "payg", "qa-1a", "bb088"), Value: 64},
-				{Labels: defaultLabels("node001-bb088", "ram", "payg", "qa-1a", "bb088"), Value: 274877906944},
+				usageMetric("node001-bb088", "cpu", "failover", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "cpu", "payg", "qa-1a", "bb088", 64),
+				usageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 274877906944),
 			},
 		},
 		{
@@ -553,10 +569,10 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 			},
 			expectedMetrics: []kvmExpectedMetric{
 				// failover = 8+12=20 CPU, 32Gi+48Gi=80Gi RAM
-				{Labels: defaultLabels("node001-bb088", "cpu", "failover", "qa-1a", "bb088"), Value: 20},
-				{Labels: defaultLabels("node001-bb088", "ram", "failover", "qa-1a", "bb088"), Value: 85899345920}, // 80Gi
-				{Labels: defaultLabels("node001-bb088", "cpu", "payg", "qa-1a", "bb088"), Value: 44},              // 128-64-0-20
-				{Labels: defaultLabels("node001-bb088", "ram", "payg", "qa-1a", "bb088"), Value: 188978561024},    // 512Gi-256Gi-0-80Gi = 176Gi
+				usageMetric("node001-bb088", "cpu", "failover", "qa-1a", "bb088", 20),
+				usageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 85899345920), // 80Gi
+				usageMetric("node001-bb088", "cpu", "payg", "qa-1a", "bb088", 44),              // 128-64-0-20
+				usageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 188978561024),    // 512Gi-256Gi-0-80Gi = 176Gi
 			},
 		},
 	}
@@ -600,6 +616,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					t.Fatalf("failed to write metric: %v", err)
 				}
 
+				metricName := getMetricName(metric.Desc().String())
+
 				labels := kvmMetricLabels{}
 				for _, label := range m.Label {
 					switch label.GetName() {
@@ -629,26 +647,29 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				}
 
 				actualMetrics = append(actualMetrics, kvmExpectedMetric{
+					Name:   metricName,
 					Labels: labels,
 					Value:  m.GetGauge().GetValue(),
 				})
 			}
 
-			// Verify each expected metric is present with the correct value
+			// Verify each expected metric is present with the correct value and metric name.
 			for _, expected := range tt.expectedMetrics {
 				found := false
 				for _, actual := range actualMetrics {
-					if actual.Labels == expected.Labels {
+					nameMatch := expected.Name == "" || actual.Name == expected.Name
+					if nameMatch && actual.Labels == expected.Labels {
 						found = true
 						if actual.Value != expected.Value {
-							t.Errorf("metric with labels %+v: expected value %f, got %f",
-								expected.Labels, expected.Value, actual.Value)
+							t.Errorf("metric %s with labels %+v: expected value %f, got %f",
+								expected.Name, expected.Labels, expected.Value, actual.Value)
 						}
 						break
 					}
 				}
 				if !found {
-					t.Errorf("metric with labels %+v not found in actual metrics", expected.Labels)
+					t.Errorf("metric %s with labels %+v not found in actual metrics",
+						expected.Name, expected.Labels)
 				}
 			}
 		})
