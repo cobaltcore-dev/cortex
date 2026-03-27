@@ -85,6 +85,16 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			ExpectedAPIResponse:  newAPIResponse("1 commitment(s) failed", "commitment long-long-long-long-long-long-long-long-long-long-long-long-long-: unexpected commitment format"),
 		},
 		{
+			Name:    "Planned CR is ignored in validation, no scheduling or capacity reservation",
+			VMs:     []*TestVM{},
+			Flavors: []*TestFlavor{m1Small},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-new", "planned", 200),
+			),
+			ExpectedReservations: []*TestReservation{},
+			ExpectedAPIResponse:  newAPIResponse(),
+		},
+		{
 			Name:                 "Invalid CR name - spaces",
 			VMs:                  []*TestVM{},
 			Flavors:              []*TestFlavor{m1Small},
