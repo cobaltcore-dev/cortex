@@ -6,6 +6,7 @@ package compute
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
@@ -23,9 +24,10 @@ func TestKVMResourceCapacityKPI_Init(t *testing.T) {
 	}
 }
 
-type metricLabels struct {
+type kvmMetricLabels struct {
 	ComputeHost      string
 	Resource         string
+	Type             string
 	AvailabilityZone string
 	BuildingBlock    string
 	CPUArchitecture  string
@@ -36,16 +38,33 @@ type metricLabels struct {
 	Maintenance      string
 }
 
-type expectedMetric struct {
-	Labels metricLabels
+type kvmExpectedMetric struct {
+	Labels kvmMetricLabels
 	Value  float64
+}
+
+func defaultLabels(host, res, capacityType, az, bb string) kvmMetricLabels {
+	return kvmMetricLabels{
+		ComputeHost:      host,
+		Resource:         res,
+		Type:             capacityType,
+		AvailabilityZone: az,
+		BuildingBlock:    bb,
+		CPUArchitecture:  "cascade-lake",
+		WorkloadType:     "general-purpose",
+		Enabled:          "true",
+		Decommissioned:   "false",
+		ExternalCustomer: "false",
+		Maintenance:      "false",
+	}
 }
 
 func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 	tests := []struct {
 		name            string
 		hypervisors     []hv1.Hypervisor
-		expectedMetrics map[string][]expectedMetric // metric_name -> []expectedMetric
+		reservations    []v1alpha1.Reservation
+		expectedMetrics []kvmExpectedMetric
 	}{
 		{
 			name: "single hypervisor with nil effective capacity",
@@ -58,7 +77,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						},
 					},
 					Status: hv1.HypervisorStatus{
-						EffectiveCapacity: nil, // Simulate nil effective capacity
+						EffectiveCapacity: nil,
 						Allocation: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("64"),
 							hv1.ResourceMemory: resource.MustParse("256Gi"),
@@ -67,8 +86,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 				},
 			},
-			// No metrics should be emitted for this hypervisor since effective capacity is nil
-			expectedMetrics: map[string][]expectedMetric{},
+			expectedMetrics: []kvmExpectedMetric{},
 		},
 		{
 			name: "single hypervisor with zero total capacity",
@@ -82,8 +100,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 					Status: hv1.HypervisorStatus{
 						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
-							hv1.ResourceCPU:    resource.MustParse("0"), // Simulate zero CPU capacity
-							hv1.ResourceMemory: resource.MustParse("0"), // Simulate zero RAM capacity
+							hv1.ResourceCPU:    resource.MustParse("0"),
+							hv1.ResourceMemory: resource.MustParse("0"),
 						},
 						Allocation: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("0"),
@@ -93,11 +111,10 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 				},
 			},
-			// No metrics should be emitted for this hypervisor since total capacity is zero
-			expectedMetrics: map[string][]expectedMetric{},
+			expectedMetrics: []kvmExpectedMetric{},
 		},
 		{
-			name: "single hypervisor with default traits",
+			name: "single hypervisor with default traits, no reservations",
 			hypervisors: []hv1.Hypervisor{
 				{
 					ObjectMeta: v1.ObjectMeta{
@@ -119,71 +136,17 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 				},
 			},
-			expectedMetrics: map[string][]expectedMetric{
-				"cortex_kvm_host_capacity_total": {
-					{
-						Labels: metricLabels{
-							ComputeHost:      "node001-bb088",
-							Resource:         "cpu",
-							AvailabilityZone: "qa-1a",
-							BuildingBlock:    "bb088",
-							CPUArchitecture:  "cascade-lake",
-							WorkloadType:     "general-purpose",
-							Enabled:          "true",
-							Decommissioned:   "false",
-							ExternalCustomer: "false",
-							Maintenance:      "false",
-						},
-						Value: 128,
-					},
-					{
-						Labels: metricLabels{
-							ComputeHost:      "node001-bb088",
-							Resource:         "ram",
-							AvailabilityZone: "qa-1a",
-							BuildingBlock:    "bb088",
-							CPUArchitecture:  "cascade-lake",
-							WorkloadType:     "general-purpose",
-							Enabled:          "true",
-							Decommissioned:   "false",
-							ExternalCustomer: "false",
-							Maintenance:      "false",
-						},
-						Value: 549755813888, // 512Gi in bytes
-					},
-				},
-				"cortex_kvm_host_capacity_utilized": {
-					{
-						Labels: metricLabels{
-							ComputeHost:      "node001-bb088",
-							Resource:         "cpu",
-							AvailabilityZone: "qa-1a",
-							BuildingBlock:    "bb088",
-							CPUArchitecture:  "cascade-lake",
-							WorkloadType:     "general-purpose",
-							Enabled:          "true",
-							Decommissioned:   "false",
-							ExternalCustomer: "false",
-							Maintenance:      "false",
-						},
-						Value: 64,
-					},
-					{
-						Labels: metricLabels{
-							ComputeHost:      "node001-bb088",
-							Resource:         "ram",
-							AvailabilityZone: "qa-1a",
-							BuildingBlock:    "bb088",
-							CPUArchitecture:  "cascade-lake",
-							WorkloadType:     "general-purpose",
-							Enabled:          "true",
-							Decommissioned:   "false",
-							ExternalCustomer: "false",
-							Maintenance:      "false",
-						},
-						Value: 274877906944, // 256Gi in bytes
-					},
-				},
+			expectedMetrics: []kvmExpectedMetric{
+				{Labels: defaultLabels("node001-bb088", "cpu", "", "qa-1a", "bb088"), Value: 128},
+				{Labels: defaultLabels("node001-bb088", "ram", "", "qa-1a", "bb088"), Value: 549755813888},
+				{Labels: defaultLabels("node001-bb088", "cpu", "utilized", "qa-1a", "bb088"), Value: 64},
+				{Labels: defaultLabels("node001-bb088", "ram", "utilized", "qa-1a", "bb088"), Value: 274877906944},
+				{Labels: defaultLabels("node001-bb088", "cpu", "reserved", "qa-1a", "bb088"), Value: 0},
+				{Labels: defaultLabels("node001-bb088", "ram", "reserved", "qa-1a", "bb088"), Value: 0},
+				{Labels: defaultLabels("node001-bb088", "cpu", "failover", "qa-1a", "bb088"), Value: 0},
+				{Labels: defaultLabels("node001-bb088", "ram", "failover", "qa-1a", "bb088"), Value: 0},
+				{Labels: defaultLabels("node001-bb088", "cpu", "payg", "qa-1a", "bb088"), Value: 64},              // 128-64-0-0
+				{Labels: defaultLabels("node001-bb088", "ram", "payg", "qa-1a", "bb088"), Value: 274877906944},     // 512Gi-256Gi
 			},
 		},
 		{
@@ -212,38 +175,24 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 				},
 			},
-			expectedMetrics: map[string][]expectedMetric{
-				"cortex_kvm_host_capacity_total": {
-					{
-						Labels: metricLabels{
-							ComputeHost:      "node002-bb089",
-							Resource:         "cpu",
-							AvailabilityZone: "qa-1b",
-							BuildingBlock:    "bb089",
-							CPUArchitecture:  "sapphire-rapids",
-							WorkloadType:     "hana",
-							Enabled:          "true",
-							Decommissioned:   "false",
-							ExternalCustomer: "false",
-							Maintenance:      "false",
-						},
-						Value: 256,
+			expectedMetrics: []kvmExpectedMetric{
+				{
+					Labels: kvmMetricLabels{
+						ComputeHost: "node002-bb089", Resource: "cpu",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb089",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "hana",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
 					},
-					{
-						Labels: metricLabels{
-							ComputeHost:      "node002-bb089",
-							Resource:         "ram",
-							AvailabilityZone: "qa-1b",
-							BuildingBlock:    "bb089",
-							CPUArchitecture:  "sapphire-rapids",
-							WorkloadType:     "hana",
-							Enabled:          "true",
-							Decommissioned:   "false",
-							ExternalCustomer: "false",
-							Maintenance:      "false",
-						},
-						Value: 1099511627776, // 1Ti in bytes
+					Value: 256,
+				},
+				{
+					Labels: kvmMetricLabels{
+						ComputeHost: "node002-bb089", Resource: "ram",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb089",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "hana",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
 					},
+					Value: 1099511627776,
 				},
 			},
 		},
@@ -273,23 +222,15 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 				},
 			},
-			expectedMetrics: map[string][]expectedMetric{
-				"cortex_kvm_host_capacity_total": {
-					{
-						Labels: metricLabels{
-							ComputeHost:      "node003-bb090",
-							Resource:         "cpu",
-							AvailabilityZone: "qa-1c",
-							BuildingBlock:    "bb090",
-							CPUArchitecture:  "cascade-lake",
-							WorkloadType:     "general-purpose",
-							Enabled:          "true",
-							Decommissioned:   "true",
-							ExternalCustomer: "true",
-							Maintenance:      "false",
-						},
-						Value: 64,
+			expectedMetrics: []kvmExpectedMetric{
+				{
+					Labels: kvmMetricLabels{
+						ComputeHost: "node003-bb090", Resource: "cpu",
+						AvailabilityZone: "qa-1c", BuildingBlock: "bb090",
+						CPUArchitecture: "cascade-lake", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "true", ExternalCustomer: "true", Maintenance: "false",
 					},
+					Value: 64,
 				},
 			},
 		},
@@ -335,38 +276,16 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 				},
 			},
-			expectedMetrics: map[string][]expectedMetric{
-				"cortex_kvm_host_capacity_total": {
-					{
-						Labels: metricLabels{
-							ComputeHost:      "node010-bb100",
-							Resource:         "cpu",
-							AvailabilityZone: "qa-1a",
-							BuildingBlock:    "bb100",
-							CPUArchitecture:  "cascade-lake",
-							WorkloadType:     "general-purpose",
-							Enabled:          "true",
-							Decommissioned:   "false",
-							ExternalCustomer: "false",
-							Maintenance:      "false",
-						},
-						Value: 100,
+			expectedMetrics: []kvmExpectedMetric{
+				{Labels: defaultLabels("node010-bb100", "cpu", "", "qa-1a", "bb100"), Value: 100},
+				{
+					Labels: kvmMetricLabels{
+						ComputeHost: "node020-bb200", Resource: "cpu",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb200",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
 					},
-					{
-						Labels: metricLabels{
-							ComputeHost:      "node020-bb200",
-							Resource:         "cpu",
-							AvailabilityZone: "qa-1b",
-							BuildingBlock:    "bb200",
-							CPUArchitecture:  "sapphire-rapids",
-							WorkloadType:     "general-purpose",
-							Enabled:          "true",
-							Decommissioned:   "false",
-							ExternalCustomer: "false",
-							Maintenance:      "false",
-						},
-						Value: 200,
-					},
+					Value: 200,
 				},
 			},
 		},
@@ -385,77 +304,259 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 							hv1.ResourceCPU:    resource.MustParse("96"),
 							hv1.ResourceMemory: resource.MustParse("384Gi"),
 						},
-						// No Allocation field - simulating missing data
 						Allocation: nil,
 						Traits:     []string{},
 					},
 				},
 			},
-			expectedMetrics: map[string][]expectedMetric{
-				"cortex_kvm_host_capacity_total": {
-					{
-						Labels: metricLabels{
-							ComputeHost:      "node004-bb091",
-							Resource:         "cpu",
-							AvailabilityZone: "qa-1d",
-							BuildingBlock:    "bb091",
-							CPUArchitecture:  "cascade-lake",
-							WorkloadType:     "general-purpose",
-							Enabled:          "true",
-							Decommissioned:   "false",
-							ExternalCustomer: "false",
-							Maintenance:      "false",
+			expectedMetrics: []kvmExpectedMetric{
+				{Labels: defaultLabels("node004-bb091", "cpu", "", "qa-1d", "bb091"), Value: 96},
+				{Labels: defaultLabels("node004-bb091", "ram", "", "qa-1d", "bb091"), Value: 412316860416},
+				{Labels: defaultLabels("node004-bb091", "cpu", "utilized", "qa-1d", "bb091"), Value: 0},
+				{Labels: defaultLabels("node004-bb091", "ram", "utilized", "qa-1d", "bb091"), Value: 0},
+			},
+		},
+		{
+			name: "failover reservation on a hypervisor",
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "node001-bb088",
+						Labels: map[string]string{
+							"topology.kubernetes.io/zone": "qa-1a",
 						},
-						Value: 96,
 					},
-					{
-						Labels: metricLabels{
-							ComputeHost:      "node004-bb091",
-							Resource:         "ram",
-							AvailabilityZone: "qa-1d",
-							BuildingBlock:    "bb091",
-							CPUArchitecture:  "cascade-lake",
-							WorkloadType:     "general-purpose",
-							Enabled:          "true",
-							Decommissioned:   "false",
-							ExternalCustomer: "false",
-							Maintenance:      "false",
+					Status: hv1.HypervisorStatus{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("128"),
+							hv1.ResourceMemory: resource.MustParse("512Gi"),
 						},
-						Value: 412316860416, // 384Gi in bytes
+						Allocation: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("64"),
+							hv1.ResourceMemory: resource.MustParse("256Gi"),
+						},
+						Traits: []string{},
 					},
 				},
-				"cortex_kvm_host_capacity_utilized": {
-					{
-						Labels: metricLabels{
-							ComputeHost:      "node004-bb091",
-							Resource:         "cpu",
-							AvailabilityZone: "qa-1d",
-							BuildingBlock:    "bb091",
-							CPUArchitecture:  "cascade-lake",
-							WorkloadType:     "general-purpose",
-							Enabled:          "true",
-							Decommissioned:   "false",
-							ExternalCustomer: "false",
-							Maintenance:      "false",
-						},
-						Value: 0, // Should be 0 when allocation is missing
+			},
+			reservations: []v1alpha1.Reservation{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "failover-1",
 					},
-					{
-						Labels: metricLabels{
-							ComputeHost:      "node004-bb091",
-							Resource:         "ram",
-							AvailabilityZone: "qa-1d",
-							BuildingBlock:    "bb091",
-							CPUArchitecture:  "cascade-lake",
-							WorkloadType:     "general-purpose",
-							Enabled:          "true",
-							Decommissioned:   "false",
-							ExternalCustomer: "false",
-							Maintenance:      "false",
+					Spec: v1alpha1.ReservationSpec{
+						Type: v1alpha1.ReservationTypeFailover,
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("16"),
+							hv1.ResourceMemory: resource.MustParse("64Gi"),
 						},
-						Value: 0, // Should be 0 when allocation is missing
+						FailoverReservation: &v1alpha1.FailoverReservationSpec{},
+					},
+					Status: v1alpha1.ReservationStatus{
+						Host: "node001-bb088",
+						Conditions: []v1.Condition{
+							{Type: v1alpha1.ReservationConditionReady, Status: v1.ConditionTrue},
+						},
 					},
 				},
+			},
+			expectedMetrics: []kvmExpectedMetric{
+				{Labels: defaultLabels("node001-bb088", "cpu", "", "qa-1a", "bb088"), Value: 128},
+				{Labels: defaultLabels("node001-bb088", "ram", "", "qa-1a", "bb088"), Value: 549755813888},
+				{Labels: defaultLabels("node001-bb088", "cpu", "utilized", "qa-1a", "bb088"), Value: 64},
+				{Labels: defaultLabels("node001-bb088", "ram", "utilized", "qa-1a", "bb088"), Value: 274877906944},
+				{Labels: defaultLabels("node001-bb088", "cpu", "reserved", "qa-1a", "bb088"), Value: 0},
+				{Labels: defaultLabels("node001-bb088", "ram", "reserved", "qa-1a", "bb088"), Value: 0},
+				{Labels: defaultLabels("node001-bb088", "cpu", "failover", "qa-1a", "bb088"), Value: 16},
+				{Labels: defaultLabels("node001-bb088", "ram", "failover", "qa-1a", "bb088"), Value: 68719476736}, // 64Gi
+				{Labels: defaultLabels("node001-bb088", "cpu", "payg", "qa-1a", "bb088"), Value: 48},              // 128-64-0-16
+				{Labels: defaultLabels("node001-bb088", "ram", "payg", "qa-1a", "bb088"), Value: 206158430208},     // 512Gi-256Gi-0-64Gi = 192Gi
+			},
+		},
+		{
+			name: "committed resource reservation with partial allocation",
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "node001-bb088",
+						Labels: map[string]string{
+							"topology.kubernetes.io/zone": "qa-1a",
+						},
+					},
+					Status: hv1.HypervisorStatus{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("128"),
+							hv1.ResourceMemory: resource.MustParse("512Gi"),
+						},
+						Allocation: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("64"),
+							hv1.ResourceMemory: resource.MustParse("256Gi"),
+						},
+						Traits: []string{},
+					},
+				},
+			},
+			reservations: []v1alpha1.Reservation{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "committed-1",
+					},
+					Spec: v1alpha1.ReservationSpec{
+						Type: v1alpha1.ReservationTypeCommittedResource,
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("32"),
+							hv1.ResourceMemory: resource.MustParse("128Gi"),
+						},
+						CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+							Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+								"vm-uuid-1": {
+									Resources: map[hv1.ResourceName]resource.Quantity{
+										hv1.ResourceCPU:    resource.MustParse("8"),
+										hv1.ResourceMemory: resource.MustParse("32Gi"),
+									},
+								},
+							},
+						},
+					},
+					Status: v1alpha1.ReservationStatus{
+						Host: "node001-bb088",
+						Conditions: []v1.Condition{
+							{Type: v1alpha1.ReservationConditionReady, Status: v1.ConditionTrue},
+						},
+					},
+				},
+			},
+			expectedMetrics: []kvmExpectedMetric{
+				// reserved = 32-8=24 CPU, 128Gi-32Gi=96Gi RAM (not in use)
+				{Labels: defaultLabels("node001-bb088", "cpu", "reserved", "qa-1a", "bb088"), Value: 24},
+				{Labels: defaultLabels("node001-bb088", "ram", "reserved", "qa-1a", "bb088"), Value: 103079215104}, // 96Gi
+				{Labels: defaultLabels("node001-bb088", "cpu", "failover", "qa-1a", "bb088"), Value: 0},
+				{Labels: defaultLabels("node001-bb088", "ram", "failover", "qa-1a", "bb088"), Value: 0},
+				{Labels: defaultLabels("node001-bb088", "cpu", "payg", "qa-1a", "bb088"), Value: 40},               // 128-64-24-0
+				{Labels: defaultLabels("node001-bb088", "ram", "payg", "qa-1a", "bb088"), Value: 171798691840},      // 512Gi-256Gi-96Gi-0 = 160Gi
+			},
+		},
+		{
+			name: "non-ready reservation should be ignored",
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "node001-bb088",
+						Labels: map[string]string{
+							"topology.kubernetes.io/zone": "qa-1a",
+						},
+					},
+					Status: hv1.HypervisorStatus{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("128"),
+							hv1.ResourceMemory: resource.MustParse("512Gi"),
+						},
+						Allocation: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("64"),
+							hv1.ResourceMemory: resource.MustParse("256Gi"),
+						},
+						Traits: []string{},
+					},
+				},
+			},
+			reservations: []v1alpha1.Reservation{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "failover-not-ready",
+					},
+					Spec: v1alpha1.ReservationSpec{
+						Type: v1alpha1.ReservationTypeFailover,
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("16"),
+							hv1.ResourceMemory: resource.MustParse("64Gi"),
+						},
+						FailoverReservation: &v1alpha1.FailoverReservationSpec{},
+					},
+					Status: v1alpha1.ReservationStatus{
+						Host: "node001-bb088",
+						Conditions: []v1.Condition{
+							{Type: v1alpha1.ReservationConditionReady, Status: v1.ConditionFalse},
+						},
+					},
+				},
+			},
+			expectedMetrics: []kvmExpectedMetric{
+				// Non-ready reservation ignored, so failover = 0
+				{Labels: defaultLabels("node001-bb088", "cpu", "failover", "qa-1a", "bb088"), Value: 0},
+				{Labels: defaultLabels("node001-bb088", "ram", "failover", "qa-1a", "bb088"), Value: 0},
+				{Labels: defaultLabels("node001-bb088", "cpu", "payg", "qa-1a", "bb088"), Value: 64},
+				{Labels: defaultLabels("node001-bb088", "ram", "payg", "qa-1a", "bb088"), Value: 274877906944},
+			},
+		},
+		{
+			name: "multiple failover reservations on same host are summed",
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "node001-bb088",
+						Labels: map[string]string{
+							"topology.kubernetes.io/zone": "qa-1a",
+						},
+					},
+					Status: hv1.HypervisorStatus{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("128"),
+							hv1.ResourceMemory: resource.MustParse("512Gi"),
+						},
+						Allocation: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("64"),
+							hv1.ResourceMemory: resource.MustParse("256Gi"),
+						},
+						Traits: []string{},
+					},
+				},
+			},
+			reservations: []v1alpha1.Reservation{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "failover-1",
+					},
+					Spec: v1alpha1.ReservationSpec{
+						Type: v1alpha1.ReservationTypeFailover,
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("8"),
+							hv1.ResourceMemory: resource.MustParse("32Gi"),
+						},
+						FailoverReservation: &v1alpha1.FailoverReservationSpec{},
+					},
+					Status: v1alpha1.ReservationStatus{
+						Host: "node001-bb088",
+						Conditions: []v1.Condition{
+							{Type: v1alpha1.ReservationConditionReady, Status: v1.ConditionTrue},
+						},
+					},
+				},
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "failover-2",
+					},
+					Spec: v1alpha1.ReservationSpec{
+						Type: v1alpha1.ReservationTypeFailover,
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("12"),
+							hv1.ResourceMemory: resource.MustParse("48Gi"),
+						},
+						FailoverReservation: &v1alpha1.FailoverReservationSpec{},
+					},
+					Status: v1alpha1.ReservationStatus{
+						Host: "node001-bb088",
+						Conditions: []v1.Condition{
+							{Type: v1alpha1.ReservationConditionReady, Status: v1.ConditionTrue},
+						},
+					},
+				},
+			},
+			expectedMetrics: []kvmExpectedMetric{
+				// failover = 8+12=20 CPU, 32Gi+48Gi=80Gi RAM
+				{Labels: defaultLabels("node001-bb088", "cpu", "failover", "qa-1a", "bb088"), Value: 20},
+				{Labels: defaultLabels("node001-bb088", "ram", "failover", "qa-1a", "bb088"), Value: 85899345920}, // 80Gi
+				{Labels: defaultLabels("node001-bb088", "cpu", "payg", "qa-1a", "bb088"), Value: 44},              // 128-64-0-20
+				{Labels: defaultLabels("node001-bb088", "ram", "payg", "qa-1a", "bb088"), Value: 188978561024},     // 512Gi-256Gi-0-80Gi = 176Gi
 			},
 		},
 	}
@@ -466,10 +567,16 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 			if err := hv1.AddToScheme(scheme); err != nil {
 				t.Fatalf("failed to add hypervisor scheme: %v", err)
 			}
+			if err := v1alpha1.AddToScheme(scheme); err != nil {
+				t.Fatalf("failed to add v1alpha1 scheme: %v", err)
+			}
 
-			objects := make([]runtime.Object, len(tt.hypervisors))
+			objects := make([]runtime.Object, 0, len(tt.hypervisors)+len(tt.reservations))
 			for i := range tt.hypervisors {
-				objects[i] = &tt.hypervisors[i]
+				objects = append(objects, &tt.hypervisors[i])
+			}
+			for i := range tt.reservations {
+				objects = append(objects, &tt.reservations[i])
 			}
 
 			client := fake.NewClientBuilder().
@@ -486,25 +593,22 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 			kpi.Collect(ch)
 			close(ch)
 
-			actualMetrics := make(map[string][]expectedMetric)
+			var actualMetrics []kvmExpectedMetric
 			for metric := range ch {
 				var m prometheusgo.Metric
 				if err := metric.Write(&m); err != nil {
 					t.Fatalf("failed to write metric: %v", err)
 				}
 
-				// Extract metric name from description
-				desc := metric.Desc().String()
-				metricName := getMetricName(desc)
-
-				// Extract labels
-				labels := metricLabels{}
+				labels := kvmMetricLabels{}
 				for _, label := range m.Label {
 					switch label.GetName() {
 					case "compute_host":
 						labels.ComputeHost = label.GetValue()
 					case "resource":
 						labels.Resource = label.GetValue()
+					case "type":
+						labels.Type = label.GetValue()
 					case "availability_zone":
 						labels.AvailabilityZone = label.GetValue()
 					case "building_block":
@@ -524,36 +628,151 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					}
 				}
 
-				actualMetrics[metricName] = append(actualMetrics[metricName], expectedMetric{
+				actualMetrics = append(actualMetrics, kvmExpectedMetric{
 					Labels: labels,
 					Value:  m.GetGauge().GetValue(),
 				})
 			}
 
-			// Verify expected metrics
-			for metricName, expectedList := range tt.expectedMetrics {
-				actualList, ok := actualMetrics[metricName]
+			// Verify each expected metric is present with the correct value
+			for _, expected := range tt.expectedMetrics {
+				found := false
+				for _, actual := range actualMetrics {
+					if actual.Labels == expected.Labels {
+						found = true
+						if actual.Value != expected.Value {
+							t.Errorf("metric with labels %+v: expected value %f, got %f",
+								expected.Labels, expected.Value, actual.Value)
+						}
+						break
+					}
+				}
+				if !found {
+					t.Errorf("metric with labels %+v not found in actual metrics", expected.Labels)
+				}
+			}
+		})
+	}
+}
+
+func TestAggregateReservationsByHost(t *testing.T) {
+	tests := []struct {
+		name                        string
+		reservations                []v1alpha1.Reservation
+		expectedFailover            map[string]hostReservationResources
+		expectedCommittedNotInUse   map[string]hostReservationResources
+	}{
+		{
+			name:                      "empty reservations",
+			reservations:              nil,
+			expectedFailover:          map[string]hostReservationResources{},
+			expectedCommittedNotInUse: map[string]hostReservationResources{},
+		},
+		{
+			name: "reservation with no ready condition is skipped",
+			reservations: []v1alpha1.Reservation{
+				{
+					Spec: v1alpha1.ReservationSpec{
+						Type: v1alpha1.ReservationTypeFailover,
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU: resource.MustParse("10"),
+						},
+					},
+					Status: v1alpha1.ReservationStatus{
+						Host: "host-1",
+						// No conditions
+					},
+				},
+			},
+			expectedFailover:          map[string]hostReservationResources{},
+			expectedCommittedNotInUse: map[string]hostReservationResources{},
+		},
+		{
+			name: "reservation with empty host is skipped",
+			reservations: []v1alpha1.Reservation{
+				{
+					Spec: v1alpha1.ReservationSpec{
+						Type: v1alpha1.ReservationTypeFailover,
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU: resource.MustParse("10"),
+						},
+					},
+					Status: v1alpha1.ReservationStatus{
+						Host: "",
+						Conditions: []v1.Condition{
+							{Type: v1alpha1.ReservationConditionReady, Status: v1.ConditionTrue},
+						},
+					},
+				},
+			},
+			expectedFailover:          map[string]hostReservationResources{},
+			expectedCommittedNotInUse: map[string]hostReservationResources{},
+		},
+		{
+			name: "committed resource with nil spec does not panic",
+			reservations: []v1alpha1.Reservation{
+				{
+					Spec: v1alpha1.ReservationSpec{
+						Type: v1alpha1.ReservationTypeCommittedResource,
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("16"),
+							hv1.ResourceMemory: resource.MustParse("64Gi"),
+						},
+						CommittedResourceReservation: nil,
+					},
+					Status: v1alpha1.ReservationStatus{
+						Host: "host-1",
+						Conditions: []v1.Condition{
+							{Type: v1alpha1.ReservationConditionReady, Status: v1.ConditionTrue},
+						},
+					},
+				},
+			},
+			expectedFailover: map[string]hostReservationResources{},
+			expectedCommittedNotInUse: map[string]hostReservationResources{
+				"host-1": {
+					cpu:    resource.MustParse("16"),
+					memory: resource.MustParse("64Gi"),
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			failover, committed := aggregateReservationsByHost(tt.reservations)
+
+			if len(failover) != len(tt.expectedFailover) {
+				t.Errorf("failover map length: expected %d, got %d", len(tt.expectedFailover), len(failover))
+			}
+			for host, expected := range tt.expectedFailover {
+				actual, ok := failover[host]
 				if !ok {
-					t.Errorf("metric %q not found in actual metrics", metricName)
+					t.Errorf("failover: host %q not found", host)
 					continue
 				}
+				if actual.cpu.Cmp(expected.cpu) != 0 {
+					t.Errorf("failover[%s].cpu: expected %s, got %s", host, expected.cpu.String(), actual.cpu.String())
+				}
+				if actual.memory.Cmp(expected.memory) != 0 {
+					t.Errorf("failover[%s].memory: expected %s, got %s", host, expected.memory.String(), actual.memory.String())
+				}
+			}
 
-				for _, expected := range expectedList {
-					found := false
-					for _, actual := range actualList {
-						if actual.Labels == expected.Labels {
-							found = true
-							if actual.Value != expected.Value {
-								t.Errorf("metric %q with labels %+v: expected value %f, got %f",
-									metricName, expected.Labels, expected.Value, actual.Value)
-							}
-							break
-						}
-					}
-					if !found {
-						t.Errorf("metric %q with labels %+v not found in actual metrics",
-							metricName, expected.Labels)
-					}
+			if len(committed) != len(tt.expectedCommittedNotInUse) {
+				t.Errorf("committed map length: expected %d, got %d", len(tt.expectedCommittedNotInUse), len(committed))
+			}
+			for host, expected := range tt.expectedCommittedNotInUse {
+				actual, ok := committed[host]
+				if !ok {
+					t.Errorf("committed: host %q not found", host)
+					continue
+				}
+				if actual.cpu.Cmp(expected.cpu) != 0 {
+					t.Errorf("committed[%s].cpu: expected %s, got %s", host, expected.cpu.String(), actual.cpu.String())
+				}
+				if actual.memory.Cmp(expected.memory) != 0 {
+					t.Errorf("committed[%s].memory: expected %s, got %s", host, expected.memory.String(), actual.memory.String())
 				}
 			}
 		})
