@@ -87,6 +87,7 @@ spec:
   {{- end }}
   type: openstack
   openstack:
+    syncInterval: 600s
     secretRef:
       name: cortex-nova-openstack-keystone
       namespace: {{ .Release.Namespace }}
@@ -110,6 +111,7 @@ spec:
   {{- end }}
   type: openstack
   openstack:
+    syncInterval: 600s
     secretRef:
       name: cortex-nova-openstack-keystone
       namespace: {{ .Release.Namespace }}
@@ -133,6 +135,7 @@ spec:
   {{- end }}
   type: openstack
   openstack:
+    syncInterval: 600s
     secretRef:
       name: cortex-nova-openstack-keystone
       namespace: {{ .Release.Namespace }}
@@ -156,6 +159,7 @@ spec:
   {{- end }}
   type: openstack
   openstack:
+    syncInterval: 600s
     secretRef:
       name: cortex-nova-openstack-keystone
       namespace: {{ .Release.Namespace }}
@@ -179,6 +183,7 @@ spec:
   {{- end }}
   type: openstack
   openstack:
+    syncInterval: 600s
     secretRef:
       name: cortex-nova-openstack-keystone
       namespace: {{ .Release.Namespace }}
@@ -202,6 +207,7 @@ spec:
   {{- end }}
   type: openstack
   openstack:
+    syncInterval: 600s
     secretRef:
       name: cortex-nova-openstack-keystone
       namespace: {{ .Release.Namespace }}
@@ -225,6 +231,7 @@ spec:
   {{- end }}
   type: openstack
   openstack:
+    syncInterval: 600s
     secretRef:
       name: cortex-nova-openstack-keystone
       namespace: {{ .Release.Namespace }}
@@ -248,6 +255,7 @@ spec:
   {{- end }}
   type: openstack
   openstack:
+    syncInterval: 600s
     secretRef:
       name: cortex-nova-openstack-keystone
       namespace: {{ .Release.Namespace }}
@@ -271,6 +279,7 @@ spec:
   {{- end }}
   type: openstack
   openstack:
+    syncInterval: 600s
     secretRef:
       name: cortex-nova-openstack-keystone
       namespace: {{ .Release.Namespace }}
@@ -294,6 +303,7 @@ spec:
   {{- end }}
   type: openstack
   openstack:
+    syncInterval: 600s
     secretRef:
       name: cortex-nova-openstack-keystone
       namespace: {{ .Release.Namespace }}
@@ -317,6 +327,7 @@ spec:
   {{- end }}
   type: openstack
   openstack:
+    syncInterval: 600s
     secretRef:
       name: cortex-nova-openstack-keystone
       namespace: {{ .Release.Namespace }}
@@ -340,6 +351,7 @@ spec:
   {{- end }}
   type: openstack
   openstack:
+    syncInterval: 600s
     secretRef:
       name: cortex-nova-openstack-keystone
       namespace: {{ .Release.Namespace }}
