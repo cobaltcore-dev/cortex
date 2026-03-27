@@ -21,7 +21,7 @@ jobs:
             **/*.alerts.yaml
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
 
       - name: Check changed rule and alert files via promtool
         if: steps.changed.outputs.any_changed == 'true'

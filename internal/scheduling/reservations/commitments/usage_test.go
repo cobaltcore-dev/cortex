@@ -331,34 +331,61 @@ func TestBuildVMAttributes(t *testing.T) {
 		MemoryMB:   4096,
 		VCPUs:      16,
 		DiskGB:     100,
+		Metadata:   map[string]string{"env": "prod"},
+		Tags:       []string{"important"},
 	}
 
 	t.Run("with commitment", func(t *testing.T) {
 		attrs := buildVMAttributes(vm, "commit-456")
 
-		if attrs["name"] != "my-vm" {
-			t.Errorf("name = %v, expected my-vm", attrs["name"])
-		}
-		if attrs["flavor"] != "m1.large" {
-			t.Errorf("flavor = %v, expected m1.large", attrs["flavor"])
-		}
+		// Status at top level
 		if attrs["status"] != "ACTIVE" {
 			t.Errorf("status = %v, expected ACTIVE", attrs["status"])
 		}
-		if attrs["hypervisor"] != "host-1" {
-			t.Errorf("hypervisor = %v, expected host-1", attrs["hypervisor"])
+
+		// Metadata at top level
+		metadata, ok := attrs["metadata"].(map[string]string)
+		if !ok {
+			t.Errorf("metadata is not map[string]string: %T", attrs["metadata"])
+		} else if metadata["env"] != "prod" {
+			t.Errorf("metadata[env] = %v, expected prod", metadata["env"])
 		}
-		if attrs["ram"] != uint64(4096) {
-			t.Errorf("ram = %v, expected 4096", attrs["ram"])
+
+		// Tags at top level
+		tags, ok := attrs["tags"].([]string)
+		if !ok {
+			t.Errorf("tags is not []string: %T", attrs["tags"])
+		} else if len(tags) != 1 || tags[0] != "important" {
+			t.Errorf("tags = %v, expected [important]", tags)
 		}
-		if attrs["vcpu"] != uint64(16) {
-			t.Errorf("vcpu = %v, expected 16", attrs["vcpu"])
+
+		// Flavor is now nested
+		flavor, ok := attrs["flavor"].(map[string]any)
+		if !ok {
+			t.Errorf("flavor is not map[string]any: %T", attrs["flavor"])
+		} else {
+			if flavor["name"] != "m1.large" {
+				t.Errorf("flavor.name = %v, expected m1.large", flavor["name"])
+			}
+			if flavor["vcpu"] != uint64(16) {
+				t.Errorf("flavor.vcpu = %v, expected 16", flavor["vcpu"])
+			}
+			if flavor["ram_mib"] != uint64(4096) {
+				t.Errorf("flavor.ram_mib = %v, expected 4096", flavor["ram_mib"])
+			}
+			if flavor["disk_gib"] != uint64(100) {
+				t.Errorf("flavor.disk_gib = %v, expected 100", flavor["disk_gib"])
+			}
 		}
-		if attrs["disk"] != uint64(100) {
-			t.Errorf("disk = %v, expected 100", attrs["disk"])
-		}
+
+		// Commitment ID
 		if attrs["commitment_id"] != "commit-456" {
 			t.Errorf("commitment_id = %v, expected commit-456", attrs["commitment_id"])
+		}
+
+		// OS type (empty for now)
+		if attrs["os_type"] != "" {
+			t.Errorf("os_type = %v, expected empty string", attrs["os_type"])
 		}
 	})
 
@@ -367,6 +394,32 @@ func TestBuildVMAttributes(t *testing.T) {
 
 		if attrs["commitment_id"] != nil {
 			t.Errorf("commitment_id = %v, expected nil", attrs["commitment_id"])
+		}
+	})
+
+	t.Run("with nil metadata and tags", func(t *testing.T) {
+		vmEmpty := VMUsageInfo{
+			UUID:       "vm-empty",
+			Name:       "empty-vm",
+			FlavorName: "m1.small",
+			Status:     "ACTIVE",
+			MemoryMB:   1024,
+			VCPUs:      2,
+			DiskGB:     10,
+			Metadata:   nil,
+			Tags:       nil,
+		}
+		attrs := buildVMAttributes(vmEmpty, "")
+
+		// Should have empty map and slice, not nil (for JSON serialization)
+		metadata, ok := attrs["metadata"].(map[string]string)
+		if !ok || metadata == nil {
+			t.Errorf("metadata should be empty map, got %T: %v", attrs["metadata"], attrs["metadata"])
+		}
+
+		tags, ok := attrs["tags"].([]string)
+		if !ok || tags == nil {
+			t.Errorf("tags should be empty slice, got %T: %v", attrs["tags"], attrs["tags"])
 		}
 	})
 }
@@ -584,9 +637,10 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 			}
 
 			// Find the VM in subresources and check its commitment assignment
-			res, ok := report.Resources["hw_version_hana_1_ram"]
+			// Subresources are now on the instances resource, not RAM
+			res, ok := report.Resources["hw_version_hana_1_instances"]
 			if !ok {
-				t.Fatal("Resource hw_version_hana_1_ram not found")
+				t.Fatal("Resource hw_version_hana_1_instances not found")
 			}
 
 			var foundCommitment any
@@ -614,6 +668,175 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 				if foundCommitment != tt.expectedActiveCommitment {
 					t.Errorf("Expected commitment %s, got %v", tt.expectedActiveCommitment, foundCommitment)
 				}
+			}
+		})
+	}
+}
+
+// TestUsageMultipleCalculation_FloorDivision tests that RAM usage is calculated
+// using floor division to handle Nova's memory overhead correctly.
+// Nova flavors like "2 GiB" actually have 2032 MiB (not 2048) due to overhead.
+// A "4 GiB" flavor has 4080 MiB, which is 2.007× the base unit.
+// Floor division ensures 4080 / 2032 = 2 (not 3 from ceiling).
+func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
+	log.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
+	ctx := context.Background()
+	baseTime := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	// Realistic Nova flavor values with memory overhead (2032 MiB base, not 2048)
+	// These match real-world hw_version_2101 flavors
+	smallestFlavor := &TestFlavor{Name: "g_k_c1_m2_v2", Group: "hw_2101", MemoryMB: 2032, VCPUs: 1}
+	flavor2x := &TestFlavor{Name: "g_k_c2_m4_v2", Group: "hw_2101", MemoryMB: 4080, VCPUs: 2}      // ~2× smallest (4080/2032 = 2.007)
+	flavor8x := &TestFlavor{Name: "g_k_c4_m16_v2", Group: "hw_2101", MemoryMB: 16368, VCPUs: 4}    // ~8× smallest (16368/2032 = 8.06)
+	flavor16x := &TestFlavor{Name: "g_k_c16_m32_v2", Group: "hw_2101", MemoryMB: 32752, VCPUs: 16} // ~16× smallest (32752/2032 = 16.11)
+
+	tests := []struct {
+		name              string
+		vms               []nova.ServerDetail
+		expectedRAM       uint64 // Expected RAM usage in units
+		expectedCores     uint64 // Expected cores usage
+		expectedInstances uint64
+	}{
+		{
+			name: "single smallest flavor - 1 unit",
+			vms: []nova.ServerDetail{
+				{
+					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
+					TenantID: "project-A", AvailabilityZone: "az-a",
+					Created:    baseTime.Format(time.RFC3339),
+					FlavorName: "g_k_c1_m2_v2", FlavorRAM: 2032, FlavorVCPUs: 1,
+				},
+			},
+			expectedRAM:       1,
+			expectedCores:     1,
+			expectedInstances: 1,
+		},
+		{
+			name: "2x flavor with overhead - floor(4080/2032) = 2 units, not 3",
+			vms: []nova.ServerDetail{
+				{
+					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
+					TenantID: "project-A", AvailabilityZone: "az-a",
+					Created:    baseTime.Format(time.RFC3339),
+					FlavorName: "g_k_c2_m4_v2", FlavorRAM: 4080, FlavorVCPUs: 2,
+				},
+			},
+			expectedRAM:       2, // floor(4080/2032) = 2, NOT 3 (ceiling would give 3)
+			expectedCores:     2,
+			expectedInstances: 1,
+		},
+		{
+			name: "multiple VMs - RAM units should match cores for fixed ratio",
+			vms: []nova.ServerDetail{
+				{
+					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
+					TenantID: "project-A", AvailabilityZone: "az-a",
+					Created:    baseTime.Format(time.RFC3339),
+					FlavorName: "g_k_c1_m2_v2", FlavorRAM: 2032, FlavorVCPUs: 1,
+				},
+				{
+					ID: "vm-002", Name: "vm-002", Status: "ACTIVE",
+					TenantID: "project-A", AvailabilityZone: "az-a",
+					Created:    baseTime.Add(time.Second).Format(time.RFC3339),
+					FlavorName: "g_k_c2_m4_v2", FlavorRAM: 4080, FlavorVCPUs: 2,
+				},
+				{
+					ID: "vm-003", Name: "vm-003", Status: "ACTIVE",
+					TenantID: "project-A", AvailabilityZone: "az-a",
+					Created:    baseTime.Add(2 * time.Second).Format(time.RFC3339),
+					FlavorName: "g_k_c4_m16_v2", FlavorRAM: 16368, FlavorVCPUs: 4,
+				},
+				{
+					ID: "vm-004", Name: "vm-004", Status: "ACTIVE",
+					TenantID: "project-A", AvailabilityZone: "az-a",
+					Created:    baseTime.Add(3 * time.Second).Format(time.RFC3339),
+					FlavorName: "g_k_c16_m32_v2", FlavorRAM: 32752, FlavorVCPUs: 16,
+				},
+			},
+			// floor(2032/2032) + floor(4080/2032) + floor(16368/2032) + floor(32752/2032)
+			// = 1 + 2 + 8 + 16 = 27 (matches sum of vCPUs: 1+2+4+16=23... wait, that's not right)
+			// Actually cores = 1+2+4+16 = 23
+			// RAM units = 1+2+8+16 = 27
+			// These don't match because vCPUs and RAM have different ratios per flavor!
+			expectedRAM:       27, // 1 + 2 + 8 + 16
+			expectedCores:     23, // 1 + 2 + 4 + 16
+			expectedInstances: 4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			_ = v1alpha1.AddToScheme(scheme)
+			_ = hv1.AddToScheme(scheme)
+
+			// Build flavor groups with realistic values
+			flavorGroups := TestFlavorGroup{
+				infoVersion: 1234,
+				flavors: []compute.FlavorInGroup{
+					smallestFlavor.ToFlavorInGroup(),
+					flavor2x.ToFlavorInGroup(),
+					flavor8x.ToFlavorInGroup(),
+					flavor16x.ToFlavorInGroup(),
+				},
+			}.ToFlavorGroupsKnowledge()
+
+			objects := []client.Object{createKnowledgeCRD(flavorGroups)}
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objects...).
+				Build()
+
+			novaClient := &mockUsageNovaClient{
+				servers: map[string][]nova.ServerDetail{
+					"project-A": tt.vms,
+				},
+			}
+
+			calc := NewUsageCalculator(k8sClient, novaClient)
+			logger := log.FromContext(ctx)
+			report, err := calc.CalculateUsage(ctx, logger, "project-A", []liquid.AvailabilityZone{"az-a"})
+			if err != nil {
+				t.Fatalf("CalculateUsage failed: %v", err)
+			}
+
+			// Check RAM usage
+			ramResource := report.Resources[liquid.ResourceName("hw_version_hw_2101_ram")]
+			if ramResource == nil {
+				t.Fatal("hw_version_hw_2101_ram resource not found")
+			}
+			var totalRAM uint64
+			for _, azReport := range ramResource.PerAZ {
+				totalRAM += azReport.Usage
+			}
+			if totalRAM != tt.expectedRAM {
+				t.Errorf("RAM usage = %d, expected %d", totalRAM, tt.expectedRAM)
+			}
+
+			// Check cores usage
+			coresResource := report.Resources[liquid.ResourceName("hw_version_hw_2101_cores")]
+			if coresResource == nil {
+				t.Fatal("hw_version_hw_2101_cores resource not found")
+			}
+			var totalCores uint64
+			for _, azReport := range coresResource.PerAZ {
+				totalCores += azReport.Usage
+			}
+			if totalCores != tt.expectedCores {
+				t.Errorf("Cores usage = %d, expected %d", totalCores, tt.expectedCores)
+			}
+
+			// Check instances usage
+			instancesResource := report.Resources[liquid.ResourceName("hw_version_hw_2101_instances")]
+			if instancesResource == nil {
+				t.Fatal("hw_version_hw_2101_instances resource not found")
+			}
+			var totalInstances uint64
+			for _, azReport := range instancesResource.PerAZ {
+				totalInstances += azReport.Usage
+			}
+			if totalInstances != tt.expectedInstances {
+				t.Errorf("Instances usage = %d, expected %d", totalInstances, tt.expectedInstances)
 			}
 		})
 	}

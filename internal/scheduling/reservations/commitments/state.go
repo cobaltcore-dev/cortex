@@ -18,29 +18,58 @@ import (
 // commitmentUUIDPattern validates commitment UUID format.
 var commitmentUUIDPattern = regexp.MustCompile(`^[a-zA-Z0-9-]{6,40}$`)
 
-// Limes LIQUID resource naming convention: hw_version_<flavorgroup>_ram
+// Limes LIQUID resource naming convention: hw_version_<flavorgroup>_<resourcetype>
+// Supported resource types: _ram, _cores, _instances
 const (
 	resourceNamePrefix = "hw_version_"
-	resourceNameSuffix = "_ram"
+	// Resource type suffixes
+	ResourceSuffixRAM       = "_ram"
+	ResourceSuffixCores     = "_cores"
+	ResourceSuffixInstances = "_instances"
 )
 
-// ResourceNameFromFlavorGroup creates a LIQUID resource name from a flavor group name.
+// ResourceNameRAM creates a LIQUID resource name for RAM from a flavor group name.
 // Format: hw_version_<flavorgroup>_ram
-func ResourceNameFromFlavorGroup(flavorGroup string) string {
-	return resourceNamePrefix + flavorGroup + resourceNameSuffix
+func ResourceNameRAM(flavorGroup string) string {
+	return resourceNamePrefix + flavorGroup + ResourceSuffixRAM
 }
 
+// ResourceNameCores creates a LIQUID resource name for CPU cores from a flavor group name.
+// Format: hw_version_<flavorgroup>_cores
+func ResourceNameCores(flavorGroup string) string {
+	return resourceNamePrefix + flavorGroup + ResourceSuffixCores
+}
+
+// ResourceNameInstances creates a LIQUID resource name for instance count from a flavor group name.
+// Format: hw_version_<flavorgroup>_instances
+func ResourceNameInstances(flavorGroup string) string {
+	return resourceNamePrefix + flavorGroup + ResourceSuffixInstances
+}
+
+// getFlavorGroupNameFromResource extracts the flavor group name from a LIQUID resource name.
+// Only accepts _ram resources since CommitmentState is RAM-based.
+// Callers handling _cores or _instances must use a different approach.
 func getFlavorGroupNameFromResource(resourceName string) (string, error) {
-	if !strings.HasPrefix(resourceName, resourceNamePrefix) || !strings.HasSuffix(resourceName, resourceNameSuffix) {
-		return "", fmt.Errorf("invalid resource name: %s", resourceName)
+	if !strings.HasPrefix(resourceName, resourceNamePrefix) {
+		return "", fmt.Errorf("invalid resource name: %s (missing prefix)", resourceName)
 	}
+
+	// Only accept _ram suffix - commitments are RAM-based and CommitmentState
+	// carries TotalMemoryBytes. Accepting _cores or _instances here would
+	// silently reinterpret non-RAM amounts as RAM, producing wrong state.
+	if !strings.HasSuffix(resourceName, ResourceSuffixRAM) {
+		return "", fmt.Errorf("invalid resource name: %s (only _ram resources are supported for commitments)", resourceName)
+	}
+
 	// Remove prefix and suffix
 	name := strings.TrimPrefix(resourceName, resourceNamePrefix)
-	name = strings.TrimSuffix(name, resourceNameSuffix)
+	name = strings.TrimSuffix(name, ResourceSuffixRAM)
+
 	// Validate that the extracted group name is not empty
 	if name == "" {
 		return "", fmt.Errorf("invalid resource name: %s (empty group name)", resourceName)
 	}
+
 	return name, nil
 }
 

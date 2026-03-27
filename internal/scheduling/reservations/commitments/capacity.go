@@ -25,8 +25,9 @@ func NewCapacityCalculator(client client.Client) *CapacityCalculator {
 	return &CapacityCalculator{client: client}
 }
 
-// CalculateCapacity computes per-AZ capacity for all flavor groups that accept commitments.
-// Only flavor groups with a fixed RAM/core ratio are included in the report.
+// CalculateCapacity computes per-AZ capacity for all flavor groups.
+// For each flavor group, three resources are reported: _ram, _cores, _instances.
+// All flavor groups are included, not just those with fixed RAM/core ratio.
 func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.ServiceCapacityReport, error) {
 	// Get all flavor groups from Knowledge CRDs
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
@@ -41,33 +42,62 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.Serv
 		infoVersion = knowledgeCRD.Status.LastContentChange.Unix()
 	}
 
-	// Build capacity report per flavor group (only for groups that accept CRs)
+	// Build capacity report for all flavor groups
 	report := liquid.ServiceCapacityReport{
 		InfoVersion: infoVersion,
 		Resources:   make(map[liquid.ResourceName]*liquid.ResourceCapacityReport),
 	}
 
 	for groupName, groupData := range flavorGroups {
-		// Only report capacity for flavor groups that accept commitments
-		if !FlavorGroupAcceptsCommitments(&groupData) {
-			continue
-		}
+		// All flavor groups are included in capacity reporting (not just those with fixed ratio).
 
-		// Resource name follows pattern: hw_version_<flavorgroup>_ram
-		resourceName := liquid.ResourceName(ResourceNameFromFlavorGroup(groupName))
-
-		// Calculate per-AZ capacity and usage
+		// Calculate per-AZ capacity (placeholder: capacity=0 for all resources)
 		azCapacity, err := c.calculateAZCapacity(ctx, groupName, groupData)
 		if err != nil {
 			return liquid.ServiceCapacityReport{}, fmt.Errorf("failed to calculate capacity for %s: %w", groupName, err)
 		}
 
-		report.Resources[resourceName] = &liquid.ResourceCapacityReport{
+		// === 1. RAM Resource ===
+		ramResourceName := liquid.ResourceName(ResourceNameRAM(groupName))
+		report.Resources[ramResourceName] = &liquid.ResourceCapacityReport{
 			PerAZ: azCapacity,
+		}
+
+		// === 2. Cores Resource ===
+		// NOTE: Copying RAM capacity is only valid while capacity=0 (placeholder).
+		// When real capacity is implemented, derive cores capacity with unit conversion
+		// (e.g., cores = RAM / ramCoreRatio). See calculateAZCapacity for details.
+		coresResourceName := liquid.ResourceName(ResourceNameCores(groupName))
+		report.Resources[coresResourceName] = &liquid.ResourceCapacityReport{
+			PerAZ: c.copyAZCapacity(azCapacity),
+		}
+
+		// === 3. Instances Resource ===
+		// NOTE: Same as cores - copying is only valid while capacity=0 (placeholder).
+		// When real capacity is implemented, derive instances capacity appropriately.
+		instancesResourceName := liquid.ResourceName(ResourceNameInstances(groupName))
+		report.Resources[instancesResourceName] = &liquid.ResourceCapacityReport{
+			PerAZ: c.copyAZCapacity(azCapacity),
 		}
 	}
 
 	return report, nil
+}
+
+// copyAZCapacity creates a deep copy of the AZ capacity map.
+// This is needed because each resource needs its own map instance.
+func (c *CapacityCalculator) copyAZCapacity(
+	src map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport,
+) map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport {
+
+	result := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(src))
+	for az, report := range src {
+		result[az] = &liquid.AZResourceCapacityReport{
+			Capacity: report.Capacity,
+			Usage:    report.Usage,
+		}
+	}
+	return result
 }
 
 func (c *CapacityCalculator) calculateAZCapacity(
@@ -81,7 +111,15 @@ func (c *CapacityCalculator) calculateAZCapacity(
 		return nil, fmt.Errorf("failed to get availability zones: %w", err)
 	}
 
-	// Create report entry for each AZ with placeholder capacity=0
+	// Create report entry for each AZ with placeholder capacity=0.
+	//
+	// NOTE: When implementing real capacity calculation here, you MUST also update
+	// the copying logic in CalculateCapacity() for _cores and _instances resources.
+	// Those resources use different units (vCPUs and VM count) than _ram (memory multiples),
+	// so the capacity values cannot be simply copied - they require unit conversion:
+	//   - _cores capacity = RAM capacity / ramCoreRatio
+	//   - _instances capacity = needs its own derivation logic
+	//
 	// TODO: Calculate actual capacity from Reservation CRDs or host resources
 	// TODO: Calculate actual usage from VM allocations
 	result := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport)

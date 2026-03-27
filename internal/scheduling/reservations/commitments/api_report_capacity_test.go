@@ -183,18 +183,36 @@ func TestCapacityCalculator(t *testing.T) {
 			t.Fatalf("Expected no error, got: %v", err)
 		}
 
-		if len(report.Resources) != 1 {
-			t.Fatalf("Expected 1 resource, got %d", len(report.Resources))
+		// Now we have 3 resources per flavor group: _ram, _cores, _instances
+		if len(report.Resources) != 3 {
+			t.Fatalf("Expected 3 resources (_ram, _cores, _instances), got %d", len(report.Resources))
 		}
 
-		resource := report.Resources[liquid.ResourceName("hw_version_test-group_ram")]
-		if resource == nil {
+		// Check RAM resource
+		ramResource := report.Resources[liquid.ResourceName("hw_version_test-group_ram")]
+		if ramResource == nil {
 			t.Fatal("Expected hw_version_test-group_ram resource to exist")
 		}
+		if len(ramResource.PerAZ) != 0 {
+			t.Errorf("Expected 0 AZs for RAM resource, got %d", len(ramResource.PerAZ))
+		}
 
-		// Should have empty perAZ map when no host details
-		if len(resource.PerAZ) != 0 {
-			t.Errorf("Expected 0 AZs, got %d", len(resource.PerAZ))
+		// Check Cores resource
+		coresResource := report.Resources[liquid.ResourceName("hw_version_test-group_cores")]
+		if coresResource == nil {
+			t.Fatal("Expected hw_version_test-group_cores resource to exist")
+		}
+		if len(coresResource.PerAZ) != 0 {
+			t.Errorf("Expected 0 AZs for Cores resource, got %d", len(coresResource.PerAZ))
+		}
+
+		// Check Instances resource
+		instancesResource := report.Resources[liquid.ResourceName("hw_version_test-group_instances")]
+		if instancesResource == nil {
+			t.Fatal("Expected hw_version_test-group_instances resource to exist")
+		}
+		if len(instancesResource.PerAZ) != 0 {
+			t.Errorf("Expected 0 AZs for Instances resource, got %d", len(instancesResource.PerAZ))
 		}
 	})
 }

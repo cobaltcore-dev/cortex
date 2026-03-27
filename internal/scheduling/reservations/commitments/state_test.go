@@ -261,9 +261,9 @@ func TestGetFlavorGroupNameFromResource_Invalid(t *testing.T) {
 }
 
 func TestResourceNameRoundTrip(t *testing.T) {
-	// Test that ResourceNameFromFlavorGroup and getFlavorGroupNameFromResource are inverses
+	// Test that ResourceNameRAM and getFlavorGroupNameFromResource are inverses
 	for _, groupName := range []string{"2101", "hana_1", "hana_medium_v2"} {
-		resourceName := ResourceNameFromFlavorGroup(groupName)
+		resourceName := ResourceNameRAM(groupName)
 		recovered, err := getFlavorGroupNameFromResource(resourceName)
 		if err != nil {
 			t.Fatalf("round-trip failed for %q: %v", groupName, err)
