@@ -485,26 +485,6 @@ groups:
         CRD retrieval. Limes scrapes may time out, affecting capacity reporting.
 
   # Committed Resource Syncer Alerts
-  - alert: CortexNovaCommittedResourceSyncerNotRunning
-    expr: |
-      increase(cortex_committed_resource_syncer_runs_total{service="cortex-nova-metrics"}[2h]) == 0
-      or
-      absent(cortex_committed_resource_syncer_runs_total{service="cortex-nova-metrics"})
-    for: 5m
-    labels:
-      context: committed-resource-syncer
-      dashboard: cortex/cortex
-      service: cortex
-      severity: warning
-      support_group: workload-management
-    annotations:
-      summary: "Committed Resource syncer not running"
-      description: >
-        The committed resource syncer has not run in the last 2 hours or the metric is missing.
-        This indicates that the syncer may have stopped, is encountering errors, or the feature
-        is not enabled. Check the syncer logs for errors or verify the commitments-sync-task is
-        in the enabledTasks configuration.
-
   - alert: CortexNovaCommittedResourceSyncerErrorsHigh
     expr: increase(cortex_committed_resource_syncer_errors_total{service="cortex-nova-metrics"}[1h]) > 3
     for: 5m
