@@ -135,7 +135,10 @@ func TestCapacityCalculator(t *testing.T) {
 			Build()
 
 		calculator := NewCapacityCalculator(fakeClient)
-		_, err := calculator.CalculateCapacity(context.Background())
+		req := liquid.ServiceCapacityRequest{
+			AllAZs: []liquid.AvailabilityZone{"az-one", "az-two"},
+		}
+		_, err := calculator.CalculateCapacity(context.Background(), req)
 		if err == nil {
 			t.Fatal("Expected error when flavor groups knowledge doesn't exist, got nil")
 		}
@@ -154,7 +157,10 @@ func TestCapacityCalculator(t *testing.T) {
 			Build()
 
 		calculator := NewCapacityCalculator(fakeClient)
-		report, err := calculator.CalculateCapacity(context.Background())
+		req := liquid.ServiceCapacityRequest{
+			AllAZs: []liquid.AvailabilityZone{"az-one", "az-two"},
+		}
+		report, err := calculator.CalculateCapacity(context.Background(), req)
 		if err != nil {
 			t.Fatalf("Expected no error, got: %v", err)
 		}
@@ -168,8 +174,8 @@ func TestCapacityCalculator(t *testing.T) {
 		}
 	})
 
-	t.Run("CalculateCapacity returns empty perAZ when no HostDetails exist", func(t *testing.T) {
-		// Create a flavor group knowledge without host details
+	t.Run("CalculateCapacity returns perAZ entries for all AZs from request", func(t *testing.T) {
+		// Create a flavor group knowledge
 		flavorGroupKnowledge := createTestFlavorGroupKnowledge(t, "test-group")
 
 		fakeClient := fake.NewClientBuilder().
@@ -178,7 +184,11 @@ func TestCapacityCalculator(t *testing.T) {
 			Build()
 
 		calculator := NewCapacityCalculator(fakeClient)
-		report, err := calculator.CalculateCapacity(context.Background())
+		// Request specifies the AZs that must be in the report
+		req := liquid.ServiceCapacityRequest{
+			AllAZs: []liquid.AvailabilityZone{"qa-de-1a", "qa-de-1b", "qa-de-1d"},
+		}
+		report, err := calculator.CalculateCapacity(context.Background(), req)
 		if err != nil {
 			t.Fatalf("Expected no error, got: %v", err)
 		}
@@ -188,31 +198,46 @@ func TestCapacityCalculator(t *testing.T) {
 			t.Fatalf("Expected 3 resources (_ram, _cores, _instances), got %d", len(report.Resources))
 		}
 
-		// Check RAM resource
+		// Check RAM resource has entries for all requested AZs
 		ramResource := report.Resources[liquid.ResourceName("hw_version_test-group_ram")]
 		if ramResource == nil {
 			t.Fatal("Expected hw_version_test-group_ram resource to exist")
 		}
-		if len(ramResource.PerAZ) != 0 {
-			t.Errorf("Expected 0 AZs for RAM resource, got %d", len(ramResource.PerAZ))
+		if len(ramResource.PerAZ) != 3 {
+			t.Errorf("Expected 3 AZs for RAM resource, got %d", len(ramResource.PerAZ))
+		}
+		for _, az := range req.AllAZs {
+			if _, ok := ramResource.PerAZ[az]; !ok {
+				t.Errorf("Expected RAM resource to have entry for AZ %s", az)
+			}
 		}
 
-		// Check Cores resource
+		// Check Cores resource has entries for all requested AZs
 		coresResource := report.Resources[liquid.ResourceName("hw_version_test-group_cores")]
 		if coresResource == nil {
 			t.Fatal("Expected hw_version_test-group_cores resource to exist")
 		}
-		if len(coresResource.PerAZ) != 0 {
-			t.Errorf("Expected 0 AZs for Cores resource, got %d", len(coresResource.PerAZ))
+		if len(coresResource.PerAZ) != 3 {
+			t.Errorf("Expected 3 AZs for Cores resource, got %d", len(coresResource.PerAZ))
+		}
+		for _, az := range req.AllAZs {
+			if _, ok := coresResource.PerAZ[az]; !ok {
+				t.Errorf("Expected Cores resource to have entry for AZ %s", az)
+			}
 		}
 
-		// Check Instances resource
+		// Check Instances resource has entries for all requested AZs
 		instancesResource := report.Resources[liquid.ResourceName("hw_version_test-group_instances")]
 		if instancesResource == nil {
 			t.Fatal("Expected hw_version_test-group_instances resource to exist")
 		}
-		if len(instancesResource.PerAZ) != 0 {
-			t.Errorf("Expected 0 AZs for Instances resource, got %d", len(instancesResource.PerAZ))
+		if len(instancesResource.PerAZ) != 3 {
+			t.Errorf("Expected 3 AZs for Instances resource, got %d", len(instancesResource.PerAZ))
+		}
+		for _, az := range req.AllAZs {
+			if _, ok := instancesResource.PerAZ[az]; !ok {
+				t.Errorf("Expected Instances resource to have entry for AZ %s", az)
+			}
 		}
 	})
 }
