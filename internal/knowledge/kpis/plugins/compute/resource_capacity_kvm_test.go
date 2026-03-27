@@ -145,8 +145,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				{Labels: defaultLabels("node001-bb088", "ram", "reserved", "qa-1a", "bb088"), Value: 0},
 				{Labels: defaultLabels("node001-bb088", "cpu", "failover", "qa-1a", "bb088"), Value: 0},
 				{Labels: defaultLabels("node001-bb088", "ram", "failover", "qa-1a", "bb088"), Value: 0},
-				{Labels: defaultLabels("node001-bb088", "cpu", "payg", "qa-1a", "bb088"), Value: 64},              // 128-64-0-0
-				{Labels: defaultLabels("node001-bb088", "ram", "payg", "qa-1a", "bb088"), Value: 274877906944},     // 512Gi-256Gi
+				{Labels: defaultLabels("node001-bb088", "cpu", "payg", "qa-1a", "bb088"), Value: 64},           // 128-64-0-0
+				{Labels: defaultLabels("node001-bb088", "ram", "payg", "qa-1a", "bb088"), Value: 274877906944}, // 512Gi-256Gi
 			},
 		},
 		{
@@ -370,7 +370,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				{Labels: defaultLabels("node001-bb088", "cpu", "failover", "qa-1a", "bb088"), Value: 16},
 				{Labels: defaultLabels("node001-bb088", "ram", "failover", "qa-1a", "bb088"), Value: 68719476736}, // 64Gi
 				{Labels: defaultLabels("node001-bb088", "cpu", "payg", "qa-1a", "bb088"), Value: 48},              // 128-64-0-16
-				{Labels: defaultLabels("node001-bb088", "ram", "payg", "qa-1a", "bb088"), Value: 206158430208},     // 512Gi-256Gi-0-64Gi = 192Gi
+				{Labels: defaultLabels("node001-bb088", "ram", "payg", "qa-1a", "bb088"), Value: 206158430208},    // 512Gi-256Gi-0-64Gi = 192Gi
 			},
 		},
 		{
@@ -432,8 +432,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				{Labels: defaultLabels("node001-bb088", "ram", "reserved", "qa-1a", "bb088"), Value: 103079215104}, // 96Gi
 				{Labels: defaultLabels("node001-bb088", "cpu", "failover", "qa-1a", "bb088"), Value: 0},
 				{Labels: defaultLabels("node001-bb088", "ram", "failover", "qa-1a", "bb088"), Value: 0},
-				{Labels: defaultLabels("node001-bb088", "cpu", "payg", "qa-1a", "bb088"), Value: 40},               // 128-64-24-0
-				{Labels: defaultLabels("node001-bb088", "ram", "payg", "qa-1a", "bb088"), Value: 171798691840},      // 512Gi-256Gi-96Gi-0 = 160Gi
+				{Labels: defaultLabels("node001-bb088", "cpu", "payg", "qa-1a", "bb088"), Value: 40},           // 128-64-24-0
+				{Labels: defaultLabels("node001-bb088", "ram", "payg", "qa-1a", "bb088"), Value: 171798691840}, // 512Gi-256Gi-96Gi-0 = 160Gi
 			},
 		},
 		{
@@ -556,7 +556,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				{Labels: defaultLabels("node001-bb088", "cpu", "failover", "qa-1a", "bb088"), Value: 20},
 				{Labels: defaultLabels("node001-bb088", "ram", "failover", "qa-1a", "bb088"), Value: 85899345920}, // 80Gi
 				{Labels: defaultLabels("node001-bb088", "cpu", "payg", "qa-1a", "bb088"), Value: 44},              // 128-64-0-20
-				{Labels: defaultLabels("node001-bb088", "ram", "payg", "qa-1a", "bb088"), Value: 188978561024},     // 512Gi-256Gi-0-80Gi = 176Gi
+				{Labels: defaultLabels("node001-bb088", "ram", "payg", "qa-1a", "bb088"), Value: 188978561024},    // 512Gi-256Gi-0-80Gi = 176Gi
 			},
 		},
 	}
@@ -657,10 +657,10 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 
 func TestAggregateReservationsByHost(t *testing.T) {
 	tests := []struct {
-		name                        string
-		reservations                []v1alpha1.Reservation
-		expectedFailover            map[string]hostReservationResources
-		expectedCommittedNotInUse   map[string]hostReservationResources
+		name                      string
+		reservations              []v1alpha1.Reservation
+		expectedFailover          map[string]hostReservationResources
+		expectedCommittedNotInUse map[string]hostReservationResources
 	}{
 		{
 			name:                      "empty reservations",

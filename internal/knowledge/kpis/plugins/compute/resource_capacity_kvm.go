@@ -102,6 +102,7 @@ func aggregateReservationsByHost(reservations []v1alpha1.Reservation) (
 	failoverByHost map[string]hostReservationResources,
 	committedNotInUseByHost map[string]hostReservationResources,
 ) {
+
 	failoverByHost = make(map[string]hostReservationResources)
 	committedNotInUseByHost = make(map[string]hostReservationResources)
 
