@@ -1069,35 +1069,14 @@ func (env *CommitmentTestEnv) LogStateSummary() {
 }
 
 // CallChangeCommitmentsAPI calls the change commitments API endpoint with JSON.
-// It uses a hybrid approach: fast polling during API execution + synchronous final pass.
+// Reservation processing is fully synchronous via operationInterceptorClient hooks.
 func (env *CommitmentTestEnv) CallChangeCommitmentsAPI(reqJSON string) (resp liquid.CommitmentChangeResponse, respJSON string, statusCode int) {
 	env.T.Helper()
 
-	// Start fast polling in background to handle reservations during API execution
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-
-	go func() {
-		ticker := time.NewTicker(5 * time.Millisecond) // Very fast - 5ms
-		defer ticker.Stop()
-		defer close(done)
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				env.processReservations()
-			}
-		}
-	}()
-
-	// Make HTTP request
+	// Make HTTP request - reservation processing happens synchronously via Create/Delete hooks
 	url := env.HTTPServer.URL + "/commitments/v1/change-commitments"
 	httpResp, err := http.Post(url, "application/json", bytes.NewReader([]byte(reqJSON))) //nolint:gosec,noctx // test server URL, not user input
 	if err != nil {
-		cancel()
-		<-done
 		env.T.Fatalf("Failed to make HTTP request: %v", err)
 	}
 	defer httpResp.Body.Close()
@@ -1105,8 +1084,6 @@ func (env *CommitmentTestEnv) CallChangeCommitmentsAPI(reqJSON string) (resp liq
 	// Read response body
 	respBytes, err := io.ReadAll(httpResp.Body)
 	if err != nil {
-		cancel()
-		<-done
 		env.T.Fatalf("Failed to read response body: %v", err)
 	}
 
@@ -1116,18 +1093,11 @@ func (env *CommitmentTestEnv) CallChangeCommitmentsAPI(reqJSON string) (resp liq
 	// Non-200 responses (like 409 Conflict for version mismatch) use plain text via http.Error()
 	if httpResp.StatusCode == http.StatusOK {
 		if err := json.Unmarshal(respBytes, &resp); err != nil {
-			cancel()
-			<-done
 			env.T.Fatalf("Failed to unmarshal response: %v", err)
 		}
 	}
 
-	// Stop background polling
-	cancel()
-	<-done
-
-	// Final synchronous pass to ensure all reservations are processed
-	// This eliminates any race conditions
+	// Final pass to handle any deletions (finalizer removal)
 	env.processReservations()
 
 	statusCode = httpResp.StatusCode

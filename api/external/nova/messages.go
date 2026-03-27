@@ -140,6 +140,8 @@ const (
 	CreateIntent v1alpha1.SchedulingIntent = "create"
 	// ReserveForFailoverIntent indicates that the request is for failover reservation scheduling.
 	ReserveForFailoverIntent v1alpha1.SchedulingIntent = "reserve_for_failover"
+	// ReserveForCommittedResourceIntent indicates that the request is for CR reservation scheduling.
+	ReserveForCommittedResourceIntent v1alpha1.SchedulingIntent = "reserve_for_committed_resource"
 )
 
 // GetIntent analyzes the request spec and determines the intent of the scheduling request.
@@ -165,6 +167,9 @@ func (req ExternalSchedulerRequest) GetIntent() (v1alpha1.SchedulingIntent, erro
 	// Used by cortex failover reservation controller
 	case "reserve_for_failover":
 		return ReserveForFailoverIntent, nil
+	// Used by cortex committed resource reservation controller
+	case "reserve_for_committed_resource":
+		return ReserveForCommittedResourceIntent, nil
 	default:
 		return CreateIntent, nil
 	}

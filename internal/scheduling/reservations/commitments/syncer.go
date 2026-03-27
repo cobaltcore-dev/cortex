@@ -36,6 +36,15 @@ func DefaultSyncerConfig() SyncerConfig {
 	}
 }
 
+// ApplyDefaults fills in any unset values with defaults.
+func (c *SyncerConfig) ApplyDefaults() {
+	defaults := DefaultSyncerConfig()
+	if c.SyncInterval == 0 {
+		c.SyncInterval = defaults.SyncInterval
+	}
+	// Note: KeystoneSecretRef and SSOSecretRef are not defaulted as they require explicit configuration
+}
+
 type Syncer struct {
 	// Client to fetch commitments from Limes
 	CommitmentsClient
@@ -43,6 +52,8 @@ type Syncer struct {
 	client.Client
 	// Monitor for metrics
 	monitor *SyncerMonitor
+	// SyncInterval is stored for logging purposes (actual interval managed by task.Runner)
+	syncInterval time.Duration
 }
 
 func NewSyncer(k8sClient client.Client, monitor *SyncerMonitor) *Syncer {
@@ -54,6 +65,7 @@ func NewSyncer(k8sClient client.Client, monitor *SyncerMonitor) *Syncer {
 }
 
 func (s *Syncer) Init(ctx context.Context, config SyncerConfig) error {
+	s.syncInterval = config.SyncInterval
 	if err := s.CommitmentsClient.Init(ctx, s.Client, config); err != nil {
 		return err
 	}
@@ -191,7 +203,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	ctx = WithNewGlobalRequestID(ctx)
 	logger := LoggerFromContext(ctx).WithValues("component", "syncer", "runID", runID)
 
-	logger.Info("starting commitment sync with sync interval", "interval", DefaultSyncerConfig().SyncInterval)
+	logger.Info("starting commitment sync")
 
 	// Record sync run
 	if s.monitor != nil {

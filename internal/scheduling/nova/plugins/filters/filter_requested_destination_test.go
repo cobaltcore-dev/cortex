@@ -571,8 +571,8 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 				Build()
 
 			step := &FilterRequestedDestinationStep{
-				BaseFilter: lib.BaseFilter[api.ExternalSchedulerRequest, FilterRequestedDestinationStepOpts]{
-					BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[api.ExternalSchedulerRequest, FilterRequestedDestinationStepOpts]{
+				BaseFilter: lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+					BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
 						Client: fakeClient,
 					},
 				},
@@ -625,29 +625,17 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 
 func TestFilterRequestedDestinationStep_processRequestedAggregates(t *testing.T) {
 	tests := []struct {
-		name              string
-		aggregates        []string
-		ignoredAggregates []string
-		hypervisors       map[string]hv1.Hypervisor
-		activations       map[string]float64
-		expectedHosts     []string
+		name          string
+		aggregates    []string
+		hypervisors   map[string]hv1.Hypervisor
+		activations   map[string]float64
+		expectedHosts []string
 	}{
 		{
 			name:       "empty aggregates - no filtering",
 			aggregates: []string{},
 			hypervisors: map[string]hv1.Hypervisor{
 				"host1": {Status: hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "agg1"}}}},
-			},
-			activations:   map[string]float64{"host1": 1.0, "host2": 1.0},
-			expectedHosts: []string{"host1", "host2"},
-		},
-		{
-			name:              "all aggregates ignored - no filtering",
-			aggregates:        []string{"agg1", "agg2"},
-			ignoredAggregates: []string{"agg1", "agg2"},
-			hypervisors: map[string]hv1.Hypervisor{
-				"host1": {Status: hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "agg1"}}}},
-				"host2": {Status: hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "agg3"}}}},
 			},
 			activations:   map[string]float64{"host1": 1.0, "host2": 1.0},
 			expectedHosts: []string{"host1", "host2"},
@@ -672,28 +660,30 @@ func TestFilterRequestedDestinationStep_processRequestedAggregates(t *testing.T)
 			expectedHosts: []string{"host1"},
 		},
 		{
-			name:              "partial ignore - some aggregates considered",
-			aggregates:        []string{"agg1", "agg2"},
-			ignoredAggregates: []string{"agg1"},
+			name:       "AND logic - host must be in all aggregates",
+			aggregates: []string{"agg1", "agg2"},
 			hypervisors: map[string]hv1.Hypervisor{
 				"host1": {Status: hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "agg1"}}}},
-				"host2": {Status: hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "agg2"}}}},
+				"host2": {Status: hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "agg1"}, {UUID: "agg2"}}}},
 			},
 			activations:   map[string]float64{"host1": 1.0, "host2": 1.0},
 			expectedHosts: []string{"host2"},
 		},
+		{
+			name:       "OR logic with comma-separated UUIDs",
+			aggregates: []string{"agg1,agg2"},
+			hypervisors: map[string]hv1.Hypervisor{
+				"host1": {Status: hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "agg1"}}}},
+				"host2": {Status: hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "agg2"}}}},
+				"host3": {Status: hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "agg3"}}}},
+			},
+			activations:   map[string]float64{"host1": 1.0, "host2": 1.0, "host3": 1.0},
+			expectedHosts: []string{"host1", "host2"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := &FilterRequestedDestinationStep{
-				BaseFilter: lib.BaseFilter[api.ExternalSchedulerRequest, FilterRequestedDestinationStepOpts]{
-					BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[api.ExternalSchedulerRequest, FilterRequestedDestinationStepOpts]{
-						Options: FilterRequestedDestinationStepOpts{
-							IgnoredAggregates: tt.ignoredAggregates,
-						},
-					},
-				},
-			}
+			step := &FilterRequestedDestinationStep{}
 			step.processRequestedAggregates(slog.Default(), tt.aggregates, tt.hypervisors, tt.activations)
 			if len(tt.activations) != len(tt.expectedHosts) {
 				t.Errorf("expected %d hosts, got %d", len(tt.expectedHosts), len(tt.activations))
@@ -709,24 +699,16 @@ func TestFilterRequestedDestinationStep_processRequestedAggregates(t *testing.T)
 
 func TestFilterRequestedDestinationStep_processRequestedHost(t *testing.T) {
 	tests := []struct {
-		name             string
-		host             string
-		ignoredHostnames []string
-		activations      map[string]float64
-		expectedHosts    []string
+		name          string
+		host          string
+		activations   map[string]float64
+		expectedHosts []string
 	}{
 		{
 			name:          "empty host - no filtering",
 			host:          "",
 			activations:   map[string]float64{"host1": 1.0, "host2": 1.0},
 			expectedHosts: []string{"host1", "host2"},
-		},
-		{
-			name:             "host in ignored list - no filtering",
-			host:             "host1",
-			ignoredHostnames: []string{"host1"},
-			activations:      map[string]float64{"host1": 1.0, "host2": 1.0},
-			expectedHosts:    []string{"host1", "host2"},
 		},
 		{
 			name:          "filter to specific host",
@@ -743,15 +725,7 @@ func TestFilterRequestedDestinationStep_processRequestedHost(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := &FilterRequestedDestinationStep{
-				BaseFilter: lib.BaseFilter[api.ExternalSchedulerRequest, FilterRequestedDestinationStepOpts]{
-					BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[api.ExternalSchedulerRequest, FilterRequestedDestinationStepOpts]{
-						Options: FilterRequestedDestinationStepOpts{
-							IgnoredHostnames: tt.ignoredHostnames,
-						},
-					},
-				},
-			}
+			step := &FilterRequestedDestinationStep{}
 			step.processRequestedHost(slog.Default(), tt.host, tt.activations)
 			if len(tt.activations) != len(tt.expectedHosts) {
 				t.Errorf("expected %d hosts, got %d", len(tt.expectedHosts), len(tt.activations))
@@ -760,221 +734,6 @@ func TestFilterRequestedDestinationStep_processRequestedHost(t *testing.T) {
 				if _, ok := tt.activations[host]; !ok {
 					t.Errorf("expected host %s to be present", host)
 				}
-			}
-		})
-	}
-}
-
-func TestFilterRequestedDestinationStepOpts_Validate(t *testing.T) {
-	tests := []struct {
-		name    string
-		opts    FilterRequestedDestinationStepOpts
-		wantErr bool
-	}{
-		{
-			name:    "Empty options - valid",
-			opts:    FilterRequestedDestinationStepOpts{},
-			wantErr: false,
-		},
-		{
-			name: "With ignored aggregates - valid",
-			opts: FilterRequestedDestinationStepOpts{
-				IgnoredAggregates: []string{"aggregate1", "aggregate2"},
-			},
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tt.opts.Validate()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestFilterRequestedDestinationStepOpts_Combined(t *testing.T) {
-	tests := []struct {
-		name              string
-		request           api.ExternalSchedulerRequest
-		hypervisors       []hv1.Hypervisor
-		ignoredAggregates []string
-		ignoredHostnames  []string
-		expectedHosts     []string
-		filteredHosts     []string
-	}{
-		{
-			name: "Both aggregate and host ignored - all filtering skipped",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-							Data: api.NovaRequestedDestination{
-								Aggregates: []string{"az-west"},
-								Host:       "host1",
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-				},
-			},
-			hypervisors: []hv1.Hypervisor{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "az-west"}}},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
-					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "az-east"}}},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
-					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "az-west"}}},
-				},
-			},
-			ignoredAggregates: []string{"az-west"},
-			ignoredHostnames:  []string{"host1"},
-			expectedHosts:     []string{"host1", "host2", "host3"},
-			filteredHosts:     []string{},
-		},
-		{
-			name: "Some aggregates ignored with host not ignored - host filtering still applies after aggregate filtering",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-							Data: api.NovaRequestedDestination{
-								Aggregates: []string{"az-west", "production"},
-								Host:       "host1",
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-				},
-			},
-			hypervisors: []hv1.Hypervisor{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "production"}}},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
-					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "production"}}},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
-					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "staging"}}},
-				},
-			},
-			// az-west is ignored, so only production is considered
-			// host1 and host2 have production, host3 is filtered out
-			// Then host filtering applies and only host1 remains
-			ignoredAggregates: []string{"az-west"},
-			ignoredHostnames:  []string{},
-			expectedHosts:     []string{"host1"},
-			filteredHosts:     []string{"host2", "host3"},
-		},
-		{
-			// Regression test: when all requested aggregates are ignored, the aggregate
-			// filtering short-circuits but the explicit host filtering must still apply.
-			// This ensures the explicit host is kept even when aggregate filtering is skipped.
-			name: "All aggregates ignored with explicit host - host filtering still applies",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-							Data: api.NovaRequestedDestination{
-								Aggregates: []string{"az-west", "az-east"},
-								Host:       "host2",
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
-					{ComputeHost: "host1"},
-					{ComputeHost: "host2"},
-					{ComputeHost: "host3"},
-				},
-			},
-			hypervisors: []hv1.Hypervisor{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
-					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "az-west"}}},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "host2"},
-					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "az-east"}}},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "host3"},
-					Status:     hv1.HypervisorStatus{Aggregates: []hv1.Aggregate{{UUID: "az-west"}}},
-				},
-			},
-			// All aggregates (az-west, az-east) are ignored, so aggregate filtering is skipped
-			// But host filtering still applies and only host2 should remain
-			ignoredAggregates: []string{"az-west", "az-east"},
-			ignoredHostnames:  []string{},
-			expectedHosts:     []string{"host2"},
-			filteredHosts:     []string{"host1", "host3"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			scheme := runtime.NewScheme()
-			if err := hv1.AddToScheme(scheme); err != nil {
-				t.Fatalf("Failed to add hv1 scheme: %v", err)
-			}
-			objs := make([]client.Object, len(tt.hypervisors))
-			for i := range tt.hypervisors {
-				objs[i] = &tt.hypervisors[i]
-			}
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(objs...).
-				Build()
-
-			step := &FilterRequestedDestinationStep{
-				BaseFilter: lib.BaseFilter[api.ExternalSchedulerRequest, FilterRequestedDestinationStepOpts]{
-					BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[api.ExternalSchedulerRequest, FilterRequestedDestinationStepOpts]{
-						Client: fakeClient,
-						Options: FilterRequestedDestinationStepOpts{
-							IgnoredAggregates: tt.ignoredAggregates,
-							IgnoredHostnames:  tt.ignoredHostnames,
-						},
-					},
-				},
-			}
-
-			result, err := step.Run(slog.Default(), tt.request)
-			if err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
-
-			for _, host := range tt.expectedHosts {
-				if _, ok := result.Activations[host]; !ok {
-					t.Errorf("expected host %s to be present in activations", host)
-				}
-			}
-
-			for _, host := range tt.filteredHosts {
-				if _, ok := result.Activations[host]; ok {
-					t.Errorf("expected host %s to be filtered out", host)
-				}
-			}
-
-			if len(result.Activations) != len(tt.expectedHosts) {
-				t.Errorf("expected %d hosts, got %d", len(tt.expectedHosts), len(result.Activations))
 			}
 		})
 	}
@@ -1011,8 +770,8 @@ func TestFilterRequestedDestinationStep_Run_ClientError(t *testing.T) {
 		Build()
 
 	step := &FilterRequestedDestinationStep{
-		BaseFilter: lib.BaseFilter[api.ExternalSchedulerRequest, FilterRequestedDestinationStepOpts]{
-			BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[api.ExternalSchedulerRequest, FilterRequestedDestinationStepOpts]{
+		BaseFilter: lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+			BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
 				Client: fakeClient,
 			},
 		},

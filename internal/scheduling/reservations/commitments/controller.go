@@ -264,6 +264,11 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		EligibleHosts:    eligibleHosts,
 		Pipeline:         pipelineName,
 		AvailabilityZone: availabilityZone,
+		// Set hint to indicate this is a CR reservation scheduling request.
+		// This prevents other CR reservations from being unlocked during capacity filtering.
+		SchedulerHints: map[string]any{
+			"_nova_check_type": string(schedulerdelegationapi.ReserveForCommittedResourceIntent),
+		},
 	}
 
 	scheduleResp, err := r.SchedulerClient.ScheduleReservation(ctx, scheduleReq)
