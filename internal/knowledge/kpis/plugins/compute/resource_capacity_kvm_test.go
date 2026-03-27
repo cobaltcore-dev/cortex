@@ -208,6 +208,86 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 					Value: 1099511627776,
 				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node002-bb089", Resource: "cpu", Type: "utilized",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb089",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "hana",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
+					},
+					Value: 128,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node002-bb089", Resource: "ram", Type: "utilized",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb089",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "hana",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
+					},
+					Value: 549755813888,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node002-bb089", Resource: "cpu", Type: "reserved",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb089",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "hana",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
+					},
+					Value: 0,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node002-bb089", Resource: "ram", Type: "reserved",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb089",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "hana",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
+					},
+					Value: 0,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node002-bb089", Resource: "cpu", Type: "failover",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb089",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "hana",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
+					},
+					Value: 0,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node002-bb089", Resource: "ram", Type: "failover",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb089",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "hana",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
+					},
+					Value: 0,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node002-bb089", Resource: "cpu", Type: "payg",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb089",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "hana",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
+					},
+					Value: 128, // 256-128-0-0
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node002-bb089", Resource: "ram", Type: "payg",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb089",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "hana",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
+					},
+					Value: 549755813888, // 1Ti-512Gi
+				},
 			},
 		},
 		{
@@ -246,6 +326,96 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						Enabled: "true", Decommissioned: "true", ExternalCustomer: "true", Maintenance: "false",
 					},
 					Value: 64,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_total",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node003-bb090", Resource: "ram",
+						AvailabilityZone: "qa-1c", BuildingBlock: "bb090",
+						CPUArchitecture: "cascade-lake", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "true", ExternalCustomer: "true", Maintenance: "false",
+					},
+					Value: 274877906944,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node003-bb090", Resource: "cpu", Type: "utilized",
+						AvailabilityZone: "qa-1c", BuildingBlock: "bb090",
+						CPUArchitecture: "cascade-lake", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "true", ExternalCustomer: "true", Maintenance: "false",
+					},
+					Value: 32,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node003-bb090", Resource: "ram", Type: "utilized",
+						AvailabilityZone: "qa-1c", BuildingBlock: "bb090",
+						CPUArchitecture: "cascade-lake", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "true", ExternalCustomer: "true", Maintenance: "false",
+					},
+					Value: 137438953472,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node003-bb090", Resource: "cpu", Type: "reserved",
+						AvailabilityZone: "qa-1c", BuildingBlock: "bb090",
+						CPUArchitecture: "cascade-lake", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "true", ExternalCustomer: "true", Maintenance: "false",
+					},
+					Value: 0,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node003-bb090", Resource: "ram", Type: "reserved",
+						AvailabilityZone: "qa-1c", BuildingBlock: "bb090",
+						CPUArchitecture: "cascade-lake", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "true", ExternalCustomer: "true", Maintenance: "false",
+					},
+					Value: 0,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node003-bb090", Resource: "cpu", Type: "failover",
+						AvailabilityZone: "qa-1c", BuildingBlock: "bb090",
+						CPUArchitecture: "cascade-lake", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "true", ExternalCustomer: "true", Maintenance: "false",
+					},
+					Value: 0,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node003-bb090", Resource: "ram", Type: "failover",
+						AvailabilityZone: "qa-1c", BuildingBlock: "bb090",
+						CPUArchitecture: "cascade-lake", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "true", ExternalCustomer: "true", Maintenance: "false",
+					},
+					Value: 0,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node003-bb090", Resource: "cpu", Type: "payg",
+						AvailabilityZone: "qa-1c", BuildingBlock: "bb090",
+						CPUArchitecture: "cascade-lake", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "true", ExternalCustomer: "true", Maintenance: "false",
+					},
+					Value: 32, // 64-32-0-0
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node003-bb090", Resource: "ram", Type: "payg",
+						AvailabilityZone: "qa-1c", BuildingBlock: "bb090",
+						CPUArchitecture: "cascade-lake", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "true", ExternalCustomer: "true", Maintenance: "false",
+					},
+					Value: 137438953472, // 256Gi-128Gi
 				},
 			},
 		},
@@ -293,6 +463,15 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 			},
 			expectedMetrics: []kvmExpectedMetric{
 				totalMetric("node010-bb100", "cpu", "qa-1a", "bb100", 100),
+				totalMetric("node010-bb100", "ram", "qa-1a", "bb100", 214748364800),
+				usageMetric("node010-bb100", "cpu", "utilized", "qa-1a", "bb100", 50),
+				usageMetric("node010-bb100", "ram", "utilized", "qa-1a", "bb100", 107374182400),
+				usageMetric("node010-bb100", "cpu", "reserved", "qa-1a", "bb100", 0),
+				usageMetric("node010-bb100", "ram", "reserved", "qa-1a", "bb100", 0),
+				usageMetric("node010-bb100", "cpu", "failover", "qa-1a", "bb100", 0),
+				usageMetric("node010-bb100", "ram", "failover", "qa-1a", "bb100", 0),
+				usageMetric("node010-bb100", "cpu", "payg", "qa-1a", "bb100", 50),           // 100-50-0-0
+				usageMetric("node010-bb100", "ram", "payg", "qa-1a", "bb100", 107374182400), // 200Gi-100Gi
 				{
 					Name: "cortex_kvm_host_capacity_total",
 					Labels: kvmMetricLabels{
@@ -302,6 +481,96 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
 					},
 					Value: 200,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_total",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node020-bb200", Resource: "ram",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb200",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
+					},
+					Value: 429496729600,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node020-bb200", Resource: "cpu", Type: "utilized",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb200",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
+					},
+					Value: 150,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node020-bb200", Resource: "ram", Type: "utilized",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb200",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
+					},
+					Value: 322122547200,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node020-bb200", Resource: "cpu", Type: "reserved",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb200",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
+					},
+					Value: 0,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node020-bb200", Resource: "ram", Type: "reserved",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb200",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
+					},
+					Value: 0,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node020-bb200", Resource: "cpu", Type: "failover",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb200",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
+					},
+					Value: 0,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node020-bb200", Resource: "ram", Type: "failover",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb200",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
+					},
+					Value: 0,
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node020-bb200", Resource: "cpu", Type: "payg",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb200",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
+					},
+					Value: 50, // 200-150-0-0
+				},
+				{
+					Name: "cortex_kvm_host_capacity_usage",
+					Labels: kvmMetricLabels{
+						ComputeHost: "node020-bb200", Resource: "ram", Type: "payg",
+						AvailabilityZone: "qa-1b", BuildingBlock: "bb200",
+						CPUArchitecture: "sapphire-rapids", WorkloadType: "general-purpose",
+						Enabled: "true", Decommissioned: "false", ExternalCustomer: "false", Maintenance: "false",
+					},
+					Value: 107374182400, // 400Gi-300Gi
 				},
 			},
 		},
@@ -330,6 +599,12 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				totalMetric("node004-bb091", "ram", "qa-1d", "bb091", 412316860416),
 				usageMetric("node004-bb091", "cpu", "utilized", "qa-1d", "bb091", 0),
 				usageMetric("node004-bb091", "ram", "utilized", "qa-1d", "bb091", 0),
+				usageMetric("node004-bb091", "cpu", "reserved", "qa-1d", "bb091", 0),
+				usageMetric("node004-bb091", "ram", "reserved", "qa-1d", "bb091", 0),
+				usageMetric("node004-bb091", "cpu", "failover", "qa-1d", "bb091", 0),
+				usageMetric("node004-bb091", "ram", "failover", "qa-1d", "bb091", 0),
+				usageMetric("node004-bb091", "cpu", "payg", "qa-1d", "bb091", 96),           // 96-0-0-0
+				usageMetric("node004-bb091", "ram", "payg", "qa-1d", "bb091", 412316860416), // 384Gi-0
 			},
 		},
 		{
@@ -445,6 +720,10 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				},
 			},
 			expectedMetrics: []kvmExpectedMetric{
+				totalMetric("node001-bb088", "cpu", "qa-1a", "bb088", 128),
+				totalMetric("node001-bb088", "ram", "qa-1a", "bb088", 549755813888),
+				usageMetric("node001-bb088", "cpu", "utilized", "qa-1a", "bb088", 64),
+				usageMetric("node001-bb088", "ram", "utilized", "qa-1a", "bb088", 274877906944),
 				// reserved = 32-8=24 CPU, 128Gi-32Gi=96Gi RAM (not in use)
 				usageMetric("node001-bb088", "cpu", "reserved", "qa-1a", "bb088", 24),
 				usageMetric("node001-bb088", "ram", "reserved", "qa-1a", "bb088", 103079215104), // 96Gi
@@ -500,11 +779,17 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				},
 			},
 			expectedMetrics: []kvmExpectedMetric{
+				totalMetric("node001-bb088", "cpu", "qa-1a", "bb088", 128),
+				totalMetric("node001-bb088", "ram", "qa-1a", "bb088", 549755813888),
+				usageMetric("node001-bb088", "cpu", "utilized", "qa-1a", "bb088", 64),
+				usageMetric("node001-bb088", "ram", "utilized", "qa-1a", "bb088", 274877906944),
+				usageMetric("node001-bb088", "cpu", "reserved", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "ram", "reserved", "qa-1a", "bb088", 0),
 				// Non-ready reservation ignored, so failover = 0
 				usageMetric("node001-bb088", "cpu", "failover", "qa-1a", "bb088", 0),
 				usageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 0),
-				usageMetric("node001-bb088", "cpu", "payg", "qa-1a", "bb088", 64),
-				usageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 274877906944),
+				usageMetric("node001-bb088", "cpu", "payg", "qa-1a", "bb088", 64),           // 128-64-0-0
+				usageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 274877906944), // 512Gi-256Gi
 			},
 		},
 		{
@@ -573,6 +858,12 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				},
 			},
 			expectedMetrics: []kvmExpectedMetric{
+				totalMetric("node001-bb088", "cpu", "qa-1a", "bb088", 128),
+				totalMetric("node001-bb088", "ram", "qa-1a", "bb088", 549755813888),
+				usageMetric("node001-bb088", "cpu", "utilized", "qa-1a", "bb088", 64),
+				usageMetric("node001-bb088", "ram", "utilized", "qa-1a", "bb088", 274877906944),
+				usageMetric("node001-bb088", "cpu", "reserved", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "ram", "reserved", "qa-1a", "bb088", 0),
 				// failover = 8+12=20 CPU, 32Gi+48Gi=80Gi RAM
 				usageMetric("node001-bb088", "cpu", "failover", "qa-1a", "bb088", 20),
 				usageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 85899345920), // 80Gi
@@ -658,7 +949,11 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				})
 			}
 
-			// Verify each expected metric is present with the correct value and metric name.
+			// Verify exact equality: same number of metrics and each expected metric is present.
+			if len(actualMetrics) != len(tt.expectedMetrics) {
+				t.Errorf("metric count mismatch: expected %d, got %d\nactual: %+v",
+					len(tt.expectedMetrics), len(actualMetrics), actualMetrics)
+			}
 			for _, expected := range tt.expectedMetrics {
 				found := false
 				for _, actual := range actualMetrics {
@@ -675,6 +970,20 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				if !found {
 					t.Errorf("metric %s with labels %+v not found in actual metrics",
 						expected.Name, expected.Labels)
+				}
+			}
+			for _, actual := range actualMetrics {
+				found := false
+				for _, expected := range tt.expectedMetrics {
+					nameMatch := expected.Name == "" || actual.Name == expected.Name
+					if nameMatch && actual.Labels == expected.Labels {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("unexpected metric %s with labels %+v (value %f) in actual metrics",
+						actual.Name, actual.Labels, actual.Value)
 				}
 			}
 		})
