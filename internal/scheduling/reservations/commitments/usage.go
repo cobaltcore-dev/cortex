@@ -32,7 +32,10 @@ type VMUsageInfo struct {
 	AZ            string
 	Hypervisor    string
 	CreatedAt     time.Time
-	UsageMultiple uint64 // Memory in multiples of smallest flavor in the group
+	UsageMultiple uint64            // Memory in multiples of smallest flavor in the group
+	Metadata      map[string]string // Server metadata from Nova
+	Tags          []string          // Server tags from Nova
+	OSType        string            // OS type from OSTypeProber (for billing)
 }
 
 // UsageCalculator computes usage reports for Limes LIQUID API.
@@ -222,9 +225,10 @@ func (c *UsageCalculator) getProjectVMs(
 		flavorGroup := flavorToGroup[server.FlavorName]
 
 		// Calculate usage multiple (memory in units of smallest flavor)
+		// Use floor division (truncate) - actual consumption, not billing
 		var usageMultiple uint64
 		if smallestMem := flavorToSmallestMemory[server.FlavorName]; smallestMem > 0 {
-			usageMultiple = (server.FlavorRAM + smallestMem - 1) / smallestMem // Round up
+			usageMultiple = server.FlavorRAM / smallestMem // Floor division (truncate)
 		}
 
 		// Normalize AZ - empty or unknown AZs become "unknown" (consistent with limes liquid-nova)
@@ -243,6 +247,9 @@ func (c *UsageCalculator) getProjectVMs(
 			Hypervisor:    server.Hypervisor,
 			CreatedAt:     createdAt,
 			UsageMultiple: usageMultiple,
+			Metadata:      server.Metadata,
+			Tags:          server.Tags,
+			OSType:        server.OSType,
 		}
 
 		vms = append(vms, vm)
@@ -335,8 +342,18 @@ func (c *UsageCalculator) assignVMsToCommitments(
 	return vmAssignments, assignedCount
 }
 
+// azUsageData aggregates usage data for a specific flavor group and AZ.
+type azUsageData struct {
+	ramUsage      uint64               // RAM usage in multiples of smallest flavor
+	coresUsage    uint64               // Total vCPU count
+	instanceCount uint64               // Number of VMs
+	subresources  []liquid.Subresource // VM details for subresource reporting
+}
+
 // buildUsageResponse constructs the Liquid API ServiceUsageReport.
-// Only flavor groups that accept commitments are included in the report.
+// All flavor groups are included in the report; commitment assignment only applies
+// to groups with fixed RAM/core ratio (those that accept commitments).
+// For each flavor group, three resources are reported: _ram, _cores, _instances.
 func (c *UsageCalculator) buildUsageResponse(
 	vms []VMUsageInfo,
 	vmAssignments map[string]string,
@@ -344,14 +361,10 @@ func (c *UsageCalculator) buildUsageResponse(
 	allAZs []liquid.AvailabilityZone,
 	infoVersion int64,
 ) liquid.ServiceUsageReport {
-	// Initialize resources map for flavor groups that accept commitments
+	// Initialize resources map for all flavor groups
 	resources := make(map[liquid.ResourceName]*liquid.ResourceUsageReport)
 
 	// Group VMs by flavor group and AZ for aggregation
-	type azUsageData struct {
-		usage        uint64
-		subresources []liquid.Subresource
-	}
 	usageByFlavorGroupAZ := make(map[string]map[liquid.AvailabilityZone]*azUsageData)
 
 	for _, vm := range vms {
@@ -368,8 +381,10 @@ func (c *UsageCalculator) buildUsageResponse(
 			usageByFlavorGroupAZ[vm.FlavorGroup][az] = &azUsageData{}
 		}
 
-		// Accumulate usage
-		usageByFlavorGroupAZ[vm.FlavorGroup][az].usage += vm.UsageMultiple
+		// Accumulate usage for all resource types
+		usageByFlavorGroupAZ[vm.FlavorGroup][az].ramUsage += vm.UsageMultiple
+		usageByFlavorGroupAZ[vm.FlavorGroup][az].coresUsage += vm.VCPUs
+		usageByFlavorGroupAZ[vm.FlavorGroup][az].instanceCount++
 
 		// Build subresource attributes
 		commitmentID := vmAssignments[vm.UUID]
@@ -390,39 +405,77 @@ func (c *UsageCalculator) buildUsageResponse(
 		)
 	}
 
-	// Build ResourceUsageReport for each flavor group that accepts commitments
-	for flavorGroupName, groupData := range flavorGroups {
-		// Only report usage for flavor groups that accept commitments
-		if !FlavorGroupAcceptsCommitments(&groupData) {
-			continue
-		}
-		resourceName := liquid.ResourceName(ResourceNameFromFlavorGroup(flavorGroupName))
+	// Build ResourceUsageReport for all flavor groups (not just those with fixed ratio)
+	for flavorGroupName := range flavorGroups {
+		// All flavor groups are included in usage reporting.
 
-		perAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
-
-		// Initialize all AZs with zero usage
+		// === 1. RAM Resource ===
+		ramResourceName := liquid.ResourceName(ResourceNameRAM(flavorGroupName))
+		ramPerAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
 		for _, az := range allAZs {
-			perAZ[az] = &liquid.AZResourceUsageReport{
+			ramPerAZ[az] = &liquid.AZResourceUsageReport{
 				Usage:        0,
 				Subresources: []liquid.Subresource{},
 			}
 		}
-
-		// Fill in actual usage data
 		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
 			for az, data := range azData {
-				if _, known := perAZ[az]; !known {
-					// AZ not in allAZs, add it anyway
-					perAZ[az] = &liquid.AZResourceUsageReport{}
+				if _, known := ramPerAZ[az]; !known {
+					ramPerAZ[az] = &liquid.AZResourceUsageReport{}
 				}
-				perAZ[az].Usage = data.usage
-				perAZ[az].PhysicalUsage = Some(data.usage) // No overcommit for RAM
-				perAZ[az].Subresources = data.subresources
+				ramPerAZ[az].Usage = data.ramUsage
+				ramPerAZ[az].PhysicalUsage = Some(data.ramUsage) // No overcommit for RAM
+				// Subresources are only on instances resource
 			}
 		}
+		resources[ramResourceName] = &liquid.ResourceUsageReport{
+			PerAZ: ramPerAZ,
+		}
 
-		resources[resourceName] = &liquid.ResourceUsageReport{
-			PerAZ: perAZ,
+		// === 2. Cores Resource ===
+		coresResourceName := liquid.ResourceName(ResourceNameCores(flavorGroupName))
+		coresPerAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
+		for _, az := range allAZs {
+			coresPerAZ[az] = &liquid.AZResourceUsageReport{
+				Usage:        0,
+				Subresources: []liquid.Subresource{},
+			}
+		}
+		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
+			for az, data := range azData {
+				if _, known := coresPerAZ[az]; !known {
+					coresPerAZ[az] = &liquid.AZResourceUsageReport{}
+				}
+				coresPerAZ[az].Usage = data.coresUsage
+				coresPerAZ[az].PhysicalUsage = Some(data.coresUsage) // No overcommit for cores
+				// Subresources are only on instances resource
+			}
+		}
+		resources[coresResourceName] = &liquid.ResourceUsageReport{
+			PerAZ: coresPerAZ,
+		}
+
+		// === 3. Instances Resource ===
+		instancesResourceName := liquid.ResourceName(ResourceNameInstances(flavorGroupName))
+		instancesPerAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
+		for _, az := range allAZs {
+			instancesPerAZ[az] = &liquid.AZResourceUsageReport{
+				Usage:        0,
+				Subresources: []liquid.Subresource{},
+			}
+		}
+		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
+			for az, data := range azData {
+				if _, known := instancesPerAZ[az]; !known {
+					instancesPerAZ[az] = &liquid.AZResourceUsageReport{}
+				}
+				instancesPerAZ[az].Usage = data.instanceCount
+				instancesPerAZ[az].PhysicalUsage = Some(data.instanceCount)
+				instancesPerAZ[az].Subresources = data.subresources // VM details on instances resource
+			}
+		}
+		resources[instancesResourceName] = &liquid.ResourceUsageReport{
+			PerAZ: instancesPerAZ,
 		}
 	}
 
@@ -433,25 +486,42 @@ func (c *UsageCalculator) buildUsageResponse(
 }
 
 // buildVMAttributes creates the attributes map for a VM subresource.
+// Follows the liquid-nova format with nested flavor structure.
 func buildVMAttributes(vm VMUsageInfo, commitmentID string) map[string]any {
-	attributes := map[string]any{
-		"name":       vm.Name,
-		"flavor":     vm.FlavorName,
-		"status":     vm.Status,
-		"hypervisor": vm.Hypervisor,
-		"ram":        vm.MemoryMB,
-		"vcpu":       vm.VCPUs,
-		"disk":       vm.DiskGB,
+	// Build metadata map (never nil for JSON)
+	metadata := vm.Metadata
+	if metadata == nil {
+		metadata = map[string]string{}
+	}
+
+	// Build tags slice (never nil for JSON)
+	tags := vm.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+
+	result := map[string]any{
+		"status":   vm.Status,
+		"metadata": metadata,
+		"tags":     tags,
+		"flavor": map[string]any{
+			"name":     vm.FlavorName,
+			"vcpu":     vm.VCPUs,
+			"ram_mib":  vm.MemoryMB,
+			"disk_gib": vm.DiskGB,
+			// video_ram_mib omitted when nil
+		},
+		"os_type": vm.OSType,
 	}
 
 	// Add commitment_id - nil for PAYG, string for committed
 	if commitmentID != "" {
-		attributes["commitment_id"] = commitmentID
+		result["commitment_id"] = commitmentID
 	} else {
-		attributes["commitment_id"] = nil
+		result["commitment_id"] = nil
 	}
 
-	return attributes
+	return result
 }
 
 // countCommitmentStates returns the total number of commitments across all az:flavorGroup keys.
