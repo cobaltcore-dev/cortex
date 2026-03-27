@@ -362,7 +362,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 					Spec: v1alpha1.ReservationSpec{
 						Type:             v1alpha1.ReservationTypeFailover,
-						SchedulingDomain: string(v1alpha1.SchedulingDomainNova),
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						Resources: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("16"),
 							hv1.ResourceMemory: resource.MustParse("64Gi"),
@@ -420,7 +420,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 					Spec: v1alpha1.ReservationSpec{
 						Type:             v1alpha1.ReservationTypeCommittedResource,
-						SchedulingDomain: string(v1alpha1.SchedulingDomainNova),
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						Resources: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("32"),
 							hv1.ResourceMemory: resource.MustParse("128Gi"),
@@ -484,7 +484,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 					Spec: v1alpha1.ReservationSpec{
 						Type:             v1alpha1.ReservationTypeFailover,
-						SchedulingDomain: string(v1alpha1.SchedulingDomainNova),
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						Resources: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("16"),
 							hv1.ResourceMemory: resource.MustParse("64Gi"),
@@ -537,7 +537,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 					Spec: v1alpha1.ReservationSpec{
 						Type:             v1alpha1.ReservationTypeFailover,
-						SchedulingDomain: string(v1alpha1.SchedulingDomainNova),
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						Resources: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("8"),
 							hv1.ResourceMemory: resource.MustParse("32Gi"),
@@ -557,7 +557,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 					Spec: v1alpha1.ReservationSpec{
 						Type:             v1alpha1.ReservationTypeFailover,
-						SchedulingDomain: string(v1alpha1.SchedulingDomainNova),
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						Resources: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("12"),
 							hv1.ResourceMemory: resource.MustParse("48Gi"),
@@ -700,7 +700,7 @@ func TestAggregateReservationsByHost(t *testing.T) {
 				{
 					Spec: v1alpha1.ReservationSpec{
 						Type:             v1alpha1.ReservationTypeFailover,
-						SchedulingDomain: string(v1alpha1.SchedulingDomainNova),
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						Resources: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU: resource.MustParse("10"),
 						},
@@ -720,7 +720,7 @@ func TestAggregateReservationsByHost(t *testing.T) {
 				{
 					Spec: v1alpha1.ReservationSpec{
 						Type:             v1alpha1.ReservationTypeFailover,
-						SchedulingDomain: string(v1alpha1.SchedulingDomainNova),
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						Resources: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU: resource.MustParse("10"),
 						},
@@ -742,7 +742,7 @@ func TestAggregateReservationsByHost(t *testing.T) {
 				{
 					Spec: v1alpha1.ReservationSpec{
 						Type:             v1alpha1.ReservationTypeCommittedResource,
-						SchedulingDomain: string(v1alpha1.SchedulingDomainNova),
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
 						Resources: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("16"),
 							hv1.ResourceMemory: resource.MustParse("64Gi"),

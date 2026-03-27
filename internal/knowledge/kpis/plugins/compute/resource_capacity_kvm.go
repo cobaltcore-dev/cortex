@@ -107,7 +107,7 @@ func aggregateReservationsByHost(reservations []v1alpha1.Reservation) (
 	committedNotInUseByHost = make(map[string]hostReservationResources)
 
 	for _, reservation := range reservations {
-		if reservation.Spec.SchedulingDomain != string(v1alpha1.SchedulingDomainNova) {
+		if reservation.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
 			continue
 		}
 
