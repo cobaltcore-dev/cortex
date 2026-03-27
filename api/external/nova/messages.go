@@ -61,7 +61,7 @@ func (r ExternalSchedulerRequest) GetTraceLogArgs() []slog.Attr {
 		slog.String("project", r.Context.ProjectID),
 	}
 }
-func (r ExternalSchedulerRequest) FilterHosts(includedHosts map[string]float64) lib.FilterWeigherPipelineRequest {
+func (r ExternalSchedulerRequest) Filter(includedHosts map[string]float64) lib.FilterWeigherPipelineRequest {
 	filteredHosts := make([]ExternalSchedulerHost, 0, len(includedHosts))
 	for _, host := range r.Hosts {
 		if _, exists := includedHosts[host.ComputeHost]; exists {
@@ -69,6 +69,15 @@ func (r ExternalSchedulerRequest) FilterHosts(includedHosts map[string]float64) 
 		}
 	}
 	r.Hosts = filteredHosts
+	// Also filter the weights map to only include the hosts that are still
+	// in the request, and update the weights accordingly.
+	filteredWeights := make(map[string]float64, len(includedHosts))
+	for host, weight := range includedHosts {
+		if _, exists := includedHosts[host]; exists {
+			filteredWeights[host] = weight
+		}
+	}
+	r.Weights = filteredWeights
 	return r
 }
 
