@@ -143,15 +143,7 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 
 	logger.V(1).Info("sending external scheduler request",
 		"url", c.URL,
-		"instanceUUID", req.InstanceUUID,
-		"projectID", req.ProjectID,
-		"flavorName", req.FlavorName,
-		"flavorExtraSpecs", req.FlavorExtraSpecs,
-		"memoryMB", req.MemoryMB,
-		"vcpus", req.VCPUs,
-		"eligibleHostsCount", len(req.EligibleHosts),
-		"ignoreHosts", req.IgnoreHosts,
-		"isEvacuation", req.isEvacuation())
+		"request", externalSchedulerRequest)
 
 	// Marshal the request
 	reqBody, err := json.Marshal(externalSchedulerRequest)
@@ -206,12 +198,4 @@ func (req ScheduleReservationRequest) getSchedulerHints() map[string]any {
 		return make(map[string]any)
 	}
 	return req.SchedulerHints
-}
-
-// isEvacuation returns true if the request has the evacuation intent hint set.
-func (req ScheduleReservationRequest) isEvacuation() bool {
-	if req.SchedulerHints == nil {
-		return false
-	}
-	return req.SchedulerHints["_nova_check_type"] == "evacuate"
 }
