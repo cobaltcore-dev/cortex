@@ -285,6 +285,52 @@ type Flavor struct {
 	ExtraSpecs string `json:"extra_specs" db:"extra_specs"`
 }
 
+// FlavorHypervisorType is a type alias for a string to represent the specific
+// values the hypervisor type contained in flavor extra specs may have.
+type FlavorHypervisorType string
+
+const (
+	// FlavorHypervisorTypeQEMU maps a flavor for QEMU/KVM hypervisors.
+	FlavorHypervisorTypeQEMU FlavorHypervisorType = "QEMU"
+	// FlavorHypervisorTypeCH maps flavors to Cloud-Hypervisor/KVM hypervisors.
+	FlavorHypervisorTypeCH FlavorHypervisorType = "CH"
+	// FlavorHypervisorTypeVMware maps flavors to VMware hypervisors.
+	FlavorHypervisorTypeVMware FlavorHypervisorType = "VMware vCenter Server"
+	// FlavorHypervisorTypeIronic maps flavors to Ironic baremetal instances.
+	FlavorHypervisorTypeIronic FlavorHypervisorType = "Ironic"
+	// FlavorHypervisorTypeOther is a flavor for which the hypervisor type
+	// is set in the extra specs but has an unknown value.
+	FlavorHypervisorTypeOther FlavorHypervisorType = "Other"
+	// FlavorHypervisorTypeUnspecified is a flavor for which the hypervisor type
+	// is not set in the extra specs.
+	FlavorHypervisorTypeUnspecified FlavorHypervisorType = "Unspecified"
+)
+
+// GetHypervisorType returns the hypervisor type of the flavor based on its
+// extra specs.
+func (f Flavor) GetHypervisorType() (FlavorHypervisorType, error) {
+	var extraSpecs map[string]string
+	if err := json.Unmarshal([]byte(f.ExtraSpecs), &extraSpecs); err != nil {
+		return "", err // Return an error if the extra specs cannot be parsed.
+	}
+	hypervisorType, ok := extraSpecs["capabilities:hypervisor_type"]
+	if !ok {
+		return FlavorHypervisorTypeUnspecified, nil
+	}
+	switch hypervisorType {
+	case string(FlavorHypervisorTypeQEMU):
+		return FlavorHypervisorTypeQEMU, nil
+	case string(FlavorHypervisorTypeCH):
+		return FlavorHypervisorTypeCH, nil
+	case string(FlavorHypervisorTypeVMware):
+		return FlavorHypervisorTypeVMware, nil
+	case string(FlavorHypervisorTypeIronic):
+		return FlavorHypervisorTypeIronic, nil
+	default:
+		return FlavorHypervisorTypeOther, nil
+	}
+}
+
 // Custom unmarshaler for OpenStackFlavor to handle nested JSON.
 func (f *Flavor) UnmarshalJSON(data []byte) error {
 	type Alias Flavor
