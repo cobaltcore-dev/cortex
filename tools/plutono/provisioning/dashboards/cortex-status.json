@@ -606,7 +606,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "sum by (faultmsg,state) (cortex_vm_faults{faultcode!=\"0\"})",
+          "expr": "sum by (faultmsg,state) (cortex_vm_faults{faultyvm!=\"no\"})",
           "format": "time_series",
           "instant": false,
           "interval": "",

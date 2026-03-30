@@ -358,7 +358,9 @@ const (
 // extra specs.
 func (f Flavor) GetHypervisorType() (FlavorHypervisorType, error) {
 	var extraSpecs map[string]string
-	if err := json.Unmarshal([]byte(f.ExtraSpecs), &extraSpecs); err != nil {
+	if f.ExtraSpecs == "" {
+		extraSpecs = map[string]string{}
+	} else if err := json.Unmarshal([]byte(f.ExtraSpecs), &extraSpecs); err != nil {
 		return "", err // Return an error if the extra specs cannot be parsed.
 	}
 	hypervisorType, ok := extraSpecs["capabilities:hypervisor_type"]
