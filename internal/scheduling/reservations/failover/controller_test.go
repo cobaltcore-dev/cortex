@@ -855,7 +855,7 @@ func getAllocations(res *v1alpha1.Reservation) map[string]string {
 // ============================================================================
 
 func TestSelectVMsToProcess(t *testing.T) {
-	// Create 10 VMs with different memory sizes (sorted by memory descending)
+	// Create VMs with different memory sizes (sorted by memory descending)
 	createVMs := func(count int) []vmFailoverNeed {
 		vms := make([]vmFailoverNeed, count)
 		for i := range count {
@@ -873,166 +873,170 @@ func TestSelectVMsToProcess(t *testing.T) {
 		return vms
 	}
 
-	tests := []struct {
-		name           string
-		reconcileCount int64
-		vmCount        int
-		maxToProcess   int
-		expectedOffset int // Expected starting offset in the VM list
-		expectedHit    bool
-	}{
-		// 3 out of 4 runs should start at offset 0
-		{
-			name:           "reconcile 1 - offset 0",
-			reconcileCount: 1,
-			vmCount:        10,
-			maxToProcess:   3,
-			expectedOffset: 0,
-			expectedHit:    true,
-		},
-		{
-			name:           "reconcile 2 - offset 0",
-			reconcileCount: 2,
-			vmCount:        10,
-			maxToProcess:   3,
-			expectedOffset: 0,
-			expectedHit:    true,
-		},
-		{
-			name:           "reconcile 3 - offset 0",
-			reconcileCount: 3,
-			vmCount:        10,
-			maxToProcess:   3,
-			expectedOffset: 0,
-			expectedHit:    true,
-		},
-		// Every 4th reconcile uses reconcileCount as offset (mod vmCount)
-		{
-			name:           "reconcile 4 - offset 4",
-			reconcileCount: 4,
-			vmCount:        10,
-			maxToProcess:   3,
-			expectedOffset: 4,
-			expectedHit:    true,
-		},
-		{
-			name:           "reconcile 5 - offset 0",
-			reconcileCount: 5,
-			vmCount:        10,
-			maxToProcess:   3,
-			expectedOffset: 0,
-			expectedHit:    true,
-		},
-		{
-			name:           "reconcile 6 - offset 0",
-			reconcileCount: 6,
-			vmCount:        10,
-			maxToProcess:   3,
-			expectedOffset: 0,
-			expectedHit:    true,
-		},
-		{
-			name:           "reconcile 7 - offset 0",
-			reconcileCount: 7,
-			vmCount:        10,
-			maxToProcess:   3,
-			expectedOffset: 0,
-			expectedHit:    true,
-		},
-		{
-			name:           "reconcile 8 - offset 8",
-			reconcileCount: 8,
-			vmCount:        10,
-			maxToProcess:   3,
-			expectedOffset: 8,
-			expectedHit:    true,
-		},
-		// Test wrap-around when reconcileCount > vmCount
-		{
-			name:           "reconcile 12 - offset 2 (12 mod 10)",
-			reconcileCount: 12,
-			vmCount:        10,
-			maxToProcess:   3,
-			expectedOffset: 2, // 12 % 10 = 2
-			expectedHit:    true,
-		},
-		{
-			name:           "reconcile 20 - offset 0 (20 mod 10)",
-			reconcileCount: 20,
-			vmCount:        10,
-			maxToProcess:   3,
-			expectedOffset: 0, // 20 % 10 = 0
-			expectedHit:    true,
-		},
-		// Edge cases
-		{
-			name:           "maxToProcess 0 - no limit, returns all",
-			reconcileCount: 4,
-			vmCount:        10,
-			maxToProcess:   0,
-			expectedOffset: 0, // No limit means all VMs returned starting from 0
-			expectedHit:    false,
-		},
-		{
-			name:           "maxToProcess >= vmCount - no limit hit",
-			reconcileCount: 4,
-			vmCount:        5,
-			maxToProcess:   10,
-			expectedOffset: 0, // All VMs fit, no rotation needed
-			expectedHit:    false,
-		},
-	}
+	t.Run("no rotation - offset 0", func(t *testing.T) {
+		ctx := context.Background()
+		controller := &FailoverReservationController{
+			reconcileCount: 1, // Not divisible by 4, so no rotation
+			Config: FailoverConfig{
+				VMSelectionRotationInterval: intPtr(4),
+			},
+		}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
+		vms := createVMs(10)
+		selected, hitLimit := controller.selectVMsToProcess(ctx, vms, 3)
+
+		if !hitLimit {
+			t.Error("expected hitLimit=true")
+		}
+		if len(selected) != 3 {
+			t.Errorf("expected 3 VMs selected, got %d", len(selected))
+		}
+		// Without rotation, should start at offset 0 (vm-a has most memory)
+		if selected[0].VM.UUID != "vm-a" {
+			t.Errorf("expected first VM to be vm-a, got %s", selected[0].VM.UUID)
+		}
+	})
+
+	t.Run("rotation triggered - random offset", func(t *testing.T) {
+		ctx := context.Background()
+		controller := &FailoverReservationController{
+			reconcileCount: 4, // Divisible by 4, triggers rotation
+			Config: FailoverConfig{
+				VMSelectionRotationInterval: intPtr(4),
+			},
+		}
+
+		vms := createVMs(10)
+		selected, hitLimit := controller.selectVMsToProcess(ctx, vms, 3)
+
+		if !hitLimit {
+			t.Error("expected hitLimit=true")
+		}
+		if len(selected) != 3 {
+			t.Errorf("expected 3 VMs selected, got %d", len(selected))
+		}
+		// With rotation, offset is random - just verify we got valid VMs
+		// and the selection wraps correctly
+		vmSet := make(map[string]bool)
+		for _, vm := range vms {
+			vmSet[vm.VM.UUID] = true
+		}
+		for _, s := range selected {
+			if !vmSet[s.VM.UUID] {
+				t.Errorf("selected VM %s not in original list", s.VM.UUID)
+			}
+		}
+	})
+
+	t.Run("rotation disabled - always offset 0", func(t *testing.T) {
+		ctx := context.Background()
+		controller := &FailoverReservationController{
+			reconcileCount: 4,
+			Config: FailoverConfig{
+				VMSelectionRotationInterval: intPtr(0), // Disabled
+			},
+		}
+
+		vms := createVMs(10)
+		selected, hitLimit := controller.selectVMsToProcess(ctx, vms, 3)
+
+		if !hitLimit {
+			t.Error("expected hitLimit=true")
+		}
+		// With rotation disabled, should always start at offset 0
+		if selected[0].VM.UUID != "vm-a" {
+			t.Errorf("expected first VM to be vm-a, got %s", selected[0].VM.UUID)
+		}
+	})
+
+	t.Run("maxToProcess 0 - no limit, returns all", func(t *testing.T) {
+		ctx := context.Background()
+		controller := &FailoverReservationController{
+			reconcileCount: 4,
+			Config: FailoverConfig{
+				VMSelectionRotationInterval: intPtr(4),
+			},
+		}
+
+		vms := createVMs(10)
+		selected, hitLimit := controller.selectVMsToProcess(ctx, vms, 0)
+
+		if hitLimit {
+			t.Error("expected hitLimit=false when maxToProcess=0")
+		}
+		if len(selected) != 10 {
+			t.Errorf("expected all 10 VMs when no limit, got %d", len(selected))
+		}
+	})
+
+	t.Run("maxToProcess >= vmCount - no limit hit", func(t *testing.T) {
+		ctx := context.Background()
+		controller := &FailoverReservationController{
+			reconcileCount: 4,
+			Config: FailoverConfig{
+				VMSelectionRotationInterval: intPtr(4),
+			},
+		}
+
+		vms := createVMs(5)
+		selected, hitLimit := controller.selectVMsToProcess(ctx, vms, 10)
+
+		if hitLimit {
+			t.Error("expected hitLimit=false when maxToProcess >= vmCount")
+		}
+		if len(selected) != 5 {
+			t.Errorf("expected all 5 VMs, got %d", len(selected))
+		}
+	})
+
+	t.Run("empty VMs list", func(t *testing.T) {
+		ctx := context.Background()
+		controller := &FailoverReservationController{
+			reconcileCount: 4,
+			Config: FailoverConfig{
+				VMSelectionRotationInterval: intPtr(4),
+			},
+		}
+
+		vms := []vmFailoverNeed{}
+		selected, hitLimit := controller.selectVMsToProcess(ctx, vms, 3)
+
+		if hitLimit {
+			t.Error("expected hitLimit=false for empty list")
+		}
+		if len(selected) != 0 {
+			t.Errorf("expected 0 VMs, got %d", len(selected))
+		}
+	})
+
+	t.Run("random offset is within bounds", func(t *testing.T) {
+		ctx := context.Background()
+		// Run multiple times to verify random offset is always valid
+		for i := range 20 {
 			controller := &FailoverReservationController{
-				reconcileCount: tt.reconcileCount,
+				reconcileCount: int64((i + 1) * 4), // Always triggers rotation
 				Config: FailoverConfig{
-					VMSelectionRotationInterval: intPtr(4), // Default rotation interval
+					VMSelectionRotationInterval: intPtr(4),
 				},
 			}
 
-			vms := createVMs(tt.vmCount)
-			selected, hitLimit := controller.selectVMsToProcess(ctx, vms, tt.maxToProcess)
+			vms := createVMs(10)
+			selected, _ := controller.selectVMsToProcess(ctx, vms, 3)
 
-			if hitLimit != tt.expectedHit {
-				t.Errorf("expected hitLimit=%v, got %v", tt.expectedHit, hitLimit)
+			if len(selected) != 3 {
+				t.Errorf("iteration %d: expected 3 VMs, got %d", i, len(selected))
 			}
 
-			if !tt.expectedHit {
-				// When no limit is hit, all VMs should be returned
-				if len(selected) != tt.vmCount {
-					t.Errorf("expected all %d VMs when no limit hit, got %d", tt.vmCount, len(selected))
+			// Verify all selected VMs are from the original list
+			vmSet := make(map[string]bool)
+			for _, vm := range vms {
+				vmSet[vm.VM.UUID] = true
+			}
+			for _, s := range selected {
+				if !vmSet[s.VM.UUID] {
+					t.Errorf("iteration %d: selected VM %s not in original list", i, s.VM.UUID)
 				}
-				return
 			}
-
-			// Verify the first selected VM is at the expected offset
-			if len(selected) == 0 {
-				t.Error("expected at least one VM selected")
-				return
-			}
-
-			// The VMs are sorted by memory descending, so vm-a has most memory, vm-j has least
-			// After sorting, the order is: vm-a, vm-b, vm-c, ..., vm-j
-			// With offset, we should start at vms[offset]
-			expectedFirstVM := vms[tt.expectedOffset].VM.UUID
-			actualFirstVM := selected[0].VM.UUID
-
-			if actualFirstVM != expectedFirstVM {
-				t.Errorf("expected first VM to be %s (offset %d), got %s",
-					expectedFirstVM, tt.expectedOffset, actualFirstVM)
-			}
-
-			// Verify we got the expected number of VMs
-			expectedCount := tt.maxToProcess
-			if expectedCount > tt.vmCount {
-				expectedCount = tt.vmCount
-			}
-			if len(selected) != expectedCount {
-				t.Errorf("expected %d VMs selected, got %d", expectedCount, len(selected))
-			}
-		})
-	}
+		}
+	})
 }

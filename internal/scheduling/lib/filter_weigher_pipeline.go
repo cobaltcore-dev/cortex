@@ -161,7 +161,7 @@ func (p *filterWeigherPipeline[RequestType]) runFilters(
 		})
 		// Mutate the request to only include the remaining hosts.
 		// Assume the resulting request type is the same as the input type.
-		filteredRequest = filteredRequest.FilterHosts(result.Activations).(RequestType)
+		filteredRequest = filteredRequest.Filter(result.Activations).(RequestType)
 	}
 	return filteredRequest, stepResults
 }
