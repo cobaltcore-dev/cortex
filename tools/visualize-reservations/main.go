@@ -1762,6 +1762,7 @@ func connectToPostgres(
 
 	// Query servers with host information
 	serverMap = make(map[string]serverInfo)
+	//nolint:gosec // This query is not using any user input, so it's not vulnerable to SQL injection
 	rows, err := db.QueryContext(ctx, "SELECT id, flavor_name, COALESCE(host_id, ''), COALESCE(os_ext_srv_attr_host, '') FROM "+nova.Server{}.TableName())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: Could not query "+nova.Server{}.TableName()+": %v\n", err)
