@@ -42,7 +42,7 @@ func (k *VMFaultsKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) e
 	}
 	k.vmFaultsDesc = prometheus.NewDesc("cortex_vm_faults",
 		"Number of vm faults in the datacenter",
-		[]string{"az", "hvtype", "state", "faultcode", "faultmessage"}, nil,
+		[]string{"az", "hvtype", "state", "fault-code", "fault-message", "faulty-vm"}, nil,
 	)
 	return nil
 }
@@ -92,6 +92,7 @@ func (k *VMFaultsKPI) Collect(ch chan<- prometheus.Metric) {
 		state      string
 		errcode    string
 		errmessage string
+		faultyVM   string
 	}
 	counts := make(map[labels]float64)
 
@@ -119,12 +120,19 @@ func (k *VMFaultsKPI) Collect(ch chan<- prometheus.Metric) {
 		if server.FaultMessage != nil {
 			errmsg = *server.FaultMessage
 		}
+		// Only provide the server ID for faulty VMs, to avoid cardinality
+		// explosion in the metric.
+		faultyVM := "no"
+		if server.FaultCode != nil || server.FaultMessage != nil {
+			faultyVM = server.ID
+		}
 		key := labels{
 			az:         server.OSEXTAvailabilityZone,
 			hvtype:     string(hypervisorType),
 			state:      server.Status,
 			errcode:    strconv.FormatUint(uint64(errcode), 10),
 			errmessage: errmsg,
+			faultyVM:   faultyVM,
 		}
 		counts[key]++
 	}
@@ -132,7 +140,7 @@ func (k *VMFaultsKPI) Collect(ch chan<- prometheus.Metric) {
 	// Emit metrics to prometheus.
 	for key, count := range counts {
 		ch <- prometheus.MustNewConstMetric(k.vmFaultsDesc, prometheus.GaugeValue, count,
-			key.az, key.hvtype, key.state, key.errcode, key.errmessage)
+			key.az, key.hvtype, key.state, key.errcode, key.errmessage, key.faultyVM)
 	}
 	vmFaultsKPIlogger.Info("collected metrics", "nMetrics", len(counts))
 }

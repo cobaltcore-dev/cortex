@@ -592,3 +592,19 @@ groups:
         corruption, bugs in reservation creation, or external modifications.
         Reservations are automatically repaired, but the root cause should be
         investigated if this alert persists.
+
+  - alert: CortexNovaDoesntFindValidHosts
+    expr: cortex_vm_faults{faultmessage=~".+No valid host was found.+"} > 0
+    labels:
+      context: scheduling
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Nova scheduling cannot find valid hosts"
+      description: >
+        Cortex is seeing faulty vms in `{{$labels.az}}` where Nova scheduling
+        failed to find a valid host. This may indicate capacity issues,
+        misconfigured filters, or resource constraints in the datacenter.
+        Investigate the affected VMs and hypervisor availability.
