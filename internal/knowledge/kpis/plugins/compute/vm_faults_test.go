@@ -126,7 +126,7 @@ func TestVMFaultsKPI_Collect(t *testing.T) {
 		// Server with fault code and message
 		&nova.Server{
 			ID:                    "server-2",
-			Name:                  "faulty-vm",
+			Name:                  "faultyvm",
 			Status:                "ERROR",
 			FlavorName:            "qemu-small",
 			OSEXTAvailabilityZone: "az1",
@@ -197,15 +197,15 @@ func TestVMFaultsKPI_Collect(t *testing.T) {
 		}
 
 		key := labels["az"] + "|" + labels["hvtype"] + "|" + labels["state"] + "|" +
-			labels["fault-code"] + "|" + labels["faulty-vm"]
+			labels["faultcode"] + "|" + labels["faultyvm"]
 
 		metrics[key] = vmFaultsMetric{
 			az:           labels["az"],
 			hvtype:       labels["hvtype"],
 			state:        labels["state"],
-			faultCode:    labels["fault-code"],
-			faultMessage: labels["fault-message"],
-			faultyVM:     labels["faulty-vm"],
+			faultCode:    labels["faultcode"],
+			faultMessage: labels["faultmsg"],
+			faultyVM:     labels["faultyvm"],
 			value:        m.GetGauge().GetValue(),
 		}
 	}

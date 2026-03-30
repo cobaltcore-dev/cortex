@@ -6,6 +6,7 @@ package compute
 import (
 	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
@@ -42,7 +43,7 @@ func (k *VMFaultsKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) e
 	}
 	k.vmFaultsDesc = prometheus.NewDesc("cortex_vm_faults",
 		"Number of vm faults in the datacenter",
-		[]string{"az", "hvtype", "state", "fault-code", "fault-message", "faulty-vm"}, nil,
+		[]string{"az", "hvtype", "state", "faultcode", "faultmsg", "faultyvm"}, nil,
 	)
 	return nil
 }
@@ -119,6 +120,10 @@ func (k *VMFaultsKPI) Collect(ch chan<- prometheus.Metric) {
 		errmsg := "n/a"
 		if server.FaultMessage != nil {
 			errmsg = *server.FaultMessage
+			// Sometimes the VM ID may appear in the error message, which can
+			// lead to high cardinality in the metric. To avoid this, we replace
+			// the VM ID with a placeholder.
+			errmsg = strings.ReplaceAll(errmsg, server.ID, "<vm_id>")
 		}
 		// Only provide the server ID for faulty VMs, to avoid cardinality
 		// explosion in the metric.
