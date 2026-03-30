@@ -284,7 +284,8 @@ func (m *ReservationManager) newReservation(
 	}
 
 	spec := v1alpha1.ReservationSpec{
-		Type: v1alpha1.ReservationTypeCommittedResource,
+		Type:             v1alpha1.ReservationTypeCommittedResource,
+		SchedulingDomain: v1alpha1.SchedulingDomainNova,
 		Resources: map[hv1.ResourceName]resource.Quantity{
 			hv1.ResourceMemory: *resource.NewQuantity(
 				memoryBytes,
