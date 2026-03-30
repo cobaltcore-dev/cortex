@@ -32,7 +32,7 @@ func (r MachinePipelineRequest) GetWeights() map[string]float64 {
 func (r MachinePipelineRequest) GetTraceLogArgs() []slog.Attr {
 	return []slog.Attr{}
 }
-func (r MachinePipelineRequest) FilterHosts(includedHosts map[string]float64) lib.FilterWeigherPipelineRequest {
+func (r MachinePipelineRequest) Filter(includedHosts map[string]float64) lib.FilterWeigherPipelineRequest {
 	filteredPools := make([]ironcorev1alpha1.MachinePool, 0, len(includedHosts))
 	for _, pool := range r.Pools {
 		if _, exists := includedHosts[pool.Name]; exists {
