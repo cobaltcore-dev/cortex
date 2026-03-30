@@ -111,6 +111,22 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
+  name: vm-state
+spec:
+  schedulingDomain: nova
+  impl: vm_state_kpi
+  dependencies:
+    datasources:
+      - name: nova-servers
+      - name: nova-flavors
+  description: |
+    This kpi monitors the current state of vms, i.e. how many vms are running,
+    stopped, paused, etc. It also exposes additional labels such as the vm's
+    hypervisor type which can be used to define alerts on non-running vms.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
   name: cortex-nova-datasource-state
 spec:
   schedulingDomain: nova
