@@ -622,7 +622,8 @@ func main() {
 			"reconcileInterval", failoverConfig.ReconcileInterval,
 			"revalidationInterval", failoverConfig.RevalidationInterval,
 			"trustHypervisorLocation", failoverConfig.TrustHypervisorLocation,
-			"maxVMsToProcess", failoverConfig.MaxVMsToProcess)
+			"maxVMsToProcess", failoverConfig.MaxVMsToProcess,
+			"vmSelectionRotationInterval", failoverConfig.VMSelectionRotationInterval)
 	}
 
 	// +kubebuilder:scaffold:builder
