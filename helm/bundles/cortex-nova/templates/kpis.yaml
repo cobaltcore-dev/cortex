@@ -111,6 +111,23 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
+  name: vm-faults
+spec:
+  schedulingDomain: nova
+  impl: vm_faults_kpi
+  dependencies:
+    datasources:
+      - name: nova-servers
+      - name: nova-flavors
+  description: |
+    This kpi tracks vm faults in the datacenter. It exposes helpful information
+    about the faults, such as the availability zone, hypervisor type, vm state,
+    and error info if available. This can be used to identify issues in the
+    datacenter and to monitor the overall health of the vms.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
   name: cortex-nova-datasource-state
 spec:
   schedulingDomain: nova

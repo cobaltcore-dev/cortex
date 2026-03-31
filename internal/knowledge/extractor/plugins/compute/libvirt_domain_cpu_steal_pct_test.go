@@ -56,7 +56,7 @@ func TestLibvirtDomainCPUStealPctExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Insert mock data into the openstack_servers table
+	// Insert mock data into the openstack servers table
 	servers := []any{
 		&nova.Server{
 			ID:                       "uuid-1",

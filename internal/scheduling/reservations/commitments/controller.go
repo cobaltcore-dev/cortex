@@ -445,7 +445,7 @@ func (r *CommitmentReservationController) listServersByProjectID(ctx context.Con
 	// Query servers from the database cache.
 	var servers []nova.Server
 	_, err := r.DB.Select(&servers,
-		"SELECT * FROM openstack_servers WHERE tenant_id = $1",
+		"SELECT * FROM "+nova.Server{}.TableName()+" WHERE tenant_id = $1",
 		projectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query servers from database: %w", err)
