@@ -609,3 +609,36 @@ groups:
         failed to find a valid `{{$labels.hvtype}}` host. This may indicate
         capacity issues, misconfigured filters, or resource constraints in the
         datacenter. Investigate the affected VMs and hypervisor availability.
+
+  - alert: CortexNovaNewDatasourcesNotReconciling
+    expr: count by(datasource) (cortex_datasource_seconds_until_reconcile{queued="false",domain="nova"}) > 0
+    for: 60m
+    labels:
+      context: datasources
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "New datasource `{{$labels.datasource}}` has not reconciled"
+      description: >
+        A new datasource `{{$labels.datasource}}` has been added but has not
+        completed its first reconciliation yet. This may indicate issues with
+        the datasource controller's workqueue overprioritizing other datasources.
+
+  - alert: CortexNovaExistingDatasourcesLackingBehind
+    expr: sum by(datasource) (cortex_datasource_seconds_until_reconcile{queued="true",domain="nova"}) < -600
+    for: 10m
+    labels:
+      context: datasources
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Existing datasource `{{$labels.datasource}}` is lacking behind"
+      description: >
+        An existing datasource `{{$labels.datasource}}` has been queued for
+        reconciliation for more than 10 minutes. This may indicate issues with
+        the datasource controller's workqueue or that this or another datasource
+        is taking an unusually long time to reconcile.
