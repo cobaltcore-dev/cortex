@@ -679,8 +679,8 @@ groups:
 
   - alert: CortexNovaWorkqueueNotDrained
     expr: |
-      sum by (name) (rate(workqueue_depth{service="cortex-nova-metrics"}[5m])) > 0
-    for: 15m
+      sum by (name) (workqueue_depth{service="cortex-nova-metrics"}) > 0
+    for: 60m
     labels:
       context: controller-workqueue
       dashboard: cortex/cortex
@@ -715,7 +715,7 @@ groups:
   - alert: CortexNovaWebhookErrorsHigh
     expr: |
       (sum by (webhook) (rate(controller_runtime_webhook_requests_total{code!="200", service="cortex-nova-metrics"}[5m])))
-      / (sum by (webhook) (rate(controller_runtime_webhook_requests_total{code="200", service="cortex-nova-metrics"}[5m]))) > 0.1
+      / (sum by (webhook) (rate(controller_runtime_webhook_requests_total{service="cortex-nova-metrics"}[5m]))) > 0.1
     for: 15m
     labels:
       context: controller-webhook
