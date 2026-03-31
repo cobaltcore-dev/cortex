@@ -108,8 +108,23 @@ type Server struct {
 	OSEXTSTSVmState                string  `json:"OS-EXT-STS:vm_state" db:"os_ext_sts_vm_state"`
 	OSEXTSTSPowerState             int     `json:"OS-EXT-STS:power_state" db:"os_ext_sts_power_state"`
 
-	// From nested JSON
+	// From nested server.flavor JSON
 	FlavorName string `json:"-" db:"flavor_name"`
+
+	// From nested server.fault JSON
+
+	// The error response code.
+	FaultCode *uint `json:"-" db:"fault_code"`
+	// The date and time when the exception was raised. The date and time stamp
+	// format is ISO 8601 (CCYY-MM-DDThh:mm:ss±hh:mm). For example,
+	// 2015-08-27T09:49:58-05:00. The ±hh:mm value if included, is the time zone
+	// as an offset from UTC. In the previous example, the offset value is -05:00.
+	FaultCreated *string `json:"-" db:"fault_created"`
+	// The error message.
+	FaultMessage *string `json:"-" db:"fault_message"`
+	// The stack trace. It is available if the response code is not 500 or you
+	// have the administrator privilege.
+	FaultDetails *string `json:"-" db:"fault_details"`
 
 	// Note: there are some more fields that are omitted. To include them again, add
 	// custom unmarshalers and marshalers for the struct below.
@@ -119,7 +134,8 @@ type Server struct {
 func (s *Server) UnmarshalJSON(data []byte) error {
 	type Alias Server
 	aux := &struct {
-		Flavor json.RawMessage `json:"flavor"`
+		Flavor json.RawMessage  `json:"flavor"`
+		Fault  *json.RawMessage `json:"fault,omitempty"`
 		*Alias
 	}{
 		Alias: (*Alias)(s),
@@ -135,31 +151,63 @@ func (s *Server) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	s.FlavorName = flavor.Name
+	var fault struct {
+		Code    uint    `json:"code"`
+		Created string  `json:"created"`
+		Message string  `json:"message"`
+		Details *string `json:"details,omitempty"`
+	}
+	if aux.Fault != nil {
+		if err := json.Unmarshal(*aux.Fault, &fault); err != nil {
+			return err
+		}
+		s.FaultCode = &fault.Code
+		s.FaultCreated = &fault.Created
+		s.FaultMessage = &fault.Message
+		s.FaultDetails = fault.Details
+	}
 	return nil
 }
 
 // Custom marshaler for OpenStackServer to handle nested JSON.
 func (s *Server) MarshalJSON() ([]byte, error) {
 	type Alias Server
+	type flavor struct {
+		// Starting in microversion 2.47, "id" was removed...
+		Name string `json:"original_name"`
+	}
+	flavorVal := flavor{
+		Name: s.FlavorName,
+	}
+	type fault struct {
+		Code    uint    `json:"code"`
+		Created string  `json:"created"`
+		Message string  `json:"message"`
+		Details *string `json:"details,omitempty"`
+	}
+	var faultVal *fault
+	if s.FaultCode != nil && s.FaultCreated != nil && s.FaultMessage != nil {
+		faultVal = &fault{
+			Code:    *s.FaultCode,
+			Created: *s.FaultCreated,
+			Message: *s.FaultMessage,
+			Details: s.FaultDetails,
+		}
+	}
 	aux := &struct {
-		Flavor struct {
-			// Starting in microversion 2.47, "id" was removed...
-			Name string `json:"original_name"`
-		} `json:"flavor"`
+		Flavor flavor `json:"flavor"`
+		Fault  *fault `json:"fault,omitempty"`
 		*Alias
 	}{
-		Alias: (*Alias)(s),
-		Flavor: struct {
-			Name string `json:"original_name"`
-		}{
-			Name: s.FlavorName,
-		},
+		Alias:  (*Alias)(s),
+		Flavor: flavorVal,
+		Fault:  faultVal,
 	}
 	return json.Marshal(aux)
 }
 
 // Table in which the openstack model is stored.
-func (Server) TableName() string { return "openstack_servers" }
+func (Server) TableName() string { return "openstack_servers_v2" }
 
 // Index for the openstack model.
 func (Server) Indexes() map[string][]string { return nil }
@@ -283,6 +331,54 @@ type Flavor struct {
 
 	// JSON string of extra specifications used when scheduling the flavor.
 	ExtraSpecs string `json:"extra_specs" db:"extra_specs"`
+}
+
+// FlavorHypervisorType is a type alias for a string to represent the specific
+// values the hypervisor type contained in flavor extra specs may have.
+type FlavorHypervisorType string
+
+const (
+	// FlavorHypervisorTypeQEMU maps a flavor for QEMU/KVM hypervisors.
+	FlavorHypervisorTypeQEMU FlavorHypervisorType = "QEMU"
+	// FlavorHypervisorTypeCH maps flavors to Cloud-Hypervisor/KVM hypervisors.
+	FlavorHypervisorTypeCH FlavorHypervisorType = "CH"
+	// FlavorHypervisorTypeVMware maps flavors to VMware hypervisors.
+	FlavorHypervisorTypeVMware FlavorHypervisorType = "VMware vCenter Server"
+	// FlavorHypervisorTypeIronic maps flavors to Ironic baremetal instances.
+	FlavorHypervisorTypeIronic FlavorHypervisorType = "Ironic"
+	// FlavorHypervisorTypeOther is a flavor for which the hypervisor type
+	// is set in the extra specs but has an unknown value.
+	FlavorHypervisorTypeOther FlavorHypervisorType = "Other"
+	// FlavorHypervisorTypeUnspecified is a flavor for which the hypervisor type
+	// is not set in the extra specs.
+	FlavorHypervisorTypeUnspecified FlavorHypervisorType = "Unspecified"
+)
+
+// GetHypervisorType returns the hypervisor type of the flavor based on its
+// extra specs.
+func (f Flavor) GetHypervisorType() (FlavorHypervisorType, error) {
+	var extraSpecs map[string]string
+	if f.ExtraSpecs == "" {
+		extraSpecs = map[string]string{}
+	} else if err := json.Unmarshal([]byte(f.ExtraSpecs), &extraSpecs); err != nil {
+		return "", err // Return an error if the extra specs cannot be parsed.
+	}
+	hypervisorType, ok := extraSpecs["capabilities:hypervisor_type"]
+	if !ok {
+		return FlavorHypervisorTypeUnspecified, nil
+	}
+	switch hypervisorType {
+	case string(FlavorHypervisorTypeQEMU):
+		return FlavorHypervisorTypeQEMU, nil
+	case string(FlavorHypervisorTypeCH):
+		return FlavorHypervisorTypeCH, nil
+	case string(FlavorHypervisorTypeVMware):
+		return FlavorHypervisorTypeVMware, nil
+	case string(FlavorHypervisorTypeIronic):
+		return FlavorHypervisorTypeIronic, nil
+	default:
+		return FlavorHypervisorTypeOther, nil
+	}
 }
 
 // Custom unmarshaler for OpenStackFlavor to handle nested JSON.
