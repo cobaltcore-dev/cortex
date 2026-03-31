@@ -5,8 +5,6 @@ package commitments
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	gosync "sync"
 	"time"
@@ -173,26 +171,18 @@ func (c *commitmentsClient) listCommitments(ctx context.Context, project Project
 		"/domains/" + project.DomainID +
 		"/projects/" + project.ID +
 		"/commitments"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("X-Auth-Token", c.limes.Token())
-	resp, err := c.limes.HTTPClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
+
+	// Use gophercloud's Get method which handles re-authentication automatically
 	var list struct {
 		Commitments []Commitment `json:"commitments"`
 	}
-	err = json.NewDecoder(resp.Body).Decode(&list)
+	_, err := c.limes.Get(ctx, url, &list, &gophercloud.RequestOpts{
+		OkCodes: []int{http.StatusOK},
+	})
 	if err != nil {
 		return nil, err
 	}
+
 	// Add the project information to each commitment.
 	var commitments []Commitment
 	for _, c := range list.Commitments {
