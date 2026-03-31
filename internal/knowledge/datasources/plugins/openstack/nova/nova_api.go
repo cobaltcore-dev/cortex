@@ -163,6 +163,7 @@ func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]D
 	initialURL := api.sc.Endpoint + "servers/detail?status=DELETED&all_tenants=true&changes-since=" + url.QueryEscape(since.Format(time.RFC3339))
 	var nextURL = &initialURL
 	var deletedServers []DeletedServer
+	seen := make(map[string]struct{})
 
 	for nextURL != nil {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
@@ -190,7 +191,14 @@ func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]D
 		if err != nil {
 			return nil, err
 		}
-		deletedServers = append(deletedServers, list.Servers...)
+		for _, s := range list.Servers {
+			if _, ok := seen[s.ID]; ok {
+				slog.Warn("skipping duplicate deleted server", "id", s.ID)
+				continue
+			}
+			seen[s.ID] = struct{}{}
+			deletedServers = append(deletedServers, s)
+		}
 		nextURL = nil
 		for _, link := range list.Links {
 			if link.Rel == "next" {
@@ -219,6 +227,7 @@ func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
 	initialURL := api.sc.Endpoint + "os-hypervisors/detail"
 	var nextURL = &initialURL
 	var hypervisors []Hypervisor
+	seen := make(map[string]struct{})
 	for nextURL != nil {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
 		if err != nil {
@@ -245,7 +254,14 @@ func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
 		if err != nil {
 			return nil, err
 		}
-		hypervisors = append(hypervisors, list.Hypervisors...)
+		for _, h := range list.Hypervisors {
+			if _, ok := seen[h.ID]; ok {
+				slog.Warn("skipping duplicate hypervisor", "id", h.ID)
+				continue
+			}
+			seen[h.ID] = struct{}{}
+			hypervisors = append(hypervisors, h)
+		}
 		nextURL = nil
 		for _, link := range list.Links {
 			if link.Rel == "next" {
@@ -309,6 +325,7 @@ func (api *novaAPI) GetAllMigrations(ctx context.Context) ([]Migration, error) {
 	initialURL := api.sc.Endpoint + "os-migrations"
 	var nextURL = &initialURL
 	var migrations []Migration
+	seen := make(map[string]struct{})
 	for nextURL != nil {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
 		if err != nil {
@@ -336,6 +353,14 @@ func (api *novaAPI) GetAllMigrations(ctx context.Context) ([]Migration, error) {
 		if err != nil {
 			return nil, err
 		}
+		for _, m := range list.Migrations {
+			if _, ok := seen[m.UUID]; ok {
+				slog.Warn("skipping duplicate migration", "uuid", m.UUID)
+				continue
+			}
+			seen[m.UUID] = struct{}{}
+			migrations = append(migrations, m)
+		}
 		nextURL = nil
 		for _, link := range list.Links {
 			if link.Rel == "next" {
@@ -343,7 +368,6 @@ func (api *novaAPI) GetAllMigrations(ctx context.Context) ([]Migration, error) {
 				break
 			}
 		}
-		migrations = append(migrations, list.Migrations...)
 	}
 	slog.Info("fetched", "label", label, "count", len(migrations))
 	return migrations, nil

@@ -157,10 +157,23 @@ func TestNovaAPI_GetAllServers_DeduplicatesServers(t *testing.T) {
 			expectedServers: []string{"aaa", "bbb"},
 		},
 		{
-			name: "no duplicates",
+			name: "no duplicates single page",
 			responses: []string{
 				`{"servers": [
 					{"id": "aaa", "name": "server1", "flavor": {"id": "1"}},
+					{"id": "bbb", "name": "server2", "flavor": {"id": "1"}}
+				]}`,
+			},
+			expectedCount:   2,
+			expectedServers: []string{"aaa", "bbb"},
+		},
+		{
+			name: "no duplicates across pages",
+			responses: []string{
+				`{"servers": [
+					{"id": "aaa", "name": "server1", "flavor": {"id": "1"}}
+				], "servers_links": [{"rel": "next", "href": "NEXT_URL"}]}`,
+				`{"servers": [
 					{"id": "bbb", "name": "server2", "flavor": {"id": "1"}}
 				]}`,
 			},
@@ -328,5 +341,296 @@ func TestNovaAPI_GetAllMigrations(t *testing.T) {
 	}
 	if migrations[0].ID != 1 || migrations[0].SourceCompute != "host1" || migrations[0].DestCompute != "host2" || migrations[0].Status != "completed" {
 		t.Errorf("unexpected migration data: %+v", migrations[0])
+	}
+}
+
+func TestNovaAPI_GetDeletedServers_DeduplicatesServers(t *testing.T) {
+	tests := []struct {
+		name          string
+		responses     []string
+		expectedCount int
+		expectedIDs   []string
+	}{
+		{
+			name: "duplicates within same page",
+			responses: []string{
+				`{"servers": [
+					{"id": "aaa", "name": "s1", "status": "DELETED", "flavor": {"id": "1"}},
+					{"id": "bbb", "name": "s2", "status": "DELETED", "flavor": {"id": "1"}},
+					{"id": "aaa", "name": "s1-dup", "status": "DELETED", "flavor": {"id": "1"}}
+				]}`,
+			},
+			expectedCount: 2,
+			expectedIDs:   []string{"aaa", "bbb"},
+		},
+		{
+			name: "duplicates across pages",
+			responses: []string{
+				`{"servers": [
+					{"id": "aaa", "name": "s1", "status": "DELETED", "flavor": {"id": "1"}}
+				], "servers_links": [{"rel": "next", "href": "NEXT_URL"}]}`,
+				`{"servers": [
+					{"id": "aaa", "name": "s1-dup", "status": "DELETED", "flavor": {"id": "1"}},
+					{"id": "bbb", "name": "s2", "status": "DELETED", "flavor": {"id": "1"}}
+				]}`,
+			},
+			expectedCount: 2,
+			expectedIDs:   []string{"aaa", "bbb"},
+		},
+		{
+			name: "no duplicates single page",
+			responses: []string{
+				`{"servers": [
+					{"id": "aaa", "name": "s1", "status": "DELETED", "flavor": {"id": "1"}},
+					{"id": "bbb", "name": "s2", "status": "DELETED", "flavor": {"id": "1"}}
+				]}`,
+			},
+			expectedCount: 2,
+			expectedIDs:   []string{"aaa", "bbb"},
+		},
+		{
+			name: "no duplicates across pages",
+			responses: []string{
+				`{"servers": [
+					{"id": "aaa", "name": "s1", "status": "DELETED", "flavor": {"id": "1"}}
+				], "servers_links": [{"rel": "next", "href": "NEXT_URL"}]}`,
+				`{"servers": [
+					{"id": "bbb", "name": "s2", "status": "DELETED", "flavor": {"id": "1"}}
+				]}`,
+			},
+			expectedCount: 2,
+			expectedIDs:   []string{"aaa", "bbb"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			callCount := 0
+			handler := func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Add("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				if _, err := w.Write([]byte(tt.responses[callCount])); err != nil {
+					t.Fatalf("failed to write response: %v", err)
+				}
+				callCount++
+			}
+			srv, k := setupNovaMockServer(handler)
+			defer srv.Close()
+
+			for i := range tt.responses {
+				tt.responses[i] = strings.ReplaceAll(tt.responses[i], "NEXT_URL", srv.URL+"/servers/detail?page=2")
+			}
+
+			api := NewNovaAPI(datasources.Monitor{}, k, v1alpha1.NovaDatasource{}).(*novaAPI)
+			if err := api.Init(t.Context()); err != nil {
+				t.Fatalf("failed to init nova api: %v", err)
+			}
+
+			servers, err := api.GetDeletedServers(t.Context(), time.Now().Add(-6*time.Hour))
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			if len(servers) != tt.expectedCount {
+				t.Fatalf("expected %d servers, got %d", tt.expectedCount, len(servers))
+			}
+			for i, id := range tt.expectedIDs {
+				if servers[i].ID != id {
+					t.Fatalf("expected server[%d].ID = %s, got %s", i, id, servers[i].ID)
+				}
+			}
+		})
+	}
+}
+
+func TestNovaAPI_GetAllHypervisors_DeduplicatesHypervisors(t *testing.T) {
+	tests := []struct {
+		name          string
+		responses     []string
+		expectedCount int
+		expectedIDs   []string
+	}{
+		{
+			name: "duplicates within same page",
+			responses: []string{
+				`{"hypervisors": [
+					{"id": "aaa", "hypervisor_hostname": "h1", "cpu_info": {}, "service": {"id": "s1", "host": "h1"}},
+					{"id": "bbb", "hypervisor_hostname": "h2", "cpu_info": {}, "service": {"id": "s2", "host": "h2"}},
+					{"id": "aaa", "hypervisor_hostname": "h1-dup", "cpu_info": {}, "service": {"id": "s1", "host": "h1"}}
+				]}`,
+			},
+			expectedCount: 2,
+			expectedIDs:   []string{"aaa", "bbb"},
+		},
+		{
+			name: "duplicates across pages",
+			responses: []string{
+				`{"hypervisors": [
+					{"id": "aaa", "hypervisor_hostname": "h1", "cpu_info": {}, "service": {"id": "s1", "host": "h1"}}
+				], "hypervisors_links": [{"rel": "next", "href": "NEXT_URL"}]}`,
+				`{"hypervisors": [
+					{"id": "aaa", "hypervisor_hostname": "h1-dup", "cpu_info": {}, "service": {"id": "s1", "host": "h1"}},
+					{"id": "bbb", "hypervisor_hostname": "h2", "cpu_info": {}, "service": {"id": "s2", "host": "h2"}}
+				]}`,
+			},
+			expectedCount: 2,
+			expectedIDs:   []string{"aaa", "bbb"},
+		},
+		{
+			name: "no duplicates single page",
+			responses: []string{
+				`{"hypervisors": [
+					{"id": "aaa", "hypervisor_hostname": "h1", "cpu_info": {}, "service": {"id": "s1", "host": "h1"}},
+					{"id": "bbb", "hypervisor_hostname": "h2", "cpu_info": {}, "service": {"id": "s2", "host": "h2"}}
+				]}`,
+			},
+			expectedCount: 2,
+			expectedIDs:   []string{"aaa", "bbb"},
+		},
+		{
+			name: "no duplicates across pages",
+			responses: []string{
+				`{"hypervisors": [
+					{"id": "aaa", "hypervisor_hostname": "h1", "cpu_info": {}, "service": {"id": "s1", "host": "h1"}}
+				], "hypervisors_links": [{"rel": "next", "href": "NEXT_URL"}]}`,
+				`{"hypervisors": [
+					{"id": "bbb", "hypervisor_hostname": "h2", "cpu_info": {}, "service": {"id": "s2", "host": "h2"}}
+				]}`,
+			},
+			expectedCount: 2,
+			expectedIDs:   []string{"aaa", "bbb"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			callCount := 0
+			handler := func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Add("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				if _, err := w.Write([]byte(tt.responses[callCount])); err != nil {
+					t.Fatalf("failed to write response: %v", err)
+				}
+				callCount++
+			}
+			srv, k := setupNovaMockServer(handler)
+			defer srv.Close()
+
+			for i := range tt.responses {
+				tt.responses[i] = strings.ReplaceAll(tt.responses[i], "NEXT_URL", srv.URL+"/os-hypervisors/detail?page=2")
+			}
+
+			api := NewNovaAPI(datasources.Monitor{}, k, v1alpha1.NovaDatasource{}).(*novaAPI)
+			if err := api.Init(t.Context()); err != nil {
+				t.Fatalf("failed to init nova api: %v", err)
+			}
+
+			hypervisors, err := api.GetAllHypervisors(t.Context())
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			if len(hypervisors) != tt.expectedCount {
+				t.Fatalf("expected %d hypervisors, got %d", tt.expectedCount, len(hypervisors))
+			}
+			for i, id := range tt.expectedIDs {
+				if hypervisors[i].ID != id {
+					t.Fatalf("expected hypervisor[%d].ID = %s, got %s", i, id, hypervisors[i].ID)
+				}
+			}
+		})
+	}
+}
+
+func TestNovaAPI_GetAllMigrations_DeduplicatesMigrations(t *testing.T) {
+	tests := []struct {
+		name          string
+		responses     []string
+		expectedCount int
+		expectedUUIDs []string
+	}{
+		{
+			name: "duplicates within same page",
+			responses: []string{
+				`{"migrations": [
+					{"id": 1, "uuid": "aaa", "status": "completed"},
+					{"id": 2, "uuid": "bbb", "status": "completed"},
+					{"id": 1, "uuid": "aaa", "status": "completed"}
+				]}`,
+			},
+			expectedCount: 2,
+			expectedUUIDs: []string{"aaa", "bbb"},
+		},
+		{
+			name: "duplicates across pages",
+			responses: []string{
+				`{"migrations": [
+					{"id": 1, "uuid": "aaa", "status": "completed"}
+				], "migrations_links": [{"rel": "next", "href": "NEXT_URL"}]}`,
+				`{"migrations": [
+					{"id": 1, "uuid": "aaa", "status": "completed"},
+					{"id": 2, "uuid": "bbb", "status": "completed"}
+				]}`,
+			},
+			expectedCount: 2,
+			expectedUUIDs: []string{"aaa", "bbb"},
+		},
+		{
+			name: "no duplicates single page",
+			responses: []string{
+				`{"migrations": [
+					{"id": 1, "uuid": "aaa", "status": "completed"},
+					{"id": 2, "uuid": "bbb", "status": "completed"}
+				]}`,
+			},
+			expectedCount: 2,
+			expectedUUIDs: []string{"aaa", "bbb"},
+		},
+		{
+			name: "no duplicates across pages",
+			responses: []string{
+				`{"migrations": [
+					{"id": 1, "uuid": "aaa", "status": "completed"}
+				], "migrations_links": [{"rel": "next", "href": "NEXT_URL"}]}`,
+				`{"migrations": [
+					{"id": 2, "uuid": "bbb", "status": "completed"}
+				]}`,
+			},
+			expectedCount: 2,
+			expectedUUIDs: []string{"aaa", "bbb"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			callCount := 0
+			handler := func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Add("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				if _, err := w.Write([]byte(tt.responses[callCount])); err != nil {
+					t.Fatalf("failed to write response: %v", err)
+				}
+				callCount++
+			}
+			srv, k := setupNovaMockServer(handler)
+			defer srv.Close()
+
+			for i := range tt.responses {
+				tt.responses[i] = strings.ReplaceAll(tt.responses[i], "NEXT_URL", srv.URL+"/os-migrations?page=2")
+			}
+
+			api := NewNovaAPI(datasources.Monitor{}, k, v1alpha1.NovaDatasource{}).(*novaAPI)
+			if err := api.Init(t.Context()); err != nil {
+				t.Fatalf("failed to init nova api: %v", err)
+			}
+
+			migrations, err := api.GetAllMigrations(t.Context())
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			if len(migrations) != tt.expectedCount {
+				t.Fatalf("expected %d migrations, got %d", tt.expectedCount, len(migrations))
+			}
+			for i, uuid := range tt.expectedUUIDs {
+				if migrations[i].UUID != uuid {
+					t.Fatalf("expected migration[%d].UUID = %s, got %s", i, uuid, migrations[i].UUID)
+				}
+			}
+		})
 	}
 }
