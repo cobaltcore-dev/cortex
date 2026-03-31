@@ -4,14 +4,14 @@
 package compute
 
 import (
-	"context"
 	_ "embed"
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type HostDetails struct {
@@ -56,7 +56,7 @@ type HostDetailsExtractor struct {
 var hostDetailsQuery string
 
 // Extract the traits of a compute host from the database.
-func (e *HostDetailsExtractor) Extract() ([]plugins.Feature, error) {
+func (e *HostDetailsExtractor) Extract(_ []*v1alpha1.Datasource, k []*v1alpha1.Knowledge) ([]plugins.Feature, error) {
 	if e.DB == nil {
 		return nil, errors.New("database connection is not initialized")
 	}
@@ -66,16 +66,15 @@ func (e *HostDetailsExtractor) Extract() ([]plugins.Feature, error) {
 	}
 
 	// Add the pinned projects to the host details.
-	pinnedProjectsKnowledge := &v1alpha1.Knowledge{}
-	if err := e.Client.Get(
-		context.Background(),
-		client.ObjectKey{Name: "host-pinned-projects"},
-		pinnedProjectsKnowledge,
-	); err != nil {
-		return nil, err
+	name := "host-pinned-projects"
+	idx := slices.IndexFunc(k, func(k *v1alpha1.Knowledge) bool {
+		return k.Name == name
+	})
+	if idx < 0 {
+		return nil, fmt.Errorf("knowledge '%s' not found", name)
 	}
 	pinnedProjects, err := v1alpha1.
-		UnboxFeatureList[HostPinnedProjects](pinnedProjectsKnowledge.Status.Raw)
+		UnboxFeatureList[HostPinnedProjects](k[idx].Status.Raw)
 	if err != nil {
 		return nil, err
 	}
@@ -99,16 +98,15 @@ func (e *HostDetailsExtractor) Extract() ([]plugins.Feature, error) {
 	}
 
 	// Add the availability zones to the host details.
-	azKnowledge := &v1alpha1.Knowledge{}
-	if err := e.Client.Get(
-		context.Background(),
-		client.ObjectKey{Name: "host-az"},
-		azKnowledge,
-	); err != nil {
-		return nil, err
+	name = "host-az"
+	idx = slices.IndexFunc(k, func(k *v1alpha1.Knowledge) bool {
+		return k.Name == name
+	})
+	if idx < 0 {
+		return nil, fmt.Errorf("knowledge '%s' not found", name)
 	}
 	hostAZs, err := v1alpha1.
-		UnboxFeatureList[HostAZ](azKnowledge.Status.Raw)
+		UnboxFeatureList[HostAZ](k[idx].Status.Raw)
 	if err != nil {
 		return nil, err
 	}

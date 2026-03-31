@@ -533,7 +533,7 @@ func TestHostPinnedProjectsExtractor_Extract(t *testing.T) {
 				t.Fatalf("expected no error, got %v", err)
 			}
 
-			features, err := extractor.Extract()
+			features, err := extractor.Extract([]*v1alpha1.Datasource{}, []*v1alpha1.Knowledge{})
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

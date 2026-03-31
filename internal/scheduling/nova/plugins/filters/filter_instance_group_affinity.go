@@ -4,6 +4,7 @@
 package filters
 
 import (
+	"context"
 	"log/slog"
 	"slices"
 
@@ -17,6 +18,7 @@ type FilterInstanceGroupAffinityStep struct {
 
 // Select hosts in spec.instance_group.
 func (s *FilterInstanceGroupAffinityStep) Run(
+	_ context.Context,
 	traceLog *slog.Logger,
 	request api.ExternalSchedulerRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {

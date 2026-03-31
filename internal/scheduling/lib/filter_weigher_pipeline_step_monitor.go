@@ -4,6 +4,7 @@
 package lib
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -63,6 +64,7 @@ func monitorStep[RequestType FilterWeigherPipelineRequest](stepName string, m Fi
 
 // Run the step and observe its execution.
 func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
+	ctx context.Context,
 	traceLog *slog.Logger,
 	request RequestType,
 	step FilterWeigherPipelineStep[RequestType],
@@ -74,7 +76,7 @@ func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
 	}
 
 	inWeights := request.GetWeights()
-	stepResult, err := step.Run(traceLog, request)
+	stepResult, err := step.Run(ctx, traceLog, request)
 	if err != nil {
 		return nil, err
 	}

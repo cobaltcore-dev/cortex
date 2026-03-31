@@ -448,7 +448,7 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			step.Options = tt.opts
 
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(t.Context(), slog.Default(), tt.request)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil")

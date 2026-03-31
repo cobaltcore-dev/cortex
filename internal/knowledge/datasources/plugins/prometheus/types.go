@@ -292,3 +292,37 @@ func (m NetAppVolumeAggrLabelsMetric) With(n string, t time.Time, v float64) Pro
 	m.Value = v
 	return m
 }
+
+type GenericMetric struct {
+	Name      string    `json:"name" db:"name"`
+	Host      string    `json:"host" db:"host"`
+	Value     float64   `json:"value" db:"value"`
+	Timestamp time.Time `json:"timestamp" db:"timestamp"`
+}
+
+func (m GenericMetric) GetName() string {
+	return m.Name
+}
+
+func (m GenericMetric) GetValue() float64 {
+	return m.Value
+}
+
+func (m GenericMetric) GetTimestamp() time.Time {
+	return m.Timestamp
+}
+
+func (m GenericMetric) TableName() string {
+	return "generic"
+}
+
+func (m GenericMetric) Indexes() map[string][]string {
+	return nil
+}
+
+func (m GenericMetric) With(alias string, t time.Time, v float64) PrometheusMetric {
+	m.Name = alias
+	m.Timestamp = t
+	m.Value = v
+	return m
+}

@@ -48,7 +48,7 @@ type FilterHasEnoughCapacity struct {
 // known at this point.
 //
 // Please also note that disk space is currently not considered by this filter.
-func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterHasEnoughCapacity) Run(ctx context.Context, traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	// This map holds the free resources per host.
@@ -58,7 +58,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 	// We can use the hypervisor status to calculate the total capacity
 	// and then subtract the actual resource allocation from virtual machines.
 	hvs := &hv1.HypervisorList{}
-	if err := s.Client.List(context.Background(), hvs); err != nil {
+	if err := s.Client.List(ctx, hvs); err != nil {
 		traceLog.Error("failed to list hypervisors", "error", err)
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 
 	// Subtract reserved resources by Reservations.
 	var reservations v1alpha1.ReservationList
-	if err := s.Client.List(context.Background(), &reservations); err != nil {
+	if err := s.Client.List(ctx, &reservations); err != nil {
 		return nil, err
 	}
 	for _, reservation := range reservations.Items {

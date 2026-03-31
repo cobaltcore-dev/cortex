@@ -4,6 +4,7 @@
 package filters
 
 import (
+	"context"
 	"log/slog"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -28,6 +29,7 @@ type FilterExcludeHostsStepOpts struct {
 func (opts FilterExcludeHostsStepOpts) Validate() error { return nil }
 
 func (s *FilterExcludeHostsStep) Run(
+	_ context.Context,
 	traceLog *slog.Logger,
 	request api.ExternalSchedulerRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {

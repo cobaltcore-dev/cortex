@@ -125,7 +125,7 @@ func TestFlavorGroupExtractor_Extract(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	features, err := extractor.Extract()
+	features, err := extractor.Extract([]*v1alpha1.Datasource{}, []*v1alpha1.Knowledge{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -360,7 +360,7 @@ func TestFlavorGroupExtractor_RamCoreRatio_FixedRatio(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	features, err := extractor.Extract()
+	features, err := extractor.Extract([]*v1alpha1.Datasource{}, []*v1alpha1.Knowledge{})
 	if err != nil {
 		t.Fatal(err)
 	}

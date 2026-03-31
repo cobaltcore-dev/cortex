@@ -6,6 +6,7 @@ package compute
 import (
 	_ "embed"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
 )
 
@@ -42,6 +43,6 @@ type HostPinnedProjectsExtractor struct {
 var hostPinnedProjectsQuery string
 
 // Extract the pinned projects of a compute host.
-func (e *HostPinnedProjectsExtractor) Extract() ([]plugins.Feature, error) {
+func (e *HostPinnedProjectsExtractor) Extract(_ []*v1alpha1.Datasource, _ []*v1alpha1.Knowledge) ([]plugins.Feature, error) {
 	return e.ExtractSQL(hostPinnedProjectsQuery)
 }

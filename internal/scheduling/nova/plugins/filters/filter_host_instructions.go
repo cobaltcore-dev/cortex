@@ -4,6 +4,7 @@
 package filters
 
 import (
+	"context"
 	"log/slog"
 	"slices"
 
@@ -18,7 +19,7 @@ type FilterHostInstructionsStep struct {
 // Filter hosts based on instructions given in the request spec. Supported are:
 // - spec.ignore_hosts: Filter out all hosts in this list.
 // - spec.force_hosts: Include only hosts in this list.
-func (s *FilterHostInstructionsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterHostInstructionsStep) Run(_ context.Context, traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	if request.Spec.Data.IgnoreHosts != nil {
 		for _, host := range *request.Spec.Data.IgnoreHosts {

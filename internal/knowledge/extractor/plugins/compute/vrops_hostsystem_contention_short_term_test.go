@@ -28,11 +28,6 @@ func TestVROpsHostsystemContentionShortTermExtractor_Extract(t *testing.T) {
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer dbEnv.Close()
 
-	scheme, err := v1alpha1.SchemeBuilder.Build()
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
 	// Create dependency tables
 	if err := testDB.CreateTable(
 		testDB.AddTable(prometheus.VROpsHostMetric{}),
@@ -59,17 +54,17 @@ func TestVROpsHostsystemContentionShortTermExtractor_Extract(t *testing.T) {
 
 	extractor := &VROpsHostsystemContentionShortTermExtractor{}
 	config := v1alpha1.KnowledgeSpec{}
-	client := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(&v1alpha1.Knowledge{
+	client := fake.NewClientBuilder().Build()
+	knowledges := []*v1alpha1.Knowledge{
+		{
 			ObjectMeta: v1.ObjectMeta{Name: "vmware-resolved-hostsystems"},
 			Status:     v1alpha1.KnowledgeStatus{Raw: vropsResolvedHostsystems},
-		}).
-		Build()
+		},
+	}
 	if err := extractor.Init(&testDB, client, config); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	features, err := extractor.Extract()
+	features, err := extractor.Extract([]*v1alpha1.Datasource{}, knowledges)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

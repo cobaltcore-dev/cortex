@@ -6,6 +6,7 @@ package compute
 import (
 	_ "embed"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
 )
 
@@ -30,6 +31,6 @@ type VROpsHostsystemResolver struct {
 var vropsHostsystemSQL string
 
 // Resolve vROps hostsystems to Nova compute hosts.
-func (e *VROpsHostsystemResolver) Extract() ([]plugins.Feature, error) {
+func (e *VROpsHostsystemResolver) Extract(_ []*v1alpha1.Datasource, _ []*v1alpha1.Knowledge) ([]plugins.Feature, error) {
 	return e.ExtractSQL(vropsHostsystemSQL)
 }

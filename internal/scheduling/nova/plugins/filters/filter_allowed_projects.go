@@ -19,7 +19,7 @@ type FilterAllowedProjectsStep struct {
 
 // Lock certain hosts for certain projects, based on the hypervisor spec.
 // Note that hosts without specified projects are still accessible.
-func (s *FilterAllowedProjectsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterAllowedProjectsStep) Run(ctx context.Context, traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	if request.Spec.Data.ProjectID == "" {
 		traceLog.Info("no project ID in request, skipping filter")
@@ -27,7 +27,7 @@ func (s *FilterAllowedProjectsStep) Run(traceLog *slog.Logger, request api.Exter
 	}
 
 	hvs := &hv1.HypervisorList{}
-	if err := s.Client.List(context.Background(), hvs); err != nil {
+	if err := s.Client.List(ctx, hvs); err != nil {
 		traceLog.Error("failed to list hypervisors", "error", err)
 		return nil, err
 	}
