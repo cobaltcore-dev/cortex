@@ -55,18 +55,19 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer dbEnv.Close()
 	mon := datasources.Monitor{}
-	pc := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviders}
 
 	syncer := &PlacementSyncer{
 		DB:   testDB,
 		Mon:  mon,
 		Conf: conf,
-		API:  NewPlacementAPI(mon, pc, conf),
+		API:  &mockPlacementAPI{},
 	}
-	syncer.API = &mockPlacementAPI{}
 
 	ctx := t.Context()
+	if err := syncer.Init(ctx); err != nil {
+		t.Fatalf("failed to init placement syncer: %v", err)
+	}
 	_, err := syncer.Sync(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -78,18 +79,19 @@ func TestPlacementSyncer_SyncResourceProviders(t *testing.T) {
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer dbEnv.Close()
 	mon := datasources.Monitor{}
-	pc := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviders}
 
 	syncer := &PlacementSyncer{
 		DB:   testDB,
 		Mon:  mon,
 		Conf: conf,
-		API:  NewPlacementAPI(mon, pc, conf),
+		API:  &mockPlacementAPI{},
 	}
-	syncer.API = &mockPlacementAPI{}
 
 	ctx := t.Context()
+	if err := syncer.Init(ctx); err != nil {
+		t.Fatalf("failed to init placement syncer: %v", err)
+	}
 	n, err := syncer.SyncResourceProviders(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -104,7 +106,6 @@ func TestPlacementSyncer_SyncTraits(t *testing.T) {
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer dbEnv.Close()
 	mon := datasources.Monitor{}
-	pc := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviderTraits}
 
 	rps := []ResourceProvider{{UUID: "1", Name: "rp1"}}
@@ -120,9 +121,12 @@ func TestPlacementSyncer_SyncTraits(t *testing.T) {
 		DB:   testDB,
 		Mon:  mon,
 		Conf: conf,
-		API:  NewPlacementAPI(mon, pc, conf),
+		API:  &mockPlacementAPI{},
 	}
-	syncer.API = &mockPlacementAPI{}
+
+	if err := syncer.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init placement syncer: %v", err)
+	}
 
 	ctx := t.Context()
 	// First, we need to sync resource providers to have them in the DB.
@@ -140,7 +144,6 @@ func TestPlacementSyncer_SyncInventoryUsages(t *testing.T) {
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer dbEnv.Close()
 	mon := datasources.Monitor{}
-	pc := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviderInventoryUsages}
 
 	rps := []ResourceProvider{{UUID: "1", Name: "rp1"}}
@@ -156,9 +159,12 @@ func TestPlacementSyncer_SyncInventoryUsages(t *testing.T) {
 		DB:   testDB,
 		Mon:  mon,
 		Conf: conf,
-		API:  NewPlacementAPI(mon, pc, conf),
+		API:  &mockPlacementAPI{},
 	}
-	syncer.API = &mockPlacementAPI{}
+
+	if err := syncer.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init placement syncer: %v", err)
+	}
 
 	ctx := t.Context()
 	n, err := syncer.SyncInventoryUsages(ctx)

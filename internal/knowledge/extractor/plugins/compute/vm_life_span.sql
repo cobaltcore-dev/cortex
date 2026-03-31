@@ -13,7 +13,7 @@ running_servers AS (
         EXTRACT(EPOCH FROM (NOW()::timestamp - servers.created::timestamp))::BIGINT AS duration,
         COALESCE(flavors.name, 'unknown')::TEXT AS flavor_name,
         false::BOOLEAN AS deleted
-    FROM openstack_servers servers
+    FROM openstack_servers_v2 servers
     LEFT JOIN openstack_flavors_v2 flavors ON flavors.name = servers.flavor_name
     WHERE servers.created IS NOT NULL
 )

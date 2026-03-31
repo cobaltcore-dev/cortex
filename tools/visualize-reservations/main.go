@@ -52,6 +52,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	_ "github.com/lib/pq"
 	corev1 "k8s.io/api/core/v1"
@@ -1761,9 +1762,10 @@ func connectToPostgres(
 
 	// Query servers with host information
 	serverMap = make(map[string]serverInfo)
-	rows, err := db.QueryContext(ctx, "SELECT id, flavor_name, COALESCE(host_id, ''), COALESCE(os_ext_srv_attr_host, '') FROM openstack_servers")
+	//nolint:gosec // This query is not using any user input, so it's not vulnerable to SQL injection
+	rows, err := db.QueryContext(ctx, "SELECT id, flavor_name, COALESCE(host_id, ''), COALESCE(os_ext_srv_attr_host, '') FROM "+nova.Server{}.TableName())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Could not query openstack_servers: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: Could not query "+nova.Server{}.TableName()+": %v\n", err)
 	} else {
 		defer rows.Close()
 		for rows.Next() {
