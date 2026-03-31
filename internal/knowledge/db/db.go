@@ -142,14 +142,16 @@ func (d *DB) SelectTimed(group string, i any, query string, args ...any) ([]any,
 func (d *DB) CreateTable(table ...*gorp.TableMap) error {
 	tx, err := d.Begin()
 	if err != nil {
-		slog.Error("failed to begin transaction", "error", err)
-		return tx.Rollback()
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	for _, t := range table {
 		slog.Info("creating table if exists", "table", t.TableName)
 		sql := t.SqlForCreate(true) // true means to add IF NOT EXISTS
 		if _, err := tx.Exec(sql); err != nil {
-			return tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				slog.Error("failed to rollback transaction", "error", rbErr)
+			}
+			return fmt.Errorf("failed to create table %s: %w", t.TableName, err)
 		}
 	}
 	return tx.Commit()
@@ -201,20 +203,22 @@ func ReplaceAll[T Table](db DB, objs ...T) error {
 	tableName := model.TableName()
 	tx, err := db.Begin()
 	if err != nil {
-		slog.Error("failed to begin transaction", "error", err)
-		return tx.Rollback()
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	if _, err = tx.Exec("DELETE FROM " + tableName); err != nil {
-		slog.Error("failed to delete old objects", "tableName", tableName, "error", err)
-		return tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			slog.Error("failed to rollback transaction", "error", rbErr)
+		}
+		return fmt.Errorf("failed to delete old objects from %s: %w", tableName, err)
 	}
 	if err = BulkInsert(tx, db, objs...); err != nil {
-		slog.Error("failed to insert new objects", "tableName", tableName, "error", err)
-		return tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			slog.Error("failed to rollback transaction", "error", rbErr)
+		}
+		return fmt.Errorf("failed to insert new objects into %s: %w", tableName, err)
 	}
 	if err = tx.Commit(); err != nil {
-		slog.Error("failed to commit transaction", "error", err)
-		return err
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 	return nil
 }

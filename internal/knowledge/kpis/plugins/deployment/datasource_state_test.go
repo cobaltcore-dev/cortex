@@ -5,10 +5,12 @@ package deployment
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -30,7 +32,7 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 		name          string
 		datasources   []v1alpha1.Datasource
 		operator      string
-		expectedCount int
+		expectedCount int // 2 metrics per datasource: state counter + seconds until reconcile gauge
 		description   string
 	}{
 		{
@@ -53,8 +55,8 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 				},
 			},
 			operator:      "test-operator",
-			expectedCount: 1,
-			description:   "should collect metric for ready datasource",
+			expectedCount: 2,
+			description:   "should collect metrics for ready datasource",
 		},
 		{
 			name: "datasource in error state",
@@ -75,8 +77,8 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 				},
 			},
 			operator:      "test-operator",
-			expectedCount: 1,
-			description:   "should collect metric for error datasource",
+			expectedCount: 2,
+			description:   "should collect metrics for error datasource",
 		},
 		{
 			name: "multiple datasources different states",
@@ -115,7 +117,7 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 				},
 			},
 			operator:      "test-operator",
-			expectedCount: 3,
+			expectedCount: 6,
 			description:   "should collect metrics for all datasources with different states",
 		},
 		{
@@ -139,7 +141,7 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 				},
 			},
 			operator:      "test-operator",
-			expectedCount: 1,
+			expectedCount: 2,
 			description:   "should only collect metrics for datasources with matching operator",
 		},
 		{
@@ -155,8 +157,8 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 				},
 			},
 			operator:      "test-operator",
-			expectedCount: 1,
-			description:   "should collect metric with unknown state for datasource without objects or conditions",
+			expectedCount: 2,
+			description:   "should collect metrics with unknown state for datasource without objects or conditions",
 		},
 	}
 
@@ -206,7 +208,7 @@ func TestDatasourceStateKPI_Describe(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	ch := make(chan *prometheus.Desc, 1)
+	ch := make(chan *prometheus.Desc, 2)
 	kpi.Describe(ch)
 	close(ch)
 
@@ -215,7 +217,113 @@ func TestDatasourceStateKPI_Describe(t *testing.T) {
 		descCount++
 	}
 
-	if descCount != 1 {
-		t.Errorf("expected 1 descriptor, got %d", descCount)
+	if descCount != 2 {
+		t.Errorf("expected 2 descriptors, got %d", descCount)
+	}
+}
+
+func TestDatasourceStateKPI_GaugeSecondsUntilReconcile(t *testing.T) {
+	scheme, err := v1alpha1.SchemeBuilder.Build()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	now := time.Now()
+	tests := []struct {
+		name         string
+		datasource   v1alpha1.Datasource
+		expectQueued bool
+		expectSign   int // 1 for positive, -1 for negative
+	}{
+		{
+			name: "datasource with NextSyncTime in future",
+			datasource: v1alpha1.Datasource{
+				ObjectMeta: v1.ObjectMeta{Name: "ds-queued", CreationTimestamp: v1.NewTime(now.Add(-time.Hour))},
+				Spec:       v1alpha1.DatasourceSpec{SchedulingDomain: "test-operator"},
+				Status: v1alpha1.DatasourceStatus{
+					NextSyncTime: v1.NewTime(now.Add(30 * time.Second)),
+				},
+			},
+			expectQueued: true,
+			expectSign:   1,
+		},
+		{
+			name: "datasource with NextSyncTime in past",
+			datasource: v1alpha1.Datasource{
+				ObjectMeta: v1.ObjectMeta{Name: "ds-overdue", CreationTimestamp: v1.NewTime(now.Add(-time.Hour))},
+				Spec:       v1alpha1.DatasourceSpec{SchedulingDomain: "test-operator"},
+				Status: v1alpha1.DatasourceStatus{
+					NextSyncTime: v1.NewTime(now.Add(-30 * time.Second)),
+				},
+			},
+			expectQueued: true,
+			expectSign:   -1,
+		},
+		{
+			name: "datasource never reconciled (no NextSyncTime)",
+			datasource: v1alpha1.Datasource{
+				ObjectMeta: v1.ObjectMeta{Name: "ds-never-reconciled", CreationTimestamp: v1.NewTime(now.Add(-time.Minute))},
+				Spec:       v1alpha1.DatasourceSpec{SchedulingDomain: "test-operator"},
+				Status:     v1alpha1.DatasourceStatus{},
+			},
+			expectQueued: false,
+			expectSign:   -1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(&tt.datasource).
+				Build()
+
+			kpi := &DatasourceStateKPI{}
+			if err := kpi.Init(nil, client, conf.NewRawOpts(`{"datasourceSchedulingDomain": "test-operator"}`)); err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+
+			ch := make(chan prometheus.Metric, 10)
+			kpi.Collect(ch)
+			close(ch)
+
+			var gaugeMetric prometheus.Metric
+			for m := range ch {
+				var metric dto.Metric
+				if err := m.Write(&metric); err != nil {
+					t.Fatalf("failed to write metric: %v", err)
+				}
+				for _, label := range metric.Label {
+					if label.GetName() == "queued" {
+						gaugeMetric = m
+						expectedQueued := "false"
+						if tt.expectQueued {
+							expectedQueued = "true"
+						}
+						if label.GetValue() != expectedQueued {
+							t.Errorf("expected queued=%s, got queued=%s", expectedQueued, label.GetValue())
+						}
+						break
+					}
+				}
+			}
+
+			if gaugeMetric == nil {
+				t.Fatal("expected gaugeSecondsUntilReconcile metric to be collected")
+			}
+
+			var metric dto.Metric
+			if err := gaugeMetric.Write(&metric); err != nil {
+				t.Fatalf("failed to write metric: %v", err)
+			}
+
+			value := metric.Gauge.GetValue()
+			if tt.expectSign == 1 && value <= 0 {
+				t.Errorf("expected positive value, got %f", value)
+			}
+			if tt.expectSign == -1 && value >= 0 {
+				t.Errorf("expected negative value, got %f", value)
+			}
+		})
 	}
 }

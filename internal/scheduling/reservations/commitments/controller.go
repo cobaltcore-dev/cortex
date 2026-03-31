@@ -23,6 +23,7 @@ import (
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	schedulingnova "github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
@@ -574,6 +575,35 @@ func (r *CommitmentReservationController) Init(ctx context.Context, client clien
 	}
 
 	return nil
+}
+
+func (r *CommitmentReservationController) listServersByProjectID(ctx context.Context, projectID string) (map[string]*nova.Server, error) {
+	if r.DB == nil {
+		return nil, errors.New("database connection not initialized")
+	}
+
+	logger := LoggerFromContext(ctx).WithValues("component", "controller")
+
+	// Query servers from the database cache.
+	var servers []nova.Server
+	_, err := r.DB.Select(&servers,
+		"SELECT * FROM "+nova.Server{}.TableName()+" WHERE tenant_id = $1",
+		projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query servers from database: %w", err)
+	}
+
+	logger.V(1).Info("queried servers from database",
+		"projectID", projectID,
+		"serverCount", len(servers))
+
+	// Build lookup map for O(1) access by VM UUID.
+	serverMap := make(map[string]*nova.Server, len(servers))
+	for i := range servers {
+		serverMap[servers[i].ID] = &servers[i]
+	}
+
+	return serverMap, nil
 }
 
 // commitmentReservationPredicate filters to only watch commitment reservations.

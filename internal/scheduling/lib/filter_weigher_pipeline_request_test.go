@@ -19,11 +19,20 @@ func (m mockFilterWeigherPipelineRequest) GetHosts() []string             { retu
 func (m mockFilterWeigherPipelineRequest) GetWeights() map[string]float64 { return m.Weights }
 func (m mockFilterWeigherPipelineRequest) GetPipeline() string            { return m.Pipeline }
 
-func (m mockFilterWeigherPipelineRequest) FilterHosts(hosts map[string]float64) FilterWeigherPipelineRequest {
+func (m mockFilterWeigherPipelineRequest) Filter(hosts map[string]float64) FilterWeigherPipelineRequest {
 	filteredHosts := make([]string, 0, len(hosts))
 	for host := range hosts {
 		filteredHosts = append(filteredHosts, host)
 	}
 	m.Hosts = filteredHosts
+	// Also filter the weights map to only include the hosts that are still
+	// in the request, and update the weights accordingly.
+	filteredWeights := make(map[string]float64, len(hosts))
+	for host, weight := range hosts {
+		if _, exists := hosts[host]; exists {
+			filteredWeights[host] = weight
+		}
+	}
+	m.Weights = filteredWeights
 	return m
 }
