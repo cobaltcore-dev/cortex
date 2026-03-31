@@ -325,7 +325,7 @@ func (api *novaAPI) GetAllMigrations(ctx context.Context) ([]Migration, error) {
 	initialURL := api.sc.Endpoint + "os-migrations"
 	var nextURL = &initialURL
 	var migrations []Migration
-	seen := make(map[string]struct{})
+	seen := make(map[int]struct{})
 	for nextURL != nil {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
 		if err != nil {
@@ -354,11 +354,11 @@ func (api *novaAPI) GetAllMigrations(ctx context.Context) ([]Migration, error) {
 			return nil, err
 		}
 		for _, m := range list.Migrations {
-			if _, ok := seen[m.UUID]; ok {
-				slog.Warn("skipping duplicate migration", "uuid", m.UUID)
+			if _, ok := seen[m.ID]; ok {
+				slog.Warn("skipping duplicate migration", "id", m.ID)
 				continue
 			}
-			seen[m.UUID] = struct{}{}
+			seen[m.ID] = struct{}{}
 			migrations = append(migrations, m)
 		}
 		nextURL = nil
