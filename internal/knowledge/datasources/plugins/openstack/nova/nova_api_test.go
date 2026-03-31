@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -119,6 +120,91 @@ func TestNovaAPI_GetAllServers(t *testing.T) {
 	}
 	if len(servers) != 1 {
 		t.Fatalf("expected 1 server, got %d", len(servers))
+	}
+}
+
+func TestNovaAPI_GetAllServers_DeduplicatesServers(t *testing.T) {
+	tests := []struct {
+		name            string
+		responses       []string
+		expectedCount   int
+		expectedServers []string
+	}{
+		{
+			name: "duplicates within same page",
+			responses: []string{
+				`{"servers": [
+					{"id": "aaa", "name": "server1", "flavor": {"id": "1"}},
+					{"id": "bbb", "name": "server2", "flavor": {"id": "1"}},
+					{"id": "aaa", "name": "server1-dup", "flavor": {"id": "1"}}
+				]}`,
+			},
+			expectedCount:   2,
+			expectedServers: []string{"aaa", "bbb"},
+		},
+		{
+			name: "duplicates across pages",
+			responses: []string{
+				`{"servers": [
+					{"id": "aaa", "name": "server1", "flavor": {"id": "1"}}
+				], "servers_links": [{"rel": "next", "href": "NEXT_URL"}]}`,
+				`{"servers": [
+					{"id": "aaa", "name": "server1-dup", "flavor": {"id": "1"}},
+					{"id": "bbb", "name": "server2", "flavor": {"id": "1"}}
+				]}`,
+			},
+			expectedCount:   2,
+			expectedServers: []string{"aaa", "bbb"},
+		},
+		{
+			name: "no duplicates",
+			responses: []string{
+				`{"servers": [
+					{"id": "aaa", "name": "server1", "flavor": {"id": "1"}},
+					{"id": "bbb", "name": "server2", "flavor": {"id": "1"}}
+				]}`,
+			},
+			expectedCount:   2,
+			expectedServers: []string{"aaa", "bbb"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			callCount := 0
+			handler := func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Add("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				if _, err := w.Write([]byte(tt.responses[callCount])); err != nil {
+					t.Fatalf("failed to write response: %v", err)
+				}
+				callCount++
+			}
+			srv, k := setupNovaMockServer(handler)
+			defer srv.Close()
+
+			// Patch NEXT_URL placeholder with actual server URL.
+			for i := range tt.responses {
+				tt.responses[i] = strings.ReplaceAll(tt.responses[i], "NEXT_URL", srv.URL+"/servers/detail?page=2")
+			}
+
+			api := NewNovaAPI(datasources.Monitor{}, k, v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeServers}).(*novaAPI)
+			if err := api.Init(t.Context()); err != nil {
+				t.Fatalf("failed to init nova api: %v", err)
+			}
+
+			servers, err := api.GetAllServers(t.Context())
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			if len(servers) != tt.expectedCount {
+				t.Fatalf("expected %d servers, got %d", tt.expectedCount, len(servers))
+			}
+			for i, id := range tt.expectedServers {
+				if servers[i].ID != id {
+					t.Fatalf("expected server[%d].ID = %s, got %s", i, id, servers[i].ID)
+				}
+			}
+		})
 	}
 }
 
