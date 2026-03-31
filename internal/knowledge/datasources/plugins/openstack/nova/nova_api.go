@@ -95,7 +95,7 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 	initialURL := api.sc.Endpoint + "servers/detail?all_tenants=true"
 	var nextURL = &initialURL
 	var allServers []Server
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 
 	for nextURL != nil {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
@@ -124,11 +124,11 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 			return nil, err
 		}
 		for _, s := range list.Servers {
-			if seen[s.ID] {
+			if _, ok := seen[s.ID]; ok {
 				slog.Warn("skipping duplicate server", "id", s.ID)
 				continue
 			}
-			seen[s.ID] = true
+			seen[s.ID] = struct{}{}
 			allServers = append(allServers, s)
 		}
 		nextURL = nil
