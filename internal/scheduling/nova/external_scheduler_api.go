@@ -200,10 +200,9 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		c.Respond(http.StatusBadRequest, err, "failed to decode request body")
 		return
 	}
-	slog.Info(
-		"handling POST request", "url", "/scheduler/nova/external",
-		"hosts", len(requestData.Hosts), "spec", requestData.Spec,
-	)
+	slog.
+		With(requestData.GetTraceLogArgs()).
+		Info("handling POST request", "url", "/scheduler/nova/external", "body", string(body))
 
 	if ok, reason := httpAPI.canRunScheduler(requestData); !ok {
 		internalErr := fmt.Errorf("cannot run scheduler: %s", reason)
