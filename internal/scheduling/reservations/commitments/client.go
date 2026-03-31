@@ -176,9 +176,12 @@ func (c *commitmentsClient) listCommitments(ctx context.Context, project Project
 	var list struct {
 		Commitments []Commitment `json:"commitments"`
 	}
-	_, err := c.limes.Get(ctx, url, &list, &gophercloud.RequestOpts{
+	resp, err := c.limes.Get(ctx, url, &list, &gophercloud.RequestOpts{
 		OkCodes: []int{http.StatusOK},
 	})
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	if err != nil {
 		return nil, err
 	}
