@@ -125,16 +125,18 @@ func TestLimesSyncer_SyncCommitments(t *testing.T) {
 	}
 
 	mon := datasources.Monitor{}
-	k := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.LimesDatasource{Type: v1alpha1.LimesDatasourceTypeProjectCommitments}
 
 	syncer := &LimesSyncer{
 		DB:   testDB,
 		Mon:  mon,
 		Conf: conf,
-		API:  NewLimesAPI(mon, k, conf),
+		API:  &mockLimesAPI{},
 	}
-	syncer.API = &mockLimesAPI{}
+
+	if err := syncer.Init(t.Context()); err != nil {
+		t.Fatalf("failed to init limes syncer: %v", err)
+	}
 
 	ctx := t.Context()
 	n, err := syncer.SyncCommitments(ctx)
