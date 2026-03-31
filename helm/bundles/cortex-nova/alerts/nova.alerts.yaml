@@ -642,3 +642,91 @@ groups:
         reconciliation for more than 10 minutes. This may indicate issues with
         the datasource controller's workqueue or that this or another datasource
         is taking an unusually long time to reconcile.
+
+  - alert: CortexNovaReconcileErrorsHigh
+    expr: |
+      (sum by (controller) (rate(controller_runtime_reconcile_errors_total{service="cortex-nova-metrics"}[5m])))
+      / (sum by (controller) (rate(controller_runtime_reconcile_total{service="cortex-nova-metrics"}[5m]))) > 0.1
+    for: 15m
+    labels:
+      context: controller-errors
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Controller reconcile error rate >10%"
+      description: >
+        More than 10% of controller reconciles are resulting in errors. This may
+        indicate issues with the controller logic, connectivity problems, or
+        external factors causing failures. Check the controller logs for error
+        details and investigate the affected resources.
+
+  - alert: CortexNovaReconcileDurationHigher10Min
+    expr: |
+      (sum by (controller) (rate(controller_runtime_reconcile_time_seconds_sum{service="cortex-nova-metrics"}[5m])))
+      / (sum by (controller) (rate(controller_runtime_reconcile_time_seconds_count{service="cortex-nova-metrics"}[5m]))) > 600
+    for: 15m
+    labels:
+      context: controller-duration
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Controller reconciliation takes longer than ({{ $value | humanizeDuration }})"
+      description: "Reconcile duration higher than 10m while reconciling {{ $labels.controller }}"
+
+  - alert: CortexNovaWorkqueueNotDrained
+    expr: |
+      sum by (name) (rate(workqueue_depth{service="cortex-nova-metrics"}[5m])) > 0
+    for: 15m
+    labels:
+      context: controller-workqueue
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Controller {{ $labels.name }}'s backlog is not being drained."
+      description: >
+        The workqueue for controller {{ $labels.name }} has a backlog that is
+        not being drained. This may indicate that the controller is overwhelmed
+        with work or is stuck on certain resources. Check the controller logs
+        and the state of the resources it manages for more details.
+
+  - alert: CortexNovaWebhookLatencyHigh
+    expr: |
+      histogram_quantile(0.9, avg(rate(controller_runtime_webhook_latency_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (webhook, le)) > 0.2
+    for: 15m
+    labels:
+      context: controller-webhook
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Controller webhook {{ $labels.webhook }} latency is high"
+      description: >
+        The latency for webhook {{ $labels.webhook }} is higher than expected (p90 > 200ms).
+        This may indicate performance issues with the webhook server or the logic it executes.
+        Check the webhook server logs and monitor its resource usage for more insights.
+
+  - alert: CortexNovaWebhookErrorsHigh
+    expr: |
+      (sum by (webhook) (rate(controller_runtime_webhook_requests_total{code!="200", service="cortex-nova-metrics"}[5m])))
+      / (sum by (webhook) (rate(controller_runtime_webhook_requests_total{code="200", service="cortex-nova-metrics"}[5m]))) > 0.1
+    for: 15m
+    labels:
+      context: controller-webhook
+      dashboard: cortex/cortex
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Controller webhook {{ $labels.webhook }} is experiencing errors"
+      description: >
+        The webhook {{ $labels.webhook }} has experienced errors in the last 5 minutes.
+        This may indicate issues with the webhook logic, connectivity problems, or
+        external factors causing failures. Check the webhook server logs for error
+        details and investigate the affected resources.
