@@ -5,11 +5,13 @@ package multicluster
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -156,6 +158,42 @@ func (r testRouter) Match(obj any, labels map[string]string) (bool, error) {
 var configMapGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
 var configMapListGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMapList"}
 var podGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
+
+func TestIsDuplicateError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "nil error",
+			err:      nil,
+			expected: false,
+		},
+		{
+			name:     "duplicate error",
+			err:      &duplicateError{msg: "duplicate /v1, Kind=ConfigMap default/foo in multiple clusters"},
+			expected: true,
+		},
+		{
+			name:     "unrelated error",
+			err:      errors.New("something went wrong"),
+			expected: false,
+		},
+		{
+			name:     "not found error",
+			err:      apierrors.NewNotFound(schema.GroupResource{Group: "", Resource: "ConfigMap"}, "foo"),
+			expected: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsDuplicateError(tt.err); got != tt.expected {
+				t.Errorf("IsDuplicateError(%v) = %v, want %v", tt.err, got, tt.expected)
+			}
+		})
+	}
+}
 
 func TestClient_Apply(t *testing.T) {
 	c := &Client{HomeScheme: newTestScheme(t)}
@@ -684,8 +722,12 @@ func TestClient_Get_MultiCluster_DuplicateError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected duplicate error, got nil")
 	}
-	if !strings.Contains(err.Error(), "duplicate") {
-		t.Errorf("expected duplicate error, got: %v", err)
+	if !IsDuplicateError(err) {
+		t.Errorf("expected IsDuplicateError to return true, got false for error: %v", err)
+	}
+	// The result should still be populated with the object from the first cluster.
+	if result.Name != "shared-cm" {
+		t.Errorf("expected result to be populated, got name %q", result.Name)
 	}
 }
 
@@ -713,8 +755,12 @@ func TestClient_Get_HomeAndRemote_DuplicateError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected duplicate error, got nil")
 	}
-	if !strings.Contains(err.Error(), "duplicate") {
-		t.Errorf("expected duplicate error, got: %v", err)
+	if !IsDuplicateError(err) {
+		t.Errorf("expected IsDuplicateError to return true, got false for error: %v", err)
+	}
+	// The result should still be populated with the object from the first cluster.
+	if result.Name != "shared-cm" {
+		t.Errorf("expected result to be populated, got name %q", result.Name)
 	}
 }
 
@@ -850,11 +896,15 @@ func TestClient_List_MultipleClusters_DuplicateError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected duplicate error, got nil")
 	}
-	if !strings.Contains(err.Error(), "duplicate") {
-		t.Errorf("expected duplicate error, got: %v", err)
+	if !IsDuplicateError(err) {
+		t.Errorf("expected IsDuplicateError to return true, got false for error: %v", err)
 	}
 	if !strings.Contains(err.Error(), "default/shared-cm") {
 		t.Errorf("expected error to contain duplicated resource name, got: %v", err)
+	}
+	// The list should still be populated (all items from all clusters).
+	if len(cmList.Items) == 0 {
+		t.Error("expected list to be populated even when duplicate error is returned")
 	}
 }
 
@@ -882,8 +932,12 @@ func TestClient_List_HomeAndRemote_DuplicateError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected duplicate error, got nil")
 	}
-	if !strings.Contains(err.Error(), "duplicate") {
-		t.Errorf("expected duplicate error, got: %v", err)
+	if !IsDuplicateError(err) {
+		t.Errorf("expected IsDuplicateError to return true, got false for error: %v", err)
+	}
+	// The list should still be populated (all items from all clusters).
+	if len(cmList.Items) == 0 {
+		t.Error("expected list to be populated even when duplicate error is returned")
 	}
 }
 
