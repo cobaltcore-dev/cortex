@@ -541,10 +541,19 @@ type subResourceClient struct {
 }
 
 // Get iterates over all clusters with the GVK and returns the result.
-// Returns an error if the resource is found in multiple clusters (duplicate).
+//
+// If the requested resource is encountered in multiple clusters, this function
+// will return the first one, but will set an error message that can be checked
+// with IsDuplicateError. In that way the result can be used if the caller
+// just cares about the resource existing in at least one cluster, and doesn't
+// mind which one is returned.
+//
+// If no cluster has the resource, a NotFound error is returned.
+//
+// Non-NotFound errors from individual clusters are logged and silently skipped
+// so that a single unavailable cluster does not block the entire read path.
 func (c *subResourceClient) Get(ctx context.Context, obj, subResource client.Object, opts ...client.SubResourceGetOption) error {
 	log := ctrl.LoggerFrom(ctx)
-
 	gvk, err := c.multiclusterClient.GVKFromHomeScheme(obj)
 	if err != nil {
 		return err
@@ -553,29 +562,40 @@ func (c *subResourceClient) Get(ctx context.Context, obj, subResource client.Obj
 	if err != nil {
 		return err
 	}
-
 	found := false
 	for _, cl := range clusters {
+		// If we already found the resource in a previous cluster, we want to check if it also exists in this cluster to detect duplicates.
 		if found {
 			candidateObj := obj.DeepCopyObject().(client.Object)
 			candidateSub := subResource.DeepCopyObject().(client.Object)
-			err := cl.GetClient().SubResource(c.subResource).Get(ctx, candidateObj, candidateSub, opts...)
+			err := cl.GetClient().SubResource(c.subResource).
+				Get(ctx, candidateObj, candidateSub, opts...)
 			if err == nil {
-				return fmt.Errorf("duplicate sub-resource found: %s %s/%s exists in multiple clusters", gvk, obj.GetNamespace(), obj.GetName())
+				// In this case Get() was already called and the object set.
+				return errors.New(duplicateErrorMsgPrefix + " " +
+					candidateObj.GetNamespace() + "/" + candidateObj.GetName() + " " +
+					"gvk: " + gvk.String() + " " +
+					"subresource: " + c.subResource + " " +
+					duplicateErrorMsgSuffix)
 			}
 			if !apierrors.IsNotFound(err) {
-				log.Error(err, "error checking for duplicate sub-resource in cluster", "gvk", gvk, "namespace", obj.GetNamespace(), "name", obj.GetName(), "subresource", c.subResource)
+				log.Error(err, "error checking for duplicate sub-resource in cluster",
+					"gvk", gvk, "namespace", obj.GetNamespace(), "name", obj.GetName(),
+					"subresource", c.subResource)
 			}
 			continue
 		}
 
-		err := cl.GetClient().SubResource(c.subResource).Get(ctx, obj, subResource, opts...)
+		err := cl.GetClient().SubResource(c.subResource).
+			Get(ctx, obj, subResource, opts...)
 		if err == nil {
 			found = true
 			continue
 		}
 		if !apierrors.IsNotFound(err) {
-			log.Error(err, "error getting sub-resource from cluster", "gvk", gvk, "namespace", obj.GetNamespace(), "name", obj.GetName(), "subresource", c.subResource)
+			log.Error(err, "error getting sub-resource from cluster", "gvk", gvk,
+				"namespace", obj.GetNamespace(), "name", obj.GetName(),
+				"subresource", c.subResource)
 		}
 	}
 	if !found {
