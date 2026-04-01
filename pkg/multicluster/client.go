@@ -235,22 +235,17 @@ func (c *Client) clusterForWrite(gvk schema.GroupVersionKind, obj any) (cluster.
 	return nil, fmt.Errorf("no cluster matched for GVK %s", gvk)
 }
 
-const (
-	duplicateErrorMsgPrefix = "duplicate resource found:"
-	duplicateErrorMsgSuffix = "exists in multiple clusters"
-)
+type duplicateError struct{ msg string }
+
+func (e *duplicateError) Error() string { return e.msg }
 
 // IsDuplicateError returns true if the error indicates that a resource was
 // found in multiple clusters. This can be used by callers of the Get and List
 // methods to keep using the result even if a duplicate exists, as long as they
 // don't mind that the result is potentially inconsistent.
 func IsDuplicateError(err error) bool {
-	if err == nil {
-		return false
-	}
-	errString := err.Error()
-	return strings.HasPrefix(errString, duplicateErrorMsgPrefix) &&
-		strings.HasSuffix(errString, duplicateErrorMsgSuffix)
+	var de *duplicateError
+	return errors.As(err, &de)
 }
 
 // Get iterates over all clusters with the GVK and returns the result.
@@ -283,10 +278,8 @@ func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Objec
 			err := cl.GetClient().Get(ctx, key, candidate, opts...)
 			if err == nil {
 				// In this case Get() was already called and the object set.
-				return errors.New(duplicateErrorMsgPrefix + " " +
-					key.Namespace + "/" + key.Name + " " +
-					"gvk: " + gvk.String() + " " +
-					duplicateErrorMsgSuffix)
+				return &duplicateError{msg: fmt.Sprintf("duplicate %s %s/%s in multiple clusters",
+					gvk, key.Namespace, key.Name)}
 			}
 			if !apierrors.IsNotFound(err) {
 				log.Error(err, "error checking for duplicate resource in cluster",
@@ -366,9 +359,8 @@ func (c *Client) List(ctx context.Context, list client.ObjectList, opts ...clien
 		return err
 	}
 	if len(duplicates) > 0 {
-		return errors.New(duplicateErrorMsgPrefix + " " +
-			strings.Join(duplicates, ", ") + " " + "gvk: " + gvk.String() + " " +
-			duplicateErrorMsgSuffix)
+		return &duplicateError{msg: fmt.Sprintf("duplicate %s [%s] in multiple clusters",
+			gvk, strings.Join(duplicates, ", "))}
 	}
 	return nil
 }
@@ -572,11 +564,8 @@ func (c *subResourceClient) Get(ctx context.Context, obj, subResource client.Obj
 				Get(ctx, candidateObj, candidateSub, opts...)
 			if err == nil {
 				// In this case Get() was already called and the object set.
-				return errors.New(duplicateErrorMsgPrefix + " " +
-					candidateObj.GetNamespace() + "/" + candidateObj.GetName() + " " +
-					"gvk: " + gvk.String() + " " +
-					"subresource: " + c.subResource + " " +
-					duplicateErrorMsgSuffix)
+				return &duplicateError{msg: fmt.Sprintf("duplicate %s %s/%s subresource %s in multiple clusters",
+					gvk, candidateObj.GetNamespace(), candidateObj.GetName(), c.subResource)}
 			}
 			if !apierrors.IsNotFound(err) {
 				log.Error(err, "error checking for duplicate sub-resource in cluster",

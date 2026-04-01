@@ -171,19 +171,9 @@ func TestIsDuplicateError(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:     "valid duplicate error",
-			err:      errors.New(duplicateErrorMsgPrefix + " default/foo gvk: /v1, Kind=ConfigMap " + duplicateErrorMsgSuffix),
+			name:     "duplicate error",
+			err:      &duplicateError{msg: "duplicate /v1, Kind=ConfigMap default/foo in multiple clusters"},
 			expected: true,
-		},
-		{
-			name:     "missing suffix",
-			err:      errors.New(duplicateErrorMsgPrefix + " default/foo"),
-			expected: false,
-		},
-		{
-			name:     "missing prefix",
-			err:      errors.New("default/foo " + duplicateErrorMsgSuffix),
-			expected: false,
 		},
 		{
 			name:     "unrelated error",
