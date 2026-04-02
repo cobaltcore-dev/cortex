@@ -169,11 +169,14 @@ func (api *novaClient) GetServerMigrations(ctx context.Context, id string) ([]mi
 				"X-OpenStack-Nova-API-Version": api.sc.Microversion,
 			},
 		})
-		if resp != nil {
-			defer resp.Body.Close()
-		}
 		if err != nil {
+			if resp != nil {
+				resp.Body.Close()
+			}
 			return nil, err
+		}
+		if resp != nil {
+			resp.Body.Close()
 		}
 		nextURL = nil
 		for _, link := range list.Links {
@@ -237,11 +240,14 @@ func (api *novaClient) ListProjectServers(ctx context.Context, projectID string)
 				"X-OpenStack-Nova-API-Version": api.sc.Microversion,
 			},
 		})
-		if resp != nil {
-			defer resp.Body.Close()
-		}
 		if err != nil {
+			if resp != nil {
+				resp.Body.Close()
+			}
 			return nil, err
+		}
+		if resp != nil {
+			resp.Body.Close()
 		}
 
 		// Convert to ServerDetail
