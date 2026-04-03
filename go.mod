@@ -7,10 +7,10 @@ require (
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.11.1
 	github.com/ironcore-dev/ironcore v0.3.0
-	github.com/majewsky/gg v1.5.0
+	github.com/majewsky/gg v1.6.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
-	github.com/sapcc/go-bits v0.0.0-20260326130200-4521b37f2cb0
+	github.com/sapcc/go-bits v0.0.0-20260402121530-dccf194c4472
 	k8s.io/api v0.35.3
 	k8s.io/apimachinery v0.35.3
 	k8s.io/client-go v0.35.3
@@ -72,7 +72,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/lib/pq v1.12.0
+	github.com/lib/pq v1.12.1
 	github.com/mattn/go-sqlite3 v1.14.37
 	github.com/moby/sys/user v0.4.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
