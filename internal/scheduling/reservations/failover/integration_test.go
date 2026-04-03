@@ -693,6 +693,7 @@ func (env *IntegrationTestEnv) TriggerFailoverReconcile(flavorRequirements map[s
 		env.VMSource,
 		config,
 		schedulerClient,
+		nil,
 	)
 
 	_, err := controller.ReconcilePeriodic(context.Background())
