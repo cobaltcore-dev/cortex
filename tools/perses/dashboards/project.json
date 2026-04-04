@@ -1,7 +1,7 @@
 {
   "kind": "Project",
   "metadata": {
-    "name": "workload_management"
+    "name": "workload-management"
   },
   "spec": {}
 }
