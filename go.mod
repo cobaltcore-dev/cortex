@@ -2,6 +2,8 @@ module github.com/cobaltcore-dev/cortex
 
 go 1.26
 
+toolchain go1.26.1
+
 require (
 	github.com/cobaltcore-dev/openstack-hypervisor-operator v1.0.2-0.20260402091752-888f1313a307
 	github.com/go-gorp/gorp v2.2.0+incompatible
