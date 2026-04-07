@@ -51,7 +51,7 @@ spec:
       description: |
         This step prefix-matches the domain name for external customer domains and
         filters out hosts that are not intended for external customers. It considers
-        the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+        the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait on hosts as well as the
         `domain_name` scheduler hint from the nova request spec.
       params:
         - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
@@ -190,7 +190,7 @@ spec:
       description: |
         This step prefix-matches the domain name for external customer domains and
         filters out hosts that are not intended for external customers. It considers
-        the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+        the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait on hosts as well as the
         `domain_name` scheduler hint from the nova request spec.
       params:
         - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
@@ -463,7 +463,7 @@ spec:
       description: |
         This step prefix-matches the domain name for external customer domains and
         filters out hosts that are not intended for external customers. It considers
-        the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+        the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait on hosts as well as the
         `domain_name` scheduler hint from the nova request spec.
       params:
         - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
@@ -534,7 +534,7 @@ spec:
       description: |
         This step prefix-matches the domain name for external customer domains and
         filters out hosts that are not intended for external customers. It considers
-        the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+        the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait on hosts as well as the
         `domain_name` scheduler hint from the nova request spec.
       params:
         - {key: domainNamePrefixes, stringListValue: ["iaas-"]}

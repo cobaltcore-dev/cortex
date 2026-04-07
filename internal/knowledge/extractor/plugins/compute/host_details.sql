@@ -35,7 +35,7 @@ SELECT
         ELSE false
     END AS decommissioned,
     CASE
-        WHEN ht.traits LIKE '%CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED%' THEN true
+        WHEN ht.traits LIKE '%CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE%' THEN true
         ELSE false
     END AS external_customer,
     CASE

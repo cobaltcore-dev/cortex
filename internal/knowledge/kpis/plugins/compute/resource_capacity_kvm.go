@@ -277,7 +277,7 @@ func hostLabelsFromHypervisor(hypervisor hv1.Hypervisor) kvmHostLabels {
 			workloadType = "hana"
 		case "CUSTOM_DECOMMISSIONING":
 			decommissioned = true
-		case "CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED":
+		case "CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE":
 			externalCustomer = true
 		}
 	}
