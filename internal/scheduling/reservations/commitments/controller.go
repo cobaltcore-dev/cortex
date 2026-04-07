@@ -21,6 +21,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	novaservers "github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
@@ -452,18 +454,26 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 				if r.NovaClient != nil {
 					novaServer, err := r.NovaClient.Get(ctx, vmUUID)
 					if err == nil && novaServer.ComputeHost != "" {
-						// VM exists but on different host - migration or placement change
-						newStatusAllocations[vmUUID] = novaServer.ComputeHost
-						logger.Info("VM found via Nova API fallback (not on expected host)",
+						// VM is on a different host past the grace period - remove from this reservation.
+						// The grace period is the window for VMs in transit; past that, a VM on the
+						// wrong host is no longer consuming this slot.
+						logger.Info("VM on different host past grace period, removing from reservation",
 							"vm", vmUUID,
 							"actualHost", novaServer.ComputeHost,
-							"expectedHost", expectedHost)
-						continue
+							"expectedHost", expectedHost,
+							"allocationAge", allocationAge)
+						// fall through to removal
+					} else {
+						var notFound *novaservers.ErrServerNotFound
+						if err != nil && !errors.As(err, &notFound) {
+							// Transient Nova API error - skip removal to avoid evicting live VMs
+							return nil, fmt.Errorf("nova API error checking VM %s: %w", vmUUID, err)
+						}
+						// err is nil (VM has no host yet) or 404 (VM gone) - fall through to removal
+						logger.V(1).Info("Nova API confirmed VM not found or has no host",
+							"vm", vmUUID,
+							"error", err)
 					}
-					// Nova API confirms VM doesn't exist or has no host
-					logger.V(1).Info("Nova API confirmed VM not found",
-						"vm", vmUUID,
-						"error", err)
 				}
 				// VM not found on hypervisor and not in Nova - mark for removal (leaving VM)
 				allocationsToRemove = append(allocationsToRemove, vmUUID)
