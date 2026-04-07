@@ -149,7 +149,7 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 				"expectedUnit", expectedUnit,
 				"smallestFlavorMemoryMB", flavorGroup.SmallestFlavor.MemoryMB)
 			if s.monitor != nil {
-				s.monitor.RecordUnitMismatch(flavorGroupName)
+				s.monitor.RecordCommitmentSkipped(SkipReasonUnitMismatch)
 			}
 			// Track skipped commitment so its existing CRDs won't be deleted
 			if commitment.UUID != "" {
