@@ -110,7 +110,7 @@ type HypervisorOvercommitController struct {
 // - https://ahmet.im/blog/controller-pitfalls/#reconcile-method-shape
 func (c *HypervisorOvercommitController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
-	log.Info("Reconciling resource")
+	log.V(1).Info("Reconciling resource")
 
 	obj := new(hv1.Hypervisor)
 	if err := c.Get(ctx, req.NamespacedName, obj); err != nil {
@@ -130,7 +130,7 @@ func (c *HypervisorOvercommitController) Reconcile(ctx context.Context, req ctrl
 	// non-overlapping resources from previous mappings.
 	desiredOvercommit := make(map[hv1.ResourceName]float64)
 	for _, mapping := range c.config.OvercommitMappings {
-		log.Info("Processing overcommit mapping",
+		log.V(1).Info("Processing overcommit mapping",
 			"mapping", mapping,
 			"hypervisorTraits", obj.Status.Traits)
 		var applyMapping bool
@@ -142,21 +142,21 @@ func (c *HypervisorOvercommitController) Reconcile(ctx context.Context, req ctrl
 			applyMapping = !slices.Contains(obj.Status.Traits, *mapping.HasntTrait)
 		default:
 			// This should never happen due to validation, but we check it just in case.
-			log.Info("Skipping overcommit mapping with no trait specified",
+			log.V(1).Info("Skipping overcommit mapping with no trait specified",
 				"overcommit", mapping.Overcommit)
 			continue
 		}
 		if !applyMapping {
 			continue
 		}
-		log.Info("Applying overcommit mapping on hypervisor",
+		log.V(1).Info("Applying overcommit mapping on hypervisor",
 			"overcommit", mapping.Overcommit)
 		maps.Copy(desiredOvercommit, mapping.Overcommit)
 	}
-	log.Info("Desired overcommit ratios based on traits",
+	log.V(1).Info("Desired overcommit ratios based on traits",
 		"desiredOvercommit", desiredOvercommit)
 	if maps.Equal(desiredOvercommit, obj.Spec.Overcommit) {
-		log.Info("Overcommit ratios are up to date, no update needed")
+		log.V(1).Info("Overcommit ratios are up to date, no update needed")
 		return ctrl.Result{}, nil
 	}
 

@@ -62,7 +62,7 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 	unknownFilters := []string{}
 	for _, filterConfig := range confedFilters {
 		slog.Info("scheduler: configuring filter", "name", filterConfig.Name)
-		slog.Info("supported:", "filters", maps.Keys(supportedFilters))
+		slog.Info("supported:", "filters", slices.Sorted(maps.Keys(supportedFilters)))
 		makeFilter, ok := supportedFilters[filterConfig.Name]
 		if !ok {
 			slog.Error("scheduler: unsupported filter", "name", filterConfig.Name)
@@ -90,7 +90,7 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 	unknownWeighers := []string{}
 	for _, weigherConfig := range confedWeighers {
 		slog.Info("scheduler: configuring weigher", "name", weigherConfig.Name)
-		slog.Info("supported:", "weighers", maps.Keys(supportedWeighers))
+		slog.Info("supported:", "weighers", slices.Sorted(maps.Keys(supportedWeighers)))
 		makeWeigher, ok := supportedWeighers[weigherConfig.Name]
 		if !ok {
 			slog.Error("scheduler: unsupported weigher", "name", weigherConfig.Name)
