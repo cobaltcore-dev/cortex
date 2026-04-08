@@ -9,6 +9,8 @@ import (
 	"flag"
 	"log/slog"
 	"net/http"
+
+	uberzap "go.uber.org/zap"
 	"os"
 	"path/filepath"
 	"slices"
@@ -150,7 +152,10 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	ctrl.SetLogger(zap.New(
+		zap.UseFlagOptions(&opts),
+		zap.RawZapOpts(uberzap.WrapCore(monitoring.WrapCoreWithLogMetrics)),
+	))
 
 	// Configure slog (used across internal packages) with JSON output and
 	// level control via the LOG_LEVEL environment variable.
@@ -169,9 +174,11 @@ func main() {
 			slogLevel.Set(slog.LevelError)
 		}
 	}
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slogLevel,
-	})))
+	slog.SetDefault(slog.New(monitoring.NewMetricsSlogHandler(
+		slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slogLevel,
+		}),
+	)))
 	slog.Info("slog configured", "level", slogLevel.Level().String())
 
 	// Log the main configuration
@@ -325,6 +332,7 @@ func main() {
 	// This is useful to distinguish metrics from different deployments.
 	metricsConfig := conf.GetConfigOrDie[monitoring.Config]()
 	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, metricsConfig)
+	metrics.Registry.MustRegister(monitoring.LogMessagesTotal)
 
 	// TODO: Remove me after scheduling pipeline steps don't require DB connections anymore.
 	metrics.Registry.MustRegister(&db.Monitor)
