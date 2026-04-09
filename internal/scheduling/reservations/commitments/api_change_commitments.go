@@ -294,9 +294,9 @@ ProcessLoop:
 		// Build rejection reason from failed commitments
 		if len(failedCommitments) > 0 {
 			var reasonBuilder strings.Builder
-			reasonBuilder.WriteString(fmt.Sprintf("%d commitment(s) failed to apply: ", len(failedCommitments)))
+			fmt.Fprintf(&reasonBuilder, "%d commitment(s) failed to apply: ", len(failedCommitments))
 			for commitmentUUID, reason := range failedCommitments {
-				reasonBuilder.WriteString(fmt.Sprintf("\n- commitment %s: %s", commitmentUUID, reason))
+				fmt.Fprintf(&reasonBuilder, "\n- commitment %s: %s", commitmentUUID, reason)
 			}
 			resp.RejectionReason = reasonBuilder.String()
 		}
