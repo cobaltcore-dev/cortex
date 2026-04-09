@@ -81,6 +81,11 @@ jobs:
           files: |
             cmd/shim/**
             internal/shim/**
+            api/**
+            pkg/**
+            go.mod
+            go.sum
+            Dockerfile
       - name: Docker Meta (Cortex Shim)
         if: steps.changed_shim_files.outputs.all_changed_files != ''
         id: meta_cortex_shim
@@ -99,7 +104,7 @@ jobs:
         id: push_cortex_shim
         uses: docker/build-push-action@v7
         with:
-          context: cmd/shim
+          context: .
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta_cortex_shim.outputs.tags }}
