@@ -53,7 +53,10 @@ func HandleCreateResourceProvider(w http.ResponseWriter, r *http.Request) {
 // provider's position in a hierarchical tree. Returns 404 if the provider
 // does not exist.
 func HandleShowResourceProvider(w http.ResponseWriter, r *http.Request) {
-	uuid := r.PathValue("uuid")
+	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
+	if !ok {
+		return
+	}
 	log := logf.FromContext(r.Context())
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 }
@@ -66,7 +69,10 @@ func HandleShowResourceProvider(w http.ResponseWriter, r *http.Request) {
 // to null to make the provider a root. Returns 409 Conflict if another
 // provider already has the requested name.
 func HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Request) {
-	uuid := r.PathValue("uuid")
+	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
+	if !ok {
+		return
+	}
 	log := logf.FromContext(r.Context())
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 }
@@ -78,7 +84,10 @@ func HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Request) {
 // allocations against the provider's inventories or if the provider has
 // child providers in a tree hierarchy. Returns 204 No Content on success.
 func HandleDeleteResourceProvider(w http.ResponseWriter, r *http.Request) {
-	uuid := r.PathValue("uuid")
+	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
+	if !ok {
+		return
+	}
 	log := logf.FromContext(r.Context())
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 }

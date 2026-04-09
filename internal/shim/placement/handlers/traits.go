@@ -30,7 +30,10 @@ func HandleListTraits(w http.ResponseWriter, r *http.Request) {
 // Checks whether a trait with the given name exists. Returns 204 No Content
 // (with no response body) if the trait is found, or 404 Not Found otherwise.
 func HandleShowTrait(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+	name, ok := requiredPathParam(w, r, "name")
+	if !ok {
+		return
+	}
 	log := logf.FromContext(r.Context())
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
 }
@@ -42,7 +45,10 @@ func HandleShowTrait(w http.ResponseWriter, r *http.Request) {
 // is newly inserted, or 204 No Content if it already exists. Returns 400
 // Bad Request if the name does not carry the CUSTOM_ prefix.
 func HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+	name, ok := requiredPathParam(w, r, "name")
+	if !ok {
+		return
+	}
 	log := logf.FromContext(r.Context())
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
 }
@@ -54,7 +60,10 @@ func HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
 // the trait is still associated with any resource provider. Returns 404 if
 // the trait does not exist. Returns 204 No Content on success.
 func HandleDeleteTrait(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+	name, ok := requiredPathParam(w, r, "name")
+	if !ok {
+		return
+	}
 	log := logf.FromContext(r.Context())
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
 }

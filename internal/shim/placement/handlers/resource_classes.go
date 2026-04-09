@@ -39,7 +39,10 @@ func HandleCreateResourceClass(w http.ResponseWriter, r *http.Request) {
 // This can be used to verify the existence of a resource class. Returns 404
 // if the class does not exist. Available since microversion 1.2.
 func HandleShowResourceClass(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+	name, ok := requiredPathParam(w, r, "name")
+	if !ok {
+		return
+	}
 	log := logf.FromContext(r.Context())
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
 }
@@ -53,7 +56,10 @@ func HandleShowResourceClass(w http.ResponseWriter, r *http.Request) {
 // endpoint allowed renaming a class via a request body, but this usage is
 // discouraged. Returns 400 Bad Request if the CUSTOM_ prefix is missing.
 func HandleUpdateResourceClass(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+	name, ok := requiredPathParam(w, r, "name")
+	if !ok {
+		return
+	}
 	log := logf.FromContext(r.Context())
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
 }
@@ -66,7 +72,10 @@ func HandleUpdateResourceClass(w http.ResponseWriter, r *http.Request) {
 // class, and 404 if the class does not exist. Returns 204 No Content on
 // success. Available since microversion 1.2.
 func HandleDeleteResourceClass(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+	name, ok := requiredPathParam(w, r, "name")
+	if !ok {
+		return
+	}
 	log := logf.FromContext(r.Context())
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
 }

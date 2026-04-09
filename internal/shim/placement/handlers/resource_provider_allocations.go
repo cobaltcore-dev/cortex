@@ -18,7 +18,10 @@ import (
 // endpoint. The response includes the resource_provider_generation. Returns
 // 404 if the provider does not exist.
 func HandleListResourceProviderAllocations(w http.ResponseWriter, r *http.Request) {
-	uuid := r.PathValue("uuid")
+	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
+	if !ok {
+		return
+	}
 	log := logf.FromContext(r.Context())
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 }

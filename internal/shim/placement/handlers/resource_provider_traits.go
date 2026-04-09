@@ -17,7 +17,10 @@ import (
 // resource_provider_generation for concurrency tracking. Returns 404 if the
 // provider does not exist.
 func HandleListResourceProviderTraits(w http.ResponseWriter, r *http.Request) {
-	uuid := r.PathValue("uuid")
+	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
+	if !ok {
+		return
+	}
 	log := logf.FromContext(r.Context())
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 }
@@ -33,7 +36,10 @@ func HandleListResourceProviderTraits(w http.ResponseWriter, r *http.Request) {
 // not returned by GET /traits). Returns 409 Conflict if the generation does
 // not match.
 func HandleUpdateResourceProviderTraits(w http.ResponseWriter, r *http.Request) {
-	uuid := r.PathValue("uuid")
+	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
+	if !ok {
+		return
+	}
 	log := logf.FromContext(r.Context())
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 }
@@ -48,7 +54,10 @@ func HandleUpdateResourceProviderTraits(w http.ResponseWriter, r *http.Request) 
 // Returns 404 if the provider does not exist. Returns 409 Conflict on
 // concurrent modification. Returns 204 No Content on success.
 func HandleDeleteResourceProviderTraits(w http.ResponseWriter, r *http.Request) {
-	uuid := r.PathValue("uuid")
+	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
+	if !ok {
+		return
+	}
 	log := logf.FromContext(r.Context())
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 }

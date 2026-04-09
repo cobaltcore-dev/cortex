@@ -18,7 +18,10 @@ import (
 // Unlike the provider allocations endpoint, this does not break down usage by
 // individual consumer. Returns 404 if the provider does not exist.
 func HandleListResourceProviderUsages(w http.ResponseWriter, r *http.Request) {
-	uuid := r.PathValue("uuid")
+	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
+	if !ok {
+		return
+	}
 	log := logf.FromContext(r.Context())
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 }
