@@ -1,0 +1,16 @@
+# To integrate with Prometheus.
+{{- if .Values.prometheus.enable }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: {{ .Values.namePrefix }}-shim-metrics-monitor
+  namespace: {{ .Release.Namespace }}
+spec:
+  endpoints:
+    - port: metrics
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "chart.name" . }}
+{{- end }}
