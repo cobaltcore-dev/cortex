@@ -450,7 +450,7 @@ func formatWeightMapFullColorized(weights map[string]float64, indent int) string
 		if i%4 == 0 {
 			sb.WriteString(indentStr)
 		}
-		sb.WriteString(fmt.Sprintf("%s: %.4f", colorizeHost(hw.host), hw.weight))
+		fmt.Fprintf(&sb, "%s: %.4f", colorizeHost(hw.host), hw.weight)
 		if i < len(sorted)-1 {
 			sb.WriteString(", ")
 		}

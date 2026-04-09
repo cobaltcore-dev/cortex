@@ -22,6 +22,26 @@
     "gomodTidy",
     "gomodUpdateImportPaths"
   ],
+  "regexManagers": [
+    {
+      "fileMatch": ["^Makefile$"],
+      "matchStrings": ["CONTROLLER_TOOLS_VERSION \\?= (?<currentValue>v[\\d.]+)"],
+      "depNameTemplate": "sigs.k8s.io/controller-tools",
+      "datasourceTemplate": "go"
+    },
+    {
+      "fileMatch": ["^Makefile$"],
+      "matchStrings": ["GOLANGCI_LINT_VERSION \\?= (?<currentValue>v[\\d.]+)"],
+      "depNameTemplate": "github.com/golangci/golangci-lint/v2",
+      "datasourceTemplate": "go"
+    },
+    {
+      "fileMatch": ["^Makefile$"],
+      "matchStrings": ["GOTESTSUM_VERSION \\?= (?<currentValue>v[\\d.]+)"],
+      "depNameTemplate": "gotest.tools/gotestsum",
+      "datasourceTemplate": "go"
+    }
+  ],
   "packageRules": [
     {
       "matchPackageNames": [
