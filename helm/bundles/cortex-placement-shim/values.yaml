@@ -20,8 +20,24 @@ alerts:
 
 cortex-shim:
   namePrefix: cortex-placement
+  deployment:
+    container:
+      extraArgs: ["--placement-shim=true"]
   conf:
     monitoring:
       labels:
         github_org: cobaltcore-dev
         github_repo: cortex
+    # Uncomment and set the following values to enable SSO for the placement
+    # shim. The shim will use the provided SSO credentials to talk to openstack
+    # over ingress.
+    # sso:
+    #   cert: |
+    #     -----BEGIN CERTIFICATE-----
+    #     Your certificate here
+    #     -----END CERTIFICATE-----
+    #   certKey: |
+    #     -----BEGIN PRIVATE KEY-----
+    #     Your private key here
+    #     -----END PRIVATE KEY-----
+    #   selfSigned: "false"

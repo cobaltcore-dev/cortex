@@ -208,7 +208,8 @@ func main() {
 	mux := http.NewServeMux()
 	if enablePlacementShim {
 		placementShim := &placement.Shim{Client: mgr.GetClient()}
-		if err := placementShim.SetupWithManager(mgr); err != nil {
+		setupLog.Info("Adding placement shim to manager")
+		if err := placementShim.SetupWithManager(ctx, mgr); err != nil {
 			setupLog.Error(err, "unable to set up placement shim")
 			os.Exit(1)
 		}
