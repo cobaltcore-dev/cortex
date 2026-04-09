@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"testing"
 
@@ -137,11 +136,8 @@ func TestCapacityCalculator(t *testing.T) {
 			WithScheme(scheme).
 			Build()
 
-		calculator := NewCapacityCalculator(fakeClient)
-		req := liquid.ServiceCapacityRequest{
-			AllAZs: []liquid.AvailabilityZone{"az-one", "az-two"},
-		}
-		_, err := calculator.CalculateCapacity(context.Background(), req)
+		calculator := NewCapacityCalculator(fakeClient, DefaultConfig())
+		_, err := calculator.CalculateCapacity(context.Background())
 		if err == nil {
 			t.Fatal("Expected error when flavor groups knowledge doesn't exist, got nil")
 		}
@@ -159,11 +155,8 @@ func TestCapacityCalculator(t *testing.T) {
 			WithObjects(emptyKnowledge).
 			Build()
 
-		calculator := NewCapacityCalculator(fakeClient)
-		req := liquid.ServiceCapacityRequest{
-			AllAZs: []liquid.AvailabilityZone{"az-one", "az-two"},
-		}
-		report, err := calculator.CalculateCapacity(context.Background(), req)
+		calculator := NewCapacityCalculator(fakeClient, DefaultConfig())
+		report, err := calculator.CalculateCapacity(context.Background())
 		if err != nil {
 			t.Fatalf("Expected no error, got: %v", err)
 		}
@@ -177,18 +170,19 @@ func TestCapacityCalculator(t *testing.T) {
 		}
 	})
 
-	t.Run("CalculateCapacity returns perAZ entries for all AZs from request", func(t *testing.T) {
+	t.Run("CalculateCapacity returns perAZ entries for all AZs from host details", func(t *testing.T) {
 		flavorGroupKnowledge := createTestFlavorGroupKnowledge(t, "test-group")
+		hostDetails := createTestHostDetailsKnowledge(t, map[string]string{
+			"host-1": "qa-de-1a",
+			"host-2": "qa-de-1b",
+		})
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(flavorGroupKnowledge).
+			WithObjects(flavorGroupKnowledge, hostDetails).
 			Build()
 
-		calculator := NewCapacityCalculator(fakeClient)
-		req := liquid.ServiceCapacityRequest{
-			AllAZs: []liquid.AvailabilityZone{"qa-de-1a", "qa-de-1b", "qa-de-1d"},
-		}
-		report, err := calculator.CalculateCapacity(context.Background(), req)
+		calculator := NewCapacityCalculator(fakeClient, DefaultConfig())
+		report, err := calculator.CalculateCapacity(context.Background())
 		if err != nil {
 			t.Fatalf("Expected no error, got: %v", err)
 		}
@@ -197,22 +191,32 @@ func TestCapacityCalculator(t *testing.T) {
 			t.Fatalf("Expected 3 resources (_ram, _cores, _instances), got %d", len(report.Resources))
 		}
 
-		// Verify all resources have exactly the requested AZs
-		verifyPerAZMatchesRequest(t, report.Resources["hw_version_test-group_ram"], req.AllAZs)
-		verifyPerAZMatchesRequest(t, report.Resources["hw_version_test-group_cores"], req.AllAZs)
-		verifyPerAZMatchesRequest(t, report.Resources["hw_version_test-group_instances"], req.AllAZs)
+		// Verify all resources have entries for the AZs from host details
+		expectedAZs := []liquid.AvailabilityZone{"qa-de-1a", "qa-de-1b"}
+		for _, resName := range []string{"hw_version_test-group_ram", "hw_version_test-group_cores", "hw_version_test-group_instances"} {
+			res := report.Resources[liquid.ResourceName(resName)]
+			if res == nil {
+				t.Errorf("resource %s not found", resName)
+				continue
+			}
+			for _, az := range expectedAZs {
+				if _, ok := res.PerAZ[az]; !ok {
+					t.Errorf("%s: missing entry for AZ %s", resName, az)
+				}
+			}
+		}
 	})
 
-	t.Run("CalculateCapacity with empty AllAZs returns empty perAZ maps", func(t *testing.T) {
+	t.Run("CalculateCapacity with no host details returns empty perAZ maps", func(t *testing.T) {
 		flavorGroupKnowledge := createTestFlavorGroupKnowledge(t, "test-group")
+		// No host details knowledge - no AZs can be derived.
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
 			WithObjects(flavorGroupKnowledge).
 			Build()
 
-		calculator := NewCapacityCalculator(fakeClient)
-		req := liquid.ServiceCapacityRequest{AllAZs: []liquid.AvailabilityZone{}}
-		report, err := calculator.CalculateCapacity(context.Background(), req)
+		calculator := NewCapacityCalculator(fakeClient, DefaultConfig())
+		report, err := calculator.CalculateCapacity(context.Background())
 		if err != nil {
 			t.Fatalf("Expected no error, got: %v", err)
 		}
@@ -228,64 +232,37 @@ func TestCapacityCalculator(t *testing.T) {
 		}
 	})
 
-	t.Run("CalculateCapacity responds to different AZ sets correctly", func(t *testing.T) {
+	t.Run("CalculateCapacity produces perAZ entries matching host details AZs", func(t *testing.T) {
 		flavorGroupKnowledge := createTestFlavorGroupKnowledge(t, "test-group")
+		hostDetails := createTestHostDetailsKnowledge(t, map[string]string{
+			"host-a": "eu-de-1a",
+			"host-b": "eu-de-1b",
+		})
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(flavorGroupKnowledge).
+			WithObjects(flavorGroupKnowledge, hostDetails).
 			Build()
 
-		calculator := NewCapacityCalculator(fakeClient)
-
-		req1 := liquid.ServiceCapacityRequest{
-			AllAZs: []liquid.AvailabilityZone{"eu-de-1a", "eu-de-1b"},
-		}
-		report1, err := calculator.CalculateCapacity(context.Background(), req1)
+		calculator := NewCapacityCalculator(fakeClient, DefaultConfig())
+		report, err := calculator.CalculateCapacity(context.Background())
 		if err != nil {
 			t.Fatalf("Expected no error, got: %v", err)
 		}
 
-		req2 := liquid.ServiceCapacityRequest{
-			AllAZs: []liquid.AvailabilityZone{"us-west-1a", "us-west-1b", "us-west-1c", "us-west-1d"},
-		}
-		report2, err := calculator.CalculateCapacity(context.Background(), req2)
-		if err != nil {
-			t.Fatalf("Expected no error, got: %v", err)
-		}
-
-		// Verify reports have exactly the requested AZs
-		for _, res := range report1.Resources {
-			verifyPerAZMatchesRequest(t, res, req1.AllAZs)
-		}
-		for _, res := range report2.Resources {
-			verifyPerAZMatchesRequest(t, res, req2.AllAZs)
+		// Verify resources contain exactly the AZs from host details
+		for resName, res := range report.Resources {
+			if len(res.PerAZ) != 2 {
+				t.Errorf("%s: expected 2 AZs, got %d", resName, len(res.PerAZ))
+			}
+			for _, az := range []liquid.AvailabilityZone{"eu-de-1a", "eu-de-1b"} {
+				if _, ok := res.PerAZ[az]; !ok {
+					t.Errorf("%s: missing entry for AZ %s", resName, az)
+				}
+			}
 		}
 	})
 }
 
-// verifyPerAZMatchesRequest checks that perAZ entries match exactly the requested AZs.
-// This follows the same semantics as nova liquid: the response must contain
-// entries for all AZs in AllAZs, no more and no less.
-func verifyPerAZMatchesRequest(t *testing.T, res *liquid.ResourceCapacityReport, requestedAZs []liquid.AvailabilityZone) {
-	t.Helper()
-	if res == nil {
-		t.Error("resource is nil")
-		return
-	}
-	if len(res.PerAZ) != len(requestedAZs) {
-		t.Errorf("expected %d AZs, got %d", len(requestedAZs), len(res.PerAZ))
-	}
-	for _, az := range requestedAZs {
-		if _, ok := res.PerAZ[az]; !ok {
-			t.Errorf("missing entry for requested AZ %s", az)
-		}
-	}
-	for az := range res.PerAZ {
-		if !slices.Contains(requestedAZs, az) {
-			t.Errorf("unexpected AZ %s in response (not in request)", az)
-		}
-	}
-}
 
 // createEmptyFlavorGroupKnowledge creates an empty flavor groups Knowledge CRD
 func createEmptyFlavorGroupKnowledge() *v1alpha1.Knowledge {
@@ -414,6 +391,8 @@ func TestCapacityCalculatorWithScheduler(t *testing.T) {
 		calculator := &CapacityCalculator{
 			client:          fakeClient,
 			schedulerClient: reservations.NewSchedulerClient(server.URL),
+			currentPipeline: "kvm-general-purpose-load-balancing-all-filters-enabled",
+			totalPipeline:   "kvm-report-capacity",
 		}
 
 		knowledge := &reservations.FlavorGroupKnowledgeClient{Client: fakeClient}
@@ -454,6 +433,8 @@ func TestCapacityCalculatorWithScheduler(t *testing.T) {
 		calculator := &CapacityCalculator{
 			client:          fakeClient,
 			schedulerClient: reservations.NewSchedulerClient(server.URL),
+			currentPipeline: "kvm-general-purpose-load-balancing-all-filters-enabled",
+			totalPipeline:   "kvm-report-capacity",
 		}
 
 		knowledge := &reservations.FlavorGroupKnowledgeClient{Client: fakeClient}
@@ -486,6 +467,8 @@ func TestCapacityCalculatorWithScheduler(t *testing.T) {
 		calculator := &CapacityCalculator{
 			client:          fakeClient,
 			schedulerClient: reservations.NewSchedulerClient(server.URL),
+			currentPipeline: "kvm-general-purpose-load-balancing-all-filters-enabled",
+			totalPipeline:   "kvm-report-capacity",
 		}
 
 		knowledge := &reservations.FlavorGroupKnowledgeClient{Client: fakeClient}
@@ -516,6 +499,8 @@ func TestCapacityCalculatorWithScheduler(t *testing.T) {
 		calculator := &CapacityCalculator{
 			client:          fakeClient,
 			schedulerClient: reservations.NewSchedulerClient(failServer.URL),
+			currentPipeline: "kvm-general-purpose-load-balancing-all-filters-enabled",
+			totalPipeline:   "kvm-report-capacity",
 		}
 
 		knowledge := &reservations.FlavorGroupKnowledgeClient{Client: fakeClient}
@@ -526,6 +511,47 @@ func TestCapacityCalculatorWithScheduler(t *testing.T) {
 		_, _, err = calculator.calculateInstanceCapacity(context.Background(), flavorGroup, groups[flavorGroup], az)
 		if err == nil {
 			t.Fatal("expected error on scheduler failure, got nil")
+		}
+	})
+
+	t.Run("multiple AZs are reported independently", func(t *testing.T) {
+		twoAZHostDetails := createTestHostDetailsKnowledge(t, map[string]string{
+			"host-1": "az-a",
+			"host-2": "az-b",
+		})
+		// Both calls always return 3 hosts regardless of AZ (pipeline-routing mock).
+		server := newPipelineMockSchedulerServer(t, map[string][]string{
+			"kvm-report-capacity": {"h1", "h2", "h3"},
+			"kvm-general-purpose-load-balancing-all-filters-enabled": {"h1"},
+		})
+		defer server.Close()
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(flavorGroupKnowledge, twoAZHostDetails).
+			Build()
+
+		calculator := &CapacityCalculator{
+			client:          fakeClient,
+			schedulerClient: reservations.NewSchedulerClient(server.URL),
+			currentPipeline: "kvm-general-purpose-load-balancing-all-filters-enabled",
+			totalPipeline:   "kvm-report-capacity",
+		}
+
+		report, err := calculator.CalculateCapacity(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		res := report.Resources[liquid.ResourceName(ResourceNameRAM(flavorGroup))]
+		if len(res.PerAZ) != 2 {
+			t.Errorf("expected 2 AZs, got %d", len(res.PerAZ))
+		}
+		if _, ok := res.PerAZ[liquid.AvailabilityZone("az-a")]; !ok {
+			t.Error("expected az-a in report")
+		}
+		if _, ok := res.PerAZ[liquid.AvailabilityZone("az-b")]; !ok {
+			t.Error("expected az-b in report")
 		}
 	})
 }
@@ -604,8 +630,8 @@ func createTestHostDetailsKnowledge(t *testing.T, hostToAZ map[string]string) *v
 	features := make([]map[string]interface{}, 0, len(hostToAZ))
 	for host, az := range hostToAZ {
 		features = append(features, map[string]interface{}{
-			"computeHost":      host,
-			"availabilityZone": az,
+			"ComputeHost":      host,
+			"AvailabilityZone": az,
 		})
 	}
 
@@ -618,7 +644,7 @@ func createTestHostDetailsKnowledge(t *testing.T, hostToAZ map[string]string) *v
 		ObjectMeta: v1.ObjectMeta{Name: "host-details"},
 		Spec: v1alpha1.KnowledgeSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			Extractor:        v1alpha1.KnowledgeExtractorSpec{Name: "host_details"},
+			Extractor:        v1alpha1.KnowledgeExtractorSpec{Name: "sap_host_details_extractor"},
 		},
 		Status: v1alpha1.KnowledgeStatus{
 			Conditions: []v1.Condition{{Type: v1alpha1.KnowledgeConditionReady, Status: "True"}},

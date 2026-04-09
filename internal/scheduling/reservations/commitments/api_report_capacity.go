@@ -11,7 +11,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/google/uuid"
-	"github.com/sapcc/go-api-declarations/liquid"
 )
 
 // handles POST /commitments/v1/report-capacity requests from Limes:
@@ -50,16 +49,9 @@ func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request)
 
 	logger.V(1).Info("processing report capacity request")
 
-	// Parse request body (may be empty or contain ServiceCapacityRequest)
-	var req liquid.ServiceCapacityRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		// Empty body is acceptable for capacity reports
-		req = liquid.ServiceCapacityRequest{}
-	}
-
 	// Calculate capacity
-	calculator := NewCapacityCalculator(api.client)
-	report, err := calculator.CalculateCapacity(ctx, req)
+	calculator := NewCapacityCalculator(api.client, api.config)
+	report, err := calculator.CalculateCapacity(ctx)
 	if err != nil {
 		logger.Error(err, "failed to calculate capacity")
 		statusCode = http.StatusInternalServerError

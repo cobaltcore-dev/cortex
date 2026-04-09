@@ -146,6 +146,10 @@ cortex-scheduling-controllers:
       "*": "kvm-general-purpose-load-balancing"  # Catch-all fallback
     # Default pipeline for CR reservations when no CommittedResourceFlavorGroupPipelines entry matches
     committedResourcePipelineDefault: "kvm-general-purpose-load-balancing"
+    # Pipeline used for currently-available capacity check (respects VM allocations and reservations)
+    reportCapacityCurrentPipeline: "kvm-general-purpose-load-balancing-all-filters-enabled"
+    # Pipeline used for total theoretical capacity check (ignores VM allocations and reservations)
+    reportCapacityTotalPipeline: "kvm-report-capacity"
     # How often to re-verify active reservations
     # 5m = 300000000000 nanoseconds
     committedResourceRequeueIntervalActive: 300000000000

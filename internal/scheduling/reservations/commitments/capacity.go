@@ -6,12 +6,14 @@ package commitments
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 )
@@ -20,21 +22,24 @@ import (
 type CapacityCalculator struct {
 	client          client.Client
 	schedulerClient *reservations.SchedulerClient
+	currentPipeline string
+	totalPipeline   string
 }
 
-func NewCapacityCalculator(client client.Client) *CapacityCalculator {
-	schedulerClient := reservations.NewSchedulerClient("http://localhost:8080/scheduler/nova/external")
+func NewCapacityCalculator(client client.Client, config Config) *CapacityCalculator {
 	return &CapacityCalculator{
 		client:          client,
-		schedulerClient: schedulerClient,
+		schedulerClient: reservations.NewSchedulerClient(config.SchedulerURL),
+		currentPipeline: config.ReportCapacityCurrentPipeline,
+		totalPipeline:   config.ReportCapacityTotalPipeline,
 	}
 }
 
 // CalculateCapacity computes per-AZ capacity for all flavor groups.
 // For each flavor group, three resources are reported: _ram, _cores, _instances.
 // All flavor groups are included, not just those with fixed RAM/core ratio.
-// The request provides the list of all AZs from Limes that must be included in the report.
-func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.ServiceCapacityRequest) (liquid.ServiceCapacityReport, error) {
+// AZs are derived from HostDetails Knowledge CRDs.
+func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.ServiceCapacityReport, error) {
 	// Get all flavor groups from Knowledge CRDs
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
@@ -48,6 +53,12 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 		infoVersion = knowledgeCRD.Status.LastContentChange.Unix()
 	}
 
+	// Get availability zones from host details
+	azs, err := c.getAvailabilityZones(ctx)
+	if err != nil {
+		return liquid.ServiceCapacityReport{}, fmt.Errorf("failed to get availability zones: %w", err)
+	}
+
 	// Build capacity report for all flavor groups
 	report := liquid.ServiceCapacityReport{
 		InfoVersion: infoVersion,
@@ -55,10 +66,11 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 	}
 
 	for groupName, groupData := range flavorGroups {
-		// All flavor groups are included in capacity reporting (not just those with fixed ratio).
-
-		// Calculate per-AZ capacity (placeholder: capacity=0 for all resources)
-		azCapacity := c.calculateAZCapacity(groupName, groupData, req.AllAZs)
+		// Calculate per-AZ capacity using scheduler
+		azCapacity, err := c.calculateAZCapacity(ctx, groupName, groupData, azs)
+		if err != nil {
+			return liquid.ServiceCapacityReport{}, fmt.Errorf("failed to calculate capacity for %s: %w", groupName, err)
+		}
 
 		// === 1. RAM Resource ===
 		ramResourceName := liquid.ResourceName(ResourceNameRAM(groupName))
@@ -103,32 +115,32 @@ func (c *CapacityCalculator) copyAZCapacity(
 	return result
 }
 
+// calculateAZCapacity computes capacity per AZ for a flavor group via scheduler calls.
+// On scheduler failure for an AZ, that AZ still gets an entry with capacity=0.
 func (c *CapacityCalculator) calculateAZCapacity(
-	_ string, // groupName - reserved for future use
-	_ compute.FlavorGroupFeature, // groupData - reserved for future use
-	allAZs []liquid.AvailabilityZone, // list of all AZs from Limes request
-) map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport {
+	ctx context.Context,
+	groupName string,
+	groupData compute.FlavorGroupFeature,
+	azs []string,
+) (map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, error) {
 
-	// Create report entry for each AZ with placeholder capacity=0.
-	//
-	// NOTE: When implementing real capacity calculation here, you MUST also update
-	// the copying logic in CalculateCapacity() for _cores and _instances resources.
-	// Those resources use different units (vCPUs and VM count) than _ram (memory multiples),
-	// so the capacity values cannot be simply copied - they require unit conversion:
-	//   - _cores capacity = RAM capacity / ramCoreRatio
-	//   - _instances capacity = needs its own derivation logic
-	//
-	// TODO: Calculate actual capacity from Reservation CRDs or host resources
-	// TODO: Calculate actual usage from VM allocations
 	result := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport)
-	for _, az := range allAZs {
-		result[az] = &liquid.AZResourceCapacityReport{
-			Capacity: 0,               // Placeholder: capacity=0 until actual calculation is implemented
-			Usage:    Some[uint64](0), // Placeholder: usage=0 until actual calculation is implemented
+	for _, az := range azs {
+		capacity, usage, err := c.calculateInstanceCapacity(ctx, groupName, groupData, az)
+		if err != nil {
+			// On failure, report az with capacity=0 rather than aborting entirely.
+			result[liquid.AvailabilityZone(az)] = &liquid.AZResourceCapacityReport{
+				Capacity: 0,
+				Usage:    Some[uint64](0),
+			}
+			continue
+		}
+		result[liquid.AvailabilityZone(az)] = &liquid.AZResourceCapacityReport{
+			Capacity: capacity,
+			Usage:    Some[uint64](usage),
 		}
 	}
-
-	return result
+	return result, nil
 }
 
 // calculateInstanceCapacity returns the total capacity and current usage for a flavor group in an AZ.
@@ -154,7 +166,7 @@ func (c *CapacityCalculator) calculateInstanceCapacity(
 		VCPUs:            smallestFlavor.VCPUs,
 		FlavorExtraSpecs: map[string]string{"hw_version": groupName},
 		AvailabilityZone: az,
-		Pipeline:         "kvm-general-purpose-load-balancing-all-filters-enabled",
+		Pipeline:         c.currentPipeline,
 	})
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to get current available capacity: %w", err)
@@ -171,7 +183,7 @@ func (c *CapacityCalculator) calculateInstanceCapacity(
 		VCPUs:            smallestFlavor.VCPUs,
 		FlavorExtraSpecs: map[string]string{"hw_version": groupName},
 		AvailabilityZone: az,
-		Pipeline:         "kvm-report-capacity",
+		Pipeline:         c.totalPipeline,
 	})
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to get total capacity: %w", err)
@@ -184,4 +196,55 @@ func (c *CapacityCalculator) calculateInstanceCapacity(
 	}
 
 	return totalCapacity, usageValue, nil
+}
+
+// getHostAZMap returns a map from compute host name to availability zone.
+func (c *CapacityCalculator) getHostAZMap(ctx context.Context) (map[string]string, error) {
+	var knowledgeList v1alpha1.KnowledgeList
+	if err := c.client.List(ctx, &knowledgeList); err != nil {
+		return nil, fmt.Errorf("failed to list Knowledge CRDs: %w", err)
+	}
+
+	type hostAZEntry struct {
+		ComputeHost      string `json:"ComputeHost"`
+		AvailabilityZone string `json:"AvailabilityZone"`
+	}
+
+	hostAZMap := make(map[string]string)
+	for _, knowledge := range knowledgeList.Items {
+		if knowledge.Spec.Extractor.Name != "sap_host_details_extractor" {
+			continue
+		}
+		features, err := v1alpha1.UnboxFeatureList[hostAZEntry](knowledge.Status.Raw)
+		if err != nil {
+			continue
+		}
+		for _, feature := range features {
+			if feature.ComputeHost != "" && feature.AvailabilityZone != "" {
+				hostAZMap[feature.ComputeHost] = feature.AvailabilityZone
+			}
+		}
+	}
+
+	return hostAZMap, nil
+}
+
+func (c *CapacityCalculator) getAvailabilityZones(ctx context.Context) ([]string, error) {
+	hostAZMap, err := c.getHostAZMap(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	azSet := make(map[string]struct{})
+	for _, az := range hostAZMap {
+		azSet[az] = struct{}{}
+	}
+
+	azs := make([]string, 0, len(azSet))
+	for az := range azSet {
+		azs = append(azs, az)
+	}
+	sort.Strings(azs)
+
+	return azs, nil
 }

@@ -30,6 +30,14 @@ type Config struct {
 	// Secret ref to the database credentials for querying VM state.
 	DatabaseSecretRef *corev1.SecretReference `json:"databaseSecretRef,omitempty"`
 
+	// ReportCapacityCurrentPipeline is the pipeline used to determine currently available capacity
+	// (respects VM allocations and reservations).
+	ReportCapacityCurrentPipeline string `json:"reportCapacityCurrentPipeline"`
+
+	// ReportCapacityTotalPipeline is the pipeline used to determine total theoretical capacity
+	// (ignores VM allocations and reservations).
+	ReportCapacityTotalPipeline string `json:"reportCapacityTotalPipeline"`
+
 	// FlavorGroupPipelines maps flavor group names to pipeline names.
 	// Example: {"2152": "kvm-hana-bin-packing", "2101": "kvm-general-purpose-load-balancing", "*": "kvm-general-purpose-load-balancing"}
 	// Used to select different scheduling pipelines based on flavor group characteristics.
@@ -90,6 +98,8 @@ func DefaultConfig() Config {
 		RequeueIntervalRetry:                   1 * time.Minute,
 		PipelineDefault:                        "kvm-general-purpose-load-balancing",
 		SchedulerURL:                           "http://localhost:8080/scheduler/nova/external",
+		ReportCapacityCurrentPipeline:          "kvm-general-purpose-load-balancing-all-filters-enabled",
+		ReportCapacityTotalPipeline:            "kvm-report-capacity",
 		ChangeAPIWatchReservationsTimeout:      10 * time.Second,
 		ChangeAPIWatchReservationsPollInterval: 500 * time.Millisecond,
 		EnableChangeCommitmentsAPI:             true,
