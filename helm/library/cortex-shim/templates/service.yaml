@@ -12,7 +12,7 @@ spec:
       protocol: TCP
       name: api
   selector:
-    app.kubernetes.io/name: {{ include "chart.name" . }}
+    {{- include "chart.selectorLabels" . | nindent 4 }}
 {{- if .Values.metrics.enable }}
 ---
 apiVersion: v1
@@ -29,5 +29,5 @@ spec:
       protocol: TCP
       name: metrics
   selector:
-    app.kubernetes.io/name: {{ include "chart.name" . }}
+    {{- include "chart.selectorLabels" . | nindent 4 }}
 {{- end }}
