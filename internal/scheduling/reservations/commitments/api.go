@@ -79,10 +79,5 @@ func (api *HTTPAPI) handleProjectEndpoint(w http.ResponseWriter, r *http.Request
 		http.Error(w, "Not found", http.StatusNotFound)
 	}
 }
-func (api *HTTPAPI) Init(mux *http.ServeMux) {
-	mux.HandleFunc("/v1/commitments/change-commitments", api.HandleChangeCommitments)
-	mux.HandleFunc("/v1/report-capacity", api.HandleReportCapacity)
-	mux.HandleFunc("/v1/commitments/info", api.HandleInfo)
-}
 
 var commitmentApiLog = ctrl.Log.WithName("commitment_api")

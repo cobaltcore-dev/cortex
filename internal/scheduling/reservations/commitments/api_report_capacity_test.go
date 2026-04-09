@@ -395,10 +395,6 @@ func TestCapacityCalculatorWithScheduler(t *testing.T) {
 	)
 
 	flavorGroupKnowledge := createTestFlavorGroupKnowledgeWithSmallest(t, flavorGroup, flavorMemMB, flavorVCPUs)
-	hostDetailsKnowledge := createTestHostDetailsKnowledge(t, map[string]string{
-		"host-1": az,
-		"host-2": az,
-	})
 
 	t.Run("computes capacity and usage via two scheduler calls", func(t *testing.T) {
 		// kvm-report-capacity returns 5 hosts (total capacity).
@@ -412,7 +408,7 @@ func TestCapacityCalculatorWithScheduler(t *testing.T) {
 
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(flavorGroupKnowledge, hostDetailsKnowledge).
+			WithObjects(flavorGroupKnowledge).
 			Build()
 
 		calculator := &CapacityCalculator{
@@ -420,29 +416,26 @@ func TestCapacityCalculatorWithScheduler(t *testing.T) {
 			schedulerClient: reservations.NewSchedulerClient(server.URL),
 		}
 
-		report, err := calculator.CalculateCapacity(context.Background())
+		knowledge := &reservations.FlavorGroupKnowledgeClient{Client: fakeClient}
+		groups, err := knowledge.GetAllFlavorGroups(context.Background(), nil)
+		if err != nil {
+			t.Fatalf("failed to get flavor groups: %v", err)
+		}
+		groupData, ok := groups[flavorGroup]
+		if !ok {
+			t.Fatalf("flavor group %q not found", flavorGroup)
+		}
+
+		capacity, usage, err := calculator.calculateInstanceCapacity(context.Background(), flavorGroup, groupData, az)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		res, ok := report.Resources[liquid.ResourceName("ram_"+flavorGroup)]
-		if !ok {
-			t.Fatal("expected ram_test-group resource")
+		if capacity != 5 {
+			t.Errorf("expected capacity = 5, got %d", capacity)
 		}
-		azReport, ok := res.PerAZ[liquid.AvailabilityZone(az)]
-		if !ok {
-			t.Fatalf("expected %s in perAZ", az)
-		}
-
-		if azReport.Capacity != 5 {
-			t.Errorf("expected capacity = 5, got %d", azReport.Capacity)
-		}
-		usageVal, ok := azReport.Usage.Unpack()
-		if !ok {
-			t.Fatal("expected usage to be set")
-		}
-		if usageVal != 2 {
-			t.Errorf("expected usage = 2, got %d", usageVal)
+		if usage != 2 {
+			t.Errorf("expected usage = 2, got %d", usage)
 		}
 	})
 
@@ -455,7 +448,7 @@ func TestCapacityCalculatorWithScheduler(t *testing.T) {
 
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(flavorGroupKnowledge, hostDetailsKnowledge).
+			WithObjects(flavorGroupKnowledge).
 			Build()
 
 		calculator := &CapacityCalculator{
@@ -463,18 +456,17 @@ func TestCapacityCalculatorWithScheduler(t *testing.T) {
 			schedulerClient: reservations.NewSchedulerClient(server.URL),
 		}
 
-		report, err := calculator.CalculateCapacity(context.Background())
+		knowledge := &reservations.FlavorGroupKnowledgeClient{Client: fakeClient}
+		groups, err := knowledge.GetAllFlavorGroups(context.Background(), nil)
+		if err != nil {
+			t.Fatalf("failed to get flavor groups: %v", err)
+		}
+		_, usage, err := calculator.calculateInstanceCapacity(context.Background(), flavorGroup, groups[flavorGroup], az)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-
-		azReport := report.Resources[liquid.ResourceName("ram_"+flavorGroup)].PerAZ[liquid.AvailabilityZone(az)]
-		usageVal, ok := azReport.Usage.Unpack()
-		if !ok {
-			t.Fatal("expected usage to be set")
-		}
-		if usageVal != 0 {
-			t.Errorf("expected usage = 0, got %d", usageVal)
+		if usage != 0 {
+			t.Errorf("expected usage = 0, got %d", usage)
 		}
 	})
 
@@ -488,7 +480,7 @@ func TestCapacityCalculatorWithScheduler(t *testing.T) {
 
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(flavorGroupKnowledge, hostDetailsKnowledge).
+			WithObjects(flavorGroupKnowledge).
 			Build()
 
 		calculator := &CapacityCalculator{
@@ -496,22 +488,21 @@ func TestCapacityCalculatorWithScheduler(t *testing.T) {
 			schedulerClient: reservations.NewSchedulerClient(server.URL),
 		}
 
-		report, err := calculator.CalculateCapacity(context.Background())
+		knowledge := &reservations.FlavorGroupKnowledgeClient{Client: fakeClient}
+		groups, err := knowledge.GetAllFlavorGroups(context.Background(), nil)
+		if err != nil {
+			t.Fatalf("failed to get flavor groups: %v", err)
+		}
+		_, usage, err := calculator.calculateInstanceCapacity(context.Background(), flavorGroup, groups[flavorGroup], az)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-
-		azReport := report.Resources[liquid.ResourceName("ram_"+flavorGroup)].PerAZ[liquid.AvailabilityZone(az)]
-		usageVal, ok := azReport.Usage.Unpack()
-		if !ok {
-			t.Fatal("expected usage to be set")
-		}
-		if usageVal != 0 {
-			t.Errorf("expected usage = 0 (clamped), got %d", usageVal)
+		if usage != 0 {
+			t.Errorf("expected usage = 0 (clamped), got %d", usage)
 		}
 	})
 
-	t.Run("scheduler failure yields empty AZ report without aborting", func(t *testing.T) {
+	t.Run("scheduler failure returns error", func(t *testing.T) {
 		failServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 		}))
@@ -519,7 +510,7 @@ func TestCapacityCalculatorWithScheduler(t *testing.T) {
 
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(flavorGroupKnowledge, hostDetailsKnowledge).
+			WithObjects(flavorGroupKnowledge).
 			Build()
 
 		calculator := &CapacityCalculator{
@@ -527,60 +518,14 @@ func TestCapacityCalculatorWithScheduler(t *testing.T) {
 			schedulerClient: reservations.NewSchedulerClient(failServer.URL),
 		}
 
-		report, err := calculator.CalculateCapacity(context.Background())
+		knowledge := &reservations.FlavorGroupKnowledgeClient{Client: fakeClient}
+		groups, err := knowledge.GetAllFlavorGroups(context.Background(), nil)
 		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+			t.Fatalf("failed to get flavor groups: %v", err)
 		}
-
-		res, ok := report.Resources[liquid.ResourceName("ram_"+flavorGroup)]
-		if !ok {
-			t.Fatal("expected resource to exist")
-		}
-		azReport := res.PerAZ[liquid.AvailabilityZone(az)]
-		if azReport == nil {
-			t.Fatal("expected non-nil AZ report on scheduler failure")
-		}
-		if azReport.Capacity != 0 {
-			t.Errorf("expected capacity = 0 on failure, got %d", azReport.Capacity)
-		}
-	})
-
-	t.Run("multiple AZs are reported independently", func(t *testing.T) {
-		twoAZHostDetails := createTestHostDetailsKnowledge(t, map[string]string{
-			"host-1": "az-a",
-			"host-2": "az-b",
-		})
-		// Both calls always return 3 hosts regardless of AZ (pipeline-routing mock).
-		server := newPipelineMockSchedulerServer(t, map[string][]string{
-			"kvm-report-capacity": {"h1", "h2", "h3"},
-			"kvm-general-purpose-load-balancing-all-filters-enabled": {"h1"},
-		})
-		defer server.Close()
-
-		fakeClient := fake.NewClientBuilder().
-			WithScheme(scheme).
-			WithObjects(flavorGroupKnowledge, twoAZHostDetails).
-			Build()
-
-		calculator := &CapacityCalculator{
-			client:          fakeClient,
-			schedulerClient: reservations.NewSchedulerClient(server.URL),
-		}
-
-		report, err := calculator.CalculateCapacity(context.Background())
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		res := report.Resources[liquid.ResourceName("ram_"+flavorGroup)]
-		if len(res.PerAZ) != 2 {
-			t.Errorf("expected 2 AZs, got %d", len(res.PerAZ))
-		}
-		if _, ok := res.PerAZ[liquid.AvailabilityZone("az-a")]; !ok {
-			t.Error("expected az-a in report")
-		}
-		if _, ok := res.PerAZ[liquid.AvailabilityZone("az-b")]; !ok {
-			t.Error("expected az-b in report")
+		_, _, err = calculator.calculateInstanceCapacity(context.Background(), flavorGroup, groups[flavorGroup], az)
+		if err == nil {
+			t.Fatal("expected error on scheduler failure, got nil")
 		}
 	})
 }

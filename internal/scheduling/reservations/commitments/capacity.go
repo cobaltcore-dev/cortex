@@ -14,9 +14,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	. "github.com/majewsky/gg/option"
-	"github.com/sapcc/go-api-declarations/liquid"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // CapacityCalculator computes capacity reports for Limes LIQUID API.
