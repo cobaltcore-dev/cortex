@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	placementhandlers "github.com/cobaltcore-dev/cortex/internal/shim/placement/handlers"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -57,6 +58,7 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var enablePlacementShim bool
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -75,6 +77,8 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.BoolVar(&enablePlacementShim, "placement-shim", false,
+		"If set, the placement API shim handlers are registered on the API server.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -202,6 +206,9 @@ func main() {
 
 	// API endpoint.
 	mux := http.NewServeMux()
+	if enablePlacementShim {
+		placementhandlers.RegisterRoutes(mux)
+	}
 
 	// +kubebuilder:scaffold:builder
 
