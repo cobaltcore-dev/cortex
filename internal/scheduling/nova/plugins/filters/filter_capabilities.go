@@ -93,11 +93,12 @@ func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.External
 
 	hvCaps := make(map[string]map[string]string)
 	for _, hv := range hvs.Items {
-		var err error
-		if hvCaps[hv.Name], err = hvToNovaCapabilities(hv); err != nil {
-			traceLog.Error("failed to get nova capabilities from hypervisor", "host", hv.Name, "error", err)
-			return nil, err
+		caps, err := hvToNovaCapabilities(hv)
+		if err != nil {
+			traceLog.Warn("skipping hypervisor with unknown capabilities", "host", hv.Name, "error", err)
+			continue
 		}
+		hvCaps[hv.Name] = caps
 	}
 	traceLog.Info("looking for capabilities", "capabilities", hvCaps)
 
