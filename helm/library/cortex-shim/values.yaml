@@ -1,6 +1,6 @@
 deployment:
   enable: true
-  replicas: 1
+  replicas: 3
   container:
     image:
       repository: ghcr.io/cobaltcore-dev/cortex-shim
