@@ -20,4 +20,8 @@ alerts:
 
 cortex-shim:
   namePrefix: cortex-placement
-  conf: {} # TODO
+  conf:
+    monitoring:
+      labels:
+        github_org: cobaltcore-dev
+        github_repo: cortex
