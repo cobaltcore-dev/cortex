@@ -12,7 +12,10 @@ type FilterWeigherPipelineRequest interface {
 	// of the request with only the given hosts remaining. This is helpful
 	// for steps that filter out hosts. Hosts not included in the map
 	// are considered as filtered out, and won't be reconsidered in later steps.
-	FilterHosts(includedHosts map[string]float64) FilterWeigherPipelineRequest
+	// This function should also update the weights of the remaining hosts
+	// accordingly, so that the weights map always corresponds to the hosts
+	// that are currently in the request.
+	Filter(includedHosts map[string]float64) FilterWeigherPipelineRequest
 	// Get the weights for the hosts.
 	GetWeights() map[string]float64
 	// Get logging args to be used in the step's trace log.

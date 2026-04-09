@@ -146,7 +146,7 @@ func TestMonitoredCallback_Respond_WithoutError(t *testing.T) {
 			// Add a small delay to ensure measurable duration
 			time.Sleep(1 * time.Millisecond)
 
-			callback.Respond(tt.code, nil, tt.text)
+			callback.Respond(nil, tt.code, nil, tt.text)
 
 			// When there's no error, Respond doesn't set the HTTP status code
 			// It only records metrics with the provided code
@@ -265,7 +265,7 @@ func TestMonitoredCallback_Respond_WithError(t *testing.T) {
 			// Add a small delay to ensure measurable duration
 			time.Sleep(1 * time.Millisecond)
 
-			callback.Respond(tt.code, tt.err, tt.text)
+			callback.Respond(nil, tt.code, tt.err, tt.text)
 
 			// Verify HTTP response
 			if w.Code != tt.code {
@@ -341,14 +341,14 @@ func TestMonitoredCallback_Respond_NilMonitor(t *testing.T) {
 	}
 
 	// Should not panic even with nil monitor
-	callback.Respond(200, nil, "")
+	callback.Respond(nil, 200, nil, "")
 
 	// Test with nil ApiRequestsTimer
 	monitor := &APIMonitor{ApiRequestsTimer: nil}
 	callback.apiMonitor = monitor
 
 	// Should not panic even with nil timer
-	callback.Respond(200, nil, "")
+	callback.Respond(nil, 200, nil, "")
 }
 
 func TestMonitoredCallback_TimeMeasurement(t *testing.T) {
@@ -375,7 +375,7 @@ func TestMonitoredCallback_TimeMeasurement(t *testing.T) {
 	sleepDuration := 10 * time.Millisecond
 	time.Sleep(sleepDuration)
 
-	callback.Respond(200, nil, "")
+	callback.Respond(nil, 200, nil, "")
 
 	// Verify the metric was recorded by gathering metrics
 	metricFamily, err := registry.Gather()
@@ -425,7 +425,7 @@ func TestMonitoredCallback_HTTPMethods(t *testing.T) {
 			w := httptest.NewRecorder()
 
 			callback := monitor.Callback(w, req, "/test")
-			callback.Respond(200, nil, "")
+			callback.Respond(nil, 200, nil, "")
 
 			// Verify the method label is recorded correctly
 			metricFamily, err := registry.Gather()

@@ -14,7 +14,9 @@ spec:
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
     Specifically, this pipeline is used for general purpose workloads.
   type: filter-weigher
-  createDecisions: false
+  # Fetch all placement candidates, ignoring nova's preselection.
+  ignorePreselection: true
+  createHistory: true
   filters:
     - name: filter_correct_az
       description: |
@@ -49,7 +51,7 @@ spec:
       description: |
         This step prefix-matches the domain name for external customer domains and
         filters out hosts that are not intended for external customers. It considers
-        the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+        the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait on hosts as well as the
         `domain_name` scheduler hint from the nova request spec.
       params:
         - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
@@ -83,17 +85,23 @@ spec:
         hypervisor resource. Note that hosts allowing all projects are still
         accessible and will not be filtered out. In this way some hypervisors
         are made accessible to some projects only.
+    - name: filter_aggregate_metadata
+      description: |
+        This step filters hosts based on metadata defined in their aggregates. For
+        example, if an aggregate has the metadata "filter_tenant_id": "<project_id>",
+        only hosts in that aggregate that match the project ID in the nova request
+        will pass this filter.
     - name: filter_live_migratable
       description: |
         This step ensures that the target host of a live migration can accept
         the migrating VM, by checking cpu architecture, cpu features, emulated
         devices, and cpu modes.
     - name: filter_requested_destination
-      params: {{ .Values.kvm.filterRequestedDestinationParams | toYaml | nindent 8 }}
       description: |
         This step filters hosts based on the `requested_destination` instruction
         from the nova scheduler request spec. It supports filtering by host and
-        by aggregates.
+        by aggregates. Aggregates use AND logic between list elements, with
+        comma-separated UUIDs within an element using OR logic.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -123,6 +131,13 @@ spec:
         into the smallest gaps possible, it spreads the load to ensure
         workloads are balanced across hosts. In this pipeline, the balancing will
         focus on general purpose virtual machines.
+    - name: kvm_failover_evacuation
+      description: |
+        This weigher prefers hosts with active failover reservations during
+        evacuation requests. Hosts matching a failover reservation where the
+        VM is allocated get a higher weight, encouraging placement on
+        pre-reserved failover capacity. For non-evacuation requests, this
+        weigher has no effect.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -138,7 +153,9 @@ spec:
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
     Specifically, this pipeline is used for hana virtual machines.
   type: filter-weigher
-  createDecisions: false
+  # Fetch all placement candidates, ignoring nova's preselection.
+  ignorePreselection: true
+  createHistory: true
   filters:
     - name: filter_correct_az
       description: |
@@ -173,7 +190,7 @@ spec:
       description: |
         This step prefix-matches the domain name for external customer domains and
         filters out hosts that are not intended for external customers. It considers
-        the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+        the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait on hosts as well as the
         `domain_name` scheduler hint from the nova request spec.
       params:
         - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
@@ -207,17 +224,23 @@ spec:
         hypervisor resource. Note that hosts allowing all projects are still
         accessible and will not be filtered out. In this way some hypervisors
         are made accessible to some projects only.
+    - name: filter_aggregate_metadata
+      description: |
+        This step filters hosts based on metadata defined in their aggregates. For
+        example, if an aggregate has the metadata "filter_tenant_id": "<project_id>",
+        only hosts in that aggregate that match the project ID in the nova request
+        will pass this filter.
     - name: filter_live_migratable
       description: |
         This step ensures that the target host of a live migration can accept
         the migrating VM, by checking cpu architecture, cpu features, emulated
         devices, and cpu modes.
     - name: filter_requested_destination
-      params: {{ .Values.kvm.filterRequestedDestinationParams | toYaml | nindent 8 }}
       description: |
         This step filters hosts based on the `requested_destination` instruction
         from the nova scheduler request spec. It supports filtering by host and
-        by aggregates.
+        by aggregates. Aggregates use AND logic between list elements, with
+        comma-separated UUIDs within an element using OR logic.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -244,6 +267,13 @@ spec:
         It pulls the requested vm into the smallest gaps possible, to ensure
         other hosts with less allocation stay free for bigger vms.
         In this pipeline, the binpacking will focus on hana virtual machines.
+    - name: kvm_failover_evacuation
+      description: |
+        This weigher prefers hosts with active failover reservations during
+        evacuation requests. Hosts matching a failover reservation where the
+        VM is allocated get a higher weight, encouraging placement on
+        pre-reserved failover capacity. For non-evacuation requests, this
+        weigher has no effect.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -261,7 +291,7 @@ spec:
 
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
   type: filter-weigher
-  createDecisions: false
+  createHistory: false
   # Fetch all placement candidates, ignoring nova's preselection.
   ignorePreselection: true
   filters:
@@ -332,11 +362,11 @@ spec:
         the migrating VM, by checking cpu architecture, cpu features, emulated
         devices, and cpu modes.
     - name: filter_requested_destination
-      params: {{ .Values.kvm.filterRequestedDestinationParams | toYaml | nindent 8 }}
       description: |
         This step filters hosts based on the `requested_destination` instruction
         from the nova scheduler request spec. It supports filtering by host and
-        by aggregates.
+        by aggregates. Aggregates use AND logic between list elements, with
+        comma-separated UUIDs within an element using OR logic.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -378,7 +408,7 @@ spec:
     compute hosts in order to optimize resource usage and performance.
     This is the pipeline used for KVM hypervisors (qemu and cloud-hypervisor).
   type: detector
-  createDecisions: false
+  createHistory: true
   detectors:
     - name: avoid_high_steal_pct
       description: |
@@ -402,7 +432,7 @@ spec:
     Use case: When a VM needs failover protection and there's an existing reservation
     on a host, this pipeline validates the host is still suitable for the VM.
   type: filter-weigher
-  createDecisions: false
+  createHistory: false
   filters:
     - name: filter_host_instructions
       description: |
@@ -433,7 +463,7 @@ spec:
       description: |
         This step prefix-matches the domain name for external customer domains and
         filters out hosts that are not intended for external customers. It considers
-        the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+        the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait on hosts as well as the
         `domain_name` scheduler hint from the nova request spec.
       params:
         - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
@@ -466,7 +496,7 @@ spec:
     that the reservation host can still accommodate all allocated VMs. If validation
     fails for any VM, the reservation is deleted (nack).
   type: filter-weigher
-  createDecisions: false
+  createHistory: false
   filters:
     - name: filter_host_instructions
       description: |
@@ -504,7 +534,7 @@ spec:
       description: |
         This step prefix-matches the domain name for external customer domains and
         filters out hosts that are not intended for external customers. It considers
-        the `CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED` trait on hosts as well as the
+        the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait on hosts as well as the
         `domain_name` scheduler hint from the nova request spec.
       params:
         - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
@@ -519,7 +549,14 @@ spec:
         This step will filter out hosts that do not meet the compute capabilities
         requested by the nova flavor extra specs, like `{"arch": "x86_64",
         "maxphysaddr:bits": 46, ...}`.
-  weighers: []
+  weighers:
+    - name: kvm_failover_evacuation
+      description: |
+        This weigher prefers hosts with active failover reservations during
+        evacuation requests. Hosts matching a failover reservation where the
+        VM is allocated get a higher weight, encouraging placement on
+        pre-reserved failover capacity. For non-evacuation requests, this
+        weigher has no effect.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline

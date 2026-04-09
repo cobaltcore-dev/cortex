@@ -167,7 +167,7 @@ type OpenStackDatasource struct {
 	Cinder CinderDatasource `json:"cinder"`
 
 	// How often to sync the datasource.
-	// +kubebuilder:default="60s"
+	// +kubebuilder:default="600s"
 	SyncInterval metav1.Duration `json:"syncInterval"`
 
 	// Keystone credentials secret ref for authenticating with openstack.

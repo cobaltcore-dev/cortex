@@ -6,7 +6,6 @@ package commitments
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -14,7 +13,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -38,28 +36,52 @@ func DefaultSyncerConfig() SyncerConfig {
 	}
 }
 
+// ApplyDefaults fills in any unset values with defaults.
+func (c *SyncerConfig) ApplyDefaults() {
+	defaults := DefaultSyncerConfig()
+	if c.SyncInterval == 0 {
+		c.SyncInterval = defaults.SyncInterval
+	}
+	// Note: KeystoneSecretRef and SSOSecretRef are not defaulted as they require explicit configuration
+}
+
 type Syncer struct {
 	// Client to fetch commitments from Limes
 	CommitmentsClient
 	// Kubernetes client for CRD operations
 	client.Client
+	// Monitor for metrics
+	monitor *SyncerMonitor
+	// SyncInterval is stored for logging purposes (actual interval managed by task.Runner)
+	syncInterval time.Duration
 }
 
-func NewSyncer(k8sClient client.Client) *Syncer {
+func NewSyncer(k8sClient client.Client, monitor *SyncerMonitor) *Syncer {
 	return &Syncer{
 		CommitmentsClient: NewCommitmentsClient(),
 		Client:            k8sClient,
+		monitor:           monitor,
 	}
 }
 
 func (s *Syncer) Init(ctx context.Context, config SyncerConfig) error {
+	s.syncInterval = config.SyncInterval
 	if err := s.CommitmentsClient.Init(ctx, s.Client, config); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavorGroups map[string]compute.FlavorGroupFeature) ([]*CommitmentState, error) {
+// getCommitmentStatesResult holds both processed and skipped commitment UUIDs
+type getCommitmentStatesResult struct {
+	// states are the commitments that were successfully processed
+	states []*CommitmentState
+	// skippedUUIDs are commitment UUIDs that were skipped (e.g., due to unit mismatch)
+	// but should NOT have their existing CRDs deleted
+	skippedUUIDs map[string]bool
+}
+
+func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavorGroups map[string]compute.FlavorGroupFeature) (*getCommitmentStatesResult, error) {
 	allProjects, err := s.ListProjects(ctx)
 	if err != nil {
 		return nil, err
@@ -70,24 +92,34 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 	}
 
 	// Filter for compute commitments with RAM flavor group resources
-	var commitmentStates []*CommitmentState
+	result := &getCommitmentStatesResult{
+		states:       []*CommitmentState{},
+		skippedUUIDs: make(map[string]bool),
+	}
 	for id, commitment := range commitments {
+		// Record each commitment seen from Limes
+		if s.monitor != nil {
+			s.monitor.RecordCommitmentSeen()
+		}
+
 		if commitment.ServiceType != "compute" {
 			log.Info("skipping non-compute commitment", "id", id, "serviceType", commitment.ServiceType)
-			continue
-		}
-		if !strings.HasPrefix(commitment.ResourceName, commitmentResourceNamePrefix) {
-			log.Info("skipping non-RAM-flavor-group commitment", "id", id, "resourceName", commitment.ResourceName)
+			if s.monitor != nil {
+				s.monitor.RecordCommitmentSkipped(SkipReasonNonCompute)
+			}
 			continue
 		}
 
-		// Extract flavor group name from resource name
+		// Extract flavor group name from resource name (validates format: hw_version_<group>_ram)
 		flavorGroupName, err := getFlavorGroupNameFromResource(commitment.ResourceName)
 		if err != nil {
 			log.Info("skipping commitment with invalid resource name",
 				"id", id,
 				"resourceName", commitment.ResourceName,
 				"error", err)
+			if s.monitor != nil {
+				s.monitor.RecordCommitmentSkipped(SkipReasonInvalidResource)
+			}
 			continue
 		}
 
@@ -97,6 +129,32 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 			log.Info("skipping commitment with unknown flavor group",
 				"id", id,
 				"flavorGroup", flavorGroupName)
+			if s.monitor != nil {
+				s.monitor.RecordCommitmentSkipped(SkipReasonUnknownFlavorGroup)
+			}
+			continue
+		}
+
+		// Validate unit matches between Limes commitment and Cortex flavor group
+		// Expected format: "<memoryMB> MiB" e.g. "131072 MiB" for 128 GiB
+		expectedUnit := fmt.Sprintf("%d MiB", flavorGroup.SmallestFlavor.MemoryMB)
+		if commitment.Unit != "" && commitment.Unit != expectedUnit {
+			// Unit mismatch: Limes has not yet updated this commitment to the new unit.
+			// Skip this commitment - trust what Cortex already has stored in CRDs.
+			// On the next sync cycle after Limes updates, this will be processed.
+			log.V(0).Info("WARNING: skipping commitment due to unit mismatch - Limes unit differs from Cortex flavor group, waiting for Limes to update",
+				"commitmentUUID", commitment.UUID,
+				"flavorGroup", flavorGroupName,
+				"limesUnit", commitment.Unit,
+				"expectedUnit", expectedUnit,
+				"smallestFlavorMemoryMB", flavorGroup.SmallestFlavor.MemoryMB)
+			if s.monitor != nil {
+				s.monitor.RecordCommitmentSkipped(SkipReasonUnitMismatch)
+			}
+			// Track skipped commitment so its existing CRDs won't be deleted
+			if commitment.UUID != "" {
+				result.skippedUUIDs[commitment.UUID] = true
+			}
 			continue
 		}
 
@@ -104,6 +162,9 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 		if commitment.UUID == "" {
 			log.Info("skipping commitment with empty UUID",
 				"id", id)
+			if s.monitor != nil {
+				s.monitor.RecordCommitmentSkipped(SkipReasonEmptyUUID)
+			}
 			continue
 		}
 
@@ -122,45 +183,56 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 			"amount", commitment.Amount,
 			"totalMemoryBytes", state.TotalMemoryBytes)
 
-		commitmentStates = append(commitmentStates, state)
+		result.states = append(result.states, state)
+
+		// Record successfully processed commitment
+		if s.monitor != nil {
+			s.monitor.RecordCommitmentProcessed()
+		}
 	}
 
-	return commitmentStates, nil
+	return result, nil
 }
 
 // SyncReservations fetches commitments from Limes and synchronizes Reservation CRDs.
 func (s *Syncer) SyncReservations(ctx context.Context) error {
 	// TODO handle concurrency with change API: consider creation time of reservations and status ready
 
-	// Create logger with run ID for this sync execution
+	// Create context with request ID for this sync execution
 	runID := fmt.Sprintf("sync-%d", time.Now().Unix())
-	log := ctrl.Log.WithName("CommitmentSyncer").WithValues("runID", runID)
+	ctx = WithNewGlobalRequestID(ctx)
+	logger := LoggerFromContext(ctx).WithValues("component", "syncer", "runID", runID)
 
-	log.Info("starting commitment sync with sync interval", "interval", DefaultSyncerConfig().SyncInterval)
+	logger.Info("starting commitment sync")
+
+	// Record sync run
+	if s.monitor != nil {
+		s.monitor.RecordSyncRun()
+	}
 
 	// Check if flavor group knowledge is ready
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: s.Client}
 	knowledgeCRD, err := knowledge.Get(ctx)
 	if err != nil {
-		log.Error(err, "failed to check flavor group knowledge readiness")
+		logger.Error(err, "failed to check flavor group knowledge readiness")
 		return err
 	}
 	if knowledgeCRD == nil {
-		log.Info("skipping commitment sync - flavor group knowledge not ready yet")
+		logger.Info("skipping commitment sync - flavor group knowledge not ready yet")
 		return nil
 	}
 
 	// Get flavor groups using the CRD we already fetched
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, knowledgeCRD)
 	if err != nil {
-		log.Error(err, "failed to get flavor groups from knowledge")
+		logger.Error(err, "failed to get flavor groups from knowledge")
 		return err
 	}
 
 	// Get all commitments as states
-	commitmentStates, err := s.getCommitmentStates(ctx, log, flavorGroups)
+	commitmentResult, err := s.getCommitmentStates(ctx, logger, flavorGroups)
 	if err != nil {
-		log.Error(err, "failed to get compute commitments")
+		logger.Error(err, "failed to get compute commitments")
 		return err
 	}
 
@@ -168,20 +240,25 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	manager := NewReservationManager(s.Client)
 
 	// Apply each commitment state using the manager
-	for _, state := range commitmentStates {
-		log.Info("applying commitment state",
+	var totalCreated, totalDeleted, totalRepaired int
+	for _, state := range commitmentResult.states {
+		logger.Info("applying commitment state",
 			"commitmentUUID", state.CommitmentUUID,
 			"projectID", state.ProjectID,
 			"flavorGroup", state.FlavorGroupName,
 			"totalMemoryBytes", state.TotalMemoryBytes)
 
-		_, _, err := manager.ApplyCommitmentState(ctx, log, state, flavorGroups, CreatorValue)
+		applyResult, err := manager.ApplyCommitmentState(ctx, logger, state, flavorGroups, CreatorValue)
 		if err != nil {
-			log.Error(err, "failed to apply commitment state",
+			logger.Error(err, "failed to apply commitment state",
 				"commitmentUUID", state.CommitmentUUID)
 			// Continue with other commitments even if one fails
 			continue
 		}
+
+		totalCreated += applyResult.Created
+		totalDeleted += applyResult.Deleted
+		totalRepaired += applyResult.Repaired
 	}
 
 	// Delete reservations that are no longer in commitments
@@ -190,14 +267,18 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	if err := s.List(ctx, &existingReservations, client.MatchingLabels{
 		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
 	}); err != nil {
-		log.Error(err, "failed to list existing committed resource reservations")
+		logger.Error(err, "failed to list existing committed resource reservations")
 		return err
 	}
 
-	// Build set of commitment UUIDs we should have
+	// Build set of commitment UUIDs we should have (processed + skipped)
 	activeCommitments := make(map[string]bool)
-	for _, state := range commitmentStates {
+	for _, state := range commitmentResult.states {
 		activeCommitments[state.CommitmentUUID] = true
+	}
+	// Also include skipped commitments - don't delete their CRDs
+	for uuid := range commitmentResult.skippedUUIDs {
+		activeCommitments[uuid] = true
 	}
 
 	// Delete reservations for commitments that no longer exist
@@ -205,22 +286,41 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		// Extract commitment UUID from reservation name
 		commitmentUUID := extractCommitmentUUID(existing.Name)
 		if commitmentUUID == "" {
-			log.Info("skipping reservation with unparseable name", "name", existing.Name)
+			logger.Info("skipping reservation with unparseable name", "name", existing.Name)
 			continue
 		}
 
 		if !activeCommitments[commitmentUUID] {
 			// This commitment no longer exists, delete the reservation
 			if err := s.Delete(ctx, &existing); err != nil {
-				log.Error(err, "failed to delete reservation", "name", existing.Name)
+				logger.Error(err, "failed to delete reservation", "name", existing.Name)
 				return err
 			}
-			log.Info("deleted reservation for expired commitment",
+			logger.Info("deleted reservation for expired commitment",
 				"name", existing.Name,
 				"commitmentUUID", commitmentUUID)
+			totalDeleted++
 		}
 	}
 
-	log.Info("synced reservations", "commitmentCount", len(commitmentStates))
+	// Record reservation change metrics
+	if s.monitor != nil {
+		if totalCreated > 0 {
+			s.monitor.RecordReservationsCreated(totalCreated)
+		}
+		if totalDeleted > 0 {
+			s.monitor.RecordReservationsDeleted(totalDeleted)
+		}
+		if totalRepaired > 0 {
+			s.monitor.RecordReservationsRepaired(totalRepaired)
+		}
+	}
+
+	logger.Info("synced reservations",
+		"processedCount", len(commitmentResult.states),
+		"skippedCount", len(commitmentResult.skippedUUIDs),
+		"created", totalCreated,
+		"deleted", totalDeleted,
+		"repaired", totalRepaired)
 	return nil
 }

@@ -53,7 +53,7 @@ func (m *APIMonitor) Callback(w http.ResponseWriter, r *http.Request, pattern st
 
 // Respond to the request with the given code and error.
 // Also log the time it took to handle the request.
-func (c MonitoredCallback) Respond(code int, err error, text string) {
+func (c MonitoredCallback) Respond(logger *slog.Logger, code int, err error, text string) {
 	if c.apiMonitor != nil && c.apiMonitor.ApiRequestsTimer != nil {
 		observer := c.apiMonitor.ApiRequestsTimer.WithLabelValues(
 			c.r.Method,
@@ -64,7 +64,11 @@ func (c MonitoredCallback) Respond(code int, err error, text string) {
 		observer.Observe(time.Since(c.t).Seconds())
 	}
 	if err != nil {
-		slog.Error("failed to handle request", "error", err)
+		if logger == nil {
+			slog.Error("failed to handle request", "error", err)
+		} else {
+			logger.Error("failed to handle request", "error", err)
+		}
 		http.Error(c.w, text, code)
 		return
 	}

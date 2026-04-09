@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.20.1
   name: reservations.cortex.cloud
 spec:
   group: cortex.cloud
@@ -23,6 +23,42 @@ spec:
       type: string
     - jsonPath: .status.conditions[?(@.type=='Ready')].status
       name: Ready
+      type: string
+    - jsonPath: .spec.committedResourceReservation.resourceGroup
+      name: ResourceGroup
+      type: string
+    - jsonPath: .spec.committedResourceReservation.projectID
+      name: Project
+      type: string
+    - jsonPath: .spec.availabilityZone
+      name: AZ
+      type: string
+    - jsonPath: .spec.startTime
+      name: StartTime
+      priority: 1
+      type: string
+    - jsonPath: .spec.endTime
+      name: EndTime
+      type: string
+    - jsonPath: .spec.resources
+      name: Resources
+      priority: 1
+      type: string
+    - jsonPath: .status.failoverReservation.lastChanged
+      name: LastChanged
+      priority: 1
+      type: date
+    - jsonPath: .status.failoverReservation.acknowledgedAt
+      name: AcknowledgedAt
+      priority: 1
+      type: date
+    - jsonPath: .status.committedResourceReservation.allocations
+      name: CR Allocations
+      priority: 1
+      type: string
+    - jsonPath: .status.failoverReservation.allocations
+      name: HA Allocations
+      priority: 1
       type: string
     name: v1alpha1
     schema:

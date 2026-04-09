@@ -18,14 +18,59 @@ import (
 // commitmentUUIDPattern validates commitment UUID format.
 var commitmentUUIDPattern = regexp.MustCompile(`^[a-zA-Z0-9-]{6,40}$`)
 
-// Limes LIQUID resource naming convention: ram_<flavorgroup>
-const commitmentResourceNamePrefix = "ram_"
+// Limes LIQUID resource naming convention: hw_version_<flavorgroup>_<resourcetype>
+// Supported resource types: _ram, _cores, _instances
+const (
+	resourceNamePrefix = "hw_version_"
+	// Resource type suffixes
+	ResourceSuffixRAM       = "_ram"
+	ResourceSuffixCores     = "_cores"
+	ResourceSuffixInstances = "_instances"
+)
 
+// ResourceNameRAM creates a LIQUID resource name for RAM from a flavor group name.
+// Format: hw_version_<flavorgroup>_ram
+func ResourceNameRAM(flavorGroup string) string {
+	return resourceNamePrefix + flavorGroup + ResourceSuffixRAM
+}
+
+// ResourceNameCores creates a LIQUID resource name for CPU cores from a flavor group name.
+// Format: hw_version_<flavorgroup>_cores
+func ResourceNameCores(flavorGroup string) string {
+	return resourceNamePrefix + flavorGroup + ResourceSuffixCores
+}
+
+// ResourceNameInstances creates a LIQUID resource name for instance count from a flavor group name.
+// Format: hw_version_<flavorgroup>_instances
+func ResourceNameInstances(flavorGroup string) string {
+	return resourceNamePrefix + flavorGroup + ResourceSuffixInstances
+}
+
+// getFlavorGroupNameFromResource extracts the flavor group name from a LIQUID resource name.
+// Only accepts _ram resources since CommitmentState is RAM-based.
+// Callers handling _cores or _instances must use a different approach.
 func getFlavorGroupNameFromResource(resourceName string) (string, error) {
-	if !strings.HasPrefix(resourceName, commitmentResourceNamePrefix) {
-		return "", fmt.Errorf("invalid resource name: %s", resourceName)
+	if !strings.HasPrefix(resourceName, resourceNamePrefix) {
+		return "", fmt.Errorf("invalid resource name: %s (missing prefix)", resourceName)
 	}
-	return strings.TrimPrefix(resourceName, commitmentResourceNamePrefix), nil
+
+	// Only accept _ram suffix - commitments are RAM-based and CommitmentState
+	// carries TotalMemoryBytes. Accepting _cores or _instances here would
+	// silently reinterpret non-RAM amounts as RAM, producing wrong state.
+	if !strings.HasSuffix(resourceName, ResourceSuffixRAM) {
+		return "", fmt.Errorf("invalid resource name: %s (only _ram resources are supported for commitments)", resourceName)
+	}
+
+	// Remove prefix and suffix
+	name := strings.TrimPrefix(resourceName, resourceNamePrefix)
+	name = strings.TrimSuffix(name, ResourceSuffixRAM)
+
+	// Validate that the extracted group name is not empty
+	if name == "" {
+		return "", fmt.Errorf("invalid resource name: %s (empty group name)", resourceName)
+	}
+
+	return name, nil
 }
 
 // CommitmentState represents desired or current commitment resource allocation.
@@ -46,6 +91,8 @@ type CommitmentState struct {
 	StartTime *time.Time
 	// EndTime is when the commitment expires
 	EndTime *time.Time
+	// CreatorRequestID is the request ID that triggered this state change (for traceability)
+	CreatorRequestID string
 }
 
 // FromCommitment converts Limes commitment to CommitmentState.
@@ -147,7 +194,7 @@ func FromChangeCommitmentTargetState(
 	smallestFlavorMemoryBytes := int64(smallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory from specs, realistically bounded
 
 	// Amount represents multiples of the smallest flavor in the group
-	totalMemoryBytes := int64(amountMultiple) * smallestFlavorMemoryBytes //nolint:gosec // commitment amount from Limes API, bounded by quota limits
+	totalMemoryBytes := int64(amountMultiple) * smallestFlavorMemoryBytes
 
 	return &CommitmentState{
 		CommitmentUUID:   string(commitment.UUID),
@@ -158,6 +205,41 @@ func FromChangeCommitmentTargetState(
 		StartTime:        startTime,
 		EndTime:          endTime,
 	}, nil
+}
+
+// CommitmentStateWithUsage extends CommitmentState with usage tracking for billing calculations.
+// Used by the report-usage API to track remaining capacity during VM-to-commitment assignment.
+type CommitmentStateWithUsage struct {
+	CommitmentState
+	// RemainingMemoryBytes is the uncommitted capacity left for VM assignment
+	RemainingMemoryBytes int64
+	// AssignedVMs tracks which VMs have been assigned to this commitment
+	AssignedVMs []string
+}
+
+// NewCommitmentStateWithUsage creates a CommitmentStateWithUsage from a CommitmentState.
+func NewCommitmentStateWithUsage(state *CommitmentState) *CommitmentStateWithUsage {
+	return &CommitmentStateWithUsage{
+		CommitmentState:      *state,
+		RemainingMemoryBytes: state.TotalMemoryBytes,
+		AssignedVMs:          []string{},
+	}
+}
+
+// AssignVM attempts to assign a VM to this commitment if there's enough capacity.
+// Returns true if the VM was assigned, false if not enough capacity.
+func (c *CommitmentStateWithUsage) AssignVM(vmUUID string, vmMemoryBytes int64) bool {
+	if c.RemainingMemoryBytes >= vmMemoryBytes {
+		c.RemainingMemoryBytes -= vmMemoryBytes
+		c.AssignedVMs = append(c.AssignedVMs, vmUUID)
+		return true
+	}
+	return false
+}
+
+// HasRemainingCapacity returns true if the commitment has any remaining capacity.
+func (c *CommitmentStateWithUsage) HasRemainingCapacity() bool {
+	return c.RemainingMemoryBytes > 0
 }
 
 // FromReservations reconstructs CommitmentState from existing Reservation CRDs.
@@ -199,8 +281,8 @@ func FromReservations(reservations []v1alpha1.Reservation) (*CommitmentState, er
 		}
 		// check flavor group consistency, ignore if not matching to repair corrupted state in k8s
 		if res.Spec.CommittedResourceReservation.ResourceGroup != state.FlavorGroupName {
-			// log message
-			commitmentLog.Error(errors.New("inconsistent flavor group in reservation"),
+			// log message using baseLog since this is a static function without context
+			baseLog.Error(errors.New("inconsistent flavor group in reservation"),
 				"reservation belongs to same commitment but has different flavor group - ignoring reservation for capacity calculation",
 				"reservationName", res.Name,
 				"expectedFlavorGroup", state.FlavorGroupName,

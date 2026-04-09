@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -30,8 +31,6 @@ import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
 )
-
-var commitmentLog = ctrl.Log.WithName("commitment-reservation-controller")
 
 // CommitmentReservationController reconciles commitment Reservation objects
 type CommitmentReservationController struct {
@@ -51,13 +50,21 @@ type CommitmentReservationController struct {
 // move the current state of the cluster closer to the desired state.
 // Note: This controller only handles commitment reservations, as filtered by the predicate.
 func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := LoggerFromContext(ctx).WithValues("reservation", req.Name, "namespace", req.Namespace)
-	// Fetch the reservation object.
+	// Fetch the reservation object first to check for creator request ID.
 	var res v1alpha1.Reservation
 	if err := r.Get(ctx, req.NamespacedName, &res); err != nil {
 		// Ignore not-found errors, since they can't be fixed by an immediate requeue
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
+	// Use creator request ID from annotation for end-to-end traceability if available,
+	// otherwise generate a new one for this reconcile loop.
+	if creatorReq := res.Annotations[v1alpha1.AnnotationCreatorRequestID]; creatorReq != "" {
+		ctx = WithGlobalRequestID(ctx, creatorReq)
+	} else {
+		ctx = WithNewGlobalRequestID(ctx)
+	}
+	logger := LoggerFromContext(ctx).WithValues("component", "controller", "reservation", req.Name)
 
 	// filter for CR reservations
 	resourceName := ""
@@ -87,7 +94,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	}
 
 	if meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ReservationConditionReady) {
-		logger.Info("reservation is active, verifying allocations")
+		logger.V(1).Info("reservation is active, verifying allocations")
 
 		// Verify all allocations in Spec against actual VM state from database
 		if err := r.reconcileAllocations(ctx, &res); err != nil {
@@ -136,13 +143,17 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 
 	// Sync Spec values to Status fields for non-pre-allocated reservations
 	// This ensures the observed state reflects the desired state from Spec
-	needsStatusUpdate := false
+	// When TargetHost is set in Spec but not synced to Status, this means
+	// the scheduler found a host and we need to mark the reservation as ready.
 	if res.Spec.TargetHost != "" && res.Status.Host != res.Spec.TargetHost {
-		res.Status.Host = res.Spec.TargetHost
-		needsStatusUpdate = true
-	}
-	if needsStatusUpdate {
 		old := res.DeepCopy()
+		res.Status.Host = res.Spec.TargetHost
+		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.ReservationConditionReady,
+			Status:  metav1.ConditionTrue,
+			Reason:  "ReservationActive",
+			Message: "reservation is successfully scheduled",
+		})
 		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			// Ignore not-found errors during background deletion
@@ -153,7 +164,9 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			// Object was deleted, no need to continue
 			return ctrl.Result{}, nil
 		}
-		logger.Info("synced spec to status", "host", res.Status.Host)
+		logger.Info("synced spec to status and marked ready", "host", res.Status.Host)
+		// Return and let next reconcile handle allocation verification
+		return ctrl.Result{}, nil
 	}
 
 	// Get project ID from CommittedResourceReservation spec if available.
@@ -251,6 +264,11 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		EligibleHosts:    eligibleHosts,
 		Pipeline:         pipelineName,
 		AvailabilityZone: availabilityZone,
+		// Set hint to indicate this is a CR reservation scheduling request.
+		// This prevents other CR reservations from being unlocked during capacity filtering.
+		SchedulerHints: map[string]any{
+			"_nova_check_type": string(schedulerdelegationapi.ReserveForCommittedResourceIntent),
+		},
 	}
 
 	scheduleResp, err := r.SchedulerClient.ScheduleReservation(ctx, scheduleReq)
@@ -260,7 +278,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	}
 
 	if len(scheduleResp.Hosts) == 0 {
-		logger.Info("no hosts found for reservation")
+		logger.Info("no hosts found for reservation", "reservation", res.Name, "flavorName", resourceName)
 		old := res.DeepCopy()
 		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.ReservationConditionReady,
@@ -281,11 +299,12 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, nil // No need to requeue, we didn't find a host.
 	}
 
-	// Update the reservation with the found host (idx 0)
+	// Update the reservation Spec with the found host (idx 0)
+	// Only update Spec here - the Status will be synced in the next reconcile cycle
+	// This avoids race conditions from doing two patches in one reconcile
 	host := scheduleResp.Hosts[0]
 	logger.Info("found host for reservation", "host", host)
 
-	// First update Spec
 	old := res.DeepCopy()
 	res.Spec.TargetHost = host
 	if err := r.Patch(ctx, &res, client.MergeFrom(old)); err != nil {
@@ -298,32 +317,15 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, nil
 	}
 
-	// Then update Status
-	old = res.DeepCopy()
-	meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
-		Type:    v1alpha1.ReservationConditionReady,
-		Status:  metav1.ConditionTrue,
-		Reason:  "ReservationActive",
-		Message: "reservation is successfully scheduled",
-	})
-	res.Status.Host = host
-	patch := client.MergeFrom(old)
-	if err := r.Status().Patch(ctx, &res, patch); err != nil {
-		// Ignore not-found errors during background deletion
-		if client.IgnoreNotFound(err) != nil {
-			logger.Error(err, "failed to patch reservation status")
-			return ctrl.Result{}, err
-		}
-		// Object was deleted, no need to continue
-		return ctrl.Result{}, nil
-	}
-	return ctrl.Result{}, nil // No need to requeue, the reservation is now active.
+	// The Spec patch will trigger a re-reconcile, which will sync Status in the
+	// "Sync Spec values to Status" section above
+	return ctrl.Result{}, nil
 }
 
 // reconcileAllocations verifies all allocations in Spec against actual Nova VM state.
 // It updates Status.Allocations based on the actual host location of each VM.
 func (r *CommitmentReservationController) reconcileAllocations(ctx context.Context, res *v1alpha1.Reservation) error {
-	logger := LoggerFromContext(ctx)
+	logger := LoggerFromContext(ctx).WithValues("component", "controller")
 
 	// Skip if no CommittedResourceReservation
 	if res.Spec.CommittedResourceReservation == nil {
@@ -334,7 +336,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 
 	// Skip if no allocations to verify
 	if len(res.Spec.CommittedResourceReservation.Allocations) == 0 {
-		logger.Info("no allocations to verify", "reservation", res.Name)
+		logger.V(1).Info("no allocations to verify", "reservation", res.Name)
 		return nil
 	}
 
@@ -360,9 +362,8 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 			actualHost := server.OSEXTSRVATTRHost
 			newStatusAllocations[vmUUID] = actualHost
 
-			logger.Info("verified VM allocation",
+			logger.V(1).Info("verified VM allocation",
 				"vm", vmUUID,
-				"reservation", res.Name,
 				"actualHost", actualHost,
 				"expectedHost", res.Status.Host)
 		} else {
@@ -392,8 +393,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		return fmt.Errorf("failed to patch reservation status: %w", err)
 	}
 
-	logger.Info("reconciled allocations",
-		"reservation", res.Name,
+	logger.V(1).Info("reconciled allocations",
 		"specAllocations", len(res.Spec.CommittedResourceReservation.Allocations),
 		"statusAllocations", len(newStatusAllocations))
 
@@ -440,18 +440,18 @@ func (r *CommitmentReservationController) listServersByProjectID(ctx context.Con
 		return nil, errors.New("database connection not initialized")
 	}
 
-	log := logf.FromContext(ctx)
+	logger := LoggerFromContext(ctx).WithValues("component", "controller")
 
 	// Query servers from the database cache.
 	var servers []nova.Server
 	_, err := r.DB.Select(&servers,
-		"SELECT * FROM openstack_servers WHERE tenant_id = $1",
+		"SELECT * FROM "+nova.Server{}.TableName()+" WHERE tenant_id = $1",
 		projectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query servers from database: %w", err)
 	}
 
-	log.V(1).Info("queried servers from database",
+	logger.V(1).Info("queried servers from database",
 		"projectID", projectID,
 		"serverCount", len(servers))
 
@@ -508,10 +508,22 @@ func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl
 	})); err != nil {
 		return err
 	}
-	return multicluster.BuildController(mcl, mgr).
-		For(&v1alpha1.Reservation{}).
-		WithEventFilter(commitmentReservationPredicate).
-		Named("commitment-reservation").
+
+	// Use WatchesMulticluster to watch Reservations across all configured clusters
+	// (home + remotes). This is required because Reservation CRDs may be stored
+	// in remote clusters, not just the home cluster. Without this, the controller
+	// would only see reservations in the home cluster's cache.
+	bldr := multicluster.BuildController(mcl, mgr)
+	bldr, err := bldr.WatchesMulticluster(
+		&v1alpha1.Reservation{},
+		&handler.EnqueueRequestForObject{},
+		commitmentReservationPredicate,
+	)
+	if err != nil {
+		return err
+	}
+
+	return bldr.Named("commitment-reservation").
 		WithOptions(controller.Options{
 			// We want to process reservations one at a time to avoid overbooking.
 			MaxConcurrentReconciles: 1,

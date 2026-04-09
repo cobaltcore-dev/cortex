@@ -5,8 +5,6 @@ package commitments
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	gosync "sync"
 	"time"
@@ -17,7 +15,6 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/must"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -48,7 +45,7 @@ func NewCommitmentsClient() CommitmentsClient {
 }
 
 func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf SyncerConfig) error {
-	log := ctrl.Log.WithName("CommitmentClient")
+	logger := LoggerFromContext(ctx).WithValues("component", "client")
 
 	var authenticatedHTTP = http.DefaultClient
 	if conf.SSOSecretRef != nil {
@@ -72,7 +69,7 @@ func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf
 		Type:         "identity",
 		Availability: "public",
 	}))
-	log.Info("using identity endpoint", "url", url)
+	logger.Info("using identity endpoint", "url", url)
 	c.keystone = &gophercloud.ServiceClient{
 		ProviderClient: c.provider,
 		Endpoint:       url,
@@ -84,7 +81,7 @@ func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf
 		Type:         "compute",
 		Availability: "public",
 	}))
-	log.Info("using nova endpoint", "url", url)
+	logger.Info("using nova endpoint", "url", url)
 	c.nova = &gophercloud.ServiceClient{
 		ProviderClient: c.provider,
 		Endpoint:       url,
@@ -97,7 +94,7 @@ func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf
 		Type:         "resources",
 		Availability: "public",
 	}))
-	log.Info("using limes endpoint", "url", url)
+	logger.Info("using limes endpoint", "url", url)
 	c.limes = &gophercloud.ServiceClient{
 		ProviderClient: c.provider,
 		Endpoint:       url,
@@ -107,9 +104,9 @@ func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf
 }
 
 func (c *commitmentsClient) ListProjects(ctx context.Context) ([]Project, error) {
-	log := ctrl.Log.WithName("CommitmentClient")
+	logger := LoggerFromContext(ctx).WithValues("component", "client")
 
-	log.V(1).Info("fetching projects from keystone")
+	logger.V(1).Info("fetching projects from keystone")
 	allPages, err := projects.List(c.keystone, nil).AllPages(ctx)
 	if err != nil {
 		return nil, err
@@ -120,15 +117,15 @@ func (c *commitmentsClient) ListProjects(ctx context.Context) ([]Project, error)
 	if err := allPages.(projects.ProjectPage).ExtractInto(data); err != nil {
 		return nil, err
 	}
-	log.V(1).Info("fetched projects from keystone", "count", len(data.Projects))
+	logger.V(1).Info("fetched projects from keystone", "count", len(data.Projects))
 	return data.Projects, nil
 }
 
 // ListCommitmentsByID fetches commitments for all projects in parallel.
 func (c *commitmentsClient) ListCommitmentsByID(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
-	log := ctrl.Log.WithName("CommitmentClient")
+	logger := LoggerFromContext(ctx).WithValues("component", "client")
 
-	log.V(1).Info("fetching commitments from limes", "projects", len(projects))
+	logger.V(1).Info("fetching commitments from limes", "projects", len(projects))
 	commitmentsMutex := gosync.Mutex{}
 	commitments := make(map[string]Commitment)
 	var wg gosync.WaitGroup
@@ -161,11 +158,11 @@ func (c *commitmentsClient) ListCommitmentsByID(ctx context.Context, projects ..
 	// Return the first error encountered, if any.
 	for err := range errChan {
 		if err != nil {
-			log.Error(err, "failed to resolve commitments")
+			logger.Error(err, "failed to resolve commitments")
 			return nil, err
 		}
 	}
-	log.V(1).Info("resolved commitments from limes", "count", len(commitments))
+	logger.V(1).Info("resolved commitments from limes", "count", len(commitments))
 	return commitments, nil
 }
 
@@ -174,26 +171,21 @@ func (c *commitmentsClient) listCommitments(ctx context.Context, project Project
 		"/domains/" + project.DomainID +
 		"/projects/" + project.ID +
 		"/commitments"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("X-Auth-Token", c.limes.Token())
-	resp, err := c.limes.HTTPClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
+
+	// Use gophercloud's Get method which handles re-authentication automatically
 	var list struct {
 		Commitments []Commitment `json:"commitments"`
 	}
-	err = json.NewDecoder(resp.Body).Decode(&list)
+	resp, err := c.limes.Get(ctx, url, &list, &gophercloud.RequestOpts{
+		OkCodes: []int{http.StatusOK},
+	})
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	if err != nil {
 		return nil, err
 	}
+
 	// Add the project information to each commitment.
 	var commitments []Commitment
 	for _, c := range list.Commitments {

@@ -21,11 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-var apiLog = ctrl.Log.WithName("commitment-reservation-api")
 
 // sortedKeys returns map keys sorted alphabetically for deterministic iteration.
 func sortedKeys[K ~string, V any](m map[K]V) []K {
@@ -39,16 +36,31 @@ func sortedKeys[K ~string, V any](m map[K]V) []K {
 	return keys
 }
 
-// implements POST /v1/change-commitments from Limes LIQUID API:
+// implements POST /commitments/v1/change-commitments from Limes LIQUID API:
 // See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/commitment.go
 // See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid
 //
 // This endpoint handles commitment changes by creating/updating/deleting Reservation CRDs based on the commitment lifecycle.
 // A request may contain multiple commitment changes which are processed in a single transaction. If any change fails, all changes are rolled back.
 func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	// Initialize
+	resp := liquid.CommitmentChangeResponse{}
+	req := liquid.CommitmentChangeRequest{}
+	statusCode := http.StatusOK
+
+	// Extract or generate request ID for tracing - always set in response header
+	requestID := r.Header.Get("X-Request-ID")
+	if requestID == "" {
+		requestID = uuid.New().String()
+	}
+	w.Header().Set("X-Request-ID", requestID)
+
 	// Check if API is enabled
 	if !api.config.EnableChangeCommitmentsAPI {
-		http.Error(w, "change-commitments API is disabled", http.StatusServiceUnavailable)
+		statusCode = http.StatusServiceUnavailable
+		http.Error(w, "change-commitments API is disabled", statusCode)
+		api.recordMetrics(req, resp, statusCode, startTime)
 		return
 	}
 
@@ -56,36 +68,32 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	api.changeMutex.Lock()
 	defer api.changeMutex.Unlock()
 
-	// Extract or generate request ID for tracing
-	requestID := r.Header.Get("X-Request-ID")
-	if requestID == "" {
-		requestID = uuid.New().String()
-	}
-	ctx := reservations.WithGlobalRequestID(context.Background(), requestID)
-	logger := APILoggerFromContext(ctx).WithValues("endpoint", "/v1/change-commitments")
+	ctx := reservations.WithGlobalRequestID(context.Background(), "committed-resource-"+requestID)
+	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/change-commitments")
 
 	// Only accept POST method
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		statusCode = http.StatusMethodNotAllowed
+		http.Error(w, "Method not allowed", statusCode)
+		api.recordMetrics(req, resp, statusCode, startTime)
 		return
 	}
 
 	// Parse request body
-	var req liquid.CommitmentChangeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		logger.Error(err, "invalid request body")
-		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
+		statusCode = http.StatusBadRequest
+		http.Error(w, "Invalid request body: "+err.Error(), statusCode)
+		api.recordMetrics(req, resp, statusCode, startTime)
 		return
 	}
 
 	logger.Info("received change commitments request", "affectedProjects", len(req.ByProject), "dryRun", req.DryRun, "availabilityZone", req.AZ)
 
-	// Initialize response
-	resp := liquid.CommitmentChangeResponse{}
-
 	// Check for dry run -> early reject, not supported yet
 	if req.DryRun {
 		resp.RejectionReason = "Dry run not supported yet"
+		api.recordMetrics(req, resp, statusCode, startTime)
 		logger.Info("rejecting dry run request")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -97,14 +105,26 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 
 	// Process commitment changes
 	// For now, we'll implement a simplified path that checks capacity for immediate start CRs
+
 	if err := api.processCommitmentChanges(ctx, w, logger, req, &resp); err != nil {
 		// Error already written to response by processCommitmentChanges
+		// Determine status code from error context (409 or 503)
+		if strings.Contains(err.Error(), "version mismatch") {
+			statusCode = http.StatusConflict
+		} else if strings.Contains(err.Error(), "caches not ready") {
+			statusCode = http.StatusServiceUnavailable
+		}
+		// Record metrics for error cases
+		api.recordMetrics(req, resp, statusCode, startTime)
 		return
 	}
 
+	// Record metrics
+	api.recordMetrics(req, resp, statusCode, startTime)
+
 	// Return response
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(statusCode)
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		return
 	}
@@ -114,7 +134,7 @@ func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.Respons
 	manager := NewReservationManager(api.client)
 	requireRollback := false
 	failedCommitments := make(map[string]string) // commitmentUUID to reason for failure, for better response messages in case of rollback
-	logger.Info("processing commitment change request", "availabilityZone", req.AZ, "dryRun", req.DryRun, "affectedProjects", len(req.ByProject))
+	creatorRequestID := reservations.GlobalRequestIDFromContext(ctx)
 
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
@@ -168,9 +188,15 @@ ProcessLoop:
 				break ProcessLoop
 			}
 
+			// Reject commitments for flavor groups that don't accept CRs
+			if !FlavorGroupAcceptsCommitments(&flavorGroup) {
+				resp.RejectionReason = FlavorGroupCommitmentRejectionReason(&flavorGroup)
+				requireRollback = true
+				break ProcessLoop
+			}
+
 			for _, commitment := range resourceChanges.Commitments {
-				// Additional per-commitment validation if needed
-				logger.Info("processing commitment change", "commitmentUUID", commitment.UUID, "projectID", projectID, "resourceName", resourceName, "oldStatus", commitment.OldStatus.UnwrapOr("none"), "newStatus", commitment.NewStatus.UnwrapOr("none"))
+				logger.V(1).Info("processing commitment", "commitmentUUID", commitment.UUID, "oldStatus", commitment.OldStatus.UnwrapOr("none"), "newStatus", commitment.NewStatus.UnwrapOr("none"))
 
 				// TODO add configurable upper limit validation for commitment size (number of instances) to prevent excessive reservation creation
 				// TODO add domain
@@ -222,18 +248,20 @@ ProcessLoop:
 					requireRollback = true
 					break ProcessLoop
 				}
+				// Set creator request ID for traceability across controller reconciles
+				stateDesired.CreatorRequestID = creatorRequestID
 
-				logger.Info("applying commitment state change", "commitmentUUID", commitment.UUID, "oldState", stateBefore, "desiredState", stateDesired)
+				logger.V(1).Info("applying commitment state change", "commitmentUUID", commitment.UUID, "oldMemory", stateBefore.TotalMemoryBytes, "desiredMemory", stateDesired.TotalMemoryBytes)
 
-				touchedReservations, deletedReservations, err := manager.ApplyCommitmentState(ctx, logger, stateDesired, flavorGroups, "changeCommitmentsApi")
+				applyResult, err := manager.ApplyCommitmentState(ctx, logger, stateDesired, flavorGroups, "changeCommitmentsApi")
 				if err != nil {
 					failedCommitments[string(commitment.UUID)] = "failed to apply commitment state"
 					logger.Info("failed to apply commitment state for commitment", "commitmentUUID", commitment.UUID, "error", err)
 					requireRollback = true
 					break ProcessLoop
 				}
-				logger.Info("applied commitment state change", "commitmentUUID", commitment.UUID, "touchedReservations", len(touchedReservations), "deletedReservations", len(deletedReservations))
-				reservationsToWatch = append(reservationsToWatch, touchedReservations...)
+				logger.V(1).Info("applied commitment state change", "commitmentUUID", commitment.UUID, "touchedReservations", len(applyResult.TouchedReservations), "deletedReservations", len(applyResult.RemovedReservations))
+				reservationsToWatch = append(reservationsToWatch, applyResult.TouchedReservations...)
 			}
 		}
 	}
@@ -254,6 +282,7 @@ ProcessLoop:
 			}
 			if len(failedReservations) == 0 {
 				resp.RejectionReason += "timeout reached while processing commitment changes"
+				api.monitor.timeouts.Inc()
 			}
 			requireRollback = true
 		}
@@ -265,9 +294,9 @@ ProcessLoop:
 		// Build rejection reason from failed commitments
 		if len(failedCommitments) > 0 {
 			var reasonBuilder strings.Builder
-			reasonBuilder.WriteString(fmt.Sprintf("%d commitment(s) failed to apply: ", len(failedCommitments)))
+			fmt.Fprintf(&reasonBuilder, "%d commitment(s) failed to apply: ", len(failedCommitments))
 			for commitmentUUID, reason := range failedCommitments {
-				reasonBuilder.WriteString(fmt.Sprintf("\n- commitment %s: %s", commitmentUUID, reason))
+				fmt.Fprintf(&reasonBuilder, "\n- commitment %s: %s", commitmentUUID, reason)
 			}
 			resp.RejectionReason = reasonBuilder.String()
 		}
@@ -276,7 +305,7 @@ ProcessLoop:
 		for commitmentUUID, state := range statesBefore {
 			// Rollback to statesBefore for this commitment
 			logger.Info("applying rollback for commitment", "commitmentUUID", commitmentUUID, "stateBefore", state)
-			_, _, err := manager.ApplyCommitmentState(ctx, logger, state, flavorGroups, "changeCommitmentsApiRollback")
+			_, err := manager.ApplyCommitmentState(ctx, logger, state, flavorGroups, "changeCommitmentsApiRollback")
 			if err != nil {
 				logger.Info("failed to apply rollback state for commitment", "commitmentUUID", commitmentUUID, "error", err)
 				// continue with best effort rollback for other projects
@@ -292,6 +321,7 @@ ProcessLoop:
 }
 
 // watchReservationsUntilReady polls until all reservations reach Ready=True or timeout.
+// Returns failed reservations and any errors encountered.
 func watchReservationsUntilReady(
 	ctx context.Context,
 	logger logr.Logger,
@@ -306,18 +336,31 @@ func watchReservationsUntilReady(
 	}
 
 	deadline := time.Now().Add(timeout)
+	startTime := time.Now()
+	totalReservations := len(reservations)
 
 	reservationsToWatch := make([]v1alpha1.Reservation, len(reservations))
 	copy(reservationsToWatch, reservations)
 
+	// Track successful reservations for summary
+	var successfulReservations []string
+	pollCount := 0
+
 	for {
+		pollCount++
 		var stillWaiting []v1alpha1.Reservation
 		if time.Now().After(deadline) {
 			errors = append(errors, fmt.Errorf("timeout after %v waiting for reservations to become ready", timeout))
+			// Log summary on timeout
+			logger.Info("reservation watch completed (timeout)",
+				"total", totalReservations,
+				"ready", len(successfulReservations),
+				"failed", len(failedReservations),
+				"timedOut", len(reservationsToWatch),
+				"duration", time.Since(startTime).Round(time.Millisecond),
+				"polls", pollCount)
 			return failedReservations, errors
 		}
-
-		allAreReady := true
 
 		for _, res := range reservationsToWatch {
 			// Fetch current state
@@ -328,9 +371,7 @@ func watchReservationsUntilReady(
 			}
 
 			if err := k8sClient.Get(ctx, nn, &current); err != nil {
-				allAreReady = false
-				// Reservation is still in process of being created, or there is a transient error, continue waiting for it
-				logger.V(1).Info("transient error getting reservation, will retry", "reservation", res.Name, "error", err)
+				// Reservation is still in process of being created, or there is a transient error
 				stillWaiting = append(stillWaiting, res)
 				continue
 			}
@@ -343,43 +384,40 @@ func watchReservationsUntilReady(
 
 			if readyCond == nil {
 				// Condition not set yet, keep waiting
-				allAreReady = false
 				stillWaiting = append(stillWaiting, res)
 				continue
 			}
 
 			switch readyCond.Status {
 			case metav1.ConditionTrue:
-				// check if host is not set in spec or status: if so, no capacity left to schedule the reservation
+				// Only consider truly ready if Status.Host is populated
 				if current.Spec.TargetHost == "" || current.Status.Host == "" {
-					allAreReady = false
-					failedReservations = append(failedReservations, current)
-					logger.Info("insufficient capacity for reservation", "reservation", current.Name, "reason", readyCond.Reason, "message", readyCond.Message, "targetHostInSpec", current.Spec.TargetHost, "hostInStatus", current.Status.Host)
-				} else {
-					// Reservation is successfully scheduled, no further action needed
-					logger.Info("reservation ready", "reservation", current.Name, "host", current.Spec.TargetHost)
+					stillWaiting = append(stillWaiting, res)
+					continue
 				}
+				// Reservation is successfully scheduled - track for summary
+				successfulReservations = append(successfulReservations, current.Name)
 
 			case metav1.ConditionFalse:
-				failedReservations = append(failedReservations, res)
+				// Any failure reason counts as failed
+				failedReservations = append(failedReservations, current)
 			case metav1.ConditionUnknown:
-				allAreReady = false
 				stillWaiting = append(stillWaiting, res)
 			}
 		}
 
-		if allAreReady || len(stillWaiting) == 0 {
-			logger.Info("all reservations checked",
-				"failed", len(failedReservations))
+		if len(stillWaiting) == 0 {
+			// All reservations have reached a terminal state - log summary
+			logger.Info("reservation watch completed",
+				"total", totalReservations,
+				"ready", len(successfulReservations),
+				"failed", len(failedReservations),
+				"duration", time.Since(startTime).Round(time.Millisecond),
+				"polls", pollCount)
 			return failedReservations, errors
 		}
 
 		reservationsToWatch = stillWaiting
-		// Log progress
-		logger.V(1).Info("waiting for reservations to become ready",
-			"notReady", len(reservationsToWatch),
-			"total", len(reservations),
-			"timeRemaining", time.Until(deadline).Round(time.Second))
 
 		// Wait before next poll
 		select {

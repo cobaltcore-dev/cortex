@@ -39,6 +39,10 @@ func (m *mockDetectorCycleBreakerNovaClient) GetServerMigrations(ctx context.Con
 	return []migration{}, nil
 }
 
+func (m *mockDetectorCycleBreakerNovaClient) ListProjectServers(ctx context.Context, projectID string) ([]ServerDetail, error) {
+	return []ServerDetail{}, nil
+}
+
 func TestDetectorCycleBreaker_Filter(t *testing.T) {
 	tests := []struct {
 		name       string

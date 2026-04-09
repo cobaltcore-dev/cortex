@@ -317,9 +317,9 @@ func TestCommitmentsClient_listCommitments_HTTPError(t *testing.T) {
 		t.Errorf("expected nil commitments, got %+v", commitments)
 	}
 
-	expectedError := "unexpected status code: 404"
-	if err.Error() != expectedError {
-		t.Errorf("expected error %q, got %q", expectedError, err.Error())
+	// Gophercloud returns a more detailed error message
+	if !strings.Contains(err.Error(), "404") {
+		t.Errorf("expected error to contain '404', got %q", err.Error())
 	}
 }
 

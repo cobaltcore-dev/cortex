@@ -4,6 +4,7 @@
 package db
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -116,6 +117,56 @@ func TestReplaceAll(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("expected 1 new records, got %d", count)
+	}
+}
+
+func TestReplaceAllWithDuplicateKeys(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	db := DB{DbMap: dbEnv.DbMap}
+	defer dbEnv.Close()
+
+	table := db.AddTable(MockTable{})
+	if err := db.CreateTable(table); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Insert initial records.
+	for _, record := range []MockTable{{ID: 1, Name: "old"}} {
+		if err := db.Insert(&record); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	}
+
+	// ReplaceAll with duplicate primary keys in the input.
+	dupes := []MockTable{
+		{ID: 10, Name: "first"},
+		{ID: 10, Name: "duplicate"},
+		{ID: 20, Name: "other"},
+	}
+	err := ReplaceAll(db, dupes...)
+
+	// The insert should fail because of the duplicate key.
+	if err == nil {
+		t.Fatal("expected an error for duplicate keys, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to insert") {
+		t.Fatalf("expected insert error, got: %v", err)
+	}
+
+	// The old data must still be intact because the transaction was rolled back.
+	var count int
+	if err := db.SelectOne(&count, "SELECT COUNT(*) FROM mock_table"); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 record (old data intact after rollback), got %d", count)
+	}
+	var name string
+	if err := db.SelectOne(&name, "SELECT name FROM mock_table WHERE id = 1"); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if name != "old" {
+		t.Fatalf("expected old data to be intact, got name=%q", name)
 	}
 }
 

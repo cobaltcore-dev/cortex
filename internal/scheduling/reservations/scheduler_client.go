@@ -118,6 +118,7 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 		Context: api.NovaRequestContext{
 			RequestID:       RequestIDFromContext(ctx),
 			GlobalRequestID: globalReqID,
+			ProjectID:       req.ProjectID,
 		},
 		Spec: api.NovaObject[api.NovaSpec]{
 			Data: api.NovaSpec{

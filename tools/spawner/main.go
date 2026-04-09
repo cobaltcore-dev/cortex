@@ -79,7 +79,7 @@ func main() {
 			panic("No password set in OS_PASSWORD or OS_PW_CMD env.")
 		}
 
-		cmd := exec.Command("sh", "-c", pwdCmd)
+		cmd := exec.Command("sh", "-c", pwdCmd) //nolint:gosec // pwdCmd is set by the operator via OS_PW_CMD env var, intentional
 		cmd.Stdin = os.Stdin
 		output := must.Return(cmd.Output())
 		password = strings.TrimSpace(string(output))

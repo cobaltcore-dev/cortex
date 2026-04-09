@@ -47,6 +47,41 @@ type Config struct {
 	// When false, the endpoint will return HTTP 503 Service Unavailable.
 	// The info endpoint remains available for health checks.
 	EnableChangeCommitmentsAPI bool `json:"committedResourceEnableChangeCommitmentsAPI"`
+
+	// EnableReportUsageAPI controls whether the report-usage API endpoint is active.
+	// When false, the endpoint will return HTTP 503 Service Unavailable.
+	// This can be used as an emergency switch if the usage reporting is causing issues.
+	EnableReportUsageAPI bool `json:"committedResourceEnableReportUsageAPI"`
+
+	// EnableReportCapacityAPI controls whether the report-capacity API endpoint is active.
+	// When false, the endpoint will return HTTP 503 Service Unavailable.
+	// This can be used as an emergency switch if the capacity reporting is causing issues.
+	EnableReportCapacityAPI bool `json:"committedResourceEnableReportCapacityAPI"`
+}
+
+// ApplyDefaults fills in any unset values with defaults.
+func (c *Config) ApplyDefaults() {
+	defaults := DefaultConfig()
+	if c.RequeueIntervalActive == 0 {
+		c.RequeueIntervalActive = defaults.RequeueIntervalActive
+	}
+	if c.RequeueIntervalRetry == 0 {
+		c.RequeueIntervalRetry = defaults.RequeueIntervalRetry
+	}
+	if c.PipelineDefault == "" {
+		c.PipelineDefault = defaults.PipelineDefault
+	}
+	if c.SchedulerURL == "" {
+		c.SchedulerURL = defaults.SchedulerURL
+	}
+	if c.ChangeAPIWatchReservationsTimeout == 0 {
+		c.ChangeAPIWatchReservationsTimeout = defaults.ChangeAPIWatchReservationsTimeout
+	}
+	if c.ChangeAPIWatchReservationsPollInterval == 0 {
+		c.ChangeAPIWatchReservationsPollInterval = defaults.ChangeAPIWatchReservationsPollInterval
+	}
+	// Note: EnableChangeCommitmentsAPI, EnableReportUsageAPI, EnableReportCapacityAPI
+	// are booleans where false is a valid value, so we don't apply defaults for them
 }
 
 func DefaultConfig() Config {
@@ -58,5 +93,7 @@ func DefaultConfig() Config {
 		ChangeAPIWatchReservationsTimeout:      10 * time.Second,
 		ChangeAPIWatchReservationsPollInterval: 500 * time.Millisecond,
 		EnableChangeCommitmentsAPI:             true,
+		EnableReportUsageAPI:                   true,
+		EnableReportCapacityAPI:                true,
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand"
 	"net/http"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -23,6 +24,16 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
+
+// Custom configuration for the Nova external scheduler api.
+type HTTPAPIConfig struct {
+	// Number of top hosts to shuffle for evacuation requests.
+	// Set to 0 or negative to disable shuffling.
+	EvacuationShuffleK int `json:"evacuationShuffleK,omitempty"`
+	// NovaLimitHostsToRequest, if true, will filter the Nova scheduler response
+	// to only include hosts that were in the original request.
+	NovaLimitHostsToRequest bool `json:"novaLimitHostsToRequest,omitempty"`
+}
 
 type HTTPAPIDelegate interface {
 	// Process the decision from the API. Should create and return the updated decision.
@@ -37,12 +48,14 @@ type HTTPAPI interface {
 type httpAPI struct {
 	monitor  scheduling.APIMonitor
 	delegate HTTPAPIDelegate
+	config   HTTPAPIConfig
 }
 
-func NewAPI(delegate HTTPAPIDelegate) HTTPAPI {
+func NewAPI(config HTTPAPIConfig, delegate HTTPAPIDelegate) HTTPAPI {
 	return &httpAPI{
 		monitor:  scheduling.NewSchedulerMonitor(),
 		delegate: delegate,
+		config:   config,
 	}
 }
 
@@ -108,6 +121,26 @@ func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerReque
 	}
 }
 
+// shuffleTopHosts randomly reorders the first k hosts if the request
+// is an evacuation. This helps distribute evacuated VMs across multiple hosts
+// rather than concentrating them on the single "best" host.
+func shuffleTopHosts(hosts []string, k int) []string {
+	if k <= 0 {
+		return hosts
+	}
+	n := min(k, len(hosts))
+	if n <= 1 {
+		return hosts
+	}
+	result := make([]string, len(hosts))
+	copy(result, hosts)
+	rand.Shuffle(n, func(i, j int) {
+		result[i], result[j] = result[j], result[i]
+	})
+	slog.Info("shuffled top hosts for evacuation", "k", n, "hosts", result[:n])
+	return result
+}
+
 // Limit the external scheduler response to the hosts provided in the  external
 // scheduler request. i.e. don't provide new hosts that weren't in the request,
 // since the Nova scheduler won't know how to handle them.
@@ -145,7 +178,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	// Exit early if the request method is not POST.
 	if r.Method != http.MethodPost {
 		internalErr := fmt.Errorf("invalid request method: %s", r.Method)
-		c.Respond(http.StatusMethodNotAllowed, internalErr, "invalid request method")
+		c.Respond(nil, http.StatusMethodNotAllowed, internalErr, "invalid request method")
 		return
 	}
 
@@ -155,7 +188,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	// If configured, log out the complete request body.
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		c.Respond(http.StatusInternalServerError, err, "failed to read request body")
+		c.Respond(nil, http.StatusInternalServerError, err, "failed to read request body")
 		return
 	}
 	raw := runtime.RawExtension{Raw: body}
@@ -164,17 +197,15 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	cp := body
 	reader := bytes.NewReader(cp)
 	if err := json.NewDecoder(reader).Decode(&requestData); err != nil {
-		c.Respond(http.StatusBadRequest, err, "failed to decode request body")
+		c.Respond(nil, http.StatusBadRequest, err, "failed to decode request body")
 		return
 	}
-	slog.Info(
-		"handling POST request", "url", "/scheduler/nova/external",
-		"hosts", len(requestData.Hosts), "spec", requestData.Spec,
-	)
+	logger := slog.With(requestData.GetTraceLogArgs())
+	logger.Info("handling POST request", "url", "/scheduler/nova/external", "body", string(body))
 
 	if ok, reason := httpAPI.canRunScheduler(requestData); !ok {
 		internalErr := fmt.Errorf("cannot run scheduler: %s", reason)
-		c.Respond(http.StatusBadRequest, internalErr, reason)
+		c.Respond(logger, http.StatusBadRequest, internalErr, reason)
 		return
 	}
 
@@ -183,10 +214,10 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		var err error
 		requestData.Pipeline, err = httpAPI.inferPipelineName(requestData)
 		if err != nil {
-			c.Respond(http.StatusBadRequest, err, err.Error())
+			c.Respond(logger, http.StatusBadRequest, err, err.Error())
 			return
 		}
-		slog.Info("inferred pipeline name", "pipeline", requestData.Pipeline)
+		logger.Info("inferred pipeline name", "pipeline", requestData.Pipeline)
 	}
 
 	decision := &v1alpha1.Decision{
@@ -204,29 +235,40 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 			},
 			ResourceID: requestData.Spec.Data.InstanceUUID,
 			NovaRaw:    &raw,
+			Intent:     v1alpha1.SchedulingIntentUnknown,
 		},
 	}
 	ctx := r.Context()
 	if err := httpAPI.delegate.ProcessNewDecisionFromAPI(ctx, decision); err != nil {
-		c.Respond(http.StatusInternalServerError, err, "failed to process scheduling decision")
+		c.Respond(logger, http.StatusInternalServerError, err, "failed to process scheduling decision")
 		return
 	}
 	// Check if the decision contains status conditions indicating an error.
 	if meta.IsStatusConditionFalse(decision.Status.Conditions, v1alpha1.DecisionConditionReady) {
-		c.Respond(http.StatusInternalServerError, errors.New("decision contains error condition"), "decision failed")
+		c.Respond(logger, http.StatusInternalServerError, errors.New("decision contains error condition"), "decision failed")
 		return
 	}
 	if decision.Status.Result == nil {
-		c.Respond(http.StatusInternalServerError, errors.New("decision didn't produce a result"), "decision failed")
+		c.Respond(logger, http.StatusInternalServerError, errors.New("decision didn't produce a result"), "decision failed")
 		return
 	}
 	hosts := decision.Status.Result.OrderedHosts
-	hosts = limitHostsToRequest(requestData, hosts)
+	if httpAPI.config.NovaLimitHostsToRequest {
+		hosts = limitHostsToRequest(requestData, hosts)
+		logger.Info("limited hosts to request",
+			"hosts", hosts, "originalHosts", decision.Status.Result.OrderedHosts)
+	}
+	// This is a hack to address the problem that Nova only uses the first host in hosts for evacuation requests.
+	// Only for evacuation we shuffle the first k hosts to ensure that we do not get stuck on a single host
+	intent, err := requestData.GetIntent()
+	if err == nil && intent == api.EvacuateIntent {
+		hosts = shuffleTopHosts(hosts, httpAPI.config.EvacuationShuffleK)
+	}
 	response := api.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(response); err != nil {
-		c.Respond(http.StatusInternalServerError, err, "failed to encode response")
+		c.Respond(logger, http.StatusInternalServerError, err, "failed to encode response")
 		return
 	}
-	c.Respond(http.StatusOK, nil, "Success")
+	c.Respond(logger, http.StatusOK, nil, "Success")
 }

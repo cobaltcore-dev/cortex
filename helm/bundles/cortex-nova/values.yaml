@@ -65,12 +65,6 @@ openstack:
 kvm:
   # Use this flag to enable/disable KVM host related features.
   enabled: false
-  # Params for the filter_requested_destination filter step.
-  filterRequestedDestinationParams: []
-  # Example:
-  # filterRequestedDestinationParams:
-  #   - {key: ignoredHostnames, stringListValue: []}
-  #   - {key: ignoredAggregates, stringListValue: []}
 
 cortex: &cortex
   crd: {enable: false}
@@ -85,6 +79,8 @@ cortex: &cortex
         gvks:
           - cortex.cloud/v1alpha1/Decision
           - cortex.cloud/v1alpha1/DecisionList
+          - cortex.cloud/v1alpha1/History
+          - cortex.cloud/v1alpha1/HistoryList
           - cortex.cloud/v1alpha1/Descheduling
           - cortex.cloud/v1alpha1/DeschedulingList
           - cortex.cloud/v1alpha1/Pipeline
@@ -132,11 +128,16 @@ cortex-scheduling-controllers:
       - nova-pipeline-controllers
       - nova-deschedulings-executor
       - hypervisor-overcommit-controller
-      - explanation-controller
       - committed-resource-reservations-controller
       - failover-reservations-controller
     enabledTasks:
-      - nova-decisions-cleanup-task
+      - nova-history-cleanup-task
+    # If true, the external scheduler API will limit the list of hosts in its
+    # response to those included in the scheduling request.
+    novaLimitHostsToRequest: true
+    # Number of top hosts to shuffle for evacuation requests.
+    # Set to 0 or negative to disable shuffling.
+    evacuationShuffleK: 3
     # CommittedResourceFlavorGroupPipelines maps flavor group IDs to pipeline names for CR reservations
     # This allows different scheduling strategies per flavor group (e.g., HANA vs GP)
     committedResourceFlavorGroupPipelines:
@@ -160,6 +161,12 @@ cortex-scheduling-controllers:
     # Whether the change-commitments API endpoint is active
     # When false, the endpoint returns HTTP 503. The info endpoint remains available.
     committedResourceEnableChangeCommitmentsAPI: true
+    # Whether the report-usage API endpoint is active
+    # When false, the endpoint returns HTTP 503.
+    committedResourceEnableReportUsageAPI: true
+    # Whether the report-capacity API endpoint is active
+    # When false, the endpoint returns HTTP 503.
+    committedResourceEnableReportCapacityAPI: true
     # OvercommitMappings is a list of mappings that map hypervisor traits to
     # overcommit ratios. Note that this list is applied in order, so if there
     # are multiple mappings applying to the same hypervisors, the last mapping
@@ -173,15 +180,18 @@ cortex-scheduling-controllers:
     # Maps flavor name patterns (glob) to required failover count
     # Example: {"hana_*": 2, "m1.xlarge": 1}
     flavorFailoverRequirements:
-      "*": 1
+      "*": 2
     # How often to check for missing failover reservations (periodic bulk reconciliation)
-    reconcileInterval: 15m
+    reconcileInterval: 5m
     # Used when maxVMsToProcess limits processing, allows faster catch-up and for the first reconcile
     shortReconcileInterval: 1m
     # Number of max VMs to process in one periodic reconciliation loop
-    maxVMsToProcess: 5
+    maxVMsToProcess: 50
+    # How often to rotate VM selection offset when maxVMsToProcess limits processing
+    # Every N reconcile cycles, the offset rotates to process different VMs
+    vmSelectionRotationInterval: 3
     # Minimum successful reservations to use short interval
-    minSuccessForShortInterval: 1
+    minSuccessForShortInterval: 0
     # Maximum failures allowed to still use short interval
     maxFailuresForShortInterval: 99
     # If true, uses hypervisor CRD as source of truth for VM location instead of postgres
@@ -208,11 +218,7 @@ cortex-knowledge-controllers:
       - datasource-controllers
       - knowledge-controllers
       - kpis-controller
-    # How often the commitments syncer reconciles Limes commitments to Reservation CRDs
-    # 1h = 3600000000000 nanoseconds
-    committedResourceSyncInterval: 3600000000000
-    enabledTasks:
-      - commitments-sync-task
+    enabledTasks: []
 
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:

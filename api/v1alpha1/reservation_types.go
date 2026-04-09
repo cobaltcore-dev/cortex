@@ -36,6 +36,13 @@ const (
 	ReservationTypeLabelFailover          = "failover"
 )
 
+// Annotation keys for Reservation metadata.
+const (
+	// AnnotationCreatorRequestID tracks the request ID that created this reservation.
+	// Used for end-to-end traceability across API calls, controller reconciles, and scheduler invocations.
+	AnnotationCreatorRequestID = "reservations.cortex.cloud/creator-request-id"
+)
+
 // CommittedResourceAllocation represents a workload's assignment to a committed resource reservation slot.
 // The workload could be a VM (Nova/IronCore), Pod (Kubernetes), or other resource.
 type CommittedResourceAllocation struct {
@@ -96,7 +103,7 @@ type ReservationSpec struct {
 
 	// SchedulingDomain specifies the scheduling domain for this reservation (e.g., "nova", "ironcore").
 	// +kubebuilder:validation:Optional
-	SchedulingDomain string `json:"schedulingDomain,omitempty"`
+	SchedulingDomain SchedulingDomain `json:"schedulingDomain,omitempty"`
 
 	// AvailabilityZone specifies the availability zone for this reservation, if restricted to a specific AZ.
 	// +kubebuilder:validation:Optional
@@ -204,6 +211,16 @@ type ReservationStatus struct {
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".metadata.labels['reservations\\.cortex\\.cloud/type']"
 // +kubebuilder:printcolumn:name="Host",type="string",JSONPath=".status.host"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
+// +kubebuilder:printcolumn:name="ResourceGroup",type="string",JSONPath=".spec.committedResourceReservation.resourceGroup"
+// +kubebuilder:printcolumn:name="Project",type="string",JSONPath=".spec.committedResourceReservation.projectID"
+// +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
+// +kubebuilder:printcolumn:name="StartTime",type="string",JSONPath=".spec.startTime",priority=1
+// +kubebuilder:printcolumn:name="EndTime",type="string",JSONPath=".spec.endTime"
+// +kubebuilder:printcolumn:name="Resources",type="string",JSONPath=".spec.resources",priority=1
+// +kubebuilder:printcolumn:name="LastChanged",type="date",JSONPath=".status.failoverReservation.lastChanged",priority=1
+// +kubebuilder:printcolumn:name="AcknowledgedAt",type="date",JSONPath=".status.failoverReservation.acknowledgedAt",priority=1
+// +kubebuilder:printcolumn:name="CR Allocations",type="string",JSONPath=".status.committedResourceReservation.allocations",priority=1
+// +kubebuilder:printcolumn:name="HA Allocations",type="string",JSONPath=".status.failoverReservation.allocations",priority=1
 
 // Reservation is the Schema for the reservations API
 type Reservation struct {

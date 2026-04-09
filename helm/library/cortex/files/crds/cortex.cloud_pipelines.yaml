@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.20.1
   name: pipelines.cortex.cloud
 spec:
   group: cortex.cloud
@@ -58,10 +58,10 @@ spec:
           spec:
             description: spec defines the desired state of Pipeline
             properties:
-              createDecisions:
+              createHistory:
                 default: false
                 description: |-
-                  If this pipeline should create decision objects.
+                  If this pipeline should create history objects.
                   When this is false, the pipeline will still process requests.
                 type: boolean
               description:

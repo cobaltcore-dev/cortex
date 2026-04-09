@@ -72,6 +72,10 @@ func (m *mockExecutorNovaClient) GetServerMigrations(ctx context.Context, id str
 	return []migration{}, nil
 }
 
+func (m *mockExecutorNovaClient) ListProjectServers(ctx context.Context, projectID string) ([]ServerDetail, error) {
+	return []ServerDetail{}, nil
+}
+
 func TestExecutor_Reconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
 	err := v1alpha1.AddToScheme(scheme)

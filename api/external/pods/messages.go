@@ -34,7 +34,7 @@ func (r PodPipelineRequest) GetWeights() map[string]float64 {
 func (r PodPipelineRequest) GetTraceLogArgs() []slog.Attr {
 	return []slog.Attr{}
 }
-func (r PodPipelineRequest) FilterHosts(includedHosts map[string]float64) lib.FilterWeigherPipelineRequest {
+func (r PodPipelineRequest) Filter(includedHosts map[string]float64) lib.FilterWeigherPipelineRequest {
 	filteredNodes := make([]corev1.Node, 0, len(includedHosts))
 	for _, node := range r.Nodes {
 		if _, exists := includedHosts[node.Name]; exists {

@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
 func TestOpenStackDatasourceReconciler_Creation(t *testing.T) {
@@ -31,7 +32,7 @@ func TestOpenStackDatasourceReconciler_Creation(t *testing.T) {
 		Client:  client,
 		Scheme:  scheme,
 		Monitor: datasources.Monitor{},
-		Conf:    OpenStackDatasourceReconcilerConfig{SchedulingDomain: "test-operator"},
+		conf:    config{SchedulingDomain: "test-operator"},
 	}
 
 	if reconciler.Client == nil {
@@ -42,8 +43,8 @@ func TestOpenStackDatasourceReconciler_Creation(t *testing.T) {
 		t.Error("Scheme should not be nil")
 	}
 
-	if reconciler.Conf.SchedulingDomain != "test-operator" {
-		t.Errorf("Expected scheduling domain 'test-operator', got %s", reconciler.Conf.SchedulingDomain)
+	if reconciler.conf.SchedulingDomain != "test-operator" {
+		t.Errorf("Expected scheduling domain 'test-operator', got %s", reconciler.conf.SchedulingDomain)
 	}
 }
 
@@ -428,5 +429,120 @@ func TestOpenStackDatasourceDefaults(t *testing.T) {
 	// The default should be set via kubebuilder annotations, but we can test the type
 	if ds.Type != v1alpha1.OpenStackDatasourceTypeNova {
 		t.Errorf("Expected type %s, got %s", v1alpha1.OpenStackDatasourceTypeNova, ds.Type)
+	}
+}
+
+func TestUpdatePredicateIgnoresStatusConditionChanges(t *testing.T) {
+	tests := []struct {
+		name     string
+		oldObj   *v1alpha1.Datasource
+		newObj   *v1alpha1.Datasource
+		expected bool
+	}{
+		{
+			name: "only status conditions change - should not trigger reconcile",
+			oldObj: &v1alpha1.Datasource{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec:       v1alpha1.DatasourceSpec{Type: v1alpha1.DatasourceTypeOpenStack},
+				Status: v1alpha1.DatasourceStatus{
+					Conditions: []metav1.Condition{
+						{Type: v1alpha1.DatasourceConditionReady, Status: metav1.ConditionFalse},
+					},
+				},
+			},
+			newObj: &v1alpha1.Datasource{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec:       v1alpha1.DatasourceSpec{Type: v1alpha1.DatasourceTypeOpenStack},
+				Status: v1alpha1.DatasourceStatus{
+					Conditions: []metav1.Condition{
+						{Type: v1alpha1.DatasourceConditionReady, Status: metav1.ConditionTrue},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "spec stays equal - should not trigger reconcile",
+			oldObj: &v1alpha1.Datasource{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec:       v1alpha1.DatasourceSpec{Type: v1alpha1.DatasourceTypeOpenStack},
+			},
+			newObj: &v1alpha1.Datasource{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec:       v1alpha1.DatasourceSpec{Type: v1alpha1.DatasourceTypeOpenStack},
+			},
+			expected: false,
+		},
+		{
+			name: "metadata labels change - should trigger reconcile",
+			oldObj: &v1alpha1.Datasource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "default",
+					Labels:    map[string]string{"env": "dev"},
+				},
+			},
+			newObj: &v1alpha1.Datasource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "default",
+					Labels:    map[string]string{"env": "prod"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "status NumberOfObjects changes - should trigger reconcile",
+			oldObj: &v1alpha1.Datasource{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Status:     v1alpha1.DatasourceStatus{NumberOfObjects: 10},
+			},
+			newObj: &v1alpha1.Datasource{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Status:     v1alpha1.DatasourceStatus{NumberOfObjects: 20},
+			},
+			expected: true,
+		},
+		{
+			name: "both conditions and other fields change - should trigger reconcile",
+			oldObj: &v1alpha1.Datasource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "default",
+					Labels:    map[string]string{"version": "v1"},
+				},
+				Status: v1alpha1.DatasourceStatus{
+					Conditions: []metav1.Condition{
+						{Type: v1alpha1.DatasourceConditionReady, Status: metav1.ConditionFalse},
+					},
+				},
+			},
+			newObj: &v1alpha1.Datasource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "default",
+					Labels:    map[string]string{"version": "v2"},
+				},
+				Status: v1alpha1.DatasourceStatus{
+					Conditions: []metav1.Condition{
+						{Type: v1alpha1.DatasourceConditionReady, Status: metav1.ConditionTrue},
+					},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := event.UpdateEvent{
+				ObjectOld: tt.oldObj,
+				ObjectNew: tt.newObj,
+			}
+			result := predicateIgnoreStatusConditions().Update(e)
+			if result != tt.expected {
+				t.Errorf("expected %v, got %v", tt.expected, result)
+			}
+		})
 	}
 }

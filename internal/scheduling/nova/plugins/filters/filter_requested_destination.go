@@ -7,42 +7,101 @@ import (
 	"context"
 	"log/slog"
 	"slices"
+	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
-type FilterRequestedDestinationStepOpts struct {
-	// IgnoredAggregates specifies a list of aggregates to ignore when filtering
-	// hosts based on the requested destination. This can be used to exclude
-	// certain aggregates from consideration, for example AZ aggregates
-	// that are already considered by the availability zone filter.
-	IgnoredAggregates []string
-	// IgnoredHostnames specifies a list of hostnames to ignore when filtering
-	// hosts based on the requested destination. This can be used to exclude
-	// certain hosts from consideration, for example if they are known to be
-	// unsuitable for the workload.
-	IgnoredHostnames []string
-}
-
-// Validate the options to ensure they are correct before running the weigher.
-func (o FilterRequestedDestinationStepOpts) Validate() error {
-	// No specific validation needed for this filter, but we could add checks here
-	// if we wanted to enforce certain constraints on the options.
-	return nil
-}
-
 type FilterRequestedDestinationStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, FilterRequestedDestinationStepOpts]
+	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
-// If `requested_destination` is set in the request spec, filter hosts
-// accordingly. The requested destination can be a specific host, or
-// an aggregate.
+// processRequestedAggregates filters hosts based on the requested aggregates.
+// The aggregates list uses AND logic between elements, meaning a host must match
+// ALL elements to pass. Each element can contain comma-separated UUIDs which use
+// OR logic, meaning the host only needs to match ONE of the UUIDs in that group.
+// Example: ["agg1", "agg2,agg3"] means host must be in agg1 AND (agg2 OR agg3).
+func (s *FilterRequestedDestinationStep) processRequestedAggregates(
+	traceLog *slog.Logger,
+	aggregates []string,
+	hvsByName map[string]hv1.Hypervisor,
+	activations map[string]float64,
+) {
+
+	if len(aggregates) == 0 {
+		return
+	}
+	for host := range activations {
+		hv, exists := hvsByName[host]
+		if !exists {
+			delete(activations, host)
+			traceLog.Info("filtered out host not in requested_destination aggregates (unknown host)", "host", host)
+			continue
+		}
+		hvAggregateUUIDs := make([]string, 0, len(hv.Status.Aggregates))
+		for _, agg := range hv.Status.Aggregates {
+			hvAggregateUUIDs = append(hvAggregateUUIDs, agg.UUID)
+		}
+		// All outer elements must match (AND logic)
+		// Each element can be comma-separated UUIDs (OR logic within the group)
+		allMatch := true
+		for _, reqAggGroup := range aggregates {
+			reqAggs := strings.Split(reqAggGroup, ",")
+			groupMatch := false
+			for _, reqAgg := range reqAggs {
+				if slices.Contains(hvAggregateUUIDs, reqAgg) {
+					groupMatch = true
+					break
+				}
+			}
+			if !groupMatch {
+				allMatch = false
+				break
+			}
+		}
+		if !allMatch {
+			delete(activations, host)
+			traceLog.Info(
+				"filtered out host not in requested_destination aggregates",
+				"host", host, "hostAggregates", hvAggregateUUIDs,
+				"requestedAggregates", aggregates,
+			)
+			continue
+		}
+		traceLog.Info("host is in requested_destination aggregates, keeping", "host", host)
+	}
+}
+
+// processRequestedHost filters hosts based on the requested specific host.
+// It removes all hosts except the one matching the requested hostname.
+func (s *FilterRequestedDestinationStep) processRequestedHost(
+	traceLog *slog.Logger,
+	host string,
+	activations map[string]float64,
+) {
+
+	if host == "" {
+		traceLog.Info("no specific host in requested_destination, skipping host filtering")
+		return
+	}
+	for h := range activations {
+		if h != host {
+			delete(activations, h)
+			traceLog.Info("filtered out host not matching requested_destination host", "host", h)
+			continue
+		}
+		traceLog.Info("host matches requested_destination host, keeping", "host", h)
+	}
+}
+
+// Run filters hosts based on the requested destination specified in the request.
+// The requested destination can include a specific host, aggregates, or both.
+// When both are specified, aggregate filtering is applied first, followed by
+// host filtering.
 func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
-
 	rd := request.Spec.Data.RequestedDestination
 	if rd == nil {
 		traceLog.Info("no requested_destination in request, skipping filter")
@@ -52,7 +111,6 @@ func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.
 		traceLog.Info("requested_destination has no host or aggregates, skipping filter")
 		return result, nil
 	}
-
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
 		traceLog.Error("failed to list hypervisors", "error", err)
@@ -62,73 +120,8 @@ func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.
 	for _, hv := range hvs.Items {
 		hvsByName[hv.Name] = hv
 	}
-
-	// If aggregates are specified, only consider hosts in these aggregates.
-	if len(rd.Data.Aggregates) > 0 {
-		// Strip off any of the ignored aggregates from the requested aggregates.
-		aggregatesToConsider := make([]string, 0, len(rd.Data.Aggregates))
-		for _, agg := range rd.Data.Aggregates {
-			if slices.Contains(s.Options.IgnoredAggregates, agg) {
-				traceLog.Info("ignoring aggregate in requested_destination as it is in the ignored list", "aggregate", agg)
-				continue
-			}
-			aggregatesToConsider = append(aggregatesToConsider, agg)
-		}
-		if len(aggregatesToConsider) == 0 {
-			traceLog.Info("all aggregates in requested_destination are in the ignored list, skipping aggregate filtering")
-			return result, nil
-		}
-		for host := range result.Activations {
-			hv, exists := hvsByName[host]
-			if !exists {
-				delete(result.Activations, host)
-				traceLog.Info("filtered out host not in requested_destination aggregates (unknown host)", "host", host)
-				continue
-			}
-			// The requested destination from Nova will contain aggregate uuids.
-			hvAggregateUUIDs := make([]string, 0, len(hv.Status.Aggregates))
-			for _, agg := range hv.Status.Aggregates {
-				hvAggregateUUIDs = append(hvAggregateUUIDs, agg.UUID)
-			}
-			// Check if any of the host's aggregates match the requested aggregates.
-			found := false
-			for _, reqAgg := range aggregatesToConsider {
-				if slices.Contains(hvAggregateUUIDs, reqAgg) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				delete(result.Activations, host)
-				traceLog.Info(
-					"filtered out host not in requested_destination aggregates",
-					"host", host, "hostAggregates", hvAggregateUUIDs,
-					"requestedAggregates", rd.Data.Aggregates,
-					"ignoredAggregates", s.Options.IgnoredAggregates,
-					"aggregatesConsidered", aggregatesToConsider,
-				)
-				continue
-			}
-			traceLog.Info("host is in requested_destination aggregates, keeping", "host", host)
-		}
-	}
-
-	// If a specific host is requested, only consider that host.
-	if rd.Data.Host != "" {
-		if slices.Contains(s.Options.IgnoredHostnames, rd.Data.Host) {
-			traceLog.Info("requested_destination host is in the ignored hostnames list, skipping host filtering", "host", rd.Data.Host)
-		} else {
-			for host := range result.Activations {
-				if host != rd.Data.Host {
-					delete(result.Activations, host)
-					traceLog.Info("filtered out host not matching requested_destination host", "host", host)
-					continue
-				}
-				traceLog.Info("host matches requested_destination host, keeping", "host", host)
-			}
-		}
-	}
-
+	s.processRequestedAggregates(traceLog, rd.Data.Aggregates, hvsByName, result.Activations)
+	s.processRequestedHost(traceLog, rd.Data.Host, result.Activations)
 	return result, nil
 }
 

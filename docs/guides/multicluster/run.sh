@@ -52,16 +52,20 @@ global:
         gvks:
         - kvm.cloud.sap/v1/Hypervisor
         - kvm.cloud.sap/v1/HypervisorList
+        - cortex.cloud/v1alpha1/History
+        - cortex.cloud/v1alpha1/HistoryList
         labels:
-          az: cortex-remote-az-a
+          availabilityZone: cortex-remote-az-a
         caCert: |
 $(cat /tmp/root-ca-remote-az-a.pem | sed 's/^/          /')
       - host: https://host.docker.internal:8445
         gvks:
         - kvm.cloud.sap/v1/Hypervisor
         - kvm.cloud.sap/v1/HypervisorList
+        - cortex.cloud/v1alpha1/History
+        - cortex.cloud/v1alpha1/HistoryList
         labels:
-          az: cortex-remote-az-b
+          availabilityZone: cortex-remote-az-b
         caCert: |
 $(cat /tmp/root-ca-remote-az-b.pem | sed 's/^/          /')
 EOF

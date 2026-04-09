@@ -19,7 +19,7 @@ host_cpu_usage AS (
         s.tenant_id,
         h.service_host,
         AVG(p.avg_cpu) AS avg_cpu_of_project
-    FROM openstack_servers s
+    FROM openstack_servers_v2 s
     JOIN vrops_vm_metrics m ON s.id = m.instance_uuid
     JOIN projects_avg_cpu p ON s.tenant_id = p.tenant_id
     JOIN openstack_hypervisors h ON s.os_ext_srv_attr_hypervisor_hostname = h.hostname

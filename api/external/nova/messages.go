@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
@@ -60,7 +61,7 @@ func (r ExternalSchedulerRequest) GetTraceLogArgs() []slog.Attr {
 		slog.String("project", r.Context.ProjectID),
 	}
 }
-func (r ExternalSchedulerRequest) FilterHosts(includedHosts map[string]float64) lib.FilterWeigherPipelineRequest {
+func (r ExternalSchedulerRequest) Filter(includedHosts map[string]float64) lib.FilterWeigherPipelineRequest {
 	filteredHosts := make([]ExternalSchedulerHost, 0, len(includedHosts))
 	for _, host := range r.Hosts {
 		if _, exists := includedHosts[host.ComputeHost]; exists {
@@ -68,6 +69,15 @@ func (r ExternalSchedulerRequest) FilterHosts(includedHosts map[string]float64) 
 		}
 	}
 	r.Hosts = filteredHosts
+	// Also filter the weights map to only include the hosts that are still
+	// in the request, and update the weights accordingly.
+	filteredWeights := make(map[string]float64, len(includedHosts))
+	for host, weight := range includedHosts {
+		if _, exists := includedHosts[host]; exists {
+			filteredWeights[host] = weight
+		}
+	}
+	r.Weights = filteredWeights
 	return r
 }
 
@@ -126,23 +136,25 @@ func (req ExternalSchedulerRequest) GetHypervisorType() (HypervisorType, error) 
 	return "", errors.New("hypervisor type not specified in flavor extra specs")
 }
 
-type RequestIntent string
-
 const (
 	// LiveMigrationIntent indicates that the request is intended for live migration.
-	LiveMigrationIntent RequestIntent = "live_migration"
+	LiveMigrationIntent v1alpha1.SchedulingIntent = "live_migration"
 	// RebuildIntent indicates that the request is intended for rebuilding a VM.
-	RebuildIntent RequestIntent = "rebuild"
+	RebuildIntent v1alpha1.SchedulingIntent = "rebuild"
 	// ResizeIntent indicates that the request is intended for resizing a VM.
-	ResizeIntent RequestIntent = "resize"
+	ResizeIntent v1alpha1.SchedulingIntent = "resize"
 	// EvacuateIntent indicates that the request is intended for evacuating a VM.
-	EvacuateIntent RequestIntent = "evacuate"
+	EvacuateIntent v1alpha1.SchedulingIntent = "evacuate"
 	// CreateIntent indicates that the request is intended for creating a new VM.
-	CreateIntent RequestIntent = "create"
+	CreateIntent v1alpha1.SchedulingIntent = "create"
+	// ReserveForFailoverIntent indicates that the request is for failover reservation scheduling.
+	ReserveForFailoverIntent v1alpha1.SchedulingIntent = "reserve_for_failover"
+	// ReserveForCommittedResourceIntent indicates that the request is for CR reservation scheduling.
+	ReserveForCommittedResourceIntent v1alpha1.SchedulingIntent = "reserve_for_committed_resource"
 )
 
 // GetIntent analyzes the request spec and determines the intent of the scheduling request.
-func (req ExternalSchedulerRequest) GetIntent() (RequestIntent, error) {
+func (req ExternalSchedulerRequest) GetIntent() (v1alpha1.SchedulingIntent, error) {
 	str, err := req.Spec.Data.GetSchedulerHintStr("_nova_check_type")
 	if err != nil {
 		return "", err
@@ -161,6 +173,12 @@ func (req ExternalSchedulerRequest) GetIntent() (RequestIntent, error) {
 	// See: https://github.com/sapcc/nova/blob/c88393/nova/compute/api.py#L5770
 	case "evacuate":
 		return EvacuateIntent, nil
+	// Used by cortex failover reservation controller
+	case "reserve_for_failover":
+		return ReserveForFailoverIntent, nil
+	// Used by cortex committed resource reservation controller
+	case "reserve_for_committed_resource":
+		return ReserveForCommittedResourceIntent, nil
 	default:
 		return CreateIntent, nil
 	}

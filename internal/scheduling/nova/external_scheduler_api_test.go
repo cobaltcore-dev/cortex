@@ -33,7 +33,7 @@ func (m *mockHTTPAPIDelegate) ProcessNewDecisionFromAPI(ctx context.Context, dec
 func TestNewAPI(t *testing.T) {
 	delegate := &mockHTTPAPIDelegate{}
 
-	api := NewAPI(delegate)
+	api := NewAPI(HTTPAPIConfig{}, delegate)
 
 	if api == nil {
 		t.Fatal("NewAPI returned nil")
@@ -55,7 +55,7 @@ func TestNewAPI(t *testing.T) {
 
 func TestHTTPAPI_Init(t *testing.T) {
 	delegate := &mockHTTPAPIDelegate{}
-	api := NewAPI(delegate)
+	api := NewAPI(HTTPAPIConfig{}, delegate)
 
 	mux := http.NewServeMux()
 	api.Init(mux)
@@ -73,7 +73,7 @@ func TestHTTPAPI_Init(t *testing.T) {
 
 func TestHTTPAPI_canRunScheduler(t *testing.T) {
 	delegate := &mockHTTPAPIDelegate{}
-	api := NewAPI(delegate).(*httpAPI)
+	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
 
 	tests := []struct {
 		name        string
@@ -276,7 +276,7 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 				},
 			}
 
-			api := NewAPI(delegate).(*httpAPI)
+			api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
 
 			var body *strings.Reader
 			if tt.body != "" {
@@ -327,7 +327,7 @@ func TestHTTPAPI_NovaExternalScheduler_DecisionCreation(t *testing.T) {
 		},
 	}
 
-	api := NewAPI(delegate).(*httpAPI)
+	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
 
 	requestData := novaapi.ExternalSchedulerRequest{
 		Spec: novaapi.NovaObject[novaapi.NovaSpec]{
@@ -506,9 +506,117 @@ func TestLimitHostsToRequest(t *testing.T) {
 	}
 }
 
+func TestShuffleTopHosts(t *testing.T) {
+	tests := []struct {
+		name              string
+		hosts             []string
+		k                 int
+		unchangedTailFrom int // index from which hosts should be unchanged (-1 if all can change)
+		expectUnchanged   bool
+	}{
+		{
+			name:  "empty hosts returns empty",
+			hosts: []string{},
+			k:     3,
+		},
+		{
+			name:              "single host returns unchanged",
+			hosts:             []string{"host1"},
+			k:                 3,
+			unchangedTailFrom: 0,
+		},
+		{
+			name:              "two hosts with k=3 shuffles all",
+			hosts:             []string{"host1", "host2"},
+			k:                 3,
+			unchangedTailFrom: -1,
+		},
+		{
+			name:              "three hosts with k=3 shuffles all",
+			hosts:             []string{"host1", "host2", "host3"},
+			k:                 3,
+			unchangedTailFrom: -1,
+		},
+		{
+			name:              "four hosts with k=3 shuffles first 3",
+			hosts:             []string{"host1", "host2", "host3", "host4"},
+			k:                 3,
+			unchangedTailFrom: 3,
+		},
+		{
+			name:              "shuffles only first k hosts",
+			hosts:             []string{"host1", "host2", "host3", "host4", "host5"},
+			k:                 3,
+			unchangedTailFrom: 3,
+		},
+		{
+			name:            "k=0 disables shuffling",
+			hosts:           []string{"host1", "host2", "host3", "host4", "host5"},
+			k:               0,
+			expectUnchanged: true,
+		},
+		{
+			name:            "negative k disables shuffling",
+			hosts:           []string{"host1", "host2", "host3", "host4", "host5"},
+			k:               -1,
+			expectUnchanged: true,
+		},
+		{
+			name:              "k larger than hosts shuffles all",
+			hosts:             []string{"host1", "host2"},
+			k:                 10,
+			unchangedTailFrom: -1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := make([]string, len(tt.hosts))
+			copy(original, tt.hosts)
+
+			result := shuffleTopHosts(tt.hosts, tt.k)
+
+			if len(result) != len(tt.hosts) {
+				t.Fatalf("expected %d hosts, got %d", len(tt.hosts), len(result))
+			}
+			// Verify original slice not modified
+			for i, h := range original {
+				if tt.hosts[i] != h {
+					t.Errorf("original slice modified at %d: expected %s, got %s", i, h, tt.hosts[i])
+				}
+			}
+			// When k <= 0, expect the same slice returned (no copy)
+			if tt.expectUnchanged {
+				if len(result) > 0 && &result[0] != &tt.hosts[0] {
+					t.Error("expected same slice returned when k <= 0")
+				}
+				return
+			}
+			// Verify tail unchanged
+			if tt.unchangedTailFrom >= 0 {
+				for i := tt.unchangedTailFrom; i < len(original); i++ {
+					if result[i] != original[i] {
+						t.Errorf("expected host[%d] = %s unchanged, got %s", i, original[i], result[i])
+					}
+				}
+			}
+			// Verify all hosts present
+			hostSet := make(map[string]bool)
+			for _, h := range result {
+				hostSet[h] = true
+			}
+			for _, h := range original {
+				if !hostSet[h] {
+					t.Errorf("host %s missing from result", h)
+				}
+			}
+		})
+	}
+}
+
 func TestHTTPAPI_inferPipelineName(t *testing.T) {
 	delegate := &mockHTTPAPIDelegate{}
-	api := NewAPI(delegate).(*httpAPI)
+	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
 
 	tests := []struct {
 		name           string

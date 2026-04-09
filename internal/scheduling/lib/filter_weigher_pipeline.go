@@ -138,7 +138,7 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 func (p *filterWeigherPipeline[RequestType]) runFilters(
 	log *slog.Logger,
 	request RequestType,
-) (filteredRequest RequestType) {
+) (filteredRequest RequestType, stepResults []v1alpha1.StepResult) {
 
 	filteredRequest = request
 	for _, filterName := range p.filtersOrder {
@@ -155,11 +155,15 @@ func (p *filterWeigherPipeline[RequestType]) runFilters(
 			continue
 		}
 		stepLog.Info("scheduler: finished filter")
+		stepResults = append(stepResults, v1alpha1.StepResult{
+			StepName:    filterName,
+			Activations: result.Activations,
+		})
 		// Mutate the request to only include the remaining hosts.
 		// Assume the resulting request type is the same as the input type.
-		filteredRequest = filteredRequest.FilterHosts(result.Activations).(RequestType)
+		filteredRequest = filteredRequest.Filter(result.Activations).(RequestType)
 	}
-	return filteredRequest
+	return filteredRequest, stepResults
 }
 
 // Execute weighers and collect their activations by step name.
@@ -275,7 +279,7 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 
 	// Run filters first to reduce the number of hosts.
 	// Any weights assigned to filtered out hosts are ignored.
-	filteredRequest := p.runFilters(traceLog, request)
+	filteredRequest, filterStepResults := p.runFilters(traceLog, request)
 	traceLog.Info(
 		"scheduler: finished filters",
 		"remainingHosts", filteredRequest.GetHosts(),
@@ -296,9 +300,23 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 	// Collect some metrics about the pipeline execution.
 	go p.monitor.observePipelineResult(request, hosts)
 
+	// Build step results from filters and weighers.
+	stepResults := filterStepResults
+	for _, weigherName := range p.weighersOrder {
+		activations, ok := stepWeights[weigherName]
+		if !ok {
+			continue
+		}
+		stepResults = append(stepResults, v1alpha1.StepResult{
+			StepName:    weigherName,
+			Activations: activations,
+		})
+	}
+
 	result := v1alpha1.DecisionResult{
 		RawInWeights:         request.GetWeights(),
 		NormalizedInWeights:  inWeights,
+		StepResults:          stepResults,
 		AggregatedOutWeights: outWeights,
 		OrderedHosts:         hosts,
 	}

@@ -276,145 +276,13 @@
           },
           "unit": "none"
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "B"
-            },
-            "properties": [
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "rgb(71, 71, 71)",
-                      "value": null
-                    },
-                    {
-                      "color": "red",
-                      "value": 1
-                    }
-                  ]
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "C"
-            },
-            "properties": [
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "rgb(71, 71, 71)",
-                      "value": null
-                    },
-                    {
-                      "color": "red",
-                      "value": 10
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
         "y": 9
-      },
-      "id": 55,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": true
-        },
-        "text": {},
-        "textMode": "value_and_name"
-      },
-      "pluginVersion": "7.5.37",
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "cortex_decision_state{state=\"success\"}",
-          "format": "time_series",
-          "hide": false,
-          "instant": true,
-          "interval": "",
-          "legendFormat": "{{state}}",
-          "refId": "A"
-        },
-        {
-          "exemplar": true,
-          "expr": "cortex_decision_state{state!=\"success\",state!=\"waiting\"}",
-          "hide": false,
-          "instant": true,
-          "interval": "",
-          "legendFormat": "{{state}}",
-          "refId": "B"
-        },
-        {
-          "exemplar": true,
-          "expr": "cortex_decision_state{state!=\"success\",state=\"waiting\"}",
-          "hide": false,
-          "instant": true,
-          "interval": "",
-          "legendFormat": "{{state}}",
-          "refId": "C"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Decision status",
-      "type": "stat"
-    },
-    {
-      "datasource": "prometheus-openstack",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "rgb(66, 66, 66)",
-                "value": 1
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 17
       },
       "id": 54,
       "options": {
@@ -466,7 +334,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 25
+        "y": 17
       },
       "id": 49,
       "panels": [],
@@ -483,7 +351,7 @@
         "h": 1,
         "w": 12,
         "x": 0,
-        "y": 26
+        "y": 18
       },
       "id": 41,
       "options": {
@@ -512,7 +380,7 @@
         "h": 1,
         "w": 12,
         "x": 12,
-        "y": 26
+        "y": 18
       },
       "id": 43,
       "options": {
@@ -556,7 +424,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 27
+        "y": 19
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -632,7 +500,7 @@
         "h": 12,
         "w": 12,
         "x": 12,
-        "y": 27
+        "y": 19
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -689,6 +557,113 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "prometheus-openstack",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 0,
+        "y": 31
+      },
+      "hiddenSeries": false,
+      "id": 58,
+      "interval": null,
+      "legend": {
+        "alignAsTable": false,
+        "avg": false,
+        "current": false,
+        "hideEmpty": false,
+        "hideZero": true,
+        "max": false,
+        "min": false,
+        "rightSide": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.37",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": false,
+          "expr": "sum by (faultmsg,state) (cortex_vm_faults{faultyvm!=\"no\"})",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{state}} {{faultmsg}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Nova: faults in vm scheduling lifecycle",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:234",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:235",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus-openstack",
       "fieldConfig": {
         "defaults": {
           "unit": "short"
@@ -701,7 +676,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 39
+        "y": 43
       },
       "hiddenSeries": false,
       "id": 39,
@@ -801,7 +776,7 @@
         "h": 11,
         "w": 6,
         "x": 0,
-        "y": 51
+        "y": 55
       },
       "hiddenSeries": false,
       "id": 31,
@@ -898,7 +873,7 @@
         "h": 11,
         "w": 6,
         "x": 6,
-        "y": 51
+        "y": 55
       },
       "hiddenSeries": false,
       "id": 33,
@@ -1010,7 +985,7 @@
         "h": 11,
         "w": 6,
         "x": 12,
-        "y": 51
+        "y": 55
       },
       "hiddenSeries": false,
       "id": 35,
@@ -1122,7 +1097,7 @@
         "h": 11,
         "w": 6,
         "x": 18,
-        "y": 51
+        "y": 55
       },
       "hiddenSeries": false,
       "id": 37,
@@ -1232,7 +1207,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 62
+        "y": 66
       },
       "hiddenSeries": false,
       "id": 27,
@@ -1340,7 +1315,7 @@
         "h": 12,
         "w": 12,
         "x": 12,
-        "y": 62
+        "y": 66
       },
       "hiddenSeries": false,
       "id": 29,
@@ -1428,7 +1403,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 74
+        "y": 78
       },
       "id": 5,
       "panels": [],
@@ -1453,7 +1428,7 @@
         "h": 11,
         "w": 12,
         "x": 0,
-        "y": 75
+        "y": 79
       },
       "hiddenSeries": false,
       "id": 2,
@@ -1573,7 +1548,7 @@
         "h": 11,
         "w": 12,
         "x": 12,
-        "y": 75
+        "y": 79
       },
       "hiddenSeries": false,
       "id": 3,
@@ -1712,7 +1687,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 86
+        "y": 90
       },
       "id": 50,
       "options": {
@@ -1753,7 +1728,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 98
+        "y": 102
       },
       "id": 25,
       "panels": [],
@@ -1776,7 +1751,7 @@
         "h": 14,
         "w": 12,
         "x": 0,
-        "y": 99
+        "y": 103
       },
       "hiddenSeries": false,
       "id": 21,
@@ -1878,7 +1853,7 @@
         "h": 14,
         "w": 12,
         "x": 12,
-        "y": 99
+        "y": 103
       },
       "hiddenSeries": false,
       "id": 23,
@@ -1971,7 +1946,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 113
+        "y": 117
       },
       "id": 19,
       "panels": [],
@@ -1994,7 +1969,7 @@
         "h": 13,
         "w": 12,
         "x": 0,
-        "y": 114
+        "y": 118
       },
       "hiddenSeries": false,
       "id": 17,
@@ -2092,7 +2067,7 @@
         "h": 13,
         "w": 12,
         "x": 12,
-        "y": 114
+        "y": 118
       },
       "hiddenSeries": false,
       "id": 15,
@@ -2189,7 +2164,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 127
+        "y": 131
       },
       "hiddenSeries": false,
       "id": 11,
@@ -2287,7 +2262,7 @@
         "h": 12,
         "w": 12,
         "x": 12,
-        "y": 127
+        "y": 131
       },
       "hiddenSeries": false,
       "id": 13,

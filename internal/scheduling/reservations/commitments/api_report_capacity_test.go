@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -95,9 +96,9 @@ func TestHandleReportCapacity(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				req = httptest.NewRequest(tt.method, "/v1/report-capacity", bytes.NewReader(bodyBytes))
+				req = httptest.NewRequest(tt.method, "/commitments/v1/report-capacity", bytes.NewReader(bodyBytes))
 			} else {
-				req = httptest.NewRequest(tt.method, "/v1/report-capacity", http.NoBody)
+				req = httptest.NewRequest(tt.method, "/commitments/v1/report-capacity", http.NoBody)
 			}
 			req = req.WithContext(context.Background())
 
@@ -137,7 +138,10 @@ func TestCapacityCalculator(t *testing.T) {
 			Build()
 
 		calculator := NewCapacityCalculator(fakeClient)
-		_, err := calculator.CalculateCapacity(context.Background())
+		req := liquid.ServiceCapacityRequest{
+			AllAZs: []liquid.AvailabilityZone{"az-one", "az-two"},
+		}
+		_, err := calculator.CalculateCapacity(context.Background(), req)
 		if err == nil {
 			t.Fatal("Expected error when flavor groups knowledge doesn't exist, got nil")
 		}
@@ -156,7 +160,10 @@ func TestCapacityCalculator(t *testing.T) {
 			Build()
 
 		calculator := NewCapacityCalculator(fakeClient)
-		report, err := calculator.CalculateCapacity(context.Background())
+		req := liquid.ServiceCapacityRequest{
+			AllAZs: []liquid.AvailabilityZone{"az-one", "az-two"},
+		}
+		report, err := calculator.CalculateCapacity(context.Background(), req)
 		if err != nil {
 			t.Fatalf("Expected no error, got: %v", err)
 		}
@@ -170,35 +177,114 @@ func TestCapacityCalculator(t *testing.T) {
 		}
 	})
 
-	t.Run("CalculateCapacity returns empty perAZ when no HostDetails exist", func(t *testing.T) {
-		// Create a flavor group knowledge without host details
+	t.Run("CalculateCapacity returns perAZ entries for all AZs from request", func(t *testing.T) {
 		flavorGroupKnowledge := createTestFlavorGroupKnowledge(t, "test-group")
-
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
 			WithObjects(flavorGroupKnowledge).
 			Build()
 
 		calculator := NewCapacityCalculator(fakeClient)
-		report, err := calculator.CalculateCapacity(context.Background())
+		req := liquid.ServiceCapacityRequest{
+			AllAZs: []liquid.AvailabilityZone{"qa-de-1a", "qa-de-1b", "qa-de-1d"},
+		}
+		report, err := calculator.CalculateCapacity(context.Background(), req)
 		if err != nil {
 			t.Fatalf("Expected no error, got: %v", err)
 		}
 
-		if len(report.Resources) != 1 {
-			t.Fatalf("Expected 1 resource, got %d", len(report.Resources))
+		if len(report.Resources) != 3 {
+			t.Fatalf("Expected 3 resources (_ram, _cores, _instances), got %d", len(report.Resources))
 		}
 
-		resource := report.Resources[liquid.ResourceName("ram_test-group")]
-		if resource == nil {
-			t.Fatal("Expected ram_test-group resource to exist")
+		// Verify all resources have exactly the requested AZs
+		verifyPerAZMatchesRequest(t, report.Resources["hw_version_test-group_ram"], req.AllAZs)
+		verifyPerAZMatchesRequest(t, report.Resources["hw_version_test-group_cores"], req.AllAZs)
+		verifyPerAZMatchesRequest(t, report.Resources["hw_version_test-group_instances"], req.AllAZs)
+	})
+
+	t.Run("CalculateCapacity with empty AllAZs returns empty perAZ maps", func(t *testing.T) {
+		flavorGroupKnowledge := createTestFlavorGroupKnowledge(t, "test-group")
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(flavorGroupKnowledge).
+			Build()
+
+		calculator := NewCapacityCalculator(fakeClient)
+		req := liquid.ServiceCapacityRequest{AllAZs: []liquid.AvailabilityZone{}}
+		report, err := calculator.CalculateCapacity(context.Background(), req)
+		if err != nil {
+			t.Fatalf("Expected no error, got: %v", err)
 		}
 
-		// Should have empty perAZ map when no host details
-		if len(resource.PerAZ) != 0 {
-			t.Errorf("Expected 0 AZs, got %d", len(resource.PerAZ))
+		if len(report.Resources) != 3 {
+			t.Fatalf("Expected 3 resources, got %d", len(report.Resources))
+		}
+
+		for resName, res := range report.Resources {
+			if len(res.PerAZ) != 0 {
+				t.Errorf("%s: expected empty PerAZ, got %d entries", resName, len(res.PerAZ))
+			}
 		}
 	})
+
+	t.Run("CalculateCapacity responds to different AZ sets correctly", func(t *testing.T) {
+		flavorGroupKnowledge := createTestFlavorGroupKnowledge(t, "test-group")
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(flavorGroupKnowledge).
+			Build()
+
+		calculator := NewCapacityCalculator(fakeClient)
+
+		req1 := liquid.ServiceCapacityRequest{
+			AllAZs: []liquid.AvailabilityZone{"eu-de-1a", "eu-de-1b"},
+		}
+		report1, err := calculator.CalculateCapacity(context.Background(), req1)
+		if err != nil {
+			t.Fatalf("Expected no error, got: %v", err)
+		}
+
+		req2 := liquid.ServiceCapacityRequest{
+			AllAZs: []liquid.AvailabilityZone{"us-west-1a", "us-west-1b", "us-west-1c", "us-west-1d"},
+		}
+		report2, err := calculator.CalculateCapacity(context.Background(), req2)
+		if err != nil {
+			t.Fatalf("Expected no error, got: %v", err)
+		}
+
+		// Verify reports have exactly the requested AZs
+		for _, res := range report1.Resources {
+			verifyPerAZMatchesRequest(t, res, req1.AllAZs)
+		}
+		for _, res := range report2.Resources {
+			verifyPerAZMatchesRequest(t, res, req2.AllAZs)
+		}
+	})
+}
+
+// verifyPerAZMatchesRequest checks that perAZ entries match exactly the requested AZs.
+// This follows the same semantics as nova liquid: the response must contain
+// entries for all AZs in AllAZs, no more and no less.
+func verifyPerAZMatchesRequest(t *testing.T, res *liquid.ResourceCapacityReport, requestedAZs []liquid.AvailabilityZone) {
+	t.Helper()
+	if res == nil {
+		t.Error("resource is nil")
+		return
+	}
+	if len(res.PerAZ) != len(requestedAZs) {
+		t.Errorf("expected %d AZs, got %d", len(requestedAZs), len(res.PerAZ))
+	}
+	for _, az := range requestedAZs {
+		if _, ok := res.PerAZ[az]; !ok {
+			t.Errorf("missing entry for requested AZ %s", az)
+		}
+	}
+	for az := range res.PerAZ {
+		if !slices.Contains(requestedAZs, az) {
+			t.Errorf("unexpected AZ %s in response (not in request)", az)
+		}
+	}
 }
 
 // createEmptyFlavorGroupKnowledge creates an empty flavor groups Knowledge CRD
@@ -234,6 +320,7 @@ func createEmptyFlavorGroupKnowledge() *v1alpha1.Knowledge {
 }
 
 // createTestFlavorGroupKnowledge creates a test Knowledge CRD with flavor group data
+// that accepts commitments (has fixed RAM/core ratio)
 func createTestFlavorGroupKnowledge(t *testing.T, groupName string) *v1alpha1.Knowledge {
 	t.Helper()
 
@@ -254,6 +341,14 @@ func createTestFlavorGroupKnowledge(t *testing.T, groupName string) *v1alpha1.Kn
 				"memoryMB": 32768,
 				"diskGB":   50,
 			},
+			"smallestFlavor": map[string]interface{}{
+				"name":     "test_c8_m32",
+				"vcpus":    8,
+				"memoryMB": 32768,
+				"diskGB":   50,
+			},
+			// Fixed RAM/core ratio (4096 MiB per vCPU) - required for group to accept commitments
+			"ramCoreRatio": 4096,
 		},
 	}
 

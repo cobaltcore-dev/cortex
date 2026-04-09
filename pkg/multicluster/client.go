@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -234,9 +235,29 @@ func (c *Client) clusterForWrite(gvk schema.GroupVersionKind, obj any) (cluster.
 	return nil, fmt.Errorf("no cluster matched for GVK %s", gvk)
 }
 
+type duplicateError struct{ msg string }
+
+func (e *duplicateError) Error() string { return e.msg }
+
+// IsDuplicateError returns true if the error indicates that a resource was
+// found in multiple clusters. This can be used by callers of the Get and List
+// methods to keep using the result even if a duplicate exists, as long as they
+// don't mind that the result is potentially inconsistent.
+func IsDuplicateError(err error) bool {
+	var de *duplicateError
+	return errors.As(err, &de)
+}
+
 // Get iterates over all clusters with the GVK and returns the result.
-// Returns an error if the resource is found in multiple clusters (duplicate).
+//
+// If the requested resource is encountered in multiple clusters, this function
+// will return the first one, but will set an error message that can be checked
+// with IsDuplicateError. In that way the result can be used if the caller
+// just cares about the resource existing in at least one cluster, and doesn't
+// mind which one is returned.
+//
 // If no cluster has the resource, a NotFound error is returned.
+//
 // Non-NotFound errors from individual clusters are logged and silently skipped
 // so that a single unavailable cluster does not block the entire read path.
 func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
@@ -256,10 +277,13 @@ func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Objec
 			candidate := obj.DeepCopyObject().(client.Object)
 			err := cl.GetClient().Get(ctx, key, candidate, opts...)
 			if err == nil {
-				return fmt.Errorf("duplicate resource found: %s %s/%s exists in multiple clusters", gvk, key.Namespace, key.Name)
+				// In this case Get() was already called and the object set.
+				return &duplicateError{msg: fmt.Sprintf("duplicate %s %s/%s in multiple clusters",
+					gvk, key.Namespace, key.Name)}
 			}
 			if !apierrors.IsNotFound(err) {
-				log.Error(err, "error checking for duplicate resource in cluster", "gvk", gvk, "namespace", key.Namespace, "name", key.Name)
+				log.Error(err, "error checking for duplicate resource in cluster",
+					"gvk", gvk, "namespace", key.Namespace, "name", key.Name)
 			}
 			continue
 		}
@@ -270,7 +294,8 @@ func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Objec
 			continue
 		}
 		if !apierrors.IsNotFound(err) {
-			log.Error(err, "error getting resource from cluster", "gvk", gvk, "namespace", key.Namespace, "name", key.Name)
+			log.Error(err, "error getting resource from cluster", "gvk", gvk,
+				"namespace", key.Namespace, "name", key.Name)
 		}
 	}
 	if !found {
@@ -279,8 +304,15 @@ func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Objec
 	return nil
 }
 
-// List iterates over all clusters with the GVK and returns a combined list.
-// Returns an error if any resources share the same namespace/name across clusters.
+// List iterates over all clusters with the GVK and returns a combined list
+// containing all resources found in any cluster.
+//
+// If resources are encountered in multiple clusters with the same
+// namespace/name, this function will still return a combined list of all
+// resources, but will set an error message that can be checked with
+// IsDuplicateError. In that way the result can be used if duplicates are ok
+// and disambiguated by the caller.
+//
 // Errors from individual clusters are logged and silently skipped so that a
 // single unavailable cluster does not block the entire read path.
 func (c *Client) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
@@ -323,11 +355,14 @@ func (c *Client) List(ctx context.Context, list client.ObjectList, opts ...clien
 		}
 		seen[key] = true
 	}
-	if len(duplicates) > 0 {
-		return fmt.Errorf("duplicate resources found in multiple clusters for %s: %v", gvk, duplicates)
+	if err := meta.SetList(list, allItems); err != nil {
+		return err
 	}
-
-	return meta.SetList(list, allItems)
+	if len(duplicates) > 0 {
+		return &duplicateError{msg: fmt.Sprintf("duplicate %s [%s] in multiple clusters",
+			gvk, strings.Join(duplicates, ", "))}
+	}
+	return nil
 }
 
 // Apply is not supported in the multicluster client as the group version kind
@@ -498,10 +533,19 @@ type subResourceClient struct {
 }
 
 // Get iterates over all clusters with the GVK and returns the result.
-// Returns an error if the resource is found in multiple clusters (duplicate).
+//
+// If the requested resource is encountered in multiple clusters, this function
+// will return the first one, but will set an error message that can be checked
+// with IsDuplicateError. In that way the result can be used if the caller
+// just cares about the resource existing in at least one cluster, and doesn't
+// mind which one is returned.
+//
+// If no cluster has the resource, a NotFound error is returned.
+//
+// Non-NotFound errors from individual clusters are logged and silently skipped
+// so that a single unavailable cluster does not block the entire read path.
 func (c *subResourceClient) Get(ctx context.Context, obj, subResource client.Object, opts ...client.SubResourceGetOption) error {
 	log := ctrl.LoggerFrom(ctx)
-
 	gvk, err := c.multiclusterClient.GVKFromHomeScheme(obj)
 	if err != nil {
 		return err
@@ -510,29 +554,37 @@ func (c *subResourceClient) Get(ctx context.Context, obj, subResource client.Obj
 	if err != nil {
 		return err
 	}
-
 	found := false
 	for _, cl := range clusters {
+		// If we already found the resource in a previous cluster, we want to check if it also exists in this cluster to detect duplicates.
 		if found {
 			candidateObj := obj.DeepCopyObject().(client.Object)
 			candidateSub := subResource.DeepCopyObject().(client.Object)
-			err := cl.GetClient().SubResource(c.subResource).Get(ctx, candidateObj, candidateSub, opts...)
+			err := cl.GetClient().SubResource(c.subResource).
+				Get(ctx, candidateObj, candidateSub, opts...)
 			if err == nil {
-				return fmt.Errorf("duplicate sub-resource found: %s %s/%s exists in multiple clusters", gvk, obj.GetNamespace(), obj.GetName())
+				// In this case Get() was already called and the object set.
+				return &duplicateError{msg: fmt.Sprintf("duplicate %s %s/%s subresource %s in multiple clusters",
+					gvk, candidateObj.GetNamespace(), candidateObj.GetName(), c.subResource)}
 			}
 			if !apierrors.IsNotFound(err) {
-				log.Error(err, "error checking for duplicate sub-resource in cluster", "gvk", gvk, "namespace", obj.GetNamespace(), "name", obj.GetName(), "subresource", c.subResource)
+				log.Error(err, "error checking for duplicate sub-resource in cluster",
+					"gvk", gvk, "namespace", obj.GetNamespace(), "name", obj.GetName(),
+					"subresource", c.subResource)
 			}
 			continue
 		}
 
-		err := cl.GetClient().SubResource(c.subResource).Get(ctx, obj, subResource, opts...)
+		err := cl.GetClient().SubResource(c.subResource).
+			Get(ctx, obj, subResource, opts...)
 		if err == nil {
 			found = true
 			continue
 		}
 		if !apierrors.IsNotFound(err) {
-			log.Error(err, "error getting sub-resource from cluster", "gvk", gvk, "namespace", obj.GetNamespace(), "name", obj.GetName(), "subresource", c.subResource)
+			log.Error(err, "error getting sub-resource from cluster", "gvk", gvk,
+				"namespace", obj.GetNamespace(), "name", obj.GetName(),
+				"subresource", c.subResource)
 		}
 	}
 	if !found {

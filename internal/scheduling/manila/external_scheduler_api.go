@@ -93,7 +93,7 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 	// Exit early if the request method is not POST.
 	if r.Method != http.MethodPost {
 		internalErr := fmt.Errorf("invalid request method: %s", r.Method)
-		c.Respond(http.StatusMethodNotAllowed, internalErr, "invalid request method")
+		c.Respond(nil, http.StatusMethodNotAllowed, internalErr, "invalid request method")
 		return
 	}
 
@@ -103,7 +103,7 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 	// If configured, log out the complete request body.
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		c.Respond(http.StatusInternalServerError, err, "failed to read request body")
+		c.Respond(nil, http.StatusInternalServerError, err, "failed to read request body")
 		return
 	}
 	raw := runtime.RawExtension{Raw: body}
@@ -112,17 +112,15 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 	cp := body
 	reader := bytes.NewReader(cp)
 	if err := json.NewDecoder(reader).Decode(&requestData); err != nil {
-		c.Respond(http.StatusBadRequest, err, "failed to decode request body")
+		c.Respond(nil, http.StatusBadRequest, err, "failed to decode request body")
 		return
 	}
-	slog.Info(
-		"handling POST request", "url", "/scheduler/manila/external",
-		"hosts", len(requestData.Hosts), "spec", requestData.Spec,
-	)
+	logger := slog.With(requestData.GetTraceLogArgs())
+	logger.Info("handling POST request", "url", "/scheduler/manila/external", "body", string(body))
 
 	if ok, reason := httpAPI.canRunScheduler(requestData); !ok {
 		internalErr := fmt.Errorf("cannot run scheduler: %s", reason)
-		c.Respond(http.StatusBadRequest, internalErr, reason)
+		c.Respond(logger, http.StatusBadRequest, internalErr, reason)
 		return
 	}
 
@@ -131,10 +129,10 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 		var err error
 		requestData.Pipeline, err = httpAPI.inferPipelineName(requestData)
 		if err != nil {
-			c.Respond(http.StatusBadRequest, err, err.Error())
+			c.Respond(logger, http.StatusBadRequest, err, err.Error())
 			return
 		}
-		slog.Info("inferred pipeline name", "pipeline", requestData.Pipeline)
+		logger.Info("inferred pipeline name", "pipeline", requestData.Pipeline)
 	}
 
 	// Create the decision object in kubernetes.
@@ -149,28 +147,29 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 			},
 			ResourceID: "", // TODO model out the spec.
 			ManilaRaw:  &raw,
+			Intent:     v1alpha1.SchedulingIntentUnknown,
 		},
 	}
 	ctx := r.Context()
 	if err := httpAPI.delegate.ProcessNewDecisionFromAPI(ctx, decision); err != nil {
-		c.Respond(http.StatusInternalServerError, err, "failed to process scheduling decision")
+		c.Respond(logger, http.StatusInternalServerError, err, "failed to process scheduling decision")
 		return
 	}
 	// Check if the decision contains status conditions indicating an error.
 	if meta.IsStatusConditionFalse(decision.Status.Conditions, v1alpha1.DecisionConditionReady) {
-		c.Respond(http.StatusInternalServerError, errors.New("decision contains error condition"), "decision failed")
+		c.Respond(logger, http.StatusInternalServerError, errors.New("decision contains error condition"), "decision failed")
 		return
 	}
 	if decision.Status.Result == nil {
-		c.Respond(http.StatusInternalServerError, errors.New("decision didn't produce a result"), "decision failed")
+		c.Respond(logger, http.StatusInternalServerError, errors.New("decision didn't produce a result"), "decision failed")
 		return
 	}
 	hosts := decision.Status.Result.OrderedHosts
 	response := api.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(response); err != nil {
-		c.Respond(http.StatusInternalServerError, err, "failed to encode response")
+		c.Respond(logger, http.StatusInternalServerError, err, "failed to encode response")
 		return
 	}
-	c.Respond(http.StatusOK, nil, "Success")
+	c.Respond(logger, http.StatusOK, nil, "Success")
 }
