@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package handlers
+package placement
 
 import (
 	"net/http"
@@ -24,7 +24,8 @@ import (
 // Returns 204 No Content on success. Returns 409 Conflict if any referenced
 // resource provider does not exist or if inventory/allocation constraints
 // would be violated. Available since microversion 1.30.
-func HandlePostReshaper(w http.ResponseWriter, r *http.Request) {
-	log := logf.FromContext(r.Context())
+func (s *Shim) HandlePostReshaper(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 }

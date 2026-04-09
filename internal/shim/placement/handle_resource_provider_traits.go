@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package handlers
+package placement
 
 import (
 	"net/http"
@@ -16,12 +16,13 @@ import (
 // by {uuid}. The response includes an array of trait name strings and the
 // resource_provider_generation for concurrency tracking. Returns 404 if the
 // provider does not exist.
-func HandleListResourceProviderTraits(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleListResourceProviderTraits(w http.ResponseWriter, r *http.Request) {
 	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 }
 
@@ -35,12 +36,13 @@ func HandleListResourceProviderTraits(w http.ResponseWriter, r *http.Request) {
 // Returns 400 Bad Request if any of the specified traits are invalid (i.e.
 // not returned by GET /traits). Returns 409 Conflict if the generation does
 // not match.
-func HandleUpdateResourceProviderTraits(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleUpdateResourceProviderTraits(w http.ResponseWriter, r *http.Request) {
 	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 }
 
@@ -53,11 +55,12 @@ func HandleUpdateResourceProviderTraits(w http.ResponseWriter, r *http.Request) 
 // for the same provider, prefer PUT with an empty traits list instead.
 // Returns 404 if the provider does not exist. Returns 409 Conflict on
 // concurrent modification. Returns 204 No Content on success.
-func HandleDeleteResourceProviderTraits(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleDeleteResourceProviderTraits(w http.ResponseWriter, r *http.Request) {
 	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 }

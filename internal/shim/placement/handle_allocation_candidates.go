@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package handlers
+package placement
 
 import (
 	"net/http"
@@ -34,7 +34,8 @@ import (
 // PUT /allocations/{consumer_uuid}. The provider_summaries section includes
 // inventory capacity and usage for informed decision-making. Available since
 // microversion 1.10.
-func HandleListAllocationCandidates(w http.ResponseWriter, r *http.Request) {
-	log := logf.FromContext(r.Context())
+func (s *Shim) HandleListAllocationCandidates(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 }

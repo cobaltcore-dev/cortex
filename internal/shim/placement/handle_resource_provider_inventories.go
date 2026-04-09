@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package handlers
+package placement
 
 import (
 	"net/http"
@@ -18,12 +18,13 @@ import (
 // min_unit, max_unit, step_size, and allocation_ratio. Also returns the
 // resource_provider_generation, which is needed for subsequent update or
 // delete operations. Returns 404 if the provider does not exist.
-func HandleListResourceProviderInventories(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleListResourceProviderInventories(w http.ResponseWriter, r *http.Request) {
 	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 }
 
@@ -37,12 +38,13 @@ func HandleListResourceProviderInventories(w http.ResponseWriter, r *http.Reques
 // class, each specifying at minimum a total value. Omitted inventory classes
 // are deleted. Returns 409 Conflict if allocations exceed the new capacity
 // or if a concurrent update has occurred.
-func HandleUpdateResourceProviderInventories(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleUpdateResourceProviderInventories(w http.ResponseWriter, r *http.Request) {
 	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 }
 
@@ -55,12 +57,13 @@ func HandleUpdateResourceProviderInventories(w http.ResponseWriter, r *http.Requ
 // Conflict if allocations exist against any of the provider's inventories.
 // Returns 404 if the provider does not exist. Available since microversion
 // 1.5.
-func HandleDeleteResourceProviderInventories(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleDeleteResourceProviderInventories(w http.ResponseWriter, r *http.Request) {
 	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 }
 
@@ -71,7 +74,7 @@ func HandleDeleteResourceProviderInventories(w http.ResponseWriter, r *http.Requ
 // provider. The response includes total, reserved, min_unit, max_unit,
 // step_size, allocation_ratio, and the resource_provider_generation. Returns
 // 404 if the provider or inventory for that class does not exist.
-func HandleShowResourceProviderInventory(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleShowResourceProviderInventory(w http.ResponseWriter, r *http.Request) {
 	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
 	if !ok {
 		return
@@ -80,7 +83,8 @@ func HandleShowResourceProviderInventory(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path,
 		"uuid", uuid, "resource_class", resourceClass)
 }
@@ -94,7 +98,7 @@ func HandleShowResourceProviderInventory(w http.ResponseWriter, r *http.Request)
 // constraints (allocation_ratio, min_unit, max_unit, step_size, reserved).
 // Since microversion 1.26, the reserved value must not exceed total. Returns
 // 409 Conflict on generation mismatch or if allocations would be violated.
-func HandleUpdateResourceProviderInventory(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleUpdateResourceProviderInventory(w http.ResponseWriter, r *http.Request) {
 	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
 	if !ok {
 		return
@@ -103,7 +107,8 @@ func HandleUpdateResourceProviderInventory(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path,
 		"uuid", uuid, "resource_class", resourceClass)
 }
@@ -115,7 +120,7 @@ func HandleUpdateResourceProviderInventory(w http.ResponseWriter, r *http.Reques
 // Returns 409 Conflict if allocations exist against this provider and resource
 // class combination, or if a concurrent update has occurred. Returns 404 if
 // the provider or inventory does not exist. Returns 204 No Content on success.
-func HandleDeleteResourceProviderInventory(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleDeleteResourceProviderInventory(w http.ResponseWriter, r *http.Request) {
 	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
 	if !ok {
 		return
@@ -124,7 +129,8 @@ func HandleDeleteResourceProviderInventory(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path,
 		"uuid", uuid, "resource_class", resourceClass)
 }

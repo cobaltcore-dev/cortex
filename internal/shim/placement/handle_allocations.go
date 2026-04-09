@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package handlers
+package placement
 
 import (
 	"net/http"
@@ -24,8 +24,9 @@ import (
 // (e.g. INSTANCE, MIGRATION) is supported. Returns 204 No Content on
 // success, or 409 Conflict if inventory is insufficient or a concurrent
 // update is detected (error code: placement.concurrent_update).
-func HandleManageAllocations(w http.ResponseWriter, r *http.Request) {
-	log := logf.FromContext(r.Context())
+func (s *Shim) HandleManageAllocations(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 }
 
@@ -40,12 +41,13 @@ func HandleManageAllocations(w http.ResponseWriter, r *http.Request) {
 // added at 1.12, consumer_generation at 1.28, and consumer_type at 1.38.
 // The consumer_generation and consumer_type fields are absent when the
 // consumer has no allocations.
-func HandleListAllocations(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleListAllocations(w http.ResponseWriter, r *http.Request) {
 	consumerUUID, ok := requiredUUIDPathParam(w, r, "consumer_uuid")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path,
 		"consumer_uuid", consumerUUID)
 }
@@ -61,12 +63,13 @@ func HandleListAllocations(w http.ResponseWriter, r *http.Request) {
 //
 // Returns 204 No Content on success. Returns 409 Conflict if there is
 // insufficient inventory or if a concurrent update was detected.
-func HandleUpdateAllocations(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleUpdateAllocations(w http.ResponseWriter, r *http.Request) {
 	consumerUUID, ok := requiredUUIDPathParam(w, r, "consumer_uuid")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path,
 		"consumer_uuid", consumerUUID)
 }
@@ -76,12 +79,13 @@ func HandleUpdateAllocations(w http.ResponseWriter, r *http.Request) {
 // Removes all allocation records for the consumer across all resource
 // providers. Returns 204 No Content on success, or 404 Not Found if the
 // consumer has no existing allocations.
-func HandleDeleteAllocations(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleDeleteAllocations(w http.ResponseWriter, r *http.Request) {
 	consumerUUID, ok := requiredUUIDPathParam(w, r, "consumer_uuid")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path,
 		"consumer_uuid", consumerUUID)
 }

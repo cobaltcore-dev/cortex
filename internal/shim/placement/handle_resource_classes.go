@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package handlers
+package placement
 
 import (
 	"net/http"
@@ -16,8 +16,9 @@ import (
 // deployer-defined custom classes prefixed with CUSTOM_. Resource classes
 // categorize the types of resources that resource providers can offer as
 // inventory. Available since microversion 1.2.
-func HandleListResourceClasses(w http.ResponseWriter, r *http.Request) {
-	log := logf.FromContext(r.Context())
+func (s *Shim) HandleListResourceClasses(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 }
 
@@ -28,8 +29,9 @@ func HandleListResourceClasses(w http.ResponseWriter, r *http.Request) {
 // a Location header on success. Returns 400 Bad Request if the CUSTOM_ prefix
 // is missing, and 409 Conflict if a class with the same name already exists.
 // Available since microversion 1.2.
-func HandleCreateResourceClass(w http.ResponseWriter, r *http.Request) {
-	log := logf.FromContext(r.Context())
+func (s *Shim) HandleCreateResourceClass(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 }
 
@@ -38,12 +40,13 @@ func HandleCreateResourceClass(w http.ResponseWriter, r *http.Request) {
 // Returns a representation of a single resource class identified by name.
 // This can be used to verify the existence of a resource class. Returns 404
 // if the class does not exist. Available since microversion 1.2.
-func HandleShowResourceClass(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleShowResourceClass(w http.ResponseWriter, r *http.Request) {
 	name, ok := requiredPathParam(w, r, "name")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
 }
 
@@ -55,12 +58,13 @@ func HandleShowResourceClass(w http.ResponseWriter, r *http.Request) {
 // The name must carry the CUSTOM_ prefix. In earlier versions (1.2-1.6), the
 // endpoint allowed renaming a class via a request body, but this usage is
 // discouraged. Returns 400 Bad Request if the CUSTOM_ prefix is missing.
-func HandleUpdateResourceClass(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleUpdateResourceClass(w http.ResponseWriter, r *http.Request) {
 	name, ok := requiredPathParam(w, r, "name")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
 }
 
@@ -71,11 +75,12 @@ func HandleUpdateResourceClass(w http.ResponseWriter, r *http.Request) {
 // Request. Returns 409 Conflict if any resource provider has inventory of this
 // class, and 404 if the class does not exist. Returns 204 No Content on
 // success. Available since microversion 1.2.
-func HandleDeleteResourceClass(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleDeleteResourceClass(w http.ResponseWriter, r *http.Request) {
 	name, ok := requiredPathParam(w, r, "name")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
 }

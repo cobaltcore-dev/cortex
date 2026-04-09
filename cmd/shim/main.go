@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	placementhandlers "github.com/cobaltcore-dev/cortex/internal/shim/placement/handlers"
+	"github.com/cobaltcore-dev/cortex/internal/shim/placement"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -207,7 +207,12 @@ func main() {
 	// API endpoint.
 	mux := http.NewServeMux()
 	if enablePlacementShim {
-		placementhandlers.RegisterRoutes(mux)
+		placementShim := &placement.Shim{Client: mgr.GetClient()}
+		if err := placementShim.SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to set up placement shim")
+			os.Exit(1)
+		}
+		placementShim.RegisterRoutes(mux)
 	}
 
 	// +kubebuilder:scaffold:builder

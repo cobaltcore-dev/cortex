@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package handlers
+package placement
 
 import (
 	"net/http"
@@ -21,7 +21,8 @@ import (
 // each group containing resource totals and a consumer_count. Since
 // microversion 1.38, an optional consumer_type query parameter allows
 // filtering the results. Available since microversion 1.9.
-func HandleListUsages(w http.ResponseWriter, r *http.Request) {
-	log := logf.FromContext(r.Context())
+func (s *Shim) HandleListUsages(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 }

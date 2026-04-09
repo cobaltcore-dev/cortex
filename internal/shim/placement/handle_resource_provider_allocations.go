@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package handlers
+package placement
 
 import (
 	"net/http"
@@ -17,11 +17,12 @@ import (
 // consumption, complementing the consumer-centric GET /allocations/{consumer}
 // endpoint. The response includes the resource_provider_generation. Returns
 // 404 if the provider does not exist.
-func HandleListResourceProviderAllocations(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleListResourceProviderAllocations(w http.ResponseWriter, r *http.Request) {
 	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 }

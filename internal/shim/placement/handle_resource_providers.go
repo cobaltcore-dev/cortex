@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package handlers
+package placement
 
 import (
 	"net/http"
@@ -22,8 +22,9 @@ import (
 // microversions: resources filtering at 1.3, tree queries at 1.14, trait
 // requirements at 1.18, forbidden traits at 1.22, forbidden aggregates at
 // 1.32, and the in: syntax for required at 1.39.
-func HandleListResourceProviders(w http.ResponseWriter, r *http.Request) {
-	log := logf.FromContext(r.Context())
+func (s *Shim) HandleListResourceProviders(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 }
 
@@ -39,8 +40,9 @@ func HandleListResourceProviders(w http.ResponseWriter, r *http.Request) {
 // an HTTP 201 with a Location header, while 1.20+ returns the full resource
 // provider object in the body. Returns 409 Conflict if a provider with the
 // same name or UUID already exists.
-func HandleCreateResourceProvider(w http.ResponseWriter, r *http.Request) {
-	log := logf.FromContext(r.Context())
+func (s *Shim) HandleCreateResourceProvider(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 }
 
@@ -52,12 +54,13 @@ func HandleCreateResourceProvider(w http.ResponseWriter, r *http.Request) {
 // also includes parent_provider_uuid and root_provider_uuid to describe the
 // provider's position in a hierarchical tree. Returns 404 if the provider
 // does not exist.
-func HandleShowResourceProvider(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleShowResourceProvider(w http.ResponseWriter, r *http.Request) {
 	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 }
 
@@ -68,12 +71,13 @@ func HandleShowResourceProvider(w http.ResponseWriter, r *http.Request) {
 // any existing provider UUID that would not create a loop in the tree, or set
 // to null to make the provider a root. Returns 409 Conflict if another
 // provider already has the requested name.
-func HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Request) {
 	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 }
 
@@ -83,11 +87,12 @@ func HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Request) {
 // inventories. The operation fails with 409 Conflict if there are any
 // allocations against the provider's inventories or if the provider has
 // child providers in a tree hierarchy. Returns 204 No Content on success.
-func HandleDeleteResourceProvider(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleDeleteResourceProvider(w http.ResponseWriter, r *http.Request) {
 	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 }

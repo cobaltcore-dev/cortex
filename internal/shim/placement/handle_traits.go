@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package handlers
+package placement
 
 import (
 	"net/http"
@@ -20,8 +20,9 @@ import (
 // (startswith:CUSTOM) or by an explicit list (in:TRAIT1,TRAIT2), and
 // associated filters to only traits that are or are not associated with at
 // least one resource provider.
-func HandleListTraits(w http.ResponseWriter, r *http.Request) {
-	log := logf.FromContext(r.Context())
+func (s *Shim) HandleListTraits(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 }
 
@@ -29,12 +30,13 @@ func HandleListTraits(w http.ResponseWriter, r *http.Request) {
 //
 // Checks whether a trait with the given name exists. Returns 204 No Content
 // (with no response body) if the trait is found, or 404 Not Found otherwise.
-func HandleShowTrait(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleShowTrait(w http.ResponseWriter, r *http.Request) {
 	name, ok := requiredPathParam(w, r, "name")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
 }
 
@@ -44,12 +46,13 @@ func HandleShowTrait(w http.ResponseWriter, r *http.Request) {
 // created; standard traits are read-only. Returns 201 Created if the trait
 // is newly inserted, or 204 No Content if it already exists. Returns 400
 // Bad Request if the name does not carry the CUSTOM_ prefix.
-func HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
 	name, ok := requiredPathParam(w, r, "name")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
 }
 
@@ -59,11 +62,12 @@ func HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
 // cannot be deleted and will return 400 Bad Request. Returns 409 Conflict if
 // the trait is still associated with any resource provider. Returns 404 if
 // the trait does not exist. Returns 204 No Content on success.
-func HandleDeleteTrait(w http.ResponseWriter, r *http.Request) {
+func (s *Shim) HandleDeleteTrait(w http.ResponseWriter, r *http.Request) {
 	name, ok := requiredPathParam(w, r, "name")
 	if !ok {
 		return
 	}
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
 }
