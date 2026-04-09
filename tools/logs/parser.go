@@ -32,7 +32,7 @@ func hostColor(host string) string {
 	// Simple hash function
 	hash := uint32(0)
 	for _, c := range host {
-		hash = hash*31 + uint32(c)
+		hash = hash*31 + uint32(c) //nolint:gosec // rune values are non-negative Unicode codepoints, no overflow risk in hash function
 	}
 
 	// Use a curated set of distinguishable background colors with appropriate text colors

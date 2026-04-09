@@ -194,7 +194,7 @@ func FromChangeCommitmentTargetState(
 	smallestFlavorMemoryBytes := int64(smallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory from specs, realistically bounded
 
 	// Amount represents multiples of the smallest flavor in the group
-	totalMemoryBytes := int64(amountMultiple) * smallestFlavorMemoryBytes //nolint:gosec // commitment amount from Limes API, realistically bounded
+	totalMemoryBytes := int64(amountMultiple) * smallestFlavorMemoryBytes
 
 	return &CommitmentState{
 		CommitmentUUID:   string(commitment.UUID),
