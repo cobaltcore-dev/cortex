@@ -41,6 +41,22 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{ $hasMutating }}}}{{- end }}
 
 
+{{/*
+chart.argsContainPrefix checks if any string in args starts with prefix.
+Usage: include "chart.argsContainPrefix" (dict "prefix" "--zap-log-level" "args" .Values.controllerManager.container.args)
+Returns "true" or "false".
+*/}}
+{{- define "chart.argsContainPrefix" -}}
+{{- $prefix := .prefix -}}
+{{- $result := dict "found" "false" -}}
+{{- range .args -}}
+  {{- if hasPrefix $prefix . -}}
+    {{- $_ := set $result "found" "true" -}}
+  {{- end -}}
+{{- end -}}
+{{- get $result "found" -}}
+{{- end -}}
+
 {{- define "chart.hasValidatingWebhooks" -}}
 {{- $hasValidating := false }}
 {{- range . }}

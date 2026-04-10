@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -151,10 +152,27 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	// Configure slog (used across internal packages) with structured JSON output.
+	// Configure slog (used across internal packages) with JSON output and
+	// level control via the LOG_LEVEL environment variable.
+	// Supported values: debug, info (default), warn, error.
+	slogLevel := new(slog.LevelVar)
+	slogLevel.Set(slog.LevelInfo)
+	if lvl := os.Getenv("LOG_LEVEL"); lvl != "" {
+		switch strings.ToLower(lvl) {
+		case "debug":
+			slogLevel.Set(slog.LevelDebug)
+		case "info":
+			slogLevel.Set(slog.LevelInfo)
+		case "warn", "warning":
+			slogLevel.Set(slog.LevelWarn)
+		case "error":
+			slogLevel.Set(slog.LevelError)
+		}
+	}
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+		Level: slogLevel,
 	})))
+	slog.Info("slog configured", "level", slogLevel.Level().String())
 
 	// Log the main configuration
 	setupLog.Info("loaded main configuration",

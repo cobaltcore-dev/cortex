@@ -35,6 +35,12 @@ spec:
             {{- range .Values.controllerManager.container.args }}
             - {{ . }}
             {{- end }}
+            {{- if and .Values.controllerManager.container.logLevel (ne (include "chart.argsContainPrefix" (dict "prefix" "--zap-log-level" "args" .Values.controllerManager.container.args)) "true") }}
+            - "--zap-log-level={{ .Values.controllerManager.container.logLevel }}"
+            {{- end }}
+            {{- if and .Values.controllerManager.container.zapDevel (ne (include "chart.argsContainPrefix" (dict "prefix" "--zap-devel" "args" .Values.controllerManager.container.args)) "true") }}
+            - "--zap-devel"
+            {{- end }}
             {{- if and .Values.webhook.enable .Values.certmanager.enable }}
             - "--webhook-cert-path=/tmp/k8s-webhook-server/serving-certs"
             {{- end }}
@@ -56,13 +62,17 @@ spec:
           {{- if .Values.controllerManager.container.image.pullPolicy }}
           imagePullPolicy: {{ .Values.controllerManager.container.image.pullPolicy }}
           {{- end }}
-          {{- if .Values.controllerManager.container.env }}
           env:
+            {{- if and .Values.controllerManager.container.logLevel (not (and .Values.controllerManager.container.env (hasKey .Values.controllerManager.container.env "LOG_LEVEL"))) }}
+            - name: LOG_LEVEL
+              value: {{ .Values.controllerManager.container.logLevel | quote }}
+            {{- end }}
+            {{- if .Values.controllerManager.container.env }}
             {{- range $key, $value := .Values.controllerManager.container.env }}
             - name: {{ $key }}
               value: {{ $value }}
             {{- end }}
-          {{- end }}
+            {{- end }}
           livenessProbe:
             {{- toYaml .Values.controllerManager.container.livenessProbe | nindent 12 }}
           readinessProbe:
