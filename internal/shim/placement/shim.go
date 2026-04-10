@@ -12,11 +12,14 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 // IndexHypervisorByID is the field index key for looking up Hypervisor
@@ -38,6 +41,15 @@ type config struct {
 	// PlacementURL is the URL of the OpenStack Placement API the shim
 	// should forward requests to.
 	PlacementURL string `json:"placementURL,omitempty"`
+}
+
+// validate checks the config for required fields and returns an error if the
+// config is invalid.
+func (c *config) validate() error {
+	if c.PlacementURL == "" {
+		return errors.New("placement URL is required")
+	}
+	return nil
 }
 
 // Shim is the placement API shim. It holds a controller-runtime client for
@@ -82,11 +94,6 @@ func (s *Shim) Start(ctx context.Context) (err error) {
 	// Try establish a connection to the placement API to fail fast if the
 	// configuration is invalid. Directly call the root endpoint for that.
 	setupLog.Info("Testing connection to placement API", "url", s.config.PlacementURL)
-	if s.config.PlacementURL == "" {
-		err := errors.New("placement URL is not configured")
-		setupLog.Error(err, "Invalid configuration for placement shim")
-		return err
-	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.config.PlacementURL, http.NoBody)
 	if err != nil {
 		setupLog.Error(err, "Failed to create HTTP request to placement API")
@@ -105,6 +112,67 @@ func (s *Shim) Start(ctx context.Context) (err error) {
 	}
 	setupLog.Info("Successfully connected to placement API")
 	return nil
+}
+
+// Reconcile is not used by the shim, but must be implemented to satisfy the
+// controller-runtime Reconciler interface.
+func (s *Shim) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	return ctrl.Result{}, nil
+}
+
+// handleRemoteHypervisor is called by watches in remote clusters and triggers
+// a reconcile on the hypervisor resource that was changed in the remote cluster.
+func (s *Shim) handleRemoteHypervisor() handler.EventHandler {
+	handler := handler.Funcs{}
+	// For now, the shim doesn't need to do anything on hypervisor events.
+	return handler
+}
+
+// predicateRemoteHypervisor is used to filter events from remote clusters,
+// so that only events for hypervisors that should be processed by the shim.
+func (s *Shim) predicateRemoteHypervisor() predicate.Predicate {
+	// For now, the shim doesn't need to process any hypervisor events.
+	return predicate.NewPredicateFuncs(func(object client.Object) bool {
+		return false
+	})
+}
+
+// SetupWithManager registers field indexes on the manager's cache so that
+// subsequent list calls are served from the informer cache rather than
+// hitting the API server. This must be called before the manager is started.
+//
+// Calling IndexField internally invokes GetInformer, which creates and
+// registers a shared informer for the indexed type (hv1.Hypervisor) with the
+// cache. The informer is started later when mgr.Start() is called. This
+// means no separate controller or empty Reconcile loop is needed — the
+// index registration alone is sufficient to warm the cache.
+func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err error) {
+	setupLog.Info("Setting up placement shim with manager")
+	s.config, err = conf.GetConfig[config]()
+	if err != nil {
+		setupLog.Error(err, "Failed to load placement shim config")
+		return err
+	}
+	// Validate we don't have any weird values in the config.
+	if err := s.config.validate(); err != nil {
+		return err
+	}
+	// Check that the provided client is a multicluster client, since we need
+	// that to watch for hypervisors across clusters.
+	mcl, ok := s.Client.(*multicluster.Client)
+	if !ok {
+		return errors.New("provided client must be a multicluster client")
+	}
+	bldr := multicluster.BuildController(mcl, mgr)
+	// The hypervisor crd may be distributed across multiple remote clusters.
+	bldr, err = bldr.WatchesMulticluster(&hv1.Hypervisor{},
+		s.handleRemoteHypervisor(),
+		s.predicateRemoteHypervisor(),
+	)
+	if err != nil {
+		return err
+	}
+	return bldr.Named("placement-shim").Complete(s)
 }
 
 // forward proxies the incoming HTTP request to the upstream placement API
@@ -157,47 +225,6 @@ func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	if _, err := io.Copy(w, resp.Body); err != nil {
 		log.Error(err, "failed to copy upstream response body")
 	}
-}
-
-// SetupWithManager registers field indexes on the manager's cache so that
-// subsequent list calls are served from the informer cache rather than
-// hitting the API server. This must be called before the manager is started.
-//
-// Calling IndexField internally invokes GetInformer, which creates and
-// registers a shared informer for the indexed type (hv1.Hypervisor) with the
-// cache. The informer is started later when mgr.Start() is called. This
-// means no separate controller or empty Reconcile loop is needed — the
-// index registration alone is sufficient to warm the cache.
-func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err error) {
-	setupLog.Info("Setting up placement shim with manager")
-	if err := mgr.Add(s); err != nil { // Bind Start(ctx)
-		setupLog.Error(err, "Failed to bind start routine")
-		return err
-	}
-	s.config, err = conf.GetConfig[config]()
-	if err != nil {
-		setupLog.Error(err, "Failed to load placement shim config")
-		return err
-	}
-	setupLog.Info("Indexing Hypervisors by hypervisor ID")
-	err = mgr.GetFieldIndexer().IndexField(ctx, &hv1.Hypervisor{}, IndexHypervisorByID,
-		func(obj client.Object) []string {
-			h, ok := obj.(*hv1.Hypervisor)
-			if !ok {
-				return nil
-			}
-			if h.Status.HypervisorID == "" {
-				return nil
-			}
-			return []string{h.Status.HypervisorID}
-		},
-	)
-	if err != nil {
-		setupLog.Error(err, "Failed to index Hypervisors by hypervisor ID")
-		return err
-	}
-	setupLog.Info("Successfully indexed Hypervisors by hypervisor ID")
-	return nil
 }
 
 // RegisterRoutes binds all Placement API handlers to the given mux. The

@@ -24,6 +24,11 @@ cortex-shim:
     container:
       extraArgs: ["--placement-shim=true"]
   conf:
+    apiservers:
+      home:
+        gvks:
+          - kvm.cloud.sap/v1/Hypervisor
+          - kvm.cloud.sap/v1/HypervisorList
     monitoring:
       labels:
         github_org: cobaltcore-dev

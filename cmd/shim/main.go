@@ -15,6 +15,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/shim/placement"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/sapcc/go-bits/httpext"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -22,6 +23,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
@@ -197,7 +199,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TODO: Initialize multicluster client here.
+	homeCluster, err := cluster.New(restConfig, func(o *cluster.Options) { o.Scheme = scheme })
+	if err != nil {
+		setupLog.Error(err, "unable to create home cluster")
+		os.Exit(1)
+	}
+	if err := mgr.Add(homeCluster); err != nil {
+		setupLog.Error(err, "unable to add home cluster")
+		os.Exit(1)
+	}
+	multiclusterClient := &multicluster.Client{
+		HomeCluster:     homeCluster,
+		HomeRestConfig:  restConfig,
+		HomeScheme:      scheme,
+		ResourceRouters: multicluster.DefaultResourceRouters,
+	}
+	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
+	if err := multiclusterClient.InitFromConf(ctx, mgr, multiclusterClientConfig); err != nil {
+		setupLog.Error(err, "unable to initialize multicluster client")
+		os.Exit(1)
+	}
 
 	// Our custom monitoring registry can add prometheus labels to all metrics.
 	// This is useful to distinguish metrics from different deployments.
@@ -207,7 +228,7 @@ func main() {
 	// API endpoint.
 	mux := http.NewServeMux()
 	if enablePlacementShim {
-		placementShim := &placement.Shim{Client: mgr.GetClient()}
+		placementShim := &placement.Shim{Client: multiclusterClient}
 		setupLog.Info("Adding placement shim to manager")
 		if err := placementShim.SetupWithManager(ctx, mgr); err != nil {
 			setupLog.Error(err, "unable to set up placement shim")
