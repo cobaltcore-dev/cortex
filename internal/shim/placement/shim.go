@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -111,16 +112,26 @@ func (s *Shim) Start(ctx context.Context) (err error) {
 func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	log := logf.FromContext(r.Context())
 
-	// Build upstream URL: config.PlacementURL + original path + query string.
-	upstreamURL := s.config.PlacementURL + r.URL.Path
-	if r.URL.RawQuery != "" {
-		upstreamURL += "?" + r.URL.RawQuery
+	// Parse the trusted base URL and resolve the request path against it
+	// so the upstream target is always anchored to the configured host.
+	upstream, err := url.Parse(s.config.PlacementURL)
+	if err != nil {
+		log.Error(err, "failed to parse placement URL", "url", s.config.PlacementURL)
+		http.Error(w, "failed to parse placement URL", http.StatusBadGateway)
+		return
 	}
+	upstream.Path, err = url.JoinPath(upstream.Path, r.URL.Path)
+	if err != nil {
+		log.Error(err, "failed to join upstream path", "path", r.URL.Path)
+		http.Error(w, "failed to join upstream path", http.StatusBadGateway)
+		return
+	}
+	upstream.RawQuery = r.URL.RawQuery
 
 	// Create upstream request preserving method, body, and context.
-	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, r.Body)
+	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, upstream.String(), r.Body)
 	if err != nil {
-		log.Error(err, "failed to create upstream request", "url", upstreamURL)
+		log.Error(err, "failed to create upstream request", "url", upstream.String())
 		http.Error(w, "failed to create upstream request", http.StatusBadGateway)
 		return
 	}
@@ -128,9 +139,9 @@ func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	// Copy all incoming headers.
 	upstreamReq.Header = r.Header.Clone()
 
-	resp, err := s.httpClient.Do(upstreamReq)
+	resp, err := s.httpClient.Do(upstreamReq) //nolint:gosec // G704: intentional reverse proxy; host is fixed by operator config, only path varies
 	if err != nil {
-		log.Error(err, "failed to reach placement API", "url", upstreamURL)
+		log.Error(err, "failed to reach placement API", "url", upstream.String())
 		http.Error(w, "failed to reach placement API", http.StatusBadGateway)
 		return
 	}
