@@ -7,8 +7,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"sync/atomic"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -57,6 +59,10 @@ type Shim struct {
 	// HTTP client that can talk to openstack placement, if needed, over
 	// ingress with single-sign-on.
 	httpClient *http.Client
+	// ready is set to true once Start() has completed successfully. It is
+	// used by the readiness check to prevent traffic from reaching the shim
+	// before the HTTP client and upstream connection are established.
+	ready atomic.Bool
 }
 
 // Start is called after the manager has started and the cache is running.
@@ -82,11 +88,15 @@ func (s *Shim) Start(ctx context.Context) (err error) {
 	transport.MaxIdleConns = 100
 	transport.MaxIdleConnsPerHost = 100
 	// Guard against a hung upstream or slow TLS negotiation.
+	transport.DialContext = (&net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}).DialContext
 	transport.TLSHandshakeTimeout = 10 * time.Second
 	transport.ResponseHeaderTimeout = 60 * time.Second
 	transport.ExpectContinueTimeout = 1 * time.Second
 	transport.IdleConnTimeout = 90 * time.Second
-	s.httpClient = &http.Client{Transport: transport}
+	s.httpClient = &http.Client{Transport: transport, Timeout: 60 * time.Second}
 	// Try establish a connection to the placement API to fail fast if the
 	// configuration is invalid. Directly call the root endpoint for that.
 	setupLog.Info("Testing connection to placement API", "url", s.config.PlacementURL)
@@ -107,7 +117,21 @@ func (s *Shim) Start(ctx context.Context) (err error) {
 		return err
 	}
 	setupLog.Info("Successfully connected to placement API")
+	s.ready.Store(true)
 	return nil
+}
+
+// ReadyzCheck returns a healthz.Checker that reports healthy only after
+// Start() has completed successfully. Wire this into the manager's readiness
+// endpoint so that Kubernetes does not route traffic to the pod before the
+// shim's HTTP client and upstream connection are established.
+func (s *Shim) ReadyzCheck() func(*http.Request) error {
+	return func(_ *http.Request) error {
+		if !s.ready.Load() {
+			return errors.New("placement shim not yet initialized")
+		}
+		return nil
+	}
 }
 
 // Reconcile is not used by the shim, but must be implemented to satisfy the
@@ -175,6 +199,12 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 // and copies the response (status, headers, body) back to the client.
 func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	log := logf.FromContext(r.Context())
+
+	if s.httpClient == nil {
+		log.Info("placement shim not yet initialized, rejecting request")
+		http.Error(w, "service not ready", http.StatusServiceUnavailable)
+		return
+	}
 
 	// Parse the trusted base URL and resolve the request path against it
 	// so the upstream target is always anchored to the configured host.

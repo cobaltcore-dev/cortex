@@ -227,8 +227,9 @@ func main() {
 
 	// API endpoint.
 	mux := http.NewServeMux()
+	var placementShim *placement.Shim
 	if enablePlacementShim {
-		placementShim := &placement.Shim{Client: multiclusterClient}
+		placementShim = &placement.Shim{Client: multiclusterClient}
 		setupLog.Info("Adding placement shim to manager")
 		if err := placementShim.SetupWithManager(ctx, mgr); err != nil {
 			setupLog.Error(err, "unable to set up placement shim")
@@ -259,7 +260,11 @@ func main() {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+	readyzCheck := healthz.Ping
+	if placementShim != nil {
+		readyzCheck = placementShim.ReadyzCheck()
+	}
+	if err := mgr.AddReadyzCheck("readyz", readyzCheck); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
