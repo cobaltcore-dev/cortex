@@ -26,6 +26,7 @@ func (s *Shim) HandleListResourceProviders(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
+	s.forward(w, r)
 }
 
 // HandleCreateResourceProvider handles POST /resource_providers requests.
@@ -44,6 +45,7 @@ func (s *Shim) HandleCreateResourceProvider(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
+	s.forward(w, r)
 }
 
 // HandleShowResourceProvider handles GET /resource_providers/{uuid} requests.
@@ -62,6 +64,7 @@ func (s *Shim) HandleShowResourceProvider(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
+	s.forward(w, r)
 }
 
 // HandleUpdateResourceProvider handles PUT /resource_providers/{uuid} requests.
@@ -79,6 +82,7 @@ func (s *Shim) HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
+	s.forward(w, r)
 }
 
 // HandleDeleteResourceProvider handles DELETE /resource_providers/{uuid} requests.
@@ -95,4 +99,5 @@ func (s *Shim) HandleDeleteResourceProvider(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
+	s.forward(w, r)
 }

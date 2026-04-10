@@ -38,4 +38,5 @@ func (s *Shim) HandleListAllocationCandidates(w http.ResponseWriter, r *http.Req
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
+	s.forward(w, r)
 }

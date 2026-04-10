@@ -30,6 +30,7 @@ func (s *Shim) HandleListResourceProviderAggregates(w http.ResponseWriter, r *ht
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
+	s.forward(w, r)
 }
 
 // HandleUpdateResourceProviderAggregates handles
@@ -50,4 +51,5 @@ func (s *Shim) HandleUpdateResourceProviderAggregates(w http.ResponseWriter, r *
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
+	s.forward(w, r)
 }

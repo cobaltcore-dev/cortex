@@ -20,6 +20,7 @@ func (s *Shim) HandleListResourceClasses(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
+	s.forward(w, r)
 }
 
 // HandleCreateResourceClass handles POST /resource_classes requests.
@@ -33,6 +34,7 @@ func (s *Shim) HandleCreateResourceClass(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
+	s.forward(w, r)
 }
 
 // HandleShowResourceClass handles GET /resource_classes/{name} requests.
@@ -48,6 +50,7 @@ func (s *Shim) HandleShowResourceClass(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
+	s.forward(w, r)
 }
 
 // HandleUpdateResourceClass handles PUT /resource_classes/{name} requests.
@@ -66,6 +69,7 @@ func (s *Shim) HandleUpdateResourceClass(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
+	s.forward(w, r)
 }
 
 // HandleDeleteResourceClass handles DELETE /resource_classes/{name} requests.
@@ -83,4 +87,5 @@ func (s *Shim) HandleDeleteResourceClass(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
+	s.forward(w, r)
 }

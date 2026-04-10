@@ -26,6 +26,7 @@ func (s *Shim) HandleListResourceProviderInventories(w http.ResponseWriter, r *h
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
+	s.forward(w, r)
 }
 
 // HandleUpdateResourceProviderInventories handles
@@ -46,6 +47,7 @@ func (s *Shim) HandleUpdateResourceProviderInventories(w http.ResponseWriter, r 
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
+	s.forward(w, r)
 }
 
 // HandleDeleteResourceProviderInventories handles
@@ -65,6 +67,7 @@ func (s *Shim) HandleDeleteResourceProviderInventories(w http.ResponseWriter, r 
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
+	s.forward(w, r)
 }
 
 // HandleShowResourceProviderInventory handles
@@ -87,6 +90,7 @@ func (s *Shim) HandleShowResourceProviderInventory(w http.ResponseWriter, r *htt
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path,
 		"uuid", uuid, "resource_class", resourceClass)
+	s.forward(w, r)
 }
 
 // HandleUpdateResourceProviderInventory handles
@@ -111,6 +115,7 @@ func (s *Shim) HandleUpdateResourceProviderInventory(w http.ResponseWriter, r *h
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path,
 		"uuid", uuid, "resource_class", resourceClass)
+	s.forward(w, r)
 }
 
 // HandleDeleteResourceProviderInventory handles
@@ -133,4 +138,5 @@ func (s *Shim) HandleDeleteResourceProviderInventory(w http.ResponseWriter, r *h
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path,
 		"uuid", uuid, "resource_class", resourceClass)
+	s.forward(w, r)
 }

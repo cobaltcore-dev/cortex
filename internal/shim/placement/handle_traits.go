@@ -24,6 +24,7 @@ func (s *Shim) HandleListTraits(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
+	s.forward(w, r)
 }
 
 // HandleShowTrait handles GET /traits/{name} requests.
@@ -38,6 +39,7 @@ func (s *Shim) HandleShowTrait(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
+	s.forward(w, r)
 }
 
 // HandleUpdateTrait handles PUT /traits/{name} requests.
@@ -54,6 +56,7 @@ func (s *Shim) HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
+	s.forward(w, r)
 }
 
 // HandleDeleteTrait handles DELETE /traits/{name} requests.
@@ -70,4 +73,5 @@ func (s *Shim) HandleDeleteTrait(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
+	s.forward(w, r)
 }

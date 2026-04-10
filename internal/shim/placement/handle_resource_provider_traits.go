@@ -24,6 +24,7 @@ func (s *Shim) HandleListResourceProviderTraits(w http.ResponseWriter, r *http.R
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
+	s.forward(w, r)
 }
 
 // HandleUpdateResourceProviderTraits handles
@@ -44,6 +45,7 @@ func (s *Shim) HandleUpdateResourceProviderTraits(w http.ResponseWriter, r *http
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
+	s.forward(w, r)
 }
 
 // HandleDeleteResourceProviderTraits handles
@@ -63,4 +65,5 @@ func (s *Shim) HandleDeleteResourceProviderTraits(w http.ResponseWriter, r *http
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
+	s.forward(w, r)
 }

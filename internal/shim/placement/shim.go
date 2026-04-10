@@ -6,13 +6,16 @@ package placement
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // IndexHypervisorByID is the field index key for looking up Hypervisor
@@ -52,18 +55,29 @@ type Shim struct {
 // running.
 func (s *Shim) Start(ctx context.Context) (err error) {
 	setupLog.Info("Starting placement shim")
-	s.httpClient = http.DefaultClient
+	// Build the transport with optional SSO TLS credentials.
+	var transport *http.Transport
 	if s.config.SSO != nil {
-		setupLog.Info("SSO config provided, creating HTTP client for placement API")
-		s.httpClient, err = sso.NewHTTPClient(*s.config.SSO)
+		setupLog.Info("SSO config provided, creating transport for placement API")
+		transport, err = sso.NewTransport(*s.config.SSO)
 		if err != nil {
-			setupLog.Error(err, "Failed to create HTTP client from SSO config")
+			setupLog.Error(err, "Failed to create transport from SSO config")
 			return err
 		}
-		setupLog.Info("Successfully created HTTP client from SSO config")
 	} else {
-		setupLog.Info("No SSO config provided, using default HTTP client for placement API")
+		setupLog.Info("No SSO config provided, using plain transport for placement API")
+		transport = &http.Transport{}
 	}
+	// All proxy traffic goes to one placement API host, so raise the
+	// per-host idle connection limit from the default of 2.
+	transport.MaxIdleConns = 100
+	transport.MaxIdleConnsPerHost = 100
+	// Guard against a hung upstream or slow TLS negotiation.
+	transport.TLSHandshakeTimeout = 10 * time.Second
+	transport.ResponseHeaderTimeout = 60 * time.Second
+	transport.ExpectContinueTimeout = 1 * time.Second
+	transport.IdleConnTimeout = 90 * time.Second
+	s.httpClient = &http.Client{Transport: transport}
 	// Try establish a connection to the placement API to fail fast if the
 	// configuration is invalid. Directly call the root endpoint for that.
 	setupLog.Info("Testing connection to placement API", "url", s.config.PlacementURL)
@@ -90,6 +104,48 @@ func (s *Shim) Start(ctx context.Context) (err error) {
 	}
 	setupLog.Info("Successfully connected to placement API")
 	return nil
+}
+
+// forward proxies the incoming HTTP request to the upstream placement API
+// and copies the response (status, headers, body) back to the client.
+func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
+	log := logf.FromContext(r.Context())
+
+	// Build upstream URL: config.PlacementURL + original path + query string.
+	upstreamURL := s.config.PlacementURL + r.URL.Path
+	if r.URL.RawQuery != "" {
+		upstreamURL += "?" + r.URL.RawQuery
+	}
+
+	// Create upstream request preserving method, body, and context.
+	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, r.Body)
+	if err != nil {
+		log.Error(err, "failed to create upstream request", "url", upstreamURL)
+		http.Error(w, "failed to create upstream request", http.StatusBadGateway)
+		return
+	}
+
+	// Copy all incoming headers.
+	upstreamReq.Header = r.Header.Clone()
+
+	resp, err := s.httpClient.Do(upstreamReq)
+	if err != nil {
+		log.Error(err, "failed to reach placement API", "url", upstreamURL)
+		http.Error(w, "failed to reach placement API", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Copy response headers, status code, and body back to the caller.
+	for k, vs := range resp.Header {
+		for _, v := range vs {
+			w.Header().Add(k, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		log.Error(err, "failed to copy upstream response body")
+	}
 }
 
 // SetupWithManager registers field indexes on the manager's cache so that

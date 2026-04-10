@@ -28,4 +28,5 @@ func (s *Shim) HandlePostReshaper(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
+	s.forward(w, r)
 }

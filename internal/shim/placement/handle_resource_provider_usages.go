@@ -25,4 +25,5 @@ func (s *Shim) HandleListResourceProviderUsages(w http.ResponseWriter, r *http.R
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
+	s.forward(w, r)
 }

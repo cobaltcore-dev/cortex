@@ -28,6 +28,7 @@ func (s *Shim) HandleManageAllocations(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
+	s.forward(w, r)
 }
 
 // HandleListAllocations handles GET /allocations/{consumer_uuid} requests.
@@ -50,6 +51,7 @@ func (s *Shim) HandleListAllocations(w http.ResponseWriter, r *http.Request) {
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path,
 		"consumer_uuid", consumerUUID)
+	s.forward(w, r)
 }
 
 // HandleUpdateAllocations handles PUT /allocations/{consumer_uuid} requests.
@@ -72,6 +74,7 @@ func (s *Shim) HandleUpdateAllocations(w http.ResponseWriter, r *http.Request) {
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path,
 		"consumer_uuid", consumerUUID)
+	s.forward(w, r)
 }
 
 // HandleDeleteAllocations handles DELETE /allocations/{consumer_uuid} requests.
@@ -88,4 +91,5 @@ func (s *Shim) HandleDeleteAllocations(w http.ResponseWriter, r *http.Request) {
 	log := logf.FromContext(ctx)
 	log.Info("placement request", "method", r.Method, "path", r.URL.Path,
 		"consumer_uuid", consumerUUID)
+	s.forward(w, r)
 }
