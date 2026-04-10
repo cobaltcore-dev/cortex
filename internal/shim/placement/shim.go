@@ -86,7 +86,7 @@ func (s *Shim) Start(ctx context.Context) (err error) {
 		setupLog.Error(err, "Invalid configuration for placement shim")
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, "GET", s.config.PlacementURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.config.PlacementURL, http.NoBody)
 	if err != nil {
 		setupLog.Error(err, "Failed to create HTTP request to placement API")
 		return err

@@ -16,7 +16,7 @@ import (
 func requiredPathParam(w http.ResponseWriter, r *http.Request, name string) (string, bool) {
 	v := r.PathValue(name)
 	if v == "" {
-		http.Error(w, fmt.Sprintf("missing path parameter: %s", name), http.StatusBadRequest)
+		http.Error(w, "missing path parameter: "+name, http.StatusBadRequest)
 		return "", false
 	}
 	return v, true
