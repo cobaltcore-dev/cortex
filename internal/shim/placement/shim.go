@@ -22,10 +22,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-// IndexHypervisorByID is the field index key for looking up Hypervisor
-// objects by their OpenStack hypervisor ID (status.hypervisorId).
-const IndexHypervisorByID = ".status.hypervisorId"
-
 var (
 	// setupLog is a controller-runtime logger used for setup and route
 	// registration. Individual handlers should use their own loggers derived
