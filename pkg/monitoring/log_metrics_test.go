@@ -14,17 +14,25 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-func TestTrimModulePrefix(t *testing.T) {
+func TestShortFilePath(t *testing.T) {
 	tests := []struct {
 		input, want string
 	}{
 		{
 			input: "github.com/cobaltcore-dev/cortex/internal/scheduling/nova/external_scheduler_api.go",
-			want:  "internal/scheduling/nova/external_scheduler_api.go",
+			want:  "nova/external_scheduler_api.go",
+		},
+		{
+			input: "/workspace/internal/knowledge/extractor/plugins/compute/vrops_hostsystem_contention_long_term.go",
+			want:  "compute/vrops_hostsystem_contention_long_term.go",
 		},
 		{
 			input: "/some/absolute/path/file.go",
-			want:  "/some/absolute/path/file.go",
+			want:  "path/file.go",
+		},
+		{
+			input: "file.go",
+			want:  "file.go",
 		},
 		{
 			input: "",
@@ -32,8 +40,8 @@ func TestTrimModulePrefix(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		if got := trimModulePrefix(tt.input); got != tt.want {
-			t.Errorf("trimModulePrefix(%q) = %q, want %q", tt.input, got, tt.want)
+		if got := shortFilePath(tt.input); got != tt.want {
+			t.Errorf("shortFilePath(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }

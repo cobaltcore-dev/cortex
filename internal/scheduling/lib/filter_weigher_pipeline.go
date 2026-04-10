@@ -73,7 +73,7 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 		filter = validateFilter(filter)
 		filter = monitorFilter(filter, filterConfig.Name, pipelineMonitor)
 		if err := filter.Init(ctx, client, filterConfig); err != nil {
-			slog.Error("scheduler: failed to initialize filter", "name", filterConfig.Name, "error", err)
+			slog.Warn("scheduler: failed to initialize filter", "name", filterConfig.Name, "error", err)
 			filterErrors[filterConfig.Name] = errors.New("failed to initialize filter: " + err.Error())
 			continue
 		}
@@ -102,7 +102,7 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 		weigher = validateWeigher(weigher)
 		weigher = monitorWeigher(weigher, weigherConfig.Name, pipelineMonitor)
 		if err := weigher.Init(ctx, client, weigherConfig); err != nil {
-			slog.Error("scheduler: failed to initialize weigher", "name", weigherConfig.Name, "error", err)
+			slog.Warn("scheduler: failed to initialize weigher", "name", weigherConfig.Name, "error", err)
 			weigherErrors[weigherConfig.Name] = errors.New("failed to initialize weigher: " + err.Error())
 			continue
 		}

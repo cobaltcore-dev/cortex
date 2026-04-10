@@ -6,8 +6,8 @@ package monitoring
 import (
 	"context"
 	"log/slog"
+	"path"
 	"runtime"
-	"strings"
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -19,10 +19,6 @@ import (
 // this map grows to a fixed size and all subsequent lookups are lock-free reads.
 var pcFileCache sync.Map // uintptr -> string
 
-// modulePath is the Go module prefix stripped from caller file paths to produce
-// relative paths suitable for use as Prometheus label values.
-const modulePath = "github.com/cobaltcore-dev/cortex/"
-
 // LogMessagesTotal counts warn and error log messages emitted by both the slog
 // and zap loggers. Labels: "level" (warn|error), "file" (relative source path).
 var LogMessagesTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -31,13 +27,16 @@ var LogMessagesTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Help:      "Total number of log messages emitted at warn or error level.",
 }, []string{"level", "file"})
 
-// trimModulePrefix strips the Go module path prefix so that the file label
-// contains only the project-relative path (e.g. "internal/scheduling/...").
-func trimModulePrefix(file string) string {
-	if i := strings.Index(file, modulePath); i >= 0 {
-		return file[i+len(modulePath):]
+// shortFilePath returns "parent_dir/filename.go" from any absolute or
+// module-relative path. This is independent of the build environment (no
+// -trimpath needed) and keeps Prometheus label cardinality manageable.
+func shortFilePath(file string) string {
+	dir, base := path.Split(file)
+	parent := path.Base(dir)
+	if parent == "." || parent == "/" {
+		return base
 	}
-	return file
+	return parent + "/" + base
 }
 
 // --- slog handler wrapper ---
@@ -75,7 +74,7 @@ func (h *MetricsSlogHandler) Handle(ctx context.Context, r slog.Record) error {
 				frames := runtime.CallersFrames([]uintptr{r.PC})
 				f, _ := frames.Next()
 				if f.File != "" {
-					file = trimModulePrefix(f.File)
+					file = shortFilePath(f.File)
 				}
 				pcFileCache.Store(r.PC, file)
 			}
@@ -116,7 +115,7 @@ func WrapCoreWithLogMetrics(core zapcore.Core) zapcore.Core {
 			}
 			file := "unknown"
 			if e.Caller.Defined {
-				file = trimModulePrefix(e.Caller.File)
+				file = shortFilePath(e.Caller.File)
 			}
 			LogMessagesTotal.WithLabelValues(level, file).Inc()
 		}
