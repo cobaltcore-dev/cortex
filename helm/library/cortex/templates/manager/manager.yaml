@@ -35,10 +35,10 @@ spec:
             {{- range .Values.controllerManager.container.args }}
             - {{ . }}
             {{- end }}
-            {{- if .Values.controllerManager.container.logLevel }}
+            {{- if and .Values.controllerManager.container.logLevel (ne (include "chart.argsContainPrefix" (dict "prefix" "--zap-log-level" "args" .Values.controllerManager.container.args)) "true") }}
             - "--zap-log-level={{ .Values.controllerManager.container.logLevel }}"
             {{- end }}
-            {{- if .Values.controllerManager.container.zapDevel }}
+            {{- if and .Values.controllerManager.container.zapDevel (ne (include "chart.argsContainPrefix" (dict "prefix" "--zap-devel" "args" .Values.controllerManager.container.args)) "true") }}
             - "--zap-devel"
             {{- end }}
             {{- if and .Values.webhook.enable .Values.certmanager.enable }}
@@ -63,7 +63,7 @@ spec:
           imagePullPolicy: {{ .Values.controllerManager.container.image.pullPolicy }}
           {{- end }}
           env:
-            {{- if .Values.controllerManager.container.logLevel }}
+            {{- if and .Values.controllerManager.container.logLevel (not (and .Values.controllerManager.container.env (hasKey .Values.controllerManager.container.env "LOG_LEVEL"))) }}
             - name: LOG_LEVEL
               value: {{ .Values.controllerManager.container.logLevel | quote }}
             {{- end }}

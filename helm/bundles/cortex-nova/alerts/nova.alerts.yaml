@@ -157,7 +157,7 @@ groups:
         time the service will have a less recent view of the datacenter.
 
   - alert: CortexNovaSyncObjectsDroppedToZero
-    expr: cortex_sync_objects{service="cortex-nova-metrics", datasource!~"openstack_migrations|prometheus_kvm_libvirt_domain_steal_pct"} == 0
+    expr: cortex_sync_objects{service="cortex-nova-metrics", datasource!="openstack_migrations"} == 0
     for: 60m
     labels:
       context: syncobjects

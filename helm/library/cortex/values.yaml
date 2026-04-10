@@ -16,9 +16,10 @@ controllerManager:
     # Log level for both zap (controller-runtime) and slog (internal packages).
     # Supported: debug, info (default), warn, error.
     logLevel: "info"
-    # Enable zap development mode (human-readable console logs, debug level).
-    # Set to true for local development (e.g. Tilt), keep false for production
-    # (JSON logs, info level, no stack traces on warnings).
+    # Enable zap development mode (human-readable console logs, development stack traces).
+    # This only changes output format and stack trace behavior, not the log level.
+    # The effective log level is controlled by logLevel above (default: "info").
+    # Set to true for local development (e.g. Tilt), keep false for production.
     zapDevel: false
     resources:
       limits:

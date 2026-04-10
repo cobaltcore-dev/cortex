@@ -6,6 +6,7 @@ package monitoring
 import (
 	"bytes"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -212,9 +213,9 @@ func TestMetricsSlogHandler_DelegatesAllLevels(t *testing.T) {
 	logger.Error("e")
 
 	output := buf.String()
-	for _, msg := range []string{"d", "i", "w", "e"} {
-		if !bytes.Contains([]byte(output), []byte(msg)) {
-			t.Errorf("expected inner handler to receive message %q", msg)
+	for _, msg := range []string{"msg=d", "msg=i", "msg=w", "msg=e"} {
+		if !strings.Contains(output, msg) {
+			t.Errorf("expected inner handler to receive %q", msg)
 		}
 	}
 }
@@ -334,7 +335,7 @@ func TestWrapCoreWithLogMetrics(t *testing.T) {
 			LogMessagesTotal = newTestCounter()
 			defer func() { LogMessagesTotal = orig }()
 
-			sink := &zapcore.BufferedWriteSyncer{WS: zapcore.AddSync(&bytes.Buffer{})}
+			sink := zapcore.AddSync(&bytes.Buffer{})
 			inner := zapcore.NewCore(enc, sink, zapcore.DebugLevel)
 			wrapped := WrapCoreWithLogMetrics(inner)
 
