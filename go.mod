@@ -10,7 +10,7 @@ require (
 	github.com/majewsky/gg v1.6.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
-	github.com/sapcc/go-bits v0.0.0-20260402121530-dccf194c4472
+	github.com/sapcc/go-bits v0.0.0-20260409170436-d7b7822ab7d3
 	k8s.io/api v0.35.3
 	k8s.io/apimachinery v0.35.3
 	k8s.io/client-go v0.35.3
