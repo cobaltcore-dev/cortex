@@ -9,9 +9,12 @@ import (
 	"flag"
 	"log/slog"
 	"net/http"
+
+	uberzap "go.uber.org/zap"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -149,12 +152,34 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	ctrl.SetLogger(zap.New(
+		zap.UseFlagOptions(&opts),
+		zap.RawZapOpts(uberzap.WrapCore(monitoring.WrapCoreWithLogMetrics)),
+	))
 
-	// Configure slog (used across internal packages) with structured JSON output.
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})))
+	// Configure slog (used across internal packages) with JSON output and
+	// level control via the LOG_LEVEL environment variable.
+	// Supported values: debug, info (default), warn, error.
+	slogLevel := new(slog.LevelVar)
+	slogLevel.Set(slog.LevelInfo)
+	if lvl := os.Getenv("LOG_LEVEL"); lvl != "" {
+		switch strings.ToLower(lvl) {
+		case "debug":
+			slogLevel.Set(slog.LevelDebug)
+		case "info":
+			slogLevel.Set(slog.LevelInfo)
+		case "warn", "warning":
+			slogLevel.Set(slog.LevelWarn)
+		case "error":
+			slogLevel.Set(slog.LevelError)
+		}
+	}
+	slog.SetDefault(slog.New(monitoring.NewMetricsSlogHandler(
+		slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slogLevel,
+		}),
+	)))
+	slog.Info("slog configured", "level", slogLevel.Level().String())
 
 	// Log the main configuration
 	setupLog.Info("loaded main configuration",
@@ -307,6 +332,7 @@ func main() {
 	// This is useful to distinguish metrics from different deployments.
 	metricsConfig := conf.GetConfigOrDie[monitoring.Config]()
 	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, metricsConfig)
+	metrics.Registry.MustRegister(monitoring.LogMessagesTotal)
 
 	// TODO: Remove me after scheduling pipeline steps don't require DB connections anymore.
 	metrics.Registry.MustRegister(&db.Monitor)
@@ -658,10 +684,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	syncerMonitor := commitments.NewSyncerMonitor()
-	must.Succeed(metrics.Registry.Register(syncerMonitor))
 	if slices.Contains(mainConfig.EnabledTasks, "commitments-sync-task") {
 		setupLog.Info("starting commitments syncer")
+		syncerMonitor := commitments.NewSyncerMonitor()
+		must.Succeed(metrics.Registry.Register(syncerMonitor))
 		syncer := commitments.NewSyncer(multiclusterClient, syncerMonitor)
 		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
 		syncerConfig.ApplyDefaults()
