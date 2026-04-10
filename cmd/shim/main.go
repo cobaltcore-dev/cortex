@@ -52,6 +52,7 @@ func main() {
 	restConfig := ctrl.GetConfigOrDie()
 
 	var metricsAddr string
+	var apiBindAddr string
 	var metricsCertPath, metricsCertName, metricsCertKey string
 	var webhookCertPath, webhookCertName, webhookCertKey string
 	// The shim does not require leader election, but this flag is provided to
@@ -64,6 +65,7 @@ func main() {
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
+	flag.StringVar(&apiBindAddr, "api-bind-address", ":8080", "The address the shim API server binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
@@ -91,6 +93,13 @@ func main() {
 	if enableLeaderElection {
 		err := errors.New("leader election should not be enabled for the shim")
 		setupLog.Error(err, "invalid configuration")
+		os.Exit(1)
+	}
+
+	// Check that the metrics and API bind addresses don't overlap.
+	if metricsAddr != "0" && metricsAddr == apiBindAddr {
+		err := errors.New("metrics-bind-address and api-bind-address must not be the same")
+		setupLog.Error(err, "invalid configuration", "metrics-bind-address", metricsAddr, "api-bind-address", apiBindAddr)
 		os.Exit(1)
 	}
 
@@ -272,8 +281,8 @@ func main() {
 	errchan := make(chan error)
 	go func() {
 		errchan <- func() error {
-			setupLog.Info("starting api server", "address", ":8080")
-			return httpext.ListenAndServeContext(ctx, ":8080", mux)
+			setupLog.Info("starting api server", "address", apiBindAddr)
+			return httpext.ListenAndServeContext(ctx, apiBindAddr, mux)
 		}()
 	}()
 	go func() {

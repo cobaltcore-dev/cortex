@@ -5,6 +5,7 @@ deployment:
     image:
       repository: ghcr.io/cobaltcore-dev/cortex-shim
     args:
+      - "--api-bind-address=:8080"
       - "--metrics-bind-address=:2112"
       - "--health-probe-bind-address=:8081"
       - "--metrics-secure=false"
