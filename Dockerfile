@@ -6,6 +6,8 @@ ARG TARGETARCH
 ARG GO_MOD_PATH=.
 ARG GOCACHE=/root/.cache/go-build
 ENV GOCACHE=${GOCACHE}
+ARG GOMAIN=cmd/manager/main.go
+ENV GOMAIN=${GOMAIN}
 
 # Note: avoid using COPY to /lib which will lead to docker build errors.
 WORKDIR /workspace/${GO_MOD_PATH}
@@ -29,13 +31,13 @@ ENV GOOS=${TARGETOS:-linux}
 ENV GOARCH=${TARGETARCH}
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=cache,target=${GOCACHE} \
-    go build -a -o /manager cmd/main.go
+    go build -a -o /main ${GOMAIN}
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
-COPY --from=builder /manager .
+COPY --from=builder /main .
 USER 65532:65532
 
-ENTRYPOINT ["/manager"]
+ENTRYPOINT ["/main"]

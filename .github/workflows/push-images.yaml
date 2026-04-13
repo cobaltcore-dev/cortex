@@ -72,6 +72,55 @@ jobs:
           subject-digest: ${{ steps.push_cortex_postgres.outputs.digest }}
           push-to-registry: true
 
+      # Only build and push the cortex-shim image if there are changes related
+      # to the cortex shims (e.g., in cmd/shim or internal/shim).
+      - name: Get all changed shim/ files
+        id: changed_shim_files
+        uses: tj-actions/changed-files@v47
+        with:
+          files: |
+            cmd/shim/**
+            internal/shim/**
+            api/**
+            pkg/**
+            go.mod
+            go.sum
+            Dockerfile
+      - name: Docker Meta (Cortex Shim)
+        if: steps.changed_shim_files.outputs.all_changed_files != ''
+        id: meta_cortex_shim
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}-shim
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+            latest
+        env:
+          DOCKER_METADATA_SHORT_SHA_LENGTH: 8
+      - name: Build and Push Cortex Shim
+        if: steps.changed_shim_files.outputs.all_changed_files != ''
+        id: push_cortex_shim
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta_cortex_shim.outputs.tags }}
+          labels: ${{ steps.meta_cortex_shim.outputs.labels }}
+          build-args: |
+            GIT_TAG=${{ github.ref_name }}
+            GIT_COMMIT=${{ github.sha }}
+            GOMAIN=cmd/shim/main.go
+      - name: Generate Artifact Attestation for Cortex Shim
+        if: steps.changed_shim_files.outputs.all_changed_files != ''
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-shim
+          subject-digest: ${{ steps.push_cortex_shim.outputs.digest }}
+          push-to-registry: true
+
       # Build & push new cortex image
       - name: Docker Meta (Cortex)
         id: meta_cortex
@@ -98,6 +147,7 @@ jobs:
           build-args: |
             GIT_TAG=${{ github.ref_name }}
             GIT_COMMIT=${{ github.sha }}
+            GOMAIN=cmd/manager/main.go
       - name: Generate Artifact Attestation for Cortex
         uses: actions/attest-build-provenance@v4
         with:

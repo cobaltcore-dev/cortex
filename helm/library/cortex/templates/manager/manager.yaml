@@ -51,7 +51,7 @@ spec:
               protocol: TCP
             {{- end }}
           command:
-            - /manager
+            - /main
           image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag | default .Chart.AppVersion }}
           {{- if .Values.controllerManager.container.image.pullPolicy }}
           imagePullPolicy: {{ .Values.controllerManager.container.image.pullPolicy }}

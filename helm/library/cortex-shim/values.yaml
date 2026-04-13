@@ -1,0 +1,61 @@
+deployment:
+  enable: true
+  replicas: 3
+  container:
+    image:
+      repository: ghcr.io/cobaltcore-dev/cortex-shim
+    args:
+      - "--metrics-bind-address=:2112"
+      - "--health-probe-bind-address=:8081"
+      - "--metrics-secure=false"
+    resources:
+      limits:
+        cpu: 500m
+        memory: 2048Mi
+      requests:
+        cpu: 10m
+        memory: 64Mi
+    livenessProbe:
+      initialDelaySeconds: 15
+      periodSeconds: 20
+      httpGet:
+        path: /healthz
+        port: 8081
+    readinessProbe:
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      httpGet:
+        path: /readyz
+        port: 8081
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - "ALL"
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  terminationGracePeriodSeconds: 10
+  serviceAccountName: shim
+
+# [METRICS]: Set to true to generate manifests for exporting metrics.
+# To disable metrics export set false, and remove the container args
+# "--metrics-bind-address=:2112" and "--metrics-secure=false".
+metrics:
+  enable: true
+
+# [RBAC]: To enable RBAC (Permissions) configurations
+rbac:
+  enable: true
+
+# [PROMETHEUS]: To enable a ServiceMonitor to export metrics to Prometheus set true
+prometheus:
+  enable: true
+
+global:
+  conf: {}
+
+# Use this to unambiguate multiple cortex deployments in the same cluster.
+namePrefix: cortex
+conf: {} # No config for now that's needed by all the shims.

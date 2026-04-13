@@ -7,7 +7,10 @@
 analytics_settings(False)
 
 # Use the ACTIVE_DEPLOYMENTS env var to select which Cortex bundles to deploy.
-ACTIVE_DEPLOYMENTS_ENV = os.getenv('ACTIVE_DEPLOYMENTS', 'nova,manila,cinder,ironcore,pods')
+ACTIVE_DEPLOYMENTS_ENV = os.getenv(
+    'ACTIVE_DEPLOYMENTS',
+    'nova,manila,cinder,ironcore,pods,placement',
+)
 if ACTIVE_DEPLOYMENTS_ENV == "":
     ACTIVE_DEPLOYMENTS = [] # Catch "".split(",") = [""]
 else:
@@ -83,12 +86,21 @@ local('kubectl wait --namespace cert-manager --for=condition=available deploymen
 url = 'https://raw.githubusercontent.com/cobaltcore-dev/openstack-hypervisor-operator/refs/heads/main/charts/openstack-hypervisor-operator/crds/kvm.cloud.sap_hypervisors.yaml'
 local('curl -L ' + url + ' | kubectl apply -f -')
 
-########### Cortex Operator & CRDs
+########### Cortex Manager & CRDs
 docker_build('ghcr.io/cobaltcore-dev/cortex', '.',
     dockerfile='Dockerfile',
+    build_args={'GOMAIN': 'cmd/manager/main.go'},
     only=['internal/', 'cmd/', 'api/', 'pkg', 'go.mod', 'go.sum', 'Dockerfile'],
 )
 local('sh helm/sync.sh helm/library/cortex')
+
+########### Cortex Shim
+docker_build('ghcr.io/cobaltcore-dev/cortex-shim', '.',
+    dockerfile='Dockerfile',
+    build_args={'GOMAIN': 'cmd/shim/main.go'},
+    only=['internal/', 'cmd/', 'api/', 'pkg', 'go.mod', 'go.sum', 'Dockerfile'],
+)
+local('sh helm/sync.sh helm/library/cortex-shim')
 
 ########### Cortex Bundles
 docker_build('ghcr.io/cobaltcore-dev/cortex-postgres', 'postgres')
@@ -103,6 +115,7 @@ bundle_charts = [
     ('helm/bundles/cortex-cinder', 'cortex-cinder'),
     ('helm/bundles/cortex-ironcore', 'cortex-ironcore'),
     ('helm/bundles/cortex-pods', 'cortex-pods'),
+    ('helm/bundles/cortex-placement-shim', 'cortex-placement-shim'),
 ]
 dep_charts = {
     'cortex-crds': [
@@ -127,6 +140,9 @@ dep_charts = {
     'cortex-pods': [
         ('helm/library/cortex-postgres', 'cortex-postgres'),
         ('helm/library/cortex', 'cortex'),
+    ],
+    'cortex-placement-shim': [
+        ('helm/library/cortex-shim', 'cortex-shim'),
     ],
 }
 
@@ -259,6 +275,10 @@ if 'pods' in ACTIVE_DEPLOYMENTS:
     k8s_yaml('samples/pods/node.yaml')
     k8s_yaml('samples/pods/pod.yaml')
     k8s_resource('test-pod', labels=['Cortex-Pods'])
+
+if 'placement' in ACTIVE_DEPLOYMENTS:
+    print("Activating Cortex Placement Shim bundle")
+    k8s_yaml(helm('./helm/bundles/cortex-placement-shim', name='cortex-placement-shim', values=tilt_values, set=env_set_overrides))
 
 ########### Dev Dependencies
 local('sh helm/sync.sh helm/dev/cortex-prometheus-operator')
