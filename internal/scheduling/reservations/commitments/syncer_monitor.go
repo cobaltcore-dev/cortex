@@ -109,11 +109,6 @@ func (m *SyncerMonitor) RecordCommitmentSkipped(reason string) {
 	m.commitmentsSkipped.WithLabelValues(reason).Inc()
 }
 
-// RecordUnitMismatch records a unit mismatch skip (convenience method).
-func (m *SyncerMonitor) RecordUnitMismatch(_ string) {
-	m.commitmentsSkipped.WithLabelValues(SkipReasonUnitMismatch).Inc()
-}
-
 // RecordReservationsCreated records reservations created.
 func (m *SyncerMonitor) RecordReservationsCreated(count int) {
 	m.reservationsCreated.Add(float64(count))

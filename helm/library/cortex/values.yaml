@@ -13,6 +13,14 @@ controllerManager:
       - "--metrics-bind-address=:2112"
       - "--health-probe-bind-address=:8081"
       - "--metrics-secure=false"
+    # Log level for both zap (controller-runtime) and slog (internal packages).
+    # Supported: debug, info (default), warn, error.
+    logLevel: "info"
+    # Enable zap development mode (human-readable console logs, development stack traces).
+    # This only changes output format and stack trace behavior, not the log level.
+    # The effective log level is controlled by logLevel above (default: "info").
+    # Set to true for local development (e.g. Tilt), keep false for production.
+    zapDevel: false
     resources:
       limits:
         cpu: 500m
