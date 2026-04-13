@@ -1,0 +1,112 @@
+{{- if .Values.deployment.enable }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.namePrefix }}-shim
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+spec:
+  replicas:  {{ .Values.deployment.replicas }}
+  selector:
+    matchLabels:
+      {{- include "chart.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: shim
+      labels:
+        {{- include "chart.labels" . | nindent 8 }}
+        {{- if and .Values.deployment.pod .Values.deployment.pod.labels }}
+        {{- range $key, $value := .Values.deployment.pod.labels }}
+        {{ $key }}: {{ $value }}
+        {{- end }}
+        {{- end }}
+    spec:
+      containers:
+        - name: shim
+          args:
+            {{- range .Values.deployment.container.args }}
+            - {{ . }}
+            {{- end }}
+            {{- range .Values.deployment.container.extraArgs }}
+            - {{ . }}
+            {{- end }}
+          ports:
+            - name: api
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 2112
+              protocol: TCP
+          command:
+            - /main
+          image: {{ .Values.deployment.container.image.repository }}:{{ .Values.deployment.container.image.tag | default .Chart.AppVersion }}
+          {{- if .Values.deployment.container.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.deployment.container.image.pullPolicy }}
+          {{- end }}
+          {{- if .Values.deployment.container.env }}
+          env:
+            {{- range $key, $value := .Values.deployment.container.env }}
+            - name: {{ $key }}
+              value: {{ $value }}
+            {{- end }}
+          {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.deployment.container.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.deployment.container.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.deployment.container.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.deployment.container.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: shim-config-volume
+              mountPath: /etc/config
+            - name: shim-secrets-volume
+              mountPath: /etc/secrets
+              readOnly: true
+      securityContext:
+        {{- toYaml .Values.deployment.securityContext | nindent 8 }}
+      serviceAccountName: {{ .Values.namePrefix }}-{{ .Values.deployment.serviceAccountName }}
+      terminationGracePeriodSeconds: {{ .Values.deployment.terminationGracePeriodSeconds }}
+      volumes:
+        # Custom values to configure the shim.
+        - name: shim-config-volume
+          configMap:
+            name: {{ .Values.namePrefix }}-shim-config
+        - name: shim-secrets-volume
+          secret:
+            secretName: {{ .Values.namePrefix }}-shim-secrets
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.namePrefix }}-shim-config
+data:
+  conf.json: |-
+    {{- $mergedConf := dict }}
+    {{- if .Values.global.conf }}
+    {{- $mergedConf = .Values.global.conf }}
+    {{- end }}
+    {{- if .Values.conf }}
+    {{- $mergedConf = mergeOverwrite .Values.conf $mergedConf }}
+    {{- end }}
+    {{ toJson $mergedConf }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.namePrefix }}-shim-secrets
+type: Opaque
+data:
+  secrets.json: |-
+    {{- $mergedSecrets := dict }}
+    {{- if .Values.global.secrets }}
+    {{- $mergedSecrets = .Values.global.secrets }}
+    {{- end }}
+    {{- if .Values.secrets }}
+    {{- $mergedSecrets = mergeOverwrite .Values.secrets $mergedSecrets }}
+    {{- end }}
+    {{ toJson $mergedSecrets | b64enc }}
+{{- end }}
