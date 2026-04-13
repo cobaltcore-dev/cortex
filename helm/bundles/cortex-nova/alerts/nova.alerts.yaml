@@ -8,7 +8,7 @@ groups:
     for: 5m
     labels:
       context: liveness
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: critical
       support_group: workload-management
@@ -28,7 +28,7 @@ groups:
     for: 5m
     labels:
       context: liveness
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -45,7 +45,7 @@ groups:
     for: 5m
     labels:
       context: descheduler
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -61,7 +61,7 @@ groups:
     for: 5m
     labels:
       context: api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -79,7 +79,7 @@ groups:
     for: 5m
     labels:
       context: api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -97,7 +97,7 @@ groups:
     for: 5m
     labels:
       context: memory
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -113,7 +113,7 @@ groups:
     for: 5m
     labels:
       context: cpu
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -129,7 +129,7 @@ groups:
     for: 5m
     labels:
       context: db
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -144,7 +144,7 @@ groups:
     for: 5m
     labels:
       context: syncstatus
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -163,7 +163,7 @@ groups:
     for: 60m
     labels:
       context: syncobjects
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -182,7 +182,7 @@ groups:
     for: 60m
     labels:
       context: datasources
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -199,7 +199,7 @@ groups:
     for: 60m
     labels:
       context: knowledge
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -216,7 +216,7 @@ groups:
     for: 5m
     labels:
       context: decisions
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -233,7 +233,7 @@ groups:
     for: 5m
     labels:
       context: decisions
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -253,7 +253,7 @@ groups:
     for: 60m
     labels:
       context: kpis
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -270,7 +270,7 @@ groups:
     for: 5m
     labels:
       context: pipelines
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -288,7 +288,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -306,7 +306,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -324,7 +324,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -342,7 +342,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -361,7 +361,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -379,7 +379,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -399,7 +399,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -415,7 +415,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -431,7 +431,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -448,7 +448,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -463,7 +463,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -479,7 +479,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -496,7 +496,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-syncer
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -516,7 +516,7 @@ groups:
     for: 15m
     labels:
       context: committed-resource-syncer
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -539,7 +539,7 @@ groups:
     for: 15m
     labels:
       context: committed-resource-syncer
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -564,7 +564,7 @@ groups:
     for: 15m
     labels:
       context: committed-resource-syncer
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -586,7 +586,7 @@ groups:
     for: 15m
     labels:
       context: committed-resource-syncer
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -604,7 +604,7 @@ groups:
     for: 5m
     labels:
       context: scheduling
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -622,7 +622,7 @@ groups:
     for: 60m
     labels:
       context: datasources
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -640,7 +640,7 @@ groups:
     for: 10m
     labels:
       context: datasources
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -659,7 +659,7 @@ groups:
     for: 15m
     labels:
       context: controller-errors
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -679,7 +679,7 @@ groups:
     for: 15m
     labels:
       context: controller-duration
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -694,7 +694,7 @@ groups:
     for: 60m
     labels:
       context: controller-workqueue
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -713,7 +713,7 @@ groups:
     for: 15m
     labels:
       context: controller-webhook
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -731,7 +731,7 @@ groups:
     for: 15m
     labels:
       context: controller-webhook
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
