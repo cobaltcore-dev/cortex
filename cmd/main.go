@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -167,6 +168,10 @@ func main() {
 			slogLevel.Set(slog.LevelWarn)
 		case "error":
 			slogLevel.Set(slog.LevelError)
+		default:
+			slogLevel.Set(slog.LevelInfo)
+			setupLog.Error(fmt.Errorf("unknown LOG_LEVEL %q, defaulting to info", lvl), "invalid log level",
+				"supported", []string{"debug", "info", "warn", "warning", "error"})
 		}
 	}
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
