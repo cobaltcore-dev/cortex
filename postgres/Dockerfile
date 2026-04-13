@@ -1,4 +1,3 @@
-# Last updated: 9 Apr 2026
 FROM debian:trixie-slim@sha256:4ffb3a1511099754cddc70eb1b12e50ffdb67619aa0ab6c13fcd800a78ef7c7a
 
 # explicitly set user/group IDs
