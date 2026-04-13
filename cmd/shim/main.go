@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"flag"
@@ -23,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -230,19 +232,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	errchan := make(chan error)
-	go func() {
-		errchan <- func() error {
-			setupLog.Info("starting api server", "address", ":8080")
-			return httpext.ListenAndServeContext(ctx, ":8080", mux)
-		}()
-	}()
-	go func() {
-		if err := <-errchan; err != nil {
-			setupLog.Error(err, "problem running api server")
-			os.Exit(1)
-		}
-	}()
+	// Couple the API server to the manager lifecycle so the informer cache is
+	// available as soon as the mux starts, and graceful shutdown is handled by
+	// the manager context cancellation.
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		setupLog.Info("starting api server", "address", ":8080")
+		return httpext.ListenAndServeContext(ctx, ":8080", mux)
+	})); err != nil {
+		setupLog.Error(err, "unable to add api server to manager")
+		os.Exit(1)
+	}
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {
