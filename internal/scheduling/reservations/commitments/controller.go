@@ -452,8 +452,16 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 			} else {
 				// VM not found on expected hypervisor - check Nova API as fallback
 				if r.NovaClient != nil {
-					novaServer, err := r.NovaClient.Get(ctx, vmUUID)
-					if err == nil && novaServer.ComputeHost != "" && novaServer.ComputeHost != expectedHost {
+					novaServer, novaErr := r.NovaClient.Get(ctx, vmUUID)
+					switch {
+					case novaErr == nil && novaServer.ComputeHost == expectedHost:
+						// VM is confirmed on the expected host via Nova - mark as running
+						newStatusAllocations[vmUUID] = expectedHost
+						logger.V(1).Info("verified VM allocation via Nova API",
+							"vm", vmUUID,
+							"host", expectedHost)
+						continue
+					case novaErr == nil && novaServer.ComputeHost != "":
 						// VM is on a different host past the grace period - remove from this reservation.
 						// The grace period is the window for VMs in transit; past that, a VM on the
 						// wrong host is no longer consuming this slot.
@@ -463,23 +471,17 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 							"expectedHost", expectedHost,
 							"allocationAge", allocationAge)
 						// fall through to removal
-					} else if err == nil && novaServer.ComputeHost == expectedHost {
-						// VM is confirmed on the expected host via Nova - mark as running
-						newStatusAllocations[vmUUID] = expectedHost
-						logger.V(1).Info("verified VM allocation via Nova API",
-							"vm", vmUUID,
-							"host", expectedHost)
-						continue
-					} else {
+					case novaErr == nil:
+						// VM has no host yet - fall through to removal
+						logger.V(1).Info("Nova API confirmed VM has no host", "vm", vmUUID)
+					default:
 						var notFound *novaservers.ErrServerNotFound
-						if err != nil && !errors.As(err, &notFound) {
+						if !errors.As(novaErr, &notFound) {
 							// Transient Nova API error - skip removal to avoid evicting live VMs
-							return nil, fmt.Errorf("nova API error checking VM %s: %w", vmUUID, err)
+							return nil, fmt.Errorf("nova API error checking VM %s: %w", vmUUID, novaErr)
 						}
-						// err is nil (VM has no host yet) or 404 (VM gone) - fall through to removal
-						logger.V(1).Info("Nova API confirmed VM not found or has no host",
-							"vm", vmUUID,
-							"error", err)
+						// 404 - VM gone, fall through to removal
+						logger.V(1).Info("Nova API confirmed VM not found", "vm", vmUUID)
 					}
 				}
 				// VM not found on hypervisor and not in Nova - mark for removal (leaving VM)
