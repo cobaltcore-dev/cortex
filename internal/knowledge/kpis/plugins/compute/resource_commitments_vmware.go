@@ -91,7 +91,7 @@ func (k *VMwareResourceCommitmentsKPI) collectUnusedCommitments(ch chan<- promet
 	}
 	// runningCount: (project_id, flavor_name, az) -> count
 	type serverKey struct{ projectID, flavorName, az string }
-	runningCount := make(map[serverKey]int64)
+	runningCount := make(map[serverKey]uint64)
 	for _, server := range servers {
 		key := serverKey{server.TenantID, server.FlavorName, server.OSEXTAvailabilityZone}
 		runningCount[key]++
@@ -99,7 +99,7 @@ func (k *VMwareResourceCommitmentsKPI) collectUnusedCommitments(ch chan<- promet
 
 	// committed: (project_id, flavor_name, az, cpuArchitecture) -> total committed amount
 	type commitKey struct{ projectID, flavorName, az, cpuArchitecture string }
-	committed := make(map[commitKey]int64)
+	committed := make(map[commitKey]uint64)
 	for _, c := range commitments {
 		flavorName := strings.TrimPrefix(c.ResourceName, "instances_")
 		if !strings.HasPrefix(flavorName, "hana_") {
@@ -114,7 +114,7 @@ func (k *VMwareResourceCommitmentsKPI) collectUnusedCommitments(ch chan<- promet
 			cpuArchitecture = "sapphire-rapids"
 		}
 		key := commitKey{c.ProjectID, flavorName, c.AvailabilityZone, cpuArchitecture}
-		committed[key] += int64(c.Amount)
+		committed[key] += c.Amount
 	}
 
 	// For each (project, flavor, az, arch): unused = max(0, committed - running).
