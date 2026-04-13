@@ -3,14 +3,14 @@ module github.com/cobaltcore-dev/cortex
 go 1.26
 
 require (
-	github.com/cobaltcore-dev/openstack-hypervisor-operator v1.0.2-0.20260402091752-888f1313a307
+	github.com/cobaltcore-dev/openstack-hypervisor-operator v1.0.2-0.20260409190432-b3a7a2d19d59
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.11.1
 	github.com/ironcore-dev/ironcore v0.3.0
 	github.com/majewsky/gg v1.6.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
-	github.com/sapcc/go-bits v0.0.0-20260402121530-dccf194c4472
+	github.com/sapcc/go-bits v0.0.0-20260409170436-d7b7822ab7d3
 	k8s.io/api v0.35.3
 	k8s.io/apimachinery v0.35.3
 	k8s.io/client-go v0.35.3
@@ -72,8 +72,8 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/lib/pq v1.12.2
-	github.com/mattn/go-sqlite3 v1.14.39
+	github.com/lib/pq v1.12.3
+	github.com/mattn/go-sqlite3 v1.14.42
 	github.com/moby/sys/user v0.4.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
@@ -96,12 +96,12 @@ require (
 	github.com/ziutek/mymysql v1.5.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.63.0 // indirect
-	go.opentelemetry.io/otel v1.40.0 // indirect
+	go.opentelemetry.io/otel v1.43.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.38.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.38.0 // indirect
-	go.opentelemetry.io/otel/metric v1.40.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.40.0 // indirect
-	go.opentelemetry.io/otel/trace v1.40.0 // indirect
+	go.opentelemetry.io/otel/metric v1.43.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.43.0 // indirect
+	go.opentelemetry.io/otel/trace v1.43.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.8.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.1 // indirect
@@ -112,8 +112,8 @@ require (
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/term v0.41.0
+	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/term v0.42.0
 	golang.org/x/text v0.35.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect

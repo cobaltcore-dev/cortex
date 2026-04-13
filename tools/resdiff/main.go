@@ -35,7 +35,7 @@ func main() {
 	diffFlag := flag.String("diff", "", "Comma-separated list of resource names to compare (empty or omit = all)")
 	noColorFlag := flag.Bool("no-color", false, "Disable colorized output")
 	flag.Parse()
-	useColor = !*noColorFlag && term.IsTerminal(int(os.Stdout.Fd()))
+	useColor = !*noColorFlag && term.IsTerminal(int(os.Stdout.Fd())) //nolint:gosec // file descriptors are small numbers, uintptr->int safe in practice
 	resources := readAndParseInput(os.Stdin)
 	var names []string
 	var selected []map[string]any

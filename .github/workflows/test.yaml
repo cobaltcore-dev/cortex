@@ -60,7 +60,7 @@ jobs:
       # Steps below are only executed if the workflow is triggered by a pull request
       - name: Delete old coverage comments (PR only)
         if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const { data: comments } = await github.rest.issues.listComments({
@@ -86,7 +86,7 @@ jobs:
           path: .
       - name: Post coverage comment (PR only)
         if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         # For external contributors, posting comments fail due to permission issues.
         continue-on-error: true
         with:
