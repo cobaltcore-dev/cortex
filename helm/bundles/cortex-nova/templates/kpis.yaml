@@ -195,5 +195,7 @@ spec:
   dependencies:
     datasources:
       - name: limes-project-commitments
+      - name: nova-flavors
+      - name: nova-servers
   description: |
     This KPI tracks unused VMware commitments based on project commitments and usage.
