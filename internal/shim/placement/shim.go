@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"sync/atomic"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -59,10 +58,6 @@ type Shim struct {
 	// HTTP client that can talk to openstack placement, if needed, over
 	// ingress with single-sign-on.
 	httpClient *http.Client
-	// ready is set to true once Start() has completed successfully. It is
-	// used by the readiness check to prevent traffic from reaching the shim
-	// before the HTTP client and upstream connection are established.
-	ready atomic.Bool
 }
 
 // Start is called after the manager has started and the cache is running.
@@ -117,21 +112,7 @@ func (s *Shim) Start(ctx context.Context) (err error) {
 		return err
 	}
 	setupLog.Info("Successfully connected to placement API")
-	s.ready.Store(true)
 	return nil
-}
-
-// ReadyzCheck returns a healthz.Checker that reports healthy only after
-// Start() has completed successfully. Wire this into the manager's readiness
-// endpoint so that Kubernetes does not route traffic to the pod before the
-// shim's HTTP client and upstream connection are established.
-func (s *Shim) ReadyzCheck() func(*http.Request) error {
-	return func(_ *http.Request) error {
-		if !s.ready.Load() {
-			return errors.New("placement shim not yet initialized")
-		}
-		return nil
-	}
 }
 
 // Reconcile is not used by the shim, but must be implemented to satisfy the

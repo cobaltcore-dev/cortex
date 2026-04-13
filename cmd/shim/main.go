@@ -271,11 +271,7 @@ func main() {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
-	readyzCheck := healthz.Ping
-	if placementShim != nil {
-		readyzCheck = placementShim.ReadyzCheck()
-	}
-	if err := mgr.AddReadyzCheck("readyz", readyzCheck); err != nil {
+	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
