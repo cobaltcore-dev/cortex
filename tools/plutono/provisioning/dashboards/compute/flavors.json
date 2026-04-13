@@ -117,7 +117,8 @@
             "renameByName": {
               "Value": "#",
               "flavor_name": "Flavor",
-              "project_name": "Project"
+              "project_name": "Project",
+              "hypervisor_family": "Hypervisor Family"
             }
           }
         }
@@ -309,7 +310,8 @@
                   "Value": "#",
                   "availability_zone": "",
                   "flavor_name": "Flavor",
-                  "project_name": "Project"
+                  "project_name": "Project",
+                  "hypervisor_family": "Hypervisor Family"
                 }
               }
             }
