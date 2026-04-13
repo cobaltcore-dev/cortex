@@ -9,8 +9,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/limes"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -24,7 +24,7 @@ type VMwareResourceCommitmentsKPI struct {
 }
 
 func (VMwareResourceCommitmentsKPI) GetName() string {
-	return "vmware_hana_commitments_kpi"
+	return "vmware_commitments_kpi"
 }
 
 func (k *VMwareResourceCommitmentsKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
@@ -35,7 +35,7 @@ func (k *VMwareResourceCommitmentsKPI) Init(db *db.DB, client client.Client, opt
 		"cortex_vmware_hana_unused_instance_commitments",
 		"Unused instance commitment capacity summed across all projects (vcpus / ram_mb / disk_gb).",
 		[]string{
-			"resource",        // "cpu", "ram", "disk"
+			"resource", // "cpu", "ram", "disk"
 			"availability_zone",
 			"cpu_architecture", // "sapphire-rapids" (_v2 suffix) or "cascade-lake"
 		},
