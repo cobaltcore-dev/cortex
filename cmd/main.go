@@ -509,7 +509,6 @@ func main() {
 			Client:  multiclusterClient,
 			Scheme:  mgr.GetScheme(),
 			Monitor: monitor,
-			Conf:    conf.GetConfigOrDie[openstack.OpenStackDatasourceReconcilerConfig](),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "OpenStackDatasourceReconciler")
 			os.Exit(1)
@@ -622,7 +621,8 @@ func main() {
 			"reconcileInterval", failoverConfig.ReconcileInterval,
 			"revalidationInterval", failoverConfig.RevalidationInterval,
 			"trustHypervisorLocation", failoverConfig.TrustHypervisorLocation,
-			"maxVMsToProcess", failoverConfig.MaxVMsToProcess)
+			"maxVMsToProcess", failoverConfig.MaxVMsToProcess,
+			"vmSelectionRotationInterval", failoverConfig.VMSelectionRotationInterval)
 	}
 
 	// +kubebuilder:scaffold:builder
@@ -652,10 +652,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	syncerMonitor := commitments.NewSyncerMonitor()
+	must.Succeed(metrics.Registry.Register(syncerMonitor))
 	if slices.Contains(mainConfig.EnabledTasks, "commitments-sync-task") {
 		setupLog.Info("starting commitments syncer")
-		syncerMonitor := commitments.NewSyncerMonitor()
-		must.Succeed(metrics.Registry.Register(syncerMonitor))
 		syncer := commitments.NewSyncer(multiclusterClient, syncerMonitor)
 		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
 		syncerConfig.ApplyDefaults()

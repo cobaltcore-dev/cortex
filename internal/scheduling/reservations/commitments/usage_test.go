@@ -967,7 +967,7 @@ func makeUsageTestReservation(commitmentUUID, projectID, flavorGroup, az string,
 
 // makeUsageTestReservationWithTimes creates a test reservation with start and end times.
 func makeUsageTestReservationWithTimes(commitmentUUID, projectID, flavorGroup, az string, memoryBytes int64, slot int, startTime, endTime *time.Time) *v1alpha1.Reservation {
-	name := "commitment-" + commitmentUUID + "-" + string(rune('0'+slot))
+	name := "commitment-" + commitmentUUID + "-" + string(rune('0'+slot)) //nolint:gosec // slot is a small test index, no overflow risk
 
 	res := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{

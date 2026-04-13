@@ -55,6 +55,9 @@ func TestManilaSyncer_Sync(t *testing.T) {
 	}
 
 	ctx := t.Context()
+	if err := syncer.Init(ctx); err != nil {
+		t.Fatalf("failed to init manila syncer: %v", err)
+	}
 	_, err := syncer.Sync(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -76,6 +79,9 @@ func TestManilaSyncer_SyncAllStoragePools(t *testing.T) {
 	}
 
 	ctx := t.Context()
+	if err := syncer.Init(ctx); err != nil {
+		t.Fatalf("failed to init manila syncer: %v", err)
+	}
 	n, err := syncer.SyncAllStoragePools(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

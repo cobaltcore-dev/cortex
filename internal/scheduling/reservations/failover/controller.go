@@ -6,6 +6,7 @@ package failover
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -518,7 +519,11 @@ func (c *FailoverReservationController) selectVMsToProcess(
 	offset := 0
 	rotationInterval := *c.Config.VMSelectionRotationInterval
 	if rotationInterval > 0 && c.reconcileCount%int64(rotationInterval) == 0 {
-		offset = int(c.reconcileCount) % len(vmsMissingFailover)
+		offset = rand.IntN(len(vmsMissingFailover)) //nolint:gosec // non-cryptographic randomness is fine for VM selection rotation
+		logger.Info("applying random rotation offset for VM selection",
+			"offset", offset,
+			"totalVMs", len(vmsMissingFailover),
+			"rotationInterval", rotationInterval)
 	}
 
 	selected = make([]vmFailoverNeed, 0, maxToProcess)

@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -157,20 +156,6 @@ func (api *novaClient) GetServerMigrations(ctx context.Context, id string) ([]mi
 	var nextURL = &initialURL
 	var migrations []migration
 	for nextURL != nil {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("X-Auth-Token", api.sc.Token())
-		req.Header.Set("X-OpenStack-Nova-API-Version", api.sc.Microversion)
-		resp, err := api.sc.HTTPClient.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		}
 		var list struct {
 			Migrations []migration `json:"migrations"`
 			Links      []struct {
@@ -178,9 +163,20 @@ func (api *novaClient) GetServerMigrations(ctx context.Context, id string) ([]mi
 				Href string `json:"href"`
 			} `json:"migrations_links"`
 		}
-		err = json.NewDecoder(resp.Body).Decode(&list)
+		resp, err := api.sc.Get(ctx, *nextURL, &list, &gophercloud.RequestOpts{
+			OkCodes: []int{http.StatusOK},
+			MoreHeaders: map[string]string{
+				"X-OpenStack-Nova-API-Version": api.sc.Microversion,
+			},
+		})
 		if err != nil {
+			if resp != nil {
+				resp.Body.Close()
+			}
 			return nil, err
+		}
+		if resp != nil {
+			resp.Body.Close()
 		}
 		nextURL = nil
 		for _, link := range list.Links {
@@ -206,23 +202,6 @@ func (api *novaClient) ListProjectServers(ctx context.Context, projectID string)
 	var result []ServerDetail
 
 	for nextURL != nil {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("X-Auth-Token", api.sc.Token())
-		req.Header.Set("X-OpenStack-Nova-API-Version", api.sc.Microversion)
-
-		resp, err := api.sc.HTTPClient.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		}
-
 		// Response structure with nested flavor, metadata, tags, image, and volumes
 		var list struct {
 			Servers []struct {
@@ -255,8 +234,20 @@ func (api *novaClient) ListProjectServers(ctx context.Context, projectID string)
 			} `json:"servers_links"`
 		}
 
-		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+		resp, err := api.sc.Get(ctx, *nextURL, &list, &gophercloud.RequestOpts{
+			OkCodes: []int{http.StatusOK},
+			MoreHeaders: map[string]string{
+				"X-OpenStack-Nova-API-Version": api.sc.Microversion,
+			},
+		})
+		if err != nil {
+			if resp != nil {
+				resp.Body.Close()
+			}
 			return nil, err
+		}
+		if resp != nil {
+			resp.Body.Close()
 		}
 
 		// Convert to ServerDetail
