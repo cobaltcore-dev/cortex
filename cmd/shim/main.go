@@ -13,8 +13,10 @@ import (
 	"path/filepath"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/shim/placement"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/sapcc/go-bits/httpext"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -22,6 +24,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -51,6 +54,7 @@ func main() {
 	restConfig := ctrl.GetConfigOrDie()
 
 	var metricsAddr string
+	var apiBindAddr string
 	var metricsCertPath, metricsCertName, metricsCertKey string
 	var webhookCertPath, webhookCertName, webhookCertKey string
 	// The shim does not require leader election, but this flag is provided to
@@ -59,9 +63,11 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var enablePlacementShim bool
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
+	flag.StringVar(&apiBindAddr, "api-bind-address", ":8080", "The address the shim API server binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
@@ -77,6 +83,8 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.BoolVar(&enablePlacementShim, "placement-shim", false,
+		"If set, the placement API shim handlers are registered on the API server.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -87,6 +95,13 @@ func main() {
 	if enableLeaderElection {
 		err := errors.New("leader election should not be enabled for the shim")
 		setupLog.Error(err, "invalid configuration")
+		os.Exit(1)
+	}
+
+	// Check that the metrics and API bind addresses don't overlap.
+	if metricsAddr != "0" && metricsAddr == apiBindAddr {
+		err := errors.New("metrics-bind-address and api-bind-address must not be the same")
+		setupLog.Error(err, "invalid configuration", "metrics-bind-address", metricsAddr, "api-bind-address", apiBindAddr)
 		os.Exit(1)
 	}
 
@@ -195,7 +210,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TODO: Initialize multicluster client here.
+	homeCluster, err := cluster.New(restConfig, func(o *cluster.Options) { o.Scheme = scheme })
+	if err != nil {
+		setupLog.Error(err, "unable to create home cluster")
+		os.Exit(1)
+	}
+	if err := mgr.Add(homeCluster); err != nil {
+		setupLog.Error(err, "unable to add home cluster")
+		os.Exit(1)
+	}
+	multiclusterClient := &multicluster.Client{
+		HomeCluster:     homeCluster,
+		HomeRestConfig:  restConfig,
+		HomeScheme:      scheme,
+		ResourceRouters: multicluster.DefaultResourceRouters,
+	}
+	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
+	if err := multiclusterClient.InitFromConf(ctx, mgr, multiclusterClientConfig); err != nil {
+		setupLog.Error(err, "unable to initialize multicluster client")
+		os.Exit(1)
+	}
 
 	// Our custom monitoring registry can add prometheus labels to all metrics.
 	// This is useful to distinguish metrics from different deployments.
@@ -204,6 +238,16 @@ func main() {
 
 	// API endpoint.
 	mux := http.NewServeMux()
+	var placementShim *placement.Shim
+	if enablePlacementShim {
+		placementShim = &placement.Shim{Client: multiclusterClient}
+		setupLog.Info("Adding placement shim to manager")
+		if err := placementShim.SetupWithManager(ctx, mgr); err != nil {
+			setupLog.Error(err, "unable to set up placement shim")
+			os.Exit(1)
+		}
+		placementShim.RegisterRoutes(mux)
+	}
 
 	// +kubebuilder:scaffold:builder
 
