@@ -184,3 +184,16 @@ spec:
     pipelineSchedulingDomain: nova
   description: |
     This KPI tracks the state of pipeline resources managed by cortex.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: vmware-commitments
+spec:
+  schedulingDomain: nova
+  impl: vmware_commitments_kpi
+  dependencies:
+    datasources:
+      - name: limes-project-commitments
+  description: |
+    This KPI tracks unused VMware commitments based on project commitments and usage.
