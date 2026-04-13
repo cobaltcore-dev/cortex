@@ -19,13 +19,35 @@ import (
 // this map grows to a fixed size and all subsequent lookups are lock-free reads.
 var pcFileCache sync.Map // uintptr -> string
 
-// LogMessagesTotal counts warn and error log messages emitted by both the slog
-// and zap loggers. Labels: "level" (warn|error), "file" (relative source path).
-var LogMessagesTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-	Namespace: "cortex",
-	Name:      "log_messages_total",
-	Help:      "Total number of log messages emitted at warn or error level.",
-}, []string{"level", "file"})
+// LogMetricsMonitor owns the log-message counter and implements the
+// prometheus.Collector interface so it can be registered with the metrics
+// registry like every other Monitor in cortex.
+type LogMetricsMonitor struct {
+	counter *prometheus.CounterVec
+}
+
+// NewLogMetricsMonitor creates a new monitor for log-level metrics.
+func NewLogMetricsMonitor() LogMetricsMonitor {
+	return LogMetricsMonitor{
+		counter: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: "cortex",
+			Name:      "log_messages_total",
+			Help:      "Total number of log messages emitted at warn or error level.",
+		}, []string{"level", "file"}),
+	}
+}
+
+func (m *LogMetricsMonitor) Describe(ch chan<- *prometheus.Desc) {
+	m.counter.Describe(ch)
+}
+
+func (m *LogMetricsMonitor) Collect(ch chan<- prometheus.Metric) {
+	m.counter.Collect(ch)
+}
+
+func (m *LogMetricsMonitor) inc(level, file string) {
+	m.counter.WithLabelValues(level, file).Inc()
+}
 
 // shortFilePath returns "parent_dir/filename.go" from any absolute or
 // module-relative path. This is independent of the build environment (no
@@ -41,16 +63,17 @@ func shortFilePath(file string) string {
 
 // --- slog handler wrapper ---
 
-// MetricsSlogHandler wraps an slog.Handler and increments LogMessagesTotal for
-// every warn or error log record.
+// MetricsSlogHandler wraps an slog.Handler and increments the log-message
+// counter for every warn or error log record.
 type MetricsSlogHandler struct {
-	next slog.Handler
+	monitor *LogMetricsMonitor
+	next    slog.Handler
 }
 
 // NewMetricsSlogHandler returns a new handler that counts warn/error logs and
 // delegates all calls to next.
-func NewMetricsSlogHandler(next slog.Handler) *MetricsSlogHandler {
-	return &MetricsSlogHandler{next: next}
+func NewMetricsSlogHandler(monitor *LogMetricsMonitor, next slog.Handler) *MetricsSlogHandler {
+	return &MetricsSlogHandler{monitor: monitor, next: next}
 }
 
 func (h *MetricsSlogHandler) Enabled(ctx context.Context, level slog.Level) bool {
@@ -79,7 +102,7 @@ func (h *MetricsSlogHandler) Handle(ctx context.Context, r slog.Record) error {
 				pcFileCache.Store(r.PC, file)
 			}
 		}
-		LogMessagesTotal.WithLabelValues(level, file).Inc()
+		h.monitor.inc(level, file)
 	}
 	if h.next == nil {
 		return nil
@@ -89,24 +112,23 @@ func (h *MetricsSlogHandler) Handle(ctx context.Context, r slog.Record) error {
 
 func (h *MetricsSlogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	if h.next == nil {
-		return &MetricsSlogHandler{}
+		return &MetricsSlogHandler{monitor: h.monitor}
 	}
-	return &MetricsSlogHandler{next: h.next.WithAttrs(attrs)}
+	return &MetricsSlogHandler{monitor: h.monitor, next: h.next.WithAttrs(attrs)}
 }
 
 func (h *MetricsSlogHandler) WithGroup(name string) slog.Handler {
 	if h.next == nil {
-		return &MetricsSlogHandler{}
+		return &MetricsSlogHandler{monitor: h.monitor}
 	}
-	return &MetricsSlogHandler{next: h.next.WithGroup(name)}
+	return &MetricsSlogHandler{monitor: h.monitor, next: h.next.WithGroup(name)}
 }
 
 // --- zap core wrapper ---
 
 // WrapCoreWithLogMetrics returns a zapcore.Core that hooks into every write to
-// increment LogMessagesTotal for warn and error entries. It uses
-// zapcore.RegisterHooks so no manual Check/Write plumbing is needed.
-func WrapCoreWithLogMetrics(core zapcore.Core) zapcore.Core {
+// increment the log-message counter for warn and error entries.
+func WrapCoreWithLogMetrics(monitor *LogMetricsMonitor, core zapcore.Core) zapcore.Core {
 	return zapcore.RegisterHooks(core, func(e zapcore.Entry) error {
 		if e.Level >= zapcore.WarnLevel {
 			level := "warn"
@@ -117,7 +139,7 @@ func WrapCoreWithLogMetrics(core zapcore.Core) zapcore.Core {
 			if e.Caller.Defined {
 				file = shortFilePath(e.Caller.File)
 			}
-			LogMessagesTotal.WithLabelValues(level, file).Inc()
+			monitor.inc(level, file)
 		}
 		return nil
 	})

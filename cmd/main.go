@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	uberzap "go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"os"
 	"path/filepath"
 	"slices"
@@ -152,9 +153,12 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
+	logMetricsMonitor := monitoring.NewLogMetricsMonitor()
 	ctrl.SetLogger(zap.New(
 		zap.UseFlagOptions(&opts),
-		zap.RawZapOpts(uberzap.WrapCore(monitoring.WrapCoreWithLogMetrics)),
+		zap.RawZapOpts(uberzap.WrapCore(func(core zapcore.Core) zapcore.Core {
+			return monitoring.WrapCoreWithLogMetrics(&logMetricsMonitor, core)
+		})),
 	))
 
 	// Configure slog (used across internal packages) with JSON output and
@@ -175,6 +179,7 @@ func main() {
 		}
 	}
 	slog.SetDefault(slog.New(monitoring.NewMetricsSlogHandler(
+		&logMetricsMonitor,
 		slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 			Level: slogLevel,
 		}),
@@ -332,7 +337,7 @@ func main() {
 	// This is useful to distinguish metrics from different deployments.
 	metricsConfig := conf.GetConfigOrDie[monitoring.Config]()
 	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, metricsConfig)
-	metrics.Registry.MustRegister(monitoring.LogMessagesTotal)
+	metrics.Registry.MustRegister(&logMetricsMonitor)
 
 	// TODO: Remove me after scheduling pipeline steps don't require DB connections anymore.
 	metrics.Registry.MustRegister(&db.Monitor)

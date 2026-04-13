@@ -46,22 +46,12 @@ func TestShortFilePath(t *testing.T) {
 	}
 }
 
-// newTestCounter creates a fresh CounterVec with the same schema as
-// LogMessagesTotal, useful for isolated test assertions.
-func newTestCounter() *prometheus.CounterVec {
-	return prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "cortex",
-		Name:      "log_messages_total",
-		Help:      "Total number of log messages emitted at warn or error level.",
-	}, []string{"level", "file"})
-}
-
 // gatherCounts collects the counter from a fresh registry and returns
 // a map of level -> file -> count.
-func gatherCounts(t *testing.T, counter *prometheus.CounterVec) map[string]map[string]float64 {
+func gatherCounts(t *testing.T, monitor *LogMetricsMonitor) map[string]map[string]float64 {
 	t.Helper()
 	reg := prometheus.NewRegistry()
-	reg.MustRegister(counter)
+	reg.MustRegister(monitor)
 	families, err := reg.Gather()
 	if err != nil {
 		t.Fatalf("gather failed: %v", err)
@@ -175,21 +165,14 @@ func TestMetricsSlogHandler_Counts(t *testing.T) {
 			wantNoInfo:  true,
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			orig := LogMessagesTotal
-			LogMessagesTotal = newTestCounter()
-			defer func() { LogMessagesTotal = orig }()
-
+			monitor := NewLogMetricsMonitor()
 			var buf bytes.Buffer
 			inner := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
-			logger := slog.New(NewMetricsSlogHandler(inner))
-
+			logger := slog.New(NewMetricsSlogHandler(&monitor, inner))
 			tt.emit(logger)
-
-			counts := gatherCounts(t, LogMessagesTotal)
-
+			counts := gatherCounts(t, &monitor)
 			if got := sumLevel(counts, "warn"); got != tt.wantWarn {
 				t.Errorf("warn count: got %v, want %v", got, tt.wantWarn)
 			}
@@ -207,19 +190,14 @@ func TestMetricsSlogHandler_Counts(t *testing.T) {
 }
 
 func TestMetricsSlogHandler_DelegatesAllLevels(t *testing.T) {
-	orig := LogMessagesTotal
-	LogMessagesTotal = newTestCounter()
-	defer func() { LogMessagesTotal = orig }()
-
+	monitor := NewLogMetricsMonitor()
 	var buf bytes.Buffer
 	inner := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
-	logger := slog.New(NewMetricsSlogHandler(inner))
-
+	logger := slog.New(NewMetricsSlogHandler(&monitor, inner))
 	logger.Debug("d")
 	logger.Info("i")
 	logger.Warn("w")
 	logger.Error("e")
-
 	output := buf.String()
 	for _, msg := range []string{"msg=d", "msg=i", "msg=w", "msg=e"} {
 		if !strings.Contains(output, msg) {
@@ -229,22 +207,36 @@ func TestMetricsSlogHandler_DelegatesAllLevels(t *testing.T) {
 }
 
 func TestMetricsSlogHandler_WithAttrsAndGroup(t *testing.T) {
-	orig := LogMessagesTotal
-	LogMessagesTotal = newTestCounter()
-	defer func() { LogMessagesTotal = orig }()
-
+	monitor := NewLogMetricsMonitor()
 	var buf bytes.Buffer
 	inner := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
-	handler := NewMetricsSlogHandler(inner)
-
+	handler := NewMetricsSlogHandler(&monitor, inner)
 	derived := handler.WithAttrs([]slog.Attr{slog.String("key", "val")})
 	grouped := derived.WithGroup("grp")
-
 	if _, ok := derived.(*MetricsSlogHandler); !ok {
 		t.Fatalf("WithAttrs should return *MetricsSlogHandler, got %T", derived)
 	}
 	if _, ok := grouped.(*MetricsSlogHandler); !ok {
 		t.Fatalf("WithGroup should return *MetricsSlogHandler, got %T", grouped)
+	}
+}
+
+func TestLogMetricsMonitor_DescribeCollect(t *testing.T) {
+	monitor := NewLogMetricsMonitor()
+	// Verify Describe sends at least one descriptor.
+	descCh := make(chan *prometheus.Desc, 10)
+	monitor.Describe(descCh)
+	close(descCh)
+	if len(descCh) == 0 {
+		t.Error("Describe should send at least one descriptor")
+	}
+	// Increment and verify Collect returns a metric.
+	monitor.inc("warn", "test/file.go")
+	metricCh := make(chan prometheus.Metric, 10)
+	monitor.Collect(metricCh)
+	close(metricCh)
+	if len(metricCh) == 0 {
+		t.Error("Collect should return at least one metric after incrementing")
 	}
 }
 
@@ -258,7 +250,7 @@ func TestWrapCoreWithLogMetrics(t *testing.T) {
 		entries     []entry
 		wantWarn    float64
 		wantError   float64
-		wantUnknown float64 // warn entries with no caller → file="unknown"
+		wantUnknown float64
 	}{
 		{
 			name: "one warn one error with caller",
@@ -339,14 +331,10 @@ func TestWrapCoreWithLogMetrics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			orig := LogMessagesTotal
-			LogMessagesTotal = newTestCounter()
-			defer func() { LogMessagesTotal = orig }()
-
+			monitor := NewLogMetricsMonitor()
 			sink := zapcore.AddSync(&bytes.Buffer{})
 			inner := zapcore.NewCore(enc, sink, zapcore.DebugLevel)
-			wrapped := WrapCoreWithLogMetrics(inner)
-
+			wrapped := WrapCoreWithLogMetrics(&monitor, inner)
 			for i, e := range tt.entries {
 				ent := zapcore.Entry{Level: e.level, Message: "msg", Time: time.Now()}
 				if e.caller {
@@ -360,9 +348,7 @@ func TestWrapCoreWithLogMetrics(t *testing.T) {
 					ce.Write()
 				}
 			}
-
-			counts := gatherCounts(t, LogMessagesTotal)
-
+			counts := gatherCounts(t, &monitor)
 			if got := sumLevel(counts, "warn"); got != tt.wantWarn {
 				t.Errorf("warn count: got %v, want %v", got, tt.wantWarn)
 			}
