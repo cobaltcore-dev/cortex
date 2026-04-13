@@ -6,6 +6,7 @@ package commitments
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -185,8 +186,7 @@ func (c *UsageCalculator) getProjectVMs(
 ) ([]VMUsageInfo, error) {
 
 	if c.usageDB == nil {
-		log.Info("usage DB client not configured - returning empty VM list", "projectID", projectID)
-		return []VMUsageInfo{}, nil
+		return nil, errors.New("usage DB client not configured")
 	}
 
 	rows, err := c.usageDB.ListProjectVMs(ctx, projectID)

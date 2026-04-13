@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/external"
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -52,9 +53,18 @@ func NewAPI(client client.Client) *HTTPAPI {
 	return NewAPIWithConfig(client, DefaultConfig(), nil)
 }
 
-func NewAPIWithConfig(client client.Client, config Config, usageDB UsageDBClient) *HTTPAPI {
+// NewAPIWithConfig creates an HTTPAPI. If usageDB is nil and config.DatabaseSecretRef
+// is set, a lazy-connecting PostgresReader-backed client is created automatically.
+func NewAPIWithConfig(k8sClient client.Client, config Config, usageDB UsageDBClient) *HTTPAPI {
+	if usageDB == nil && config.DatabaseSecretRef != nil {
+		reader := &external.PostgresReader{
+			Client:            k8sClient,
+			DatabaseSecretRef: *config.DatabaseSecretRef,
+		}
+		usageDB = NewDBUsageClient(reader)
+	}
 	return &HTTPAPI{
-		client:          client,
+		client:          k8sClient,
 		config:          config,
 		usageDB:         usageDB,
 		monitor:         NewChangeCommitmentsAPIMonitor(),
@@ -62,11 +72,6 @@ func NewAPIWithConfig(client client.Client, config Config, usageDB UsageDBClient
 		capacityMonitor: NewReportCapacityAPIMonitor(),
 		infoMonitor:     NewInfoAPIMonitor(),
 	}
-}
-
-// SetUsageDB sets the UsageDBClient after construction (e.g. once the K8s cache is ready).
-func (api *HTTPAPI) SetUsageDB(usageDB UsageDBClient) {
-	api.usageDB = usageDB
 }
 
 func (api *HTTPAPI) Init(mux *http.ServeMux, registry prometheus.Registerer, log logr.Logger) {

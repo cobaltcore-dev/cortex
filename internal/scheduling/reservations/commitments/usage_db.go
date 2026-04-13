@@ -8,17 +8,17 @@ import (
 	"fmt"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/external"
 )
 
-// dbUsageClient implements UsageDBClient using a *db.DB directly.
+// dbUsageClient implements UsageDBClient using a PostgresReader for lazy connection.
 type dbUsageClient struct {
-	db *db.DB
+	reader *external.PostgresReader
 }
 
-// NewDBUsageClient creates a UsageDBClient backed by the given database connection.
-func NewDBUsageClient(database *db.DB) UsageDBClient {
-	return &dbUsageClient{db: database}
+// NewDBUsageClient creates a UsageDBClient backed by the given PostgresReader.
+func NewDBUsageClient(reader *external.PostgresReader) UsageDBClient {
+	return &dbUsageClient{reader: reader}
 }
 
 // vmQueryRow is the scan target for the server+flavor JOIN query.
@@ -37,7 +37,7 @@ type vmQueryRow struct {
 }
 
 // ListProjectVMs returns all VMs for a project joined with their flavor data from Postgres.
-func (c *dbUsageClient) ListProjectVMs(_ context.Context, projectID string) ([]VMRow, error) {
+func (c *dbUsageClient) ListProjectVMs(ctx context.Context, projectID string) ([]VMRow, error) {
 	query := `
 		SELECT
 			s.id, s.name, s.status, s.created,
@@ -53,7 +53,7 @@ func (c *dbUsageClient) ListProjectVMs(_ context.Context, projectID string) ([]V
 		WHERE s.tenant_id = $1`
 
 	var rows []vmQueryRow
-	if _, err := c.db.Select(&rows, query, projectID); err != nil {
+	if err := c.reader.Select(ctx, &rows, query, projectID); err != nil {
 		return nil, fmt.Errorf("failed to query VMs for project %s: %w", projectID, err)
 	}
 

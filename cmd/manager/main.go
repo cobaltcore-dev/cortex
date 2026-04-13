@@ -522,10 +522,9 @@ func main() {
 		commitmentsConfig.ApplyDefaults()
 
 		if err := (&commitments.CommitmentReservationController{
-			Client:   multiclusterClient,
-			Scheme:   mgr.GetScheme(),
-			Conf:     commitmentsConfig,
-			UsageAPI: commitmentsAPI,
+			Client: multiclusterClient,
+			Scheme: mgr.GetScheme(),
+			Conf:   commitmentsConfig,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "CommitmentReservation")
 			os.Exit(1)
