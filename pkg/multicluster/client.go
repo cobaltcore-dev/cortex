@@ -28,9 +28,9 @@ func NewClient(homeCluster cluster.Cluster, restConfig *rest.Config, scheme *run
 		HomeRestConfig: restConfig,
 		HomeScheme:     scheme,
 		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
-			{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}:              HypervisorResourceRouter{},
-			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}:        ReservationsResourceRouter{},
-			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}:            HistoryResourceRouter{},
+			{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}:       HypervisorResourceRouter{},
+			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}: ReservationsResourceRouter{},
+			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}:     HistoryResourceRouter{},
 		},
 	}
 }
