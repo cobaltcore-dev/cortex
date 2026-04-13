@@ -453,7 +453,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 				// VM not found on expected hypervisor - check Nova API as fallback
 				if r.NovaClient != nil {
 					novaServer, err := r.NovaClient.Get(ctx, vmUUID)
-					if err == nil && novaServer.ComputeHost != "" {
+					if err == nil && novaServer.ComputeHost != "" && novaServer.ComputeHost != expectedHost {
 						// VM is on a different host past the grace period - remove from this reservation.
 						// The grace period is the window for VMs in transit; past that, a VM on the
 						// wrong host is no longer consuming this slot.
@@ -463,6 +463,13 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 							"expectedHost", expectedHost,
 							"allocationAge", allocationAge)
 						// fall through to removal
+					} else if err == nil && novaServer.ComputeHost == expectedHost {
+						// VM is confirmed on the expected host via Nova - mark as running
+						newStatusAllocations[vmUUID] = expectedHost
+						logger.V(1).Info("verified VM allocation via Nova API",
+							"vm", vmUUID,
+							"host", expectedHost)
+						continue
 					} else {
 						var notFound *novaservers.ErrServerNotFound
 						if err != nil && !errors.As(err, &notFound) {
@@ -517,6 +524,8 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 			}
 			return nil, fmt.Errorf("failed to re-fetch reservation: %w", err)
 		}
+		// Re-apply the status update that was overwritten by the re-fetch.
+		res.Status.CommittedResourceReservation.Allocations = newStatusAllocations
 		old = res.DeepCopy()
 	}
 
