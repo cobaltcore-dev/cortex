@@ -1,0 +1,26 @@
+# Copyright SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+sidecar:
+  enabled: true
+
+config:
+  provisioning:
+    folders:
+      - /etc/perses/provisioning
+      - /etc/perses/datasources
+    interval: 1m
+
+datasources:
+  - kind: GlobalDatasource
+    metadata:
+      name: PrometheusOpenstack
+    spec:
+      default: true
+      plugin:
+        kind: PrometheusDatasource
+        spec:
+          proxy:
+            kind: HTTPProxy
+            spec:
+              url: http://prometheus-operated:9090

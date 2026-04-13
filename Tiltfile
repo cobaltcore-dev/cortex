@@ -53,6 +53,11 @@ helm_repo(
     'https://prometheus-community.github.io/helm-charts',
     labels=['Repositories'],
 )
+helm_repo(
+    'perses',
+    'https://perses.github.io/helm-charts',
+    labels=['Repositories'],
+)
 
 ########### Certmanager
 # Certmanager is required for the validating webhooks in the cortex bundles, so
@@ -302,3 +307,20 @@ k8s_resource('cortex-plutono', port_forwards=[
 ], links=[
     link('http://localhost:5000/d/cortex/cortex?orgId=1', 'cortex dashboard'),
 ], labels=['Monitoring'])
+
+helm_resource(
+    'cortex-perses',
+    'perses/perses',
+    flags=['--values=./tools/perses/values.yaml'],
+    port_forwards=[port_forward(5080, 8080, name='perses')],
+    links=[link('http://localhost:5080', 'perses dashboard')],
+    labels=['Monitoring'],
+    resource_deps=['perses'],
+)
+watch_file('./tools/perses/dashboards')
+k8s_yaml(local(' '.join([
+    'kubectl create configmap cortex-perses-dashboards',
+    '--from-file=./tools/perses/dashboards/',
+    '--dry-run=client -o yaml |',
+    'kubectl label --local -f - perses.dev/resource=true --dry-run=client -o yaml',
+])))
