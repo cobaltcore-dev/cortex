@@ -12,7 +12,7 @@ groups:
       service: cortex
       severity: critical
       support_group: workload-management
-      playbook: docs/support/playbook/cortex/down
+      playbook: docs/support/playbook/cortex/alerts/down
     annotations:
       summary: "Cortex Scheduling for Nova is down"
       description: >
@@ -32,7 +32,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
-      playbook: docs/support/playbook/cortex/down
+      playbook: docs/support/playbook/cortex/alerts/down
     annotations:
       summary: "Cortex Knowledge for Nova is down"
       description: >
@@ -65,6 +65,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/api-errors
     annotations:
       summary: "Nova Scheduler HTTP request 400 errors too high"
       description: >
@@ -82,6 +83,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/api-errors
     annotations:
       summary: "Nova Scheduler HTTP request 500 errors too high"
       description: >
@@ -184,6 +186,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/unready
     annotations:
       summary: "Datasource `{{$labels.datasource}}` is in `{{$labels.state}}` state"
       description: >
@@ -200,6 +203,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/unready
     annotations:
       summary: "Knowledge `{{$labels.knowledge}}` is in `{{$labels.state}}` state"
       description: >
@@ -253,6 +257,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/unready
     annotations:
       summary: "KPI `{{$labels.kpi}}` is in `{{$labels.state}}` state"
       description: >
@@ -269,6 +274,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/unready
     annotations:
       summary: "Pipeline `{{$labels.pipeline}}` is in `{{$labels.state}}` state"
       description: >
@@ -602,6 +608,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/scheduling
     annotations:
       summary: "Nova scheduling cannot find valid KVM hosts"
       description: >
@@ -656,6 +663,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/reconciles
     annotations:
       summary: "Controller reconcile error rate >10%"
       description: >
@@ -675,6 +683,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/reconciles
     annotations:
       summary: "Controller reconciliation takes longer than ({{ $value | humanizeDuration }})"
       description: "Reconcile duration higher than 10m while reconciling {{ $labels.controller }}"
@@ -689,6 +698,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/reconciles
     annotations:
       summary: "Controller {{ $labels.name }}'s backlog is not being drained."
       description: >
