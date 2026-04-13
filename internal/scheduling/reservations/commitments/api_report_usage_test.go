@@ -18,7 +18,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -432,42 +431,41 @@ type ExpectedVMUsage struct {
 }
 
 // ============================================================================
-// Mock Nova Client
+// Mock UsageDBClient
 // ============================================================================
 
-type mockUsageNovaClient struct {
-	servers map[string][]nova.ServerDetail // projectID -> servers
-	err     error
+type mockUsageDBClient struct {
+	rows map[string][]VMRow // projectID -> rows
+	err  error
 }
 
-func newMockUsageNovaClient() *mockUsageNovaClient {
-	return &mockUsageNovaClient{
-		servers: make(map[string][]nova.ServerDetail),
+func newMockUsageDBClient() *mockUsageDBClient {
+	return &mockUsageDBClient{
+		rows: make(map[string][]VMRow),
 	}
 }
 
-func (m *mockUsageNovaClient) ListProjectServers(_ context.Context, projectID string) ([]nova.ServerDetail, error) {
+func (m *mockUsageDBClient) ListProjectVMs(_ context.Context, projectID string) ([]VMRow, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	return m.servers[projectID], nil
+	return m.rows[projectID], nil
 }
 
-func (m *mockUsageNovaClient) addVM(vm *TestVMUsage) {
-	server := nova.ServerDetail{
-		ID:               vm.UUID,
-		Name:             vm.UUID,
-		Status:           "ACTIVE",
-		TenantID:         vm.ProjectID,
-		Created:          vm.CreatedAt.Format(time.RFC3339),
-		AvailabilityZone: vm.AZ,
-		Hypervisor:       vm.Host,
-		FlavorName:       vm.Flavor.Name,
-		FlavorRAM:        uint64(vm.Flavor.MemoryMB), //nolint:gosec
-		FlavorVCPUs:      uint64(vm.Flavor.VCPUs),    //nolint:gosec
-		FlavorDisk:       vm.Flavor.DiskGB,
+func (m *mockUsageDBClient) addVM(vm *TestVMUsage) {
+	row := VMRow{
+		ID:          vm.UUID,
+		Name:        vm.UUID,
+		Status:      "ACTIVE",
+		Created:     vm.CreatedAt.Format(time.RFC3339),
+		AZ:          vm.AZ,
+		Hypervisor:  vm.Host,
+		FlavorName:  vm.Flavor.Name,
+		FlavorRAM:   uint64(vm.Flavor.MemoryMB), //nolint:gosec
+		FlavorVCPUs: uint64(vm.Flavor.VCPUs),    //nolint:gosec
+		FlavorDisk:  vm.Flavor.DiskGB,
 	}
-	m.servers[vm.ProjectID] = append(m.servers[vm.ProjectID], server)
+	m.rows[vm.ProjectID] = append(m.rows[vm.ProjectID], row)
 }
 
 // ============================================================================
@@ -478,7 +476,7 @@ type UsageTestEnv struct {
 	T            *testing.T
 	Scheme       *runtime.Scheme
 	K8sClient    client.Client
-	NovaClient   *mockUsageNovaClient
+	DBClient     *mockUsageDBClient
 	FlavorGroups FlavorGroupsKnowledge
 	HTTPServer   *httptest.Server
 	API          *HTTPAPI
@@ -530,14 +528,14 @@ func newUsageTestEnv(
 		}).
 		Build()
 
-	// Create mock Nova client with VMs
-	novaClient := newMockUsageNovaClient()
+	// Create mock DB client with VMs
+	dbClient := newMockUsageDBClient()
 	for _, vm := range vms {
-		novaClient.addVM(vm)
+		dbClient.addVM(vm)
 	}
 
-	// Create API with mock Nova client
-	api := NewAPIWithConfig(k8sClient, DefaultConfig(), novaClient)
+	// Create API with mock DB client
+	api := NewAPIWithConfig(k8sClient, DefaultConfig(), dbClient)
 	mux := http.NewServeMux()
 	registry := prometheus.NewRegistry()
 	api.Init(mux, registry, log.Log)
@@ -547,7 +545,7 @@ func newUsageTestEnv(
 		T:            t,
 		Scheme:       scheme,
 		K8sClient:    k8sClient,
-		NovaClient:   novaClient,
+		DBClient:     dbClient,
 		FlavorGroups: flavorGroups,
 		HTTPServer:   httpServer,
 		API:          api,

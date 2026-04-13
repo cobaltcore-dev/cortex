@@ -48,6 +48,9 @@ type CommitmentReservationController struct {
 	SchedulerClient *reservations.SchedulerClient
 	// NovaClient for direct Nova API calls (real-time VM status).
 	NovaClient schedulingnova.NovaClient
+	// UsageAPI is the HTTP API that needs the DB client for report-usage.
+	// Set this to wire up the DB after Init connects to Postgres.
+	UsageAPI *HTTPAPI
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -575,6 +578,9 @@ func (r *CommitmentReservationController) Init(ctx context.Context, client clien
 			return fmt.Errorf("failed to initialize database connection: %w", err)
 		}
 		logf.FromContext(ctx).Info("database connection initialized for commitment reservation controller")
+		if r.UsageAPI != nil {
+			r.UsageAPI.SetUsageDB(NewDBUsageClient(r.DB))
+		}
 	}
 
 	// Initialize scheduler client
