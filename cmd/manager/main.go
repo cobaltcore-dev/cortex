@@ -7,11 +7,9 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
-
-	uberzap "go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"os"
 	"path/filepath"
 	"slices"
@@ -31,6 +29,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	uberzap "go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
@@ -176,6 +176,10 @@ func main() {
 			slogLevel.Set(slog.LevelWarn)
 		case "error":
 			slogLevel.Set(slog.LevelError)
+		default:
+			slogLevel.Set(slog.LevelInfo)
+			setupLog.Error(fmt.Errorf("unknown LOG_LEVEL %q, defaulting to info", lvl), "invalid log level",
+				"supported", []string{"debug", "info", "warn", "warning", "error"})
 		}
 	}
 	slog.SetDefault(slog.New(monitoring.NewMetricsSlogHandler(
@@ -689,10 +693,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	syncerMonitor := commitments.NewSyncerMonitor()
+	must.Succeed(metrics.Registry.Register(syncerMonitor))
 	if slices.Contains(mainConfig.EnabledTasks, "commitments-sync-task") {
 		setupLog.Info("starting commitments syncer")
-		syncerMonitor := commitments.NewSyncerMonitor()
-		must.Succeed(metrics.Registry.Register(syncerMonitor))
 		syncer := commitments.NewSyncer(multiclusterClient, syncerMonitor)
 		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
 		syncerConfig.ApplyDefaults()

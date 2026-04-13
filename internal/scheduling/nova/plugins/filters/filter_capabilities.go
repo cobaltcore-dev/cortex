@@ -95,8 +95,8 @@ func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.External
 	for _, hv := range hvs.Items {
 		caps, err := hvToNovaCapabilities(hv)
 		if err != nil {
-			traceLog.Warn("skipping hypervisor with unknown capabilities", "host", hv.Name, "error", err)
-			continue
+			traceLog.Warn("hypervisor has unknown capabilities, using empty defaults", "host", hv.Name, "error", err)
+			caps = make(map[string]string)
 		}
 		hvCaps[hv.Name] = caps
 	}

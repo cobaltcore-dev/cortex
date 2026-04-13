@@ -7,7 +7,10 @@
 analytics_settings(False)
 
 # Use the ACTIVE_DEPLOYMENTS env var to select which Cortex bundles to deploy.
-ACTIVE_DEPLOYMENTS_ENV = os.getenv('ACTIVE_DEPLOYMENTS', 'nova,manila,cinder,ironcore,pods')
+ACTIVE_DEPLOYMENTS_ENV = os.getenv(
+    'ACTIVE_DEPLOYMENTS',
+    'nova,manila,cinder,ironcore,pods,placement',
+)
 if ACTIVE_DEPLOYMENTS_ENV == "":
     ACTIVE_DEPLOYMENTS = [] # Catch "".split(",") = [""]
 else:
@@ -50,6 +53,11 @@ helm_repo(
     'https://prometheus-community.github.io/helm-charts',
     labels=['Repositories'],
 )
+helm_repo(
+    'perses',
+    'https://perses.github.io/helm-charts',
+    labels=['Repositories'],
+)
 
 ########### Certmanager
 # Certmanager is required for the validating webhooks in the cortex bundles, so
@@ -78,12 +86,21 @@ local('kubectl wait --namespace cert-manager --for=condition=available deploymen
 url = 'https://raw.githubusercontent.com/cobaltcore-dev/openstack-hypervisor-operator/refs/heads/main/charts/openstack-hypervisor-operator/crds/kvm.cloud.sap_hypervisors.yaml'
 local('curl -L ' + url + ' | kubectl apply -f -')
 
-########### Cortex Operator & CRDs
+########### Cortex Manager & CRDs
 docker_build('ghcr.io/cobaltcore-dev/cortex', '.',
     dockerfile='Dockerfile',
+    build_args={'GOMAIN': 'cmd/manager/main.go'},
     only=['internal/', 'cmd/', 'api/', 'pkg', 'go.mod', 'go.sum', 'Dockerfile'],
 )
 local('sh helm/sync.sh helm/library/cortex')
+
+########### Cortex Shim
+docker_build('ghcr.io/cobaltcore-dev/cortex-shim', '.',
+    dockerfile='Dockerfile',
+    build_args={'GOMAIN': 'cmd/shim/main.go'},
+    only=['internal/', 'cmd/', 'api/', 'pkg', 'go.mod', 'go.sum', 'Dockerfile'],
+)
+local('sh helm/sync.sh helm/library/cortex-shim')
 
 ########### Cortex Bundles
 docker_build('ghcr.io/cobaltcore-dev/cortex-postgres', 'postgres')
@@ -98,6 +115,7 @@ bundle_charts = [
     ('helm/bundles/cortex-cinder', 'cortex-cinder'),
     ('helm/bundles/cortex-ironcore', 'cortex-ironcore'),
     ('helm/bundles/cortex-pods', 'cortex-pods'),
+    ('helm/bundles/cortex-placement-shim', 'cortex-placement-shim'),
 ]
 dep_charts = {
     'cortex-crds': [
@@ -122,6 +140,9 @@ dep_charts = {
     'cortex-pods': [
         ('helm/library/cortex-postgres', 'cortex-postgres'),
         ('helm/library/cortex', 'cortex'),
+    ],
+    'cortex-placement-shim': [
+        ('helm/library/cortex-shim', 'cortex-shim'),
     ],
 }
 
@@ -255,6 +276,10 @@ if 'pods' in ACTIVE_DEPLOYMENTS:
     k8s_yaml('samples/pods/pod.yaml')
     k8s_resource('test-pod', labels=['Cortex-Pods'])
 
+if 'placement' in ACTIVE_DEPLOYMENTS:
+    print("Activating Cortex Placement Shim bundle")
+    k8s_yaml(helm('./helm/bundles/cortex-placement-shim', name='cortex-placement-shim', values=tilt_values, set=env_set_overrides))
+
 ########### Dev Dependencies
 local('sh helm/sync.sh helm/dev/cortex-prometheus-operator')
 k8s_yaml(helm('./helm/dev/cortex-prometheus-operator', name='cortex-prometheus-operator')) # Operator
@@ -282,3 +307,20 @@ k8s_resource('cortex-plutono', port_forwards=[
 ], links=[
     link('http://localhost:5000/d/cortex/cortex?orgId=1', 'cortex dashboard'),
 ], labels=['Monitoring'])
+
+helm_resource(
+    'cortex-perses',
+    'perses/perses',
+    flags=['--values=./tools/perses/values.yaml'],
+    port_forwards=[port_forward(5080, 8080, name='perses')],
+    links=[link('http://localhost:5080', 'perses dashboard')],
+    labels=['Monitoring'],
+    resource_deps=['perses'],
+)
+watch_file('./tools/perses/dashboards')
+k8s_yaml(local(' '.join([
+    'kubectl create configmap cortex-perses-dashboards',
+    '--from-file=./tools/perses/dashboards/',
+    '--dry-run=client -o yaml |',
+    'kubectl label --local -f - perses.dev/resource=true --dry-run=client -o yaml',
+])))

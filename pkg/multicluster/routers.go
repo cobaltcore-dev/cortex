@@ -9,7 +9,17 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
+
+// DefaultResourceRouters defines all mappings of GroupVersionKinds to RRs
+// for the multicluster client that cortex supports by default. This is used to
+// route resources to the correct cluster in a multicluster setup.
+var DefaultResourceRouters = map[schema.GroupVersionKind]ResourceRouter{
+	{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}:       HypervisorResourceRouter{},
+	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}: ReservationsResourceRouter{},
+	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}:     HistoryResourceRouter{},
+}
 
 // ResourceRouter determines which remote cluster a resource should be written to
 // by matching the resource content against the cluster's labels.
