@@ -20,6 +20,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 )
 
+// NewClient creates a multicluster Client with the standard resource routers
+// pre-configured for the GVKs known to cortex.
+func NewClient(homeCluster cluster.Cluster, restConfig *rest.Config, scheme *runtime.Scheme) *Client {
+	return &Client{
+		HomeCluster:    homeCluster,
+		HomeRestConfig: restConfig,
+		HomeScheme:     scheme,
+		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
+			{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}:              HypervisorResourceRouter{},
+			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}:        ReservationsResourceRouter{},
+			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}:            HistoryResourceRouter{},
+		},
+	}
+}
+
 // A remote cluster with routing labels used to match resources to clusters.
 type remoteCluster struct {
 	cluster cluster.Cluster

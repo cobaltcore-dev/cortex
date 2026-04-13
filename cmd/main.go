@@ -18,8 +18,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
@@ -278,19 +277,7 @@ func main() {
 		setupLog.Error(err, "unable to add home cluster")
 		os.Exit(1)
 	}
-	hvGVK := schema.GroupVersionKind{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}
-	reservationGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}
-	historyGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}
-	multiclusterClient := &multicluster.Client{
-		HomeCluster:    homeCluster,
-		HomeRestConfig: restConfig,
-		HomeScheme:     scheme,
-		ResourceRouters: map[schema.GroupVersionKind]multicluster.ResourceRouter{
-			hvGVK:          multicluster.HypervisorResourceRouter{},
-			reservationGVK: multicluster.ReservationsResourceRouter{},
-			historyGVK:     multicluster.HistoryResourceRouter{},
-		},
-	}
+	multiclusterClient := multicluster.NewClient(homeCluster, restConfig, scheme)
 	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
 	if err := multiclusterClient.InitFromConf(ctx, mgr, multiclusterClientConfig); err != nil {
 		setupLog.Error(err, "unable to initialize multicluster client")
