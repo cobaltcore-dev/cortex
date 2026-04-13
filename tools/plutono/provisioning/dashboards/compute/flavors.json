@@ -15,8 +15,8 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 5,
-  "iteration": 1770195363564,
+  "id": 8,
+  "iteration": 1776069882965,
   "links": [],
   "panels": [
     {
@@ -89,7 +89,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort_desc(sum(cortex_flavor_running_vms{project_name=~\"$project_name\", flavor_name=~\"$flavor_name\", availability_zone=~\"$availability_zone\"}) by (project_name, flavor_name))",
+          "expr": "sort_desc(sum(cortex_flavor_running_vms{project_name=~\"$project_name\", flavor_name=~\"$flavor_name\", availability_zone=~\"$availability_zone\", hypervisor_family=~\"$hypervisor_family\"}) by (project_name, flavor_name, hypervisor_family))",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -173,7 +173,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "topk(20,sort_desc(sum(cortex_flavor_running_vms{project_name=~\"$project_name\", flavor_name=~\"$flavor_name\", availability_zone=~\"$availability_zone\"}) by (flavor_name)))",
+          "expr": "topk(20,sort_desc(sum(cortex_flavor_running_vms{project_name=~\"$project_name\", flavor_name=~\"$flavor_name\", availability_zone=~\"$availability_zone\", hypervisor_family=~\"$hypervisor_family\"}) by (flavor_name)))",
           "format": "time_series",
           "instant": true,
           "interval": "",
@@ -251,17 +251,10 @@
             "showHeader": true
           },
           "pluginVersion": "7.5.37",
-          "scopedVars": {
-            "availability_zone": {
-              "selected": false,
-              "text": "qa-de-1a",
-              "value": "qa-de-1a"
-            }
-          },
           "targets": [
             {
               "exemplar": true,
-              "expr": "sort_desc(cortex_flavor_running_vms{availability_zone=\"$availability_zone\", project_name=~\"$project_name\", flavor_name=~\"$flavor_name\"})",
+              "expr": "sort_desc(cortex_flavor_running_vms{availability_zone=\"$availability_zone\", project_name=~\"$project_name\", flavor_name=~\"$flavor_name\", hypervisor_family=~\"$hypervisor_family\"})",
               "format": "table",
               "instant": true,
               "interval": "",
@@ -369,17 +362,10 @@
             "text": {}
           },
           "pluginVersion": "7.5.37",
-          "scopedVars": {
-            "availability_zone": {
-              "selected": false,
-              "text": "qa-de-1a",
-              "value": "qa-de-1a"
-            }
-          },
           "targets": [
             {
               "exemplar": true,
-              "expr": "topk(20, sum(cortex_flavor_running_vms{availability_zone=\"$availability_zone\", flavor_name=~\"$flavor_name\", project_name=~\"$project_name\"}) by (flavor_name))",
+              "expr": "topk(20, sum(cortex_flavor_running_vms{availability_zone=\"$availability_zone\", flavor_name=~\"$flavor_name\", project_name=~\"$project_name\", hypervisor_family=~\"$hypervisor_family\"}) by (flavor_name))",
               "instant": true,
               "interval": "",
               "legendFormat": "{{flavor_name}} ",
@@ -443,7 +429,6 @@
         "allValue": null,
         "current": {
           "selected": true,
-          "tags": [],
           "text": [
             "All"
           ],
@@ -479,7 +464,6 @@
         "allValue": null,
         "current": {
           "selected": true,
-          "tags": [],
           "text": [
             "All"
           ],
@@ -510,6 +494,42 @@
         "tagsQuery": "",
         "type": "query",
         "useTags": false
+      },
+      {
+        "allValue": null,
+        "current": {
+          "selected": true,
+          "tags": [],
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": "prometheus-openstack",
+        "definition": "label_values(cortex_flavor_running_vms, hypervisor_family)",
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "includeAll": true,
+        "label": "Hypervisor Family",
+        "multi": true,
+        "name": "hypervisor_family",
+        "options": [],
+        "query": {
+          "query": "label_values(cortex_flavor_running_vms, hypervisor_family)",
+          "refId": "prometheus-openstack-hypervisor_family-Variable-Query"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
       }
     ]
   },
@@ -519,7 +539,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Cortex Compute Flavors",
+  "title": "Cortex Flavor Usage",
   "uid": "cortex-compute-flavors",
   "version": 2
 }
