@@ -11,10 +11,17 @@ import (
 
 type Config struct {
 
-	// RequeueIntervalActive is the interval for requeueing active reservations for verification.
+	// RequeueIntervalActive is the interval for requeueing active reservations for periodic verification.
 	RequeueIntervalActive time.Duration `json:"committedResourceRequeueIntervalActive"`
 	// RequeueIntervalRetry is the interval for requeueing when retrying after knowledge is not ready.
 	RequeueIntervalRetry time.Duration `json:"committedResourceRequeueIntervalRetry"`
+	// AllocationGracePeriod is the time window after a VM is allocated to a reservation
+	// during which it's expected to appear on the target host. VMs not confirmed within
+	// this period are considered stale and removed from the reservation.
+	AllocationGracePeriod time.Duration `json:"committedResourceAllocationGracePeriod"`
+	// RequeueIntervalGracePeriod is the interval for requeueing when VMs are in grace period.
+	// Shorter than RequeueIntervalActive for faster verification of new allocations.
+	RequeueIntervalGracePeriod time.Duration `json:"committedResourceRequeueIntervalGracePeriod"`
 	// PipelineDefault is the default pipeline used for scheduling committed resource reservations.
 	PipelineDefault string `json:"committedResourcePipelineDefault"`
 
@@ -68,6 +75,12 @@ func (c *Config) ApplyDefaults() {
 	if c.RequeueIntervalRetry == 0 {
 		c.RequeueIntervalRetry = defaults.RequeueIntervalRetry
 	}
+	if c.RequeueIntervalGracePeriod == 0 {
+		c.RequeueIntervalGracePeriod = defaults.RequeueIntervalGracePeriod
+	}
+	if c.AllocationGracePeriod == 0 {
+		c.AllocationGracePeriod = defaults.AllocationGracePeriod
+	}
 	if c.PipelineDefault == "" {
 		c.PipelineDefault = defaults.PipelineDefault
 	}
@@ -88,6 +101,8 @@ func DefaultConfig() Config {
 	return Config{
 		RequeueIntervalActive:                  5 * time.Minute,
 		RequeueIntervalRetry:                   1 * time.Minute,
+		RequeueIntervalGracePeriod:             1 * time.Minute,
+		AllocationGracePeriod:                  15 * time.Minute,
 		PipelineDefault:                        "kvm-general-purpose-load-balancing",
 		SchedulerURL:                           "http://localhost:8080/scheduler/nova/external",
 		ChangeAPIWatchReservationsTimeout:      10 * time.Second,
