@@ -205,14 +205,14 @@ if 'nova' in ACTIVE_DEPLOYMENTS:
     k8s_resource('cortex-nova-knowledge-controller-manager', labels=['Cortex-Nova'])
     local_resource(
         'Scheduler E2E Tests (Nova)',
-        '/bin/sh -c "kubectl exec deploy/cortex-nova-scheduling-controller-manager -- /manager e2e-nova"',
+        '/bin/sh -c "kubectl exec deploy/cortex-nova-scheduling-controller-manager -- /main e2e-nova"',
         labels=['Cortex-Nova'],
         trigger_mode=TRIGGER_MODE_MANUAL,
         auto_init=False,
     )
     local_resource(
         'Commitments E2E Tests',
-        '/bin/sh -c "kubectl exec deploy/cortex-nova-scheduling-controller-manager -- /manager e2e-commitments"',
+        '/bin/sh -c "kubectl exec deploy/cortex-nova-scheduling-controller-manager -- /main e2e-commitments"',
         labels=['Cortex-Nova'],
         trigger_mode=TRIGGER_MODE_MANUAL,
         auto_init=False,
@@ -230,7 +230,7 @@ if 'manila' in ACTIVE_DEPLOYMENTS:
     k8s_resource('cortex-manila-knowledge-controller-manager', labels=['Cortex-Manila'])
     local_resource(
         'Scheduler E2E Tests (Manila)',
-        '/bin/sh -c "kubectl exec deploy/cortex-manila-scheduling-controller-manager -- /manager e2e-manila"',
+        '/bin/sh -c "kubectl exec deploy/cortex-manila-scheduling-controller-manager -- /main e2e-manila"',
         labels=['Cortex-Manila'],
         trigger_mode=TRIGGER_MODE_MANUAL,
         auto_init=False,
@@ -247,7 +247,7 @@ if 'cinder' in ACTIVE_DEPLOYMENTS:
     k8s_resource('cortex-cinder-knowledge-controller-manager', labels=['Cortex-Cinder'])
     local_resource(
         'Scheduler E2E Tests (Cinder)',
-        '/bin/sh -c "kubectl exec deploy/cortex-cinder-scheduling-controller-manager -- /manager e2e-cinder"',
+        '/bin/sh -c "kubectl exec deploy/cortex-cinder-scheduling-controller-manager -- /main e2e-cinder"',
         labels=['Cortex-Cinder'],
         trigger_mode=TRIGGER_MODE_MANUAL,
         auto_init=False,
