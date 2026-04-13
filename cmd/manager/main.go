@@ -20,6 +20,8 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	uberzap "go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -151,7 +153,13 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	logMetricsMonitor := monitoring.NewLogMetricsMonitor()
+	ctrl.SetLogger(zap.New(
+		zap.UseFlagOptions(&opts),
+		zap.RawZapOpts(uberzap.WrapCore(func(core zapcore.Core) zapcore.Core {
+			return monitoring.WrapCoreWithLogMetrics(&logMetricsMonitor, core)
+		})),
+	))
 
 	// Configure slog (used across internal packages) with JSON output and
 	// level control via the LOG_LEVEL environment variable.
@@ -174,9 +182,12 @@ func main() {
 				"supported", []string{"debug", "info", "warn", "warning", "error"})
 		}
 	}
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slogLevel,
-	})))
+	slog.SetDefault(slog.New(monitoring.NewMetricsSlogHandler(
+		&logMetricsMonitor,
+		slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slogLevel,
+		}),
+	)))
 	slog.Info("slog configured", "level", slogLevel.Level().String())
 
 	// Log the main configuration
@@ -330,6 +341,7 @@ func main() {
 	// This is useful to distinguish metrics from different deployments.
 	metricsConfig := conf.GetConfigOrDie[monitoring.Config]()
 	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, metricsConfig)
+	metrics.Registry.MustRegister(&logMetricsMonitor)
 
 	// TODO: Remove me after scheduling pipeline steps don't require DB connections anymore.
 	metrics.Registry.MustRegister(&db.Monitor)
