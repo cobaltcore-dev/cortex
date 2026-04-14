@@ -192,6 +192,12 @@ func (s *Shim) predicateRemoteHypervisor() predicate.Predicate {
 // the HTTP client for talking to the placement API.
 func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err error) {
 	setupLog.Info("Setting up placement shim with manager")
+
+	// Bind the Start method to the manager.
+	if err := mgr.Add(s); err != nil {
+		return err
+	}
+
 	s.config, err = conf.GetConfig[config]()
 	if err != nil {
 		setupLog.Error(err, "Failed to load placement shim config")
@@ -276,20 +282,15 @@ func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	pattern, _ := ctx.Value(routePatternKey).(string)
 	start := time.Now()
 	resp, err := s.httpClient.Do(upstreamReq) //nolint:gosec // G704: intentional reverse proxy
-	duration := time.Since(start).Seconds()
 	if err != nil {
 		log.Error(err, "failed to reach placement API", "url", upstream.String())
-		// Here we actually did an upstream request attempt, to record it to prometheus.
 		s.upstreamRequestTimer.
 			WithLabelValues(r.Method, pattern, strconv.Itoa(http.StatusBadGateway)).
-			Observe(duration)
+			Observe(time.Since(start).Seconds())
 		http.Error(w, "failed to reach placement API", http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
-	s.upstreamRequestTimer.
-		WithLabelValues(r.Method, pattern, strconv.Itoa(resp.StatusCode)).
-		Observe(duration)
 
 	// Copy response headers, status code, and body back to the caller.
 	for k, vs := range resp.Header {
@@ -301,6 +302,11 @@ func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	if _, err := io.Copy(w, resp.Body); err != nil {
 		log.Error(err, "failed to copy upstream response body")
 	}
+	// Observe after the body is fully consumed so the duration includes
+	// the time spent streaming the response from upstream.
+	s.upstreamRequestTimer.
+		WithLabelValues(r.Method, pattern, strconv.Itoa(resp.StatusCode)).
+		Observe(time.Since(start).Seconds())
 }
 
 // RegisterRoutes binds all Placement API handlers to the given mux. The
@@ -357,7 +363,7 @@ func (s *Shim) RegisterRoutes(mux *http.ServeMux) {
 		next := h.handler
 		mux.HandleFunc(routePattern, func(w http.ResponseWriter, r *http.Request) {
 			r = r.WithContext(context.WithValue(r.Context(), routePatternKey, handlerPattern))
-			sw := &statusCapturingResponseWriter{ResponseWriter: w}
+			sw := &statusCapturingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 			start := time.Now()
 			next.ServeHTTP(sw, r)
 			s.downstreamRequestTimer.
