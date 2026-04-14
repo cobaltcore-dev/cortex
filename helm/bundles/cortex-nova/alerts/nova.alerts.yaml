@@ -332,7 +332,9 @@ groups:
         issue is resolved.
 
   - alert: CortexNovaCommittedResourceLatencyTooHigh
-    expr: histogram_quantile(0.95, sum(rate(cortex_committed_resource_change_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) > 30
+    expr: |
+      histogram_quantile(0.95, sum(rate(cortex_committed_resource_change_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) > 30
+      and on() rate(cortex_committed_resource_change_api_requests_total{service="cortex-nova-metrics"}[5m]) > 0
     for: 5m
     labels:
       context: committed-resource-api
@@ -350,8 +352,11 @@ groups:
 
   - alert: CortexNovaCommittedResourceRejectionRateTooHigh
     expr: |
-      sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected"}[5m]))
-      / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[5m])) > 0.5
+      (
+        sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected"}[5m]))
+        / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[5m]))
+      ) > 0.5
+      and on() sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[5m])) > 0
     for: 5m
     labels:
       context: committed-resource-api
@@ -378,7 +383,7 @@ groups:
       severity: warning
       support_group: workload-management
     annotations:
-      summary: "Committed Resource change API timeouts too high"
+      summary: "Committed Resource change API timeout detected"
       description: >
         The committed resource change API (Limes LIQUID integration) timed out
         while waiting for reservations to become ready. This indicates that the
@@ -421,7 +426,9 @@ groups:
         or Nova server data. Limes may receive stale or incomplete usage data.
 
   - alert: CortexNovaCommittedResourceUsageLatencyTooHigh
-    expr: histogram_quantile(0.95, sum(rate(cortex_committed_resource_usage_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) > 5
+    expr: |
+      histogram_quantile(0.95, sum(rate(cortex_committed_resource_usage_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) > 10
+      and on() rate(cortex_committed_resource_usage_api_requests_total{service="cortex-nova-metrics"}[5m]) > 0
     for: 5m
     labels:
       context: committed-resource-api
@@ -433,7 +440,7 @@ groups:
       summary: "Committed Resource usage API latency too high"
       description: >
         The committed resource usage API (Limes LIQUID integration) is experiencing
-        high latency (p95 > 5s). This may indicate slow Nova API responses or
+        high latency (p95 > 10s). This may indicate slow Nova API responses or
         database queries. Limes scrapes may time out, affecting quota reporting.
 
   # Committed Resource Capacity API Alerts
@@ -469,7 +476,9 @@ groups:
         capacity. Limes may receive stale or incomplete capacity data.
 
   - alert: CortexNovaCommittedResourceCapacityLatencyTooHigh
-    expr: histogram_quantile(0.95, sum(rate(cortex_committed_resource_capacity_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) > 5
+    expr: |
+      histogram_quantile(0.95, sum(rate(cortex_committed_resource_capacity_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) > 10
+      and on() rate(cortex_committed_resource_capacity_api_requests_total{service="cortex-nova-metrics"}[5m]) > 0
     for: 5m
     labels:
       context: committed-resource-api
@@ -481,7 +490,7 @@ groups:
       summary: "Committed Resource capacity API latency too high"
       description: >
         The committed resource capacity API (Limes LIQUID integration) is experiencing
-        high latency (p95 > 5s). This may indicate slow database queries or knowledge
+        high latency (p95 > 10s). This may indicate slow database queries or knowledge
         CRD retrieval. Limes scrapes may time out, affecting capacity reporting.
 
   # Committed Resource Syncer Alerts
@@ -498,7 +507,8 @@ groups:
       summary: "Committed Resource syncer experiencing errors"
       description: >
         The committed resource syncer has encountered multiple errors in the last hour.
-        This may indicate connectivity issues with Limes. Check the syncer logs for error details.
+        This may indicate connectivity issues with Limes, malformed API responses,
+        or failures writing reservation CRDs. Check the syncer logs for error details.
 
   - alert: CortexNovaCommittedResourceSyncerUnitMismatchRateHigh
     expr: |
