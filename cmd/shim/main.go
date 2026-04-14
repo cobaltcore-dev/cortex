@@ -246,6 +246,7 @@ func main() {
 			setupLog.Error(err, "unable to set up placement shim")
 			os.Exit(1)
 		}
+		metrics.Registry.MustRegister(placementShim)
 		placementShim.RegisterRoutes(mux)
 	}
 
