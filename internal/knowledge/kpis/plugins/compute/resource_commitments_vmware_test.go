@@ -136,9 +136,9 @@ func TestVMwareResourceCommitmentsKPI_CollectHanaUnusedCommitments(t *testing.T)
 		}
 	}
 
-	// project-A/az1: 2 unused hana_small (cascade-lake)       → cpu=2×4=8,  ram=2×16384=32768,  disk=2×100=200
-	// project-B/az1: 2 unused hana_large_v2 (sapphire-rapids)  → cpu=2×16=32, ram=2×65536=131072, disk=2×400=800
-	// project-A/az2: 3 unused hana_small (cascade-lake)        → cpu=3×4=12, ram=3×16384=49152,  disk=3×100=300
+	// project-A/az1: 2 unused hana_small (cascade-lake)       → cpu=2*4=8,  ram=2*16384=32768,  disk=2*100=200
+	// project-B/az1: 2 unused hana_large_v2 (sapphire-rapids)  → cpu=2*16=32, ram=2*65536=131072, disk=2*400=800
+	// project-A/az2: 3 unused hana_small (cascade-lake)        → cpu=3*4=12, ram=3*16384=49152,  disk=3*100=300
 	// project-E/az1: 5 running > 2 committed hana_small        → clamped to 0, no metric emitted
 	// project-F/az2: 3 running == 3 committed hana_large_v2    → clamped to 0, no metric emitted
 	expected := map[string]UnusedMetric{
