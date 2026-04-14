@@ -1,0 +1,48 @@
+# Copyright SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+owner-info:
+  enabled: true
+  helm-chart-url: "https://github.com/cobaltcore-dev/cortex/helm/bundles/cortex-placement-shim"
+  maintainers:
+    - "arno.uhlig@sap.com"
+    - "julius.clausnitzer@sap.com"
+    - "malte.viering@sap.com"
+    - "marcel.gute@sap.com"
+    - "markus.wieland@sap.com"
+    - "p.matthes@sap.com"
+  support-group: "workload-management"
+  service: "cortex-placement-shim"
+
+alerts:
+  enabled: true
+  prometheus: openstack
+
+cortex-shim:
+  namePrefix: cortex-placement
+  deployment:
+    container:
+      extraArgs: ["--placement-shim=true"]
+  conf:
+    apiservers:
+      home:
+        gvks:
+          - kvm.cloud.sap/v1/Hypervisor
+          - kvm.cloud.sap/v1/HypervisorList
+    monitoring:
+      labels:
+        github_org: cobaltcore-dev
+        github_repo: cortex
+    # Uncomment and set the following values to enable SSO for the placement
+    # shim. The shim will use the provided SSO credentials to talk to openstack
+    # over ingress.
+    # sso:
+    #   cert: |
+    #     -----BEGIN CERTIFICATE-----
+    #     Your certificate here
+    #     -----END CERTIFICATE-----
+    #   certKey: |
+    #     -----BEGIN PRIVATE KEY-----
+    #     Your private key here
+    #     -----END PRIVATE KEY-----
+    #   selfSigned: "false"

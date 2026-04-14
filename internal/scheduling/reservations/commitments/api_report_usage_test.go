@@ -18,7 +18,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -298,6 +297,41 @@ func TestReportUsageIntegration(t *testing.T) {
 			},
 		},
 		{
+			Name:      "VM with video RAM - video_ram_mib present, hw_version absent",
+			ProjectID: "project-vram",
+			Flavors: func() []*TestFlavor {
+				vram := uint64(16)
+				return []*TestFlavor{
+					m1Small,
+					{Name: "m1.gpu", Group: "hana_1", MemoryMB: 4096, VCPUs: 16, VideoRAMMiB: &vram},
+				}
+			}(),
+			VMs: func() []*TestVMUsage {
+				vram := uint64(16)
+				f := &TestFlavor{Name: "m1.gpu", Group: "hana_1", MemoryMB: 4096, VCPUs: 16, VideoRAMMiB: &vram}
+				return []*TestVMUsage{newTestVMUsage("vm-gpu", f, "project-vram", "az-a", "host-1", baseTime)}
+			}(),
+			Reservations: []*UsageTestReservation{
+				{CommitmentID: "commit-1", Flavor: m1Small, ProjectID: "project-vram", AZ: "az-a", Count: 4},
+			},
+			AllAZs: []string{"az-a"},
+			Expected: map[string]ExpectedResourceUsage{
+				"hw_version_hana_1_ram": {
+					PerAZ: map[string]ExpectedAZUsage{
+						"az-a": {
+							Usage: 4,
+							VMs: func() []ExpectedVMUsage {
+								vram := uint64(16)
+								return []ExpectedVMUsage{
+									{UUID: "vm-gpu", CommitmentID: "commit-1", MemoryMB: 4096, VideoRAMMiB: &vram},
+								}
+							}(),
+						},
+					},
+				},
+			},
+		},
+		{
 			Name:               "Invalid project ID - 400 Bad Request",
 			ProjectID:          "",
 			Flavors:            []*TestFlavor{m1Small},
@@ -427,47 +461,55 @@ type ExpectedAZUsage struct {
 
 type ExpectedVMUsage struct {
 	UUID         string
-	CommitmentID string // Empty string = PAYG
-	MemoryMB     uint64 // For verification
+	CommitmentID string  // Empty string = PAYG
+	MemoryMB     uint64  // For verification
+	VideoRAMMiB  *uint64 // nil = expect field absent
 }
 
 // ============================================================================
-// Mock Nova Client
+// Mock UsageDBClient
 // ============================================================================
 
-type mockUsageNovaClient struct {
-	servers map[string][]nova.ServerDetail // projectID -> servers
-	err     error
+type mockUsageDBClient struct {
+	rows map[string][]VMRow // projectID -> rows
+	err  error
 }
 
-func newMockUsageNovaClient() *mockUsageNovaClient {
-	return &mockUsageNovaClient{
-		servers: make(map[string][]nova.ServerDetail),
+func newMockUsageDBClient() *mockUsageDBClient {
+	return &mockUsageDBClient{
+		rows: make(map[string][]VMRow),
 	}
 }
 
-func (m *mockUsageNovaClient) ListProjectServers(_ context.Context, projectID string) ([]nova.ServerDetail, error) {
+func (m *mockUsageDBClient) ListProjectVMs(_ context.Context, projectID string) ([]VMRow, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	return m.servers[projectID], nil
+	return m.rows[projectID], nil
 }
 
-func (m *mockUsageNovaClient) addVM(vm *TestVMUsage) {
-	server := nova.ServerDetail{
-		ID:               vm.UUID,
-		Name:             vm.UUID,
-		Status:           "ACTIVE",
-		TenantID:         vm.ProjectID,
-		Created:          vm.CreatedAt.Format(time.RFC3339),
-		AvailabilityZone: vm.AZ,
-		Hypervisor:       vm.Host,
-		FlavorName:       vm.Flavor.Name,
-		FlavorRAM:        uint64(vm.Flavor.MemoryMB), //nolint:gosec
-		FlavorVCPUs:      uint64(vm.Flavor.VCPUs),    //nolint:gosec
-		FlavorDisk:       vm.Flavor.DiskGB,
+func (m *mockUsageDBClient) addVM(vm *TestVMUsage) {
+	extraSpecs := map[string]string{
+		"quota:hw_version": vm.Flavor.Group,
 	}
-	m.servers[vm.ProjectID] = append(m.servers[vm.ProjectID], server)
+	if vm.Flavor.VideoRAMMiB != nil {
+		extraSpecs["hw_video:ram_max_mb"] = strconv.FormatUint(*vm.Flavor.VideoRAMMiB, 10)
+	}
+	extrasJSON, _ := json.Marshal(extraSpecs) //nolint:errcheck // test helper, always valid
+	row := VMRow{
+		ID:           vm.UUID,
+		Name:         vm.UUID,
+		Status:       "ACTIVE",
+		Created:      vm.CreatedAt.Format(time.RFC3339),
+		AZ:           vm.AZ,
+		Hypervisor:   vm.Host,
+		FlavorName:   vm.Flavor.Name,
+		FlavorRAM:    uint64(vm.Flavor.MemoryMB), //nolint:gosec
+		FlavorVCPUs:  uint64(vm.Flavor.VCPUs),    //nolint:gosec
+		FlavorDisk:   vm.Flavor.DiskGB,
+		FlavorExtras: string(extrasJSON),
+	}
+	m.rows[vm.ProjectID] = append(m.rows[vm.ProjectID], row)
 }
 
 // ============================================================================
@@ -478,7 +520,7 @@ type UsageTestEnv struct {
 	T            *testing.T
 	Scheme       *runtime.Scheme
 	K8sClient    client.Client
-	NovaClient   *mockUsageNovaClient
+	DBClient     *mockUsageDBClient
 	FlavorGroups FlavorGroupsKnowledge
 	HTTPServer   *httptest.Server
 	API          *HTTPAPI
@@ -530,14 +572,14 @@ func newUsageTestEnv(
 		}).
 		Build()
 
-	// Create mock Nova client with VMs
-	novaClient := newMockUsageNovaClient()
+	// Create mock DB client with VMs
+	dbClient := newMockUsageDBClient()
 	for _, vm := range vms {
-		novaClient.addVM(vm)
+		dbClient.addVM(vm)
 	}
 
-	// Create API with mock Nova client
-	api := NewAPIWithConfig(k8sClient, DefaultConfig(), novaClient)
+	// Create API with mock DB client
+	api := NewAPIWithConfig(k8sClient, DefaultConfig(), dbClient)
 	mux := http.NewServeMux()
 	registry := prometheus.NewRegistry()
 	api.Init(mux, registry, log.Log)
@@ -547,7 +589,7 @@ func newUsageTestEnv(
 		T:            t,
 		Scheme:       scheme,
 		K8sClient:    k8sClient,
-		NovaClient:   novaClient,
+		DBClient:     dbClient,
 		FlavorGroups: flavorGroups,
 		HTTPServer:   httpServer,
 		API:          api,
@@ -706,6 +748,7 @@ func verifyUsageReport(t *testing.T, tc UsageReportTestCase, actual liquid.Servi
 
 			// Build actual VM map for comparison (parse attributes)
 			actualVMs := make(map[string]vmAttributes)
+			actualRawVMs := make(map[string]map[string]json.RawMessage) // for checking absent fields
 			for _, sub := range actualInstancesAZ.Subresources {
 				var attrs vmAttributes
 				attrs.ID = sub.ID
@@ -714,6 +757,11 @@ func verifyUsageReport(t *testing.T, tc UsageReportTestCase, actual liquid.Servi
 					continue
 				}
 				actualVMs[sub.ID] = attrs
+
+				var rawAttrs map[string]json.RawMessage
+				if err := json.Unmarshal(sub.Attributes, &rawAttrs); err == nil {
+					actualRawVMs[sub.ID] = rawAttrs
+				}
 			}
 
 			// Verify each expected VM
@@ -740,6 +788,35 @@ func verifyUsageReport(t *testing.T, tc UsageReportTestCase, actual liquid.Servi
 					t.Errorf("Resource %s AZ %s VM %s: expected RAM %d MB, got %d MB",
 						instancesResourceName, azName, expectedVM.UUID, expectedVM.MemoryMB, actualVM.Flavor.MemoryMiB)
 				}
+
+				// Verify video_ram_mib
+				if expectedVM.VideoRAMMiB != nil {
+					if actualVM.Flavor.VideoMemoryMiB == nil {
+						t.Errorf("Resource %s AZ %s VM %s: expected video_ram_mib %d, got nil",
+							instancesResourceName, azName, expectedVM.UUID, *expectedVM.VideoRAMMiB)
+					} else if *actualVM.Flavor.VideoMemoryMiB != *expectedVM.VideoRAMMiB {
+						t.Errorf("Resource %s AZ %s VM %s: expected video_ram_mib %d, got %d",
+							instancesResourceName, azName, expectedVM.UUID, *expectedVM.VideoRAMMiB, *actualVM.Flavor.VideoMemoryMiB)
+					}
+				} else {
+					if actualVM.Flavor.VideoMemoryMiB != nil {
+						t.Errorf("Resource %s AZ %s VM %s: expected no video_ram_mib, got %d",
+							instancesResourceName, azName, expectedVM.UUID, *actualVM.Flavor.VideoMemoryMiB)
+					}
+				}
+
+				// Assert HWVersion is absent from the serialized output (must not appear per LIQUID schema)
+				if rawFlavor, ok := actualRawVMs[expectedVM.UUID]; ok {
+					if flavorRaw, ok := rawFlavor["flavor"]; ok {
+						var flavorMap map[string]json.RawMessage
+						if err := json.Unmarshal(flavorRaw, &flavorMap); err == nil {
+							if _, present := flavorMap["hw_version"]; present {
+								t.Errorf("Resource %s AZ %s VM %s: hw_version must not appear in output (tagged json:\"-\")",
+									instancesResourceName, azName, expectedVM.UUID)
+							}
+						}
+					}
+				}
 			}
 		}
 	}
@@ -750,19 +827,20 @@ func verifyUsageReport(t *testing.T, tc UsageReportTestCase, actual liquid.Servi
 type vmAttributes struct {
 	ID           string            `json:"-"` // set from Subresource.ID
 	Status       string            `json:"status"`
-	Metadata     map[string]string `json:"metadata"`
-	Tags         []string          `json:"tags"`
+	Metadata     map[string]string `json:"metadata,omitempty"`
+	Tags         []string          `json:"tags,omitempty"`
 	Flavor       vmFlavorAttrs     `json:"flavor"`
-	OSType       string            `json:"os_type"`
+	OSType       string            `json:"os_type,omitempty"`
 	CommitmentID string            `json:"commitment_id,omitempty"`
 }
 
 // vmFlavorAttrs is the nested flavor info within vm attributes.
 type vmFlavorAttrs struct {
-	Name      string `json:"name"`
-	VCPUs     uint64 `json:"vcpu"`
-	MemoryMiB uint64 `json:"ram_mib"`
-	DiskGiB   uint64 `json:"disk_gib"`
+	Name           string  `json:"name"`
+	VCPUs          uint64  `json:"vcpu"`
+	MemoryMiB      uint64  `json:"ram_mib"`
+	DiskGiB        uint64  `json:"disk_gib"`
+	VideoMemoryMiB *uint64 `json:"video_ram_mib,omitempty"`
 }
 
 // ============================================================================

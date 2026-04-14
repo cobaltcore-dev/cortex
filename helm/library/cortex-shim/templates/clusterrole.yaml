@@ -1,0 +1,100 @@
+# Roles that grant the shims access to cortex crds.
+{{- if .Values.rbac.enable }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: {{ .Values.namePrefix }}-shim-role
+rules:
+- apiGroups:
+  - cortex.cloud
+  resources:
+  - knowledges
+  - datasources
+  - reservations
+  - decisions
+  - deschedulings
+  - pipelines
+  - kpis
+  - histories
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cortex.cloud
+  resources:
+  - knowledges/finalizers
+  - datasources/finalizers
+  - reservations/finalizers
+  - decisions/finalizers
+  - deschedulings/finalizers
+  - pipelines/finalizers
+  - kpis/finalizers
+  - histories/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - cortex.cloud
+  resources:
+  - knowledges/status
+  - datasources/status
+  - reservations/status
+  - decisions/status
+  - deschedulings/status
+  - pipelines/status
+  - kpis/status
+  - histories/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+{{- end -}}
+{{- if and .Values.rbac.enable .Values.metrics.enable }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: {{ .Values.namePrefix }}-metrics-reader
+rules:
+- nonResourceURLs:
+  - "/metrics"
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: {{ .Values.namePrefix }}-metrics-auth-role
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+{{- end -}}
+

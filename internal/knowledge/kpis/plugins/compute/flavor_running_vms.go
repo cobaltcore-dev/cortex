@@ -5,6 +5,7 @@ package compute
 
 import (
 	"log/slog"
+	"regexp"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
@@ -22,6 +23,10 @@ type FlavorRunningVMs struct {
 	ProjectID        string  `db:"project_id"`
 	ProjectName      string  `db:"project_name"`
 }
+
+// kvmFlavorPattern matches flavors where the second underscore-delimited
+// segment is "k", e.g. "type_k_cXXX_mXXXX".
+var kvmFlavorPattern = regexp.MustCompile(`^[^_]+_k_`)
 
 type FlavorRunningVMsKPI struct {
 	// Common base for all KPIs that provides standard functionality.
@@ -45,6 +50,7 @@ func (k *FlavorRunningVMsKPI) Init(db *db.DB, client client.Client, opts conf.Ra
 			"availability_zone",
 			"project_id",
 			"project_name",
+			"hypervisor_family",
 		},
 		nil,
 	)
@@ -83,6 +89,10 @@ func (k *FlavorRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 	for _, r := range results {
+		hypervisorFamily := "vmware"
+		if kvmFlavorPattern.MatchString(r.FlavorName) {
+			hypervisorFamily = "kvm"
+		}
 		ch <- prometheus.MustNewConstMetric(
 			k.flavorRunningVMs,
 			prometheus.GaugeValue,
@@ -91,6 +101,7 @@ func (k *FlavorRunningVMsKPI) Collect(ch chan<- prometheus.Metric) {
 			r.AvailabilityZone,
 			r.ProjectID,
 			r.ProjectName,
+			hypervisorFamily,
 		)
 	}
 }

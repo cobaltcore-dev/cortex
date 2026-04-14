@@ -50,7 +50,8 @@ Helm charts:
 ## Repository Structure
 
 Code:
-- `cmd/main.go` is the entry point for the manager, which starts the controllers and webhooks
+- `cmd/manager/main.go` is the entry point for the manager, which starts the controllers and webhooks
+- `cmd/shim/main.go` is the entry point for cortex shims exposing cortex capabilities over REST endpoints
 - `api/v1alpha1` is where the CRD specs of cortex lives
 - `api/external` contains messages sent to cortex via http from external openstack services
 - `internal/scheduling` contains the logic for scheduling in different cloud domains

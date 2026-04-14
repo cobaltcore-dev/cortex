@@ -34,6 +34,7 @@ cortex.secrets.yaml
 !.editorconfig
 !.gitignore
 !.github
+!.gitkeep
 !.golangci.yaml
 !.license-scan-overrides.jsonl
 !.license-scan-rules.json

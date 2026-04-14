@@ -23,6 +23,7 @@ metadata:
   name: kvm-libvirt-domain-cpu-steal-pct
 spec:
   schedulingDomain: nova
+  recency: "60s"
   extractor:
     name: kvm_libvirt_domain_cpu_steal_pct_extractor
   description: |
