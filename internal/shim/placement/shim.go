@@ -6,16 +6,19 @@ package placement
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/prometheus/client_golang/prometheus"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -29,6 +32,13 @@ var (
 	// from the request context.
 	setupLog = ctrl.Log.WithName("placement-shim")
 )
+
+// contextKey is an unexported type for context keys in this package.
+type contextKey struct{}
+
+// routePatternKey is the context key used to pass the route pattern from the
+// measurement middleware (set in RegisterRoutes) to the forward method.
+var routePatternKey = contextKey{}
 
 // config holds configuration for the placement shim.
 type config struct {
@@ -58,6 +68,45 @@ type Shim struct {
 	// HTTP client that can talk to openstack placement, if needed, over
 	// ingress with single-sign-on.
 	httpClient *http.Client
+
+	// downstreamRequestTimer is a prometheus histogram to measure the duration
+	// (and count) of requests coming from the client that wants to talk to the
+	// placement API.
+	downstreamRequestTimer *prometheus.HistogramVec
+	// upstreamRequestTimer is a prometheus histogram to measure the duration
+	// (and count) of requests to the upstream placement API by route and method.
+	upstreamRequestTimer *prometheus.HistogramVec
+}
+
+// statusCapturingResponseWriter wraps http.ResponseWriter to capture the
+// HTTP status code written via WriteHeader for use in metrics labels.
+type statusCapturingResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (w *statusCapturingResponseWriter) WriteHeader(code int) {
+	w.statusCode = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *statusCapturingResponseWriter) Write(b []byte) (int, error) {
+	if w.statusCode == 0 {
+		w.statusCode = http.StatusOK
+	}
+	return w.ResponseWriter.Write(b)
+}
+
+// Describe implements prometheus.Collector.
+func (s *Shim) Describe(ch chan<- *prometheus.Desc) {
+	s.downstreamRequestTimer.Describe(ch)
+	s.upstreamRequestTimer.Describe(ch)
+}
+
+// Collect implements prometheus.Collector.
+func (s *Shim) Collect(ch chan<- prometheus.Metric) {
+	s.downstreamRequestTimer.Collect(ch)
+	s.upstreamRequestTimer.Collect(ch)
 }
 
 // Start is called after the manager has started and the cache is running.
@@ -138,17 +187,17 @@ func (s *Shim) predicateRemoteHypervisor() predicate.Predicate {
 	})
 }
 
-// SetupWithManager registers field indexes on the manager's cache so that
-// subsequent list calls are served from the informer cache rather than
-// hitting the API server. This must be called before the manager is started.
-//
-// Calling IndexField internally invokes GetInformer, which creates and
-// registers a shared informer for the indexed type (hv1.Hypervisor) with the
-// cache. The informer is started later when mgr.Start() is called. This
-// means no separate controller or empty Reconcile loop is needed — the
-// index registration alone is sufficient to warm the cache.
+// SetupWithManager sets up the controller with the manager.
+// It registers watches for the Hypervisor CRD across all clusters and sets up
+// the HTTP client for talking to the placement API.
 func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err error) {
 	setupLog.Info("Setting up placement shim with manager")
+
+	// Bind the Start method to the manager.
+	if err := mgr.Add(s); err != nil {
+		return err
+	}
+
 	s.config, err = conf.GetConfig[config]()
 	if err != nil {
 		setupLog.Error(err, "Failed to load placement shim config")
@@ -158,6 +207,19 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 	if err := s.config.validate(); err != nil {
 		return err
 	}
+
+	// Initialize Prometheus histogram timers for request monitoring.
+	s.downstreamRequestTimer = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "cortex_placement_shim_downstream_request_duration_seconds",
+		Help:    "Duration of downstream requests to the placement shim from clients.",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"method", "pattern", "responsecode"})
+	s.upstreamRequestTimer = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "cortex_placement_shim_upstream_request_duration_seconds",
+		Help:    "Duration of upstream requests from the placement shim to the placement API.",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"method", "pattern", "responsecode"})
+
 	// Check that the provided client is a multicluster client, since we need
 	// that to watch for hypervisors across clusters.
 	mcl, ok := s.Client.(*multicluster.Client)
@@ -178,8 +240,11 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 
 // forward proxies the incoming HTTP request to the upstream placement API
 // and copies the response (status, headers, body) back to the client.
+// The route pattern for metric labels is read from the request context
+// (set by the measurement middleware in RegisterRoutes).
 func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
-	log := logf.FromContext(r.Context())
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
 
 	if s.httpClient == nil {
 		log.Info("placement shim not yet initialized, rejecting request")
@@ -204,7 +269,7 @@ func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	upstream.RawQuery = r.URL.RawQuery
 
 	// Create upstream request preserving method, body, and context.
-	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, upstream.String(), r.Body)
+	upstreamReq, err := http.NewRequestWithContext(ctx, r.Method, upstream.String(), r.Body)
 	if err != nil {
 		log.Error(err, "failed to create upstream request", "url", upstream.String())
 		http.Error(w, "failed to create upstream request", http.StatusBadGateway)
@@ -214,9 +279,14 @@ func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	// Copy all incoming headers.
 	upstreamReq.Header = r.Header.Clone()
 
-	resp, err := s.httpClient.Do(upstreamReq) //nolint:gosec // G704: intentional reverse proxy; host is fixed by operator config, only path varies
+	pattern, _ := ctx.Value(routePatternKey).(string)
+	start := time.Now()
+	resp, err := s.httpClient.Do(upstreamReq) //nolint:gosec // G704: intentional reverse proxy
 	if err != nil {
 		log.Error(err, "failed to reach placement API", "url", upstream.String())
+		s.upstreamRequestTimer.
+			WithLabelValues(r.Method, pattern, strconv.Itoa(http.StatusBadGateway)).
+			Observe(time.Since(start).Seconds())
 		http.Error(w, "failed to reach placement API", http.StatusBadGateway)
 		return
 	}
@@ -232,6 +302,11 @@ func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	if _, err := io.Copy(w, resp.Body); err != nil {
 		log.Error(err, "failed to copy upstream response body")
 	}
+	// Observe after the body is fully consumed so the duration includes
+	// the time spent streaming the response from upstream.
+	s.upstreamRequestTimer.
+		WithLabelValues(r.Method, pattern, strconv.Itoa(resp.StatusCode)).
+		Observe(time.Since(start).Seconds())
 }
 
 // RegisterRoutes binds all Placement API handlers to the given mux. The
@@ -283,7 +358,18 @@ func (s *Shim) RegisterRoutes(mux *http.ServeMux) {
 	}
 	for _, h := range handlers {
 		setupLog.Info("Registering route", "method", h.method, "pattern", h.pattern)
-		mux.HandleFunc(h.method+" "+h.pattern, h.handler)
+		routePattern := fmt.Sprintf("%s %s", h.method, h.pattern)
+		handlerPattern := h.pattern
+		next := h.handler
+		mux.HandleFunc(routePattern, func(w http.ResponseWriter, r *http.Request) {
+			r = r.WithContext(context.WithValue(r.Context(), routePatternKey, handlerPattern))
+			sw := &statusCapturingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+			start := time.Now()
+			next.ServeHTTP(sw, r)
+			s.downstreamRequestTimer.
+				WithLabelValues(r.Method, handlerPattern, strconv.Itoa(sw.statusCode)).
+				Observe(time.Since(start).Seconds())
+		})
 	}
 	setupLog.Info("Successfully registered placement API routes")
 }

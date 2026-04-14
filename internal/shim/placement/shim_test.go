@@ -4,14 +4,46 @@
 package placement
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 )
 
 const validUUID = "d9b3a520-2a3c-4f6b-8b9a-1c2d3e4f5a6b"
+
+// timerLabels are the histogram label names used by both request timers.
+var timerLabels = []string{"method", "pattern", "responsecode"}
+
+// histSampleCount returns the number of observations recorded by the histogram
+// with the given label values. Returns 0 when no matching series exists.
+func histSampleCount(t *testing.T, h *prometheus.HistogramVec, lvs ...string) uint64 {
+	t.Helper()
+	obs, err := h.GetMetricWithLabelValues(lvs...)
+	if err != nil {
+		t.Fatalf("failed to get metric with labels %v: %v", lvs, err)
+	}
+	m := &dto.Metric{}
+	if err := obs.(prometheus.Metric).Write(m); err != nil {
+		t.Fatalf("failed to write metric: %v", err)
+	}
+	return m.GetHistogram().GetSampleCount()
+}
+
+// newTestTimers returns fresh downstream and upstream histogram vecs for tests.
+func newTestTimers() (downstream, upstream *prometheus.HistogramVec) {
+	return prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name: "test_downstream", Buckets: prometheus.DefBuckets,
+		}, timerLabels),
+		prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name: "test_upstream", Buckets: prometheus.DefBuckets,
+		}, timerLabels)
+}
 
 // newTestShim creates a Shim backed by an upstream test server that returns
 // the given status and body for every request. It records the last request
@@ -28,9 +60,12 @@ func newTestShim(t *testing.T, status int, body string, gotPath *string) *Shim {
 		}
 	}))
 	t.Cleanup(upstream.Close)
+	down, up := newTestTimers()
 	return &Shim{
-		config:     config{PlacementURL: upstream.URL},
-		httpClient: upstream.Client(),
+		config:                 config{PlacementURL: upstream.URL},
+		httpClient:             upstream.Client(),
+		downstreamRequestTimer: down,
+		upstreamRequestTimer:   up,
 	}
 }
 
@@ -127,6 +162,7 @@ func TestForward(t *testing.T) {
 				config:     config{PlacementURL: upstream.URL},
 				httpClient: upstream.Client(),
 			}
+			s.downstreamRequestTimer, s.upstreamRequestTimer = newTestTimers()
 			target := tt.path
 			if tt.query != "" {
 				target += "?" + tt.query
@@ -158,9 +194,12 @@ func TestForward(t *testing.T) {
 }
 
 func TestForwardUpstreamUnreachable(t *testing.T) {
+	down, up := newTestTimers()
 	s := &Shim{
-		config:     config{PlacementURL: "http://127.0.0.1:1"},
-		httpClient: &http.Client{},
+		config:                 config{PlacementURL: "http://127.0.0.1:1"},
+		httpClient:             &http.Client{},
+		downstreamRequestTimer: down,
+		upstreamRequestTimer:   up,
 	}
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	w := httptest.NewRecorder()
@@ -175,9 +214,12 @@ func TestRegisterRoutes(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
+	down, up := newTestTimers()
 	s := &Shim{
-		config:     config{PlacementURL: upstream.URL},
-		httpClient: upstream.Client(),
+		config:                 config{PlacementURL: upstream.URL},
+		httpClient:             upstream.Client(),
+		downstreamRequestTimer: down,
+		upstreamRequestTimer:   up,
 	}
 	mux := http.NewServeMux()
 	s.RegisterRoutes(mux)
@@ -206,4 +248,77 @@ func TestRegisterRoutes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRegisterRoutesDownstreamMetrics(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+	down, up := newTestTimers()
+	s := &Shim{
+		config:                 config{PlacementURL: upstream.URL},
+		httpClient:             upstream.Client(),
+		downstreamRequestTimer: down,
+		upstreamRequestTimer:   up,
+	}
+	mux := http.NewServeMux()
+	s.RegisterRoutes(mux)
+
+	// Fire a request through the mux so the wrapper observes the downstream timer.
+	req := httptest.NewRequest(http.MethodGet, "/resource_providers", http.NoBody)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	// The downstream timer should have exactly one observation for the
+	// expected label combination (method, pattern, responsecode).
+	if n := histSampleCount(t, down, "GET", "/resource_providers", "200"); n != 1 {
+		t.Errorf("downstream observation count = %d, want 1", n)
+	}
+}
+
+func TestForwardUpstreamMetrics(t *testing.T) {
+	t.Run("success records upstream status", func(t *testing.T) {
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer upstream.Close()
+		down, up := newTestTimers()
+		s := &Shim{
+			config:                 config{PlacementURL: upstream.URL},
+			httpClient:             upstream.Client(),
+			downstreamRequestTimer: down,
+			upstreamRequestTimer:   up,
+		}
+		// Set the route pattern via context, as the RegisterRoutes wrapper would.
+		req := httptest.NewRequest(http.MethodGet, "/traits", http.NoBody)
+		req = req.WithContext(context.WithValue(req.Context(), routePatternKey, "/traits"))
+		w := httptest.NewRecorder()
+		s.forward(w, req)
+
+		if n := histSampleCount(t, up, "GET", "/traits", "404"); n != 1 {
+			t.Errorf("upstream observation count = %d, want 1", n)
+		}
+	})
+
+	t.Run("unreachable upstream records 502", func(t *testing.T) {
+		down, up := newTestTimers()
+		s := &Shim{
+			config:                 config{PlacementURL: "http://127.0.0.1:1"},
+			httpClient:             &http.Client{},
+			downstreamRequestTimer: down,
+			upstreamRequestTimer:   up,
+		}
+		req := httptest.NewRequest(http.MethodGet, "/usages", http.NoBody)
+		req = req.WithContext(context.WithValue(req.Context(), routePatternKey, "/usages"))
+		w := httptest.NewRecorder()
+		s.forward(w, req)
+
+		if n := histSampleCount(t, up, "GET", "/usages", "502"); n != 1 {
+			t.Errorf("upstream observation count = %d, want 1", n)
+		}
+	})
 }
