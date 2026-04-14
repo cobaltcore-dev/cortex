@@ -136,13 +136,13 @@ func (c *CapacityCalculator) calculateAZCapacity(
 			// On failure, report az with capacity=0 rather than aborting entirely.
 			result[liquid.AvailabilityZone(az)] = &liquid.AZResourceCapacityReport{
 				Capacity: 0,
-				Usage:    None[uint64](),
+				Usage:    Some[uint64](0), // Placeholder: usage=0 until actual calculation is implemented
 			}
 			continue
 		}
 		result[liquid.AvailabilityZone(az)] = &liquid.AZResourceCapacityReport{
 			Capacity: capacity,
-			Usage:    None[uint64](),
+			Usage:    Some[uint64](0), // Placeholder: usage=0 until actual calculation is implemented
 		}
 	}
 	return result
