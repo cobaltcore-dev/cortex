@@ -8,6 +8,6 @@ import "context"
 func init() {
 	e2eTests = append(e2eTests, e2eTest{
 		name: "resource_provider_aggregates",
-		run:  func(ctx context.Context) {},
+		run:  func(ctx context.Context) error { return nil },
 	})
 }
