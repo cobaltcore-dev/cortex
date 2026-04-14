@@ -358,6 +358,11 @@ func main() {
 	detectorPipelineMonitor := schedulinglib.NewDetectorPipelineMonitor()
 	metrics.Registry.MustRegister(&detectorPipelineMonitor)
 
+	// Initialize commitments API for LIQUID interface (Postgres-backed usage reporting).
+	commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
+	commitmentsAPI := commitments.NewAPIWithConfig(multiclusterClient, commitmentsConfig, nil)
+	commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
+
 	if slices.Contains(mainConfig.EnabledControllers, "nova-pipeline-controllers") {
 		// Filter-weigher pipeline controller setup.
 		filterWeigherController := &nova.FilterWeigherPipelineController{
@@ -384,11 +389,6 @@ func main() {
 			setupLog.Error(err, "unable to initialize nova client")
 			os.Exit(1)
 		}
-
-		// Initialize commitments API for LIQUID interface (with Nova client for usage reporting)
-		commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
-		commitmentsAPI := commitments.NewAPIWithConfig(multiclusterClient, commitmentsConfig, novaClient)
-		commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
 
 		deschedulingsController := &nova.DetectorPipelineController{
 			Monitor: detectorPipelineMonitor,

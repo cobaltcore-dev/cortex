@@ -5,8 +5,11 @@ package commitments
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -29,26 +32,24 @@ type VMUsageInfo struct {
 	MemoryMB      uint64
 	VCPUs         uint64
 	DiskGB        uint64
+	VideoRAMMiB   *uint64 // optional, from flavor extra_specs hw_video:ram_max_mb
 	AZ            string
 	Hypervisor    string
 	CreatedAt     time.Time
-	UsageMultiple uint64            // Memory in multiples of smallest flavor in the group
-	Metadata      map[string]string // Server metadata from Nova
-	Tags          []string          // Server tags from Nova
-	OSType        string            // OS type from OSTypeProber (for billing)
+	UsageMultiple uint64 // Memory in multiples of smallest flavor in the group
 }
 
 // UsageCalculator computes usage reports for Limes LIQUID API.
 type UsageCalculator struct {
-	client     client.Client
-	novaClient UsageNovaClient
+	client  client.Client
+	usageDB UsageDBClient
 }
 
 // NewUsageCalculator creates a new UsageCalculator instance.
-func NewUsageCalculator(client client.Client, novaClient UsageNovaClient) *UsageCalculator {
+func NewUsageCalculator(client client.Client, usageDB UsageDBClient) *UsageCalculator {
 	return &UsageCalculator{
-		client:     client,
-		novaClient: novaClient,
+		client:  client,
+		usageDB: usageDB,
 	}
 }
 
@@ -175,7 +176,7 @@ func (c *UsageCalculator) buildCommitmentCapacityMap(
 	return result, nil
 }
 
-// getProjectVMs retrieves all VMs for a project from Nova and enriches them with flavor group info.
+// getProjectVMs retrieves all VMs for a project from Postgres and enriches them with flavor group info.
 func (c *UsageCalculator) getProjectVMs(
 	ctx context.Context,
 	log logr.Logger,
@@ -184,15 +185,13 @@ func (c *UsageCalculator) getProjectVMs(
 	allAZs []liquid.AvailabilityZone,
 ) ([]VMUsageInfo, error) {
 
-	if c.novaClient == nil {
-		log.Info("Nova client not configured - returning empty VM list", "projectID", projectID)
-		return []VMUsageInfo{}, nil
+	if c.usageDB == nil {
+		return nil, errors.New("usage DB client not configured")
 	}
 
-	// Query VMs from Nova
-	servers, err := c.novaClient.ListProjectServers(ctx, projectID)
+	rows, err := c.usageDB.ListProjectVMs(ctx, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list servers from Nova: %w", err)
+		return nil, fmt.Errorf("failed to list VMs from Postgres: %w", err)
 	}
 
 	// Build flavor name -> flavor group lookup
@@ -210,49 +209,56 @@ func (c *UsageCalculator) getProjectVMs(
 		}
 	}
 
-	// Convert to VMUsageInfo
 	var vms []VMUsageInfo
-	for _, server := range servers {
+	for _, row := range rows {
 		// Parse creation time (Nova returns ISO 8601/RFC3339 format)
-		createdAt, err := time.Parse(time.RFC3339, server.Created)
+		createdAt, err := time.Parse(time.RFC3339, row.Created)
 		if err != nil {
 			log.V(1).Info("failed to parse server creation time, using zero time",
-				"server", server.ID, "created", server.Created, "error", err.Error())
+				"server", row.ID, "created", row.Created, "error", err.Error())
 			createdAt = time.Time{}
 		}
 
 		// Determine flavor group
-		flavorGroup := flavorToGroup[server.FlavorName]
+		flavorGroup := flavorToGroup[row.FlavorName]
 
 		// Calculate usage multiple (memory in units of smallest flavor)
-		// Use floor division (truncate) - actual consumption, not billing
 		var usageMultiple uint64
-		if smallestMem := flavorToSmallestMemory[server.FlavorName]; smallestMem > 0 {
-			usageMultiple = server.FlavorRAM / smallestMem // Floor division (truncate)
+		if smallestMem := flavorToSmallestMemory[row.FlavorName]; smallestMem > 0 {
+			usageMultiple = row.FlavorRAM / smallestMem
 		}
 
-		// Normalize AZ - empty or unknown AZs become "unknown" (consistent with limes liquid-nova)
-		normalizedAZ := liquid.NormalizeAZ(server.AvailabilityZone, allAZs)
+		// Normalize AZ
+		normalizedAZ := liquid.NormalizeAZ(row.AZ, allAZs)
 
-		vm := VMUsageInfo{
-			UUID:          server.ID,
-			Name:          server.Name,
-			FlavorName:    server.FlavorName,
+		// Parse video RAM from flavor extra_specs
+		var videoRAMMiB *uint64
+		if row.FlavorExtras != "" {
+			var extraSpecs map[string]string
+			if err := json.Unmarshal([]byte(row.FlavorExtras), &extraSpecs); err == nil {
+				if val, ok := extraSpecs["hw_video:ram_max_mb"]; ok {
+					if parsed, err := strconv.ParseUint(val, 10, 64); err == nil {
+						videoRAMMiB = &parsed
+					}
+				}
+			}
+		}
+
+		vms = append(vms, VMUsageInfo{
+			UUID:          row.ID,
+			Name:          row.Name,
+			FlavorName:    row.FlavorName,
 			FlavorGroup:   flavorGroup,
-			Status:        server.Status,
-			MemoryMB:      server.FlavorRAM,
-			VCPUs:         server.FlavorVCPUs,
-			DiskGB:        server.FlavorDisk,
+			Status:        row.Status,
+			MemoryMB:      row.FlavorRAM,
+			VCPUs:         row.FlavorVCPUs,
+			DiskGB:        row.FlavorDisk,
+			VideoRAMMiB:   videoRAMMiB,
 			AZ:            string(normalizedAZ),
-			Hypervisor:    server.Hypervisor,
+			Hypervisor:    row.Hypervisor,
 			CreatedAt:     createdAt,
 			UsageMultiple: usageMultiple,
-			Metadata:      server.Metadata,
-			Tags:          server.Tags,
-			OSType:        server.OSType,
-		}
-
-		vms = append(vms, vm)
+		})
 	}
 
 	return vms, nil
@@ -488,30 +494,22 @@ func (c *UsageCalculator) buildUsageResponse(
 // buildVMAttributes creates the attributes map for a VM subresource.
 // Follows the liquid-nova format with nested flavor structure.
 func buildVMAttributes(vm VMUsageInfo, commitmentID string) map[string]any {
-	// Build metadata map (never nil for JSON)
-	metadata := vm.Metadata
-	if metadata == nil {
-		metadata = map[string]string{}
+	flavor := map[string]any{
+		"name":     vm.FlavorName,
+		"vcpu":     vm.VCPUs,
+		"ram_mib":  vm.MemoryMB,
+		"disk_gib": vm.DiskGB,
 	}
-
-	// Build tags slice (never nil for JSON)
-	tags := vm.Tags
-	if tags == nil {
-		tags = []string{}
+	if vm.VideoRAMMiB != nil {
+		flavor["video_ram_mib"] = *vm.VideoRAMMiB
 	}
 
 	result := map[string]any{
 		"status":   vm.Status,
-		"metadata": metadata,
-		"tags":     tags,
-		"flavor": map[string]any{
-			"name":     vm.FlavorName,
-			"vcpu":     vm.VCPUs,
-			"ram_mib":  vm.MemoryMB,
-			"disk_gib": vm.DiskGB,
-			// video_ram_mib omitted when nil
-		},
-		"os_type": vm.OSType,
+		"metadata": map[string]string{},
+		"tags":     []string{},
+		"flavor":   flavor,
+		"os_type":  "",
 	}
 
 	// Add commitment_id - nil for PAYG, string for committed
