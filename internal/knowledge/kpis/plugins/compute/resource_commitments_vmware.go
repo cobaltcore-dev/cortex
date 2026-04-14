@@ -106,7 +106,7 @@ func (k *VMwareResourceCommitmentsKPI) collectUnusedCommitments(ch chan<- promet
 			continue
 		}
 		if strings.HasPrefix(flavorName, "hana_k_") {
-			slog.Info("unused_commitments: skipping hana kvm commitment", "flavor", flavorName, "project_id", c.ProjectID)
+			slog.Debug("unused_commitments: skipping hana kvm commitment", "flavor", flavorName, "project_id", c.ProjectID)
 			continue
 		}
 		cpuArchitecture := "cascade-lake"
