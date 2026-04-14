@@ -53,7 +53,7 @@ jobs:
           # Exclude e2e files from the coverage profile so they don't
           # count against the coverage percentage.
           head -1 profile.cov > profile_filtered.cov
-          grep -v '_e2e\.go' profile.cov >> profile_filtered.cov || true
+          tail -n +2 profile.cov | grep -v '_e2e\.go' >> profile_filtered.cov || true
 
           go tool cover -func profile_filtered.cov > func_coverage.txt
 
