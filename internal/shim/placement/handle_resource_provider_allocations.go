@@ -5,8 +5,6 @@ package placement
 
 import (
 	"net/http"
-
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // HandleListResourceProviderAllocations handles
@@ -18,12 +16,8 @@ import (
 // endpoint. The response includes the resource_provider_generation. Returns
 // 404 if the provider does not exist.
 func (s *Shim) HandleListResourceProviderAllocations(w http.ResponseWriter, r *http.Request) {
-	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
-	if !ok {
+	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 	s.forward(w, r)
 }

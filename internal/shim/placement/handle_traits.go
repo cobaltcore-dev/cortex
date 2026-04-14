@@ -5,8 +5,6 @@ package placement
 
 import (
 	"net/http"
-
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // HandleListTraits handles GET /traits requests.
@@ -21,9 +19,6 @@ import (
 // associated filters to only traits that are or are not associated with at
 // least one resource provider.
 func (s *Shim) HandleListTraits(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 	s.forward(w, r)
 }
 
@@ -32,13 +27,9 @@ func (s *Shim) HandleListTraits(w http.ResponseWriter, r *http.Request) {
 // Checks whether a trait with the given name exists. Returns 204 No Content
 // (with no response body) if the trait is found, or 404 Not Found otherwise.
 func (s *Shim) HandleShowTrait(w http.ResponseWriter, r *http.Request) {
-	name, ok := requiredPathParam(w, r, "name")
-	if !ok {
+	if _, ok := requiredPathParam(w, r, "name"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
 	s.forward(w, r)
 }
 
@@ -49,13 +40,9 @@ func (s *Shim) HandleShowTrait(w http.ResponseWriter, r *http.Request) {
 // is newly inserted, or 204 No Content if it already exists. Returns 400
 // Bad Request if the name does not carry the CUSTOM_ prefix.
 func (s *Shim) HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
-	name, ok := requiredPathParam(w, r, "name")
-	if !ok {
+	if _, ok := requiredPathParam(w, r, "name"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
 	s.forward(w, r)
 }
 
@@ -66,12 +53,8 @@ func (s *Shim) HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
 // the trait is still associated with any resource provider. Returns 404 if
 // the trait does not exist. Returns 204 No Content on success.
 func (s *Shim) HandleDeleteTrait(w http.ResponseWriter, r *http.Request) {
-	name, ok := requiredPathParam(w, r, "name")
-	if !ok {
+	if _, ok := requiredPathParam(w, r, "name"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
 	s.forward(w, r)
 }

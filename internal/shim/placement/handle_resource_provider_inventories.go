@@ -5,8 +5,6 @@ package placement
 
 import (
 	"net/http"
-
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // HandleListResourceProviderInventories handles
@@ -19,13 +17,9 @@ import (
 // resource_provider_generation, which is needed for subsequent update or
 // delete operations. Returns 404 if the provider does not exist.
 func (s *Shim) HandleListResourceProviderInventories(w http.ResponseWriter, r *http.Request) {
-	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
-	if !ok {
+	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 	s.forward(w, r)
 }
 
@@ -40,13 +34,9 @@ func (s *Shim) HandleListResourceProviderInventories(w http.ResponseWriter, r *h
 // are deleted. Returns 409 Conflict if allocations exceed the new capacity
 // or if a concurrent update has occurred.
 func (s *Shim) HandleUpdateResourceProviderInventories(w http.ResponseWriter, r *http.Request) {
-	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
-	if !ok {
+	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 	s.forward(w, r)
 }
 
@@ -60,13 +50,9 @@ func (s *Shim) HandleUpdateResourceProviderInventories(w http.ResponseWriter, r 
 // Returns 404 if the provider does not exist. Available since microversion
 // 1.5.
 func (s *Shim) HandleDeleteResourceProviderInventories(w http.ResponseWriter, r *http.Request) {
-	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
-	if !ok {
+	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 	s.forward(w, r)
 }
 
@@ -78,18 +64,12 @@ func (s *Shim) HandleDeleteResourceProviderInventories(w http.ResponseWriter, r 
 // step_size, allocation_ratio, and the resource_provider_generation. Returns
 // 404 if the provider or inventory for that class does not exist.
 func (s *Shim) HandleShowResourceProviderInventory(w http.ResponseWriter, r *http.Request) {
-	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
-	if !ok {
+	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	resourceClass, ok := requiredPathParam(w, r, "resource_class")
-	if !ok {
+	if _, ok := requiredPathParam(w, r, "resource_class"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path,
-		"uuid", uuid, "resource_class", resourceClass)
 	s.forward(w, r)
 }
 
@@ -103,18 +83,12 @@ func (s *Shim) HandleShowResourceProviderInventory(w http.ResponseWriter, r *htt
 // Since microversion 1.26, the reserved value must not exceed total. Returns
 // 409 Conflict on generation mismatch or if allocations would be violated.
 func (s *Shim) HandleUpdateResourceProviderInventory(w http.ResponseWriter, r *http.Request) {
-	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
-	if !ok {
+	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	resourceClass, ok := requiredPathParam(w, r, "resource_class")
-	if !ok {
+	if _, ok := requiredPathParam(w, r, "resource_class"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path,
-		"uuid", uuid, "resource_class", resourceClass)
 	s.forward(w, r)
 }
 
@@ -126,17 +100,11 @@ func (s *Shim) HandleUpdateResourceProviderInventory(w http.ResponseWriter, r *h
 // class combination, or if a concurrent update has occurred. Returns 404 if
 // the provider or inventory does not exist. Returns 204 No Content on success.
 func (s *Shim) HandleDeleteResourceProviderInventory(w http.ResponseWriter, r *http.Request) {
-	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
-	if !ok {
+	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	resourceClass, ok := requiredPathParam(w, r, "resource_class")
-	if !ok {
+	if _, ok := requiredPathParam(w, r, "resource_class"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path,
-		"uuid", uuid, "resource_class", resourceClass)
 	s.forward(w, r)
 }

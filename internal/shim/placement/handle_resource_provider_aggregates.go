@@ -5,8 +5,6 @@ package placement
 
 import (
 	"net/http"
-
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // HandleListResourceProviderAggregates handles
@@ -23,13 +21,9 @@ import (
 // includes the resource_provider_generation for concurrency tracking. Returns
 // 404 if the provider does not exist.
 func (s *Shim) HandleListResourceProviderAggregates(w http.ResponseWriter, r *http.Request) {
-	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
-	if !ok {
+	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 	s.forward(w, r)
 }
 
@@ -44,12 +38,8 @@ func (s *Shim) HandleListResourceProviderAggregates(w http.ResponseWriter, r *ht
 // concurrency control. Returns 409 Conflict if the generation does not match
 // (1.19+). Returns 200 with the updated aggregate list on success.
 func (s *Shim) HandleUpdateResourceProviderAggregates(w http.ResponseWriter, r *http.Request) {
-	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
-	if !ok {
+	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 	s.forward(w, r)
 }

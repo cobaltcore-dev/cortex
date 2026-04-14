@@ -5,8 +5,6 @@ package placement
 
 import (
 	"net/http"
-
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // HandleListUsages handles GET /usages requests.
@@ -22,8 +20,5 @@ import (
 // microversion 1.38, an optional consumer_type query parameter allows
 // filtering the results. Available since microversion 1.9.
 func (s *Shim) HandleListUsages(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 	s.forward(w, r)
 }
