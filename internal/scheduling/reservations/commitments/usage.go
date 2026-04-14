@@ -505,11 +505,8 @@ func buildVMAttributes(vm VMUsageInfo, commitmentID string) map[string]any {
 	}
 
 	result := map[string]any{
-		"status":   vm.Status,
-		"metadata": map[string]string{},
-		"tags":     []string{},
-		"flavor":   flavor,
-		"os_type":  "",
+		"status": vm.Status,
+		"flavor": flavor,
 	}
 
 	// Add commitment_id - nil for PAYG, string for committed
