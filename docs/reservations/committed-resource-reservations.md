@@ -83,19 +83,22 @@ VM allocations are tracked within reservations:
 flowchart LR
     subgraph State
         Res[(Reservation CRDs)]
+        HV[(Hypervisor CRDs)]
     end
     A[Nova Scheduler] -->|VM Create/Migrate/Resize| B[Scheduling Pipeline]
     B -->|update Spec.Allocations| Res
-    Res -->|watch| Controller
-    Res -->|periodic reconcile| Controller
-    Controller -->|update Spec/Status.Allocations| Res
+    Res -->|watch| C[Controller]
+    HV -->|watch - instance changes| C
+    Res -->|periodic safety-net requeue| C
+    C -->|update Spec/Status.Allocations| Res
 ```
 
 | Component | Event | Timing | Action |
 |-----------|-------|--------|--------|
 | **Scheduling Pipeline** | VM Create, Migrate, Resize | Immediate | Add VM to `Spec.Allocations` |
-| **Controller** | Reservation CRD updated | `committedResourceRequeueIntervalGracePeriod` (default: 1 min) | Verify new VMs via Nova API; update `Status.Allocations` |
-| **Controller** | Periodic check | `committedResourceRequeueIntervalActive` (default: 5 min) | Verify established VMs via Hypervisor CRD; remove gone VMs from `Spec.Allocations` |
+| **Controller** | Reservation CRD updated | `committedResourceRequeueIntervalGracePeriod` (default: 1 min) | Defer verification for new VMs still spawning; update `Status.Allocations` |
+| **Controller** | Hypervisor CRD updated (VM appeared/disappeared) | Immediate (event-driven) | Verify allocations via Hypervisor CRD; remove gone VMs from `Spec.Allocations` |
+| **Controller** | Periodic safety-net | `committedResourceRequeueIntervalActive` (default: 5 min) | Same as above; catches any missed events |
 
 **Allocation fields**:
 - `Spec.Allocations` — Expected VMs (written by the scheduling pipeline on placement)
@@ -103,26 +106,20 @@ flowchart LR
 
 **VM allocation state diagram**:
 
-The controller uses two sources to verify VM allocations, depending on how recently the VM was placed:
-- **Nova API** — used during the grace period (`committedResourceAllocationGracePeriod`, default: 15 min) where the VM may still be starting up; provides real-time host assignment
-- **Hypervisor CRD** — used for established allocations; reflects the set of instances the hypervisor operator observes on the host
+The controller uses the **Hypervisor CRD** as the sole source of truth for VM allocation verification:
+- **Hypervisor CRD** — used for all allocation checks; reflects the set of instances the hypervisor operator observes on the host
 
 ```mermaid
 stateDiagram-v2
     direction LR
-    [*] --> SpecOnly : placement (create, migrate, resize)
-    SpecOnly --> Confirmed : on expected host
-    SpecOnly --> WrongHost : on different host
-    SpecOnly --> [*] : not confirmed after grace period
-    Confirmed --> WrongHost : not on HV CRD, found elsewhere
-    Confirmed --> [*] : not on HV CRD, Nova 404
-    WrongHost --> Confirmed : back on expected host
-    WrongHost --> [*] : VM gone (404)
-    WrongHost --> [*] : on wrong host > grace period
-
     state "Spec only (grace period)" as SpecOnly
     state "Spec + Status (on expected host)" as Confirmed
-    state "Spec + Status (host mismatch)" as WrongHost
+
+    [*] --> SpecOnly : placement (create, migrate, resize)
+    SpecOnly --> SpecOnly : within grace period
+    SpecOnly --> Confirmed : found on HV CRD after grace period
+    SpecOnly --> [*] : not on HV CRD after grace period
+    Confirmed --> [*] : not on HV CRD
 ```
 
 **Note**: VM allocations may not consume all resources of a reservation slot. A reservation with 128 GB may have VMs totaling only 96 GB if that fits the project's needs. Allocations may exceed reservation capacity (e.g., after VM resize).
@@ -185,10 +182,12 @@ The controller watches Reservation CRDs and performs two types of reconciliation
 
 **Placement** - Finds hosts for new reservations (calls scheduler API)
 
-**Allocation Verification** - Tracks VM lifecycle on reservations. VMs take time to appear on a host after scheduling, so new allocations are verified more frequently via the Nova API for real-time status, while established allocations are verified via the Hypervisor CRD:
-- New VMs (within `committedResourceAllocationGracePeriod`, default: 15 min): checked via Nova API every `committedResourceRequeueIntervalGracePeriod` (default: 1 min)
-- Established VMs: checked via Hypervisor CRD every `committedResourceRequeueIntervalActive` (default: 5 min)
-- Missing VMs: removed from `Spec.Allocations` after Nova API confirms 404
+**Allocation Verification** - Tracks VM lifecycle on reservations. The controller uses the Hypervisor CRD as the sole source of truth, with two triggers:
+- New VMs (within `committedResourceAllocationGracePeriod`, default: 15 min): verification deferred — VM may still be spawning; requeued every `committedResourceRequeueIntervalGracePeriod` (default: 1 min)
+- Established VMs: verified reactively when the Hypervisor CRD changes (VM appeared or disappeared in `Status.Instances`), with `committedResourceRequeueIntervalActive` (default: 5 min) as a safety-net fallback
+- Missing VMs: removed from `Spec.Allocations` when not found on the Hypervisor CRD after the grace period
+
+**Reservation migration is not supported yet.** 
 
 ### Usage API
 

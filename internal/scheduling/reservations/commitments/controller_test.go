@@ -145,11 +145,6 @@ func TestCommitmentReservationController_Reconcile(t *testing.T) {
 // Test: reconcileAllocations
 // ============================================================================
 
-// Note: Full reconcileAllocations tests require mocking NovaClient, which uses
-// unexported types (nova.server, nova.migration). Tests for the Nova API path
-// would need to be placed in the nova package or the types would need to be exported.
-// For now, we test only the Hypervisor CRD path (when NovaClient is nil).
-
 func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
@@ -169,6 +164,7 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 		hypervisor                   *hv1.Hypervisor
 		config                       Config
 		expectedStatusAllocations    map[string]string
+		expectedSpecAllocations      []string // VM UUIDs expected to remain in spec; nil means no check
 		expectedHasGracePeriodAllocs bool
 	}{
 		{
@@ -181,6 +177,7 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 			}),
 			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
 			expectedStatusAllocations:    map[string]string{"vm-1": "host-1"},
+			expectedSpecAllocations:      []string{"vm-1"},
 			expectedHasGracePeriodAllocs: false,
 		},
 		{
@@ -193,26 +190,29 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 			}),
 			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
 			expectedStatusAllocations:    map[string]string{"vm-stopped": "host-1"},
+			expectedSpecAllocations:      []string{"vm-stopped"},
 			expectedHasGracePeriodAllocs: false,
 		},
 		{
-			name: "old allocation - VM not on hypervisor CRD (no NovaClient fallback)",
+			name: "old allocation - VM not on hypervisor CRD (stale, removed)",
 			reservation: newTestCRReservation(map[string]metav1.Time{
 				"vm-1": oldTime,
 			}),
 			hypervisor:                   newTestHypervisorCRD("host-1", []hv1.Instance{}), // Empty
 			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
-			expectedStatusAllocations:    map[string]string{}, // Not confirmed
+			expectedStatusAllocations:    map[string]string{},
+			expectedSpecAllocations:      []string{}, // Removed from spec
 			expectedHasGracePeriodAllocs: false,
 		},
 		{
-			name: "new allocation within grace period - no Nova client",
+			name: "new allocation within grace period - deferred to requeue",
 			reservation: newTestCRReservation(map[string]metav1.Time{
 				"vm-1": recentTime,
 			}),
 			hypervisor:                   nil,
 			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
-			expectedStatusAllocations:    map[string]string{}, // Can't verify without Nova
+			expectedStatusAllocations:    map[string]string{},
+			expectedSpecAllocations:      []string{"vm-1"}, // Kept in spec during grace period
 			expectedHasGracePeriodAllocs: true,
 		},
 		{
@@ -226,6 +226,7 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 			}),
 			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
 			expectedStatusAllocations:    map[string]string{"vm-old": "host-1"}, // Only old one confirmed via CRD
+			expectedSpecAllocations:      []string{"vm-new", "vm-old"},
 			expectedHasGracePeriodAllocs: true,
 		},
 		{
@@ -235,6 +236,28 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
 			expectedStatusAllocations:    map[string]string{},
 			expectedHasGracePeriodAllocs: false,
+		},
+		{
+			name: "hypervisor CRD not found - post-grace VM removed",
+			reservation: newTestCRReservation(map[string]metav1.Time{
+				"vm-1": oldTime,
+			}),
+			hypervisor:                   nil, // HV CRD does not exist (e.g. host deleted)
+			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
+			expectedStatusAllocations:    map[string]string{},
+			expectedSpecAllocations:      []string{}, // Removed from spec
+			expectedHasGracePeriodAllocs: false,
+		},
+		{
+			name: "hypervisor CRD not found - grace period VM kept",
+			reservation: newTestCRReservation(map[string]metav1.Time{
+				"vm-1": recentTime,
+			}),
+			hypervisor:                   nil, // HV CRD does not exist
+			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
+			expectedStatusAllocations:    map[string]string{},
+			expectedSpecAllocations:      []string{"vm-1"}, // Kept during grace period
+			expectedHasGracePeriodAllocs: true,
 		},
 	}
 
@@ -253,10 +276,9 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 				Build()
 
 			controller := &CommitmentReservationController{
-				Client:     k8sClient,
-				Scheme:     scheme,
-				Conf:       tt.config,
-				NovaClient: nil, // No NovaClient - testing Hypervisor CRD path only
+				Client: k8sClient,
+				Scheme: scheme,
+				Conf:   tt.config,
 			}
 
 			ctx := WithNewGlobalRequestID(context.Background())
@@ -293,6 +315,25 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 					t.Errorf("expected VM %s in status allocations", vmUUID)
 				} else if actualHost != expectedHost {
 					t.Errorf("VM %s: expected host %s, got %s", vmUUID, expectedHost, actualHost)
+				}
+			}
+
+			// Check spec allocations if expected set is specified
+			if tt.expectedSpecAllocations != nil {
+				specAllocs := map[string]bool{}
+				if updated.Spec.CommittedResourceReservation != nil {
+					for vmUUID := range updated.Spec.CommittedResourceReservation.Allocations {
+						specAllocs[vmUUID] = true
+					}
+				}
+				if len(specAllocs) != len(tt.expectedSpecAllocations) {
+					t.Errorf("expected %d spec allocations, got %d: %v",
+						len(tt.expectedSpecAllocations), len(specAllocs), specAllocs)
+				}
+				for _, vmUUID := range tt.expectedSpecAllocations {
+					if !specAllocs[vmUUID] {
+						t.Errorf("expected VM %s in spec allocations", vmUUID)
+					}
 				}
 			}
 		})
@@ -353,6 +394,78 @@ func newTestHypervisorCRD(name string, instances []hv1.Instance) *hv1.Hypervisor
 		Status: hv1.HypervisorStatus{
 			Instances: instances,
 		},
+	}
+}
+
+// ============================================================================
+// Test: hypervisorToReservations mapper
+// ============================================================================
+
+// TestHypervisorToReservations tests the mapper that translates a Hypervisor change
+// into reconcile requests for the CR reservations assigned to that host.
+// This covers the mapper logic; the watch wiring itself (informer → mapper → enqueue)
+// is controller-runtime's responsibility and is not unit-testable without envtest.
+func TestHypervisorToReservations(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	res1 := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "res-host-1"},
+		Spec:       v1alpha1.ReservationSpec{Type: v1alpha1.ReservationTypeCommittedResource},
+		Status:     v1alpha1.ReservationStatus{Host: "host-1"},
+	}
+	res2 := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "res-host-1b"},
+		Spec:       v1alpha1.ReservationSpec{Type: v1alpha1.ReservationTypeCommittedResource},
+		Status:     v1alpha1.ReservationStatus{Host: "host-1"},
+	}
+	resOtherHost := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "res-host-2"},
+		Spec:       v1alpha1.ReservationSpec{Type: v1alpha1.ReservationTypeCommittedResource},
+		Status:     v1alpha1.ReservationStatus{Host: "host-2"},
+	}
+	resNoHost := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "res-no-host"},
+		Spec:       v1alpha1.ReservationSpec{Type: v1alpha1.ReservationTypeCommittedResource},
+	}
+	resFailover := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "res-failover"},
+		Spec:       v1alpha1.ReservationSpec{Type: v1alpha1.ReservationTypeFailover},
+		Status:     v1alpha1.ReservationStatus{Host: "host-1"},
+	}
+
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(res1, res2, resOtherHost, resNoHost, resFailover).
+		WithStatusSubresource(&v1alpha1.Reservation{}).
+		WithIndex(&v1alpha1.Reservation{}, indexReservationByStatusHost, func(obj client.Object) []string {
+			res := obj.(*v1alpha1.Reservation)
+			if res.Status.Host == "" {
+				return nil
+			}
+			return []string{res.Status.Host}
+		}).
+		Build()
+
+	controller := &CommitmentReservationController{Client: k8sClient}
+
+	hv := &hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "host-1"}}
+	requests := controller.hypervisorToReservations(context.Background(), hv)
+
+	// Only CR reservations on host-1 should be enqueued; failover and other-host excluded
+	got := make(map[string]bool, len(requests))
+	for _, req := range requests {
+		got[req.Name] = true
+	}
+	if len(got) != 2 {
+		t.Errorf("expected 2 requests, got %d: %v", len(got), got)
+	}
+	for _, name := range []string{"res-host-1", "res-host-1b"} {
+		if !got[name] {
+			t.Errorf("expected %s in requests", name)
+		}
 	}
 }
 
