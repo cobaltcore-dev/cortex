@@ -49,7 +49,13 @@ jobs:
           go test -v \
             -coverpkg=./internal/... \
             -coverprofile=profile.cov ./internal/...
-          go tool cover -func profile.cov > func_coverage.txt
+
+          # Exclude e2e files from the coverage profile so they don't
+          # count against the coverage percentage.
+          head -1 profile.cov > profile_filtered.cov
+          grep -v '_e2e\.go' profile.cov >> profile_filtered.cov || true
+
+          go tool cover -func profile_filtered.cov > func_coverage.txt
 
       - name: Upload coverage files
         uses: actions/upload-artifact@v7

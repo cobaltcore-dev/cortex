@@ -51,6 +51,13 @@ func init() {
 
 func main() {
 	ctx := ctrl.SetupSignalHandler()
+
+	// Custom entrypoint for placement shim e2e tests.
+	if len(os.Args) == 2 && os.Args[1] == "e2e-placement-shim" {
+		placement.RunE2E(ctx)
+		return
+	}
+
 	restConfig := ctrl.GetConfigOrDie()
 
 	var metricsAddr string
