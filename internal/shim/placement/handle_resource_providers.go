@@ -5,8 +5,6 @@ package placement
 
 import (
 	"net/http"
-
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // HandleListResourceProviders handles GET /resource_providers requests.
@@ -23,9 +21,6 @@ import (
 // requirements at 1.18, forbidden traits at 1.22, forbidden aggregates at
 // 1.32, and the in: syntax for required at 1.39.
 func (s *Shim) HandleListResourceProviders(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 	s.forward(w, r)
 }
 
@@ -42,9 +37,6 @@ func (s *Shim) HandleListResourceProviders(w http.ResponseWriter, r *http.Reques
 // provider object in the body. Returns 409 Conflict if a provider with the
 // same name or UUID already exists.
 func (s *Shim) HandleCreateResourceProvider(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 	s.forward(w, r)
 }
 
@@ -57,13 +49,9 @@ func (s *Shim) HandleCreateResourceProvider(w http.ResponseWriter, r *http.Reque
 // provider's position in a hierarchical tree. Returns 404 if the provider
 // does not exist.
 func (s *Shim) HandleShowResourceProvider(w http.ResponseWriter, r *http.Request) {
-	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
-	if !ok {
+	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 	s.forward(w, r)
 }
 
@@ -75,13 +63,9 @@ func (s *Shim) HandleShowResourceProvider(w http.ResponseWriter, r *http.Request
 // to null to make the provider a root. Returns 409 Conflict if another
 // provider already has the requested name.
 func (s *Shim) HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Request) {
-	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
-	if !ok {
+	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 	s.forward(w, r)
 }
 
@@ -92,12 +76,8 @@ func (s *Shim) HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Reque
 // allocations against the provider's inventories or if the provider has
 // child providers in a tree hierarchy. Returns 204 No Content on success.
 func (s *Shim) HandleDeleteResourceProvider(w http.ResponseWriter, r *http.Request) {
-	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
-	if !ok {
+	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 	s.forward(w, r)
 }

@@ -5,8 +5,6 @@ package placement
 
 import (
 	"net/http"
-
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // HandleListResourceClasses handles GET /resource_classes requests.
@@ -17,9 +15,6 @@ import (
 // categorize the types of resources that resource providers can offer as
 // inventory. Available since microversion 1.2.
 func (s *Shim) HandleListResourceClasses(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 	s.forward(w, r)
 }
 
@@ -31,9 +26,6 @@ func (s *Shim) HandleListResourceClasses(w http.ResponseWriter, r *http.Request)
 // is missing, and 409 Conflict if a class with the same name already exists.
 // Available since microversion 1.2.
 func (s *Shim) HandleCreateResourceClass(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 	s.forward(w, r)
 }
 
@@ -43,13 +35,9 @@ func (s *Shim) HandleCreateResourceClass(w http.ResponseWriter, r *http.Request)
 // This can be used to verify the existence of a resource class. Returns 404
 // if the class does not exist. Available since microversion 1.2.
 func (s *Shim) HandleShowResourceClass(w http.ResponseWriter, r *http.Request) {
-	name, ok := requiredPathParam(w, r, "name")
-	if !ok {
+	if _, ok := requiredPathParam(w, r, "name"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
 	s.forward(w, r)
 }
 
@@ -62,13 +50,9 @@ func (s *Shim) HandleShowResourceClass(w http.ResponseWriter, r *http.Request) {
 // endpoint allowed renaming a class via a request body, but this usage is
 // discouraged. Returns 400 Bad Request if the CUSTOM_ prefix is missing.
 func (s *Shim) HandleUpdateResourceClass(w http.ResponseWriter, r *http.Request) {
-	name, ok := requiredPathParam(w, r, "name")
-	if !ok {
+	if _, ok := requiredPathParam(w, r, "name"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
 	s.forward(w, r)
 }
 
@@ -80,12 +64,8 @@ func (s *Shim) HandleUpdateResourceClass(w http.ResponseWriter, r *http.Request)
 // class, and 404 if the class does not exist. Returns 204 No Content on
 // success. Available since microversion 1.2.
 func (s *Shim) HandleDeleteResourceClass(w http.ResponseWriter, r *http.Request) {
-	name, ok := requiredPathParam(w, r, "name")
-	if !ok {
+	if _, ok := requiredPathParam(w, r, "name"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "name", name)
 	s.forward(w, r)
 }

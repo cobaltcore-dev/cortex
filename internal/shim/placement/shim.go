@@ -19,6 +19,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
+	"k8s.io/apimachinery/pkg/api/resource"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -40,6 +41,13 @@ type contextKey struct{}
 // measurement middleware (set in RegisterRoutes) to the forward method.
 var routePatternKey = contextKey{}
 
+// requestIDContextKey is a separate type so it cannot collide with routePatternKey.
+type requestIDContextKey struct{}
+
+// requestIDKey is the context key used to propagate the X-OpenStack-Request-Id
+// header value through the request lifecycle for tracing.
+var requestIDKey = requestIDContextKey{}
+
 // config holds configuration for the placement shim.
 type config struct {
 	// SSO is an optional reference to a Kubernetes secret containing
@@ -48,6 +56,11 @@ type config struct {
 	// PlacementURL is the URL of the OpenStack Placement API the shim
 	// should forward requests to.
 	PlacementURL string `json:"placementURL,omitempty"`
+	// MaxBodyLogSize is the maximum number of bytes of request/response
+	// bodies to include in debug-level log lines, specified as a
+	// Kubernetes resource.Quantity string (e.g. "4Ki"). Defaults to "4Ki"
+	// when unset or empty.
+	MaxBodyLogSize string `json:"maxBodyLogSize,omitempty"`
 }
 
 // validate checks the config for required fields and returns an error if the
@@ -68,6 +81,10 @@ type Shim struct {
 	// HTTP client that can talk to openstack placement, if needed, over
 	// ingress with single-sign-on.
 	httpClient *http.Client
+	// maxBodyLogSize is the maximum number of bytes of request/response
+	// bodies to capture for debug-level logging. Parsed from
+	// config.MaxBodyLogSize at setup time.
+	maxBodyLogSize int64
 
 	// downstreamRequestTimer is a prometheus histogram to measure the duration
 	// (and count) of requests coming from the client that wants to talk to the
@@ -76,25 +93,6 @@ type Shim struct {
 	// upstreamRequestTimer is a prometheus histogram to measure the duration
 	// (and count) of requests to the upstream placement API by route and method.
 	upstreamRequestTimer *prometheus.HistogramVec
-}
-
-// statusCapturingResponseWriter wraps http.ResponseWriter to capture the
-// HTTP status code written via WriteHeader for use in metrics labels.
-type statusCapturingResponseWriter struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-func (w *statusCapturingResponseWriter) WriteHeader(code int) {
-	w.statusCode = code
-	w.ResponseWriter.WriteHeader(code)
-}
-
-func (w *statusCapturingResponseWriter) Write(b []byte) (int, error) {
-	if w.statusCode == 0 {
-		w.statusCode = http.StatusOK
-	}
-	return w.ResponseWriter.Write(b)
 }
 
 // Describe implements prometheus.Collector.
@@ -207,6 +205,17 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 	if err := s.config.validate(); err != nil {
 		return err
 	}
+
+	// Parse the body log size limit from config (default 4Ki).
+	bodyLogQty := s.config.MaxBodyLogSize
+	if bodyLogQty == "" {
+		bodyLogQty = "4Ki"
+	}
+	qty, err := resource.ParseQuantity(bodyLogQty)
+	if err != nil {
+		return fmt.Errorf("invalid maxBodyLogSize %q: %w", bodyLogQty, err)
+	}
+	s.maxBodyLogSize = qty.Value()
 
 	// Initialize Prometheus histogram timers for request monitoring.
 	s.downstreamRequestTimer = prometheus.NewHistogramVec(prometheus.HistogramOpts{
@@ -358,18 +367,7 @@ func (s *Shim) RegisterRoutes(mux *http.ServeMux) {
 	}
 	for _, h := range handlers {
 		setupLog.Info("Registering route", "method", h.method, "pattern", h.pattern)
-		routePattern := fmt.Sprintf("%s %s", h.method, h.pattern)
-		handlerPattern := h.pattern
-		next := h.handler
-		mux.HandleFunc(routePattern, func(w http.ResponseWriter, r *http.Request) {
-			r = r.WithContext(context.WithValue(r.Context(), routePatternKey, handlerPattern))
-			sw := &statusCapturingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-			start := time.Now()
-			next.ServeHTTP(sw, r)
-			s.downstreamRequestTimer.
-				WithLabelValues(r.Method, handlerPattern, strconv.Itoa(sw.statusCode)).
-				Observe(time.Since(start).Seconds())
-		})
+		mux.HandleFunc(fmt.Sprintf("%s %s", h.method, h.pattern), s.wrapHandler(h.pattern, h.handler))
 	}
 	setupLog.Info("Successfully registered placement API routes")
 }
