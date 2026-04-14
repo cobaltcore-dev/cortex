@@ -54,6 +54,8 @@ func TestVMwareResourceCommitmentsKPI_CollectHanaUnusedCommitments(t *testing.T)
 	//   project-C: 1 x hana_k_foo in az1  — hana_k_ prefix, should be skipped
 	//   project-D: 1 x general_medium     — not hana_, should be skipped
 	//   project-A: 10 x hana_small pending — should be excluded (wrong status)
+	//   project-E: 2 x hana_small in az1  — running will exceed this (over-used, no metric)
+	//   project-F: 3 x hana_large_v2 in az2 — running exactly equals this (fully used, no metric)
 	if err := testDB.Insert(
 		&limes.Commitment{ID: 1, ServiceType: "compute", ResourceName: "instances_hana_small", AvailabilityZone: "az1", Amount: 3, Status: "confirmed", ProjectID: "project-A"},
 		&limes.Commitment{ID: 2, ServiceType: "compute", ResourceName: "instances_hana_large_v2", AvailabilityZone: "az1", Amount: 2, Status: "confirmed", ProjectID: "project-B"},
@@ -61,6 +63,8 @@ func TestVMwareResourceCommitmentsKPI_CollectHanaUnusedCommitments(t *testing.T)
 		&limes.Commitment{ID: 4, ServiceType: "compute", ResourceName: "instances_hana_k_foo", AvailabilityZone: "az1", Amount: 5, Status: "confirmed", ProjectID: "project-C"},
 		&limes.Commitment{ID: 5, ServiceType: "compute", ResourceName: "instances_general_medium", AvailabilityZone: "az1", Amount: 1, Status: "confirmed", ProjectID: "project-D"},
 		&limes.Commitment{ID: 6, ServiceType: "compute", ResourceName: "instances_hana_small", AvailabilityZone: "az1", Amount: 10, Status: "pending", ProjectID: "project-A"},
+		&limes.Commitment{ID: 7, ServiceType: "compute", ResourceName: "instances_hana_small", AvailabilityZone: "az1", Amount: 2, Status: "confirmed", ProjectID: "project-E"},
+		&limes.Commitment{ID: 8, ServiceType: "compute", ResourceName: "instances_hana_large_v2", AvailabilityZone: "az2", Amount: 3, Status: "confirmed", ProjectID: "project-F"},
 	); err != nil {
 		t.Fatalf("expected no error inserting commitments, got %v", err)
 	}
@@ -69,10 +73,20 @@ func TestVMwareResourceCommitmentsKPI_CollectHanaUnusedCommitments(t *testing.T)
 	//   project-A/az1: 1 hana_small ACTIVE, 1 DELETED (ignored) → 2 unused in az1
 	//   project-B/az1: 0 hana_large_v2                          → 2 unused in az1
 	//   project-A/az2: 1 hana_small ACTIVE                      → 3 unused in az2
+	//   project-E/az1: 5 hana_small ACTIVE → 5 > 2 committed    → 0 unused (over-used, clamped)
+	//   project-F/az2: 3 hana_large_v2 ACTIVE → 3 == 3 committed → 0 unused (fully used, clamped)
 	if err := testDB.Insert(
 		&nova.Server{ID: "s1", TenantID: "project-A", FlavorName: "hana_small", OSEXTAvailabilityZone: "az1", Status: "ACTIVE"},
 		&nova.Server{ID: "s2", TenantID: "project-A", FlavorName: "hana_small", OSEXTAvailabilityZone: "az1", Status: "DELETED"},
 		&nova.Server{ID: "s3", TenantID: "project-A", FlavorName: "hana_small", OSEXTAvailabilityZone: "az2", Status: "ACTIVE"},
+		&nova.Server{ID: "s4", TenantID: "project-E", FlavorName: "hana_small", OSEXTAvailabilityZone: "az1", Status: "ACTIVE"},
+		&nova.Server{ID: "s5", TenantID: "project-E", FlavorName: "hana_small", OSEXTAvailabilityZone: "az1", Status: "ACTIVE"},
+		&nova.Server{ID: "s6", TenantID: "project-E", FlavorName: "hana_small", OSEXTAvailabilityZone: "az1", Status: "ACTIVE"},
+		&nova.Server{ID: "s7", TenantID: "project-E", FlavorName: "hana_small", OSEXTAvailabilityZone: "az1", Status: "ACTIVE"},
+		&nova.Server{ID: "s8", TenantID: "project-E", FlavorName: "hana_small", OSEXTAvailabilityZone: "az1", Status: "ACTIVE"},
+		&nova.Server{ID: "s9", TenantID: "project-F", FlavorName: "hana_large_v2", OSEXTAvailabilityZone: "az2", Status: "ACTIVE"},
+		&nova.Server{ID: "s10", TenantID: "project-F", FlavorName: "hana_large_v2", OSEXTAvailabilityZone: "az2", Status: "ACTIVE"},
+		&nova.Server{ID: "s11", TenantID: "project-F", FlavorName: "hana_large_v2", OSEXTAvailabilityZone: "az2", Status: "ACTIVE"},
 	); err != nil {
 		t.Fatalf("expected no error inserting servers, got %v", err)
 	}
@@ -122,9 +136,11 @@ func TestVMwareResourceCommitmentsKPI_CollectHanaUnusedCommitments(t *testing.T)
 		}
 	}
 
-	// project-A/az1: 2 unused hana_small (cascade-lake)      → cpu=2×4=8,  ram=2×16384=32768,  disk=2×100=200
-	// project-B/az1: 2 unused hana_large_v2 (sapphire-rapids) → cpu=2×16=32, ram=2×65536=131072, disk=2×400=800
-	// project-A/az2: 3 unused hana_small (cascade-lake)      → cpu=3×4=12, ram=3×16384=49152,  disk=3×100=300
+	// project-A/az1: 2 unused hana_small (cascade-lake)       → cpu=2×4=8,  ram=2×16384=32768,  disk=2×100=200
+	// project-B/az1: 2 unused hana_large_v2 (sapphire-rapids)  → cpu=2×16=32, ram=2×65536=131072, disk=2×400=800
+	// project-A/az2: 3 unused hana_small (cascade-lake)        → cpu=3×4=12, ram=3×16384=49152,  disk=3×100=300
+	// project-E/az1: 5 running > 2 committed hana_small        → clamped to 0, no metric emitted
+	// project-F/az2: 3 running == 3 committed hana_large_v2    → clamped to 0, no metric emitted
 	expected := map[string]UnusedMetric{
 		"cpu/az1/cascade-lake":     {Resource: "cpu", AZ: "az1", Arch: "cascade-lake", Value: 8},
 		"ram/az1/cascade-lake":     {Resource: "ram", AZ: "az1", Arch: "cascade-lake", Value: 32768},
