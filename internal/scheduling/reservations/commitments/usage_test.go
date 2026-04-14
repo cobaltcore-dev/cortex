@@ -340,16 +340,11 @@ func TestBuildVMAttributes(t *testing.T) {
 			t.Errorf("status = %v, expected ACTIVE", attrs["status"])
 		}
 
-		// Metadata always empty map (tags/metadata not available from Postgres cache)
-		metadata, ok := attrs["metadata"].(map[string]string)
-		if !ok || metadata == nil {
-			t.Errorf("metadata should be empty map, got %T: %v", attrs["metadata"], attrs["metadata"])
-		}
-
-		// Tags always empty slice
-		tags, ok := attrs["tags"].([]string)
-		if !ok || tags == nil {
-			t.Errorf("tags should be empty slice, got %T: %v", attrs["tags"], attrs["tags"])
+		// metadata, tags and os_type are not included (not in Postgres cache)
+		for _, absent := range []string{"metadata", "tags", "os_type"} {
+			if _, present := attrs[absent]; present {
+				t.Errorf("%s must not appear in output (not available from Postgres cache)", absent)
+			}
 		}
 
 		// Flavor is now nested
@@ -375,11 +370,6 @@ func TestBuildVMAttributes(t *testing.T) {
 		if attrs["commitment_id"] != "commit-456" {
 			t.Errorf("commitment_id = %v, expected commit-456", attrs["commitment_id"])
 		}
-
-		// OS type (empty for now)
-		if attrs["os_type"] != "" {
-			t.Errorf("os_type = %v, expected empty string", attrs["os_type"])
-		}
 	})
 
 	t.Run("without commitment (PAYG)", func(t *testing.T) {
@@ -390,18 +380,33 @@ func TestBuildVMAttributes(t *testing.T) {
 		}
 	})
 
-	t.Run("empty metadata and tags always returned", func(t *testing.T) {
-		attrs := buildVMAttributes(vm, "")
+	t.Run("with video RAM - video_ram_mib present", func(t *testing.T) {
+		vram := uint64(16)
+		vmWithVRAM := vm
+		vmWithVRAM.VideoRAMMiB = &vram
+		attrs := buildVMAttributes(vmWithVRAM, "")
 
-		// Should have empty map and slice, not nil (for JSON serialization)
-		metadata, ok := attrs["metadata"].(map[string]string)
-		if !ok || metadata == nil {
-			t.Errorf("metadata should be empty map, got %T: %v", attrs["metadata"], attrs["metadata"])
+		flavor, ok := attrs["flavor"].(map[string]any)
+		if !ok {
+			t.Fatalf("flavor is not map[string]any: %T", attrs["flavor"])
 		}
+		if flavor["video_ram_mib"] != uint64(16) {
+			t.Errorf("flavor.video_ram_mib = %v, expected 16", flavor["video_ram_mib"])
+		}
+		if _, present := flavor["hw_version"]; present {
+			t.Errorf("flavor.hw_version must not appear in output")
+		}
+	})
 
-		tags, ok := attrs["tags"].([]string)
-		if !ok || tags == nil {
-			t.Errorf("tags should be empty slice, got %T: %v", attrs["tags"], attrs["tags"])
+	t.Run("without video RAM - video_ram_mib absent", func(t *testing.T) {
+		attrs := buildVMAttributes(vm, "") // vm.VideoRAMMiB is nil
+
+		flavor, ok := attrs["flavor"].(map[string]any)
+		if !ok {
+			t.Fatalf("flavor is not map[string]any: %T", attrs["flavor"])
+		}
+		if _, present := flavor["video_ram_mib"]; present {
+			t.Errorf("flavor.video_ram_mib should be absent when VideoRAMMiB is nil, got %v", flavor["video_ram_mib"])
 		}
 	})
 }
