@@ -7,16 +7,21 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	uberzap "go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -143,12 +148,47 @@ func main() {
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	opts := zap.Options{
-		Development: true,
+		Development: false,
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	logMetricsMonitor := monitoring.NewLogMetricsMonitor()
+	ctrl.SetLogger(zap.New(
+		zap.UseFlagOptions(&opts),
+		zap.RawZapOpts(uberzap.WrapCore(func(core zapcore.Core) zapcore.Core {
+			return monitoring.WrapCoreWithLogMetrics(&logMetricsMonitor, core)
+		})),
+	))
+
+	// Configure slog (used across internal packages) with JSON output and
+	// level control via the LOG_LEVEL environment variable.
+	// Supported values: debug, info (default), warn, error.
+	slogLevel := new(slog.LevelVar)
+	slogLevel.Set(slog.LevelInfo)
+	if lvl := os.Getenv("LOG_LEVEL"); lvl != "" {
+		switch strings.ToLower(lvl) {
+		case "debug":
+			slogLevel.Set(slog.LevelDebug)
+		case "info":
+			slogLevel.Set(slog.LevelInfo)
+		case "warn", "warning":
+			slogLevel.Set(slog.LevelWarn)
+		case "error":
+			slogLevel.Set(slog.LevelError)
+		default:
+			slogLevel.Set(slog.LevelInfo)
+			setupLog.Error(fmt.Errorf("unknown LOG_LEVEL %q, defaulting to info", lvl), "invalid log level",
+				"supported", []string{"debug", "info", "warn", "warning", "error"})
+		}
+	}
+	slog.SetDefault(slog.New(monitoring.NewMetricsSlogHandler(
+		&logMetricsMonitor,
+		slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slogLevel,
+		}),
+	)))
+	slog.Info("slog configured", "level", slogLevel.Level().String())
 
 	// Log the main configuration
 	setupLog.Info("loaded main configuration",
@@ -301,6 +341,7 @@ func main() {
 	// This is useful to distinguish metrics from different deployments.
 	metricsConfig := conf.GetConfigOrDie[monitoring.Config]()
 	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, metricsConfig)
+	metrics.Registry.MustRegister(&logMetricsMonitor)
 
 	// TODO: Remove me after scheduling pipeline steps don't require DB connections anymore.
 	metrics.Registry.MustRegister(&db.Monitor)
@@ -316,6 +357,11 @@ func main() {
 	metrics.Registry.MustRegister(&filterWeigherPipelineMonitor)
 	detectorPipelineMonitor := schedulinglib.NewDetectorPipelineMonitor()
 	metrics.Registry.MustRegister(&detectorPipelineMonitor)
+
+	// Initialize commitments API for LIQUID interface (Postgres-backed usage reporting).
+	commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
+	commitmentsAPI := commitments.NewAPIWithConfig(multiclusterClient, commitmentsConfig, nil)
+	commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
 
 	if slices.Contains(mainConfig.EnabledControllers, "nova-pipeline-controllers") {
 		// Filter-weigher pipeline controller setup.
@@ -343,11 +389,6 @@ func main() {
 			setupLog.Error(err, "unable to initialize nova client")
 			os.Exit(1)
 		}
-
-		// Initialize commitments API for LIQUID interface (with Nova client for usage reporting)
-		commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
-		commitmentsAPI := commitments.NewAPIWithConfig(multiclusterClient, commitmentsConfig, novaClient)
-		commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
 
 		deschedulingsController := &nova.DetectorPipelineController{
 			Monitor: detectorPipelineMonitor,

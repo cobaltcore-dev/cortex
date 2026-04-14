@@ -40,6 +40,19 @@
       "matchStrings": ["GOTESTSUM_VERSION \\?= (?<currentValue>v[\\d.]+)"],
       "depNameTemplate": "gotest.tools/gotestsum",
       "datasourceTemplate": "go"
+    },
+    {
+      "fileMatch": ["^postgres/Dockerfile$"],
+      "matchStrings": ["FROM (?<depName>[^:\\n]+):(?<currentValue>[^@\\n]+)@sha256:(?<currentDigest>[a-f0-9]+)"],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "fileMatch": ["^postgres/Dockerfile$"],
+      "matchStrings": ["ENV PG_VERSION (?<currentValue>[\\d]+\\.[\\d]+)-[^\\n]+"],
+      "depNameTemplate": "postgres",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "semver-coerced",
+      "autoReplaceStringTemplate": "ENV PG_VERSION {{{newValue}}}-1.pgdg13+1"
     }
   ],
   "packageRules": [
@@ -51,6 +64,17 @@
     },
     {
       "matchPackageNames": [
+        "postgres"
+      ],
+      "matchFileNames": [
+        "postgres/Dockerfile"
+      ],
+      "allowedVersions": "17.x",
+      "automerge": true,
+      "groupName": "postgres Dockerfile"
+    },
+    {
+      "matchPackageNames": [
         "/^github\\.com\\/sapcc\\/.*/"
       ],
       "automerge": true,
@@ -59,6 +83,7 @@
     {
       "matchPackageNames": [
         "!/^github\\.com\\/sapcc\\/.*/",
+        "!postgres",
         "/.*/"
       ],
       "matchUpdateTypes": [

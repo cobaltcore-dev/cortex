@@ -93,12 +93,12 @@ func (httpAPI *httpAPI) canRunScheduler(requestData api.ExternalSchedulerRequest
 func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerRequest) (string, error) {
 	hvType, err := requestData.GetHypervisorType()
 	if err != nil {
-		slog.Info("failed to determine hypervisor type, cannot infer pipeline name", "error", err)
+		slog.Warn("failed to determine hypervisor type, cannot infer pipeline name", "error", err)
 		return "", errors.New("failed to determine hypervisor type from request data")
 	}
 	flavorType, err := requestData.GetFlavorType()
 	if err != nil {
-		slog.Info("failed to determine flavor type, cannot infer pipeline name", "error", err)
+		slog.Warn("failed to determine flavor type, cannot infer pipeline name", "error", err)
 		return "", errors.New("failed to determine flavor type from request data")
 	}
 	switch hvType {

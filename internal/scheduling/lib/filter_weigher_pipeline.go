@@ -62,7 +62,7 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 	unknownFilters := []string{}
 	for _, filterConfig := range confedFilters {
 		slog.Info("scheduler: configuring filter", "name", filterConfig.Name)
-		slog.Info("supported:", "filters", maps.Keys(supportedFilters))
+		slog.Info("supported:", "filters", slices.Sorted(maps.Keys(supportedFilters)))
 		makeFilter, ok := supportedFilters[filterConfig.Name]
 		if !ok {
 			slog.Error("scheduler: unsupported filter", "name", filterConfig.Name)
@@ -73,7 +73,7 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 		filter = validateFilter(filter)
 		filter = monitorFilter(filter, filterConfig.Name, pipelineMonitor)
 		if err := filter.Init(ctx, client, filterConfig); err != nil {
-			slog.Error("scheduler: failed to initialize filter", "name", filterConfig.Name, "error", err)
+			slog.Warn("scheduler: failed to initialize filter", "name", filterConfig.Name, "error", err)
 			filterErrors[filterConfig.Name] = errors.New("failed to initialize filter: " + err.Error())
 			continue
 		}
@@ -90,7 +90,7 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 	unknownWeighers := []string{}
 	for _, weigherConfig := range confedWeighers {
 		slog.Info("scheduler: configuring weigher", "name", weigherConfig.Name)
-		slog.Info("supported:", "weighers", maps.Keys(supportedWeighers))
+		slog.Info("supported:", "weighers", slices.Sorted(maps.Keys(supportedWeighers)))
 		makeWeigher, ok := supportedWeighers[weigherConfig.Name]
 		if !ok {
 			slog.Error("scheduler: unsupported weigher", "name", weigherConfig.Name)
@@ -102,7 +102,7 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 		weigher = validateWeigher(weigher)
 		weigher = monitorWeigher(weigher, weigherConfig.Name, pipelineMonitor)
 		if err := weigher.Init(ctx, client, weigherConfig); err != nil {
-			slog.Error("scheduler: failed to initialize weigher", "name", weigherConfig.Name, "error", err)
+			slog.Warn("scheduler: failed to initialize weigher", "name", weigherConfig.Name, "error", err)
 			weigherErrors[weigherConfig.Name] = errors.New("failed to initialize weigher: " + err.Error())
 			continue
 		}

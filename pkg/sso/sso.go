@@ -70,15 +70,13 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 	return NewHTTPClient(conf)
 }
 
-// Create a new HTTP client with the given SSO configuration
-// and logging for each request.
-func NewHTTPClient(conf SSOConfig) (*http.Client, error) {
+// NewTransport returns an *http.Transport configured with TLS client
+// certificates from the given SSO config. If no certificate is provided,
+// a plain *http.Transport is returned.
+func NewTransport(conf SSOConfig) (*http.Transport, error) {
 	if conf.Cert == "" {
-		// Disable SSO if no certificate is provided.
-		slog.Debug("making http requests without SSO")
-		return &http.Client{Transport: &requestLogger{T: &http.Transport{}}}, nil
+		return &http.Transport{}, nil
 	}
-	// If we have a public key, we also need a private key.
 	if conf.CertKey == "" {
 		return nil, errors.New("missing cert key for SSO")
 	}
@@ -91,7 +89,7 @@ func NewHTTPClient(conf SSOConfig) (*http.Client, error) {
 	}
 	caCertPool := x509.NewCertPool()
 	caCertPool.AddCert(cert.Leaf)
-	return &http.Client{Transport: &requestLogger{T: &http.Transport{
+	return &http.Transport{
 		TLSClientConfig: &tls.Config{
 			Certificates: []tls.Certificate{cert},
 			RootCAs:      caCertPool,
@@ -99,5 +97,18 @@ func NewHTTPClient(conf SSOConfig) (*http.Client, error) {
 			//nolint:gosec
 			InsecureSkipVerify: conf.SelfSigned,
 		},
-	}}}, nil
+	}, nil
+}
+
+// Create a new HTTP client with the given SSO configuration
+// and logging for each request.
+func NewHTTPClient(conf SSOConfig) (*http.Client, error) {
+	transport, err := NewTransport(conf)
+	if err != nil {
+		return nil, err
+	}
+	if conf.Cert == "" {
+		slog.Debug("making http requests without SSO")
+	}
+	return &http.Client{Transport: &requestLogger{T: transport}}, nil
 }

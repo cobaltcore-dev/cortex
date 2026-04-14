@@ -3,14 +3,14 @@ module github.com/cobaltcore-dev/cortex
 go 1.26
 
 require (
-	github.com/cobaltcore-dev/openstack-hypervisor-operator v1.0.2-0.20260402091752-888f1313a307
+	github.com/cobaltcore-dev/openstack-hypervisor-operator v1.0.2-0.20260409190432-b3a7a2d19d59
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.11.1
 	github.com/ironcore-dev/ironcore v0.3.0
 	github.com/majewsky/gg v1.6.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
-	github.com/sapcc/go-bits v0.0.0-20260402121530-dccf194c4472
+	github.com/sapcc/go-bits v0.0.0-20260409170436-d7b7822ab7d3
 	k8s.io/api v0.35.3
 	k8s.io/apimachinery v0.35.3
 	k8s.io/client-go v0.35.3
@@ -104,7 +104,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.43.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.8.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.1 // indirect
+	go.uber.org/zap v1.27.1
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
@@ -112,8 +112,8 @@ require (
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/term v0.41.0
+	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/term v0.42.0
 	golang.org/x/text v0.35.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
