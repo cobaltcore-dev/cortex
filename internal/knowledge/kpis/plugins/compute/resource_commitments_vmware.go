@@ -123,10 +123,12 @@ func (k *VMwareResourceCommitmentsKPI) collectUnusedCommitments(ch chan<- promet
 	sumByResource := make(map[resourceKey]float64)
 	for ck, total := range committed {
 		sk := serverKey{ck.projectID, ck.flavorName, ck.az}
-		unused := total - runningCount[sk]
-		if unused <= 0 {
+		running := runningCount[sk]
+
+		if running >= total {
 			continue
 		}
+		unused := total - running
 		flavor, ok := flavorsByName[ck.flavorName]
 		if !ok {
 			slog.Warn("unused_commitments: flavor not found in flavor table", "flavor", ck.flavorName)
