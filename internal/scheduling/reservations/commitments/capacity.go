@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,7 +23,6 @@ import (
 type CapacityCalculator struct {
 	client          client.Client
 	schedulerClient *reservations.SchedulerClient
-	currentPipeline string
 	totalPipeline   string
 }
 
@@ -30,7 +30,6 @@ func NewCapacityCalculator(client client.Client, config Config) *CapacityCalcula
 	return &CapacityCalculator{
 		client:          client,
 		schedulerClient: reservations.NewSchedulerClient(config.SchedulerURL),
-		currentPipeline: config.ReportCapacityCurrentPipeline,
 		totalPipeline:   config.ReportCapacityTotalPipeline,
 	}
 }
@@ -59,6 +58,16 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.Serv
 		return liquid.ServiceCapacityReport{}, fmt.Errorf("failed to get availability zones: %w", err)
 	}
 
+	// Pre-fetch all Hypervisor CRDs once (shared across all flavor groups and AZs)
+	var hvList hv1.HypervisorList
+	if err := c.client.List(ctx, &hvList); err != nil {
+		return liquid.ServiceCapacityReport{}, fmt.Errorf("failed to list hypervisors: %w", err)
+	}
+	hvByName := make(map[string]hv1.Hypervisor, len(hvList.Items))
+	for _, hv := range hvList.Items {
+		hvByName[hv.Name] = hv
+	}
+
 	// Build capacity report for all flavor groups
 	report := liquid.ServiceCapacityReport{
 		InfoVersion: infoVersion,
@@ -66,11 +75,8 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.Serv
 	}
 
 	for groupName, groupData := range flavorGroups {
-		// Calculate per-AZ capacity using scheduler
-		azCapacity, err := c.calculateAZCapacity(ctx, groupName, groupData, azs)
-		if err != nil {
-			return liquid.ServiceCapacityReport{}, fmt.Errorf("failed to calculate capacity for %s: %w", groupName, err)
-		}
+		// Calculate per-AZ capacity using scheduler + HV CRDs
+		azCapacity := c.calculateAZCapacity(ctx, groupName, groupData, azs, hvByName)
 
 		// === 1. RAM Resource ===
 		ramResourceName := liquid.ResourceName(ResourceNameRAM(groupName))
@@ -79,17 +85,14 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.Serv
 		}
 
 		// === 2. Cores Resource ===
-		// NOTE: Copying RAM capacity is only valid while capacity=0 (placeholder).
-		// When real capacity is implemented, derive cores capacity with unit conversion
-		// (e.g., cores = RAM / ramCoreRatio). See calculateAZCapacity for details.
+		// All three resources express capacity in units of "multiples of the smallest flavor",
+		// so the same number applies to ram, cores, and instances.
 		coresResourceName := liquid.ResourceName(ResourceNameCores(groupName))
 		report.Resources[coresResourceName] = &liquid.ResourceCapacityReport{
 			PerAZ: c.copyAZCapacity(azCapacity),
 		}
 
 		// === 3. Instances Resource ===
-		// NOTE: Same as cores - copying is only valid while capacity=0 (placeholder).
-		// When real capacity is implemented, derive instances capacity appropriately.
 		instancesResourceName := liquid.ResourceName(ResourceNameInstances(groupName))
 		report.Resources[instancesResourceName] = &liquid.ResourceCapacityReport{
 			PerAZ: c.copyAZCapacity(azCapacity),
@@ -115,68 +118,60 @@ func (c *CapacityCalculator) copyAZCapacity(
 	return result
 }
 
-// calculateAZCapacity computes capacity per AZ for a flavor group via scheduler calls.
+// calculateAZCapacity computes capacity per AZ for a flavor group.
+// Uses one scheduler call per AZ to get eligible hosts, then reads HV CRDs for resource data.
 // On scheduler failure for an AZ, that AZ still gets an entry with capacity=0.
 func (c *CapacityCalculator) calculateAZCapacity(
 	ctx context.Context,
 	groupName string,
 	groupData compute.FlavorGroupFeature,
 	azs []string,
-) (map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, error) {
+	hvByName map[string]hv1.Hypervisor,
+) map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport {
 
 	result := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport)
 	for _, az := range azs {
-		capacity, usage, err := c.calculateInstanceCapacity(ctx, groupName, groupData, az)
+		capacity, err := c.calculateInstanceCapacity(ctx, groupName, groupData, az, hvByName)
 		if err != nil {
 			// On failure, report az with capacity=0 rather than aborting entirely.
 			result[liquid.AvailabilityZone(az)] = &liquid.AZResourceCapacityReport{
 				Capacity: 0,
-				Usage:    Some[uint64](0),
+				Usage:    None[uint64](),
 			}
 			continue
 		}
 		result[liquid.AvailabilityZone(az)] = &liquid.AZResourceCapacityReport{
 			Capacity: capacity,
-			Usage:    Some[uint64](usage),
+			Usage:    None[uint64](),
 		}
 	}
-	return result, nil
+	return result
 }
 
-// calculateInstanceCapacity returns the total capacity and current usage for a flavor group in an AZ.
+// calculateInstanceCapacity returns the total capacity for a flavor group in an AZ.
 // Capacity is expressed in multiples of the smallest flavor's memory.
-// Total capacity is derived directly from Hypervisor CRDs (as if everything were empty).
-// Currently available is derived from the scheduler (respecting current VM and reservation state).
-// Usage = totalCapacity - currentlyAvailable.
+// Usage tracking (VM allocations + reservations) is not yet implemented — see PR 2.
+//
+// 1. One scheduler call (kvm-report-capacity pipeline, ignoring allocations) → list of eligible hosts
+// 2. For each eligible host, read EffectiveCapacity from HV CRDs
+// 3. Total capacity = sum(floor(EffectiveCapacity.Memory / smallestFlavorMemory))
 func (c *CapacityCalculator) calculateInstanceCapacity(
 	ctx context.Context,
 	groupName string,
 	groupData compute.FlavorGroupFeature,
 	az string,
-) (capacity, usage uint64, err error) {
+	hvByName map[string]hv1.Hypervisor,
+) (capacity uint64, err error) {
 
 	smallestFlavor := groupData.SmallestFlavor
-
-	// Request 1: currently available — how many instances can be placed right now.
-	currentResp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
-		InstanceUUID:     fmt.Sprintf("capacity-current-%s-%s-%d", groupName, az, time.Now().UnixNano()),
-		ProjectID:        "cortex-capacity-check",
-		FlavorName:       smallestFlavor.Name,
-		MemoryMB:         smallestFlavor.MemoryMB,
-		VCPUs:            smallestFlavor.VCPUs,
-		FlavorExtraSpecs: map[string]string{"hw_version": groupName},
-		AvailabilityZone: az,
-		Pipeline:         c.currentPipeline,
-	})
-	if err != nil {
-		return 0, 0, fmt.Errorf("failed to get current available capacity: %w", err)
+	smallestFlavorBytes := int64(smallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory from Nova, realistically bounded
+	if smallestFlavorBytes <= 0 {
+		return 0, fmt.Errorf("smallest flavor %q has invalid memory %d MB", smallestFlavor.Name, smallestFlavor.MemoryMB)
 	}
-	currentlyAvailable := uint64(len(currentResp.Hosts))
 
-	// Request 2: total capacity — hosts eligible if everything were empty.
-	// Uses a dedicated pipeline that ignores VM allocations and all reservations.
-	totalResp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
-		InstanceUUID:     fmt.Sprintf("capacity-total-%s-%s-%d", groupName, az, time.Now().UnixNano()),
+	// Scheduler call: get eligible hosts (ignoring allocations and reservations).
+	resp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
+		InstanceUUID:     fmt.Sprintf("capacity-%s-%s-%d", groupName, az, time.Now().UnixNano()),
 		ProjectID:        "cortex-capacity-check",
 		FlavorName:       smallestFlavor.Name,
 		MemoryMB:         smallestFlavor.MemoryMB,
@@ -186,16 +181,39 @@ func (c *CapacityCalculator) calculateInstanceCapacity(
 		Pipeline:         c.totalPipeline,
 	})
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to get total capacity: %w", err)
-	}
-	totalCapacity := uint64(len(totalResp.Hosts))
-
-	var usageValue uint64
-	if totalCapacity >= currentlyAvailable {
-		usageValue = totalCapacity - currentlyAvailable
+		return 0, fmt.Errorf("scheduler call failed: %w", err)
 	}
 
-	return totalCapacity, usageValue, nil
+	// For each eligible host, look up HV CRD and compute multiples.
+	var totalCapacity uint64
+	for _, hostName := range resp.Hosts {
+		hv, ok := hvByName[hostName]
+		if !ok {
+			continue
+		}
+
+		// Use EffectiveCapacity if available, fall back to Capacity.
+		effectiveCap := hv.Status.EffectiveCapacity
+		if effectiveCap == nil {
+			effectiveCap = hv.Status.Capacity
+		}
+		if effectiveCap == nil {
+			continue
+		}
+
+		memCapacity, ok := effectiveCap[hv1.ResourceMemory]
+		if !ok {
+			continue
+		}
+
+		// Total: floor(effectiveCapacity / smallestFlavorMemory)
+		capBytes := memCapacity.Value()
+		if capBytes > 0 {
+			totalCapacity += uint64(capBytes / smallestFlavorBytes) //nolint:gosec // both values are positive, result fits uint64
+		}
+	}
+
+	return totalCapacity, nil
 }
 
 // getHostAZMap returns a map from compute host name to availability zone.

@@ -12,7 +12,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -79,5 +78,3 @@ func (api *HTTPAPI) handleProjectEndpoint(w http.ResponseWriter, r *http.Request
 		http.Error(w, "Not found", http.StatusNotFound)
 	}
 }
-
-var commitmentApiLog = ctrl.Log.WithName("commitment_api")
