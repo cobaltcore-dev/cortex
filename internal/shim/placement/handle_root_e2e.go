@@ -12,17 +12,23 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// e2eTestRoot is a simple test that just sends a request to the root endpoint
+// e2eTestGetRoot is a simple test that just sends a request to the root endpoint
 // of the shim, which should return a 200 OK response with a simple message.
-func e2eTestRoot(ctx context.Context) error {
+func e2eTestGetRoot(ctx context.Context) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running root endpoint e2e test")
-	config, err := conf.GetConfig[e2eConfigRoot]()
+	config, err := conf.GetConfig[e2eRootConfig]()
 	if err != nil {
 		log.Error(err, "failed to get e2e config")
 		return err
 	}
-	resp, err := http.Get(config.E2E.SVCURL + "/")
+	req, err := http.NewRequestWithContext(ctx,
+		http.MethodGet, config.E2E.SVCURL+"/", http.NoBody)
+	if err != nil {
+		log.Error(err, "failed to create request for placement shim")
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Error(err, "failed to send request to placement shim")
 		return err
@@ -38,5 +44,5 @@ func e2eTestRoot(ctx context.Context) error {
 }
 
 func init() {
-	e2eTests = append(e2eTests, e2eTest{name: "root", run: e2eTestRoot})
+	e2eTests = append(e2eTests, e2eTest{name: "root", run: e2eTestGetRoot})
 }

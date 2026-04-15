@@ -50,8 +50,8 @@ var requestIDKey = requestIDContextKey{}
 
 // config holds configuration for the placement shim.
 type config struct {
-	// SSO is an optional reference to a Kubernetes secret containing
-	// credentials to talk to openstack over ingress via single-sign-on.
+	// SSO is an optional configuration for the certificates the http client
+	// should use when talking to the placement API over ingress with single-sign-on.
 	SSO *sso.SSOConfig `json:"sso,omitempty"`
 	// PlacementURL is the URL of the OpenStack Placement API the shim
 	// should forward requests to.
@@ -254,6 +254,8 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
+	log.Info("Forwarding request to placement API",
+		"method", r.Method, "path", r.URL.Path)
 
 	if s.httpClient == nil {
 		log.Info("placement shim not yet initialized, rejecting request")
@@ -278,9 +280,11 @@ func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	upstream.RawQuery = r.URL.RawQuery
 
 	// Create upstream request preserving method, body, and context.
-	upstreamReq, err := http.NewRequestWithContext(ctx, r.Method, upstream.String(), r.Body)
+	url := upstream.String()
+	log.Info("Calling URL", "url", url)
+	upstreamReq, err := http.NewRequestWithContext(ctx, r.Method, url, r.Body)
 	if err != nil {
-		log.Error(err, "failed to create upstream request", "url", upstream.String())
+		log.Error(err, "failed to create upstream request", "url", url)
 		http.Error(w, "failed to create upstream request", http.StatusBadGateway)
 		return
 	}
@@ -292,7 +296,7 @@ func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	resp, err := s.httpClient.Do(upstreamReq) //nolint:gosec // G704: intentional reverse proxy
 	if err != nil {
-		log.Error(err, "failed to reach placement API", "url", upstream.String())
+		log.Error(err, "failed to reach placement API", "url", url)
 		s.upstreamRequestTimer.
 			WithLabelValues(r.Method, pattern, strconv.Itoa(http.StatusBadGateway)).
 			Observe(time.Since(start).Seconds())
