@@ -136,7 +136,7 @@ func (c *CapacityCalculator) calculateAZCapacity(
 	result := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport)
 	failures := 0
 	for _, az := range azs {
-		capacity, err := c.calculateInstanceCapacity(ctx, groupName, groupData, az, hvByName)
+		capacity, err := c.calculateInstanceCapacity(ctx, groupData, az, hvByName)
 		if err != nil {
 			failures++
 			LoggerFromContext(ctx).Error(err, "failed to calculate capacity for AZ, reporting 0",
@@ -171,7 +171,6 @@ func (c *CapacityCalculator) calculateAZCapacity(
 // 3. Total capacity = sum(floor(EffectiveCapacity.Memory / smallestFlavorMemory))
 func (c *CapacityCalculator) calculateInstanceCapacity(
 	ctx context.Context,
-	groupName string,
 	groupData compute.FlavorGroupFeature,
 	az string,
 	hvByName map[string]hv1.Hypervisor,

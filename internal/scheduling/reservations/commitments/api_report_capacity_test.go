@@ -305,7 +305,7 @@ func TestCapacityCalculatorWithHypervisors(t *testing.T) {
 		}
 
 		hvByName := map[string]hv1.Hypervisor{"host-1": *hvObj}
-		capacity, err := calculator.calculateInstanceCapacity(context.Background(), flavorGroup, groups[flavorGroup], az, hvByName)
+		capacity, err := calculator.calculateInstanceCapacity(context.Background(), groups[flavorGroup], az, hvByName)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -347,7 +347,7 @@ func TestCapacityCalculatorWithHypervisors(t *testing.T) {
 		}
 
 		hvByName := map[string]hv1.Hypervisor{"host-1": *host1HV, "host-2": *host2HV}
-		capacity, err := calculator.calculateInstanceCapacity(context.Background(), flavorGroup, groups[flavorGroup], az, hvByName)
+		capacity, err := calculator.calculateInstanceCapacity(context.Background(), groups[flavorGroup], az, hvByName)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -382,7 +382,7 @@ func TestCapacityCalculatorWithHypervisors(t *testing.T) {
 		}
 
 		hvByName := map[string]hv1.Hypervisor{"host-1": *hvObj}
-		capacity, err := calculator.calculateInstanceCapacity(context.Background(), flavorGroup, groups[flavorGroup], az, hvByName)
+		capacity, err := calculator.calculateInstanceCapacity(context.Background(), groups[flavorGroup], az, hvByName)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -417,7 +417,7 @@ func TestCapacityCalculatorWithHypervisors(t *testing.T) {
 		}
 
 		hvByName := map[string]hv1.Hypervisor{} // empty
-		capacity, err := calculator.calculateInstanceCapacity(context.Background(), flavorGroup, groups[flavorGroup], az, hvByName)
+		capacity, err := calculator.calculateInstanceCapacity(context.Background(), groups[flavorGroup], az, hvByName)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -451,7 +451,7 @@ func TestCapacityCalculatorWithHypervisors(t *testing.T) {
 		}
 
 		hvByName := map[string]hv1.Hypervisor{}
-		_, err = calculator.calculateInstanceCapacity(context.Background(), flavorGroup, groups[flavorGroup], az, hvByName)
+		_, err = calculator.calculateInstanceCapacity(context.Background(), groups[flavorGroup], az, hvByName)
 		if err == nil {
 			t.Fatal("expected error on scheduler failure, got nil")
 		}
@@ -524,7 +524,7 @@ func TestCapacityCalculatorWithHypervisors(t *testing.T) {
 		}
 
 		hvByName := map[string]hv1.Hypervisor{"host-1": *hvObj}
-		capacity, err := calculator.calculateInstanceCapacity(context.Background(), flavorGroup, groups[flavorGroup], az, hvByName)
+		capacity, err := calculator.calculateInstanceCapacity(context.Background(), groups[flavorGroup], az, hvByName)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
