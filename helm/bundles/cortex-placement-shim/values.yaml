@@ -24,6 +24,8 @@ cortex-shim:
     container:
       extraArgs: ["--placement-shim=true"]
   conf:
+    e2e:
+      svcURL: "http://cortex-placement-shim-service:8080"
     apiservers:
       home:
         gvks:

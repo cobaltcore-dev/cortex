@@ -6,9 +6,20 @@ package placement
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
+
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+type e2eConfigRoot struct {
+	E2E e2eConfig `yaml:"e2e"`
+}
+
+type e2eConfig struct {
+	// SVCURL is the url placement shim service, e.g.
+	// "http://cortex-placement-shim-service:8080"
+	SVCURL string `json:"svcURL"`
+}
 
 // e2eTest is a named end-to-end test registered by handler e2e files.
 type e2eTest struct {
@@ -22,17 +33,24 @@ var e2eTests []e2eTest
 // RunE2E executes end-to-end tests for all placement shim handlers.
 // It stops on the first failure and returns the error.
 func RunE2E(ctx context.Context) error {
-	log.Printf("Running %d e2e test(s)", len(e2eTests))
+	log := logf.FromContext(ctx)
+	log.Info("Running e2e test(s)", "count", len(e2eTests))
 	totalStart := time.Now()
 	for i, test := range e2eTests {
-		log.Printf("[%d/%d] Starting: %s", i+1, len(e2eTests), test.name)
+		log.Info("Starting e2e test",
+			"index", i+1, "total", len(e2eTests), "name", test.name)
 		start := time.Now()
 		if err := test.run(ctx); err != nil {
-			log.Printf("[%d/%d] FAIL: %s (took: %d ms): %v", i+1, len(e2eTests), test.name, time.Since(start).Milliseconds(), err)
+			log.Error(err, "FAIL e2e test",
+				"index", i+1, "total", len(e2eTests), "name", test.name,
+				"took_ms", time.Since(start).Milliseconds())
 			return fmt.Errorf("e2e test %q failed: %w", test.name, err)
 		}
-		log.Printf("[%d/%d] Done: %s (took: %d ms)", i+1, len(e2eTests), test.name, time.Since(start).Milliseconds())
+		log.Info("PASS e2e test",
+			"index", i+1, "total", len(e2eTests), "name", test.name,
+			"took_ms", time.Since(start).Milliseconds())
 	}
-	log.Printf("All e2e tests passed (took: %d ms)", time.Since(totalStart).Milliseconds())
+	log.Info("All e2e tests passed",
+		"took_ms", time.Since(totalStart).Milliseconds())
 	return nil
 }

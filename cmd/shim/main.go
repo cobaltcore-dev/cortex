@@ -53,14 +53,6 @@ func init() {
 func main() {
 	ctx := ctrl.SetupSignalHandler()
 
-	// Custom entrypoint for placement shim e2e tests.
-	if len(os.Args) == 2 && os.Args[1] == "e2e-placement-shim" {
-		if err := placement.RunE2E(ctx); err != nil {
-			log.Fatalf("E2E tests failed: %v", err)
-		}
-		return
-	}
-
 	restConfig := ctrl.GetConfigOrDie()
 
 	var metricsAddr string
@@ -74,6 +66,7 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var enablePlacementShim bool
+	var runPlacementShimE2E bool
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -95,6 +88,8 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.BoolVar(&enablePlacementShim, "placement-shim", false,
 		"If set, the placement API shim handlers are registered on the API server.")
+	flag.BoolVar(&runPlacementShimE2E, "e2e-placement-shim", false,
+		"If set, runs end-to-end tests for the placement shim instead of starting the manager. ")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -116,6 +111,14 @@ func main() {
 	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	// Custom entrypoint for placement shim e2e tests.
+	if runPlacementShimE2E {
+		if err := placement.RunE2E(ctx); err != nil {
+			log.Fatalf("E2E tests failed: %v", err)
+		}
+		os.Exit(0)
+	}
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will

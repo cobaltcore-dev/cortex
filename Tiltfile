@@ -281,7 +281,7 @@ if 'placement' in ACTIVE_DEPLOYMENTS:
     k8s_yaml(helm('./helm/bundles/cortex-placement-shim', name='cortex-placement-shim', values=tilt_values, set=env_set_overrides))
     local_resource(
         'Placement Shim E2E Tests',
-        '/bin/sh -c "kubectl exec deploy/cortex-placement-shim -- /main e2e-placement-shim"',
+        '/bin/sh -c "kubectl exec deploy/cortex-placement-shim -- /main --e2e-placement-shim"',
         labels=['Cortex-Placement'],
         trigger_mode=TRIGGER_MODE_MANUAL,
         auto_init=False,
