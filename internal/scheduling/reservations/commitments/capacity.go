@@ -14,7 +14,6 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 )
@@ -37,7 +36,7 @@ func NewCapacityCalculator(client client.Client, config Config) *CapacityCalcula
 // CalculateCapacity computes per-AZ capacity for all flavor groups.
 // For each flavor group, three resources are reported: _ram, _cores, _instances.
 // All flavor groups are included, not just those with fixed RAM/core ratio.
-// AZs are derived from HostDetails Knowledge CRDs.
+// AZs are derived from Hypervisor CRDs via the topology.kubernetes.io/zone label.
 func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.ServiceCapacityReport, error) {
 	// Get all flavor groups from Knowledge CRDs
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
@@ -52,12 +51,6 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.Serv
 		infoVersion = knowledgeCRD.Status.LastContentChange.Unix()
 	}
 
-	// Get availability zones from host details
-	azs, err := c.getAvailabilityZones(ctx)
-	if err != nil {
-		return liquid.ServiceCapacityReport{}, fmt.Errorf("failed to get availability zones: %w", err)
-	}
-
 	// Pre-fetch all Hypervisor CRDs once (shared across all flavor groups and AZs)
 	var hvList hv1.HypervisorList
 	if err := c.client.List(ctx, &hvList); err != nil {
@@ -67,6 +60,9 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.Serv
 	for _, hv := range hvList.Items {
 		hvByName[hv.Name] = hv
 	}
+
+	// Derive AZs from Hypervisor CRDs via topology.kubernetes.io/zone label
+	azs := getAvailabilityZones(hvList.Items)
 
 	// Build capacity report for all flavor groups
 	report := liquid.ServiceCapacityReport{
@@ -203,7 +199,7 @@ func (c *CapacityCalculator) calculateInstanceCapacity(
 		hv, ok := hvByName[hostName]
 		if !ok {
 			LoggerFromContext(ctx).Info("scheduler host not found in hypervisor CRDs, skipping",
-				"host", hostName, "az", az, "flavorGroup", groupName)
+				"host", hostName, "az", az)
 			continue
 		}
 
@@ -231,56 +227,19 @@ func (c *CapacityCalculator) calculateInstanceCapacity(
 	return totalCapacity, nil
 }
 
-// getHostAZMap returns a map from compute host name to availability zone.
-func (c *CapacityCalculator) getHostAZMap(ctx context.Context) (map[string]string, error) {
-	var knowledgeList v1alpha1.KnowledgeList
-	if err := c.client.List(ctx, &knowledgeList); err != nil {
-		return nil, fmt.Errorf("failed to list knowledge CRDs: %w", err)
-	}
-
-	type hostAZEntry struct {
-		ComputeHost      string `json:"ComputeHost"`
-		AvailabilityZone string `json:"AvailabilityZone"`
-	}
-
-	hostAZMap := make(map[string]string)
-	for _, knowledge := range knowledgeList.Items {
-		if knowledge.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
-			continue
-		}
-		if knowledge.Spec.Extractor.Name != "sap_host_details_extractor" {
-			continue
-		}
-		features, err := v1alpha1.UnboxFeatureList[hostAZEntry](knowledge.Status.Raw)
-		if err != nil {
-			continue
-		}
-		for _, feature := range features {
-			if feature.ComputeHost != "" && feature.AvailabilityZone != "" {
-				hostAZMap[feature.ComputeHost] = feature.AvailabilityZone
-			}
-		}
-	}
-
-	return hostAZMap, nil
-}
-
-func (c *CapacityCalculator) getAvailabilityZones(ctx context.Context) ([]string, error) {
-	hostAZMap, err := c.getHostAZMap(ctx)
-	if err != nil {
-		return nil, err
-	}
-
+// getAvailabilityZones returns a sorted, deduplicated list of AZs from Hypervisor CRDs.
+// AZ is read from the topology.kubernetes.io/zone label on each Hypervisor.
+func getAvailabilityZones(hvs []hv1.Hypervisor) []string {
 	azSet := make(map[string]struct{})
-	for _, az := range hostAZMap {
-		azSet[az] = struct{}{}
+	for _, hv := range hvs {
+		if az, ok := hv.Labels["topology.kubernetes.io/zone"]; ok && az != "" {
+			azSet[az] = struct{}{}
+		}
 	}
-
 	azs := make([]string, 0, len(azSet))
 	for az := range azSet {
 		azs = append(azs, az)
 	}
 	sort.Strings(azs)
-
-	return azs, nil
+	return azs
 }

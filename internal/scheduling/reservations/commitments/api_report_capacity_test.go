@@ -175,18 +175,22 @@ func TestCapacityCalculator(t *testing.T) {
 		}
 	})
 
-	t.Run("CalculateCapacity returns perAZ entries for all AZs from host details", func(t *testing.T) {
+	t.Run("CalculateCapacity returns perAZ entries for all AZs from hypervisors", func(t *testing.T) {
 		flavorGroupKnowledge := createTestFlavorGroupKnowledge(t, "test-group")
-		hostDetails := createTestHostDetailsKnowledge(t, map[string]string{
+		hvs := createTestHypervisorsWithAZ(map[string]string{
 			"host-1": "qa-de-1a",
 			"host-2": "qa-de-1b",
 		})
+		server := newMockSchedulerServer(t, []string{})
+		defer server.Close()
+		cfg := DefaultConfig()
+		cfg.SchedulerURL = server.URL
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(flavorGroupKnowledge, hostDetails).
+			WithObjects(flavorGroupKnowledge, hvs[0], hvs[1]).
 			Build()
 
-		calculator := NewCapacityCalculator(fakeClient, DefaultConfig())
+		calculator := NewCapacityCalculator(fakeClient, cfg)
 		report, err := calculator.CalculateCapacity(context.Background())
 		if err != nil {
 			t.Fatalf("Expected no error, got: %v", err)
@@ -196,7 +200,7 @@ func TestCapacityCalculator(t *testing.T) {
 			t.Fatalf("Expected 3 resources (_ram, _cores, _instances), got %d", len(report.Resources))
 		}
 
-		// Verify all resources have entries for the AZs from host details
+		// Verify all resources have entries for the AZs from hypervisors
 		expectedAZs := []liquid.AvailabilityZone{"qa-de-1a", "qa-de-1b"}
 		for _, resName := range []string{"hw_version_test-group_ram", "hw_version_test-group_cores", "hw_version_test-group_instances"} {
 			res := report.Resources[liquid.ResourceName(resName)]
@@ -236,18 +240,22 @@ func TestCapacityCalculator(t *testing.T) {
 		}
 	})
 
-	t.Run("CalculateCapacity produces perAZ entries matching host details AZs", func(t *testing.T) {
+	t.Run("CalculateCapacity produces perAZ entries matching hypervisor AZs", func(t *testing.T) {
 		flavorGroupKnowledge := createTestFlavorGroupKnowledge(t, "test-group")
-		hostDetails := createTestHostDetailsKnowledge(t, map[string]string{
+		hvs := createTestHypervisorsWithAZ(map[string]string{
 			"host-a": "eu-de-1a",
 			"host-b": "eu-de-1b",
 		})
+		server := newMockSchedulerServer(t, []string{})
+		defer server.Close()
+		cfg := DefaultConfig()
+		cfg.SchedulerURL = server.URL
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(flavorGroupKnowledge, hostDetails).
+			WithObjects(flavorGroupKnowledge, hvs[0], hvs[1]).
 			Build()
 
-		calculator := NewCapacityCalculator(fakeClient, DefaultConfig())
+		calculator := NewCapacityCalculator(fakeClient, cfg)
 		report, err := calculator.CalculateCapacity(context.Background())
 		if err != nil {
 			t.Fatalf("Expected no error, got: %v", err)
@@ -284,12 +292,11 @@ func TestCapacityCalculatorWithHypervisors(t *testing.T) {
 		server := newMockSchedulerServer(t, []string{"host-1"})
 		defer server.Close()
 
-		hvObj := createTestHypervisor("host-1", "256Gi", "64Gi")
-		hostDetails := createTestHostDetailsKnowledge(t, map[string]string{"host-1": az})
+		hvObj := createTestHypervisorWithAZ("host-1", az, "256Gi", "64Gi")
 
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(flavorGroupKnowledge, hostDetails, hvObj).
+			WithObjects(flavorGroupKnowledge, hvObj).
 			Build()
 
 		calculator := &CapacityCalculator{
@@ -322,16 +329,12 @@ func TestCapacityCalculatorWithHypervisors(t *testing.T) {
 		server := newMockSchedulerServer(t, []string{"host-1", "host-2"})
 		defer server.Close()
 
-		host1HV := createTestHypervisor("host-1", "256Gi", "128Gi")
-		host2HV := createTestHypervisor("host-2", "128Gi", "0")
-		hostDetails := createTestHostDetailsKnowledge(t, map[string]string{
-			"host-1": az,
-			"host-2": az,
-		})
+		host1HV := createTestHypervisorWithAZ("host-1", az, "256Gi", "128Gi")
+		host2HV := createTestHypervisorWithAZ("host-2", az, "128Gi", "0")
 
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(flavorGroupKnowledge, hostDetails, host1HV, host2HV).
+			WithObjects(flavorGroupKnowledge, host1HV, host2HV).
 			Build()
 
 		calculator := &CapacityCalculator{
@@ -361,12 +364,11 @@ func TestCapacityCalculatorWithHypervisors(t *testing.T) {
 		server := newMockSchedulerServer(t, []string{"host-1"})
 		defer server.Close()
 
-		hvObj := createTestHypervisor("host-1", "128Gi", "0")
-		hostDetails := createTestHostDetailsKnowledge(t, map[string]string{"host-1": az})
+		hvObj := createTestHypervisorWithAZ("host-1", az, "128Gi", "0")
 
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(flavorGroupKnowledge, hostDetails, hvObj).
+			WithObjects(flavorGroupKnowledge, hvObj).
 			Build()
 
 		calculator := &CapacityCalculator{
@@ -397,11 +399,11 @@ func TestCapacityCalculatorWithHypervisors(t *testing.T) {
 		server := newMockSchedulerServer(t, []string{"host-unknown"})
 		defer server.Close()
 
-		hostDetails := createTestHostDetailsKnowledge(t, map[string]string{"host-unknown": az})
+		hostDetails := createTestHypervisorsWithAZ(map[string]string{"host-unknown": az})
 
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(flavorGroupKnowledge, hostDetails).
+			WithObjects(flavorGroupKnowledge, hostDetails[0]).
 			Build()
 
 		calculator := &CapacityCalculator{
@@ -458,20 +460,16 @@ func TestCapacityCalculatorWithHypervisors(t *testing.T) {
 	})
 
 	t.Run("multiple AZs are reported independently", func(t *testing.T) {
-		hostDetails := createTestHostDetailsKnowledge(t, map[string]string{
-			"host-1": "az-a",
-			"host-2": "az-b",
-		})
 		// Scheduler always returns both hosts (mock doesn't filter by AZ).
 		server := newMockSchedulerServer(t, []string{"host-1", "host-2"})
 		defer server.Close()
 
-		host1HV := createTestHypervisor("host-1", "128Gi", "32Gi")
-		host2HV := createTestHypervisor("host-2", "64Gi", "0")
+		host1HV := createTestHypervisorWithAZ("host-1", "az-a", "128Gi", "32Gi")
+		host2HV := createTestHypervisorWithAZ("host-2", "az-b", "64Gi", "0")
 
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(flavorGroupKnowledge, hostDetails, host1HV, host2HV).
+			WithObjects(flavorGroupKnowledge, host1HV, host2HV).
 			Build()
 
 		calculator := &CapacityCalculator{
@@ -503,12 +501,11 @@ func TestCapacityCalculatorWithHypervisors(t *testing.T) {
 		server := newMockSchedulerServer(t, []string{"host-1"})
 		defer server.Close()
 
-		hvObj := createTestHypervisor("host-1", "100Gi", "0")
-		hostDetails := createTestHostDetailsKnowledge(t, map[string]string{"host-1": az})
+		hvObj := createTestHypervisorWithAZ("host-1", az, "100Gi", "0")
 
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(flavorGroupKnowledge, hostDetails, hvObj).
+			WithObjects(flavorGroupKnowledge, hvObj).
 			Build()
 
 		calculator := &CapacityCalculator{
@@ -561,6 +558,13 @@ func createTestHypervisor(name, effectiveCapacity, allocation string) *hv1.Hyper
 			hv1.ResourceMemory: resource.MustParse(allocation),
 		}
 	}
+	return hv
+}
+
+// createTestHypervisorWithAZ creates an HV CRD with a topology.kubernetes.io/zone label.
+func createTestHypervisorWithAZ(name, az, effectiveCapacity, allocation string) *hv1.Hypervisor {
+	hv := createTestHypervisor(name, effectiveCapacity, allocation)
+	hv.Labels = map[string]string{"topology.kubernetes.io/zone": az}
 	return hv
 }
 
@@ -702,32 +706,18 @@ func createTestFlavorGroupKnowledgeWithSmallest(t *testing.T, groupName string, 
 	}
 }
 
-// createTestHostDetailsKnowledge creates a Knowledge CRD with host→AZ mappings.
-func createTestHostDetailsKnowledge(t *testing.T, hostToAZ map[string]string) *v1alpha1.Knowledge {
-	t.Helper()
-
-	features := make([]map[string]interface{}, 0, len(hostToAZ))
+// createTestHypervisorsWithAZ creates HV CRDs with topology.kubernetes.io/zone labels
+// from a host→AZ map. Hypervisors have no capacity data (used only for AZ discovery).
+func createTestHypervisorsWithAZ(hostToAZ map[string]string) []*hv1.Hypervisor {
+	hvs := make([]*hv1.Hypervisor, 0, len(hostToAZ))
 	for host, az := range hostToAZ {
-		features = append(features, map[string]interface{}{
-			"ComputeHost":      host,
-			"AvailabilityZone": az,
-		})
+		hv := &hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name:   host,
+				Labels: map[string]string{"topology.kubernetes.io/zone": az},
+			},
+		}
+		hvs = append(hvs, hv)
 	}
-
-	raw, err := v1alpha1.BoxFeatureList(features)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return &v1alpha1.Knowledge{
-		ObjectMeta: v1.ObjectMeta{Name: "host-details"},
-		Spec: v1alpha1.KnowledgeSpec{
-			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			Extractor:        v1alpha1.KnowledgeExtractorSpec{Name: "sap_host_details_extractor"},
-		},
-		Status: v1alpha1.KnowledgeStatus{
-			Conditions: []v1.Condition{{Type: v1alpha1.KnowledgeConditionReady, Status: "True"}},
-			Raw:        raw,
-		},
-	}
+	return hvs
 }
