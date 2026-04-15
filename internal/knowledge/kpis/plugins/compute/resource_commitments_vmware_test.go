@@ -128,6 +128,10 @@ func TestVMwareResourceCommitmentsKPI_CollectHanaUnusedCommitments(t *testing.T)
 			labels[lbl.GetName()] = lbl.GetValue()
 		}
 		key := labels["resource"] + "/" + labels["availability_zone"] + "/" + labels["cpu_architecture"]
+		if _, exists := actual[key]; exists {
+			t.Fatalf("duplicate metric key %q (resource=%q, availability_zone=%q, cpu_architecture=%q)",
+				key, labels["resource"], labels["availability_zone"], labels["cpu_architecture"])
+		}
 		actual[key] = UnusedMetric{
 			Resource: labels["resource"],
 			AZ:       labels["availability_zone"],
