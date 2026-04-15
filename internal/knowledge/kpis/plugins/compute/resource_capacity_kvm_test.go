@@ -997,6 +997,49 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 			},
 		},
 		{
+			name: "hypervisor in manual maintenance mode",
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "node005-bb092",
+						Labels: map[string]string{
+							"topology.kubernetes.io/zone": "qa-1a",
+						},
+					},
+					Spec: hv1.HypervisorSpec{
+						Maintenance: hv1.MaintenanceManual,
+					},
+					Status: hv1.HypervisorStatus{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("64"),
+							hv1.ResourceMemory: resource.MustParse("256Gi"),
+						},
+						Allocation: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("0"),
+							hv1.ResourceMemory: resource.MustParse("0"),
+						},
+						Traits: []string{},
+					},
+				},
+			},
+			expectedMetrics: func() []kvmExpectedMetric {
+				l := defaultHostLabels("node005-bb092", "qa-1a", "bb092")
+				l.Maintenance = "true"
+				return []kvmExpectedMetric{
+					{Name: "cortex_kvm_host_capacity_total", Labels: func() kvmMetricLabels { r := l; r.Resource = "cpu"; return r }(), Value: 64},
+					{Name: "cortex_kvm_host_capacity_total", Labels: func() kvmMetricLabels { r := l; r.Resource = "ram"; return r }(), Value: 274877906944}, // 256Gi
+					{Name: "cortex_kvm_host_capacity_usage", Labels: func() kvmMetricLabels { r := l; r.Resource = "cpu"; r.Type = "utilized"; return r }(), Value: 0},
+					{Name: "cortex_kvm_host_capacity_usage", Labels: func() kvmMetricLabels { r := l; r.Resource = "ram"; r.Type = "utilized"; return r }(), Value: 0},
+					{Name: "cortex_kvm_host_capacity_usage", Labels: func() kvmMetricLabels { r := l; r.Resource = "cpu"; r.Type = "reserved"; return r }(), Value: 0},
+					{Name: "cortex_kvm_host_capacity_usage", Labels: func() kvmMetricLabels { r := l; r.Resource = "ram"; r.Type = "reserved"; return r }(), Value: 0},
+					{Name: "cortex_kvm_host_capacity_usage", Labels: func() kvmMetricLabels { r := l; r.Resource = "cpu"; r.Type = "failover"; return r }(), Value: 0},
+					{Name: "cortex_kvm_host_capacity_usage", Labels: func() kvmMetricLabels { r := l; r.Resource = "ram"; r.Type = "failover"; return r }(), Value: 0},
+					{Name: "cortex_kvm_host_capacity_usage", Labels: func() kvmMetricLabels { r := l; r.Resource = "cpu"; r.Type = "payg"; return r }(), Value: 64},
+					{Name: "cortex_kvm_host_capacity_usage", Labels: func() kvmMetricLabels { r := l; r.Resource = "ram"; r.Type = "payg"; return r }(), Value: 274877906944}, // 256Gi
+				}
+			}(),
+		},
+		{
 			name: "multiple failover reservations on same host are summed",
 			hypervisors: []hv1.Hypervisor{
 				{

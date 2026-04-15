@@ -282,6 +282,8 @@ func hostLabelsFromHypervisor(hypervisor hv1.Hypervisor) kvmHostLabels {
 		}
 	}
 
+	maintenance := hypervisor.Spec.Maintenance != hv1.MaintenanceUnset
+
 	return kvmHostLabels{
 		computeHost:      hypervisor.Name,
 		availabilityZone: hypervisor.Labels["topology.kubernetes.io/zone"],
@@ -291,7 +293,7 @@ func hostLabelsFromHypervisor(hypervisor hv1.Hypervisor) kvmHostLabels {
 		enabled:          strconv.FormatBool(true),
 		decommissioned:   strconv.FormatBool(decommissioned),
 		externalCustomer: strconv.FormatBool(externalCustomer),
-		maintenance:      strconv.FormatBool(false),
+		maintenance:      strconv.FormatBool(maintenance),
 	}
 }
 
