@@ -589,6 +589,10 @@ spec:
     - name: filter_has_requested_traits
       description: |
         Ensures hosts have the hardware traits required by the flavor.
+    - name: filter_capabilities
+      description: |
+        Ensures hosts meet the compute capabilities required by the flavor
+        extra specs (e.g., architecture, maxphysaddr bits).
     - name: filter_status_conditions
       description: |
         Excludes hosts that are not ready or are disabled.

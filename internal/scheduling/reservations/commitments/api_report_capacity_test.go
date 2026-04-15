@@ -322,8 +322,8 @@ func TestCapacityCalculatorWithHypervisors(t *testing.T) {
 		server := newMockSchedulerServer(t, []string{"host-1", "host-2"})
 		defer server.Close()
 
-		hv1Obj := createTestHypervisor("host-1", "256Gi", "128Gi")
-		hv2Obj := createTestHypervisor("host-2", "128Gi", "0")
+		host1HV := createTestHypervisor("host-1", "256Gi", "128Gi")
+		host2HV := createTestHypervisor("host-2", "128Gi", "0")
 		hostDetails := createTestHostDetailsKnowledge(t, map[string]string{
 			"host-1": az,
 			"host-2": az,
@@ -331,7 +331,7 @@ func TestCapacityCalculatorWithHypervisors(t *testing.T) {
 
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(flavorGroupKnowledge, hostDetails, hv1Obj, hv2Obj).
+			WithObjects(flavorGroupKnowledge, hostDetails, host1HV, host2HV).
 			Build()
 
 		calculator := &CapacityCalculator{
@@ -346,7 +346,7 @@ func TestCapacityCalculatorWithHypervisors(t *testing.T) {
 			t.Fatalf("failed to get flavor groups: %v", err)
 		}
 
-		hvByName := map[string]hv1.Hypervisor{"host-1": *hv1Obj, "host-2": *hv2Obj}
+		hvByName := map[string]hv1.Hypervisor{"host-1": *host1HV, "host-2": *host2HV}
 		capacity, err := calculator.calculateInstanceCapacity(context.Background(), flavorGroup, groups[flavorGroup], az, hvByName)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -466,12 +466,12 @@ func TestCapacityCalculatorWithHypervisors(t *testing.T) {
 		server := newMockSchedulerServer(t, []string{"host-1", "host-2"})
 		defer server.Close()
 
-		hv1Obj := createTestHypervisor("host-1", "128Gi", "32Gi")
-		hv2Obj := createTestHypervisor("host-2", "64Gi", "0")
+		host1HV := createTestHypervisor("host-1", "128Gi", "32Gi")
+		host2HV := createTestHypervisor("host-2", "64Gi", "0")
 
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(flavorGroupKnowledge, hostDetails, hv1Obj, hv2Obj).
+			WithObjects(flavorGroupKnowledge, hostDetails, host1HV, host2HV).
 			Build()
 
 		calculator := &CapacityCalculator{

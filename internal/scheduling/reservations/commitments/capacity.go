@@ -7,8 +7,8 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"time"
 
+	"github.com/google/uuid"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -133,6 +133,8 @@ func (c *CapacityCalculator) calculateAZCapacity(
 	for _, az := range azs {
 		capacity, err := c.calculateInstanceCapacity(ctx, groupName, groupData, az, hvByName)
 		if err != nil {
+			LoggerFromContext(ctx).Error(err, "failed to calculate capacity for AZ, reporting 0",
+				"flavorGroup", groupName, "az", az)
 			// On failure, report az with capacity=0 rather than aborting entirely.
 			result[liquid.AvailabilityZone(az)] = &liquid.AZResourceCapacityReport{
 				Capacity: 0,
@@ -171,7 +173,7 @@ func (c *CapacityCalculator) calculateInstanceCapacity(
 
 	// Scheduler call: get eligible hosts (ignoring allocations and reservations).
 	resp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
-		InstanceUUID:     fmt.Sprintf("capacity-%s-%s-%d", groupName, az, time.Now().UnixNano()),
+		InstanceUUID:     uuid.New().String(),
 		ProjectID:        "cortex-capacity-check",
 		FlavorName:       smallestFlavor.Name,
 		MemoryMB:         smallestFlavor.MemoryMB,
@@ -230,6 +232,9 @@ func (c *CapacityCalculator) getHostAZMap(ctx context.Context) (map[string]strin
 
 	hostAZMap := make(map[string]string)
 	for _, knowledge := range knowledgeList.Items {
+		if knowledge.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
+			continue
+		}
 		if knowledge.Spec.Extractor.Name != "sap_host_details_extractor" {
 			continue
 		}

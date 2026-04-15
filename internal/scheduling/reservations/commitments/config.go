@@ -86,6 +86,9 @@ func (c *Config) ApplyDefaults() {
 	if c.SchedulerURL == "" {
 		c.SchedulerURL = defaults.SchedulerURL
 	}
+	if c.ReportCapacityTotalPipeline == "" {
+		c.ReportCapacityTotalPipeline = defaults.ReportCapacityTotalPipeline
+	}
 	if c.ChangeAPIWatchReservationsTimeout == 0 {
 		c.ChangeAPIWatchReservationsTimeout = defaults.ChangeAPIWatchReservationsTimeout
 	}
