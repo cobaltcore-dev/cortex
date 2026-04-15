@@ -5,17 +5,17 @@ package placement
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httputil"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// e2eTestListTraits is a test that sends a request to the /traits endpoint of
-// the placement shim, which should return a 200 OK response with a list of traits.
-func e2eTestListTraits(ctx context.Context) error {
+// e2eTestTraits is a test that sends a request to the /traits
+// endpoints of the placement shim.
+func e2eTestTraits(ctx context.Context) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running traits endpoint e2e test")
 	config, err := conf.GetConfig[e2eRootConfig]()
@@ -30,6 +30,9 @@ func e2eTestListTraits(ctx context.Context) error {
 		return err
 	}
 	log.Info("Successfully created openstack client for traits e2e test")
+
+	// Test GET /traits
+	log.Info("Testing GET /traits endpoint of placement shim")
 	req, err := http.NewRequestWithContext(ctx,
 		http.MethodGet, sc.Endpoint+"/traits", http.NoBody)
 	if err != nil {
@@ -41,24 +44,119 @@ func e2eTestListTraits(ctx context.Context) error {
 	req.Header.Set("Accept", "application/json")
 	resp, err := sc.HTTPClient.Do(req)
 	if err != nil {
-		log.Error(err, "failed to send request to traits endpoint")
+		log.Error(err, "failed to send request to placement shim /traits endpoint")
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		log.Error(err, "traits endpoint returned an error")
+		log.Error(err, "placement shim /traits endpoint returned an error")
 		return err
 	}
-	dump, err := httputil.DumpResponse(resp, true)
+	var list struct {
+		Traits []string `json:"traits"`
+	}
+	err = json.NewDecoder(resp.Body).Decode(&list)
 	if err != nil {
-		log.Error(err, "failed to dump response for traits endpoint")
+		log.Error(err, "failed to decode response from placement shim /traits endpoint")
 		return err
 	}
-	log.Info("Placement shim traits endpoint response", "dump", string(dump))
+	log.Info("Successfully retrieved traits from placement shim",
+		"traits", list.Traits)
+
+	// Test GET /traits/{name}
+	log.Info("Testing GET /traits/{name} endpoint of placement shim")
+	for _, trait := range list.Traits[:4] { // Test only the first 4 traits to save time.
+		log.Info("Testing trait", "trait", trait)
+		req, err := http.NewRequestWithContext(ctx,
+			http.MethodGet, sc.Endpoint+"/traits/"+trait, http.NoBody)
+		if err != nil {
+			log.Error(err, "failed to create request for traits/{name} endpoint",
+				"trait", trait)
+			return err
+		}
+		req.Header.Set("X-Auth-Token", sc.TokenID)
+		req.Header.Set("OpenStack-API-Version", "placement 1.29") // No "X-"!
+		req.Header.Set("Accept", "application/json")
+		resp, err := sc.HTTPClient.Do(req)
+		if err != nil {
+			log.Error(err, "failed to send request to placement shim /traits/{name} endpoint",
+				"trait", trait)
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+			log.Error(err, "placement shim /traits/{name} endpoint returned an error",
+				"trait", trait)
+			return err
+		}
+		log.Info("Successfully retrieved trait from placement shim /traits/{name} endpoint",
+			"trait", trait)
+	}
+
+	// Test PUT /traits/{name}
+	const testTrait = "CUSTOM_CORTEX_PLACEMENT_SHIM_E2E_TEST_TRAIT"
+	log.Info("Testing PUT /traits/{name} endpoint of placement shim", "testTrait", testTrait)
+	req, err = http.NewRequestWithContext(ctx,
+		http.MethodPut, sc.Endpoint+"/traits/"+testTrait, http.NoBody)
+	if err != nil {
+		log.Error(err, "failed to create request for traits/{name} endpoint",
+			"trait", testTrait)
+		return err
+	}
+	req.Header.Set("X-Auth-Token", sc.TokenID)
+	req.Header.Set("OpenStack-API-Version", "placement 1.29") // No "X-"!
+	req.Header.Set("Accept", "application/json")
+	resp, err = sc.HTTPClient.Do(req)
+	if err != nil {
+		log.Error(err, "failed to send request to placement shim /traits/{name} endpoint",
+			"trait", testTrait)
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		log.Error(err, "placement shim /traits/{name} endpoint returned an error",
+			"trait", testTrait)
+		return err
+	}
+	log.Info("Successfully created trait with placement shim /traits/{name} endpoint",
+		"trait", testTrait)
+
+	// Cleanup: delete the test trait we just created. This is not strictly
+	// necessary since the trait doesn't actually exist in the real placement
+	// service, but it's good hygiene.
+	log.Info("Cleaning up test trait from placement shim", "testTrait", testTrait)
+	req, err = http.NewRequestWithContext(ctx,
+		http.MethodDelete, sc.Endpoint+"/traits/"+testTrait, http.NoBody)
+	if err != nil {
+		log.Error(err, "failed to create request for traits/{name} endpoint",
+			"trait", testTrait)
+		return err
+	}
+	req.Header.Set("X-Auth-Token", sc.TokenID)
+	req.Header.Set("OpenStack-API-Version", "placement 1.29") // No "X-"!
+	req.Header.Set("Accept", "application/json")
+	resp, err = sc.HTTPClient.Do(req)
+	if err != nil {
+		log.Error(err, "failed to send request to placement shim /traits/{name} endpoint",
+			"trait", testTrait)
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		log.Error(err, "placement shim /traits/{name} endpoint returned an error",
+			"trait", testTrait)
+		return err
+	}
+	log.Info("Successfully deleted test trait with placement shim /traits/{name} endpoint",
+		"trait", testTrait)
+
 	return nil
 }
 
 func init() {
-	e2eTests = append(e2eTests, e2eTest{name: "traits", run: e2eTestListTraits})
+	e2eTests = append(e2eTests, e2eTest{name: "traits", run: e2eTestTraits})
 }
