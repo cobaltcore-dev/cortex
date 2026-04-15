@@ -187,7 +187,7 @@ func e2eTestReshaper(ctx context.Context) error {
 	putBody, err := json.Marshal(map[string]any{
 		"resource_provider_generation": genA,
 		"inventories": map[string]any{
-			testRC: map[string]any{"total": 100},
+			testRC: map[string]any{"total": 100, "max_unit": 100},
 		},
 	})
 	if err != nil {
@@ -317,7 +317,7 @@ func e2eTestReshaper(ctx context.Context) error {
 			},
 			rpBUUID: map[string]any{
 				"inventories": map[string]any{
-					testRC: map[string]any{"total": 100},
+					testRC: map[string]any{"total": 100, "max_unit": 100},
 				},
 				"resource_provider_generation": genB,
 			},

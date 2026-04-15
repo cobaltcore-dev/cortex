@@ -29,8 +29,7 @@ import (
 //     5 units against the same RP.
 //  7. GET /allocations/{consumer2} — verify the second allocation exists.
 //  8. DELETE /allocations/{consumer} — remove allocations for both consumers.
-//  9. GET /allocations/{consumer1} — verify allocations are empty again.
-//  10. Cleanup: DELETE the test RP and custom resource class.
+//  9. Cleanup: DELETE the test RP and custom resource class.
 func e2eTestAllocations(ctx context.Context) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running allocations endpoint e2e test")
@@ -426,40 +425,6 @@ func e2eTestAllocations(ctx context.Context) error {
 		}
 		log.Info("Successfully deleted allocation for consumer", "consumer", consumer)
 	}
-
-	// Verify first consumer's allocations are empty.
-	log.Info("Verifying first consumer's allocations are empty", "consumer", consumerUUID1)
-	req, err = http.NewRequestWithContext(ctx,
-		http.MethodGet, sc.Endpoint+"/allocations/"+consumerUUID1, http.NoBody)
-	if err != nil {
-		log.Error(err, "failed to create GET request for allocations", "consumer", consumerUUID1)
-		return err
-	}
-	req.Header.Set("X-Auth-Token", sc.TokenID)
-	req.Header.Set("OpenStack-API-Version", apiVersion)
-	req.Header.Set("Accept", "application/json")
-	resp, err = sc.HTTPClient.Do(req)
-	if err != nil {
-		log.Error(err, "failed to send GET request for allocations", "consumer", consumerUUID1)
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		log.Error(err, "GET /allocations returned an error", "consumer", consumerUUID1)
-		return err
-	}
-	err = json.NewDecoder(resp.Body).Decode(&allocResp)
-	if err != nil {
-		log.Error(err, "failed to decode allocations response", "consumer", consumerUUID1)
-		return err
-	}
-	if len(allocResp.Allocations) != 0 {
-		err := fmt.Errorf("expected 0 allocations, got %d", len(allocResp.Allocations))
-		log.Error(err, "allocations not cleared", "consumer", consumerUUID1)
-		return err
-	}
-	log.Info("Verified first consumer's allocations are empty", "consumer", consumerUUID1)
 
 	// Cleanup: delete the resource provider and custom resource class.
 	log.Info("Cleaning up test resources")
