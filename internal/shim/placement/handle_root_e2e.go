@@ -12,8 +12,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// e2eTestGetRoot is a simple test that just sends a request to the root endpoint
-// of the shim, which should return a 200 OK response with a simple message.
+// e2eTestGetRoot verifies basic connectivity to the placement shim.
+// It sends a GET request to the root endpoint (/) and checks that the shim
+// responds with a 2xx status code, confirming the service is reachable.
 func e2eTestGetRoot(ctx context.Context) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running root endpoint e2e test")

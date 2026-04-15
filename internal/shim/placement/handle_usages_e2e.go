@@ -14,6 +14,12 @@ import (
 )
 
 // e2eTestUsages tests the /usages endpoint.
+//
+//  1. GET /projects from keystone — obtain a list of real project IDs.
+//  2. GET /usages?project_id={id} — for up to 5 projects, request total
+//     resource usages and verify each returns a successful response.
+//
+// This test is read-only and does not create any resources.
 func e2eTestUsages(ctx context.Context) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running usages endpoint e2e test")
@@ -29,6 +35,8 @@ func e2eTestUsages(ctx context.Context) error {
 		return err
 	}
 	log.Info("Successfully created openstack client for usages e2e test")
+
+	const apiVersion = "placement 1.9"
 
 	// Get the list of projects from the identity service, so that we can test
 	// the /usages endpoint with a valid project id.
@@ -80,7 +88,7 @@ func e2eTestUsages(ctx context.Context) error {
 			return err
 		}
 		projReq.Header.Set("X-Auth-Token", sc.TokenID)
-		projReq.Header.Set("OpenStack-API-Version", "placement 1.9") // No "X-"!
+		projReq.Header.Set("OpenStack-API-Version", apiVersion)
 		projReq.Header.Set("Accept", "application/json")
 		projResp, err := sc.HTTPClient.Do(projReq)
 		if err != nil {

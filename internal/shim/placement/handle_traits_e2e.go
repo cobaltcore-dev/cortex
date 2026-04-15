@@ -14,6 +14,12 @@ import (
 )
 
 // e2eTestTraits tests the /traits and /traits/{name} endpoints.
+//
+//  1. Pre-cleanup: DELETE any leftover custom test trait (ignore 404).
+//  2. GET /traits — list all traits and verify a successful response.
+//  3. GET /traits/{name} — retrieve 5 individual existing traits by name.
+//  4. PUT /traits/{name} — create a custom test trait (CUSTOM_CORTEX_...).
+//  5. DELETE /traits/{name} — remove the custom test trait to clean up.
 func e2eTestTraits(ctx context.Context) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running traits endpoint e2e test")
@@ -30,18 +36,39 @@ func e2eTestTraits(ctx context.Context) error {
 	}
 	log.Info("Successfully created openstack client for traits e2e test")
 
+	const testTrait = "CUSTOM_CORTEX_PLACEMENT_SHIM_E2E_TEST_TRAIT"
+	const apiVersion = "placement 1.6"
+
+	// Pre-cleanup: delete leftover test trait from a prior run.
+	log.Info("Pre-cleanup: deleting leftover test trait", "trait", testTrait)
+	req, err := http.NewRequestWithContext(ctx,
+		http.MethodDelete, sc.Endpoint+"/traits/"+testTrait, http.NoBody)
+	if err != nil {
+		log.Error(err, "failed to create pre-cleanup request")
+		return err
+	}
+	req.Header.Set("X-Auth-Token", sc.TokenID)
+	req.Header.Set("OpenStack-API-Version", apiVersion)
+	resp, err := sc.HTTPClient.Do(req)
+	if err != nil {
+		log.Error(err, "failed to send pre-cleanup request")
+		return err
+	}
+	defer resp.Body.Close()
+	log.Info("Pre-cleanup completed", "status", resp.StatusCode)
+
 	// Test GET /traits
 	log.Info("Testing GET /traits endpoint of placement shim")
-	req, err := http.NewRequestWithContext(ctx,
+	req, err = http.NewRequestWithContext(ctx,
 		http.MethodGet, sc.Endpoint+"/traits", http.NoBody)
 	if err != nil {
 		log.Error(err, "failed to create request for traits endpoint")
 		return err
 	}
 	req.Header.Set("X-Auth-Token", sc.TokenID)
-	req.Header.Set("OpenStack-API-Version", "placement 1.6") // No "X-"!
+	req.Header.Set("OpenStack-API-Version", apiVersion)
 	req.Header.Set("Accept", "application/json")
-	resp, err := sc.HTTPClient.Do(req)
+	resp, err = sc.HTTPClient.Do(req)
 	if err != nil {
 		log.Error(err, "failed to send request to placement shim /traits endpoint")
 		return err
@@ -75,7 +102,7 @@ func e2eTestTraits(ctx context.Context) error {
 			return err
 		}
 		traitReq.Header.Set("X-Auth-Token", sc.TokenID)
-		traitReq.Header.Set("OpenStack-API-Version", "placement 1.6") // No "X-"!
+		traitReq.Header.Set("OpenStack-API-Version", apiVersion)
 		traitReq.Header.Set("Accept", "application/json")
 		traitResp, err := sc.HTTPClient.Do(traitReq)
 		if err != nil {
@@ -95,7 +122,6 @@ func e2eTestTraits(ctx context.Context) error {
 	}
 
 	// Test PUT /traits/{name}
-	const testTrait = "CUSTOM_CORTEX_PLACEMENT_SHIM_E2E_TEST_TRAIT"
 	log.Info("Testing PUT /traits/{name} endpoint of placement shim", "testTrait", testTrait)
 	req, err = http.NewRequestWithContext(ctx,
 		http.MethodPut, sc.Endpoint+"/traits/"+testTrait, http.NoBody)
@@ -105,7 +131,7 @@ func e2eTestTraits(ctx context.Context) error {
 		return err
 	}
 	req.Header.Set("X-Auth-Token", sc.TokenID)
-	req.Header.Set("OpenStack-API-Version", "placement 1.6") // No "X-"!
+	req.Header.Set("OpenStack-API-Version", apiVersion)
 	req.Header.Set("Accept", "application/json")
 	resp, err = sc.HTTPClient.Do(req)
 	if err != nil {
@@ -133,7 +159,7 @@ func e2eTestTraits(ctx context.Context) error {
 		return err
 	}
 	req.Header.Set("X-Auth-Token", sc.TokenID)
-	req.Header.Set("OpenStack-API-Version", "placement 1.6") // No "X-"!
+	req.Header.Set("OpenStack-API-Version", apiVersion)
 	req.Header.Set("Accept", "application/json")
 	resp, err = sc.HTTPClient.Do(req)
 	if err != nil {
