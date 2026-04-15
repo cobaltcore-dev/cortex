@@ -143,7 +143,14 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 
 	logger.V(1).Info("sending external scheduler request",
 		"url", c.URL,
-		"request", externalSchedulerRequest)
+		"pipeline", req.Pipeline,
+		"instanceUUID", req.InstanceUUID,
+		"flavorName", req.FlavorName,
+		"flavorExtraSpecs", req.FlavorExtraSpecs,
+		"eligibleHostsCount", len(req.EligibleHosts),
+		"ignoreHostsCount", len(req.IgnoreHosts),
+		"hasSchedulerHints", len(req.SchedulerHints) > 0,
+		"availabilityZone", req.AvailabilityZone)
 
 	// Marshal the request
 	reqBody, err := json.Marshal(externalSchedulerRequest)

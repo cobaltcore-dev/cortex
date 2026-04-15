@@ -331,7 +331,7 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 	// Log summary
 	summary.duration = time.Since(startTime)
 	summary.totalVMs = len(vms)
-	summary.totalReservations = len(failoverReservations)
+	summary.totalReservations = len(failoverReservations) + summary.totalCreated
 	requeueAfter := c.Config.ReconcileInterval.Duration
 	successCount := summary.totalCreated + summary.totalReused
 	madeProgress := successCount >= *c.Config.MinSuccessForShortInterval
