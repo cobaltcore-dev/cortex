@@ -178,7 +178,7 @@ func (c *CapacityCalculator) calculateInstanceCapacity(
 		FlavorName:       smallestFlavor.Name,
 		MemoryMB:         smallestFlavor.MemoryMB,
 		VCPUs:            smallestFlavor.VCPUs,
-		FlavorExtraSpecs: map[string]string{"hw_version": groupName},
+		FlavorExtraSpecs: smallestFlavor.ExtraSpecs,
 		AvailabilityZone: az,
 		Pipeline:         c.totalPipeline,
 	})
