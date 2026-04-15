@@ -76,7 +76,10 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context) (liquid.Serv
 
 	for groupName, groupData := range flavorGroups {
 		// Calculate per-AZ capacity using scheduler + HV CRDs
-		azCapacity := c.calculateAZCapacity(ctx, groupName, groupData, azs, hvByName)
+		azCapacity, err := c.calculateAZCapacity(ctx, groupName, groupData, azs, hvByName)
+		if err != nil {
+			return liquid.ServiceCapacityReport{}, fmt.Errorf("failed to calculate capacity for flavor group %s: %w", groupName, err)
+		}
 
 		// === 1. RAM Resource ===
 		ramResourceName := liquid.ResourceName(ResourceNameRAM(groupName))
@@ -121,18 +124,21 @@ func (c *CapacityCalculator) copyAZCapacity(
 // calculateAZCapacity computes capacity per AZ for a flavor group.
 // Uses one scheduler call per AZ to get eligible hosts, then reads HV CRDs for resource data.
 // On scheduler failure for an AZ, that AZ still gets an entry with capacity=0.
+// If all AZs fail, returns an error instead of a zero-capacity report.
 func (c *CapacityCalculator) calculateAZCapacity(
 	ctx context.Context,
 	groupName string,
 	groupData compute.FlavorGroupFeature,
 	azs []string,
 	hvByName map[string]hv1.Hypervisor,
-) map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport {
+) (map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, error) {
 
 	result := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport)
+	failures := 0
 	for _, az := range azs {
 		capacity, err := c.calculateInstanceCapacity(ctx, groupName, groupData, az, hvByName)
 		if err != nil {
+			failures++
 			LoggerFromContext(ctx).Error(err, "failed to calculate capacity for AZ, reporting 0",
 				"flavorGroup", groupName, "az", az)
 			// On failure, report az with capacity=0 rather than aborting entirely.
@@ -147,7 +153,13 @@ func (c *CapacityCalculator) calculateAZCapacity(
 			Usage:    Some[uint64](0), // Placeholder: usage=0 until actual calculation is implemented
 		}
 	}
-	return result
+
+	// If all AZs failed, return an error instead of a zero-capacity report
+	if failures == len(azs) && len(azs) > 0 {
+		return nil, fmt.Errorf("failed to calculate capacity for all AZs in flavor group %s", groupName)
+	}
+
+	return result, nil
 }
 
 // calculateInstanceCapacity returns the total capacity for a flavor group in an AZ.
@@ -191,6 +203,8 @@ func (c *CapacityCalculator) calculateInstanceCapacity(
 	for _, hostName := range resp.Hosts {
 		hv, ok := hvByName[hostName]
 		if !ok {
+			LoggerFromContext(ctx).Info("scheduler host not found in hypervisor CRDs, skipping",
+				"host", hostName, "az", az, "flavorGroup", groupName)
 			continue
 		}
 
@@ -222,7 +236,7 @@ func (c *CapacityCalculator) calculateInstanceCapacity(
 func (c *CapacityCalculator) getHostAZMap(ctx context.Context) (map[string]string, error) {
 	var knowledgeList v1alpha1.KnowledgeList
 	if err := c.client.List(ctx, &knowledgeList); err != nil {
-		return nil, fmt.Errorf("failed to list Knowledge CRDs: %w", err)
+		return nil, fmt.Errorf("failed to list knowledge CRDs: %w", err)
 	}
 
 	type hostAZEntry struct {
