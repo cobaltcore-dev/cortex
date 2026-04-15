@@ -101,6 +101,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/deployment
     annotations:
       summary: "`{{$labels.component}}` uses too much memory"
       description: >
@@ -117,6 +118,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/deployment
     annotations:
       summary: "`{{$labels.component}}` uses too much CPU"
       description: >
@@ -133,6 +135,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/database
     annotations:
       summary: "`{{$labels.component}}` is trying to connect to the database too often"
       description: >
@@ -148,6 +151,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/datasources
     annotations:
       summary: "`{{$labels.component}}` Sync not successful"
       description: >
@@ -167,6 +171,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/datasources
     annotations:
       summary: "`{{$labels.component}}` is not syncing any new data from `{{$labels.datasource}}`"
       description: >
@@ -626,6 +631,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/datasources
     annotations:
       summary: "New datasource `{{$labels.datasource}}` has not reconciled"
       description: >
@@ -644,6 +650,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/datasources
     annotations:
       summary: "Existing datasource `{{$labels.datasource}}` is lacking behind"
       description: >
@@ -698,7 +705,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
-      playbook: docs/support/playbook/cortex/alerts/reconciles
+      playbook: docs/support/playbook/cortex/alerts/datasources
     annotations:
       summary: "Controller {{ $labels.name }}'s backlog is not being drained."
       description: >
