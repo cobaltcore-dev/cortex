@@ -13,8 +13,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// e2eTestTraits is a test that sends a request to the /traits
-// endpoints of the placement shim.
+// e2eTestTraits tests the /traits and /traits/{name} endpoints.
 func e2eTestTraits(ctx context.Context) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running traits endpoint e2e test")
@@ -40,7 +39,7 @@ func e2eTestTraits(ctx context.Context) error {
 		return err
 	}
 	req.Header.Set("X-Auth-Token", sc.TokenID)
-	req.Header.Set("OpenStack-API-Version", "placement 1.29") // No "X-"!
+	req.Header.Set("OpenStack-API-Version", "placement 1.6") // No "X-"!
 	req.Header.Set("Accept", "application/json")
 	resp, err := sc.HTTPClient.Do(req)
 	if err != nil {
@@ -62,31 +61,31 @@ func e2eTestTraits(ctx context.Context) error {
 		return err
 	}
 	log.Info("Successfully retrieved traits from placement shim",
-		"traits", list.Traits)
+		"traits", len(list.Traits))
 
 	// Test GET /traits/{name}
 	log.Info("Testing GET /traits/{name} endpoint of placement shim")
-	for _, trait := range list.Traits[:4] { // Test only the first 4 traits to save time.
+	for _, trait := range list.Traits[:5] { // Test only the first 5 traits to save time.
 		log.Info("Testing trait", "trait", trait)
-		req, err := http.NewRequestWithContext(ctx,
+		traitReq, err := http.NewRequestWithContext(ctx,
 			http.MethodGet, sc.Endpoint+"/traits/"+trait, http.NoBody)
 		if err != nil {
 			log.Error(err, "failed to create request for traits/{name} endpoint",
 				"trait", trait)
 			return err
 		}
-		req.Header.Set("X-Auth-Token", sc.TokenID)
-		req.Header.Set("OpenStack-API-Version", "placement 1.29") // No "X-"!
-		req.Header.Set("Accept", "application/json")
-		resp, err := sc.HTTPClient.Do(req)
+		traitReq.Header.Set("X-Auth-Token", sc.TokenID)
+		traitReq.Header.Set("OpenStack-API-Version", "placement 1.6") // No "X-"!
+		traitReq.Header.Set("Accept", "application/json")
+		traitResp, err := sc.HTTPClient.Do(traitReq)
 		if err != nil {
 			log.Error(err, "failed to send request to placement shim /traits/{name} endpoint",
 				"trait", trait)
 			return err
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		defer traitResp.Body.Close()
+		if traitResp.StatusCode < 200 || traitResp.StatusCode >= 300 {
+			err := fmt.Errorf("unexpected status code: %d", traitResp.StatusCode)
 			log.Error(err, "placement shim /traits/{name} endpoint returned an error",
 				"trait", trait)
 			return err
@@ -106,7 +105,7 @@ func e2eTestTraits(ctx context.Context) error {
 		return err
 	}
 	req.Header.Set("X-Auth-Token", sc.TokenID)
-	req.Header.Set("OpenStack-API-Version", "placement 1.29") // No "X-"!
+	req.Header.Set("OpenStack-API-Version", "placement 1.6") // No "X-"!
 	req.Header.Set("Accept", "application/json")
 	resp, err = sc.HTTPClient.Do(req)
 	if err != nil {
@@ -124,9 +123,7 @@ func e2eTestTraits(ctx context.Context) error {
 	log.Info("Successfully created trait with placement shim /traits/{name} endpoint",
 		"trait", testTrait)
 
-	// Cleanup: delete the test trait we just created. This is not strictly
-	// necessary since the trait doesn't actually exist in the real placement
-	// service, but it's good hygiene.
+	// Test DELETE /traits/{name}
 	log.Info("Cleaning up test trait from placement shim", "testTrait", testTrait)
 	req, err = http.NewRequestWithContext(ctx,
 		http.MethodDelete, sc.Endpoint+"/traits/"+testTrait, http.NoBody)
@@ -136,7 +133,7 @@ func e2eTestTraits(ctx context.Context) error {
 		return err
 	}
 	req.Header.Set("X-Auth-Token", sc.TokenID)
-	req.Header.Set("OpenStack-API-Version", "placement 1.29") // No "X-"!
+	req.Header.Set("OpenStack-API-Version", "placement 1.6") // No "X-"!
 	req.Header.Set("Accept", "application/json")
 	resp, err = sc.HTTPClient.Do(req)
 	if err != nil {

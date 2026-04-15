@@ -120,7 +120,8 @@ func RunE2E(ctx context.Context) error {
 		log.Info("Starting e2e test",
 			"index", i+1, "total", len(e2eTests), "name", test.name)
 		start := time.Now()
-		if err := test.run(ctx); err != nil {
+		testCtx := logf.IntoContext(ctx, log.WithName(test.name))
+		if err := test.run(testCtx); err != nil {
 			log.Error(err, "FAIL e2e test",
 				"index", i+1, "total", len(e2eTests), "name", test.name,
 				"took_ms", time.Since(start).Milliseconds())
