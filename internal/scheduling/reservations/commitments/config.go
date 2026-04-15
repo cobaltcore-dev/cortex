@@ -28,12 +28,6 @@ type Config struct {
 	// SchedulerURL is the endpoint of the nova external scheduler
 	SchedulerURL string `json:"schedulerURL"`
 
-	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
-	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
-
-	// Secret ref to keystone credentials stored in a k8s secret.
-	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
-
 	// Secret ref to the database credentials for querying VM state.
 	DatabaseSecretRef *corev1.SecretReference `json:"databaseSecretRef,omitempty"`
 

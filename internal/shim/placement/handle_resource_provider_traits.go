@@ -5,8 +5,6 @@ package placement
 
 import (
 	"net/http"
-
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // HandleListResourceProviderTraits handles
@@ -17,13 +15,9 @@ import (
 // resource_provider_generation for concurrency tracking. Returns 404 if the
 // provider does not exist.
 func (s *Shim) HandleListResourceProviderTraits(w http.ResponseWriter, r *http.Request) {
-	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
-	if !ok {
+	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 	s.forward(w, r)
 }
 
@@ -38,13 +32,9 @@ func (s *Shim) HandleListResourceProviderTraits(w http.ResponseWriter, r *http.R
 // not returned by GET /traits). Returns 409 Conflict if the generation does
 // not match.
 func (s *Shim) HandleUpdateResourceProviderTraits(w http.ResponseWriter, r *http.Request) {
-	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
-	if !ok {
+	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 	s.forward(w, r)
 }
 
@@ -58,12 +48,8 @@ func (s *Shim) HandleUpdateResourceProviderTraits(w http.ResponseWriter, r *http
 // Returns 404 if the provider does not exist. Returns 409 Conflict on
 // concurrent modification. Returns 204 No Content on success.
 func (s *Shim) HandleDeleteResourceProviderTraits(w http.ResponseWriter, r *http.Request) {
-	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
-	if !ok {
+	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path, "uuid", uuid)
 	s.forward(w, r)
 }

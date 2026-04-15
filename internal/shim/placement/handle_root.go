@@ -5,8 +5,6 @@ package placement
 
 import (
 	"net/http"
-
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // HandleGetRoot handles GET / requests.
@@ -18,8 +16,5 @@ import (
 // supported by the running service. Clients use this endpoint to discover API
 // capabilities and negotiate microversions before making further requests.
 func (s *Shim) HandleGetRoot(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 	s.forward(w, r)
 }
