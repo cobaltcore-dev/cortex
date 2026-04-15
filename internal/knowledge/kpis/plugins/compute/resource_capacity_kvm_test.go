@@ -379,7 +379,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 						},
 						Traits: []string{
 							"CUSTOM_DECOMMISSIONING",
-							"CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED",
+							"CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE",
 						},
 					},
 				},

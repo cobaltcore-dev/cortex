@@ -26,7 +26,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 				Name: "host1",
 			},
 			Status: hv1.HypervisorStatus{
-				Traits: []string{"CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED"},
+				Traits: []string{"CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE"},
 			},
 		},
 		&hv1.Hypervisor{
@@ -34,7 +34,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 				Name: "host2",
 			},
 			Status: hv1.HypervisorStatus{
-				Traits: []string{"CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED", "SOME_OTHER_TRAIT"},
+				Traits: []string{"CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE", "SOME_OTHER_TRAIT"},
 			},
 		},
 		&hv1.Hypervisor{
@@ -58,7 +58,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 				Name: "host5",
 			},
 			Status: hv1.HypervisorStatus{
-				Traits: []string{"CUSTOM_EXTERNAL_CUSTOMER_SUPPORTED"},
+				Traits: []string{"CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE"},
 			},
 		},
 	}

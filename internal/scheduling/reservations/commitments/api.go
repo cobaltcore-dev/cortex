@@ -9,23 +9,38 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/external"
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// UsageNovaClient is a minimal interface for the Nova client needed by the usage API.
-// This allows for easy mocking in tests without implementing the full NovaClient interface.
-type UsageNovaClient interface {
-	ListProjectServers(ctx context.Context, projectID string) ([]nova.ServerDetail, error)
+// UsageDBClient is the minimal interface for querying VM usage data from Postgres.
+type UsageDBClient interface {
+	// ListProjectVMs returns all VMs for a project with their flavor data.
+	ListProjectVMs(ctx context.Context, projectID string) ([]VMRow, error)
+}
+
+// VMRow is the result of a joined server+flavor query from Postgres.
+type VMRow struct {
+	ID           string
+	Name         string
+	Status       string
+	Created      string
+	AZ           string
+	Hypervisor   string
+	FlavorName   string
+	FlavorRAM    uint64
+	FlavorVCPUs  uint64
+	FlavorDisk   uint64
+	FlavorExtras string // JSON string of flavor extra_specs
 }
 
 // HTTPAPI implements Limes LIQUID commitment validation endpoints.
 type HTTPAPI struct {
 	client          client.Client
 	config          Config
-	novaClient      UsageNovaClient
+	usageDB         UsageDBClient
 	monitor         ChangeCommitmentsAPIMonitor
 	usageMonitor    ReportUsageAPIMonitor
 	capacityMonitor ReportCapacityAPIMonitor
@@ -38,11 +53,20 @@ func NewAPI(client client.Client) *HTTPAPI {
 	return NewAPIWithConfig(client, DefaultConfig(), nil)
 }
 
-func NewAPIWithConfig(client client.Client, config Config, novaClient UsageNovaClient) *HTTPAPI {
+// NewAPIWithConfig creates an HTTPAPI. If usageDB is nil and config.DatabaseSecretRef
+// is set, a lazy-connecting PostgresReader-backed client is created automatically.
+func NewAPIWithConfig(k8sClient client.Client, config Config, usageDB UsageDBClient) *HTTPAPI {
+	if usageDB == nil && config.DatabaseSecretRef != nil {
+		reader := &external.PostgresReader{
+			Client:            k8sClient,
+			DatabaseSecretRef: *config.DatabaseSecretRef,
+		}
+		usageDB = NewDBUsageClient(reader)
+	}
 	return &HTTPAPI{
-		client:          client,
+		client:          k8sClient,
 		config:          config,
-		novaClient:      novaClient,
+		usageDB:         usageDB,
 		monitor:         NewChangeCommitmentsAPIMonitor(),
 		usageMonitor:    NewReportUsageAPIMonitor(),
 		capacityMonitor: NewReportCapacityAPIMonitor(),

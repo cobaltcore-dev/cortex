@@ -49,7 +49,13 @@ jobs:
           go test -v \
             -coverpkg=./internal/... \
             -coverprofile=profile.cov ./internal/...
-          go tool cover -func profile.cov > func_coverage.txt
+
+          # Exclude e2e files from the coverage profile so they don't
+          # count against the coverage percentage.
+          head -1 profile.cov > profile_filtered.cov
+          tail -n +2 profile.cov | grep -v '_e2e\.go' >> profile_filtered.cov || true
+
+          go tool cover -func profile_filtered.cov > func_coverage.txt
 
       - name: Upload coverage files
         uses: actions/upload-artifact@v7
@@ -60,7 +66,7 @@ jobs:
       # Steps below are only executed if the workflow is triggered by a pull request
       - name: Delete old coverage comments (PR only)
         if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const { data: comments } = await github.rest.issues.listComments({
@@ -86,7 +92,7 @@ jobs:
           path: .
       - name: Post coverage comment (PR only)
         if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         # For external contributors, posting comments fail due to permission issues.
         continue-on-error: true
         with:

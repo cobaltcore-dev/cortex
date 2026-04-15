@@ -729,11 +729,12 @@ type VM struct {
 }
 
 type TestFlavor struct {
-	Name     string
-	Group    string
-	MemoryMB int64
-	VCPUs    int64
-	DiskGB   uint64
+	Name        string
+	Group       string
+	MemoryMB    int64
+	VCPUs       int64
+	DiskGB      uint64
+	VideoRAMMiB *uint64 // optional, from flavor extra_specs hw_video:ram_max_mb
 }
 
 func (f *TestFlavor) ToFlavorInGroup() compute.FlavorInGroup {
@@ -741,14 +742,18 @@ func (f *TestFlavor) ToFlavorInGroup() compute.FlavorInGroup {
 	if diskGB == 0 {
 		diskGB = defaultFlavorDiskGB
 	}
+	extraSpecs := map[string]string{
+		"quota:hw_version": f.Group,
+	}
+	if f.VideoRAMMiB != nil {
+		extraSpecs["hw_video:ram_max_mb"] = strconv.FormatUint(*f.VideoRAMMiB, 10)
+	}
 	return compute.FlavorInGroup{
-		Name:     f.Name,
-		MemoryMB: uint64(f.MemoryMB), //nolint:gosec // test values are always positive
-		VCPUs:    uint64(f.VCPUs),    //nolint:gosec // test values are always positive
-		DiskGB:   diskGB,
-		ExtraSpecs: map[string]string{
-			"quota:hw_version": f.Group,
-		},
+		Name:       f.Name,
+		MemoryMB:   uint64(f.MemoryMB), //nolint:gosec // test values are always positive
+		VCPUs:      uint64(f.VCPUs),    //nolint:gosec // test values are always positive
+		DiskGB:     diskGB,
+		ExtraSpecs: extraSpecs,
 	}
 }
 

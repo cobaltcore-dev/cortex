@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -20,10 +21,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
@@ -96,13 +97,18 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	if meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ReservationConditionReady) {
 		logger.V(1).Info("reservation is active, verifying allocations")
 
-		// Verify all allocations in Spec against actual VM state from database
-		if err := r.reconcileAllocations(ctx, &res); err != nil {
+		// Verify all allocations in Spec against actual VM state
+		result, err := r.reconcileAllocations(ctx, &res)
+		if err != nil {
 			logger.Error(err, "failed to reconcile allocations")
 			return ctrl.Result{}, err
 		}
 
-		// Requeue periodically to keep verifying allocations
+		// Requeue with appropriate interval based on allocation state
+		// Use shorter interval if there are allocations in grace period for faster verification
+		if result.HasAllocationsInGracePeriod {
+			return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalGracePeriod}, nil
+		}
 		return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalActive}, nil
 	}
 
@@ -322,82 +328,149 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	return ctrl.Result{}, nil
 }
 
-// reconcileAllocations verifies all allocations in Spec against actual Nova VM state.
-// It updates Status.Allocations based on the actual host location of each VM.
-func (r *CommitmentReservationController) reconcileAllocations(ctx context.Context, res *v1alpha1.Reservation) error {
+// reconcileAllocationsResult holds the outcome of allocation reconciliation.
+type reconcileAllocationsResult struct {
+	// HasAllocationsInGracePeriod is true if any allocations are still in grace period.
+	HasAllocationsInGracePeriod bool
+}
+
+// reconcileAllocations verifies all allocations in Spec against actual VM state using the
+// Hypervisor CRD as the sole source of truth.
+//
+// For new allocations (within grace period): the VM may not yet appear in the HV CRD
+// (still spawning), so we skip verification and requeue with a short interval.
+// For older allocations: we check the HV CRD; VMs not found are considered leaving and
+// removed from the reservation.
+func (r *CommitmentReservationController) reconcileAllocations(ctx context.Context, res *v1alpha1.Reservation) (*reconcileAllocationsResult, error) {
 	logger := LoggerFromContext(ctx).WithValues("component", "controller")
+	result := &reconcileAllocationsResult{}
+	now := time.Now()
 
 	// Skip if no CommittedResourceReservation
 	if res.Spec.CommittedResourceReservation == nil {
-		return nil
+		return result, nil
 	}
-
-	// TODO trigger migrations of unused reservations (to PAYG VMs)
 
 	// Skip if no allocations to verify
 	if len(res.Spec.CommittedResourceReservation.Allocations) == 0 {
 		logger.V(1).Info("no allocations to verify", "reservation", res.Name)
-		return nil
+		return result, nil
 	}
 
-	// Query all VMs for this project from the database
-	projectID := res.Spec.CommittedResourceReservation.ProjectID
-	serverMap, err := r.listServersByProjectID(ctx, projectID)
-	if err != nil {
-		return fmt.Errorf("failed to list servers for project %s: %w", projectID, err)
+	expectedHost := res.Status.Host
+
+	// Fetch the Hypervisor CRD for the expected host.
+	var hypervisor hv1.Hypervisor
+	hvInstanceSet := make(map[string]bool)
+	if expectedHost != "" {
+		if err := r.Get(ctx, client.ObjectKey{Name: expectedHost}, &hypervisor); err != nil {
+			if client.IgnoreNotFound(err) != nil {
+				return nil, fmt.Errorf("failed to get hypervisor %s: %w", expectedHost, err)
+			}
+			// Hypervisor not found — treat all post-grace-period VMs as stale.
+			logger.Info("hypervisor CRD not found", "host", expectedHost)
+		} else {
+			// Build set of all VM UUIDs on this hypervisor for O(1) lookup.
+			// Include both active and inactive VMs — stopped/shelved VMs still hold the slot.
+			for _, inst := range hypervisor.Status.Instances {
+				hvInstanceSet[inst.ID] = true
+			}
+			logger.V(1).Info("fetched hypervisor instances", "host", expectedHost, "instanceCount", len(hvInstanceSet))
+		}
 	}
 
-	// initialize
+	// Initialize status
 	if res.Status.CommittedResourceReservation == nil {
 		res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{}
 	}
 
-	// Build new Status.Allocations map based on actual VM locations
+	// Build new Status.Allocations map based on HV CRD state.
 	newStatusAllocations := make(map[string]string)
+	// Track allocations to remove from Spec (stale/leaving VMs).
+	var allocationsToRemove []string
 
-	for vmUUID := range res.Spec.CommittedResourceReservation.Allocations {
-		server, exists := serverMap[vmUUID]
-		if exists {
-			// VM found - record its actual host location
-			actualHost := server.OSEXTSRVATTRHost
-			newStatusAllocations[vmUUID] = actualHost
+	for vmUUID, allocation := range res.Spec.CommittedResourceReservation.Allocations {
+		allocationAge := now.Sub(allocation.CreationTimestamp.Time)
+		isInGracePeriod := allocationAge < r.Conf.AllocationGracePeriod
 
-			logger.V(1).Info("verified VM allocation",
+		if isInGracePeriod {
+			// New allocation: VM may not yet appear in the HV CRD (still spawning).
+			// Signal to requeue with the short grace-period interval; skip verification.
+			result.HasAllocationsInGracePeriod = true
+			logger.V(1).Info("allocation in grace period, deferring verification",
 				"vm", vmUUID,
-				"actualHost", actualHost,
-				"expectedHost", res.Status.Host)
+				"allocationAge", allocationAge)
+			continue
+		}
+
+		// Post-grace-period: use HV CRD as authoritative source.
+		if hvInstanceSet[vmUUID] {
+			newStatusAllocations[vmUUID] = expectedHost
+			logger.V(1).Info("verified VM allocation via Hypervisor CRD",
+				"vm", vmUUID,
+				"host", expectedHost)
 		} else {
-			// VM not found in database
-			logger.Info("VM not found in database",
+			allocationsToRemove = append(allocationsToRemove, vmUUID)
+			logger.Info("removing stale allocation (VM not found on hypervisor)",
 				"vm", vmUUID,
 				"reservation", res.Name,
-				"projectID", projectID)
-
-			// TODO handle entering and leave event
+				"expectedHost", expectedHost,
+				"allocationAge", allocationAge,
+				"gracePeriod", r.Conf.AllocationGracePeriod)
 		}
 	}
 
-	// Patch the reservation status
+	// Patch the reservation
 	old := res.DeepCopy()
+	specChanged := false
+
+	// Remove stale allocations from Spec
+	if len(allocationsToRemove) > 0 {
+		for _, vmUUID := range allocationsToRemove {
+			delete(res.Spec.CommittedResourceReservation.Allocations, vmUUID)
+		}
+		specChanged = true
+	}
 
 	// Update Status.Allocations
 	res.Status.CommittedResourceReservation.Allocations = newStatusAllocations
 
+	// Patch Spec if changed (stale allocations removed)
+	if specChanged {
+		if err := r.Patch(ctx, res, client.MergeFrom(old)); err != nil {
+			if client.IgnoreNotFound(err) == nil {
+				return result, nil
+			}
+			return nil, fmt.Errorf("failed to patch reservation spec: %w", err)
+		}
+		// Re-fetch to get the updated resource version for status patch
+		if err := r.Get(ctx, client.ObjectKeyFromObject(res), res); err != nil {
+			if client.IgnoreNotFound(err) == nil {
+				return result, nil
+			}
+			return nil, fmt.Errorf("failed to re-fetch reservation: %w", err)
+		}
+		// Re-apply the status update that was overwritten by the re-fetch.
+		res.Status.CommittedResourceReservation.Allocations = newStatusAllocations
+		old = res.DeepCopy()
+	}
+
+	// Patch Status
 	patch := client.MergeFrom(old)
 	if err := r.Status().Patch(ctx, res, patch); err != nil {
-		// Ignore not-found errors during background deletion
 		if client.IgnoreNotFound(err) == nil {
-			// Object was deleted, no need to continue
-			return nil
+			return result, nil
 		}
-		return fmt.Errorf("failed to patch reservation status: %w", err)
+		return nil, fmt.Errorf("failed to patch reservation status: %w", err)
 	}
 
 	logger.V(1).Info("reconciled allocations",
 		"specAllocations", len(res.Spec.CommittedResourceReservation.Allocations),
-		"statusAllocations", len(newStatusAllocations))
+		"statusAllocations", len(newStatusAllocations),
+		"removedAllocations", len(allocationsToRemove),
+		"hasAllocationsInGracePeriod", result.HasAllocationsInGracePeriod)
 
-	return nil
+	return result, nil
 }
 
 // getPipelineForFlavorGroup returns the pipeline name for a given flavor group.
@@ -414,6 +487,31 @@ func (r *CommitmentReservationController) getPipelineForFlavorGroup(flavorGroupN
 
 	logger.Info("no pipeline configured for flavor group, using default", "flavorGroup", flavorGroupName, "defaultPipeline", r.Conf.PipelineDefault)
 	return r.Conf.PipelineDefault
+}
+
+// hypervisorToReservations maps a Hypervisor change event to the set of CR reservations
+// assigned to that host. Used as the event handler for the Hypervisor CRD watch so that
+// when the hypervisor operator updates Status.Instances, affected reservations are
+// immediately enqueued for reconciliation.
+func (r *CommitmentReservationController) hypervisorToReservations(ctx context.Context, obj client.Object) []reconcile.Request {
+	hvName := obj.GetName()
+	var reservationList v1alpha1.ReservationList
+	if err := r.List(ctx, &reservationList,
+		client.MatchingFields{indexReservationByStatusHost: hvName},
+	); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to list reservations for hypervisor", "hypervisor", hvName)
+		return nil
+	}
+	requests := make([]reconcile.Request, 0, len(reservationList.Items))
+	for _, res := range reservationList.Items {
+		if res.Spec.Type != v1alpha1.ReservationTypeCommittedResource {
+			continue
+		}
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{Name: res.Name, Namespace: res.Namespace},
+		})
+	}
+	return requests
 }
 
 // Init initializes the reconciler with required clients and DB connection.
@@ -433,35 +531,6 @@ func (r *CommitmentReservationController) Init(ctx context.Context, client clien
 	logf.FromContext(ctx).Info("scheduler client initialized for commitment reservation controller", "url", conf.SchedulerURL)
 
 	return nil
-}
-
-func (r *CommitmentReservationController) listServersByProjectID(ctx context.Context, projectID string) (map[string]*nova.Server, error) {
-	if r.DB == nil {
-		return nil, errors.New("database connection not initialized")
-	}
-
-	logger := LoggerFromContext(ctx).WithValues("component", "controller")
-
-	// Query servers from the database cache.
-	var servers []nova.Server
-	_, err := r.DB.Select(&servers,
-		"SELECT * FROM openstack_servers WHERE tenant_id = $1",
-		projectID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query servers from database: %w", err)
-	}
-
-	logger.V(1).Info("queried servers from database",
-		"projectID", projectID,
-		"serverCount", len(servers))
-
-	// Build lookup map for O(1) access by VM UUID.
-	serverMap := make(map[string]*nova.Server, len(servers))
-	for i := range servers {
-		serverMap[servers[i].ID] = &servers[i]
-	}
-
-	return serverMap, nil
 }
 
 // commitmentReservationPredicate filters to only watch commitment reservations.
@@ -498,6 +567,10 @@ var commitmentReservationPredicate = predicate.Funcs{
 	},
 }
 
+// indexReservationByStatusHost is the field index key for Reservation.Status.Host.
+// Used by the Hypervisor→Reservation mapper to efficiently look up reservations on a given host.
+const indexReservationByStatusHost = ".status.host"
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
@@ -509,6 +582,22 @@ func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl
 		return err
 	}
 
+	// Index reservations by Status.Host so the HV mapper can do O(1) lookups.
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&v1alpha1.Reservation{},
+		indexReservationByStatusHost,
+		func(obj client.Object) []string {
+			res := obj.(*v1alpha1.Reservation)
+			if res.Status.Host == "" {
+				return nil
+			}
+			return []string{res.Status.Host}
+		},
+	); err != nil {
+		return fmt.Errorf("failed to index reservations by status host: %w", err)
+	}
+
 	// Use WatchesMulticluster to watch Reservations across all configured clusters
 	// (home + remotes). This is required because Reservation CRDs may be stored
 	// in remote clusters, not just the home cluster. Without this, the controller
@@ -518,6 +607,19 @@ func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl
 		&v1alpha1.Reservation{},
 		&handler.EnqueueRequestForObject{},
 		commitmentReservationPredicate,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Watch Hypervisor CRDs reactively: when the hypervisor operator updates
+	// Status.Instances (VM appeared or disappeared), enqueue all reservations
+	// assigned to that host. This replaces periodic polling for the established-VM
+	// verification path — changes are detected in seconds rather than up to
+	// RequeueIntervalActive. RequeueIntervalActive remains as a safety-net fallback.
+	bldr, err = bldr.WatchesMulticluster(
+		&hv1.Hypervisor{},
+		handler.EnqueueRequestsFromMapFunc(r.hypervisorToReservations),
 	)
 	if err != nil {
 		return err

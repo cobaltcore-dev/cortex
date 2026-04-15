@@ -38,33 +38,30 @@ func TestFlavorRunningVMsKPI_Collect(t *testing.T) {
 	}
 
 	mockData := []any{
+		// VMware flavor (no "_k_" segment)
 		&nova.Server{
 			ID:                    "id-1",
-			FlavorName:            "small",
+			FlavorName:            "small_vmware_flavor",
 			OSEXTAvailabilityZone: "zone1",
 			TenantID:              "project-1",
 		},
+		// KVM flavor ("_k_" as second segment)
 		&nova.Server{
 			ID:                    "id-2",
-			FlavorName:            "medium",
+			FlavorName:            "medium_k_flavor",
 			OSEXTAvailabilityZone: "zone1",
 			TenantID:              "project-1",
 		},
 		&nova.Server{
 			ID:                    "id-3",
-			FlavorName:            "medium",
-			OSEXTAvailabilityZone: "zone2",
+			FlavorName:            "medium_k_flavor",
+			OSEXTAvailabilityZone: "zone1",
 			TenantID:              "project-1",
 		},
+		// Another VMware flavor in a different zone and project
 		&nova.Server{
 			ID:                    "id-4",
-			FlavorName:            "medium",
-			OSEXTAvailabilityZone: "zone2",
-			TenantID:              "project-1",
-		},
-		&nova.Server{
-			ID:                    "id-5",
-			FlavorName:            "medium",
+			FlavorName:            "large_vmware_flavor",
 			OSEXTAvailabilityZone: "zone2",
 			TenantID:              "project-2",
 		},
@@ -98,9 +95,10 @@ func TestFlavorRunningVMsKPI_Collect(t *testing.T) {
 		RunningVMs       float64
 		ProjectID        string
 		ProjectName      string
+		HypervisorFamily string
 	}
 
-	metrics := make(map[string]FlavorRunningVMsMetric, 0)
+	metrics := make(map[string]FlavorRunningVMsMetric)
 
 	for metric := range ch {
 		var m prometheusgo.Metric
@@ -117,6 +115,7 @@ func TestFlavorRunningVMsKPI_Collect(t *testing.T) {
 		availabilityZone := labels["availability_zone"]
 		projectID := labels["project_id"]
 		projectName := labels["project_name"]
+		hypervisorFamily := labels["hypervisor_family"]
 
 		key := flavor + "|" + availabilityZone + "|" + projectID
 
@@ -126,37 +125,34 @@ func TestFlavorRunningVMsKPI_Collect(t *testing.T) {
 			ProjectID:        projectID,
 			ProjectName:      projectName,
 			RunningVMs:       m.GetGauge().GetValue(),
+			HypervisorFamily: hypervisorFamily,
 		}
 	}
 
 	expectedMetrics := map[string]FlavorRunningVMsMetric{
-		"small|zone1|project-1": {
-			FlavorName:       "small",
+		"small_vmware_flavor|zone1|project-1": {
+			FlavorName:       "small_vmware_flavor",
 			AvailabilityZone: "zone1",
 			ProjectID:        "project-1",
 			ProjectName:      "Project One",
 			RunningVMs:       1,
+			HypervisorFamily: "vmware",
 		},
-		"medium|zone1|project-1": {
-			FlavorName:       "medium",
+		"medium_k_flavor|zone1|project-1": {
+			FlavorName:       "medium_k_flavor",
 			AvailabilityZone: "zone1",
-			ProjectID:        "project-1",
-			ProjectName:      "Project One",
-			RunningVMs:       1,
-		},
-		"medium|zone2|project-1": {
-			FlavorName:       "medium",
-			AvailabilityZone: "zone2",
 			ProjectID:        "project-1",
 			ProjectName:      "Project One",
 			RunningVMs:       2,
+			HypervisorFamily: "kvm",
 		},
-		"medium|zone2|project-2": {
-			FlavorName:       "medium",
+		"large_vmware_flavor|zone2|project-2": {
+			FlavorName:       "large_vmware_flavor",
 			AvailabilityZone: "zone2",
-			RunningVMs:       1,
 			ProjectID:        "project-2",
 			ProjectName:      "Project Two",
+			RunningVMs:       1,
+			HypervisorFamily: "vmware",
 		},
 	}
 
@@ -166,9 +162,28 @@ func TestFlavorRunningVMsKPI_Collect(t *testing.T) {
 			t.Errorf("expected metric %q not found", key)
 			continue
 		}
-
 		if !reflect.DeepEqual(expected, actual) {
 			t.Errorf("metric %q: expected %+v, got %+v", key, expected, actual)
+		}
+	}
+}
+
+func TestKVMFlavorPattern(t *testing.T) {
+	tests := []struct {
+		flavor string
+		isKVM  bool
+	}{
+		{"x_k_c89_m7890_v2", true},
+		{"x_k_c89_m7890", true},
+		{"x_v_c12_m3456", false},
+		{"x_kvm_c12_m3456", false}, // "kvm" != "k"
+		{"k_c12_m3456", false},     // "k" must be second segment
+		{"", false},
+	}
+	for _, tc := range tests {
+		got := kvmFlavorPattern.MatchString(tc.flavor)
+		if got != tc.isKVM {
+			t.Errorf("kvmFlavorPattern.MatchString(%q) = %v, want %v", tc.flavor, got, tc.isKVM)
 		}
 	}
 }
