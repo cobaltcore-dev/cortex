@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/google/uuid"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/google/uuid"
 	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"sigs.k8s.io/controller-runtime/pkg/client"
