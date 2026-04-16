@@ -52,33 +52,8 @@ func (k *VMwareResourceCommitmentsKPI) Collect(ch chan<- prometheus.Metric) {
 	k.collectUnusedCommitments(ch)
 }
 
-func (k *VMwareResourceCommitmentsKPI) collectUnusedCommitments(ch chan<- prometheus.Metric) {
-	if k.DB == nil {
-		return
-	}
-	// Load confirmed/guaranteed instance commitments.
-	var commitments []limes.Commitment
-	if _, err := k.DB.Select(&commitments, `
-		SELECT * FROM `+limes.Commitment{}.TableName()+`
-		WHERE service_type = 'compute'
-		  AND resource_name LIKE 'instances_%'
-		  AND status IN ('confirmed', 'guaranteed')
-	`); err != nil {
-		slog.Error("unused_commitments: failed to load commitments", "err", err)
-		return
-	}
-
-	// Load flavors for capacity lookup.
-	var flavors []nova.Flavor
-	if _, err := k.DB.Select(&flavors, "SELECT * FROM "+nova.Flavor{}.TableName()); err != nil {
-		slog.Error("unused_commitments: failed to load flavors", "err", err)
-		return
-	}
-	flavorsByName := make(map[string]nova.Flavor, len(flavors))
-	for _, flavor := range flavors {
-		flavorsByName[flavor.Name] = flavor
-	}
-
+// getRunningHANAServers loads all running HANA servers from the database. We consider a server "running" if its status is not DELETED or ERROR.
+func (k *VMwareResourceCommitmentsKPI) getRunningHANAServers() ([]nova.Server, error) {
 	// Load running HANA servers (non-deleted, non-error).
 	var servers []nova.Server
 	if _, err := k.DB.Select(&servers, `
@@ -86,20 +61,69 @@ func (k *VMwareResourceCommitmentsKPI) collectUnusedCommitments(ch chan<- promet
 		WHERE flavor_name LIKE 'hana_%'
 		  AND status NOT IN ('DELETED', 'ERROR')
 	`); err != nil {
-		slog.Error("unused_commitments: failed to load servers", "err", err)
-		return
+		return nil, err
 	}
-	// runningCount: (project_id, flavor_name, az) -> count
-	type serverKey struct{ projectID, flavorName, az string }
-	runningCount := make(map[serverKey]uint64)
-	for _, server := range servers {
-		key := serverKey{server.TenantID, server.FlavorName, server.OSEXTAvailabilityZone}
-		runningCount[key]++
+	return servers, nil
+}
+
+// getFlavorsByName loads all flavors from the database and returns a map of flavor name to flavor struct for easy lookup.
+func (k *VMwareResourceCommitmentsKPI) getFlavorsByName() (map[string]nova.Flavor, error) {
+	var flavors []nova.Flavor
+	if _, err := k.DB.Select(&flavors, "SELECT * FROM "+nova.Flavor{}.TableName()); err != nil {
+		return nil, err
+	}
+	flavorsByName := make(map[string]nova.Flavor, len(flavors))
+	for _, flavor := range flavors {
+		flavorsByName[flavor.Name] = flavor
+	}
+	return flavorsByName, nil
+}
+
+// getInstanceCommitments loads all confirmed or guaranteed instance commitments from the database.
+func (k *VMwareResourceCommitmentsKPI) getInstanceCommitments() ([]limes.Commitment, error) {
+	var commitments []limes.Commitment
+	if _, err := k.DB.Select(&commitments, `
+		SELECT * FROM `+limes.Commitment{}.TableName()+`
+		WHERE service_type = 'compute'
+		  AND resource_name LIKE 'instances_%'
+		  AND status IN ('confirmed', 'guaranteed')
+	`); err != nil {
+		return nil, err
+	}
+	return commitments, nil
+}
+
+// cpuArchitectureForFlavor returns the CPU architecture label for a HANA flavor name.
+// Flavors with a "_v2" suffix run on sapphire-rapids; all others are cascade-lake.
+func cpuArchitectureForFlavor(flavorName string) string {
+	if strings.HasSuffix(flavorName, "_v2") {
+		return "sapphire-rapids"
+	}
+	return "cascade-lake"
+}
+
+// resourceKey identifies an aggregated capacity bucket by (resource, az, architecture).
+type resourceKey struct{ resource, az, architecture string }
+
+// calculateUnusedInstanceCapacity computes per-(resource, az, architecture) capacity sums for unused
+// HANA VMware commitments. It filters out non-HANA and KVM (hana_k_) commitments, then for each
+// (project, flavor, az, architecture) bucket subtracts running servers from committed amount; over-used
+// buckets are clamped to zero and omitted from the result.
+func calculateUnusedInstanceCapacity(
+	commitments []limes.Commitment,
+	servers []nova.Server,
+	flavorsByName map[string]nova.Flavor,
+) map[resourceKey]float64 {
+	// running: (project_id, flavor_name, az) -> count of non-deleted/non-error servers.
+	type serverCountKey struct{ projectID, flavorName, az string }
+	running := make(map[serverCountKey]uint64, len(servers))
+	for _, s := range servers {
+		running[serverCountKey{s.TenantID, s.FlavorName, s.OSEXTAvailabilityZone}]++
 	}
 
-	// committed: (project_id, flavor_name, az, cpuArchitecture) -> total committed amount
-	type commitKey struct{ projectID, flavorName, az, cpuArchitecture string }
-	committed := make(map[commitKey]uint64)
+	// committed: (project_id, flavor_name, az, cpuArchitecture) -> total committed amount.
+	type commitmentKey struct{ projectID, flavorName, az, cpuArchitecture string }
+	committed := make(map[commitmentKey]uint64)
 	for _, c := range commitments {
 		flavorName := strings.TrimPrefix(c.ResourceName, "instances_")
 		if !strings.HasPrefix(flavorName, "hana_") {
@@ -109,35 +133,56 @@ func (k *VMwareResourceCommitmentsKPI) collectUnusedCommitments(ch chan<- promet
 			slog.Debug("unused_commitments: skipping hana kvm commitment", "flavor", flavorName, "project_id", c.ProjectID)
 			continue
 		}
-		cpuArchitecture := "cascade-lake"
-		if strings.HasSuffix(flavorName, "_v2") {
-			cpuArchitecture = "sapphire-rapids"
-		}
-		key := commitKey{c.ProjectID, flavorName, c.AvailabilityZone, cpuArchitecture}
+		key := commitmentKey{c.ProjectID, flavorName, c.AvailabilityZone, cpuArchitectureForFlavor(flavorName)}
 		committed[key] += c.Amount
 	}
 
-	// For each (project, flavor, az, arch): unused = max(0, committed - running).
-	// Accumulate capacity into sumByResource: (resource, az, arch) -> value.
-	type resourceKey struct{ resource, az, arch string }
-	sumByResource := make(map[resourceKey]float64)
+	sum := make(map[resourceKey]float64)
 	for ck, total := range committed {
-		sk := serverKey{ck.projectID, ck.flavorName, ck.az}
-		running := runningCount[sk]
-
-		if running >= total {
+		run := running[serverCountKey{ck.projectID, ck.flavorName, ck.az}]
+		if run >= total {
 			continue
 		}
-		unused := total - running
+		unused := total - run
 		flavor, ok := flavorsByName[ck.flavorName]
 		if !ok {
 			slog.Warn("unused_commitments: flavor not found in flavor table", "flavor", ck.flavorName)
 			continue
 		}
-		sumByResource[resourceKey{"cpu", ck.az, ck.cpuArchitecture}] += float64(unused) * float64(flavor.VCPUs)
-		sumByResource[resourceKey{"ram", ck.az, ck.cpuArchitecture}] += float64(unused) * float64(flavor.RAM)
-		sumByResource[resourceKey{"disk", ck.az, ck.cpuArchitecture}] += float64(unused) * float64(flavor.Disk)
+		sum[resourceKey{"cpu", ck.az, ck.cpuArchitecture}] += float64(unused) * float64(flavor.VCPUs)
+		sum[resourceKey{"ram", ck.az, ck.cpuArchitecture}] += float64(unused) * float64(flavor.RAM)
+		sum[resourceKey{"disk", ck.az, ck.cpuArchitecture}] += float64(unused) * float64(flavor.Disk)
 	}
+	return sum
+}
+
+func (k *VMwareResourceCommitmentsKPI) collectUnusedCommitments(ch chan<- prometheus.Metric) {
+	if k.DB == nil {
+		return
+	}
+
+	// Load confirmed/guaranteed instance commitments.
+	commitments, err := k.getInstanceCommitments()
+	if err != nil {
+		slog.Error("unused_commitments: failed to load commitments", "err", err)
+		return
+	}
+
+	// Load flavors for capacity lookup.
+	flavorsByName, err := k.getFlavorsByName()
+	if err != nil {
+		slog.Error("unused_commitments: failed to load flavors", "err", err)
+		return
+	}
+
+	// Load running HANA servers.
+	servers, err := k.getRunningHANAServers()
+	if err != nil {
+		slog.Error("unused_commitments: failed to get running HANA servers", "err", err)
+		return
+	}
+
+	sumByResource := calculateUnusedInstanceCapacity(commitments, servers, flavorsByName)
 
 	for rk, value := range sumByResource {
 		ch <- prometheus.MustNewConstMetric(
@@ -146,7 +191,7 @@ func (k *VMwareResourceCommitmentsKPI) collectUnusedCommitments(ch chan<- promet
 			value,
 			rk.resource,
 			rk.az,
-			rk.arch,
+			rk.architecture,
 		)
 	}
 }

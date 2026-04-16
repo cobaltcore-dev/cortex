@@ -19,6 +19,134 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+func TestCPUArchitectureForFlavor(t *testing.T) {
+	tests := []struct {
+		flavorName string
+		want       string
+	}{
+		{"hana_small", "cascade-lake"},
+		{"hana_large", "cascade-lake"},
+		{"hana_small_v2", "sapphire-rapids"},
+		{"hana_large_v2", "sapphire-rapids"},
+		{"hana_v2_extra", "cascade-lake"}, // _v2 must be a suffix
+		{"hana_x_v2", "sapphire-rapids"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.flavorName, func(t *testing.T) {
+			got := cpuArchitectureForFlavor(tt.flavorName)
+			if got != tt.want {
+				t.Errorf("cpuArchitectureForFlavor(%q) = %q, want %q", tt.flavorName, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCalculateUnusedInstanceCapacity(t *testing.T) {
+	flavors := map[string]nova.Flavor{
+		"hana_small":    {VCPUs: 4, RAM: 16384, Disk: 100},
+		"hana_large_v2": {VCPUs: 16, RAM: 65536, Disk: 400},
+	}
+
+	t.Run("basic unused", func(t *testing.T) {
+		commitments := []limes.Commitment{
+			{ProjectID: "p1", ResourceName: "instances_hana_small", AvailabilityZone: "az1", Amount: 3},
+		}
+		servers := []nova.Server{
+			{TenantID: "p1", FlavorName: "hana_small", OSEXTAvailabilityZone: "az1"}, // 1 running -> 2 unused
+		}
+		got := calculateUnusedInstanceCapacity(commitments, servers, flavors)
+
+		if got[resourceKey{"cpu", "az1", "cascade-lake"}] != 8 { // 2 * 4
+			t.Errorf("expected cpu=8, got %v", got[resourceKey{"cpu", "az1", "cascade-lake"}])
+		}
+		if got[resourceKey{"ram", "az1", "cascade-lake"}] != 32768 { // 2 * 16384
+			t.Errorf("expected ram=32768, got %v", got[resourceKey{"ram", "az1", "cascade-lake"}])
+		}
+		if got[resourceKey{"disk", "az1", "cascade-lake"}] != 200 { // 2 * 100
+			t.Errorf("expected disk=200, got %v", got[resourceKey{"disk", "az1", "cascade-lake"}])
+		}
+	})
+
+	t.Run("non-hana and kvm commitments are skipped", func(t *testing.T) {
+		commitments := []limes.Commitment{
+			{ProjectID: "p1", ResourceName: "instances_hana_k_foo", AvailabilityZone: "az1", Amount: 5},
+			{ProjectID: "p2", ResourceName: "instances_general_medium", AvailabilityZone: "az1", Amount: 3},
+		}
+		got := calculateUnusedInstanceCapacity(commitments, nil, flavors)
+		if len(got) != 0 {
+			t.Errorf("expected no metrics for kvm/non-hana commitments, got %v", got)
+		}
+	})
+
+	t.Run("amounts for the same key are summed", func(t *testing.T) {
+		commitments := []limes.Commitment{
+			{ProjectID: "p1", ResourceName: "instances_hana_small", AvailabilityZone: "az1", Amount: 3},
+			{ProjectID: "p1", ResourceName: "instances_hana_small", AvailabilityZone: "az1", Amount: 2},
+		}
+		got := calculateUnusedInstanceCapacity(commitments, nil, flavors) // nil servers -> all unused
+		if got[resourceKey{"cpu", "az1", "cascade-lake"}] != 20 {         // 5 * 4
+			t.Errorf("expected cpu=20 for summed commitments, got %v", got[resourceKey{"cpu", "az1", "cascade-lake"}])
+		}
+	})
+
+	t.Run("over-used bucket emits no metric", func(t *testing.T) {
+		commitments := []limes.Commitment{
+			{ProjectID: "p1", ResourceName: "instances_hana_small", AvailabilityZone: "az1", Amount: 2},
+		}
+		servers := []nova.Server{ // 5 running > 2 committed
+			{TenantID: "p1", FlavorName: "hana_small", OSEXTAvailabilityZone: "az1"},
+			{TenantID: "p1", FlavorName: "hana_small", OSEXTAvailabilityZone: "az1"},
+			{TenantID: "p1", FlavorName: "hana_small", OSEXTAvailabilityZone: "az1"},
+			{TenantID: "p1", FlavorName: "hana_small", OSEXTAvailabilityZone: "az1"},
+			{TenantID: "p1", FlavorName: "hana_small", OSEXTAvailabilityZone: "az1"},
+		}
+		got := calculateUnusedInstanceCapacity(commitments, servers, flavors)
+		if len(got) != 0 {
+			t.Errorf("expected no metrics for over-used bucket, got %v", got)
+		}
+	})
+
+	t.Run("exactly-used bucket emits no metric", func(t *testing.T) {
+		commitments := []limes.Commitment{
+			{ProjectID: "p1", ResourceName: "instances_hana_small", AvailabilityZone: "az1", Amount: 3},
+		}
+		servers := []nova.Server{ // 3 running == 3 committed
+			{TenantID: "p1", FlavorName: "hana_small", OSEXTAvailabilityZone: "az1"},
+			{TenantID: "p1", FlavorName: "hana_small", OSEXTAvailabilityZone: "az1"},
+			{TenantID: "p1", FlavorName: "hana_small", OSEXTAvailabilityZone: "az1"},
+		}
+		got := calculateUnusedInstanceCapacity(commitments, servers, flavors)
+		if len(got) != 0 {
+			t.Errorf("expected no metrics for fully-used bucket, got %v", got)
+		}
+	})
+
+	t.Run("unknown flavor is skipped", func(t *testing.T) {
+		commitments := []limes.Commitment{
+			{ProjectID: "p1", ResourceName: "instances_hana_unknown", AvailabilityZone: "az1", Amount: 3},
+		}
+		got := calculateUnusedInstanceCapacity(commitments, nil, flavors)
+		if len(got) != 0 {
+			t.Errorf("expected no metrics for unknown flavor, got %v", got)
+		}
+	})
+
+	t.Run("multiple keys aggregated correctly", func(t *testing.T) {
+		commitments := []limes.Commitment{
+			{ProjectID: "p1", ResourceName: "instances_hana_small", AvailabilityZone: "az1", Amount: 2},
+			{ProjectID: "p2", ResourceName: "instances_hana_large_v2", AvailabilityZone: "az1", Amount: 1},
+		}
+		got := calculateUnusedInstanceCapacity(commitments, nil, flavors) // nil running -> all unused
+
+		if got[resourceKey{"cpu", "az1", "cascade-lake"}] != 8 { // 2 * 4
+			t.Errorf("expected cpu cascade-lake=8, got %v", got[resourceKey{"cpu", "az1", "cascade-lake"}])
+		}
+		if got[resourceKey{"cpu", "az1", "sapphire-rapids"}] != 16 { // 1 * 16
+			t.Errorf("expected cpu sapphire-rapids=16, got %v", got[resourceKey{"cpu", "az1", "sapphire-rapids"}])
+		}
+	})
+}
+
 func TestVMwareResourceCommitmentsKPI_CollectHanaUnusedCommitments(t *testing.T) {
 	scheme, err := v1alpha1.SchemeBuilder.Build()
 	if err != nil {
@@ -70,11 +198,11 @@ func TestVMwareResourceCommitmentsKPI_CollectHanaUnusedCommitments(t *testing.T)
 	}
 
 	// Running servers:
-	//   project-A/az1: 1 hana_small ACTIVE, 1 DELETED (ignored) → 2 unused in az1
-	//   project-B/az1: 0 hana_large_v2                          → 2 unused in az1
-	//   project-A/az2: 1 hana_small ACTIVE                      → 3 unused in az2
-	//   project-E/az1: 5 hana_small ACTIVE → 5 > 2 committed    → 0 unused (over-used, clamped)
-	//   project-F/az2: 3 hana_large_v2 ACTIVE → 3 == 3 committed → 0 unused (fully used, clamped)
+	//   project-A/az1: 1 hana_small ACTIVE, 1 DELETED (ignored) -> 2 unused in az1
+	//   project-B/az1: 0 hana_large_v2                          -> 2 unused in az1
+	//   project-A/az2: 1 hana_small ACTIVE                      -> 3 unused in az2
+	//   project-E/az1: 5 hana_small ACTIVE -> 5 > 2 committed    -> 0 unused (over-used, clamped)
+	//   project-F/az2: 3 hana_large_v2 ACTIVE -> 3 == 3 committed -> 0 unused (fully used, clamped)
 	if err := testDB.Insert(
 		&nova.Server{ID: "s1", TenantID: "project-A", FlavorName: "hana_small", OSEXTAvailabilityZone: "az1", Status: "ACTIVE"},
 		&nova.Server{ID: "s2", TenantID: "project-A", FlavorName: "hana_small", OSEXTAvailabilityZone: "az1", Status: "DELETED"},
@@ -140,11 +268,11 @@ func TestVMwareResourceCommitmentsKPI_CollectHanaUnusedCommitments(t *testing.T)
 		}
 	}
 
-	// project-A/az1: 2 unused hana_small (cascade-lake)       → cpu=2*4=8,  ram=2*16384=32768,  disk=2*100=200
-	// project-B/az1: 2 unused hana_large_v2 (sapphire-rapids)  → cpu=2*16=32, ram=2*65536=131072, disk=2*400=800
-	// project-A/az2: 3 unused hana_small (cascade-lake)        → cpu=3*4=12, ram=3*16384=49152,  disk=3*100=300
-	// project-E/az1: 5 running > 2 committed hana_small        → clamped to 0, no metric emitted
-	// project-F/az2: 3 running == 3 committed hana_large_v2    → clamped to 0, no metric emitted
+	// project-A/az1: 2 unused hana_small (cascade-lake)       -> cpu=2*4=8,  ram=2*16384=32768,  disk=2*100=200
+	// project-B/az1: 2 unused hana_large_v2 (sapphire-rapids)  -> cpu=2*16=32, ram=2*65536=131072, disk=2*400=800
+	// project-A/az2: 3 unused hana_small (cascade-lake)        -> cpu=3*4=12, ram=3*16384=49152,  disk=3*100=300
+	// project-E/az1: 5 running > 2 committed hana_small        -> clamped to 0, no metric emitted
+	// project-F/az2: 3 running == 3 committed hana_large_v2    -> clamped to 0, no metric emitted
 	expected := map[string]UnusedMetric{
 		"cpu/az1/cascade-lake":     {Resource: "cpu", AZ: "az1", Arch: "cascade-lake", Value: 8},
 		"ram/az1/cascade-lake":     {Resource: "ram", AZ: "az1", Arch: "cascade-lake", Value: 32768},
