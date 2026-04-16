@@ -24,6 +24,17 @@ cortex-shim:
     container:
       extraArgs: ["--placement-shim=true"]
   conf:
+    e2e:
+      svcURL: "http://cortex-placement-shim-service:8080"
+      # Openstack credentials for e2e tests. These are not used by the shim
+      # itself, but are passed to the e2e test suite to generate an authenticated
+      # openstack client token for testing the shim's integration with openstack.
+      osKeystoneURL:
+      osUsername:
+      osPassword:
+      osProjectName:
+      osUserDomainName:
+      osProjectDomainName:
     apiservers:
       home:
         gvks:
