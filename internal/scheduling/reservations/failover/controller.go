@@ -42,15 +42,17 @@ type FailoverReservationController struct {
 	Config          FailoverConfig
 	SchedulerClient *reservations.SchedulerClient
 	Recorder        events.EventRecorder // Event recorder for emitting Kubernetes events
-	reconcileCount  int64                // Track reconciliation count for rotating VM selection
+	Monitor         *FailoverMonitor
+	reconcileCount  int64 // Track reconciliation count for rotating VM selection
 }
 
-func NewFailoverReservationController(c client.Client, vmSource VMSource, config FailoverConfig, schedulerClient *reservations.SchedulerClient) *FailoverReservationController {
+func NewFailoverReservationController(c client.Client, vmSource VMSource, config FailoverConfig, schedulerClient *reservations.SchedulerClient, monitor *FailoverMonitor) *FailoverReservationController {
 	return &FailoverReservationController{
 		Client:          c,
 		VMSource:        vmSource,
 		Config:          config,
 		SchedulerClient: schedulerClient,
+		Monitor:         monitor,
 	}
 }
 
@@ -229,6 +231,9 @@ func (c *FailoverReservationController) validateReservation(ctx context.Context,
 
 // reconcileSummary holds statistics from the reconciliation cycle.
 type reconcileSummary struct {
+	duration            time.Duration
+	totalVMs            int
+	totalReservations   int
 	vmsMissingFailover  int
 	vmsProcessed        int
 	reservationsNeeded  int
@@ -324,7 +329,9 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 	summary.totalFailed = assignSummary.totalFailed
 
 	// Log summary
-	duration := time.Since(startTime)
+	summary.duration = time.Since(startTime)
+	summary.totalVMs = len(vms)
+	summary.totalReservations = len(failoverReservations) + summary.totalCreated
 	requeueAfter := c.Config.ReconcileInterval.Duration
 	successCount := summary.totalCreated + summary.totalReused
 	madeProgress := successCount >= *c.Config.MinSuccessForShortInterval
@@ -334,10 +341,10 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 	}
 	logger.Info("periodic reconciliation completed",
 		"reconcileCount", c.reconcileCount,
-		"duration", duration.Round(time.Millisecond),
+		"duration", summary.duration.Round(time.Millisecond),
 		"requeueAfter", requeueAfter,
-		"totalVMs", len(vms),
-		"totalReservations", len(failoverReservations),
+		"totalVMs", summary.totalVMs,
+		"totalReservations", summary.totalReservations,
 		"vmsMissingFailover", summary.vmsMissingFailover,
 		"vmsProcessed", summary.vmsProcessed,
 		"reservationsNeeded", summary.reservationsNeeded,
@@ -346,6 +353,10 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 		"failed", summary.totalFailed,
 		"updated", summary.reservationsUpdated,
 		"deleted", summary.reservationsDeleted)
+
+	if c.Monitor != nil {
+		c.Monitor.RecordReconciliation(summary, "")
+	}
 
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }

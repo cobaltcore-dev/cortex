@@ -611,6 +611,12 @@ func main() {
 		// The scheduler client calls the nova external scheduler API to get placement decisions
 		schedulerClient := reservations.NewSchedulerClient(failoverConfig.SchedulerURL)
 
+		failoverMonitor := failover.NewFailoverMonitor()
+		if err := metrics.Registry.Register(failoverMonitor); err != nil {
+			setupLog.Error(err, "failed to register failover monitor metrics, continuing without metrics")
+			failoverMonitor = nil
+		}
+
 		// Defer the initialization of PostgresReader until the manager starts
 		// because the cache is not ready during setup
 		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
@@ -636,6 +642,7 @@ func main() {
 				vmSource,
 				failoverConfig,
 				schedulerClient,
+				failoverMonitor,
 			)
 
 			// Set up the watch-based reconciler for per-reservation reconciliation
