@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -402,9 +401,8 @@ func e2eTestReshaper(ctx context.Context) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		respBody, _ := io.ReadAll(resp.Body)
 		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		log.Error(err, "POST /reshaper returned an error", "body", string(respBody))
+		log.Error(err, "POST /reshaper returned an error")
 		return err
 	}
 	log.Info("Successfully executed reshaper")

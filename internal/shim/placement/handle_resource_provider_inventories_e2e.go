@@ -29,6 +29,7 @@ import (
 //  7. DELETE /{uuid}/inventories/{rc} — remove the single inventory record.
 //  8. PUT /{uuid}/inventories — re-add inventory (total=50) for the bulk test.
 //  9. DELETE /{uuid}/inventories — bulk-delete all inventories at once.
+//
 // 10. Cleanup: DELETE the test RP and custom resource class.
 func e2eTestResourceProviderInventories(ctx context.Context) error {
 	log := logf.FromContext(ctx)
