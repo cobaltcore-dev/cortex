@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -19,11 +20,11 @@ import (
 //
 //  1. Pre-cleanup: DELETE leftover allocation, both RPs, and custom RC.
 //  2. Create fixtures: PUT a custom resource class, POST two resource
-//     providers (RP-A and RP-B), PUT inventory on RP-A (total=100), PUT
-//     an allocation of 10 units on RP-A.
+//     providers (RP-A and RP-B), PUT inventory on both RP-A and RP-B
+//     (total=100), PUT an allocation of 10 units on RP-A.
 //  3. Gather state: GET consumer_generation from the allocation, GET
 //     resource_provider_generation for both RP-A and RP-B.
-//  4. POST /reshaper — atomically clear RP-A's inventory, set inventory on
+//  4. POST /reshaper — atomically clear RP-A's inventory, update inventory on
 //     RP-B, and re-point the consumer's allocation from RP-A to RP-B.
 //  5. Verify RP-A: GET inventories — expect empty.
 //  6. Verify RP-B: GET inventories — expect the custom resource class present.
@@ -218,6 +219,50 @@ func e2eTestReshaper(ctx context.Context) error {
 	}
 	log.Info("Successfully set inventory on RP-A", "uuid", rpAUUID)
 
+	// Pre-seed inventory on RP-B so the reshaper can validate allocation
+	// constraints (some placement versions need the target RP to already have
+	// an inventory row in the database).
+	genB, err := getGeneration(rpBUUID)
+	if err != nil {
+		log.Error(err, "failed to get generation for RP-B before seeding inventory")
+		return err
+	}
+	log.Info("Seeding inventory on RP-B", "uuid", rpBUUID, "class", testRC,
+		"generation", genB)
+	seedBody, err := json.Marshal(map[string]any{
+		"resource_provider_generation": genB,
+		"inventories": map[string]any{
+			testRC: map[string]any{"total": 100, "max_unit": 100},
+		},
+	})
+	if err != nil {
+		log.Error(err, "failed to marshal request body")
+		return err
+	}
+	req, err = http.NewRequestWithContext(ctx,
+		http.MethodPut, sc.Endpoint+"/resource_providers/"+rpBUUID+"/inventories",
+		bytes.NewReader(seedBody))
+	if err != nil {
+		log.Error(err, "failed to create PUT request for RP-B inventories")
+		return err
+	}
+	req.Header.Set("X-Auth-Token", sc.TokenID)
+	req.Header.Set("OpenStack-API-Version", apiVersion)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	resp, err = sc.HTTPClient.Do(req)
+	if err != nil {
+		log.Error(err, "failed to send PUT request for RP-B inventories")
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		log.Error(err, "PUT RP-B inventories returned an error")
+		return err
+	}
+	log.Info("Successfully seeded inventory on RP-B", "uuid", rpBUUID)
+
 	// Create an allocation on RP-A.
 	log.Info("Creating allocation on RP-A", "consumer", consumerUUID,
 		"rp", rpAUUID, "amount", 10)
@@ -299,7 +344,7 @@ func e2eTestReshaper(ctx context.Context) error {
 		log.Error(err, "failed to get updated generation for RP-A")
 		return err
 	}
-	genB, err := getGeneration(rpBUUID)
+	genB, err = getGeneration(rpBUUID)
 	if err != nil {
 		log.Error(err, "failed to get generation for RP-B")
 		return err
@@ -357,8 +402,9 @@ func e2eTestReshaper(ctx context.Context) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
 		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		log.Error(err, "POST /reshaper returned an error")
+		log.Error(err, "POST /reshaper returned an error", "body", string(respBody))
 		return err
 	}
 	log.Info("Successfully executed reshaper")
