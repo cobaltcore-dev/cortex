@@ -25,7 +25,6 @@ import (
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
@@ -41,8 +40,6 @@ type CommitmentReservationController struct {
 	Scheme *runtime.Scheme
 	// Configuration for the controller.
 	Conf Config
-	// Database connection for querying VM state from Knowledge cache.
-	DB *db.DB
 	// SchedulerClient for making scheduler API calls.
 	SchedulerClient *reservations.SchedulerClient
 }
@@ -516,16 +513,6 @@ func (r *CommitmentReservationController) hypervisorToReservations(ctx context.C
 
 // Init initializes the reconciler with required clients and DB connection.
 func (r *CommitmentReservationController) Init(ctx context.Context, client client.Client, conf Config) error {
-	// Initialize database connection if DatabaseSecretRef is provided.
-	if conf.DatabaseSecretRef != nil {
-		var err error
-		r.DB, err = db.Connector{Client: client}.FromSecretRef(ctx, *conf.DatabaseSecretRef)
-		if err != nil {
-			return fmt.Errorf("failed to initialize database connection: %w", err)
-		}
-		logf.FromContext(ctx).Info("database connection initialized for commitment reservation controller")
-	}
-
 	// Initialize scheduler client
 	r.SchedulerClient = reservations.NewSchedulerClient(conf.SchedulerURL)
 	logf.FromContext(ctx).Info("scheduler client initialized for commitment reservation controller", "url", conf.SchedulerURL)
