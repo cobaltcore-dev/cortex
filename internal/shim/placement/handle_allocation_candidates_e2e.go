@@ -67,7 +67,7 @@ func e2eTestAllocationCandidates(ctx context.Context) error {
 			log.Error(err, "failed to send pre-cleanup request", "url", cleanup.url)
 			return err
 		}
-		defer resp.Body.Close()
+		resp.Body.Close()
 		log.Info("Pre-cleanup request completed", "url", cleanup.url, "status", resp.StatusCode)
 	}
 

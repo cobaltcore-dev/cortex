@@ -188,12 +188,13 @@ func e2eTestResourceProviderUsages(ctx context.Context) error {
 			log.Error(err, "failed to send GET request for RP usages", "uuid", rp.UUID)
 			return err
 		}
-		defer rpResp.Body.Close()
 		if rpResp.StatusCode < 200 || rpResp.StatusCode >= 300 {
+			rpResp.Body.Close()
 			err := fmt.Errorf("unexpected status code: %d", rpResp.StatusCode)
 			log.Error(err, "GET RP usages returned an error", "uuid", rp.UUID)
 			return err
 		}
+		rpResp.Body.Close()
 		log.Info("Successfully retrieved usages for existing resource provider",
 			"uuid", rp.UUID)
 	}

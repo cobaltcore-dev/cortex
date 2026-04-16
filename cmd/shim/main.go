@@ -8,7 +8,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"flag"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -115,7 +114,8 @@ func main() {
 	// Custom entrypoint for placement shim e2e tests.
 	if runPlacementShimE2E {
 		if err := placement.RunE2E(ctx); err != nil {
-			log.Fatalf("E2E tests failed: %v", err)
+			setupLog.Error(err, "E2E tests failed")
+			os.Exit(1)
 		}
 		os.Exit(0)
 	}

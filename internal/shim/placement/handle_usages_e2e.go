@@ -96,13 +96,14 @@ func e2eTestUsages(ctx context.Context) error {
 				"projectID", project.ID, "projectName", project.Name)
 			return err
 		}
-		defer projResp.Body.Close()
 		if projResp.StatusCode < 200 || projResp.StatusCode >= 300 {
+			projResp.Body.Close()
 			err := fmt.Errorf("unexpected status code: %d", projResp.StatusCode)
 			log.Error(err, "placement shim /usages endpoint returned an error",
 				"projectID", project.ID, "projectName", project.Name)
 			return err
 		}
+		projResp.Body.Close()
 		log.Info("Successfully retrieved usages from placement shim for project",
 			"projectID", project.ID, "projectName", project.Name)
 	}

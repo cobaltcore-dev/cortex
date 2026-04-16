@@ -23,13 +23,18 @@ func e2eTestGetRoot(ctx context.Context) error {
 		log.Error(err, "failed to get e2e config")
 		return err
 	}
+	sc, err := makeE2EServiceClient(ctx, config)
+	if err != nil {
+		log.Error(err, "failed to create placement service client for e2e test")
+		return err
+	}
 	req, err := http.NewRequestWithContext(ctx,
-		http.MethodGet, config.E2E.SVCURL+"/", http.NoBody)
+		http.MethodGet, sc.Endpoint+"/", http.NoBody)
 	if err != nil {
 		log.Error(err, "failed to create request for placement shim")
 		return err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := sc.HTTPClient.Do(req)
 	if err != nil {
 		log.Error(err, "failed to send request to placement shim")
 		return err

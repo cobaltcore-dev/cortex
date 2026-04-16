@@ -92,7 +92,11 @@ func e2eTestTraits(ctx context.Context) error {
 
 	// Test GET /traits/{name}
 	log.Info("Testing GET /traits/{name} endpoint of placement shim")
-	for _, trait := range list.Traits[:5] { // Test only the first 5 traits to save time.
+	traitsToTest := list.Traits
+	if len(traitsToTest) > 5 {
+		traitsToTest = traitsToTest[:5]
+	}
+	for _, trait := range traitsToTest { // Test only the first 5 traits to save time.
 		log.Info("Testing trait", "trait", trait)
 		traitReq, err := http.NewRequestWithContext(ctx,
 			http.MethodGet, sc.Endpoint+"/traits/"+trait, http.NoBody)
@@ -110,13 +114,14 @@ func e2eTestTraits(ctx context.Context) error {
 				"trait", trait)
 			return err
 		}
-		defer traitResp.Body.Close()
 		if traitResp.StatusCode < 200 || traitResp.StatusCode >= 300 {
+			traitResp.Body.Close()
 			err := fmt.Errorf("unexpected status code: %d", traitResp.StatusCode)
 			log.Error(err, "placement shim /traits/{name} endpoint returned an error",
 				"trait", trait)
 			return err
 		}
+		traitResp.Body.Close()
 		log.Info("Successfully retrieved trait from placement shim /traits/{name} endpoint",
 			"trait", trait)
 	}

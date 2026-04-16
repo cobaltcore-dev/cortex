@@ -67,7 +67,13 @@ func e2eTestResourceProviderTraits(ctx context.Context) error {
 			log.Error(err, "failed to send pre-cleanup request", "url", cleanup.url)
 			return err
 		}
-		defer resp.Body.Close()
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound &&
+			(resp.StatusCode < 200 || resp.StatusCode >= 300) {
+			err := fmt.Errorf("unexpected status code during pre-cleanup: %d", resp.StatusCode)
+			log.Error(err, "pre-cleanup failed", "url", cleanup.url)
+			return err
+		}
 		log.Info("Pre-cleanup request completed", "url", cleanup.url, "status", resp.StatusCode)
 	}
 
@@ -129,6 +135,35 @@ func e2eTestResourceProviderTraits(ctx context.Context) error {
 	log.Info("Successfully created test resource provider for RP traits test",
 		"uuid", testRPUUID)
 
+	// Deferred cleanup: always delete test fixtures on exit so a failed
+	// assertion doesn't leave the fixed UUID/trait behind.
+	defer func() {
+		log.Info("Deferred cleanup: deleting test resources")
+		for _, c := range []struct {
+			url  string
+			desc string
+		}{
+			{sc.Endpoint + "/resource_providers/" + testRPUUID + "/traits", "RP traits"},
+			{sc.Endpoint + "/resource_providers/" + testRPUUID, "RP"},
+			{sc.Endpoint + "/traits/" + testTrait, "trait"},
+		} {
+			dReq, dErr := http.NewRequestWithContext(ctx, http.MethodDelete, c.url, http.NoBody)
+			if dErr != nil {
+				log.Error(dErr, "deferred cleanup: failed to create request", "desc", c.desc)
+				continue
+			}
+			dReq.Header.Set("X-Auth-Token", sc.TokenID)
+			dReq.Header.Set("OpenStack-API-Version", "placement 1.6")
+			dResp, dErr := sc.HTTPClient.Do(dReq)
+			if dErr != nil {
+				log.Error(dErr, "deferred cleanup: failed to send request", "desc", c.desc)
+				continue
+			}
+			dResp.Body.Close()
+			log.Info("Deferred cleanup completed", "desc", c.desc, "status", dResp.StatusCode)
+		}
+	}()
+
 	// Test GET /resource_providers/{uuid}/traits (empty).
 	log.Info("Testing GET /resource_providers/{uuid}/traits (empty)", "uuid", testRPUUID)
 	req, err = http.NewRequestWithContext(ctx,
@@ -158,6 +193,11 @@ func e2eTestResourceProviderTraits(ctx context.Context) error {
 	err = json.NewDecoder(resp.Body).Decode(&traitsResp)
 	if err != nil {
 		log.Error(err, "failed to decode RP traits response", "uuid", testRPUUID)
+		return err
+	}
+	if len(traitsResp.Traits) != 0 {
+		err := fmt.Errorf("expected 0 initial traits, got %d", len(traitsResp.Traits))
+		log.Error(err, "initial traits not empty", "uuid", testRPUUID)
 		return err
 	}
 	log.Info("Successfully retrieved empty traits for test resource provider",

@@ -79,7 +79,7 @@ func e2eTestReshaper(ctx context.Context) error {
 			log.Error(err, "failed to send pre-cleanup request", "url", cleanup.url)
 			return err
 		}
-		defer resp.Body.Close()
+		resp.Body.Close()
 		log.Info("Pre-cleanup request completed", "url", cleanup.url, "status", resp.StatusCode)
 	}
 
@@ -167,12 +167,13 @@ func e2eTestReshaper(ctx context.Context) error {
 			log.Error(err, "failed to send POST request to /resource_providers")
 			return err
 		}
-		defer resp.Body.Close()
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			resp.Body.Close()
 			err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 			log.Error(err, "POST /resource_providers returned an error", "uuid", rp.uuid)
 			return err
 		}
+		resp.Body.Close()
 		log.Info("Successfully created resource provider", "uuid", rp.uuid)
 	}
 
@@ -555,12 +556,13 @@ func e2eTestReshaper(ctx context.Context) error {
 			log.Error(err, "failed to send DELETE request", "desc", cleanup.desc)
 			return err
 		}
-		defer resp.Body.Close()
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			resp.Body.Close()
 			err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 			log.Error(err, "DELETE returned an error", "desc", cleanup.desc)
 			return err
 		}
+		resp.Body.Close()
 		log.Info("Successfully deleted test resource", "desc", cleanup.desc)
 	}
 

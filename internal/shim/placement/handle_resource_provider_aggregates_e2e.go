@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -21,9 +22,10 @@ import (
 //  2. POST /resource_providers — create a test RP.
 //  3. GET /{uuid}/aggregates — verify aggregates are empty, store generation.
 //  4. PUT /{uuid}/aggregates — associate two aggregate UUIDs with the RP.
-//  5. GET /{uuid}/aggregates — verify both aggregates are present.
+//  5. GET /{uuid}/aggregates — verify both aggregate UUIDs are present.
 //  6. PUT /{uuid}/aggregates — clear aggregates by sending an empty list.
-//  7. Cleanup: DELETE the test RP.
+//  7. GET /{uuid}/aggregates — verify aggregates are empty after clear.
+//  8. Cleanup: DELETE the test RP (also runs via deferred cleanup on failure).
 func e2eTestResourceProviderAggregates(ctx context.Context) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running resource provider aggregates endpoint e2e test")
@@ -60,8 +62,8 @@ func e2eTestResourceProviderAggregates(ctx context.Context) error {
 		log.Error(err, "failed to send pre-cleanup request")
 		return err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusConflict &&
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound &&
 		(resp.StatusCode < 200 || resp.StatusCode >= 300) {
 		err := fmt.Errorf("unexpected status code during pre-cleanup: %d", resp.StatusCode)
 		log.Error(err, "pre-cleanup failed")
@@ -103,6 +105,27 @@ func e2eTestResourceProviderAggregates(ctx context.Context) error {
 	}
 	log.Info("Successfully created test resource provider for aggregates test",
 		"uuid", testRPUUID)
+
+	// Deferred cleanup: always delete the test RP on exit so a failed
+	// assertion doesn't leave the fixed UUID behind.
+	defer func() {
+		log.Info("Deferred cleanup: deleting test resource provider", "uuid", testRPUUID)
+		dReq, dErr := http.NewRequestWithContext(ctx,
+			http.MethodDelete, sc.Endpoint+"/resource_providers/"+testRPUUID, http.NoBody)
+		if dErr != nil {
+			log.Error(dErr, "deferred cleanup: failed to create DELETE request")
+			return
+		}
+		dReq.Header.Set("X-Auth-Token", sc.TokenID)
+		dReq.Header.Set("OpenStack-API-Version", "placement 1.19")
+		dResp, dErr := sc.HTTPClient.Do(dReq)
+		if dErr != nil {
+			log.Error(dErr, "deferred cleanup: failed to send DELETE request")
+			return
+		}
+		dResp.Body.Close()
+		log.Info("Deferred cleanup completed", "status", dResp.StatusCode)
+	}()
 
 	// Test GET /resource_providers/{uuid}/aggregates (empty).
 	log.Info("Testing GET /resource_providers/{uuid}/aggregates (empty)",
@@ -214,9 +237,12 @@ func e2eTestResourceProviderAggregates(ctx context.Context) error {
 		log.Error(err, "failed to decode RP aggregates response", "uuid", testRPUUID)
 		return err
 	}
-	if len(aggResp.Aggregates) != 2 {
-		err := fmt.Errorf("expected 2 aggregates, got %d", len(aggResp.Aggregates))
-		log.Error(err, "aggregate count mismatch", "uuid", testRPUUID)
+	if len(aggResp.Aggregates) != 2 ||
+		!slices.Contains(aggResp.Aggregates, testAggUUID1) ||
+		!slices.Contains(aggResp.Aggregates, testAggUUID2) {
+		err := fmt.Errorf("expected aggregates %v, got %v",
+			[]string{testAggUUID1, testAggUUID2}, aggResp.Aggregates)
+		log.Error(err, "aggregate mismatch", "uuid", testRPUUID)
 		return err
 	}
 	log.Info("Successfully verified aggregates on test resource provider",
@@ -257,6 +283,40 @@ func e2eTestResourceProviderAggregates(ctx context.Context) error {
 	}
 	log.Info("Successfully cleared aggregates on test resource provider",
 		"uuid", testRPUUID)
+
+	// Verify aggregates are empty after clear.
+	log.Info("Verifying aggregates are empty after clear", "uuid", testRPUUID)
+	req, err = http.NewRequestWithContext(ctx,
+		http.MethodGet, sc.Endpoint+"/resource_providers/"+testRPUUID+"/aggregates", http.NoBody)
+	if err != nil {
+		log.Error(err, "failed to create GET request for RP aggregates", "uuid", testRPUUID)
+		return err
+	}
+	req.Header.Set("X-Auth-Token", sc.TokenID)
+	req.Header.Set("OpenStack-API-Version", "placement 1.19")
+	req.Header.Set("Accept", "application/json")
+	resp, err = sc.HTTPClient.Do(req)
+	if err != nil {
+		log.Error(err, "failed to send GET request for RP aggregates", "uuid", testRPUUID)
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		log.Error(err, "GET RP aggregates returned an error", "uuid", testRPUUID)
+		return err
+	}
+	err = json.NewDecoder(resp.Body).Decode(&aggResp)
+	if err != nil {
+		log.Error(err, "failed to decode RP aggregates response", "uuid", testRPUUID)
+		return err
+	}
+	if len(aggResp.Aggregates) != 0 {
+		err := fmt.Errorf("expected 0 aggregates after clear, got %d", len(aggResp.Aggregates))
+		log.Error(err, "aggregates not empty after clear", "uuid", testRPUUID)
+		return err
+	}
+	log.Info("Verified aggregates are empty after clear", "uuid", testRPUUID)
 
 	// Cleanup: delete the test resource provider.
 	log.Info("Cleaning up test resource provider", "uuid", testRPUUID)
