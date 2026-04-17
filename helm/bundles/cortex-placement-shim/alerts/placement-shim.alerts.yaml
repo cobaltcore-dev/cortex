@@ -1,3 +1,179 @@
 groups:
 - name: cortex-placement-shim-alerts
-  rules: []
+  rules:
+  # Liveness
+  - alert: CortexPlacementShimDown
+    expr: |
+      up{pod=~"cortex-placement-shim-.*"} != 1 or
+      absent(up{pod=~"cortex-placement-shim-.*"})
+    for: 5m
+    labels:
+      context: liveness
+      dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/shim-down
+    annotations:
+      summary: "Cortex Placement Shim is down"
+      description: >
+        The Cortex Placement Shim is down. Placement API requests that are
+        routed through the shim will not be served. OpenStack services relying
+        on the shim for resource provider lookups and allocation candidates
+        will degrade.
+
+  # Downstream HTTP errors (client -> shim)
+  - alert: CortexPlacementShimDownstreamHttp400sTooHigh
+    expr: rate(cortex_placement_shim_downstream_request_duration_seconds_count{service="cortex-placement-shim-metrics-service", responsecode=~"4.."}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: api
+      dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/shim-api-errors
+    annotations:
+      summary: "Placement Shim downstream HTTP 4xx errors too high"
+      description: >
+        The Placement Shim is responding to client requests with HTTP 4xx
+        errors at a sustained rate. This may indicate that the request format
+        from OpenStack services has changed, authentication tokens are invalid,
+        or the shim is rejecting malformed requests. Investigate the shim logs
+        for details on which endpoints and request patterns are affected.
+
+  - alert: CortexPlacementShimDownstreamHttp500sTooHigh
+    expr: rate(cortex_placement_shim_downstream_request_duration_seconds_count{service="cortex-placement-shim-metrics-service", responsecode=~"5.."}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: api
+      dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/shim-api-errors
+    annotations:
+      summary: "Placement Shim downstream HTTP 5xx errors too high"
+      description: >
+        The Placement Shim is responding to client requests with HTTP 5xx
+        errors. This indicates internal problems within the shim such as
+        handler panics or misconfiguration. OpenStack services may experience
+        degraded placement functionality until the issue is resolved.
+
+  # Upstream HTTP errors (shim -> Placement API)
+  - alert: CortexPlacementShimUpstreamHttp5xxTooHigh
+    expr: rate(cortex_placement_shim_upstream_request_duration_seconds_count{service="cortex-placement-shim-metrics-service", responsecode=~"5.."}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: upstream
+      dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/shim-api-errors
+    annotations:
+      summary: "Placement Shim upstream HTTP 5xx errors too high"
+      description: >
+        The upstream Placement API is returning 5xx errors to the shim.
+        This indicates the OpenStack Placement service itself is having
+        problems. The shim forwards these errors to its clients. Investigate
+        the Placement API service health and logs.
+
+  - alert: CortexPlacementShimUpstreamUnreachable
+    expr: rate(cortex_placement_shim_upstream_request_duration_seconds_count{service="cortex-placement-shim-metrics-service", responsecode="502"}[5m]) > 0.1
+    for: 5m
+    labels:
+      context: upstream
+      dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/shim-api-errors
+    annotations:
+      summary: "Placement Shim cannot reach the upstream Placement API"
+      description: >
+        The Placement Shim is unable to reach the upstream OpenStack Placement
+        API and is returning 502 Bad Gateway errors. This means all forwarded
+        requests are failing. Check network connectivity, the Placement API
+        service endpoint configuration, and whether the upstream service is
+        running.
+
+  # Latency alerts
+  - alert: CortexPlacementShimDownstreamLatencyTooHigh
+    expr: |
+      histogram_quantile(0.95, sum(rate(cortex_placement_shim_downstream_request_duration_seconds_bucket{service="cortex-placement-shim-metrics-service"}[5m])) by (le)) > 10
+      and on() sum(rate(cortex_placement_shim_downstream_request_duration_seconds_count{service="cortex-placement-shim-metrics-service"}[5m])) > 0
+    for: 5m
+    labels:
+      context: api
+      dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/shim-api-errors
+    annotations:
+      summary: "Placement Shim downstream latency too high"
+      description: >
+        The Placement Shim downstream request latency (p95) exceeds 10
+        seconds. This affects all OpenStack services making placement
+        requests through the shim. The cause may be slow upstream responses,
+        shim processing overhead, or resource contention. Investigate both
+        shim and upstream Placement API performance.
+
+  - alert: CortexPlacementShimUpstreamLatencyTooHigh
+    expr: |
+      histogram_quantile(0.95, sum(rate(cortex_placement_shim_upstream_request_duration_seconds_bucket{service="cortex-placement-shim-metrics-service"}[5m])) by (le)) > 10
+      and on() sum(rate(cortex_placement_shim_upstream_request_duration_seconds_count{service="cortex-placement-shim-metrics-service"}[5m])) > 0
+    for: 5m
+    labels:
+      context: upstream
+      dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/shim-api-errors
+    annotations:
+      summary: "Placement Shim upstream latency too high"
+      description: >
+        The upstream Placement API response latency (p95) as seen by the
+        shim exceeds 10 seconds. This directly impacts the end-to-end
+        latency of placement requests. Investigate the upstream Placement
+        API performance and network conditions.
+
+  # Resource usage
+  - alert: CortexPlacementShimHighMemoryUsage
+    expr: process_resident_memory_bytes{service="cortex-placement-shim-metrics-service"} > 1500 * 1024 * 1024
+    for: 5m
+    labels:
+      context: memory
+      dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/shim-resource-usage
+    annotations:
+      summary: "Placement Shim uses too much memory"
+      description: >
+        The Placement Shim is using more than 1500 MiB of resident memory
+        against a limit of 2048 MiB. This may indicate a memory leak, a
+        large number of cached hypervisors, or unexpected request patterns.
+        If the usage continues to grow, the pod will be OOM-killed.
+
+  - alert: CortexPlacementShimHighCPUUsage
+    expr: rate(process_cpu_seconds_total{service="cortex-placement-shim-metrics-service"}[1m]) > 0.4
+    for: 5m
+    labels:
+      context: cpu
+      dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/shim-resource-usage
+    annotations:
+      summary: "Placement Shim uses too much CPU"
+      description: >
+        The Placement Shim is consuming more than 40% of a single CPU core
+        against a limit of 500m. Under normal operation the shim should use
+        much less since it primarily proxies requests. This may indicate a
+        hot loop, excessive logging, or an unusual traffic spike.
+
