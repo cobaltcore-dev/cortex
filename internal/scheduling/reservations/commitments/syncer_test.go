@@ -234,6 +234,7 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 			AvailabilityZone: "az1",
 			Amount:           2, // 2 multiples of smallest flavor (2 * 1024MB = 2048MB total)
 			Unit:             "",
+			Status:           "confirmed",
 			ProjectID:        "test-project-1",
 			DomainID:         "test-domain-1",
 		},
@@ -370,6 +371,7 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 			AvailabilityZone: "az1",
 			Amount:           1,
 			Unit:             "",
+			Status:           "confirmed",
 			ProjectID:        "new-project",
 			DomainID:         "new-domain",
 		},
@@ -472,6 +474,7 @@ func TestSyncer_SyncReservations_UnitMismatch(t *testing.T) {
 			AvailabilityZone: "az1",
 			Amount:           2,
 			Unit:             "2048 MiB", // Mismatched unit - should be "1024 MiB"
+			Status:           "confirmed",
 			ProjectID:        "test-project",
 			DomainID:         "test-domain",
 		},
@@ -556,6 +559,7 @@ func TestSyncer_SyncReservations_UnitMatch(t *testing.T) {
 			AvailabilityZone: "az1",
 			Amount:           2,
 			Unit:             "1024 MiB", // Correct unit matching smallest flavor
+			Status:           "confirmed",
 			ProjectID:        "test-project",
 			DomainID:         "test-domain",
 		},
@@ -636,6 +640,7 @@ func TestSyncer_SyncReservations_EmptyUUID(t *testing.T) {
 			AvailabilityZone: "az1",
 			Amount:           1,
 			Unit:             "",
+			Status:           "confirmed",
 			ProjectID:        "test-project",
 			DomainID:         "test-domain",
 		},
@@ -684,5 +689,96 @@ func TestSyncer_SyncReservations_EmptyUUID(t *testing.T) {
 
 	if len(reservations.Items) != 0 {
 		t.Errorf("Expected 0 reservations due to empty UUID, got %d", len(reservations.Items))
+	}
+}
+
+func TestSyncer_SyncReservations_StatusFilter(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheme: %v", err)
+	}
+
+	flavorGroupsKnowledge := createFlavorGroupKnowledge(t, map[string]FlavorGroupData{
+		"test_group_v1": {
+			LargestFlavorName:      "test-flavor",
+			LargestFlavorVCPUs:     2,
+			LargestFlavorMemoryMB:  1024,
+			SmallestFlavorName:     "test-flavor",
+			SmallestFlavorVCPUs:    2,
+			SmallestFlavorMemoryMB: 1024,
+		},
+	})
+
+	tests := []struct {
+		name              string
+		status            string
+		expectReservation bool
+	}{
+		{"confirmed is processed", "confirmed", true},
+		{"guaranteed is processed", "guaranteed", true},
+		{"planned is skipped", "planned", false},
+		{"pending is skipped", "pending", false},
+		{"superseded is skipped", "superseded", false},
+		{"expired is skipped", "expired", false},
+		{"empty status is skipped", "", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(flavorGroupsKnowledge).
+				Build()
+
+			mockCommitments := []Commitment{
+				{
+					ID:               1,
+					UUID:             "test-uuid-status-filter",
+					ServiceType:      "compute",
+					ResourceName:     "hw_version_test_group_v1_ram",
+					AvailabilityZone: "az1",
+					Amount:           1,
+					Status:           tc.status,
+					ProjectID:        "test-project",
+					DomainID:         "test-domain",
+				},
+			}
+
+			monitor := NewSyncerMonitor()
+			mockClient := &mockCommitmentsClient{
+				listCommitmentsByIDFunc: func(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
+					result := make(map[string]Commitment)
+					for _, c := range mockCommitments {
+						result[c.UUID] = c
+					}
+					return result, nil
+				},
+				listProjectsFunc: func(ctx context.Context) ([]Project, error) {
+					return []Project{{ID: "test-project", DomainID: "test-domain"}}, nil
+				},
+			}
+
+			syncer := &Syncer{
+				CommitmentsClient: mockClient,
+				Client:            k8sClient,
+				monitor:           monitor,
+			}
+
+			if err := syncer.SyncReservations(context.Background()); err != nil {
+				t.Fatalf("SyncReservations() error = %v", err)
+			}
+
+			var reservations v1alpha1.ReservationList
+			if err := k8sClient.List(context.Background(), &reservations); err != nil {
+				t.Fatalf("Failed to list reservations: %v", err)
+			}
+
+			if tc.expectReservation && len(reservations.Items) == 0 {
+				t.Errorf("status=%q: expected reservation to be created, got none", tc.status)
+			}
+			if !tc.expectReservation && len(reservations.Items) != 0 {
+				t.Errorf("status=%q: expected no reservation, got %d", tc.status, len(reservations.Items))
+			}
+		})
 	}
 }
