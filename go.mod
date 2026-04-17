@@ -3,9 +3,9 @@ module github.com/cobaltcore-dev/cortex
 go 1.26
 
 require (
-	github.com/cobaltcore-dev/openstack-hypervisor-operator v1.0.2-0.20260409190432-b3a7a2d19d59
+	github.com/cobaltcore-dev/openstack-hypervisor-operator v1.0.2-0.20260416190048-8c00b47ee107
 	github.com/go-gorp/gorp v2.2.0+incompatible
-	github.com/gophercloud/gophercloud/v2 v2.11.1
+	github.com/gophercloud/gophercloud/v2 v2.12.0
 	github.com/ironcore-dev/ironcore v0.3.0
 	github.com/majewsky/gg v1.6.0
 	github.com/prometheus/client_golang v1.23.2
