@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/external"
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,16 +52,8 @@ func NewAPI(client client.Client) *HTTPAPI {
 	return NewAPIWithConfig(client, DefaultConfig(), nil)
 }
 
-// NewAPIWithConfig creates an HTTPAPI. If usageDB is nil and config.DatabaseSecretRef
-// is set, a lazy-connecting PostgresReader-backed client is created automatically.
+// NewAPIWithConfig creates an HTTPAPI with the given config and optional usageDB client.
 func NewAPIWithConfig(k8sClient client.Client, config Config, usageDB UsageDBClient) *HTTPAPI {
-	if usageDB == nil && config.DatabaseSecretRef != nil {
-		reader := &external.PostgresReader{
-			Client:            k8sClient,
-			DatabaseSecretRef: *config.DatabaseSecretRef,
-		}
-		usageDB = NewDBUsageClient(reader)
-	}
 	return &HTTPAPI{
 		client:          k8sClient,
 		config:          config,
