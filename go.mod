@@ -5,14 +5,14 @@ go 1.26
 require (
 	github.com/cobaltcore-dev/openstack-hypervisor-operator v1.0.2-0.20260409190432-b3a7a2d19d59
 	github.com/go-gorp/gorp v2.2.0+incompatible
-	github.com/gophercloud/gophercloud/v2 v2.11.1
+	github.com/gophercloud/gophercloud/v2 v2.12.0
 	github.com/ironcore-dev/ironcore v0.3.0
 	github.com/majewsky/gg v1.6.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
 	github.com/sapcc/go-bits v0.0.0-20260409170436-d7b7822ab7d3
-	k8s.io/api v0.35.3
-	k8s.io/apimachinery v0.35.3
+	k8s.io/api v0.35.4
+	k8s.io/apimachinery v0.35.4
 	k8s.io/client-go v0.35.3
 	sigs.k8s.io/controller-runtime v0.23.3
 )
