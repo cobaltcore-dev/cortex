@@ -86,7 +86,7 @@ groups:
       context: upstream
       dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
       service: cortex
-      severity: critical
+      severity: warning
       support_group: workload-management
       playbook: docs/support/playbook/cortex/alerts/shim-api-errors
     annotations:
