@@ -149,6 +149,9 @@ cortex-scheduling-controllers:
       "*": "kvm-general-purpose-load-balancing"  # Catch-all fallback
     # Default pipeline for CR reservations when no CommittedResourceFlavorGroupPipelines entry matches
     committedResourcePipelineDefault: "kvm-general-purpose-load-balancing"
+    # Pipeline used for capacity reporting: determines eligible hosts per AZ (ignores allocations/reservations).
+    # Host resource data is then read from Hypervisor CRDs to compute actual multiples.
+    reportCapacityTotalPipeline: "kvm-report-capacity"
     # How often to re-verify active reservations
     # 5m = 300000000000 nanoseconds
     committedResourceRequeueIntervalActive: 300000000000

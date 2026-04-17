@@ -31,6 +31,11 @@ type Config struct {
 	// Secret ref to the database credentials for querying VM state.
 	DatabaseSecretRef *corev1.SecretReference `json:"databaseSecretRef,omitempty"`
 
+	// ReportCapacityTotalPipeline is the pipeline used to determine eligible hosts for capacity calculation.
+	// This pipeline ignores VM allocations and reservations (empty datacenter scenario).
+	// Host resource data is then read from Hypervisor CRDs to compute actual multiples.
+	ReportCapacityTotalPipeline string `json:"reportCapacityTotalPipeline"`
+
 	// FlavorGroupPipelines maps flavor group names to pipeline names.
 	// Example: {"2152": "kvm-hana-bin-packing", "2101": "kvm-general-purpose-load-balancing", "*": "kvm-general-purpose-load-balancing"}
 	// Used to select different scheduling pipelines based on flavor group characteristics.
@@ -81,6 +86,9 @@ func (c *Config) ApplyDefaults() {
 	if c.SchedulerURL == "" {
 		c.SchedulerURL = defaults.SchedulerURL
 	}
+	if c.ReportCapacityTotalPipeline == "" {
+		c.ReportCapacityTotalPipeline = defaults.ReportCapacityTotalPipeline
+	}
 	if c.ChangeAPIWatchReservationsTimeout == 0 {
 		c.ChangeAPIWatchReservationsTimeout = defaults.ChangeAPIWatchReservationsTimeout
 	}
@@ -99,6 +107,7 @@ func DefaultConfig() Config {
 		AllocationGracePeriod:                  15 * time.Minute,
 		PipelineDefault:                        "kvm-general-purpose-load-balancing",
 		SchedulerURL:                           "http://localhost:8080/scheduler/nova/external",
+		ReportCapacityTotalPipeline:            "kvm-report-capacity",
 		ChangeAPIWatchReservationsTimeout:      10 * time.Second,
 		ChangeAPIWatchReservationsPollInterval: 500 * time.Millisecond,
 		EnableChangeCommitmentsAPI:             true,
