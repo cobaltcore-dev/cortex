@@ -6,19 +6,38 @@ package commitments
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/external"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// dbUsageClient implements UsageDBClient using a PostgresReader for lazy connection.
+// dbUsageClient implements UsageDBClient using a lazy-connecting PostgresReader.
 type dbUsageClient struct {
-	reader *external.PostgresReader
+	k8sClient      client.Client
+	datasourceName string
+	mu             sync.Mutex
+	reader         *external.PostgresReader
 }
 
-// NewDBUsageClient creates a UsageDBClient backed by the given PostgresReader.
-func NewDBUsageClient(reader *external.PostgresReader) UsageDBClient {
-	return &dbUsageClient{reader: reader}
+// NewDBUsageClient creates a UsageDBClient that lazily connects to Postgres via the named Datasource CRD.
+func NewDBUsageClient(k8sClient client.Client, datasourceName string) UsageDBClient {
+	return &dbUsageClient{k8sClient: k8sClient, datasourceName: datasourceName}
+}
+
+func (c *dbUsageClient) getReader(ctx context.Context) (*external.PostgresReader, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.reader != nil {
+		return c.reader, nil
+	}
+	reader, err := external.NewPostgresReader(ctx, c.k8sClient, c.datasourceName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to datasource %s: %w", c.datasourceName, err)
+	}
+	c.reader = reader
+	return reader, nil
 }
 
 // vmQueryRow is the scan target for the server+flavor JOIN query.
@@ -38,6 +57,11 @@ type vmQueryRow struct {
 
 // ListProjectVMs returns all VMs for a project joined with their flavor data from Postgres.
 func (c *dbUsageClient) ListProjectVMs(ctx context.Context, projectID string) ([]VMRow, error) {
+	reader, err := c.getReader(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		SELECT
 			s.id, s.name, s.status, s.created,
@@ -53,7 +77,7 @@ func (c *dbUsageClient) ListProjectVMs(ctx context.Context, projectID string) ([
 		WHERE s.tenant_id = $1`
 
 	var rows []vmQueryRow
-	if err := c.reader.Select(ctx, &rows, query, projectID); err != nil {
+	if err := reader.Select(ctx, &rows, query, projectID); err != nil {
 		return nil, fmt.Errorf("failed to query VMs for project %s: %w", projectID, err)
 	}
 

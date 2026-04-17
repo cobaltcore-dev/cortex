@@ -360,7 +360,11 @@ func main() {
 
 	// Initialize commitments API for LIQUID interface (Postgres-backed usage reporting).
 	commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
-	commitmentsAPI := commitments.NewAPIWithConfig(multiclusterClient, commitmentsConfig, nil)
+	var commitmentsUsageDB commitments.UsageDBClient
+	if commitmentsConfig.DatasourceName != "" {
+		commitmentsUsageDB = commitments.NewDBUsageClient(multiclusterClient, commitmentsConfig.DatasourceName)
+	}
+	commitmentsAPI := commitments.NewAPIWithConfig(multiclusterClient, commitmentsConfig, commitmentsUsageDB)
 	commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
 
 	if slices.Contains(mainConfig.EnabledControllers, "nova-pipeline-controllers") {
