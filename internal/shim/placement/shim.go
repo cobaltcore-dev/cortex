@@ -235,6 +235,10 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 	if !ok {
 		return errors.New("provided client must be a multicluster client")
 	}
+	// Bind all indexes that will help make fast lookups.
+	if err := indexFields(ctx, mcl); err != nil {
+		return fmt.Errorf("failed to set up indexes: %w", err)
+	}
 	bldr := multicluster.BuildController(mcl, mgr)
 	// The hypervisor crd may be distributed across multiple remote clusters.
 	bldr, err = bldr.WatchesMulticluster(&hv1.Hypervisor{},
