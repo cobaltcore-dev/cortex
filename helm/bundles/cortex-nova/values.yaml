@@ -99,10 +99,6 @@ cortex: &cortex
     keystoneSecretRef:
       name: cortex-nova-openstack-keystone
       namespace: default
-    # TODO: Remove me
-    databaseSecretRef:
-      name: cortex-nova-postgresql
-      namespace: default
 
     # ssoSecretRef:
     #   name: cortex-nova-openstack-sso
