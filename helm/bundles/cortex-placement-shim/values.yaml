@@ -34,6 +34,13 @@ cortex-shim:
     # used by the auth middleware for token introspection and by E2E tests
     # for authentication.
     keystoneURL:
+    # OpenStack credentials used by the auth middleware for Keystone token
+    # introspection and by the E2E test suite to obtain authenticated tokens.
+    osUsername:
+    osPassword:
+    osProjectName:
+    osUserDomainName:
+    osProjectDomainName:
     auth:
       tokenCacheTTL: "5m"
       policies:
@@ -56,14 +63,6 @@ cortex-shim:
             - name: cloud_compute_admin
     e2e:
       svcURL: "http://cortex-placement-shim-service:8080"
-      # Openstack credentials for e2e tests. These are not used by the shim
-      # itself, but are passed to the e2e test suite to generate an authenticated
-      # openstack client token for testing the shim's integration with openstack.
-      osUsername:
-      osPassword:
-      osProjectName:
-      osUserDomainName:
-      osProjectDomainName:
     apiservers:
       home:
         gvks:

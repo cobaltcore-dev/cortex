@@ -408,6 +408,14 @@ func TestConfigValidateAuthRequiresKeystoneURL(t *testing.T) {
 		t.Fatal("expected error when auth configured without keystoneURL")
 	}
 	c.KeystoneURL = "http://keystone:5000"
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when auth configured without osUsername")
+	}
+	c.OSUsername = "admin"
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when auth configured without osPassword")
+	}
+	c.OSPassword = "secret"
 	if err := c.validate(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

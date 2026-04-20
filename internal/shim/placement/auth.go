@@ -14,6 +14,38 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// compileAuthPolicies parses the auth config into the shim's runtime
+// policy table and token cache. Called during SetupWithManager.
+func (s *Shim) compileAuthPolicies() error {
+	if s.config.Auth == nil {
+		return nil
+	}
+	ttlStr := s.config.Auth.TokenCacheTTL
+	if ttlStr == "" {
+		ttlStr = "5m"
+	}
+	ttl, err := time.ParseDuration(ttlStr)
+	if err != nil {
+		return fmt.Errorf("invalid tokenCacheTTL %q: %w", ttlStr, err)
+	}
+	s.tokenCache = &tokenCache{ttl: ttl}
+	s.authPolicies = make([]compiledPolicy, len(s.config.Auth.Policies))
+	for i, p := range s.config.Auth.Policies {
+		method, path, ok := strings.Cut(p.Pattern, " ")
+		if !ok {
+			return fmt.Errorf("invalid auth policy pattern %q: expected \"METHOD /path\"", p.Pattern)
+		}
+		s.authPolicies[i] = compiledPolicy{
+			method:      method,
+			pathPattern: path,
+			roles:       p.Roles,
+		}
+	}
+	setupLog.Info("Auth middleware configured",
+		"policies", len(s.authPolicies), "tokenCacheTTL", ttl)
+	return nil
+}
+
 // tokenInfo holds validated Keystone token metadata cached after a
 // successful introspection.
 type tokenInfo struct {
@@ -126,6 +158,8 @@ func (s *Shim) checkAuth(w http.ResponseWriter, r *http.Request) bool {
 
 	tokenValue := r.Header.Get("X-Auth-Token")
 	if tokenValue == "" {
+		log.Info("auth denied: missing token",
+			"method", r.Method, "path", r.URL.Path)
 		authError(w, http.StatusUnauthorized, "Unauthorized",
 			"The request you have made requires authentication.")
 		return false

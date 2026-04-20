@@ -10,50 +10,50 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/gophercloud/gophercloud/v2"
 )
 
 func TestKeystoneIntrospectorSuccess(t *testing.T) {
 	expiry := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
 
 	ks := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v3/auth/tokens" {
+		if r.URL.Path != "/auth/tokens" {
 			t.Errorf("unexpected path %q", r.URL.Path)
-		}
-		if r.Header.Get("X-Auth-Token") != "my-token" {
-			t.Error("missing X-Auth-Token")
 		}
 		if r.Header.Get("X-Subject-Token") != "my-token" {
 			t.Error("missing X-Subject-Token")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(keystoneTokenResponse{
-			Token: struct {
-				ExpiresAt string `json:"expires_at"`
-				Roles     []struct {
-					Name string `json:"name"`
-				} `json:"roles"`
-				Project *struct {
-					ID string `json:"id"`
-				} `json:"project"`
-			}{
-				ExpiresAt: expiry.Format(time.RFC3339),
-				Roles: []struct {
-					Name string `json:"name"`
-				}{
-					{Name: "cloud_compute_admin"},
-					{Name: "cloud_compute_viewer"},
+		resp := map[string]any{
+			"token": map[string]any{
+				"expires_at": expiry.Format(time.RFC3339),
+				"roles": []map[string]any{
+					{"name": "cloud_compute_admin"},
+					{"name": "cloud_compute_viewer"},
 				},
-				Project: &struct {
-					ID string `json:"id"`
-				}{ID: "proj-abc"},
+				"project": map[string]any{
+					"id":   "proj-abc",
+					"name": "my-project",
+					"domain": map[string]any{
+						"id":   "default",
+						"name": "Default",
+					},
+				},
 			},
-		}); err != nil {
+		}
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			t.Fatal(err)
 		}
 	}))
 	defer ks.Close()
 
-	ki := &keystoneIntrospector{keystoneURL: ks.URL, httpClient: ks.Client()}
+	ki := &keystoneIntrospector{
+		identityClient: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{},
+			Endpoint:       ks.URL + "/",
+		},
+	}
 	info, err := ki.introspect(context.Background(), "my-token")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -78,7 +78,12 @@ func TestKeystoneIntrospectorInvalidToken(t *testing.T) {
 	}))
 	defer ks.Close()
 
-	ki := &keystoneIntrospector{keystoneURL: ks.URL, httpClient: ks.Client()}
+	ki := &keystoneIntrospector{
+		identityClient: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{},
+			Endpoint:       ks.URL + "/",
+		},
+	}
 	_, err := ki.introspect(context.Background(), "bad-token")
 	if err == nil {
 		t.Fatal("expected error for invalid token")
@@ -87,8 +92,12 @@ func TestKeystoneIntrospectorInvalidToken(t *testing.T) {
 
 func TestKeystoneIntrospectorKeystoneDown(t *testing.T) {
 	ki := &keystoneIntrospector{
-		keystoneURL: "http://127.0.0.1:1",
-		httpClient:  &http.Client{Timeout: 100 * time.Millisecond},
+		identityClient: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{
+				HTTPClient: http.Client{Timeout: 100 * time.Millisecond},
+			},
+			Endpoint: "http://127.0.0.1:1/",
+		},
 	}
 	_, err := ki.introspect(context.Background(), "token")
 	if err == nil {
@@ -101,31 +110,26 @@ func TestKeystoneIntrospectorDomainScopedToken(t *testing.T) {
 
 	ks := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(keystoneTokenResponse{
-			Token: struct {
-				ExpiresAt string `json:"expires_at"`
-				Roles     []struct {
-					Name string `json:"name"`
-				} `json:"roles"`
-				Project *struct {
-					ID string `json:"id"`
-				} `json:"project"`
-			}{
-				ExpiresAt: expiry.Format(time.RFC3339),
-				Roles: []struct {
-					Name string `json:"name"`
-				}{
-					{Name: "admin"},
+		resp := map[string]any{
+			"token": map[string]any{
+				"expires_at": expiry.Format(time.RFC3339),
+				"roles": []map[string]any{
+					{"name": "admin"},
 				},
-				Project: nil, // domain-scoped, no project
 			},
-		}); err != nil {
+		}
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			t.Fatal(err)
 		}
 	}))
 	defer ks.Close()
 
-	ki := &keystoneIntrospector{keystoneURL: ks.URL, httpClient: ks.Client()}
+	ki := &keystoneIntrospector{
+		identityClient: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{},
+			Endpoint:       ks.URL + "/",
+		},
+	}
 	info, err := ki.introspect(context.Background(), "domain-token")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

@@ -5,80 +5,93 @@ package placement
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"strings"
 	"time"
+
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/tokens"
 )
 
-// keystoneIntrospector validates tokens against a real Keystone service
-// by calling GET /v3/auth/tokens with the token as both X-Auth-Token
-// (caller identity) and X-Subject-Token (token to validate). This
-// self-validation pattern avoids the need for separate service
-// credentials.
-type keystoneIntrospector struct {
-	keystoneURL string
-	httpClient  *http.Client
+// initTokenIntrospector authenticates the shim with Keystone using
+// service credentials and creates the identity v3 client used for
+// token validation. Called during Start after the HTTP client is ready.
+func (s *Shim) initTokenIntrospector(ctx context.Context) error {
+	if s.config.Auth == nil {
+		return nil
+	}
+	authOpts := gophercloud.AuthOptions{
+		IdentityEndpoint: s.config.KeystoneURL,
+		Username:         s.config.OSUsername,
+		DomainName:       s.config.OSUserDomainName,
+		Password:         s.config.OSPassword,
+		AllowReauth:      true,
+		Scope: &gophercloud.AuthScope{
+			ProjectName: s.config.OSProjectName,
+			DomainName:  s.config.OSProjectDomainName,
+		},
+	}
+	provider, err := openstack.NewClient(s.config.KeystoneURL)
+	if err != nil {
+		return fmt.Errorf("creating Keystone provider client: %w", err)
+	}
+	provider.HTTPClient = *s.httpClient
+	if err := openstack.Authenticate(ctx, provider, authOpts); err != nil {
+		return fmt.Errorf("authenticating with Keystone: %w", err)
+	}
+	identityClient, err := openstack.NewIdentityV3(provider, gophercloud.EndpointOpts{})
+	if err != nil {
+		return fmt.Errorf("creating identity v3 client: %w", err)
+	}
+	s.tokenIntrospector = &keystoneIntrospector{identityClient: identityClient}
+	setupLog.Info("Auth middleware enabled with Keystone",
+		"keystoneURL", s.config.KeystoneURL)
+	return nil
 }
 
-// keystoneTokenResponse mirrors the relevant subset of the Keystone
-// GET /v3/auth/tokens JSON response.
-type keystoneTokenResponse struct {
-	Token struct {
-		ExpiresAt string `json:"expires_at"`
-		Roles     []struct {
-			Name string `json:"name"`
-		} `json:"roles"`
-		Project *struct {
-			ID string `json:"id"`
-		} `json:"project"`
-	} `json:"token"`
+// keystoneIntrospector validates tokens against Keystone using an
+// authenticated service client. It calls GET /v3/auth/tokens with the
+// shim's own service credentials as X-Auth-Token and the subject token
+// as X-Subject-Token, then extracts roles, project, and expiry from
+// the response.
+type keystoneIntrospector struct {
+	identityClient *gophercloud.ServiceClient
 }
 
 func (k *keystoneIntrospector) introspect(ctx context.Context, tokenValue string) (*tokenInfo, error) {
-	url := strings.TrimSuffix(k.keystoneURL, "/") + "/v3/auth/tokens"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody) //nolint:gosec // URL from trusted config
+	result := tokens.Get(ctx, k.identityClient, tokenValue)
+	if result.Err != nil {
+		return nil, fmt.Errorf("keystone token introspection failed: %w", result.Err)
+	}
+
+	token, err := result.ExtractToken()
 	if err != nil {
-		return nil, fmt.Errorf("creating keystone request: %w", err)
+		return nil, fmt.Errorf("extracting token: %w", err)
 	}
-	req.Header.Set("X-Auth-Token", tokenValue)
-	req.Header.Set("X-Subject-Token", tokenValue)
 
-	resp, err := k.httpClient.Do(req) //nolint:gosec // intentional call to configured Keystone
+	roles, err := result.ExtractRoles()
 	if err != nil {
-		return nil, fmt.Errorf("keystone request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("keystone returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("extracting roles: %w", err)
 	}
 
-	var body keystoneTokenResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return nil, fmt.Errorf("decoding keystone response: %w", err)
-	}
-
-	expiresAt, err := time.Parse(time.RFC3339, body.Token.ExpiresAt)
-	if err != nil {
-		return nil, fmt.Errorf("parsing token expiry: %w", err)
-	}
-
-	roleNames := make([]string, len(body.Token.Roles))
-	for i, r := range body.Token.Roles {
+	roleNames := make([]string, len(roles))
+	for i, r := range roles {
 		roleNames[i] = r.Name
 	}
 
 	projectID := ""
-	if body.Token.Project != nil {
-		projectID = body.Token.Project.ID
+	project, err := result.ExtractProject()
+	if err != nil {
+		return nil, fmt.Errorf("extracting project: %w", err)
+	}
+	if project != nil {
+		projectID = project.ID
 	}
 
 	return &tokenInfo{
 		roles:     roleNames,
 		projectID: projectID,
-		expiresAt: expiresAt,
+		expiresAt: token.ExpiresAt,
 		cachedAt:  time.Now(),
 	}, nil
 }
