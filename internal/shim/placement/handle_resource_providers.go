@@ -4,7 +4,13 @@
 package placement
 
 import (
+	"encoding/json"
 	"net/http"
+
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // HandleListResourceProviders handles GET /resource_providers requests.
@@ -49,10 +55,40 @@ func (s *Shim) HandleCreateResourceProvider(w http.ResponseWriter, r *http.Reque
 // provider's position in a hierarchical tree. Returns 404 if the provider
 // does not exist.
 func (s *Shim) HandleShowResourceProvider(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
+	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
+	if !ok {
 		return
 	}
-	s.forward(w, r)
+	// Try to find the hypervisor in kubernetes.
+	var hv hv1.HypervisorList
+	err := s.List(ctx, &hv, client.MatchingFields{idxHypervisorOpenStackId: uuid})
+	if apierrors.IsNotFound(err) || len(hv.Items) == 0 {
+		// Forward the request to placement if the hypervisor doesn't exist.
+		s.forward(w, r)
+		return
+	}
+	if err != nil {
+		// Something else is wrong.
+		log.Error(err, "failed to list hypervisors with OpenStack ID index")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	if len(hv.Items) > 1 {
+		log.Error(nil, "multiple hypervisors found with the same OpenStack ID", "uuid", uuid)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	// TODO: For now, just dump the hypervisor's status as JSON, but eventually we may want to transform it.
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	jsonEncoder := json.NewEncoder(w)
+	if err := jsonEncoder.Encode(hv.Items[0].Status); err != nil {
+		log.Error(err, "failed to encode hypervisor status as JSON")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 }
 
 // HandleUpdateResourceProvider handles PUT /resource_providers/{uuid} requests.
