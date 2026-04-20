@@ -123,7 +123,9 @@ func (s *Shim) wrapHandler(pattern string, next http.HandlerFunc) http.HandlerFu
 		}
 
 		start := time.Now()
-		next.ServeHTTP(sw, r)
+		if s.checkAuth(sw, r) {
+			next.ServeHTTP(sw, r)
+		}
 		latencyMs := time.Since(start).Milliseconds()
 
 		// NOTE: We intentionally never log HTTP headers to avoid

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -108,6 +109,9 @@ func (c *config) validate() error {
 	if c.PlacementURL == "" {
 		return errors.New("placement URL is required")
 	}
+	if c.Auth != nil && c.KeystoneURL == "" {
+		return errors.New("keystoneURL is required when auth is configured")
+	}
 	return nil
 }
 
@@ -132,6 +136,15 @@ type Shim struct {
 	// upstreamRequestTimer is a prometheus histogram to measure the duration
 	// (and count) of requests to the upstream placement API by route and method.
 	upstreamRequestTimer *prometheus.HistogramVec
+
+	// authPolicies is the pre-compiled policy table. Nil when auth is
+	// disabled (config.Auth is nil).
+	authPolicies []compiledPolicy
+	// tokenCache caches validated token info to avoid repeated Keystone
+	// introspection.
+	tokenCache *tokenCache
+	// tokenIntrospector validates tokens against Keystone.
+	tokenIntrospector tokenIntrospector
 }
 
 // Describe implements prometheus.Collector.
@@ -198,6 +211,18 @@ func (s *Shim) Start(ctx context.Context) (err error) {
 		return err
 	}
 	setupLog.Info("Successfully connected to placement API")
+
+	// Create the Keystone introspector when auth is configured. This
+	// reuses the shim's HTTP client (and its TLS/SSO transport).
+	if s.config.Auth != nil {
+		s.tokenIntrospector = &keystoneIntrospector{
+			keystoneURL: s.config.KeystoneURL,
+			httpClient:  s.httpClient,
+		}
+		setupLog.Info("Auth middleware enabled with Keystone",
+			"keystoneURL", s.config.KeystoneURL)
+	}
+
 	return nil
 }
 
@@ -255,6 +280,33 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 		return fmt.Errorf("invalid maxBodyLogSize %q: %w", bodyLogQty, err)
 	}
 	s.maxBodyLogSize = qty.Value()
+
+	// Compile auth policies when auth is configured.
+	if s.config.Auth != nil {
+		ttlStr := s.config.Auth.TokenCacheTTL
+		if ttlStr == "" {
+			ttlStr = "5m"
+		}
+		ttl, err := time.ParseDuration(ttlStr)
+		if err != nil {
+			return fmt.Errorf("invalid tokenCacheTTL %q: %w", ttlStr, err)
+		}
+		s.tokenCache = &tokenCache{ttl: ttl}
+		s.authPolicies = make([]compiledPolicy, len(s.config.Auth.Policies))
+		for i, p := range s.config.Auth.Policies {
+			method, path, ok := strings.Cut(p.Pattern, " ")
+			if !ok {
+				return fmt.Errorf("invalid auth policy pattern %q: expected \"METHOD /path\"", p.Pattern)
+			}
+			s.authPolicies[i] = compiledPolicy{
+				method:      method,
+				pathPattern: path,
+				roles:       p.Roles,
+			}
+		}
+		setupLog.Info("Auth middleware configured",
+			"policies", len(s.authPolicies), "tokenCacheTTL", ttl)
+	}
 
 	// Initialize Prometheus histogram timers for request monitoring.
 	s.downstreamRequestTimer = prometheus.NewHistogramVec(prometheus.HistogramOpts{

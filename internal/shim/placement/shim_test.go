@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
@@ -396,4 +397,98 @@ func TestRequestIDInContext(t *testing.T) {
 	if gotHeader != wantID {
 		t.Errorf("upstream received X-OpenStack-Request-Id = %q, want %q", gotHeader, wantID)
 	}
+}
+
+func TestConfigValidateAuthRequiresKeystoneURL(t *testing.T) {
+	c := config{
+		PlacementURL: "http://placement:8778",
+		Auth:         &authConfig{TokenCacheTTL: "5m"},
+	}
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when auth configured without keystoneURL")
+	}
+	c.KeystoneURL = "http://keystone:5000"
+	if err := c.validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestWrapHandlerWithAuth(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte(`{"ok":true}`)); err != nil {
+			t.Errorf("failed to write response: %v", err)
+		}
+	}))
+	defer upstream.Close()
+
+	info := &tokenInfo{
+		roles:     []string{"cloud_compute_admin"},
+		expiresAt: time.Now().Add(time.Hour),
+		cachedAt:  time.Now(),
+	}
+
+	down, up := newTestTimers()
+	s := &Shim{
+		config:                 config{PlacementURL: upstream.URL},
+		httpClient:             upstream.Client(),
+		maxBodyLogSize:         4096,
+		downstreamRequestTimer: down,
+		upstreamRequestTimer:   up,
+		authPolicies: []compiledPolicy{
+			{method: "GET", pathPattern: "/", roles: nil}, // public
+			{method: "*", pathPattern: "/*", roles: []authPolicyRole{{Name: "cloud_compute_admin"}}},
+		},
+		tokenCache:        &tokenCache{ttl: time.Minute},
+		tokenIntrospector: &mockIntrospector{info: info},
+	}
+
+	t.Run("authorized request succeeds", func(t *testing.T) {
+		wrapped := s.wrapHandler("/test", func(w http.ResponseWriter, r *http.Request) {
+			s.forward(w, r)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
+		req.Header.Set("X-Auth-Token", "good-token")
+		w := httptest.NewRecorder()
+		wrapped(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+		if n := histSampleCount(t, down, "GET", "/test", "200"); n != 1 {
+			t.Errorf("downstream 200 count = %d, want 1", n)
+		}
+	})
+
+	t.Run("missing token returns 401", func(t *testing.T) {
+		down2, _ := newTestTimers()
+		s2 := *s
+		s2.downstreamRequestTimer = down2
+		wrapped := s2.wrapHandler("/test", func(w http.ResponseWriter, r *http.Request) {
+			s2.forward(w, r)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
+		w := httptest.NewRecorder()
+		wrapped(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+		}
+		if n := histSampleCount(t, down2, "GET", "/test", "401"); n != 1 {
+			t.Errorf("downstream 401 count = %d, want 1", n)
+		}
+	})
+
+	t.Run("public endpoint without token succeeds", func(t *testing.T) {
+		down3, _ := newTestTimers()
+		s3 := *s
+		s3.downstreamRequestTimer = down3
+		wrapped := s3.wrapHandler("/", func(w http.ResponseWriter, r *http.Request) {
+			s3.forward(w, r)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		w := httptest.NewRecorder()
+		wrapped(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+	})
 }

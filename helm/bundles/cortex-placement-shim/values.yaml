@@ -37,9 +37,8 @@ cortex-shim:
     auth:
       tokenCacheTTL: "5m"
       policies:
-        # Version endpoint is publicly accessible (no token required).
         - pattern: "GET /"
-          roles: null
+          roles: null # Version endpoint is publicly accessible (no token required).
         - pattern: "GET /usages"
           roles:
             - name: cloud_compute_admin
