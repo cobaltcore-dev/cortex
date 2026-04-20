@@ -20,6 +20,9 @@ alerts:
 
 cortex-shim:
   namePrefix: cortex-placement
+  prometheus:
+    extraLabels:
+      prometheus: openstack
   deployment:
     container:
       extraArgs: ["--placement-shim=true"]

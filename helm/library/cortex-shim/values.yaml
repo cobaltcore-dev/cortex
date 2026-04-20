@@ -54,6 +54,7 @@ rbac:
 # [PROMETHEUS]: To enable a ServiceMonitor to export metrics to Prometheus set true
 prometheus:
   enable: true
+  extraLabels: {} # Additional labels to add to the ServiceMonitor, e.g. for Prometheus Service Discovery.
 
 # Use this to unambiguate multiple cortex deployments in the same cluster.
 namePrefix: cortex
