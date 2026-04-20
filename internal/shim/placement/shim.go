@@ -65,6 +65,7 @@ type authPolicy struct {
 	// Pattern is the method + path to match (e.g. "GET /usages", "* /*").
 	Pattern string `json:"pattern"`
 	// Roles lists the roles that grant access for this pattern.
+	// When null, the path is publicly accessible (no token required).
 	Roles []authPolicyRole `json:"roles"`
 }
 
