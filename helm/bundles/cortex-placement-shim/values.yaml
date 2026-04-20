@@ -27,12 +27,36 @@ cortex-shim:
     container:
       extraArgs: ["--placement-shim=true"]
   conf:
+    # placementURL is the URL of the OpenStack Placement service toward
+    # which the shim will proxy requests.
+    placementURL:
+    # keystoneURL is the URL of the OpenStack Keystone identity service,
+    # used by the auth middleware for token introspection and by E2E tests
+    # for authentication.
+    keystoneURL:
+    auth:
+      tokenCacheTTL: "5m"
+      policies:
+        - pattern: "GET /usages"
+          roles:
+            - name: cloud_compute_admin
+            - name: cloud_compute_viewer
+            - name: compute_admin
+              projectScoped: true
+            - name: compute_viewer
+              projectScoped: true
+        - pattern: "GET /*"
+          roles:
+            - name: cloud_compute_admin
+            - name: cloud_compute_viewer
+        - pattern: "* /*"
+          roles:
+            - name: cloud_compute_admin
     e2e:
       svcURL: "http://cortex-placement-shim-service:8080"
       # Openstack credentials for e2e tests. These are not used by the shim
       # itself, but are passed to the e2e test suite to generate an authenticated
       # openstack client token for testing the shim's integration with openstack.
-      osKeystoneURL:
       osUsername:
       osPassword:
       osProjectName:

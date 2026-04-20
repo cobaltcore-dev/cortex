@@ -48,6 +48,37 @@ type requestIDContextKey struct{}
 // header value through the request lifecycle for tracing.
 var requestIDKey = requestIDContextKey{}
 
+// authPolicyRole is a role that grants access for a matching policy rule.
+type authPolicyRole struct {
+	// Name is the OpenStack role name (e.g. "cloud_compute_admin").
+	Name string `json:"name"`
+	// ProjectScoped requires the token's project_id to match the
+	// request's project_id when true (e.g. for per-project usages).
+	ProjectScoped bool `json:"projectScoped,omitempty"`
+}
+
+// authPolicy maps an HTTP method + path pattern to the roles allowed to
+// access it. Patterns use "METHOD /path" syntax where "*" matches any
+// method and "*" in the path acts as a wildcard. Evaluation is
+// first-match; no match means deny.
+type authPolicy struct {
+	// Pattern is the method + path to match (e.g. "GET /usages", "* /*").
+	Pattern string `json:"pattern"`
+	// Roles lists the roles that grant access for this pattern.
+	Roles []authPolicyRole `json:"roles"`
+}
+
+// authConfig configures the Keystone token-validation middleware.
+// When nil, auth is disabled and all requests are passed through.
+type authConfig struct {
+	// TokenCacheTTL is how long validated tokens are cached before
+	// re-introspection against Keystone (e.g. "5m").
+	TokenCacheTTL string `json:"tokenCacheTTL,omitempty"`
+	// Policies is the ordered list of first-match access rules evaluated
+	// against each incoming request.
+	Policies []authPolicy `json:"policies,omitempty"`
+}
+
 // config holds configuration for the placement shim.
 type config struct {
 	// SSO is an optional configuration for the certificates the http client
@@ -56,6 +87,13 @@ type config struct {
 	// PlacementURL is the URL of the OpenStack Placement API the shim
 	// should forward requests to.
 	PlacementURL string `json:"placementURL,omitempty"`
+	// KeystoneURL is the URL of the OpenStack Keystone identity service
+	// used for token introspection by the auth middleware and for E2E
+	// test authentication.
+	KeystoneURL string `json:"keystoneURL,omitempty"`
+	// Auth configures Keystone token validation. When nil, auth is
+	// disabled and requests pass through without access checks.
+	Auth *authConfig `json:"auth,omitempty"`
 	// MaxBodyLogSize is the maximum number of bytes of request/response
 	// bodies to include in debug-level log lines, specified as a
 	// Kubernetes resource.Quantity string (e.g. "4Ki"). Defaults to "4Ki"

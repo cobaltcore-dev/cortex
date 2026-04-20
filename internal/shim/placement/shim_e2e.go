@@ -23,15 +23,15 @@ type e2eRootConfig struct {
 	// SSO is an optional configuration for the certificates the http client
 	// should use when talking to the placement API over ingress with single-sign-on.
 	SSO *sso.SSOConfig `json:"sso,omitempty"`
+	// KeystoneURL is the URL of the OpenStack Keystone identity service,
+	// shared with the main shim config.
+	KeystoneURL string `json:"keystoneURL,omitempty"`
 }
 
 type e2eConfig struct {
 	// SVCURL is the url placement shim service, e.g.
 	// "http://cortex-placement-shim-service:8080"
 	SVCURL string `json:"svcURL"`
-	// OSKeystoneURL is the URL of the keystone service to contact for
-	// generating an authenticated openstack client token.
-	OSKeystoneURL string `json:"osKeystoneURL"`
 	// OSUsername is the OpenStack username for keystone authentication
 	// (OS_USERNAME in openstack cli).
 	OSUsername string `json:"osUsername"`
@@ -56,7 +56,7 @@ type e2eConfig struct {
 func makeE2EServiceClient(ctx context.Context, rc e2eRootConfig) (*gophercloud.ServiceClient, error) {
 	log := logf.FromContext(ctx)
 	authOpts := gophercloud.AuthOptions{
-		IdentityEndpoint: rc.E2E.OSKeystoneURL,
+		IdentityEndpoint: rc.KeystoneURL,
 		Username:         rc.E2E.OSUsername,
 		DomainName:       rc.E2E.OSUserDomainName,
 		Password:         rc.E2E.OSPassword,
@@ -70,7 +70,7 @@ func makeE2EServiceClient(ctx context.Context, rc e2eRootConfig) (*gophercloud.S
 		"endpoint", authOpts.IdentityEndpoint,
 		"username", authOpts.Username,
 		"project", authOpts.Scope.ProjectName)
-	provider, err := openstack.NewClient(rc.E2E.OSKeystoneURL)
+	provider, err := openstack.NewClient(rc.KeystoneURL)
 	if err != nil {
 		log.Error(err, "Failed to create openstack provider client")
 		return nil, fmt.Errorf("failed to create openstack provider client: %w", err)
