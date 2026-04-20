@@ -99,6 +99,7 @@ cortex: &cortex
     keystoneSecretRef:
       name: cortex-nova-openstack-keystone
       namespace: default
+
     # ssoSecretRef:
     #   name: cortex-nova-openstack-sso
     #   namespace: default

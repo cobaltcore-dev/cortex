@@ -5,8 +5,6 @@ package placement
 
 import (
 	"net/http"
-
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // HandleListAllocationCandidates handles GET /allocation_candidates requests.
@@ -35,8 +33,5 @@ import (
 // inventory capacity and usage for informed decision-making. Available since
 // microversion 1.10.
 func (s *Shim) HandleListAllocationCandidates(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 	s.forward(w, r)
 }

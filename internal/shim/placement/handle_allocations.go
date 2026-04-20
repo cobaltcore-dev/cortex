@@ -5,8 +5,6 @@ package placement
 
 import (
 	"net/http"
-
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // HandleManageAllocations handles POST /allocations requests.
@@ -25,9 +23,6 @@ import (
 // success, or 409 Conflict if inventory is insufficient or a concurrent
 // update is detected (error code: placement.concurrent_update).
 func (s *Shim) HandleManageAllocations(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 	s.forward(w, r)
 }
 
@@ -43,14 +38,9 @@ func (s *Shim) HandleManageAllocations(w http.ResponseWriter, r *http.Request) {
 // The consumer_generation and consumer_type fields are absent when the
 // consumer has no allocations.
 func (s *Shim) HandleListAllocations(w http.ResponseWriter, r *http.Request) {
-	consumerUUID, ok := requiredUUIDPathParam(w, r, "consumer_uuid")
-	if !ok {
+	if _, ok := requiredUUIDPathParam(w, r, "consumer_uuid"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path,
-		"consumer_uuid", consumerUUID)
 	s.forward(w, r)
 }
 
@@ -66,14 +56,9 @@ func (s *Shim) HandleListAllocations(w http.ResponseWriter, r *http.Request) {
 // Returns 204 No Content on success. Returns 409 Conflict if there is
 // insufficient inventory or if a concurrent update was detected.
 func (s *Shim) HandleUpdateAllocations(w http.ResponseWriter, r *http.Request) {
-	consumerUUID, ok := requiredUUIDPathParam(w, r, "consumer_uuid")
-	if !ok {
+	if _, ok := requiredUUIDPathParam(w, r, "consumer_uuid"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path,
-		"consumer_uuid", consumerUUID)
 	s.forward(w, r)
 }
 
@@ -83,13 +68,8 @@ func (s *Shim) HandleUpdateAllocations(w http.ResponseWriter, r *http.Request) {
 // providers. Returns 204 No Content on success, or 404 Not Found if the
 // consumer has no existing allocations.
 func (s *Shim) HandleDeleteAllocations(w http.ResponseWriter, r *http.Request) {
-	consumerUUID, ok := requiredUUIDPathParam(w, r, "consumer_uuid")
-	if !ok {
+	if _, ok := requiredUUIDPathParam(w, r, "consumer_uuid"); !ok {
 		return
 	}
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path,
-		"consumer_uuid", consumerUUID)
 	s.forward(w, r)
 }

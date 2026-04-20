@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -20,14 +21,11 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-
-	novaservers "github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	schedulingnova "github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -42,12 +40,8 @@ type CommitmentReservationController struct {
 	Scheme *runtime.Scheme
 	// Configuration for the controller.
 	Conf Config
-	// Database connection for querying VM state from Knowledge cache.
-	DB *db.DB
 	// SchedulerClient for making scheduler API calls.
 	SchedulerClient *reservations.SchedulerClient
-	// NovaClient for direct Nova API calls (real-time VM status).
-	NovaClient schedulingnova.NovaClient
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -337,10 +331,13 @@ type reconcileAllocationsResult struct {
 	HasAllocationsInGracePeriod bool
 }
 
-// reconcileAllocations verifies all allocations in Spec against actual VM state.
-// It updates Status.Allocations based on the actual host location of each VM.
-// For new allocations (within grace period), it uses the Nova API for real-time status.
-// For older allocations, it uses the Hypervisor CRD to check if VM is on the expected host.
+// reconcileAllocations verifies all allocations in Spec against actual VM state using the
+// Hypervisor CRD as the sole source of truth.
+//
+// For new allocations (within grace period): the VM may not yet appear in the HV CRD
+// (still spawning), so we skip verification and requeue with a short interval.
+// For older allocations: we check the HV CRD; VMs not found are considered leaving and
+// removed from the reservation.
 func (r *CommitmentReservationController) reconcileAllocations(ctx context.Context, res *v1alpha1.Reservation) (*reconcileAllocationsResult, error) {
 	logger := LoggerFromContext(ctx).WithValues("component", "controller")
 	result := &reconcileAllocationsResult{}
@@ -359,7 +356,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 
 	expectedHost := res.Status.Host
 
-	// Fetch the Hypervisor CRD for the expected host (for older allocations)
+	// Fetch the Hypervisor CRD for the expected host.
 	var hypervisor hv1.Hypervisor
 	hvInstanceSet := make(map[string]bool)
 	if expectedHost != "" {
@@ -367,11 +364,11 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 			if client.IgnoreNotFound(err) != nil {
 				return nil, fmt.Errorf("failed to get hypervisor %s: %w", expectedHost, err)
 			}
-			// Hypervisor not found - all older allocations will be checked via Nova API fallback
+			// Hypervisor not found — treat all post-grace-period VMs as stale.
 			logger.Info("hypervisor CRD not found", "host", expectedHost)
 		} else {
-			// Build set of all VM UUIDs on this hypervisor for O(1) lookup
-			// Include both active and inactive VMs - stopped/shelved VMs still consume the reservation slot
+			// Build set of all VM UUIDs on this hypervisor for O(1) lookup.
+			// Include both active and inactive VMs — stopped/shelved VMs still hold the slot.
 			for _, inst := range hypervisor.Status.Instances {
 				hvInstanceSet[inst.ID] = true
 			}
@@ -384,9 +381,9 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{}
 	}
 
-	// Build new Status.Allocations map based on actual VM locations
+	// Build new Status.Allocations map based on HV CRD state.
 	newStatusAllocations := make(map[string]string)
-	// Track allocations to remove from Spec (stale/leaving VMs)
+	// Track allocations to remove from Spec (stale/leaving VMs).
 	var allocationsToRemove []string
 
 	for vmUUID, allocation := range res.Spec.CommittedResourceReservation.Allocations {
@@ -394,105 +391,29 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		isInGracePeriod := allocationAge < r.Conf.AllocationGracePeriod
 
 		if isInGracePeriod {
-			// New allocation: use Nova API for real-time status
+			// New allocation: VM may not yet appear in the HV CRD (still spawning).
+			// Signal to requeue with the short grace-period interval; skip verification.
 			result.HasAllocationsInGracePeriod = true
+			logger.V(1).Info("allocation in grace period, deferring verification",
+				"vm", vmUUID,
+				"allocationAge", allocationAge)
+			continue
+		}
 
-			if r.NovaClient == nil {
-				// No Nova client - skip verification for now, retry later
-				logger.V(1).Info("Nova client not available, skipping new allocation verification",
-					"vm", vmUUID,
-					"allocationAge", allocationAge)
-				continue
-			}
-
-			server, err := r.NovaClient.Get(ctx, vmUUID)
-			if err != nil {
-				// VM not yet available in Nova (still spawning) - retry on next reconcile
-				logger.V(1).Info("VM not yet available in Nova API",
-					"vm", vmUUID,
-					"error", err.Error(),
-					"allocationAge", allocationAge)
-				// Keep in Spec, don't add to Status - will retry on next reconcile
-				continue
-			}
-
-			actualHost := server.ComputeHost
-			switch {
-			case actualHost == expectedHost:
-				// VM is on expected host - confirmed running
-				newStatusAllocations[vmUUID] = actualHost
-				logger.V(1).Info("verified new VM allocation via Nova API",
-					"vm", vmUUID,
-					"actualHost", actualHost,
-					"allocationAge", allocationAge)
-			case actualHost != "":
-				// VM is on different host - migration scenario (log for now)
-				newStatusAllocations[vmUUID] = actualHost
-				logger.Info("VM on different host than expected (migration?)",
-					"vm", vmUUID,
-					"actualHost", actualHost,
-					"expectedHost", expectedHost,
-					"allocationAge", allocationAge)
-			default:
-				// VM not yet on any host - still spawning
-				logger.V(1).Info("VM not yet on host (spawning)",
-					"vm", vmUUID,
-					"status", server.Status,
-					"allocationAge", allocationAge)
-				// Keep in Spec, don't add to Status - will retry on next reconcile
-			}
+		// Post-grace-period: use HV CRD as authoritative source.
+		if hvInstanceSet[vmUUID] {
+			newStatusAllocations[vmUUID] = expectedHost
+			logger.V(1).Info("verified VM allocation via Hypervisor CRD",
+				"vm", vmUUID,
+				"host", expectedHost)
 		} else {
-			// Older allocation: use Hypervisor CRD for verification
-			if hvInstanceSet[vmUUID] {
-				// VM found on expected hypervisor - confirmed running
-				newStatusAllocations[vmUUID] = expectedHost
-				logger.V(1).Info("verified VM allocation via Hypervisor CRD",
-					"vm", vmUUID,
-					"host", expectedHost)
-			} else {
-				// VM not found on expected hypervisor - check Nova API as fallback
-				if r.NovaClient != nil {
-					novaServer, novaErr := r.NovaClient.Get(ctx, vmUUID)
-					switch {
-					case novaErr == nil && novaServer.ComputeHost == expectedHost:
-						// VM is confirmed on the expected host via Nova - mark as running
-						newStatusAllocations[vmUUID] = expectedHost
-						logger.V(1).Info("verified VM allocation via Nova API",
-							"vm", vmUUID,
-							"host", expectedHost)
-						continue
-					case novaErr == nil && novaServer.ComputeHost != "":
-						// VM is on a different host past the grace period - remove from this reservation.
-						// The grace period is the window for VMs in transit; past that, a VM on the
-						// wrong host is no longer consuming this slot.
-						logger.Info("VM on different host past grace period, removing from reservation",
-							"vm", vmUUID,
-							"actualHost", novaServer.ComputeHost,
-							"expectedHost", expectedHost,
-							"allocationAge", allocationAge)
-						// fall through to removal
-					case novaErr == nil:
-						// VM has no host yet - fall through to removal
-						logger.V(1).Info("Nova API confirmed VM has no host", "vm", vmUUID)
-					default:
-						var notFound *novaservers.ErrServerNotFound
-						if !errors.As(novaErr, &notFound) {
-							// Transient Nova API error - skip removal to avoid evicting live VMs
-							return nil, fmt.Errorf("nova API error checking VM %s: %w", vmUUID, novaErr)
-						}
-						// 404 - VM gone, fall through to removal
-						logger.V(1).Info("Nova API confirmed VM not found", "vm", vmUUID)
-					}
-				}
-				// VM not found on hypervisor and not in Nova - mark for removal (leaving VM)
-				allocationsToRemove = append(allocationsToRemove, vmUUID)
-				logger.Info("removing stale allocation (VM not found on hypervisor or Nova)",
-					"vm", vmUUID,
-					"reservation", res.Name,
-					"expectedHost", expectedHost,
-					"allocationAge", allocationAge,
-					"gracePeriod", r.Conf.AllocationGracePeriod)
-			}
+			allocationsToRemove = append(allocationsToRemove, vmUUID)
+			logger.Info("removing stale allocation (VM not found on hypervisor)",
+				"vm", vmUUID,
+				"reservation", res.Name,
+				"expectedHost", expectedHost,
+				"allocationAge", allocationAge,
+				"gracePeriod", r.Conf.AllocationGracePeriod)
 		}
 	}
 
@@ -565,34 +486,36 @@ func (r *CommitmentReservationController) getPipelineForFlavorGroup(flavorGroupN
 	return r.Conf.PipelineDefault
 }
 
+// hypervisorToReservations maps a Hypervisor change event to the set of CR reservations
+// assigned to that host. Used as the event handler for the Hypervisor CRD watch so that
+// when the hypervisor operator updates Status.Instances, affected reservations are
+// immediately enqueued for reconciliation.
+func (r *CommitmentReservationController) hypervisorToReservations(ctx context.Context, obj client.Object) []reconcile.Request {
+	hvName := obj.GetName()
+	var reservationList v1alpha1.ReservationList
+	if err := r.List(ctx, &reservationList,
+		client.MatchingFields{indexReservationByStatusHost: hvName},
+	); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to list reservations for hypervisor", "hypervisor", hvName)
+		return nil
+	}
+	requests := make([]reconcile.Request, 0, len(reservationList.Items))
+	for _, res := range reservationList.Items {
+		if res.Spec.Type != v1alpha1.ReservationTypeCommittedResource {
+			continue
+		}
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{Name: res.Name, Namespace: res.Namespace},
+		})
+	}
+	return requests
+}
+
 // Init initializes the reconciler with required clients and DB connection.
 func (r *CommitmentReservationController) Init(ctx context.Context, client client.Client, conf Config) error {
-	// Initialize database connection if DatabaseSecretRef is provided.
-	if conf.DatabaseSecretRef != nil {
-		var err error
-		r.DB, err = db.Connector{Client: client}.FromSecretRef(ctx, *conf.DatabaseSecretRef)
-		if err != nil {
-			return fmt.Errorf("failed to initialize database connection: %w", err)
-		}
-		logf.FromContext(ctx).Info("database connection initialized for commitment reservation controller")
-	}
-
 	// Initialize scheduler client
 	r.SchedulerClient = reservations.NewSchedulerClient(conf.SchedulerURL)
 	logf.FromContext(ctx).Info("scheduler client initialized for commitment reservation controller", "url", conf.SchedulerURL)
-
-	// Initialize Nova client for real-time VM status checks (optional).
-	// Skip if NovaClient is already set (e.g., injected for testing) or if keystone not configured.
-	if r.NovaClient == nil && conf.KeystoneSecretRef.Name != "" {
-		r.NovaClient = schedulingnova.NewNovaClient()
-		if err := r.NovaClient.Init(ctx, client, schedulingnova.NovaClientConfig{
-			KeystoneSecretRef: conf.KeystoneSecretRef,
-			SSOSecretRef:      conf.SSOSecretRef,
-		}); err != nil {
-			return fmt.Errorf("failed to initialize Nova client: %w", err)
-		}
-		logf.FromContext(ctx).Info("Nova client initialized for commitment reservation controller")
-	}
 
 	return nil
 }
@@ -631,6 +554,10 @@ var commitmentReservationPredicate = predicate.Funcs{
 	},
 }
 
+// indexReservationByStatusHost is the field index key for Reservation.Status.Host.
+// Used by the Hypervisor→Reservation mapper to efficiently look up reservations on a given host.
+const indexReservationByStatusHost = ".status.host"
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
@@ -642,6 +569,22 @@ func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl
 		return err
 	}
 
+	// Index reservations by Status.Host so the HV mapper can do O(1) lookups.
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&v1alpha1.Reservation{},
+		indexReservationByStatusHost,
+		func(obj client.Object) []string {
+			res := obj.(*v1alpha1.Reservation)
+			if res.Status.Host == "" {
+				return nil
+			}
+			return []string{res.Status.Host}
+		},
+	); err != nil {
+		return fmt.Errorf("failed to index reservations by status host: %w", err)
+	}
+
 	// Use WatchesMulticluster to watch Reservations across all configured clusters
 	// (home + remotes). This is required because Reservation CRDs may be stored
 	// in remote clusters, not just the home cluster. Without this, the controller
@@ -651,6 +594,19 @@ func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl
 		&v1alpha1.Reservation{},
 		&handler.EnqueueRequestForObject{},
 		commitmentReservationPredicate,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Watch Hypervisor CRDs reactively: when the hypervisor operator updates
+	// Status.Instances (VM appeared or disappeared), enqueue all reservations
+	// assigned to that host. This replaces periodic polling for the established-VM
+	// verification path — changes are detected in seconds rather than up to
+	// RequeueIntervalActive. RequeueIntervalActive remains as a safety-net fallback.
+	bldr, err = bldr.WatchesMulticluster(
+		&hv1.Hypervisor{},
+		handler.EnqueueRequestsFromMapFunc(r.hypervisorToReservations),
 	)
 	if err != nil {
 		return err

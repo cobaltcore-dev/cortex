@@ -8,11 +8,11 @@ groups:
     for: 5m
     labels:
       context: liveness
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: critical
       support_group: workload-management
-      playbook: docs/support/playbook/cortex/down
+      playbook: docs/support/playbook/cortex/alerts/down
     annotations:
       summary: "Cortex Scheduling for Nova is down"
       description: >
@@ -28,11 +28,11 @@ groups:
     for: 5m
     labels:
       context: liveness
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
-      playbook: docs/support/playbook/cortex/down
+      playbook: docs/support/playbook/cortex/alerts/down
     annotations:
       summary: "Cortex Knowledge for Nova is down"
       description: >
@@ -45,7 +45,7 @@ groups:
     for: 5m
     labels:
       context: descheduler
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -61,10 +61,11 @@ groups:
     for: 5m
     labels:
       context: api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/api-errors
     annotations:
       summary: "Nova Scheduler HTTP request 400 errors too high"
       description: >
@@ -78,10 +79,11 @@ groups:
     for: 5m
     labels:
       context: api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/api-errors
     annotations:
       summary: "Nova Scheduler HTTP request 500 errors too high"
       description: >
@@ -95,10 +97,11 @@ groups:
     for: 5m
     labels:
       context: memory
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/deployment
     annotations:
       summary: "`{{$labels.component}}` uses too much memory"
       description: >
@@ -111,10 +114,11 @@ groups:
     for: 5m
     labels:
       context: cpu
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/deployment
     annotations:
       summary: "`{{$labels.component}}` uses too much CPU"
       description: >
@@ -127,10 +131,11 @@ groups:
     for: 5m
     labels:
       context: db
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/database
     annotations:
       summary: "`{{$labels.component}}` is trying to connect to the database too often"
       description: >
@@ -142,10 +147,11 @@ groups:
     for: 5m
     labels:
       context: syncstatus
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/datasources
     annotations:
       summary: "`{{$labels.component}}` Sync not successful"
       description: >
@@ -161,10 +167,11 @@ groups:
     for: 60m
     labels:
       context: syncobjects
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/datasources
     annotations:
       summary: "`{{$labels.component}}` is not syncing any new data from `{{$labels.datasource}}`"
       description: >
@@ -180,10 +187,11 @@ groups:
     for: 60m
     labels:
       context: datasources
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/unready
     annotations:
       summary: "Datasource `{{$labels.datasource}}` is in `{{$labels.state}}` state"
       description: >
@@ -196,10 +204,11 @@ groups:
     for: 60m
     labels:
       context: knowledge
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/unready
     annotations:
       summary: "Knowledge `{{$labels.knowledge}}` is in `{{$labels.state}}` state"
       description: >
@@ -212,7 +221,7 @@ groups:
     for: 5m
     labels:
       context: decisions
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -229,7 +238,7 @@ groups:
     for: 5m
     labels:
       context: decisions
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -249,10 +258,11 @@ groups:
     for: 60m
     labels:
       context: kpis
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/unready
     annotations:
       summary: "KPI `{{$labels.kpi}}` is in `{{$labels.state}}` state"
       description: >
@@ -265,10 +275,11 @@ groups:
     for: 5m
     labels:
       context: pipelines
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/unready
     annotations:
       summary: "Pipeline `{{$labels.pipeline}}` is in `{{$labels.state}}` state"
       description: >
@@ -282,7 +293,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -300,7 +311,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -318,7 +329,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -332,11 +343,13 @@ groups:
         issue is resolved.
 
   - alert: CortexNovaCommittedResourceLatencyTooHigh
-    expr: histogram_quantile(0.95, sum(rate(cortex_committed_resource_change_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) > 30
+    expr: |
+      histogram_quantile(0.95, sum(rate(cortex_committed_resource_change_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) > 30
+      and on() rate(cortex_committed_resource_change_api_requests_total{service="cortex-nova-metrics"}[5m]) > 0
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -350,12 +363,15 @@ groups:
 
   - alert: CortexNovaCommittedResourceRejectionRateTooHigh
     expr: |
-      sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected"}[5m]))
-      / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[5m])) > 0.5
+      (
+        sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected"}[5m]))
+        / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[5m]))
+      ) > 0.5
+      and on() sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[5m])) > 0
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -373,12 +389,12 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
     annotations:
-      summary: "Committed Resource change API timeouts too high"
+      summary: "Committed Resource change API timeout detected"
       description: >
         The committed resource change API (Limes LIQUID integration) timed out
         while waiting for reservations to become ready. This indicates that the
@@ -393,7 +409,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -409,7 +425,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -421,11 +437,13 @@ groups:
         or Nova server data. Limes may receive stale or incomplete usage data.
 
   - alert: CortexNovaCommittedResourceUsageLatencyTooHigh
-    expr: histogram_quantile(0.95, sum(rate(cortex_committed_resource_usage_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) > 5
+    expr: |
+      histogram_quantile(0.95, sum(rate(cortex_committed_resource_usage_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) > 10
+      and on() rate(cortex_committed_resource_usage_api_requests_total{service="cortex-nova-metrics"}[5m]) > 0
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -433,7 +451,7 @@ groups:
       summary: "Committed Resource usage API latency too high"
       description: >
         The committed resource usage API (Limes LIQUID integration) is experiencing
-        high latency (p95 > 5s). This may indicate slow Nova API responses or
+        high latency (p95 > 10s). This may indicate slow Nova API responses or
         database queries. Limes scrapes may time out, affecting quota reporting.
 
   # Committed Resource Capacity API Alerts
@@ -442,7 +460,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -457,7 +475,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -469,11 +487,13 @@ groups:
         capacity. Limes may receive stale or incomplete capacity data.
 
   - alert: CortexNovaCommittedResourceCapacityLatencyTooHigh
-    expr: histogram_quantile(0.95, sum(rate(cortex_committed_resource_capacity_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) > 5
+    expr: |
+      histogram_quantile(0.95, sum(rate(cortex_committed_resource_capacity_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) > 10
+      and on() rate(cortex_committed_resource_capacity_api_requests_total{service="cortex-nova-metrics"}[5m]) > 0
     for: 5m
     labels:
       context: committed-resource-api
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -481,7 +501,7 @@ groups:
       summary: "Committed Resource capacity API latency too high"
       description: >
         The committed resource capacity API (Limes LIQUID integration) is experiencing
-        high latency (p95 > 5s). This may indicate slow database queries or knowledge
+        high latency (p95 > 10s). This may indicate slow database queries or knowledge
         CRD retrieval. Limes scrapes may time out, affecting capacity reporting.
 
   # Committed Resource Syncer Alerts
@@ -490,7 +510,7 @@ groups:
     for: 5m
     labels:
       context: committed-resource-syncer
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -498,7 +518,8 @@ groups:
       summary: "Committed Resource syncer experiencing errors"
       description: >
         The committed resource syncer has encountered multiple errors in the last hour.
-        This may indicate connectivity issues with Limes. Check the syncer logs for error details.
+        This may indicate connectivity issues with Limes, malformed API responses,
+        or failures writing reservation CRDs. Check the syncer logs for error details.
 
   - alert: CortexNovaCommittedResourceSyncerUnitMismatchRateHigh
     expr: |
@@ -510,7 +531,7 @@ groups:
     for: 15m
     labels:
       context: committed-resource-syncer
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -533,7 +554,7 @@ groups:
     for: 15m
     labels:
       context: committed-resource-syncer
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -558,7 +579,7 @@ groups:
     for: 15m
     labels:
       context: committed-resource-syncer
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -580,7 +601,7 @@ groups:
     for: 15m
     labels:
       context: committed-resource-syncer
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -598,10 +619,11 @@ groups:
     for: 5m
     labels:
       context: scheduling
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/scheduling
     annotations:
       summary: "Nova scheduling cannot find valid KVM hosts"
       description: >
@@ -615,10 +637,11 @@ groups:
     for: 60m
     labels:
       context: datasources
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/datasources
     annotations:
       summary: "New datasource `{{$labels.datasource}}` has not reconciled"
       description: >
@@ -633,10 +656,11 @@ groups:
     for: 10m
     labels:
       context: datasources
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/datasources
     annotations:
       summary: "Existing datasource `{{$labels.datasource}}` is lacking behind"
       description: >
@@ -652,10 +676,11 @@ groups:
     for: 15m
     labels:
       context: controller-errors
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/reconciles
     annotations:
       summary: "Controller reconcile error rate >10%"
       description: >
@@ -671,10 +696,11 @@ groups:
     for: 15m
     labels:
       context: controller-duration
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/reconciles
     annotations:
       summary: "Controller reconciliation takes longer than ({{ $value | humanizeDuration }})"
       description: "Reconcile duration higher than 10m while reconciling {{ $labels.controller }}"
@@ -685,10 +711,11 @@ groups:
     for: 60m
     labels:
       context: controller-workqueue
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/datasources
     annotations:
       summary: "Controller {{ $labels.name }}'s backlog is not being drained."
       description: >
@@ -703,7 +730,7 @@ groups:
     for: 15m
     labels:
       context: controller-webhook
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management
@@ -721,7 +748,7 @@ groups:
     for: 15m
     labels:
       context: controller-webhook
-      dashboard: cortex/cortex
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
       service: cortex
       severity: warning
       support_group: workload-management

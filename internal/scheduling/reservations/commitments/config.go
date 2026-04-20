@@ -5,8 +5,6 @@ package commitments
 
 import (
 	"time"
-
-	corev1 "k8s.io/api/core/v1"
 )
 
 type Config struct {
@@ -28,14 +26,9 @@ type Config struct {
 	// SchedulerURL is the endpoint of the nova external scheduler
 	SchedulerURL string `json:"schedulerURL"`
 
-	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
-	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
-
-	// Secret ref to keystone credentials stored in a k8s secret.
-	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
-
-	// Secret ref to the database credentials for querying VM state.
-	DatabaseSecretRef *corev1.SecretReference `json:"databaseSecretRef,omitempty"`
+	// DatasourceName is the name of the Datasource CRD that provides database connection info.
+	// Used to query VM state for report-usage. If empty, report-usage returns an error.
+	DatasourceName string `json:"datasourceName,omitempty"`
 
 	// FlavorGroupPipelines maps flavor group names to pipeline names.
 	// Example: {"2152": "kvm-hana-bin-packing", "2101": "kvm-general-purpose-load-balancing", "*": "kvm-general-purpose-load-balancing"}

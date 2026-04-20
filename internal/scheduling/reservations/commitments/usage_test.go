@@ -13,7 +13,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -41,7 +40,7 @@ func TestUsageCalculator_CalculateUsage(t *testing.T) {
 	tests := []struct {
 		name          string
 		projectID     string
-		vms           []nova.ServerDetail
+		vms           []VMRow
 		reservations  []*v1alpha1.Reservation
 		allAZs        []liquid.AvailabilityZone
 		expectedUsage map[string]uint64 // resourceName -> usage
@@ -49,7 +48,7 @@ func TestUsageCalculator_CalculateUsage(t *testing.T) {
 		{
 			name:         "empty project",
 			projectID:    "project-empty",
-			vms:          []nova.ServerDetail{},
+			vms:          []VMRow{},
 			reservations: []*v1alpha1.Reservation{},
 			allAZs:       []liquid.AvailabilityZone{"az-a"},
 			expectedUsage: map[string]uint64{
@@ -59,10 +58,10 @@ func TestUsageCalculator_CalculateUsage(t *testing.T) {
 		{
 			name:      "single VM with commitment",
 			projectID: "project-A",
-			vms: []nova.ServerDetail{
+			vms: []VMRow{
 				{
 					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
-					TenantID: "project-A", AvailabilityZone: "az-a",
+					AZ:         "az-a",
 					Created:    baseTime.Format(time.RFC3339),
 					FlavorName: "m1.large", FlavorRAM: 4096, FlavorVCPUs: 16,
 				},
@@ -81,10 +80,10 @@ func TestUsageCalculator_CalculateUsage(t *testing.T) {
 		{
 			name:      "VM without matching commitment - PAYG",
 			projectID: "project-B",
-			vms: []nova.ServerDetail{
+			vms: []VMRow{
 				{
 					ID: "vm-002", Name: "vm-002", Status: "ACTIVE",
-					TenantID: "project-B", AvailabilityZone: "az-a",
+					AZ:         "az-a",
 					Created:    baseTime.Format(time.RFC3339),
 					FlavorName: "m1.large", FlavorRAM: 4096, FlavorVCPUs: 16,
 				},
@@ -122,14 +121,14 @@ func TestUsageCalculator_CalculateUsage(t *testing.T) {
 				Build()
 
 			// Setup mock Nova client
-			novaClient := &mockUsageNovaClient{
-				servers: map[string][]nova.ServerDetail{
+			dbClient := &mockUsageDBClient{
+				rows: map[string][]VMRow{
 					tt.projectID: tt.vms,
 				},
 			}
 
 			// Create calculator and run
-			calc := NewUsageCalculator(k8sClient, novaClient)
+			calc := NewUsageCalculator(k8sClient, dbClient)
 			logger := log.FromContext(ctx)
 			report, err := calc.CalculateUsage(ctx, logger, tt.projectID, tt.allAZs)
 			if err != nil {
@@ -331,8 +330,6 @@ func TestBuildVMAttributes(t *testing.T) {
 		MemoryMB:   4096,
 		VCPUs:      16,
 		DiskGB:     100,
-		Metadata:   map[string]string{"env": "prod"},
-		Tags:       []string{"important"},
 	}
 
 	t.Run("with commitment", func(t *testing.T) {
@@ -343,20 +340,11 @@ func TestBuildVMAttributes(t *testing.T) {
 			t.Errorf("status = %v, expected ACTIVE", attrs["status"])
 		}
 
-		// Metadata at top level
-		metadata, ok := attrs["metadata"].(map[string]string)
-		if !ok {
-			t.Errorf("metadata is not map[string]string: %T", attrs["metadata"])
-		} else if metadata["env"] != "prod" {
-			t.Errorf("metadata[env] = %v, expected prod", metadata["env"])
-		}
-
-		// Tags at top level
-		tags, ok := attrs["tags"].([]string)
-		if !ok {
-			t.Errorf("tags is not []string: %T", attrs["tags"])
-		} else if len(tags) != 1 || tags[0] != "important" {
-			t.Errorf("tags = %v, expected [important]", tags)
+		// metadata, tags and os_type are not included (not in Postgres cache)
+		for _, absent := range []string{"metadata", "tags", "os_type"} {
+			if _, present := attrs[absent]; present {
+				t.Errorf("%s must not appear in output (not available from Postgres cache)", absent)
+			}
 		}
 
 		// Flavor is now nested
@@ -382,11 +370,6 @@ func TestBuildVMAttributes(t *testing.T) {
 		if attrs["commitment_id"] != "commit-456" {
 			t.Errorf("commitment_id = %v, expected commit-456", attrs["commitment_id"])
 		}
-
-		// OS type (empty for now)
-		if attrs["os_type"] != "" {
-			t.Errorf("os_type = %v, expected empty string", attrs["os_type"])
-		}
 	})
 
 	t.Run("without commitment (PAYG)", func(t *testing.T) {
@@ -397,29 +380,33 @@ func TestBuildVMAttributes(t *testing.T) {
 		}
 	})
 
-	t.Run("with nil metadata and tags", func(t *testing.T) {
-		vmEmpty := VMUsageInfo{
-			UUID:       "vm-empty",
-			Name:       "empty-vm",
-			FlavorName: "m1.small",
-			Status:     "ACTIVE",
-			MemoryMB:   1024,
-			VCPUs:      2,
-			DiskGB:     10,
-			Metadata:   nil,
-			Tags:       nil,
-		}
-		attrs := buildVMAttributes(vmEmpty, "")
+	t.Run("with video RAM - video_ram_mib present", func(t *testing.T) {
+		vram := uint64(16)
+		vmWithVRAM := vm
+		vmWithVRAM.VideoRAMMiB = &vram
+		attrs := buildVMAttributes(vmWithVRAM, "")
 
-		// Should have empty map and slice, not nil (for JSON serialization)
-		metadata, ok := attrs["metadata"].(map[string]string)
-		if !ok || metadata == nil {
-			t.Errorf("metadata should be empty map, got %T: %v", attrs["metadata"], attrs["metadata"])
+		flavor, ok := attrs["flavor"].(map[string]any)
+		if !ok {
+			t.Fatalf("flavor is not map[string]any: %T", attrs["flavor"])
 		}
+		if flavor["video_ram_mib"] != uint64(16) {
+			t.Errorf("flavor.video_ram_mib = %v, expected 16", flavor["video_ram_mib"])
+		}
+		if _, present := flavor["hw_version"]; present {
+			t.Errorf("flavor.hw_version must not appear in output")
+		}
+	})
 
-		tags, ok := attrs["tags"].([]string)
-		if !ok || tags == nil {
-			t.Errorf("tags should be empty slice, got %T: %v", attrs["tags"], attrs["tags"])
+	t.Run("without video RAM - video_ram_mib absent", func(t *testing.T) {
+		attrs := buildVMAttributes(vm, "") // vm.VideoRAMMiB is nil
+
+		flavor, ok := attrs["flavor"].(map[string]any)
+		if !ok {
+			t.Fatalf("flavor is not map[string]any: %T", attrs["flavor"])
+		}
+		if _, present := flavor["video_ram_mib"]; present {
+			t.Errorf("flavor.video_ram_mib should be absent when VideoRAMMiB is nil, got %v", flavor["video_ram_mib"])
 		}
 	})
 }
@@ -494,7 +481,7 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 	tests := []struct {
 		name                     string
 		projectID                string
-		vms                      []nova.ServerDetail
+		vms                      []VMRow
 		reservations             []*v1alpha1.Reservation
 		allAZs                   []liquid.AvailabilityZone
 		expectedActiveCommitment string // non-empty if VM should be assigned to a commitment
@@ -502,10 +489,10 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 		{
 			name:      "active commitment - within time range",
 			projectID: "project-A",
-			vms: []nova.ServerDetail{
+			vms: []VMRow{
 				{
 					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
-					TenantID: "project-A", AvailabilityZone: "az-a",
+					AZ:         "az-a",
 					Created:    baseTime.Format(time.RFC3339),
 					FlavorName: "m1.large", FlavorRAM: 4096, FlavorVCPUs: 16,
 				},
@@ -526,10 +513,10 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 		{
 			name:      "expired commitment - should be ignored (VM goes to PAYG)",
 			projectID: "project-A",
-			vms: []nova.ServerDetail{
+			vms: []VMRow{
 				{
 					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
-					TenantID: "project-A", AvailabilityZone: "az-a",
+					AZ:         "az-a",
 					Created:    baseTime.Format(time.RFC3339),
 					FlavorName: "m1.large", FlavorRAM: 4096, FlavorVCPUs: 16,
 				},
@@ -547,10 +534,10 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 		{
 			name:      "future commitment - should be ignored (VM goes to PAYG)",
 			projectID: "project-A",
-			vms: []nova.ServerDetail{
+			vms: []VMRow{
 				{
 					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
-					TenantID: "project-A", AvailabilityZone: "az-a",
+					AZ:         "az-a",
 					Created:    baseTime.Format(time.RFC3339),
 					FlavorName: "m1.large", FlavorRAM: 4096, FlavorVCPUs: 16,
 				},
@@ -568,10 +555,10 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 		{
 			name:      "mixed - only active commitment is used",
 			projectID: "project-A",
-			vms: []nova.ServerDetail{
+			vms: []VMRow{
 				{
 					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
-					TenantID: "project-A", AvailabilityZone: "az-a",
+					AZ:         "az-a",
 					Created:    baseTime.Format(time.RFC3339),
 					FlavorName: "m1.large", FlavorRAM: 4096, FlavorVCPUs: 16,
 				},
@@ -623,13 +610,13 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 				WithObjects(objects...).
 				Build()
 
-			novaClient := &mockUsageNovaClient{
-				servers: map[string][]nova.ServerDetail{
+			dbClient := &mockUsageDBClient{
+				rows: map[string][]VMRow{
 					tt.projectID: tt.vms,
 				},
 			}
 
-			calc := NewUsageCalculator(k8sClient, novaClient)
+			calc := NewUsageCalculator(k8sClient, dbClient)
 			logger := log.FromContext(ctx)
 			report, err := calc.CalculateUsage(ctx, logger, tt.projectID, tt.allAZs)
 			if err != nil {
@@ -692,17 +679,17 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 
 	tests := []struct {
 		name              string
-		vms               []nova.ServerDetail
+		vms               []VMRow
 		expectedRAM       uint64 // Expected RAM usage in units
 		expectedCores     uint64 // Expected cores usage
 		expectedInstances uint64
 	}{
 		{
 			name: "single smallest flavor - 1 unit",
-			vms: []nova.ServerDetail{
+			vms: []VMRow{
 				{
 					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
-					TenantID: "project-A", AvailabilityZone: "az-a",
+					AZ:         "az-a",
 					Created:    baseTime.Format(time.RFC3339),
 					FlavorName: "g_k_c1_m2_v2", FlavorRAM: 2032, FlavorVCPUs: 1,
 				},
@@ -713,10 +700,10 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 		},
 		{
 			name: "2x flavor with overhead - floor(4080/2032) = 2 units, not 3",
-			vms: []nova.ServerDetail{
+			vms: []VMRow{
 				{
 					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
-					TenantID: "project-A", AvailabilityZone: "az-a",
+					AZ:         "az-a",
 					Created:    baseTime.Format(time.RFC3339),
 					FlavorName: "g_k_c2_m4_v2", FlavorRAM: 4080, FlavorVCPUs: 2,
 				},
@@ -727,28 +714,28 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 		},
 		{
 			name: "multiple VMs - RAM units should match cores for fixed ratio",
-			vms: []nova.ServerDetail{
+			vms: []VMRow{
 				{
 					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
-					TenantID: "project-A", AvailabilityZone: "az-a",
+					AZ:         "az-a",
 					Created:    baseTime.Format(time.RFC3339),
 					FlavorName: "g_k_c1_m2_v2", FlavorRAM: 2032, FlavorVCPUs: 1,
 				},
 				{
 					ID: "vm-002", Name: "vm-002", Status: "ACTIVE",
-					TenantID: "project-A", AvailabilityZone: "az-a",
+					AZ:         "az-a",
 					Created:    baseTime.Add(time.Second).Format(time.RFC3339),
 					FlavorName: "g_k_c2_m4_v2", FlavorRAM: 4080, FlavorVCPUs: 2,
 				},
 				{
 					ID: "vm-003", Name: "vm-003", Status: "ACTIVE",
-					TenantID: "project-A", AvailabilityZone: "az-a",
+					AZ:         "az-a",
 					Created:    baseTime.Add(2 * time.Second).Format(time.RFC3339),
 					FlavorName: "g_k_c4_m16_v2", FlavorRAM: 16368, FlavorVCPUs: 4,
 				},
 				{
 					ID: "vm-004", Name: "vm-004", Status: "ACTIVE",
-					TenantID: "project-A", AvailabilityZone: "az-a",
+					AZ:         "az-a",
 					Created:    baseTime.Add(3 * time.Second).Format(time.RFC3339),
 					FlavorName: "g_k_c16_m32_v2", FlavorRAM: 32752, FlavorVCPUs: 16,
 				},
@@ -787,13 +774,13 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 				WithObjects(objects...).
 				Build()
 
-			novaClient := &mockUsageNovaClient{
-				servers: map[string][]nova.ServerDetail{
+			dbClient := &mockUsageDBClient{
+				rows: map[string][]VMRow{
 					"project-A": tt.vms,
 				},
 			}
 
-			calc := NewUsageCalculator(k8sClient, novaClient)
+			calc := NewUsageCalculator(k8sClient, dbClient)
 			logger := log.FromContext(ctx)
 			report, err := calc.CalculateUsage(ctx, logger, "project-A", []liquid.AvailabilityZone{"az-a"})
 			if err != nil {

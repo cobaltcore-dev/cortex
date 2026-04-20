@@ -5,8 +5,6 @@ package placement
 
 import (
 	"net/http"
-
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // HandlePostReshaper handles POST /reshaper requests.
@@ -25,8 +23,5 @@ import (
 // resource provider does not exist or if inventory/allocation constraints
 // would be violated. Available since microversion 1.30.
 func (s *Shim) HandlePostReshaper(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-	log.Info("placement request", "method", r.Method, "path", r.URL.Path)
 	s.forward(w, r)
 }

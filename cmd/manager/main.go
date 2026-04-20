@@ -358,6 +358,15 @@ func main() {
 	detectorPipelineMonitor := schedulinglib.NewDetectorPipelineMonitor()
 	metrics.Registry.MustRegister(&detectorPipelineMonitor)
 
+	// Initialize commitments API for LIQUID interface (Postgres-backed usage reporting).
+	commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
+	var commitmentsUsageDB commitments.UsageDBClient
+	if commitmentsConfig.DatasourceName != "" {
+		commitmentsUsageDB = commitments.NewDBUsageClient(multiclusterClient, commitmentsConfig.DatasourceName)
+	}
+	commitmentsAPI := commitments.NewAPIWithConfig(multiclusterClient, commitmentsConfig, commitmentsUsageDB)
+	commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
+
 	if slices.Contains(mainConfig.EnabledControllers, "nova-pipeline-controllers") {
 		// Filter-weigher pipeline controller setup.
 		filterWeigherController := &nova.FilterWeigherPipelineController{
@@ -384,11 +393,6 @@ func main() {
 			setupLog.Error(err, "unable to initialize nova client")
 			os.Exit(1)
 		}
-
-		// Initialize commitments API for LIQUID interface (with Nova client for usage reporting)
-		commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
-		commitmentsAPI := commitments.NewAPIWithConfig(multiclusterClient, commitmentsConfig, novaClient)
-		commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
 
 		deschedulingsController := &nova.DetectorPipelineController{
 			Monitor: detectorPipelineMonitor,
@@ -611,6 +615,12 @@ func main() {
 		// The scheduler client calls the nova external scheduler API to get placement decisions
 		schedulerClient := reservations.NewSchedulerClient(failoverConfig.SchedulerURL)
 
+		failoverMonitor := failover.NewFailoverMonitor()
+		if err := metrics.Registry.Register(failoverMonitor); err != nil {
+			setupLog.Error(err, "failed to register failover monitor metrics, continuing without metrics")
+			failoverMonitor = nil
+		}
+
 		// Defer the initialization of PostgresReader until the manager starts
 		// because the cache is not ready during setup
 		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
@@ -636,6 +646,7 @@ func main() {
 				vmSource,
 				failoverConfig,
 				schedulerClient,
+				failoverMonitor,
 			)
 
 			// Set up the watch-based reconciler for per-reservation reconciliation
