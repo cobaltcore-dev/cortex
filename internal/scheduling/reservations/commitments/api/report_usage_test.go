@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package commitments
+package api
 
 import (
 	"bytes"
@@ -18,6 +18,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -471,17 +472,17 @@ type ExpectedVMUsage struct {
 // ============================================================================
 
 type mockUsageDBClient struct {
-	rows map[string][]VMRow // projectID -> rows
+	rows map[string][]commitments.VMRow // projectID -> rows
 	err  error
 }
 
 func newMockUsageDBClient() *mockUsageDBClient {
 	return &mockUsageDBClient{
-		rows: make(map[string][]VMRow),
+		rows: make(map[string][]commitments.VMRow),
 	}
 }
 
-func (m *mockUsageDBClient) ListProjectVMs(_ context.Context, projectID string) ([]VMRow, error) {
+func (m *mockUsageDBClient) ListProjectVMs(_ context.Context, projectID string) ([]commitments.VMRow, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -496,7 +497,7 @@ func (m *mockUsageDBClient) addVM(vm *TestVMUsage) {
 		extraSpecs["hw_video:ram_max_mb"] = strconv.FormatUint(*vm.Flavor.VideoRAMMiB, 10)
 	}
 	extrasJSON, _ := json.Marshal(extraSpecs) //nolint:errcheck // test helper, always valid
-	row := VMRow{
+	row := commitments.VMRow{
 		ID:           vm.UUID,
 		Name:         vm.UUID,
 		Status:       "ACTIVE",
@@ -579,7 +580,7 @@ func newUsageTestEnv(
 	}
 
 	// Create API with mock DB client
-	api := NewAPIWithConfig(k8sClient, DefaultConfig(), dbClient)
+	api := NewAPIWithConfig(k8sClient, commitments.DefaultConfig(), dbClient)
 	mux := http.NewServeMux()
 	registry := prometheus.NewRegistry()
 	api.Init(mux, registry, log.Log)

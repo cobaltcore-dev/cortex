@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package commitments
+package api
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	liquid "github.com/sapcc/go-api-declarations/liquid"
@@ -38,7 +39,7 @@ func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Request-ID", requestID)
 
 	ctx := reservations.WithGlobalRequestID(r.Context(), "committed-resource-"+requestID)
-	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/info")
+	logger := commitments.LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/info")
 
 	// Only accept GET method
 	if r.Method != http.MethodGet {
@@ -113,7 +114,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo)
 	for groupName, groupData := range flavorGroups {
 		// Determine if this group accepts commitments (requires fixed RAM/core ratio)
-		handlesCommitments := FlavorGroupAcceptsCommitments(&groupData)
+		handlesCommitments := commitments.FlavorGroupAcceptsCommitments(&groupData)
 
 		// All flavor groups are registered for usage reporting.
 		// Only those with a fixed RAM/core ratio have HandlesCommitments=true.
@@ -143,7 +144,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 		}
 
 		// === 1. RAM Resource ===
-		ramResourceName := liquid.ResourceName(ResourceNameRAM(groupName))
+		ramResourceName := liquid.ResourceName(commitments.ResourceNameRAM(groupName))
 		ramUnit, err := liquid.UnitMebibytes.MultiplyBy(groupData.SmallestFlavor.MemoryMB)
 		if err != nil {
 			// Note: This error only occurs on uint64 overflow, which is unrealistic for memory values
@@ -166,7 +167,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 		}
 
 		// === 2. Cores Resource ===
-		coresResourceName := liquid.ResourceName(ResourceNameCores(groupName))
+		coresResourceName := liquid.ResourceName(commitments.ResourceNameCores(groupName))
 		resources[coresResourceName] = liquid.ResourceInfo{
 			DisplayName: fmt.Sprintf(
 				"CPU cores (usable by: %s)",
@@ -182,7 +183,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 		}
 
 		// === 3. Instances Resource ===
-		instancesResourceName := liquid.ResourceName(ResourceNameInstances(groupName))
+		instancesResourceName := liquid.ResourceName(commitments.ResourceNameInstances(groupName))
 		resources[instancesResourceName] = liquid.ResourceInfo{
 			DisplayName: fmt.Sprintf(
 				"instances (usable by: %s)",

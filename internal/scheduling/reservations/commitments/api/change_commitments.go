@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package commitments
+package api
 
 import (
 	"context"
@@ -15,6 +15,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -69,7 +70,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	defer api.changeMutex.Unlock()
 
 	ctx := reservations.WithGlobalRequestID(context.Background(), "committed-resource-"+requestID)
-	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/change-commitments")
+	logger := commitments.LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/change-commitments")
 
 	// Only accept POST method
 	if r.Method != http.MethodPost {
@@ -131,7 +132,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 }
 
 func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.ResponseWriter, logger logr.Logger, req liquid.CommitmentChangeRequest, resp *liquid.CommitmentChangeResponse) error {
-	manager := NewReservationManager(api.client)
+	manager := commitments.NewReservationManager(api.client)
 	requireRollback := false
 	failedCommitments := make(map[string]string) // commitmentUUID to reason for failure, for better response messages in case of rollback
 	creatorRequestID := reservations.GlobalRequestIDFromContext(ctx)
@@ -159,7 +160,7 @@ func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.Respons
 		return errors.New("version mismatch")
 	}
 
-	statesBefore := make(map[string]*CommitmentState) // map of commitmentID to existing state for rollback
+	statesBefore := make(map[string]*commitments.CommitmentState) // map of commitmentID to existing state for rollback
 	var reservationsToWatch []v1alpha1.Reservation
 
 	if req.DryRun {
@@ -173,7 +174,7 @@ ProcessLoop:
 		for _, resourceName := range sortedKeys(projectChanges.ByResource) {
 			resourceChanges := projectChanges.ByResource[resourceName]
 			// Validate resource name pattern (instances_group_*)
-			flavorGroupName, err := getFlavorGroupNameFromResource(string(resourceName))
+			flavorGroupName, err := commitments.GetFlavorGroupNameFromResource(string(resourceName))
 			if err != nil {
 				resp.RejectionReason = fmt.Sprintf("project with unknown resource name %s: %v", projectID, err)
 				requireRollback = true
@@ -189,8 +190,8 @@ ProcessLoop:
 			}
 
 			// Reject commitments for flavor groups that don't accept CRs
-			if !FlavorGroupAcceptsCommitments(&flavorGroup) {
-				resp.RejectionReason = FlavorGroupCommitmentRejectionReason(&flavorGroup)
+			if !commitments.FlavorGroupAcceptsCommitments(&flavorGroup) {
+				resp.RejectionReason = commitments.FlavorGroupCommitmentRejectionReason(&flavorGroup)
 				requireRollback = true
 				break ProcessLoop
 			}
@@ -221,16 +222,16 @@ ProcessLoop:
 					}
 				}
 
-				var stateBefore *CommitmentState
+				var stateBefore *commitments.CommitmentState
 				if len(existing_reservations.Items) == 0 {
-					stateBefore = &CommitmentState{
+					stateBefore = &commitments.CommitmentState{
 						CommitmentUUID:   string(commitment.UUID),
 						ProjectID:        string(projectID),
 						FlavorGroupName:  flavorGroupName,
 						TotalMemoryBytes: 0,
 					}
 				} else {
-					stateBefore, err = FromReservations(existing_reservations.Items)
+					stateBefore, err = commitments.FromReservations(existing_reservations.Items)
 					if err != nil {
 						failedCommitments[string(commitment.UUID)] = "failed to parse existing commitment reservations"
 						logger.Info("failed to get existing state for commitment", "commitmentUUID", commitment.UUID, "error", err)
@@ -241,7 +242,7 @@ ProcessLoop:
 				statesBefore[string(commitment.UUID)] = stateBefore
 
 				// get desired state
-				stateDesired, err := FromChangeCommitmentTargetState(commitment, string(projectID), flavorGroupName, flavorGroup, string(req.AZ))
+				stateDesired, err := commitments.FromChangeCommitmentTargetState(commitment, string(projectID), flavorGroupName, flavorGroup, string(req.AZ))
 				if err != nil {
 					failedCommitments[string(commitment.UUID)] = err.Error()
 					logger.Info("failed to get desired state for commitment", "commitmentUUID", commitment.UUID, "error", err)

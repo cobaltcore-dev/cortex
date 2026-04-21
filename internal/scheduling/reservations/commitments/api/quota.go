@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package commitments
+package api
 
 import (
 	"net/http"
@@ -24,7 +24,7 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("X-Request-ID", requestID)
 
-	log := baseLog.WithValues("requestID", requestID, "endpoint", "quota")
+	log := apiLog.WithValues("requestID", requestID, "endpoint", "quota")
 
 	if r.Method != http.MethodPut {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

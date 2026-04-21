@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package commitments
+package api
 
 import (
 	"encoding/json"
@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/google/uuid"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
@@ -38,7 +39,7 @@ func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request)
 	}
 
 	ctx := reservations.WithGlobalRequestID(r.Context(), "committed-resource-"+requestID)
-	logger := LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/report-capacity")
+	logger := commitments.LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/report-capacity")
 
 	// Only accept POST method
 	if r.Method != http.MethodPost {
@@ -58,7 +59,7 @@ func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Calculate capacity
-	calculator := NewCapacityCalculator(api.client)
+	calculator := commitments.NewCapacityCalculator(api.client)
 	report, err := calculator.CalculateCapacity(ctx, req)
 	if err != nil {
 		logger.Error(err, "failed to calculate capacity")

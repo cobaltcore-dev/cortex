@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package commitments
+package api
 
 import (
 	"bytes"
@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 )
 
 func TestHandleReportCapacity(t *testing.T) {
@@ -135,7 +136,7 @@ func TestCapacityCalculator(t *testing.T) {
 			WithScheme(scheme).
 			Build()
 
-		calculator := NewCapacityCalculator(fakeClient)
+		calculator := commitments.NewCapacityCalculator(fakeClient)
 		req := liquid.ServiceCapacityRequest{
 			AllAZs: []liquid.AvailabilityZone{"az-one", "az-two"},
 		}
@@ -157,7 +158,7 @@ func TestCapacityCalculator(t *testing.T) {
 			WithObjects(emptyKnowledge).
 			Build()
 
-		calculator := NewCapacityCalculator(fakeClient)
+		calculator := commitments.NewCapacityCalculator(fakeClient)
 		req := liquid.ServiceCapacityRequest{
 			AllAZs: []liquid.AvailabilityZone{"az-one", "az-two"},
 		}
@@ -182,7 +183,7 @@ func TestCapacityCalculator(t *testing.T) {
 			WithObjects(flavorGroupKnowledge).
 			Build()
 
-		calculator := NewCapacityCalculator(fakeClient)
+		calculator := commitments.NewCapacityCalculator(fakeClient)
 		req := liquid.ServiceCapacityRequest{
 			AllAZs: []liquid.AvailabilityZone{"qa-de-1a", "qa-de-1b", "qa-de-1d"},
 		}
@@ -208,7 +209,7 @@ func TestCapacityCalculator(t *testing.T) {
 			WithObjects(flavorGroupKnowledge).
 			Build()
 
-		calculator := NewCapacityCalculator(fakeClient)
+		calculator := commitments.NewCapacityCalculator(fakeClient)
 		req := liquid.ServiceCapacityRequest{AllAZs: []liquid.AvailabilityZone{}}
 		report, err := calculator.CalculateCapacity(context.Background(), req)
 		if err != nil {
@@ -233,7 +234,7 @@ func TestCapacityCalculator(t *testing.T) {
 			WithObjects(flavorGroupKnowledge).
 			Build()
 
-		calculator := NewCapacityCalculator(fakeClient)
+		calculator := commitments.NewCapacityCalculator(fakeClient)
 
 		req1 := liquid.ServiceCapacityRequest{
 			AllAZs: []liquid.AvailabilityZone{"eu-de-1a", "eu-de-1b"},

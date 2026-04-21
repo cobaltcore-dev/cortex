@@ -1,45 +1,27 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package commitments
+package api
 
 import (
-	"context"
 	"net/http"
 	"strings"
 	"sync"
 
+	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// UsageDBClient is the minimal interface for querying VM usage data from Postgres.
-type UsageDBClient interface {
-	// ListProjectVMs returns all VMs for a project with their flavor data.
-	ListProjectVMs(ctx context.Context, projectID string) ([]VMRow, error)
-}
-
-// VMRow is the result of a joined server+flavor query from Postgres.
-type VMRow struct {
-	ID           string
-	Name         string
-	Status       string
-	Created      string
-	AZ           string
-	Hypervisor   string
-	FlavorName   string
-	FlavorRAM    uint64
-	FlavorVCPUs  uint64
-	FlavorDisk   uint64
-	FlavorExtras string // JSON string of flavor extra_specs
-}
+var apiLog = ctrl.Log.WithName("committed-resource")
 
 // HTTPAPI implements Limes LIQUID commitment validation endpoints.
 type HTTPAPI struct {
 	client          client.Client
-	config          Config
-	usageDB         UsageDBClient
+	config          commitments.Config
+	usageDB         commitments.UsageDBClient
 	monitor         ChangeCommitmentsAPIMonitor
 	usageMonitor    ReportUsageAPIMonitor
 	capacityMonitor ReportCapacityAPIMonitor
@@ -49,11 +31,11 @@ type HTTPAPI struct {
 }
 
 func NewAPI(client client.Client) *HTTPAPI {
-	return NewAPIWithConfig(client, DefaultConfig(), nil)
+	return NewAPIWithConfig(client, commitments.DefaultConfig(), nil)
 }
 
 // NewAPIWithConfig creates an HTTPAPI with the given config and optional usageDB client.
-func NewAPIWithConfig(k8sClient client.Client, config Config, usageDB UsageDBClient) *HTTPAPI {
+func NewAPIWithConfig(k8sClient client.Client, config commitments.Config, usageDB commitments.UsageDBClient) *HTTPAPI {
 	return &HTTPAPI{
 		client:          k8sClient,
 		config:          config,

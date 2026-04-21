@@ -121,7 +121,7 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 		}
 
 		// Extract flavor group name from resource name (validates format: hw_version_<group>_ram)
-		flavorGroupName, err := getFlavorGroupNameFromResource(commitment.ResourceName)
+		flavorGroupName, err := GetFlavorGroupNameFromResource(commitment.ResourceName)
 		if err != nil {
 			log.Info("skipping commitment with invalid resource name",
 				"id", id,
