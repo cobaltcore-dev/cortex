@@ -402,7 +402,7 @@ func TestRequestIDInContext(t *testing.T) {
 func TestConfigValidateAuthRequiresKeystoneURL(t *testing.T) {
 	c := config{
 		PlacementURL: "http://placement:8778",
-		Auth:         &authConfig{TokenCacheTTL: "5m"},
+		Auth:         &authConfig{TokenCacheTTL: "5m", Policies: []authPolicy{{Pattern: "GET /", Roles: nil}}},
 	}
 	if err := c.validate(); err == nil {
 		t.Fatal("expected error when auth configured without keystoneURL")

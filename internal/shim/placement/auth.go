@@ -5,6 +5,8 @@ package placement
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strings"
@@ -13,6 +15,38 @@ import (
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+// authPolicyRole is a role that grants access for a matching policy rule.
+type authPolicyRole struct {
+	// Name is the OpenStack role name (e.g. "cloud_compute_admin").
+	Name string `json:"name"`
+	// ProjectScoped requires the token's project_id to match the
+	// request's project_id when true (e.g. for per-project usages).
+	ProjectScoped bool `json:"projectScoped,omitempty"`
+}
+
+// authPolicy maps an HTTP method + path pattern to the roles allowed to
+// access it. Patterns use "METHOD /path" syntax where "*" matches any
+// method and "*" in the path acts as a wildcard. Evaluation is
+// first-match; no match means deny.
+type authPolicy struct {
+	// Pattern is the method + path to match (e.g. "GET /usages", "* /*").
+	Pattern string `json:"pattern"`
+	// Roles lists the roles that grant access for this pattern.
+	// When null, the path is publicly accessible (no token required).
+	Roles []authPolicyRole `json:"roles"`
+}
+
+// authConfig configures the Keystone token-validation middleware.
+// When nil, auth is disabled and all requests are passed through.
+type authConfig struct {
+	// TokenCacheTTL is how long validated tokens are cached before
+	// re-introspection against Keystone (e.g. "5m").
+	TokenCacheTTL string `json:"tokenCacheTTL,omitempty"`
+	// Policies is the ordered list of first-match access rules evaluated
+	// against each incoming request.
+	Policies []authPolicy `json:"policies,omitempty"`
+}
 
 // compileAuthPolicies parses the auth config into the shim's runtime
 // policy table and token cache. Called during SetupWithManager.
@@ -32,7 +66,7 @@ func (s *Shim) compileAuthPolicies() error {
 	s.authPolicies = make([]compiledPolicy, len(s.config.Auth.Policies))
 	for i, p := range s.config.Auth.Policies {
 		method, path, ok := strings.Cut(p.Pattern, " ")
-		if !ok {
+		if !ok || method == "" || path == "" {
 			return fmt.Errorf("invalid auth policy pattern %q: expected \"METHOD /path\"", p.Pattern)
 		}
 		s.authPolicies[i] = compiledPolicy{
@@ -64,22 +98,32 @@ type tokenCache struct {
 	ttl     time.Duration
 }
 
+func tokenCacheKey(token string) string {
+	h := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(h[:])
+}
+
 func (c *tokenCache) get(token string) (*tokenInfo, bool) {
-	v, ok := c.entries.Load(token)
+	key := tokenCacheKey(token)
+	v, ok := c.entries.Load(key)
 	if !ok {
 		return nil, false
 	}
 	info := v.(*tokenInfo)
 	now := time.Now()
 	if now.After(info.expiresAt) || now.After(info.cachedAt.Add(c.ttl)) {
-		c.entries.Delete(token)
+		c.entries.Delete(key)
 		return nil, false
 	}
 	return info, true
 }
 
 func (c *tokenCache) put(token string, info *tokenInfo) {
-	c.entries.Store(token, info)
+	c.entries.Store(tokenCacheKey(token), info)
+}
+
+func (c *tokenCache) delete(token string) {
+	c.entries.Delete(tokenCacheKey(token))
 }
 
 // tokenIntrospector abstracts Keystone token validation so tests can
@@ -130,7 +174,7 @@ func authError(w http.ResponseWriter, code int, title, message string) {
 // policy table. It returns true if the request is authorized, false if
 // a 401/403 response has already been written.
 func (s *Shim) checkAuth(w http.ResponseWriter, r *http.Request) bool {
-	if s.authPolicies == nil {
+	if len(s.authPolicies) == 0 {
 		return true
 	}
 
@@ -179,7 +223,7 @@ func (s *Shim) checkAuth(w http.ResponseWriter, r *http.Request) bool {
 	}
 
 	if time.Now().After(info.expiresAt) {
-		s.tokenCache.entries.Delete(tokenValue)
+		s.tokenCache.delete(tokenValue)
 		authError(w, http.StatusUnauthorized, "Unauthorized",
 			"The token has expired.")
 		return false
@@ -187,7 +231,7 @@ func (s *Shim) checkAuth(w http.ResponseWriter, r *http.Request) bool {
 
 	for _, policyRole := range matched.roles {
 		for _, tokenRole := range info.roles {
-			if policyRole.Name != tokenRole {
+			if !strings.EqualFold(policyRole.Name, tokenRole) {
 				continue
 			}
 			if policyRole.ProjectScoped {

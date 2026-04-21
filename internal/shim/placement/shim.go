@@ -48,38 +48,6 @@ type requestIDContextKey struct{}
 // header value through the request lifecycle for tracing.
 var requestIDKey = requestIDContextKey{}
 
-// authPolicyRole is a role that grants access for a matching policy rule.
-type authPolicyRole struct {
-	// Name is the OpenStack role name (e.g. "cloud_compute_admin").
-	Name string `json:"name"`
-	// ProjectScoped requires the token's project_id to match the
-	// request's project_id when true (e.g. for per-project usages).
-	ProjectScoped bool `json:"projectScoped,omitempty"`
-}
-
-// authPolicy maps an HTTP method + path pattern to the roles allowed to
-// access it. Patterns use "METHOD /path" syntax where "*" matches any
-// method and "*" in the path acts as a wildcard. Evaluation is
-// first-match; no match means deny.
-type authPolicy struct {
-	// Pattern is the method + path to match (e.g. "GET /usages", "* /*").
-	Pattern string `json:"pattern"`
-	// Roles lists the roles that grant access for this pattern.
-	// When null, the path is publicly accessible (no token required).
-	Roles []authPolicyRole `json:"roles"`
-}
-
-// authConfig configures the Keystone token-validation middleware.
-// When nil, auth is disabled and all requests are passed through.
-type authConfig struct {
-	// TokenCacheTTL is how long validated tokens are cached before
-	// re-introspection against Keystone (e.g. "5m").
-	TokenCacheTTL string `json:"tokenCacheTTL,omitempty"`
-	// Policies is the ordered list of first-match access rules evaluated
-	// against each incoming request.
-	Policies []authPolicy `json:"policies,omitempty"`
-}
-
 // config holds configuration for the placement shim.
 type config struct {
 	// SSO is an optional configuration for the certificates the http client
@@ -133,6 +101,9 @@ func (c *config) validate() error {
 	}
 	if c.Auth != nil && c.OSPassword == "" {
 		return errors.New("osPassword is required when auth is configured")
+	}
+	if c.Auth != nil && len(c.Auth.Policies) == 0 {
+		return errors.New("auth.policies must not be empty when auth is configured")
 	}
 	return nil
 }
