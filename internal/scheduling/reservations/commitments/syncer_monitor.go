@@ -14,6 +14,7 @@ const (
 	SkipReasonInvalidResource    = "invalid_resource_name"
 	SkipReasonEmptyUUID          = "empty_uuid"
 	SkipReasonNonCompute         = "non_compute"
+	SkipReasonNonActive          = "non_active"
 )
 
 // SyncerMonitor provides metrics for the commitment syncer.
@@ -77,6 +78,7 @@ func NewSyncerMonitor() *SyncerMonitor {
 		SkipReasonInvalidResource,
 		SkipReasonEmptyUUID,
 		SkipReasonNonCompute,
+		SkipReasonNonActive,
 	} {
 		m.commitmentsSkipped.WithLabelValues(reason)
 	}

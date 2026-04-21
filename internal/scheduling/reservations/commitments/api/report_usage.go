@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package commitments
+package api
 
 import (
 	"encoding/json"
@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/google/uuid"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
@@ -32,7 +33,7 @@ func (api *HTTPAPI) HandleReportUsage(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("X-Request-ID", requestID)
 
-	log := baseLog.WithValues("requestID", requestID, "endpoint", "report-usage")
+	log := apiLog.WithValues("requestID", requestID, "endpoint", "report-usage")
 
 	// Check if API is enabled
 	if !api.config.EnableReportUsageAPI {
@@ -72,7 +73,7 @@ func (api *HTTPAPI) HandleReportUsage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Use UsageCalculator to build usage report
-	calculator := NewUsageCalculator(api.client, api.usageDB)
+	calculator := commitments.NewUsageCalculator(api.client, api.usageDB)
 	report, err := calculator.CalculateUsage(r.Context(), log, projectID, req.AllAZs)
 	if err != nil {
 		log.Error(err, "failed to calculate usage report", "projectID", projectID)

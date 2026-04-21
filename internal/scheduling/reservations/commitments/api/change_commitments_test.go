@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //nolint:unparam,unused // test helper functions have fixed parameters for simplicity
-package commitments
+package api
 
 import (
 	"bytes"
@@ -22,6 +22,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -444,8 +445,8 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-disabled", "confirmed", 2),
 			),
-			CustomConfig: func() *Config {
-				cfg := DefaultConfig()
+			CustomConfig: func() *commitments.Config {
+				cfg := commitments.DefaultConfig()
 				cfg.EnableChangeCommitmentsAPI = false
 				return &cfg
 			}(),
@@ -498,8 +499,8 @@ func TestCommitmentChangeIntegration(t *testing.T) {
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-timeout", "confirmed", 2),
 			),
 			// With 0ms timeout, the watch will timeout immediately before reservations become ready
-			CustomConfig: func() *Config {
-				cfg := DefaultConfig()
+			CustomConfig: func() *commitments.Config {
+				cfg := commitments.DefaultConfig()
 				cfg.ChangeAPIWatchReservationsTimeout = 0 * time.Millisecond
 				cfg.ChangeAPIWatchReservationsPollInterval = 100 * time.Millisecond
 				return &cfg
@@ -600,7 +601,7 @@ type CommitmentChangeTestCase struct {
 	ExpectedAPIResponse  APIResponseExpectation
 	AvailableResources   *AvailableResources // If nil, all reservations accepted without checks
 	EnvInfoVersion       int64               // Override InfoVersion for version mismatch tests
-	CustomConfig         *Config             // Override default config for testing timeout behavior
+	CustomConfig         *commitments.Config // Override default config for testing timeout behavior
 }
 
 // AvailableResources defines available memory per host (MB).
@@ -944,7 +945,7 @@ func newCommitmentTestEnv(
 	reservations []*v1alpha1.Reservation,
 	flavorGroups FlavorGroupsKnowledge,
 	resources *AvailableResources,
-	customConfig *Config,
+	customConfig *commitments.Config,
 ) *CommitmentTestEnv {
 
 	t.Helper()

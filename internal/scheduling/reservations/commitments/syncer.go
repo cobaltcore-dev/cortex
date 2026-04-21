@@ -110,8 +110,18 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 			continue
 		}
 
+		// Only process commitments that are active (confirmed or guaranteed).
+		// planned/pending are not yet accepted by Cortex; superseded/expired are done.
+		if commitment.Status != "confirmed" && commitment.Status != "guaranteed" {
+			log.Info("skipping non-active commitment", "id", id, "status", commitment.Status)
+			if s.monitor != nil {
+				s.monitor.RecordCommitmentSkipped(SkipReasonNonActive)
+			}
+			continue
+		}
+
 		// Extract flavor group name from resource name (validates format: hw_version_<group>_ram)
-		flavorGroupName, err := getFlavorGroupNameFromResource(commitment.ResourceName)
+		flavorGroupName, err := GetFlavorGroupNameFromResource(commitment.ResourceName)
 		if err != nil {
 			log.Info("skipping commitment with invalid resource name",
 				"id", id,
