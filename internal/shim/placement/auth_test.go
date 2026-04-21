@@ -585,30 +585,6 @@ func TestCompileRoles(t *testing.T) {
 		}
 	})
 
-	t.Run("backward compat projectScoped bool", func(t *testing.T) {
-		roles, err := compileRoles([]authPolicyRole{
-			{Name: "viewer", ProjectScoped: true},
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if roles[0].extractor != queryParamScope || roles[0].extractParam != "project_id" {
-			t.Errorf("backward compat: got extractor=%d param=%q", roles[0].extractor, roles[0].extractParam)
-		}
-	})
-
-	t.Run("projectScope takes precedence over projectScoped", func(t *testing.T) {
-		roles, err := compileRoles([]authPolicyRole{
-			{Name: "admin", ProjectScoped: true, ProjectScope: &authProjectScope{From: "body", Field: "proj"}},
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if roles[0].extractor != bodyFieldScope || roles[0].extractParam != "proj" {
-			t.Errorf("precedence: got extractor=%d param=%q", roles[0].extractor, roles[0].extractParam)
-		}
-	})
-
 	t.Run("no project scope", func(t *testing.T) {
 		roles, err := compileRoles([]authPolicyRole{
 			{Name: "admin"},

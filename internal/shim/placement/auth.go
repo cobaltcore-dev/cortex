@@ -37,8 +37,6 @@ type authProjectScope struct {
 type authPolicyRole struct {
 	// Name is the OpenStack role name (e.g. "cloud_compute_admin").
 	Name string `json:"name"`
-	// ProjectScoped is deprecated; use ProjectScope instead.
-	ProjectScoped bool `json:"projectScoped,omitempty"`
 	// ProjectScope configures project-scoped authorization for this role.
 	// When non-nil, the request's project ID (extracted per the config)
 	// must match the token's project ID.
@@ -112,9 +110,6 @@ func compileRoles(roles []authPolicyRole) ([]compiledRole, error) {
 	for i, role := range roles {
 		cr := compiledRole{name: role.Name}
 		scope := role.ProjectScope
-		if scope == nil && role.ProjectScoped {
-			scope = &authProjectScope{From: "query", Param: "project_id"}
-		}
 		if scope != nil {
 			switch scope.From {
 			case "query":
