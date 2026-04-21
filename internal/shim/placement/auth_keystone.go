@@ -6,6 +6,7 @@ package placement
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
@@ -35,7 +36,12 @@ func (s *Shim) initTokenIntrospector(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("creating Keystone provider client: %w", err)
 	}
-	provider.HTTPClient = *s.httpClient
+	// Use a dedicated HTTP client for Keystone — the shim's httpClient
+	// carries the placement-API SSO transport (client certs / custom CA)
+	// which would cause TLS mismatches against Keystone.
+	provider.HTTPClient = http.Client{
+		Timeout: 30 * time.Second,
+	}
 	if err := openstack.Authenticate(ctx, provider, authOpts); err != nil {
 		return fmt.Errorf("authenticating with Keystone: %w", err)
 	}

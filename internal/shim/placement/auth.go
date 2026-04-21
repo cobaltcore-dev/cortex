@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -176,6 +177,7 @@ type tokenInfo struct {
 // elapsed.
 type tokenCache struct {
 	entries sync.Map // map[string]*tokenInfo
+	sf      singleflight.Group
 	ttl     time.Duration
 }
 
@@ -310,15 +312,25 @@ func (s *Shim) checkAuth(w http.ResponseWriter, r *http.Request) bool {
 
 	info, ok := s.tokenCache.get(tokenValue)
 	if !ok {
-		var err error
-		info, err = s.tokenIntrospector.introspect(r.Context(), tokenValue)
+		key := tokenCacheKey(tokenValue)
+		v, err, _ := s.tokenCache.sf.Do(key, func() (any, error) {
+			if cached, ok := s.tokenCache.get(tokenValue); ok {
+				return cached, nil
+			}
+			result, err := s.tokenIntrospector.introspect(r.Context(), tokenValue)
+			if err != nil {
+				return nil, err
+			}
+			s.tokenCache.put(tokenValue, result)
+			return result, nil
+		})
 		if err != nil {
 			log.Info("token introspection failed", "error", err)
 			authError(w, http.StatusUnauthorized, "Unauthorized",
 				"Token validation failed.")
 			return false
 		}
-		s.tokenCache.put(tokenValue, info)
+		info = v.(*tokenInfo)
 	}
 
 	if time.Now().After(info.expiresAt) {

@@ -29,6 +29,20 @@ func (m *mockIntrospector) introspect(_ context.Context, _ string) (*tokenInfo, 
 	return m.info, m.err
 }
 
+// slowIntrospector is like mockIntrospector but adds a small delay,
+// making singleflight deduplication observable under concurrent load.
+type slowIntrospector struct {
+	info  *tokenInfo
+	err   error
+	calls atomic.Int64
+}
+
+func (s *slowIntrospector) introspect(_ context.Context, _ string) (*tokenInfo, error) {
+	s.calls.Add(1)
+	time.Sleep(50 * time.Millisecond)
+	return s.info, s.err
+}
+
 func TestMatchPath(t *testing.T) {
 	tests := []struct {
 		pattern string
@@ -392,6 +406,39 @@ func TestCheckAuthCachesToken(t *testing.T) {
 	}
 	if n := mock.calls.Load(); n != 1 {
 		t.Errorf("introspect called %d times, want 1", n)
+	}
+}
+
+func TestCheckAuthSingleflight(t *testing.T) {
+	slow := &slowIntrospector{info: &tokenInfo{
+		roles:     []string{"admin"},
+		expiresAt: time.Now().Add(time.Hour),
+		cachedAt:  time.Now(),
+	}}
+	s := &Shim{
+		authPolicies: []compiledPolicy{
+			{method: "*", pathPattern: "/*", roles: []compiledRole{{name: "admin"}}},
+		},
+		tokenCache:        &tokenCache{ttl: time.Minute},
+		tokenIntrospector: slow,
+	}
+	const n = 10
+	results := make(chan bool, n)
+	for range n {
+		go func() {
+			req := httptest.NewRequest(http.MethodGet, "/traits", http.NoBody)
+			req.Header.Set("X-Auth-Token", "same-token")
+			w := httptest.NewRecorder()
+			results <- s.checkAuth(w, req)
+		}()
+	}
+	for range n {
+		if !<-results {
+			t.Fatal("expected all concurrent requests to be authorized")
+		}
+	}
+	if c := slow.calls.Load(); c != 1 {
+		t.Errorf("introspect called %d times, want 1 (singleflight should deduplicate)", c)
 	}
 }
 
