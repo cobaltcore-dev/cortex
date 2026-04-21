@@ -4,10 +4,13 @@
 package placement
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -16,13 +19,30 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// authProjectScope configures how the project ID is extracted from the
+// request for project-scoped authorization.
+type authProjectScope struct {
+	// From selects the extraction strategy: "query" reads a URL query
+	// parameter, "body" reads a top-level JSON body field.
+	From string `json:"from"`
+	// Param is the query parameter name (used when From is "query",
+	// defaults to "project_id").
+	Param string `json:"param,omitempty"`
+	// Field is the JSON body field name (used when From is "body",
+	// defaults to "project_id").
+	Field string `json:"field,omitempty"`
+}
+
 // authPolicyRole is a role that grants access for a matching policy rule.
 type authPolicyRole struct {
 	// Name is the OpenStack role name (e.g. "cloud_compute_admin").
 	Name string `json:"name"`
-	// ProjectScoped requires the token's project_id to match the
-	// request's project_id when true (e.g. for per-project usages).
+	// ProjectScoped is deprecated; use ProjectScope instead.
 	ProjectScoped bool `json:"projectScoped,omitempty"`
+	// ProjectScope configures project-scoped authorization for this role.
+	// When non-nil, the request's project ID (extracted per the config)
+	// must match the token's project ID.
+	ProjectScope *authProjectScope `json:"projectScope,omitempty"`
 }
 
 // authPolicy maps an HTTP method + path pattern to the roles allowed to
@@ -69,15 +89,81 @@ func (s *Shim) compileAuthPolicies() error {
 		if !ok || method == "" || path == "" {
 			return fmt.Errorf("invalid auth policy pattern %q: expected \"METHOD /path\"", p.Pattern)
 		}
+		roles, err := compileRoles(p.Roles)
+		if err != nil {
+			return fmt.Errorf("policy %q: %w", p.Pattern, err)
+		}
 		s.authPolicies[i] = compiledPolicy{
 			method:      method,
 			pathPattern: path,
-			roles:       p.Roles,
+			roles:       roles,
 		}
 	}
 	setupLog.Info("Auth middleware configured",
 		"policies", len(s.authPolicies), "tokenCacheTTL", ttl)
 	return nil
+}
+
+func compileRoles(roles []authPolicyRole) ([]compiledRole, error) {
+	if len(roles) == 0 {
+		return nil, nil
+	}
+	compiled := make([]compiledRole, len(roles))
+	for i, role := range roles {
+		cr := compiledRole{name: role.Name}
+		scope := role.ProjectScope
+		if scope == nil && role.ProjectScoped {
+			scope = &authProjectScope{From: "query", Param: "project_id"}
+		}
+		if scope != nil {
+			switch scope.From {
+			case "query":
+				cr.extractor = queryParamScope
+				cr.extractParam = scope.Param
+				if cr.extractParam == "" {
+					cr.extractParam = "project_id"
+				}
+			case "body":
+				cr.extractor = bodyFieldScope
+				cr.extractParam = scope.Field
+				if cr.extractParam == "" {
+					cr.extractParam = "project_id"
+				}
+			default:
+				return nil, fmt.Errorf("role %q: invalid projectScope.from %q (must be \"query\" or \"body\")", role.Name, scope.From)
+			}
+		}
+		compiled[i] = cr
+	}
+	return compiled, nil
+}
+
+// extractBodyField reads the request body, extracts a top-level JSON
+// string field, and re-wraps r.Body so downstream handlers can still
+// read it.
+func extractBodyField(r *http.Request, field string) string {
+	if r.Body == nil || r.Body == http.NoBody {
+		return ""
+	}
+	const maxBodySize = 1 << 20 // 1 MiB
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize))
+	if err != nil {
+		return ""
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(body, &top); err != nil {
+		return ""
+	}
+	raw, ok := top[field]
+	if !ok {
+		return ""
+	}
+	var val string
+	if err := json.Unmarshal(raw, &val); err != nil {
+		return ""
+	}
+	return val
 }
 
 // tokenInfo holds validated Keystone token metadata cached after a
@@ -132,12 +218,30 @@ type tokenIntrospector interface {
 	introspect(ctx context.Context, tokenValue string) (*tokenInfo, error)
 }
 
+// projectIDExtractor selects how the request's project ID is obtained
+// for project-scoped authorization checks.
+type projectIDExtractor int
+
+const (
+	noProjectScope  projectIDExtractor = iota
+	queryParamScope                    // extract from URL query parameter
+	bodyFieldScope                     // extract from top-level JSON body field
+)
+
+// compiledRole is a pre-resolved role with its project-scope extraction
+// strategy ready for request-time evaluation.
+type compiledRole struct {
+	name         string
+	extractor    projectIDExtractor
+	extractParam string // query param name or body field name
+}
+
 // compiledPolicy is an authPolicy with its pattern pre-parsed at setup
 // time for efficient request-time matching.
 type compiledPolicy struct {
-	method      string           // HTTP method or "*"
-	pathPattern string           // path with optional trailing "/*" wildcard
-	roles       []authPolicyRole // nil/empty = public (no token required)
+	method      string         // HTTP method or "*"
+	pathPattern string         // path with optional trailing "/*" wildcard
+	roles       []compiledRole // nil/empty = public (no token required)
 }
 
 // matchPath reports whether requestPath matches the pattern.
@@ -229,18 +333,30 @@ func (s *Shim) checkAuth(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 
-	for _, policyRole := range matched.roles {
+	var bodyProjectID string
+	var bodyRead bool
+
+	for _, cr := range matched.roles {
 		for _, tokenRole := range info.roles {
-			if !strings.EqualFold(policyRole.Name, tokenRole) {
+			if !strings.EqualFold(cr.name, tokenRole) {
 				continue
 			}
-			if policyRole.ProjectScoped {
-				reqProjectID := r.URL.Query().Get("project_id")
-				if reqProjectID == "" || reqProjectID != info.projectID {
-					continue
+			switch cr.extractor {
+			case noProjectScope:
+				return true
+			case queryParamScope:
+				if id := r.URL.Query().Get(cr.extractParam); id != "" && id == info.projectID {
+					return true
+				}
+			case bodyFieldScope:
+				if !bodyRead {
+					bodyProjectID = extractBodyField(r, cr.extractParam)
+					bodyRead = true
+				}
+				if bodyProjectID != "" && bodyProjectID == info.projectID {
+					return true
 				}
 			}
-			return true
 		}
 	}
 

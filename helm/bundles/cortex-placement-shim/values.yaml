@@ -51,9 +51,11 @@ cortex-shim:
             - name: cloud_compute_admin
             - name: cloud_compute_viewer
             - name: compute_admin
-              projectScoped: true
+              projectScope:
+                from: query
             - name: compute_viewer
-              projectScoped: true
+              projectScope:
+                from: query
         - pattern: "GET /*"
           roles:
             - name: cloud_compute_admin

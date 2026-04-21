@@ -445,7 +445,7 @@ func TestWrapHandlerWithAuth(t *testing.T) {
 		upstreamRequestTimer:   up,
 		authPolicies: []compiledPolicy{
 			{method: "GET", pathPattern: "/", roles: nil}, // public
-			{method: "*", pathPattern: "/*", roles: []authPolicyRole{{Name: "cloud_compute_admin"}}},
+			{method: "*", pathPattern: "/*", roles: []compiledRole{{name: "cloud_compute_admin"}}},
 		},
 		tokenCache:        &tokenCache{ttl: time.Minute},
 		tokenIntrospector: &mockIntrospector{info: info},

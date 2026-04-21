@@ -4,11 +4,14 @@
 package placement
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -158,7 +161,7 @@ func TestCheckAuthDisabled(t *testing.T) {
 func TestCheckAuthNoMatchingPolicy(t *testing.T) {
 	s := &Shim{
 		authPolicies: []compiledPolicy{
-			{method: "GET", pathPattern: "/usages", roles: []authPolicyRole{{Name: "admin"}}},
+			{method: "GET", pathPattern: "/usages", roles: []compiledRole{{name: "admin"}}},
 		},
 		tokenCache:        &tokenCache{ttl: time.Minute},
 		tokenIntrospector: &mockIntrospector{},
@@ -191,7 +194,7 @@ func TestCheckAuthPublicEndpoint(t *testing.T) {
 	t.Run("empty roles", func(t *testing.T) {
 		s := &Shim{
 			authPolicies: []compiledPolicy{
-				{method: "GET", pathPattern: "/", roles: []authPolicyRole{}},
+				{method: "GET", pathPattern: "/", roles: []compiledRole{}},
 			},
 			tokenCache:        &tokenCache{ttl: time.Minute},
 			tokenIntrospector: &mockIntrospector{},
@@ -207,7 +210,7 @@ func TestCheckAuthPublicEndpoint(t *testing.T) {
 func TestCheckAuthMissingToken(t *testing.T) {
 	s := &Shim{
 		authPolicies: []compiledPolicy{
-			{method: "*", pathPattern: "/*", roles: []authPolicyRole{{Name: "admin"}}},
+			{method: "*", pathPattern: "/*", roles: []compiledRole{{name: "admin"}}},
 		},
 		tokenCache:        &tokenCache{ttl: time.Minute},
 		tokenIntrospector: &mockIntrospector{},
@@ -225,7 +228,7 @@ func TestCheckAuthMissingToken(t *testing.T) {
 func TestCheckAuthInvalidToken(t *testing.T) {
 	s := &Shim{
 		authPolicies: []compiledPolicy{
-			{method: "*", pathPattern: "/*", roles: []authPolicyRole{{Name: "admin"}}},
+			{method: "*", pathPattern: "/*", roles: []compiledRole{{name: "admin"}}},
 		},
 		tokenCache:        &tokenCache{ttl: time.Minute},
 		tokenIntrospector: &mockIntrospector{err: errors.New("invalid token")},
@@ -244,9 +247,9 @@ func TestCheckAuthInvalidToken(t *testing.T) {
 func TestCheckAuthValidToken(t *testing.T) {
 	s := &Shim{
 		authPolicies: []compiledPolicy{
-			{method: "GET", pathPattern: "/*", roles: []authPolicyRole{
-				{Name: "cloud_compute_admin"},
-				{Name: "cloud_compute_viewer"},
+			{method: "GET", pathPattern: "/*", roles: []compiledRole{
+				{name: "cloud_compute_admin"},
+				{name: "cloud_compute_viewer"},
 			}},
 		},
 		tokenCache: &tokenCache{ttl: time.Minute},
@@ -267,7 +270,7 @@ func TestCheckAuthValidToken(t *testing.T) {
 func TestCheckAuthInsufficientRoles(t *testing.T) {
 	s := &Shim{
 		authPolicies: []compiledPolicy{
-			{method: "*", pathPattern: "/*", roles: []authPolicyRole{{Name: "cloud_compute_admin"}}},
+			{method: "*", pathPattern: "/*", roles: []compiledRole{{name: "cloud_compute_admin"}}},
 		},
 		tokenCache: &tokenCache{ttl: time.Minute},
 		tokenIntrospector: &mockIntrospector{info: &tokenInfo{
@@ -289,8 +292,8 @@ func TestCheckAuthInsufficientRoles(t *testing.T) {
 
 func TestCheckAuthProjectScoped(t *testing.T) {
 	policies := []compiledPolicy{
-		{method: "GET", pathPattern: "/usages", roles: []authPolicyRole{
-			{Name: "compute_viewer", ProjectScoped: true},
+		{method: "GET", pathPattern: "/usages", roles: []compiledRole{
+			{name: "compute_viewer", extractor: queryParamScope, extractParam: "project_id"},
 		}},
 	}
 	info := &tokenInfo{
@@ -353,7 +356,7 @@ func TestCheckAuthFirstMatchWins(t *testing.T) {
 	s := &Shim{
 		authPolicies: []compiledPolicy{
 			{method: "GET", pathPattern: "/usages", roles: nil}, // public
-			{method: "*", pathPattern: "/*", roles: []authPolicyRole{{Name: "admin"}}},
+			{method: "*", pathPattern: "/*", roles: []compiledRole{{name: "admin"}}},
 		},
 		tokenCache:        &tokenCache{ttl: time.Minute},
 		tokenIntrospector: &mockIntrospector{},
@@ -374,7 +377,7 @@ func TestCheckAuthCachesToken(t *testing.T) {
 	}}
 	s := &Shim{
 		authPolicies: []compiledPolicy{
-			{method: "*", pathPattern: "/*", roles: []authPolicyRole{{Name: "admin"}}},
+			{method: "*", pathPattern: "/*", roles: []compiledRole{{name: "admin"}}},
 		},
 		tokenCache:        &tokenCache{ttl: time.Minute},
 		tokenIntrospector: mock,
@@ -422,4 +425,269 @@ func TestAuthErrorFormat(t *testing.T) {
 	if body.Error.Message != "The request you have made requires authentication." {
 		t.Errorf("error message = %q", body.Error.Message)
 	}
+}
+
+func TestCheckAuthProjectScopedBody(t *testing.T) {
+	policies := []compiledPolicy{
+		{method: "PUT", pathPattern: "/allocations/*", roles: []compiledRole{
+			{name: "compute_admin", extractor: bodyFieldScope, extractParam: "project_id"},
+		}},
+	}
+	info := &tokenInfo{
+		roles:     []string{"compute_admin"},
+		projectID: "proj-123",
+		expiresAt: time.Now().Add(time.Hour),
+		cachedAt:  time.Now(),
+	}
+
+	t.Run("matching project_id from body", func(t *testing.T) {
+		s := &Shim{
+			authPolicies:      policies,
+			tokenCache:        &tokenCache{ttl: time.Minute},
+			tokenIntrospector: &mockIntrospector{info: info},
+		}
+		body := `{"project_id":"proj-123","user_id":"u1","allocations":{}}`
+		req := httptest.NewRequest(http.MethodPut, "/allocations/consumer-1", strings.NewReader(body))
+		req.Header.Set("X-Auth-Token", "token")
+		w := httptest.NewRecorder()
+		if !s.checkAuth(w, req) {
+			t.Fatal("expected authorized with matching project_id in body")
+		}
+	})
+
+	t.Run("mismatched project_id from body", func(t *testing.T) {
+		s := &Shim{
+			authPolicies:      policies,
+			tokenCache:        &tokenCache{ttl: time.Minute},
+			tokenIntrospector: &mockIntrospector{info: info},
+		}
+		body := `{"project_id":"other-proj","user_id":"u1"}`
+		req := httptest.NewRequest(http.MethodPut, "/allocations/consumer-1", strings.NewReader(body))
+		req.Header.Set("X-Auth-Token", "token")
+		w := httptest.NewRecorder()
+		if s.checkAuth(w, req) {
+			t.Fatal("expected deny for mismatched project_id in body")
+		}
+		if w.Code != http.StatusForbidden {
+			t.Errorf("status = %d, want %d", w.Code, http.StatusForbidden)
+		}
+	})
+
+	t.Run("missing project_id field in body", func(t *testing.T) {
+		s := &Shim{
+			authPolicies:      policies,
+			tokenCache:        &tokenCache{ttl: time.Minute},
+			tokenIntrospector: &mockIntrospector{info: info},
+		}
+		body := `{"user_id":"u1","allocations":{}}`
+		req := httptest.NewRequest(http.MethodPut, "/allocations/consumer-1", strings.NewReader(body))
+		req.Header.Set("X-Auth-Token", "token")
+		w := httptest.NewRecorder()
+		if s.checkAuth(w, req) {
+			t.Fatal("expected deny for missing project_id in body")
+		}
+	})
+
+	t.Run("empty body", func(t *testing.T) {
+		s := &Shim{
+			authPolicies:      policies,
+			tokenCache:        &tokenCache{ttl: time.Minute},
+			tokenIntrospector: &mockIntrospector{info: info},
+		}
+		req := httptest.NewRequest(http.MethodPut, "/allocations/consumer-1", http.NoBody)
+		req.Header.Set("X-Auth-Token", "token")
+		w := httptest.NewRecorder()
+		if s.checkAuth(w, req) {
+			t.Fatal("expected deny for empty body")
+		}
+	})
+
+	t.Run("malformed JSON body", func(t *testing.T) {
+		s := &Shim{
+			authPolicies:      policies,
+			tokenCache:        &tokenCache{ttl: time.Minute},
+			tokenIntrospector: &mockIntrospector{info: info},
+		}
+		req := httptest.NewRequest(http.MethodPut, "/allocations/consumer-1", strings.NewReader("not json"))
+		req.Header.Set("X-Auth-Token", "token")
+		w := httptest.NewRecorder()
+		if s.checkAuth(w, req) {
+			t.Fatal("expected deny for malformed JSON body")
+		}
+	})
+
+	t.Run("body still readable after auth", func(t *testing.T) {
+		s := &Shim{
+			authPolicies:      policies,
+			tokenCache:        &tokenCache{ttl: time.Minute},
+			tokenIntrospector: &mockIntrospector{info: info},
+		}
+		body := `{"project_id":"proj-123","user_id":"u1"}`
+		req := httptest.NewRequest(http.MethodPut, "/allocations/consumer-1", strings.NewReader(body))
+		req.Header.Set("X-Auth-Token", "token")
+		w := httptest.NewRecorder()
+		if !s.checkAuth(w, req) {
+			t.Fatal("expected authorized")
+		}
+		remaining, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatalf("failed to read body after auth: %v", err)
+		}
+		if string(remaining) != body {
+			t.Errorf("body after auth = %q, want %q", remaining, body)
+		}
+	})
+}
+
+func TestCompileRoles(t *testing.T) {
+	t.Run("projectScope from query", func(t *testing.T) {
+		roles, err := compileRoles([]authPolicyRole{
+			{Name: "admin", ProjectScope: &authProjectScope{From: "query", Param: "proj"}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if roles[0].extractor != queryParamScope || roles[0].extractParam != "proj" {
+			t.Errorf("got extractor=%d param=%q", roles[0].extractor, roles[0].extractParam)
+		}
+	})
+
+	t.Run("projectScope from body", func(t *testing.T) {
+		roles, err := compileRoles([]authPolicyRole{
+			{Name: "admin", ProjectScope: &authProjectScope{From: "body", Field: "project_id"}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if roles[0].extractor != bodyFieldScope || roles[0].extractParam != "project_id" {
+			t.Errorf("got extractor=%d param=%q", roles[0].extractor, roles[0].extractParam)
+		}
+	})
+
+	t.Run("projectScope defaults", func(t *testing.T) {
+		roles, err := compileRoles([]authPolicyRole{
+			{Name: "admin", ProjectScope: &authProjectScope{From: "query"}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if roles[0].extractParam != "project_id" {
+			t.Errorf("default param = %q, want %q", roles[0].extractParam, "project_id")
+		}
+	})
+
+	t.Run("invalid from value", func(t *testing.T) {
+		_, err := compileRoles([]authPolicyRole{
+			{Name: "admin", ProjectScope: &authProjectScope{From: "header"}},
+		})
+		if err == nil {
+			t.Fatal("expected error for invalid from value")
+		}
+	})
+
+	t.Run("backward compat projectScoped bool", func(t *testing.T) {
+		roles, err := compileRoles([]authPolicyRole{
+			{Name: "viewer", ProjectScoped: true},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if roles[0].extractor != queryParamScope || roles[0].extractParam != "project_id" {
+			t.Errorf("backward compat: got extractor=%d param=%q", roles[0].extractor, roles[0].extractParam)
+		}
+	})
+
+	t.Run("projectScope takes precedence over projectScoped", func(t *testing.T) {
+		roles, err := compileRoles([]authPolicyRole{
+			{Name: "admin", ProjectScoped: true, ProjectScope: &authProjectScope{From: "body", Field: "proj"}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if roles[0].extractor != bodyFieldScope || roles[0].extractParam != "proj" {
+			t.Errorf("precedence: got extractor=%d param=%q", roles[0].extractor, roles[0].extractParam)
+		}
+	})
+
+	t.Run("no project scope", func(t *testing.T) {
+		roles, err := compileRoles([]authPolicyRole{
+			{Name: "admin"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if roles[0].extractor != noProjectScope {
+			t.Errorf("got extractor=%d, want noProjectScope", roles[0].extractor)
+		}
+	})
+
+	t.Run("nil roles returns nil", func(t *testing.T) {
+		roles, err := compileRoles(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if roles != nil {
+			t.Errorf("expected nil, got %v", roles)
+		}
+	})
+}
+
+func TestExtractBodyField(t *testing.T) {
+	t.Run("valid JSON with string field", func(t *testing.T) {
+		body := `{"project_id":"abc-123","other":"val"}`
+		req := httptest.NewRequest(http.MethodPut, "/test", strings.NewReader(body))
+		if got := extractBodyField(req, "project_id"); got != "abc-123" {
+			t.Errorf("got %q, want %q", got, "abc-123")
+		}
+	})
+
+	t.Run("missing field", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPut, "/test", strings.NewReader(`{"other":"val"}`))
+		if got := extractBodyField(req, "project_id"); got != "" {
+			t.Errorf("got %q, want empty", got)
+		}
+	})
+
+	t.Run("non-string field", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPut, "/test", strings.NewReader(`{"project_id":42}`))
+		if got := extractBodyField(req, "project_id"); got != "" {
+			t.Errorf("got %q, want empty for non-string", got)
+		}
+	})
+
+	t.Run("malformed JSON", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPut, "/test", strings.NewReader("not json"))
+		if got := extractBodyField(req, "project_id"); got != "" {
+			t.Errorf("got %q, want empty for bad JSON", got)
+		}
+	})
+
+	t.Run("nil body", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPut, "/test", http.NoBody)
+		if got := extractBodyField(req, "project_id"); got != "" {
+			t.Errorf("got %q, want empty for nil body", got)
+		}
+	})
+
+	t.Run("body re-readable after extraction", func(t *testing.T) {
+		body := `{"project_id":"abc-123"}`
+		req := httptest.NewRequest(http.MethodPut, "/test", strings.NewReader(body))
+		extractBodyField(req, "project_id")
+		remaining, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(remaining) != body {
+			t.Errorf("re-read body = %q, want %q", remaining, body)
+		}
+	})
+
+	t.Run("large body is capped", func(t *testing.T) {
+		huge := `{"project_id":"` + strings.Repeat("x", 2<<20) + `"}`
+		req := httptest.NewRequest(http.MethodPut, "/test", bytes.NewReader([]byte(huge)))
+		got := extractBodyField(req, "project_id")
+		if got != "" {
+			t.Errorf("expected empty for body exceeding limit, got %q", got)
+		}
+	})
 }
