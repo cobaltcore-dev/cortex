@@ -426,8 +426,8 @@ func TestTranslateToResourceProvider(t *testing.T) {
 	if rp.Generation != 3 {
 		t.Errorf("Generation = %d, want 3", rp.Generation)
 	}
-	if rp.ParentProviderUUID == nil || *rp.ParentProviderUUID != validUUID {
-		t.Errorf("ParentProviderUUID = %v, want %q", rp.ParentProviderUUID, validUUID)
+	if rp.ParentProviderUUID != nil {
+		t.Errorf("ParentProviderUUID = %v, want nil (root provider)", rp.ParentProviderUUID)
 	}
 	if rp.RootProviderUUID == nil || *rp.RootProviderUUID != validUUID {
 		t.Errorf("RootProviderUUID = %v, want %q", rp.RootProviderUUID, validUUID)
@@ -636,12 +636,12 @@ func TestHandleListResourceProviders_Filters(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid resources returns 500", func(t *testing.T) {
+	t.Run("invalid resources returns 400", func(t *testing.T) {
 		s := newTestShimWithHypervisors(t, http.StatusOK, emptyUpstream, hv1Obj)
 		w := serveHandler(t, http.MethodGet, "/resource_providers",
 			s.HandleListResourceProviders, "/resource_providers?resources=INVALID")
-		if w.Code != http.StatusInternalServerError {
-			t.Fatalf("status = %d, want %d", w.Code, http.StatusInternalServerError)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
 		}
 	})
 }
@@ -671,6 +671,17 @@ func TestHandleCreateResourceProvider(t *testing.T) {
 		s.HandleCreateResourceProvider(w, req)
 		if w.Code != http.StatusCreated {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusCreated)
+		}
+	})
+
+	t.Run("uuid conflict with existing hypervisor", func(t *testing.T) {
+		s := newTestShimWithHypervisors(t, http.StatusCreated, `{}`, hv1Obj)
+		body := `{"name":"different-name","uuid":"` + validUUID + `"}`
+		req := httptest.NewRequest(http.MethodPost, "/resource_providers", strings.NewReader(body))
+		w := httptest.NewRecorder()
+		s.HandleCreateResourceProvider(w, req)
+		if w.Code != http.StatusConflict {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusConflict)
 		}
 	})
 

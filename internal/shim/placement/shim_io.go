@@ -84,10 +84,16 @@ func (w *shimResponseWriter) Write(b []byte) (int, error) {
 // writeJSON serializes v as JSON and writes it to w with the given HTTP status
 // code. On encoding failure it sends a 500 Internal Server Error instead.
 func (s *Shim) writeJSON(w http.ResponseWriter, statusCode int, v any) {
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(v); err != nil {
+		logf.Log.Error(err, "failed to encode JSON response")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	if err := json.NewEncoder(w).Encode(v); err != nil {
-		logf.Log.Error(err, "failed to encode JSON response")
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		logf.Log.Error(err, "failed to write JSON response")
 	}
 }
 

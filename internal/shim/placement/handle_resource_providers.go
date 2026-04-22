@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -48,16 +49,13 @@ type resourceProviderLink struct {
 }
 
 // translateToResourceProvider constructs a resourceProvider from a Hypervisor.
-// For the purposes of this shim, we treat each hypervisor as a root
-// provider with no parent, so both ParentProviderUUID and RootProviderUUID
-// are set to the hypervisor's UUID.
+// KVM hypervisors are root providers with no parent.
 func translateToResourceProvider(hv hv1.Hypervisor) resourceProvider {
 	return resourceProvider{
-		Generation:         hv.Generation,
-		UUID:               hv.Status.HypervisorID,
-		Name:               hv.Name,
-		ParentProviderUUID: &hv.Status.HypervisorID,
-		RootProviderUUID:   &hv.Status.HypervisorID,
+		Generation:       hv.Generation,
+		UUID:             hv.Status.HypervisorID,
+		Name:             hv.Name,
+		RootProviderUUID: &hv.Status.HypervisorID,
 		Links: []resourceProviderLink{
 			{
 				Rel:  "self",
@@ -91,10 +89,7 @@ func translateToResourceProvider(hv hv1.Hypervisor) resourceProvider {
 // POST /resource_providers.
 type createResourceProviderRequest struct {
 	Name string `json:"name"`
-
-	// Other fields are not relevant for the shim since we don't actually
-	// create resource providers in Kubernetes. We just check for name
-	// collisions with openstack placement.
+	UUID string `json:"uuid,omitempty"`
 }
 
 // HandleCreateResourceProvider handles POST /resource_providers requests.
@@ -164,9 +159,26 @@ func (s *Shim) HandleCreateResourceProvider(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Check UUID collision with existing KVM hypervisors.
+	if req.UUID != "" {
+		var hvsByUUID hv1.HypervisorList
+		err = s.List(ctx, &hvsByUUID, client.MatchingFields{idxHypervisorOpenStackId: req.UUID})
+		if err != nil && !apierrors.IsNotFound(err) {
+			log.Error(err, "failed to list hypervisors with OpenStack ID index")
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+		if len(hvsByUUID.Items) > 0 {
+			log.Error(nil, "attempt to create a resource provider that conflicts with a kvm hypervisor UUID",
+				"uuid", req.UUID)
+			http.Error(w, "conflict with an existing kvm hypervisor resource provider", http.StatusConflict)
+			return
+		}
+	}
+
 	// No conflict — restore the body and forward to upstream placement.
 	log.Info("no conflict with existing kvm hypervisor, forwarding create resource provider request to upstream placement",
-		"uuid", req.Name)
+		"name", req.Name)
 	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	s.forward(w, r)
 }
@@ -184,13 +196,14 @@ func (s *Shim) HandleCreateResourceProvider(w http.ResponseWriter, r *http.Reque
 func (s *Shim) HandleShowResourceProvider(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
-	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
-	if !ok {
-		return
-	}
 
 	if !s.config.Features.EnableResourceProviders {
 		s.forward(w, r)
+		return
+	}
+
+	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
+	if !ok {
 		return
 	}
 
@@ -241,13 +254,14 @@ type updateResourceProviderRequest struct {
 func (s *Shim) HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
-	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
-	if !ok {
-		return
-	}
 
 	if !s.config.Features.EnableResourceProviders {
 		s.forward(w, r)
+		return
+	}
+
+	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
+	if !ok {
 		return
 	}
 
@@ -298,10 +312,10 @@ func (s *Shim) HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "cannot change the name of a kvm hypervisor resource provider", http.StatusConflict)
 		return
 	}
-	// The hypervisor's parent is also immutable, so if the request tries to
-	// change it, we return a 409 Conflict.
-	if req.ParentProviderUUID != nil && *req.ParentProviderUUID != hv.Status.HypervisorID {
-		log.Error(nil, "attempt to change the parent of a kvm hypervisor resource provider", "uuid", uuid, "currentParent", hv.Status.HypervisorID, "requestedParent", *req.ParentProviderUUID)
+	// KVM hypervisors are root providers with no parent. Any attempt to set a
+	// parent is rejected.
+	if req.ParentProviderUUID != nil {
+		log.Error(nil, "attempt to set parent on a kvm hypervisor resource provider", "uuid", uuid, "requestedParent", *req.ParentProviderUUID)
 		http.Error(w, "cannot change the parent of a kvm hypervisor resource provider", http.StatusConflict)
 		return
 	}
@@ -324,13 +338,14 @@ func (s *Shim) HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Reque
 func (s *Shim) HandleDeleteResourceProvider(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
-	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
-	if !ok {
-		return
-	}
 
 	if !s.config.Features.EnableResourceProviders {
 		s.forward(w, r)
+		return
+	}
+
+	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
+	if !ok {
 		return
 	}
 
@@ -457,8 +472,8 @@ func (s *Shim) HandleListResourceProviders(w http.ResponseWriter, r *http.Reques
 			var err error
 			filtered, err = filterHypervisorsByResources(ctx, filtered, v)
 			if err != nil {
-				log.Error(err, "failed to filter hypervisors by resources")
-				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				log.Info("invalid resources query parameter", "error", err)
+				http.Error(w, "invalid resources query parameter: "+err.Error(), http.StatusBadRequest)
 				return
 			}
 		}
@@ -676,6 +691,9 @@ func filterHypervisorsByResources(ctx context.Context, hvs []hv1.Hypervisor, raw
 		if err != nil {
 			return nil, fmt.Errorf("invalid amount in resources token %q: %w", part, err)
 		}
+		if amount < 0 {
+			return nil, fmt.Errorf("negative amount in resources token %q", part)
+		}
 		mappedResourceName := ""
 		var mappedResourceQuantity *resource.Quantity
 		switch kv[0] {
@@ -683,9 +701,15 @@ func filterHypervisorsByResources(ctx context.Context, hvs []hv1.Hypervisor, raw
 			mappedResourceName = "cpu"
 			mappedResourceQuantity = resource.NewQuantity(amount, resource.DecimalSI)
 		case "MEMORY_MB":
+			if amount > math.MaxInt64/(1024*1024) {
+				return nil, fmt.Errorf("amount overflows bytes in resources token %q", part)
+			}
 			mappedResourceName = "memory"
 			mappedResourceQuantity = resource.NewQuantity(amount*1024*1024, resource.DecimalSI)
 		case "DISK_GB":
+			if amount > math.MaxInt64/(1024*1024*1024) {
+				return nil, fmt.Errorf("amount overflows bytes in resources token %q", part)
+			}
 			mappedResourceName = "disk"
 			mappedResourceQuantity = resource.NewQuantity(amount*1024*1024*1024, resource.DecimalSI)
 		default:
