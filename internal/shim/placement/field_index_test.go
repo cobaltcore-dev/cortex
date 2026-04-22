@@ -110,8 +110,8 @@ func TestIndexFields_RegistersAllIndexes(t *testing.T) {
 	cc := &captureCache{}
 	mcl := buildClient(t, cc)
 
-	if err := indexFields(context.Background(), mcl); err != nil {
-		t.Fatalf("indexFields: %v", err)
+	if err := IndexFields(context.Background(), mcl); err != nil {
+		t.Fatalf("IndexFields: %v", err)
 	}
 
 	wantFields := []string{
@@ -138,7 +138,7 @@ func TestIndexFields_PropagatesError(t *testing.T) {
 	cc := &captureCache{err: wantErr}
 	mcl := buildClient(t, cc)
 
-	err := indexFields(context.Background(), mcl)
+	err := IndexFields(context.Background(), mcl)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -150,8 +150,8 @@ func TestIndexFields_PropagatesError(t *testing.T) {
 func TestExtractor_HypervisorOpenStackId(t *testing.T) {
 	cc := &captureCache{}
 	mcl := buildClient(t, cc)
-	if err := indexFields(context.Background(), mcl); err != nil {
-		t.Fatalf("indexFields: %v", err)
+	if err := IndexFields(context.Background(), mcl); err != nil {
+		t.Fatalf("IndexFields: %v", err)
 	}
 	fn := extractorByField(t, cc.calls, idxHypervisorOpenStackId)
 
@@ -191,8 +191,8 @@ func TestExtractor_HypervisorOpenStackId(t *testing.T) {
 func TestExtractor_HypervisorKubernetesId(t *testing.T) {
 	cc := &captureCache{}
 	mcl := buildClient(t, cc)
-	if err := indexFields(context.Background(), mcl); err != nil {
-		t.Fatalf("indexFields: %v", err)
+	if err := IndexFields(context.Background(), mcl); err != nil {
+		t.Fatalf("IndexFields: %v", err)
 	}
 	fn := extractorByField(t, cc.calls, idxHypervisorKubernetesId)
 
@@ -232,8 +232,8 @@ func TestExtractor_HypervisorKubernetesId(t *testing.T) {
 func TestExtractor_HypervisorName(t *testing.T) {
 	cc := &captureCache{}
 	mcl := buildClient(t, cc)
-	if err := indexFields(context.Background(), mcl); err != nil {
-		t.Fatalf("indexFields: %v", err)
+	if err := IndexFields(context.Background(), mcl); err != nil {
+		t.Fatalf("IndexFields: %v", err)
 	}
 	fn := extractorByField(t, cc.calls, idxHypervisorName)
 

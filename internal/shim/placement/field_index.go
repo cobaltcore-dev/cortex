@@ -28,9 +28,9 @@ const (
 	idxHypervisorName = "metadata.name"
 )
 
-// indexFields indexes all fields that are needed by the shim to quickly
+// IndexFields indexes all fields that are needed by the shim to quickly
 // look up objects from the controller-runtime cache.
-func indexFields(ctx context.Context, mcl *multicluster.Client) error {
+func IndexFields(ctx context.Context, mcl *multicluster.Client) error {
 	log := logf.FromContext(ctx)
 	log.Info("Setting up field indexes for the multicluster client")
 	h, hl := &hv1.Hypervisor{}, &hv1.HypervisorList{}

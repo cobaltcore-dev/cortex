@@ -9,13 +9,14 @@ import (
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // e2eTestGetRoot verifies basic connectivity to the placement shim.
 // It sends a GET request to the root endpoint (/) and checks that the shim
 // responds with a 2xx status code, confirming the service is reachable.
-func e2eTestGetRoot(ctx context.Context) error {
+func e2eTestGetRoot(ctx context.Context, _ client.Client) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running root endpoint e2e test")
 	config, err := conf.GetConfig[e2eRootConfig]()

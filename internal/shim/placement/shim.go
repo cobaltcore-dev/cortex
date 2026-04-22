@@ -288,7 +288,7 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 	if !ok {
 		return errors.New("provided client must be a multicluster client")
 	}
-	if err := indexFields(ctx, mcl); err != nil {
+	if err := IndexFields(ctx, mcl); err != nil {
 		return fmt.Errorf("failed to set up indexes: %w", err)
 	}
 	bldr := multicluster.BuildController(mcl, mgr)
@@ -355,6 +355,15 @@ func (s *Shim) forwardWithHook(w http.ResponseWriter, r *http.Request, hook func
 
 	// Copy all incoming headers.
 	upstreamReq.Header = r.Header.Clone()
+
+	// When a hook will inspect the response body, remove Accept-Encoding
+	// so the upstream returns uncompressed data. Go's Transport would
+	// normally handle this automatically, but we're forwarding the
+	// downstream client's explicit Accept-Encoding, which bypasses the
+	// auto-decompression in net/http.
+	if hook != nil {
+		upstreamReq.Header.Del("Accept-Encoding")
+	}
 
 	pattern, _ := ctx.Value(routePatternKey).(string)
 	start := time.Now()

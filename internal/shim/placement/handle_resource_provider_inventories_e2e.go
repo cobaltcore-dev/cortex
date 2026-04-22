@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -31,7 +32,7 @@ import (
 //  9. DELETE /{uuid}/inventories — bulk-delete all inventories at once.
 //
 // 10. Cleanup: DELETE the test RP and custom resource class.
-func e2eTestResourceProviderInventories(ctx context.Context) error {
+func e2eTestResourceProviderInventories(ctx context.Context, _ client.Client) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running resource provider inventories endpoint e2e test")
 	config, err := conf.GetConfig[e2eRootConfig]()

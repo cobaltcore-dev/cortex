@@ -160,6 +160,8 @@ func (s *Shim) HandleCreateResourceProvider(w http.ResponseWriter, r *http.Reque
 	}
 
 	// No conflict — restore the body and forward to upstream placement.
+	log.Info("no conflict with existing kvm hypervisor, forwarding create resource provider request to upstream placement",
+		"uuid", req.Name)
 	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	s.forward(w, r)
 }
@@ -187,6 +189,8 @@ func (s *Shim) HandleShowResourceProvider(w http.ResponseWriter, r *http.Request
 	err := s.List(ctx, &hvs, client.MatchingFields{idxHypervisorOpenStackId: uuid})
 	if apierrors.IsNotFound(err) || len(hvs.Items) == 0 {
 		// Forward the request to placement if the hypervisor doesn't exist.
+		log.Info("resource provider not found in kubernetes, forwarding to upstream placement",
+			"uuid", uuid)
 		s.forward(w, r)
 		return
 	}
@@ -203,6 +207,8 @@ func (s *Shim) HandleShowResourceProvider(w http.ResponseWriter, r *http.Request
 	}
 
 	// Translate the hypervisor to a resource provider response.
+	log.Info("resource provider found in kubernetes, returning translated kvm hypervisor",
+		"uuid", uuid, "hypervisor", hvs.Items[0].Name)
 	s.writeJSON(w, http.StatusOK, translateToResourceProvider(hvs.Items[0]))
 }
 
@@ -252,6 +258,8 @@ func (s *Shim) HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Reque
 	err = s.List(ctx, &hvs, client.MatchingFields{idxHypervisorOpenStackId: uuid})
 	if apierrors.IsNotFound(err) || len(hvs.Items) == 0 {
 		// Forward the request to placement if the hypervisor doesn't exist.
+		log.Info("resource provider not found in kubernetes, forwarding to upstream placement",
+			"uuid", uuid)
 		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		s.forward(w, r)
 		return
@@ -285,6 +293,8 @@ func (s *Shim) HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Reque
 
 	// If we get here, the request is valid but doesn't actually change anything,
 	// so we can just return the current state of the resource provider.
+	log.Info("update to kvm hypervisor resource provider has no effect, returning current state",
+		"uuid", uuid, "name", hv.Name, "parentProviderUUID", hv.Status.HypervisorID)
 	s.writeJSON(w, http.StatusOK, translateToResourceProvider(hv))
 }
 
@@ -309,6 +319,8 @@ func (s *Shim) HandleDeleteResourceProvider(w http.ResponseWriter, r *http.Reque
 	err := s.List(ctx, &hvs, client.MatchingFields{idxHypervisorOpenStackId: uuid})
 	if apierrors.IsNotFound(err) || len(hvs.Items) == 0 {
 		// Forward the request to placement if the hypervisor doesn't exist.
+		log.Info("resource provider not found in kubernetes, forwarding to upstream placement",
+			"uuid", uuid)
 		s.forward(w, r)
 		return
 	}
@@ -326,6 +338,7 @@ func (s *Shim) HandleDeleteResourceProvider(w http.ResponseWriter, r *http.Reque
 
 	// KVM hypervisor resources are immutable to the extent that they cannot be
 	// deleted, so we return a 409 Conflict to match the behavior of placement.
+	log.Error(nil, "attempt to delete a kvm hypervisor resource provider", "uuid", uuid)
 	http.Error(w, "cannot delete a kvm hypervisor resource provider", http.StatusConflict)
 }
 
@@ -376,6 +389,12 @@ func (s *Shim) HandleListResourceProviders(w http.ResponseWriter, r *http.Reques
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
+		var uuids []string
+		for _, rp := range upstreamList.ResourceProviders {
+			uuids = append(uuids, rp.UUID)
+		}
+		log.Info("fetched resource providers from upstream placement",
+			"count", len(upstreamList.ResourceProviders), "uuids", uuids)
 
 		// Fetch all KVM hypervisors from Kubernetes.
 		query := r.URL.Query()
@@ -385,6 +404,12 @@ func (s *Shim) HandleListResourceProviders(w http.ResponseWriter, r *http.Reques
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
+		uuids = nil
+		for _, hv := range hvs.Items {
+			uuids = append(uuids, hv.Status.HypervisorID)
+		}
+		log.Info("fetched hypervisors from kubernetes",
+			"count", len(hvs.Items), "uuids", uuids)
 
 		// Post-filter by query parameters.
 		filtered := hvs.Items
@@ -441,6 +466,11 @@ func (s *Shim) HandleListResourceProviders(w http.ResponseWriter, r *http.Reques
 			merged = append(merged, rp)
 		}
 
+		log.Info("merged resource providers from upstream placement and kubernetes",
+			"upstreamCount", len(upstreamList.ResourceProviders),
+			"kubernetesCount", len(filtered),
+			"mergedCount", len(merged),
+		)
 		s.writeJSON(w, http.StatusOK, listResourceProvidersResponse{
 			ResourceProviders: merged,
 		})

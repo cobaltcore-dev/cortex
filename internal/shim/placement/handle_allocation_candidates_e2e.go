@@ -12,6 +12,7 @@ import (
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -25,7 +26,7 @@ import (
 //     - allocation_requests is non-empty (at least one candidate found).
 //     - provider_summaries contains the test RP's UUID.
 //  4. Cleanup: DELETE the test RP and custom resource class.
-func e2eTestAllocationCandidates(ctx context.Context) error {
+func e2eTestAllocationCandidates(ctx context.Context, _ client.Client) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running allocation candidates endpoint e2e test")
 	config, err := conf.GetConfig[e2eRootConfig]()

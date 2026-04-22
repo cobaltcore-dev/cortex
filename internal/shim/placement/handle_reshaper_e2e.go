@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -30,7 +31,7 @@ import (
 //  7. Verify allocation: GET /allocations/{consumer} — expect it to reference
 //     RP-B (not RP-A).
 //  8. Cleanup: DELETE allocation, both RPs, and custom resource class.
-func e2eTestReshaper(ctx context.Context) error {
+func e2eTestReshaper(ctx context.Context, _ client.Client) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running reshaper endpoint e2e test")
 	config, err := conf.GetConfig[e2eRootConfig]()

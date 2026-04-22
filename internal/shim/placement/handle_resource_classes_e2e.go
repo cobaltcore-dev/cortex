@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -23,7 +24,7 @@ import (
 //  5. GET /resource_classes/{name} — verify the custom class now exists.
 //  6. DELETE /resource_classes/{name} — remove the custom class.
 //  7. GET /resource_classes/{name} — confirm deletion returns 404.
-func e2eTestResourceClasses(ctx context.Context) error {
+func e2eTestResourceClasses(ctx context.Context, _ client.Client) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running resource classes endpoint e2e test")
 	config, err := conf.GetConfig[e2eRootConfig]()
