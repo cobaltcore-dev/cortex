@@ -458,6 +458,28 @@ func TestConfigValidateEnableRootRequiresVersioning(t *testing.T) {
 	}
 }
 
+func TestConfigValidateEnableTraitsRequiresConfig(t *testing.T) {
+	c := config{
+		PlacementURL: "http://placement:8778",
+		Features:     featuresConfig{EnableTraits: true},
+	}
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when enableTraits is true without traits config")
+	}
+	c.Traits = &traitsConfig{}
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when traits.configMapName is empty")
+	}
+	c.Traits.ConfigMapName = "cortex-placement-global"
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when POD_NAMESPACE is not set")
+	}
+	t.Setenv("POD_NAMESPACE", "default")
+	if err := c.validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestWrapHandlerWithAuth(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
