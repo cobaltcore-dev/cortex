@@ -48,6 +48,16 @@ type requestIDContextKey struct{}
 // header value through the request lifecycle for tracing.
 var requestIDKey = requestIDContextKey{}
 
+// featuresConfig holds feature flags that can enable or disable specific
+// shim behaviors. All flags default to off (false).
+type featuresConfig struct {
+	// EnableResourceProviders enables the KVM-specific resource provider
+	// logic (hypervisor lookups, merged listings, 409 conflicts). When
+	// false, all resource provider handlers forward to upstream placement
+	// as a pure passthrough.
+	EnableResourceProviders bool `json:"enableResourceProviders,omitempty"`
+}
+
 // config holds configuration for the placement shim.
 type config struct {
 	// SSO is an optional configuration for the certificates the http client
@@ -85,6 +95,9 @@ type config struct {
 	// Kubernetes resource.Quantity string (e.g. "4Ki"). Defaults to "4Ki"
 	// when unset or empty.
 	MaxBodyLogSize string `json:"maxBodyLogSize,omitempty"`
+	// Features holds feature flags for enabling or disabling specific
+	// shim behaviors.
+	Features featuresConfig `json:"features"`
 }
 
 // validate checks the config for required fields and returns an error if the

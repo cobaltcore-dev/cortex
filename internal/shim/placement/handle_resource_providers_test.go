@@ -96,8 +96,11 @@ func newTestShimWithHypervisors(t *testing.T, upstreamStatus int, upstreamBody s
 	t.Cleanup(upstream.Close)
 	down, up := newTestTimers()
 	return &Shim{
-		Client:                 newFakeClient(t, hvs...),
-		config:                 config{PlacementURL: upstream.URL},
+		Client: newFakeClient(t, hvs...),
+		config: config{
+			PlacementURL: upstream.URL,
+			Features:     featuresConfig{EnableResourceProviders: true},
+		},
 		httpClient:             upstream.Client(),
 		maxBodyLogSize:         4096,
 		downstreamRequestTimer: down,
@@ -865,6 +868,102 @@ func TestHandleDeleteResourceProvider(t *testing.T) {
 			s.HandleDeleteResourceProvider, "/resource_providers/not-a-uuid")
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Feature flag tests
+// ---------------------------------------------------------------------------
+
+func TestHandleResourceProviders_FeatureFlagOff(t *testing.T) {
+	hv1Obj := &hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{Name: "hv-flagtest"},
+		Status:     hv1.HypervisorStatus{HypervisorID: validUUID},
+	}
+
+	newFlagOffShim := func(t *testing.T, upstreamStatus int, upstreamBody string) *Shim {
+		t.Helper()
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(upstreamStatus)
+			if _, err := w.Write([]byte(upstreamBody)); err != nil {
+				t.Errorf("failed to write upstream body: %v", err)
+			}
+		}))
+		t.Cleanup(upstream.Close)
+		down, up := newTestTimers()
+		return &Shim{
+			Client: newFakeClient(t, hv1Obj),
+			config: config{
+				PlacementURL: upstream.URL,
+				Features:     featuresConfig{EnableResourceProviders: false},
+			},
+			httpClient:             upstream.Client(),
+			maxBodyLogSize:         4096,
+			downstreamRequestTimer: down,
+			upstreamRequestTimer:   up,
+		}
+	}
+
+	t.Run("create forwards to upstream", func(t *testing.T) {
+		s := newFlagOffShim(t, http.StatusCreated, `{"uuid":"new","name":"hv-flagtest"}`)
+		body := `{"name":"hv-flagtest"}`
+		req := httptest.NewRequest(http.MethodPost, "/resource_providers", strings.NewReader(body))
+		w := httptest.NewRecorder()
+		s.HandleCreateResourceProvider(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want %d (flag off should forward, not 409)", w.Code, http.StatusCreated)
+		}
+	})
+
+	t.Run("show forwards to upstream", func(t *testing.T) {
+		s := newFlagOffShim(t, http.StatusOK, `{"uuid":"`+validUUID+`","name":"upstream-rp"}`)
+		w := serveHandler(t, http.MethodGet, "/resource_providers/{uuid}",
+			s.HandleShowResourceProvider, "/resource_providers/"+validUUID)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+		if !strings.Contains(w.Body.String(), "upstream-rp") {
+			t.Errorf("expected upstream body, got %q", w.Body.String())
+		}
+	})
+
+	t.Run("update forwards to upstream", func(t *testing.T) {
+		s := newFlagOffShim(t, http.StatusOK, `{"uuid":"`+validUUID+`","name":"different-name"}`)
+		body := `{"name":"different-name"}`
+		req := httptest.NewRequest(http.MethodPut, "/resource_providers/"+validUUID, strings.NewReader(body))
+		mux := http.NewServeMux()
+		mux.HandleFunc("PUT /resource_providers/{uuid}", s.HandleUpdateResourceProvider)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d (flag off should forward, not 409)", w.Code, http.StatusOK)
+		}
+	})
+
+	t.Run("delete forwards to upstream", func(t *testing.T) {
+		s := newFlagOffShim(t, http.StatusNoContent, "")
+		w := serveHandler(t, http.MethodDelete, "/resource_providers/{uuid}",
+			s.HandleDeleteResourceProvider, "/resource_providers/"+validUUID)
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want %d (flag off should forward, not 409)", w.Code, http.StatusNoContent)
+		}
+	})
+
+	t.Run("list forwards to upstream without merge", func(t *testing.T) {
+		upstreamBody := `{"resource_providers":[{"uuid":"upstream-uuid","name":"upstream-rp","generation":1,"links":[]}]}`
+		s := newFlagOffShim(t, http.StatusOK, upstreamBody)
+		w := serveHandler(t, http.MethodGet, "/resource_providers",
+			s.HandleListResourceProviders, "/resource_providers")
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+		if !strings.Contains(w.Body.String(), "upstream-uuid") {
+			t.Errorf("expected upstream body passthrough, got %q", w.Body.String())
+		}
+		if strings.Contains(w.Body.String(), validUUID) {
+			t.Errorf("should not contain k8s hypervisor UUID when flag is off, got %q", w.Body.String())
 		}
 	})
 }

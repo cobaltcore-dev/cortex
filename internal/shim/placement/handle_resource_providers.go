@@ -119,6 +119,11 @@ func (s *Shim) HandleCreateResourceProvider(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
+	if !s.config.Features.EnableResourceProviders {
+		s.forward(w, r)
+		return
+	}
+
 	// Buffer the body so we can decode it and still forward the original
 	// bytes to upstream placement.
 	bodyBytes, err := io.ReadAll(r.Body)
@@ -184,6 +189,11 @@ func (s *Shim) HandleShowResourceProvider(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if !s.config.Features.EnableResourceProviders {
+		s.forward(w, r)
+		return
+	}
+
 	// Try to find the hypervisor in kubernetes.
 	var hvs hv1.HypervisorList
 	err := s.List(ctx, &hvs, client.MatchingFields{idxHypervisorOpenStackId: uuid})
@@ -233,6 +243,11 @@ func (s *Shim) HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Reque
 	log := logf.FromContext(ctx)
 	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
 	if !ok {
+		return
+	}
+
+	if !s.config.Features.EnableResourceProviders {
+		s.forward(w, r)
 		return
 	}
 
@@ -314,6 +329,11 @@ func (s *Shim) HandleDeleteResourceProvider(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	if !s.config.Features.EnableResourceProviders {
+		s.forward(w, r)
+		return
+	}
+
 	// Try to find the hypervisor in kubernetes.
 	var hvs hv1.HypervisorList
 	err := s.List(ctx, &hvs, client.MatchingFields{idxHypervisorOpenStackId: uuid})
@@ -370,6 +390,11 @@ type listResourceProvidersResponse struct {
 func (s *Shim) HandleListResourceProviders(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
+
+	if !s.config.Features.EnableResourceProviders {
+		s.forward(w, r)
+		return
+	}
 
 	s.forwardWithHook(w, r, func(w http.ResponseWriter, resp *http.Response) {
 		if resp.StatusCode != http.StatusOK {
