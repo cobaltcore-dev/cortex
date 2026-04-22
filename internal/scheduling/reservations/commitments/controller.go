@@ -5,7 +5,6 @@ package commitments
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -25,7 +24,6 @@ import (
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -195,25 +193,9 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	}
 
 	// Search for the flavor across all flavor groups
-	// Also capture the flavor group name for pipeline selection
-	var flavorDetails *compute.FlavorInGroup
-	var flavorGroupName string
-	for groupName, fg := range flavorGroups {
-		for _, flavor := range fg.Flavors {
-			if flavor.Name == resourceName {
-				flavorDetails = &flavor
-				flavorGroupName = groupName
-				break
-			}
-		}
-		if flavorDetails != nil {
-			break
-		}
-	}
-
-	// Check if flavor was found
-	if flavorDetails == nil {
-		logger.Error(errors.New("flavor not found"), "flavor not found in any flavor group",
+	flavorGroupName, flavorDetails, err := reservations.FindFlavorInGroups(resourceName, flavorGroups)
+	if err != nil {
+		logger.Error(err, "flavor not found in any flavor group",
 			"resourceName", resourceName)
 		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 	}
