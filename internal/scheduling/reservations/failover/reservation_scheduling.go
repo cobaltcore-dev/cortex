@@ -30,7 +30,7 @@ const (
 	PipelineAcknowledgeFailoverReservation = "kvm-acknowledge-failover-reservation"
 )
 
-func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm VM, allHypervisors []string, pipeline string) ([]string, error) {
+func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm VM, allHypervisors []string, pipeline string, resolved resolvedReservationSpec) ([]string, error) {
 	logger := LoggerFromContext(ctx)
 
 	// Build list of eligible hypervisors (excluding VM's current hypervisor)
@@ -52,18 +52,6 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 
 	ignoreHypervisors := []string{vm.CurrentHypervisor}
 
-	// Get memory and vcpus from VM resources
-	// The VM struct uses "vcpus" and "memory" keys (see vm_source.go)
-	var memoryMB uint64
-	var vcpus uint64
-	if memory, ok := vm.Resources["memory"]; ok {
-		// Convert from bytes to MB
-		memoryMB = uint64(memory.Value() / (1024 * 1024)) //nolint:gosec // memory values won't overflow
-	}
-	if vcpusRes, ok := vm.Resources["vcpus"]; ok {
-		vcpus = uint64(vcpusRes.Value()) //nolint:gosec // vcpus values won't overflow
-	}
-
 	// Build flavor extra specs from VM's extra specs
 	// Start with the VM's actual extra specs, then ensure required defaults are set
 	flavorExtraSpecs := make(map[string]string)
@@ -78,13 +66,15 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 	// Schedule the reservation using the SchedulerClient.
 	// Note: We pass all hypervisors (from all AZs) in EligibleHosts. The scheduler pipeline's
 	// filter_correct_az filter will exclude hosts that are not in the VM's availability zone.
+	// Use resSpec.FlavorName and reservation spec resources so the scheduler checks capacity for the
+	// correct flavor size (which may be the LargestFlavor from the flavor group).
 	scheduleReq := reservations.ScheduleReservationRequest{
 		InstanceUUID:     vm.UUID,
 		ProjectID:        vm.ProjectID,
-		FlavorName:       vm.FlavorName,
+		FlavorName:       resSpec.FlavorName,
 		FlavorExtraSpecs: flavorExtraSpecs,
-		MemoryMB:         memoryMB,
-		VCPUs:            vcpus,
+		MemoryMB:         resSpec.MemoryMB,
+		VCPUs:            resSpec.VCPUs,
 		EligibleHosts:    eligibleHypervisors,
 		IgnoreHosts:      ignoreHypervisors,
 		Pipeline:         pipeline,
@@ -123,11 +113,12 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 	vm VM,
 	failoverReservations []v1alpha1.Reservation,
 	allHypervisors []string,
+	resolved resolvedReservationSpec,
 ) *v1alpha1.Reservation {
 
 	logger := LoggerFromContext(ctx)
 
-	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineReuseFailoverReservation)
+	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineReuseFailoverReservation, resSpec)
 	if err != nil {
 		logger.Error(err, "failed to get potential hypervisors for VM", "vmUUID", vm.UUID)
 		return nil
@@ -263,12 +254,14 @@ func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 	allHypervisors []string,
 	failoverReservations []v1alpha1.Reservation,
 	excludeHypervisors map[string]bool,
+	resolved resolvedReservationSpec,
 ) (*v1alpha1.Reservation, error) {
 
 	logger := LoggerFromContext(ctx)
 
-	// Get potential hypervisors from scheduler
-	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineNewFailoverReservation)
+	// Get potential hypervisors from scheduler using the reservation spec resources
+	// (which may be sized to the LargestFlavor from the flavor group)
+	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineNewFailoverReservation, resSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get potential hypervisors for VM: %w", err)
 	}
@@ -307,8 +300,8 @@ func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 		"selectedHypervisor", selectedHypervisor,
 		"allReturnedHypervisors", validHypervisors)
 
-	// Build the failover reservation on the selected hypervisor (in-memory only)
-	reservation := newFailoverReservation(ctx, vm, selectedHypervisor, c.Config.Creator)
+	// Build the failover reservation using the same reservation spec resources
+	reservation := newFailoverReservation(ctx, vm, selectedHypervisor, c.Config.Creator, resSpec)
 
 	return reservation, nil
 }

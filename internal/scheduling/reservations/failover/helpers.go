@@ -8,10 +8,90 @@ import (
 	"fmt"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// resolvedReservationSpec holds the resolved resource spec for scheduling and reservation sizing.
+// When UseFlavorGroupResources is enabled and the VM's flavor is found in a group,
+// resources are sized to the LargestFlavor. Otherwise, they come from the VM directly.
+type resolvedReservationSpec struct {
+	FlavorName      string // may be overridden to LargestFlavor.Name
+	FlavorGroupName string // flavor group name if found, empty otherwise
+	MemoryMB        uint64
+	VCPUs           uint64
+}
+
+// ResourceGroup returns the flavor group name if available, otherwise falls back to the provided fallback value.
+func (r resolvedReservationSpec) ResourceGroup(fallback string) string {
+	if r.FlavorGroupName != "" {
+		return r.FlavorGroupName
+	}
+	return fallback
+}
+
+// HypervisorResources returns the reservation spec resources as a map suitable for the reservation CRD.
+// We use "cpu" (not "vcpus") as the canonical key because the scheduling capacity logic
+// (e.g., nova filter_has_enough_capacity) uses "cpu".
+func (r resolvedReservationSpec) HypervisorResources() map[hv1.ResourceName]resource.Quantity {
+	return map[hv1.ResourceName]resource.Quantity{
+		"memory": *resource.NewQuantity(int64(r.MemoryMB)*1024*1024, resource.BinarySI), //nolint:gosec // flavor memory from specs, realistically bounded
+		"cpu":    *resource.NewQuantity(int64(r.VCPUs), resource.DecimalSI),             //nolint:gosec // flavor vcpus from specs, realistically bounded
+	}
+}
+
+// resolveVMSpecForScheduling resolves the VM's resources for scheduling.
+// When useFlavorGroupResources is true and the flavor is found in a group,
+// returns the LargestFlavor's name and size. Otherwise falls back to VM resources.
+func resolveVMSpecForScheduling(
+	ctx context.Context,
+	vm VM,
+	useFlavorGroupResources bool,
+	flavorGroups map[string]compute.FlavorGroupFeature,
+) resolvedReservationSpec {
+
+	logger := LoggerFromContext(ctx)
+
+	if useFlavorGroupResources && flavorGroups != nil {
+		groupName, _, err := reservations.FindFlavorInGroups(vm.FlavorName, flavorGroups)
+		if err == nil {
+			fg := flavorGroups[groupName]
+			largest := fg.LargestFlavor
+			logger.V(1).Info("resolved VM resources from flavor group LargestFlavor",
+				"vmFlavor", vm.FlavorName,
+				"flavorGroup", groupName,
+				"largestFlavor", largest.Name,
+				"memoryMB", largest.MemoryMB,
+				"vcpus", largest.VCPUs)
+			return resolvedReservationSpec{
+				FlavorName:      largest.Name,
+				FlavorGroupName: groupName,
+				MemoryMB:        largest.MemoryMB,
+				VCPUs:           largest.VCPUs,
+			}
+		}
+		logger.Info("flavor group lookup failed, falling back to VM resources",
+			"vmFlavor", vm.FlavorName,
+			"error", err)
+	}
+
+	// Fallback: use VM's own resources
+	var memoryMB, vcpus uint64
+	if memory, ok := vm.Resources["memory"]; ok {
+		memoryMB = uint64(memory.Value() / (1024 * 1024)) //nolint:gosec // memory values won't overflow
+	}
+	if v, ok := vm.Resources["vcpus"]; ok {
+		vcpus = uint64(v.Value()) //nolint:gosec // vcpus values won't overflow
+	}
+	return resolvedReservationSpec{
+		FlavorName: vm.FlavorName,
+		MemoryMB:   memoryMB,
+		VCPUs:      vcpus,
+	}
+}
 
 // getFailoverAllocations safely returns the allocations map from a failover reservation.
 // Returns an empty map if the reservation has no failover status or allocations.
@@ -90,23 +170,20 @@ func ValidateFailoverReservationResources(res *v1alpha1.Reservation) error {
 // newFailoverReservation creates a new failover reservation for a VM on a specific hypervisor.
 // This does NOT persist the reservation to the cluster - it only creates the in-memory object.
 // The caller is responsible for persisting the reservation.
-func newFailoverReservation(ctx context.Context, vm VM, hypervisor, creator string) *v1alpha1.Reservation {
+//
+// The resolved parameter contains the pre-computed resources (from resolveVMForScheduling),
+// which may come from the VM's flavor group LargestFlavor or from the VM's own resources.
+// This ensures the same sizing is used for both the scheduler query and the reservation CRD.
+func newFailoverReservation(
+	ctx context.Context,
+	vm VM,
+	hypervisor, creator string,
+	resolved resolvedReservationSpec,
+) *v1alpha1.Reservation {
+
 	logger := LoggerFromContext(ctx)
 
-	// Build resources from VM's Resources map
-	// The VM struct uses "vcpus" and "memory" keys (see vm_source.go)
-	// We convert "vcpus" to "cpu" for the reservation because the scheduling capacity logic
-	// (e.g., nova filter_has_enough_capacity) uses "cpu" as the canonical key.
-
-	// TODO we may want to use different resource (bigger) to enable better sharing
-	resources := make(map[hv1.ResourceName]resource.Quantity)
-	if memory, ok := vm.Resources["memory"]; ok {
-		resources["memory"] = memory
-	}
-	if vcpus, ok := vm.Resources["vcpus"]; ok {
-		// todo check if that is correct, i.e. that the cpu reported on e.g. hypervisors is vcpu and not pcpu
-		resources["cpu"] = vcpus
-	}
+	resources := resSpec.HypervisorResources()
 
 	reservation := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{
@@ -123,7 +200,7 @@ func newFailoverReservation(ctx context.Context, vm VM, hypervisor, creator stri
 			Resources:        resources,
 			TargetHost:       hypervisor, // Set the desired hypervisor from scheduler response
 			FailoverReservation: &v1alpha1.FailoverReservationSpec{
-				ResourceGroup: vm.FlavorName,
+				ResourceGroup: resSpec.ResourceGroup(vm.FlavorName),
 			},
 		},
 	}
