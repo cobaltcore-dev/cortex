@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -20,7 +21,7 @@ import (
 //     resource usages and verify each returns a successful response.
 //
 // This test is read-only and does not create any resources.
-func e2eTestUsages(ctx context.Context) error {
+func e2eTestUsages(ctx context.Context, _ client.Client) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running usages endpoint e2e test")
 	config, err := conf.GetConfig[e2eRootConfig]()

@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -20,7 +21,7 @@ import (
 //  3. GET /traits/{name} — retrieve 5 individual existing traits by name.
 //  4. PUT /traits/{name} — create a custom test trait (CUSTOM_CORTEX_...).
 //  5. DELETE /traits/{name} — remove the custom test trait to clean up.
-func e2eTestTraits(ctx context.Context) error {
+func e2eTestTraits(ctx context.Context, _ client.Client) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running traits endpoint e2e test")
 	config, err := conf.GetConfig[e2eRootConfig]()

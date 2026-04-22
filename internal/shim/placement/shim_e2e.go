@@ -12,6 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -81,7 +82,7 @@ func makeE2EServiceClient(ctx context.Context, rc e2eRootConfig) (*gophercloud.S
 // e2eTest is a named end-to-end test registered by handler e2e files.
 type e2eTest struct {
 	name string
-	run  func(ctx context.Context) error
+	run  func(ctx context.Context, cl client.Client) error
 }
 
 // e2eTests is populated by init() functions in the handle_*_e2e.go files.
@@ -89,7 +90,7 @@ var e2eTests []e2eTest
 
 // RunE2E executes end-to-end tests for all placement shim handlers.
 // It stops on the first failure and returns the error.
-func RunE2E(ctx context.Context) error {
+func RunE2E(ctx context.Context, cl client.Client) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running e2e test(s)", "count", len(e2eTests))
 	totalStart := time.Now()
@@ -98,7 +99,7 @@ func RunE2E(ctx context.Context) error {
 			"index", i+1, "total", len(e2eTests), "name", test.name)
 		start := time.Now()
 		testCtx := logf.IntoContext(ctx, log.WithName(test.name))
-		if err := test.run(testCtx); err != nil {
+		if err := test.run(testCtx, cl); err != nil {
 			log.Error(err, "FAIL e2e test",
 				"index", i+1, "total", len(e2eTests), "name", test.name,
 				"took_ms", time.Since(start).Milliseconds())

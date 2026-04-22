@@ -110,15 +110,14 @@ func TestIndexFields_RegistersAllIndexes(t *testing.T) {
 	cc := &captureCache{}
 	mcl := buildClient(t, cc)
 
-	if err := indexFields(context.Background(), mcl); err != nil {
-		t.Fatalf("indexFields: %v", err)
+	if err := IndexFields(context.Background(), mcl); err != nil {
+		t.Fatalf("IndexFields: %v", err)
 	}
 
 	wantFields := []string{
 		idxHypervisorOpenStackId,
 		idxHypervisorKubernetesId,
 		idxHypervisorName,
-		idxStatusAggUUIDs,
 	}
 	if len(cc.calls) != len(wantFields) {
 		t.Fatalf("got %d IndexField calls, want %d", len(cc.calls), len(wantFields))
@@ -139,7 +138,7 @@ func TestIndexFields_PropagatesError(t *testing.T) {
 	cc := &captureCache{err: wantErr}
 	mcl := buildClient(t, cc)
 
-	err := indexFields(context.Background(), mcl)
+	err := IndexFields(context.Background(), mcl)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -151,8 +150,8 @@ func TestIndexFields_PropagatesError(t *testing.T) {
 func TestExtractor_HypervisorOpenStackId(t *testing.T) {
 	cc := &captureCache{}
 	mcl := buildClient(t, cc)
-	if err := indexFields(context.Background(), mcl); err != nil {
-		t.Fatalf("indexFields: %v", err)
+	if err := IndexFields(context.Background(), mcl); err != nil {
+		t.Fatalf("IndexFields: %v", err)
 	}
 	fn := extractorByField(t, cc.calls, idxHypervisorOpenStackId)
 
@@ -192,8 +191,8 @@ func TestExtractor_HypervisorOpenStackId(t *testing.T) {
 func TestExtractor_HypervisorKubernetesId(t *testing.T) {
 	cc := &captureCache{}
 	mcl := buildClient(t, cc)
-	if err := indexFields(context.Background(), mcl); err != nil {
-		t.Fatalf("indexFields: %v", err)
+	if err := IndexFields(context.Background(), mcl); err != nil {
+		t.Fatalf("IndexFields: %v", err)
 	}
 	fn := extractorByField(t, cc.calls, idxHypervisorKubernetesId)
 
@@ -233,8 +232,8 @@ func TestExtractor_HypervisorKubernetesId(t *testing.T) {
 func TestExtractor_HypervisorName(t *testing.T) {
 	cc := &captureCache{}
 	mcl := buildClient(t, cc)
-	if err := indexFields(context.Background(), mcl); err != nil {
-		t.Fatalf("indexFields: %v", err)
+	if err := IndexFields(context.Background(), mcl); err != nil {
+		t.Fatalf("IndexFields: %v", err)
 	}
 	fn := extractorByField(t, cc.calls, idxHypervisorName)
 
@@ -254,63 +253,6 @@ func TestExtractor_HypervisorName(t *testing.T) {
 			name: "empty name",
 			obj:  &hv1.Hypervisor{},
 			want: []string{""},
-		},
-		{
-			name: "wrong type",
-			obj:  &corev1.ConfigMap{},
-			want: nil,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := fn(tt.obj)
-			if !strSliceEqual(got, tt.want) {
-				t.Errorf("got %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestExtractor_StatusAggUUIDs(t *testing.T) {
-	cc := &captureCache{}
-	mcl := buildClient(t, cc)
-	if err := indexFields(context.Background(), mcl); err != nil {
-		t.Fatalf("indexFields: %v", err)
-	}
-	fn := extractorByField(t, cc.calls, idxStatusAggUUIDs)
-
-	tests := []struct {
-		name string
-		obj  client.Object
-		want []string
-	}{
-		{
-			name: "multiple aggregates",
-			obj: &hv1.Hypervisor{
-				Status: hv1.HypervisorStatus{
-					Aggregates: []hv1.Aggregate{
-						{Name: "agg-a", UUID: "uuid-a"},
-						{Name: "agg-b", UUID: "uuid-b"},
-					},
-				},
-			},
-			want: []string{"uuid-a", "uuid-b"},
-		},
-		{
-			name: "single aggregate",
-			obj: &hv1.Hypervisor{
-				Status: hv1.HypervisorStatus{
-					Aggregates: []hv1.Aggregate{
-						{Name: "agg-x", UUID: "uuid-x"},
-					},
-				},
-			},
-			want: []string{"uuid-x"},
-		},
-		{
-			name: "no aggregates",
-			obj:  &hv1.Hypervisor{},
-			want: nil,
 		},
 		{
 			name: "wrong type",

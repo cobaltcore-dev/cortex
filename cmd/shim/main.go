@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
@@ -112,11 +113,41 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	// Custom entrypoint for placement shim e2e tests.
+	// Spins up a minimal manager with a multicluster client so that e2e
+	// tests can access the controller-runtime cache for hypervisor lookups.
 	if runPlacementShimE2E {
-		if err := placement.RunE2E(ctx); err != nil {
-			setupLog.Error(err, "E2E tests failed")
+		mgrCtx, mgrCancel := context.WithCancel(ctx)
+
+		mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
+			Scheme:                 scheme,
+			Metrics:                metricsserver.Options{BindAddress: "0"},
+			HealthProbeBindAddress: "",
+		})
+		if err != nil {
+			setupLog.Error(err, "unable to start e2e manager")
 			os.Exit(1)
 		}
+		multiclusterClient := setupMulticlusterClient(mgrCtx, mgr, restConfig)
+		if err := placement.IndexFields(mgrCtx, multiclusterClient); err != nil {
+			setupLog.Error(err, "unable to set up e2e field indexes")
+			os.Exit(1)
+		}
+		go func() {
+			if err := mgr.Start(mgrCtx); err != nil {
+				setupLog.Error(err, "e2e manager exited with error")
+			}
+		}()
+		if !mgr.GetCache().WaitForCacheSync(ctx) {
+			setupLog.Error(nil, "e2e cache sync failed")
+			mgrCancel()
+			os.Exit(1)
+		}
+		if err := placement.RunE2E(ctx, multiclusterClient); err != nil {
+			setupLog.Error(err, "E2E tests failed")
+			mgrCancel()
+			os.Exit(1)
+		}
+		mgrCancel()
 		os.Exit(0)
 	}
 
@@ -223,26 +254,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	homeCluster, err := cluster.New(restConfig, func(o *cluster.Options) { o.Scheme = scheme })
-	if err != nil {
-		setupLog.Error(err, "unable to create home cluster")
-		os.Exit(1)
-	}
-	if err := mgr.Add(homeCluster); err != nil {
-		setupLog.Error(err, "unable to add home cluster")
-		os.Exit(1)
-	}
-	multiclusterClient := &multicluster.Client{
-		HomeCluster:     homeCluster,
-		HomeRestConfig:  restConfig,
-		HomeScheme:      scheme,
-		ResourceRouters: multicluster.DefaultResourceRouters,
-	}
-	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
-	if err := multiclusterClient.InitFromConf(ctx, mgr, multiclusterClientConfig); err != nil {
-		setupLog.Error(err, "unable to initialize multicluster client")
-		os.Exit(1)
-	}
+	multiclusterClient := setupMulticlusterClient(ctx, mgr, restConfig)
 
 	// Our custom monitoring registry can add prometheus labels to all metrics.
 	// This is useful to distinguish metrics from different deployments.
@@ -306,4 +318,28 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func setupMulticlusterClient(ctx context.Context, mgr manager.Manager, restConfig *rest.Config) *multicluster.Client {
+	homeCluster, err := cluster.New(restConfig, func(o *cluster.Options) { o.Scheme = scheme })
+	if err != nil {
+		setupLog.Error(err, "unable to create home cluster")
+		os.Exit(1)
+	}
+	if err := mgr.Add(homeCluster); err != nil {
+		setupLog.Error(err, "unable to add home cluster")
+		os.Exit(1)
+	}
+	mcl := &multicluster.Client{
+		HomeCluster:     homeCluster,
+		HomeRestConfig:  restConfig,
+		HomeScheme:      scheme,
+		ResourceRouters: multicluster.DefaultResourceRouters,
+	}
+	mclConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
+	if err := mcl.InitFromConf(ctx, mgr, mclConfig); err != nil {
+		setupLog.Error(err, "unable to initialize multicluster client")
+		os.Exit(1)
+	}
+	return mcl
 }

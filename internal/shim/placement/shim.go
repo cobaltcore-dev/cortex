@@ -48,6 +48,16 @@ type requestIDContextKey struct{}
 // header value through the request lifecycle for tracing.
 var requestIDKey = requestIDContextKey{}
 
+// featuresConfig holds feature flags that can enable or disable specific
+// shim behaviors. All flags default to off (false).
+type featuresConfig struct {
+	// EnableResourceProviders enables the KVM-specific resource provider
+	// logic (hypervisor lookups, merged listings, 409 conflicts). When
+	// false, all resource provider handlers forward to upstream placement
+	// as a pure passthrough.
+	EnableResourceProviders bool `json:"enableResourceProviders,omitempty"`
+}
+
 // config holds configuration for the placement shim.
 type config struct {
 	// SSO is an optional configuration for the certificates the http client
@@ -85,6 +95,9 @@ type config struct {
 	// Kubernetes resource.Quantity string (e.g. "4Ki"). Defaults to "4Ki"
 	// when unset or empty.
 	MaxBodyLogSize string `json:"maxBodyLogSize,omitempty"`
+	// Features holds feature flags for enabling or disabling specific
+	// shim behaviors.
+	Features featuresConfig `json:"features"`
 }
 
 // validate checks the config for required fields and returns an error if the
@@ -288,7 +301,7 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 	if !ok {
 		return errors.New("provided client must be a multicluster client")
 	}
-	if err := indexFields(ctx, mcl); err != nil {
+	if err := IndexFields(ctx, mcl); err != nil {
 		return fmt.Errorf("failed to set up indexes: %w", err)
 	}
 	bldr := multicluster.BuildController(mcl, mgr)
@@ -307,6 +320,15 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 // The route pattern for metric labels is read from the request context
 // (set by the measurement middleware in RegisterRoutes).
 func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
+	s.forwardWithHook(w, r, nil)
+}
+
+// forwardWithHook works like forward but accepts an optional intercept
+// callback. When hook is non-nil and the upstream returns a successful
+// response, the hook receives the *http.Response and is responsible for
+// writing the final response to w. If hook is nil the response is copied
+// through unchanged, identical to forward.
+func (s *Shim) forwardWithHook(w http.ResponseWriter, r *http.Request, hook func(w http.ResponseWriter, resp *http.Response)) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("Forwarding request to placement API",
@@ -347,6 +369,15 @@ func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	// Copy all incoming headers.
 	upstreamReq.Header = r.Header.Clone()
 
+	// When a hook will inspect the response body, remove Accept-Encoding
+	// so the upstream returns uncompressed data. Go's Transport would
+	// normally handle this automatically, but we're forwarding the
+	// downstream client's explicit Accept-Encoding, which bypasses the
+	// auto-decompression in net/http.
+	if hook != nil {
+		upstreamReq.Header.Del("Accept-Encoding")
+	}
+
 	pattern, _ := ctx.Value(routePatternKey).(string)
 	start := time.Now()
 	resp, err := s.httpClient.Do(upstreamReq) //nolint:gosec // G704: intentional reverse proxy
@@ -360,7 +391,18 @@ func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// Copy response headers, status code, and body back to the caller.
+	// Observe after the response is received (the hook or copy below
+	// may consume the body, but the upstream latency is already known).
+	s.upstreamRequestTimer.
+		WithLabelValues(r.Method, pattern, strconv.Itoa(resp.StatusCode)).
+		Observe(time.Since(start).Seconds())
+
+	if hook != nil {
+		hook(w, resp)
+		return
+	}
+
+	// Default: copy response headers, status code, and body back to the caller.
 	for k, vs := range resp.Header {
 		for _, v := range vs {
 			w.Header().Add(k, v)
@@ -370,11 +412,6 @@ func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	if _, err := io.Copy(w, resp.Body); err != nil {
 		log.Error(err, "failed to copy upstream response body")
 	}
-	// Observe after the body is fully consumed so the duration includes
-	// the time spent streaming the response from upstream.
-	s.upstreamRequestTimer.
-		WithLabelValues(r.Method, pattern, strconv.Itoa(resp.StatusCode)).
-		Observe(time.Since(start).Seconds())
 }
 
 // RegisterRoutes binds all Placement API handlers to the given mux. The

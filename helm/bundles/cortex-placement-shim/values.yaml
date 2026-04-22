@@ -41,6 +41,8 @@ cortex-shim:
     osProjectName:
     osUserDomainName:
     osProjectDomainName:
+    features:
+      enableResourceProviders: false
     auth:
       tokenCacheTTL: "5m"
       policies:

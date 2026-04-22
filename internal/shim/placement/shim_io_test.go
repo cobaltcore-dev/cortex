@@ -154,6 +154,42 @@ func TestShimResponseWriterNilBodyBuf(t *testing.T) {
 	}
 }
 
+func TestWriteJSON(t *testing.T) {
+	s := &Shim{}
+
+	t.Run("encodes struct as JSON with status", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		s.writeJSON(rec, http.StatusOK, map[string]string{"key": "value"})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+		}
+		if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+			t.Errorf("Content-Type = %q, want %q", ct, "application/json")
+		}
+		want := `{"key":"value"}` + "\n"
+		if got := rec.Body.String(); got != want {
+			t.Errorf("body = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("uses provided status code", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		s.writeJSON(rec, http.StatusCreated, map[string]int{"n": 42})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusCreated)
+		}
+	})
+
+	t.Run("encodes nil as null", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		s.writeJSON(rec, http.StatusOK, nil)
+		want := "null\n"
+		if got := rec.Body.String(); got != want {
+			t.Errorf("body = %q, want %q", got, want)
+		}
+	})
+}
+
 func TestWrapHandlerLogsAndMetrics(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -30,7 +31,7 @@ import (
 //  7. GET /allocations/{consumer2} — verify the second allocation exists.
 //  8. DELETE /allocations/{consumer} — remove allocations for both consumers.
 //  9. Cleanup: DELETE the test RP and custom resource class.
-func e2eTestAllocations(ctx context.Context) error {
+func e2eTestAllocations(ctx context.Context, _ client.Client) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running allocations endpoint e2e test")
 	config, err := conf.GetConfig[e2eRootConfig]()
