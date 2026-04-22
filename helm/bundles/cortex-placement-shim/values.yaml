@@ -43,6 +43,14 @@ cortex-shim:
     osProjectDomainName:
     features:
       enableResourceProviders: false
+      enableRoot: false
+    # The shim will return this as a static version discovery document for
+    # GET / instead of forwarding to upstream placement.
+    versioning:
+      id: "v1.0"
+      minVersion: "1.0"
+      maxVersion: "1.39"
+      status: "CURRENT"
     auth:
       tokenCacheTTL: "5m"
       policies:

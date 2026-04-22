@@ -213,6 +213,20 @@ func TestForwardUpstreamUnreachable(t *testing.T) {
 	}
 }
 
+func TestInitHTTPClientUnreachableUpstreamNonFatal(t *testing.T) {
+	s := &Shim{
+		config: config{PlacementURL: "http://127.0.0.1:1"},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := s.initHTTPClient(ctx); err != nil {
+		t.Fatalf("initHTTPClient should not return error for unreachable upstream, got: %v", err)
+	}
+	if s.httpClient == nil {
+		t.Fatal("httpClient should be set even when upstream is unreachable")
+	}
+}
+
 func TestRegisterRoutes(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -416,6 +430,29 @@ func TestConfigValidateAuthRequiresKeystoneURL(t *testing.T) {
 		t.Fatal("expected error when auth configured without osPassword")
 	}
 	c.OSPassword = "secret"
+	if err := c.validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestConfigValidateEnableRootRequiresVersioning(t *testing.T) {
+	c := config{
+		PlacementURL: "http://placement:8778",
+		Features:     featuresConfig{EnableRoot: true},
+	}
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when enableRoot is true without versioning config")
+	}
+	c.Versioning = &versioningConfig{ID: "v1.0"}
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when versioning has missing fields")
+	}
+	c.Versioning = &versioningConfig{
+		ID:         "v1.0",
+		MinVersion: "1.0",
+		MaxVersion: "1.39",
+		Status:     "CURRENT",
+	}
 	if err := c.validate(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

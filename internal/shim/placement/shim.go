@@ -56,6 +56,19 @@ type featuresConfig struct {
 	// false, all resource provider handlers forward to upstream placement
 	// as a pure passthrough.
 	EnableResourceProviders bool `json:"enableResourceProviders,omitempty"`
+	// EnableRoot makes the GET / handler return a static version discovery
+	// document from the Versioning config instead of forwarding to
+	// upstream placement. When false, GET / is forwarded as-is.
+	EnableRoot bool `json:"enableRoot,omitempty"`
+}
+
+// versioningConfig describes the Placement API version advertised by the
+// static root endpoint when features.enableRoot is true.
+type versioningConfig struct {
+	ID         string `json:"id"`
+	MinVersion string `json:"minVersion"`
+	MaxVersion string `json:"maxVersion"`
+	Status     string `json:"status"`
 }
 
 // config holds configuration for the placement shim.
@@ -98,6 +111,9 @@ type config struct {
 	// Features holds feature flags for enabling or disabling specific
 	// shim behaviors.
 	Features featuresConfig `json:"features"`
+	// Versioning configures the static version discovery document returned
+	// by GET / when features.enableRoot is true.
+	Versioning *versioningConfig `json:"versioning,omitempty"`
 }
 
 // validate checks the config for required fields and returns an error if the
@@ -105,6 +121,14 @@ type config struct {
 func (c *config) validate() error {
 	if c.PlacementURL == "" {
 		return errors.New("placement URL is required")
+	}
+	if c.Features.EnableRoot {
+		if c.Versioning == nil {
+			return errors.New("versioning config is required when features.enableRoot is true")
+		}
+		if c.Versioning.ID == "" || c.Versioning.MinVersion == "" || c.Versioning.MaxVersion == "" || c.Versioning.Status == "" {
+			return errors.New("versioning id, minVersion, maxVersion, and status are required when features.enableRoot is true")
+		}
 	}
 	if c.Auth != nil && c.KeystoneURL == "" {
 		return errors.New("keystoneURL is required when auth is configured")
@@ -204,14 +228,13 @@ func (s *Shim) initHTTPClient(ctx context.Context) error {
 	}
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		setupLog.Error(err, "Failed to connect to placement API")
-		return err
+		setupLog.Info("WARNING: Failed to connect to placement API at startup, continuing anyway", "error", err)
+		return nil
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		err := errors.New("unexpected response from placement API")
-		setupLog.Error(err, "Failed to call placement API", "status", resp.Status)
-		return err
+		setupLog.Info("WARNING: Unexpected response from placement API at startup, continuing anyway", "status", resp.Status)
+		return nil
 	}
 	setupLog.Info("Successfully connected to placement API")
 	return nil
