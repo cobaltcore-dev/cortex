@@ -307,6 +307,15 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 // The route pattern for metric labels is read from the request context
 // (set by the measurement middleware in RegisterRoutes).
 func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
+	s.forwardWithHook(w, r, nil)
+}
+
+// forwardWithHook works like forward but accepts an optional intercept
+// callback. When hook is non-nil and the upstream returns a successful
+// response, the hook receives the *http.Response and is responsible for
+// writing the final response to w. If hook is nil the response is copied
+// through unchanged, identical to forward.
+func (s *Shim) forwardWithHook(w http.ResponseWriter, r *http.Request, hook func(w http.ResponseWriter, resp *http.Response)) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("Forwarding request to placement API",
@@ -360,7 +369,18 @@ func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// Copy response headers, status code, and body back to the caller.
+	// Observe after the response is received (the hook or copy below
+	// may consume the body, but the upstream latency is already known).
+	s.upstreamRequestTimer.
+		WithLabelValues(r.Method, pattern, strconv.Itoa(resp.StatusCode)).
+		Observe(time.Since(start).Seconds())
+
+	if hook != nil {
+		hook(w, resp)
+		return
+	}
+
+	// Default: copy response headers, status code, and body back to the caller.
 	for k, vs := range resp.Header {
 		for _, v := range vs {
 			w.Header().Add(k, v)
@@ -370,11 +390,6 @@ func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	if _, err := io.Copy(w, resp.Body); err != nil {
 		log.Error(err, "failed to copy upstream response body")
 	}
-	// Observe after the body is fully consumed so the duration includes
-	// the time spent streaming the response from upstream.
-	s.upstreamRequestTimer.
-		WithLabelValues(r.Method, pattern, strconv.Itoa(resp.StatusCode)).
-		Observe(time.Since(start).Seconds())
 }
 
 // RegisterRoutes binds all Placement API handlers to the given mux. The

@@ -6,6 +6,7 @@ package placement
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strconv"
@@ -78,6 +79,16 @@ func (w *shimResponseWriter) Write(b []byte) (int, error) {
 		}
 	}
 	return n, err
+}
+
+// writeJSON serializes v as JSON and writes it to w with the given HTTP status
+// code. On encoding failure it sends a 500 Internal Server Error instead.
+func (s *Shim) writeJSON(w http.ResponseWriter, statusCode int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		logf.Log.Error(err, "failed to encode JSON response")
+	}
 }
 
 // wrapHandler returns an http.HandlerFunc that wraps next with logging,

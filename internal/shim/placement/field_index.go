@@ -19,9 +19,6 @@ const (
 	// of the hypervisor in OpenStack. This also corresponds to the uuid of the
 	// resource provider in OpenStack Placement.
 	idxHypervisorOpenStackId = "status.hypervisorId"
-	// idxStatusAggUUIDs is the name of the index for looking up hypervisors
-	// by the UUIDs of the aggregates they belong to.
-	idxStatusAggUUIDs = "status.aggregates[*].uuid"
 	// idxHypervisorKubernetesId is the name of the index for looking up
 	// hypervisors by their uid in Kubernetes.
 	idxHypervisorKubernetesId = "metadata.uid"
@@ -79,23 +76,6 @@ func indexFields(ctx context.Context, mcl *multicluster.Client) error {
 		return err
 	}
 	log.Info("Successfully set up index for hypervisor name")
-
-	if err := mcl.IndexField(ctx, h, hl, idxStatusAggUUIDs, func(obj client.Object) []string {
-		hv, ok := obj.(*hv1.Hypervisor)
-		if !ok {
-			log.Error(errors.New("unexpected type"), "object", obj)
-			return nil
-		}
-		var uuids []string
-		for _, agg := range hv.Status.Aggregates {
-			uuids = append(uuids, agg.UUID)
-		}
-		return uuids
-	}); err != nil {
-		log.Error(err, "failed to set up index for hypervisor aggregates")
-		return err
-	}
-	log.Info("Successfully set up index for hypervisor aggregates")
 
 	return nil
 }

@@ -272,7 +272,7 @@ func TestRegisterRoutesDownstreamMetrics(t *testing.T) {
 	s.RegisterRoutes(mux)
 
 	// Fire a request through the mux so the wrapper observes the downstream timer.
-	req := httptest.NewRequest(http.MethodGet, "/resource_providers", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/traits", http.NoBody)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
@@ -281,7 +281,7 @@ func TestRegisterRoutesDownstreamMetrics(t *testing.T) {
 	}
 	// The downstream timer should have exactly one observation for the
 	// expected label combination (method, pattern, responsecode).
-	if n := histSampleCount(t, down, "GET", "/resource_providers", "200"); n != 1 {
+	if n := histSampleCount(t, down, "GET", "/traits", "200"); n != 1 {
 		t.Errorf("downstream observation count = %d, want 1", n)
 	}
 }
@@ -351,7 +351,7 @@ func TestRequestIDPropagation(t *testing.T) {
 	mux := http.NewServeMux()
 	s.RegisterRoutes(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/resource_providers", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/traits", http.NoBody)
 	req.Header.Set("X-OpenStack-Request-Id", wantID)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
