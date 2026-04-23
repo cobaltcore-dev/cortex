@@ -126,6 +126,130 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 			expectedMetrics: []kvmExpectedMetric{},
 		},
 		{
+			name: "nil effective capacity falls back to physical capacity",
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "node001-bb088",
+						Labels: map[string]string{
+							"topology.kubernetes.io/zone": "qa-1a",
+						},
+					},
+					Status: hv1.HypervisorStatus{
+						EffectiveCapacity: nil,
+						Capacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("128"),
+							hv1.ResourceMemory: resource.MustParse("512Gi"),
+						},
+						Allocation: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("64"),
+							hv1.ResourceMemory: resource.MustParse("256Gi"),
+						},
+						Traits: []string{},
+					},
+				},
+			},
+			expectedMetrics: []kvmExpectedMetric{
+				totalMetric("node001-bb088", "cpu", "qa-1a", "bb088", 128),
+				totalMetric("node001-bb088", "ram", "qa-1a", "bb088", 549755813888), // 512Gi
+				usageMetric("node001-bb088", "cpu", "utilized", "qa-1a", "bb088", 64),
+				usageMetric("node001-bb088", "ram", "utilized", "qa-1a", "bb088", 274877906944), // 256Gi
+				usageMetric("node001-bb088", "cpu", "reserved", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "ram", "reserved", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "cpu", "failover", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "cpu", "payg", "qa-1a", "bb088", 64),           // 128-64-0-0
+				usageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 274877906944), // 512Gi-256Gi
+			},
+		},
+		{
+			name: "zero effective capacity falls back to physical capacity",
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "node001-bb088",
+						Labels: map[string]string{
+							"topology.kubernetes.io/zone": "qa-1a",
+						},
+					},
+					Status: hv1.HypervisorStatus{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("0"),
+							hv1.ResourceMemory: resource.MustParse("0"),
+						},
+						Capacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("128"),
+							hv1.ResourceMemory: resource.MustParse("512Gi"),
+						},
+						Allocation: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("64"),
+							hv1.ResourceMemory: resource.MustParse("256Gi"),
+						},
+						Traits: []string{},
+					},
+				},
+			},
+			expectedMetrics: []kvmExpectedMetric{
+				totalMetric("node001-bb088", "cpu", "qa-1a", "bb088", 128),
+				totalMetric("node001-bb088", "ram", "qa-1a", "bb088", 549755813888), // 512Gi
+				usageMetric("node001-bb088", "cpu", "utilized", "qa-1a", "bb088", 64),
+				usageMetric("node001-bb088", "ram", "utilized", "qa-1a", "bb088", 274877906944), // 256Gi
+				usageMetric("node001-bb088", "cpu", "reserved", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "ram", "reserved", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "cpu", "failover", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "cpu", "payg", "qa-1a", "bb088", 64),           // 128-64-0-0
+				usageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 274877906944), // 512Gi-256Gi
+			},
+		},
+		{
+			name: "zero effective capacity with nil physical capacity skips",
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "node001-bb088",
+						Labels: map[string]string{
+							"topology.kubernetes.io/zone": "qa-1a",
+						},
+					},
+					Status: hv1.HypervisorStatus{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("0"),
+							hv1.ResourceMemory: resource.MustParse("0"),
+						},
+						Capacity: nil,
+						Traits:   []string{},
+					},
+				},
+			},
+			expectedMetrics: []kvmExpectedMetric{},
+		},
+		{
+			name: "zero effective capacity with zero physical capacity skips",
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "node001-bb088",
+						Labels: map[string]string{
+							"topology.kubernetes.io/zone": "qa-1a",
+						},
+					},
+					Status: hv1.HypervisorStatus{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("0"),
+							hv1.ResourceMemory: resource.MustParse("0"),
+						},
+						Capacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("0"),
+							hv1.ResourceMemory: resource.MustParse("0"),
+						},
+						Traits: []string{},
+					},
+				},
+			},
+			expectedMetrics: []kvmExpectedMetric{},
+		},
+		{
 			name: "single hypervisor with default traits, no reservations",
 			hypervisors: []hv1.Hypervisor{
 				{

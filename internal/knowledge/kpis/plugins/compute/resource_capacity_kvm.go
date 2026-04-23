@@ -183,13 +183,18 @@ func (k *KVMResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	failoverByHost, committedNotInUseByHost := aggregateReservationsByHost(reservations.Items)
 
 	for _, hypervisor := range hvs.Items {
-		if hypervisor.Status.EffectiveCapacity == nil {
-			slog.Warn("hypervisor with nil effective capacity, skipping", "host", hypervisor.Name)
+		capacityMap := hypervisor.Status.EffectiveCapacity
+		if capacityMap == nil {
+			slog.Warn("hypervisor with nil effective capacity, falling back to physical capacity (overcommit not considered)", "host", hypervisor.Name)
+			capacityMap = hypervisor.Status.Capacity
+		}
+		if capacityMap == nil {
+			slog.Warn("hypervisor with nil capacity, skipping", "host", hypervisor.Name)
 			continue
 		}
 
-		cpuTotal, hasCPUTotal := hypervisor.Status.EffectiveCapacity[hv1.ResourceCPU]
-		ramTotal, hasRAMTotal := hypervisor.Status.EffectiveCapacity[hv1.ResourceMemory]
+		cpuTotal, hasCPUTotal := capacityMap[hv1.ResourceCPU]
+		ramTotal, hasRAMTotal := capacityMap[hv1.ResourceMemory]
 
 		if !hasCPUTotal || !hasRAMTotal {
 			slog.Error("hypervisor missing cpu or ram total capacity", "hypervisor", hypervisor.Name)
@@ -197,8 +202,17 @@ func (k *KVMResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		}
 
 		if cpuTotal.IsZero() || ramTotal.IsZero() {
-			slog.Warn("hypervisor with zero cpu or ram total capacity, skipping", "host", hypervisor.Name)
-			continue
+			slog.Warn("hypervisor with zero effective capacity, falling back to physical capacity (overcommit not considered)", "host", hypervisor.Name)
+			if hypervisor.Status.Capacity == nil {
+				slog.Warn("hypervisor with nil physical capacity, skipping", "host", hypervisor.Name)
+				continue
+			}
+			cpuTotal = hypervisor.Status.Capacity[hv1.ResourceCPU]
+			ramTotal = hypervisor.Status.Capacity[hv1.ResourceMemory]
+			if cpuTotal.IsZero() || ramTotal.IsZero() {
+				slog.Warn("hypervisor with zero physical capacity, skipping", "host", hypervisor.Name)
+				continue
+			}
 		}
 
 		cpuUsed, hasCPUUtilized := hypervisor.Status.Allocation[hv1.ResourceCPU]
