@@ -89,7 +89,6 @@ type CommittedResourceSpec struct {
 	// +kubebuilder:validation:Enum=planned;pending;guaranteed;confirmed;superseded;expired
 	// +kubebuilder:validation:Required
 	State CommitmentStatus `json:"state"`
-
 }
 
 // CommittedResourceStatus defines the observed state of CommittedResource.
