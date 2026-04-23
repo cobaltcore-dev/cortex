@@ -5,6 +5,7 @@ package v1alpha1
 
 import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -246,6 +247,11 @@ type ReservationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Reservation `json:"items"`
+}
+
+// IsReady returns true if the reservation has the Ready condition set to True.
+func (r *Reservation) IsReady() bool {
+	return meta.IsStatusConditionTrue(r.Status.Conditions, ReservationConditionReady)
 }
 
 func init() {

@@ -89,7 +89,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, nil // Don't need to requeue.
 	}
 
-	if meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ReservationConditionReady) {
+	if res.IsReady() {
 		logger.V(1).Info("reservation is active, verifying allocations")
 
 		// Verify all allocations in Spec against actual VM state
