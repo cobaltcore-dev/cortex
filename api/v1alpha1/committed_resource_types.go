@@ -90,10 +90,6 @@ type CommittedResourceSpec struct {
 	// +kubebuilder:validation:Required
 	State CommitmentStatus `json:"state"`
 
-	// DryRun marks this as an ephemeral commitment for capacity validation only.
-	// The controller self-deletes the CRD after writing the result to status.
-	// +kubebuilder:validation:Optional
-	DryRun bool `json:"dryRun,omitempty"`
 }
 
 // CommittedResourceStatus defines the observed state of CommittedResource.
