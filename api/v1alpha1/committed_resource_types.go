@@ -78,9 +78,9 @@ type CommittedResourceSpec struct {
 	// +kubebuilder:validation:Optional
 	StartTime *metav1.Time `json:"startTime,omitempty"`
 
-	// EndTime is when Reservation slots expire.
-	// +kubebuilder:validation:Required
-	EndTime metav1.Time `json:"endTime"`
+	// EndTime is when Reservation slots expire. Nil for unbounded commitments with no expiry.
+	// +kubebuilder:validation:Optional
+	EndTime *metav1.Time `json:"endTime,omitempty"`
 
 	// ConfirmedAt is when the commitment was confirmed.
 	// +kubebuilder:validation:Optional

@@ -214,6 +214,10 @@ func FromCommittedResource(cr v1alpha1.CommittedResource) (*CommitmentState, err
 		return nil, fmt.Errorf("unsupported resource type %q: only memory commitments are supported", cr.Spec.ResourceType)
 	}
 
+	if !commitmentUUIDPattern.MatchString(cr.Spec.CommitmentUUID) {
+		return nil, errors.New("unexpected commitment format")
+	}
+
 	state := &CommitmentState{
 		CommitmentUUID:   cr.Spec.CommitmentUUID,
 		ProjectID:        cr.Spec.ProjectID,
@@ -227,8 +231,10 @@ func FromCommittedResource(cr v1alpha1.CommittedResource) (*CommitmentState, err
 		t := cr.Spec.StartTime.Time
 		state.StartTime = &t
 	}
-	endTime := cr.Spec.EndTime.Time
-	state.EndTime = &endTime
+	if cr.Spec.EndTime != nil && !cr.Spec.EndTime.IsZero() {
+		t := cr.Spec.EndTime.Time
+		state.EndTime = &t
+	}
 
 	return state, nil
 }

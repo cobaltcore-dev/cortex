@@ -164,7 +164,10 @@ func (in *CommittedResourceSpec) DeepCopyInto(out *CommittedResourceSpec) {
 		in, out := &in.StartTime, &out.StartTime
 		*out = (*in).DeepCopy()
 	}
-	in.EndTime.DeepCopyInto(&out.EndTime)
+	if in.EndTime != nil {
+		in, out := &in.EndTime, &out.EndTime
+		*out = (*in).DeepCopy()
+	}
 	if in.ConfirmedAt != nil {
 		in, out := &in.ConfirmedAt, &out.ConfirmedAt
 		*out = (*in).DeepCopy()
