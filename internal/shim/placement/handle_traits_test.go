@@ -264,9 +264,12 @@ func TestHandleUpdateTraitLocalBadPrefix(t *testing.T) {
 	}
 }
 
-func TestHandleUpdateTraitLocalDoesNotCallUpstream(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		t.Fatal("upstream should not be called when enableTraits is true")
+func TestHandleUpdateTraitLocalSyncsToUpstream(t *testing.T) {
+	var gotMethod, gotPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
 	}))
 	t.Cleanup(upstream.Close)
 	s := newTraitShim(t, nil)
@@ -276,6 +279,24 @@ func TestHandleUpdateTraitLocalDoesNotCallUpstream(t *testing.T) {
 	w := serveHandler(t, "PUT", "/traits/{name}", s.HandleUpdateTrait, "/traits/CUSTOM_NEW")
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusCreated)
+	}
+	if gotMethod != "PUT" || gotPath != "/traits/CUSTOM_NEW" {
+		t.Fatalf("upstream got %s %s, want PUT /traits/CUSTOM_NEW", gotMethod, gotPath)
+	}
+}
+
+func TestHandleUpdateTraitLocalUpstreamDown(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(upstream.Close)
+	s := newTraitShim(t, nil)
+	s.config.PlacementURL = upstream.URL
+	s.httpClient = upstream.Client()
+
+	w := serveHandler(t, "PUT", "/traits/{name}", s.HandleUpdateTrait, "/traits/CUSTOM_NEW")
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; upstream failure should not block local creation", w.Code, http.StatusCreated)
 	}
 }
 

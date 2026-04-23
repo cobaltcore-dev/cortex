@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -218,6 +219,7 @@ func (s *Shim) HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Info("created custom traits configmap with new trait", "trait", name)
+		s.syncTraitToUpstream(ctx, name)
 		w.WriteHeader(http.StatusCreated)
 		return
 	}
@@ -250,6 +252,7 @@ func (s *Shim) HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Info("added custom trait to configmap", "trait", name)
+	s.syncTraitToUpstream(ctx, name)
 	w.WriteHeader(http.StatusCreated)
 }
 
@@ -410,4 +413,38 @@ func (s *Shim) writeTraits(cm *corev1.ConfigMap, traitSet map[string]struct{}) e
 	}
 	cm.Data[configMapKeyTraits] = string(data)
 	return nil
+}
+
+// syncTraitToUpstream best-effort creates the trait in upstream placement so
+// that endpoints forwarded to upstream (e.g. PUT /resource_providers/{uuid}/traits)
+// can reference locally-created custom traits. Errors are logged but never
+// propagated — upstream may be unreachable and that is acceptable.
+func (s *Shim) syncTraitToUpstream(ctx context.Context, name string) {
+	log := logf.FromContext(ctx)
+	if s.httpClient == nil {
+		log.V(1).Info("skipping upstream trait sync, no http client configured", "trait", name)
+		return
+	}
+	u, err := url.Parse(s.config.PlacementURL)
+	if err != nil {
+		log.Error(err, "failed to parse placement URL for trait sync", "trait", name)
+		return
+	}
+	u.Path, err = url.JoinPath(u.Path, "/traits/"+name)
+	if err != nil {
+		log.Error(err, "failed to build upstream trait URL", "trait", name)
+		return
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, u.String(), http.NoBody)
+	if err != nil {
+		log.Error(err, "failed to create upstream trait request", "trait", name)
+		return
+	}
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		log.Info("best-effort upstream trait sync failed, upstream may be down", "trait", name, "error", err.Error())
+		return
+	}
+	defer resp.Body.Close()
+	log.Info("synced custom trait to upstream placement", "trait", name, "status", resp.StatusCode)
 }
