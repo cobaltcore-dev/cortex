@@ -17,8 +17,10 @@
 package resourcelock
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	coordinationv1 "k8s.io/api/coordination/v1"
@@ -26,8 +28,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	"context"
 )
 
 // ErrLockHeld is returned when a lock cannot be acquired within the retry
@@ -50,8 +50,24 @@ type ResourceLocker struct {
 type Option func(*ResourceLocker)
 
 // WithLeaseDuration sets the lease duration. Default is 15 seconds.
+// Sub-second values are rounded up to 1 second; non-positive values are ignored.
 func WithLeaseDuration(d time.Duration) Option {
-	return func(rl *ResourceLocker) { rl.leaseDuration = int32(d.Seconds()) }
+	return func(rl *ResourceLocker) {
+		if d <= 0 {
+			return
+		}
+		secs := int64(d / time.Second)
+		if d%time.Second != 0 {
+			secs++
+		}
+		if secs < 1 {
+			secs = 1
+		}
+		if secs > math.MaxInt32 {
+			secs = math.MaxInt32
+		}
+		rl.leaseDuration = int32(secs) // #nosec G115 -- clamped above
+	}
 }
 
 // WithRetryInterval sets the interval between acquire retries. Default is 500ms.
@@ -86,11 +102,13 @@ func NewResourceLocker(c client.Client, namespace string, opts ...Option) *Resou
 // The algorithm has three cases:
 //  1. Lease does not exist — create it and return (lock acquired).
 //  2. Lease exists but is expired — update it to claim ownership.
-//  3. Lease exists and is still valid — sleep and retry until the timeout,
+//  3. Lease exists and is still valid — wait and retry until the timeout,
 //     then return ErrLockHeld.
 //
 // Create and Update conflicts (another replica raced us) are retried
-// transparently within the timeout window.
+// transparently within the timeout window. The wait between retries is
+// context-aware: if ctx is cancelled, AcquireLock returns ctx.Err()
+// immediately instead of blocking.
 func (rl *ResourceLocker) AcquireLock(ctx context.Context, name, lockerID string) error {
 	log := logf.FromContext(ctx).WithValues("namespace", rl.namespace, "lease", name, "locker", lockerID)
 
@@ -117,10 +135,9 @@ func (rl *ResourceLocker) AcquireLock(ctx context.Context, name, lockerID string
 			if err := rl.client.Create(ctx, lease); err != nil {
 				// Another replica created it between our Get and Create.
 				if apierrors.IsAlreadyExists(err) {
-					if time.Now().After(deadline) {
-						return ErrLockHeld
+					if err := rl.waitForRetry(ctx, deadline); err != nil {
+						return err
 					}
-					time.Sleep(rl.retryInterval)
 					continue
 				}
 				return fmt.Errorf("resourcelock: create lease %s: %w", name, err)
@@ -136,10 +153,9 @@ func (rl *ResourceLocker) AcquireLock(ctx context.Context, name, lockerID string
 		if lease.Spec.RenewTime != nil && lease.Spec.LeaseDurationSeconds != nil {
 			expiry := lease.Spec.RenewTime.Add(time.Duration(*lease.Spec.LeaseDurationSeconds) * time.Second)
 			if time.Now().Before(expiry) {
-				if time.Now().After(deadline) {
-					return ErrLockHeld
+				if err := rl.waitForRetry(ctx, deadline); err != nil {
+					return err
 				}
-				time.Sleep(rl.retryInterval)
 				continue
 			}
 		}
@@ -156,15 +172,33 @@ func (rl *ResourceLocker) AcquireLock(ctx context.Context, name, lockerID string
 		if err := rl.client.Update(ctx, lease); err != nil {
 			// Another replica claimed the expired lease first.
 			if apierrors.IsConflict(err) {
-				if time.Now().After(deadline) {
-					return ErrLockHeld
+				if err := rl.waitForRetry(ctx, deadline); err != nil {
+					return err
 				}
-				time.Sleep(rl.retryInterval)
 				continue
 			}
 			return fmt.Errorf("resourcelock: update lease %s: %w", name, err)
 		}
 		log.V(2).Info("Lock acquired, claimed expired lease", "previousHolder", previousHolder)
+		return nil
+	}
+}
+
+// waitForRetry pauses until retryInterval elapses, the deadline is reached, or
+// ctx is cancelled — whichever comes first. Returns ErrLockHeld when the
+// deadline has passed, or ctx.Err() on cancellation.
+func (rl *ResourceLocker) waitForRetry(ctx context.Context, deadline time.Time) error {
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return ErrLockHeld
+	}
+	wait := min(rl.retryInterval, remaining)
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
 		return nil
 	}
 }

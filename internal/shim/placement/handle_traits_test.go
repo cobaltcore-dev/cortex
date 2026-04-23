@@ -204,16 +204,16 @@ func TestHandleListTraitsLocalFilterUnknown(t *testing.T) {
 func TestHandleShowTraitLocalFound(t *testing.T) {
 	s := newTraitShim(t, []string{"HW_CPU_X86_AVX2"})
 	w := serveHandler(t, "GET", "/traits/{name}", s.HandleShowTrait, "/traits/HW_CPU_X86_AVX2")
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
 	}
 }
 
 func TestHandleShowTraitLocalFoundCustom(t *testing.T) {
 	s := newTraitShim(t, nil, "CUSTOM_FOO")
 	w := serveHandler(t, "GET", "/traits/{name}", s.HandleShowTrait, "/traits/CUSTOM_FOO")
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
 	}
 }
 

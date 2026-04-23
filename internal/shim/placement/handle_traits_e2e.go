@@ -104,8 +104,8 @@ func e2eTestTraits(ctx context.Context, _ client.Client) error {
 			return fmt.Errorf("failed to send GET request for trait %s: %w", knownTrait, err)
 		}
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("GET /traits/%s: expected 200, got %d", knownTrait, resp.StatusCode)
+		if resp.StatusCode != http.StatusNoContent {
+			return fmt.Errorf("GET /traits/%s: expected 204, got %d", knownTrait, resp.StatusCode)
 		}
 		log.Info("Successfully verified known trait exists", "trait", knownTrait)
 	} else {
@@ -199,7 +199,7 @@ func e2eTestTraits(ctx context.Context, _ client.Client) error {
 	}
 	log.Info("Successfully verified idempotent PUT", "trait", testTrait)
 
-	// Test GET /traits/{name} — verify exists → 200.
+	// Test GET /traits/{name} — verify exists → 204.
 	log.Info("Testing GET /traits/{name} for custom trait", "trait", testTrait)
 	req, err = http.NewRequestWithContext(ctx,
 		http.MethodGet, sc.Endpoint+"/traits/"+testTrait, http.NoBody)
@@ -213,8 +213,8 @@ func e2eTestTraits(ctx context.Context, _ client.Client) error {
 		return fmt.Errorf("failed to send GET request for trait %s: %w", testTrait, err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("GET /traits/%s: expected 200, got %d", testTrait, resp.StatusCode)
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("GET /traits/%s: expected 204, got %d", testTrait, resp.StatusCode)
 	}
 	log.Info("Successfully verified custom trait exists", "trait", testTrait)
 

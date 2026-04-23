@@ -156,7 +156,7 @@ func (c *config) validate() error {
 			return errors.New("traits.configMapName is required when features.enableTraits is true")
 		}
 		if os.Getenv("POD_NAMESPACE") == "" {
-			return errors.New("POD_NAMESPACE environment variable is required when features.enableTraits is true")
+			return errors.New("pod namespace (POD_NAMESPACE) is required when features.enableTraits is true")
 		}
 	}
 	if c.Auth != nil && c.KeystoneURL == "" {

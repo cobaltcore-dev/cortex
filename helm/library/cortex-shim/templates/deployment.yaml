@@ -46,15 +46,16 @@ spec:
           imagePullPolicy: {{ .Values.deployment.container.image.pullPolicy }}
           {{- end }}
           env:
+            {{- $env := .Values.deployment.container.env | default dict }}
+            {{- if not (hasKey $env "POD_NAMESPACE") }}
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            {{- if .Values.deployment.container.env }}
-            {{- range $key, $value := .Values.deployment.container.env }}
+            {{- end }}
+            {{- range $key, $value := $env }}
             - name: {{ $key }}
               value: {{ $value }}
-            {{- end }}
             {{- end }}
           livenessProbe:
             {{- toYaml .Values.deployment.container.livenessProbe | nindent 12 }}

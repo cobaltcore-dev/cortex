@@ -459,6 +459,8 @@ func TestConfigValidateEnableRootRequiresVersioning(t *testing.T) {
 }
 
 func TestConfigValidateEnableTraitsRequiresConfig(t *testing.T) {
+	t.Setenv("POD_NAMESPACE", "")
+
 	c := config{
 		PlacementURL: "http://placement:8778",
 		Features:     featuresConfig{EnableTraits: true},

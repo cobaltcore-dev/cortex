@@ -114,7 +114,7 @@ func (s *Shim) HandleListTraits(w http.ResponseWriter, r *http.Request) {
 // HandleShowTrait handles GET /traits/{name} requests.
 //
 // Checks whether a trait with the given name exists in either the static
-// or dynamic ConfigMap. Returns 200 OK if found, 404 Not Found otherwise.
+// or dynamic ConfigMap. Returns 204 No Content if found, 404 Not Found otherwise.
 //
 // See: https://docs.openstack.org/api-ref/placement/#show-traits
 func (s *Shim) HandleShowTrait(w http.ResponseWriter, r *http.Request) {
@@ -141,7 +141,7 @@ func (s *Shim) HandleShowTrait(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Info("trait found", "trait", name)
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // HandleUpdateTrait handles PUT /traits/{name} requests.
@@ -184,14 +184,20 @@ func (s *Shim) HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Slow path: acquire lock, read/create dynamic ConfigMap, add trait.
-	lockerID := fmt.Sprintf("shim-%d", time.Now().UnixNano())
+	host, err := os.Hostname()
+	if err != nil {
+		host = "unknown"
+	}
+	lockerID := fmt.Sprintf("shim-%s-%d", host, time.Now().UnixNano())
 	if err := s.resourceLocker.AcquireLock(ctx, s.traitsLockName(), lockerID); err != nil {
 		log.Error(err, "failed to acquire traits lock", "trait", name)
 		http.Error(w, "failed to create trait", http.StatusInternalServerError)
 		return
 	}
 	defer func() {
-		if err := s.resourceLocker.ReleaseLock(ctx, s.traitsLockName(), lockerID); err != nil {
+		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.resourceLocker.ReleaseLock(releaseCtx, s.traitsLockName(), lockerID); err != nil {
 			log.Error(err, "failed to release traits lock")
 		}
 	}()
@@ -281,20 +287,26 @@ func (s *Shim) HandleDeleteTrait(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lockerID := fmt.Sprintf("shim-%d", time.Now().UnixNano())
+	host, err := os.Hostname()
+	if err != nil {
+		host = "unknown"
+	}
+	lockerID := fmt.Sprintf("shim-%s-%d", host, time.Now().UnixNano())
 	if err := s.resourceLocker.AcquireLock(ctx, s.traitsLockName(), lockerID); err != nil {
 		log.Error(err, "failed to acquire traits lock", "trait", name)
 		http.Error(w, "failed to delete trait", http.StatusInternalServerError)
 		return
 	}
 	defer func() {
-		if err := s.resourceLocker.ReleaseLock(ctx, s.traitsLockName(), lockerID); err != nil {
+		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.resourceLocker.ReleaseLock(releaseCtx, s.traitsLockName(), lockerID); err != nil {
 			log.Error(err, "failed to release traits lock")
 		}
 	}()
 
 	cm := &corev1.ConfigMap{}
-	err := s.Get(ctx, s.customTraitsConfigMapKey(), cm)
+	err = s.Get(ctx, s.customTraitsConfigMapKey(), cm)
 	if apierrors.IsNotFound(err) {
 		log.Info("custom traits configmap not found, trait does not exist", "trait", name)
 		http.Error(w, "trait not found", http.StatusNotFound)
