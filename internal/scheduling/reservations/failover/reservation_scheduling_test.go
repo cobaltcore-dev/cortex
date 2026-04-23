@@ -292,10 +292,10 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 			useFlavorGroupResources: false,
 			flavorGroups:            flavorGroups,
 			wantFlavorName:          "hana_c60_m960", // VM's own flavor name
-			wantFlavorGroupName:     "",               // no flavor group (disabled)
-			wantResourceGroup:       "hana_c60_m960",  // ResourceGroup = fallback to flavor name
-			wantMemoryMB:            983040,           // VM's own memory
-			wantVCPUs:               60,               // VM's own vcpus
+			wantFlavorGroupName:     "",              // no flavor group (disabled)
+			wantResourceGroup:       "hana_c60_m960", // ResourceGroup = fallback to flavor name
+			wantMemoryMB:            983040,          // VM's own memory
+			wantVCPUs:               60,              // VM's own vcpus
 		},
 		{
 			name: "falls back to VM resources when flavor not in any group",
@@ -312,8 +312,8 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 			useFlavorGroupResources: true,
 			flavorGroups:            flavorGroups,
 			wantFlavorName:          "unknown_flavor", // VM's own flavor name (fallback)
-			wantFlavorGroupName:     "",                // no flavor group (not found)
-			wantResourceGroup:       "unknown_flavor",  // ResourceGroup = fallback to flavor name
+			wantFlavorGroupName:     "",               // no flavor group (not found)
+			wantResourceGroup:       "unknown_flavor", // ResourceGroup = fallback to flavor name
 			wantMemoryMB:            16384,            // VM's own memory (fallback)
 			wantVCPUs:               8,                // VM's own vcpus (fallback)
 		},
@@ -331,11 +331,11 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 			},
 			useFlavorGroupResources: true,
 			flavorGroups:            nil,             // nil flavor groups
-			wantFlavorName:          "hana_c60_m960",  // VM's own flavor name (fallback)
-			wantFlavorGroupName:     "",                // no flavor group (nil groups)
-			wantResourceGroup:       "hana_c60_m960",  // ResourceGroup = fallback to flavor name
-			wantMemoryMB:            983040,           // VM's own memory (fallback)
-			wantVCPUs:               60,               // VM's own vcpus (fallback)
+			wantFlavorName:          "hana_c60_m960", // VM's own flavor name (fallback)
+			wantFlavorGroupName:     "",              // no flavor group (nil groups)
+			wantResourceGroup:       "hana_c60_m960", // ResourceGroup = fallback to flavor name
+			wantMemoryMB:            983040,          // VM's own memory (fallback)
+			wantVCPUs:               60,              // VM's own vcpus (fallback)
 		},
 	}
 

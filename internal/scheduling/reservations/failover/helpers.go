@@ -178,7 +178,7 @@ func newFailoverReservation(
 	ctx context.Context,
 	vm VM,
 	hypervisor, creator string,
-	resolved resolvedReservationSpec,
+	resSpec resolvedReservationSpec,
 ) *v1alpha1.Reservation {
 
 	logger := LoggerFromContext(ctx)

@@ -30,7 +30,7 @@ const (
 	PipelineAcknowledgeFailoverReservation = "kvm-acknowledge-failover-reservation"
 )
 
-func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm VM, allHypervisors []string, pipeline string, resolved resolvedReservationSpec) ([]string, error) {
+func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm VM, allHypervisors []string, pipeline string, resSpec resolvedReservationSpec) ([]string, error) {
 	logger := LoggerFromContext(ctx)
 
 	// Build list of eligible hypervisors (excluding VM's current hypervisor)
@@ -79,7 +79,10 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		IgnoreHosts:      ignoreHypervisors,
 		Pipeline:         pipeline,
 		AvailabilityZone: vm.AvailabilityZone,
-		SchedulerHints:   map[string]any{"_nova_check_type": string(api.ReserveForFailoverIntent)},
+		SchedulerHints: map[string]any{
+			"_nova_check_type":       string(api.ReserveForFailoverIntent),
+			api.HintKeyResourceGroup: resSpec.ResourceGroup(vm.FlavorName),
+		},
 	}
 
 	logger.V(1).Info("scheduling failover reservation",
@@ -113,7 +116,7 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 	vm VM,
 	failoverReservations []v1alpha1.Reservation,
 	allHypervisors []string,
-	resolved resolvedReservationSpec,
+	resSpec resolvedReservationSpec,
 ) *v1alpha1.Reservation {
 
 	logger := LoggerFromContext(ctx)
@@ -254,7 +257,7 @@ func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 	allHypervisors []string,
 	failoverReservations []v1alpha1.Reservation,
 	excludeHypervisors map[string]bool,
-	resolved resolvedReservationSpec,
+	resSpec resolvedReservationSpec,
 ) (*v1alpha1.Reservation, error) {
 
 	logger := LoggerFromContext(ctx)
