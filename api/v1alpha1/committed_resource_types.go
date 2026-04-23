@@ -43,7 +43,8 @@ type CommittedResourceSpec struct {
 	CommitmentUUID string `json:"commitmentUUID"`
 
 	// SchedulingDomain specifies the scheduling domain for this committed resource (e.g., "nova", "ironcore").
-	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`
+	// +kubebuilder:validation:Optional
+	SchedulingDomain SchedulingDomain `json:"schedulingDomain,omitempty"`
 
 	// FlavorGroupName identifies the flavor group this commitment targets, e.g. "kvm_v2_hana_s".
 	// +kubebuilder:validation:Required
