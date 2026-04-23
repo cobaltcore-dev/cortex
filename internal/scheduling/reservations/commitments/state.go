@@ -207,6 +207,32 @@ func FromChangeCommitmentTargetState(
 	}, nil
 }
 
+// FromCommittedResource reads CommitmentState from a CommittedResource CRD.
+// Only memory commitments are supported; cores support is added in a follow-up.
+func FromCommittedResource(cr v1alpha1.CommittedResource) (*CommitmentState, error) {
+	if cr.Spec.ResourceType != v1alpha1.CommittedResourceTypeMemory {
+		return nil, fmt.Errorf("unsupported resource type %q: only memory commitments are supported", cr.Spec.ResourceType)
+	}
+
+	state := &CommitmentState{
+		CommitmentUUID:   cr.Spec.CommitmentUUID,
+		ProjectID:        cr.Spec.ProjectID,
+		DomainID:         cr.Spec.DomainID,
+		FlavorGroupName:  cr.Spec.FlavorGroupName,
+		TotalMemoryBytes: cr.Spec.Amount.Value(),
+		AvailabilityZone: cr.Spec.AvailabilityZone,
+	}
+
+	if cr.Spec.StartTime != nil {
+		t := cr.Spec.StartTime.Time
+		state.StartTime = &t
+	}
+	endTime := cr.Spec.EndTime.Time
+	state.EndTime = &endTime
+
+	return state, nil
+}
+
 // FromReservations reconstructs CommitmentState from existing Reservation CRDs.
 func FromReservations(reservations []v1alpha1.Reservation) (*CommitmentState, error) {
 	if len(reservations) == 0 {
