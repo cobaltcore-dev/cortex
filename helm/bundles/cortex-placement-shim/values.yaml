@@ -53,7 +53,7 @@ cortex-shim:
       maxVersion: "1.39"
       status: "CURRENT"
     traits:
-      configMapName: "cortex-placement-global"
+      configMapName: "cortex-placement-shim-traits"
       # Static traits included in every Helm install/upgrade. The shim
       # merges them with dynamic CUSTOM_* traits at request time.
       static: []

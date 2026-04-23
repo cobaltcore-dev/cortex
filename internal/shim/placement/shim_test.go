@@ -470,7 +470,7 @@ func TestConfigValidateEnableTraitsRequiresConfig(t *testing.T) {
 	if err := c.validate(); err == nil {
 		t.Fatal("expected error when traits.configMapName is empty")
 	}
-	c.Traits.ConfigMapName = "cortex-placement-global"
+	c.Traits.ConfigMapName = "cortex-placement-shim-traits"
 	if err := c.validate(); err == nil {
 		t.Fatal("expected error when POD_NAMESPACE is not set")
 	}

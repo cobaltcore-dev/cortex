@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,17 +20,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-const (
-	configMapKeyTraits       = "traits"
-	traitsLeaseDuration      = 15
-	traitsLeaseRetryInterval = 500 * time.Millisecond
-	traitsLeaseRetryTimeout  = 5 * time.Second
-)
-
-// traitsListResponse matches the OpenStack Placement GET /traits response.
-type traitsListResponse struct {
-	Traits []string `json:"traits"`
-}
+const configMapKeyTraits = "traits"
 
 func (s *Shim) staticTraitsConfigMapKey() client.ObjectKey {
 	return client.ObjectKey{
@@ -47,19 +36,34 @@ func (s *Shim) customTraitsConfigMapKey() client.ObjectKey {
 	}
 }
 
+func (s *Shim) traitsLockName() string {
+	return s.config.Traits.ConfigMapName + "-custom-lock"
+}
+
+// traitsListResponse matches the OpenStack Placement GET /traits response.
+type traitsListResponse struct {
+	Traits []string `json:"traits"`
+}
+
 // HandleListTraits handles GET /traits requests.
 //
 // Returns a sorted list of trait strings merged from the static (Helm-managed)
 // and dynamic (CUSTOM_*) ConfigMaps. Supports optional query parameter "name"
 // for filtering: "in:TRAIT_A,TRAIT_B" returns only named traits,
 // "startswith:CUSTOM_" returns prefix matches.
+//
+// See: https://docs.openstack.org/api-ref/placement/#list-traits
 func (s *Shim) HandleListTraits(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
+
 	if !s.config.Features.EnableTraits {
 		s.forward(w, r)
 		return
 	}
-	traitSet, err := s.getAllTraits(r.Context())
+	traitSet, err := s.getAllTraits(ctx)
 	if err != nil {
+		log.Error(err, "failed to list traits from configmaps")
 		http.Error(w, "failed to list traits", http.StatusInternalServerError)
 		return
 	}
@@ -72,6 +76,7 @@ func (s *Shim) HandleListTraits(w http.ResponseWriter, r *http.Request) {
 
 	nameFilter := r.URL.Query().Get("name")
 	if nameFilter == "" {
+		log.Info("listing all traits", "count", len(all))
 		s.writeJSON(w, http.StatusOK, traitsListResponse{Traits: all})
 		return
 	}
@@ -86,6 +91,7 @@ func (s *Shim) HandleListTraits(w http.ResponseWriter, r *http.Request) {
 				filtered = append(filtered, t)
 			}
 		}
+		log.Info("listing traits with in: filter", "filter", nameFilter, "count", len(filtered))
 		s.writeJSON(w, http.StatusOK, traitsListResponse{Traits: filtered})
 		return
 	}
@@ -96,9 +102,11 @@ func (s *Shim) HandleListTraits(w http.ResponseWriter, r *http.Request) {
 				filtered = append(filtered, t)
 			}
 		}
+		log.Info("listing traits with startswith: filter", "filter", nameFilter, "count", len(filtered))
 		s.writeJSON(w, http.StatusOK, traitsListResponse{Traits: filtered})
 		return
 	}
+	log.Info("listing all traits, unrecognized filter ignored", "filter", nameFilter, "count", len(all))
 	s.writeJSON(w, http.StatusOK, traitsListResponse{Traits: all})
 }
 
@@ -106,7 +114,12 @@ func (s *Shim) HandleListTraits(w http.ResponseWriter, r *http.Request) {
 //
 // Checks whether a trait with the given name exists in either the static
 // or dynamic ConfigMap. Returns 200 OK if found, 404 Not Found otherwise.
+//
+// See: https://docs.openstack.org/api-ref/placement/#show-traits
 func (s *Shim) HandleShowTrait(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
+
 	if !s.config.Features.EnableTraits {
 		s.forward(w, r)
 		return
@@ -115,15 +128,18 @@ func (s *Shim) HandleShowTrait(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	found, err := s.hasTrait(r.Context(), name)
+	found, err := s.hasTrait(ctx, name)
 	if err != nil {
+		log.Error(err, "failed to check trait", "trait", name)
 		http.Error(w, "failed to check trait", http.StatusInternalServerError)
 		return
 	}
 	if !found {
+		log.Info("trait not found", "trait", name)
 		http.Error(w, "trait not found", http.StatusNotFound)
 		return
 	}
+	log.Info("trait found", "trait", name)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -133,7 +149,12 @@ func (s *Shim) HandleShowTrait(w http.ResponseWriter, r *http.Request) {
 // with CUSTOM_ may be created. Returns 201 Created if the trait is newly
 // inserted, or 204 No Content if it already exists (in either ConfigMap).
 // Returns 400 Bad Request if the name does not carry the CUSTOM_ prefix.
+//
+// See: https://docs.openstack.org/api-ref/placement/#update-trait
 func (s *Shim) HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
+
 	if !s.config.Features.EnableTraits {
 		s.forward(w, r)
 		return
@@ -143,37 +164,41 @@ func (s *Shim) HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !strings.HasPrefix(name, "CUSTOM_") {
+		log.Info("rejected trait without CUSTOM_ prefix", "trait", name)
 		http.Error(w, "trait name must start with CUSTOM_", http.StatusBadRequest)
 		return
 	}
-	ctx := r.Context()
 
 	// Fast path: trait already exists in either ConfigMap (no lock needed).
 	allTraits, err := s.getAllTraits(ctx)
 	if err != nil {
+		log.Error(err, "failed to read traits for existence check", "trait", name)
 		http.Error(w, "failed to create trait", http.StatusInternalServerError)
 		return
 	}
 	if _, exists := allTraits[name]; exists {
+		log.Info("trait already exists, nothing to do", "trait", name)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
 	// Slow path: acquire lock, read/create dynamic ConfigMap, add trait.
-	if err := s.acquireTraitsLease(ctx); err != nil {
+	lockerID := fmt.Sprintf("shim-%d", time.Now().UnixNano())
+	if err := s.resourceLocker.AcquireLock(ctx, s.traitsLockName(), lockerID); err != nil {
+		log.Error(err, "failed to acquire traits lock", "trait", name)
 		http.Error(w, "failed to create trait", http.StatusInternalServerError)
 		return
 	}
 	defer func() {
-		if err := s.releaseTraitsLease(ctx); err != nil {
-			logf.FromContext(ctx).Error(err, "Failed to release traits lease")
+		if err := s.resourceLocker.ReleaseLock(ctx, s.traitsLockName(), lockerID); err != nil {
+			log.Error(err, "failed to release traits lock")
 		}
 	}()
 
 	cm := &corev1.ConfigMap{}
 	err = s.Get(ctx, s.customTraitsConfigMapKey(), cm)
 	if apierrors.IsNotFound(err) {
-		// Dynamic ConfigMap doesn't exist yet — create it with the new trait.
+		// Dynamic ConfigMap does not exist yet — create it with the new trait.
 		cm = &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      s.customTraitsConfigMapKey().Name,
@@ -183,39 +208,48 @@ func (s *Shim) HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
 		}
 		current := map[string]struct{}{name: {}}
 		if err := s.writeTraits(cm, current); err != nil {
+			log.Error(err, "failed to serialize traits", "trait", name)
 			http.Error(w, "failed to create trait", http.StatusInternalServerError)
 			return
 		}
 		if err := s.Create(ctx, cm); err != nil {
+			log.Error(err, "failed to create custom traits configmap", "trait", name)
 			http.Error(w, "failed to create trait", http.StatusInternalServerError)
 			return
 		}
+		log.Info("created custom traits configmap with new trait", "trait", name)
 		w.WriteHeader(http.StatusCreated)
 		return
 	}
 	if err != nil {
+		log.Error(err, "failed to get custom traits configmap", "trait", name)
 		http.Error(w, "failed to create trait", http.StatusInternalServerError)
 		return
 	}
 
 	current, err := parseTraits(cm)
 	if err != nil {
+		log.Error(err, "failed to parse custom traits configmap", "trait", name)
 		http.Error(w, "failed to create trait", http.StatusInternalServerError)
 		return
 	}
 	if _, exists := current[name]; exists {
+		log.Info("trait already exists in custom configmap after lock acquisition", "trait", name)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	current[name] = struct{}{}
 	if err := s.writeTraits(cm, current); err != nil {
+		log.Error(err, "failed to serialize traits", "trait", name)
 		http.Error(w, "failed to create trait", http.StatusInternalServerError)
 		return
 	}
 	if err := s.Update(ctx, cm); err != nil {
+		log.Error(err, "failed to update custom traits configmap", "trait", name)
 		http.Error(w, "failed to create trait", http.StatusInternalServerError)
 		return
 	}
+	log.Info("added custom trait to configmap", "trait", name)
 	w.WriteHeader(http.StatusCreated)
 }
 
@@ -224,7 +258,12 @@ func (s *Shim) HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
 // Deletes a custom trait from the dynamic ConfigMap. Standard traits (those
 // without the CUSTOM_ prefix) cannot be deleted and return 400 Bad Request.
 // Returns 404 if the trait does not exist. Returns 204 No Content on success.
+//
+// See: https://docs.openstack.org/api-ref/placement/#delete-traits
 func (s *Shim) HandleDeleteTrait(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
+
 	if !s.config.Features.EnableTraits {
 		s.forward(w, r)
 		return
@@ -234,49 +273,58 @@ func (s *Shim) HandleDeleteTrait(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !strings.HasPrefix(name, "CUSTOM_") {
+		log.Info("rejected deletion of standard trait", "trait", name)
 		http.Error(w, "cannot delete standard traits", http.StatusBadRequest)
 		return
 	}
-	ctx := r.Context()
 
-	if err := s.acquireTraitsLease(ctx); err != nil {
+	lockerID := fmt.Sprintf("shim-%d", time.Now().UnixNano())
+	if err := s.resourceLocker.AcquireLock(ctx, s.traitsLockName(), lockerID); err != nil {
+		log.Error(err, "failed to acquire traits lock", "trait", name)
 		http.Error(w, "failed to delete trait", http.StatusInternalServerError)
 		return
 	}
 	defer func() {
-		if err := s.releaseTraitsLease(ctx); err != nil {
-			logf.FromContext(ctx).Error(err, "Failed to release traits lease")
+		if err := s.resourceLocker.ReleaseLock(ctx, s.traitsLockName(), lockerID); err != nil {
+			log.Error(err, "failed to release traits lock")
 		}
 	}()
 
 	cm := &corev1.ConfigMap{}
 	err := s.Get(ctx, s.customTraitsConfigMapKey(), cm)
 	if apierrors.IsNotFound(err) {
+		log.Info("custom traits configmap not found, trait does not exist", "trait", name)
 		http.Error(w, "trait not found", http.StatusNotFound)
 		return
 	}
 	if err != nil {
+		log.Error(err, "failed to get custom traits configmap", "trait", name)
 		http.Error(w, "failed to delete trait", http.StatusInternalServerError)
 		return
 	}
 	current, err := parseTraits(cm)
 	if err != nil {
+		log.Error(err, "failed to parse custom traits configmap", "trait", name)
 		http.Error(w, "failed to delete trait", http.StatusInternalServerError)
 		return
 	}
 	if _, exists := current[name]; !exists {
+		log.Info("trait not found in custom configmap", "trait", name)
 		http.Error(w, "trait not found", http.StatusNotFound)
 		return
 	}
 	delete(current, name)
 	if err := s.writeTraits(cm, current); err != nil {
+		log.Error(err, "failed to serialize traits", "trait", name)
 		http.Error(w, "failed to delete trait", http.StatusInternalServerError)
 		return
 	}
 	if err := s.Update(ctx, cm); err != nil {
+		log.Error(err, "failed to update custom traits configmap", "trait", name)
 		http.Error(w, "failed to delete trait", http.StatusInternalServerError)
 		return
 	}
+	log.Info("deleted custom trait from configmap", "trait", name)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -361,103 +409,5 @@ func (s *Shim) writeTraits(cm *corev1.ConfigMap, traitSet map[string]struct{}) e
 		cm.Data = make(map[string]string)
 	}
 	cm.Data[configMapKeyTraits] = string(data)
-	return nil
-}
-
-// traitsLeaseName returns the Lease resource name used for locking writes.
-func (s *Shim) traitsLeaseName() string {
-	return s.config.Traits.ConfigMapName + "-lock"
-}
-
-// acquireTraitsLease attempts to acquire a Kubernetes Lease for serializing
-// ConfigMap writes. It retries with backoff until the lease is acquired or
-// the timeout expires.
-func (s *Shim) acquireTraitsLease(ctx context.Context) error {
-	log := logf.FromContext(ctx)
-	name := s.traitsLeaseName()
-	ns := os.Getenv("POD_NAMESPACE")
-	holderID := fmt.Sprintf("shim-%d", time.Now().UnixNano())
-	leaseDuration := int32(traitsLeaseDuration)
-
-	deadline := time.Now().Add(traitsLeaseRetryTimeout)
-	for {
-		now := metav1.NewMicroTime(time.Now())
-		lease := &coordinationv1.Lease{}
-		err := s.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, lease)
-
-		if apierrors.IsNotFound(err) {
-			lease = &coordinationv1.Lease{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      name,
-					Namespace: ns,
-				},
-				Spec: coordinationv1.LeaseSpec{
-					HolderIdentity:       &holderID,
-					LeaseDurationSeconds: &leaseDuration,
-					AcquireTime:          &now,
-					RenewTime:            &now,
-				},
-			}
-			if err := s.Create(ctx, lease); err != nil {
-				if apierrors.IsAlreadyExists(err) {
-					if time.Now().After(deadline) {
-						return fmt.Errorf("timeout acquiring traits lease %s", name)
-					}
-					time.Sleep(traitsLeaseRetryInterval)
-					continue
-				}
-				return fmt.Errorf("create lease %s: %w", name, err)
-			}
-			log.V(2).Info("Acquired traits lease", "lease", name)
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("get lease %s: %w", name, err)
-		}
-
-		// Check if the existing lease has expired.
-		if lease.Spec.RenewTime != nil && lease.Spec.LeaseDurationSeconds != nil {
-			expiry := lease.Spec.RenewTime.Add(time.Duration(*lease.Spec.LeaseDurationSeconds) * time.Second)
-			if time.Now().Before(expiry) {
-				if time.Now().After(deadline) {
-					return fmt.Errorf("timeout acquiring traits lease %s", name)
-				}
-				time.Sleep(traitsLeaseRetryInterval)
-				continue
-			}
-		}
-
-		// Lease expired — claim it.
-		lease.Spec.HolderIdentity = &holderID
-		lease.Spec.LeaseDurationSeconds = &leaseDuration
-		lease.Spec.AcquireTime = &now
-		lease.Spec.RenewTime = &now
-		if err := s.Update(ctx, lease); err != nil {
-			if apierrors.IsConflict(err) {
-				if time.Now().After(deadline) {
-					return fmt.Errorf("timeout acquiring traits lease %s", name)
-				}
-				time.Sleep(traitsLeaseRetryInterval)
-				continue
-			}
-			return fmt.Errorf("update lease %s: %w", name, err)
-		}
-		log.V(2).Info("Acquired expired traits lease", "lease", name)
-		return nil
-	}
-}
-
-// releaseTraitsLease deletes the Lease resource to allow other replicas to proceed.
-func (s *Shim) releaseTraitsLease(ctx context.Context) error {
-	ns := os.Getenv("POD_NAMESPACE")
-	lease := &coordinationv1.Lease{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      s.traitsLeaseName(),
-			Namespace: ns,
-		},
-	}
-	if err := s.Delete(ctx, lease); err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("delete lease %s: %w", s.traitsLeaseName(), err)
-	}
 	return nil
 }

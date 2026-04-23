@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/pkg/resourcelock"
 	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,6 +61,7 @@ func newTraitShim(t *testing.T, staticTraits []string, customTraits ...string) *
 		maxBodyLogSize:         4096,
 		downstreamRequestTimer: down,
 		upstreamRequestTimer:   up,
+		resourceLocker:         resourcelock.NewResourceLocker(cl, "default"),
 	}
 }
 
@@ -305,37 +307,5 @@ func TestHandleDeleteTraitLocalBadPrefix(t *testing.T) {
 	w := serveHandler(t, "DELETE", "/traits/{name}", s.HandleDeleteTrait, "/traits/HW_CPU")
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
-	}
-}
-
-func TestLeaseAcquireRelease(t *testing.T) {
-	t.Setenv("POD_NAMESPACE", "default")
-	cm := newTestConfigMap("default", "test-cm", nil)
-	cl := newFakeClientWithScheme(t, cm)
-	s := &Shim{
-		Client: cl,
-		config: config{Traits: &traitsConfig{ConfigMapName: "test-cm"}},
-	}
-	ctx := context.Background()
-
-	if err := s.acquireTraitsLease(ctx); err != nil {
-		t.Fatalf("acquireTraitsLease: %v", err)
-	}
-
-	lease := &coordinationv1.Lease{}
-	if err := cl.Get(ctx, client.ObjectKey{Namespace: "default", Name: s.traitsLeaseName()}, lease); err != nil {
-		t.Fatalf("get lease: %v", err)
-	}
-	if lease.Spec.HolderIdentity == nil {
-		t.Fatal("expected holder identity to be set")
-	}
-
-	if err := s.releaseTraitsLease(ctx); err != nil {
-		t.Fatalf("releaseTraitsLease: %v", err)
-	}
-
-	err := cl.Get(ctx, client.ObjectKey{Namespace: "default", Name: s.traitsLeaseName()}, lease)
-	if err == nil {
-		t.Fatal("expected lease to be deleted")
 	}
 }

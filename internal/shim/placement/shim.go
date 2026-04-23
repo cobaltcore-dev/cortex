@@ -17,6 +17,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
+	"github.com/cobaltcore-dev/cortex/pkg/resourcelock"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
@@ -203,6 +204,9 @@ type Shim struct {
 	tokenCache *tokenCache
 	// tokenIntrospector validates tokens against Keystone.
 	tokenIntrospector tokenIntrospector
+	// resourceLocker serializes writes to the custom traits ConfigMap
+	// across replicas using a Kubernetes Lease.
+	resourceLocker *resourcelock.ResourceLocker
 }
 
 // Describe implements prometheus.Collector.
@@ -345,6 +349,13 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 		Help:    "Duration of upstream requests from the placement shim to the placement API.",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"method", "pattern", "responsecode"})
+
+	if s.config.Features.EnableTraits {
+		s.resourceLocker = resourcelock.NewResourceLocker(
+			s.Client,
+			os.Getenv("POD_NAMESPACE"),
+		)
+	}
 
 	// Check that the provided client is a multicluster client, since we need
 	// that to watch for hypervisors across clusters.
