@@ -219,7 +219,7 @@ func (s *Shim) HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Info("created custom traits configmap with new trait", "trait", name)
-		s.syncTraitToUpstream(ctx, name)
+		s.syncTraitToUpstream(ctx, name, r.Header)
 		w.WriteHeader(http.StatusCreated)
 		return
 	}
@@ -252,7 +252,7 @@ func (s *Shim) HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Info("added custom trait to configmap", "trait", name)
-	s.syncTraitToUpstream(ctx, name)
+	s.syncTraitToUpstream(ctx, name, r.Header)
 	w.WriteHeader(http.StatusCreated)
 }
 
@@ -419,7 +419,7 @@ func (s *Shim) writeTraits(cm *corev1.ConfigMap, traitSet map[string]struct{}) e
 // that endpoints forwarded to upstream (e.g. PUT /resource_providers/{uuid}/traits)
 // can reference locally-created custom traits. Errors are logged but never
 // propagated — upstream may be unreachable and that is acceptable.
-func (s *Shim) syncTraitToUpstream(ctx context.Context, name string) {
+func (s *Shim) syncTraitToUpstream(ctx context.Context, name string, incomingHeader http.Header) {
 	log := logf.FromContext(ctx)
 	if s.httpClient == nil {
 		log.V(1).Info("skipping upstream trait sync, no http client configured", "trait", name)
@@ -440,6 +440,8 @@ func (s *Shim) syncTraitToUpstream(ctx context.Context, name string) {
 		log.Error(err, "failed to create upstream trait request", "trait", name)
 		return
 	}
+	// Forward authentication headers so upstream placement accepts the request.
+	req.Header = incomingHeader.Clone()
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		log.Info("best-effort upstream trait sync failed, upstream may be down", "trait", name, "error", err.Error())
