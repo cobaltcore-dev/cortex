@@ -13,6 +13,7 @@ rules:
   - knowledges
   - datasources
   - reservations
+  - committedresources
   - decisions
   - deschedulings
   - pipelines
@@ -32,6 +33,7 @@ rules:
   - knowledges/finalizers
   - datasources/finalizers
   - reservations/finalizers
+  - committedresources/finalizers
   - decisions/finalizers
   - deschedulings/finalizers
   - pipelines/finalizers
@@ -45,6 +47,7 @@ rules:
   - knowledges/status
   - datasources/status
   - reservations/status
+  - committedresources/status
   - decisions/status
   - deschedulings/status
   - pipelines/status
