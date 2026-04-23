@@ -11,11 +11,13 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
+	"github.com/cobaltcore-dev/cortex/pkg/resourcelock"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
@@ -60,6 +62,11 @@ type featuresConfig struct {
 	// document from the Versioning config instead of forwarding to
 	// upstream placement. When false, GET / is forwarded as-is.
 	EnableRoot bool `json:"enableRoot,omitempty"`
+	// EnableTraits makes the trait handlers (GET /traits, GET /traits/{name},
+	// PUT /traits/{name}, DELETE /traits/{name}) serve from a local ConfigMap
+	// instead of forwarding to upstream placement. When false, all trait
+	// requests are forwarded as-is.
+	EnableTraits bool `json:"enableTraits,omitempty"`
 }
 
 // versioningConfig describes the Placement API version advertised by the
@@ -69,6 +76,14 @@ type versioningConfig struct {
 	MinVersion string `json:"minVersion"`
 	MaxVersion string `json:"maxVersion"`
 	Status     string `json:"status"`
+}
+
+// traitsConfig configures the local trait store used when
+// features.enableTraits is true.
+type traitsConfig struct {
+	// ConfigMapName is the name of the ConfigMap used to persist traits.
+	// Must exist in the same namespace as the shim pod.
+	ConfigMapName string `json:"configMapName"`
 }
 
 // config holds configuration for the placement shim.
@@ -114,6 +129,9 @@ type config struct {
 	// Versioning configures the static version discovery document returned
 	// by GET / when features.enableRoot is true.
 	Versioning *versioningConfig `json:"versioning,omitempty"`
+	// Traits configures the local trait store used when
+	// features.enableTraits is true.
+	Traits *traitsConfig `json:"traits,omitempty"`
 }
 
 // validate checks the config for required fields and returns an error if the
@@ -128,6 +146,17 @@ func (c *config) validate() error {
 		}
 		if c.Versioning.ID == "" || c.Versioning.MinVersion == "" || c.Versioning.MaxVersion == "" || c.Versioning.Status == "" {
 			return errors.New("versioning id, minVersion, maxVersion, and status are required when features.enableRoot is true")
+		}
+	}
+	if c.Features.EnableTraits {
+		if c.Traits == nil {
+			return errors.New("traits config is required when features.enableTraits is true")
+		}
+		if c.Traits.ConfigMapName == "" {
+			return errors.New("traits.configMapName is required when features.enableTraits is true")
+		}
+		if os.Getenv("POD_NAMESPACE") == "" {
+			return errors.New("pod namespace (POD_NAMESPACE) is required when features.enableTraits is true")
 		}
 	}
 	if c.Auth != nil && c.KeystoneURL == "" {
@@ -175,6 +204,9 @@ type Shim struct {
 	tokenCache *tokenCache
 	// tokenIntrospector validates tokens against Keystone.
 	tokenIntrospector tokenIntrospector
+	// resourceLocker serializes writes to the custom traits ConfigMap
+	// across replicas using a Kubernetes Lease.
+	resourceLocker *resourcelock.ResourceLocker
 }
 
 // Describe implements prometheus.Collector.
@@ -317,6 +349,13 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 		Help:    "Duration of upstream requests from the placement shim to the placement API.",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"method", "pattern", "responsecode"})
+
+	if s.config.Features.EnableTraits {
+		s.resourceLocker = resourcelock.NewResourceLocker(
+			s.Client,
+			os.Getenv("POD_NAMESPACE"),
+		)
+	}
 
 	// Check that the provided client is a multicluster client, since we need
 	// that to watch for hypervisors across clusters.
