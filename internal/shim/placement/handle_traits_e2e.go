@@ -19,9 +19,10 @@ import (
 //
 // Phase 1 — read-only (always runs):
 //
-//  1. GET /traits — list all traits and verify the response contains at least
-//     one trait.
-//  2. GET /traits/{name} — show a known trait from the list and verify 200.
+//  1. GET /traits — list all traits; when forwarding to upstream (enableTraits
+//     is false) verify at least one trait exists.
+//  2. GET /traits/{name} — show a known trait from the list and verify 200
+//     (skipped when the trait list is empty).
 //  3. GET /traits/{name} — show a nonexistent trait and verify 404.
 //
 // Phase 2 — CRUD (only when enableTraits is true):
@@ -79,30 +80,37 @@ func e2eTestTraits(ctx context.Context, _ client.Client) error {
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
 		return fmt.Errorf("failed to decode GET /traits response: %w", err)
 	}
-	if len(listResp.Traits) == 0 {
+	// When traits are served locally (enableTraits=true) the static list may
+	// be empty. Only require at least one trait when forwarding to upstream
+	// placement, which always has standard traits.
+	if !config.Features.EnableTraits && len(listResp.Traits) == 0 {
 		return errors.New("GET /traits: expected at least one trait, got 0")
 	}
 	log.Info("Successfully retrieved traits", "count", len(listResp.Traits))
 
-	// Test GET /traits/{name} for a known trait.
-	knownTrait := listResp.Traits[0]
-	log.Info("Testing GET /traits/{name} for known trait", "trait", knownTrait)
-	req, err = http.NewRequestWithContext(ctx,
-		http.MethodGet, sc.Endpoint+"/traits/"+knownTrait, http.NoBody)
-	if err != nil {
-		return fmt.Errorf("failed to create GET request for trait %s: %w", knownTrait, err)
+	// Test GET /traits/{name} for a known trait (skip when the list is empty).
+	if len(listResp.Traits) > 0 {
+		knownTrait := listResp.Traits[0]
+		log.Info("Testing GET /traits/{name} for known trait", "trait", knownTrait)
+		req, err = http.NewRequestWithContext(ctx,
+			http.MethodGet, sc.Endpoint+"/traits/"+knownTrait, http.NoBody)
+		if err != nil {
+			return fmt.Errorf("failed to create GET request for trait %s: %w", knownTrait, err)
+		}
+		req.Header.Set("X-Auth-Token", sc.TokenID)
+		req.Header.Set("OpenStack-API-Version", "placement 1.6")
+		resp, err = sc.HTTPClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("failed to send GET request for trait %s: %w", knownTrait, err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("GET /traits/%s: expected 200, got %d", knownTrait, resp.StatusCode)
+		}
+		log.Info("Successfully verified known trait exists", "trait", knownTrait)
+	} else {
+		log.Info("Skipping GET /traits/{name} for known trait, trait list is empty")
 	}
-	req.Header.Set("X-Auth-Token", sc.TokenID)
-	req.Header.Set("OpenStack-API-Version", "placement 1.6")
-	resp, err = sc.HTTPClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send GET request for trait %s: %w", knownTrait, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("GET /traits/%s: expected 200, got %d", knownTrait, resp.StatusCode)
-	}
-	log.Info("Successfully verified known trait exists", "trait", knownTrait)
 
 	// Test GET /traits/{name} for a nonexistent trait.
 	log.Info("Testing GET /traits/{name} for nonexistent trait")
