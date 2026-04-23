@@ -1199,6 +1199,81 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				usageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 188978561024),    // 512Gi-256Gi-0-80Gi = 176Gi
 			},
 		},
+		{
+			name: "payg capacity clamped to zero when overcommitted",
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name:   "node001-bb088",
+						Labels: map[string]string{"topology.kubernetes.io/zone": "qa-1a"},
+					},
+					Status: hv1.HypervisorStatus{
+						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("100"),
+							hv1.ResourceMemory: resource.MustParse("200Gi"),
+						},
+						Allocation: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("80"),
+							hv1.ResourceMemory: resource.MustParse("150Gi"),
+						},
+						Traits: []string{},
+					},
+				},
+			},
+			// failover=20 CPU/40Gi RAM, committed reserved=20 CPU/40Gi RAM (no allocations)
+			// CPU:  100 - 80 - 20 - 20 = -20 → clamped to 0
+			// RAM:  200Gi - 150Gi - 40Gi - 40Gi = -30Gi → clamped to 0
+			reservations: []v1alpha1.Reservation{
+				{
+					ObjectMeta: v1.ObjectMeta{Name: "failover-1"},
+					Spec: v1alpha1.ReservationSpec{
+						Type:             v1alpha1.ReservationTypeFailover,
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("20"),
+							hv1.ResourceMemory: resource.MustParse("40Gi"),
+						},
+						FailoverReservation: &v1alpha1.FailoverReservationSpec{},
+					},
+					Status: v1alpha1.ReservationStatus{
+						Host: "node001-bb088",
+						Conditions: []v1.Condition{
+							{Type: v1alpha1.ReservationConditionReady, Status: v1.ConditionTrue},
+						},
+					},
+				},
+				{
+					ObjectMeta: v1.ObjectMeta{Name: "committed-1"},
+					Spec: v1alpha1.ReservationSpec{
+						Type:             v1alpha1.ReservationTypeCommittedResource,
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("20"),
+							hv1.ResourceMemory: resource.MustParse("40Gi"),
+						},
+						CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
+					},
+					Status: v1alpha1.ReservationStatus{
+						Host: "node001-bb088",
+						Conditions: []v1.Condition{
+							{Type: v1alpha1.ReservationConditionReady, Status: v1.ConditionTrue},
+						},
+					},
+				},
+			},
+			expectedMetrics: []kvmExpectedMetric{
+				totalMetric("node001-bb088", "cpu", "qa-1a", "bb088", 100),
+				totalMetric("node001-bb088", "ram", "qa-1a", "bb088", 214748364800), // 200Gi
+				usageMetric("node001-bb088", "cpu", "utilized", "qa-1a", "bb088", 80),
+				usageMetric("node001-bb088", "ram", "utilized", "qa-1a", "bb088", 161061273600), // 150Gi
+				usageMetric("node001-bb088", "cpu", "reserved", "qa-1a", "bb088", 20),
+				usageMetric("node001-bb088", "ram", "reserved", "qa-1a", "bb088", 42949672960), // 40Gi
+				usageMetric("node001-bb088", "cpu", "failover", "qa-1a", "bb088", 20),
+				usageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 42949672960), // 40Gi
+				usageMetric("node001-bb088", "cpu", "payg", "qa-1a", "bb088", 0),
+				usageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 0),
+			},
+		},
 	}
 
 	for _, tt := range tests {

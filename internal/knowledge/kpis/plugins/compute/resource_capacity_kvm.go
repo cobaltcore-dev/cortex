@@ -23,6 +23,72 @@ import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
+type kvmHost struct {
+	hv1.Hypervisor
+}
+
+// getResourceCapacity attempts to retrieve the effective capacity for the specified resource from the hypervisor status, falling back to the physical capacity if effective capacity is not available. It returns the capacity quantity and a boolean indicating whether any capacity information was found.
+func (k kvmHost) getResourceCapacity(resourceName hv1.ResourceName) (capacity resource.Quantity, ok bool) {
+	if k.Status.EffectiveCapacity != nil {
+		qty, exists := k.Status.EffectiveCapacity[resourceName]
+		if exists && !qty.IsZero() {
+			return qty, true
+		}
+	}
+	if k.Status.Capacity == nil {
+		return resource.Quantity{}, false
+	}
+	qty, exists := k.Status.Capacity[resourceName]
+	if !exists || qty.IsZero() {
+		return resource.Quantity{}, false
+	}
+	return qty, true
+}
+
+func (k kvmHost) getResourceAllocation(resourceName hv1.ResourceName) (allocation resource.Quantity) {
+	if k.Status.Allocation == nil {
+		return resource.MustParse("0")
+	}
+
+	qty, exists := k.Status.Allocation[resourceName]
+	if !exists {
+		return resource.MustParse("0")
+	}
+	return qty
+}
+
+func (k kvmHost) getLabels() kvmHostLabels {
+	decommissioned := false
+	externalCustomer := false
+	workloadType := "general-purpose"
+	cpuArchitecture := "cascade-lake"
+
+	for _, trait := range k.Status.Traits {
+		switch trait {
+		case "CUSTOM_HW_SAPPHIRE_RAPIDS":
+			cpuArchitecture = "sapphire-rapids"
+		case "CUSTOM_HANA_EXCLUSIVE_HOST":
+			workloadType = "hana"
+		case "CUSTOM_DECOMMISSIONING":
+			decommissioned = true
+		case "CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE":
+			externalCustomer = true
+		}
+	}
+
+	return kvmHostLabels{
+		computeHost:      k.Name,
+		availabilityZone: k.Labels["topology.kubernetes.io/zone"],
+		buildingBlock:    getBuildingBlock(k.Name),
+		cpuArchitecture:  cpuArchitecture,
+		workloadType:     workloadType,
+		enabled:          strconv.FormatBool(true),
+		decommissioned:   strconv.FormatBool(decommissioned),
+		externalCustomer: strconv.FormatBool(externalCustomer),
+		maintenance:      strconv.FormatBool(false),
+	}
+}
+
 // Assuming hypervisor names are in the format nodeXXX-bbYY
 func getBuildingBlock(hostName string) string {
 	parts := strings.Split(hostName, "-")
@@ -167,10 +233,23 @@ func aggregateReservationsByHost(reservations []v1alpha1.Reservation) (
 	return failoverByHost, committedNotInUseByHost
 }
 
-func (k *KVMResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
+func (k *KVMResourceCapacityKPI) getHypervisors() ([]kvmHost, error) {
 	hvs := &hv1.HypervisorList{}
 	if err := k.Client.List(context.Background(), hvs); err != nil {
-		slog.Error("failed to list hypervisors", "error", err)
+		return nil, err
+	}
+
+	hosts := make([]kvmHost, len(hvs.Items))
+	for i, hv := range hvs.Items {
+		hosts[i] = kvmHost{Hypervisor: hv}
+	}
+	return hosts, nil
+}
+
+func (k *KVMResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
+	hypervisors, err := k.getHypervisors()
+	if err != nil {
+		slog.Error("failed to get hypervisors", "error", err)
 		return
 	}
 
@@ -182,48 +261,17 @@ func (k *KVMResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 
 	failoverByHost, committedNotInUseByHost := aggregateReservationsByHost(reservations.Items)
 
-	for _, hypervisor := range hvs.Items {
-		capacityMap := hypervisor.Status.EffectiveCapacity
-		if capacityMap == nil {
-			slog.Warn("hypervisor with nil effective capacity, falling back to physical capacity (overcommit not considered)", "host", hypervisor.Name)
-			capacityMap = hypervisor.Status.Capacity
-		}
-		if capacityMap == nil {
-			slog.Warn("hypervisor with nil capacity, skipping", "host", hypervisor.Name)
-			continue
-		}
-
-		cpuTotal, hasCPUTotal := capacityMap[hv1.ResourceCPU]
-		ramTotal, hasRAMTotal := capacityMap[hv1.ResourceMemory]
+	for _, hypervisor := range hypervisors {
+		cpuTotal, hasCPUTotal := hypervisor.getResourceCapacity(hv1.ResourceCPU)
+		ramTotal, hasRAMTotal := hypervisor.getResourceCapacity(hv1.ResourceMemory)
 
 		if !hasCPUTotal || !hasRAMTotal {
-			slog.Error("hypervisor missing cpu or ram total capacity", "hypervisor", hypervisor.Name)
+			slog.Warn("hypervisor missing cpu or ram capacity, skipping", "host", hypervisor.Name)
 			continue
 		}
 
-		if cpuTotal.IsZero() || ramTotal.IsZero() {
-			slog.Warn("hypervisor with zero effective capacity, falling back to physical capacity (overcommit not considered)", "host", hypervisor.Name)
-			if hypervisor.Status.Capacity == nil {
-				slog.Warn("hypervisor with nil physical capacity, skipping", "host", hypervisor.Name)
-				continue
-			}
-			cpuTotal = hypervisor.Status.Capacity[hv1.ResourceCPU]
-			ramTotal = hypervisor.Status.Capacity[hv1.ResourceMemory]
-			if cpuTotal.IsZero() || ramTotal.IsZero() {
-				slog.Warn("hypervisor with zero physical capacity, skipping", "host", hypervisor.Name)
-				continue
-			}
-		}
-
-		cpuUsed, hasCPUUtilized := hypervisor.Status.Allocation[hv1.ResourceCPU]
-		if !hasCPUUtilized {
-			cpuUsed = resource.MustParse("0")
-		}
-
-		ramUsed, hasRAMUtilized := hypervisor.Status.Allocation[hv1.ResourceMemory]
-		if !hasRAMUtilized {
-			ramUsed = resource.MustParse("0")
-		}
+		cpuUsed := hypervisor.getResourceAllocation(hv1.ResourceCPU)
+		ramUsed := hypervisor.getResourceAllocation(hv1.ResourceMemory)
 
 		// Get reservation data for this hypervisor (zero-value if absent).
 		failoverRes := failoverByHost[hypervisor.Name]
@@ -234,7 +282,7 @@ func (k *KVMResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		cpuFailover := failoverRes.cpu
 		ramFailover := failoverRes.memory
 
-		labels := hostLabelsFromHypervisor(hypervisor)
+		labels := hypervisor.getLabels()
 
 		k.emitTotal(ch, "cpu", cpuTotal.AsApproximateFloat64(), labels)
 		k.emitTotal(ch, "ram", ramTotal.AsApproximateFloat64(), labels)
@@ -253,11 +301,17 @@ func (k *KVMResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		paygCPU.Sub(cpuUsed)
 		paygCPU.Sub(cpuReserved)
 		paygCPU.Sub(cpuFailover)
+		if paygCPU.Cmp(resource.MustParse("0")) < 0 {
+			paygCPU = resource.MustParse("0")
+		}
 
 		paygRAM := ramTotal.DeepCopy()
 		paygRAM.Sub(ramUsed)
 		paygRAM.Sub(ramReserved)
 		paygRAM.Sub(ramFailover)
+		if paygRAM.Cmp(resource.MustParse("0")) < 0 {
+			paygRAM = resource.MustParse("0")
+		}
 
 		k.emitUsage(ch, "cpu", paygCPU.AsApproximateFloat64(), "payg", labels)
 		k.emitUsage(ch, "ram", paygRAM.AsApproximateFloat64(), "payg", labels)
@@ -275,38 +329,6 @@ type kvmHostLabels struct {
 	decommissioned   string
 	externalCustomer string
 	maintenance      string
-}
-
-func hostLabelsFromHypervisor(hypervisor hv1.Hypervisor) kvmHostLabels {
-	decommissioned := false
-	externalCustomer := false
-	workloadType := "general-purpose"
-	cpuArchitecture := "cascade-lake"
-
-	for _, trait := range hypervisor.Status.Traits {
-		switch trait {
-		case "CUSTOM_HW_SAPPHIRE_RAPIDS":
-			cpuArchitecture = "sapphire-rapids"
-		case "CUSTOM_HANA_EXCLUSIVE_HOST":
-			workloadType = "hana"
-		case "CUSTOM_DECOMMISSIONING":
-			decommissioned = true
-		case "CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE":
-			externalCustomer = true
-		}
-	}
-
-	return kvmHostLabels{
-		computeHost:      hypervisor.Name,
-		availabilityZone: hypervisor.Labels["topology.kubernetes.io/zone"],
-		buildingBlock:    getBuildingBlock(hypervisor.Name),
-		cpuArchitecture:  cpuArchitecture,
-		workloadType:     workloadType,
-		enabled:          strconv.FormatBool(true),
-		decommissioned:   strconv.FormatBool(decommissioned),
-		externalCustomer: strconv.FormatBool(externalCustomer),
-		maintenance:      strconv.FormatBool(false),
-	}
 }
 
 func (k *KVMResourceCapacityKPI) emitTotal(ch chan<- prometheus.Metric, resourceName string, value float64, l kvmHostLabels) {
