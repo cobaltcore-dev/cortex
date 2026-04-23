@@ -43,8 +43,6 @@ type CommittedResourceSpec struct {
 	CommitmentUUID string `json:"commitmentUUID"`
 
 	// SchedulingDomain specifies the scheduling domain for this committed resource (e.g., "nova", "ironcore").
-	// +kubebuilder:validation:Enum=nova;cinder;manila;machines;pods
-	// +kubebuilder:validation:Required
 	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`
 
 	// FlavorGroupName identifies the flavor group this commitment targets, e.g. "kvm_v2_hana_s".
@@ -57,7 +55,8 @@ type CommittedResourceSpec struct {
 	ResourceType CommittedResourceType `json:"resourceType"`
 
 	// Amount is the total committed quantity.
-	// Examples: "1280Gi" for RAM, "40" for CPU cores.
+	// memory: MiB expressed in K8s binary SI notation (e.g. "1280Gi", "640Mi").
+	// cores: integer core count (e.g. "40").
 	// +kubebuilder:validation:Required
 	Amount resource.Quantity `json:"amount"`
 
