@@ -37,3 +37,12 @@ runs:
       run: |
         curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.13"
         echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install LiteLLM dependencies
+      shell: bash
+      run: pip install litellm==1.83.10 fastapi==0.136.0 uvicorn==0.44.0 --quiet
