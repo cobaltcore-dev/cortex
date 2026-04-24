@@ -36,7 +36,7 @@ This project uses a custom `multicluster.Client` (pkg/multicluster/client.go) th
 - Check `cmd/manager/main.go` for the multicluster client initialization block to see if new GVKs and routers are wired up.
 
 **Reporting format for this pitfall:**
-```
+```text
 [Pitfall #1 - Multicluster Client Misconfiguration]
 Violation: <which sub-check>
 File: <path:line>
@@ -45,7 +45,7 @@ Fix: <concrete fix>
 ```
 
 If no violations are found for this pitfall, write:
-```
+```text
 [Pitfall #1 - Multicluster Client Misconfiguration] No violations found.
 ```
 
