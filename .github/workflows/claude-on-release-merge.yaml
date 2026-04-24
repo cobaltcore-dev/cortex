@@ -10,6 +10,9 @@ jobs:
   changelog:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    concurrency:
+      group: changelog-release
+      cancel-in-progress: false
     permissions:
       contents: write
       pull-requests: write

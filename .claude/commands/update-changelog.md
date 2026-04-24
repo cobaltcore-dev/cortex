@@ -9,13 +9,24 @@ To build the entry, use the PR's commit subjects (no diffs) and the changed Helm
 
 Format each entry as:
 
-## YYYY-MM-DD — <PR title> ([#NNN](https://github.com/cobaltcore-dev/cortex/pull/NNN))
+## {merged_at date in UTC, formatted YYYY-MM-DD} — {PR title} ([#NNN](https://github.com/cobaltcore-dev/cortex/pull/NNN))
 
 One `###` section per changed chart: `### <chart-name> v<version> (<appVersion>)`
 Under each section, bullet the commit subjects that relate to that chart.
 
-Attribution: "postgres" → cortex-postgres; "nova"/"manila"/"cinder"/"placement"/"shim"/"bundle" → the matching bundle chart; unattributable commits → `### General` at the end.
-Skip commits containing "[skip ci]" or that are pure version-bump messages.
+Attribution: for each commit, inspect its changed files with `git show --name-only <sha>` and map to the chart whose files were touched:
+
+- `postgres/**` → cortex-postgres
+- `cmd/shim/**` or `internal/shim/**` → cortex-shim
+- `helm/bundles/cortex-<name>/**` → that specific bundle chart
+- anything else → cortex (core)
+
+Commits that only touch CI, docs, or tooling go into `### General`. Skip commits containing "[skip ci]" or that are pure version-bump message.
+
+For bundle chart sections (helm/bundles/*), add a note listing which library chart versions they now include (read the bundle's Chart.yaml dependencies). Then inspect the actual diff of the bundle's own files with `git show <sha> -- helm/bundles/<name>/` for any commit that touched that bundle, and surface specific changes:
+
+- **values.yaml** changes: call out new, removed, or renamed keys and changed defaults
+- **templates/** or **crds/** changes: call out added, removed, or modified resources by kind and name
 
 Prepend the new entry below the `# Changelog` header in `CHANGELOG.md` (create the file if it doesn't exist). Then open a PR to `main` referencing this release PR.
 
