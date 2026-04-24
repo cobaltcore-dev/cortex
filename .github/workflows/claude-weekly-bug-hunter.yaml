@@ -38,16 +38,12 @@ jobs:
           AICORE_CLIENT_ID: ${{ secrets.AICORE_CLIENT_ID }}
           AICORE_CLIENT_SECRET: ${{ secrets.AICORE_CLIENT_SECRET }}
 
-      - name: Install CI permissions for Claude
-        run: |
-          mkdir -p .claude
-          cp .github/config/claude-settings.json .claude/settings.json
-
       - uses: ./.claude-code-action
         with:
           claude_args: |
             --max-turns 1000
             --permission-mode auto
+            --allowedTools "Read,Write,Edit,Bash(*),WebSearch,WebFetch"
           use_litellm: "true"
           litellm_model: "sap/anthropic--claude-4.6-sonnet"
           github_token: ${{ secrets.GITHUB_TOKEN }}
