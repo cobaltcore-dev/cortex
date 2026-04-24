@@ -3,7 +3,7 @@ module github.com/cobaltcore-dev/cortex
 go 1.26
 
 require (
-	github.com/cobaltcore-dev/openstack-hypervisor-operator v1.0.2-0.20260416190048-8c00b47ee107
+	github.com/cobaltcore-dev/openstack-hypervisor-operator v1.0.2-0.20260423190401-f34871697a61
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.12.0
 	github.com/ironcore-dev/ironcore v0.3.0
@@ -109,13 +109,13 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	golang.org/x/exp v0.0.0-20250819193227-8b4c13bb791b // indirect
-	golang.org/x/net v0.52.0 // indirect
+	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/term v0.42.0
-	golang.org/x/text v0.35.0 // indirect
-	golang.org/x/time v0.14.0 // indirect
+	golang.org/x/text v0.36.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260128011058-8636f8732409 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260319201613-d00831a3d3e7 // indirect
