@@ -58,3 +58,69 @@ After a request was received by the API, it is processed in two ways depending o
 2. **Per-request forwarding**: For requests that ask for a specific resource provider, such as `GET /resource_providers/{uuid}`, the shim needs to determine if the requested resource provider is managed by the KVM translation or the passthrough. This can be done by checking the UUID of the resource provider against a list of known KVM resource providers. If it is a KVM resource provider, the request is forwarded to the translation; otherwise, it is forwarded to the OpenStack Placement instance.
 
 The translation layer is responsible for translating the requests and responses between the OpenStack Placement API and the Hypervisor CRD. This includes mapping resource provider attributes, inventory, and allocations to the corresponding fields in the Hypervisor CRD.
+
+### Authentication Middleware
+
+The shim can enforce Keystone token validation on its endpoints via a configurable policy table. When enabled, every incoming request is matched against an ordered list of rules before reaching any handler.
+
+**How it works:**
+
+1. Each rule (a *policy*) has a `METHOD /path` pattern and a list of required roles. A trailing `/*` in the path acts as a wildcard. `*` as the method matches any HTTP verb. Rules are evaluated in order; the **first match wins** (deny-by-default if nothing matches).
+2. A rule with an empty role list means the endpoint is publicly accessible — no token required.
+3. For rules with roles, the shim reads the `X-Auth-Token` header and looks up the token in an in-memory cache (keyed by SHA-256 hash). On a cache miss, it calls Keystone's token introspection endpoint using a `singleflight` group to collapse concurrent requests for the same token into one upstream call.
+4. Validated tokens are cached for the configured `tokenCacheTTL` (default: `5m`) or until the Keystone-reported expiry, whichever comes first.
+5. For **project-scoped roles**, the rule can additionally require that the project ID embedded in the token matches a project ID found in the request — extracted from either a URL query parameter (`from: query`) or a top-level JSON body field (`from: body`). This allows tenant-scoped endpoints like `GET /usages?project_id=<id>` to be restricted to tokens belonging to that specific project.
+
+**Example configuration snippet (Helm values):**
+
+```yaml
+auth:
+  tokenCacheTTL: "5m"
+  policies:
+    - pattern: "GET /"
+      roles: null  # publicly accessible
+    - pattern: "GET /usages"
+      roles:
+        - name: cloud_compute_admin
+        - name: compute_viewer
+          projectScope:
+            from: query   # token's project must match ?project_id= query param
+    - pattern: "GET /*"
+      roles:
+        - name: cloud_compute_admin
+        - name: cloud_compute_viewer
+    - pattern: "* /*"
+      roles:
+        - name: cloud_compute_admin
+```
+
+When `auth` is absent from the configuration, the middleware is disabled and all requests are passed through without validation.
+
+### Traits API
+
+The shim provides feature-gated `/traits` endpoints that serve OpenStack Placement trait data directly from Kubernetes ConfigMaps, rather than forwarding to the upstream Placement instance. This is controlled by `features.enableTraits` in the Helm values.
+
+**Two ConfigMaps are used:**
+
+| ConfigMap | Content | Managed by |
+|-----------|---------|------------|
+| `<configMapName>` (static) | Standard traits declared in Helm values (`traits.static`) | Helm — recreated on each deploy |
+| `<configMapName>-custom` (dynamic) | `CUSTOM_*` traits created at runtime via `PUT /traits/{name}` | The shim at runtime |
+
+**Read path (`GET /traits`, `GET /traits/{name}`):** Both ConfigMaps are merged in memory and the combined set is returned. The `GET /traits` endpoint supports `name=in:A,B` (exact list) and `name=startswith:PREFIX` filters.
+
+**Write path (`PUT /traits/{name}`, `DELETE /traits/{name}`):**
+
+Only traits whose name begins with `CUSTOM_` may be created or deleted; attempts to modify standard traits are rejected with `400 Bad Request`.
+
+Writes use **Lease-based distributed locking** (`pkg/resourcelock`) to serialize access across shim replicas:
+
+```
+1. Fast path: check if trait already exists in either ConfigMap (no lock needed).
+2. If not found: acquire a Kubernetes Lease lock named <configMapName>-custom-lock.
+3. Under the lock: re-read (double-check), then create/update/delete the dynamic ConfigMap.
+4. Release the lock.
+5. Best-effort: sync the new CUSTOM_* trait to upstream Placement (fire-and-forget, errors logged but not propagated).
+```
+
+The `POD_NAMESPACE` environment variable must be injected via the Kubernetes Downward API so the shim knows which namespace to use for ConfigMap and Lease operations.
