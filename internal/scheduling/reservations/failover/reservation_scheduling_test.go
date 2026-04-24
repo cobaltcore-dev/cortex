@@ -170,8 +170,10 @@ func TestBuildNewFailoverReservation(t *testing.T) {
 				t.Errorf("allocated host = %v, want %v", allocatedHost, tt.vm.CurrentHypervisor)
 			}
 
-			// Verify resources are copied from VM
-			// Note: VM uses "vcpus" but reservation uses "cpu" as the canonical key
+			// Verify resources are derived from VM
+			// Note: VM uses "vcpus" but reservation uses "cpu" as the canonical key.
+			// Memory uses binary MiB (bytes / 1024*1024 → MiB → MiB * 1024*1024), matching
+			// commitments/state.go and vm_source.go conventions.
 			if tt.vm.Resources != nil {
 				if memory, ok := tt.vm.Resources["memory"]; ok {
 					if resMemory, ok := result.Spec.Resources[hv1.ResourceMemory]; !ok {
@@ -294,7 +296,7 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 			wantFlavorName:          "hana_c60_m960", // VM's own flavor name
 			wantFlavorGroupName:     "",              // no flavor group (disabled)
 			wantResourceGroup:       "hana_c60_m960", // ResourceGroup = fallback to flavor name
-			wantMemoryMB:            983040,          // VM's own memory
+			wantMemoryMB:            983040,          // VM's own memory (MiB, binary)
 			wantVCPUs:               60,              // VM's own vcpus
 		},
 		{
@@ -314,7 +316,7 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 			wantFlavorName:          "unknown_flavor", // VM's own flavor name (fallback)
 			wantFlavorGroupName:     "",               // no flavor group (not found)
 			wantResourceGroup:       "unknown_flavor", // ResourceGroup = fallback to flavor name
-			wantMemoryMB:            16384,            // VM's own memory (fallback)
+			wantMemoryMB:            16384,            // VM's own memory (MiB, binary)
 			wantVCPUs:               8,                // VM's own vcpus (fallback)
 		},
 		{
@@ -334,7 +336,7 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 			wantFlavorName:          "hana_c60_m960", // VM's own flavor name (fallback)
 			wantFlavorGroupName:     "",              // no flavor group (nil groups)
 			wantResourceGroup:       "hana_c60_m960", // ResourceGroup = fallback to flavor name
-			wantMemoryMB:            983040,          // VM's own memory (fallback)
+			wantMemoryMB:            983040,          // VM's own memory (MiB, binary)
 			wantVCPUs:               60,              // VM's own vcpus (fallback)
 		},
 	}
@@ -368,7 +370,7 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 			if !ok {
 				t.Fatal("reservation missing memory resource")
 			}
-			wantMemoryBytes := int64(tt.wantMemoryMB) * 1024 * 1024 //nolint:gosec // test values won't overflow
+			wantMemoryBytes := int64(tt.wantMemoryMB) * 1024 * 1024 //nolint:gosec // test values won't overflow; binary MiB matches OpenStack convention
 			if resMemory.Value() != wantMemoryBytes {
 				t.Errorf("reservation memory = %d bytes, want %d bytes", resMemory.Value(), wantMemoryBytes)
 			}

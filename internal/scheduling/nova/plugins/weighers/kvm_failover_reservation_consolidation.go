@@ -5,6 +5,7 @@ package weighers
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -26,6 +27,17 @@ type KVMFailoverReservationConsolidationOpts struct {
 }
 
 func (o KVMFailoverReservationConsolidationOpts) Validate() error {
+	w := o.GetTotalCountWeight()
+	p := o.GetSameSpecPenalty()
+	if w < 0 {
+		return errors.New("totalCountWeight must be non-negative")
+	}
+	if p < 0 {
+		return errors.New("sameSpecPenalty must be non-negative")
+	}
+	if w > 0 && p >= w {
+		return errors.New("sameSpecPenalty must be less than totalCountWeight")
+	}
 	return nil
 }
 

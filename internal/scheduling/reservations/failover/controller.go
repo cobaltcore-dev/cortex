@@ -620,10 +620,10 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 		vmLogger := LoggerFromContext(vmCtx).WithValues("vmUUID", need.VM.UUID)
 		vmLogger.Info("processing VM for failover reservation")
 
-		for i := range need.Count {
-			// Resolve VM resources once per VM (may use LargestFlavor from flavor group)
-			resSpec := resolveVMSpecForScheduling(vmCtx, need.VM, c.Config.UseFlavorGroupResources, flavorGroups)
+		// Resolve VM resources once per VM (may use LargestFlavor from flavor group)
+		resSpec := resolveVMSpecForScheduling(vmCtx, need.VM, c.Config.UseFlavorGroupResources, flavorGroups)
 
+		for i := range need.Count {
 			reusedRes := c.tryReuseExistingReservation(vmCtx, need.VM, failoverReservations, allHypervisors, resSpec)
 
 			if reusedRes != nil {

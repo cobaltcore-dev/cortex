@@ -38,8 +38,8 @@ func (r resolvedReservationSpec) ResourceGroup(fallback string) string {
 // (e.g., nova filter_has_enough_capacity) uses "cpu".
 func (r resolvedReservationSpec) HypervisorResources() map[hv1.ResourceName]resource.Quantity {
 	return map[hv1.ResourceName]resource.Quantity{
-		"memory": *resource.NewQuantity(int64(r.MemoryMB)*1024*1024, resource.BinarySI), //nolint:gosec // flavor memory from specs, realistically bounded
-		"cpu":    *resource.NewQuantity(int64(r.VCPUs), resource.DecimalSI),             //nolint:gosec // flavor vcpus from specs, realistically bounded
+		hv1.ResourceMemory: *resource.NewQuantity(int64(r.MemoryMB)*1024*1024, resource.BinarySI), //nolint:gosec // flavor memory (MiB) from specs, realistically bounded; use binary to match commitments/state.go and vm_source.go
+		hv1.ResourceCPU:    *resource.NewQuantity(int64(r.VCPUs), resource.DecimalSI),             //nolint:gosec // flavor vcpus from specs, realistically bounded
 	}
 }
 
@@ -73,7 +73,7 @@ func resolveVMSpecForScheduling(
 				VCPUs:           largest.VCPUs,
 			}
 		}
-		logger.Info("flavor group lookup failed, falling back to VM resources",
+		logger.V(1).Info("flavor group lookup failed, falling back to VM resources",
 			"vmFlavor", vm.FlavorName,
 			"error", err)
 	}
@@ -81,7 +81,7 @@ func resolveVMSpecForScheduling(
 	// Fallback: use VM's own resources
 	var memoryMB, vcpus uint64
 	if memory, ok := vm.Resources["memory"]; ok {
-		memoryMB = uint64(memory.Value() / (1024 * 1024)) //nolint:gosec // memory values won't overflow
+		memoryMB = uint64(memory.Value() / (1024 * 1024)) //nolint:gosec // memory values won't overflow; binary MiB matches commitments/state.go and vm_source.go
 	}
 	if v, ok := vm.Resources["vcpus"]; ok {
 		vcpus = uint64(v.Value()) //nolint:gosec // vcpus values won't overflow
