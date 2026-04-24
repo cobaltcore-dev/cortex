@@ -1,0 +1,44 @@
+name: "Setup Claude Code Action"
+description: "Clone upstream claude-code-action, apply SAP AI Core LiteLLM patch, and prepare the action for use"
+
+inputs:
+  upstream_repo:
+    description: "Upstream claude-code-action repository"
+    required: false
+    default: "anthropics/claude-code-action"
+  upstream_ref:
+    description: "Commit SHA to pin the upstream clone to"
+    required: false
+    default: "e58dfa55559035499a4982426bb73605e8b5ad8e"
+  checkout_path:
+    description: "Path to clone the action into"
+    required: false
+    default: ".claude-code-action"
+
+outputs:
+  action_path:
+    description: "Path to the patched action"
+    value: ${{ inputs.checkout_path }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Clone upstream claude-code-action
+      shell: bash
+      run: |
+        git clone --depth 1 "https://github.com/${{ inputs.upstream_repo }}.git" "${{ inputs.checkout_path }}"
+        cd "${{ inputs.checkout_path }}"
+        git fetch --depth 1 origin "${{ inputs.upstream_ref }}"
+        git checkout "${{ inputs.upstream_ref }}"
+
+    - name: Apply LiteLLM proxy patch
+      shell: bash
+      run: |
+        cd "${{ inputs.checkout_path }}"
+        git apply "${{ github.workspace }}/.github/patches/claude-code-action/litellm-proxy.patch"
+
+    - name: Install Bun
+      shell: bash
+      run: |
+        curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.13"
+        echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
