@@ -22,7 +22,7 @@ jobs:
         with:
           use_litellm: "true"
           litellm_model: "sap/anthropic--claude-4.6-sonnet"
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.BOT_PAT }}
           show_full_output: "true"
           direct_prompt: |
             You are a bug-finding specialist. Your sole mission is to hunt for real, demonstrable bugs in this codebase — not style issues, not theoretical concerns, not missing tests. Bugs only.
