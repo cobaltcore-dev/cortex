@@ -5,11 +5,6 @@ description: Review a pull request
 
 Perform a comprehensive code review using subagents for key areas:
 
-- code-quality-reviewer
-- performance-reviewer
-- test-coverage-reviewer
-- documentation-accuracy-reviewer
-- security-code-reviewer
 - common-pitfall-guard
 
 Instruct each to only provide noteworthy feedback. Once they finish, review the feedback and post only the feedback that you also deem noteworthy.
