@@ -1,0 +1,209 @@
+diff --git a/action.yml b/action.yml
+index b6d0f05..e3e2145 100644
+--- a/action.yml
++++ b/action.yml
+@@ -85,6 +85,14 @@ inputs:
+     description: "Use Microsoft Foundry with OIDC authentication instead of direct Anthropic API"
+     required: false
+     default: "false"
++  use_litellm:
++    description: "Use LiteLLM to route requests through SAP AI Core (or other LiteLLM-supported providers)"
++    required: false
++    default: "false"
++  litellm_model:
++    description: "LiteLLM model identifier (e.g., 'sap/anthropic--claude-4.6-sonnet')"
++    required: false
++    default: "sap/anthropic--claude-4.6-sonnet"
+ 
+   claude_args:
+     description: "Additional arguments to pass directly to Claude CLI"
+@@ -173,10 +181,11 @@ runs:
+   steps:
+     - name: Install Bun
+       if: inputs.path_to_bun_executable == ''
+-      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # https://github.com/oven-sh/setup-bun/releases/tag/v2.2.0
+-      with:
+-        bun-version: 1.3.6
+-        token: ${{ inputs.github_token || github.token }}
++      shell: bash
++      run: |
++        # Install Bun via official install script (avoids github.com API token issues on GHES)
++        curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.13"
++        echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+ 
+     - name: Setup Custom Bun Path
+       if: inputs.path_to_bun_executable != ''
+@@ -237,6 +246,58 @@ runs:
+         echo "/usr/bin" >> "$GITHUB_PATH"
+         echo "/bin" >> "$GITHUB_PATH"
+ 
++    - name: Setup Python for LiteLLM
++      if: inputs.use_litellm == 'true'
++      uses: actions/setup-python@v5
++      with:
++        python-version: "3.12"
++
++    - name: Install LiteLLM dependencies
++      if: inputs.use_litellm == 'true'
++      shell: bash
++      run: |
++        pip install litellm==1.83.10 fastapi==0.136.0 uvicorn==0.44.0 --quiet
++
++    - name: Start LiteLLM Proxy
++      if: inputs.use_litellm == 'true'
++      id: litellm
++      shell: bash
++      env:
++        LITELLM_MODEL: ${{ inputs.litellm_model }}
++      run: |
++        LITELLM_PORT=$(python3 -c "import socket; s=socket.socket(); s.bind(('',0)); print(s.getsockname()[1]); s.close()")
++        echo "Starting LiteLLM proxy on port ${LITELLM_PORT}..."
++
++        LITELLM_PROXY_PORT=${LITELLM_PORT} python3 "${GITHUB_ACTION_PATH}/scripts/litellm-proxy.py" &
++        LITELLM_PID=$!
++        echo "LITELLM_PID=${LITELLM_PID}" >> "$GITHUB_ENV"
++        echo "LITELLM_PORT=${LITELLM_PORT}" >> "$GITHUB_ENV"
++
++        for i in $(seq 1 30); do
++          if curl -sf --connect-timeout 2 --max-time 3 "http://localhost:${LITELLM_PORT}/health/readiness" > /dev/null 2>&1; then
++            echo "LiteLLM proxy is ready on port ${LITELLM_PORT}"
++            break
++          fi
++          if ! kill -0 $LITELLM_PID 2>/dev/null; then
++            echo "ERROR: LiteLLM proxy process died"
++            exit 1
++          fi
++          sleep 2
++        done
++
++        if ! curl -sf --connect-timeout 2 --max-time 3 "http://localhost:${LITELLM_PORT}/health/readiness" > /dev/null 2>&1; then
++          echo "ERROR: LiteLLM proxy failed to start after 60 seconds"
++          exit 1
++        fi
++
++        # Set env vars for Claude Code CLI to use the proxy
++        echo "ANTHROPIC_BASE_URL=http://localhost:${LITELLM_PORT}" >> "$GITHUB_ENV"
++        echo "ANTHROPIC_MODEL=${{ inputs.litellm_model }}" >> "$GITHUB_ENV"
++
++        # Set a dummy API key — the proxy handles auth via AICORE_SERVICE_KEY
++        LITELLM_PROXY_API_KEY="litellm-proxy-key"
++        echo "LITELLM_PROXY_API_KEY=${LITELLM_PROXY_API_KEY}" >> "$GITHUB_ENV"
++
+     - name: Run Claude Code Action
+       id: run
+       shell: bash
+@@ -292,13 +353,14 @@ runs:
+         NODE_VERSION: ${{ env.NODE_VERSION }}
+ 
+         # Provider configuration
+-        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
++        ANTHROPIC_API_KEY: ${{ inputs.use_litellm == 'true' && env.LITELLM_PROXY_API_KEY || inputs.anthropic_api_key }}
+         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_code_oauth_token }}
+         ANTHROPIC_BASE_URL: ${{ env.ANTHROPIC_BASE_URL }}
+         ANTHROPIC_CUSTOM_HEADERS: ${{ env.ANTHROPIC_CUSTOM_HEADERS }}
+         CLAUDE_CODE_USE_BEDROCK: ${{ inputs.use_bedrock == 'true' && '1' || '' }}
+         CLAUDE_CODE_USE_VERTEX: ${{ inputs.use_vertex == 'true' && '1' || '' }}
+         CLAUDE_CODE_USE_FOUNDRY: ${{ inputs.use_foundry == 'true' && '1' || '' }}
++        CLAUDE_CODE_USE_LITELLM: ${{ inputs.use_litellm == 'true' && '1' || '' }}
+ 
+         # AWS configuration
+         AWS_REGION: ${{ env.AWS_REGION }}
+@@ -335,6 +397,18 @@ runs:
+         MCP_TOOL_TIMEOUT: ${{ env.MCP_TOOL_TIMEOUT }}
+         MAX_MCP_OUTPUT_TOKENS: ${{ env.MAX_MCP_OUTPUT_TOKENS }}
+ 
++        # SAP AI Core configuration (for LiteLLM)
++        AICORE_SERVICE_KEY: ${{ env.AICORE_SERVICE_KEY }}
++        AICORE_AUTH_URL: ${{ env.AICORE_AUTH_URL }}
++        AICORE_CLIENT_ID: ${{ env.AICORE_CLIENT_ID }}
++        AICORE_CLIENT_SECRET: ${{ env.AICORE_CLIENT_SECRET }}
++        AICORE_BASE_URL: ${{ env.AICORE_BASE_URL }}
++        AICORE_RESOURCE_GROUP: ${{ env.AICORE_RESOURCE_GROUP }}
++
++        # SAP compliance configuration
++        DISABLE_TELEMETRY: "1"
++        DISABLE_ERROR_REPORTING: "1"
++
+         # Telemetry configuration
+         CLAUDE_CODE_ENABLE_TELEMETRY: ${{ env.CLAUDE_CODE_ENABLE_TELEMETRY }}
+         OTEL_METRICS_EXPORTER: ${{ env.OTEL_METRICS_EXPORTER }}
+@@ -372,6 +446,23 @@ runs:
+           echo "DYLD_FRAMEWORK_PATH="
+         } >> "$GITHUB_ENV"
+ 
++    - name: Stop LiteLLM Proxy
++      if: always() && inputs.use_litellm == 'true'
++      shell: bash
++      run: |
++        if [ -n "${LITELLM_PID}" ] && kill -0 "${LITELLM_PID}" 2>/dev/null; then
++          echo "Stopping LiteLLM proxy (PID: ${LITELLM_PID})..."
++          kill "${LITELLM_PID}" 2>/dev/null || true
++          for _ in $(seq 1 20); do
++            kill -0 "${LITELLM_PID}" 2>/dev/null || break
++            sleep 0.5
++          done
++          kill -9 "${LITELLM_PID}" 2>/dev/null || true
++          echo "LiteLLM proxy stopped."
++        else
++          echo "LiteLLM proxy already stopped."
++        fi
++
+     - name: Cleanup SSH signing key
+       if: always() && inputs.ssh_signing_key != ''
+       shell: bash
+diff --git a/base-action/src/validate-env.ts b/base-action/src/validate-env.ts
+index 1f28da3..4eae3f2 100644
+--- a/base-action/src/validate-env.ts
++++ b/base-action/src/validate-env.ts
+@@ -1,25 +1,26 @@
+ /**
+  * Validates the environment variables required for running Claude Code
+- * based on the selected provider (Anthropic API, AWS Bedrock, Google Vertex AI, or Microsoft Foundry)
++ * based on the selected provider (Anthropic API, AWS Bedrock, Google Vertex AI, Microsoft Foundry, or LiteLLM/SAP AI Core)
+  */
+ export function validateEnvironmentVariables() {
+   const useBedrock = process.env.CLAUDE_CODE_USE_BEDROCK === "1";
+   const useVertex = process.env.CLAUDE_CODE_USE_VERTEX === "1";
+   const useFoundry = process.env.CLAUDE_CODE_USE_FOUNDRY === "1";
++  const useLiteLLM = process.env.CLAUDE_CODE_USE_LITELLM === "1";
+   const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+   const claudeCodeOAuthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+ 
+   const errors: string[] = [];
+ 
+   // Check for mutual exclusivity between providers
+-  const activeProviders = [useBedrock, useVertex, useFoundry].filter(Boolean);
++  const activeProviders = [useBedrock, useVertex, useFoundry, useLiteLLM].filter(Boolean);
+   if (activeProviders.length > 1) {
+     errors.push(
+-      "Cannot use multiple providers simultaneously. Please set only one of: CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX, or CLAUDE_CODE_USE_FOUNDRY.",
++      "Cannot use multiple providers simultaneously. Please set only one of: CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX, CLAUDE_CODE_USE_FOUNDRY, or CLAUDE_CODE_USE_LITELLM.",
+     );
+   }
+ 
+-  if (!useBedrock && !useVertex && !useFoundry) {
++  if (!useBedrock && !useVertex && !useFoundry && !useLiteLLM) {
+     if (!anthropicApiKey && !claudeCodeOAuthToken) {
+       errors.push(
+         "Either ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN is required when using direct Anthropic API.",
+@@ -66,6 +67,20 @@ export function validateEnvironmentVariables() {
+         "Either ANTHROPIC_FOUNDRY_RESOURCE or ANTHROPIC_FOUNDRY_BASE_URL is required when using Microsoft Foundry.",
+       );
+     }
++  } else if (useLiteLLM) {
++    const baseUrl = process.env.ANTHROPIC_BASE_URL;
++    const apiKey = process.env.ANTHROPIC_API_KEY;
++
++    if (!baseUrl) {
++      errors.push(
++        "ANTHROPIC_BASE_URL is required when using LiteLLM. This should be set automatically by the LiteLLM proxy startup step.",
++      );
++    }
++    if (!apiKey) {
++      errors.push(
++        "ANTHROPIC_API_KEY is required when using LiteLLM. This should be set automatically by the LiteLLM proxy startup step.",
++      );
++    }
+   }
+ 
+   if (errors.length > 0) {
