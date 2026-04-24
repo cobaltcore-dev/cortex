@@ -4,6 +4,7 @@
 package placement
 
 import (
+	"fmt"
 	"net/http"
 )
 
@@ -15,7 +16,14 @@ import (
 // categorize the types of resources that resource providers can offer as
 // inventory. Available since microversion 1.2.
 func (s *Shim) HandleListResourceClasses(w http.ResponseWriter, r *http.Request) {
-	s.forward(w, r)
+	switch s.config.Features.ResourceClasses.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.ResourceClasses), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }
 
 // HandleCreateResourceClass handles POST /resource_classes requests.
@@ -26,7 +34,14 @@ func (s *Shim) HandleListResourceClasses(w http.ResponseWriter, r *http.Request)
 // is missing, and 409 Conflict if a class with the same name already exists.
 // Available since microversion 1.2.
 func (s *Shim) HandleCreateResourceClass(w http.ResponseWriter, r *http.Request) {
-	s.forward(w, r)
+	switch s.config.Features.ResourceClasses.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.ResourceClasses), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }
 
 // HandleShowResourceClass handles GET /resource_classes/{name} requests.
@@ -38,7 +53,14 @@ func (s *Shim) HandleShowResourceClass(w http.ResponseWriter, r *http.Request) {
 	if _, ok := requiredPathParam(w, r, "name"); !ok {
 		return
 	}
-	s.forward(w, r)
+	switch s.config.Features.ResourceClasses.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.ResourceClasses), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }
 
 // HandleUpdateResourceClass handles PUT /resource_classes/{name} requests.
@@ -53,7 +75,14 @@ func (s *Shim) HandleUpdateResourceClass(w http.ResponseWriter, r *http.Request)
 	if _, ok := requiredPathParam(w, r, "name"); !ok {
 		return
 	}
-	s.forward(w, r)
+	switch s.config.Features.ResourceClasses.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.ResourceClasses), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }
 
 // HandleDeleteResourceClass handles DELETE /resource_classes/{name} requests.
@@ -67,5 +96,12 @@ func (s *Shim) HandleDeleteResourceClass(w http.ResponseWriter, r *http.Request)
 	if _, ok := requiredPathParam(w, r, "name"); !ok {
 		return
 	}
-	s.forward(w, r)
+	switch s.config.Features.ResourceClasses.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.ResourceClasses), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }

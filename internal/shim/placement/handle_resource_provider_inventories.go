@@ -4,6 +4,7 @@
 package placement
 
 import (
+	"fmt"
 	"net/http"
 )
 
@@ -20,7 +21,14 @@ func (s *Shim) HandleListResourceProviderInventories(w http.ResponseWriter, r *h
 	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	s.forward(w, r)
+	switch s.config.Features.Inventories.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.Inventories), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }
 
 // HandleUpdateResourceProviderInventories handles
@@ -37,7 +45,14 @@ func (s *Shim) HandleUpdateResourceProviderInventories(w http.ResponseWriter, r 
 	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	s.forward(w, r)
+	switch s.config.Features.Inventories.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.Inventories), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }
 
 // HandleDeleteResourceProviderInventories handles
@@ -53,7 +68,14 @@ func (s *Shim) HandleDeleteResourceProviderInventories(w http.ResponseWriter, r 
 	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	s.forward(w, r)
+	switch s.config.Features.Inventories.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.Inventories), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }
 
 // HandleShowResourceProviderInventory handles
@@ -70,7 +92,14 @@ func (s *Shim) HandleShowResourceProviderInventory(w http.ResponseWriter, r *htt
 	if _, ok := requiredPathParam(w, r, "resource_class"); !ok {
 		return
 	}
-	s.forward(w, r)
+	switch s.config.Features.Inventories.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.Inventories), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }
 
 // HandleUpdateResourceProviderInventory handles
@@ -89,7 +118,14 @@ func (s *Shim) HandleUpdateResourceProviderInventory(w http.ResponseWriter, r *h
 	if _, ok := requiredPathParam(w, r, "resource_class"); !ok {
 		return
 	}
-	s.forward(w, r)
+	switch s.config.Features.Inventories.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.Inventories), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }
 
 // HandleDeleteResourceProviderInventory handles
@@ -106,5 +142,12 @@ func (s *Shim) HandleDeleteResourceProviderInventory(w http.ResponseWriter, r *h
 	if _, ok := requiredPathParam(w, r, "resource_class"); !ok {
 		return
 	}
-	s.forward(w, r)
+	switch s.config.Features.Inventories.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.Inventories), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }

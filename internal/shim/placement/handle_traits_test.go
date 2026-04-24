@@ -55,7 +55,7 @@ func newTraitShim(t *testing.T, staticTraits []string, customTraits ...string) *
 		Client: cl,
 		config: config{
 			PlacementURL: "http://should-not-be-called:1234",
-			Features:     featuresConfig{EnableTraits: true},
+			Features:     featuresConfig{Traits: FeatureModeCRD},
 			Traits:       &traitsConfig{ConfigMapName: "test-cm"},
 		},
 		maxBodyLogSize:         4096,

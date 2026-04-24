@@ -4,6 +4,7 @@
 package placement
 
 import (
+	"fmt"
 	"net/http"
 )
 
@@ -18,7 +19,14 @@ func (s *Shim) HandleListResourceProviderTraits(w http.ResponseWriter, r *http.R
 	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	s.forward(w, r)
+	switch s.config.Features.ResourceProviderTraits.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.ResourceProviderTraits), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }
 
 // HandleUpdateResourceProviderTraits handles
@@ -35,7 +43,14 @@ func (s *Shim) HandleUpdateResourceProviderTraits(w http.ResponseWriter, r *http
 	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	s.forward(w, r)
+	switch s.config.Features.ResourceProviderTraits.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.ResourceProviderTraits), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }
 
 // HandleDeleteResourceProviderTraits handles
@@ -51,5 +66,12 @@ func (s *Shim) HandleDeleteResourceProviderTraits(w http.ResponseWriter, r *http
 	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	s.forward(w, r)
+	switch s.config.Features.ResourceProviderTraits.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.ResourceProviderTraits), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }

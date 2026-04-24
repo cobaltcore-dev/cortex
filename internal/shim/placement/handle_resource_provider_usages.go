@@ -4,6 +4,7 @@
 package placement
 
 import (
+	"fmt"
 	"net/http"
 )
 
@@ -19,5 +20,12 @@ func (s *Shim) HandleListResourceProviderUsages(w http.ResponseWriter, r *http.R
 	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	s.forward(w, r)
+	switch s.config.Features.Usages.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.Usages), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }

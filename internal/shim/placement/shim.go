@@ -50,27 +50,59 @@ type requestIDContextKey struct{}
 // header value through the request lifecycle for tracing.
 var requestIDKey = requestIDContextKey{}
 
-// featuresConfig holds feature flags that can enable or disable specific
-// shim behaviors. All flags default to off (false).
+// FeatureMode controls how an endpoint group interacts with upstream
+// placement and the hypervisor CRD.
+type FeatureMode string
+
+const (
+	// FeatureModePassthrough forwards all requests to upstream placement
+	// without any shim logic.
+	FeatureModePassthrough FeatureMode = "passthrough"
+	// FeatureModeHybrid directs requests to both upstream placement and the
+	// hypervisor CRD. Upstream must respond; the shim keeps CRD state in
+	// sync to prepare for cutover.
+	FeatureModeHybrid FeatureMode = "hybrid"
+	// FeatureModeCRD serves requests exclusively from the hypervisor CRD.
+	// No upstream placement dependency is required.
+	FeatureModeCRD FeatureMode = "crd"
+)
+
+// orDefault returns FeatureModePassthrough when m is the zero value.
+func (m FeatureMode) orDefault() FeatureMode {
+	if m == "" {
+		return FeatureModePassthrough
+	}
+	return m
+}
+
+// valid reports whether m is a recognized feature mode (including the
+// zero value, which maps to passthrough).
+func (m FeatureMode) valid() bool {
+	switch m {
+	case FeatureModePassthrough, FeatureModeHybrid, FeatureModeCRD, "":
+		return true
+	}
+	return false
+}
+
+// featuresConfig controls the feature mode for each endpoint group.
+// Every field defaults to passthrough (zero value) when omitted.
 type featuresConfig struct {
-	// EnableResourceProviders enables the KVM-specific resource provider
-	// logic (hypervisor lookups, merged listings, 409 conflicts). When
-	// false, all resource provider handlers forward to upstream placement
-	// as a pure passthrough.
-	EnableResourceProviders bool `json:"enableResourceProviders,omitempty"`
-	// EnableRoot makes the GET / handler return a static version discovery
-	// document from the Versioning config instead of forwarding to
-	// upstream placement. When false, GET / is forwarded as-is.
-	EnableRoot bool `json:"enableRoot,omitempty"`
-	// EnableTraits makes the trait handlers (GET /traits, GET /traits/{name},
-	// PUT /traits/{name}, DELETE /traits/{name}) serve from a local ConfigMap
-	// instead of forwarding to upstream placement. When false, all trait
-	// requests are forwarded as-is.
-	EnableTraits bool `json:"enableTraits,omitempty"`
+	ResourceProviders      FeatureMode `json:"resourceProviders,omitempty"`
+	Root                   FeatureMode `json:"root,omitempty"`
+	Traits                 FeatureMode `json:"traits,omitempty"`
+	ResourceProviderTraits FeatureMode `json:"resourceProviderTraits,omitempty"`
+	ResourceClasses        FeatureMode `json:"resourceClasses,omitempty"`
+	Inventories            FeatureMode `json:"inventories,omitempty"`
+	Aggregates             FeatureMode `json:"aggregates,omitempty"`
+	Allocations            FeatureMode `json:"allocations,omitempty"`
+	Usages                 FeatureMode `json:"usages,omitempty"`
+	AllocationCandidates   FeatureMode `json:"allocationCandidates,omitempty"`
+	Reshaper               FeatureMode `json:"reshaper,omitempty"`
 }
 
 // versioningConfig describes the Placement API version advertised by the
-// static root endpoint when features.enableRoot is true.
+// static root endpoint when features.root is hybrid or crd.
 type versioningConfig struct {
 	ID         string `json:"id"`
 	MinVersion string `json:"minVersion"`
@@ -79,7 +111,7 @@ type versioningConfig struct {
 }
 
 // traitsConfig configures the local trait store used when
-// features.enableTraits is true.
+// features.traits is hybrid or crd.
 type traitsConfig struct {
 	// ConfigMapName is the name of the ConfigMap used to persist traits.
 	// Must exist in the same namespace as the shim pod.
@@ -123,14 +155,13 @@ type config struct {
 	// Kubernetes resource.Quantity string (e.g. "4Ki"). Defaults to "4Ki"
 	// when unset or empty.
 	MaxBodyLogSize string `json:"maxBodyLogSize,omitempty"`
-	// Features holds feature flags for enabling or disabling specific
-	// shim behaviors.
+	// Features controls the feature mode for each endpoint group.
 	Features featuresConfig `json:"features"`
 	// Versioning configures the static version discovery document returned
-	// by GET / when features.enableRoot is true.
+	// by GET / when features.root is hybrid or crd.
 	Versioning *versioningConfig `json:"versioning,omitempty"`
 	// Traits configures the local trait store used when
-	// features.enableTraits is true.
+	// features.traits is hybrid or crd.
 	Traits *traitsConfig `json:"traits,omitempty"`
 }
 
@@ -140,23 +171,42 @@ func (c *config) validate() error {
 	if c.PlacementURL == "" {
 		return errors.New("placement URL is required")
 	}
-	if c.Features.EnableRoot {
-		if c.Versioning == nil {
-			return errors.New("versioning config is required when features.enableRoot is true")
-		}
-		if c.Versioning.ID == "" || c.Versioning.MinVersion == "" || c.Versioning.MaxVersion == "" || c.Versioning.Status == "" {
-			return errors.New("versioning id, minVersion, maxVersion, and status are required when features.enableRoot is true")
+	for name, mode := range map[string]FeatureMode{
+		"resourceProviders":      c.Features.ResourceProviders,
+		"root":                   c.Features.Root,
+		"traits":                 c.Features.Traits,
+		"resourceProviderTraits": c.Features.ResourceProviderTraits,
+		"resourceClasses":        c.Features.ResourceClasses,
+		"inventories":            c.Features.Inventories,
+		"aggregates":             c.Features.Aggregates,
+		"allocations":            c.Features.Allocations,
+		"usages":                 c.Features.Usages,
+		"allocationCandidates":   c.Features.AllocationCandidates,
+		"reshaper":               c.Features.Reshaper,
+	} {
+		if !mode.valid() {
+			return fmt.Errorf("features.%s has invalid mode %q (must be passthrough, hybrid, or crd)", name, mode)
 		}
 	}
-	if c.Features.EnableTraits {
+	rootMode := c.Features.Root.orDefault()
+	if rootMode == FeatureModeHybrid || rootMode == FeatureModeCRD {
+		if c.Versioning == nil {
+			return fmt.Errorf("versioning config is required when features.root is %s", rootMode)
+		}
+		if c.Versioning.ID == "" || c.Versioning.MinVersion == "" || c.Versioning.MaxVersion == "" || c.Versioning.Status == "" {
+			return fmt.Errorf("versioning id, minVersion, maxVersion, and status are required when features.root is %s", rootMode)
+		}
+	}
+	traitsMode := c.Features.Traits.orDefault()
+	if traitsMode == FeatureModeHybrid || traitsMode == FeatureModeCRD {
 		if c.Traits == nil {
-			return errors.New("traits config is required when features.enableTraits is true")
+			return fmt.Errorf("traits config is required when features.traits is %s", traitsMode)
 		}
 		if c.Traits.ConfigMapName == "" {
-			return errors.New("traits.configMapName is required when features.enableTraits is true")
+			return fmt.Errorf("traits.configMapName is required when features.traits is %s", traitsMode)
 		}
-		if os.Getenv("POD_NAMESPACE") == "" {
-			return errors.New("pod namespace (POD_NAMESPACE) is required when features.enableTraits is true")
+		if traitsMode == FeatureModeCRD && os.Getenv("POD_NAMESPACE") == "" {
+			return errors.New("pod namespace (POD_NAMESPACE) is required when features.traits is crd")
 		}
 	}
 	if c.Auth != nil && c.KeystoneURL == "" {
@@ -278,7 +328,11 @@ func (s *Shim) Start(ctx context.Context) error {
 	if err := s.initHTTPClient(ctx); err != nil {
 		return err
 	}
-	return s.initTokenIntrospector(ctx)
+	if err := s.initTokenIntrospector(ctx); err != nil {
+		return err
+	}
+	go s.startTraitSyncLoop(ctx)
+	return nil
 }
 
 // Reconcile is not used by the shim, but must be implemented to satisfy the
@@ -350,7 +404,8 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 		Buckets: prometheus.DefBuckets,
 	}, []string{"method", "pattern", "responsecode"})
 
-	if s.config.Features.EnableTraits {
+	traitsMode := s.config.Features.Traits.orDefault()
+	if traitsMode == FeatureModeHybrid || traitsMode == FeatureModeCRD {
 		s.resourceLocker = resourcelock.NewResourceLocker(
 			s.Client,
 			os.Getenv("POD_NAMESPACE"),

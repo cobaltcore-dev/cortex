@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,9 +15,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -58,10 +61,17 @@ func (s *Shim) HandleListTraits(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	if !s.config.Features.EnableTraits {
+	switch s.config.Features.Traits.orDefault() {
+	case FeatureModePassthrough, FeatureModeHybrid:
 		s.forward(w, r)
 		return
+	case FeatureModeCRD:
+		// Serve from local ConfigMaps.
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+		return
 	}
+
 	traitSet, err := s.getAllTraits(ctx)
 	if err != nil {
 		log.Error(err, "failed to list traits from configmaps")
@@ -121,10 +131,17 @@ func (s *Shim) HandleShowTrait(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	if !s.config.Features.EnableTraits {
+	switch s.config.Features.Traits.orDefault() {
+	case FeatureModePassthrough, FeatureModeHybrid:
 		s.forward(w, r)
 		return
+	case FeatureModeCRD:
+		// Serve from local ConfigMaps.
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+		return
 	}
+
 	name, ok := requiredPathParam(w, r, "name")
 	if !ok {
 		return
@@ -156,10 +173,17 @@ func (s *Shim) HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	if !s.config.Features.EnableTraits {
+	switch s.config.Features.Traits.orDefault() {
+	case FeatureModePassthrough, FeatureModeHybrid:
 		s.forward(w, r)
 		return
+	case FeatureModeCRD:
+		// Serve from local ConfigMaps.
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+		return
 	}
+
 	name, ok := requiredPathParam(w, r, "name")
 	if !ok {
 		return
@@ -273,10 +297,17 @@ func (s *Shim) HandleDeleteTrait(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	if !s.config.Features.EnableTraits {
+	switch s.config.Features.Traits.orDefault() {
+	case FeatureModePassthrough, FeatureModeHybrid:
 		s.forward(w, r)
 		return
+	case FeatureModeCRD:
+		// Serve from local ConfigMaps.
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+		return
 	}
+
 	name, ok := requiredPathParam(w, r, "name")
 	if !ok {
 		return
@@ -461,4 +492,94 @@ func (s *Shim) syncTraitToUpstream(ctx context.Context, name string, incomingHea
 	}
 	defer resp.Body.Close()
 	log.Info("synced custom trait to upstream placement", "trait", name, "status", resp.StatusCode)
+}
+
+// startTraitSyncLoop runs a periodic goroutine that fetches traits from
+// upstream placement and writes them into the static ConfigMap. Only active
+// when features.traits is hybrid. The loop exits when ctx is cancelled.
+func (s *Shim) startTraitSyncLoop(ctx context.Context) {
+	if s.config.Features.Traits.orDefault() != FeatureModeHybrid {
+		return
+	}
+	log := ctrl.Log.WithName("placement-shim").WithName("trait-sync")
+	jitter := time.Duration(rand.Int63n(int64(30 * time.Second))) //nolint:gosec
+	log.Info("starting trait sync loop", "jitter", jitter)
+
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(jitter):
+	}
+
+	s.syncTraitsFromUpstream(ctx, log)
+
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.syncTraitsFromUpstream(ctx, log)
+		}
+	}
+}
+
+// syncTraitsFromUpstream fetches GET /traits from upstream placement and
+// writes the result into the static ConfigMap so that the shim's local
+// view stays in sync with upstream.
+func (s *Shim) syncTraitsFromUpstream(ctx context.Context, log logr.Logger) {
+	if s.httpClient == nil {
+		log.V(1).Info("skipping upstream trait sync, no http client configured")
+		return
+	}
+	u, err := url.Parse(s.config.PlacementURL)
+	if err != nil {
+		log.Error(err, "failed to parse placement URL for trait sync")
+		return
+	}
+	u.Path, err = url.JoinPath(u.Path, "/traits")
+	if err != nil {
+		log.Error(err, "failed to build upstream traits URL")
+		return
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), http.NoBody)
+	if err != nil {
+		log.Error(err, "failed to create upstream trait list request")
+		return
+	}
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		log.Info("upstream trait sync failed, upstream may be down", "error", err.Error())
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		log.Info("upstream trait sync got unexpected status", "status", resp.StatusCode)
+		return
+	}
+	var body traitsListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		log.Error(err, "failed to decode upstream trait list")
+		return
+	}
+
+	cm := &corev1.ConfigMap{}
+	if err := s.Get(ctx, s.staticTraitsConfigMapKey(), cm); err != nil {
+		log.Error(err, "failed to get static traits configmap for sync")
+		return
+	}
+	traitSet := make(map[string]struct{}, len(body.Traits))
+	for _, t := range body.Traits {
+		traitSet[t] = struct{}{}
+	}
+	if err := s.writeTraits(cm, traitSet); err != nil {
+		log.Error(err, "failed to serialize synced traits")
+		return
+	}
+	if err := s.Update(ctx, cm); err != nil {
+		log.Error(err, "failed to update static traits configmap with upstream data")
+		return
+	}
+	log.Info("synced traits from upstream placement", "count", len(body.Traits))
 }

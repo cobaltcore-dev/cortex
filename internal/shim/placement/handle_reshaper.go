@@ -4,6 +4,7 @@
 package placement
 
 import (
+	"fmt"
 	"net/http"
 )
 
@@ -23,5 +24,12 @@ import (
 // resource provider does not exist or if inventory/allocation constraints
 // would be violated. Available since microversion 1.30.
 func (s *Shim) HandlePostReshaper(w http.ResponseWriter, r *http.Request) {
-	s.forward(w, r)
+	switch s.config.Features.Reshaper.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.Reshaper), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }

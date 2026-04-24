@@ -99,7 +99,7 @@ func newTestShimWithHypervisors(t *testing.T, upstreamStatus int, upstreamBody s
 		Client: newFakeClient(t, hvs...),
 		config: config{
 			PlacementURL: upstream.URL,
-			Features:     featuresConfig{EnableResourceProviders: true},
+			Features:     featuresConfig{ResourceProviders: FeatureModeHybrid},
 		},
 		httpClient:             upstream.Client(),
 		maxBodyLogSize:         4096,
@@ -908,7 +908,7 @@ func TestHandleResourceProviders_FeatureFlagOff(t *testing.T) {
 			Client: newFakeClient(t, hv1Obj),
 			config: config{
 				PlacementURL: upstream.URL,
-				Features:     featuresConfig{EnableResourceProviders: false},
+				Features:     featuresConfig{ResourceProviders: FeatureModePassthrough},
 			},
 			httpClient:             upstream.Client(),
 			maxBodyLogSize:         4096,

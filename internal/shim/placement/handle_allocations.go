@@ -4,6 +4,7 @@
 package placement
 
 import (
+	"fmt"
 	"net/http"
 )
 
@@ -23,7 +24,14 @@ import (
 // success, or 409 Conflict if inventory is insufficient or a concurrent
 // update is detected (error code: placement.concurrent_update).
 func (s *Shim) HandleManageAllocations(w http.ResponseWriter, r *http.Request) {
-	s.forward(w, r)
+	switch s.config.Features.Allocations.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.Allocations), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }
 
 // HandleListAllocations handles GET /allocations/{consumer_uuid} requests.
@@ -41,7 +49,14 @@ func (s *Shim) HandleListAllocations(w http.ResponseWriter, r *http.Request) {
 	if _, ok := requiredUUIDPathParam(w, r, "consumer_uuid"); !ok {
 		return
 	}
-	s.forward(w, r)
+	switch s.config.Features.Allocations.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.Allocations), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }
 
 // HandleUpdateAllocations handles PUT /allocations/{consumer_uuid} requests.
@@ -59,7 +74,14 @@ func (s *Shim) HandleUpdateAllocations(w http.ResponseWriter, r *http.Request) {
 	if _, ok := requiredUUIDPathParam(w, r, "consumer_uuid"); !ok {
 		return
 	}
-	s.forward(w, r)
+	switch s.config.Features.Allocations.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.Allocations), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }
 
 // HandleDeleteAllocations handles DELETE /allocations/{consumer_uuid} requests.
@@ -71,5 +93,12 @@ func (s *Shim) HandleDeleteAllocations(w http.ResponseWriter, r *http.Request) {
 	if _, ok := requiredUUIDPathParam(w, r, "consumer_uuid"); !ok {
 		return
 	}
-	s.forward(w, r)
+	switch s.config.Features.Allocations.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.Allocations), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }

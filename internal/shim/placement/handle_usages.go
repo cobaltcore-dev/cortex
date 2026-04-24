@@ -4,6 +4,7 @@
 package placement
 
 import (
+	"fmt"
 	"net/http"
 )
 
@@ -20,5 +21,12 @@ import (
 // microversion 1.38, an optional consumer_type query parameter allows
 // filtering the results. Available since microversion 1.9.
 func (s *Shim) HandleListUsages(w http.ResponseWriter, r *http.Request) {
-	s.forward(w, r)
+	switch s.config.Features.Usages.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.Usages), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }

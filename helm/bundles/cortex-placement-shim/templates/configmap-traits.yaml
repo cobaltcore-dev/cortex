@@ -1,4 +1,4 @@
-{{- if (index .Values "cortex-shim").conf.features.enableTraits }}
+{{- if ne ((index .Values "cortex-shim").conf.features.traits | default "passthrough") "passthrough" }}
 {{- $cmName := (index .Values "cortex-shim").conf.traits.configMapName }}
 apiVersion: v1
 kind: ConfigMap
