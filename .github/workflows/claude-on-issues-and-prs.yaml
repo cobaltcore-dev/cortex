@@ -11,29 +11,8 @@ on:
     types: [submitted]
 
 jobs:
-  check-allowlist:
-    runs-on: ubuntu-latest
-    outputs:
-      allowed: ${{ steps.check.outputs.allowed }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-      - name: Check sender against allowlist
-        id: check
-        run: |
-          if grep -qxF "${{ github.event.sender.login }}" \
-            <(grep -v '^#' .github/claude-allowed-users | sed '/^[[:space:]]*$/d'); then
-            echo "allowed=true" >> $GITHUB_OUTPUT
-          else
-            echo "allowed=false" >> $GITHUB_OUTPUT
-          fi
-
   claude:
-    needs: check-allowlist
-    if: >
-      github.event.sender.type == 'User' &&
-      needs.check-allowlist.outputs.allowed == 'true'
+    if: github.event.sender.type == 'User'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -52,6 +31,7 @@ jobs:
           claude_args: |
             --max-turns 100
           trigger_phrase: "@claude"
+          include_comments_by_actor: "auhlig,umswmayj,juliusclausnitzer,mblos,PhilippMatthes,Varsius,henrichter"
           use_litellm: "true"
           litellm_model: "sap/anthropic--claude-4.6-sonnet"
           github_token: ${{ secrets.GITHUB_TOKEN }}
