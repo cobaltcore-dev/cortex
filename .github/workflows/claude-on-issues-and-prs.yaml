@@ -67,7 +67,7 @@ jobs:
           trigger_phrase: "@claude"
           include_comments_by_actor: "auhlig,umswmayj,juliusclausnitzer,mblos,PhilippMatthes,Varsius,henrichter,SoWieMarkus,*[bot]"
           use_litellm: "true"
-          litellm_model: "sap/anthropic--claude-4.6-sonnet"
+          litellm_model: "sap/anthropic--claude-4.6-opus"
           github_token: ${{ secrets.GITHUB_TOKEN }}
           show_full_output: "true"
 

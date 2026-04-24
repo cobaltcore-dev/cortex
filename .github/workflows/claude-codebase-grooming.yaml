@@ -1,4 +1,4 @@
-name: Claude Code Weekly Bug Hunter
+name: Claude Code Codebase Grooming
 
 on:
   schedule:
@@ -22,14 +22,6 @@ jobs:
 
       - uses: ./.github/actions/setup-claude-code-action
 
-      - name: Load bug hunter prompt
-        id: prompt
-        run: |
-          echo "content<<EOF" >> "$GITHUB_OUTPUT"
-          cat .github/agents/bug-hunter.md >> "$GITHUB_OUTPUT"
-          echo "" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-
       - uses: ./.github/actions/start-litellm-proxy
         env:
           AICORE_RESOURCE_GROUP: ${{ secrets.AICORE_RESOURCE_GROUP }}
@@ -45,11 +37,10 @@ jobs:
             --permission-mode auto
             --allowedTools "Read,Write,Edit,Bash(*),WebSearch,WebFetch"
           use_litellm: "true"
-          litellm_model: "sap/anthropic--claude-4.6-sonnet"
+          litellm_model: "sap/anthropic--claude-4.6-opus"
           github_token: ${{ secrets.GITHUB_TOKEN }}
           show_full_output: "true"
-          prompt: |
-            ${{ steps.prompt.outputs.content }}
+          prompt: "/groom-codebase"
 
       - uses: ./.github/actions/stop-litellm-proxy
         if: always()
