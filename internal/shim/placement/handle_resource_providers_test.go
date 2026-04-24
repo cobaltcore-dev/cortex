@@ -529,6 +529,34 @@ func TestHandleListResourceProviders(t *testing.T) {
 			t.Fatalf("got %d providers, want 1", len(resp.ResourceProviders))
 		}
 	})
+
+	t.Run("hypervisors with empty HypervisorID are excluded", func(t *testing.T) {
+		hvWithID := &hv1.Hypervisor{
+			ObjectMeta: metav1.ObjectMeta{Name: "hv-with-id"},
+			Status:     hv1.HypervisorStatus{HypervisorID: validUUID},
+		}
+		hvWithoutID := &hv1.Hypervisor{
+			ObjectMeta: metav1.ObjectMeta{Name: "hv-without-id"},
+			Status:     hv1.HypervisorStatus{HypervisorID: ""},
+		}
+		upstreamBody := `{"resource_providers":[]}`
+		s := newTestShimWithHypervisors(t, http.StatusOK, upstreamBody, hvWithID, hvWithoutID)
+		w := serveHandler(t, http.MethodGet, "/resource_providers",
+			s.HandleListResourceProviders, "/resource_providers")
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+		var resp listResourceProvidersResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if len(resp.ResourceProviders) != 1 {
+			t.Fatalf("got %d providers, want 1 (only hv-with-id)", len(resp.ResourceProviders))
+		}
+		if resp.ResourceProviders[0].Name != "hv-with-id" {
+			t.Errorf("name = %q, want %q", resp.ResourceProviders[0].Name, "hv-with-id")
+		}
+	})
 }
 
 func TestHandleListResourceProviders_Filters(t *testing.T) {

@@ -444,6 +444,17 @@ func (s *Shim) HandleListResourceProviders(w http.ResponseWriter, r *http.Reques
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
+		// Filter out hypervisors that have no OpenStack ID yet — they are
+		// not registered as resource providers and must not appear in the
+		// merged list.
+		n := 0
+		for i := range hvs.Items {
+			if hvs.Items[i].Status.HypervisorID != "" {
+				hvs.Items[n] = hvs.Items[i]
+				n++
+			}
+		}
+		hvs.Items = hvs.Items[:n]
 		uuids = nil
 		for _, hv := range hvs.Items {
 			uuids = append(uuids, hv.Status.HypervisorID)
