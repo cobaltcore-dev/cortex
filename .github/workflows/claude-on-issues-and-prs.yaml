@@ -49,6 +49,8 @@ jobs:
 
       - uses: ./.claude-code-action
         with:
+          claude_args: |
+            --max-turns 100
           trigger_phrase: "@claude"
           use_litellm: "true"
           litellm_model: "sap/anthropic--claude-4.6-sonnet"
