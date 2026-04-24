@@ -21,6 +21,7 @@ import (
 )
 
 // A remote cluster with routing labels used to match resources to clusters.
+// Labels are set during initialization and used by ResourceRouters for write routing.
 type remoteCluster struct {
 	cluster cluster.Cluster
 	labels  map[string]string

@@ -30,6 +30,8 @@ const (
 
 // IndexFields indexes all fields that are needed by the shim to quickly
 // look up objects from the controller-runtime cache.
+// Both the singular object type and the list type are indexed because the
+// multicluster client routes each based on its own GVK.
 func IndexFields(ctx context.Context, mcl *multicluster.Client) error {
 	log := logf.FromContext(ctx)
 	log.Info("Setting up field indexes for the multicluster client")
