@@ -1,5 +1,5 @@
 diff --git a/action.yml b/action.yml
-index b6d0f05b9..50c847656 100644
+index b6d0f05..e3e2145 100644
 --- a/action.yml
 +++ b/action.yml
 @@ -85,6 +85,14 @@ inputs:
@@ -14,7 +14,7 @@ index b6d0f05b9..50c847656 100644
 +    description: "LiteLLM model identifier (e.g., 'sap/anthropic--claude-4.6-sonnet')"
 +    required: false
 +    default: "sap/anthropic--claude-4.6-sonnet"
-
+ 
    claude_args:
      description: "Additional arguments to pass directly to Claude CLI"
 @@ -173,10 +181,11 @@ runs:
@@ -30,13 +30,13 @@ index b6d0f05b9..50c847656 100644
 +        # Install Bun via official install script (avoids github.com API token issues on GHES)
 +        curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.13"
 +        echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
-
+ 
      - name: Setup Custom Bun Path
        if: inputs.path_to_bun_executable != ''
 @@ -237,6 +246,58 @@ runs:
          echo "/usr/bin" >> "$GITHUB_PATH"
          echo "/bin" >> "$GITHUB_PATH"
-
+ 
 +    - name: Setup Python for LiteLLM
 +      if: inputs.use_litellm == 'true'
 +      uses: actions/setup-python@v5
@@ -94,7 +94,7 @@ index b6d0f05b9..50c847656 100644
        shell: bash
 @@ -292,13 +353,14 @@ runs:
          NODE_VERSION: ${{ env.NODE_VERSION }}
-
+ 
          # Provider configuration
 -        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
 +        ANTHROPIC_API_KEY: ${{ inputs.use_litellm == 'true' && env.LITELLM_PROXY_API_KEY || inputs.anthropic_api_key }}
@@ -105,13 +105,13 @@ index b6d0f05b9..50c847656 100644
          CLAUDE_CODE_USE_VERTEX: ${{ inputs.use_vertex == 'true' && '1' || '' }}
          CLAUDE_CODE_USE_FOUNDRY: ${{ inputs.use_foundry == 'true' && '1' || '' }}
 +        CLAUDE_CODE_USE_LITELLM: ${{ inputs.use_litellm == 'true' && '1' || '' }}
-
+ 
          # AWS configuration
          AWS_REGION: ${{ env.AWS_REGION }}
 @@ -335,6 +397,18 @@ runs:
          MCP_TOOL_TIMEOUT: ${{ env.MCP_TOOL_TIMEOUT }}
          MAX_MCP_OUTPUT_TOKENS: ${{ env.MAX_MCP_OUTPUT_TOKENS }}
-
+ 
 +        # SAP AI Core configuration (for LiteLLM)
 +        AICORE_SERVICE_KEY: ${{ env.AICORE_SERVICE_KEY }}
 +        AICORE_AUTH_URL: ${{ env.AICORE_AUTH_URL }}
@@ -127,10 +127,10 @@ index b6d0f05b9..50c847656 100644
          # Telemetry configuration
          CLAUDE_CODE_ENABLE_TELEMETRY: ${{ env.CLAUDE_CODE_ENABLE_TELEMETRY }}
          OTEL_METRICS_EXPORTER: ${{ env.OTEL_METRICS_EXPORTER }}
-@@ -372,6 +446,19 @@ runs:
+@@ -372,6 +446,23 @@ runs:
            echo "DYLD_FRAMEWORK_PATH="
          } >> "$GITHUB_ENV"
-
+ 
 +    - name: Stop LiteLLM Proxy
 +      if: always() && inputs.use_litellm == 'true'
 +      shell: bash
@@ -152,10 +152,10 @@ index b6d0f05b9..50c847656 100644
        if: always() && inputs.ssh_signing_key != ''
        shell: bash
 diff --git a/base-action/src/validate-env.ts b/base-action/src/validate-env.ts
-index 1f28da37e..f9866fe2f 100644
+index 1f28da3..4eae3f2 100644
 --- a/base-action/src/validate-env.ts
 +++ b/base-action/src/validate-env.ts
-@@ -1,25 +1,31 @@
+@@ -1,25 +1,26 @@
  /**
   * Validates the environment variables required for running Claude Code
 - * based on the selected provider (Anthropic API, AWS Bedrock, Google Vertex AI, or Microsoft Foundry)
@@ -168,36 +168,29 @@ index 1f28da37e..f9866fe2f 100644
 +  const useLiteLLM = process.env.CLAUDE_CODE_USE_LITELLM === "1";
    const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
    const claudeCodeOAuthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
-
+ 
    const errors: string[] = [];
-
+ 
    // Check for mutual exclusivity between providers
 -  const activeProviders = [useBedrock, useVertex, useFoundry].filter(Boolean);
-+  const activeProviders = [
-+    useBedrock,
-+    useVertex,
-+    useFoundry,
-+    useLiteLLM,
-+  ].filter(Boolean);
++  const activeProviders = [useBedrock, useVertex, useFoundry, useLiteLLM].filter(Boolean);
    if (activeProviders.length > 1) {
      errors.push(
 -      "Cannot use multiple providers simultaneously. Please set only one of: CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX, or CLAUDE_CODE_USE_FOUNDRY.",
 +      "Cannot use multiple providers simultaneously. Please set only one of: CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX, CLAUDE_CODE_USE_FOUNDRY, or CLAUDE_CODE_USE_LITELLM.",
      );
    }
-
+ 
 -  if (!useBedrock && !useVertex && !useFoundry) {
 +  if (!useBedrock && !useVertex && !useFoundry && !useLiteLLM) {
      if (!anthropicApiKey && !claudeCodeOAuthToken) {
        errors.push(
          "Either ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN is required when using direct Anthropic API.",
-@@ -66,6 +72,22 @@ export function validateEnvironmentVariables() {
+@@ -66,6 +67,20 @@ export function validateEnvironmentVariables() {
          "Either ANTHROPIC_FOUNDRY_RESOURCE or ANTHROPIC_FOUNDRY_BASE_URL is required when using Microsoft Foundry.",
        );
      }
 +  } else if (useLiteLLM) {
-+    // LiteLLM/SAP AI Core: the proxy step sets ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY
-+    // automatically. We just validate they were set (proxy started successfully).
 +    const baseUrl = process.env.ANTHROPIC_BASE_URL;
 +    const apiKey = process.env.ANTHROPIC_API_KEY;
 +
@@ -212,165 +205,5 @@ index 1f28da37e..f9866fe2f 100644
 +      );
 +    }
    }
-
+ 
    if (errors.length > 0) {
-diff --git a/scripts/litellm-proxy.py b/scripts/litellm-proxy.py
-new file mode 100644
-index 000000000..9eb1488c6
---- /dev/null
-+++ b/scripts/litellm-proxy.py
-@@ -0,0 +1,142 @@
-+"""
-+Minimal Anthropic Messages API proxy using LiteLLM SDK.
-+
-+Accepts Anthropic Messages API requests on /v1/messages and routes them
-+through LiteLLM to SAP AI Core (or any other LiteLLM-supported provider).
-+
-+Uses litellm.anthropic.messages.acreate() which handles Anthropic format
-+natively — no format translation, no Pydantic serialization bugs.
-+"""
-+
-+import json
-+import logging
-+import os
-+import sys
-+
-+from fastapi import FastAPI, Request
-+from fastapi.responses import JSONResponse, StreamingResponse
-+
-+import litellm
-+
-+# Drop unsupported params (e.g., 'thinking') instead of raising errors.
-+# Claude Code CLI sends params that not all providers support.
-+litellm.drop_params = True
-+
-+logging.basicConfig(level=logging.INFO, stream=sys.stderr)
-+logger = logging.getLogger("litellm-proxy")
-+
-+app = FastAPI()
-+
-+# The LiteLLM model to route requests to (e.g., "sap/anthropic--claude-4.6-sonnet")
-+LITELLM_MODEL = os.environ.get("LITELLM_MODEL", "sap/anthropic--claude-4.6-sonnet")
-+
-+
-+@app.get("/health/readiness")
-+async def health_readiness():
-+    return {"status": "ok"}
-+
-+
-+@app.post("/v1/messages")
-+async def messages(request: Request):
-+    """
-+    Proxy Anthropic Messages API requests through LiteLLM SDK.
-+
-+    Claude Code CLI sends requests here (via ANTHROPIC_BASE_URL).
-+    We forward them to LiteLLM which routes to SAP AI Core.
-+    """
-+    try:
-+        body = await request.json()
-+    except Exception:
-+        return JSONResponse(
-+            status_code=400,
-+            content={
-+                "type": "error",
-+                "error": {
-+                    "type": "invalid_request_error",
-+                    "message": "Request body is not valid JSON.",
-+                },
-+            },
-+        )
-+
-+    original_model = body.get("model", "unknown")
-+    body["model"] = LITELLM_MODEL
-+
-+    logger.info(
-+        f"Proxying request: {original_model} -> {LITELLM_MODEL}, stream={body.get('stream', False)}"
-+    )
-+
-+    is_streaming = body.get("stream", False)
-+
-+    try:
-+        if is_streaming:
-+            return await _handle_streaming(body)
-+        else:
-+            return await _handle_non_streaming(body)
-+    except Exception as e:
-+        logger.exception(f"Error proxying request: {e}")
-+        return JSONResponse(
-+            status_code=500,
-+            content={
-+                "type": "error",
-+                "error": {
-+                    "type": "api_error",
-+                    "message": "An internal proxy error occurred. Check server logs for details.",
-+                },
-+            },
-+        )
-+
-+
-+async def _handle_non_streaming(body: dict) -> JSONResponse:
-+    """Handle non-streaming Anthropic Messages API request."""
-+    body.pop("stream", None)
-+
-+    response = await litellm.anthropic.messages.acreate(**body)
-+
-+    # litellm.anthropic.messages.acreate() returns Anthropic-format response
-+    if hasattr(response, "model_dump"):
-+        result = response.model_dump()
-+    elif isinstance(response, dict):
-+        result = response
-+    else:
-+        result = json.loads(str(response))
-+
-+    return JSONResponse(content=result)
-+
-+
-+async def _handle_streaming(body: dict) -> StreamingResponse:
-+    """Handle streaming Anthropic Messages API request."""
-+    body["stream"] = True
-+
-+    response = await litellm.anthropic.messages.acreate(**body)
-+
-+    async def event_generator():
-+        """Yield SSE events from LiteLLM streaming response."""
-+        try:
-+            async for chunk in response:
-+                # Each chunk from litellm.anthropic.messages.acreate(stream=True)
-+                # is already in Anthropic SSE format
-+                if hasattr(chunk, "model_dump"):
-+                    data = chunk.model_dump()
-+                elif isinstance(chunk, dict):
-+                    data = chunk
-+                else:
-+                    data = json.loads(str(chunk))
-+
-+                event_type = data.get("type")
-+                if not event_type:
-+                    logger.warning("Chunk missing 'type' field: %s", data)
-+                    continue
-+                yield f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
-+        except Exception as e:
-+            logger.exception(f"Streaming error: {e}")
-+            error_data = {
-+                "type": "error",
-+                "error": {"type": "api_error", "message": "An internal proxy error occurred. Check server logs for details."},
-+            }
-+            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
-+
-+    return StreamingResponse(
-+        event_generator(),
-+        media_type="text/event-stream",
-+        headers={
-+            "Cache-Control": "no-cache",
-+            "Connection": "keep-alive",
-+            "X-Accel-Buffering": "no",
-+        },
-+    )
-+
-+
-+if __name__ == "__main__":
-+    import uvicorn
-+
-+    port = int(os.environ.get("LITELLM_PROXY_PORT", "4000"))
-+    logger.info(f"Starting LiteLLM proxy on port {port}, model={LITELLM_MODEL}")
-+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
