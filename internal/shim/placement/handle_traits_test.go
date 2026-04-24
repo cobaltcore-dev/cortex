@@ -323,6 +323,62 @@ func TestHandleDeleteTraitLocalNotFound(t *testing.T) {
 	}
 }
 
+// newTraitShimNoStaticCM creates a shim with no static traits ConfigMap at all,
+// to exercise the IsNotFound fallback in getStaticTraits.
+func newTraitShimNoStaticCM(t *testing.T, customTraits ...string) *Shim {
+	t.Helper()
+	t.Setenv("POD_NAMESPACE", "default")
+	var objs []client.Object
+	if len(customTraits) > 0 {
+		objs = append(objs, newTestConfigMap("default", "test-cm-custom", customTraits))
+	}
+	cl := newFakeClientWithScheme(t, objs...)
+	down, up := newTestTimers()
+	return &Shim{
+		Client: cl,
+		config: config{
+			PlacementURL: "http://should-not-be-called:1234",
+			Features:     featuresConfig{EnableTraits: true},
+			Traits:       &traitsConfig{ConfigMapName: "test-cm"},
+		},
+		maxBodyLogSize:         4096,
+		downstreamRequestTimer: down,
+		upstreamRequestTimer:   up,
+		resourceLocker:         resourcelock.NewResourceLocker(cl, "default"),
+	}
+}
+
+func TestHandleListTraitsStaticCMAbsent(t *testing.T) {
+	s := newTraitShimNoStaticCM(t, "CUSTOM_FOO")
+	w := serveHandler(t, "GET", "/traits", s.HandleListTraits, "/traits")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; missing static CM should not cause 500", w.Code, http.StatusOK)
+	}
+	var resp traitsListResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Traits) != 1 || resp.Traits[0] != "CUSTOM_FOO" {
+		t.Fatalf("got %v, want [CUSTOM_FOO]", resp.Traits)
+	}
+}
+
+func TestHandleShowTraitStaticCMAbsent(t *testing.T) {
+	s := newTraitShimNoStaticCM(t, "CUSTOM_FOO")
+	w := serveHandler(t, "GET", "/traits/{name}", s.HandleShowTrait, "/traits/CUSTOM_FOO")
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d; missing static CM should not cause 500", w.Code, http.StatusNoContent)
+	}
+}
+
+func TestHandleUpdateTraitStaticCMAbsent(t *testing.T) {
+	s := newTraitShimNoStaticCM(t)
+	w := serveHandler(t, "PUT", "/traits/{name}", s.HandleUpdateTrait, "/traits/CUSTOM_NEW")
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; missing static CM should not cause 500", w.Code, http.StatusCreated)
+	}
+}
+
 func TestHandleDeleteTraitLocalBadPrefix(t *testing.T) {
 	s := newTraitShim(t, []string{"HW_CPU"})
 	w := serveHandler(t, "DELETE", "/traits/{name}", s.HandleDeleteTrait, "/traits/HW_CPU")

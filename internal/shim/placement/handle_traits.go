@@ -344,9 +344,14 @@ func (s *Shim) HandleDeleteTrait(w http.ResponseWriter, r *http.Request) {
 }
 
 // getStaticTraits reads traits from the Helm-managed static ConfigMap.
+// Returns an empty set if the ConfigMap does not exist yet.
 func (s *Shim) getStaticTraits(ctx context.Context) (map[string]struct{}, error) {
 	cm := &corev1.ConfigMap{}
-	if err := s.Get(ctx, s.staticTraitsConfigMapKey(), cm); err != nil {
+	err := s.Get(ctx, s.staticTraitsConfigMapKey(), cm)
+	if apierrors.IsNotFound(err) {
+		return make(map[string]struct{}), nil
+	}
+	if err != nil {
 		return nil, fmt.Errorf("get static configmap %s: %w", s.config.Traits.ConfigMapName, err)
 	}
 	return parseTraits(cm)
