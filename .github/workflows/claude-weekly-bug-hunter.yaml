@@ -8,7 +8,6 @@ on:
 jobs:
   bug-hunt:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     permissions:
       contents: write
       pull-requests: write
@@ -41,6 +40,9 @@ jobs:
 
       - uses: ./.claude-code-action
         with:
+          claude_args: |
+            --max-turns 1000
+            --permission-mode auto
           use_litellm: "true"
           litellm_model: "sap/anthropic--claude-4.6-sonnet"
           github_token: ${{ secrets.GITHUB_TOKEN }}

@@ -62,6 +62,7 @@ jobs:
         with:
           claude_args: |
             --max-turns 1000
+            --permission-mode auto
           trigger_phrase: "@claude"
           include_comments_by_actor: "auhlig,umswmayj,juliusclausnitzer,mblos,PhilippMatthes,Varsius,henrichter,SoWieMarkus,*[bot]"
           use_litellm: "true"
