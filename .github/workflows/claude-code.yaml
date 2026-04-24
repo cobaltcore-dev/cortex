@@ -27,7 +27,7 @@ jobs:
 
       - uses: ./.claude-code-action
         with:
-          trigger_phrase: "@claude-code"
+          trigger_phrase: "@claude"
           use_litellm: "true"
           litellm_model: "sap/anthropic--claude-4.6-sonnet"
           github_token: ${{ secrets.GITHUB_TOKEN }}
