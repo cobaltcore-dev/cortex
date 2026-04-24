@@ -1,3 +1,9 @@
+# NOTE: This workflow is temporarily disabled.
+# We need to determine a compliant approach for passing AI Core credentials
+# and whether utilizing the SAP AI Core Proxy is a viable and compliant option.
+# Until this is resolved, no AI Core credentials are configured and no
+# communication with AI Core takes place.
+
 name: Claude Code reviewer on PRs
 
 on:
@@ -6,6 +12,7 @@ on:
 
 jobs:
   check-allowlist:
+    if: false # Temporarily disabled
     runs-on: ubuntu-latest
     outputs:
       allowed: ${{ steps.check.outputs.allowed }}
@@ -25,9 +32,7 @@ jobs:
 
   claude:
     needs: check-allowlist
-    if: >
-      github.event.sender.type == 'User' &&
-      needs.check-allowlist.outputs.allowed == 'true'
+    if: false # Temporarily disabled
     runs-on: ubuntu-latest
     permissions:
       contents: write
