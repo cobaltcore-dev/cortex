@@ -1,4 +1,4 @@
-name: Claude Code on Issues and PRs
+name: Weekly Claude Code Code Repo Analysis and Grooming
 
 on:
   issue_comment:
