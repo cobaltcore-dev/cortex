@@ -138,7 +138,11 @@ index b6d0f05b9..50c847656 100644
 +        if [ -n "${LITELLM_PID}" ] && kill -0 "${LITELLM_PID}" 2>/dev/null; then
 +          echo "Stopping LiteLLM proxy (PID: ${LITELLM_PID})..."
 +          kill "${LITELLM_PID}" 2>/dev/null || true
-+          wait "${LITELLM_PID}" 2>/dev/null || true
++          for _ in $(seq 1 20); do
++            kill -0 "${LITELLM_PID}" 2>/dev/null || break
++            sleep 0.5
++          done
++          kill -9 "${LITELLM_PID}" 2>/dev/null || true
 +          echo "LiteLLM proxy stopped."
 +        else
 +          echo "LiteLLM proxy already stopped."
@@ -262,11 +266,20 @@ index 000000000..9eb1488c6
 +    Claude Code CLI sends requests here (via ANTHROPIC_BASE_URL).
 +    We forward them to LiteLLM which routes to SAP AI Core.
 +    """
-+    body = await request.json()
++    try:
++        body = await request.json()
++    except Exception:
++        return JSONResponse(
++            status_code=400,
++            content={
++                "type": "error",
++                "error": {
++                    "type": "invalid_request_error",
++                    "message": "Request body is not valid JSON.",
++                },
++            },
++        )
 +
-+    # Override model with our LiteLLM model (e.g., sap/anthropic--claude-4.6-sonnet)
-+    # Claude Code CLI sends the model it was configured with, but we need
-+    # the LiteLLM provider-prefixed model name for routing.
 +    original_model = body.get("model", "unknown")
 +    body["model"] = LITELLM_MODEL
 +
@@ -289,7 +302,7 @@ index 000000000..9eb1488c6
 +                "type": "error",
 +                "error": {
 +                    "type": "api_error",
-+                    "message": str(e),
++                    "message": "An internal proxy error occurred. Check server logs for details.",
 +                },
 +            },
 +        )
@@ -331,13 +344,16 @@ index 000000000..9eb1488c6
 +                else:
 +                    data = json.loads(str(chunk))
 +
-+                event_type = data.get("type", "content_block_delta")
++                event_type = data.get("type")
++                if not event_type:
++                    logger.warning("Chunk missing 'type' field: %s", data)
++                    continue
 +                yield f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
 +        except Exception as e:
 +            logger.exception(f"Streaming error: {e}")
 +            error_data = {
 +                "type": "error",
-+                "error": {"type": "api_error", "message": str(e)},
++                "error": {"type": "api_error", "message": "An internal proxy error occurred. Check server logs for details."},
 +            }
 +            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
 +
@@ -357,4 +373,4 @@ index 000000000..9eb1488c6
 +
 +    port = int(os.environ.get("LITELLM_PROXY_PORT", "4000"))
 +    logger.info(f"Starting LiteLLM proxy on port {port}, model={LITELLM_MODEL}")
-+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
++    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")

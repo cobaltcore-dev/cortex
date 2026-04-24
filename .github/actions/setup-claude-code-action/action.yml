@@ -15,11 +15,6 @@ inputs:
     required: false
     default: ".claude-code-action"
 
-outputs:
-  action_path:
-    description: "Path to the patched action"
-    value: ${{ inputs.checkout_path }}
-
 runs:
   using: "composite"
   steps:

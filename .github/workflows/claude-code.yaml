@@ -32,12 +32,9 @@ jobs:
           litellm_model: "sap/anthropic--claude-4.6-sonnet"
           github_token: ${{ secrets.GITHUB_TOKEN }}
           show_full_output: "true"
-          path_to_bun_executable: ${{ env.HOME }}/.bun/bin/bun
         env:
           AICORE_RESOURCE_GROUP: ${{ secrets.AICORE_RESOURCE_GROUP }}
           AICORE_BASE_URL: ${{ secrets.AICORE_BASE_URL }}
           AICORE_AUTH_URL: ${{ secrets.AICORE_AUTH_URL }}
-          AICORE_BASE_URL: ${{ secrets.AICORE_BASE_URL }}
           AICORE_CLIENT_ID: ${{ secrets.AICORE_CLIENT_ID }}
           AICORE_CLIENT_SECRET: ${{ secrets.AICORE_CLIENT_SECRET }}
-          AICORE_SERVICE_KEY: ${{ secrets.AICORE_SERVICE_KEY }}
