@@ -12,6 +12,7 @@ on:
 
 jobs:
   claude:
+    if: github.event.sender.type == 'User'
     runs-on: ubuntu-latest
     permissions:
       contents: write
