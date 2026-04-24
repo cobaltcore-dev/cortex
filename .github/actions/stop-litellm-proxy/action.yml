@@ -1,0 +1,21 @@
+name: Stop LiteLLM Proxy
+description: Stop the LiteLLM proxy server started by start-litellm-proxy
+
+runs:
+  using: composite
+  steps:
+    - name: Stop LiteLLM Proxy
+      shell: bash
+      run: |
+        if [ -n "${LITELLM_PID}" ] && kill -0 "${LITELLM_PID}" 2>/dev/null; then
+          echo "Stopping LiteLLM proxy (PID: ${LITELLM_PID})..."
+          kill "${LITELLM_PID}" 2>/dev/null || true
+          for _ in $(seq 1 20); do
+            kill -0 "${LITELLM_PID}" 2>/dev/null || break
+            sleep 0.5
+          done
+          kill -9 "${LITELLM_PID}" 2>/dev/null || true
+          echo "LiteLLM proxy stopped."
+        else
+          echo "LiteLLM proxy already stopped."
+        fi

@@ -28,17 +28,22 @@ jobs:
           cat .github/agents/bug-hunter.md >> "$GITHUB_OUTPUT"
           echo "$EOF" >> "$GITHUB_OUTPUT"
 
-      - uses: ./.claude-code-action
-        with:
-          use_litellm: "true"
-          litellm_model: "sap/anthropic--claude-4.6-sonnet"
-          github_token: ${{ secrets.BOT_PAT }}
-          show_full_output: "true"
-          prompt: |
-            ${{ steps.prompt.outputs.content }}
+      - uses: ./.github/actions/start-litellm-proxy
         env:
           AICORE_RESOURCE_GROUP: ${{ secrets.AICORE_RESOURCE_GROUP }}
           AICORE_BASE_URL: ${{ secrets.AICORE_BASE_URL }}
           AICORE_AUTH_URL: ${{ secrets.AICORE_AUTH_URL }}
           AICORE_CLIENT_ID: ${{ secrets.AICORE_CLIENT_ID }}
           AICORE_CLIENT_SECRET: ${{ secrets.AICORE_CLIENT_SECRET }}
+
+      - uses: ./.claude-code-action
+        with:
+          use_litellm: "true"
+          litellm_model: "sap/anthropic--claude-4.6-sonnet"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          show_full_output: "true"
+          prompt: |
+            ${{ steps.prompt.outputs.content }}
+
+      - uses: ./.github/actions/stop-litellm-proxy
+        if: always()

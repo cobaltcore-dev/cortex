@@ -47,45 +47,13 @@ jobs:
 
       - uses: ./.github/actions/setup-claude-code-action
 
-      - name: Start LiteLLM Proxy
-        shell: bash
+      - uses: ./.github/actions/start-litellm-proxy
         env:
           AICORE_RESOURCE_GROUP: ${{ secrets.AICORE_RESOURCE_GROUP }}
           AICORE_BASE_URL: ${{ secrets.AICORE_BASE_URL }}
           AICORE_AUTH_URL: ${{ secrets.AICORE_AUTH_URL }}
           AICORE_CLIENT_ID: ${{ secrets.AICORE_CLIENT_ID }}
           AICORE_CLIENT_SECRET: ${{ secrets.AICORE_CLIENT_SECRET }}
-          LITELLM_MODEL: "sap/anthropic--claude-4.6-sonnet"
-        run: |
-          LITELLM_PORT=$(python3 -c "import socket; s=socket.socket(); s.bind(('',0)); print(s.getsockname()[1]); s.close()")
-          echo "Starting LiteLLM proxy on port ${LITELLM_PORT}..."
-
-          LITELLM_PROXY_PORT=${LITELLM_PORT} python3 "${{ github.workspace }}/.github/scripts/litellm-proxy.py" &
-          LITELLM_PID=$!
-          echo "LITELLM_PID=${LITELLM_PID}" >> "$GITHUB_ENV"
-          echo "LITELLM_PORT=${LITELLM_PORT}" >> "$GITHUB_ENV"
-
-          for i in $(seq 1 30); do
-            if curl -sf --connect-timeout 2 --max-time 3 "http://localhost:${LITELLM_PORT}/health/readiness" > /dev/null 2>&1; then
-              echo "LiteLLM proxy is ready on port ${LITELLM_PORT}"
-              break
-            fi
-            if ! kill -0 $LITELLM_PID 2>/dev/null; then
-              echo "ERROR: LiteLLM proxy process died"
-              exit 1
-            fi
-            sleep 2
-          done
-
-          if ! curl -sf --connect-timeout 2 --max-time 3 "http://localhost:${LITELLM_PORT}/health/readiness" > /dev/null 2>&1; then
-            echo "ERROR: LiteLLM proxy failed to start after 60 seconds"
-            exit 1
-          fi
-
-          echo "ANTHROPIC_BASE_URL=http://localhost:${LITELLM_PORT}" >> "$GITHUB_ENV"
-          echo "ANTHROPIC_MODEL=sap/anthropic--claude-4.6-sonnet" >> "$GITHUB_ENV"
-          LITELLM_PROXY_API_KEY="litellm-proxy-key"
-          echo "LITELLM_PROXY_API_KEY=${LITELLM_PROXY_API_KEY}" >> "$GITHUB_ENV"
 
       - uses: ./.claude-code-action
         with:
@@ -98,19 +66,5 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           show_full_output: "true"
 
-      - name: Stop LiteLLM Proxy
+      - uses: ./.github/actions/stop-litellm-proxy
         if: always()
-        shell: bash
-        run: |
-          if [ -n "${LITELLM_PID}" ] && kill -0 "${LITELLM_PID}" 2>/dev/null; then
-            echo "Stopping LiteLLM proxy (PID: ${LITELLM_PID})..."
-            kill "${LITELLM_PID}" 2>/dev/null || true
-            for _ in $(seq 1 20); do
-              kill -0 "${LITELLM_PID}" 2>/dev/null || break
-              sleep 0.5
-            done
-            kill -9 "${LITELLM_PID}" 2>/dev/null || true
-            echo "LiteLLM proxy stopped."
-          else
-            echo "LiteLLM proxy already stopped."
-          fi
