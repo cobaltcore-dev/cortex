@@ -1,14 +1,13 @@
-name: Claude Code Changelog on Release Merge
+name: Claude Code Release Orchestrator
 
 on:
   pull_request:
-    types: [closed]
+    types: [opened, synchronize, reopened]
     branches:
       - release
 
 jobs:
-  changelog:
-    if: github.event.pull_request.merged == true
+  release:
     runs-on: ubuntu-latest
     concurrency:
       group: changelog-release
@@ -39,14 +38,14 @@ jobs:
       - uses: ./.claude-code-action
         with:
           claude_args: |
-            --max-turns 100
+            --max-turns 200
             --permission-mode auto
-            --allowedTools "Read,Write,Edit,Bash(*),WebSearch,WebFetch"
+            --allowedTools "Read,Write,Edit,Bash(*),WebSearch,WebFetch,Agent"
           use_litellm: "true"
           litellm_model: "sap/anthropic--claude-4.6-opus"
           github_token: ${{ secrets.GITHUB_TOKEN }}
           show_full_output: "true"
-          prompt: "/update-changelog ${{ github.event.pull_request.number }}"
+          prompt: "/on-release ${{ github.event.pull_request.number }}"
 
       - uses: ./.github/actions/stop-litellm-proxy
         if: always()
