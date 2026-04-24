@@ -1,0 +1,69 @@
+name: Claude Code reviewer on PRs
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-allowlist:
+    runs-on: ubuntu-latest
+    outputs:
+      allowed: ${{ steps.check.outputs.allowed }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+      - name: Check sender against allowlist
+        id: check
+        run: |
+          if grep -qxF "${{ github.event.sender.login }}" \
+            <(grep -v '^#' .github/claude-allowed-users | sed '/^[[:space:]]*$/d'); then
+            echo "allowed=true" >> $GITHUB_OUTPUT
+          else
+            echo "allowed=false" >> $GITHUB_OUTPUT
+          fi
+
+  claude:
+    needs: check-allowlist
+    if: >
+      github.event.sender.type == 'User' &&
+      needs.check-allowlist.outputs.allowed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - uses: ./.github/actions/setup-claude-code-action
+
+      - uses: ./.github/actions/start-litellm-proxy
+        env:
+          AICORE_RESOURCE_GROUP: ${{ secrets.AICORE_RESOURCE_GROUP }}
+          AICORE_BASE_URL: ${{ secrets.AICORE_BASE_URL }}
+          AICORE_AUTH_URL: ${{ secrets.AICORE_AUTH_URL }}
+          AICORE_CLIENT_ID: ${{ secrets.AICORE_CLIENT_ID }}
+          AICORE_CLIENT_SECRET: ${{ secrets.AICORE_CLIENT_SECRET }}
+
+      - uses: ./.claude-code-action
+        with:
+          claude_args: |
+            --max-turns 1000
+            --permission-mode auto
+            --allowedTools "Read,Write,Edit,Bash(*),WebSearch,WebFetch"
+          prompt: "/review-pr REPO: ${{ github.repository }} PR_NUMBER: ${{ github.event.pull_request.number }}"
+          include_comments_by_actor: "auhlig,umswmayj,juliusclausnitzer,mblos,PhilippMatthes,Varsius,henrichter,SoWieMarkus,*[bot]"
+          use_litellm: "true"
+          litellm_model: "sap/anthropic--claude-4.6-opus"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          show_full_output: "true"
+
+      - uses: ./.github/actions/stop-litellm-proxy
+        if: always()
