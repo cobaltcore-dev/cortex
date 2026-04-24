@@ -42,7 +42,7 @@ When reviewing documentation, you will:
 - Identify missing documentation for public interfaces
 - Note inconsistencies between documentation and implementation
 - Suggest improvements for clarity and completeness
-- Ensure documentation follows project-specific standards from CLAUDE.md
+- Ensure documentation follows project-specific standards
 
 **Review Structure:**
 Provide your analysis in this format:
