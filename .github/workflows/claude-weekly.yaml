@@ -1,4 +1,4 @@
-name: Weekly Claude Code Code Repo Analysis and Grooming
+name: Weekly Claude Code Repo Analysis and Grooming
 
 on:
   issue_comment:
@@ -60,6 +60,7 @@ jobs:
 
       - uses: ./.claude-code-action
         with:
+          prompt: "/weekly"
           claude_args: |
             --max-turns 1000
             --permission-mode auto
