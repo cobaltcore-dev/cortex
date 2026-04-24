@@ -23,10 +23,10 @@ jobs:
       - name: Load bug hunter prompt
         id: prompt
         run: |
-          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-          echo "content<<$EOF" >> "$GITHUB_OUTPUT"
+          echo "content<<EOF" >> "$GITHUB_OUTPUT"
           cat .github/agents/bug-hunter.md >> "$GITHUB_OUTPUT"
-          echo "$EOF" >> "$GITHUB_OUTPUT"
+          echo "" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
       - uses: ./.github/actions/start-litellm-proxy
         env:
