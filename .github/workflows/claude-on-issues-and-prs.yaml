@@ -61,7 +61,7 @@ jobs:
       - uses: ./.claude-code-action
         with:
           claude_args: |
-            --max-turns 100
+            --max-turns 1000
           trigger_phrase: "@claude"
           include_comments_by_actor: "auhlig,umswmayj,juliusclausnitzer,mblos,PhilippMatthes,Varsius,henrichter,SoWieMarkus,*[bot]"
           use_litellm: "true"
