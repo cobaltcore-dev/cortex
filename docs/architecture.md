@@ -36,15 +36,35 @@ Cortex receives the list of possible hosts and their weights from Nova. It then 
 
 As part of the [CobaltCore](https://cobaltcore-dev.github.io/docs/) stack, we provide a Placement-like API shim, which translates requests from Nova and Neutron to the [Hypervisor CRD](https://github.com/cobaltcore-dev/openstack-hypervisor-operator) based on the KVM stack provided by [IronCore](https://ironcore.dev/), [Gardener](https://gardener.cloud/) and [Garden Linux](https://gardenlinux.io/). This means, instead of managing resource inventories in Placement's database, the Hypervisor CRD is used to track resource allocations and hypervisor capabilities.
 
-### Feature Flags
+### Feature Modes
 
-Each major capability of the shim is gated behind a feature flag in the Helm configuration. When a flag is disabled, the corresponding endpoints fall back to forwarding requests to upstream Placement unchanged. This allows operators to adopt CRD-backed behavior incrementally.
+Each endpoint group of the shim is controlled by a **feature mode** in the Helm configuration (`features.<endpoint>`). There are three modes:
 
-| Flag | Endpoints affected | Behavior when enabled |
-|---|---|---|
-| `features.enableResourceProviders` | `/resource_providers` and sub-resources | Serve KVM resource providers from Hypervisor CRDs; merge with upstream for non-KVM providers |
-| `features.enableRoot` | `GET /` | Return a static version discovery document from config instead of forwarding to upstream |
-| `features.enableTraits` | `/traits` | Serve traits from local ConfigMaps instead of upstream Placement |
+| Mode | Description |
+|---|---|
+| `passthrough` | Forward all requests to upstream Placement without any shim logic. This is the default for every endpoint when unset. |
+| `hybrid` | Combine upstream Placement with local CRD data. Upstream must be available; the shim keeps CRD state in sync to prepare for cutover. |
+| `crd` | Serve requests exclusively from the Hypervisor CRD and local Kubernetes resources. No upstream Placement dependency is required. |
+
+The following endpoint groups each have their own mode field:
+
+| Helm key | Endpoints affected |
+|---|---|
+| `features.resourceProviders` | `/resource_providers` and sub-resources |
+| `features.root` | `GET /` |
+| `features.traits` | `/traits` |
+| `features.resourceProviderTraits` | `/resource_providers/{uuid}/traits` |
+| `features.resourceClasses` | `/resource_classes` |
+| `features.inventories` | `/resource_providers/{uuid}/inventories` |
+| `features.aggregates` | `/resource_providers/{uuid}/aggregates` |
+| `features.allocations` | `/allocations` |
+| `features.usages` | `/usages` |
+| `features.allocationCandidates` | `/allocation_candidates` |
+| `features.reshaper` | `/reshaper` |
+
+This per-endpoint granularity allows operators to adopt CRD-backed behavior incrementally, migrating one endpoint group at a time from `passthrough` through `hybrid` to `crd`.
+
+Endpoint groups that have not yet implemented `hybrid` or `crd` logic return **501 Not Implemented** when set to those modes.
 
 ### Passthrough
 
@@ -76,21 +96,31 @@ Upstream connectivity is optional at startup: if the upstream Placement API is u
 
 ### CRD-Backed Resource Providers
 
-When `features.enableResourceProviders` is enabled, the shim serves KVM resource providers directly from Kubernetes Hypervisor CRDs rather than forwarding to upstream Placement. This is the core architectural shift: KVM hypervisor inventory lives in Kubernetes instead of in Placement's database.
+When `features.resourceProviders` is set to `hybrid` or `crd`, the shim serves KVM resource providers directly from Kubernetes Hypervisor CRDs rather than forwarding to upstream Placement. This is the core architectural shift: KVM hypervisor inventory lives in Kubernetes instead of in Placement's database.
 
 The shim supports the full CRUD surface for resource providers:
 
-- **GET /resource_providers**: Lists resource providers by merging KVM hypervisors from Kubernetes with non-KVM providers from upstream Placement. The merge is based on UUID: if a hypervisor CRD exists with the same OpenStack ID as an upstream provider, the CRD-backed version takes precedence.
-- **GET /resource_providers/{uuid}**: Looks up the UUID against indexed Hypervisor CRDs first. If found, returns the translated provider; otherwise, forwards to upstream.
-- **POST /resource_providers**: Checks the requested name and UUID against existing Hypervisor CRDs. Returns `409 Conflict` if the name or UUID collides with a KVM hypervisor, preventing shadow providers from being created in upstream Placement. If no collision, the request is forwarded to upstream.
-- **PUT /resource_providers/{uuid}**: Same collision detection as POST. Updates that would rename a KVM-managed provider are rejected with `409 Conflict`.
-- **DELETE /resource_providers/{uuid}**: Prevents deletion of CRD-backed KVM providers by returning `409 Conflict`. Non-KVM providers are forwarded to upstream.
+- **GET /resource_providers**: In `hybrid` mode, lists resource providers by merging KVM hypervisors from Kubernetes with non-KVM providers from upstream Placement. The merge is based on UUID: if a hypervisor CRD exists with the same OpenStack ID as an upstream provider, the CRD-backed version takes precedence. In `crd` mode, lists only from Kubernetes without contacting upstream.
+- **GET /resource_providers/{uuid}**: Looks up the UUID against indexed Hypervisor CRDs first. If found, returns the translated provider. In `hybrid` mode, if not found, forwards to upstream; in `crd` mode, returns 404.
+- **POST /resource_providers**: Checks the requested name and UUID against existing Hypervisor CRDs. Returns `409 Conflict` if the name or UUID collides with a KVM hypervisor, preventing shadow providers from being created in upstream Placement. In `hybrid` mode, if no collision, the request is forwarded to upstream; in `crd` mode, non-KVM providers are rejected with 404.
+- **PUT /resource_providers/{uuid}**: Same collision detection as POST. Updates that would rename a KVM-managed provider are rejected with `409 Conflict`. Non-KVM providers are forwarded to upstream in `hybrid` mode or rejected with 404 in `crd` mode.
+- **DELETE /resource_providers/{uuid}**: Prevents deletion of CRD-backed KVM providers by returning `409 Conflict`. Non-KVM providers are forwarded to upstream in `hybrid` mode or rejected with 404 in `crd` mode.
 
 For efficient lookups, the shim indexes Hypervisor CRDs on three fields: `status.hypervisorId` (the OpenStack UUID), `metadata.uid` (the Kubernetes UID), and `metadata.name`. These indexes are registered at startup via the multicluster client, enabling O(1) lookups by any of these keys.
 
+### Root Endpoint
+
+The `GET /` endpoint returns a version discovery document. The behavior depends on the mode set in `features.root`:
+
+- **passthrough**: Forwards to upstream Placement as-is.
+- **hybrid**: Fetches the version document from upstream and computes the **version intersection** with the local static configuration. The result uses the higher minimum version and the lower maximum version, yielding the narrowest compatible window. If the ranges don't overlap, the local config is returned as-is.
+- **crd**: Returns the static version discovery document from the `versioning` config section without contacting upstream.
+
+Both `hybrid` and `crd` modes require a `versioning` config block with `id`, `minVersion`, `maxVersion`, and `status`.
+
 ### Traits
 
-When `features.enableTraits` is enabled, the shim serves OpenStack Placement traits from a pair of Kubernetes ConfigMaps instead of forwarding to upstream:
+When `features.traits` is set to `hybrid` or `crd`, the shim serves OpenStack Placement traits from a pair of Kubernetes ConfigMaps instead of forwarding to upstream:
 
 - **Static ConfigMap** (Helm-managed): Contains the standard OpenStack traits deployed via Helm. Its name is set by `traits.configMapName` in the shim config.
 - **Custom ConfigMap** (shim-managed): Stores `CUSTOM_*` traits created at runtime through PUT requests. Named `{configMapName}-custom`.
@@ -102,6 +132,8 @@ The trait endpoints support the full OpenStack Placement traits API:
 - `DELETE /traits/{name}` removes custom traits.
 
 Writes to the custom ConfigMap are serialized across replicas using a Kubernetes Lease-backed distributed lock (see `pkg/resourcelock`). This prevents concurrent writes from corrupting the ConfigMap data.
+
+In **hybrid** mode, `GET`, `PUT`, and `DELETE` trait requests are forwarded to upstream Placement (so upstream always has the latest data), and a **periodic sync loop** runs in the background (every 60 seconds with jitter) to fetch traits from upstream and write them into the static ConfigMap. This keeps the local view in sync with upstream and prepares for cutover to `crd` mode. In **crd** mode, traits are served exclusively from the local ConfigMaps with no upstream dependency.
 
 ### Authentication
 
