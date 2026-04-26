@@ -102,7 +102,7 @@ Include the following instructions in the prompt for each PR subagent:
 1. Read the `AGENTS.md` file in the repository root first. Follow all conventions described there.
 2. Create a new branch from main with a descriptive name (e.g., `claude/fix-null-check-in-placement-handler` or `claude/docs-update-scheduling-algorithm`).
 3. Implement the fix or documentation change. Keep changes minimal and focused — one issue per PR.
-4. Run `make` to verify the build passes. If it fails, fix the issues or abandon the PR if the fix is not straightforward.
+4. Run `make` to verify the build passes. If it fails, fix the issues. If the fix is not straightforward, abandon the attempt: delete the branch (`git checkout main && git branch -D <branch-name>`) and report the abandoned finding back to the orchestrator with a short explanation of what went wrong.
 5. Use clear, concise commit messages.
 6. Open a pull request targeting main using `gh pr create`:
    - The PR title must start with an uppercase letter. Conventional commits prefixes are not required.
@@ -110,9 +110,9 @@ Include the following instructions in the prompt for each PR subagent:
 7. After opening the PR, determine who should review it:
    - Run `git log --format="%an" -- <affected files> | sort | uniq -c | sort -rn | head -5` to find the most frequent contributors to the affected files.
    - Filter out bot accounts (e.g., names containing "bot", "ci", "automation").
-   - Assign the top 1-2 human contributors as reviewers using `gh pr edit <number> --add-assignee <username>`. If git log names don't map cleanly to GitHub usernames, use `gh api repos/{owner}/{repo}/commits?path=<file>&per_page=5` to get the GitHub login from recent commits to that file.
+   - Assign the top 1-2 human contributors as reviewers using `gh pr edit <number> --add-assignee <username>`. If git log names don't map cleanly to GitHub usernames, use `gh api repos/{owner}/{repo}/commits?path=<file>&per_page=5 --jq '.[].author.login'` to extract GitHub usernames from recent commits to that file. You can get `{owner}` and `{repo}` from `gh repo view --json owner,name`.
    - The goal is to notify the people most familiar with the code, not to assign everyone.
-8. After opening the PR, switch back to main before returning.
+8. After opening the PR, switch back to main (`git checkout main`) before returning.
 
 ---
 

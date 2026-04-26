@@ -73,7 +73,7 @@ For each confirmed issue:
 - **Description**: <what the bug is and why it matters>
 - **Suggested fix**: <concise description of what should change>
 - **Recommend PR**: [yes/no] — whether this warrants a pull request
-- **Key contributors**: <contributors who recently touched these files, from git log>
+- **Key contributors**: <top 3 contributors who recently touched these files, as comma-separated GitHub usernames from `git log` and `gh api`, e.g., `alice, bob, carol`>
 
 ### Summary
 - Total findings: N

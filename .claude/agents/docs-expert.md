@@ -90,7 +90,7 @@ For each issue found:
 - **Description**: <what is wrong or missing and why it matters>
 - **Suggested change**: <concise description of what should be written or edited>
 - **Recommend PR**: [yes/no] — whether this warrants a pull request
-- **Key contributors**: <contributors who recently touched the related code/docs, from git log>
+- **Key contributors**: <top 3 contributors who recently touched the related code/docs, as comma-separated GitHub usernames from `git log` and `gh api`, e.g., `alice, bob, carol`>
 
 ### Summary
 - Total findings: N
