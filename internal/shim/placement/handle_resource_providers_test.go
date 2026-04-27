@@ -884,16 +884,16 @@ func TestHandleDeleteResourceProvider(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Feature flag tests
+// Passthrough mode tests
 // ---------------------------------------------------------------------------
 
-func TestHandleResourceProviders_FeatureFlagOff(t *testing.T) {
+func TestHandleResourceProviders_Passthrough(t *testing.T) {
 	hv1Obj := &hv1.Hypervisor{
 		ObjectMeta: metav1.ObjectMeta{Name: "hv-flagtest"},
 		Status:     hv1.HypervisorStatus{HypervisorID: validUUID},
 	}
 
-	newFlagOffShim := func(t *testing.T, upstreamStatus int, upstreamBody string) *Shim {
+	newPassthroughShim := func(t *testing.T, upstreamStatus int, upstreamBody string) *Shim {
 		t.Helper()
 		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -918,18 +918,18 @@ func TestHandleResourceProviders_FeatureFlagOff(t *testing.T) {
 	}
 
 	t.Run("create forwards to upstream", func(t *testing.T) {
-		s := newFlagOffShim(t, http.StatusCreated, `{"uuid":"new","name":"hv-flagtest"}`)
+		s := newPassthroughShim(t, http.StatusCreated, `{"uuid":"new","name":"hv-flagtest"}`)
 		body := `{"name":"hv-flagtest"}`
 		req := httptest.NewRequest(http.MethodPost, "/resource_providers", strings.NewReader(body))
 		w := httptest.NewRecorder()
 		s.HandleCreateResourceProvider(w, req)
 		if w.Code != http.StatusCreated {
-			t.Fatalf("status = %d, want %d (flag off should forward, not 409)", w.Code, http.StatusCreated)
+			t.Fatalf("status = %d, want %d (passthrough should forward, not 409)", w.Code, http.StatusCreated)
 		}
 	})
 
 	t.Run("show forwards to upstream", func(t *testing.T) {
-		s := newFlagOffShim(t, http.StatusOK, `{"uuid":"`+validUUID+`","name":"upstream-rp"}`)
+		s := newPassthroughShim(t, http.StatusOK, `{"uuid":"`+validUUID+`","name":"upstream-rp"}`)
 		w := serveHandler(t, http.MethodGet, "/resource_providers/{uuid}",
 			s.HandleShowResourceProvider, "/resource_providers/"+validUUID)
 		if w.Code != http.StatusOK {
@@ -941,7 +941,7 @@ func TestHandleResourceProviders_FeatureFlagOff(t *testing.T) {
 	})
 
 	t.Run("update forwards to upstream", func(t *testing.T) {
-		s := newFlagOffShim(t, http.StatusOK, `{"uuid":"`+validUUID+`","name":"different-name"}`)
+		s := newPassthroughShim(t, http.StatusOK, `{"uuid":"`+validUUID+`","name":"different-name"}`)
 		body := `{"name":"different-name"}`
 		req := httptest.NewRequest(http.MethodPut, "/resource_providers/"+validUUID, strings.NewReader(body))
 		mux := http.NewServeMux()
@@ -949,22 +949,22 @@ func TestHandleResourceProviders_FeatureFlagOff(t *testing.T) {
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d (flag off should forward, not 409)", w.Code, http.StatusOK)
+			t.Fatalf("status = %d, want %d (passthrough should forward, not 409)", w.Code, http.StatusOK)
 		}
 	})
 
 	t.Run("delete forwards to upstream", func(t *testing.T) {
-		s := newFlagOffShim(t, http.StatusNoContent, "")
+		s := newPassthroughShim(t, http.StatusNoContent, "")
 		w := serveHandler(t, http.MethodDelete, "/resource_providers/{uuid}",
 			s.HandleDeleteResourceProvider, "/resource_providers/"+validUUID)
 		if w.Code != http.StatusNoContent {
-			t.Fatalf("status = %d, want %d (flag off should forward, not 409)", w.Code, http.StatusNoContent)
+			t.Fatalf("status = %d, want %d (passthrough should forward, not 409)", w.Code, http.StatusNoContent)
 		}
 	})
 
 	t.Run("list forwards to upstream without merge", func(t *testing.T) {
 		upstreamBody := `{"resource_providers":[{"uuid":"upstream-uuid","name":"upstream-rp","generation":1,"links":[]}]}`
-		s := newFlagOffShim(t, http.StatusOK, upstreamBody)
+		s := newPassthroughShim(t, http.StatusOK, upstreamBody)
 		w := serveHandler(t, http.MethodGet, "/resource_providers",
 			s.HandleListResourceProviders, "/resource_providers")
 		if w.Code != http.StatusOK {
@@ -974,7 +974,7 @@ func TestHandleResourceProviders_FeatureFlagOff(t *testing.T) {
 			t.Errorf("expected upstream body passthrough, got %q", w.Body.String())
 		}
 		if strings.Contains(w.Body.String(), validUUID) {
-			t.Errorf("should not contain k8s hypervisor UUID when flag is off, got %q", w.Body.String())
+			t.Errorf("should not contain k8s hypervisor UUID in passthrough mode, got %q", w.Body.String())
 		}
 	})
 }

@@ -87,6 +87,19 @@ func (m FeatureMode) valid() bool {
 	return false
 }
 
+// dispatchPassthroughOnly forwards in passthrough mode, returns 501 for
+// hybrid/crd, and 500 for unknown modes.
+func (s *Shim) dispatchPassthroughOnly(w http.ResponseWriter, r *http.Request, mode FeatureMode) {
+	switch mode.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", mode), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
+}
+
 // featuresConfig controls the feature mode for each endpoint group.
 // Every field defaults to passthrough (zero value) when omitted.
 type featuresConfig struct {

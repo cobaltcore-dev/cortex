@@ -4,7 +4,6 @@
 package placement
 
 import (
-	"fmt"
 	"net/http"
 )
 
@@ -20,12 +19,5 @@ func (s *Shim) HandleListResourceProviderAllocations(w http.ResponseWriter, r *h
 	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	switch s.config.Features.Allocations.orDefault() {
-	case FeatureModePassthrough:
-		s.forward(w, r)
-	case FeatureModeHybrid, FeatureModeCRD:
-		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.Allocations), http.StatusNotImplemented)
-	default:
-		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
-	}
+	s.dispatchPassthroughOnly(w, r, s.config.Features.Allocations)
 }

@@ -19,13 +19,13 @@ import (
 //
 // Phase 1 — read-only (always runs):
 //
-//  1. GET /traits — list all traits; when forwarding to upstream (enableTraits
-//     is false) verify at least one trait exists.
+//  1. GET /traits — list all traits; when traits mode is passthrough
+//     (forwarding to upstream) verify at least one trait exists.
 //  2. GET /traits/{name} — show a known trait from the list and verify 200
 //     (skipped when the trait list is empty).
 //  3. GET /traits/{name} — show a nonexistent trait and verify 404.
 //
-// Phase 2 — CRUD (only when enableTraits is true):
+// Phase 2 — CRUD (only when traits mode is non-passthrough):
 //
 //  1. Pre-cleanup: DELETE any leftover test trait (ignore 404).
 //  2. PUT /traits/{name} — create a custom test trait → 201.

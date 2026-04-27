@@ -4,7 +4,6 @@
 package placement
 
 import (
-	"fmt"
 	"net/http"
 )
 
@@ -25,14 +24,7 @@ func (s *Shim) HandleListResourceProviderAggregates(w http.ResponseWriter, r *ht
 	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	switch s.config.Features.Aggregates.orDefault() {
-	case FeatureModePassthrough:
-		s.forward(w, r)
-	case FeatureModeHybrid, FeatureModeCRD:
-		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.Aggregates), http.StatusNotImplemented)
-	default:
-		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
-	}
+	s.dispatchPassthroughOnly(w, r, s.config.Features.Aggregates)
 }
 
 // HandleUpdateResourceProviderAggregates handles
@@ -49,12 +41,5 @@ func (s *Shim) HandleUpdateResourceProviderAggregates(w http.ResponseWriter, r *
 	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	switch s.config.Features.Aggregates.orDefault() {
-	case FeatureModePassthrough:
-		s.forward(w, r)
-	case FeatureModeHybrid, FeatureModeCRD:
-		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.Aggregates), http.StatusNotImplemented)
-	default:
-		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
-	}
+	s.dispatchPassthroughOnly(w, r, s.config.Features.Aggregates)
 }

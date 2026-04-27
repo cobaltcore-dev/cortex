@@ -11,6 +11,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -505,30 +506,11 @@ func (s *Shim) listResourceProvidersHybrid(w http.ResponseWriter, r *http.Reques
 			"count", len(hvs.Items), "uuids", uuids)
 
 		// Post-filter by query parameters.
-		filtered := hvs.Items
-		if v := query.Get("uuid"); v != "" {
-			filtered = filterHypervisorsByUUID(ctx, filtered, v)
-		}
-		if v := query.Get("name"); v != "" {
-			filtered = filterHypervisorsByName(ctx, filtered, v)
-		}
-		if vals := query["member_of"]; len(vals) > 0 {
-			filtered = filterHypervisorsByMemberOf(ctx, filtered, vals)
-		}
-		if v := query.Get("in_tree"); v != "" {
-			filtered = filterHypervisorsByInTree(ctx, filtered, v)
-		}
-		if vals := query["required"]; len(vals) > 0 {
-			filtered = filterHypervisorsByRequired(ctx, filtered, vals)
-		}
-		if v := query.Get("resources"); v != "" {
-			var err error
-			filtered, err = filterHypervisorsByResources(ctx, filtered, v)
-			if err != nil {
-				log.Info("invalid resources query parameter", "error", err)
-				http.Error(w, "invalid resources query parameter: "+err.Error(), http.StatusBadRequest)
-				return
-			}
+		filtered, err := applyHypervisorQueryFilters(ctx, hvs.Items, query)
+		if err != nil {
+			log.Info("invalid resources query parameter", "error", err)
+			http.Error(w, "invalid resources query parameter: "+err.Error(), http.StatusBadRequest)
+			return
 		}
 
 		// Build collision sets from filtered k8s hypervisors.
@@ -583,7 +565,25 @@ func (s *Shim) listResourceProvidersCRD(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	filtered := hvs.Items
+	filtered, err := applyHypervisorQueryFilters(ctx, hvs.Items, query)
+	if err != nil {
+		log.Info("invalid resources query parameter", "error", err)
+		http.Error(w, "invalid resources query parameter: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	rps := make([]resourceProvider, 0, len(filtered))
+	for _, hv := range filtered {
+		rps = append(rps, translateToResourceProvider(hv))
+	}
+	log.Info("listed resource providers from kubernetes (crd mode)", "count", len(rps))
+	s.writeJSON(w, http.StatusOK, listResourceProvidersResponse{ResourceProviders: rps})
+}
+
+// applyHypervisorQueryFilters runs the placement-style query filters against
+// the given hypervisor list and returns the filtered slice.
+func applyHypervisorQueryFilters(ctx context.Context, hvs []hv1.Hypervisor, query url.Values) ([]hv1.Hypervisor, error) {
+	filtered := hvs
 	if v := query.Get("uuid"); v != "" {
 		filtered = filterHypervisorsByUUID(ctx, filtered, v)
 	}
@@ -603,18 +603,10 @@ func (s *Shim) listResourceProvidersCRD(w http.ResponseWriter, r *http.Request) 
 		var err error
 		filtered, err = filterHypervisorsByResources(ctx, filtered, v)
 		if err != nil {
-			log.Info("invalid resources query parameter", "error", err)
-			http.Error(w, "invalid resources query parameter: "+err.Error(), http.StatusBadRequest)
-			return
+			return nil, err
 		}
 	}
-
-	rps := make([]resourceProvider, 0, len(filtered))
-	for _, hv := range filtered {
-		rps = append(rps, translateToResourceProvider(hv))
-	}
-	log.Info("listed resource providers from kubernetes (crd mode)", "count", len(rps))
-	s.writeJSON(w, http.StatusOK, listResourceProvidersResponse{ResourceProviders: rps})
+	return filtered, nil
 }
 
 func filterHypervisorsByUUID(ctx context.Context, hvs []hv1.Hypervisor, uuid string) []hv1.Hypervisor {

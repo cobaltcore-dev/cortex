@@ -4,7 +4,6 @@
 package placement
 
 import (
-	"fmt"
 	"net/http"
 )
 
@@ -34,12 +33,5 @@ import (
 // inventory capacity and usage for informed decision-making. Available since
 // microversion 1.10.
 func (s *Shim) HandleListAllocationCandidates(w http.ResponseWriter, r *http.Request) {
-	switch s.config.Features.AllocationCandidates.orDefault() {
-	case FeatureModePassthrough:
-		s.forward(w, r)
-	case FeatureModeHybrid, FeatureModeCRD:
-		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.AllocationCandidates), http.StatusNotImplemented)
-	default:
-		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
-	}
+	s.dispatchPassthroughOnly(w, r, s.config.Features.AllocationCandidates)
 }
