@@ -7,17 +7,20 @@ Cortex reserves hypervisor capacity for customers who pre-commit resources (comm
   - [Configuration and Observability](#configuration-and-observability)
   - [Lifecycle Management](#lifecycle-management)
     - [State (CRDs)](#state-crds)
-    - [CR Reservation Lifecycle](#cr-reservation-lifecycle)
-    - [VM Lifecycle](#vm-lifecycle)
-    - [Capacity Blocking](#capacity-blocking)
+    - [CR Commitment Lifecycle](#cr-commitment-lifecycle)
+      - [CommittedResource Controller](#committedresource-controller)
+    - [Reservation Lifecycle](#reservation-lifecycle)
+      - [VM Lifecycle](#vm-lifecycle)
+      - [Capacity Blocking](#capacity-blocking)
+      - [Reservation Controller](#reservation-controller)
     - [Change-Commitments API](#change-commitments-api)
     - [Syncer Task](#syncer-task)
-    - [Controller (Reconciliation)](#controller-reconciliation)
     - [Usage API](#usage-api)
 
 The CR reservation implementation is located in `internal/scheduling/reservations/commitments/`. Key components include:
-- Controller logic (`controller.go`)
-- API handlers in the `api/` subpackage (`change_commitments.go`, `report_capacity.go`, `report_usage.go`)
+- `CommittedResource` controller (`committed_resource_controller.go`) — acceptance, rejection, child Reservation CRUD
+- `Reservation` controller (`reservation_controller.go`) — placement, VM allocation verification
+- API endpoints (`api_*.go`)
 - Capacity and usage calculation logic (`capacity.go`, `usage.go`)
 - Syncer for periodic state sync (`syncer.go`)
 
@@ -35,47 +38,111 @@ The CR reservation implementation is located in `internal/scheduling/reservation
 
 ## Lifecycle Management
 
-### State (CRDs)
-Defined in `api/v1alpha1/reservation_types.go`, which contains definitions for CR reservations and failover reservations (see [./failover-reservations.md](./failover-reservations.md)).
-
-A reservation CRD represents a single reservation slot on a hypervisor, which holds multiple VMs.
-A single CR entry typically refers to multiple reservation CRDs (slots).
-
-
-### CR Reservation Lifecycle
+The system is organized around two CRD types and two controllers. `CommittedResource` CRDs represent customer commitments; `Reservation` CRDs represent individual hypervisor capacity slots. Each has its own controller with a well-defined responsibility boundary.
 
 ```mermaid
 flowchart LR
     subgraph State
+        CR[(CommittedResource CRDs)]
         Res[(Reservation CRDs)]
     end
-    
+
     Syncer[Syncer Task]
     ChangeAPI[Change API]
     CapacityAPI[Capacity API]
-    Controller[Controller]
+    CRCtrl[CommittedResource Controller]
+    ResCtrl[Reservation Controller]
     UsageAPI[Usage API]
     Scheduler[Scheduler API]
-    
-    ChangeAPI -->|CRUD| Res
-    Syncer -->|CRUD| Res
+
+    ChangeAPI -->|CRUD| CR
+    Syncer -->|CRUD| CR
+    UsageAPI -->|read| CR
     UsageAPI -->|read| Res
     CapacityAPI -->|read| Res
     CapacityAPI -->|capacity request| Scheduler
-    Res -->|watch| Controller
-    Controller -->|update spec/status| Res
-    Controller -->|reservation placement request| Scheduler
+    CR -->|watch| CRCtrl
+    CRCtrl -->|CRUD child Reservation slots| Res
+    CRCtrl -->|update status| CR
+    Res -->|watch| CRCtrl
+    Res -->|watch| ResCtrl
+    ResCtrl -->|placement request| Scheduler
+    ResCtrl -->|update status| Res
 ```
 
-Reservations are managed through the Change API, Syncer Task, and Controller reconciliation.
+### State (CRDs)
+
+**`CommittedResource` CRD** (`committed_resource_types.go`) — primary source of truth for a commitment accepted by Cortex. One CRD per commitment UUID. Spec holds the commitment identity (project, flavor group, ...). Status holds the acceptance outcome (`Ready` condition with reason `Planned`/`Reserving`/`Rejected`) and the accepted amount.
+
+**`Reservation` CRD** (`reservation_types.go`) — a single reservation slot on a hypervisor, owned by a `CommittedResource`. One `CommittedResource` typically drives multiple `Reservation` CRDs (one per flavor-sized slot). See [./failover-reservations.md](./failover-reservations.md) for the failover reservation type.
+
+### CR Commitment Lifecycle
+
+The CR commitment lifecycle covers everything from a commitment being accepted by Limes through to Cortex confirming or rejecting it. The `CommittedResource` CRD is the entry point; the `CommittedResource` controller owns the acceptance decision.
+
+**Limes state → Cortex action:**
+
+| Limes State | Meaning | Cortex action |
+|---|---|---|
+| `planned` | Future ConfirmBy date, no guarantee yet | Store CRD only — no child Reservations created, no capacity blocked |
+| `guaranteed` | Future ConfirmBy date, upfront guarantee requested | Place Reservations immediately — capacity blocked even before StartTime |
+| `pending` | ConfirmBy date reached, Limes requesting confirmation | Attempt placement — accept if capacity available, reject otherwise |
+| `confirmed` | Already placed in a prior request | Idempotent — no new action if Reservations already exist |
+
+**CommittedResource state diagram (Cortex-side):**
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "Planned (Ready=False, Reason=Planned)" as Planned
+    state "Reserving (Ready=False, Reason=Reserving)" as Reserving
+    state "Active (Ready=True)" as Active
+    state "Rejected (Ready=False, Reason=Rejected)" as Rejected
+
+    [*] --> Planned : State=planned
+    [*] --> Reserving : State=pending / guaranteed
+    Planned --> Reserving : State changes to pending/guaranteed (Syncer detects ConfirmBy reached or upfront guarantee)
+    Reserving --> Active : all child Reservations Ready=True
+    Reserving --> Rejected : any child Reservation failed (no capacity)
+    Active --> Reserving : resize (Spec.Amount changed)
+    Active --> [*] : deleted (expired or cancelled)
+    Rejected --> [*] : deleted
+    Planned --> [*] : deleted
+```
+
+`guaranteed` and `planned` with a future start time differ only in whether Cortex creates Reservations: `guaranteed` blocks capacity upfront; `planned` waits until ConfirmBy is reached before attempting placement. 
+
+| Component | Event | Timing | Action |
+|---|---|---|---|
+| **Change API / Syncer** | CR Create, Resize, Delete | Immediate/Hourly | Create/update/delete `CommittedResource` CRDs |
+| **CommittedResource Controller** | `CommittedResource` created/updated | Immediate (watch) | Compute target `Reservation` count; CRUD child `Reservation` CRDs |
+| **CommittedResource Controller** | Child `Reservation` status changed | Immediate (watch) | Aggregate child statuses; set `CommittedResource.Status` to accepted or rejected |
+| **CommittedResource Controller** | Any `Reservation` failed | On failure | Delete all created `Reservation` CRDs (rollback); set `CommittedResource.Status = Rejected` |
+
+#### CommittedResource Controller
+
+The `CommittedResource` controller watches `CommittedResource` CRDs (spec changes) and child `Reservation` CRDs (status changes). Its responsibilities:
+
+- **Desired state reconciliation**: translates `Spec.Amount` into the target placement state based on `Spec.ResourceType`:
+  - **Memory CRs** (`ResourceType=memory`): creates, updates, and deletes child `Reservation` CRDs to match the target slot count. Flavor selection targets the largest flavors in the group first; falls back to smaller flavors when the largest do not fit.
+  - **CPU CRs** (`ResourceType=cores`): no child `Reservation` CRDs created. The controller runs an arithmetic capacity check — sum available cores across all hosts in the target AZ, subtract committed cores from all other active CPU `CommittedResource` CRDs for the same flavor group, accept if remaining >= `Spec.Amount`. CPU CRs provide a soft guarantee; they do not pin specific hypervisors.
+- **Status aggregation**: when all child Reservations are `Ready=True` (or, for CPU CRs, when the arithmetic check passes), marks the `CommittedResource` accepted; on any failure or timeout, rolls back created Reservations and marks it rejected
+- **Rollback**: on failure, deletes all Reservations created during the current reconcile attempt before setting `CommittedResource.Status = Rejected`
+
+The controller communicates with the Reservation controller only through CRDs — no direct calls.
+
+### Reservation Lifecycle
 
 | Component | Event | Timing | Action |
 |-----------|-------|--------|--------|
-| **Change API / Syncer** | CR Create, Resize, Delete | Immediate/Hourly | Create/update/delete Reservation CRDs |
-| **Controller** | Placement | On creation | Find host via scheduler API, set `TargetHost` |
-| **Controller** | Optimize unused slots | >> minutes | Assign PAYG VMs or re-place reservations |
+| **Reservation Controller** | `Reservation` created | Immediate (watch) | Find host via scheduler API, set `TargetHost` |
+| **Scheduling Pipeline** | VM Create, Migrate, Resize | Immediate | Add VM to `Spec.Allocations` |
+| **Reservation Controller** | Reservation CRD updated | `committedResourceRequeueIntervalGracePeriod` (default: 1 min) | Defer verification for new VMs still spawning; update `Status.Allocations` |
+| **Reservation Controller** | Hypervisor CRD updated (VM appeared/disappeared) | Immediate (event-driven) | Verify allocations via Hypervisor CRD; remove gone VMs from `Spec.Allocations` |
+| **Reservation Controller** | Periodic safety-net | `committedResourceRequeueIntervalActive` (default: 5 min) | Same as above; catches any missed events |
+| **Reservation Controller** | Optimize unused slots | >> minutes | Assign PAYG VMs or re-place reservations |
 
-### VM Lifecycle
+#### VM Lifecycle
 
 VM allocations are tracked within reservations:
 
@@ -87,18 +154,11 @@ flowchart LR
     end
     A[Nova Scheduler] -->|VM Create/Migrate/Resize| B[Scheduling Pipeline]
     B -->|update Spec.Allocations| Res
-    Res -->|watch| C[Controller]
+    Res -->|watch| C[Reservation Controller]
     HV -->|watch - instance changes| C
     Res -->|periodic safety-net requeue| C
     C -->|update Spec/Status.Allocations| Res
 ```
-
-| Component | Event | Timing | Action |
-|-----------|-------|--------|--------|
-| **Scheduling Pipeline** | VM Create, Migrate, Resize | Immediate | Add VM to `Spec.Allocations` |
-| **Controller** | Reservation CRD updated | `committedResourceRequeueIntervalGracePeriod` (default: 1 min) | Defer verification for new VMs still spawning; update `Status.Allocations` |
-| **Controller** | Hypervisor CRD updated (VM appeared/disappeared) | Immediate (event-driven) | Verify allocations via Hypervisor CRD; remove gone VMs from `Spec.Allocations` |
-| **Controller** | Periodic safety-net | `committedResourceRequeueIntervalActive` (default: 5 min) | Same as above; catches any missed events |
 
 **Allocation fields**:
 - `Spec.Allocations` — Expected VMs (written by the scheduling pipeline on placement)
@@ -124,7 +184,7 @@ stateDiagram-v2
 
 **Note**: VM allocations may not consume all resources of a reservation slot. A reservation with 128 GB may have VMs totaling only 96 GB if that fits the project's needs. Allocations may exceed reservation capacity (e.g., after VM resize).
 
-### Capacity Blocking
+#### Capacity Blocking
 
 **Blocking rules by allocation state:**
 
@@ -161,6 +221,19 @@ When a reservation is being migrated to a new host, block the full `max(Spec.Res
 
 - **VM live migration within a reservation** (VM moves away from the reservation's host): handled implicitly by `hv.Status.Allocation`. Libvirt reports resource consumption on both source and target during live migration, so both hosts' `hv.Status.Allocation` already reflects the in-flight state. No special filter logic needed. The reservation controller will eventually remove the VM from the reservation once it's confirmed on the wrong host past the grace period.
 
+#### Reservation Controller
+
+The `Reservation` controller (`CommitmentReservationController`) watches `Reservation` CRDs and `Hypervisor` CRDs. `MaxConcurrentReconciles=1` prevents overbooking during concurrent placements.
+
+**Placement** — finds hosts for new reservations (calls scheduler API)
+
+**Allocation Verification** — tracks VM lifecycle on reservations. The controller uses the Hypervisor CRD as the sole source of truth, with two triggers:
+- New VMs (within `committedResourceAllocationGracePeriod`, default: 15 min): verification deferred — VM may still be spawning; requeued every `committedResourceRequeueIntervalGracePeriod` (default: 1 min)
+- Established VMs: verified reactively when the Hypervisor CRD changes (VM appeared or disappeared in `Status.Instances`), with `committedResourceRequeueIntervalActive` (default: 5 min) as a safety-net fallback
+- Missing VMs: removed from `Spec.Allocations` when not found on the Hypervisor CRD after the grace period
+
+**Reservation migration is not supported yet.**
+
 ### Change-Commitments API
 
 The change-commitments API receives batched commitment changes from Limes and manages reservations accordingly.
@@ -175,19 +248,6 @@ The change-commitments API receives batched commitment changes from Limes and ma
 ### Syncer Task
 
 The syncer task runs periodically and syncs local Reservation CRD state to match Limes' view of commitments, correcting drift from missed API calls or restarts.
-
-### Controller (Reconciliation)
-
-The controller watches Reservation CRDs and performs two types of reconciliation:
-
-**Placement** - Finds hosts for new reservations (calls scheduler API)
-
-**Allocation Verification** - Tracks VM lifecycle on reservations. The controller uses the Hypervisor CRD as the sole source of truth, with two triggers:
-- New VMs (within `committedResourceAllocationGracePeriod`, default: 15 min): verification deferred — VM may still be spawning; requeued every `committedResourceRequeueIntervalGracePeriod` (default: 1 min)
-- Established VMs: verified reactively when the Hypervisor CRD changes (VM appeared or disappeared in `Status.Instances`), with `committedResourceRequeueIntervalActive` (default: 5 min) as a safety-net fallback
-- Missing VMs: removed from `Spec.Allocations` when not found on the Hypervisor CRD after the grace period
-
-**Reservation migration is not supported yet.** 
 
 ### Usage API
 

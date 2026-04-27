@@ -131,6 +131,12 @@ type CommittedResourceStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
+const (
+	// CommittedResourceConditionReady indicates whether the CommittedResource has been
+	// successfully reconciled into active Reservation CRDs.
+	CommittedResourceConditionReady = "Ready"
+)
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
