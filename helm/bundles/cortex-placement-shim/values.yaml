@@ -20,26 +20,84 @@ alerts:
 
 cortex-shim:
   namePrefix: cortex-placement
+  prometheus:
+    extraLabels:
+      prometheus: openstack
   deployment:
     container:
       extraArgs: ["--placement-shim=true"]
   conf:
+    # placementURL is the URL of the OpenStack Placement service toward
+    # which the shim will proxy requests.
+    placementURL:
+    # keystoneURL is the URL of the OpenStack Keystone identity service,
+    # used by the auth middleware for token introspection and by E2E tests
+    # for authentication.
+    keystoneURL:
+    # OpenStack credentials used by the auth middleware for Keystone token
+    # introspection and by the E2E test suite to obtain authenticated tokens.
+    osUsername:
+    osPassword:
+    osProjectName:
+    osUserDomainName:
+    osProjectDomainName:
+    features:
+      resourceProviders: passthrough
+      root: passthrough
+      traits: passthrough
+      resourceProviderTraits: passthrough
+      resourceClasses: passthrough
+      inventories: passthrough
+      aggregates: passthrough
+      allocations: passthrough
+      usages: passthrough
+      allocationCandidates: passthrough
+      reshaper: passthrough
+    # The shim will return this as a static version discovery document for
+    # GET / instead of forwarding to upstream placement.
+    versioning:
+      id: "v1.0"
+      minVersion: "1.0"
+      maxVersion: "1.39"
+      status: "CURRENT"
+    traits:
+      configMapName: "cortex-placement-shim-traits"
+      # Static traits included in every Helm install/upgrade. The shim
+      # merges them with dynamic CUSTOM_* traits at request time.
+      static: []
+    auth:
+      tokenCacheTTL: "5m"
+      policies:
+        - pattern: "GET /"
+          roles: null # Version endpoint is publicly accessible (no token required).
+        - pattern: "GET /usages"
+          roles:
+            - name: cloud_compute_admin
+            - name: cloud_compute_viewer
+            - name: compute_admin
+              projectScope:
+                from: query
+            - name: compute_viewer
+              projectScope:
+                from: query
+        - pattern: "GET /*"
+          roles:
+            - name: cloud_compute_admin
+            - name: cloud_compute_viewer
+        - pattern: "* /*"
+          roles:
+            - name: cloud_compute_admin
     e2e:
       svcURL: "http://cortex-placement-shim-service:8080"
-      # Openstack credentials for e2e tests. These are not used by the shim
-      # itself, but are passed to the e2e test suite to generate an authenticated
-      # openstack client token for testing the shim's integration with openstack.
-      osKeystoneURL:
-      osUsername:
-      osPassword:
-      osProjectName:
-      osUserDomainName:
-      osProjectDomainName:
     apiservers:
       home:
         gvks:
           - kvm.cloud.sap/v1/Hypervisor
           - kvm.cloud.sap/v1/HypervisorList
+          - v1/ConfigMap
+          - v1/ConfigMapList
+          - coordination.k8s.io/v1/Lease
+          - coordination.k8s.io/v1/LeaseList
     monitoring:
       labels:
         github_org: cobaltcore-dev

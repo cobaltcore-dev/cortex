@@ -440,13 +440,6 @@ func TestHypervisorToReservations(t *testing.T) {
 		WithScheme(scheme).
 		WithObjects(res1, res2, resOtherHost, resNoHost, resFailover).
 		WithStatusSubresource(&v1alpha1.Reservation{}).
-		WithIndex(&v1alpha1.Reservation{}, indexReservationByStatusHost, func(obj client.Object) []string {
-			res := obj.(*v1alpha1.Reservation)
-			if res.Status.Host == "" {
-				return nil
-			}
-			return []string{res.Status.Host}
-		}).
 		Build()
 
 	controller := &CommitmentReservationController{Client: k8sClient}

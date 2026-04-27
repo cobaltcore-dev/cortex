@@ -5,6 +5,9 @@ kind: ServiceMonitor
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
+    {{- if .Values.prometheus.extraLabels }}
+    {{- toYaml .Values.prometheus.extraLabels | nindent 4 }}
+    {{- end }}
   name: {{ .Values.namePrefix }}-shim-metrics-monitor
   namespace: {{ .Release.Namespace }}
 spec:

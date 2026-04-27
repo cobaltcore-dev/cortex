@@ -237,7 +237,7 @@ func TestFromReservations_NonCommittedResourceType(t *testing.T) {
 
 func TestGetFlavorGroupNameFromResource_Valid(t *testing.T) {
 	// Test valid resource names with underscores in flavor group
-	name, err := getFlavorGroupNameFromResource("hw_version_hana_medium_v2_ram")
+	name, err := GetFlavorGroupNameFromResource("hw_version_hana_medium_v2_ram")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -254,17 +254,17 @@ func TestGetFlavorGroupNameFromResource_Invalid(t *testing.T) {
 		"hw_version_2101", // missing suffix
 	}
 	for _, input := range invalidCases {
-		if _, err := getFlavorGroupNameFromResource(input); err == nil {
+		if _, err := GetFlavorGroupNameFromResource(input); err == nil {
 			t.Errorf("expected error for %q, got nil", input)
 		}
 	}
 }
 
 func TestResourceNameRoundTrip(t *testing.T) {
-	// Test that ResourceNameRAM and getFlavorGroupNameFromResource are inverses
+	// Test that ResourceNameRAM and GetFlavorGroupNameFromResource are inverses
 	for _, groupName := range []string{"2101", "hana_1", "hana_medium_v2"} {
 		resourceName := ResourceNameRAM(groupName)
-		recovered, err := getFlavorGroupNameFromResource(resourceName)
+		recovered, err := GetFlavorGroupNameFromResource(resourceName)
 		if err != nil {
 			t.Fatalf("round-trip failed for %q: %v", groupName, err)
 		}

@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
@@ -212,6 +213,20 @@ func TestForwardUpstreamUnreachable(t *testing.T) {
 	}
 }
 
+func TestInitHTTPClientUnreachableUpstreamNonFatal(t *testing.T) {
+	s := &Shim{
+		config: config{PlacementURL: "http://127.0.0.1:1"},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := s.initHTTPClient(ctx); err != nil {
+		t.Fatalf("initHTTPClient should not return error for unreachable upstream, got: %v", err)
+	}
+	if s.httpClient == nil {
+		t.Fatal("httpClient should be set even when upstream is unreachable")
+	}
+}
+
 func TestRegisterRoutes(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -271,7 +286,7 @@ func TestRegisterRoutesDownstreamMetrics(t *testing.T) {
 	s.RegisterRoutes(mux)
 
 	// Fire a request through the mux so the wrapper observes the downstream timer.
-	req := httptest.NewRequest(http.MethodGet, "/resource_providers", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/traits", http.NoBody)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
@@ -280,7 +295,7 @@ func TestRegisterRoutesDownstreamMetrics(t *testing.T) {
 	}
 	// The downstream timer should have exactly one observation for the
 	// expected label combination (method, pattern, responsecode).
-	if n := histSampleCount(t, down, "GET", "/resource_providers", "200"); n != 1 {
+	if n := histSampleCount(t, down, "GET", "/traits", "200"); n != 1 {
 		t.Errorf("downstream observation count = %d, want 1", n)
 	}
 }
@@ -350,7 +365,7 @@ func TestRequestIDPropagation(t *testing.T) {
 	mux := http.NewServeMux()
 	s.RegisterRoutes(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/resource_providers", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/traits", http.NoBody)
 	req.Header.Set("X-OpenStack-Request-Id", wantID)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
@@ -396,4 +411,153 @@ func TestRequestIDInContext(t *testing.T) {
 	if gotHeader != wantID {
 		t.Errorf("upstream received X-OpenStack-Request-Id = %q, want %q", gotHeader, wantID)
 	}
+}
+
+func TestConfigValidateAuthRequiresKeystoneURL(t *testing.T) {
+	c := config{
+		PlacementURL: "http://placement:8778",
+		Auth:         &authConfig{TokenCacheTTL: "5m", Policies: []authPolicy{{Pattern: "GET /", Roles: nil}}},
+	}
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when auth configured without keystoneURL")
+	}
+	c.KeystoneURL = "http://keystone:5000"
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when auth configured without osUsername")
+	}
+	c.OSUsername = "admin"
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when auth configured without osPassword")
+	}
+	c.OSPassword = "secret"
+	if err := c.validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestConfigValidateRootCRDRequiresVersioning(t *testing.T) {
+	c := config{
+		PlacementURL: "http://placement:8778",
+		Features:     featuresConfig{Root: FeatureModeCRD},
+	}
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when root mode is crd without versioning config")
+	}
+	c.Versioning = &versioningConfig{ID: "v1.0"}
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when versioning has missing fields")
+	}
+	c.Versioning = &versioningConfig{
+		ID:         "v1.0",
+		MinVersion: "1.0",
+		MaxVersion: "1.39",
+		Status:     "CURRENT",
+	}
+	if err := c.validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestConfigValidateTraitsCRDRequiresConfig(t *testing.T) {
+	t.Setenv("POD_NAMESPACE", "")
+
+	c := config{
+		PlacementURL: "http://placement:8778",
+		Features:     featuresConfig{Traits: FeatureModeCRD},
+	}
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when traits mode is crd without traits config")
+	}
+	c.Traits = &traitsConfig{}
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when traits.configMapName is empty")
+	}
+	c.Traits.ConfigMapName = "cortex-placement-shim-traits"
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when POD_NAMESPACE is not set")
+	}
+	t.Setenv("POD_NAMESPACE", "default")
+	if err := c.validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestWrapHandlerWithAuth(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte(`{"ok":true}`)); err != nil {
+			t.Errorf("failed to write response: %v", err)
+		}
+	}))
+	defer upstream.Close()
+
+	info := &tokenInfo{
+		roles:     []string{"cloud_compute_admin"},
+		expiresAt: time.Now().Add(time.Hour),
+		cachedAt:  time.Now(),
+	}
+
+	down, up := newTestTimers()
+	s := &Shim{
+		config:                 config{PlacementURL: upstream.URL},
+		httpClient:             upstream.Client(),
+		maxBodyLogSize:         4096,
+		downstreamRequestTimer: down,
+		upstreamRequestTimer:   up,
+		authPolicies: []compiledPolicy{
+			{method: "GET", pathPattern: "/", roles: nil}, // public
+			{method: "*", pathPattern: "/*", roles: []compiledRole{{name: "cloud_compute_admin"}}},
+		},
+		tokenCache:        &tokenCache{ttl: time.Minute},
+		tokenIntrospector: &mockIntrospector{info: info},
+	}
+
+	t.Run("authorized request succeeds", func(t *testing.T) {
+		wrapped := s.wrapHandler("/test", func(w http.ResponseWriter, r *http.Request) {
+			s.forward(w, r)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
+		req.Header.Set("X-Auth-Token", "good-token")
+		w := httptest.NewRecorder()
+		wrapped(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+		if n := histSampleCount(t, down, "GET", "/test", "200"); n != 1 {
+			t.Errorf("downstream 200 count = %d, want 1", n)
+		}
+	})
+
+	t.Run("missing token returns 401", func(t *testing.T) {
+		down2, _ := newTestTimers()
+		s2 := *s
+		s2.downstreamRequestTimer = down2
+		wrapped := s2.wrapHandler("/test", func(w http.ResponseWriter, r *http.Request) {
+			s2.forward(w, r)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
+		w := httptest.NewRecorder()
+		wrapped(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+		}
+		if n := histSampleCount(t, down2, "GET", "/test", "401"); n != 1 {
+			t.Errorf("downstream 401 count = %d, want 1", n)
+		}
+	})
+
+	t.Run("public endpoint without token succeeds", func(t *testing.T) {
+		down3, _ := newTestTimers()
+		s3 := *s
+		s3.downstreamRequestTimer = down3
+		wrapped := s3.wrapHandler("/", func(w http.ResponseWriter, r *http.Request) {
+			s3.forward(w, r)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		w := httptest.NewRecorder()
+		wrapped(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+	})
 }

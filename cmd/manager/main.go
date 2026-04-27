@@ -57,6 +57,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
+	commitmentsapi "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
@@ -321,14 +322,16 @@ func main() {
 	hvGVK := schema.GroupVersionKind{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}
 	reservationGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}
 	historyGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}
+	committedResourceGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}
 	multiclusterClient := &multicluster.Client{
 		HomeCluster:    homeCluster,
 		HomeRestConfig: restConfig,
 		HomeScheme:     scheme,
 		ResourceRouters: map[schema.GroupVersionKind]multicluster.ResourceRouter{
-			hvGVK:          multicluster.HypervisorResourceRouter{},
-			reservationGVK: multicluster.ReservationsResourceRouter{},
-			historyGVK:     multicluster.HistoryResourceRouter{},
+			hvGVK:                multicluster.HypervisorResourceRouter{},
+			reservationGVK:       multicluster.ReservationsResourceRouter{},
+			historyGVK:           multicluster.HistoryResourceRouter{},
+			committedResourceGVK: multicluster.CommittedResourceRouter{},
 		},
 	}
 	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
@@ -364,7 +367,7 @@ func main() {
 	if commitmentsConfig.DatasourceName != "" {
 		commitmentsUsageDB = commitments.NewDBUsageClient(multiclusterClient, commitmentsConfig.DatasourceName)
 	}
-	commitmentsAPI := commitments.NewAPIWithConfig(multiclusterClient, commitmentsConfig, commitmentsUsageDB)
+	commitmentsAPI := commitmentsapi.NewAPIWithConfig(multiclusterClient, commitmentsConfig, commitmentsUsageDB)
 	commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
 
 	if slices.Contains(mainConfig.EnabledControllers, "nova-pipeline-controllers") {

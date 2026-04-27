@@ -12,6 +12,7 @@ import (
 	"slices"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -26,7 +27,7 @@ import (
 //  6. PUT /{uuid}/aggregates — clear aggregates by sending an empty list.
 //  7. GET /{uuid}/aggregates — verify aggregates are empty after clear.
 //  8. Cleanup: DELETE the test RP (also runs via deferred cleanup on failure).
-func e2eTestResourceProviderAggregates(ctx context.Context) error {
+func e2eTestResourceProviderAggregates(ctx context.Context, _ client.Client) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running resource provider aggregates endpoint e2e test")
 	config, err := conf.GetConfig[e2eRootConfig]()

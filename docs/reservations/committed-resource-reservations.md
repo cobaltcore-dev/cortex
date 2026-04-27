@@ -17,7 +17,7 @@ Cortex reserves hypervisor capacity for customers who pre-commit resources (comm
 
 The CR reservation implementation is located in `internal/scheduling/reservations/commitments/`. Key components include:
 - Controller logic (`controller.go`)
-- API endpoints (`api_*.go`)
+- API handlers in the `api/` subpackage (`change_commitments.go`, `report_capacity.go`, `report_usage.go`)
 - Capacity and usage calculation logic (`capacity.go`, `usage.go`)
 - Syncer for periodic state sync (`syncer.go`)
 
@@ -147,7 +147,7 @@ block                = max(remaining, spec_only_unblocked)
 
 When a VM is in flight (Nova choosing between candidates), a pessimistic blocking reservation exists on each candidate host. For any SpecOnly VM that has such a reservation on the same host, the pessimistic blocking reservation is the authority — the CR reservation must not double-count it. The `spec_only_unblocked` term excludes those VMs.
 
-See [pessimistic-blocking-reservations.md](./pessimistic-blocking-reservations.md) for the full interaction semantics.
+See the pessimistic blocking reservations documentation for the full interaction semantics.
 
 **Migration state (`Spec.TargetHost != Status.Host`):**
 

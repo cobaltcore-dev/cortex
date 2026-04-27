@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -24,7 +25,7 @@ import (
 //  4. GET /resource_providers — list real providers, then GET /{uuid}/usages
 //     on up to 3 of them to verify the endpoint works with production data.
 //  5. Cleanup: DELETE the test RP.
-func e2eTestResourceProviderUsages(ctx context.Context) error {
+func e2eTestResourceProviderUsages(ctx context.Context, _ client.Client) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running resource provider usages endpoint e2e test")
 	config, err := conf.GetConfig[e2eRootConfig]()

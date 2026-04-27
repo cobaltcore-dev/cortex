@@ -6,6 +6,7 @@ package placement
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strconv"
@@ -80,6 +81,22 @@ func (w *shimResponseWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// writeJSON serializes v as JSON and writes it to w with the given HTTP status
+// code. On encoding failure it sends a 500 Internal Server Error instead.
+func (s *Shim) writeJSON(w http.ResponseWriter, statusCode int, v any) {
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(v); err != nil {
+		logf.Log.Error(err, "failed to encode JSON response")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		logf.Log.Error(err, "failed to write JSON response")
+	}
+}
+
 // wrapHandler returns an http.HandlerFunc that wraps next with logging,
 // metrics collection, and request-ID propagation. It is used by
 // RegisterRoutes to apply uniform middleware to every placement API handler.
@@ -123,7 +140,9 @@ func (s *Shim) wrapHandler(pattern string, next http.HandlerFunc) http.HandlerFu
 		}
 
 		start := time.Now()
-		next.ServeHTTP(sw, r)
+		if s.checkAuth(sw, r) {
+			next.ServeHTTP(sw, r)
+		}
 		latencyMs := time.Since(start).Milliseconds()
 
 		// NOTE: We intentionally never log HTTP headers to avoid

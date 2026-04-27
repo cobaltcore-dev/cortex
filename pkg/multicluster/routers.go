@@ -16,9 +16,10 @@ import (
 // for the multicluster client that cortex supports by default. This is used to
 // route resources to the correct cluster in a multicluster setup.
 var DefaultResourceRouters = map[schema.GroupVersionKind]ResourceRouter{
-	{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}:       HypervisorResourceRouter{},
-	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}: ReservationsResourceRouter{},
-	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}:     HistoryResourceRouter{},
+	{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}:             HypervisorResourceRouter{},
+	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}:       ReservationsResourceRouter{},
+	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}:           HistoryResourceRouter{},
+	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}: CommittedResourceRouter{},
 }
 
 // ResourceRouter determines which remote cluster a resource should be written to
@@ -81,6 +82,33 @@ func (r ReservationsResourceRouter) Match(obj any, labels map[string]string) (bo
 		return false, errors.New("reservation does not have availability zone in spec")
 	}
 	return reservationAvailabilityZone == availabilityZone, nil
+}
+
+// CommittedResourceRouter routes committed resources to clusters based on availability zone.
+type CommittedResourceRouter struct{}
+
+func (c CommittedResourceRouter) Match(obj any, labels map[string]string) (bool, error) {
+	var cr v1alpha1.CommittedResource
+
+	switch v := obj.(type) {
+	case *v1alpha1.CommittedResource:
+		if v == nil {
+			return false, errors.New("object is nil")
+		}
+		cr = *v
+	case v1alpha1.CommittedResource:
+		cr = v
+	default:
+		return false, errors.New("object is not a CommittedResource")
+	}
+	availabilityZone, ok := labels["availabilityZone"]
+	if !ok {
+		return false, errors.New("cluster does not have availabilityZone label")
+	}
+	if cr.Spec.AvailabilityZone == "" {
+		return false, errors.New("committed resource does not have availability zone in spec")
+	}
+	return cr.Spec.AvailabilityZone == availabilityZone, nil
 }
 
 // HistoryResourceRouter routes histories to clusters based on availability zone.

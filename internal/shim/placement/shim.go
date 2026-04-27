@@ -11,13 +11,17 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
+	"github.com/cobaltcore-dev/cortex/pkg/resourcelock"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/api/resource"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -48,6 +52,87 @@ type requestIDContextKey struct{}
 // header value through the request lifecycle for tracing.
 var requestIDKey = requestIDContextKey{}
 
+// FeatureMode controls how an endpoint group interacts with upstream
+// placement and the hypervisor CRD.
+type FeatureMode string
+
+const (
+	// FeatureModePassthrough forwards all requests to upstream placement
+	// without any shim logic.
+	FeatureModePassthrough FeatureMode = "passthrough"
+	// FeatureModeHybrid directs requests to both upstream placement and the
+	// hypervisor CRD. Upstream must respond; the shim keeps CRD state in
+	// sync to prepare for cutover.
+	FeatureModeHybrid FeatureMode = "hybrid"
+	// FeatureModeCRD serves requests exclusively from the hypervisor CRD.
+	// No upstream placement dependency is required.
+	FeatureModeCRD FeatureMode = "crd"
+)
+
+// orDefault returns FeatureModePassthrough when m is the zero value.
+func (m FeatureMode) orDefault() FeatureMode {
+	if m == "" {
+		return FeatureModePassthrough
+	}
+	return m
+}
+
+// valid reports whether m is a recognized feature mode (including the
+// zero value, which maps to passthrough).
+func (m FeatureMode) valid() bool {
+	switch m {
+	case FeatureModePassthrough, FeatureModeHybrid, FeatureModeCRD, "":
+		return true
+	}
+	return false
+}
+
+// dispatchPassthroughOnly forwards in passthrough mode, returns 501 for
+// hybrid/crd, and 500 for unknown modes.
+func (s *Shim) dispatchPassthroughOnly(w http.ResponseWriter, r *http.Request, mode FeatureMode) {
+	switch mode.orDefault() {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", mode), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
+}
+
+// featuresConfig controls the feature mode for each endpoint group.
+// Every field defaults to passthrough (zero value) when omitted.
+type featuresConfig struct {
+	ResourceProviders      FeatureMode `json:"resourceProviders,omitempty"`
+	Root                   FeatureMode `json:"root,omitempty"`
+	Traits                 FeatureMode `json:"traits,omitempty"`
+	ResourceProviderTraits FeatureMode `json:"resourceProviderTraits,omitempty"`
+	ResourceClasses        FeatureMode `json:"resourceClasses,omitempty"`
+	Inventories            FeatureMode `json:"inventories,omitempty"`
+	Aggregates             FeatureMode `json:"aggregates,omitempty"`
+	Allocations            FeatureMode `json:"allocations,omitempty"`
+	Usages                 FeatureMode `json:"usages,omitempty"`
+	AllocationCandidates   FeatureMode `json:"allocationCandidates,omitempty"`
+	Reshaper               FeatureMode `json:"reshaper,omitempty"`
+}
+
+// versioningConfig describes the Placement API version advertised by the
+// static root endpoint when features.root is hybrid or crd.
+type versioningConfig struct {
+	ID         string `json:"id"`
+	MinVersion string `json:"minVersion"`
+	MaxVersion string `json:"maxVersion"`
+	Status     string `json:"status"`
+}
+
+// traitsConfig configures the local trait store used when
+// features.traits is hybrid or crd.
+type traitsConfig struct {
+	// ConfigMapName is the name of the ConfigMap used to persist traits.
+	// Must exist in the same namespace as the shim pod.
+	ConfigMapName string `json:"configMapName"`
+}
+
 // config holds configuration for the placement shim.
 type config struct {
 	// SSO is an optional configuration for the certificates the http client
@@ -56,11 +141,43 @@ type config struct {
 	// PlacementURL is the URL of the OpenStack Placement API the shim
 	// should forward requests to.
 	PlacementURL string `json:"placementURL,omitempty"`
+	// KeystoneURL is the URL of the OpenStack Keystone identity service
+	// used for token introspection by the auth middleware and for E2E
+	// test authentication.
+	KeystoneURL string `json:"keystoneURL,omitempty"`
+	// OSUsername is the OpenStack username for Keystone authentication
+	// (OS_USERNAME). Required when auth is configured.
+	OSUsername string `json:"osUsername,omitempty"`
+	// OSPassword is the OpenStack password for Keystone authentication
+	// (OS_PASSWORD). Required when auth is configured.
+	OSPassword string `json:"osPassword,omitempty"`
+	// OSProjectName is the OpenStack project name for Keystone
+	// authentication (OS_PROJECT_NAME). Required when auth is configured.
+	OSProjectName string `json:"osProjectName,omitempty"`
+	// OSUserDomainName is the OpenStack user domain name for Keystone
+	// authentication (OS_USER_DOMAIN_NAME). Required when auth is
+	// configured.
+	OSUserDomainName string `json:"osUserDomainName,omitempty"`
+	// OSProjectDomainName is the OpenStack project domain name for
+	// Keystone authentication (OS_PROJECT_DOMAIN_NAME). Required when
+	// auth is configured.
+	OSProjectDomainName string `json:"osProjectDomainName,omitempty"`
+	// Auth configures Keystone token validation. When nil, auth is
+	// disabled and requests pass through without access checks.
+	Auth *authConfig `json:"auth,omitempty"`
 	// MaxBodyLogSize is the maximum number of bytes of request/response
 	// bodies to include in debug-level log lines, specified as a
 	// Kubernetes resource.Quantity string (e.g. "4Ki"). Defaults to "4Ki"
 	// when unset or empty.
 	MaxBodyLogSize string `json:"maxBodyLogSize,omitempty"`
+	// Features controls the feature mode for each endpoint group.
+	Features featuresConfig `json:"features"`
+	// Versioning configures the static version discovery document returned
+	// by GET / when features.root is hybrid or crd.
+	Versioning *versioningConfig `json:"versioning,omitempty"`
+	// Traits configures the local trait store used when
+	// features.traits is hybrid or crd.
+	Traits *traitsConfig `json:"traits,omitempty"`
 }
 
 // validate checks the config for required fields and returns an error if the
@@ -68,6 +185,56 @@ type config struct {
 func (c *config) validate() error {
 	if c.PlacementURL == "" {
 		return errors.New("placement URL is required")
+	}
+	for name, mode := range map[string]FeatureMode{
+		"resourceProviders":      c.Features.ResourceProviders,
+		"root":                   c.Features.Root,
+		"traits":                 c.Features.Traits,
+		"resourceProviderTraits": c.Features.ResourceProviderTraits,
+		"resourceClasses":        c.Features.ResourceClasses,
+		"inventories":            c.Features.Inventories,
+		"aggregates":             c.Features.Aggregates,
+		"allocations":            c.Features.Allocations,
+		"usages":                 c.Features.Usages,
+		"allocationCandidates":   c.Features.AllocationCandidates,
+		"reshaper":               c.Features.Reshaper,
+	} {
+		if !mode.valid() {
+			return fmt.Errorf("features.%s has invalid mode %q (must be passthrough, hybrid, or crd)", name, mode)
+		}
+	}
+	rootMode := c.Features.Root.orDefault()
+	if rootMode == FeatureModeHybrid || rootMode == FeatureModeCRD {
+		if c.Versioning == nil {
+			return fmt.Errorf("versioning config is required when features.root is %s", rootMode)
+		}
+		if c.Versioning.ID == "" || c.Versioning.MinVersion == "" || c.Versioning.MaxVersion == "" || c.Versioning.Status == "" {
+			return fmt.Errorf("versioning id, minVersion, maxVersion, and status are required when features.root is %s", rootMode)
+		}
+	}
+	traitsMode := c.Features.Traits.orDefault()
+	if traitsMode == FeatureModeHybrid || traitsMode == FeatureModeCRD {
+		if c.Traits == nil {
+			return fmt.Errorf("traits config is required when features.traits is %s", traitsMode)
+		}
+		if c.Traits.ConfigMapName == "" {
+			return fmt.Errorf("traits.configMapName is required when features.traits is %s", traitsMode)
+		}
+		if traitsMode == FeatureModeCRD && os.Getenv("POD_NAMESPACE") == "" {
+			return errors.New("pod namespace (POD_NAMESPACE) is required when features.traits is crd")
+		}
+	}
+	if c.Auth != nil && c.KeystoneURL == "" {
+		return errors.New("keystoneURL is required when auth is configured")
+	}
+	if c.Auth != nil && c.OSUsername == "" {
+		return errors.New("osUsername is required when auth is configured")
+	}
+	if c.Auth != nil && c.OSPassword == "" {
+		return errors.New("osPassword is required when auth is configured")
+	}
+	if c.Auth != nil && len(c.Auth.Policies) == 0 {
+		return errors.New("auth.policies must not be empty when auth is configured")
 	}
 	return nil
 }
@@ -93,6 +260,23 @@ type Shim struct {
 	// upstreamRequestTimer is a prometheus histogram to measure the duration
 	// (and count) of requests to the upstream placement API by route and method.
 	upstreamRequestTimer *prometheus.HistogramVec
+
+	// authPolicies is the pre-compiled policy table. Nil when auth is
+	// disabled (config.Auth is nil).
+	authPolicies []compiledPolicy
+	// tokenCache caches validated token info to avoid repeated Keystone
+	// introspection.
+	tokenCache *tokenCache
+	// tokenIntrospector validates tokens against Keystone.
+	tokenIntrospector tokenIntrospector
+	// resourceLocker serializes writes to the custom traits ConfigMap
+	// across replicas using a Kubernetes Lease.
+	resourceLocker *resourcelock.ResourceLocker
+	// placementServiceClient is an authenticated gophercloud service client
+	// used by background tasks (trait sync) to make requests to upstream
+	// placement with automatic token management (including reauth on 401).
+	// Nil when Keystone credentials are not configured.
+	placementServiceClient *gophercloud.ServiceClient
 }
 
 // Describe implements prometheus.Collector.
@@ -107,13 +291,11 @@ func (s *Shim) Collect(ch chan<- prometheus.Metric) {
 	s.upstreamRequestTimer.Collect(ch)
 }
 
-// Start is called after the manager has started and the cache is running.
-// It can be used to perform any initialization that requires the cache to be
-// running.
-func (s *Shim) Start(ctx context.Context) (err error) {
-	setupLog.Info("Starting placement shim")
-	// Build the transport with optional SSO TLS credentials.
+// initHTTPClient builds the HTTP transport (with optional SSO TLS) and
+// verifies connectivity to the upstream placement API. Called during Start.
+func (s *Shim) initHTTPClient(ctx context.Context) error {
 	var transport *http.Transport
+	var err error
 	if s.config.SSO != nil {
 		setupLog.Info("SSO config provided, creating transport for placement API")
 		transport, err = sso.NewTransport(*s.config.SSO)
@@ -139,8 +321,7 @@ func (s *Shim) Start(ctx context.Context) (err error) {
 	transport.ExpectContinueTimeout = 1 * time.Second
 	transport.IdleConnTimeout = 90 * time.Second
 	s.httpClient = &http.Client{Transport: transport, Timeout: 60 * time.Second}
-	// Try establish a connection to the placement API to fail fast if the
-	// configuration is invalid. Directly call the root endpoint for that.
+
 	setupLog.Info("Testing connection to placement API", "url", s.config.PlacementURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.config.PlacementURL, http.NoBody)
 	if err != nil {
@@ -149,16 +330,76 @@ func (s *Shim) Start(ctx context.Context) (err error) {
 	}
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		setupLog.Error(err, "Failed to connect to placement API")
-		return err
+		setupLog.Info("WARNING: Failed to connect to placement API at startup, continuing anyway", "error", err)
+		return nil
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		err := errors.New("unexpected response from placement API")
-		setupLog.Error(err, "Failed to call placement API", "status", resp.Status)
-		return err
+		setupLog.Info("WARNING: Unexpected response from placement API at startup, continuing anyway", "status", resp.Status)
+		return nil
 	}
 	setupLog.Info("Successfully connected to placement API")
+	return nil
+}
+
+// initPlacementServiceClient creates an authenticated gophercloud
+// ServiceClient that background tasks (e.g. the trait sync loop) use to
+// make requests to upstream placement with automatic token management.
+// After initial Keystone authentication the provider's HTTP transport is
+// replaced with the shim's own transport (which carries SSO TLS certs)
+// so that subsequent placement requests use the correct transport.
+// Skipped when Keystone credentials are not configured.
+func (s *Shim) initPlacementServiceClient(ctx context.Context) error {
+	if s.config.KeystoneURL == "" || s.config.OSUsername == "" || s.config.OSPassword == "" {
+		setupLog.Info("Keystone credentials not configured, background tasks will make unauthenticated upstream requests")
+		return nil
+	}
+	authOpts := gophercloud.AuthOptions{
+		IdentityEndpoint: s.config.KeystoneURL,
+		Username:         s.config.OSUsername,
+		DomainName:       s.config.OSUserDomainName,
+		Password:         s.config.OSPassword,
+		AllowReauth:      true,
+		Scope: &gophercloud.AuthScope{
+			ProjectName: s.config.OSProjectName,
+			DomainName:  s.config.OSProjectDomainName,
+		},
+	}
+	provider, err := openstack.NewClient(s.config.KeystoneURL)
+	if err != nil {
+		return fmt.Errorf("creating Keystone provider for upstream auth: %w", err)
+	}
+	provider.HTTPClient = http.Client{Timeout: 30 * time.Second}
+	if err := openstack.Authenticate(ctx, provider, authOpts); err != nil {
+		return fmt.Errorf("authenticating with Keystone for upstream auth: %w", err)
+	}
+	// After successful Keystone auth, switch the provider's HTTP transport
+	// to the shim's transport so placement requests use SSO TLS certs.
+	if s.httpClient != nil && s.httpClient.Transport != nil {
+		provider.HTTPClient.Transport = s.httpClient.Transport
+	}
+	s.placementServiceClient = &gophercloud.ServiceClient{
+		ProviderClient: provider,
+		Endpoint:       s.config.PlacementURL,
+		Type:           "placement",
+	}
+	setupLog.Info("Placement service client initialized for background upstream requests")
+	return nil
+}
+
+// Start is called after the manager has started and the cache is running.
+func (s *Shim) Start(ctx context.Context) error {
+	setupLog.Info("Starting placement shim")
+	if err := s.initHTTPClient(ctx); err != nil {
+		return err
+	}
+	if err := s.initTokenIntrospector(ctx); err != nil {
+		return err
+	}
+	if err := s.initPlacementServiceClient(ctx); err != nil {
+		return err
+	}
+	go s.startTraitSyncLoop(ctx)
 	return nil
 }
 
@@ -191,7 +432,6 @@ func (s *Shim) predicateRemoteHypervisor() predicate.Predicate {
 func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err error) {
 	setupLog.Info("Setting up placement shim with manager")
 
-	// Bind the Start method to the manager.
 	if err := mgr.Add(s); err != nil {
 		return err
 	}
@@ -201,7 +441,6 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 		setupLog.Error(err, "Failed to load placement shim config")
 		return err
 	}
-	// Validate we don't have any weird values in the config.
 	if err := s.config.validate(); err != nil {
 		return err
 	}
@@ -217,6 +456,10 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 	}
 	s.maxBodyLogSize = qty.Value()
 
+	if err := s.compileAuthPolicies(); err != nil {
+		return err
+	}
+
 	// Initialize Prometheus histogram timers for request monitoring.
 	s.downstreamRequestTimer = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cortex_placement_shim_downstream_request_duration_seconds",
@@ -229,14 +472,24 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 		Buckets: prometheus.DefBuckets,
 	}, []string{"method", "pattern", "responsecode"})
 
+	traitsMode := s.config.Features.Traits.orDefault()
+	if traitsMode == FeatureModeHybrid || traitsMode == FeatureModeCRD {
+		s.resourceLocker = resourcelock.NewResourceLocker(
+			s.Client,
+			os.Getenv("POD_NAMESPACE"),
+		)
+	}
+
 	// Check that the provided client is a multicluster client, since we need
 	// that to watch for hypervisors across clusters.
 	mcl, ok := s.Client.(*multicluster.Client)
 	if !ok {
 		return errors.New("provided client must be a multicluster client")
 	}
+	if err := IndexFields(ctx, mcl); err != nil {
+		return fmt.Errorf("failed to set up indexes: %w", err)
+	}
 	bldr := multicluster.BuildController(mcl, mgr)
-	// The hypervisor crd may be distributed across multiple remote clusters.
 	bldr, err = bldr.WatchesMulticluster(&hv1.Hypervisor{},
 		s.handleRemoteHypervisor(),
 		s.predicateRemoteHypervisor(),
@@ -252,6 +505,15 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 // The route pattern for metric labels is read from the request context
 // (set by the measurement middleware in RegisterRoutes).
 func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
+	s.forwardWithHook(w, r, nil)
+}
+
+// forwardWithHook works like forward but accepts an optional intercept
+// callback. When hook is non-nil and the upstream returns a successful
+// response, the hook receives the *http.Response and is responsible for
+// writing the final response to w. If hook is nil the response is copied
+// through unchanged, identical to forward.
+func (s *Shim) forwardWithHook(w http.ResponseWriter, r *http.Request, hook func(w http.ResponseWriter, resp *http.Response)) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("Forwarding request to placement API",
@@ -292,6 +554,15 @@ func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	// Copy all incoming headers.
 	upstreamReq.Header = r.Header.Clone()
 
+	// When a hook will inspect the response body, remove Accept-Encoding
+	// so the upstream returns uncompressed data. Go's Transport would
+	// normally handle this automatically, but we're forwarding the
+	// downstream client's explicit Accept-Encoding, which bypasses the
+	// auto-decompression in net/http.
+	if hook != nil {
+		upstreamReq.Header.Del("Accept-Encoding")
+	}
+
 	pattern, _ := ctx.Value(routePatternKey).(string)
 	start := time.Now()
 	resp, err := s.httpClient.Do(upstreamReq) //nolint:gosec // G704: intentional reverse proxy
@@ -305,7 +576,18 @@ func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// Copy response headers, status code, and body back to the caller.
+	// Observe after the response is received (the hook or copy below
+	// may consume the body, but the upstream latency is already known).
+	s.upstreamRequestTimer.
+		WithLabelValues(r.Method, pattern, strconv.Itoa(resp.StatusCode)).
+		Observe(time.Since(start).Seconds())
+
+	if hook != nil {
+		hook(w, resp)
+		return
+	}
+
+	// Default: copy response headers, status code, and body back to the caller.
 	for k, vs := range resp.Header {
 		for _, v := range vs {
 			w.Header().Add(k, v)
@@ -315,11 +597,6 @@ func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
 	if _, err := io.Copy(w, resp.Body); err != nil {
 		log.Error(err, "failed to copy upstream response body")
 	}
-	// Observe after the body is fully consumed so the duration includes
-	// the time spent streaming the response from upstream.
-	s.upstreamRequestTimer.
-		WithLabelValues(r.Method, pattern, strconv.Itoa(resp.StatusCode)).
-		Observe(time.Since(start).Seconds())
 }
 
 // RegisterRoutes binds all Placement API handlers to the given mux. The

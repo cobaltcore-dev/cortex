@@ -10,16 +10,75 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/external"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/go-logr/logr"
 	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// UsageDBClient is the minimal interface for querying VM usage data from Postgres.
+type UsageDBClient interface {
+	// ListProjectVMs returns all VMs for a project with their flavor data.
+	ListProjectVMs(ctx context.Context, projectID string) ([]VMRow, error)
+}
+
+// VMRow is the result of a joined server+flavor query from Postgres.
+type VMRow struct {
+	ID           string
+	Name         string
+	Status       string
+	Created      string
+	AZ           string
+	Hypervisor   string
+	FlavorName   string
+	FlavorRAM    uint64
+	FlavorVCPUs  uint64
+	FlavorDisk   uint64
+	FlavorExtras string // JSON string of flavor extra_specs
+}
+
+// CommitmentStateWithUsage extends CommitmentState with usage tracking for billing calculations.
+// Used by the report-usage API to track remaining capacity during VM-to-commitment assignment.
+type CommitmentStateWithUsage struct {
+	CommitmentState
+	// RemainingMemoryBytes is the uncommitted capacity left for VM assignment
+	RemainingMemoryBytes int64
+	// AssignedVMs tracks which VMs have been assigned to this commitment
+	AssignedVMs []string
+}
+
+// NewCommitmentStateWithUsage creates a CommitmentStateWithUsage from a CommitmentState.
+func NewCommitmentStateWithUsage(state *CommitmentState) *CommitmentStateWithUsage {
+	return &CommitmentStateWithUsage{
+		CommitmentState:      *state,
+		RemainingMemoryBytes: state.TotalMemoryBytes,
+		AssignedVMs:          []string{},
+	}
+}
+
+// AssignVM attempts to assign a VM to this commitment if there's enough capacity.
+// Returns true if the VM was assigned, false if not enough capacity.
+func (c *CommitmentStateWithUsage) AssignVM(vmUUID string, vmMemoryBytes int64) bool {
+	if c.RemainingMemoryBytes >= vmMemoryBytes {
+		c.RemainingMemoryBytes -= vmMemoryBytes
+		c.AssignedVMs = append(c.AssignedVMs, vmUUID)
+		return true
+	}
+	return false
+}
+
+// HasRemainingCapacity returns true if the commitment has any remaining capacity.
+func (c *CommitmentStateWithUsage) HasRemainingCapacity() bool {
+	return c.RemainingMemoryBytes > 0
+}
 
 // VMUsageInfo contains VM information needed for usage calculation.
 // This is a local view of the VM enriched with flavor group information.
@@ -526,4 +585,79 @@ func countCommitmentStates(m map[string][]*CommitmentStateWithUsage) int {
 		count += len(list)
 	}
 	return count
+}
+
+// dbUsageClient implements UsageDBClient using a lazy-connecting PostgresReader.
+type dbUsageClient struct {
+	k8sClient      client.Client
+	datasourceName string
+	mu             sync.Mutex
+	reader         *external.PostgresReader
+}
+
+// NewDBUsageClient creates a UsageDBClient that lazily connects to Postgres via the named Datasource CRD.
+func NewDBUsageClient(k8sClient client.Client, datasourceName string) UsageDBClient {
+	return &dbUsageClient{k8sClient: k8sClient, datasourceName: datasourceName}
+}
+
+func (c *dbUsageClient) getReader(ctx context.Context) (*external.PostgresReader, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.reader != nil {
+		return c.reader, nil
+	}
+	reader, err := external.NewPostgresReader(ctx, c.k8sClient, c.datasourceName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to datasource %s: %w", c.datasourceName, err)
+	}
+	c.reader = reader
+	return reader, nil
+}
+
+// vmQueryRow is the scan target for the server+flavor JOIN query.
+type vmQueryRow struct {
+	ID           string `db:"id"`
+	Name         string `db:"name"`
+	Status       string `db:"status"`
+	Created      string `db:"created"`
+	AZ           string `db:"az"`
+	Hypervisor   string `db:"hypervisor"`
+	FlavorName   string `db:"flavor_name"`
+	FlavorRAM    uint64 `db:"flavor_ram"`
+	FlavorVCPUs  uint64 `db:"flavor_vcpus"`
+	FlavorDisk   uint64 `db:"flavor_disk"`
+	FlavorExtras string `db:"flavor_extras"`
+}
+
+// ListProjectVMs returns all VMs for a project joined with their flavor data from Postgres.
+func (c *dbUsageClient) ListProjectVMs(ctx context.Context, projectID string) ([]VMRow, error) {
+	reader, err := c.getReader(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	query := `
+		SELECT
+			s.id, s.name, s.status, s.created,
+			s.os_ext_az_availability_zone        AS az,
+			s.os_ext_srv_attr_hypervisor_hostname AS hypervisor,
+			s.flavor_name,
+			COALESCE(f.ram, 0)          AS flavor_ram,
+			COALESCE(f.vcpus, 0)        AS flavor_vcpus,
+			COALESCE(f.disk, 0)         AS flavor_disk,
+			COALESCE(f.extra_specs, '') AS flavor_extras
+		FROM ` + nova.Server{}.TableName() + ` s
+		LEFT JOIN ` + nova.Flavor{}.TableName() + ` f ON f.name = s.flavor_name
+		WHERE s.tenant_id = $1`
+
+	var rows []vmQueryRow
+	if err := reader.Select(ctx, &rows, query, projectID); err != nil {
+		return nil, fmt.Errorf("failed to query VMs for project %s: %w", projectID, err)
+	}
+
+	result := make([]VMRow, len(rows))
+	for i, r := range rows {
+		result[i] = VMRow(r)
+	}
+	return result, nil
 }

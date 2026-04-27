@@ -100,6 +100,7 @@ func TestSyncerMonitor_SkipReasonsPreInitialized(t *testing.T) {
 		SkipReasonInvalidResource,
 		SkipReasonEmptyUUID,
 		SkipReasonNonCompute,
+		SkipReasonNonActive,
 	} {
 		if !presentReasons[reason] {
 			t.Errorf("skip reason %q not pre-initialized in commitments_skipped_total", reason)

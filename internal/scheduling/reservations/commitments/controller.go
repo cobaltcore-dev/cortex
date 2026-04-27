@@ -447,9 +447,12 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 			}
 			return nil, fmt.Errorf("failed to re-fetch reservation: %w", err)
 		}
+		// Capture the re-fetched state as the patch base BEFORE re-applying
+		// the status update. Otherwise MergeFrom(old) would see no diff
+		// and the status patch would be a no-op.
+		old = res.DeepCopy()
 		// Re-apply the status update that was overwritten by the re-fetch.
 		res.Status.CommittedResourceReservation.Allocations = newStatusAllocations
-		old = res.DeepCopy()
 	}
 
 	// Patch Status
@@ -493,15 +496,16 @@ func (r *CommitmentReservationController) getPipelineForFlavorGroup(flavorGroupN
 func (r *CommitmentReservationController) hypervisorToReservations(ctx context.Context, obj client.Object) []reconcile.Request {
 	hvName := obj.GetName()
 	var reservationList v1alpha1.ReservationList
-	if err := r.List(ctx, &reservationList,
-		client.MatchingFields{indexReservationByStatusHost: hvName},
-	); err != nil {
+	if err := r.List(ctx, &reservationList); err != nil {
 		logf.FromContext(ctx).Error(err, "failed to list reservations for hypervisor", "hypervisor", hvName)
 		return nil
 	}
-	requests := make([]reconcile.Request, 0, len(reservationList.Items))
+	requests := make([]reconcile.Request, 0)
 	for _, res := range reservationList.Items {
 		if res.Spec.Type != v1alpha1.ReservationTypeCommittedResource {
+			continue
+		}
+		if res.Status.Host != hvName {
 			continue
 		}
 		requests = append(requests, reconcile.Request{
@@ -554,10 +558,6 @@ var commitmentReservationPredicate = predicate.Funcs{
 	},
 }
 
-// indexReservationByStatusHost is the field index key for Reservation.Status.Host.
-// Used by the Hypervisor→Reservation mapper to efficiently look up reservations on a given host.
-const indexReservationByStatusHost = ".status.host"
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
@@ -567,22 +567,6 @@ func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl
 		return nil
 	})); err != nil {
 		return err
-	}
-
-	// Index reservations by Status.Host so the HV mapper can do O(1) lookups.
-	if err := mgr.GetFieldIndexer().IndexField(
-		context.Background(),
-		&v1alpha1.Reservation{},
-		indexReservationByStatusHost,
-		func(obj client.Object) []string {
-			res := obj.(*v1alpha1.Reservation)
-			if res.Status.Host == "" {
-				return nil
-			}
-			return []string{res.Status.Host}
-		},
-	); err != nil {
-		return fmt.Errorf("failed to index reservations by status host: %w", err)
 	}
 
 	// Use WatchesMulticluster to watch Reservations across all configured clusters
