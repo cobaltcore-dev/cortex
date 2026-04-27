@@ -447,9 +447,12 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 			}
 			return nil, fmt.Errorf("failed to re-fetch reservation: %w", err)
 		}
+		// Capture the re-fetched state as the patch base BEFORE re-applying
+		// the status update. Otherwise MergeFrom(old) would see no diff
+		// and the status patch would be a no-op.
+		old = res.DeepCopy()
 		// Re-apply the status update that was overwritten by the re-fetch.
 		res.Status.CommittedResourceReservation.Allocations = newStatusAllocations
-		old = res.DeepCopy()
 	}
 
 	// Patch Status
