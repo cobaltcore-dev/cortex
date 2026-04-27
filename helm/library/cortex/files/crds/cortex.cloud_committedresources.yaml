@@ -1,0 +1,267 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: committedresources.cortex.cloud
+spec:
+  group: cortex.cloud
+  names:
+    kind: CommittedResource
+    listKind: CommittedResourceList
+    plural: committedresources
+    singular: committedresource
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.projectID
+      name: Project
+      type: string
+    - jsonPath: .spec.flavorGroupName
+      name: FlavorGroup
+      type: string
+    - jsonPath: .spec.resourceType
+      name: ResourceType
+      type: string
+    - jsonPath: .spec.availabilityZone
+      name: AZ
+      type: string
+    - jsonPath: .spec.amount
+      name: Amount
+      type: string
+    - jsonPath: .status.acceptedAmount
+      name: AcceptedAmount
+      type: string
+    - jsonPath: .status.usedAmount
+      name: UsedAmount
+      type: string
+    - jsonPath: .spec.state
+      name: State
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .spec.startTime
+      name: StartTime
+      priority: 1
+      type: date
+    - jsonPath: .spec.endTime
+      name: EndTime
+      priority: 1
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: CommittedResource is the Schema for the committedresources API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: CommittedResourceSpec defines the desired state of CommittedResource,
+            properties:
+              amount:
+                anyOf:
+                - type: integer
+                - type: string
+                description: |-
+                  Amount is the total committed quantity.
+                  memory: MiB expressed in K8s binary SI notation (e.g. "1280Gi", "640Mi").
+                  cores: integer core count (e.g. "40").
+                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                x-kubernetes-int-or-string: true
+              availabilityZone:
+                description: AvailabilityZone specifies the availability zone for
+                  this commitment.
+                type: string
+              commitmentUUID:
+                description: UUID of the commitment this resource corresponds to.
+                type: string
+              confirmedAt:
+                description: ConfirmedAt is when the commitment was confirmed.
+                format: date-time
+                type: string
+              domainID:
+                description: DomainID of the OpenStack domain this commitment belongs
+                  to.
+                type: string
+              endTime:
+                description: EndTime is when Reservation slots expire. Nil for unbounded
+                  commitments with no expiry.
+                format: date-time
+                type: string
+              flavorGroupName:
+                description: FlavorGroupName identifies the flavor group this commitment
+                  targets, e.g. "kvm_v2_hana_s".
+                type: string
+              projectID:
+                description: ProjectID of the OpenStack project this commitment belongs
+                  to.
+                type: string
+              resourceType:
+                description: 'ResourceType identifies the kind of resource committed:
+                  memory drives Reservation slots; cores uses an arithmetic check
+                  only.'
+                enum:
+                - memory
+                - cores
+                type: string
+              schedulingDomain:
+                description: SchedulingDomain specifies the scheduling domain for
+                  this committed resource (e.g., "nova", "ironcore").
+                type: string
+              startTime:
+                description: |-
+                  StartTime is the activation time for Reservation slots.
+                  Nil for guaranteed commitments (slots are active from creation); set to ConfirmedAt for confirmed ones.
+                format: date-time
+                type: string
+              state:
+                description: State is the lifecycle state of the commitment.
+                enum:
+                - planned
+                - pending
+                - guaranteed
+                - confirmed
+                - superseded
+                - expired
+                type: string
+            required:
+            - amount
+            - availabilityZone
+            - commitmentUUID
+            - domainID
+            - flavorGroupName
+            - projectID
+            - resourceType
+            - state
+            type: object
+          status:
+            description: CommittedResourceStatus defines the observed state of CommittedResource.
+            properties:
+              acceptedAmount:
+                anyOf:
+                - type: integer
+                - type: string
+                description: |-
+                  AcceptedAmount is the quantity the controller last successfully provisioned as Reservation slots.
+                  Nil if the spec has never been successfully reconciled.
+                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                x-kubernetes-int-or-string: true
+              acceptedAt:
+                description: AcceptedAt is when the controller last successfully reconciled
+                  the spec into Reservation slots.
+                format: date-time
+                type: string
+              assignedVMs:
+                description: |-
+                  AssignedVMs holds the UUIDs of VMs deterministically assigned to this committed resource.
+                  Populated by the usage reconciler; used to compute UsedAmount and drive the quota controller.
+                items:
+                  type: string
+                type: array
+              conditions:
+                description: Conditions holds the current status conditions.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              lastChanged:
+                description: |-
+                  LastChanged is when the spec was last written by the syncer.
+                  When AcceptedAt is older than LastChanged, the controller has pending work.
+                format: date-time
+                type: string
+              lastReconcileAt:
+                description: LastReconcileAt is when the controller last ran its reconcile
+                  loop for this resource.
+                format: date-time
+                type: string
+              lastUsageReconcileAt:
+                description: LastUsageReconcileAt is when the usage reconciler last
+                  updated AssignedVMs and UsedAmount.
+                format: date-time
+                type: string
+              usedAmount:
+                anyOf:
+                - type: integer
+                - type: string
+                description: |-
+                  UsedAmount is the sum of assigned VM resources expressed in the same units as Spec.Amount.
+                  Populated by the usage reconciler.
+                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                x-kubernetes-int-or-string: true
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
