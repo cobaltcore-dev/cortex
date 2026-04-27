@@ -6,7 +6,20 @@ package placement
 import (
 	"fmt"
 	"net/http"
+
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+// resourceProviderTraitsResponse is the JSON body returned by
+// GET /resource_providers/{uuid}/traits and
+// PUT /resource_providers/{uuid}/traits.
+type resourceProviderTraitsResponse struct {
+	Traits                     []string `json:"traits"`
+	ResourceProviderGeneration int64    `json:"resource_provider_generation"`
+}
 
 // HandleListResourceProviderTraits handles
 // GET /resource_providers/{uuid}/traits requests.
@@ -16,17 +29,53 @@ import (
 // resource_provider_generation for concurrency tracking. Returns 404 if the
 // provider does not exist.
 func (s *Shim) HandleListResourceProviderTraits(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
+	uuid, ok := requiredUUIDPathParam(w, r, "uuid")
+	if !ok {
 		return
 	}
 	switch s.config.Features.ResourceProviderTraits.orDefault() {
 	case FeatureModePassthrough:
 		s.forward(w, r)
-	case FeatureModeHybrid, FeatureModeCRD:
-		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.ResourceProviderTraits), http.StatusNotImplemented)
+	case FeatureModeHybrid:
+		s.forward(w, r)
+	case FeatureModeCRD:
+		s.listResourceProviderTraitsCRD(w, r, uuid)
 	default:
 		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
 	}
+}
+
+func (s *Shim) listResourceProviderTraitsCRD(w http.ResponseWriter, r *http.Request, uuid string) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
+
+	var hvs hv1.HypervisorList
+	err := s.List(ctx, &hvs, client.MatchingFields{idxHypervisorOpenStackId: uuid})
+	if apierrors.IsNotFound(err) || len(hvs.Items) == 0 {
+		log.Info("resource provider not found in kubernetes (crd mode)", "uuid", uuid)
+		http.Error(w, "resource provider not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		log.Error(err, "failed to list hypervisors with OpenStack ID index")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	if len(hvs.Items) > 1 {
+		log.Error(nil, "multiple hypervisors found with the same OpenStack ID", "uuid", uuid)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	hv := hvs.Items[0]
+	traits := hv.Status.Traits
+	if traits == nil {
+		traits = []string{}
+	}
+	s.writeJSON(w, http.StatusOK, resourceProviderTraitsResponse{
+		Traits:                     traits,
+		ResourceProviderGeneration: hv.Generation,
+	})
 }
 
 // HandleUpdateResourceProviderTraits handles
@@ -46,8 +95,10 @@ func (s *Shim) HandleUpdateResourceProviderTraits(w http.ResponseWriter, r *http
 	switch s.config.Features.ResourceProviderTraits.orDefault() {
 	case FeatureModePassthrough:
 		s.forward(w, r)
-	case FeatureModeHybrid, FeatureModeCRD:
-		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.ResourceProviderTraits), http.StatusNotImplemented)
+	case FeatureModeHybrid:
+		s.forward(w, r)
+	case FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for resource provider trait writes", s.config.Features.ResourceProviderTraits), http.StatusNotImplemented)
 	default:
 		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
 	}
@@ -69,8 +120,10 @@ func (s *Shim) HandleDeleteResourceProviderTraits(w http.ResponseWriter, r *http
 	switch s.config.Features.ResourceProviderTraits.orDefault() {
 	case FeatureModePassthrough:
 		s.forward(w, r)
-	case FeatureModeHybrid, FeatureModeCRD:
-		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", s.config.Features.ResourceProviderTraits), http.StatusNotImplemented)
+	case FeatureModeHybrid:
+		s.forward(w, r)
+	case FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for resource provider trait writes", s.config.Features.ResourceProviderTraits), http.StatusNotImplemented)
 	default:
 		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
 	}

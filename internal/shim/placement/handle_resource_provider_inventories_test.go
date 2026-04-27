@@ -137,3 +137,125 @@ func TestHandleDeleteResourceProviderInventory(t *testing.T) {
 		}
 	})
 }
+
+func TestHandleResourceProviderInventories_HybridMode(t *testing.T) {
+	down, up := newTestTimers()
+	s := &Shim{
+		config: config{
+			PlacementURL: "http://should-not-be-called:1234",
+			Features:     featuresConfig{Inventories: FeatureModeHybrid},
+		},
+		maxBodyLogSize:         4096,
+		downstreamRequestTimer: down,
+		upstreamRequestTimer:   up,
+	}
+	t.Run("GET list returns 501", func(t *testing.T) {
+		w := serveHandler(t, "GET", "/resource_providers/{uuid}/inventories",
+			s.HandleListResourceProviderInventories,
+			"/resource_providers/"+validUUID+"/inventories")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("PUT list returns 501", func(t *testing.T) {
+		w := serveHandler(t, "PUT", "/resource_providers/{uuid}/inventories",
+			s.HandleUpdateResourceProviderInventories,
+			"/resource_providers/"+validUUID+"/inventories")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("DELETE list returns 501", func(t *testing.T) {
+		w := serveHandler(t, "DELETE", "/resource_providers/{uuid}/inventories",
+			s.HandleDeleteResourceProviderInventories,
+			"/resource_providers/"+validUUID+"/inventories")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("GET single returns 501", func(t *testing.T) {
+		w := serveHandler(t, "GET", "/resource_providers/{uuid}/inventories/{resource_class}",
+			s.HandleShowResourceProviderInventory,
+			"/resource_providers/"+validUUID+"/inventories/VCPU")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("PUT single returns 501", func(t *testing.T) {
+		w := serveHandler(t, "PUT", "/resource_providers/{uuid}/inventories/{resource_class}",
+			s.HandleUpdateResourceProviderInventory,
+			"/resource_providers/"+validUUID+"/inventories/VCPU")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("DELETE single returns 501", func(t *testing.T) {
+		w := serveHandler(t, "DELETE", "/resource_providers/{uuid}/inventories/{resource_class}",
+			s.HandleDeleteResourceProviderInventory,
+			"/resource_providers/"+validUUID+"/inventories/VCPU")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+}
+
+func TestHandleResourceProviderInventories_CRDMode(t *testing.T) {
+	down, up := newTestTimers()
+	s := &Shim{
+		config: config{
+			PlacementURL: "http://should-not-be-called:1234",
+			Features:     featuresConfig{Inventories: FeatureModeCRD},
+		},
+		maxBodyLogSize:         4096,
+		downstreamRequestTimer: down,
+		upstreamRequestTimer:   up,
+	}
+	t.Run("GET list returns 501", func(t *testing.T) {
+		w := serveHandler(t, "GET", "/resource_providers/{uuid}/inventories",
+			s.HandleListResourceProviderInventories,
+			"/resource_providers/"+validUUID+"/inventories")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("PUT list returns 501", func(t *testing.T) {
+		w := serveHandler(t, "PUT", "/resource_providers/{uuid}/inventories",
+			s.HandleUpdateResourceProviderInventories,
+			"/resource_providers/"+validUUID+"/inventories")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("DELETE list returns 501", func(t *testing.T) {
+		w := serveHandler(t, "DELETE", "/resource_providers/{uuid}/inventories",
+			s.HandleDeleteResourceProviderInventories,
+			"/resource_providers/"+validUUID+"/inventories")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("GET single returns 501", func(t *testing.T) {
+		w := serveHandler(t, "GET", "/resource_providers/{uuid}/inventories/{resource_class}",
+			s.HandleShowResourceProviderInventory,
+			"/resource_providers/"+validUUID+"/inventories/VCPU")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("PUT single returns 501", func(t *testing.T) {
+		w := serveHandler(t, "PUT", "/resource_providers/{uuid}/inventories/{resource_class}",
+			s.HandleUpdateResourceProviderInventory,
+			"/resource_providers/"+validUUID+"/inventories/VCPU")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("DELETE single returns 501", func(t *testing.T) {
+		w := serveHandler(t, "DELETE", "/resource_providers/{uuid}/inventories/{resource_class}",
+			s.HandleDeleteResourceProviderInventory,
+			"/resource_providers/"+validUUID+"/inventories/VCPU")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+}
