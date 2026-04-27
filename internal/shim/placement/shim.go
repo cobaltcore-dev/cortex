@@ -259,11 +259,11 @@ type Shim struct {
 	// resourceLocker serializes writes to the custom traits ConfigMap
 	// across replicas using a Kubernetes Lease.
 	resourceLocker *resourcelock.ResourceLocker
-	// keystoneProvider is an authenticated gophercloud provider used by
-	// background tasks (trait sync) to obtain a valid X-Auth-Token for
-	// upstream placement requests. Nil when Keystone credentials are not
-	// configured.
-	keystoneProvider *gophercloud.ProviderClient
+	// placementServiceClient is an authenticated gophercloud service client
+	// used by background tasks (trait sync) to make requests to upstream
+	// placement with automatic token management (including reauth on 401).
+	// Nil when Keystone credentials are not configured.
+	placementServiceClient *gophercloud.ServiceClient
 }
 
 // Describe implements prometheus.Collector.
@@ -329,11 +329,14 @@ func (s *Shim) initHTTPClient(ctx context.Context) error {
 	return nil
 }
 
-// initKeystoneProvider creates an authenticated gophercloud ProviderClient
-// that background tasks (e.g. the trait sync loop) use to obtain a valid
-// X-Auth-Token for upstream placement requests. Skipped when Keystone
-// credentials are not configured.
-func (s *Shim) initKeystoneProvider(ctx context.Context) error {
+// initPlacementServiceClient creates an authenticated gophercloud
+// ServiceClient that background tasks (e.g. the trait sync loop) use to
+// make requests to upstream placement with automatic token management.
+// After initial Keystone authentication the provider's HTTP transport is
+// replaced with the shim's own transport (which carries SSO TLS certs)
+// so that subsequent placement requests use the correct transport.
+// Skipped when Keystone credentials are not configured.
+func (s *Shim) initPlacementServiceClient(ctx context.Context) error {
 	if s.config.KeystoneURL == "" || s.config.OSUsername == "" || s.config.OSPassword == "" {
 		setupLog.Info("Keystone credentials not configured, background tasks will make unauthenticated upstream requests")
 		return nil
@@ -357,8 +360,17 @@ func (s *Shim) initKeystoneProvider(ctx context.Context) error {
 	if err := openstack.Authenticate(ctx, provider, authOpts); err != nil {
 		return fmt.Errorf("authenticating with Keystone for upstream auth: %w", err)
 	}
-	s.keystoneProvider = provider
-	setupLog.Info("Keystone provider initialized for background upstream requests")
+	// After successful Keystone auth, switch the provider's HTTP transport
+	// to the shim's transport so placement requests use SSO TLS certs.
+	if s.httpClient != nil && s.httpClient.Transport != nil {
+		provider.HTTPClient.Transport = s.httpClient.Transport
+	}
+	s.placementServiceClient = &gophercloud.ServiceClient{
+		ProviderClient: provider,
+		Endpoint:       s.config.PlacementURL,
+		Type:           "placement",
+	}
+	setupLog.Info("Placement service client initialized for background upstream requests")
 	return nil
 }
 
@@ -371,7 +383,7 @@ func (s *Shim) Start(ctx context.Context) error {
 	if err := s.initTokenIntrospector(ctx); err != nil {
 		return err
 	}
-	if err := s.initKeystoneProvider(ctx); err != nil {
+	if err := s.initPlacementServiceClient(ctx); err != nil {
 		return err
 	}
 	go s.startTraitSyncLoop(ctx)

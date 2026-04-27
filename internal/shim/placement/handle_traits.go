@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/gophercloud/gophercloud/v2"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -527,40 +528,30 @@ func (s *Shim) startTraitSyncLoop(ctx context.Context) {
 
 // syncTraitsFromUpstream fetches GET /traits from upstream placement and
 // writes the result into the static ConfigMap so that the shim's local
-// view stays in sync with upstream.
+// view stays in sync with upstream. Uses the gophercloud ServiceClient
+// for automatic token management (including reauth on 401).
 func (s *Shim) syncTraitsFromUpstream(ctx context.Context, log logr.Logger) {
-	if s.httpClient == nil {
-		log.V(1).Info("skipping upstream trait sync, no http client configured")
+	if s.placementServiceClient == nil {
+		log.V(1).Info("skipping upstream trait sync, no placement service client configured")
 		return
 	}
-	u, err := url.Parse(s.config.PlacementURL)
-	if err != nil {
-		log.Error(err, "failed to parse placement URL for trait sync")
-		return
-	}
-	u.Path, err = url.JoinPath(u.Path, "/traits")
+	u, err := url.JoinPath(s.placementServiceClient.Endpoint, "/traits")
 	if err != nil {
 		log.Error(err, "failed to build upstream traits URL")
 		return
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), http.NoBody)
+	resp, err := s.placementServiceClient.Request(ctx, http.MethodGet, u, &gophercloud.RequestOpts{
+		OkCodes: []int{http.StatusOK},
+		MoreHeaders: map[string]string{
+			"OpenStack-API-Version": "placement 1.6",
+		},
+		KeepResponseBody: true,
+	})
 	if err != nil {
-		log.Error(err, "failed to create upstream trait list request")
-		return
-	}
-	if s.keystoneProvider != nil {
-		req.Header.Set("X-Auth-Token", s.keystoneProvider.TokenID)
-	}
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		log.Info("upstream trait sync failed, upstream may be down", "error", err.Error())
+		log.Info("upstream trait sync failed", "error", err.Error())
 		return
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		log.Info("upstream trait sync got unexpected status", "status", resp.StatusCode)
-		return
-	}
 	var body traitsListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		log.Error(err, "failed to decode upstream trait list")
