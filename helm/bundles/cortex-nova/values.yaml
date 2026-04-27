@@ -204,7 +204,7 @@ cortex-scheduling-controllers:
     # Prevents creating multiple new reservations on the same hypervisor per cycle
     limitOneNewReservationPerHypervisor: false
     # Size failover reservations based on LargestFlavor in the flavor group
-    useFlavorGroupResources: true
+    useFlavorGroupResources: false
 
 cortex-knowledge-controllers:
   <<: *cortex
