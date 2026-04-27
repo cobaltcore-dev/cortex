@@ -548,6 +548,9 @@ func (s *Shim) syncTraitsFromUpstream(ctx context.Context, log logr.Logger) {
 		log.Error(err, "failed to create upstream trait list request")
 		return
 	}
+	if s.keystoneProvider != nil {
+		req.Header.Set("X-Auth-Token", s.keystoneProvider.TokenID)
+	}
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		log.Info("upstream trait sync failed, upstream may be down", "error", err.Error())

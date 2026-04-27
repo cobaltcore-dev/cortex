@@ -20,6 +20,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/resourcelock"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/api/resource"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -257,6 +259,11 @@ type Shim struct {
 	// resourceLocker serializes writes to the custom traits ConfigMap
 	// across replicas using a Kubernetes Lease.
 	resourceLocker *resourcelock.ResourceLocker
+	// keystoneProvider is an authenticated gophercloud provider used by
+	// background tasks (trait sync) to obtain a valid X-Auth-Token for
+	// upstream placement requests. Nil when Keystone credentials are not
+	// configured.
+	keystoneProvider *gophercloud.ProviderClient
 }
 
 // Describe implements prometheus.Collector.
@@ -322,6 +329,39 @@ func (s *Shim) initHTTPClient(ctx context.Context) error {
 	return nil
 }
 
+// initKeystoneProvider creates an authenticated gophercloud ProviderClient
+// that background tasks (e.g. the trait sync loop) use to obtain a valid
+// X-Auth-Token for upstream placement requests. Skipped when Keystone
+// credentials are not configured.
+func (s *Shim) initKeystoneProvider(ctx context.Context) error {
+	if s.config.KeystoneURL == "" || s.config.OSUsername == "" || s.config.OSPassword == "" {
+		setupLog.Info("Keystone credentials not configured, background tasks will make unauthenticated upstream requests")
+		return nil
+	}
+	authOpts := gophercloud.AuthOptions{
+		IdentityEndpoint: s.config.KeystoneURL,
+		Username:         s.config.OSUsername,
+		DomainName:       s.config.OSUserDomainName,
+		Password:         s.config.OSPassword,
+		AllowReauth:      true,
+		Scope: &gophercloud.AuthScope{
+			ProjectName: s.config.OSProjectName,
+			DomainName:  s.config.OSProjectDomainName,
+		},
+	}
+	provider, err := openstack.NewClient(s.config.KeystoneURL)
+	if err != nil {
+		return fmt.Errorf("creating Keystone provider for upstream auth: %w", err)
+	}
+	provider.HTTPClient = http.Client{Timeout: 30 * time.Second}
+	if err := openstack.Authenticate(ctx, provider, authOpts); err != nil {
+		return fmt.Errorf("authenticating with Keystone for upstream auth: %w", err)
+	}
+	s.keystoneProvider = provider
+	setupLog.Info("Keystone provider initialized for background upstream requests")
+	return nil
+}
+
 // Start is called after the manager has started and the cache is running.
 func (s *Shim) Start(ctx context.Context) error {
 	setupLog.Info("Starting placement shim")
@@ -329,6 +369,9 @@ func (s *Shim) Start(ctx context.Context) error {
 		return err
 	}
 	if err := s.initTokenIntrospector(ctx); err != nil {
+		return err
+	}
+	if err := s.initKeystoneProvider(ctx); err != nil {
 		return err
 	}
 	go s.startTraitSyncLoop(ctx)
