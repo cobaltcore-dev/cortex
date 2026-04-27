@@ -286,11 +286,83 @@ func TestKVMFailoverReservationConsolidationOpts_Defaults(t *testing.T) {
 }
 
 func TestKVMFailoverReservationConsolidationOpts_Validate(t *testing.T) {
-	opts := KVMFailoverReservationConsolidationOpts{
-		TotalCountWeight: testlib.Ptr(2.0),
-		SameSpecPenalty:  testlib.Ptr(0.5),
+	tests := []struct {
+		name    string
+		opts    KVMFailoverReservationConsolidationOpts
+		wantErr string
+	}{
+		{
+			name: "valid: both set, p < w",
+			opts: KVMFailoverReservationConsolidationOpts{
+				TotalCountWeight: testlib.Ptr(2.0),
+				SameSpecPenalty:  testlib.Ptr(0.5),
+			},
+		},
+		{
+			name: "valid: defaults (nil)",
+			opts: KVMFailoverReservationConsolidationOpts{},
+		},
+		{
+			name: "valid: both zero",
+			opts: KVMFailoverReservationConsolidationOpts{
+				TotalCountWeight: testlib.Ptr(0.0),
+				SameSpecPenalty:  testlib.Ptr(0.0),
+			},
+		},
+		{
+			name: "invalid: negative totalCountWeight",
+			opts: KVMFailoverReservationConsolidationOpts{
+				TotalCountWeight: testlib.Ptr(-1.0),
+			},
+			wantErr: "totalCountWeight must be non-negative",
+		},
+		{
+			name: "invalid: negative sameSpecPenalty",
+			opts: KVMFailoverReservationConsolidationOpts{
+				SameSpecPenalty: testlib.Ptr(-0.1),
+			},
+			wantErr: "sameSpecPenalty must be non-negative",
+		},
+		{
+			name: "invalid: p >= w",
+			opts: KVMFailoverReservationConsolidationOpts{
+				TotalCountWeight: testlib.Ptr(1.0),
+				SameSpecPenalty:  testlib.Ptr(1.0),
+			},
+			wantErr: "sameSpecPenalty must be less than totalCountWeight",
+		},
+		{
+			name: "invalid: w=0 with p>0 (default penalty with zero weight)",
+			opts: KVMFailoverReservationConsolidationOpts{
+				TotalCountWeight: testlib.Ptr(0.0),
+				// SameSpecPenalty defaults to 0.1
+			},
+			wantErr: "sameSpecPenalty must be zero when totalCountWeight is zero",
+		},
+		{
+			name: "invalid: w=0 with explicit p>0",
+			opts: KVMFailoverReservationConsolidationOpts{
+				TotalCountWeight: testlib.Ptr(0.0),
+				SameSpecPenalty:  testlib.Ptr(0.5),
+			},
+			wantErr: "sameSpecPenalty must be zero when totalCountWeight is zero",
+		},
 	}
-	if err := opts.Validate(); err != nil {
-		t.Errorf("expected no error, got %v", err)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.opts.Validate()
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Errorf("expected no error, got %v", err)
+				}
+			} else {
+				if err == nil {
+					t.Errorf("expected error %q, got nil", tt.wantErr)
+				} else if err.Error() != tt.wantErr {
+					t.Errorf("expected error %q, got %q", tt.wantErr, err.Error())
+				}
+			}
+		})
 	}
 }

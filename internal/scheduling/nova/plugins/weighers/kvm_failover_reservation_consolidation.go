@@ -35,6 +35,9 @@ func (o KVMFailoverReservationConsolidationOpts) Validate() error {
 	if p < 0 {
 		return errors.New("sameSpecPenalty must be non-negative")
 	}
+	if w == 0 && p > 0 {
+		return errors.New("sameSpecPenalty must be zero when totalCountWeight is zero")
+	}
 	if w > 0 && p >= w {
 		return errors.New("sameSpecPenalty must be less than totalCountWeight")
 	}
