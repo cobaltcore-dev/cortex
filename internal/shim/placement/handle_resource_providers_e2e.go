@@ -65,8 +65,8 @@ func e2eTestResourceProviders(ctx context.Context, cl client.Client) error {
 
 	// ==================== Phase 2: KVM path ====================
 
-	if !config.Features.EnableResourceProviders {
-		log.Info("Skipping KVM resource provider e2e tests because enableResourceProviders is false")
+	if config.Features.ResourceProviders.orDefault() == FeatureModePassthrough {
+		log.Info("Skipping KVM resource provider e2e tests because resourceProviders mode is passthrough")
 	} else {
 		log.Info("=== KVM path: hypervisor-backed resource provider tests ===")
 		if err := e2eKVMResourceProviders(ctx, sc, cl); err != nil {

@@ -55,7 +55,7 @@ func newTraitShim(t *testing.T, staticTraits []string, customTraits ...string) *
 		Client: cl,
 		config: config{
 			PlacementURL: "http://should-not-be-called:1234",
-			Features:     featuresConfig{EnableTraits: true},
+			Features:     featuresConfig{Traits: FeatureModeCRD},
 			Traits:       &traitsConfig{ConfigMapName: "test-cm"},
 		},
 		maxBodyLogSize:         4096,
@@ -65,7 +65,7 @@ func newTraitShim(t *testing.T, staticTraits []string, customTraits ...string) *
 	}
 }
 
-// --- Passthrough tests (enableTraits=false) ---
+// --- Passthrough mode tests ---
 
 func TestHandleListTraitsPassthrough(t *testing.T) {
 	var gotPath string
@@ -107,7 +107,7 @@ func TestHandleDeleteTraitPassthrough(t *testing.T) {
 	}
 }
 
-// --- Handler tests (enableTraits=true) ---
+// --- CRD mode handler tests ---
 
 func TestHandleListTraitsLocal(t *testing.T) {
 	s := newTraitShim(t, []string{"CUSTOM_FOO", "HW_CPU_X86_AVX2", "STORAGE_DISK_SSD"})

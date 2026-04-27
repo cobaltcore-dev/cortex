@@ -19,13 +19,13 @@ import (
 //
 // Phase 1 — read-only (always runs):
 //
-//  1. GET /traits — list all traits; when forwarding to upstream (enableTraits
-//     is false) verify at least one trait exists.
+//  1. GET /traits — list all traits; when traits mode is passthrough
+//     (forwarding to upstream) verify at least one trait exists.
 //  2. GET /traits/{name} — show a known trait from the list and verify 200
 //     (skipped when the trait list is empty).
 //  3. GET /traits/{name} — show a nonexistent trait and verify 404.
 //
-// Phase 2 — CRUD (only when enableTraits is true):
+// Phase 2 — CRUD (only when traits mode is non-passthrough):
 //
 //  1. Pre-cleanup: DELETE any leftover test trait (ignore 404).
 //  2. PUT /traits/{name} — create a custom test trait → 201.
@@ -80,10 +80,10 @@ func e2eTestTraits(ctx context.Context, _ client.Client) error {
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
 		return fmt.Errorf("failed to decode GET /traits response: %w", err)
 	}
-	// When traits are served locally (enableTraits=true) the static list may
+	// When traits are served locally (hybrid or crd mode) the static list may
 	// be empty. Only require at least one trait when forwarding to upstream
 	// placement, which always has standard traits.
-	if !config.Features.EnableTraits && len(listResp.Traits) == 0 {
+	if config.Features.Traits.orDefault() == FeatureModePassthrough && len(listResp.Traits) == 0 {
 		return errors.New("GET /traits: expected at least one trait, got 0")
 	}
 	log.Info("Successfully retrieved traits", "count", len(listResp.Traits))
@@ -133,12 +133,12 @@ func e2eTestTraits(ctx context.Context, _ client.Client) error {
 
 	// ==================== Phase 2: CRUD tests (feature-gated) ====================
 
-	if !config.Features.EnableTraits {
-		log.Info("Skipping trait CRUD e2e tests because enableTraits is false")
+	if config.Features.Traits.orDefault() == FeatureModePassthrough {
+		log.Info("Skipping trait CRUD e2e tests because traits mode is passthrough")
 		return nil
 	}
 
-	log.Info("=== Phase 2: CRUD trait tests (enableTraits=true) ===")
+	log.Info("=== Phase 2: CRUD trait tests (traits mode non-passthrough) ===")
 
 	const testTrait = "CUSTOM_CORTEX_E2E_TRAIT"
 
