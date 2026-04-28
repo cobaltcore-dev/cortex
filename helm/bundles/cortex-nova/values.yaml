@@ -134,6 +134,12 @@ cortex-scheduling-controllers:
       - committed-resource-reservations-controller
       - failover-reservations-controller
       - capacity-controller
+    # Pipeline used for the empty-state capacity probe (ignores allocations and reservations).
+    capacityTotalPipeline: "kvm-report-capacity"
+    # Pipeline used for the current-state capacity probe (considers current VM allocations).
+    capacityPlaceablePipeline: "kvm-general-purpose-load-balancing"
+    # How often the capacity controller re-runs its scheduler probes.
+    capacityReconcileInterval: 5m
     enabledTasks:
       - nova-history-cleanup-task
     # If true, the external scheduler API will limit the list of hosts in its
