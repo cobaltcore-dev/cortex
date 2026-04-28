@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -353,32 +354,36 @@ func e2eCRDResourceProviderAggregates(ctx context.Context, sc *gophercloud.Servi
 	}
 
 	// Test GET — should return the seeded aggregates.
+	// Poll because the shim's informer cache may take a moment to observe the update.
 	log.Info("Testing GET /resource_providers/{uuid}/aggregates (CRD)", "uuid", kvmUUID)
-	req, err := http.NewRequestWithContext(ctx,
-		http.MethodGet, sc.Endpoint+"/resource_providers/"+kvmUUID+"/aggregates", http.NoBody)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("X-Auth-Token", sc.TokenID)
-	req.Header.Set("OpenStack-API-Version", "placement 1.19")
-	req.Header.Set("Accept", "application/json")
-	resp, err := sc.HTTPClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("GET CRD aggregates: expected 200, got %d", resp.StatusCode)
-	}
 	var aggResp struct {
 		Aggregates                 []string `json:"aggregates"`
 		ResourceProviderGeneration int64    `json:"resource_provider_generation"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&aggResp); err != nil {
-		return fmt.Errorf("failed to decode CRD aggregates response: %w", err)
-	}
-	if !slices.Contains(aggResp.Aggregates, testAgg1UUID) || !slices.Contains(aggResp.Aggregates, testAgg2UUID) {
-		return fmt.Errorf("expected aggregates %v and %v in %v", testAgg1UUID, testAgg2UUID, aggResp.Aggregates)
+	if err := e2ePollUntil(ctx, 10*time.Second, func() (bool, error) {
+		req, err := http.NewRequestWithContext(ctx,
+			http.MethodGet, sc.Endpoint+"/resource_providers/"+kvmUUID+"/aggregates", http.NoBody)
+		if err != nil {
+			return false, err
+		}
+		req.Header.Set("X-Auth-Token", sc.TokenID)
+		req.Header.Set("OpenStack-API-Version", "placement 1.19")
+		req.Header.Set("Accept", "application/json")
+		resp, err := sc.HTTPClient.Do(req)
+		if err != nil {
+			return false, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return false, fmt.Errorf("GET CRD aggregates: expected 200, got %d", resp.StatusCode)
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&aggResp); err != nil {
+			return false, fmt.Errorf("failed to decode CRD aggregates response: %w", err)
+		}
+		return slices.Contains(aggResp.Aggregates, testAgg1UUID) &&
+			slices.Contains(aggResp.Aggregates, testAgg2UUID), nil
+	}); err != nil {
+		return fmt.Errorf("waiting for seeded aggregates: %w (got %v)", err, aggResp.Aggregates)
 	}
 	log.Info("Verified GET returns seeded aggregates from CRD",
 		"aggregates", aggResp.Aggregates, "generation", aggResp.ResourceProviderGeneration)
@@ -392,7 +397,7 @@ func e2eCRDResourceProviderAggregates(ctx context.Context, sc *gophercloud.Servi
 	if err != nil {
 		return err
 	}
-	req, err = http.NewRequestWithContext(ctx,
+	req, err := http.NewRequestWithContext(ctx,
 		http.MethodPut, sc.Endpoint+"/resource_providers/"+kvmUUID+"/aggregates",
 		bytes.NewReader(putBody))
 	if err != nil {
@@ -402,7 +407,7 @@ func e2eCRDResourceProviderAggregates(ctx context.Context, sc *gophercloud.Servi
 	req.Header.Set("OpenStack-API-Version", "placement 1.19")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	resp, err = sc.HTTPClient.Do(req)
+	resp, err := sc.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}

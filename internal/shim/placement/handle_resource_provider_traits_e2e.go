@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -372,32 +373,36 @@ func e2eCRDResourceProviderTraits(ctx context.Context, sc *gophercloud.ServiceCl
 	}
 
 	// Test GET — should return the seeded traits.
+	// Poll because the shim's informer cache may take a moment to observe the update.
 	log.Info("Testing GET /resource_providers/{uuid}/traits (CRD)", "uuid", kvmUUID)
-	req, err := http.NewRequestWithContext(ctx,
-		http.MethodGet, sc.Endpoint+"/resource_providers/"+kvmUUID+"/traits", http.NoBody)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("X-Auth-Token", sc.TokenID)
-	req.Header.Set("OpenStack-API-Version", "placement 1.6")
-	req.Header.Set("Accept", "application/json")
-	resp, err := sc.HTTPClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("GET CRD traits: expected 200, got %d", resp.StatusCode)
-	}
 	var traitsResp struct {
 		Traits                     []string `json:"traits"`
 		ResourceProviderGeneration int64    `json:"resource_provider_generation"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&traitsResp); err != nil {
-		return fmt.Errorf("failed to decode CRD traits response: %w", err)
-	}
-	if !slices.Contains(traitsResp.Traits, testTrait1) || !slices.Contains(traitsResp.Traits, testTrait2) {
-		return fmt.Errorf("expected traits %v and %v in %v", testTrait1, testTrait2, traitsResp.Traits)
+	if err := e2ePollUntil(ctx, 10*time.Second, func() (bool, error) {
+		req, err := http.NewRequestWithContext(ctx,
+			http.MethodGet, sc.Endpoint+"/resource_providers/"+kvmUUID+"/traits", http.NoBody)
+		if err != nil {
+			return false, err
+		}
+		req.Header.Set("X-Auth-Token", sc.TokenID)
+		req.Header.Set("OpenStack-API-Version", "placement 1.6")
+		req.Header.Set("Accept", "application/json")
+		resp, err := sc.HTTPClient.Do(req)
+		if err != nil {
+			return false, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return false, fmt.Errorf("GET CRD traits: expected 200, got %d", resp.StatusCode)
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&traitsResp); err != nil {
+			return false, fmt.Errorf("failed to decode CRD traits response: %w", err)
+		}
+		return slices.Contains(traitsResp.Traits, testTrait1) &&
+			slices.Contains(traitsResp.Traits, testTrait2), nil
+	}); err != nil {
+		return fmt.Errorf("waiting for seeded traits: %w (got %v)", err, traitsResp.Traits)
 	}
 	log.Info("Verified GET returns seeded traits from CRD",
 		"traits", traitsResp.Traits, "generation", traitsResp.ResourceProviderGeneration)
@@ -411,7 +416,7 @@ func e2eCRDResourceProviderTraits(ctx context.Context, sc *gophercloud.ServiceCl
 	if err != nil {
 		return err
 	}
-	req, err = http.NewRequestWithContext(ctx,
+	req, err := http.NewRequestWithContext(ctx,
 		http.MethodPut, sc.Endpoint+"/resource_providers/"+kvmUUID+"/traits",
 		bytes.NewReader(putBody))
 	if err != nil {
@@ -421,7 +426,7 @@ func e2eCRDResourceProviderTraits(ctx context.Context, sc *gophercloud.ServiceCl
 	req.Header.Set("OpenStack-API-Version", "placement 1.6")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	resp, err = sc.HTTPClient.Do(req)
+	resp, err := sc.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
