@@ -90,6 +90,18 @@ type CommittedResourceSpec struct {
 	// +kubebuilder:validation:Enum=planned;pending;guaranteed;confirmed;superseded;expired
 	// +kubebuilder:validation:Required
 	State CommitmentStatus `json:"state"`
+
+	// AllowRejection controls what the CommittedResource controller does when placement fails
+	// for a guaranteed or confirmed commitment.
+	// true  — controller may reject: on failure, child Reservations are rolled back and the CR
+	//         is marked Rejected. Use this when the caller is making a first-time placement
+	//         decision and a "no" answer is acceptable (e.g. the change-commitments API).
+	// false — controller must retry: on failure, existing child Reservations are kept and the
+	//         CR is set to Reserving so the controller retries later. Use this when the caller
+	//         is restoring already-committed state that Cortex must honour (e.g. the syncer).
+	// Only meaningful for state=guaranteed or state=confirmed; ignored for all other states.
+	// +kubebuilder:validation:Optional
+	AllowRejection bool `json:"allowRejection,omitempty"`
 }
 
 // CommittedResourceStatus defines the observed state of CommittedResource.

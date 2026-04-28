@@ -282,9 +282,8 @@ func TestCRLifecycle_Deletion(t *testing.T) {
 		t.Fatalf("create CR: %v", err)
 	}
 
-	// First reconcile adds finalizer. Fake client Delete() only sets DeletionTimestamp
-	// when finalizers are present, so we need the finalizer in place first.
-	env.reconcileCR(t, cr.Name)
+	// newTestCommittedResource pre-populates the finalizer, so Delete() will set
+	// DeletionTimestamp without needing a prior reconcile.
 
 	// Pre-create a child Reservation to verify it gets cleaned up on deletion.
 	child := &v1alpha1.Reservation{

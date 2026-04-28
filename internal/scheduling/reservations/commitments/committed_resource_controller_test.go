@@ -6,7 +6,6 @@ package commitments
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"testing"
 	"time"
 
@@ -27,10 +26,15 @@ import (
 // Helpers
 // ============================================================================
 
-// newTestCommittedResource returns a CommittedResource with sensible defaults for testing.
+// newTestCommittedResource returns a CommittedResource with sensible defaults.
+// The finalizer is pre-populated so tests can call Reconcile once without a
+// separate finalizer-add round-trip.
 func newTestCommittedResource(name string, state v1alpha1.CommitmentStatus) *v1alpha1.CommittedResource {
 	return &v1alpha1.CommittedResource{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Finalizers: []string{crFinalizer},
+		},
 		Spec: v1alpha1.CommittedResourceSpec{
 			CommitmentUUID:   "test-uuid-1234",
 			FlavorGroupName:  "test-group",
@@ -44,8 +48,8 @@ func newTestCommittedResource(name string, state v1alpha1.CommitmentStatus) *v1a
 	}
 }
 
-// newTestFlavorKnowledge returns a Knowledge CRD with a single flavor group for testing.
-// The flavor group has one flavor of 4 GiB so a 4 GiB commitment produces exactly one slot.
+// newTestFlavorKnowledge returns a Knowledge CRD with a single 4 GiB flavor so
+// a 4 GiB commitment produces exactly one slot.
 func newTestFlavorKnowledge() *v1alpha1.Knowledge {
 	raw, err := json.Marshal(map[string]any{
 		"features": []map[string]any{
@@ -109,7 +113,7 @@ func reconcileReq(name string) ctrl.Request {
 	return ctrl.Request{NamespacedName: types.NamespacedName{Name: name}}
 }
 
-// assertCondition checks that the CR has the expected Ready condition status and reason.
+// assertCondition checks the Ready condition status and reason on a CommittedResource.
 func assertCondition(t *testing.T, k8sClient client.Client, crName string, expectedStatus metav1.ConditionStatus, expectedReason string) {
 	t.Helper()
 	var cr v1alpha1.CommittedResource
@@ -129,8 +133,9 @@ func assertCondition(t *testing.T, k8sClient client.Client, crName string, expec
 	}
 }
 
-// countChildReservations returns the number of Reservation CRDs whose name starts with the CR name prefix.
-func countChildReservations(t *testing.T, k8sClient client.Client, crName string) int {
+// countChildReservations counts Reservation CRDs owned by the given CommitmentUUID,
+// using the same identity predicate as the controller.
+func countChildReservations(t *testing.T, k8sClient client.Client, commitmentUUID string) int {
 	t.Helper()
 	var list v1alpha1.ReservationList
 	if err := k8sClient.List(context.Background(), &list, client.MatchingLabels{
@@ -138,10 +143,10 @@ func countChildReservations(t *testing.T, k8sClient client.Client, crName string
 	}); err != nil {
 		t.Fatalf("failed to list reservations: %v", err)
 	}
-	prefix := crName + "-"
 	count := 0
 	for _, r := range list.Items {
-		if strings.HasPrefix(r.Name, prefix) {
+		if r.Spec.CommittedResourceReservation != nil &&
+			r.Spec.CommittedResourceReservation.CommitmentUUID == commitmentUUID {
 			count++
 		}
 	}
@@ -158,9 +163,7 @@ func TestCommittedResourceController_Reconcile(t *testing.T) {
 		state          v1alpha1.CommitmentStatus
 		expectedStatus metav1.ConditionStatus
 		expectedReason string
-		expectedSlots  int // expected child Reservation count after reconcile
-		// Knowledge CRD is only needed for active states (guaranteed/confirmed).
-		// planned/pending short-circuit before ApplyCommitmentState, so it is omitted.
+		expectedSlots  int
 		needsKnowledge bool
 	}{
 		{
@@ -171,11 +174,12 @@ func TestCommittedResourceController_Reconcile(t *testing.T) {
 			expectedSlots:  0,
 		},
 		{
-			name:           "pending: no Reservations created, Ready=False/Planned",
+			name:           "pending: Reservations created, Ready=True",
 			state:          v1alpha1.CommitmentStatusPending,
-			expectedStatus: metav1.ConditionFalse,
-			expectedReason: "Planned",
-			expectedSlots:  0,
+			expectedStatus: metav1.ConditionTrue,
+			expectedReason: "Accepted",
+			expectedSlots:  1,
+			needsKnowledge: true,
 		},
 		{
 			name:           "guaranteed: Reservations created, Ready=True",
@@ -206,21 +210,15 @@ func TestCommittedResourceController_Reconcile(t *testing.T) {
 			k8sClient := newCRTestClient(scheme, objects...)
 			controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: Config{}}
 
-			// First reconcile adds finalizer and returns early.
 			if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
-				t.Fatalf("first reconcile error: %v", err)
-			}
-			// Second reconcile runs the actual state logic.
-			if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
-				t.Fatalf("second reconcile error: %v", err)
+				t.Fatalf("reconcile: %v", err)
 			}
 
 			assertCondition(t, k8sClient, cr.Name, tt.expectedStatus, tt.expectedReason)
-			if got := countChildReservations(t, k8sClient, cr.Name); got != tt.expectedSlots {
+			if got := countChildReservations(t, k8sClient, cr.Spec.CommitmentUUID); got != tt.expectedSlots {
 				t.Errorf("expected %d child reservations, got %d", tt.expectedSlots, got)
 			}
 
-			// For active states, verify AcceptedAmount is set and child follows naming convention.
 			if tt.expectedSlots > 0 {
 				var updated v1alpha1.CommittedResource
 				if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: cr.Name}, &updated); err != nil {
@@ -228,32 +226,6 @@ func TestCommittedResourceController_Reconcile(t *testing.T) {
 				}
 				if updated.Status.AcceptedAmount == nil {
 					t.Errorf("expected AcceptedAmount to be set on acceptance")
-				}
-
-				// Child reservation must follow <cr-name>-<slot-index> naming.
-				var list v1alpha1.ReservationList
-				if err := k8sClient.List(context.Background(), &list, client.MatchingLabels{
-					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-				}); err != nil {
-					t.Fatalf("list reservations: %v", err)
-				}
-				expectedName := cr.Name + "-0"
-				found := false
-				for _, r := range list.Items {
-					if r.Name == expectedName {
-						found = true
-						break
-					}
-				}
-				if !found {
-					t.Errorf("expected child reservation named %q, not found in %v",
-						expectedName, func() []string {
-							names := make([]string, len(list.Items))
-							for i, r := range list.Items {
-								names[i] = r.Name
-							}
-							return names
-						}())
 				}
 			}
 		})
@@ -273,7 +245,6 @@ func TestCommittedResourceController_InactiveStates(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			scheme := newCRTestScheme(t)
 			cr := newTestCommittedResource("test-cr", tt.state)
-			// Pre-existing child reservation that should be cleaned up.
 			existing := &v1alpha1.Reservation{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-cr-0",
@@ -292,55 +263,109 @@ func TestCommittedResourceController_InactiveStates(t *testing.T) {
 			controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: Config{}}
 
 			if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
-				t.Fatalf("first reconcile (finalizer): %v", err)
-			}
-			if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
-				t.Fatalf("second reconcile: %v", err)
+				t.Fatalf("reconcile: %v", err)
 			}
 
 			assertCondition(t, k8sClient, cr.Name, metav1.ConditionFalse, string(tt.state))
-			if got := countChildReservations(t, k8sClient, cr.Name); got != 0 {
+			if got := countChildReservations(t, k8sClient, cr.Spec.CommitmentUUID); got != 0 {
 				t.Errorf("expected 0 child reservations after %s, got %d", tt.state, got)
 			}
 		})
 	}
 }
 
-func TestCommittedResourceController_MissingKnowledge(t *testing.T) {
-	scheme := newCRTestScheme(t)
-	cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
-	// No Knowledge CRD — controller should requeue, not error or set Ready=True.
-	k8sClient := newCRTestClient(scheme, cr)
-	controller := &CommittedResourceController{
-		Client: k8sClient,
-		Scheme: scheme,
-		Conf:   Config{RequeueIntervalRetry: 5 * time.Minute},
+// ============================================================================
+// Tests: placement failure paths
+// ============================================================================
+
+func TestCommittedResourceController_PlacementFailure(t *testing.T) {
+	// Knowledge absent → placement fails. Tests diverging behavior by state and AllowRejection.
+	tests := []struct {
+		name           string
+		state          v1alpha1.CommitmentStatus
+		allowRejection bool
+		expectedReason string
+		expectRequeue  bool
+	}{
+		{
+			name:           "pending: always rejects on failure, no retry",
+			state:          v1alpha1.CommitmentStatusPending,
+			expectedReason: "Rejected",
+			expectRequeue:  false,
+		},
+		{
+			name:           "guaranteed AllowRejection=true: rejects on failure, no retry",
+			state:          v1alpha1.CommitmentStatusGuaranteed,
+			allowRejection: true,
+			expectedReason: "Rejected",
+			expectRequeue:  false,
+		},
+		{
+			name:           "confirmed AllowRejection=true: rejects on failure, no retry",
+			state:          v1alpha1.CommitmentStatusConfirmed,
+			allowRejection: true,
+			expectedReason: "Rejected",
+			expectRequeue:  false,
+		},
+		{
+			name:           "guaranteed AllowRejection=false: retries on failure",
+			state:          v1alpha1.CommitmentStatusGuaranteed,
+			allowRejection: false,
+			expectedReason: "Reserving",
+			expectRequeue:  true,
+		},
+		{
+			name:           "confirmed AllowRejection=false: retries on failure",
+			state:          v1alpha1.CommitmentStatusConfirmed,
+			allowRejection: false,
+			expectedReason: "Reserving",
+			expectRequeue:  true,
+		},
 	}
 
-	if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
-		t.Fatalf("first reconcile: %v", err)
-	}
-	result, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name))
-	if err != nil {
-		t.Fatalf("second reconcile: %v", err)
-	}
-	if result.RequeueAfter == 0 {
-		t.Errorf("expected requeue when knowledge not ready, got none")
-	}
-	if got := countChildReservations(t, k8sClient, cr.Name); got != 0 {
-		t.Errorf("expected no reservations created when knowledge missing, got %d", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := newCRTestScheme(t)
+			cr := newTestCommittedResource("test-cr", tt.state)
+			cr.Spec.AllowRejection = tt.allowRejection
+			k8sClient := newCRTestClient(scheme, cr) // no Knowledge → placement fails
+			controller := &CommittedResourceController{
+				Client: k8sClient,
+				Scheme: scheme,
+				Conf:   Config{RequeueIntervalRetry: 1 * time.Minute},
+			}
+
+			result, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name))
+			if err != nil {
+				t.Fatalf("reconcile: %v", err)
+			}
+
+			assertCondition(t, k8sClient, cr.Name, metav1.ConditionFalse, tt.expectedReason)
+			if tt.expectRequeue && result.RequeueAfter == 0 {
+				t.Errorf("expected requeue after failure, got none")
+			}
+			if !tt.expectRequeue && result.RequeueAfter != 0 {
+				t.Errorf("expected no requeue after rejection, got RequeueAfter=%v", result.RequeueAfter)
+			}
+			if got := countChildReservations(t, k8sClient, cr.Spec.CommitmentUUID); got != 0 {
+				t.Errorf("expected 0 child reservations after failure, got %d", got)
+			}
+		})
 	}
 }
 
-func TestCommittedResourceController_UnsupportedResourceType(t *testing.T) {
+func TestCommittedResourceController_BadSpec(t *testing.T) {
+	// Invalid resource type → permanent Rejected regardless of AllowRejection (bad spec won't fix itself).
 	scheme := newCRTestScheme(t)
-	// Invalid resource type causes FromCommittedResource to fail → rollback path.
 	cr := &v1alpha1.CommittedResource{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-cr"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-cr",
+			Finalizers: []string{crFinalizer},
+		},
 		Spec: v1alpha1.CommittedResourceSpec{
 			CommitmentUUID:   "test-uuid-1234",
 			FlavorGroupName:  "test-group",
-			ResourceType:     v1alpha1.CommittedResourceTypeCores, // unsupported → triggers rejection
+			ResourceType:     v1alpha1.CommittedResourceTypeCores,
 			Amount:           resource.MustParse("4"),
 			AvailabilityZone: "test-az",
 			ProjectID:        "test-project",
@@ -352,15 +377,12 @@ func TestCommittedResourceController_UnsupportedResourceType(t *testing.T) {
 	controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: Config{}}
 
 	if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
-		t.Fatalf("first reconcile: %v", err)
-	}
-	if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
-		t.Fatalf("second reconcile: %v", err)
+		t.Fatalf("reconcile: %v", err)
 	}
 
 	assertCondition(t, k8sClient, cr.Name, metav1.ConditionFalse, "Rejected")
-	if got := countChildReservations(t, k8sClient, cr.Name); got != 0 {
-		t.Errorf("expected 0 child reservations after rollback, got %d", got)
+	if got := countChildReservations(t, k8sClient, cr.Spec.CommitmentUUID); got != 0 {
+		t.Errorf("expected 0 child reservations after bad-spec rejection, got %d", got)
 	}
 }
 
@@ -370,15 +392,50 @@ func TestCommittedResourceController_Idempotent(t *testing.T) {
 	k8sClient := newCRTestClient(scheme, cr, newTestFlavorKnowledge())
 	controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: Config{}}
 
-	// Reconcile three times — slot count must stay at 1.
 	for i := range 3 {
 		if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
 			t.Fatalf("reconcile %d: %v", i+1, err)
 		}
 	}
 
-	if got := countChildReservations(t, k8sClient, cr.Name); got != 1 {
+	if got := countChildReservations(t, k8sClient, cr.Spec.CommitmentUUID); got != 1 {
 		t.Errorf("expected 1 child reservation after 3 reconciles (idempotency), got %d", got)
 	}
 	assertCondition(t, k8sClient, cr.Name, metav1.ConditionTrue, "Accepted")
+}
+
+func TestCommittedResourceController_Deletion(t *testing.T) {
+	scheme := newCRTestScheme(t)
+	cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
+	child := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-cr-0",
+			Labels: map[string]string{
+				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+			},
+		},
+		Spec: v1alpha1.ReservationSpec{
+			Type: v1alpha1.ReservationTypeCommittedResource,
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				CommitmentUUID: "test-uuid-1234",
+			},
+		},
+	}
+	k8sClient := newCRTestClient(scheme, cr, child)
+	controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: Config{}}
+
+	if err := k8sClient.Delete(context.Background(), cr); err != nil {
+		t.Fatalf("delete CR: %v", err)
+	}
+	if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	if got := countChildReservations(t, k8sClient, cr.Spec.CommitmentUUID); got != 0 {
+		t.Errorf("expected 0 child reservations after deletion, got %d", got)
+	}
+	var deleted v1alpha1.CommittedResource
+	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: cr.Name}, &deleted); err == nil {
+		t.Errorf("expected CR to be gone after deletion, but it still exists with finalizers=%v", deleted.Finalizers)
+	}
 }

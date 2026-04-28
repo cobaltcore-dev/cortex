@@ -84,50 +84,42 @@ The CR commitment lifecycle covers everything from a commitment being accepted b
 
 | Limes State | Meaning | Cortex action |
 |---|---|---|
-| `planned` | Future ConfirmBy date, no guarantee yet | Store CRD only — no child Reservations created, no capacity blocked |
-| `guaranteed` | Future ConfirmBy date, upfront guarantee requested | Place Reservations immediately — capacity blocked even before StartTime |
-| `pending` | ConfirmBy date reached, Limes requesting confirmation | Attempt placement — accept if capacity available, reject otherwise |
-| `confirmed` | Already placed in a prior request | Idempotent — no new action if Reservations already exist |
+| `planned` | Future start, no guarantee yet | No Reservations — capacity not blocked |
+| `pending` | Limes asking for a yes/no decision now | One-shot attempt — accept or reject; no retry |
+| `guaranteed` / `confirmed` | Capacity must be honoured | Place Reservations and keep them in sync; see failure handling below |
+| `superseded` / `expired` | Commitment no longer active | Remove all child Reservations |
 
-**CommittedResource state diagram (Cortex-side):**
+**CommittedResource status conditions (Cortex-side):**
 
 ```mermaid
 stateDiagram-v2
     direction LR
-    state "Planned (Ready=False, Reason=Planned)" as Planned
-    state "Reserving (Ready=False, Reason=Reserving)" as Reserving
+    state "Planned (Ready=False)" as Planned
+    state "Reserving (Ready=False)" as Reserving
     state "Active (Ready=True)" as Active
-    state "Rejected (Ready=False, Reason=Rejected)" as Rejected
+    state "Rejected (Ready=False)" as Rejected
 
-    [*] --> Planned : State=planned
-    [*] --> Reserving : State=pending / guaranteed
-    Planned --> Reserving : State changes to pending/guaranteed (Syncer detects ConfirmBy reached or upfront guarantee)
-    Reserving --> Active : all child Reservations Ready=True
-    Reserving --> Rejected : any child Reservation failed (no capacity)
-    Active --> Reserving : resize (Spec.Amount changed)
-    Active --> [*] : deleted (expired or cancelled)
+    [*] --> Planned : state=planned
+    [*] --> Reserving : state=pending / guaranteed / confirmed
+    Planned --> Reserving : state changes to pending/guaranteed/confirmed
+    Reserving --> Active : placement succeeded
+    Reserving --> Rejected : placement failed — pending, or AllowRejection=true
+    Reserving --> Reserving : placement failed — retrying (AllowRejection=false)
+    Active --> Reserving : spec changed (e.g. resize)
+    Active --> [*] : state=superseded / expired
     Rejected --> [*] : deleted
     Planned --> [*] : deleted
 ```
 
-`guaranteed` and `planned` with a future start time differ only in whether Cortex creates Reservations: `guaranteed` blocks capacity upfront; `planned` waits until ConfirmBy is reached before attempting placement. 
-
-| Component | Event | Timing | Action |
-|---|---|---|---|
-| **Change API / Syncer** | CR Create, Resize, Delete | Immediate/Hourly | Create/update/delete `CommittedResource` CRDs |
-| **CommittedResource Controller** | `CommittedResource` created/updated | Immediate (watch) | Compute target `Reservation` count; CRUD child `Reservation` CRDs |
-| **CommittedResource Controller** | Child `Reservation` status changed | Immediate (watch) | Aggregate child statuses; set `CommittedResource.Status` to accepted or rejected |
-| **CommittedResource Controller** | Any `Reservation` failed | On failure | Delete all created `Reservation` CRDs (rollback); set `CommittedResource.Status = Rejected` |
-
 #### CommittedResource Controller
 
-The `CommittedResource` controller watches `CommittedResource` CRDs (spec changes) and child `Reservation` CRDs (status changes). Its responsibilities:
+The controller's job is to keep child `Reservation` CRDs in sync with the desired state expressed in `Spec.Amount`. The key rules:
 
-- **Desired state reconciliation**: translates `Spec.Amount` into the target placement state based on `Spec.ResourceType`:
-  - **Memory CRs** (`ResourceType=memory`): creates, updates, and deletes child `Reservation` CRDs to match the target slot count. Flavor selection targets the largest flavors in the group first; falls back to smaller flavors when the largest do not fit.
-  - **CPU CRs** (`ResourceType=cores`): no child `Reservation` CRDs created. The controller runs an arithmetic capacity check — sum available cores across all hosts in the target AZ, subtract committed cores from all other active CPU `CommittedResource` CRDs for the same flavor group, accept if remaining >= `Spec.Amount`. CPU CRs provide a soft guarantee; they do not pin specific hypervisors.
-- **Status aggregation**: when all child Reservations are `Ready=True` (or, for CPU CRs, when the arithmetic check passes), marks the `CommittedResource` accepted; on any failure or timeout, rolls back created Reservations and marks it rejected
-- **Rollback**: on failure, deletes all Reservations created during the current reconcile attempt before setting `CommittedResource.Status = Rejected`
+- **`pending`**: Cortex is being asked for a yes/no decision. If placement fails for any reason, child Reservations are removed and the CR is marked Rejected. The caller (e.g. the change-commitments API) reads the outcome and reports back to Limes. No retry.
+
+- **`guaranteed` / `confirmed`**: Cortex is expected to honour the commitment. The default is to keep retrying until placement succeeds (`Ready=Reserving`). Callers that can accept "no" as an answer (e.g. the change-commitments API on a resize request) set `Spec.AllowRejection=true`; the controller then rejects on failure instead of retrying.
+
+- **On rejection**: rolls back child Reservations to the last successfully placed quantity (`Status.AcceptedAmount`). For a CR that was never accepted, this means removing all child Reservations.
 
 The controller communicates with the Reservation controller only through CRDs — no direct calls.
 
