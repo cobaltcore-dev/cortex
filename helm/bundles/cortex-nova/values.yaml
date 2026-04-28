@@ -133,6 +133,7 @@ cortex-scheduling-controllers:
       - hypervisor-overcommit-controller
       - committed-resource-reservations-controller
       - failover-reservations-controller
+      - capacity-controller
     enabledTasks:
       - nova-history-cleanup-task
     # If true, the external scheduler API will limit the list of hosts in its

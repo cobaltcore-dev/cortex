@@ -1,0 +1,166 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: flavorgroupcapacities.cortex.cloud
+spec:
+  group: cortex.cloud
+  names:
+    kind: FlavorGroupCapacity
+    listKind: FlavorGroupCapacityList
+    plural: flavorgroupcapacities
+    singular: flavorgroupcapacity
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.flavorGroup
+      name: FlavorGroup
+      type: string
+    - jsonPath: .spec.availabilityZone
+      name: AZ
+      type: string
+    - jsonPath: .status.totalCapacity
+      name: TotalCapacity
+      type: integer
+    - jsonPath: .status.totalPlaceable
+      name: TotalPlaceable
+      type: integer
+    - jsonPath: .status.totalHosts
+      name: TotalHosts
+      type: integer
+    - jsonPath: .status.lastReconcileAt
+      name: LastReconcile
+      type: date
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          FlavorGroupCapacity caches pre-computed capacity data for one flavor group in one AZ.
+          One CRD exists per (flavor group × AZ) pair, updated by the capacity controller on a fixed interval.
+          The capacity API reads these CRDs instead of probing the scheduler on each request.
+        properties:
+          apiVersion:
+            description: APIVersion defines the versioned schema of this representation of an object.
+            type: string
+          kind:
+            description: Kind is a string value representing the REST resource this object represents.
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: FlavorGroupCapacitySpec defines the desired state of FlavorGroupCapacity.
+            properties:
+              availabilityZone:
+                description: AvailabilityZone is the OpenStack AZ this capacity data covers (e.g. "qa-de-1a").
+                type: string
+              flavorGroup:
+                description: FlavorGroup is the name of the flavor group (e.g. "2101").
+                type: string
+            required:
+            - availabilityZone
+            - flavorGroup
+            type: object
+          status:
+            description: FlavorGroupCapacityStatus defines the observed state of FlavorGroupCapacity.
+            properties:
+              committedCapacity:
+                description: CommittedCapacity is the sum of AcceptedAmount across Ready=True CommittedResource CRDs.
+                format: int64
+                minimum: 0
+                type: integer
+              conditions:
+                description: |-
+                  Conditions represent the current state of the FlavorGroupCapacity.
+                  The Ready condition indicates whether the status data is up-to-date.
+                items:
+                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition transitioned from one status to another.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating details about the transition.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation that the condition was set based upon.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              lastReconcileAt:
+                description: LastReconcileAt is the timestamp of the last successful reconcile.
+                format: date-time
+                type: string
+              placeableHosts:
+                description: PlaceableHosts is the number of hosts still able to accept a new smallest-flavor VM.
+                format: int64
+                minimum: 0
+                type: integer
+              totalCapacity:
+                description: |-
+                  TotalCapacity is the total schedulable slots in an empty-datacenter scenario.
+                  Computed as sum of floor(EffectiveCapacity.Memory / smallestFlavorMemory) across
+                  all hosts eligible for this flavor group (empty-state scheduler probe).
+                format: int64
+                minimum: 0
+                type: integer
+              totalHosts:
+                description: TotalHosts is the number of hosts eligible for this flavor group in the empty-state probe.
+                format: int64
+                minimum: 0
+                type: integer
+              totalInstances:
+                description: |-
+                  TotalInstances is the total number of VM instances running on hypervisors in this AZ,
+                  derived from Hypervisor CRD Status.Instances (not filtered by flavor group).
+                format: int64
+                minimum: 0
+                type: integer
+              totalPlaceable:
+                description: TotalPlaceable is the schedulable slots remaining given current VM allocations.
+                format: int64
+                minimum: 0
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
