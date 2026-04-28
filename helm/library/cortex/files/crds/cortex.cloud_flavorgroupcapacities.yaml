@@ -69,7 +69,7 @@ spec:
                   covers (e.g. "qa-de-1a").
                 type: string
               flavorGroup:
-                description: FlavorGroup is the name of the flavor group (e.g. "2101").
+                description: FlavorGroup is the name of the flavor group (e.g. "hana-v2").
                 type: string
             required:
             - availabilityZone

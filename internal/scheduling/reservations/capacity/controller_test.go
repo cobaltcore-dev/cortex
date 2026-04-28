@@ -165,7 +165,7 @@ func TestCountInstancesInAZ(t *testing.T) {
 
 func TestReconcileOne_CreatesCRD(t *testing.T) {
 	const (
-		groupName = "2101"
+		groupName = "hana-v2"
 		az        = "qa-de-1a"
 		memMB     = 4096 // 4 GiB
 		memBytes  = int64(memMB) * 1024 * 1024
@@ -221,7 +221,7 @@ func TestReconcileOne_CreatesCRD(t *testing.T) {
 
 func TestReconcileOne_SetsReadyConditionFalseOnSchedulerError(t *testing.T) {
 	const (
-		groupName = "2101"
+		groupName = "hana-v2"
 		az        = "qa-de-1a"
 		memMB     = 2048
 	)
@@ -274,7 +274,7 @@ func TestReconcileOne_SetsReadyConditionFalseOnSchedulerError(t *testing.T) {
 
 func TestReconcileOne_IdempotentUpdate(t *testing.T) {
 	const (
-		groupName = "2101"
+		groupName = "hana-v2"
 		az        = "qa-de-1a"
 		memMB     = 2048
 		memBytes  = int64(memMB) * 1024 * 1024
@@ -334,7 +334,7 @@ func TestReconcileOne_IdempotentUpdate(t *testing.T) {
 
 func TestReconcileAll_SkipsGroupsWithNoAZs(t *testing.T) {
 	scheme := newTestScheme(t)
-	knowledge := newFlavorGroupKnowledge(t, "2101", 2048)
+	knowledge := newFlavorGroupKnowledge(t, "hana-v2", 2048)
 
 	// No hypervisors → no AZs → reconcileAll returns without error
 	fakeClient := fake.NewClientBuilder().
@@ -487,7 +487,7 @@ func TestReconcileOne_ZeroMemoryFlavorReturnsError(t *testing.T) {
 	groupData := compute.FlavorGroupFeature{
 		SmallestFlavor: compute.FlavorInGroup{Name: "bad-flavor", MemoryMB: 0},
 	}
-	err := c.reconcileOne(context.Background(), "2101", groupData, "az-a", nil, nil)
+	err := c.reconcileOne(context.Background(), "hana-v2", groupData, "az-a", nil, nil)
 	if err == nil {
 		t.Error("expected error for zero-memory flavor")
 	}
@@ -501,7 +501,7 @@ func TestPackageLogVar(t *testing.T) {
 
 func TestSumCommittedCapacity(t *testing.T) {
 	const (
-		groupName = "2101"
+		groupName = "hana-v2"
 		az        = "qa-de-1a"
 		memMB     = 4096
 		memBytes  = int64(memMB) * 1024 * 1024

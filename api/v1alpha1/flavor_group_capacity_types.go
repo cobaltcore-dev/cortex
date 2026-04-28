@@ -14,7 +14,7 @@ const (
 
 // FlavorGroupCapacitySpec defines the desired state of FlavorGroupCapacity.
 type FlavorGroupCapacitySpec struct {
-	// FlavorGroup is the name of the flavor group (e.g. "2101").
+	// FlavorGroup is the name of the flavor group (e.g. "hana-v2").
 	// +kubebuilder:validation:Required
 	FlavorGroup string `json:"flavorGroup"`
 
