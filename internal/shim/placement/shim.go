@@ -116,13 +116,22 @@ func (s *Shim) dispatchPassthroughOnly(w http.ResponseWriter, r *http.Request, m
 // featureModeFromConfOrHeader returns the effective feature mode for the
 // current request. If a valid override is present in the request context
 // (injected by wrapHandler from the X-Cortex-Feature-Mode header), the
-// override takes precedence. Otherwise the configured mode's default is
-// returned.
+// override takes precedence — unless it would escalate from passthrough into
+// a mode that requires backing config (Versioning, Traits) that was not
+// validated at startup. In that case the override is ignored and the
+// configured default is returned.
 func (s *Shim) featureModeFromConfOrHeader(r *http.Request, configured FeatureMode) FeatureMode {
-	if override, ok := r.Context().Value(featureModeOverrideKey).(FeatureMode); ok {
-		return override.orDefault()
+	override, ok := r.Context().Value(featureModeOverrideKey).(FeatureMode)
+	if !ok {
+		return configured.orDefault()
 	}
-	return configured.orDefault()
+	resolved := override.orDefault()
+	if resolved == FeatureModeHybrid || resolved == FeatureModeCRD {
+		if s.config.Versioning == nil && s.config.Traits == nil {
+			return configured.orDefault()
+		}
+	}
+	return resolved
 }
 
 // featuresConfig controls the feature mode for each endpoint group.

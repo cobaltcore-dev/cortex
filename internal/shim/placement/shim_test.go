@@ -563,7 +563,9 @@ func TestWrapHandlerWithAuth(t *testing.T) {
 }
 
 func TestFeatureModeFromConfOrHeader(t *testing.T) {
-	s := &Shim{}
+	s := &Shim{config: config{
+		Traits: &traitsConfig{ConfigMapName: "test"},
+	}}
 
 	t.Run("returns configured mode when no override", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -581,13 +583,35 @@ func TestFeatureModeFromConfOrHeader(t *testing.T) {
 		}
 	})
 
-	t.Run("returns override when present in context", func(t *testing.T) {
+	t.Run("returns override when present in context and backing config exists", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		ctx := context.WithValue(req.Context(), featureModeOverrideKey, FeatureModeCRD)
 		req = req.WithContext(ctx)
 		got := s.featureModeFromConfOrHeader(req, FeatureModePassthrough)
 		if got != FeatureModeCRD {
 			t.Fatalf("got %q, want %q", got, FeatureModeCRD)
+		}
+	})
+
+	t.Run("override to hybrid/crd ignored when no backing config", func(t *testing.T) {
+		bare := &Shim{}
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		ctx := context.WithValue(req.Context(), featureModeOverrideKey, FeatureModeCRD)
+		req = req.WithContext(ctx)
+		got := bare.featureModeFromConfOrHeader(req, FeatureModePassthrough)
+		if got != FeatureModePassthrough {
+			t.Fatalf("got %q, want %q (override should be rejected without backing config)", got, FeatureModePassthrough)
+		}
+	})
+
+	t.Run("override to passthrough always allowed", func(t *testing.T) {
+		bare := &Shim{}
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		ctx := context.WithValue(req.Context(), featureModeOverrideKey, FeatureModePassthrough)
+		req = req.WithContext(ctx)
+		got := bare.featureModeFromConfOrHeader(req, FeatureModeHybrid)
+		if got != FeatureModePassthrough {
+			t.Fatalf("got %q, want %q", got, FeatureModePassthrough)
 		}
 	})
 

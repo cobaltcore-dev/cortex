@@ -141,8 +141,8 @@ func e2eWrapWithModes(fn func(ctx context.Context, cl client.Client) error) func
 // e2eProbeUnimplemented sends a single GET request with the mode override
 // header to verify the endpoint returns 501 Not Implemented. Returns true if
 // the endpoint is unimplemented for this mode (test should skip). Returns
-// false if the endpoint works (test should continue). Returns an error if
-// something unexpected happened.
+// false if the endpoint returned a success status (test should continue).
+// Returns an error for unexpected status codes (4xx/5xx other than 501).
 func e2eProbeUnimplemented(ctx context.Context, sc *gophercloud.ServiceClient, probeURL string) (bool, error) {
 	log := logf.FromContext(ctx)
 	mode := e2eCurrentMode(ctx)
@@ -164,6 +164,9 @@ func e2eProbeUnimplemented(ctx context.Context, sc *gophercloud.ServiceClient, p
 	if resp.StatusCode == http.StatusNotImplemented {
 		log.Info("Endpoint correctly returns 501 for unimplemented mode", "mode", mode)
 		return true, nil
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return false, fmt.Errorf("probe %s in mode %s returned unexpected status %d", probeURL, mode, resp.StatusCode)
 	}
 	return false, nil
 }
