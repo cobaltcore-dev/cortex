@@ -183,7 +183,7 @@ func (c *Controller) probeScheduler(
 	az, pipeline string,
 	hvByName map[string]hv1.Hypervisor,
 	smallestFlavorBytes int64,
-) (capacity int64, hosts int64, err error) {
+) (capacity, hosts int64, err error) {
 	resp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
 		InstanceUUID:     uuid.New().String(),
 		ProjectID:        "cortex-capacity-probe",

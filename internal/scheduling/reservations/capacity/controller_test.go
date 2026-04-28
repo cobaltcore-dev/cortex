@@ -405,7 +405,7 @@ func TestReconcileAll_MultipleGroupsAndAZs(t *testing.T) {
 	// Two AZs, two hypervisors
 	hv1Obj := newHypervisor("h1", "az-a", memBytes)
 	hv2Obj := newHypervisor("h2", "az-b", memBytes)
-	knowledge := newFlavorGroupKnowledge(t, "2101", memMB)
+	knowledge := newFlavorGroupKnowledge(t, "2152", memMB)
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
