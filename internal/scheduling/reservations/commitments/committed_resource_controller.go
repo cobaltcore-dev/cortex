@@ -78,7 +78,7 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 	if applyErr := r.applyReservationState(ctx, logger, cr); applyErr != nil {
 		logger.Error(applyErr, "pending commitment placement failed, rejecting")
 		if rollbackErr := r.deleteChildReservations(ctx, cr); rollbackErr != nil {
-			logger.Error(rollbackErr, "rollback failed")
+			return ctrl.Result{}, rollbackErr
 		}
 		return ctrl.Result{}, r.setNotReady(ctx, cr, "Rejected", applyErr.Error())
 	}
@@ -95,7 +95,7 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		if cr.Spec.AllowRejection {
 			logger.Error(applyErr, "committed placement failed, rolling back to accepted amount")
 			if rollbackErr := r.rollbackToAccepted(ctx, logger, cr); rollbackErr != nil {
-				logger.Error(rollbackErr, "rollback failed")
+				return ctrl.Result{}, rollbackErr
 			}
 			return ctrl.Result{}, r.setNotReady(ctx, cr, "Rejected", applyErr.Error())
 		}

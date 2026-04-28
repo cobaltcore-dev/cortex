@@ -355,7 +355,7 @@ func TestCommittedResourceController_PlacementFailure(t *testing.T) {
 }
 
 func TestCommittedResourceController_BadSpec(t *testing.T) {
-	// Invalid resource type → permanent Rejected regardless of AllowRejection (bad spec won't fix itself).
+	// Invalid UUID fails commitmentUUIDPattern — permanently broken regardless of AllowRejection.
 	scheme := newCRTestScheme(t)
 	cr := &v1alpha1.CommittedResource{
 		ObjectMeta: metav1.ObjectMeta{
@@ -363,10 +363,10 @@ func TestCommittedResourceController_BadSpec(t *testing.T) {
 			Finalizers: []string{crFinalizer},
 		},
 		Spec: v1alpha1.CommittedResourceSpec{
-			CommitmentUUID:   "test-uuid-1234",
+			CommitmentUUID:   "x", // too short, fails commitmentUUIDPattern
 			FlavorGroupName:  "test-group",
-			ResourceType:     v1alpha1.CommittedResourceTypeCores,
-			Amount:           resource.MustParse("4"),
+			ResourceType:     v1alpha1.CommittedResourceTypeMemory,
+			Amount:           resource.MustParse("4Gi"),
 			AvailabilityZone: "test-az",
 			ProjectID:        "test-project",
 			DomainID:         "test-domain",

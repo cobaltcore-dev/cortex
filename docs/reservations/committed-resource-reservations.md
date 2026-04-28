@@ -117,7 +117,7 @@ The controller's job is to keep child `Reservation` CRDs in sync with the desire
 
 - **`pending`**: Cortex is being asked for a yes/no decision. If placement fails for any reason, child Reservations are removed and the CR is marked Rejected. The caller (e.g. the change-commitments API) reads the outcome and reports back to Limes. No retry.
 
-- **`guaranteed` / `confirmed`**: Cortex is expected to honour the commitment. The default is to keep retrying until placement succeeds (`Ready=Reserving`). Callers that can accept "no" as an answer (e.g. the change-commitments API on a resize request) set `Spec.AllowRejection=true`; the controller then rejects on failure instead of retrying.
+- **`guaranteed` / `confirmed`**: Cortex is expected to honour the commitment. The default is to keep retrying until placement succeeds (`Ready=False, Reason=Reserving`). Callers that can accept "no" as an answer (e.g. the change-commitments API on a resize request) set `Spec.AllowRejection=true`; the controller then rejects on failure instead of retrying.
 
 - **On rejection**: rolls back child Reservations to the last successfully placed quantity (`Status.AcceptedAmount`). For a CR that was never accepted, this means removing all child Reservations.
 
