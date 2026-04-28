@@ -84,9 +84,6 @@ func e2eTestTraits(ctx context.Context, _ client.Client) error {
 	// be empty. Only require at least one trait when forwarding to upstream
 	// placement, which always has standard traits.
 	traitsMode := e2eCurrentMode(ctx)
-	if traitsMode == "" {
-		traitsMode = config.Features.Traits.orDefault()
-	}
 	if traitsMode == FeatureModePassthrough && len(listResp.Traits) == 0 {
 		return errors.New("GET /traits: expected at least one trait, got 0")
 	}

@@ -12,6 +12,8 @@ import (
 	"slices"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/gophercloud/gophercloud/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -19,15 +21,11 @@ import (
 // e2eTestResourceProviderAggregates tests the
 // /resource_providers/{uuid}/aggregates endpoints.
 //
-//  1. Pre-cleanup: DELETE any leftover test RP (ignore 404).
-//  2. POST /resource_providers — create a test RP.
-//  3. GET /{uuid}/aggregates — verify aggregates are empty, store generation.
-//  4. PUT /{uuid}/aggregates — associate two aggregate UUIDs with the RP.
-//  5. GET /{uuid}/aggregates — verify both aggregate UUIDs are present.
-//  6. PUT /{uuid}/aggregates — clear aggregates by sending an empty list.
-//  7. GET /{uuid}/aggregates — verify aggregates are empty after clear.
-//  8. Cleanup: DELETE the test RP (also runs via deferred cleanup on failure).
-func e2eTestResourceProviderAggregates(ctx context.Context, _ client.Client) error {
+// In passthrough mode: exercises the upstream placement path with a
+// dynamically created resource provider.
+// In hybrid/crd mode: exercises the spec.groups-backed CRD path using a
+// real KVM hypervisor discovered from the cluster.
+func e2eTestResourceProviderAggregates(ctx context.Context, cl client.Client) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running resource provider aggregates endpoint e2e test")
 	config, err := conf.GetConfig[e2eRootConfig]()
@@ -43,21 +41,26 @@ func e2eTestResourceProviderAggregates(ctx context.Context, _ client.Client) err
 	}
 	log.Info("Successfully created openstack client for resource provider aggregates e2e test")
 
+	mode := e2eCurrentMode(ctx)
+	switch mode {
+	case FeatureModePassthrough:
+		return e2ePassthroughResourceProviderAggregates(ctx, sc)
+	case FeatureModeHybrid, FeatureModeCRD:
+		return e2eCRDResourceProviderAggregates(ctx, sc, cl)
+	default:
+		return fmt.Errorf("unexpected mode %q", mode)
+	}
+}
+
+func e2ePassthroughResourceProviderAggregates(ctx context.Context, sc *gophercloud.ServiceClient) error {
+	log := logf.FromContext(ctx)
+
 	const testRPUUID = "e2e10000-0000-0000-0000-000000000004"
 	const testRPName = "cortex-e2e-test-rp-agg"
 	const testAggUUID1 = "e2e30000-0000-0000-0000-000000000001"
 	const testAggUUID2 = "e2e30000-0000-0000-0000-000000000002"
 
-	// Probe: for non-passthrough modes, verify endpoint returns 501.
-	unimplemented, err := e2eProbeUnimplemented(ctx, sc, sc.Endpoint+"/resource_providers/"+testRPUUID+"/aggregates")
-	if err != nil {
-		return fmt.Errorf("probe: %w", err)
-	}
-	if unimplemented {
-		return nil
-	}
-
-	// Pre-cleanup: delete any leftover test resource provider from a prior run.
+	// Pre-cleanup: delete leftover test RP.
 	log.Info("Pre-cleanup: deleting leftover test resource provider", "uuid", testRPUUID)
 	req, err := http.NewRequestWithContext(ctx,
 		http.MethodDelete, sc.Endpoint+"/resource_providers/"+testRPUUID, http.NoBody)
@@ -116,8 +119,7 @@ func e2eTestResourceProviderAggregates(ctx context.Context, _ client.Client) err
 	log.Info("Successfully created test resource provider for aggregates test",
 		"uuid", testRPUUID)
 
-	// Deferred cleanup: always delete the test RP on exit so a failed
-	// assertion doesn't leave the fixed UUID behind.
+	// Deferred cleanup.
 	defer func() {
 		log.Info("Deferred cleanup: deleting test resource provider", "uuid", testRPUUID)
 		dReq, dErr := http.NewRequestWithContext(ctx,
@@ -137,13 +139,11 @@ func e2eTestResourceProviderAggregates(ctx context.Context, _ client.Client) err
 		log.Info("Deferred cleanup completed", "status", dResp.StatusCode)
 	}()
 
-	// Test GET /resource_providers/{uuid}/aggregates (empty).
-	log.Info("Testing GET /resource_providers/{uuid}/aggregates (empty)",
-		"uuid", testRPUUID)
+	// Test GET (empty).
+	log.Info("Testing GET /resource_providers/{uuid}/aggregates (empty)", "uuid", testRPUUID)
 	req, err = http.NewRequestWithContext(ctx,
 		http.MethodGet, sc.Endpoint+"/resource_providers/"+testRPUUID+"/aggregates", http.NoBody)
 	if err != nil {
-		log.Error(err, "failed to create GET request for RP aggregates", "uuid", testRPUUID)
 		return err
 	}
 	req.Header.Set("X-Auth-Token", sc.TokenID)
@@ -151,44 +151,36 @@ func e2eTestResourceProviderAggregates(ctx context.Context, _ client.Client) err
 	req.Header.Set("Accept", "application/json")
 	resp, err = sc.HTTPClient.Do(req)
 	if err != nil {
-		log.Error(err, "failed to send GET request for RP aggregates", "uuid", testRPUUID)
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		log.Error(err, "GET RP aggregates returned an error", "uuid", testRPUUID)
-		return err
+		return fmt.Errorf("GET RP aggregates: unexpected status %d", resp.StatusCode)
 	}
 	var aggResp struct {
 		Aggregates                 []string `json:"aggregates"`
 		ResourceProviderGeneration int      `json:"resource_provider_generation"`
 	}
-	err = json.NewDecoder(resp.Body).Decode(&aggResp)
-	if err != nil {
-		log.Error(err, "failed to decode RP aggregates response", "uuid", testRPUUID)
+	if err := json.NewDecoder(resp.Body).Decode(&aggResp); err != nil {
 		return err
 	}
-	log.Info("Successfully retrieved empty aggregates for test resource provider",
-		"uuid", testRPUUID, "aggregates", len(aggResp.Aggregates),
-		"generation", aggResp.ResourceProviderGeneration)
+	if len(aggResp.Aggregates) != 0 {
+		return fmt.Errorf("expected 0 initial aggregates, got %d", len(aggResp.Aggregates))
+	}
+	log.Info("Verified empty aggregates", "generation", aggResp.ResourceProviderGeneration)
 
-	// Test PUT /resource_providers/{uuid}/aggregates (set two aggregates).
-	log.Info("Testing PUT /resource_providers/{uuid}/aggregates to set aggregates",
-		"uuid", testRPUUID, "agg1", testAggUUID1, "agg2", testAggUUID2)
+	// Test PUT (associate aggregates).
 	putBody, err := json.Marshal(map[string]any{
 		"resource_provider_generation": aggResp.ResourceProviderGeneration,
 		"aggregates":                   []string{testAggUUID1, testAggUUID2},
 	})
 	if err != nil {
-		log.Error(err, "failed to marshal request body")
 		return err
 	}
 	req, err = http.NewRequestWithContext(ctx,
 		http.MethodPut, sc.Endpoint+"/resource_providers/"+testRPUUID+"/aggregates",
 		bytes.NewReader(putBody))
 	if err != nil {
-		log.Error(err, "failed to create PUT request for RP aggregates", "uuid", testRPUUID)
 		return err
 	}
 	req.Header.Set("X-Auth-Token", sc.TokenID)
@@ -197,35 +189,18 @@ func e2eTestResourceProviderAggregates(ctx context.Context, _ client.Client) err
 	req.Header.Set("Accept", "application/json")
 	resp, err = sc.HTTPClient.Do(req)
 	if err != nil {
-		log.Error(err, "failed to send PUT request for RP aggregates", "uuid", testRPUUID)
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		log.Error(err, "PUT RP aggregates returned an error", "uuid", testRPUUID)
-		return err
+		return fmt.Errorf("PUT RP aggregates: unexpected status %d", resp.StatusCode)
 	}
-	var putAggResp struct {
-		Aggregates                 []string `json:"aggregates"`
-		ResourceProviderGeneration int      `json:"resource_provider_generation"`
-	}
-	err = json.NewDecoder(resp.Body).Decode(&putAggResp)
-	if err != nil {
-		log.Error(err, "failed to decode PUT RP aggregates response", "uuid", testRPUUID)
-		return err
-	}
-	log.Info("Successfully set aggregates on test resource provider",
-		"uuid", testRPUUID, "aggregates", len(putAggResp.Aggregates),
-		"generation", putAggResp.ResourceProviderGeneration)
+	log.Info("Successfully associated aggregates")
 
-	// Test GET /resource_providers/{uuid}/aggregates (after PUT).
-	log.Info("Testing GET /resource_providers/{uuid}/aggregates (after PUT)",
-		"uuid", testRPUUID)
+	// Test GET (after PUT).
 	req, err = http.NewRequestWithContext(ctx,
 		http.MethodGet, sc.Endpoint+"/resource_providers/"+testRPUUID+"/aggregates", http.NoBody)
 	if err != nil {
-		log.Error(err, "failed to create GET request for RP aggregates", "uuid", testRPUUID)
 		return err
 	}
 	req.Header.Set("X-Auth-Token", sc.TokenID)
@@ -233,47 +208,29 @@ func e2eTestResourceProviderAggregates(ctx context.Context, _ client.Client) err
 	req.Header.Set("Accept", "application/json")
 	resp, err = sc.HTTPClient.Do(req)
 	if err != nil {
-		log.Error(err, "failed to send GET request for RP aggregates", "uuid", testRPUUID)
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		log.Error(err, "GET RP aggregates returned an error", "uuid", testRPUUID)
+	if err := json.NewDecoder(resp.Body).Decode(&aggResp); err != nil {
 		return err
 	}
-	err = json.NewDecoder(resp.Body).Decode(&aggResp)
-	if err != nil {
-		log.Error(err, "failed to decode RP aggregates response", "uuid", testRPUUID)
-		return err
+	if !slices.Contains(aggResp.Aggregates, testAggUUID1) || !slices.Contains(aggResp.Aggregates, testAggUUID2) {
+		return fmt.Errorf("expected aggregates %v and %v, got %v", testAggUUID1, testAggUUID2, aggResp.Aggregates)
 	}
-	if len(aggResp.Aggregates) != 2 ||
-		!slices.Contains(aggResp.Aggregates, testAggUUID1) ||
-		!slices.Contains(aggResp.Aggregates, testAggUUID2) {
-		err := fmt.Errorf("expected aggregates %v, got %v",
-			[]string{testAggUUID1, testAggUUID2}, aggResp.Aggregates)
-		log.Error(err, "aggregate mismatch", "uuid", testRPUUID)
-		return err
-	}
-	log.Info("Successfully verified aggregates on test resource provider",
-		"uuid", testRPUUID, "aggregates", aggResp.Aggregates)
+	log.Info("Verified aggregates present after PUT")
 
 	// Clear aggregates by PUT with empty list.
-	log.Info("Testing PUT /resource_providers/{uuid}/aggregates to clear aggregates",
-		"uuid", testRPUUID)
 	putBody, err = json.Marshal(map[string]any{
 		"resource_provider_generation": aggResp.ResourceProviderGeneration,
 		"aggregates":                   []string{},
 	})
 	if err != nil {
-		log.Error(err, "failed to marshal request body")
 		return err
 	}
 	req, err = http.NewRequestWithContext(ctx,
 		http.MethodPut, sc.Endpoint+"/resource_providers/"+testRPUUID+"/aggregates",
 		bytes.NewReader(putBody))
 	if err != nil {
-		log.Error(err, "failed to create PUT request to clear RP aggregates", "uuid", testRPUUID)
 		return err
 	}
 	req.Header.Set("X-Auth-Token", sc.TokenID)
@@ -282,24 +239,18 @@ func e2eTestResourceProviderAggregates(ctx context.Context, _ client.Client) err
 	req.Header.Set("Accept", "application/json")
 	resp, err = sc.HTTPClient.Do(req)
 	if err != nil {
-		log.Error(err, "failed to send PUT request to clear RP aggregates", "uuid", testRPUUID)
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		log.Error(err, "PUT to clear RP aggregates returned an error", "uuid", testRPUUID)
-		return err
+		return fmt.Errorf("PUT RP aggregates (clear): unexpected status %d", resp.StatusCode)
 	}
-	log.Info("Successfully cleared aggregates on test resource provider",
-		"uuid", testRPUUID)
+	log.Info("Successfully cleared aggregates")
 
-	// Verify aggregates are empty after clear.
-	log.Info("Verifying aggregates are empty after clear", "uuid", testRPUUID)
+	// Verify empty after clear.
 	req, err = http.NewRequestWithContext(ctx,
 		http.MethodGet, sc.Endpoint+"/resource_providers/"+testRPUUID+"/aggregates", http.NoBody)
 	if err != nil {
-		log.Error(err, "failed to create GET request for RP aggregates", "uuid", testRPUUID)
 		return err
 	}
 	req.Header.Set("X-Auth-Token", sc.TokenID)
@@ -307,49 +258,209 @@ func e2eTestResourceProviderAggregates(ctx context.Context, _ client.Client) err
 	req.Header.Set("Accept", "application/json")
 	resp, err = sc.HTTPClient.Do(req)
 	if err != nil {
-		log.Error(err, "failed to send GET request for RP aggregates", "uuid", testRPUUID)
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		log.Error(err, "GET RP aggregates returned an error", "uuid", testRPUUID)
-		return err
-	}
-	err = json.NewDecoder(resp.Body).Decode(&aggResp)
-	if err != nil {
-		log.Error(err, "failed to decode RP aggregates response", "uuid", testRPUUID)
+	if err := json.NewDecoder(resp.Body).Decode(&aggResp); err != nil {
 		return err
 	}
 	if len(aggResp.Aggregates) != 0 {
-		err := fmt.Errorf("expected 0 aggregates after clear, got %d", len(aggResp.Aggregates))
-		log.Error(err, "aggregates not empty after clear", "uuid", testRPUUID)
-		return err
+		return fmt.Errorf("expected 0 aggregates after clear, got %d", len(aggResp.Aggregates))
 	}
-	log.Info("Verified aggregates are empty after clear", "uuid", testRPUUID)
+	log.Info("Verified aggregates empty after clear")
 
-	// Cleanup: delete the test resource provider.
-	log.Info("Cleaning up test resource provider", "uuid", testRPUUID)
+	// Cleanup.
 	req, err = http.NewRequestWithContext(ctx,
 		http.MethodDelete, sc.Endpoint+"/resource_providers/"+testRPUUID, http.NoBody)
 	if err != nil {
-		log.Error(err, "failed to create DELETE request for resource provider", "uuid", testRPUUID)
 		return err
 	}
 	req.Header.Set("X-Auth-Token", sc.TokenID)
 	req.Header.Set("OpenStack-API-Version", "placement 1.19")
 	resp, err = sc.HTTPClient.Do(req)
 	if err != nil {
-		log.Error(err, "failed to send DELETE request for resource provider", "uuid", testRPUUID)
+		return err
+	}
+	resp.Body.Close()
+
+	return nil
+}
+
+// e2eCRDResourceProviderAggregates tests the CRD/hybrid path by discovering a
+// real KVM hypervisor in the cluster, seeding spec.groups, and exercising
+// GET/PUT through the shim.
+func e2eCRDResourceProviderAggregates(ctx context.Context, sc *gophercloud.ServiceClient, cl client.Client) error {
+	log := logf.FromContext(ctx)
+
+	// Discover a KVM hypervisor with a non-empty OpenStack ID.
+	var hvs hv1.HypervisorList
+	if err := cl.List(ctx, &hvs); err != nil {
+		log.Error(err, "failed to list hypervisors for CRD aggregates path")
+		return err
+	}
+	var kvmHV *hv1.Hypervisor
+	for i := range hvs.Items {
+		if hvs.Items[i].Status.HypervisorID != "" {
+			kvmHV = &hvs.Items[i]
+			break
+		}
+	}
+	if kvmHV == nil {
+		log.Info("No KVM hypervisors with OpenStack ID found, skipping CRD aggregates tests")
+		return nil
+	}
+	kvmUUID := kvmHV.Status.HypervisorID
+	log.Info("Using KVM hypervisor for CRD aggregates e2e tests", "uuid", kvmUUID, "name", kvmHV.Name)
+
+	// Save original groups for restoration.
+	originalGroups := kvmHV.Spec.Groups
+
+	// Seed spec.groups with test aggregates (preserve non-aggregate groups).
+	const testAgg1UUID = "e2e40000-0000-0000-0000-000000000001"
+	const testAgg2UUID = "e2e40000-0000-0000-0000-000000000002"
+	var nonAggGroups []hv1.Group
+	for i := range kvmHV.Spec.Groups {
+		if kvmHV.Spec.Groups[i].Aggregate == nil {
+			nonAggGroups = append(nonAggGroups, kvmHV.Spec.Groups[i])
+		}
+	}
+	nonAggGroups = append(nonAggGroups,
+		hv1.Group{Aggregate: &hv1.AggregateGroup{Name: testAgg1UUID, UUID: testAgg1UUID}},
+		hv1.Group{Aggregate: &hv1.AggregateGroup{Name: testAgg2UUID, UUID: testAgg2UUID}},
+	)
+	kvmHV.Spec.Groups = nonAggGroups
+	if err := cl.Update(ctx, kvmHV); err != nil {
+		return fmt.Errorf("failed to seed spec.groups with test aggregates: %w", err)
+	}
+	log.Info("Seeded spec.groups with test aggregates", "uuid", kvmUUID)
+
+	// Always restore original groups on exit.
+	defer func() {
+		log.Info("Restoring original spec.groups", "uuid", kvmUUID)
+		if err := cl.Get(ctx, client.ObjectKeyFromObject(kvmHV), kvmHV); err != nil {
+			log.Error(err, "failed to refetch hypervisor for restoration")
+			return
+		}
+		kvmHV.Spec.Groups = originalGroups
+		if err := cl.Update(ctx, kvmHV); err != nil {
+			log.Error(err, "failed to restore original spec.groups")
+		}
+	}()
+
+	// Refetch to get updated generation.
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(kvmHV), kvmHV); err != nil {
+		return fmt.Errorf("failed to refetch hypervisor after seed: %w", err)
+	}
+
+	// Test GET — should return the seeded aggregates.
+	log.Info("Testing GET /resource_providers/{uuid}/aggregates (CRD)", "uuid", kvmUUID)
+	req, err := http.NewRequestWithContext(ctx,
+		http.MethodGet, sc.Endpoint+"/resource_providers/"+kvmUUID+"/aggregates", http.NoBody)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Auth-Token", sc.TokenID)
+	req.Header.Set("OpenStack-API-Version", "placement 1.19")
+	req.Header.Set("Accept", "application/json")
+	resp, err := sc.HTTPClient.Do(req)
+	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		log.Error(err, "DELETE /resource_providers/{uuid} returned an error", "uuid", testRPUUID)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("GET CRD aggregates: expected 200, got %d", resp.StatusCode)
+	}
+	var aggResp struct {
+		Aggregates                 []string `json:"aggregates"`
+		ResourceProviderGeneration int64    `json:"resource_provider_generation"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&aggResp); err != nil {
+		return fmt.Errorf("failed to decode CRD aggregates response: %w", err)
+	}
+	if !slices.Contains(aggResp.Aggregates, testAgg1UUID) || !slices.Contains(aggResp.Aggregates, testAgg2UUID) {
+		return fmt.Errorf("expected aggregates %v and %v in %v", testAgg1UUID, testAgg2UUID, aggResp.Aggregates)
+	}
+	log.Info("Verified GET returns seeded aggregates from CRD",
+		"aggregates", aggResp.Aggregates, "generation", aggResp.ResourceProviderGeneration)
+
+	// Test PUT — replace aggregates.
+	const replacementAggUUID = "e2e40000-0000-0000-0000-000000000099"
+	putBody, err := json.Marshal(map[string]any{
+		"resource_provider_generation": aggResp.ResourceProviderGeneration,
+		"aggregates":                   []string{replacementAggUUID},
+	})
+	if err != nil {
 		return err
 	}
-	log.Info("Successfully deleted test resource provider", "uuid", testRPUUID)
+	req, err = http.NewRequestWithContext(ctx,
+		http.MethodPut, sc.Endpoint+"/resource_providers/"+kvmUUID+"/aggregates",
+		bytes.NewReader(putBody))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Auth-Token", sc.TokenID)
+	req.Header.Set("OpenStack-API-Version", "placement 1.19")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	resp, err = sc.HTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("PUT CRD aggregates: expected 200, got %d", resp.StatusCode)
+	}
+	log.Info("Successfully replaced aggregates via PUT (CRD)")
+
+	// Test PUT with stale generation — should return 409.
+	putBody, err = json.Marshal(map[string]any{
+		"resource_provider_generation": aggResp.ResourceProviderGeneration,
+		"aggregates":                   []string{"stale-uuid"},
+	})
+	if err != nil {
+		return err
+	}
+	req, err = http.NewRequestWithContext(ctx,
+		http.MethodPut, sc.Endpoint+"/resource_providers/"+kvmUUID+"/aggregates",
+		bytes.NewReader(putBody))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Auth-Token", sc.TokenID)
+	req.Header.Set("OpenStack-API-Version", "placement 1.19")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	resp, err = sc.HTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		return fmt.Errorf("PUT CRD aggregates (stale gen): expected 409, got %d", resp.StatusCode)
+	}
+	log.Info("Verified generation conflict returns 409")
+
+	// Test GET — verify replacement persisted.
+	req, err = http.NewRequestWithContext(ctx,
+		http.MethodGet, sc.Endpoint+"/resource_providers/"+kvmUUID+"/aggregates", http.NoBody)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Auth-Token", sc.TokenID)
+	req.Header.Set("OpenStack-API-Version", "placement 1.19")
+	req.Header.Set("Accept", "application/json")
+	resp, err = sc.HTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if err := json.NewDecoder(resp.Body).Decode(&aggResp); err != nil {
+		return err
+	}
+	if len(aggResp.Aggregates) != 1 || aggResp.Aggregates[0] != replacementAggUUID {
+		return fmt.Errorf("expected [%s], got %v", replacementAggUUID, aggResp.Aggregates)
+	}
+	log.Info("Verified replacement aggregate persisted")
 
 	return nil
 }
