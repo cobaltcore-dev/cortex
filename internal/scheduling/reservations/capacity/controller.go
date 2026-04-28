@@ -101,6 +101,7 @@ func (c *Controller) reconcileOne(
 	hvByName map[string]hv1.Hypervisor,
 	allHVs []hv1.Hypervisor,
 ) error {
+
 	smallestFlavor := groupData.SmallestFlavor
 	smallestFlavorBytes := int64(smallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec
 	if smallestFlavorBytes <= 0 {
@@ -184,6 +185,7 @@ func (c *Controller) probeScheduler(
 	hvByName map[string]hv1.Hypervisor,
 	smallestFlavorBytes int64,
 ) (capacity, hosts int64, err error) {
+
 	resp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
 		InstanceUUID:     uuid.New().String(),
 		ProjectID:        "cortex-capacity-probe",
@@ -198,7 +200,7 @@ func (c *Controller) probeScheduler(
 		return 0, 0, fmt.Errorf("scheduler call failed (pipeline=%s): %w", pipeline, err)
 	}
 
-	hosts = int64(len(resp.Hosts)) //nolint:gosec
+	hosts = int64(len(resp.Hosts))
 	for _, hostName := range resp.Hosts {
 		hv, ok := hvByName[hostName]
 		if !ok {
@@ -279,7 +281,7 @@ func countInstancesInAZ(hvs []hv1.Hypervisor, az string) int64 {
 		if hv.Labels["topology.kubernetes.io/zone"] != az {
 			continue
 		}
-		total += int64(len(hv.Status.Instances)) //nolint:gosec
+		total += int64(len(hv.Status.Instances))
 	}
 	return total
 }

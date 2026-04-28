@@ -128,8 +128,8 @@ func TestAvailabilityZones(t *testing.T) {
 	hvs := []hv1.Hypervisor{
 		*newHypervisor("h1", "az-a", 0),
 		*newHypervisor("h2", "az-b", 0),
-		*newHypervisor("h3", "az-a", 0), // duplicate
-		{ObjectMeta: metav1.ObjectMeta{Name: "h4"}},  // no label
+		*newHypervisor("h3", "az-a", 0),             // duplicate
+		{ObjectMeta: metav1.ObjectMeta{Name: "h4"}}, // no label
 	}
 	got := availabilityZones(hvs)
 	want := []string{"az-a", "az-b"}
@@ -165,10 +165,10 @@ func TestCountInstancesInAZ(t *testing.T) {
 
 func TestReconcileOne_CreatesCRD(t *testing.T) {
 	const (
-		groupName    = "2101"
-		az           = "qa-de-1a"
-		memMB        = 4096                      // 4 GiB
-		memBytes     = int64(memMB) * 1024 * 1024
+		groupName = "2101"
+		az        = "qa-de-1a"
+		memMB     = 4096 // 4 GiB
+		memBytes  = int64(memMB) * 1024 * 1024
 	)
 
 	scheme := newTestScheme(t)
@@ -501,10 +501,10 @@ func TestPackageLogVar(t *testing.T) {
 
 func TestSumCommittedCapacity(t *testing.T) {
 	const (
-		groupName    = "2101"
-		az           = "qa-de-1a"
-		memMB        = 4096
-		memBytes     = int64(memMB) * 1024 * 1024
+		groupName = "2101"
+		az        = "qa-de-1a"
+		memMB     = 4096
+		memBytes  = int64(memMB) * 1024 * 1024
 	)
 
 	newCR := func(name, group, zone string, state v1alpha1.CommitmentStatus, resType v1alpha1.CommittedResourceType, amount string, acceptedAmount string) *v1alpha1.CommittedResource {

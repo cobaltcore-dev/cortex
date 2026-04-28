@@ -45,18 +45,28 @@ spec:
           The capacity API reads these CRDs instead of probing the scheduler on each request.
         properties:
           apiVersion:
-            description: APIVersion defines the versioned schema of this representation of an object.
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: Kind is a string value representing the REST resource this object represents.
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
           spec:
-            description: FlavorGroupCapacitySpec defines the desired state of FlavorGroupCapacity.
+            description: spec defines the desired state of FlavorGroupCapacity
             properties:
               availabilityZone:
-                description: AvailabilityZone is the OpenStack AZ this capacity data covers (e.g. "qa-de-1a").
+                description: AvailabilityZone is the OpenStack AZ this capacity data
+                  covers (e.g. "qa-de-1a").
                 type: string
               flavorGroup:
                 description: FlavorGroup is the name of the flavor group (e.g. "2101").
@@ -66,35 +76,46 @@ spec:
             - flavorGroup
             type: object
           status:
-            description: FlavorGroupCapacityStatus defines the observed state of FlavorGroupCapacity.
+            description: status defines the observed state of FlavorGroupCapacity
             properties:
               committedCapacity:
-                description: CommittedCapacity is the sum of AcceptedAmount across Ready=True CommittedResource CRDs.
+                description: CommittedCapacity is the sum of AcceptedAmount across
+                  Ready=True CommittedResource CRDs.
                 format: int64
-                minimum: 0
                 type: integer
               conditions:
-                description: |-
-                  Conditions represent the current state of the FlavorGroupCapacity.
-                  The Ready condition indicates whether the status data is up-to-date.
+                description: The current status conditions of the FlavorGroupCapacity.
                 items:
-                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
                   properties:
                     lastTransitionTime:
-                      description: lastTransitionTime is the last time the condition transitioned from one status to another.
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
                       format: date-time
                       type: string
                     message:
-                      description: message is a human readable message indicating details about the transition.
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
                       maxLength: 32768
                       type: string
                     observedGeneration:
-                      description: observedGeneration represents the .metadata.generation that the condition was set based upon.
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
                       format: int64
                       minimum: 0
                       type: integer
                     reason:
-                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
                       maxLength: 1024
                       minLength: 1
                       pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
@@ -119,17 +140,15 @@ spec:
                   - type
                   type: object
                 type: array
-                x-kubernetes-list-map-keys:
-                - type
-                x-kubernetes-list-type: map
               lastReconcileAt:
-                description: LastReconcileAt is the timestamp of the last successful reconcile.
+                description: LastReconcileAt is the timestamp of the last successful
+                  reconcile.
                 format: date-time
                 type: string
               placeableHosts:
-                description: PlaceableHosts is the number of hosts still able to accept a new smallest-flavor VM.
+                description: PlaceableHosts is the number of hosts still able to accept
+                  a new smallest-flavor VM.
                 format: int64
-                minimum: 0
                 type: integer
               totalCapacity:
                 description: |-
@@ -137,24 +156,23 @@ spec:
                   Computed as sum of floor(EffectiveCapacity.Memory / smallestFlavorMemory) across
                   all hosts eligible for this flavor group (empty-state scheduler probe).
                 format: int64
-                minimum: 0
                 type: integer
               totalHosts:
-                description: TotalHosts is the number of hosts eligible for this flavor group in the empty-state probe.
+                description: TotalHosts is the number of hosts eligible for this flavor
+                  group in the empty-state probe.
                 format: int64
-                minimum: 0
                 type: integer
               totalInstances:
                 description: |-
                   TotalInstances is the total number of VM instances running on hypervisors in this AZ,
                   derived from Hypervisor CRD Status.Instances (not filtered by flavor group).
                 format: int64
-                minimum: 0
                 type: integer
               totalPlaceable:
-                description: TotalPlaceable is the schedulable slots remaining given current VM allocations.
+                description: |-
+                  TotalPlaceable is the schedulable slots remaining given current VM allocations.
+                  Computed from the current-state scheduler probe.
                 format: int64
-                minimum: 0
                 type: integer
             type: object
         required:
