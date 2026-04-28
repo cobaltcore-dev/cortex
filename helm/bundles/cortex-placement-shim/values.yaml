@@ -42,8 +42,17 @@ cortex-shim:
     osUserDomainName:
     osProjectDomainName:
     features:
-      enableResourceProviders: false
-      enableRoot: false
+      resourceProviders: passthrough
+      root: passthrough
+      traits: passthrough
+      resourceProviderTraits: passthrough
+      resourceClasses: passthrough
+      inventories: passthrough
+      aggregates: passthrough
+      allocations: passthrough
+      usages: passthrough
+      allocationCandidates: passthrough
+      reshaper: passthrough
     # The shim will return this as a static version discovery document for
     # GET / instead of forwarding to upstream placement.
     versioning:
@@ -51,6 +60,11 @@ cortex-shim:
       minVersion: "1.0"
       maxVersion: "1.39"
       status: "CURRENT"
+    traits:
+      configMapName: "cortex-placement-shim-traits"
+      # Static traits included in every Helm install/upgrade. The shim
+      # merges them with dynamic CUSTOM_* traits at request time.
+      static: []
     auth:
       tokenCacheTTL: "5m"
       policies:
@@ -80,6 +94,10 @@ cortex-shim:
         gvks:
           - kvm.cloud.sap/v1/Hypervisor
           - kvm.cloud.sap/v1/HypervisorList
+          - v1/ConfigMap
+          - v1/ConfigMapList
+          - coordination.k8s.io/v1/Lease
+          - coordination.k8s.io/v1/LeaseList
     monitoring:
       labels:
         github_org: cobaltcore-dev

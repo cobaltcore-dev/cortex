@@ -19,5 +19,5 @@ func (s *Shim) HandleListResourceProviderUsages(w http.ResponseWriter, r *http.R
 	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	s.forward(w, r)
+	s.dispatchPassthroughOnly(w, r, s.config.Features.Usages)
 }

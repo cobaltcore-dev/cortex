@@ -323,14 +323,16 @@ func main() {
 	hvGVK := schema.GroupVersionKind{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}
 	reservationGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}
 	historyGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}
+	committedResourceGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}
 	multiclusterClient := &multicluster.Client{
 		HomeCluster:    homeCluster,
 		HomeRestConfig: restConfig,
 		HomeScheme:     scheme,
 		ResourceRouters: map[schema.GroupVersionKind]multicluster.ResourceRouter{
-			hvGVK:          multicluster.HypervisorResourceRouter{},
-			reservationGVK: multicluster.ReservationsResourceRouter{},
-			historyGVK:     multicluster.HistoryResourceRouter{},
+			hvGVK:                multicluster.HypervisorResourceRouter{},
+			reservationGVK:       multicluster.ReservationsResourceRouter{},
+			historyGVK:           multicluster.HistoryResourceRouter{},
+			committedResourceGVK: multicluster.CommittedResourceRouter{},
 		},
 	}
 	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()

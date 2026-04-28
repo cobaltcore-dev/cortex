@@ -24,7 +24,7 @@ func (s *Shim) HandleListResourceProviderAggregates(w http.ResponseWriter, r *ht
 	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	s.forward(w, r)
+	s.dispatchPassthroughOnly(w, r, s.config.Features.Aggregates)
 }
 
 // HandleUpdateResourceProviderAggregates handles
@@ -41,5 +41,5 @@ func (s *Shim) HandleUpdateResourceProviderAggregates(w http.ResponseWriter, r *
 	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	s.forward(w, r)
+	s.dispatchPassthroughOnly(w, r, s.config.Features.Aggregates)
 }

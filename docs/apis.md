@@ -19,9 +19,11 @@ graph LR;
     descheduling(Descheduling CRD)
     decision(Decision CRD)
     reservation(Reservation CRD)
+    committedresource(CommittedResource CRD)
     pipeline --> descheduling
     pipeline --> decision
     pipeline --> reservation
+    committedresource --> reservation
     end
 
     prometheus(Prometheus)
@@ -88,6 +90,29 @@ kubectl get reservations
 Reservations take away space for a workload that is expected to be spawned in the future. They specify which kind of resource is allocated, how much, and on which workload host. During scheduling, reservations are considered in addition to the running workload, creating a feedback loop where reservations influence follow-up scheduling decisions.
 
 The reservation state reflects where this reservation is currently placed as outcome of a pipeline decision.
+
+### CommittedResources
+
+```bash
+kubectl get committedresources
+```
+
+CommittedResources are a Kubernetes-native way to configure resource commitments (memory, CPU) for scheduling domains. They represent a guaranteed allocation of resources within a project and availability zone, and drive the automatic creation and management of Reservation slots.
+
+A CommittedResource goes through the following lifecycle states:
+
+- **planned**: StartTime not yet reached; no resources guaranteed, no Reservation slots created.
+- **pending**: StartTime reached; awaiting confirmation, no Reservation slots yet.
+- **guaranteed**: StartTime not reached yet; resources are guaranteed starting from StartTime, Reservation slots are kept in sync.
+- **confirmed**: StartTime reached; resources are actively guaranteed, Reservation slots are kept in sync.
+- **superseded**: Replaced by another commitment; resources released, Reservation slots removed.
+- **expired**: Past EndTime; resources released, Reservation slots removed.
+
+Key fields include `commitmentUUID`, `flavorGroupName`, `resourceType` (memory or cores), `amount`, `availabilityZone`, `projectID`, and time bounds (`startTime`, `endTime`). Only confirmed and guaranteed commitments result in active Reservation slots. Memory commitments drive flavor-based Reservation slot creation, while core commitments are verified arithmetically without creating Reservation slots.
+
+The status tracks the accepted amount, usage information (assigned VMs and used amount), and standard Kubernetes conditions for observability.
+
+For more details on how committed resources interact with reservations, see [committed resource reservations](reservations/committed-resource-reservations.md).
 
 ### Deschedulings
 

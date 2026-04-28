@@ -39,3 +39,5 @@ cortex.secrets.yaml
 !.license-scan-overrides.jsonl
 !.license-scan-rules.json
 !.coderabbit.yaml
+!.claude
+~/.claude

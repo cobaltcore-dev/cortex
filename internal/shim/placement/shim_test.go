@@ -435,13 +435,13 @@ func TestConfigValidateAuthRequiresKeystoneURL(t *testing.T) {
 	}
 }
 
-func TestConfigValidateEnableRootRequiresVersioning(t *testing.T) {
+func TestConfigValidateRootCRDRequiresVersioning(t *testing.T) {
 	c := config{
 		PlacementURL: "http://placement:8778",
-		Features:     featuresConfig{EnableRoot: true},
+		Features:     featuresConfig{Root: FeatureModeCRD},
 	}
 	if err := c.validate(); err == nil {
-		t.Fatal("expected error when enableRoot is true without versioning config")
+		t.Fatal("expected error when root mode is crd without versioning config")
 	}
 	c.Versioning = &versioningConfig{ID: "v1.0"}
 	if err := c.validate(); err == nil {
@@ -453,6 +453,30 @@ func TestConfigValidateEnableRootRequiresVersioning(t *testing.T) {
 		MaxVersion: "1.39",
 		Status:     "CURRENT",
 	}
+	if err := c.validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestConfigValidateTraitsCRDRequiresConfig(t *testing.T) {
+	t.Setenv("POD_NAMESPACE", "")
+
+	c := config{
+		PlacementURL: "http://placement:8778",
+		Features:     featuresConfig{Traits: FeatureModeCRD},
+	}
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when traits mode is crd without traits config")
+	}
+	c.Traits = &traitsConfig{}
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when traits.configMapName is empty")
+	}
+	c.Traits.ConfigMapName = "cortex-placement-shim-traits"
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when POD_NAMESPACE is not set")
+	}
+	t.Setenv("POD_NAMESPACE", "default")
 	if err := c.validate(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
