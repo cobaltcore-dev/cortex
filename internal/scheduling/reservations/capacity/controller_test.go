@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	schedulerapi "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -218,7 +219,7 @@ func TestReconcileOne_CreatesCRD(t *testing.T) {
 	}
 }
 
-func TestReconcileOne_SetsFreshConditionFalseOnSchedulerError(t *testing.T) {
+func TestReconcileOne_SetsReadyConditionFalseOnSchedulerError(t *testing.T) {
 	const (
 		groupName = "2101"
 		az        = "qa-de-1a"
@@ -250,7 +251,7 @@ func TestReconcileOne_SetsFreshConditionFalseOnSchedulerError(t *testing.T) {
 		SmallestFlavor: compute.FlavorInGroup{Name: groupName + "-small", MemoryMB: memMB},
 	}
 
-	// reconcileOne returns no error itself (it continues on probe failure), but sets Fresh=False
+	// reconcileOne returns no error itself (it continues on probe failure), but sets Ready=False
 	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, map[string]hv1.Hypervisor{}, []hv1.Hypervisor{}); err != nil {
 		t.Fatalf("reconcileOne failed: %v", err)
 	}
@@ -262,12 +263,12 @@ func TestReconcileOne_SetsFreshConditionFalseOnSchedulerError(t *testing.T) {
 
 	var freshStatus metav1.ConditionStatus
 	for _, c := range crd.Status.Conditions {
-		if c.Type == v1alpha1.FlavorGroupCapacityConditionFresh {
+		if c.Type == v1alpha1.FlavorGroupCapacityConditionReady {
 			freshStatus = c.Status
 		}
 	}
 	if freshStatus != metav1.ConditionFalse {
-		t.Errorf("Fresh condition = %q, want %q", freshStatus, metav1.ConditionFalse)
+		t.Errorf("Ready condition = %q, want %q", freshStatus, metav1.ConditionFalse)
 	}
 }
 
@@ -496,4 +497,63 @@ func TestReconcileOne_ZeroMemoryFlavorReturnsError(t *testing.T) {
 // collide with the one in this package.
 func TestPackageLogVar(t *testing.T) {
 	_ = reservations.NewSchedulerClient("http://localhost")
+}
+
+func TestSumCommittedCapacity(t *testing.T) {
+	const (
+		groupName    = "2101"
+		az           = "qa-de-1a"
+		memMB        = 4096
+		memBytes     = int64(memMB) * 1024 * 1024
+	)
+
+	newCR := func(name, group, zone string, state v1alpha1.CommitmentStatus, resType v1alpha1.CommittedResourceType, amount string, acceptedAmount string) *v1alpha1.CommittedResource {
+		qty := resource.MustParse(amount)
+		cr := &v1alpha1.CommittedResource{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Spec: v1alpha1.CommittedResourceSpec{
+				FlavorGroupName:  group,
+				AvailabilityZone: zone,
+				State:            state,
+				ResourceType:     resType,
+				Amount:           qty,
+			},
+		}
+		if acceptedAmount != "" {
+			accepted := resource.MustParse(acceptedAmount)
+			cr.Status.AcceptedAmount = &accepted
+		}
+		return cr
+	}
+
+	scheme := newTestScheme(t)
+	objects := []client.Object{
+		// Should count: confirmed, memory, right group+AZ, AcceptedAmount set
+		newCR("cr1", groupName, az, v1alpha1.CommitmentStatusConfirmed, v1alpha1.CommittedResourceTypeMemory, "8Gi", "8Gi"),
+		// Should count: guaranteed, memory, right group+AZ, no AcceptedAmount → falls back to Spec.Amount
+		newCR("cr2", groupName, az, v1alpha1.CommitmentStatusGuaranteed, v1alpha1.CommittedResourceTypeMemory, "4Gi", ""),
+		// Should NOT count: wrong state
+		newCR("cr3", groupName, az, v1alpha1.CommitmentStatusPlanned, v1alpha1.CommittedResourceTypeMemory, "4Gi", ""),
+		// Should NOT count: wrong resource type
+		newCR("cr4", groupName, az, v1alpha1.CommitmentStatusConfirmed, v1alpha1.CommittedResourceTypeCores, "4Gi", ""),
+		// Should NOT count: wrong AZ
+		newCR("cr5", groupName, "other-az", v1alpha1.CommitmentStatusConfirmed, v1alpha1.CommittedResourceTypeMemory, "4Gi", ""),
+		// Should NOT count: wrong flavor group
+		newCR("cr6", "other-group", az, v1alpha1.CommitmentStatusConfirmed, v1alpha1.CommittedResourceTypeMemory, "4Gi", ""),
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(objects...).
+		Build()
+
+	c := NewController(fakeClient, Config{})
+	// smallestFlavorBytes = 4GiB → cr1 = 8GiB/4GiB = 2 slots, cr2 = 4GiB/4GiB = 1 slot → total = 3
+	got, err := c.sumCommittedCapacity(context.Background(), groupName, az, memBytes)
+	if err != nil {
+		t.Fatalf("sumCommittedCapacity failed: %v", err)
+	}
+	if got != 3 {
+		t.Errorf("sumCommittedCapacity = %d, want 3", got)
+	}
 }

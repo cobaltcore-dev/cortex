@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	// FlavorGroupCapacityConditionFresh indicates the status data is up-to-date.
-	FlavorGroupCapacityConditionFresh = "Fresh"
+	// FlavorGroupCapacityConditionReady indicates the status data is up-to-date.
+	FlavorGroupCapacityConditionReady = "Ready"
 )
 
 // FlavorGroupCapacitySpec defines the desired state of FlavorGroupCapacity.
@@ -29,46 +29,36 @@ type FlavorGroupCapacityStatus struct {
 	// Computed as sum of floor(EffectiveCapacity.Memory / smallestFlavorMemory) across
 	// all hosts eligible for this flavor group (empty-state scheduler probe).
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Minimum=0
 	TotalCapacity int64 `json:"totalCapacity,omitempty"`
 
 	// TotalHosts is the number of hosts eligible for this flavor group in the empty-state probe.
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Minimum=0
 	TotalHosts int64 `json:"totalHosts,omitempty"`
 
 	// TotalPlaceable is the schedulable slots remaining given current VM allocations.
 	// Computed from the current-state scheduler probe.
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Minimum=0
 	TotalPlaceable int64 `json:"totalPlaceable,omitempty"`
 
 	// PlaceableHosts is the number of hosts still able to accept a new smallest-flavor VM.
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Minimum=0
 	PlaceableHosts int64 `json:"placeableHosts,omitempty"`
 
 	// TotalInstances is the total number of VM instances running on hypervisors in this AZ,
 	// derived from Hypervisor CRD Status.Instances (not filtered by flavor group).
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Minimum=0
 	TotalInstances int64 `json:"totalInstances,omitempty"`
 
 	// CommittedCapacity is the sum of AcceptedAmount across Ready=True CommittedResource CRDs.
-	// TODO(BLI #337): populate once CommittedResource CRD exists.
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Minimum=0
 	CommittedCapacity int64 `json:"committedCapacity,omitempty"`
 
 	// LastReconcileAt is the timestamp of the last successful reconcile.
 	// +kubebuilder:validation:Optional
 	LastReconcileAt metav1.Time `json:"lastReconcileAt,omitempty"`
 
-	// Conditions represent the current state of the FlavorGroupCapacity.
-	// The Fresh condition indicates whether the status data is up-to-date.
+	// The current status conditions of the FlavorGroupCapacity.
 	// +kubebuilder:validation:Optional
-	// +patchStrategy=merge
-	// +patchMergeKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
@@ -81,7 +71,7 @@ type FlavorGroupCapacityStatus struct {
 // +kubebuilder:printcolumn:name="TotalPlaceable",type="integer",JSONPath=".status.totalPlaceable"
 // +kubebuilder:printcolumn:name="TotalHosts",type="integer",JSONPath=".status.totalHosts"
 // +kubebuilder:printcolumn:name="LastReconcile",type="date",JSONPath=".status.lastReconcileAt"
-// +kubebuilder:printcolumn:name="Fresh",type="string",JSONPath=".status.conditions[?(@.type=='Fresh')].status"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 
 // FlavorGroupCapacity caches pre-computed capacity data for one flavor group in one AZ.
 // One CRD exists per (flavor group × AZ) pair, updated by the capacity controller on a fixed interval.
@@ -89,14 +79,17 @@ type FlavorGroupCapacityStatus struct {
 type FlavorGroupCapacity struct {
 	metav1.TypeMeta `json:",inline"`
 
+	// metadata is a standard object metadata
 	// +optional
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
+	// spec defines the desired state of FlavorGroupCapacity
 	// +required
 	Spec FlavorGroupCapacitySpec `json:"spec"`
 
+	// status defines the observed state of FlavorGroupCapacity
 	// +optional
-	Status FlavorGroupCapacityStatus `json:"status,omitempty"`
+	Status FlavorGroupCapacityStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true

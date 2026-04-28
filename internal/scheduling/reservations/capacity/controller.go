@@ -116,8 +116,11 @@ func (c *Controller) reconcileOne(
 	// Count total instances on hypervisors in this AZ.
 	totalInstances := countInstancesInAZ(allHVs, az)
 
-	// TODO(BLI #337): populate CommittedCapacity from Ready=True CommittedResource CRDs.
-	var committedCapacity int64
+	committedCapacity, committedErr := c.sumCommittedCapacity(ctx, groupName, az, smallestFlavorBytes)
+	if committedErr != nil {
+		log.Error(committedErr, "failed to sum committed capacity", "flavorGroup", groupName, "az", az)
+		committedCapacity = 0
+	}
 
 	crdName := crdNameFor(groupName, az)
 	fresh := totalErr == nil && placeableErr == nil
@@ -149,7 +152,7 @@ func (c *Controller) reconcileOne(
 	existing.Status.LastReconcileAt = metav1.Now()
 
 	freshCondition := metav1.Condition{
-		Type:               v1alpha1.FlavorGroupCapacityConditionFresh,
+		Type:               v1alpha1.FlavorGroupCapacityConditionReady,
 		ObservedGeneration: existing.Generation,
 	}
 	if fresh {
@@ -217,6 +220,40 @@ func (c *Controller) probeScheduler(
 		}
 	}
 	return capacity, hosts, nil
+}
+
+// sumCommittedCapacity sums AcceptedAmount (or Spec.Amount as fallback) across all
+// CommittedResource CRDs for the given (flavorGroup, az) pair with an active state
+// (guaranteed or confirmed) and resource type memory. Returns the total in slots.
+func (c *Controller) sumCommittedCapacity(ctx context.Context, groupName, az string, smallestFlavorBytes int64) (int64, error) {
+	var list v1alpha1.CommittedResourceList
+	if err := c.client.List(ctx, &list); err != nil {
+		return 0, fmt.Errorf("failed to list CommittedResources: %w", err)
+	}
+
+	var total int64
+	for _, cr := range list.Items {
+		if cr.Spec.FlavorGroupName != groupName {
+			continue
+		}
+		if cr.Spec.AvailabilityZone != az {
+			continue
+		}
+		if cr.Spec.ResourceType != v1alpha1.CommittedResourceTypeMemory {
+			continue
+		}
+		if cr.Spec.State != v1alpha1.CommitmentStatusGuaranteed && cr.Spec.State != v1alpha1.CommitmentStatusConfirmed {
+			continue
+		}
+		amount := cr.Spec.Amount
+		if cr.Status.AcceptedAmount != nil {
+			amount = *cr.Status.AcceptedAmount
+		}
+		if bytes := amount.Value(); bytes > 0 {
+			total += bytes / smallestFlavorBytes
+		}
+	}
+	return total, nil
 }
 
 // availabilityZones returns a sorted, deduplicated list of AZs from Hypervisor CRD labels.
