@@ -52,6 +52,18 @@ type requestIDContextKey struct{}
 // header value through the request lifecycle for tracing.
 var requestIDKey = requestIDContextKey{}
 
+// featureModeOverrideContextKey is a separate type for the per-request feature
+// mode override injected via the X-Cortex-Feature-Mode header.
+type featureModeOverrideContextKey struct{}
+
+// featureModeOverrideKey is the context key used to propagate the feature mode
+// override from the middleware to handlers.
+var featureModeOverrideKey = featureModeOverrideContextKey{}
+
+// headerFeatureModeOverride is the HTTP header that allows e2e tests to
+// override the configured feature mode on a per-request basis.
+const headerFeatureModeOverride = "X-Cortex-Feature-Mode"
+
 // FeatureMode controls how an endpoint group interacts with upstream
 // placement and the hypervisor CRD.
 type FeatureMode string
@@ -90,14 +102,27 @@ func (m FeatureMode) valid() bool {
 // dispatchPassthroughOnly forwards in passthrough mode, returns 501 for
 // hybrid/crd, and 500 for unknown modes.
 func (s *Shim) dispatchPassthroughOnly(w http.ResponseWriter, r *http.Request, mode FeatureMode) {
-	switch mode.orDefault() {
+	resolved := s.featureModeFromConfOrHeader(r, mode)
+	switch resolved {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 	case FeatureModeHybrid, FeatureModeCRD:
-		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", mode), http.StatusNotImplemented)
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", resolved), http.StatusNotImplemented)
 	default:
 		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
 	}
+}
+
+// featureModeFromConfOrHeader returns the effective feature mode for the
+// current request. If a valid override is present in the request context
+// (injected by wrapHandler from the X-Cortex-Feature-Mode header), the
+// override takes precedence. Otherwise the configured mode's default is
+// returned.
+func (s *Shim) featureModeFromConfOrHeader(r *http.Request, configured FeatureMode) FeatureMode {
+	if override, ok := r.Context().Value(featureModeOverrideKey).(FeatureMode); ok {
+		return override.orDefault()
+	}
+	return configured.orDefault()
 }
 
 // featuresConfig controls the feature mode for each endpoint group.
@@ -472,13 +497,10 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 		Buckets: prometheus.DefBuckets,
 	}, []string{"method", "pattern", "responsecode"})
 
-	traitsMode := s.config.Features.Traits.orDefault()
-	if traitsMode == FeatureModeHybrid || traitsMode == FeatureModeCRD {
-		s.resourceLocker = resourcelock.NewResourceLocker(
-			s.Client,
-			os.Getenv("POD_NAMESPACE"),
-		)
-	}
+	s.resourceLocker = resourcelock.NewResourceLocker(
+		s.Client,
+		os.Getenv("POD_NAMESPACE"),
+	)
 
 	// Check that the provided client is a multicluster client, since we need
 	// that to watch for hypervisors across clusters.
