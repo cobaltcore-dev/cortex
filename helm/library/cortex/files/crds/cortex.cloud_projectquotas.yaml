@@ -1,0 +1,212 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: projectquotas.cortex.cloud
+spec:
+  group: cortex.cloud
+  names:
+    kind: ProjectQuota
+    listKind: ProjectQuotaList
+    plural: projectquotas
+    singular: projectquota
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.projectID
+      name: Project
+      type: string
+    - jsonPath: .spec.domainID
+      name: Domain
+      type: string
+    - jsonPath: .status.lastReconcileAt
+      name: LastReconcile
+      type: date
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ProjectQuota is the Schema for the projectquotas API.
+          It persists quota values pushed by Limes via the LIQUID quota endpoint
+          (PUT /v1/projects/:uuid/quota → liquid.ServiceQuotaRequest).
+          See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#ServiceQuotaRequest
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              ProjectQuotaSpec defines the desired state of ProjectQuota.
+              Populated from PUT /v1/projects/:uuid/quota payloads (liquid.ServiceQuotaRequest).
+              See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#ServiceQuotaRequest
+            properties:
+              domainID:
+                description: |-
+                  DomainID of the OpenStack domain this project belongs to.
+                  Extracted from liquid.ServiceQuotaRequest.ProjectMetadata.Domain.UUID.
+                type: string
+              domainName:
+                description: |-
+                  DomainName is the human-readable name of the OpenStack domain.
+                  Extracted from liquid.ServiceQuotaRequest.ProjectMetadata.Domain.Name.
+                type: string
+              projectID:
+                description: |-
+                  ProjectID of the OpenStack project this quota belongs to.
+                  Corresponds to the :uuid in the PUT URL path.
+                type: string
+              projectName:
+                description: |-
+                  ProjectName is the human-readable name of the OpenStack project.
+                  Extracted from liquid.ServiceQuotaRequest.ProjectMetadata.Name.
+                type: string
+              quota:
+                additionalProperties:
+                  description: |-
+                    ResourceQuota holds the quota for a single resource with per-AZ breakdown.
+                    Maps to liquid.ResourceQuotaRequest from the LIQUID API.
+                    See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#ResourceQuotaRequest
+                  properties:
+                    perAZ:
+                      additionalProperties:
+                        format: int64
+                        type: integer
+                      description: |-
+                        PerAZ holds the per-availability-zone quota breakdown.
+                        Key: availability zone name, Value: quota for that AZ.
+                        Only populated for AZSeparatedTopology resources.
+                        Corresponds to liquid.ResourceQuotaRequest.PerAZ[az].Quota.
+                        See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#AZResourceQuotaRequest
+                      type: object
+                    quota:
+                      description: |-
+                        Quota is the total quota across all AZs (for compatibility).
+                        Corresponds to liquid.ResourceQuotaRequest.Quota.
+                      format: int64
+                      type: integer
+                  required:
+                  - quota
+                  type: object
+                description: |-
+                  Quota maps LIQUID resource names to their per-AZ quota.
+                  Key: liquid.ResourceName (e.g. "hw_version_hana_v2_ram")
+                  Mirrors liquid.ServiceQuotaRequest.Resources with AZSeparatedTopology.
+                  See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#ServiceQuotaRequest
+                type: object
+            required:
+            - domainID
+            - projectID
+            type: object
+          status:
+            description: |-
+              ProjectQuotaStatus defines the observed state of ProjectQuota.
+              Usage values correspond to liquid.AZResourceUsageReport fields reported via /report-usage.
+              See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#AZResourceUsageReport
+            properties:
+              conditions:
+                description: Conditions holds the current status conditions.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              lastReconcileAt:
+                description: LastReconcileAt is when the controller last reconciled
+                  this project's quota.
+                format: date-time
+                type: string
+              paygUsage:
+                additionalProperties:
+                  description: ResourceQuotaUsage holds per-AZ PAYG usage for a single
+                    resource.
+                  properties:
+                    perAZ:
+                      additionalProperties:
+                        format: int64
+                        type: integer
+                      description: |-
+                        PerAZ holds per-availability-zone PAYG usage values.
+                        Key: availability zone name, Value: PAYG usage in that AZ.
+                      type: object
+                  type: object
+                description: |-
+                  PaygUsage tracks per-resource per-AZ pay-as-you-go usage.
+                  Key: liquid.ResourceName
+                type: object
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

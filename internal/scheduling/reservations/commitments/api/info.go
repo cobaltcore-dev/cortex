@@ -151,6 +151,12 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 			return liquid.ServiceInfo{}, fmt.Errorf("%w: failed to create unit for flavor group %q: %w",
 				errInternalServiceInfo, groupName, err)
 		}
+		// Determine topology: AZSeparatedTopology only for groups that accept commitments
+		// (AZSeparatedTopology means quota is also AZ-aware, required when HasQuota=true)
+		ramTopology := liquid.AZAwareTopology
+		if handlesCommitments {
+			ramTopology = liquid.AZSeparatedTopology
+		}
 		resources[ramResourceName] = liquid.ResourceInfo{
 			DisplayName: fmt.Sprintf(
 				"multiples of %d MiB (usable by: %s)",
@@ -158,10 +164,10 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 				flavorListStr,
 			),
 			Unit:                ramUnit, // Non-standard unit: multiples of smallest flavor RAM
-			Topology:            liquid.AZAwareTopology,
+			Topology:            ramTopology,
 			NeedsResourceDemand: false,
-			HasCapacity:         true, // We report capacity via /commitments/v1/report-capacity
-			HasQuota:            false,
+			HasCapacity:         true,               // We report capacity via /commitments/v1/report-capacity
+			HasQuota:            handlesCommitments, // true only for groups that accept commitments
 			HandlesCommitments:  handlesCommitments, // Only groups with fixed ratio accept commitments
 			Attributes:          attrsJSON,
 		}

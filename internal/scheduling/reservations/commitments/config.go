@@ -57,6 +57,11 @@ type Config struct {
 	// When false, the endpoint will return HTTP 503 Service Unavailable.
 	// This can be used as an emergency switch if the capacity reporting is causing issues.
 	EnableReportCapacityAPI bool `json:"committedResourceEnableReportCapacityAPI"`
+
+	// EnableQuotaAPI controls whether the quota API endpoint is active.
+	// When false, the endpoint will return HTTP 503 Service Unavailable.
+	// This can be used as an emergency switch if quota persistence is causing issues.
+	EnableQuotaAPI bool `json:"committedResourceEnableQuotaAPI"`
 }
 
 // ApplyDefaults fills in any unset values with defaults.
@@ -103,5 +108,6 @@ func DefaultConfig() Config {
 		EnableChangeCommitmentsAPI:             true,
 		EnableReportUsageAPI:                   true,
 		EnableReportCapacityAPI:                true,
+		EnableQuotaAPI:                         true,
 	}
 }
