@@ -62,7 +62,7 @@ func (s *Shim) HandleListTraits(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	switch s.config.Features.Traits.orDefault() {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.Traits) {
 	case FeatureModePassthrough, FeatureModeHybrid:
 		s.forward(w, r)
 		return
@@ -132,7 +132,7 @@ func (s *Shim) HandleShowTrait(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	switch s.config.Features.Traits.orDefault() {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.Traits) {
 	case FeatureModePassthrough, FeatureModeHybrid:
 		s.forward(w, r)
 		return
@@ -174,7 +174,7 @@ func (s *Shim) HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	switch s.config.Features.Traits.orDefault() {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.Traits) {
 	case FeatureModePassthrough, FeatureModeHybrid:
 		s.forward(w, r)
 		return
@@ -298,7 +298,7 @@ func (s *Shim) HandleDeleteTrait(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	switch s.config.Features.Traits.orDefault() {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.Traits) {
 	case FeatureModePassthrough, FeatureModeHybrid:
 		s.forward(w, r)
 		return

@@ -42,6 +42,15 @@ func e2eTestResourceClasses(ctx context.Context, _ client.Client) error {
 
 	const testRC = "CUSTOM_CORTEX_E2E_RC"
 
+	// Probe: for non-passthrough modes, verify endpoint returns 501.
+	unimplemented, err := e2eProbeUnimplemented(ctx, sc, sc.Endpoint+"/resource_classes")
+	if err != nil {
+		return fmt.Errorf("probe: %w", err)
+	}
+	if unimplemented {
+		return nil
+	}
+
 	// Pre-cleanup: delete any leftover test resource class from a prior run.
 	log.Info("Pre-cleanup: deleting leftover test resource class", "class", testRC)
 	req, err := http.NewRequestWithContext(ctx,
@@ -226,5 +235,5 @@ func e2eTestResourceClasses(ctx context.Context, _ client.Client) error {
 }
 
 func init() {
-	e2eTests = append(e2eTests, e2eTest{name: "resource_classes", run: e2eTestResourceClasses})
+	e2eTests = append(e2eTests, e2eTest{name: "resource_classes", run: e2eWrapWithModes(e2eTestResourceClasses)})
 }

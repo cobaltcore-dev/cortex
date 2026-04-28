@@ -51,5 +51,5 @@ func e2eTestGetRoot(ctx context.Context, _ client.Client) error {
 }
 
 func init() {
-	e2eTests = append(e2eTests, e2eTest{name: "root", run: e2eTestGetRoot})
+	e2eTests = append(e2eTests, e2eTest{name: "root", run: e2eWrapWithModes(e2eTestGetRoot)})
 }

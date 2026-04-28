@@ -4,7 +4,6 @@
 package placement
 
 import (
-	"fmt"
 	"net/http"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -33,7 +32,7 @@ func (s *Shim) HandleListResourceProviderTraits(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	switch s.config.Features.ResourceProviderTraits.orDefault() {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviderTraits) {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 	case FeatureModeHybrid:
@@ -92,13 +91,13 @@ func (s *Shim) HandleUpdateResourceProviderTraits(w http.ResponseWriter, r *http
 	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	switch s.config.Features.ResourceProviderTraits.orDefault() {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviderTraits) {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 	case FeatureModeHybrid:
 		s.forward(w, r)
 	case FeatureModeCRD:
-		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for resource provider trait writes", s.config.Features.ResourceProviderTraits), http.StatusNotImplemented)
+		http.Error(w, "crd mode is not yet implemented for resource provider trait writes", http.StatusNotImplemented)
 	default:
 		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
 	}
@@ -117,13 +116,13 @@ func (s *Shim) HandleDeleteResourceProviderTraits(w http.ResponseWriter, r *http
 	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	switch s.config.Features.ResourceProviderTraits.orDefault() {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviderTraits) {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 	case FeatureModeHybrid:
 		s.forward(w, r)
 	case FeatureModeCRD:
-		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for resource provider trait writes", s.config.Features.ResourceProviderTraits), http.StatusNotImplemented)
+		http.Error(w, "crd mode is not yet implemented for resource provider trait writes", http.StatusNotImplemented)
 	default:
 		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
 	}

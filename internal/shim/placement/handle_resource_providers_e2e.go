@@ -58,14 +58,24 @@ func e2eTestResourceProviders(ctx context.Context, cl client.Client) error {
 
 	// ==================== Phase 1: VMware path ====================
 
-	log.Info("=== VMware path: passthrough resource provider tests ===")
-	if err := e2eVMwareResourceProviders(ctx, sc); err != nil {
-		return fmt.Errorf("VMware path: %w", err)
+	// The VMware path creates synthetic test RPs against upstream placement.
+	// In crd mode there is no upstream, so skip it.
+	mode := e2eCurrentMode(ctx)
+	if mode == "" {
+		mode = config.Features.ResourceProviders.orDefault()
+	}
+	if mode != FeatureModeCRD {
+		log.Info("=== VMware path: passthrough resource provider tests ===")
+		if err := e2eVMwareResourceProviders(ctx, sc); err != nil {
+			return fmt.Errorf("VMware path: %w", err)
+		}
+	} else {
+		log.Info("Skipping VMware path because mode is crd (no upstream placement)")
 	}
 
 	// ==================== Phase 2: KVM path ====================
 
-	if config.Features.ResourceProviders.orDefault() == FeatureModePassthrough {
+	if mode == FeatureModePassthrough {
 		log.Info("Skipping KVM resource provider e2e tests because resourceProviders mode is passthrough")
 	} else {
 		log.Info("=== KVM path: hypervisor-backed resource provider tests ===")
@@ -506,5 +516,5 @@ func e2eKVMResourceProviders(ctx context.Context, sc *gophercloud.ServiceClient,
 }
 
 func init() {
-	e2eTests = append(e2eTests, e2eTest{name: "resource_providers", run: e2eTestResourceProviders})
+	e2eTests = append(e2eTests, e2eTest{name: "resource_providers", run: e2eWrapWithModes(e2eTestResourceProviders)})
 }
