@@ -167,33 +167,26 @@ func (r *CommittedResourceController) applyReservationState(ctx context.Context,
 // Returns allReady=false, anyFailed=false when some children have no condition yet (placement pending).
 func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Context, cr *v1alpha1.CommittedResource) (allReady, anyFailed bool, failReason string, err error) {
 	var list v1alpha1.ReservationList
-	if err := r.List(ctx, &list, client.MatchingLabels{
-		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-	}); err != nil {
+	if err := r.List(ctx, &list,
+		client.MatchingLabels{v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource},
+		client.MatchingFields{idxReservationByCommitmentUUID: cr.Spec.CommitmentUUID},
+	); err != nil {
 		return false, false, "", fmt.Errorf("failed to list reservations: %w", err)
 	}
 
-	var children []v1alpha1.Reservation
-	for _, res := range list.Items {
-		if res.Spec.CommittedResourceReservation != nil &&
-			res.Spec.CommittedResourceReservation.CommitmentUUID == cr.Spec.CommitmentUUID {
-			children = append(children, res)
-		}
-	}
-
-	if len(children) == 0 {
+	if len(list.Items) == 0 {
 		return true, false, "", nil
 	}
 
 	// First pass: failures take priority over pending.
-	for _, res := range children {
+	for _, res := range list.Items {
 		cond := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ReservationConditionReady)
 		if cond != nil && cond.Status == metav1.ConditionFalse {
 			return false, true, cond.Message, nil
 		}
 	}
 	// Second pass: check for any not-yet-ready slots.
-	for _, res := range children {
+	for _, res := range list.Items {
 		cond := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ReservationConditionReady)
 		if cond == nil || cond.Status != metav1.ConditionTrue {
 			return false, false, "", nil
@@ -245,17 +238,14 @@ func (r *CommittedResourceController) reconcileDeletion(ctx context.Context, log
 // identified by matching CommitmentUUID in the reservation spec.
 func (r *CommittedResourceController) deleteChildReservations(ctx context.Context, cr *v1alpha1.CommittedResource) error {
 	var list v1alpha1.ReservationList
-	if err := r.List(ctx, &list, client.MatchingLabels{
-		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-	}); err != nil {
+	if err := r.List(ctx, &list,
+		client.MatchingLabels{v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource},
+		client.MatchingFields{idxReservationByCommitmentUUID: cr.Spec.CommitmentUUID},
+	); err != nil {
 		return fmt.Errorf("failed to list reservations: %w", err)
 	}
 	for i := range list.Items {
 		res := &list.Items[i]
-		if res.Spec.CommittedResourceReservation == nil ||
-			res.Spec.CommittedResourceReservation.CommitmentUUID != cr.Spec.CommitmentUUID {
-			continue
-		}
 		if err := r.Delete(ctx, res); client.IgnoreNotFound(err) != nil {
 			return fmt.Errorf("failed to delete reservation %s: %w", res.Name, err)
 		}

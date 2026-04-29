@@ -18,62 +18,51 @@ const (
 
 // SyncerMonitor provides metrics for the commitment syncer.
 type SyncerMonitor struct {
-	// Sync lifecycle
-	syncRuns   prometheus.Counter
-	syncErrors prometheus.Counter
-
-	// Commitment processing
-	commitmentsTotal     prometheus.Counter     // all commitments seen from Limes
-	commitmentsProcessed prometheus.Counter     // successfully processed
-	commitmentsSkipped   *prometheus.CounterVec // skipped with reason label
-
-	// Reservation changes
-	reservationsCreated  prometheus.Counter
-	reservationsDeleted  prometheus.Counter
-	reservationsRepaired prometheus.Counter
-
-	// Stale committed resource CRDs (present locally but absent from Limes)
-	staleCRs prometheus.Gauge
+	syncErrors             prometheus.Counter
+	syncDuration           prometheus.Histogram
+	limesCommitmentsActive prometheus.Gauge
+	staleCRs               prometheus.Gauge
+	commitmentsSkipped     *prometheus.CounterVec
+	crCreates              prometheus.Counter
+	crUpdates              prometheus.Counter
+	crDeletes              prometheus.Counter
 }
 
 // NewSyncerMonitor creates a new monitor with Prometheus metrics.
 func NewSyncerMonitor() *SyncerMonitor {
 	m := &SyncerMonitor{
-		syncRuns: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "cortex_committed_resource_syncer_runs_total",
-			Help: "Total number of commitment syncer runs",
-		}),
 		syncErrors: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "cortex_committed_resource_syncer_errors_total",
-			Help: "Total number of commitment syncer errors",
+			Help: "Total number of commitment syncer runs that failed",
 		}),
-		commitmentsTotal: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "cortex_committed_resource_syncer_commitments_total",
-			Help: "Total number of commitments seen from Limes",
+		syncDuration: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Name:    "cortex_committed_resource_syncer_duration_seconds",
+			Help:    "Duration of each commitment syncer run",
+			Buckets: []float64{0.5, 1, 5, 10, 30, 60, 120},
 		}),
-		commitmentsProcessed: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "cortex_committed_resource_syncer_commitments_processed_total",
-			Help: "Total number of commitments successfully processed",
+		limesCommitmentsActive: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "cortex_committed_resource_syncer_limes_commitments_active",
+			Help: "Number of commitments from Limes that passed filtering and should have CR CRDs",
+		}),
+		staleCRs: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "cortex_committed_resource_syncer_stale_crs",
+			Help: "Number of CommittedResource CRDs present locally but absent from Limes",
 		}),
 		commitmentsSkipped: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "cortex_committed_resource_syncer_commitments_skipped_total",
 			Help: "Total number of commitments skipped during sync",
 		}, []string{"reason"}),
-		reservationsCreated: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "cortex_committed_resource_syncer_reservations_created_total",
-			Help: "Total number of reservations created during sync",
+		crCreates: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "cortex_committed_resource_syncer_cr_creates_total",
+			Help: "Total number of CommittedResource CRDs created by the syncer",
 		}),
-		reservationsDeleted: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "cortex_committed_resource_syncer_reservations_deleted_total",
-			Help: "Total number of reservations deleted during sync",
+		crUpdates: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "cortex_committed_resource_syncer_cr_updates_total",
+			Help: "Total number of CommittedResource CRDs updated by the syncer",
 		}),
-		reservationsRepaired: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "cortex_committed_resource_syncer_reservations_repaired_total",
-			Help: "Total number of reservations repaired during sync (wrong metadata)",
-		}),
-		staleCRs: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "cortex_committed_resource_syncer_stale_crs",
-			Help: "Number of CommittedResource CRDs present locally but absent from Limes (measured each sync run)",
+		crDeletes: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "cortex_committed_resource_syncer_cr_deletes_total",
+			Help: "Total number of CommittedResource CRDs deleted by the syncer (expired GC)",
 		}),
 	}
 
@@ -91,73 +80,58 @@ func NewSyncerMonitor() *SyncerMonitor {
 	return m
 }
 
-// RecordSyncRun records a syncer run.
-func (m *SyncerMonitor) RecordSyncRun() {
-	m.syncRuns.Inc()
-}
-
-// RecordSyncError records a syncer error.
-func (m *SyncerMonitor) RecordSyncError() {
+func (m *SyncerMonitor) RecordError() {
 	m.syncErrors.Inc()
 }
 
-// RecordCommitmentSeen records a commitment seen from Limes.
-func (m *SyncerMonitor) RecordCommitmentSeen() {
-	m.commitmentsTotal.Inc()
+func (m *SyncerMonitor) RecordDuration(seconds float64) {
+	m.syncDuration.Observe(seconds)
 }
 
-// RecordCommitmentProcessed records a commitment successfully processed.
-func (m *SyncerMonitor) RecordCommitmentProcessed() {
-	m.commitmentsProcessed.Inc()
+func (m *SyncerMonitor) SetLimesCommitmentsActive(count int) {
+	m.limesCommitmentsActive.Set(float64(count))
 }
 
-// RecordCommitmentSkipped records a commitment skipped with a reason.
-func (m *SyncerMonitor) RecordCommitmentSkipped(reason string) {
-	m.commitmentsSkipped.WithLabelValues(reason).Inc()
-}
-
-// RecordReservationsCreated records reservations created.
-func (m *SyncerMonitor) RecordReservationsCreated(count int) {
-	m.reservationsCreated.Add(float64(count))
-}
-
-// RecordReservationsDeleted records reservations deleted.
-func (m *SyncerMonitor) RecordReservationsDeleted(count int) {
-	m.reservationsDeleted.Add(float64(count))
-}
-
-// RecordReservationsRepaired records reservations repaired.
-func (m *SyncerMonitor) RecordReservationsRepaired(count int) {
-	m.reservationsRepaired.Add(float64(count))
-}
-
-// RecordStaleCRs sets the gauge to the number of CRDs present locally but absent from Limes.
 func (m *SyncerMonitor) RecordStaleCRs(count int) {
 	m.staleCRs.Set(float64(count))
 }
 
+func (m *SyncerMonitor) RecordCommitmentSkipped(reason string) {
+	m.commitmentsSkipped.WithLabelValues(reason).Inc()
+}
+
+func (m *SyncerMonitor) RecordCRCreates(count int) {
+	m.crCreates.Add(float64(count))
+}
+
+func (m *SyncerMonitor) RecordCRUpdates(count int) {
+	m.crUpdates.Add(float64(count))
+}
+
+func (m *SyncerMonitor) RecordCRDeletes(count int) {
+	m.crDeletes.Add(float64(count))
+}
+
 // Describe implements prometheus.Collector.
 func (m *SyncerMonitor) Describe(ch chan<- *prometheus.Desc) {
-	m.syncRuns.Describe(ch)
 	m.syncErrors.Describe(ch)
-	m.commitmentsTotal.Describe(ch)
-	m.commitmentsProcessed.Describe(ch)
-	m.commitmentsSkipped.Describe(ch)
-	m.reservationsCreated.Describe(ch)
-	m.reservationsDeleted.Describe(ch)
-	m.reservationsRepaired.Describe(ch)
+	m.syncDuration.Describe(ch)
+	m.limesCommitmentsActive.Describe(ch)
 	m.staleCRs.Describe(ch)
+	m.commitmentsSkipped.Describe(ch)
+	m.crCreates.Describe(ch)
+	m.crUpdates.Describe(ch)
+	m.crDeletes.Describe(ch)
 }
 
 // Collect implements prometheus.Collector.
 func (m *SyncerMonitor) Collect(ch chan<- prometheus.Metric) {
-	m.syncRuns.Collect(ch)
 	m.syncErrors.Collect(ch)
-	m.commitmentsTotal.Collect(ch)
-	m.commitmentsProcessed.Collect(ch)
-	m.commitmentsSkipped.Collect(ch)
-	m.reservationsCreated.Collect(ch)
-	m.reservationsDeleted.Collect(ch)
-	m.reservationsRepaired.Collect(ch)
+	m.syncDuration.Collect(ch)
+	m.limesCommitmentsActive.Collect(ch)
 	m.staleCRs.Collect(ch)
+	m.commitmentsSkipped.Collect(ch)
+	m.crCreates.Collect(ch)
+	m.crUpdates.Collect(ch)
+	m.crDeletes.Collect(ch)
 }

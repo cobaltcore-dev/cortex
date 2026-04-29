@@ -19,6 +19,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	"github.com/sapcc/go-api-declarations/liquid"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -196,7 +197,14 @@ ProcessLoop:
 				// Snapshot the current spec before mutation so we can restore it on rollback.
 				snap := crSnapshot{crName: crName}
 				existing := &v1alpha1.CommittedResource{}
-				if err := api.client.Get(ctx, types.NamespacedName{Name: crName}, existing); err == nil {
+				if err := api.client.Get(ctx, types.NamespacedName{Name: crName}, existing); err != nil {
+					if !apierrors.IsNotFound(err) {
+						failedReason = fmt.Sprintf("commitment %s: failed to read pre-update snapshot: %v", commitment.UUID, err)
+						rollback = true
+						break ProcessLoop
+					}
+					// Not found: CR is new, prevSpec stays nil.
+				} else {
 					specCopy := existing.Spec
 					snap.prevSpec = &specCopy
 				}

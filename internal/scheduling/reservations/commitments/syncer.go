@@ -124,6 +124,9 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 			// valid, continue processing
 		default:
 			log.Info("skipping commitment with unknown status", "id", id, "status", commitment.Status)
+			if commitment.UUID != "" {
+				result.skippedUUIDs[commitment.UUID] = true
+			}
 			continue
 		}
 
@@ -222,10 +225,12 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 
 	logger.Info("starting commitment sync")
 
-	// Record sync run
-	if s.monitor != nil {
-		s.monitor.RecordSyncRun()
-	}
+	startTime := time.Now()
+	defer func() {
+		if s.monitor != nil {
+			s.monitor.RecordDuration(time.Since(startTime).Seconds())
+		}
+	}()
 
 	// Check if flavor group knowledge is ready
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: s.Client}
@@ -308,6 +313,9 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	staleCRCount, gcDeleted := 0, 0
 	for i := range existingCRs.Items {
 		cr := &existingCRs.Items[i]
+		if cr.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
+			continue
+		}
 		if !activeCommitments[cr.Spec.CommitmentUUID] {
 			staleCRCount++
 		}
@@ -334,9 +342,13 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	var totalReservationDeleted int
 	for i := range existingReservations.Items {
 		res := &existingReservations.Items[i]
-		commitmentUUID := extractCommitmentUUID(res.Name)
+		if res.Spec.CommittedResourceReservation == nil {
+			logger.Info("skipping reservation without committed resource spec", "name", res.Name)
+			continue
+		}
+		commitmentUUID := res.Spec.CommittedResourceReservation.CommitmentUUID
 		if commitmentUUID == "" {
-			logger.Info("skipping reservation with unparseable name", "name", res.Name)
+			logger.Info("skipping reservation with empty commitment UUID", "name", res.Name)
 			continue
 		}
 		if !activeCommitments[commitmentUUID] {
@@ -350,9 +362,6 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	}
 
 	if s.monitor != nil {
-		if totalCreated > 0 {
-			s.monitor.RecordReservationsCreated(totalCreated)
-		}
 		if totalReservationDeleted > 0 {
 			s.monitor.RecordReservationsDeleted(totalReservationDeleted)
 		}

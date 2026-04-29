@@ -25,6 +25,7 @@ import (
 	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -604,6 +605,8 @@ func (env *CRTestEnv) VerifyCRAbsent(name string) {
 	err := env.K8sClient.Get(context.Background(), client.ObjectKey{Name: name}, cr)
 	if err == nil {
 		env.T.Errorf("expected CommittedResource %q to be absent after rollback, but it still exists", name)
+	} else if !apierrors.IsNotFound(err) {
+		env.T.Errorf("unexpected error checking if CommittedResource %q is absent: %v", name, err)
 	}
 }
 
