@@ -13,7 +13,10 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 var (
@@ -110,13 +113,17 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 			continue
 		}
 
-		// Only process commitments that are active (confirmed or guaranteed).
-		// planned/pending are not yet accepted by Cortex; superseded/expired are done.
-		if commitment.Status != "confirmed" && commitment.Status != "guaranteed" {
-			log.Info("skipping non-active commitment", "id", id, "status", commitment.Status)
-			if s.monitor != nil {
-				s.monitor.RecordCommitmentSkipped(SkipReasonNonActive)
-			}
+		// Validate that the commitment state is a known enum value.
+		switch v1alpha1.CommitmentStatus(commitment.Status) {
+		case v1alpha1.CommitmentStatusPlanned,
+			v1alpha1.CommitmentStatusPending,
+			v1alpha1.CommitmentStatusGuaranteed,
+			v1alpha1.CommitmentStatusConfirmed,
+			v1alpha1.CommitmentStatusSuperseded,
+			v1alpha1.CommitmentStatusExpired:
+			// valid, continue processing
+		default:
+			log.Info("skipping commitment with unknown status", "id", id, "status", commitment.Status)
 			continue
 		}
 
@@ -246,39 +253,38 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		return err
 	}
 
-	// Create ReservationManager to handle state application
-	manager := NewReservationManager(s.Client)
-
-	// Apply each commitment state using the manager
-	var totalCreated, totalDeleted, totalRepaired int
+	// Upsert CommittedResource CRDs for each commitment
+	var totalCreated, totalUpdated int
 	for _, state := range commitmentResult.states {
-		logger.Info("applying commitment state",
+		logger.Info("upserting committed resource CRD",
 			"commitmentUUID", state.CommitmentUUID,
 			"projectID", state.ProjectID,
 			"flavorGroup", state.FlavorGroupName,
-			"totalMemoryBytes", state.TotalMemoryBytes)
+			"state", state.State)
 
-		applyResult, err := manager.ApplyCommitmentState(ctx, logger, state, flavorGroups, CreatorValue)
+		var (
+			op  controllerutil.OperationResult
+			err error
+		)
+		if isTerminalCommitment(state) {
+			// Terminal commitments (superseded/expired state, or EndTime in the past): update
+			// existing CRD so the controller can clean up Reservations, but do not create a
+			// new one — if no CRD exists locally there are no Reservation slots to clean up.
+			op, err = s.updateCommittedResourceIfExists(ctx, logger, state)
+		} else {
+			op, err = s.upsertCommittedResource(ctx, logger, state)
+		}
 		if err != nil {
-			logger.Error(err, "failed to apply commitment state",
+			logger.Error(err, "failed to upsert committed resource CRD",
 				"commitmentUUID", state.CommitmentUUID)
-			// Continue with other commitments even if one fails
 			continue
 		}
-
-		totalCreated += applyResult.Created
-		totalDeleted += applyResult.Deleted
-		totalRepaired += applyResult.Repaired
-	}
-
-	// Delete reservations that are no longer in commitments
-	// Only query committed resource reservations using labels for efficiency
-	var existingReservations v1alpha1.ReservationList
-	if err := s.List(ctx, &existingReservations, client.MatchingLabels{
-		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-	}); err != nil {
-		logger.Error(err, "failed to list existing committed resource reservations")
-		return err
+		switch op {
+		case controllerutil.OperationResultCreated:
+			totalCreated++
+		case controllerutil.OperationResultUpdated:
+			totalUpdated++
+		}
 	}
 
 	// Build set of commitment UUIDs we should have (processed + skipped)
@@ -286,51 +292,159 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	for _, state := range commitmentResult.states {
 		activeCommitments[state.CommitmentUUID] = true
 	}
-	// Also include skipped commitments - don't delete their CRDs
 	for uuid := range commitmentResult.skippedUUIDs {
 		activeCommitments[uuid] = true
 	}
 
-	// Delete reservations for commitments that no longer exist
-	for _, existing := range existingReservations.Items {
-		// Extract commitment UUID from reservation name
-		commitmentUUID := extractCommitmentUUID(existing.Name)
-		if commitmentUUID == "" {
-			logger.Info("skipping reservation with unparseable name", "name", existing.Name)
-			continue
+	// Count CommittedResource CRDs present locally but absent from Limes (do not delete — Limes
+	// responses may be transient and deleting active CRDs would drop Reservation slots).
+	// Also GC CRDs whose EndTime has passed: the commitment is over, the controller's finalizer
+	// will clean up child Reservations on deletion.
+	var existingCRs v1alpha1.CommittedResourceList
+	if err := s.List(ctx, &existingCRs); err != nil {
+		logger.Error(err, "failed to list existing committed resource CRDs")
+		return err
+	}
+	staleCRCount, gcDeleted := 0, 0
+	for i := range existingCRs.Items {
+		cr := &existingCRs.Items[i]
+		if !activeCommitments[cr.Spec.CommitmentUUID] {
+			staleCRCount++
 		}
-
-		if !activeCommitments[commitmentUUID] {
-			// This commitment no longer exists, delete the reservation
-			if err := s.Delete(ctx, &existing); err != nil {
-				logger.Error(err, "failed to delete reservation", "name", existing.Name)
+		if cr.Spec.EndTime != nil && !cr.Spec.EndTime.After(time.Now()) {
+			if err := s.Delete(ctx, cr); client.IgnoreNotFound(err) != nil {
+				logger.Error(err, "failed to GC expired committed resource CRD", "name", cr.Name)
 				return err
 			}
-			logger.Info("deleted reservation for expired commitment",
-				"name", existing.Name,
-				"commitmentUUID", commitmentUUID)
-			totalDeleted++
+			logger.Info("GC'd expired committed resource CRD",
+				"name", cr.Name, "endTime", cr.Spec.EndTime)
+			gcDeleted++
 		}
 	}
 
-	// Record reservation change metrics
+	// Delete orphaned Reservation CRDs: type=committed-resource but commitment no longer active.
+	// These are left over from the pre-refactor path where the syncer wrote Reservations directly.
+	var existingReservations v1alpha1.ReservationList
+	if err := s.List(ctx, &existingReservations, client.MatchingLabels{
+		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+	}); err != nil {
+		logger.Error(err, "failed to list committed resource reservations")
+		return err
+	}
+	var totalReservationDeleted int
+	for i := range existingReservations.Items {
+		res := &existingReservations.Items[i]
+		commitmentUUID := extractCommitmentUUID(res.Name)
+		if commitmentUUID == "" {
+			logger.Info("skipping reservation with unparseable name", "name", res.Name)
+			continue
+		}
+		if !activeCommitments[commitmentUUID] {
+			if err := s.Delete(ctx, res); client.IgnoreNotFound(err) != nil {
+				logger.Error(err, "failed to delete orphaned reservation", "name", res.Name)
+				return err
+			}
+			logger.Info("deleted orphaned reservation", "name", res.Name, "commitmentUUID", commitmentUUID)
+			totalReservationDeleted++
+		}
+	}
+
 	if s.monitor != nil {
 		if totalCreated > 0 {
 			s.monitor.RecordReservationsCreated(totalCreated)
 		}
-		if totalDeleted > 0 {
-			s.monitor.RecordReservationsDeleted(totalDeleted)
+		if totalReservationDeleted > 0 {
+			s.monitor.RecordReservationsDeleted(totalReservationDeleted)
 		}
-		if totalRepaired > 0 {
-			s.monitor.RecordReservationsRepaired(totalRepaired)
-		}
+		s.monitor.RecordStaleCRs(staleCRCount)
 	}
 
-	logger.Info("synced reservations",
+	if staleCRCount > 0 {
+		logger.Info("WARNING: committed resource CRDs present locally but absent from Limes — review for manual cleanup",
+			"staleCRs", staleCRCount)
+	}
+
+	logger.Info("synced committed resource CRDs",
 		"processedCount", len(commitmentResult.states),
 		"skippedCount", len(commitmentResult.skippedUUIDs),
 		"created", totalCreated,
-		"deleted", totalDeleted,
-		"repaired", totalRepaired)
+		"updated", totalUpdated,
+		"staleCRs", staleCRCount,
+		"expiredCRsGCd", gcDeleted,
+		"orphanReservationsDeleted", totalReservationDeleted)
 	return nil
+}
+
+func (s *Syncer) applyCommittedResourceSpec(cr *v1alpha1.CommittedResource, state *CommitmentState) {
+	cr.Spec.CommitmentUUID = state.CommitmentUUID
+	cr.Spec.SchedulingDomain = v1alpha1.SchedulingDomainNova
+	cr.Spec.FlavorGroupName = state.FlavorGroupName
+	cr.Spec.ResourceType = v1alpha1.CommittedResourceTypeMemory
+	cr.Spec.Amount = *resource.NewQuantity(state.TotalMemoryBytes, resource.BinarySI)
+	cr.Spec.AvailabilityZone = state.AvailabilityZone
+	cr.Spec.ProjectID = state.ProjectID
+	cr.Spec.DomainID = state.DomainID
+	cr.Spec.State = state.State
+	cr.Spec.AllowRejection = false
+
+	if state.StartTime != nil {
+		t := metav1.NewTime(*state.StartTime)
+		cr.Spec.StartTime = &t
+	} else {
+		cr.Spec.StartTime = nil
+	}
+	if state.EndTime != nil {
+		t := metav1.NewTime(*state.EndTime)
+		cr.Spec.EndTime = &t
+	} else {
+		cr.Spec.EndTime = nil
+	}
+}
+
+func (s *Syncer) upsertCommittedResource(ctx context.Context, logger logr.Logger, state *CommitmentState) (controllerutil.OperationResult, error) {
+	cr := &v1alpha1.CommittedResource{}
+	cr.Name = "commitment-" + state.CommitmentUUID
+
+	op, err := controllerutil.CreateOrUpdate(ctx, s.Client, cr, func() error {
+		s.applyCommittedResourceSpec(cr, state)
+		return nil
+	})
+	if err != nil {
+		return op, err
+	}
+	logger.V(1).Info("upserted committed resource CRD", "name", cr.Name, "op", op)
+	return op, nil
+}
+
+// updateCommittedResourceIfExists updates an existing CommittedResource CRD but does not
+// create one if it is absent. Used for terminal states (superseded/expired): we want the
+// controller to see the state transition and clean up child Reservations, but there is no
+// point creating a CRD for a commitment Cortex has never tracked.
+func (s *Syncer) updateCommittedResourceIfExists(ctx context.Context, logger logr.Logger, state *CommitmentState) (controllerutil.OperationResult, error) {
+	cr := &v1alpha1.CommittedResource{}
+	name := "commitment-" + state.CommitmentUUID
+	if err := s.Get(ctx, client.ObjectKey{Name: name}, cr); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			logger.V(1).Info("skipping terminal state — CRD does not exist locally",
+				"commitmentUUID", state.CommitmentUUID, "state", state.State)
+			return controllerutil.OperationResultNone, nil
+		}
+		return controllerutil.OperationResultNone, err
+	}
+	s.applyCommittedResourceSpec(cr, state)
+	if err := s.Update(ctx, cr); err != nil {
+		return controllerutil.OperationResultNone, err
+	}
+	logger.V(1).Info("updated committed resource CRD (terminal state)", "name", name, "state", state.State)
+	return controllerutil.OperationResultUpdated, nil
+}
+
+// isTerminalCommitment returns true when a commitment should not result in new Reservation
+// slots: either its Limes state is already terminal, or its EndTime has passed.
+func isTerminalCommitment(state *CommitmentState) bool {
+	switch state.State {
+	case v1alpha1.CommitmentStatusSuperseded, v1alpha1.CommitmentStatusExpired:
+		return true
+	}
+	return state.EndTime != nil && !state.EndTime.After(time.Now())
 }

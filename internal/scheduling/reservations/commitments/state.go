@@ -97,6 +97,8 @@ type CommitmentState struct {
 	// When set (e.g. "<cr-name>-"), Reservation CRDs are named "<NamePrefix><slot-index>".
 	// Used by the CommittedResource controller; leave empty for the legacy syncer path.
 	NamePrefix string
+	// State is the lifecycle state from Limes (planned/pending/guaranteed/confirmed/superseded/expired).
+	State v1alpha1.CommitmentStatus
 }
 
 // FromCommitment converts Limes commitment to CommitmentState.
@@ -144,6 +146,7 @@ func FromCommitment(
 		AvailabilityZone: commitment.AvailabilityZone,
 		StartTime:        startTime,
 		EndTime:          endTime,
+		State:            v1alpha1.CommitmentStatus(commitment.Status),
 	}, nil
 }
 
@@ -166,8 +169,8 @@ func FromChangeCommitmentTargetState(
 	var endTime *time.Time
 
 	switch commitment.NewStatus.UnwrapOr("none") {
-	// guaranteed and confirmed commitments are honored with start time now
-	case liquid.CommitmentStatusGuaranteed, liquid.CommitmentStatusConfirmed:
+	// pending, guaranteed, confirmed commitments are honored with Reservation slots.
+	case liquid.CommitmentStatusPending, liquid.CommitmentStatusGuaranteed, liquid.CommitmentStatusConfirmed:
 		amountMultiple = commitment.Amount
 		// Set start time: use ConfirmBy if available (when the commitment was confirmed),
 		// otherwise use time.Now() for immediate confirmation
@@ -208,6 +211,7 @@ func FromChangeCommitmentTargetState(
 		AvailabilityZone: az,
 		StartTime:        startTime,
 		EndTime:          endTime,
+		State:            v1alpha1.CommitmentStatus(commitment.NewStatus.UnwrapOr("")),
 	}, nil
 }
 

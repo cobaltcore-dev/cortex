@@ -55,8 +55,8 @@ flowchart LR
     UsageAPI[Usage API]
     Scheduler[Scheduler API]
 
-    ChangeAPI -->|CRUD| CR
-    Syncer -->|CRUD| CR
+    ChangeAPI -->|upsert + poll status| CR
+    Syncer -->|upsert| CR
     UsageAPI -->|read| CR
     UsageAPI -->|read| Res
     CapacityAPI -->|read| Res
@@ -228,18 +228,20 @@ The `Reservation` controller (`CommitmentReservationController`) watches `Reserv
 
 ### Change-Commitments API
 
-The change-commitments API receives batched commitment changes from Limes and manages reservations accordingly.
+The change-commitments API receives batched commitment changes from Limes and applies them using a **write-intent, watch-for-outcome** pattern: the handler creates or updates `CommittedResource` CRDs and polls their `Status.Conditions` until each reaches a terminal state — it does not interact with `Reservation` CRDs directly.
 
 **Request Semantics**: A request can contain multiple commitment changes across different projects and flavor groups. The semantic is **all-or-nothing** — if any commitment in the batch cannot be fulfilled (e.g., insufficient capacity), the entire request is rejected and rolled back.
 
-**Operations**: Cortex performs CRUD operations on local Reservation CRDs to match the new desired state:
-- Creates new reservations for increased commitment amounts
-- Deletes existing reservations for decreased commitments
-- Preserves existing reservations that already have VMs allocated when possible
+**Operations**:
+1. For each commitment in the batch, create or update a `CommittedResource` CRD with `Spec.AllowRejection=true` (snapshots the previous spec for rollback)
+2. Poll `CommittedResource.Status.Conditions[Ready]` until each reaches a terminal state: `Reason=Accepted` (success), `Reason=Planned` (deferred; accepted), or `Reason=Rejected` (failure)
+3. On any failure or timeout, restore all modified `CommittedResource` CRDs to their pre-request specs (or delete newly-created ones)
+
+The `CommittedResource` controller handles all downstream `Reservation` CRUD. `AllowRejection=true` tells it to reject and roll back child Reservations on placement failure rather than retrying indefinitely.
 
 ### Syncer Task
 
-The syncer task runs periodically and syncs local Reservation CRD state to match Limes' view of commitments, correcting drift from missed API calls or restarts.
+The syncer task runs periodically and syncs local `CommittedResource` CRD state to match Limes' view of commitments, correcting drift from missed API calls or restarts. It writes `CommittedResource` CRDs only — Reservation CRUD is the controller's responsibility.
 
 ### Usage API
 

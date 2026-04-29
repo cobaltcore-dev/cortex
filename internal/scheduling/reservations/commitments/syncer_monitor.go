@@ -14,7 +14,6 @@ const (
 	SkipReasonInvalidResource    = "invalid_resource_name"
 	SkipReasonEmptyUUID          = "empty_uuid"
 	SkipReasonNonCompute         = "non_compute"
-	SkipReasonNonActive          = "non_active"
 )
 
 // SyncerMonitor provides metrics for the commitment syncer.
@@ -32,6 +31,9 @@ type SyncerMonitor struct {
 	reservationsCreated  prometheus.Counter
 	reservationsDeleted  prometheus.Counter
 	reservationsRepaired prometheus.Counter
+
+	// Stale committed resource CRDs (present locally but absent from Limes)
+	staleCRs prometheus.Gauge
 }
 
 // NewSyncerMonitor creates a new monitor with Prometheus metrics.
@@ -69,6 +71,10 @@ func NewSyncerMonitor() *SyncerMonitor {
 			Name: "cortex_committed_resource_syncer_reservations_repaired_total",
 			Help: "Total number of reservations repaired during sync (wrong metadata)",
 		}),
+		staleCRs: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "cortex_committed_resource_syncer_stale_crs",
+			Help: "Number of CommittedResource CRDs present locally but absent from Limes (measured each sync run)",
+		}),
 	}
 
 	// Pre-initialize skip reason labels
@@ -78,7 +84,6 @@ func NewSyncerMonitor() *SyncerMonitor {
 		SkipReasonInvalidResource,
 		SkipReasonEmptyUUID,
 		SkipReasonNonCompute,
-		SkipReasonNonActive,
 	} {
 		m.commitmentsSkipped.WithLabelValues(reason)
 	}
@@ -126,6 +131,11 @@ func (m *SyncerMonitor) RecordReservationsRepaired(count int) {
 	m.reservationsRepaired.Add(float64(count))
 }
 
+// RecordStaleCRs sets the gauge to the number of CRDs present locally but absent from Limes.
+func (m *SyncerMonitor) RecordStaleCRs(count int) {
+	m.staleCRs.Set(float64(count))
+}
+
 // Describe implements prometheus.Collector.
 func (m *SyncerMonitor) Describe(ch chan<- *prometheus.Desc) {
 	m.syncRuns.Describe(ch)
@@ -136,6 +146,7 @@ func (m *SyncerMonitor) Describe(ch chan<- *prometheus.Desc) {
 	m.reservationsCreated.Describe(ch)
 	m.reservationsDeleted.Describe(ch)
 	m.reservationsRepaired.Describe(ch)
+	m.staleCRs.Describe(ch)
 }
 
 // Collect implements prometheus.Collector.
@@ -148,4 +159,5 @@ func (m *SyncerMonitor) Collect(ch chan<- prometheus.Metric) {
 	m.reservationsCreated.Collect(ch)
 	m.reservationsDeleted.Collect(ch)
 	m.reservationsRepaired.Collect(ch)
+	m.staleCRs.Collect(ch)
 }

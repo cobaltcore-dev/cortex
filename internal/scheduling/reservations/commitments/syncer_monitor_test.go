@@ -44,6 +44,7 @@ func TestSyncerMonitor_MetricsRegistration(t *testing.T) {
 		{"cortex_committed_resource_syncer_reservations_created_total", dto.MetricType_COUNTER},
 		{"cortex_committed_resource_syncer_reservations_deleted_total", dto.MetricType_COUNTER},
 		{"cortex_committed_resource_syncer_reservations_repaired_total", dto.MetricType_COUNTER},
+		{"cortex_committed_resource_syncer_stale_crs", dto.MetricType_GAUGE},
 	}
 
 	for _, tc := range cases {
@@ -100,7 +101,6 @@ func TestSyncerMonitor_SkipReasonsPreInitialized(t *testing.T) {
 		SkipReasonInvalidResource,
 		SkipReasonEmptyUUID,
 		SkipReasonNonCompute,
-		SkipReasonNonActive,
 	} {
 		if !presentReasons[reason] {
 			t.Errorf("skip reason %q not pre-initialized in commitments_skipped_total", reason)

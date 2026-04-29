@@ -136,6 +136,18 @@ func (e *crIntegrationEnv) getCR(t *testing.T, name string) v1alpha1.CommittedRe
 	return cr
 }
 
+// reconcileChildReservations runs the reservation controller twice on every child Reservation
+// for crName (first reconcile sets TargetHost, second sets Ready=True), then re-reconciles
+// the CR so it can observe the placement outcomes.
+func (e *crIntegrationEnv) reconcileChildReservations(t *testing.T, crName string) {
+	t.Helper()
+	for _, res := range e.listChildReservations(t, crName) {
+		e.reconcileReservation(t, res.Name) // calls scheduler → sets TargetHost
+		e.reconcileReservation(t, res.Name) // syncs TargetHost to Status → Ready=True
+	}
+	e.reconcileCR(t, crName)
+}
+
 // ============================================================================
 // Integration tests
 // ============================================================================
@@ -176,6 +188,9 @@ func TestCRLifecycle_PlannedToConfirmed(t *testing.T) {
 	if len(children) != 1 {
 		t.Fatalf("confirmed: expected 1 reservation, got %d", len(children))
 	}
+	// Run reservation controller to place the slot, then re-reconcile the CR to accept.
+	env.reconcileChildReservations(t, cr.Name)
+
 	crState = env.getCR(t, cr.Name)
 	if !meta.IsStatusConditionTrue(crState.Status.Conditions, v1alpha1.CommittedResourceConditionReady) {
 		t.Errorf("confirmed: expected Ready=True")
@@ -193,9 +208,10 @@ func TestCRLifecycle_ConfirmedToExpired(t *testing.T) {
 		t.Fatalf("create CR: %v", err)
 	}
 
-	// Bring to confirmed+Ready=True.
-	env.reconcileCR(t, cr.Name) // adds finalizer
-	env.reconcileCR(t, cr.Name) // creates Reservations
+	// Bring to confirmed+Ready=True: finalizer → create Reservations → place → accept.
+	env.reconcileCR(t, cr.Name)                // adds finalizer
+	env.reconcileCR(t, cr.Name)                // creates Reservations, waits for placement
+	env.reconcileChildReservations(t, cr.Name) // places slots + re-reconciles CR → Ready=True
 
 	if got := env.listChildReservations(t, cr.Name); len(got) != 1 {
 		t.Fatalf("pre-expire: expected 1 reservation, got %d", len(got))

@@ -153,6 +153,34 @@ func countChildReservations(t *testing.T, k8sClient client.Client, commitmentUUI
 	return count
 }
 
+// setChildReservationsReady simulates the reservation controller by marking all child
+// Reservations for the given commitmentUUID as Ready=True.
+func setChildReservationsReady(t *testing.T, k8sClient client.Client, commitmentUUID string) {
+	t.Helper()
+	var list v1alpha1.ReservationList
+	if err := k8sClient.List(context.Background(), &list, client.MatchingLabels{
+		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+	}); err != nil {
+		t.Fatalf("list reservations: %v", err)
+	}
+	for i := range list.Items {
+		res := &list.Items[i]
+		if res.Spec.CommittedResourceReservation == nil ||
+			res.Spec.CommittedResourceReservation.CommitmentUUID != commitmentUUID {
+			continue
+		}
+		res.Status.Conditions = []metav1.Condition{{
+			Type:               v1alpha1.ReservationConditionReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "ReservationActive",
+			LastTransitionTime: metav1.Now(),
+		}}
+		if err := k8sClient.Status().Update(context.Background(), res); err != nil {
+			t.Fatalf("set reservation Ready=True: %v", err)
+		}
+	}
+}
+
 // ============================================================================
 // Tests: per-state reconcile paths
 // ============================================================================
@@ -210,8 +238,19 @@ func TestCommittedResourceController_Reconcile(t *testing.T) {
 			k8sClient := newCRTestClient(scheme, objects...)
 			controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: Config{}}
 
+			// First reconcile: creates Reservation CRDs; if slots are expected, controller
+			// waits for the reservation controller to set Ready=True before accepting.
 			if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
-				t.Fatalf("reconcile: %v", err)
+				t.Fatalf("reconcile 1: %v", err)
+			}
+
+			if tt.expectedSlots > 0 {
+				// Simulate reservation controller: mark all child reservations as Ready=True.
+				setChildReservationsReady(t, k8sClient, cr.Spec.CommitmentUUID)
+				// Second reconcile: sees all Ready=True and accepts.
+				if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
+					t.Fatalf("reconcile 2: %v", err)
+				}
 			}
 
 			assertCondition(t, k8sClient, cr.Name, tt.expectedStatus, tt.expectedReason)
@@ -392,9 +431,16 @@ func TestCommittedResourceController_Idempotent(t *testing.T) {
 	k8sClient := newCRTestClient(scheme, cr, newTestFlavorKnowledge())
 	controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: Config{}}
 
-	for i := range 3 {
+	// Round 1: creates reservation, waits for placement.
+	if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
+		t.Fatalf("reconcile 1: %v", err)
+	}
+	// Simulate reservation controller setting Ready=True.
+	setChildReservationsReady(t, k8sClient, cr.Spec.CommitmentUUID)
+	// Rounds 2 and 3: accepts, then stays accepted.
+	for i := 2; i <= 3; i++ {
 		if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
-			t.Fatalf("reconcile %d: %v", i+1, err)
+			t.Fatalf("reconcile %d: %v", i, err)
 		}
 	}
 
