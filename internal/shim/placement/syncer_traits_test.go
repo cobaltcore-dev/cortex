@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/pkg/resourcelock"
 	"github.com/gophercloud/gophercloud/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,7 +20,7 @@ import (
 
 func TestTraitSyncerInitCreatesConfigMap(t *testing.T) {
 	cl := newFakeClientWithScheme(t)
-	ts := NewTraitSyncer(cl, "test-traits", "default", nil)
+	ts := NewTraitSyncer(cl, "test-traits", "default", nil, resourcelock.NewResourceLocker(cl, "default"))
 
 	if err := ts.Init(context.Background()); err != nil {
 		t.Fatalf("Init: %v", err)
@@ -40,7 +41,7 @@ func TestTraitSyncerInitIdempotent(t *testing.T) {
 		Data:       map[string]string{configMapKeyTraits: `["CUSTOM_EXISTING"]`},
 	}
 	cl := newFakeClientWithScheme(t, existing)
-	ts := NewTraitSyncer(cl, "test-traits", "default", nil)
+	ts := NewTraitSyncer(cl, "test-traits", "default", nil, resourcelock.NewResourceLocker(cl, "default"))
 
 	if err := ts.Init(context.Background()); err != nil {
 		t.Fatalf("Init: %v", err)
@@ -57,7 +58,7 @@ func TestTraitSyncerInitIdempotent(t *testing.T) {
 
 func TestTraitSyncerRunNoClient(t *testing.T) {
 	cl := newFakeClientWithScheme(t)
-	ts := NewTraitSyncer(cl, "test-traits", "default", nil)
+	ts := NewTraitSyncer(cl, "test-traits", "default", nil, resourcelock.NewResourceLocker(cl, "default"))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -90,7 +91,7 @@ func TestTraitSyncerSyncWritesUpstreamTraits(t *testing.T) {
 	}
 	sc.HTTPClient = *upstream.Client()
 
-	ts := NewTraitSyncer(cl, "test-traits", "default", sc)
+	ts := NewTraitSyncer(cl, "test-traits", "default", sc, resourcelock.NewResourceLocker(cl, "default"))
 	ts.sync(context.Background())
 
 	cm := &corev1.ConfigMap{}
@@ -131,7 +132,7 @@ func TestTraitSyncerSyncUpstreamError(t *testing.T) {
 	}
 	sc.HTTPClient = *upstream.Client()
 
-	ts := NewTraitSyncer(cl, "test-traits", "default", sc)
+	ts := NewTraitSyncer(cl, "test-traits", "default", sc, resourcelock.NewResourceLocker(cl, "default"))
 	ts.sync(context.Background())
 
 	cm := &corev1.ConfigMap{}

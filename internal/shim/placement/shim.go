@@ -442,6 +442,7 @@ func (s *Shim) Start(ctx context.Context) error {
 			s.config.Traits.ConfigMapName,
 			os.Getenv("POD_NAMESPACE"),
 			s.placementServiceClient,
+			s.resourceLocker,
 		))
 	}
 	for _, syncer := range s.syncers {
@@ -449,8 +450,11 @@ func (s *Shim) Start(ctx context.Context) error {
 			return err
 		}
 	}
+	traitsMode := s.config.Features.Traits.orDefault()
 	for _, syncer := range s.syncers {
-		go syncer.Run(ctx)
+		if traitsMode == FeatureModeHybrid || traitsMode == FeatureModePassthrough {
+			go syncer.Run(ctx)
+		}
 	}
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"sort"
@@ -203,13 +204,15 @@ func (s *Shim) handleUpdateTraitHybrid(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.forwardWithHook(w, r, func(w http.ResponseWriter, resp *http.Response) {
-		// Copy the upstream response to the caller.
 		for k, vs := range resp.Header {
 			for _, v := range vs {
 				w.Header().Add(k, v)
 			}
 		}
 		w.WriteHeader(resp.StatusCode)
+		if resp.Body != nil {
+			io.Copy(w, resp.Body) //nolint:errcheck
+		}
 
 		if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusNoContent {
 			if _, err := s.addTraitToConfigMap(ctx, name); err != nil {
@@ -289,6 +292,9 @@ func (s *Shim) handleDeleteTraitHybrid(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		w.WriteHeader(resp.StatusCode)
+		if resp.Body != nil {
+			io.Copy(w, resp.Body) //nolint:errcheck
+		}
 
 		if resp.StatusCode == http.StatusNoContent {
 			if _, err := s.removeTraitFromConfigMap(ctx, name); err != nil {

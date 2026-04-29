@@ -10,8 +10,10 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/pkg/resourcelock"
 	"github.com/gophercloud/gophercloud/v2"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -27,6 +29,7 @@ type TraitSyncer struct {
 	configMapName   string
 	namespace       string
 	placementClient *gophercloud.ServiceClient
+	resourceLocker  *resourcelock.ResourceLocker
 }
 
 func NewTraitSyncer(
@@ -34,6 +37,7 @@ func NewTraitSyncer(
 	configMapName string,
 	namespace string,
 	placementClient *gophercloud.ServiceClient,
+	resourceLocker *resourcelock.ResourceLocker,
 ) *TraitSyncer {
 
 	return &TraitSyncer{
@@ -41,6 +45,7 @@ func NewTraitSyncer(
 		configMapName:   configMapName,
 		namespace:       namespace,
 		placementClient: placementClient,
+		resourceLocker:  resourceLocker,
 	}
 }
 
@@ -108,7 +113,7 @@ func (ts *TraitSyncer) Run(ctx context.Context) {
 }
 
 // sync fetches GET /traits from upstream placement and writes the result
-// into the ConfigMap.
+// into the ConfigMap under the resource lock.
 func (ts *TraitSyncer) sync(ctx context.Context) {
 	log := ctrl.Log.WithName("placement-shim").WithName("trait-syncer")
 	u, err := url.JoinPath(ts.placementClient.Endpoint, "/traits")
@@ -133,6 +138,19 @@ func (ts *TraitSyncer) sync(ctx context.Context) {
 		log.Error(err, "Failed to decode upstream trait list")
 		return
 	}
+
+	host, _ := os.Hostname() //nolint:errcheck
+	lockerID := fmt.Sprintf("syncer-%s-%d", host, time.Now().UnixNano())
+	lockName := ts.configMapName + "-lock"
+	if err := ts.resourceLocker.AcquireLock(ctx, lockName, lockerID); err != nil {
+		log.Error(err, "Failed to acquire lock for trait sync")
+		return
+	}
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = ts.resourceLocker.ReleaseLock(releaseCtx, lockName, lockerID) //nolint:errcheck
+	}()
 
 	cm := &corev1.ConfigMap{}
 	if err := ts.client.Get(ctx, client.ObjectKey{Namespace: ts.namespace, Name: ts.configMapName}, cm); err != nil {
