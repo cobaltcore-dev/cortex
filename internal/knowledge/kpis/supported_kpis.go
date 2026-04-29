@@ -7,6 +7,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/deployment"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/infrastructure"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/storage"
 )
 
@@ -23,6 +24,8 @@ var supportedKPIs = map[string]plugins.KPI{
 	"vm_commitments_kpi":           &compute.VMCommitmentsKPI{},
 	"vm_faults_kpi":                &compute.VMFaultsKPI{},
 	"vmware_commitments_kpi":       &compute.VMwareResourceCommitmentsKPI{},
+
+	"vmware_project_utilization_kpi": &infrastructure.VMwareProjectUtilizationKPI{},
 
 	"netapp_storage_pool_cpu_usage_kpi": &storage.NetAppStoragePoolCPUUsageKPI{},
 
