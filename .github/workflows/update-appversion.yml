@@ -47,41 +47,11 @@ jobs:
 
       - name: Bump and push cortex-postgres appVersion
         if: steps.changed_postgres_files.outputs.all_changed_files != ''
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          SHA="${{ steps.vars.outputs.sha }}"
-          git fetch origin main
-          git reset --hard origin/main
-          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"'"$SHA"'"/' helm/library/cortex-postgres/Chart.yaml
-          git add helm/library/cortex-postgres/Chart.yaml
-          git diff --cached --quiet && { echo "No changes to commit"; exit 0; }
-          git commit -m "Bump cortex-postgres chart appVersions to $SHA [skip ci]"
-          git push origin HEAD:main
+        run: bash .github/scripts/bump-chart.sh helm/library/cortex-postgres/Chart.yaml "${{ steps.vars.outputs.sha }}" "${{ github.event.workflow_run.head_sha }}" postgres/
 
       - name: Bump and push cortex-shim appVersion
         if: steps.changed_shim_files.outputs.all_changed_files != ''
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          SHA="${{ steps.vars.outputs.sha }}"
-          git fetch origin main
-          git reset --hard origin/main
-          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"'"$SHA"'"/' helm/library/cortex-shim/Chart.yaml
-          git add helm/library/cortex-shim/Chart.yaml
-          git diff --cached --quiet && { echo "No changes to commit"; exit 0; }
-          git commit -m "Bump cortex-shim chart appVersions to $SHA [skip ci]"
-          git push origin HEAD:main
+        run: bash .github/scripts/bump-chart.sh helm/library/cortex-shim/Chart.yaml "${{ steps.vars.outputs.sha }}" "${{ github.event.workflow_run.head_sha }}" internal/shim/ cmd/shim/
 
       - name: Bump and push cortex appVersion
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          SHA="${{ steps.vars.outputs.sha }}"
-          git fetch origin main
-          git reset --hard origin/main
-          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"'"$SHA"'"/' helm/library/cortex/Chart.yaml
-          git add helm/library/cortex/Chart.yaml
-          git diff --cached --quiet && { echo "No changes to commit"; exit 0; }
-          git commit -m "Bump cortex chart appVersions to $SHA [skip ci]"
-          git push origin HEAD:main
+        run: bash .github/scripts/bump-chart.sh helm/library/cortex/Chart.yaml "${{ steps.vars.outputs.sha }}" "${{ github.event.workflow_run.head_sha }}"
