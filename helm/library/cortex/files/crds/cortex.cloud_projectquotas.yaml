@@ -200,6 +200,26 @@ spec:
                   type: object
                 description: |-
                   PaygUsage tracks per-resource per-AZ pay-as-you-go usage.
+                  Derived as TotalUsage - CRUsage (clamped >= 0).
+                  Key: liquid.ResourceName
+                type: object
+              totalUsage:
+                additionalProperties:
+                  description: ResourceQuotaUsage holds per-AZ PAYG usage for a single
+                    resource.
+                  properties:
+                    perAZ:
+                      additionalProperties:
+                        format: int64
+                        type: integer
+                      description: |-
+                        PerAZ holds per-availability-zone PAYG usage values.
+                        Key: availability zone name, Value: PAYG usage in that AZ.
+                      type: object
+                  type: object
+                description: |-
+                  TotalUsage tracks per-resource per-AZ total resource consumption (all VMs in this project).
+                  Persisted by the quota controller; updated by full reconcile and HV instance diffs.
                   Key: liquid.ResourceName
                 type: object
             type: object

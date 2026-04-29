@@ -69,7 +69,14 @@ type ProjectQuotaSpec struct {
 // Usage values correspond to liquid.AZResourceUsageReport fields reported via /report-usage.
 // See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#AZResourceUsageReport
 type ProjectQuotaStatus struct {
+	// TotalUsage tracks per-resource per-AZ total resource consumption (all VMs in this project).
+	// Persisted by the quota controller; updated by full reconcile and HV instance diffs.
+	// Key: liquid.ResourceName
+	// +kubebuilder:validation:Optional
+	TotalUsage map[string]ResourceQuotaUsage `json:"totalUsage,omitempty"`
+
 	// PaygUsage tracks per-resource per-AZ pay-as-you-go usage.
+	// Derived as TotalUsage - CRUsage (clamped >= 0).
 	// Key: liquid.ResourceName
 	// +kubebuilder:validation:Optional
 	PaygUsage map[string]ResourceQuotaUsage `json:"paygUsage,omitempty"`

@@ -399,3 +399,7 @@ func (m *mockNovaReader) GetFlavorByName(ctx context.Context, flavorName string)
 	}
 	return nil, nil
 }
+
+func (m *mockNovaReader) GetDeletedServerByID(_ context.Context, _ string) (*nova.DeletedServer, error) {
+	return nil, nil
+}
