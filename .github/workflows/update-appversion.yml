@@ -11,6 +11,13 @@ jobs:
     if: >-
       ${{ github.event.workflow_run.conclusion == 'success' && !contains(github.event.workflow_run.head_commit.message, '[skip ci]') }}
     runs-on: ubuntu-latest
+    # Serialize runs so concurrent merges don't race on git push.
+    # Example: PR A changes shim, PR B changes cortex — both trigger this
+    # workflow. Without serialization, one push fails and that chart bump is
+    # lost permanently (no future run will retry it).
+    concurrency:
+      group: update-appversion
+      cancel-in-progress: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -30,21 +37,6 @@ jobs:
           files: |
             postgres/**
 
-      # Only bumped if there are changes in the postgres directory.
-      - name: Update appVersion in cortex-postgres Chart.yaml
-        if: steps.changed_postgres_files.outputs.all_changed_files != ''
-        run: |
-          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' helm/library/cortex-postgres/Chart.yaml
-      - name: Commit and push changes for cortex-postgres
-        if: steps.changed_postgres_files.outputs.all_changed_files != ''
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add helm/library/cortex-postgres/Chart.yaml
-          git commit -m "Bump cortex-postgres chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
-          git push origin HEAD:main
-
-      # Only bumped if there are changes in shim-related directories
       - name: Get all changed shim files
         id: changed_shim_files
         uses: tj-actions/changed-files@v47
@@ -52,26 +44,44 @@ jobs:
           files: |
             internal/shim/**
             cmd/shim/**
-      - name: Update appVersion in cortex-shim Chart.yaml
-        if: steps.changed_shim_files.outputs.all_changed_files != ''
-        run: |
-          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' helm/library/cortex-shim/Chart.yaml
-      - name: Commit and push changes for cortex-shim
-        if: steps.changed_shim_files.outputs.all_changed_files != ''
+
+      - name: Bump and push cortex-postgres appVersion
+        if: steps.changed_postgres_files.outputs.all_changed_files != ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add helm/library/cortex-shim/Chart.yaml
-          git commit -m "Bump cortex-shim chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
+          SHA="${{ steps.vars.outputs.sha }}"
+          git fetch origin main
+          git reset --hard origin/main
+          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"'"$SHA"'"/' helm/library/cortex-postgres/Chart.yaml
+          git add helm/library/cortex-postgres/Chart.yaml
+          git diff --cached --quiet && { echo "No changes to commit"; exit 0; }
+          git commit -m "Bump cortex-postgres chart appVersions to $SHA [skip ci]"
           git push origin HEAD:main
 
-      - name: Update appVersion in helm/library/cortex/Chart.yaml
-        run: |
-          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"${{ steps.vars.outputs.sha }}"/' helm/library/cortex/Chart.yaml
-      - name: Commit and push changes for cortex
+      - name: Bump and push cortex-shim appVersion
+        if: steps.changed_shim_files.outputs.all_changed_files != ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          SHA="${{ steps.vars.outputs.sha }}"
+          git fetch origin main
+          git reset --hard origin/main
+          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"'"$SHA"'"/' helm/library/cortex-shim/Chart.yaml
+          git add helm/library/cortex-shim/Chart.yaml
+          git diff --cached --quiet && { echo "No changes to commit"; exit 0; }
+          git commit -m "Bump cortex-shim chart appVersions to $SHA [skip ci]"
+          git push origin HEAD:main
+
+      - name: Bump and push cortex appVersion
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          SHA="${{ steps.vars.outputs.sha }}"
+          git fetch origin main
+          git reset --hard origin/main
+          sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"'"$SHA"'"/' helm/library/cortex/Chart.yaml
           git add helm/library/cortex/Chart.yaml
-          git commit -m "Bump cortex chart appVersions to ${{ steps.vars.outputs.sha }} [skip ci]" || echo "No changes to commit"
+          git diff --cached --quiet && { echo "No changes to commit"; exit 0; }
+          git commit -m "Bump cortex chart appVersions to $SHA [skip ci]"
           git push origin HEAD:main
