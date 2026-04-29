@@ -115,8 +115,8 @@ func (k *VMwareProjectUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 		hostLabels := host.getHostLabels()
 		hostLabels = append(hostLabels, projectCapacityUsage.ProjectID, projectCapacityUsage.ProjectName)
 
-		memoryUsageBytes := projectCapacityUsage.TotalRAMMB * 1024 * 1024
-		diskUsageBytes := projectCapacityUsage.TotalDiskGB * 1024 * 1024 * 1024
+		memoryUsageBytes, _ := bytesFromUnit(projectCapacityUsage.TotalRAMMB, "MB")
+		diskUsageBytes, _ := bytesFromUnit(projectCapacityUsage.TotalDiskGB, "GB")
 
 		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerProjectAndHost, prometheus.GaugeValue, projectCapacityUsage.TotalVCPUs, append(hostLabels, "vcpu")...)
 		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerProjectAndHost, prometheus.GaugeValue, memoryUsageBytes, append(hostLabels, "memory")...)

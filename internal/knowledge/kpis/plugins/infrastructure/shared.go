@@ -4,6 +4,7 @@
 package infrastructure
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 
@@ -77,4 +78,58 @@ type collectedVMwareMetric struct {
 	Name   string
 	Labels map[string]string
 	Value  float64
+}
+
+// kvmFlavorPattern matches KVM flavors where the second underscore-delimited
+// segment is "k" (e.g. "m1_k_small", "hana_k_large").
+var kvmFlavorPattern = regexp.MustCompile(`^[^_]+_k_`)
+
+// isKVMFlavor reports whether flavorName belongs to a KVM hypervisor.
+func isKVMFlavor(name string) bool {
+	return kvmFlavorPattern.MatchString(name)
+}
+
+// cpuArchRule maps a flavor name regex to a CPU architecture label.
+type cpuArchRule struct {
+	pattern *regexp.Regexp
+	arch    string
+}
+
+// flavorCPUArchitectureRules maps flavor name patterns to CPU architecture labels in priority order.
+// The first matching rule wins; vmwareDefaultCPUArch is used when none match.
+var flavorCPUArchitectureRules = []cpuArchRule{
+	{regexp.MustCompile(`_v2$`), "sapphire-rapids"},
+}
+
+const defaultCPUArch = "cascade-lake"
+
+// flavorCPUArchitecture derives the CPU architecture label from a HANA flavor name.
+func flavorCPUArchitecture(flavorName string) string {
+	for _, rule := range flavorCPUArchitectureRules {
+		if rule.pattern.MatchString(flavorName) {
+			return rule.arch
+		}
+	}
+	return defaultCPUArch
+}
+
+// bytesPerUnit maps memory unit strings to their byte multipliers.
+var bytesPerUnit = map[string]float64{
+	"":    1,
+	"B":   1,
+	"KiB": 1024,
+	"MB":  1024 * 1024,
+	"MiB": 1024 * 1024,
+	"GB":  1024 * 1024 * 1024,
+	"GiB": 1024 * 1024 * 1024,
+	"TiB": 1024 * 1024 * 1024 * 1024,
+}
+
+// bytesFromUnit converts an amount in the given unit to bytes.
+func bytesFromUnit(amount float64, unit string) (float64, error) {
+	multiplier, ok := bytesPerUnit[unit]
+	if !ok {
+		return 0, fmt.Errorf("unknown memory unit: %s", unit)
+	}
+	return amount * multiplier, nil
 }

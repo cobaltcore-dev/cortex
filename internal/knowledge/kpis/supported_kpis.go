@@ -23,9 +23,9 @@ var supportedKPIs = map[string]plugins.KPI{
 	"vm_life_span_kpi":             &compute.VMLifeSpanKPI{},
 	"vm_commitments_kpi":           &compute.VMCommitmentsKPI{},
 	"vm_faults_kpi":                &compute.VMFaultsKPI{},
-	"vmware_commitments_kpi":       &compute.VMwareResourceCommitmentsKPI{},
 
-	"vmware_project_utilization_kpi": &infrastructure.VMwareProjectUtilizationKPI{},
+	"vmware_project_utilization_kpi":  &infrastructure.VMwareProjectUtilizationKPI{},
+	"vmware_resource_commitments_kpi": &infrastructure.VMwareResourceCommitmentsKPI{},
 
 	"netapp_storage_pool_cpu_usage_kpi": &storage.NetAppStoragePoolCPUUsageKPI{},
 
