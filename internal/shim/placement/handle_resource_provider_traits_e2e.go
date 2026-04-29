@@ -15,6 +15,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/gophercloud/gophercloud/v2"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -354,17 +355,25 @@ func e2eCRDResourceProviderTraits(ctx context.Context, sc *gophercloud.ServiceCl
 	}
 	log.Info("Seeded spec.groups with test traits", "uuid", kvmUUID)
 
-	// Always restore original groups on exit.
+	// Always restore original groups on exit (retry on conflict).
 	defer func() {
 		log.Info("Restoring original spec.groups", "uuid", kvmUUID)
-		if err := cl.Get(ctx, client.ObjectKeyFromObject(kvmHV), kvmHV); err != nil {
-			log.Error(err, "failed to refetch hypervisor for restoration")
+		for range 5 {
+			if err := cl.Get(ctx, client.ObjectKeyFromObject(kvmHV), kvmHV); err != nil {
+				log.Error(err, "failed to refetch hypervisor for restoration")
+				return
+			}
+			kvmHV.Spec.Groups = originalGroups
+			if err := cl.Update(ctx, kvmHV); err != nil {
+				if apierrors.IsConflict(err) {
+					continue
+				}
+				log.Error(err, "failed to restore original spec.groups")
+				return
+			}
 			return
 		}
-		kvmHV.Spec.Groups = originalGroups
-		if err := cl.Update(ctx, kvmHV); err != nil {
-			log.Error(err, "failed to restore original spec.groups")
-		}
+		log.Error(nil, "exhausted retries restoring original spec.groups")
 	}()
 
 	// Refetch to get updated generation.
