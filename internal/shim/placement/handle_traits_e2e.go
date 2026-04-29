@@ -80,13 +80,10 @@ func e2eTestTraits(ctx context.Context, _ client.Client) error {
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
 		return fmt.Errorf("failed to decode GET /traits response: %w", err)
 	}
-	// When traits are served locally (hybrid or crd mode) the static list may
-	// be empty. Only require at least one trait when forwarding to upstream
+	// When traits are served locally (hybrid or crd mode) the list may be
+	// empty. Only require at least one trait when forwarding to upstream
 	// placement, which always has standard traits.
 	traitsMode := e2eCurrentMode(ctx)
-	if traitsMode == "" {
-		traitsMode = config.Features.Traits.orDefault()
-	}
 	if traitsMode == FeatureModePassthrough && len(listResp.Traits) == 0 {
 		return errors.New("GET /traits: expected at least one trait, got 0")
 	}
@@ -135,19 +132,9 @@ func e2eTestTraits(ctx context.Context, _ client.Client) error {
 	}
 	log.Info("Correctly received 404 for nonexistent trait")
 
-	// ==================== Phase 2: CRUD tests (feature-gated) ====================
+	// ==================== Phase 2: CRUD tests ====================
 
-	// CRUD tests require traits ConfigMaps which are only created when the
-	// configured traits mode is hybrid or crd. The override header changes
-	// handler routing but cannot create ConfigMaps that don't exist.
-	configuredTraitsMode := config.Features.Traits.orDefault()
-	if traitsMode == FeatureModePassthrough || configuredTraitsMode == FeatureModePassthrough {
-		log.Info("Skipping trait CRUD e2e tests",
-			"overrideMode", traitsMode, "configuredMode", configuredTraitsMode)
-		return nil
-	}
-
-	log.Info("=== Phase 2: CRUD trait tests (traits mode non-passthrough) ===")
+	log.Info("=== Phase 2: CRUD trait tests ===")
 
 	const testTrait = "CUSTOM_CORTEX_E2E_TRAIT"
 

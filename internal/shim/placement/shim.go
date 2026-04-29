@@ -247,15 +247,15 @@ func (c *config) validate() error {
 		}
 	}
 	traitsMode := c.Features.Traits.orDefault()
-	if traitsMode == FeatureModeHybrid || traitsMode == FeatureModeCRD {
-		if c.Traits == nil {
-			return fmt.Errorf("traits config is required when features.traits is %s", traitsMode)
-		}
+	if traitsMode != FeatureModePassthrough && c.Traits == nil {
+		return fmt.Errorf("traits config is required when features.traits is %s", traitsMode)
+	}
+	if c.Traits != nil {
 		if c.Traits.ConfigMapName == "" {
-			return fmt.Errorf("traits.configMapName is required when features.traits is %s", traitsMode)
+			return errors.New("traits.configMapName is required when traits config is present")
 		}
-		if traitsMode == FeatureModeCRD && os.Getenv("POD_NAMESPACE") == "" {
-			return errors.New("pod namespace (POD_NAMESPACE) is required when features.traits is crd")
+		if os.Getenv("POD_NAMESPACE") == "" {
+			return errors.New("pod namespace (POD_NAMESPACE) is required when traits config is present")
 		}
 	}
 	if c.Auth != nil && c.KeystoneURL == "" {
@@ -303,14 +303,17 @@ type Shim struct {
 	tokenCache *tokenCache
 	// tokenIntrospector validates tokens against Keystone.
 	tokenIntrospector tokenIntrospector
-	// resourceLocker serializes writes to the custom traits ConfigMap
-	// across replicas using a Kubernetes Lease.
+	// resourceLocker serializes writes to ConfigMaps across replicas
+	// using a Kubernetes Lease.
 	resourceLocker *resourcelock.ResourceLocker
 	// placementServiceClient is an authenticated gophercloud service client
 	// used by background tasks (trait sync) to make requests to upstream
 	// placement with automatic token management (including reauth on 401).
 	// Nil when Keystone credentials are not configured.
 	placementServiceClient *gophercloud.ServiceClient
+	// syncers are background workers that manage ConfigMap-backed local
+	// stores (e.g. traits, resource classes). Started uniformly in Start.
+	syncers []Syncer
 }
 
 // Describe implements prometheus.Collector.
@@ -433,7 +436,26 @@ func (s *Shim) Start(ctx context.Context) error {
 	if err := s.initPlacementServiceClient(ctx); err != nil {
 		return err
 	}
-	go s.startTraitSyncLoop(ctx)
+	if s.config.Traits != nil {
+		s.syncers = append(s.syncers, NewTraitSyncer(
+			s.Client,
+			s.config.Traits.ConfigMapName,
+			os.Getenv("POD_NAMESPACE"),
+			s.placementServiceClient,
+			s.resourceLocker,
+		))
+	}
+	for _, syncer := range s.syncers {
+		if err := syncer.Init(ctx); err != nil {
+			return err
+		}
+	}
+	traitsMode := s.config.Features.Traits.orDefault()
+	for _, syncer := range s.syncers {
+		if traitsMode == FeatureModeHybrid || traitsMode == FeatureModePassthrough {
+			go syncer.Run(ctx)
+		}
+	}
 	return nil
 }
 
