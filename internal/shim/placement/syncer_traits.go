@@ -139,7 +139,11 @@ func (ts *TraitSyncer) sync(ctx context.Context) {
 		return
 	}
 
-	host, _ := os.Hostname() //nolint:errcheck
+	host, err := os.Hostname()
+	if err != nil {
+		log.Error(err, "Failed to get hostname for trait sync lock")
+		return
+	}
 	lockerID := fmt.Sprintf("syncer-%s-%d", host, time.Now().UnixNano())
 	lockName := ts.configMapName + "-lock"
 	if err := ts.resourceLocker.AcquireLock(ctx, lockName, lockerID); err != nil {
@@ -149,7 +153,9 @@ func (ts *TraitSyncer) sync(ctx context.Context) {
 	defer func() {
 		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = ts.resourceLocker.ReleaseLock(releaseCtx, lockName, lockerID) //nolint:errcheck
+		if err := ts.resourceLocker.ReleaseLock(releaseCtx, lockName, lockerID); err != nil {
+			log.Error(err, "Failed to release lock after trait sync")
+		}
 	}()
 
 	cm := &corev1.ConfigMap{}

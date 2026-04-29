@@ -17,6 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -127,14 +128,19 @@ func (s *Shim) handleCreateResourceClassHybrid(w http.ResponseWriter, r *http.Re
 	log := logf.FromContext(ctx)
 
 	s.forwardWithHook(w, r, func(w http.ResponseWriter, resp *http.Response) {
-		body, _ := io.ReadAll(resp.Body) //nolint:errcheck
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Error(err, "hybrid: failed to read upstream response body")
+		}
 		for k, vs := range resp.Header {
 			for _, v := range vs {
 				w.Header().Add(k, v)
 			}
 		}
 		w.WriteHeader(resp.StatusCode)
-		w.Write(body) //nolint:errcheck
+		if _, err := w.Write(body); err != nil {
+			log.Error(err, "hybrid: failed to write response body")
+		}
 
 		if resp.StatusCode == http.StatusCreated {
 			var created struct {
@@ -260,7 +266,9 @@ func (s *Shim) handleUpdateResourceClassHybrid(w http.ResponseWriter, r *http.Re
 		}
 		w.WriteHeader(resp.StatusCode)
 		if resp.Body != nil {
-			io.Copy(w, resp.Body) //nolint:errcheck
+			if _, err := io.Copy(w, resp.Body); err != nil {
+				log.Error(err, "hybrid: failed to copy upstream response body")
+			}
 		}
 
 		if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusNoContent {
@@ -342,7 +350,9 @@ func (s *Shim) handleDeleteResourceClassHybrid(w http.ResponseWriter, r *http.Re
 		}
 		w.WriteHeader(resp.StatusCode)
 		if resp.Body != nil {
-			io.Copy(w, resp.Body) //nolint:errcheck
+			if _, err := io.Copy(w, resp.Body); err != nil {
+				log.Error(err, "hybrid: failed to copy upstream response body")
+			}
 		}
 
 		if resp.StatusCode == http.StatusNoContent {
@@ -430,7 +440,9 @@ func (s *Shim) addResourceClassToConfigMap(ctx context.Context, name string) (bo
 	defer func() {
 		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = s.resourceLocker.ReleaseLock(releaseCtx, s.config.ResourceClasses.ConfigMapName+"-lock", lockerID) //nolint:errcheck
+		if err := s.resourceLocker.ReleaseLock(releaseCtx, s.config.ResourceClasses.ConfigMapName+"-lock", lockerID); err != nil {
+			ctrl.Log.WithName("placement-shim").Error(err, "failed to release resource classes lock")
+		}
 	}()
 
 	cm := &corev1.ConfigMap{}
@@ -487,7 +499,9 @@ func (s *Shim) removeResourceClassFromConfigMap(ctx context.Context, name string
 	defer func() {
 		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = s.resourceLocker.ReleaseLock(releaseCtx, s.config.ResourceClasses.ConfigMapName+"-lock", lockerID) //nolint:errcheck
+		if err := s.resourceLocker.ReleaseLock(releaseCtx, s.config.ResourceClasses.ConfigMapName+"-lock", lockerID); err != nil {
+			ctrl.Log.WithName("placement-shim").Error(err, "failed to release resource classes lock")
+		}
 	}()
 
 	cm := &corev1.ConfigMap{}

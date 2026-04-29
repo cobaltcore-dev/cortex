@@ -150,7 +150,11 @@ func (rs *ResourceClassSyncer) sync(ctx context.Context) {
 		return
 	}
 
-	host, _ := os.Hostname() //nolint:errcheck
+	host, err := os.Hostname()
+	if err != nil {
+		log.Error(err, "Failed to get hostname for resource class sync lock")
+		return
+	}
 	lockerID := fmt.Sprintf("syncer-%s-%d", host, time.Now().UnixNano())
 	lockName := rs.configMapName + "-lock"
 	if err := rs.resourceLocker.AcquireLock(ctx, lockName, lockerID); err != nil {
@@ -160,7 +164,9 @@ func (rs *ResourceClassSyncer) sync(ctx context.Context) {
 	defer func() {
 		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = rs.resourceLocker.ReleaseLock(releaseCtx, lockName, lockerID) //nolint:errcheck
+		if err := rs.resourceLocker.ReleaseLock(releaseCtx, lockName, lockerID); err != nil {
+			log.Error(err, "Failed to release lock after resource class sync")
+		}
 	}()
 
 	cm := &corev1.ConfigMap{}
