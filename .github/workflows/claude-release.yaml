@@ -8,6 +8,7 @@ on:
 
 jobs:
   release:
+    if: false # Temporarily disabled
     runs-on: ubuntu-latest
     concurrency:
       group: changelog-release
@@ -38,14 +39,14 @@ jobs:
       - uses: ./.claude-code-action
         with:
           claude_args: |
-            --max-turns 200
+            --max-turns 1000
             --permission-mode auto
             --allowedTools "Read,Write,Edit,Bash(*),WebSearch,WebFetch,Agent"
           use_litellm: "true"
           litellm_model: "sap/anthropic--claude-4.6-opus"
           github_token: ${{ secrets.GITHUB_TOKEN }}
           show_full_output: "true"
-          prompt: "/on-release ${{ github.event.pull_request.number }}"
+          prompt: "/release ${{ github.event.pull_request.number }}"
 
       - uses: ./.github/actions/stop-litellm-proxy
         if: always()
