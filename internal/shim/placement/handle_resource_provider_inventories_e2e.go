@@ -53,6 +53,15 @@ func e2eTestResourceProviderInventories(ctx context.Context, _ client.Client) er
 	const testRC = "CUSTOM_CORTEX_E2E_INV_RC"
 	const apiVersion = "placement 1.26"
 
+	// Probe: for non-passthrough modes, verify endpoint returns 501.
+	unimplemented, err := e2eProbeUnimplemented(ctx, sc, sc.Endpoint+"/resource_providers/"+testRPUUID+"/inventories")
+	if err != nil {
+		return fmt.Errorf("probe: %w", err)
+	}
+	if unimplemented {
+		return nil
+	}
+
 	// Pre-cleanup: delete the resource provider (cascades inventories), then
 	// the custom resource class. Ignore 404/409.
 	log.Info("Pre-cleanup: deleting leftover test resources")
@@ -488,5 +497,5 @@ func e2eTestResourceProviderInventories(ctx context.Context, _ client.Client) er
 }
 
 func init() {
-	e2eTests = append(e2eTests, e2eTest{name: "resource_provider_inventories", run: e2eTestResourceProviderInventories})
+	e2eTests = append(e2eTests, e2eTest{name: "resource_provider_inventories", run: e2eWrapWithModes(e2eTestResourceProviderInventories)})
 }

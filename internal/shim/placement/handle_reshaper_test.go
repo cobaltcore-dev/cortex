@@ -19,3 +19,43 @@ func TestHandlePostReshaper(t *testing.T) {
 		t.Fatalf("upstream path = %q, want /reshaper", gotPath)
 	}
 }
+
+func TestHandleReshaper_HybridMode(t *testing.T) {
+	down, up := newTestTimers()
+	s := &Shim{
+		config: config{
+			PlacementURL: "http://should-not-be-called:1234",
+			Features:     featuresConfig{Reshaper: FeatureModeHybrid},
+		},
+		maxBodyLogSize:         4096,
+		downstreamRequestTimer: down,
+		upstreamRequestTimer:   up,
+	}
+	t.Run("POST returns 501", func(t *testing.T) {
+		w := serveHandler(t, "POST", "/reshaper",
+			s.HandlePostReshaper, "/reshaper")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+}
+
+func TestHandleReshaper_CRDMode(t *testing.T) {
+	down, up := newTestTimers()
+	s := &Shim{
+		config: config{
+			PlacementURL: "http://should-not-be-called:1234",
+			Features:     featuresConfig{Reshaper: FeatureModeCRD},
+		},
+		maxBodyLogSize:         4096,
+		downstreamRequestTimer: down,
+		upstreamRequestTimer:   up,
+	}
+	t.Run("POST returns 501", func(t *testing.T) {
+		w := serveHandler(t, "POST", "/reshaper",
+			s.HandlePostReshaper, "/reshaper")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+}

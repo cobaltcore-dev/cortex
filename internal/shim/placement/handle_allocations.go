@@ -23,7 +23,7 @@ import (
 // success, or 409 Conflict if inventory is insufficient or a concurrent
 // update is detected (error code: placement.concurrent_update).
 func (s *Shim) HandleManageAllocations(w http.ResponseWriter, r *http.Request) {
-	s.forward(w, r)
+	s.dispatchPassthroughOnly(w, r, s.config.Features.Allocations)
 }
 
 // HandleListAllocations handles GET /allocations/{consumer_uuid} requests.
@@ -41,7 +41,7 @@ func (s *Shim) HandleListAllocations(w http.ResponseWriter, r *http.Request) {
 	if _, ok := requiredUUIDPathParam(w, r, "consumer_uuid"); !ok {
 		return
 	}
-	s.forward(w, r)
+	s.dispatchPassthroughOnly(w, r, s.config.Features.Allocations)
 }
 
 // HandleUpdateAllocations handles PUT /allocations/{consumer_uuid} requests.
@@ -59,7 +59,7 @@ func (s *Shim) HandleUpdateAllocations(w http.ResponseWriter, r *http.Request) {
 	if _, ok := requiredUUIDPathParam(w, r, "consumer_uuid"); !ok {
 		return
 	}
-	s.forward(w, r)
+	s.dispatchPassthroughOnly(w, r, s.config.Features.Allocations)
 }
 
 // HandleDeleteAllocations handles DELETE /allocations/{consumer_uuid} requests.
@@ -71,5 +71,5 @@ func (s *Shim) HandleDeleteAllocations(w http.ResponseWriter, r *http.Request) {
 	if _, ok := requiredUUIDPathParam(w, r, "consumer_uuid"); !ok {
 		return
 	}
-	s.forward(w, r)
+	s.dispatchPassthroughOnly(w, r, s.config.Features.Allocations)
 }

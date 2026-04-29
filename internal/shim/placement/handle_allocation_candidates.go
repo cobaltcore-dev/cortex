@@ -33,5 +33,5 @@ import (
 // inventory capacity and usage for informed decision-making. Available since
 // microversion 1.10.
 func (s *Shim) HandleListAllocationCandidates(w http.ResponseWriter, r *http.Request) {
-	s.forward(w, r)
+	s.dispatchPassthroughOnly(w, r, s.config.Features.AllocationCandidates)
 }

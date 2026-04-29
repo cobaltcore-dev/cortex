@@ -44,6 +44,15 @@ func e2eTestResourceProviderAllocations(ctx context.Context, _ client.Client) er
 	const testRPUUID = "e2e10000-0000-0000-0000-000000000006"
 	const testRPName = "cortex-e2e-test-rp-alloc-view"
 
+	// Probe: for non-passthrough modes, verify endpoint returns 501.
+	unimplemented, err := e2eProbeUnimplemented(ctx, sc, sc.Endpoint+"/resource_providers/"+testRPUUID+"/allocations")
+	if err != nil {
+		return fmt.Errorf("probe: %w", err)
+	}
+	if unimplemented {
+		return nil
+	}
+
 	// Pre-cleanup: delete any leftover test resource provider from a prior run.
 	log.Info("Pre-cleanup: deleting leftover test resource provider", "uuid", testRPUUID)
 	req, err := http.NewRequestWithContext(ctx,
@@ -227,5 +236,5 @@ func e2eTestResourceProviderAllocations(ctx context.Context, _ client.Client) er
 }
 
 func init() {
-	e2eTests = append(e2eTests, e2eTest{name: "resource_provider_allocations", run: e2eTestResourceProviderAllocations})
+	e2eTests = append(e2eTests, e2eTest{name: "resource_provider_allocations", run: e2eWrapWithModes(e2eTestResourceProviderAllocations)})
 }

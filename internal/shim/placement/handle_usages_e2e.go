@@ -39,6 +39,15 @@ func e2eTestUsages(ctx context.Context, _ client.Client) error {
 
 	const apiVersion = "placement 1.9"
 
+	// Probe: for non-passthrough modes, verify endpoint returns 501.
+	unimplemented, err := e2eProbeUnimplemented(ctx, sc, sc.Endpoint+"/usages?project_id=test")
+	if err != nil {
+		return fmt.Errorf("probe: %w", err)
+	}
+	if unimplemented {
+		return nil
+	}
+
 	// Get the list of projects from the identity service, so that we can test
 	// the /usages endpoint with a valid project id.
 	log.Info("Getting list of projects from identity service for usages e2e test")
@@ -113,5 +122,5 @@ func e2eTestUsages(ctx context.Context, _ client.Client) error {
 }
 
 func init() {
-	e2eTests = append(e2eTests, e2eTest{name: "usages", run: e2eTestUsages})
+	e2eTests = append(e2eTests, e2eTest{name: "usages", run: e2eWrapWithModes(e2eTestUsages)})
 }
