@@ -83,7 +83,7 @@ local('kubectl wait --namespace cert-manager --for=condition=available deploymen
 
 ########### Dependency CRDs
 # Make sure the local cluster is running if you are running into startup issues here.
-url = 'https://raw.githubusercontent.com/cobaltcore-dev/openstack-hypervisor-operator/ca3e55288120011789c24514b1ed11247fa0966c/charts/openstack-hypervisor-operator/crds/kvm.cloud.sap_hypervisors.yaml'
+url = 'https://raw.githubusercontent.com/cobaltcore-dev/openstack-hypervisor-operator/d35f2bc2c5d4fd634b17e7a8dd77ff3025758fbb/charts/openstack-hypervisor-operator/crds/kvm.cloud.sap_hypervisors.yaml'
 local('curl -L ' + url + ' | kubectl apply -f -')
 
 ########### Cortex Manager & CRDs
