@@ -329,7 +329,7 @@ func TestVMwareHostCapacityKPI_Collect(t *testing.T) {
 }
 
 func hostCapacityLabels(computeHost, az, resource string) map[string]string {
-	labels := hostLabels(computeHost, az)
+	labels := mockVMwareHostLabels(computeHost, az)
 	labels["resource"] = resource
 	return labels
 }

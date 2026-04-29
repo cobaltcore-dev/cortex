@@ -5,6 +5,21 @@ package infrastructure
 
 import "testing"
 
+func mockVMwareHostLabels(computeHost, az string) map[string]string {
+	return map[string]string{
+		"availability_zone":  az,
+		"compute_host":       computeHost,
+		"cpu_architecture":   "",
+		"workload_type":      "",
+		"enabled":            "false",
+		"decommissioned":     "false",
+		"external_customer":  "false",
+		"disabled_reason":    "-",
+		"pinned_projects":    "false",
+		"pinned_project_ids": "",
+	}
+}
+
 func TestIsKVMFlavor(t *testing.T) {
 	tests := []struct {
 		flavor string
