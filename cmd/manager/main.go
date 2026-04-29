@@ -549,6 +549,15 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "CommitmentReservation")
 			os.Exit(1)
 		}
+
+		if err := (&commitments.CommittedResourceController{
+			Client: multiclusterClient,
+			Scheme: mgr.GetScheme(),
+			Conf:   commitmentsConfig,
+		}).SetupWithManager(mgr, multiclusterClient); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "CommittedResource")
+			os.Exit(1)
+		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "datasource-controllers") {
 		setupLog.Info("enabling controller", "controller", "datasource-controllers")
