@@ -16,7 +16,6 @@ var supportedKPIs = map[string]plugins.KPI{
 	"kvm_host_capacity_kpi":        &compute.KVMResourceCapacityKPI{},
 	"vmware_host_contention_kpi":   &compute.VMwareHostContentionKPI{},
 	"vmware_project_noisiness_kpi": &compute.VMwareProjectNoisinessKPI{},
-	"vmware_host_capacity_kpi":     &compute.VMwareResourceCapacityKPI{},
 	"host_running_vms_kpi":         &compute.HostRunningVMsKPI{},
 	"flavor_running_vms_kpi":       &compute.FlavorRunningVMsKPI{},
 	"vm_migration_statistics_kpi":  &compute.VMMigrationStatisticsKPI{},
@@ -26,6 +25,7 @@ var supportedKPIs = map[string]plugins.KPI{
 
 	"vmware_project_utilization_kpi":  &infrastructure.VMwareProjectUtilizationKPI{},
 	"vmware_resource_commitments_kpi": &infrastructure.VMwareResourceCommitmentsKPI{},
+	"vmware_host_capacity_kpi":        &infrastructure.VMwareHostCapacityKPI{},
 
 	"netapp_storage_pool_cpu_usage_kpi": &storage.NetAppStoragePoolCPUUsageKPI{},
 

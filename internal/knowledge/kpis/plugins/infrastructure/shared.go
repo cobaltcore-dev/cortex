@@ -13,6 +13,7 @@ import (
 
 const (
 	hostDetailsKnowledgeName       = "host-details"
+	hostUtilizationKnowledgeName   = "host-utilization"
 	vmwareIronicHypervisorType     = "ironic"
 	hypervisorFamilyVMware         = "vmware"
 	vmwareComputeHostPattern       = "nova-compute-%"
