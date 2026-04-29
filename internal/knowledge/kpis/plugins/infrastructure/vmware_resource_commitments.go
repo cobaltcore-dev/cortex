@@ -18,7 +18,7 @@ import (
 
 // This KPI tracks committed resources in the VMware environment, based on commitments provided by Limes.
 // For KVM we can map a commitment to a reservation on a specific host. In VMware this is not possible.
-// For general purpose workload customer can speicfic amounts of resources.
+// For general purpose workload customer can specific amounts of resources.
 // For HANA workloads customers commit a certain number of HANA instances (based on flavor).
 // Like this it is possible to determine the workload type of a commitment.
 // For general purpose workloads its not possible to differentiate the cpu architecture. To avoid weird behavior in a dashboard we don't export this label for the metric.

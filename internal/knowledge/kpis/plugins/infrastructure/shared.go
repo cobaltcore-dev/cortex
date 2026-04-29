@@ -89,28 +89,28 @@ func isKVMFlavor(name string) bool {
 	return kvmFlavorPattern.MatchString(name)
 }
 
-// cpuArchRule maps a flavor name regex to a CPU architecture label.
-type cpuArchRule struct {
+// cpuArchitectureRule maps a flavor name regex to a CPU architecture label.
+type cpuArchitectureRule struct {
 	pattern *regexp.Regexp
 	arch    string
 }
 
 // flavorCPUArchitectureRules maps flavor name patterns to CPU architecture labels in priority order.
-// The first matching rule wins; vmwareDefaultCPUArch is used when none match.
-var flavorCPUArchitectureRules = []cpuArchRule{
+// The first matching rule wins; defaultCPUArch is used when none match.
+var flavorCPUArchitectureRules = []cpuArchitectureRule{
 	{regexp.MustCompile(`_v2$`), "sapphire-rapids"},
 }
 
-const defaultCPUArch = "cascade-lake"
+const defaultCPUArchitecture = "cascade-lake"
 
-// flavorCPUArchitecture derives the CPU architecture label from a HANA flavor name.
+// flavorCPUArchitecture derives the CPU architecture label from a flavor name.
 func flavorCPUArchitecture(flavorName string) string {
 	for _, rule := range flavorCPUArchitectureRules {
 		if rule.pattern.MatchString(flavorName) {
 			return rule.arch
 		}
 	}
-	return defaultCPUArch
+	return defaultCPUArchitecture
 }
 
 // bytesPerUnit maps memory unit strings to their byte multipliers.
