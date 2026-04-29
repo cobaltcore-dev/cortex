@@ -23,5 +23,5 @@ import (
 // resource provider does not exist or if inventory/allocation constraints
 // would be violated. Available since microversion 1.30.
 func (s *Shim) HandlePostReshaper(w http.ResponseWriter, r *http.Request) {
-	s.forward(w, r)
+	s.dispatchPassthroughOnly(w, r, s.config.Features.Reshaper)
 }

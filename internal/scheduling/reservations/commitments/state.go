@@ -93,6 +93,10 @@ type CommitmentState struct {
 	EndTime *time.Time
 	// CreatorRequestID is the request ID that triggered this state change (for traceability)
 	CreatorRequestID string
+	// NamePrefix overrides the default "commitment-<uuid>-" reservation naming convention.
+	// When set (e.g. "<cr-name>-"), Reservation CRDs are named "<NamePrefix><slot-index>".
+	// Used by the CommittedResource controller; leave empty for the legacy syncer path.
+	NamePrefix string
 }
 
 // FromCommitment converts Limes commitment to CommitmentState.

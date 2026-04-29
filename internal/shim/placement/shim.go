@@ -20,6 +20,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/resourcelock"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/api/resource"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -50,27 +52,106 @@ type requestIDContextKey struct{}
 // header value through the request lifecycle for tracing.
 var requestIDKey = requestIDContextKey{}
 
-// featuresConfig holds feature flags that can enable or disable specific
-// shim behaviors. All flags default to off (false).
+// featureModeOverrideContextKey is a separate type for the per-request feature
+// mode override injected via the X-Cortex-Feature-Mode header.
+type featureModeOverrideContextKey struct{}
+
+// featureModeOverrideKey is the context key used to propagate the feature mode
+// override from the middleware to handlers.
+var featureModeOverrideKey = featureModeOverrideContextKey{}
+
+// headerFeatureModeOverride is the HTTP header that allows e2e tests to
+// override the configured feature mode on a per-request basis.
+const headerFeatureModeOverride = "X-Cortex-Feature-Mode"
+
+// FeatureMode controls how an endpoint group interacts with upstream
+// placement and the hypervisor CRD.
+type FeatureMode string
+
+const (
+	// FeatureModePassthrough forwards all requests to upstream placement
+	// without any shim logic.
+	FeatureModePassthrough FeatureMode = "passthrough"
+	// FeatureModeHybrid directs requests to both upstream placement and the
+	// hypervisor CRD. Upstream must respond; the shim keeps CRD state in
+	// sync to prepare for cutover.
+	FeatureModeHybrid FeatureMode = "hybrid"
+	// FeatureModeCRD serves requests exclusively from the hypervisor CRD.
+	// No upstream placement dependency is required.
+	FeatureModeCRD FeatureMode = "crd"
+)
+
+// orDefault returns FeatureModePassthrough when m is the zero value.
+func (m FeatureMode) orDefault() FeatureMode {
+	if m == "" {
+		return FeatureModePassthrough
+	}
+	return m
+}
+
+// valid reports whether m is a recognized feature mode (including the
+// zero value, which maps to passthrough).
+func (m FeatureMode) valid() bool {
+	switch m {
+	case FeatureModePassthrough, FeatureModeHybrid, FeatureModeCRD, "":
+		return true
+	}
+	return false
+}
+
+// dispatchPassthroughOnly forwards in passthrough mode, returns 501 for
+// hybrid/crd, and 500 for unknown modes.
+func (s *Shim) dispatchPassthroughOnly(w http.ResponseWriter, r *http.Request, mode FeatureMode) {
+	resolved := s.featureModeFromConfOrHeader(r, mode)
+	switch resolved {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid, FeatureModeCRD:
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", resolved), http.StatusNotImplemented)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
+}
+
+// featureModeFromConfOrHeader returns the effective feature mode for the
+// current request. If a valid override is present in the request context
+// (injected by wrapHandler from the X-Cortex-Feature-Mode header), the
+// override takes precedence — unless it would escalate from passthrough into
+// a mode that requires backing config (Versioning, Traits) that was not
+// validated at startup. In that case the override is ignored and the
+// configured default is returned.
+func (s *Shim) featureModeFromConfOrHeader(r *http.Request, configured FeatureMode) FeatureMode {
+	override, ok := r.Context().Value(featureModeOverrideKey).(FeatureMode)
+	if !ok {
+		return configured.orDefault()
+	}
+	resolved := override.orDefault()
+	if resolved == FeatureModeHybrid || resolved == FeatureModeCRD {
+		if s.config.Versioning == nil && s.config.Traits == nil {
+			return configured.orDefault()
+		}
+	}
+	return resolved
+}
+
+// featuresConfig controls the feature mode for each endpoint group.
+// Every field defaults to passthrough (zero value) when omitted.
 type featuresConfig struct {
-	// EnableResourceProviders enables the KVM-specific resource provider
-	// logic (hypervisor lookups, merged listings, 409 conflicts). When
-	// false, all resource provider handlers forward to upstream placement
-	// as a pure passthrough.
-	EnableResourceProviders bool `json:"enableResourceProviders,omitempty"`
-	// EnableRoot makes the GET / handler return a static version discovery
-	// document from the Versioning config instead of forwarding to
-	// upstream placement. When false, GET / is forwarded as-is.
-	EnableRoot bool `json:"enableRoot,omitempty"`
-	// EnableTraits makes the trait handlers (GET /traits, GET /traits/{name},
-	// PUT /traits/{name}, DELETE /traits/{name}) serve from a local ConfigMap
-	// instead of forwarding to upstream placement. When false, all trait
-	// requests are forwarded as-is.
-	EnableTraits bool `json:"enableTraits,omitempty"`
+	ResourceProviders      FeatureMode `json:"resourceProviders,omitempty"`
+	Root                   FeatureMode `json:"root,omitempty"`
+	Traits                 FeatureMode `json:"traits,omitempty"`
+	ResourceProviderTraits FeatureMode `json:"resourceProviderTraits,omitempty"`
+	ResourceClasses        FeatureMode `json:"resourceClasses,omitempty"`
+	Inventories            FeatureMode `json:"inventories,omitempty"`
+	Aggregates             FeatureMode `json:"aggregates,omitempty"`
+	Allocations            FeatureMode `json:"allocations,omitempty"`
+	Usages                 FeatureMode `json:"usages,omitempty"`
+	AllocationCandidates   FeatureMode `json:"allocationCandidates,omitempty"`
+	Reshaper               FeatureMode `json:"reshaper,omitempty"`
 }
 
 // versioningConfig describes the Placement API version advertised by the
-// static root endpoint when features.enableRoot is true.
+// static root endpoint when features.root is hybrid or crd.
 type versioningConfig struct {
 	ID         string `json:"id"`
 	MinVersion string `json:"minVersion"`
@@ -79,7 +160,7 @@ type versioningConfig struct {
 }
 
 // traitsConfig configures the local trait store used when
-// features.enableTraits is true.
+// features.traits is hybrid or crd.
 type traitsConfig struct {
 	// ConfigMapName is the name of the ConfigMap used to persist traits.
 	// Must exist in the same namespace as the shim pod.
@@ -123,14 +204,13 @@ type config struct {
 	// Kubernetes resource.Quantity string (e.g. "4Ki"). Defaults to "4Ki"
 	// when unset or empty.
 	MaxBodyLogSize string `json:"maxBodyLogSize,omitempty"`
-	// Features holds feature flags for enabling or disabling specific
-	// shim behaviors.
+	// Features controls the feature mode for each endpoint group.
 	Features featuresConfig `json:"features"`
 	// Versioning configures the static version discovery document returned
-	// by GET / when features.enableRoot is true.
+	// by GET / when features.root is hybrid or crd.
 	Versioning *versioningConfig `json:"versioning,omitempty"`
 	// Traits configures the local trait store used when
-	// features.enableTraits is true.
+	// features.traits is hybrid or crd.
 	Traits *traitsConfig `json:"traits,omitempty"`
 }
 
@@ -140,23 +220,42 @@ func (c *config) validate() error {
 	if c.PlacementURL == "" {
 		return errors.New("placement URL is required")
 	}
-	if c.Features.EnableRoot {
-		if c.Versioning == nil {
-			return errors.New("versioning config is required when features.enableRoot is true")
-		}
-		if c.Versioning.ID == "" || c.Versioning.MinVersion == "" || c.Versioning.MaxVersion == "" || c.Versioning.Status == "" {
-			return errors.New("versioning id, minVersion, maxVersion, and status are required when features.enableRoot is true")
+	for name, mode := range map[string]FeatureMode{
+		"resourceProviders":      c.Features.ResourceProviders,
+		"root":                   c.Features.Root,
+		"traits":                 c.Features.Traits,
+		"resourceProviderTraits": c.Features.ResourceProviderTraits,
+		"resourceClasses":        c.Features.ResourceClasses,
+		"inventories":            c.Features.Inventories,
+		"aggregates":             c.Features.Aggregates,
+		"allocations":            c.Features.Allocations,
+		"usages":                 c.Features.Usages,
+		"allocationCandidates":   c.Features.AllocationCandidates,
+		"reshaper":               c.Features.Reshaper,
+	} {
+		if !mode.valid() {
+			return fmt.Errorf("features.%s has invalid mode %q (must be passthrough, hybrid, or crd)", name, mode)
 		}
 	}
-	if c.Features.EnableTraits {
+	rootMode := c.Features.Root.orDefault()
+	if rootMode == FeatureModeHybrid || rootMode == FeatureModeCRD {
+		if c.Versioning == nil {
+			return fmt.Errorf("versioning config is required when features.root is %s", rootMode)
+		}
+		if c.Versioning.ID == "" || c.Versioning.MinVersion == "" || c.Versioning.MaxVersion == "" || c.Versioning.Status == "" {
+			return fmt.Errorf("versioning id, minVersion, maxVersion, and status are required when features.root is %s", rootMode)
+		}
+	}
+	traitsMode := c.Features.Traits.orDefault()
+	if traitsMode == FeatureModeHybrid || traitsMode == FeatureModeCRD {
 		if c.Traits == nil {
-			return errors.New("traits config is required when features.enableTraits is true")
+			return fmt.Errorf("traits config is required when features.traits is %s", traitsMode)
 		}
 		if c.Traits.ConfigMapName == "" {
-			return errors.New("traits.configMapName is required when features.enableTraits is true")
+			return fmt.Errorf("traits.configMapName is required when features.traits is %s", traitsMode)
 		}
-		if os.Getenv("POD_NAMESPACE") == "" {
-			return errors.New("pod namespace (POD_NAMESPACE) is required when features.enableTraits is true")
+		if traitsMode == FeatureModeCRD && os.Getenv("POD_NAMESPACE") == "" {
+			return errors.New("pod namespace (POD_NAMESPACE) is required when features.traits is crd")
 		}
 	}
 	if c.Auth != nil && c.KeystoneURL == "" {
@@ -207,6 +306,11 @@ type Shim struct {
 	// resourceLocker serializes writes to the custom traits ConfigMap
 	// across replicas using a Kubernetes Lease.
 	resourceLocker *resourcelock.ResourceLocker
+	// placementServiceClient is an authenticated gophercloud service client
+	// used by background tasks (trait sync) to make requests to upstream
+	// placement with automatic token management (including reauth on 401).
+	// Nil when Keystone credentials are not configured.
+	placementServiceClient *gophercloud.ServiceClient
 }
 
 // Describe implements prometheus.Collector.
@@ -272,13 +376,65 @@ func (s *Shim) initHTTPClient(ctx context.Context) error {
 	return nil
 }
 
+// initPlacementServiceClient creates an authenticated gophercloud
+// ServiceClient that background tasks (e.g. the trait sync loop) use to
+// make requests to upstream placement with automatic token management.
+// After initial Keystone authentication the provider's HTTP transport is
+// replaced with the shim's own transport (which carries SSO TLS certs)
+// so that subsequent placement requests use the correct transport.
+// Skipped when Keystone credentials are not configured.
+func (s *Shim) initPlacementServiceClient(ctx context.Context) error {
+	if s.config.KeystoneURL == "" || s.config.OSUsername == "" || s.config.OSPassword == "" {
+		setupLog.Info("Keystone credentials not configured, background tasks will make unauthenticated upstream requests")
+		return nil
+	}
+	authOpts := gophercloud.AuthOptions{
+		IdentityEndpoint: s.config.KeystoneURL,
+		Username:         s.config.OSUsername,
+		DomainName:       s.config.OSUserDomainName,
+		Password:         s.config.OSPassword,
+		AllowReauth:      true,
+		Scope: &gophercloud.AuthScope{
+			ProjectName: s.config.OSProjectName,
+			DomainName:  s.config.OSProjectDomainName,
+		},
+	}
+	provider, err := openstack.NewClient(s.config.KeystoneURL)
+	if err != nil {
+		return fmt.Errorf("creating Keystone provider for upstream auth: %w", err)
+	}
+	provider.HTTPClient = http.Client{Timeout: 30 * time.Second}
+	if err := openstack.Authenticate(ctx, provider, authOpts); err != nil {
+		return fmt.Errorf("authenticating with Keystone for upstream auth: %w", err)
+	}
+	// After successful Keystone auth, switch the provider's HTTP transport
+	// to the shim's transport so placement requests use SSO TLS certs.
+	if s.httpClient != nil && s.httpClient.Transport != nil {
+		provider.HTTPClient.Transport = s.httpClient.Transport
+	}
+	s.placementServiceClient = &gophercloud.ServiceClient{
+		ProviderClient: provider,
+		Endpoint:       s.config.PlacementURL,
+		Type:           "placement",
+	}
+	setupLog.Info("Placement service client initialized for background upstream requests")
+	return nil
+}
+
 // Start is called after the manager has started and the cache is running.
 func (s *Shim) Start(ctx context.Context) error {
 	setupLog.Info("Starting placement shim")
 	if err := s.initHTTPClient(ctx); err != nil {
 		return err
 	}
-	return s.initTokenIntrospector(ctx)
+	if err := s.initTokenIntrospector(ctx); err != nil {
+		return err
+	}
+	if err := s.initPlacementServiceClient(ctx); err != nil {
+		return err
+	}
+	go s.startTraitSyncLoop(ctx)
+	return nil
 }
 
 // Reconcile is not used by the shim, but must be implemented to satisfy the
@@ -350,12 +506,10 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 		Buckets: prometheus.DefBuckets,
 	}, []string{"method", "pattern", "responsecode"})
 
-	if s.config.Features.EnableTraits {
-		s.resourceLocker = resourcelock.NewResourceLocker(
-			s.Client,
-			os.Getenv("POD_NAMESPACE"),
-		)
-	}
+	s.resourceLocker = resourcelock.NewResourceLocker(
+		s.Client,
+		os.Getenv("POD_NAMESPACE"),
+	)
 
 	// Check that the provided client is a multicluster client, since we need
 	// that to watch for hypervisors across clusters.

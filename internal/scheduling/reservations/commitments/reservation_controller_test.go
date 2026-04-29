@@ -15,24 +15,16 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
 
 func TestCommitmentReservationController_Reconcile(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add scheme: %v", err)
-	}
-	if err := hv1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add hypervisor scheme: %v", err)
-	}
+	scheme := newCRTestScheme(t)
 
 	tests := []struct {
 		name          string
@@ -83,14 +75,10 @@ func TestCommitmentReservationController_Reconcile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(tt.reservation).
-				WithStatusSubresource(&v1alpha1.Reservation{}).
-				Build()
+			k8sClient := newCRTestClient(scheme, tt.reservation)
 
 			reconciler := &CommitmentReservationController{
-				Client: client,
+				Client: k8sClient,
 				Scheme: scheme,
 				Conf: Config{
 					RequeueIntervalActive: 5 * time.Minute,
@@ -118,9 +106,8 @@ func TestCommitmentReservationController_Reconcile(t *testing.T) {
 				t.Errorf("Expected no requeue but got %v", result.RequeueAfter)
 			}
 
-			// Verify the reservation status
 			var updated v1alpha1.Reservation
-			err = client.Get(context.Background(), req.NamespacedName, &updated)
+			err = k8sClient.Get(context.Background(), req.NamespacedName, &updated)
 			if err != nil {
 				t.Errorf("Failed to get updated reservation: %v", err)
 				return
@@ -146,23 +133,18 @@ func TestCommitmentReservationController_Reconcile(t *testing.T) {
 // ============================================================================
 
 func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add scheme: %v", err)
-	}
-	if err := hv1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add hypervisor scheme: %v", err)
-	}
+	scheme := newCRTestScheme(t)
 
 	now := time.Now()
 	recentTime := metav1.NewTime(now.Add(-5 * time.Minute)) // 5 minutes ago (within grace period)
 	oldTime := metav1.NewTime(now.Add(-30 * time.Minute))   // 30 minutes ago (past grace period)
 
+	config := Config{AllocationGracePeriod: 15 * time.Minute}
+
 	tests := []struct {
 		name                         string
 		reservation                  *v1alpha1.Reservation
 		hypervisor                   *hv1.Hypervisor
-		config                       Config
 		expectedStatusAllocations    map[string]string
 		expectedSpecAllocations      []string // VM UUIDs expected to remain in spec; nil means no check
 		expectedHasGracePeriodAllocs bool
@@ -175,7 +157,6 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 			hypervisor: newTestHypervisorCRD("host-1", []hv1.Instance{
 				{ID: "vm-1", Name: "vm-1", Active: true},
 			}),
-			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
 			expectedStatusAllocations:    map[string]string{"vm-1": "host-1"},
 			expectedSpecAllocations:      []string{"vm-1"},
 			expectedHasGracePeriodAllocs: false,
@@ -186,9 +167,8 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 				"vm-stopped": oldTime,
 			}),
 			hypervisor: newTestHypervisorCRD("host-1", []hv1.Instance{
-				{ID: "vm-stopped", Name: "vm-stopped", Active: false}, // Inactive VM should still be found
+				{ID: "vm-stopped", Name: "vm-stopped", Active: false},
 			}),
-			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
 			expectedStatusAllocations:    map[string]string{"vm-stopped": "host-1"},
 			expectedSpecAllocations:      []string{"vm-stopped"},
 			expectedHasGracePeriodAllocs: false,
@@ -198,10 +178,9 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 			reservation: newTestCRReservation(map[string]metav1.Time{
 				"vm-1": oldTime,
 			}),
-			hypervisor:                   newTestHypervisorCRD("host-1", []hv1.Instance{}), // Empty
-			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
+			hypervisor:                   newTestHypervisorCRD("host-1", []hv1.Instance{}),
 			expectedStatusAllocations:    map[string]string{},
-			expectedSpecAllocations:      []string{}, // Removed from spec
+			expectedSpecAllocations:      []string{},
 			expectedHasGracePeriodAllocs: false,
 		},
 		{
@@ -209,31 +188,26 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 			reservation: newTestCRReservation(map[string]metav1.Time{
 				"vm-1": recentTime,
 			}),
-			hypervisor:                   nil,
-			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
 			expectedStatusAllocations:    map[string]string{},
-			expectedSpecAllocations:      []string{"vm-1"}, // Kept in spec during grace period
+			expectedSpecAllocations:      []string{"vm-1"},
 			expectedHasGracePeriodAllocs: true,
 		},
 		{
 			name: "mixed allocations - old verified via CRD, new in grace period",
 			reservation: newTestCRReservation(map[string]metav1.Time{
-				"vm-new": recentTime, // In grace period
-				"vm-old": oldTime,    // Past grace period
+				"vm-new": recentTime,
+				"vm-old": oldTime,
 			}),
 			hypervisor: newTestHypervisorCRD("host-1", []hv1.Instance{
 				{ID: "vm-old", Name: "vm-old", Active: true},
 			}),
-			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
-			expectedStatusAllocations:    map[string]string{"vm-old": "host-1"}, // Only old one confirmed via CRD
+			expectedStatusAllocations:    map[string]string{"vm-old": "host-1"},
 			expectedSpecAllocations:      []string{"vm-new", "vm-old"},
 			expectedHasGracePeriodAllocs: true,
 		},
 		{
 			name:                         "empty allocations - no work to do",
 			reservation:                  newTestCRReservation(map[string]metav1.Time{}),
-			hypervisor:                   nil,
-			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
 			expectedStatusAllocations:    map[string]string{},
 			expectedHasGracePeriodAllocs: false,
 		},
@@ -242,10 +216,8 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 			reservation: newTestCRReservation(map[string]metav1.Time{
 				"vm-1": oldTime,
 			}),
-			hypervisor:                   nil, // HV CRD does not exist (e.g. host deleted)
-			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
 			expectedStatusAllocations:    map[string]string{},
-			expectedSpecAllocations:      []string{}, // Removed from spec
+			expectedSpecAllocations:      []string{},
 			expectedHasGracePeriodAllocs: false,
 		},
 		{
@@ -253,32 +225,25 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 			reservation: newTestCRReservation(map[string]metav1.Time{
 				"vm-1": recentTime,
 			}),
-			hypervisor:                   nil, // HV CRD does not exist
-			config:                       Config{AllocationGracePeriod: 15 * time.Minute},
 			expectedStatusAllocations:    map[string]string{},
-			expectedSpecAllocations:      []string{"vm-1"}, // Kept during grace period
+			expectedSpecAllocations:      []string{"vm-1"},
 			expectedHasGracePeriodAllocs: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Build fake client with objects
 			objects := []client.Object{tt.reservation}
 			if tt.hypervisor != nil {
 				objects = append(objects, tt.hypervisor)
 			}
 
-			k8sClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(objects...).
-				WithStatusSubresource(&v1alpha1.Reservation{}).
-				Build()
+			k8sClient := newCRTestClient(scheme, objects...)
 
 			controller := &CommitmentReservationController{
 				Client: k8sClient,
 				Scheme: scheme,
-				Conf:   tt.config,
+				Conf:   config,
 			}
 
 			ctx := WithNewGlobalRequestID(context.Background())
@@ -406,10 +371,7 @@ func newTestHypervisorCRD(name string, instances []hv1.Instance) *hv1.Hypervisor
 // This covers the mapper logic; the watch wiring itself (informer → mapper → enqueue)
 // is controller-runtime's responsibility and is not unit-testable without envtest.
 func TestHypervisorToReservations(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("failed to add scheme: %v", err)
-	}
+	scheme := newCRTestScheme(t)
 
 	res1 := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{Name: "res-host-1"},
@@ -436,11 +398,7 @@ func TestHypervisorToReservations(t *testing.T) {
 		Status:     v1alpha1.ReservationStatus{Host: "host-1"},
 	}
 
-	k8sClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(res1, res2, resOtherHost, resNoHost, resFailover).
-		WithStatusSubresource(&v1alpha1.Reservation{}).
-		Build()
+	k8sClient := newCRTestClient(scheme, res1, res2, resOtherHost, resNoHost, resFailover)
 
 	controller := &CommitmentReservationController{Client: k8sClient}
 
@@ -467,13 +425,7 @@ func TestHypervisorToReservations(t *testing.T) {
 // ============================================================================
 
 func TestCommitmentReservationController_reconcileInstanceReservation_Success(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add scheme: %v", err)
-	}
-	if err := hv1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add hypervisor scheme: %v", err)
-	}
+	scheme := newCRTestScheme(t)
 
 	reservation := &v1alpha1.Reservation{
 		ObjectMeta: ctrl.ObjectMeta{
@@ -486,91 +438,16 @@ func TestCommitmentReservationController_reconcileInstanceReservation_Success(t 
 				ResourceName: "test-flavor",
 			},
 			Resources: map[hv1.ResourceName]resource.Quantity{
-				hv1.ResourceMemory: resource.MustParse("1Gi"),
+				hv1.ResourceMemory: resource.MustParse("4Gi"),
 				hv1.ResourceCPU:    resource.MustParse("2"),
 			},
 		},
 	}
 
-	// Create flavor group knowledge CRD for the test
-	flavorGroups := []struct {
-		Name    string `json:"name"`
-		Flavors []struct {
-			Name       string            `json:"name"`
-			MemoryMB   uint64            `json:"memoryMB"`
-			VCPUs      uint64            `json:"vcpus"`
-			ExtraSpecs map[string]string `json:"extraSpecs"`
-		} `json:"flavors"`
-	}{
-		{
-			Name: "test-group",
-			Flavors: []struct {
-				Name       string            `json:"name"`
-				MemoryMB   uint64            `json:"memoryMB"`
-				VCPUs      uint64            `json:"vcpus"`
-				ExtraSpecs map[string]string `json:"extraSpecs"`
-			}{
-				{
-					Name:       "test-flavor",
-					MemoryMB:   1024,
-					VCPUs:      2,
-					ExtraSpecs: map[string]string{},
-				},
-			},
-		},
-	}
+	hypervisor1 := &hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "test-host-1"}}
+	hypervisor2 := &hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "test-host-2"}}
 
-	// Marshal flavor groups into runtime.RawExtension
-	flavorGroupsJSON, err := json.Marshal(map[string]interface{}{
-		"features": flavorGroups,
-	})
-	if err != nil {
-		t.Fatalf("Failed to marshal flavor groups: %v", err)
-	}
-
-	flavorGroupKnowledge := &v1alpha1.Knowledge{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "flavor-groups",
-		},
-		Spec: v1alpha1.KnowledgeSpec{
-			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			Extractor: v1alpha1.KnowledgeExtractorSpec{
-				Name: "flavor_groups",
-			},
-			Recency: metav1.Duration{Duration: 0},
-		},
-		Status: v1alpha1.KnowledgeStatus{
-			Raw:       runtime.RawExtension{Raw: flavorGroupsJSON},
-			RawLength: 1,
-			Conditions: []metav1.Condition{
-				{
-					Type:   v1alpha1.KnowledgeConditionReady,
-					Status: metav1.ConditionTrue,
-					Reason: "TestReady",
-				},
-			},
-		},
-	}
-
-	// Create mock hypervisors
-	hypervisor1 := &hv1.Hypervisor{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-host-1",
-		},
-		Spec: hv1.HypervisorSpec{},
-	}
-	hypervisor2 := &hv1.Hypervisor{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-host-2",
-		},
-		Spec: hv1.HypervisorSpec{},
-	}
-
-	client := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(reservation, flavorGroupKnowledge, hypervisor1, hypervisor2).
-		WithStatusSubresource(&v1alpha1.Reservation{}, &v1alpha1.Knowledge{}).
-		Build()
+	k8sClient := newCRTestClient(scheme, reservation, newTestFlavorKnowledge(), hypervisor1, hypervisor2)
 
 	// Create a mock server that returns a successful response
 	mockResponse := &schedulerdelegationapi.ExternalSchedulerResponse{
@@ -602,13 +479,13 @@ func TestCommitmentReservationController_reconcileInstanceReservation_Success(t 
 	}
 
 	reconciler := &CommitmentReservationController{
-		Client: client,
+		Client: k8sClient,
 		Scheme: scheme,
 		Conf:   config,
 	}
 
 	// Initialize the reconciler (this sets up SchedulerClient)
-	if err := reconciler.Init(context.Background(), client, config); err != nil {
+	if err := reconciler.Init(context.Background(), k8sClient, config); err != nil {
 		t.Fatalf("Failed to initialize reconciler: %v", err)
 	}
 
@@ -630,7 +507,7 @@ func TestCommitmentReservationController_reconcileInstanceReservation_Success(t 
 
 	// Verify Spec.TargetHost is set after first reconcile
 	var afterFirstReconcile v1alpha1.Reservation
-	if err = client.Get(context.Background(), req.NamespacedName, &afterFirstReconcile); err != nil {
+	if err = k8sClient.Get(context.Background(), req.NamespacedName, &afterFirstReconcile); err != nil {
 		t.Errorf("Failed to get reservation after first reconcile: %v", err)
 		return
 	}
@@ -650,7 +527,7 @@ func TestCommitmentReservationController_reconcileInstanceReservation_Success(t 
 
 	// Verify the reservation status after second reconcile
 	var updated v1alpha1.Reservation
-	if err = client.Get(context.Background(), req.NamespacedName, &updated); err != nil {
+	if err = k8sClient.Get(context.Background(), req.NamespacedName, &updated); err != nil {
 		t.Errorf("Failed to get updated reservation: %v", err)
 		return
 	}

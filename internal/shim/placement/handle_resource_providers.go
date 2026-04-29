@@ -11,6 +11,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -114,8 +115,15 @@ func (s *Shim) HandleCreateResourceProvider(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	if !s.config.Features.EnableResourceProviders {
+	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders)
+	switch mode {
+	case FeatureModePassthrough:
 		s.forward(w, r)
+		return
+	case FeatureModeHybrid, FeatureModeCRD:
+		// Check for KVM conflicts below.
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
 		return
 	}
 
@@ -176,7 +184,12 @@ func (s *Shim) HandleCreateResourceProvider(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	// No conflict — restore the body and forward to upstream placement.
+	// No conflict — forward to upstream placement (hybrid) or reject (crd).
+	if mode == FeatureModeCRD {
+		log.Info("crd mode: non-kvm resource provider create not supported", "name", req.Name)
+		http.Error(w, "resource provider not found", http.StatusNotFound)
+		return
+	}
 	log.Info("no conflict with existing kvm hypervisor, forwarding create resource provider request to upstream placement",
 		"name", req.Name)
 	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
@@ -197,8 +210,15 @@ func (s *Shim) HandleShowResourceProvider(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	if !s.config.Features.EnableResourceProviders {
+	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders)
+	switch mode {
+	case FeatureModePassthrough:
 		s.forward(w, r)
+		return
+	case FeatureModeHybrid, FeatureModeCRD:
+		// Look up in Kubernetes below.
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
 		return
 	}
 
@@ -211,6 +231,11 @@ func (s *Shim) HandleShowResourceProvider(w http.ResponseWriter, r *http.Request
 	var hvs hv1.HypervisorList
 	err := s.List(ctx, &hvs, client.MatchingFields{idxHypervisorOpenStackId: uuid})
 	if apierrors.IsNotFound(err) || len(hvs.Items) == 0 {
+		if mode == FeatureModeCRD {
+			log.Info("resource provider not found in kubernetes (crd mode)", "uuid", uuid)
+			http.Error(w, "resource provider not found", http.StatusNotFound)
+			return
+		}
 		// Forward the request to placement if the hypervisor doesn't exist.
 		log.Info("resource provider not found in kubernetes, forwarding to upstream placement",
 			"uuid", uuid)
@@ -255,8 +280,15 @@ func (s *Shim) HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	if !s.config.Features.EnableResourceProviders {
+	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders)
+	switch mode {
+	case FeatureModePassthrough:
 		s.forward(w, r)
+		return
+	case FeatureModeHybrid, FeatureModeCRD:
+		// Check KVM immutability below.
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
 		return
 	}
 
@@ -286,6 +318,11 @@ func (s *Shim) HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Reque
 	var hvs hv1.HypervisorList
 	err = s.List(ctx, &hvs, client.MatchingFields{idxHypervisorOpenStackId: uuid})
 	if apierrors.IsNotFound(err) || len(hvs.Items) == 0 {
+		if mode == FeatureModeCRD {
+			log.Info("resource provider not found in kubernetes (crd mode)", "uuid", uuid)
+			http.Error(w, "resource provider not found", http.StatusNotFound)
+			return
+		}
 		// Forward the request to placement if the hypervisor doesn't exist.
 		log.Info("resource provider not found in kubernetes, forwarding to upstream placement",
 			"uuid", uuid)
@@ -339,8 +376,15 @@ func (s *Shim) HandleDeleteResourceProvider(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	if !s.config.Features.EnableResourceProviders {
+	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders)
+	switch mode {
+	case FeatureModePassthrough:
 		s.forward(w, r)
+		return
+	case FeatureModeHybrid, FeatureModeCRD:
+		// Check KVM protection below.
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
 		return
 	}
 
@@ -353,6 +397,11 @@ func (s *Shim) HandleDeleteResourceProvider(w http.ResponseWriter, r *http.Reque
 	var hvs hv1.HypervisorList
 	err := s.List(ctx, &hvs, client.MatchingFields{idxHypervisorOpenStackId: uuid})
 	if apierrors.IsNotFound(err) || len(hvs.Items) == 0 {
+		if mode == FeatureModeCRD {
+			log.Info("resource provider not found in kubernetes (crd mode)", "uuid", uuid)
+			http.Error(w, "resource provider not found", http.StatusNotFound)
+			return
+		}
 		// Forward the request to placement if the hypervisor doesn't exist.
 		log.Info("resource provider not found in kubernetes, forwarding to upstream placement",
 			"uuid", uuid)
@@ -403,13 +452,22 @@ type listResourceProvidersResponse struct {
 //
 // See: https://docs.openstack.org/api-ref/placement/#list-resource-providers
 func (s *Shim) HandleListResourceProviders(w http.ResponseWriter, r *http.Request) {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders) {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid:
+		s.listResourceProvidersHybrid(w, r)
+	case FeatureModeCRD:
+		s.listResourceProvidersCRD(w, r)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
+}
+
+// listResourceProvidersHybrid merges upstream and K8s results.
+func (s *Shim) listResourceProvidersHybrid(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
-
-	if !s.config.Features.EnableResourceProviders {
-		s.forward(w, r)
-		return
-	}
 
 	s.forwardWithHook(w, r, func(w http.ResponseWriter, resp *http.Response) {
 		if resp.StatusCode != http.StatusOK {
@@ -452,30 +510,11 @@ func (s *Shim) HandleListResourceProviders(w http.ResponseWriter, r *http.Reques
 			"count", len(hvs.Items), "uuids", uuids)
 
 		// Post-filter by query parameters.
-		filtered := hvs.Items
-		if v := query.Get("uuid"); v != "" {
-			filtered = filterHypervisorsByUUID(ctx, filtered, v)
-		}
-		if v := query.Get("name"); v != "" {
-			filtered = filterHypervisorsByName(ctx, filtered, v)
-		}
-		if vals := query["member_of"]; len(vals) > 0 {
-			filtered = filterHypervisorsByMemberOf(ctx, filtered, vals)
-		}
-		if v := query.Get("in_tree"); v != "" {
-			filtered = filterHypervisorsByInTree(ctx, filtered, v)
-		}
-		if vals := query["required"]; len(vals) > 0 {
-			filtered = filterHypervisorsByRequired(ctx, filtered, vals)
-		}
-		if v := query.Get("resources"); v != "" {
-			var err error
-			filtered, err = filterHypervisorsByResources(ctx, filtered, v)
-			if err != nil {
-				log.Info("invalid resources query parameter", "error", err)
-				http.Error(w, "invalid resources query parameter: "+err.Error(), http.StatusBadRequest)
-				return
-			}
+		filtered, err := applyHypervisorQueryFilters(ctx, hvs.Items, query)
+		if err != nil {
+			log.Info("invalid resources query parameter", "error", err)
+			http.Error(w, "invalid resources query parameter: "+err.Error(), http.StatusBadRequest)
+			return
 		}
 
 		// Build collision sets from filtered k8s hypervisors.
@@ -515,6 +554,63 @@ func (s *Shim) HandleListResourceProviders(w http.ResponseWriter, r *http.Reques
 			ResourceProviders: merged,
 		})
 	})
+}
+
+// listResourceProvidersCRD serves the list from Kubernetes only, no upstream.
+func (s *Shim) listResourceProvidersCRD(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
+	query := r.URL.Query()
+
+	var hvs hv1.HypervisorList
+	if err := s.List(ctx, &hvs); err != nil && !apierrors.IsNotFound(err) {
+		log.Error(err, "failed to list hypervisors")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	filtered, err := applyHypervisorQueryFilters(ctx, hvs.Items, query)
+	if err != nil {
+		log.Info("invalid resources query parameter", "error", err)
+		http.Error(w, "invalid resources query parameter: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	rps := make([]resourceProvider, 0, len(filtered))
+	for _, hv := range filtered {
+		rps = append(rps, translateToResourceProvider(hv))
+	}
+	log.Info("listed resource providers from kubernetes (crd mode)", "count", len(rps))
+	s.writeJSON(w, http.StatusOK, listResourceProvidersResponse{ResourceProviders: rps})
+}
+
+// applyHypervisorQueryFilters runs the placement-style query filters against
+// the given hypervisor list and returns the filtered slice.
+func applyHypervisorQueryFilters(ctx context.Context, hvs []hv1.Hypervisor, query url.Values) ([]hv1.Hypervisor, error) {
+	filtered := hvs
+	if v := query.Get("uuid"); v != "" {
+		filtered = filterHypervisorsByUUID(ctx, filtered, v)
+	}
+	if v := query.Get("name"); v != "" {
+		filtered = filterHypervisorsByName(ctx, filtered, v)
+	}
+	if vals := query["member_of"]; len(vals) > 0 {
+		filtered = filterHypervisorsByMemberOf(ctx, filtered, vals)
+	}
+	if v := query.Get("in_tree"); v != "" {
+		filtered = filterHypervisorsByInTree(ctx, filtered, v)
+	}
+	if vals := query["required"]; len(vals) > 0 {
+		filtered = filterHypervisorsByRequired(ctx, filtered, vals)
+	}
+	if v := query.Get("resources"); v != "" {
+		var err error
+		filtered, err = filterHypervisorsByResources(ctx, filtered, v)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return filtered, nil
 }
 
 func filterHypervisorsByUUID(ctx context.Context, hvs []hv1.Hypervisor, uuid string) []hv1.Hypervisor {

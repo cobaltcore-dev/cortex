@@ -55,3 +55,99 @@ func TestHandleDeleteResourceClass(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
 	}
 }
+
+func TestHandleResourceClasses_HybridMode(t *testing.T) {
+	down, up := newTestTimers()
+	s := &Shim{
+		config: config{
+			PlacementURL: "http://should-not-be-called:1234",
+			Features:     featuresConfig{ResourceClasses: FeatureModeHybrid},
+		},
+		maxBodyLogSize:         4096,
+		downstreamRequestTimer: down,
+		upstreamRequestTimer:   up,
+	}
+	t.Run("GET list returns 501", func(t *testing.T) {
+		w := serveHandler(t, "GET", "/resource_classes",
+			s.HandleListResourceClasses, "/resource_classes")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("POST returns 501", func(t *testing.T) {
+		w := serveHandler(t, "POST", "/resource_classes",
+			s.HandleCreateResourceClass, "/resource_classes")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("GET show returns 501", func(t *testing.T) {
+		w := serveHandler(t, "GET", "/resource_classes/{name}",
+			s.HandleShowResourceClass, "/resource_classes/VCPU")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("PUT returns 501", func(t *testing.T) {
+		w := serveHandler(t, "PUT", "/resource_classes/{name}",
+			s.HandleUpdateResourceClass, "/resource_classes/CUSTOM_FOO")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("DELETE returns 501", func(t *testing.T) {
+		w := serveHandler(t, "DELETE", "/resource_classes/{name}",
+			s.HandleDeleteResourceClass, "/resource_classes/CUSTOM_BAR")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+}
+
+func TestHandleResourceClasses_CRDMode(t *testing.T) {
+	down, up := newTestTimers()
+	s := &Shim{
+		config: config{
+			PlacementURL: "http://should-not-be-called:1234",
+			Features:     featuresConfig{ResourceClasses: FeatureModeCRD},
+		},
+		maxBodyLogSize:         4096,
+		downstreamRequestTimer: down,
+		upstreamRequestTimer:   up,
+	}
+	t.Run("GET list returns 501", func(t *testing.T) {
+		w := serveHandler(t, "GET", "/resource_classes",
+			s.HandleListResourceClasses, "/resource_classes")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("POST returns 501", func(t *testing.T) {
+		w := serveHandler(t, "POST", "/resource_classes",
+			s.HandleCreateResourceClass, "/resource_classes")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("GET show returns 501", func(t *testing.T) {
+		w := serveHandler(t, "GET", "/resource_classes/{name}",
+			s.HandleShowResourceClass, "/resource_classes/VCPU")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("PUT returns 501", func(t *testing.T) {
+		w := serveHandler(t, "PUT", "/resource_classes/{name}",
+			s.HandleUpdateResourceClass, "/resource_classes/CUSTOM_FOO")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("DELETE returns 501", func(t *testing.T) {
+		w := serveHandler(t, "DELETE", "/resource_classes/{name}",
+			s.HandleDeleteResourceClass, "/resource_classes/CUSTOM_BAR")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+}

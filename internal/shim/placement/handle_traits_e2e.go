@@ -19,13 +19,13 @@ import (
 //
 // Phase 1 — read-only (always runs):
 //
-//  1. GET /traits — list all traits; when forwarding to upstream (enableTraits
-//     is false) verify at least one trait exists.
+//  1. GET /traits — list all traits; when traits mode is passthrough
+//     (forwarding to upstream) verify at least one trait exists.
 //  2. GET /traits/{name} — show a known trait from the list and verify 200
 //     (skipped when the trait list is empty).
 //  3. GET /traits/{name} — show a nonexistent trait and verify 404.
 //
-// Phase 2 — CRUD (only when enableTraits is true):
+// Phase 2 — CRUD (only when traits mode is non-passthrough):
 //
 //  1. Pre-cleanup: DELETE any leftover test trait (ignore 404).
 //  2. PUT /traits/{name} — create a custom test trait → 201.
@@ -80,10 +80,14 @@ func e2eTestTraits(ctx context.Context, _ client.Client) error {
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
 		return fmt.Errorf("failed to decode GET /traits response: %w", err)
 	}
-	// When traits are served locally (enableTraits=true) the static list may
+	// When traits are served locally (hybrid or crd mode) the static list may
 	// be empty. Only require at least one trait when forwarding to upstream
 	// placement, which always has standard traits.
-	if !config.Features.EnableTraits && len(listResp.Traits) == 0 {
+	traitsMode := e2eCurrentMode(ctx)
+	if traitsMode == "" {
+		traitsMode = config.Features.Traits.orDefault()
+	}
+	if traitsMode == FeatureModePassthrough && len(listResp.Traits) == 0 {
 		return errors.New("GET /traits: expected at least one trait, got 0")
 	}
 	log.Info("Successfully retrieved traits", "count", len(listResp.Traits))
@@ -133,12 +137,17 @@ func e2eTestTraits(ctx context.Context, _ client.Client) error {
 
 	// ==================== Phase 2: CRUD tests (feature-gated) ====================
 
-	if !config.Features.EnableTraits {
-		log.Info("Skipping trait CRUD e2e tests because enableTraits is false")
+	// CRUD tests require traits ConfigMaps which are only created when the
+	// configured traits mode is hybrid or crd. The override header changes
+	// handler routing but cannot create ConfigMaps that don't exist.
+	configuredTraitsMode := config.Features.Traits.orDefault()
+	if traitsMode == FeatureModePassthrough || configuredTraitsMode == FeatureModePassthrough {
+		log.Info("Skipping trait CRUD e2e tests",
+			"overrideMode", traitsMode, "configuredMode", configuredTraitsMode)
 		return nil
 	}
 
-	log.Info("=== Phase 2: CRUD trait tests (enableTraits=true) ===")
+	log.Info("=== Phase 2: CRUD trait tests (traits mode non-passthrough) ===")
 
 	const testTrait = "CUSTOM_CORTEX_E2E_TRAIT"
 
@@ -287,47 +296,53 @@ func e2eTestTraits(ctx context.Context, _ client.Client) error {
 	}
 	log.Info("Verified test trait was deleted", "trait", testTrait)
 
-	// Test PUT /traits/{name} with bad prefix → 400.
-	log.Info("Testing PUT /traits/{name} with non-CUSTOM_ prefix")
-	req, err = http.NewRequestWithContext(ctx,
-		http.MethodPut, sc.Endpoint+"/traits/HW_CORTEX_E2E_BAD", http.NoBody)
-	if err != nil {
-		return fmt.Errorf("failed to create bad-prefix PUT request: %w", err)
-	}
-	req.Header.Set("X-Auth-Token", sc.TokenID)
-	req.Header.Set("OpenStack-API-Version", "placement 1.6")
-	resp, err = sc.HTTPClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send bad-prefix PUT request: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		return fmt.Errorf("PUT /traits/HW_CORTEX_E2E_BAD: expected 400, got %d", resp.StatusCode)
-	}
-	log.Info("Correctly received 400 for PUT with non-CUSTOM_ prefix")
+	// Bad-prefix validation is only enforced by the shim in crd mode.
+	// In hybrid mode, writes forward to upstream which has different behavior.
+	if traitsMode == FeatureModeCRD {
+		// Test PUT /traits/{name} with bad prefix → 400.
+		log.Info("Testing PUT /traits/{name} with non-CUSTOM_ prefix")
+		req, err = http.NewRequestWithContext(ctx,
+			http.MethodPut, sc.Endpoint+"/traits/HW_CORTEX_E2E_BAD", http.NoBody)
+		if err != nil {
+			return fmt.Errorf("failed to create bad-prefix PUT request: %w", err)
+		}
+		req.Header.Set("X-Auth-Token", sc.TokenID)
+		req.Header.Set("OpenStack-API-Version", "placement 1.6")
+		resp, err = sc.HTTPClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("failed to send bad-prefix PUT request: %w", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			return fmt.Errorf("PUT /traits/HW_CORTEX_E2E_BAD: expected 400, got %d", resp.StatusCode)
+		}
+		log.Info("Correctly received 400 for PUT with non-CUSTOM_ prefix")
 
-	// Test DELETE /traits/{name} with bad prefix → 400.
-	log.Info("Testing DELETE /traits/{name} with non-CUSTOM_ prefix")
-	req, err = http.NewRequestWithContext(ctx,
-		http.MethodDelete, sc.Endpoint+"/traits/HW_CORTEX_E2E_BAD", http.NoBody)
-	if err != nil {
-		return fmt.Errorf("failed to create bad-prefix DELETE request: %w", err)
+		// Test DELETE /traits/{name} with bad prefix → 400.
+		log.Info("Testing DELETE /traits/{name} with non-CUSTOM_ prefix")
+		req, err = http.NewRequestWithContext(ctx,
+			http.MethodDelete, sc.Endpoint+"/traits/HW_CORTEX_E2E_BAD", http.NoBody)
+		if err != nil {
+			return fmt.Errorf("failed to create bad-prefix DELETE request: %w", err)
+		}
+		req.Header.Set("X-Auth-Token", sc.TokenID)
+		req.Header.Set("OpenStack-API-Version", "placement 1.6")
+		resp, err = sc.HTTPClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("failed to send bad-prefix DELETE request: %w", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			return fmt.Errorf("DELETE /traits/HW_CORTEX_E2E_BAD: expected 400, got %d", resp.StatusCode)
+		}
+		log.Info("Correctly received 400 for DELETE with non-CUSTOM_ prefix")
+	} else {
+		log.Info("Skipping bad-prefix validation tests (only enforced in crd mode)")
 	}
-	req.Header.Set("X-Auth-Token", sc.TokenID)
-	req.Header.Set("OpenStack-API-Version", "placement 1.6")
-	resp, err = sc.HTTPClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send bad-prefix DELETE request: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		return fmt.Errorf("DELETE /traits/HW_CORTEX_E2E_BAD: expected 400, got %d", resp.StatusCode)
-	}
-	log.Info("Correctly received 400 for DELETE with non-CUSTOM_ prefix")
 
 	return nil
 }
 
 func init() {
-	e2eTests = append(e2eTests, e2eTest{name: "traits", run: e2eTestTraits})
+	e2eTests = append(e2eTests, e2eTest{name: "traits", run: e2eWrapWithModes(e2eTestTraits)})
 }

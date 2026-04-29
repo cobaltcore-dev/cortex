@@ -42,6 +42,15 @@ func e2eTestResourceProviderTraits(ctx context.Context, _ client.Client) error {
 	}
 	log.Info("Successfully created openstack client for resource provider traits e2e test")
 
+	// Resource provider trait writes (PUT/DELETE) are not yet implemented in
+	// crd mode, and the test RP created via POST won't exist as a Hypervisor
+	// CRD either, so skip the entire test in crd mode.
+	rpTraitsMode := e2eCurrentMode(ctx)
+	if rpTraitsMode == FeatureModeCRD {
+		log.Info("Skipping resource provider traits e2e test because mode is crd (writes not implemented)")
+		return nil
+	}
+
 	const testRPUUID = "e2e10000-0000-0000-0000-000000000003"
 	const testRPName = "cortex-e2e-test-rp-traits"
 	const testTrait = "CUSTOM_CORTEX_E2E_RP_TRAIT"
@@ -382,5 +391,5 @@ func e2eTestResourceProviderTraits(ctx context.Context, _ client.Client) error {
 }
 
 func init() {
-	e2eTests = append(e2eTests, e2eTest{name: "resource_provider_traits", run: e2eTestResourceProviderTraits})
+	e2eTests = append(e2eTests, e2eTest{name: "resource_provider_traits", run: e2eWrapWithModes(e2eTestResourceProviderTraits)})
 }

@@ -57,6 +57,15 @@ func e2eTestReshaper(ctx context.Context, _ client.Client) error {
 	const userID = "e2e50000-0000-0000-0000-000000000001"
 	const apiVersion = "placement 1.30"
 
+	// Probe: for non-passthrough modes, verify endpoint returns 501.
+	unimplemented, err := e2eProbeUnimplemented(ctx, sc, sc.Endpoint+"/allocations/"+consumerUUID)
+	if err != nil {
+		return fmt.Errorf("probe: %w", err)
+	}
+	if unimplemented {
+		return nil
+	}
+
 	// Pre-cleanup: delete allocation, both RPs, and custom resource class.
 	log.Info("Pre-cleanup: deleting leftover test resources")
 	for _, cleanup := range []struct {
@@ -571,5 +580,5 @@ func e2eTestReshaper(ctx context.Context, _ client.Client) error {
 }
 
 func init() {
-	e2eTests = append(e2eTests, e2eTest{name: "reshaper", run: e2eTestReshaper})
+	e2eTests = append(e2eTests, e2eTest{name: "reshaper", run: e2eWrapWithModes(e2eTestReshaper)})
 }
