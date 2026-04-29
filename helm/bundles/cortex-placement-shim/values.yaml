@@ -62,6 +62,8 @@ cortex-shim:
       status: "CURRENT"
     traits:
       configMapName: "cortex-placement-shim-traits"
+    resourceClasses:
+      configMapName: "cortex-placement-shim-resource-classes"
     auth:
       tokenCacheTTL: "5m"
       policies:

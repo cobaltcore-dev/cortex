@@ -127,7 +127,7 @@ func (s *Shim) featureModeFromConfOrHeader(r *http.Request, configured FeatureMo
 	}
 	resolved := override.orDefault()
 	if resolved == FeatureModeHybrid || resolved == FeatureModeCRD {
-		if s.config.Versioning == nil && s.config.Traits == nil {
+		if s.config.Versioning == nil && s.config.Traits == nil && s.config.ResourceClasses == nil {
 			return configured.orDefault()
 		}
 	}
@@ -163,6 +163,14 @@ type versioningConfig struct {
 // features.traits is hybrid or crd.
 type traitsConfig struct {
 	// ConfigMapName is the name of the ConfigMap used to persist traits.
+	// Must exist in the same namespace as the shim pod.
+	ConfigMapName string `json:"configMapName"`
+}
+
+// resourceClassesConfig configures the local resource class store used when
+// features.resourceClasses is hybrid or crd.
+type resourceClassesConfig struct {
+	// ConfigMapName is the name of the ConfigMap used to persist resource classes.
 	// Must exist in the same namespace as the shim pod.
 	ConfigMapName string `json:"configMapName"`
 }
@@ -212,6 +220,9 @@ type config struct {
 	// Traits configures the local trait store used when
 	// features.traits is hybrid or crd.
 	Traits *traitsConfig `json:"traits,omitempty"`
+	// ResourceClasses configures the local resource class store used when
+	// features.resourceClasses is hybrid or crd.
+	ResourceClasses *resourceClassesConfig `json:"resourceClasses,omitempty"`
 }
 
 // validate checks the config for required fields and returns an error if the
@@ -256,6 +267,18 @@ func (c *config) validate() error {
 		}
 		if os.Getenv("POD_NAMESPACE") == "" {
 			return errors.New("pod namespace (POD_NAMESPACE) is required when traits config is present")
+		}
+	}
+	rcMode := c.Features.ResourceClasses.orDefault()
+	if rcMode != FeatureModePassthrough && c.ResourceClasses == nil {
+		return fmt.Errorf("resourceClasses config is required when features.resourceClasses is %s", rcMode)
+	}
+	if c.ResourceClasses != nil {
+		if c.ResourceClasses.ConfigMapName == "" {
+			return errors.New("resourceClasses.configMapName is required when resourceClasses config is present")
+		}
+		if os.Getenv("POD_NAMESPACE") == "" {
+			return errors.New("pod namespace (POD_NAMESPACE) is required when resourceClasses config is present")
 		}
 	}
 	if c.Auth != nil && c.KeystoneURL == "" {
@@ -445,14 +468,25 @@ func (s *Shim) Start(ctx context.Context) error {
 			s.resourceLocker,
 		))
 	}
+	if s.config.ResourceClasses != nil {
+		s.syncers = append(s.syncers, NewResourceClassSyncer(
+			s.Client,
+			s.config.ResourceClasses.ConfigMapName,
+			os.Getenv("POD_NAMESPACE"),
+			s.placementServiceClient,
+			s.resourceLocker,
+		))
+	}
 	for _, syncer := range s.syncers {
 		if err := syncer.Init(ctx); err != nil {
 			return err
 		}
 	}
 	traitsMode := s.config.Features.Traits.orDefault()
+	rcMode := s.config.Features.ResourceClasses.orDefault()
 	for _, syncer := range s.syncers {
-		if traitsMode == FeatureModeHybrid || traitsMode == FeatureModePassthrough {
+		if traitsMode == FeatureModeHybrid || traitsMode == FeatureModePassthrough ||
+			rcMode == FeatureModeHybrid || rcMode == FeatureModePassthrough {
 			go syncer.Run(ctx)
 		}
 	}
