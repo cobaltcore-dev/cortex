@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	corev1 "k8s.io/api/core/v1"
@@ -79,6 +78,7 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Check if all datasources configured share the same database secret ref.
 	var databaseSecretRef *corev1.SecretReference
+	var dataSources []*v1alpha1.Datasource
 	for _, dsRef := range knowledge.Spec.Dependencies.Datasources {
 		ds := &v1alpha1.Datasource{}
 		if err := r.Get(ctx, client.ObjectKey{
@@ -119,7 +119,34 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			}
 			return ctrl.Result{}, nil
 		}
+		dataSources = append(dataSources, ds)
 	}
+
+	var knowledgeSources []*v1alpha1.Knowledge
+	for _, knRef := range knowledge.Spec.Dependencies.Knowledges {
+		kn := &v1alpha1.Knowledge{}
+		if err := r.Get(ctx, client.ObjectKey{
+			Namespace: req.Namespace,
+			Name:      knRef.Name,
+		}, kn); err != nil {
+			log.Error(err, "failed to get knowledge", "name", knRef.Name)
+			old := knowledge.DeepCopy()
+			meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.KnowledgeConditionReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  "KnowledgeFetchFailed",
+				Message: "failed to get knowledge: " + err.Error(),
+			})
+			patch := client.MergeFrom(old)
+			if err := r.Status().Patch(ctx, knowledge, patch); err != nil {
+				log.Error(err, "failed to patch knowledge status")
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, err
+		}
+		knowledgeSources = append(knowledgeSources, kn)
+	}
+
 	// When we have datasources reading from a database, connect to it.
 	var authenticatedDatasourceDB *db.DB
 	if databaseSecretRef != nil {
@@ -163,7 +190,7 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	features, err := extractor.Extract()
+	features, err := extractor.Extract(dataSources, knowledgeSources)
 	if err != nil {
 		log.Error(err, "failed to extract features", "name", knowledge.Spec.Extractor.Name)
 		old := knowledge.DeepCopy()

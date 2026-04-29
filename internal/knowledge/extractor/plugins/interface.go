@@ -14,7 +14,7 @@ type FeatureExtractor interface {
 	// Configure the feature extractor with a spec and (optional) databases.
 	Init(datasourceDB *db.DB, client client.Client, spec v1alpha1.KnowledgeSpec) error
 	// Extract features from the given data.
-	Extract() ([]Feature, error)
+	Extract(d []*v1alpha1.Datasource, k []*v1alpha1.Knowledge) ([]Feature, error)
 }
 
 type Feature any

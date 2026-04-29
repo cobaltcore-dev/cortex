@@ -26,4 +26,5 @@ var supportedMetricSyncers = map[string]func(
 	"netapp_node_metric":                    newTypedSyncer[NetAppNodeMetric],
 	"netapp_volume_aggregate_labels_metric": newTypedSyncer[NetAppVolumeAggrLabelsMetric],
 	"kvm_libvirt_domain_metric":             newTypedSyncer[KVMDomainMetric],
+	"generic":                               newTypedSyncer[GenericMetric],
 }

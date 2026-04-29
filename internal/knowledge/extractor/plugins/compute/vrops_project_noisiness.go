@@ -6,6 +6,7 @@ package compute
 import (
 	_ "embed"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
 )
 
@@ -30,6 +31,6 @@ type VROpsProjectNoisinessExtractor struct {
 //go:embed vrops_project_noisiness.sql
 var vropsProjectNoisinessSQL string
 
-func (e *VROpsProjectNoisinessExtractor) Extract() ([]plugins.Feature, error) {
+func (e *VROpsProjectNoisinessExtractor) Extract(_ []*v1alpha1.Datasource, _ []*v1alpha1.Knowledge) ([]plugins.Feature, error) {
 	return e.ExtractSQL(vropsProjectNoisinessSQL)
 }

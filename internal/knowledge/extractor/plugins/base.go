@@ -42,13 +42,13 @@ func (e *BaseExtractor[Opts, Feature]) Init(
 }
 
 // Extract the features directly from an sql query.
-func (e *BaseExtractor[Opts, F]) ExtractSQL(query string) ([]Feature, error) {
+func (e *BaseExtractor[Opts, F]) ExtractSQL(query string, args ...interface{}) ([]Feature, error) {
 	// This can happen when no datasource is provided that connects to a database.
 	if e.DB == nil {
 		return nil, errors.New("database connection is not initialized")
 	}
 	var features []F
-	if _, err := e.DB.Select(&features, query); err != nil {
+	if _, err := e.DB.Select(&features, query, args...); err != nil {
 		return nil, err
 	}
 	return e.Extracted(features)

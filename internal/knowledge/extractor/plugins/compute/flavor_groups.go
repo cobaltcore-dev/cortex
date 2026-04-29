@@ -9,6 +9,7 @@ import (
 	"errors"
 	"sort"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -76,7 +77,7 @@ var flavorGroupsQuery string
 var flavorGroupLog = ctrl.Log.WithName("flavor_group_extractor")
 
 // Extract flavor groups from the database.
-func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
+func (e *FlavorGroupExtractor) Extract(_ []*v1alpha1.Datasource, _ []*v1alpha1.Knowledge) ([]plugins.Feature, error) {
 	if e.DB == nil {
 		return nil, errors.New("database connection is not initialized")
 	}

@@ -4,6 +4,7 @@
 package weighers
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"math"
@@ -31,7 +32,7 @@ type BinpackingStep struct {
 	lib.BaseWeigher[api.PodPipelineRequest, BinpackingStepOpts]
 }
 
-func (s *BinpackingStep) Run(traceLog *slog.Logger, request api.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *BinpackingStep) Run(_ context.Context, traceLog *slog.Logger, request api.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	podResources := helpers.GetPodResourceRequests(request.Pod)

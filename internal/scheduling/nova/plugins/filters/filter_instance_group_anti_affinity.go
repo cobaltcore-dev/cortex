@@ -20,6 +20,7 @@ type FilterInstanceGroupAntiAffinityStep struct {
 // Select hosts not in spec_obj.instance_group but only until
 // max_server_per_host is reached (by default = 1).
 func (s *FilterInstanceGroupAntiAffinityStep) Run(
+	ctx context.Context,
 	traceLog *slog.Logger,
 	request api.ExternalSchedulerRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
@@ -52,7 +53,7 @@ func (s *FilterInstanceGroupAntiAffinityStep) Run(
 	}
 
 	hvs := &hv1.HypervisorList{}
-	if err := s.Client.List(context.Background(), hvs); err != nil {
+	if err := s.Client.List(ctx, hvs); err != nil {
 		traceLog.Error("failed to list hypervisors", "error", err)
 		return nil, err
 	}

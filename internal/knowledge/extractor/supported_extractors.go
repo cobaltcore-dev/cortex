@@ -26,4 +26,6 @@ var supportedExtractors = map[string]plugins.FeatureExtractor{
 	"flavor_groups":                                    &compute.FlavorGroupExtractor{},
 
 	"netapp_storage_pool_cpu_usage_extractor": &storage.StoragePoolCPUUsageExtractor{},
+
+	"generic": &plugins.GenericExtractor{},
 }

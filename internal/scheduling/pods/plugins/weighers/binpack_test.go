@@ -257,7 +257,7 @@ func TestBinpackingStep_Run(t *testing.T) {
 				},
 			}
 
-			result, err := tt.step.Run(slog.Default(), tt.request)
+			result, err := tt.step.Run(t.Context(), slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
