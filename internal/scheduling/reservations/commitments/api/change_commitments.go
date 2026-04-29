@@ -42,9 +42,11 @@ func sortedKeys[K ~string, V any](m map[K]V) []K {
 
 // crSnapshot captures a CommittedResource CRD's prior state for batch rollback.
 // prevSpec is nil when the CRD was newly created (i.e. did not exist before the batch).
+// wasDeleted is true when the batch operation deleted the CRD; rollback must re-create it.
 type crSnapshot struct {
-	crName   string
-	prevSpec *v1alpha1.CommittedResourceSpec
+	crName     string
+	prevSpec   *v1alpha1.CommittedResourceSpec
+	wasDeleted bool
 }
 
 // HandleChangeCommitments implements POST /commitments/v1/change-commitments from the Limes LIQUID API.
@@ -62,7 +64,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	}
 	w.Header().Set("X-Request-ID", requestID)
 
-	if !api.config.EnableChangeCommitmentsAPI {
+	if !api.config.EnableChangeCommitments {
 		statusCode = http.StatusServiceUnavailable
 		http.Error(w, "change-commitments API is disabled", statusCode)
 		api.recordMetrics(req, resp, statusCode, startTime)
@@ -145,8 +147,13 @@ func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.Respons
 		return errors.New("version mismatch")
 	}
 
+	// If Limes does not require confirmation for this batch (e.g. deletions, status-only transitions),
+	// the controller must not reject — it must retry until it succeeds (AllowRejection=false).
+	// Conversely, when Limes requires confirmation, the controller may reject and report back.
+	allowRejection := req.RequiresConfirmation()
+
 	var (
-		toWatch      []string     // CRD names to poll for terminal conditions
+		toWatch      []string     // CRD names to poll for terminal conditions (upserts only)
 		snapshots    []crSnapshot // ordered list for deterministic rollback
 		failedReason string
 		rollback     bool
@@ -155,6 +162,13 @@ func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.Respons
 ProcessLoop:
 	for _, projectID := range sortedKeys(req.ByProject) {
 		projectChanges := req.ByProject[projectID]
+
+		// Extract domain ID from Keystone project metadata if Limes provided it.
+		domainID := ""
+		if pm := projectChanges.ProjectMetadata.UnwrapOr(liquid.ProjectMetadata{}); pm.Domain.UUID != "" {
+			domainID = pm.Domain.UUID
+		}
+
 		for _, resourceName := range sortedKeys(projectChanges.ByResource) {
 			resourceChanges := projectChanges.ByResource[resourceName]
 
@@ -179,20 +193,14 @@ ProcessLoop:
 			}
 
 			for _, commitment := range resourceChanges.Commitments {
+				isDelete := commitment.NewStatus.IsNone()
+				crName := "commitment-" + string(commitment.UUID)
+
 				logger.V(1).Info("processing commitment",
 					"commitmentUUID", commitment.UUID,
 					"oldStatus", commitment.OldStatus.UnwrapOr("none"),
-					"newStatus", commitment.NewStatus.UnwrapOr("none"))
-
-				stateDesired, err := commitments.FromChangeCommitmentTargetState(
-					commitment, string(projectID), flavorGroupName, flavorGroup, string(req.AZ))
-				if err != nil {
-					failedReason = fmt.Sprintf("commitment %s: %s", commitment.UUID, err)
-					rollback = true
-					break ProcessLoop
-				}
-
-				crName := "commitment-" + string(commitment.UUID)
+					"newStatus", commitment.NewStatus.UnwrapOr("none"),
+					"delete", isDelete)
 
 				// Snapshot the current spec before mutation so we can restore it on rollback.
 				snap := crSnapshot{crName: crName}
@@ -203,18 +211,39 @@ ProcessLoop:
 						rollback = true
 						break ProcessLoop
 					}
-					// Not found: CR is new, prevSpec stays nil.
+					// Not found: CR is new (or already absent for deletes), prevSpec stays nil.
 				} else {
 					specCopy := existing.Spec
 					snap.prevSpec = &specCopy
 				}
 
-				// Upsert CommittedResource CRD. AllowRejection=true: the controller may reject
-				// and roll back child Reservations if placement fails — the API needs a final answer.
+				if isDelete {
+					// Limes is removing this commitment; delete the CRD if it exists.
+					snap.wasDeleted = true
+					if snap.prevSpec != nil {
+						if err := api.client.Delete(ctx, existing); err != nil && !apierrors.IsNotFound(err) {
+							failedReason = fmt.Sprintf("commitment %s: failed to delete CommittedResource CRD: %v", commitment.UUID, err)
+							rollback = true
+							break ProcessLoop
+						}
+						logger.V(1).Info("deleted CommittedResource CRD", "name", crName)
+					}
+					snapshots = append(snapshots, snap)
+					continue
+				}
+
+				stateDesired, err := commitments.FromChangeCommitmentTargetState(
+					commitment, string(projectID), domainID, flavorGroupName, flavorGroup, string(req.AZ))
+				if err != nil {
+					failedReason = fmt.Sprintf("commitment %s: %s", commitment.UUID, err)
+					rollback = true
+					break ProcessLoop
+				}
+
 				cr := &v1alpha1.CommittedResource{}
 				cr.Name = crName
 				if _, err := controllerutil.CreateOrUpdate(ctx, api.client, cr, func() error {
-					applyCRSpec(cr, stateDesired, true)
+					applyCRSpec(cr, stateDesired, allowRejection)
 					return nil
 				}); err != nil {
 					failedReason = fmt.Sprintf("commitment %s: failed to write CommittedResource CRD: %v", commitment.UUID, err)
@@ -230,13 +259,21 @@ ProcessLoop:
 	}
 
 	if !rollback {
+		// Non-confirming changes (RequiresConfirmation=false): Limes ignores our RejectionReason,
+		// so there is no point blocking on the controller outcome. The CRDs are written with
+		// AllowRejection=false, meaning the controller will retry indefinitely in the background.
+		if !allowRejection {
+			logger.Info("non-confirming changes applied, returning without polling", "count", len(toWatch))
+			return nil
+		}
+
 		logger.Info("CommittedResource CRDs written, polling for controller outcome", "count", len(toWatch))
 		watchStart := time.Now()
 
 		rejected, watchErrs := watchCRsUntilReady(
 			ctx, logger, api.client, toWatch,
-			api.config.ChangeAPIWatchReservationsTimeout,
-			api.config.ChangeAPIWatchReservationsPollInterval,
+			api.config.WatchTimeout.Duration,
+			api.config.WatchPollInterval.Duration,
 		)
 
 		logger.Info("polling complete", "duration", time.Since(watchStart).Round(time.Millisecond))
@@ -347,9 +384,24 @@ func watchCRsUntilReady(
 }
 
 // rollbackCR reverses the batch-local change to a single CommittedResource CRD.
-// If the CRD was newly created (snap.prevSpec == nil) it is deleted.
-// If it was updated, its spec is restored to the snapshot.
+//   - wasDeleted=true, prevSpec!=nil: CRD was deleted; re-create it from the snapshot.
+//   - wasDeleted=true, prevSpec==nil: CRD was absent before and after; nothing to do.
+//   - wasDeleted=false, prevSpec==nil: CRD was newly created; delete it.
+//   - wasDeleted=false, prevSpec!=nil: CRD was updated; restore its spec.
 func rollbackCR(ctx context.Context, logger logr.Logger, k8sClient client.Client, snap crSnapshot) {
+	if snap.wasDeleted {
+		if snap.prevSpec == nil {
+			return // was absent before deletion attempt; nothing to undo
+		}
+		cr := &v1alpha1.CommittedResource{}
+		cr.Name = snap.crName
+		cr.Spec = *snap.prevSpec
+		if err := k8sClient.Create(ctx, cr); client.IgnoreAlreadyExists(err) != nil {
+			logger.Error(err, "failed to re-create CommittedResource CRD during rollback", "name", snap.crName)
+		}
+		return
+	}
+
 	if snap.prevSpec == nil {
 		cr := &v1alpha1.CommittedResource{}
 		cr.Name = snap.crName

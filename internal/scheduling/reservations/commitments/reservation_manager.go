@@ -95,6 +95,9 @@ func (m *ReservationManager) ApplyCommitmentState(
 	if !exists {
 		return nil, fmt.Errorf("flavor group not found: %s", desiredState.FlavorGroupName)
 	}
+	if len(flavorGroup.Flavors) == 0 {
+		return nil, fmt.Errorf("flavor group %s has no flavors", desiredState.FlavorGroupName)
+	}
 	deltaMemoryBytes := desiredState.TotalMemoryBytes
 	for _, res := range existing {
 		memoryQuantity := res.Spec.Resources[hv1.ResourceMemory]

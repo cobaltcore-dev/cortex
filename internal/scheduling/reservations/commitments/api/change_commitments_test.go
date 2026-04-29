@@ -140,10 +140,10 @@ func TestHandleChangeCommitments(t *testing.T) {
 			NoCondition: []string{"commitment-uuid-timeout"},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-timeout", "confirmed", 2)),
-			CustomConfig: func() *commitments.Config {
-				cfg := commitments.DefaultConfig()
-				cfg.ChangeAPIWatchReservationsTimeout = 0
-				cfg.ChangeAPIWatchReservationsPollInterval = 100 * time.Millisecond
+			CustomConfig: func() *commitments.APIConfig {
+				cfg := commitments.DefaultAPIConfig()
+				cfg.WatchTimeout = metav1.Duration{}
+				cfg.WatchPollInterval = metav1.Duration{Duration: 100 * time.Millisecond}
 				return &cfg
 			}(),
 			ExpectedAPIResponse: newAPIResponse("timeout reached while processing commitment changes"),
@@ -179,9 +179,9 @@ func TestHandleChangeCommitments(t *testing.T) {
 			Flavors: []*TestFlavor{m1Small},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-dis", "confirmed", 2)),
-			CustomConfig: func() *commitments.Config {
-				cfg := commitments.DefaultConfig()
-				cfg.EnableChangeCommitmentsAPI = false
+			CustomConfig: func() *commitments.APIConfig {
+				cfg := commitments.DefaultAPIConfig()
+				cfg.EnableChangeCommitments = false
 				return &cfg
 			}(),
 			ExpectedAPIResponse: APIResponseExpectation{StatusCode: 503},
@@ -206,6 +206,179 @@ func TestHandleChangeCommitments(t *testing.T) {
 			Flavors:             []*TestFlavor{m1Small},
 			CommitmentRequest:   newCommitmentRequest("az-a", false, 1234),
 			ExpectedAPIResponse: newAPIResponse(),
+		},
+		// --- Deletion ---
+		{
+			Name:    "Deletion: existing CRD is deleted",
+			Flavors: []*TestFlavor{m1Small},
+			ExistingCRs: []*TestCR{
+				{CommitmentUUID: "uuid-del", State: v1alpha1.CommitmentStatusConfirmed, AmountMiB: 1024, ProjectID: "project-A", AZ: "az-a"},
+			},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				deleteCommitment("hw_version_hana_1_ram", "project-A", "uuid-del", "confirmed", 2)),
+			ExpectedAPIResponse: newAPIResponse(),
+			ExpectedDeletedCRs:  []string{"commitment-uuid-del"},
+		},
+		{
+			Name:    "Deletion: non-existing CRD is a no-op",
+			Flavors: []*TestFlavor{m1Small},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				deleteCommitment("hw_version_hana_1_ram", "project-A", "uuid-absent", "confirmed", 2)),
+			ExpectedAPIResponse: newAPIResponse(),
+		},
+		{
+			Name:    "Deletion rollback: delete succeeds but later commitment fails → CRD re-created",
+			Flavors: []*TestFlavor{m1Small},
+			ExistingCRs: []*TestCR{
+				{CommitmentUUID: "uuid-del-rb", State: v1alpha1.CommitmentStatusConfirmed, AmountMiB: 1024, ProjectID: "project-A", AZ: "az-a"},
+			},
+			CROutcomes: map[string]string{
+				"commitment-uuid-new-rb": "not enough capacity",
+			},
+			// project-A deletion sorts before project-B creation; deletion succeeds then creation fails.
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				deleteCommitment("hw_version_hana_1_ram", "project-A", "uuid-del-rb", "confirmed", 2),
+				createCommitment("hw_version_hana_1_ram", "project-B", "uuid-new-rb", "confirmed", 2),
+			),
+			ExpectedAPIResponse:    newAPIResponse("not enough capacity"),
+			ExpectedCreatedCRNames: []string{"commitment-uuid-del-rb"}, // re-created during rollback
+		},
+		// --- Non-confirming changes (RequiresConfirmation=false → AllowRejection=false, no watch) ---
+		{
+			Name:    "Non-confirming: guaranteed→confirmed, AllowRejection=false, watch skipped",
+			Flavors: []*TestFlavor{m1Small},
+			ExistingCRs: []*TestCR{
+				{CommitmentUUID: "uuid-guar", State: v1alpha1.CommitmentStatusGuaranteed, AmountMiB: 1024, ProjectID: "project-A", AZ: "az-a"},
+			},
+			// Controller would reject, but we skip watching for non-confirming changes.
+			CROutcomes: map[string]string{"commitment-uuid-guar": "not enough capacity"},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				TestCommitment{
+					ResourceName:   "hw_version_hana_1_ram",
+					ProjectID:      "project-A",
+					ConfirmationID: "uuid-guar",
+					OldState:       "guaranteed",
+					State:          "confirmed",
+					Amount:         2,
+				}),
+			ExpectedAPIResponse:    newAPIResponse(), // no rejection even though controller would reject
+			ExpectedCreatedCRNames: []string{"commitment-uuid-guar"},
+			ExpectedAllowRejection: map[string]bool{"commitment-uuid-guar": false},
+		},
+		{
+			Name:    "Non-confirming: planned, AllowRejection=false",
+			Flavors: []*TestFlavor{m1Small},
+			// CROutcomes not set: controller accepts (irrelevant since watch is skipped).
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-plan-nc", "planned", 2)),
+			ExpectedAPIResponse:    newAPIResponse(),
+			ExpectedCreatedCRNames: []string{"commitment-uuid-plan-nc"},
+			ExpectedAllowRejection: map[string]bool{"commitment-uuid-plan-nc": false},
+		},
+		// --- Pending state ---
+		{
+			Name:    "None→pending: non-confirming, AllowRejection=false, watch skipped",
+			Flavors: []*TestFlavor{m1Small},
+			// pending creates Reservation slots (like confirmed) but RequiresConfirmation=false.
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-pend", "pending", 2)),
+			ExpectedAPIResponse:    newAPIResponse(),
+			ExpectedCreatedCRNames: []string{"commitment-uuid-pend"},
+			ExpectedAllowRejection: map[string]bool{"commitment-uuid-pend": false},
+			ExpectedCRSpecs:        map[string]int64{"commitment-uuid-pend": 2 * 1024 * 1024 * 1024},
+		},
+		// --- Inactive state transitions via upsert ---
+		{
+			Name:    "confirmed→expired: non-confirming upsert, AllowRejection=false, watch skipped",
+			Flavors: []*TestFlavor{m1Small},
+			ExistingCRs: []*TestCR{
+				{CommitmentUUID: "uuid-to-exp", State: v1alpha1.CommitmentStatusConfirmed, AmountMiB: 1024, ProjectID: "project-A", AZ: "az-a"},
+			},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				TestCommitment{
+					ResourceName:   "hw_version_hana_1_ram",
+					ProjectID:      "project-A",
+					ConfirmationID: "uuid-to-exp",
+					OldState:       "confirmed",
+					State:          "expired",
+					Amount:         1,
+				}),
+			ExpectedAPIResponse:    newAPIResponse(),
+			ExpectedCreatedCRNames: []string{"commitment-uuid-to-exp"},
+			ExpectedAllowRejection: map[string]bool{"commitment-uuid-to-exp": false},
+			ExpectedCRSpecs:        map[string]int64{"commitment-uuid-to-exp": 0},
+		},
+		{
+			Name:    "confirmed→superseded: confirming upsert, AllowRejection=true, controller accepts",
+			Flavors: []*TestFlavor{m1Small},
+			ExistingCRs: []*TestCR{
+				{CommitmentUUID: "uuid-to-sup", State: v1alpha1.CommitmentStatusConfirmed, AmountMiB: 1024, ProjectID: "project-A", AZ: "az-a"},
+			},
+			// confirmed→superseded is a confirming change (not in the liquid API's free-transition list).
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				TestCommitment{
+					ResourceName:   "hw_version_hana_1_ram",
+					ProjectID:      "project-A",
+					ConfirmationID: "uuid-to-sup",
+					OldState:       "confirmed",
+					State:          "superseded",
+					Amount:         1,
+				}),
+			ExpectedAPIResponse:    newAPIResponse(),
+			ExpectedCreatedCRNames: []string{"commitment-uuid-to-sup"},
+			ExpectedAllowRejection: map[string]bool{"commitment-uuid-to-sup": true},
+			ExpectedCRSpecs:        map[string]int64{"commitment-uuid-to-sup": 0},
+		},
+		// --- Resize ---
+		{
+			Name:    "Resize down: confirmed→confirmed with less capacity, RequiresConfirmation=true",
+			Flavors: []*TestFlavor{m1Small},
+			ExistingCRs: []*TestCR{
+				{CommitmentUUID: "uuid-dn", State: v1alpha1.CommitmentStatusConfirmed, AmountMiB: 4 * 1024, ProjectID: "project-A", AZ: "az-a"},
+			},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				TestCommitment{
+					ResourceName:   "hw_version_hana_1_ram",
+					ProjectID:      "project-A",
+					ConfirmationID: "uuid-dn",
+					OldState:       "confirmed",
+					OldAmount:      4,
+					State:          "confirmed",
+					Amount:         2,
+				}),
+			ExpectedAPIResponse:    newAPIResponse(),
+			ExpectedCreatedCRNames: []string{"commitment-uuid-dn"},
+			ExpectedAllowRejection: map[string]bool{"commitment-uuid-dn": true},
+			ExpectedCRSpecs:        map[string]int64{"commitment-uuid-dn": 2 * 1024 * 1024 * 1024},
+		},
+		// --- Mixed batch success ---
+		{
+			Name:    "Mixed batch: delete + create both succeed without rollback",
+			Flavors: []*TestFlavor{m1Small},
+			ExistingCRs: []*TestCR{
+				{CommitmentUUID: "uuid-mbdel", State: v1alpha1.CommitmentStatusConfirmed, AmountMiB: 1024, ProjectID: "project-A", AZ: "az-a"},
+			},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				deleteCommitment("hw_version_hana_1_ram", "project-A", "uuid-mbdel", "confirmed", 1),
+				createCommitment("hw_version_hana_1_ram", "project-B", "uuid-mbnew", "confirmed", 2),
+			),
+			ExpectedAPIResponse:    newAPIResponse(),
+			ExpectedDeletedCRs:     []string{"commitment-uuid-mbdel"},
+			ExpectedCreatedCRNames: []string{"commitment-uuid-mbnew"},
+			ExpectedAllowRejection: map[string]bool{"commitment-uuid-mbnew": true},
+		},
+		// --- Pre-write validation failure rollback ---
+		{
+			Name:    "Pre-write validation failure: first CR written then rolled back on second CR's unknown flavor group",
+			Flavors: []*TestFlavor{m1Small},
+			// project-A (valid) sorts before project-B (invalid): A's CR is written, then B's
+			// unknown flavor group triggers a pre-watch rollback that deletes A's CR.
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-pva", "confirmed", 2),
+				createCommitment("hw_version_nonexistent_ram", "project-B", "uuid-pvb", "confirmed", 2),
+			),
+			ExpectedAPIResponse: newAPIResponse("flavor group not found"),
+			ExpectedDeletedCRs:  []string{"commitment-uuid-pva"},
 		},
 	}
 
@@ -270,7 +443,7 @@ type CommitmentChangeTestCase struct {
 	ExpectedAllowRejection map[string]bool  // crName → expected AllowRejection value
 	ExpectedCRSpecs        map[string]int64 // crName → expected Amount.Value() in bytes
 	ExpectedDeletedCRs     []string
-	CustomConfig           *commitments.Config
+	CustomConfig           *commitments.APIConfig
 	EnvInfoVersion         int64
 }
 
@@ -294,8 +467,10 @@ type TestCommitment struct {
 	ResourceName   liquid.ResourceName
 	ProjectID      string
 	ConfirmationID string
-	State          string
+	OldState       string // empty = None (no prior status)
+	State          string // empty = None (deletion)
 	Amount         uint64
+	OldAmount      uint64 // if non-zero, used for TotalBefore totals instead of Amount (for resize-down)
 }
 
 type APIResponseExpectation struct {
@@ -689,6 +864,18 @@ func createCommitment(resourceName, projectID, uuid, state string, amount uint64
 	}
 }
 
+// deleteCommitment builds a TestCommitment representing a removal (OldStatus=oldState, NewStatus=None).
+func deleteCommitment(resourceName, projectID, uuid, oldState string, amount uint64) TestCommitment {
+	return TestCommitment{
+		ResourceName:   liquid.ResourceName(resourceName),
+		ProjectID:      projectID,
+		ConfirmationID: uuid,
+		OldState:       oldState,
+		State:          "", // NewStatus = None
+		Amount:         amount,
+	}
+}
+
 func buildRequestJSON(req CommitmentChangeRequest) string {
 	byProject := make(map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset)
 	for _, tc := range req.Commitments {
@@ -698,15 +885,47 @@ func buildRequestJSON(req CommitmentChangeRequest) string {
 				ByResource: make(map[liquid.ResourceName]liquid.ResourceCommitmentChangeset),
 			}
 		}
+		var oldStatus Option[liquid.CommitmentStatus]
+		if tc.OldState != "" {
+			oldStatus = Some(liquid.CommitmentStatus(tc.OldState))
+		} else {
+			oldStatus = None[liquid.CommitmentStatus]()
+		}
+		var newStatus Option[liquid.CommitmentStatus]
+		if tc.State != "" {
+			newStatus = Some(liquid.CommitmentStatus(tc.State))
+		} else {
+			newStatus = None[liquid.CommitmentStatus]()
+		}
 		commitment := liquid.Commitment{
 			UUID:      liquid.CommitmentUUID(tc.ConfirmationID),
 			Amount:    tc.Amount,
-			OldStatus: None[liquid.CommitmentStatus](),
-			NewStatus: Some(liquid.CommitmentStatus(tc.State)),
+			OldStatus: oldStatus,
+			NewStatus: newStatus,
 			ExpiresAt: time.Now().Add(365 * 24 * time.Hour),
 		}
 		byResource := byProject[pid].ByResource[tc.ResourceName]
 		byResource.Commitments = append(byResource.Commitments, commitment)
+
+		// Compute per-resource totals so RequiresConfirmation() behaves correctly.
+		// OldAmount overrides Amount for TotalBefore (resize-down: old amount != new amount).
+		oldAmt := tc.Amount
+		if tc.OldAmount != 0 {
+			oldAmt = tc.OldAmount
+		}
+		if oldStatus == Some(liquid.CommitmentStatusConfirmed) {
+			byResource.TotalConfirmedBefore += oldAmt
+		}
+		if newStatus == Some(liquid.CommitmentStatusConfirmed) {
+			byResource.TotalConfirmedAfter += tc.Amount
+		}
+		if oldStatus == Some(liquid.CommitmentStatusGuaranteed) {
+			byResource.TotalGuaranteedBefore += oldAmt
+		}
+		if newStatus == Some(liquid.CommitmentStatusGuaranteed) {
+			byResource.TotalGuaranteedAfter += tc.Amount
+		}
+
 		byProject[pid].ByResource[tc.ResourceName] = byResource
 	}
 

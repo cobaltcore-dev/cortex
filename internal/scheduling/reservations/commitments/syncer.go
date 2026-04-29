@@ -322,10 +322,11 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		if cr.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
 			continue
 		}
-		if !activeCommitments[cr.Spec.CommitmentUUID] {
+		isExpired := cr.Spec.EndTime != nil && !cr.Spec.EndTime.After(time.Now())
+		if !activeCommitments[cr.Spec.CommitmentUUID] && !isExpired {
 			staleCRCount++
 		}
-		if cr.Spec.EndTime != nil && !cr.Spec.EndTime.After(time.Now()) {
+		if isExpired {
 			if err := s.Delete(ctx, cr); client.IgnoreNotFound(err) != nil {
 				logger.Error(err, "failed to GC expired committed resource CRD", "name", cr.Name)
 				return err

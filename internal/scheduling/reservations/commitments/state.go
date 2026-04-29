@@ -159,6 +159,7 @@ func FromCommitment(
 func FromChangeCommitmentTargetState(
 	commitment liquid.Commitment,
 	projectID string,
+	domainID string,
 	flavorGroupName string,
 	flavorGroup compute.FlavorGroupFeature,
 	az string,
@@ -211,6 +212,7 @@ func FromChangeCommitmentTargetState(
 	return &CommitmentState{
 		CommitmentUUID:   string(commitment.UUID),
 		ProjectID:        projectID,
+		DomainID:         domainID,
 		FlavorGroupName:  flavorGroupName,
 		TotalMemoryBytes: totalMemoryBytes,
 		AvailabilityZone: az,
