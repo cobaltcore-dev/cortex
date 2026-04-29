@@ -3,7 +3,94 @@
 
 package infrastructure
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+)
+
+func mockVMwareHostLabels(computeHost, az string) map[string]string {
+	return map[string]string{
+		"availability_zone":  az,
+		"compute_host":       computeHost,
+		"cpu_architecture":   "",
+		"workload_type":      "",
+		"enabled":            "false",
+		"decommissioned":     "false",
+		"external_customer":  "false",
+		"disabled_reason":    "-",
+		"pinned_projects":    "false",
+		"pinned_project_ids": "",
+	}
+}
+
+func TestVMwareHostGetHostLabels(t *testing.T) {
+	str := func(s string) *string { return &s }
+
+	tests := []struct {
+		name string
+		host vmwareHost
+		want []string
+	}{
+		{
+			name: "all optional fields nil",
+			host: vmwareHost{compute.HostDetails{
+				AvailabilityZone: "az1",
+				ComputeHost:      "nova-compute-1",
+				CPUArchitecture:  "cascade-lake",
+				WorkloadType:     "general-purpose",
+				Enabled:          true,
+				Decommissioned:   false,
+				ExternalCustomer: false,
+				DisabledReason:   nil,
+				PinnedProjects:   nil,
+			}},
+			want: []string{"az1", "nova-compute-1", "cascade-lake", "general-purpose", "true", "false", "false", "-", "false", ""},
+		},
+		{
+			name: "disabled reason set",
+			host: vmwareHost{compute.HostDetails{
+				AvailabilityZone: "az2",
+				ComputeHost:      "nova-compute-2",
+				DisabledReason:   str("scheduled-maintenance"),
+			}},
+			want: []string{"az2", "nova-compute-2", "", "", "false", "false", "false", "scheduled-maintenance", "false", ""},
+		},
+		{
+			name: "pinned projects set",
+			host: vmwareHost{compute.HostDetails{
+				AvailabilityZone: "az1",
+				ComputeHost:      "nova-compute-3",
+				PinnedProjects:   str("proj-a,proj-b"),
+			}},
+			want: []string{"az1", "nova-compute-3", "", "", "false", "false", "false", "-", "true", "proj-a,proj-b"},
+		},
+		{
+			name: "decommissioned and external customer",
+			host: vmwareHost{compute.HostDetails{
+				AvailabilityZone: "az3",
+				ComputeHost:      "nova-compute-4",
+				Decommissioned:   true,
+				ExternalCustomer: true,
+			}},
+			want: []string{"az3", "nova-compute-4", "", "", "false", "true", "true", "-", "false", ""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.host.getHostLabels()
+			if len(got) != len(vmwareHostLabels) {
+				t.Fatalf("getHostLabels() returned %d values, want %d (matching vmwareHostLabels)", len(got), len(vmwareHostLabels))
+			}
+			for i, want := range tt.want {
+				if got[i] != want {
+					t.Errorf("label[%d] (%s) = %q, want %q", i, vmwareHostLabels[i], got[i], want)
+				}
+			}
+		})
+	}
+}
 
 func TestIsKVMFlavor(t *testing.T) {
 	tests := []struct {

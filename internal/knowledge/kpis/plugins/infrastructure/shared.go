@@ -13,6 +13,7 @@ import (
 
 const (
 	hostDetailsKnowledgeName       = "host-details"
+	hostUtilizationKnowledgeName   = "host-utilization"
 	vmwareIronicHypervisorType     = "ironic"
 	hypervisorFamilyVMware         = "vmware"
 	vmwareComputeHostPattern       = "nova-compute-%"
@@ -40,7 +41,6 @@ func (h vmwareHost) getHostLabels() []string {
 		h.ComputeHost,
 		h.CPUArchitecture,
 		h.WorkloadType,
-		h.HypervisorFamily,
 		strconv.FormatBool(h.Enabled),
 		strconv.FormatBool(h.Decommissioned),
 		strconv.FormatBool(h.ExternalCustomer),
@@ -55,7 +55,6 @@ var vmwareHostLabels = []string{
 	"compute_host",
 	"cpu_architecture",
 	"workload_type",
-	"hypervisor_family",
 	"enabled",
 	"decommissioned",
 	"external_customer",
