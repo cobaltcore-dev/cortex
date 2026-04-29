@@ -83,6 +83,18 @@ func serveHandler(t *testing.T, method, pattern string, handler http.HandlerFunc
 	return w
 }
 
+// serveHandlerWithBody is like serveHandler but allows providing a request body.
+func serveHandlerWithBody(t *testing.T, method, pattern string, handler http.HandlerFunc, reqPath string, body io.Reader) *httptest.ResponseRecorder {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc(method+" "+pattern, handler)
+	req := httptest.NewRequest(method, reqPath, body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	return w
+}
+
 func TestForward(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -473,6 +485,30 @@ func TestConfigValidateTraitsCRDRequiresConfig(t *testing.T) {
 		t.Fatal("expected error when traits.configMapName is empty")
 	}
 	c.Traits.ConfigMapName = "cortex-placement-shim-traits"
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when POD_NAMESPACE is not set")
+	}
+	t.Setenv("POD_NAMESPACE", "default")
+	if err := c.validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestConfigValidateResourceClassesCRDRequiresConfig(t *testing.T) {
+	t.Setenv("POD_NAMESPACE", "")
+
+	c := config{
+		PlacementURL: "http://placement:8778",
+		Features:     featuresConfig{ResourceClasses: FeatureModeCRD},
+	}
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when resourceClasses mode is crd without config")
+	}
+	c.ResourceClasses = &resourceClassesConfig{}
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when resourceClasses.configMapName is empty")
+	}
+	c.ResourceClasses.ConfigMapName = "cortex-placement-shim-resource-classes"
 	if err := c.validate(); err == nil {
 		t.Fatal("expected error when POD_NAMESPACE is not set")
 	}

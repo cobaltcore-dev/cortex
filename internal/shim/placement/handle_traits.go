@@ -17,6 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -211,7 +212,9 @@ func (s *Shim) handleUpdateTraitHybrid(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(resp.StatusCode)
 		if resp.Body != nil {
-			io.Copy(w, resp.Body) //nolint:errcheck
+			if _, err := io.Copy(w, resp.Body); err != nil {
+				log.Error(err, "hybrid: failed to copy upstream response body")
+			}
 		}
 
 		if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusNoContent {
@@ -293,7 +296,9 @@ func (s *Shim) handleDeleteTraitHybrid(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(resp.StatusCode)
 		if resp.Body != nil {
-			io.Copy(w, resp.Body) //nolint:errcheck
+			if _, err := io.Copy(w, resp.Body); err != nil {
+				log.Error(err, "hybrid: failed to copy upstream response body")
+			}
 		}
 
 		if resp.StatusCode == http.StatusNoContent {
@@ -382,7 +387,9 @@ func (s *Shim) addTraitToConfigMap(ctx context.Context, name string) (bool, erro
 	defer func() {
 		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = s.resourceLocker.ReleaseLock(releaseCtx, s.config.Traits.ConfigMapName+"-lock", lockerID) //nolint:errcheck
+		if err := s.resourceLocker.ReleaseLock(releaseCtx, s.config.Traits.ConfigMapName+"-lock", lockerID); err != nil {
+			ctrl.Log.WithName("placement-shim").Error(err, "failed to release traits lock")
+		}
 	}()
 
 	cm := &corev1.ConfigMap{}
@@ -439,7 +446,9 @@ func (s *Shim) removeTraitFromConfigMap(ctx context.Context, name string) (bool,
 	defer func() {
 		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = s.resourceLocker.ReleaseLock(releaseCtx, s.config.Traits.ConfigMapName+"-lock", lockerID) //nolint:errcheck
+		if err := s.resourceLocker.ReleaseLock(releaseCtx, s.config.Traits.ConfigMapName+"-lock", lockerID); err != nil {
+			ctrl.Log.WithName("placement-shim").Error(err, "failed to release traits lock")
+		}
 	}()
 
 	cm := &corev1.ConfigMap{}
