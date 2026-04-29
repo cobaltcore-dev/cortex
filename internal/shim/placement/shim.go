@@ -482,13 +482,8 @@ func (s *Shim) Start(ctx context.Context) error {
 			return err
 		}
 	}
-	traitsMode := s.config.Features.Traits.orDefault()
-	rcMode := s.config.Features.ResourceClasses.orDefault()
 	for _, syncer := range s.syncers {
-		if traitsMode == FeatureModeHybrid || traitsMode == FeatureModePassthrough ||
-			rcMode == FeatureModeHybrid || rcMode == FeatureModePassthrough {
-			go syncer.Run(ctx)
-		}
+		go syncer.Run(ctx)
 	}
 	return nil
 }

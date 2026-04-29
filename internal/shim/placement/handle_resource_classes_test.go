@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/pkg/resourcelock"
@@ -117,6 +118,9 @@ func TestHandleListResourceClassesLocal(t *testing.T) {
 	for i, rc := range resp.ResourceClasses {
 		if rc.Name != want[i] {
 			t.Errorf("class[%d] = %q, want %q", i, rc.Name, want[i])
+		}
+		if len(rc.Links) != 1 || rc.Links[0].Rel != "self" || rc.Links[0].Href != "/resource_classes/"+rc.Name {
+			t.Errorf("class[%d] links = %v, want self link", i, rc.Links)
 		}
 	}
 }
@@ -230,5 +234,90 @@ func TestHandleDeleteResourceClassLocalBadPrefix(t *testing.T) {
 	w := serveHandler(t, "DELETE", "/resource_classes/{name}", s.HandleDeleteResourceClass, "/resource_classes/VCPU")
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+// --- Hybrid mode tests ---
+
+func newHybridResourceClassShim(t *testing.T, upstreamStatus int, upstreamBody string, classes []string) *Shim {
+	t.Helper()
+	t.Setenv("POD_NAMESPACE", "default")
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(upstreamStatus)
+		if upstreamBody != "" {
+			if _, err := w.Write([]byte(upstreamBody)); err != nil {
+				t.Errorf("failed to write upstream body: %v", err)
+			}
+		}
+	}))
+	t.Cleanup(upstream.Close)
+	objs := []client.Object{newTestResourceClassConfigMap("default", "test-rc-cm", classes)}
+	cl := newFakeClientWithScheme(t, objs...)
+	down, up := newTestTimers()
+	return &Shim{
+		Client: cl,
+		config: config{
+			PlacementURL:    upstream.URL,
+			Features:        featuresConfig{ResourceClasses: FeatureModeHybrid},
+			ResourceClasses: &resourceClassesConfig{ConfigMapName: "test-rc-cm"},
+		},
+		httpClient:             upstream.Client(),
+		maxBodyLogSize:         4096,
+		downstreamRequestTimer: down,
+		upstreamRequestTimer:   up,
+		resourceLocker:         resourcelock.NewResourceLocker(cl, "default"),
+	}
+}
+
+func TestHandleListResourceClassesHybridForwards(t *testing.T) {
+	s := newHybridResourceClassShim(t, http.StatusOK, `{"resource_classes":[{"name":"VCPU"}]}`, nil)
+	w := serveHandler(t, "GET", "/resource_classes", s.HandleListResourceClasses, "/resource_classes")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestHandleUpdateResourceClassHybridUpdatesLocal(t *testing.T) {
+	s := newHybridResourceClassShim(t, http.StatusCreated, "", nil)
+	w := serveHandler(t, "PUT", "/resource_classes/{name}", s.HandleUpdateResourceClass, "/resource_classes/CUSTOM_HYB")
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusCreated)
+	}
+	found, err := s.hasResourceClass(context.Background(), "CUSTOM_HYB")
+	if err != nil {
+		t.Fatalf("hasResourceClass: %v", err)
+	}
+	if !found {
+		t.Error("expected resource class to be added to local configmap in hybrid mode")
+	}
+}
+
+func TestHandleDeleteResourceClassHybridUpdatesLocal(t *testing.T) {
+	s := newHybridResourceClassShim(t, http.StatusNoContent, "", []string{"CUSTOM_DEL"})
+	w := serveHandler(t, "DELETE", "/resource_classes/{name}", s.HandleDeleteResourceClass, "/resource_classes/CUSTOM_DEL")
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+	found, err := s.hasResourceClass(context.Background(), "CUSTOM_DEL")
+	if err != nil {
+		t.Fatalf("hasResourceClass: %v", err)
+	}
+	if found {
+		t.Error("expected resource class to be removed from local configmap in hybrid mode")
+	}
+}
+
+func TestHandleUpdateResourceClassHybridUpstreamFailure(t *testing.T) {
+	s := newHybridResourceClassShim(t, http.StatusInternalServerError, "upstream error", nil)
+	w := serveHandler(t, "PUT", "/resource_classes/{name}", s.HandleUpdateResourceClass, "/resource_classes/CUSTOM_FAIL")
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+	found, err := s.hasResourceClass(context.Background(), "CUSTOM_FAIL")
+	if err != nil {
+		t.Fatalf("hasResourceClass: %v", err)
+	}
+	if found {
+		t.Error("expected resource class NOT to be added when upstream fails")
 	}
 }

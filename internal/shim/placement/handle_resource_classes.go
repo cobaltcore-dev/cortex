@@ -54,7 +54,10 @@ func (s *Shim) HandleListResourceClasses(w http.ResponseWriter, r *http.Request)
 
 	entries := make([]resourceClassEntry, 0, len(rcSet))
 	for name := range rcSet {
-		entries = append(entries, resourceClassEntry{Name: name})
+		entries = append(entries, resourceClassEntry{
+			Name:  name,
+			Links: []resourceClassLink{{Rel: "self", Href: "/resource_classes/" + name}},
+		})
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
 
@@ -194,7 +197,10 @@ func (s *Shim) HandleShowResourceClass(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Info("resource class found", "class", name)
-	s.writeJSON(w, http.StatusOK, resourceClassEntry{Name: name})
+	s.writeJSON(w, http.StatusOK, resourceClassEntry{
+		Name:  name,
+		Links: []resourceClassLink{{Rel: "self", Href: "/resource_classes/" + name}},
+	})
 }
 
 // HandleUpdateResourceClass handles PUT /resource_classes/{name} requests.

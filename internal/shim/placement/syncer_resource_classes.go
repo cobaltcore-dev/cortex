@@ -30,7 +30,13 @@ type resourceClassesListResponse struct {
 }
 
 type resourceClassEntry struct {
-	Name string `json:"name"`
+	Name  string              `json:"name"`
+	Links []resourceClassLink `json:"links,omitempty"`
+}
+
+type resourceClassLink struct {
+	Rel  string `json:"rel"`
+	Href string `json:"href"`
 }
 
 // ResourceClassSyncer manages the lifecycle of the resource classes ConfigMap.
