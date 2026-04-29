@@ -115,8 +115,16 @@ func (k *VMwareProjectUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 		hostLabels := host.getHostLabels()
 		hostLabels = append(hostLabels, projectCapacityUsage.ProjectID, projectCapacityUsage.ProjectName)
 
-		memoryUsageBytes := projectCapacityUsage.TotalRAMMB * 1024 * 1024
-		diskUsageBytes := projectCapacityUsage.TotalDiskGB * 1024 * 1024 * 1024
+		memoryUsageBytes, err := bytesFromUnit(projectCapacityUsage.TotalRAMMB, "MB")
+		if err != nil {
+			slog.Error("vmware_project_utilization: failed to convert memory to bytes", "err", err)
+			continue
+		}
+		diskUsageBytes, err := bytesFromUnit(projectCapacityUsage.TotalDiskGB, "GB")
+		if err != nil {
+			slog.Error("vmware_project_utilization: failed to convert disk to bytes", "err", err)
+			continue
+		}
 
 		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerProjectAndHost, prometheus.GaugeValue, projectCapacityUsage.TotalVCPUs, append(hostLabels, "vcpu")...)
 		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerProjectAndHost, prometheus.GaugeValue, memoryUsageBytes, append(hostLabels, "memory")...)

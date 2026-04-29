@@ -188,21 +188,6 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: vmware-commitments
-spec:
-  schedulingDomain: nova
-  impl: vmware_commitments_kpi
-  dependencies:
-    datasources:
-      - name: limes-project-commitments
-      - name: nova-flavors
-      - name: nova-servers
-  description: |
-    This KPI tracks unused VMware commitments based on project commitments and usage.
----
-apiVersion: cortex.cloud/v1alpha1
-kind: KPI
-metadata:
   name: vmware-project-utilization
 spec:
   schedulingDomain: nova
@@ -216,3 +201,18 @@ spec:
       - name: host-details
   description: |
     This KPI tracks the resource utilization of projects running VMs on VMware hosts.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: vmware-resource-commitments
+spec:
+  schedulingDomain: nova
+  impl: vmware_resource_commitments_kpi
+  dependencies:
+    datasources:
+      - name: nova-servers
+      - name: nova-flavors
+      - name: limes-project-commitments
+  description: |
+    This KPI tracks the resource commitments of projects running VMs on VMware hosts.
