@@ -211,7 +211,8 @@ spec:
     datasources:
       - name: nova-servers
       - name: nova-flavors
+      - name: identity-projects
     knowledges:
-      - name: project-details
+      - name: host-details
   description: |
     This KPI tracks the resource utilization of projects running VMs on VMware hosts.
