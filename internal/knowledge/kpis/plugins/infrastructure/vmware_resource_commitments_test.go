@@ -15,10 +15,10 @@ import (
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
-func setupResourceCommitmentsDB(t *testing.T) (*db.DB, func()) {
+func setupResourceCommitmentsDB(t *testing.T) (testDB *db.DB, cleanup func()) {
 	t.Helper()
 	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := &db.DB{DbMap: dbEnv.DbMap}
+	testDB = &db.DB{DbMap: dbEnv.DbMap}
 	if err := testDB.CreateTable(
 		testDB.AddTable(limes.Commitment{}),
 		testDB.AddTable(nova.Server{}),
