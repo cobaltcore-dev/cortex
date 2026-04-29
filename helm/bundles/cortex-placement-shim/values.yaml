@@ -42,9 +42,17 @@ cortex-shim:
     osUserDomainName:
     osProjectDomainName:
     features:
-      enableResourceProviders: false
-      enableRoot: false
-      enableTraits: false
+      resourceProviders: passthrough
+      root: passthrough
+      traits: passthrough
+      resourceProviderTraits: passthrough
+      resourceClasses: passthrough
+      inventories: passthrough
+      aggregates: passthrough
+      allocations: passthrough
+      usages: passthrough
+      allocationCandidates: passthrough
+      reshaper: passthrough
     # The shim will return this as a static version discovery document for
     # GET / instead of forwarding to upstream placement.
     versioning:
@@ -54,9 +62,8 @@ cortex-shim:
       status: "CURRENT"
     traits:
       configMapName: "cortex-placement-shim-traits"
-      # Static traits included in every Helm install/upgrade. The shim
-      # merges them with dynamic CUSTOM_* traits at request time.
-      static: []
+    resourceClasses:
+      configMapName: "cortex-placement-shim-resource-classes"
     auth:
       tokenCacheTTL: "5m"
       policies:

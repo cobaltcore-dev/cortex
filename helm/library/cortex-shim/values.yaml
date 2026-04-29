@@ -59,3 +59,6 @@ prometheus:
 # Use this to unambiguate multiple cortex deployments in the same cluster.
 namePrefix: cortex
 conf: {} # No config for now that's needed by all the shims.
+
+global:
+  conf: {} # No global config for now that's needed by all the shims.

@@ -199,3 +199,20 @@ spec:
       - name: nova-servers
   description: |
     This KPI tracks unused VMware commitments based on project commitments and usage.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: vmware-project-utilization
+spec:
+  schedulingDomain: nova
+  impl: vmware_project_utilization_kpi
+  dependencies:
+    datasources:
+      - name: nova-servers
+      - name: nova-flavors
+      - name: identity-projects
+    knowledges:
+      - name: host-details
+  description: |
+    This KPI tracks the resource utilization of projects running VMs on VMware hosts.

@@ -48,6 +48,15 @@ func e2eTestResourceProviderAggregates(ctx context.Context, _ client.Client) err
 	const testAggUUID1 = "e2e30000-0000-0000-0000-000000000001"
 	const testAggUUID2 = "e2e30000-0000-0000-0000-000000000002"
 
+	// Probe: for non-passthrough modes, verify endpoint returns 501.
+	unimplemented, err := e2eProbeUnimplemented(ctx, sc, sc.Endpoint+"/resource_providers/"+testRPUUID+"/aggregates")
+	if err != nil {
+		return fmt.Errorf("probe: %w", err)
+	}
+	if unimplemented {
+		return nil
+	}
+
 	// Pre-cleanup: delete any leftover test resource provider from a prior run.
 	log.Info("Pre-cleanup: deleting leftover test resource provider", "uuid", testRPUUID)
 	req, err := http.NewRequestWithContext(ctx,
@@ -346,5 +355,5 @@ func e2eTestResourceProviderAggregates(ctx context.Context, _ client.Client) err
 }
 
 func init() {
-	e2eTests = append(e2eTests, e2eTest{name: "resource_provider_aggregates", run: e2eTestResourceProviderAggregates})
+	e2eTests = append(e2eTests, e2eTest{name: "resource_provider_aggregates", run: e2eWrapWithModes(e2eTestResourceProviderAggregates)})
 }
