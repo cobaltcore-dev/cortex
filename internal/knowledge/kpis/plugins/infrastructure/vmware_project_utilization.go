@@ -96,8 +96,8 @@ func (k *VMwareProjectUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			continue
 		}
 		hostLabels := host.getHostLabels()
-		labels := append(hostLabels, projectInstanceCount.ProjectID, projectInstanceCount.ProjectName, projectInstanceCount.FlavorName)
-		ch <- prometheus.MustNewConstMetric(k.instanceCountPerProjectAndHostAndFlavor, prometheus.GaugeValue, projectInstanceCount.InstanceCount, labels...)
+		hostLabels = append(hostLabels, projectInstanceCount.ProjectID, projectInstanceCount.ProjectName, projectInstanceCount.FlavorName)
+		ch <- prometheus.MustNewConstMetric(k.instanceCountPerProjectAndHostAndFlavor, prometheus.GaugeValue, projectInstanceCount.InstanceCount, hostLabels...)
 	}
 
 	// Export project x compute_host x resource capacity usage metric
@@ -113,14 +113,14 @@ func (k *VMwareProjectUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			continue
 		}
 		hostLabels := host.getHostLabels()
-		labels := append(hostLabels, projectCapacityUsage.ProjectID, projectCapacityUsage.ProjectName)
+		hostLabels = append(hostLabels, projectCapacityUsage.ProjectID, projectCapacityUsage.ProjectName)
 
 		memoryUsageBytes := projectCapacityUsage.TotalRAMMB * 1024 * 1024
 		diskUsageBytes := projectCapacityUsage.TotalDiskGB * 1024 * 1024 * 1024
 
-		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerProjectAndHost, prometheus.GaugeValue, projectCapacityUsage.TotalVCPUs, append(labels, "vcpu")...)
-		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerProjectAndHost, prometheus.GaugeValue, memoryUsageBytes, append(labels, "memory")...)
-		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerProjectAndHost, prometheus.GaugeValue, diskUsageBytes, append(labels, "disk")...)
+		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerProjectAndHost, prometheus.GaugeValue, projectCapacityUsage.TotalVCPUs, append(hostLabels, "vcpu")...)
+		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerProjectAndHost, prometheus.GaugeValue, memoryUsageBytes, append(hostLabels, "memory")...)
+		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerProjectAndHost, prometheus.GaugeValue, diskUsageBytes, append(hostLabels, "disk")...)
 	}
 }
 

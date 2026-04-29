@@ -262,7 +262,9 @@ func TestVMwareProjectUtilizationKPI_queryProjectInstanceCount(t *testing.T) {
 
 			client := buildVMwareHostDetailsClient(t, []compute.HostDetails{})
 			kpi := &VMwareProjectUtilizationKPI{}
-			kpi.Init(&testDB, client.Build(), conf.NewRawOpts("{}"))
+			if err := kpi.Init(&testDB, client.Build(), conf.NewRawOpts("{}")); err != nil {
+				t.Fatalf("expected no error on Init, got %v", err)
+			}
 			counts, err := kpi.queryProjectInstanceCount()
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
@@ -429,7 +431,9 @@ func TestVMwareProjectUtilizationKPI_queryProjectCapacityUsage(t *testing.T) {
 
 			client := buildVMwareHostDetailsClient(t, []compute.HostDetails{})
 			kpi := &VMwareProjectUtilizationKPI{}
-			kpi.Init(&testDB, client.Build(), conf.NewRawOpts("{}"))
+			if err := kpi.Init(&testDB, client.Build(), conf.NewRawOpts("{}")); err != nil {
+				t.Fatalf("expected no error on Init, got %v", err)
+			}
 			usages, err := kpi.queryProjectCapacityUsage()
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
@@ -661,7 +665,9 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 
 			client := buildVMwareHostDetailsClient(t, tt.hostDetails)
 			kpi := &VMwareProjectUtilizationKPI{}
-			kpi.Init(&testDB, client.Build(), conf.NewRawOpts("{}"))
+			if err := kpi.Init(&testDB, client.Build(), conf.NewRawOpts("{}")); err != nil {
+				t.Fatalf("expected no error on Init, got %v", err)
+			}
 
 			ch := make(chan prometheus.Metric, 100)
 			kpi.Collect(ch)
