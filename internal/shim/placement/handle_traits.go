@@ -7,43 +7,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net/http"
-	"net/url"
 	"os"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
-	"github.com/gophercloud/gophercloud/v2"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const configMapKeyTraits = "traits"
-
-func (s *Shim) staticTraitsConfigMapKey() client.ObjectKey {
-	return client.ObjectKey{
-		Namespace: os.Getenv("POD_NAMESPACE"),
-		Name:      s.config.Traits.ConfigMapName,
-	}
-}
-
-func (s *Shim) customTraitsConfigMapKey() client.ObjectKey {
-	return client.ObjectKey{
-		Namespace: os.Getenv("POD_NAMESPACE"),
-		Name:      s.config.Traits.ConfigMapName + "-custom",
-	}
-}
-
-func (s *Shim) traitsLockName() string {
-	return s.config.Traits.ConfigMapName + "-custom-lock"
-}
 
 // traitsListResponse matches the OpenStack Placement GET /traits response.
 type traitsListResponse struct {
@@ -52,10 +29,10 @@ type traitsListResponse struct {
 
 // HandleListTraits handles GET /traits requests.
 //
-// Returns a sorted list of trait strings merged from the static (Helm-managed)
-// and dynamic (CUSTOM_*) ConfigMaps. Supports optional query parameter "name"
-// for filtering: "in:TRAIT_A,TRAIT_B" returns only named traits,
-// "startswith:CUSTOM_" returns prefix matches.
+// Feature modes:
+//   - passthrough: forwards to upstream placement.
+//   - hybrid: forwards to upstream placement.
+//   - crd: serves the trait list from the local ConfigMap.
 //
 // See: https://docs.openstack.org/api-ref/placement/#list-traits
 func (s *Shim) HandleListTraits(w http.ResponseWriter, r *http.Request) {
@@ -67,15 +44,15 @@ func (s *Shim) HandleListTraits(w http.ResponseWriter, r *http.Request) {
 		s.forward(w, r)
 		return
 	case FeatureModeCRD:
-		// Serve from local ConfigMaps.
+		// Serve from local ConfigMap.
 	default:
 		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
 		return
 	}
 
-	traitSet, err := s.getAllTraits(ctx)
+	traitSet, err := s.getTraits(ctx)
 	if err != nil {
-		log.Error(err, "failed to list traits from configmaps")
+		log.Error(err, "failed to list traits from configmap")
 		http.Error(w, "failed to list traits", http.StatusInternalServerError)
 		return
 	}
@@ -124,8 +101,10 @@ func (s *Shim) HandleListTraits(w http.ResponseWriter, r *http.Request) {
 
 // HandleShowTrait handles GET /traits/{name} requests.
 //
-// Checks whether a trait with the given name exists in either the static
-// or dynamic ConfigMap. Returns 204 No Content if found, 404 Not Found otherwise.
+// Feature modes:
+//   - passthrough: forwards to upstream placement.
+//   - hybrid: forwards to upstream placement.
+//   - crd: checks the local ConfigMap for the trait.
 //
 // See: https://docs.openstack.org/api-ref/placement/#show-traits
 func (s *Shim) HandleShowTrait(w http.ResponseWriter, r *http.Request) {
@@ -137,7 +116,7 @@ func (s *Shim) HandleShowTrait(w http.ResponseWriter, r *http.Request) {
 		s.forward(w, r)
 		return
 	case FeatureModeCRD:
-		// Serve from local ConfigMaps.
+		// Serve from local ConfigMap.
 	default:
 		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
 		return
@@ -164,22 +143,26 @@ func (s *Shim) HandleShowTrait(w http.ResponseWriter, r *http.Request) {
 
 // HandleUpdateTrait handles PUT /traits/{name} requests.
 //
-// Creates a new custom trait in the dynamic ConfigMap. Only traits prefixed
-// with CUSTOM_ may be created. Returns 201 Created if the trait is newly
-// inserted, or 204 No Content if it already exists (in either ConfigMap).
-// Returns 400 Bad Request if the name does not carry the CUSTOM_ prefix.
+// Feature modes:
+//   - passthrough: forwards to upstream placement.
+//   - hybrid: forwards to upstream; on success, adds the trait to the local ConfigMap.
+//   - crd: writes the trait to the local ConfigMap (CUSTOM_ prefix required).
 //
 // See: https://docs.openstack.org/api-ref/placement/#update-trait
 func (s *Shim) HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	switch s.featureModeFromConfOrHeader(r, s.config.Features.Traits) {
-	case FeatureModePassthrough, FeatureModeHybrid:
+	mode := s.featureModeFromConfOrHeader(r, s.config.Features.Traits)
+	switch mode {
+	case FeatureModePassthrough:
 		s.forward(w, r)
 		return
+	case FeatureModeHybrid:
+		s.handleUpdateTraitHybrid(w, r)
+		return
 	case FeatureModeCRD:
-		// Serve from local ConfigMaps.
+		// Handle locally.
 	default:
 		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
 		return
@@ -195,115 +178,69 @@ func (s *Shim) HandleUpdateTrait(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fast path: trait already exists in either ConfigMap (no lock needed).
-	allTraits, err := s.getAllTraits(ctx)
+	created, err := s.addTraitToConfigMap(ctx, name)
 	if err != nil {
-		log.Error(err, "failed to read traits for existence check", "trait", name)
+		log.Error(err, "failed to create trait", "trait", name)
 		http.Error(w, "failed to create trait", http.StatusInternalServerError)
 		return
 	}
-	if _, exists := allTraits[name]; exists {
-		log.Info("trait already exists, nothing to do", "trait", name)
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-
-	// Slow path: acquire lock, read/create dynamic ConfigMap, add trait.
-	host, err := os.Hostname()
-	if err != nil {
-		host = "unknown"
-	}
-	lockerID := fmt.Sprintf("shim-%s-%d", host, time.Now().UnixNano())
-	if err := s.resourceLocker.AcquireLock(ctx, s.traitsLockName(), lockerID); err != nil {
-		log.Error(err, "failed to acquire traits lock", "trait", name)
-		http.Error(w, "failed to create trait", http.StatusInternalServerError)
-		return
-	}
-	defer func() {
-		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := s.resourceLocker.ReleaseLock(releaseCtx, s.traitsLockName(), lockerID); err != nil {
-			log.Error(err, "failed to release traits lock")
-		}
-	}()
-
-	cm := &corev1.ConfigMap{}
-	err = s.Get(ctx, s.customTraitsConfigMapKey(), cm)
-	if apierrors.IsNotFound(err) {
-		// Dynamic ConfigMap does not exist yet — create it with the new trait.
-		cm = &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      s.customTraitsConfigMapKey().Name,
-				Namespace: s.customTraitsConfigMapKey().Namespace,
-			},
-			Data: map[string]string{configMapKeyTraits: "[]"},
-		}
-		current := map[string]struct{}{name: {}}
-		if err := s.writeTraits(cm, current); err != nil {
-			log.Error(err, "failed to serialize traits", "trait", name)
-			http.Error(w, "failed to create trait", http.StatusInternalServerError)
-			return
-		}
-		if err := s.Create(ctx, cm); err != nil {
-			log.Error(err, "failed to create custom traits configmap", "trait", name)
-			http.Error(w, "failed to create trait", http.StatusInternalServerError)
-			return
-		}
-		log.Info("created custom traits configmap with new trait", "trait", name)
-		s.syncTraitToUpstream(ctx, name, r.Header)
+	if created {
 		w.WriteHeader(http.StatusCreated)
-		return
+	} else {
+		w.WriteHeader(http.StatusNoContent)
 	}
-	if err != nil {
-		log.Error(err, "failed to get custom traits configmap", "trait", name)
-		http.Error(w, "failed to create trait", http.StatusInternalServerError)
+}
+
+// handleUpdateTraitHybrid forwards PUT /traits/{name} to upstream, then
+// updates the local ConfigMap on success.
+func (s *Shim) handleUpdateTraitHybrid(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
+
+	name, ok := requiredPathParam(w, r, "name")
+	if !ok {
 		return
 	}
 
-	current, err := parseTraits(cm)
-	if err != nil {
-		log.Error(err, "failed to parse custom traits configmap", "trait", name)
-		http.Error(w, "failed to create trait", http.StatusInternalServerError)
-		return
-	}
-	if _, exists := current[name]; exists {
-		log.Info("trait already exists in custom configmap after lock acquisition", "trait", name)
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	current[name] = struct{}{}
-	if err := s.writeTraits(cm, current); err != nil {
-		log.Error(err, "failed to serialize traits", "trait", name)
-		http.Error(w, "failed to create trait", http.StatusInternalServerError)
-		return
-	}
-	if err := s.Update(ctx, cm); err != nil {
-		log.Error(err, "failed to update custom traits configmap", "trait", name)
-		http.Error(w, "failed to create trait", http.StatusInternalServerError)
-		return
-	}
-	log.Info("added custom trait to configmap", "trait", name)
-	s.syncTraitToUpstream(ctx, name, r.Header)
-	w.WriteHeader(http.StatusCreated)
+	s.forwardWithHook(w, r, func(w http.ResponseWriter, resp *http.Response) {
+		// Copy the upstream response to the caller.
+		for k, vs := range resp.Header {
+			for _, v := range vs {
+				w.Header().Add(k, v)
+			}
+		}
+		w.WriteHeader(resp.StatusCode)
+
+		if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusNoContent {
+			if _, err := s.addTraitToConfigMap(ctx, name); err != nil {
+				log.Error(err, "hybrid: failed to add trait to local configmap", "trait", name)
+			}
+		}
+	})
 }
 
 // HandleDeleteTrait handles DELETE /traits/{name} requests.
 //
-// Deletes a custom trait from the dynamic ConfigMap. Standard traits (those
-// without the CUSTOM_ prefix) cannot be deleted and return 400 Bad Request.
-// Returns 404 if the trait does not exist. Returns 204 No Content on success.
+// Feature modes:
+//   - passthrough: forwards to upstream placement.
+//   - hybrid: forwards to upstream; on success, removes the trait from the local ConfigMap.
+//   - crd: removes the trait from the local ConfigMap (CUSTOM_ prefix required).
 //
 // See: https://docs.openstack.org/api-ref/placement/#delete-traits
 func (s *Shim) HandleDeleteTrait(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	switch s.featureModeFromConfOrHeader(r, s.config.Features.Traits) {
-	case FeatureModePassthrough, FeatureModeHybrid:
+	mode := s.featureModeFromConfOrHeader(r, s.config.Features.Traits)
+	switch mode {
+	case FeatureModePassthrough:
 		s.forward(w, r)
 		return
+	case FeatureModeHybrid:
+		s.handleDeleteTraitHybrid(w, r)
+		return
 	case FeatureModeCRD:
-		// Serve from local ConfigMaps.
+		// Handle locally.
 	default:
 		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
 		return
@@ -319,99 +256,55 @@ func (s *Shim) HandleDeleteTrait(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	host, err := os.Hostname()
+	removed, err := s.removeTraitFromConfigMap(ctx, name)
 	if err != nil {
-		host = "unknown"
-	}
-	lockerID := fmt.Sprintf("shim-%s-%d", host, time.Now().UnixNano())
-	if err := s.resourceLocker.AcquireLock(ctx, s.traitsLockName(), lockerID); err != nil {
-		log.Error(err, "failed to acquire traits lock", "trait", name)
+		log.Error(err, "failed to delete trait", "trait", name)
 		http.Error(w, "failed to delete trait", http.StatusInternalServerError)
 		return
 	}
-	defer func() {
-		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := s.resourceLocker.ReleaseLock(releaseCtx, s.traitsLockName(), lockerID); err != nil {
-			log.Error(err, "failed to release traits lock")
-		}
-	}()
-
-	cm := &corev1.ConfigMap{}
-	err = s.Get(ctx, s.customTraitsConfigMapKey(), cm)
-	if apierrors.IsNotFound(err) {
-		log.Info("custom traits configmap not found, trait does not exist", "trait", name)
+	if !removed {
+		log.Info("trait not found in configmap", "trait", name)
 		http.Error(w, "trait not found", http.StatusNotFound)
 		return
 	}
-	if err != nil {
-		log.Error(err, "failed to get custom traits configmap", "trait", name)
-		http.Error(w, "failed to delete trait", http.StatusInternalServerError)
-		return
-	}
-	current, err := parseTraits(cm)
-	if err != nil {
-		log.Error(err, "failed to parse custom traits configmap", "trait", name)
-		http.Error(w, "failed to delete trait", http.StatusInternalServerError)
-		return
-	}
-	if _, exists := current[name]; !exists {
-		log.Info("trait not found in custom configmap", "trait", name)
-		http.Error(w, "trait not found", http.StatusNotFound)
-		return
-	}
-	delete(current, name)
-	if err := s.writeTraits(cm, current); err != nil {
-		log.Error(err, "failed to serialize traits", "trait", name)
-		http.Error(w, "failed to delete trait", http.StatusInternalServerError)
-		return
-	}
-	if err := s.Update(ctx, cm); err != nil {
-		log.Error(err, "failed to update custom traits configmap", "trait", name)
-		http.Error(w, "failed to delete trait", http.StatusInternalServerError)
-		return
-	}
-	log.Info("deleted custom trait from configmap", "trait", name)
+	log.Info("deleted trait from configmap", "trait", name)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// getStaticTraits reads traits from the Helm-managed static ConfigMap.
-func (s *Shim) getStaticTraits(ctx context.Context) (map[string]struct{}, error) {
-	cm := &corev1.ConfigMap{}
-	if err := s.Get(ctx, s.staticTraitsConfigMapKey(), cm); err != nil {
-		return nil, fmt.Errorf("get static configmap %s: %w", s.config.Traits.ConfigMapName, err)
+// handleDeleteTraitHybrid forwards DELETE /traits/{name} to upstream, then
+// updates the local ConfigMap on success.
+func (s *Shim) handleDeleteTraitHybrid(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
+
+	name, ok := requiredPathParam(w, r, "name")
+	if !ok {
+		return
 	}
-	return parseTraits(cm)
+
+	s.forwardWithHook(w, r, func(w http.ResponseWriter, resp *http.Response) {
+		for k, vs := range resp.Header {
+			for _, v := range vs {
+				w.Header().Add(k, v)
+			}
+		}
+		w.WriteHeader(resp.StatusCode)
+
+		if resp.StatusCode == http.StatusNoContent {
+			if _, err := s.removeTraitFromConfigMap(ctx, name); err != nil {
+				log.Error(err, "hybrid: failed to remove trait from local configmap", "trait", name)
+			}
+		}
+	})
 }
 
-// getCustomTraits reads traits from the dynamic ConfigMap created by the shim.
-// Returns an empty set if the ConfigMap does not exist yet.
-func (s *Shim) getCustomTraits(ctx context.Context) (map[string]struct{}, error) {
+// getTraits reads traits from the single ConfigMap.
+func (s *Shim) getTraits(ctx context.Context) (map[string]struct{}, error) {
 	cm := &corev1.ConfigMap{}
-	err := s.Get(ctx, s.customTraitsConfigMapKey(), cm)
-	if apierrors.IsNotFound(err) {
-		return make(map[string]struct{}), nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("get custom configmap %s-custom: %w", s.config.Traits.ConfigMapName, err)
+	if err := s.Get(ctx, client.ObjectKey{Namespace: os.Getenv("POD_NAMESPACE"), Name: s.config.Traits.ConfigMapName}, cm); err != nil {
+		return nil, fmt.Errorf("get traits configmap %s: %w", s.config.Traits.ConfigMapName, err)
 	}
 	return parseTraits(cm)
-}
-
-// getAllTraits merges static and custom traits into a single set.
-func (s *Shim) getAllTraits(ctx context.Context) (map[string]struct{}, error) {
-	static, err := s.getStaticTraits(ctx)
-	if err != nil {
-		return nil, err
-	}
-	custom, err := s.getCustomTraits(ctx)
-	if err != nil {
-		return nil, err
-	}
-	for t := range custom {
-		static[t] = struct{}{}
-	}
-	return static, nil
 }
 
 // parseTraits extracts the trait set from a ConfigMap.
@@ -432,7 +325,7 @@ func parseTraits(cm *corev1.ConfigMap) (map[string]struct{}, error) {
 }
 
 func (s *Shim) hasTrait(ctx context.Context, name string) (bool, error) {
-	traits, err := s.getAllTraits(ctx)
+	traits, err := s.getTraits(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -440,8 +333,8 @@ func (s *Shim) hasTrait(ctx context.Context, name string) (bool, error) {
 	return ok, nil
 }
 
-// writeTraits serializes the trait set into the ConfigMap's data field.
-func (s *Shim) writeTraits(cm *corev1.ConfigMap, traitSet map[string]struct{}) error {
+// writeTraitsToConfigMap serializes the trait set into the ConfigMap's data field.
+func writeTraitsToConfigMap(cm *corev1.ConfigMap, traitSet map[string]struct{}) error {
 	traits := make([]string, 0, len(traitSet))
 	for t := range traitSet {
 		traits = append(traits, t)
@@ -459,121 +352,110 @@ func (s *Shim) writeTraits(cm *corev1.ConfigMap, traitSet map[string]struct{}) e
 	return nil
 }
 
-// syncTraitToUpstream best-effort creates the trait in upstream placement so
-// that endpoints forwarded to upstream (e.g. PUT /resource_providers/{uuid}/traits)
-// can reference locally-created custom traits. Errors are logged but never
-// propagated — upstream may be unreachable and that is acceptable.
-func (s *Shim) syncTraitToUpstream(ctx context.Context, name string, incomingHeader http.Header) {
-	log := logf.FromContext(ctx)
-	if s.httpClient == nil {
-		log.V(1).Info("skipping upstream trait sync, no http client configured", "trait", name)
-		return
-	}
-	u, err := url.Parse(s.config.PlacementURL)
+// addTraitToConfigMap adds a trait to the ConfigMap under the resource lock.
+// Returns true if the trait was newly created, false if it already existed.
+func (s *Shim) addTraitToConfigMap(ctx context.Context, name string) (bool, error) {
+	// Fast path: trait already exists (no lock needed).
+	traits, err := s.getTraits(ctx)
 	if err != nil {
-		log.Error(err, "failed to parse placement URL for trait sync", "trait", name)
-		return
+		return false, err
 	}
-	u.Path, err = url.JoinPath(u.Path, "/traits/"+name)
-	if err != nil {
-		log.Error(err, "failed to build upstream trait URL", "trait", name)
-		return
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, u.String(), http.NoBody)
-	if err != nil {
-		log.Error(err, "failed to create upstream trait request", "trait", name)
-		return
-	}
-	// Forward authentication headers so upstream placement accepts the request.
-	req.Header = incomingHeader.Clone()
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		log.Info("best-effort upstream trait sync failed, upstream may be down", "trait", name, "error", err.Error())
-		return
-	}
-	defer resp.Body.Close()
-	log.Info("synced custom trait to upstream placement", "trait", name, "status", resp.StatusCode)
-}
-
-// startTraitSyncLoop runs a periodic goroutine that fetches traits from
-// upstream placement and writes them into the static ConfigMap. Only active
-// when features.traits is hybrid. The loop exits when ctx is cancelled.
-func (s *Shim) startTraitSyncLoop(ctx context.Context) {
-	if s.config.Features.Traits.orDefault() != FeatureModeHybrid {
-		return
-	}
-	log := ctrl.Log.WithName("placement-shim").WithName("trait-sync")
-	jitter := time.Duration(rand.Int63n(int64(30 * time.Second))) //nolint:gosec
-	log.Info("starting trait sync loop", "jitter", jitter)
-
-	select {
-	case <-ctx.Done():
-		return
-	case <-time.After(jitter):
+	if _, exists := traits[name]; exists {
+		return false, nil
 	}
 
-	s.syncTraitsFromUpstream(ctx, log)
-
-	ticker := time.NewTicker(60 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			s.syncTraitsFromUpstream(ctx, log)
-		}
-	}
-}
-
-// syncTraitsFromUpstream fetches GET /traits from upstream placement and
-// writes the result into the static ConfigMap so that the shim's local
-// view stays in sync with upstream. Uses the gophercloud ServiceClient
-// for automatic token management (including reauth on 401).
-func (s *Shim) syncTraitsFromUpstream(ctx context.Context, log logr.Logger) {
-	if s.placementServiceClient == nil {
-		log.V(1).Info("skipping upstream trait sync, no placement service client configured")
-		return
-	}
-	u, err := url.JoinPath(s.placementServiceClient.Endpoint, "/traits")
+	// Slow path: acquire lock, re-read, add trait.
+	host, err := os.Hostname()
 	if err != nil {
-		log.Error(err, "failed to build upstream traits URL")
-		return
+		return false, fmt.Errorf("get hostname: %w", err)
 	}
-	resp, err := s.placementServiceClient.Request(ctx, http.MethodGet, u, &gophercloud.RequestOpts{
-		OkCodes: []int{http.StatusOK},
-		MoreHeaders: map[string]string{
-			"OpenStack-API-Version": "placement 1.6",
-		},
-		KeepResponseBody: true,
-	})
-	if err != nil {
-		log.Info("upstream trait sync failed", "error", err.Error())
-		return
+	lockerID := fmt.Sprintf("shim-%s-%d", host, time.Now().UnixNano())
+	if err := s.resourceLocker.AcquireLock(ctx, s.config.Traits.ConfigMapName+"-lock", lockerID); err != nil {
+		return false, fmt.Errorf("acquire traits lock: %w", err)
 	}
-	defer resp.Body.Close()
-	var body traitsListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		log.Error(err, "failed to decode upstream trait list")
-		return
-	}
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.resourceLocker.ReleaseLock(releaseCtx, s.config.Traits.ConfigMapName+"-lock", lockerID) //nolint:errcheck
+	}()
 
 	cm := &corev1.ConfigMap{}
-	if err := s.Get(ctx, s.staticTraitsConfigMapKey(), cm); err != nil {
-		log.Error(err, "failed to get static traits configmap for sync")
-		return
+	key := client.ObjectKey{Namespace: os.Getenv("POD_NAMESPACE"), Name: s.config.Traits.ConfigMapName}
+	if err := s.Get(ctx, key, cm); err != nil {
+		if apierrors.IsNotFound(err) {
+			cm = &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      key.Name,
+					Namespace: key.Namespace,
+				},
+				Data: map[string]string{configMapKeyTraits: "[]"},
+			}
+			current := map[string]struct{}{name: {}}
+			if err := writeTraitsToConfigMap(cm, current); err != nil {
+				return false, err
+			}
+			if err := s.Create(ctx, cm); err != nil {
+				return false, fmt.Errorf("create traits configmap: %w", err)
+			}
+			return true, nil
+		}
+		return false, fmt.Errorf("get traits configmap: %w", err)
 	}
-	traitSet := make(map[string]struct{}, len(body.Traits))
-	for _, t := range body.Traits {
-		traitSet[t] = struct{}{}
+
+	current, err := parseTraits(cm)
+	if err != nil {
+		return false, err
 	}
-	if err := s.writeTraits(cm, traitSet); err != nil {
-		log.Error(err, "failed to serialize synced traits")
-		return
+	if _, exists := current[name]; exists {
+		return false, nil
+	}
+	current[name] = struct{}{}
+	if err := writeTraitsToConfigMap(cm, current); err != nil {
+		return false, err
 	}
 	if err := s.Update(ctx, cm); err != nil {
-		log.Error(err, "failed to update static traits configmap with upstream data")
-		return
+		return false, fmt.Errorf("update traits configmap: %w", err)
 	}
-	log.Info("synced traits from upstream placement", "count", len(body.Traits))
+	return true, nil
+}
+
+// removeTraitFromConfigMap removes a trait from the ConfigMap under the
+// resource lock. Returns true if the trait was found and removed.
+func (s *Shim) removeTraitFromConfigMap(ctx context.Context, name string) (bool, error) {
+	host, err := os.Hostname()
+	if err != nil {
+		return false, fmt.Errorf("get hostname: %w", err)
+	}
+	lockerID := fmt.Sprintf("shim-%s-%d", host, time.Now().UnixNano())
+	if err := s.resourceLocker.AcquireLock(ctx, s.config.Traits.ConfigMapName+"-lock", lockerID); err != nil {
+		return false, fmt.Errorf("acquire traits lock: %w", err)
+	}
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.resourceLocker.ReleaseLock(releaseCtx, s.config.Traits.ConfigMapName+"-lock", lockerID) //nolint:errcheck
+	}()
+
+	cm := &corev1.ConfigMap{}
+	if err := s.Get(ctx, client.ObjectKey{Namespace: os.Getenv("POD_NAMESPACE"), Name: s.config.Traits.ConfigMapName}, cm); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("get traits configmap: %w", err)
+	}
+	current, err := parseTraits(cm)
+	if err != nil {
+		return false, err
+	}
+	if _, exists := current[name]; !exists {
+		return false, nil
+	}
+	delete(current, name)
+	if err := writeTraitsToConfigMap(cm, current); err != nil {
+		return false, err
+	}
+	if err := s.Update(ctx, cm); err != nil {
+		return false, fmt.Errorf("update traits configmap: %w", err)
+	}
+	return true, nil
 }

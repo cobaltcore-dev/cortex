@@ -62,9 +62,6 @@ cortex-shim:
       status: "CURRENT"
     traits:
       configMapName: "cortex-placement-shim-traits"
-      # Static traits included in every Helm install/upgrade. The shim
-      # merges them with dynamic CUSTOM_* traits at request time.
-      static: []
     auth:
       tokenCacheTTL: "5m"
       policies:

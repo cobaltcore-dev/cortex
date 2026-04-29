@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/pkg/resourcelock"
@@ -42,13 +41,12 @@ func newTestConfigMap(namespace, name string, traits []string) *corev1.ConfigMap
 	}
 }
 
-func newTraitShim(t *testing.T, staticTraits []string, customTraits ...string) *Shim {
+func newTraitShim(t *testing.T, traits []string, extraTraits ...string) *Shim {
 	t.Helper()
 	t.Setenv("POD_NAMESPACE", "default")
-	objs := []client.Object{newTestConfigMap("default", "test-cm", staticTraits)}
-	if len(customTraits) > 0 {
-		objs = append(objs, newTestConfigMap("default", "test-cm-custom", customTraits))
-	}
+	all := append([]string{}, traits...)
+	all = append(all, extraTraits...)
+	objs := []client.Object{newTestConfigMap("default", "test-cm", all)}
 	cl := newFakeClientWithScheme(t, objs...)
 	down, up := newTestTimers()
 	return &Shim{
@@ -264,39 +262,11 @@ func TestHandleUpdateTraitLocalBadPrefix(t *testing.T) {
 	}
 }
 
-func TestHandleUpdateTraitLocalSyncsToUpstream(t *testing.T) {
-	var gotMethod, gotPath string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod = r.Method
-		gotPath = r.URL.Path
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	t.Cleanup(upstream.Close)
+func TestHandleUpdateTraitLocalNoUpstreamContact(t *testing.T) {
 	s := newTraitShim(t, nil)
-	s.config.PlacementURL = upstream.URL
-	s.httpClient = upstream.Client()
-
 	w := serveHandler(t, "PUT", "/traits/{name}", s.HandleUpdateTrait, "/traits/CUSTOM_NEW")
 	if w.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusCreated)
-	}
-	if gotMethod != "PUT" || gotPath != "/traits/CUSTOM_NEW" {
-		t.Fatalf("upstream got %s %s, want PUT /traits/CUSTOM_NEW", gotMethod, gotPath)
-	}
-}
-
-func TestHandleUpdateTraitLocalUpstreamDown(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	t.Cleanup(upstream.Close)
-	s := newTraitShim(t, nil)
-	s.config.PlacementURL = upstream.URL
-	s.httpClient = upstream.Client()
-
-	w := serveHandler(t, "PUT", "/traits/{name}", s.HandleUpdateTrait, "/traits/CUSTOM_NEW")
-	if w.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d; upstream failure should not block local creation", w.Code, http.StatusCreated)
+		t.Fatalf("status = %d, want %d; CRD mode should not contact upstream", w.Code, http.StatusCreated)
 	}
 }
 
