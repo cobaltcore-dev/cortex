@@ -334,9 +334,6 @@ type Shim struct {
 	// placement with automatic token management (including reauth on 401).
 	// Nil when Keystone credentials are not configured.
 	placementServiceClient *gophercloud.ServiceClient
-	// syncers are background workers that manage ConfigMap-backed local
-	// stores (e.g. traits, resource classes). Started uniformly in Start.
-	syncers []Syncer
 }
 
 // Describe implements prometheus.Collector.
@@ -460,30 +457,34 @@ func (s *Shim) Start(ctx context.Context) error {
 		return err
 	}
 	if s.config.Traits != nil {
-		s.syncers = append(s.syncers, NewTraitSyncer(
+		ts := NewTraitSyncer(
 			s.Client,
 			s.config.Traits.ConfigMapName,
 			os.Getenv("POD_NAMESPACE"),
 			s.placementServiceClient,
 			s.resourceLocker,
-		))
+		)
+		if err := ts.Init(ctx); err != nil {
+			return err
+		}
+		if s.config.Features.Traits.orDefault() != FeatureModeCRD {
+			go ts.Run(ctx)
+		}
 	}
 	if s.config.ResourceClasses != nil {
-		s.syncers = append(s.syncers, NewResourceClassSyncer(
+		rs := NewResourceClassSyncer(
 			s.Client,
 			s.config.ResourceClasses.ConfigMapName,
 			os.Getenv("POD_NAMESPACE"),
 			s.placementServiceClient,
 			s.resourceLocker,
-		))
-	}
-	for _, syncer := range s.syncers {
-		if err := syncer.Init(ctx); err != nil {
+		)
+		if err := rs.Init(ctx); err != nil {
 			return err
 		}
-	}
-	for _, syncer := range s.syncers {
-		go syncer.Run(ctx)
+		if s.config.Features.ResourceClasses.orDefault() != FeatureModeCRD {
+			go rs.Run(ctx)
+		}
 	}
 	return nil
 }
