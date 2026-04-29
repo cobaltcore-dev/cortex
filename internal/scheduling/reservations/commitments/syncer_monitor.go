@@ -45,7 +45,7 @@ func NewSyncerMonitor() *SyncerMonitor {
 			Help: "Number of commitments from Limes that passed filtering and should have CR CRDs",
 		}),
 		staleCRs: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "cortex_committed_resource_syncer_stale_crs",
+			Name: "cortex_committed_resource_syncer_crd_unmatched",
 			Help: "Number of CommittedResource CRDs present locally but absent from Limes",
 		}),
 		commitmentsSkipped: prometheus.NewCounterVec(prometheus.CounterOpts{

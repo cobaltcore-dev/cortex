@@ -55,6 +55,20 @@ func newCRIntegrationEnv(t *testing.T) *crIntegrationEnv {
 			&v1alpha1.Reservation{},
 			&v1alpha1.Knowledge{},
 		).
+		WithIndex(&v1alpha1.Reservation{}, idxReservationByCommitmentUUID, func(obj client.Object) []string {
+			res, ok := obj.(*v1alpha1.Reservation)
+			if !ok || res.Spec.CommittedResourceReservation == nil || res.Spec.CommittedResourceReservation.CommitmentUUID == "" {
+				return nil
+			}
+			return []string{res.Spec.CommittedResourceReservation.CommitmentUUID}
+		}).
+		WithIndex(&v1alpha1.CommittedResource{}, idxCommittedResourceByUUID, func(obj client.Object) []string {
+			cr, ok := obj.(*v1alpha1.CommittedResource)
+			if !ok || cr.Spec.CommitmentUUID == "" {
+				return nil
+			}
+			return []string{cr.Spec.CommitmentUUID}
+		}).
 		Build()
 
 	schedulerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

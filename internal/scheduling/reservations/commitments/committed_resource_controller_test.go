@@ -106,6 +106,20 @@ func newCRTestClient(scheme *runtime.Scheme, objects ...client.Object) client.Cl
 		WithScheme(scheme).
 		WithObjects(objects...).
 		WithStatusSubresource(&v1alpha1.CommittedResource{}, &v1alpha1.Reservation{}).
+		WithIndex(&v1alpha1.Reservation{}, idxReservationByCommitmentUUID, func(obj client.Object) []string {
+			res, ok := obj.(*v1alpha1.Reservation)
+			if !ok || res.Spec.CommittedResourceReservation == nil || res.Spec.CommittedResourceReservation.CommitmentUUID == "" {
+				return nil
+			}
+			return []string{res.Spec.CommittedResourceReservation.CommitmentUUID}
+		}).
+		WithIndex(&v1alpha1.CommittedResource{}, idxCommittedResourceByUUID, func(obj client.Object) []string {
+			cr, ok := obj.(*v1alpha1.CommittedResource)
+			if !ok || cr.Spec.CommitmentUUID == "" {
+				return nil
+			}
+			return []string{cr.Spec.CommitmentUUID}
+		}).
 		Build()
 }
 
@@ -154,7 +168,8 @@ func countChildReservations(t *testing.T, k8sClient client.Client, commitmentUUI
 }
 
 // setChildReservationsReady simulates the reservation controller by marking all child
-// Reservations for the given commitmentUUID as Ready=True.
+// Reservations for the given commitmentUUID as Ready=True and echoing ParentGeneration
+// into ObservedParentGeneration (matching what echoParentGeneration does in production).
 func setChildReservationsReady(t *testing.T, k8sClient client.Client, commitmentUUID string) {
 	t.Helper()
 	var list v1alpha1.ReservationList
@@ -175,6 +190,10 @@ func setChildReservationsReady(t *testing.T, k8sClient client.Client, commitment
 			Reason:             "ReservationActive",
 			LastTransitionTime: metav1.Now(),
 		}}
+		if res.Status.CommittedResourceReservation == nil {
+			res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{}
+		}
+		res.Status.CommittedResourceReservation.ObservedParentGeneration = res.Spec.CommittedResourceReservation.ParentGeneration
 		if err := k8sClient.Status().Update(context.Background(), res); err != nil {
 			t.Fatalf("set reservation Ready=True: %v", err)
 		}

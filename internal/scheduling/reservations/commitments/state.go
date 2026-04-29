@@ -97,6 +97,11 @@ type CommitmentState struct {
 	// When set (e.g. "<cr-name>-"), Reservation CRDs are named "<NamePrefix><slot-index>".
 	// Used by the CommittedResource controller; leave empty for the legacy syncer path.
 	NamePrefix string
+	// ParentGeneration is the Generation of the parent CommittedResource CRD. Written into
+	// Reservation spec so the Reservation controller can echo it back in status, letting
+	// the CR controller detect when all children have been processed for the current spec.
+	// Zero for syncer-created reservations (no parent CR).
+	ParentGeneration int64
 	// State is the lifecycle state from Limes (planned/pending/guaranteed/confirmed/superseded/expired).
 	State v1alpha1.CommitmentStatus
 }

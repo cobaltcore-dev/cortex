@@ -750,6 +750,7 @@ func TestSyncer_SyncReservations_StaleCRCount(t *testing.T) {
 			DomainID:         "test-domain",
 			AvailabilityZone: "az1",
 			State:            v1alpha1.CommitmentStatusConfirmed,
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
 		},
 	}
 
@@ -959,8 +960,9 @@ func TestSyncer_SyncReservations_GC_ExpiredEndTime(t *testing.T) {
 			ResourceType: v1alpha1.CommittedResourceTypeMemory,
 			Amount:       *resource.NewQuantity(1024*1024*1024, resource.BinarySI),
 			ProjectID:    "p", DomainID: "d", AvailabilityZone: "az1",
-			State:   v1alpha1.CommitmentStatusConfirmed,
-			EndTime: &pastTime,
+			State:            v1alpha1.CommitmentStatusConfirmed,
+			EndTime:          &pastTime,
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
 		},
 	}
 

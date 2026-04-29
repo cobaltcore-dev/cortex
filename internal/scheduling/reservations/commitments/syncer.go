@@ -100,11 +100,6 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 		skippedUUIDs: make(map[string]bool),
 	}
 	for id, commitment := range commitments {
-		// Record each commitment seen from Limes
-		if s.monitor != nil {
-			s.monitor.RecordCommitmentSeen()
-		}
-
 		if commitment.ServiceType != "compute" {
 			log.Info("skipping non-compute commitment", "id", id, "serviceType", commitment.ServiceType)
 			if s.monitor != nil {
@@ -204,11 +199,6 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 			"totalMemoryBytes", state.TotalMemoryBytes)
 
 		result.states = append(result.states, state)
-
-		// Record successfully processed commitment
-		if s.monitor != nil {
-			s.monitor.RecordCommitmentProcessed()
-		}
 	}
 
 	return result, nil
@@ -237,6 +227,9 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	knowledgeCRD, err := knowledge.Get(ctx)
 	if err != nil {
 		logger.Error(err, "failed to check flavor group knowledge readiness")
+		if s.monitor != nil {
+			s.monitor.RecordError()
+		}
 		return err
 	}
 	if knowledgeCRD == nil {
@@ -248,6 +241,9 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, knowledgeCRD)
 	if err != nil {
 		logger.Error(err, "failed to get flavor groups from knowledge")
+		if s.monitor != nil {
+			s.monitor.RecordError()
+		}
 		return err
 	}
 
@@ -255,7 +251,14 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	commitmentResult, err := s.getCommitmentStates(ctx, logger, flavorGroups)
 	if err != nil {
 		logger.Error(err, "failed to get compute commitments")
+		if s.monitor != nil {
+			s.monitor.RecordError()
+		}
 		return err
+	}
+
+	if s.monitor != nil {
+		s.monitor.SetLimesCommitmentsActive(len(commitmentResult.states))
 	}
 
 	// Upsert CommittedResource CRDs for each commitment
@@ -308,6 +311,9 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	var existingCRs v1alpha1.CommittedResourceList
 	if err := s.List(ctx, &existingCRs); err != nil {
 		logger.Error(err, "failed to list existing committed resource CRDs")
+		if s.monitor != nil {
+			s.monitor.RecordError()
+		}
 		return err
 	}
 	staleCRCount, gcDeleted := 0, 0
@@ -362,10 +368,16 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	}
 
 	if s.monitor != nil {
-		if totalReservationDeleted > 0 {
-			s.monitor.RecordReservationsDeleted(totalReservationDeleted)
-		}
 		s.monitor.RecordStaleCRs(staleCRCount)
+		if totalCreated > 0 {
+			s.monitor.RecordCRCreates(totalCreated)
+		}
+		if totalUpdated > 0 {
+			s.monitor.RecordCRUpdates(totalUpdated)
+		}
+		if gcDeleted > 0 {
+			s.monitor.RecordCRDeletes(gcDeleted)
+		}
 	}
 
 	if staleCRCount > 0 {

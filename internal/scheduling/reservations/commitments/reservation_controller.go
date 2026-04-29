@@ -44,6 +44,19 @@ type CommitmentReservationController struct {
 	SchedulerClient *reservations.SchedulerClient
 }
 
+// echoParentGeneration copies Spec.CommittedResourceReservation.ParentGeneration to
+// Status.CommittedResourceReservation.ObservedParentGeneration so the CommittedResource
+// controller can confirm this reservation was processed for the current CR generation.
+func echoParentGeneration(res *v1alpha1.Reservation) {
+	if res.Spec.CommittedResourceReservation == nil {
+		return
+	}
+	if res.Status.CommittedResourceReservation == nil {
+		res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{}
+	}
+	res.Status.CommittedResourceReservation.ObservedParentGeneration = res.Spec.CommittedResourceReservation.ParentGeneration
+}
+
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // Note: This controller only handles commitment reservations, as filtered by the predicate.
@@ -78,6 +91,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			Reason:  "MissingResourceName",
 			Message: "reservation has no resource name",
 		})
+		echoParentGeneration(&res)
 		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			// Ignore not-found errors during background deletion
@@ -128,6 +142,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			Reason:  "PreAllocated",
 			Message: "reservation pre-allocated with VM allocations",
 		})
+		echoParentGeneration(&res)
 		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			// Ignore not-found errors during background deletion
@@ -157,6 +172,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			Reason:  "ReservationActive",
 			Message: "reservation is successfully scheduled",
 		})
+		echoParentGeneration(&res)
 		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			// Ignore not-found errors during background deletion
@@ -242,6 +258,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			Reason:  "NoHostsAvailable",
 			Message: "no hypervisors available for scheduling",
 		})
+		echoParentGeneration(&res)
 		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -289,6 +306,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			Reason:  "NoHostsFound",
 			Message: "no hosts found for reservation",
 		})
+		echoParentGeneration(&res)
 		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			// Ignore not-found errors during background deletion
