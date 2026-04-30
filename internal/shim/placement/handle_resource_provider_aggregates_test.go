@@ -6,6 +6,7 @@ package placement
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -170,7 +171,7 @@ func TestHandleResourceProviderAggregates_CRDMode(t *testing.T) {
 		body := `{"aggregates":["new-uuid-1","new-uuid-2"],"resource_provider_generation":0}`
 		w := serveHandlerWithBody(t, "PUT", "/resource_providers/{uuid}/aggregates",
 			sPut.HandleUpdateResourceProviderAggregates,
-			"/resource_providers/c1c2c3c4-d5d6-e7e8-f9f0-a1a2a3a4a5a6/aggregates", body)
+			"/resource_providers/c1c2c3c4-d5d6-e7e8-f9f0-a1a2a3a4a5a6/aggregates", strings.NewReader(body))
 		if w.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 		}
@@ -201,7 +202,7 @@ func TestHandleResourceProviderAggregates_CRDMode(t *testing.T) {
 		body := `{"aggregates":["u1"],"resource_provider_generation":999}`
 		w := serveHandlerWithBody(t, "PUT", "/resource_providers/{uuid}/aggregates",
 			sConflict.HandleUpdateResourceProviderAggregates,
-			"/resource_providers/d1d2d3d4-e5e6-f7f8-a9a0-b1b2b3b4b5b6/aggregates", body)
+			"/resource_providers/d1d2d3d4-e5e6-f7f8-a9a0-b1b2b3b4b5b6/aggregates", strings.NewReader(body))
 		if w.Code != http.StatusConflict {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusConflict)
 		}
@@ -211,7 +212,7 @@ func TestHandleResourceProviderAggregates_CRDMode(t *testing.T) {
 		body := `{"aggregates":["u1"],"resource_provider_generation":0}`
 		w := serveHandlerWithBody(t, "PUT", "/resource_providers/{uuid}/aggregates",
 			s.HandleUpdateResourceProviderAggregates,
-			"/resource_providers/e1e2e3e4-f5f6-a7a8-b9b0-c1c2c3c4c5c6/aggregates", body)
+			"/resource_providers/e1e2e3e4-f5f6-a7a8-b9b0-c1c2c3c4c5c6/aggregates", strings.NewReader(body))
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
 		}
@@ -228,7 +229,7 @@ func TestHandleResourceProviderAggregates_CRDMode(t *testing.T) {
 		body := `{"aggregates":[],"resource_provider_generation":0}`
 		w := serveHandlerWithBody(t, "PUT", "/resource_providers/{uuid}/aggregates",
 			sClear.HandleUpdateResourceProviderAggregates,
-			"/resource_providers/e1e2e3e4-f5f6-a7a8-b9b0-c1c2c3c4c5c6/aggregates", body)
+			"/resource_providers/e1e2e3e4-f5f6-a7a8-b9b0-c1c2c3c4c5c6/aggregates", strings.NewReader(body))
 		if w.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 		}
@@ -253,7 +254,7 @@ func TestHandleResourceProviderAggregates_CRDMode(t *testing.T) {
 	t.Run("PUT returns 400 for malformed body", func(t *testing.T) {
 		w := serveHandlerWithBody(t, "PUT", "/resource_providers/{uuid}/aggregates",
 			s.HandleUpdateResourceProviderAggregates,
-			"/resource_providers/"+validUUID+"/aggregates", "not json")
+			"/resource_providers/"+validUUID+"/aggregates", strings.NewReader("not json"))
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
 		}

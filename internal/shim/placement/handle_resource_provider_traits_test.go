@@ -6,7 +6,6 @@ package placement
 import (
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -21,21 +20,6 @@ func testHypervisorWithGroups(name, openstackID string, groups []hv1.Group) *hv1
 		Spec:       hv1.HypervisorSpec{Groups: groups},
 		Status:     hv1.HypervisorStatus{HypervisorID: openstackID},
 	}
-}
-
-func serveHandlerWithBody(t *testing.T, method, pattern string, handler http.HandlerFunc, reqPath, body string) *httptest.ResponseRecorder { //nolint:unparam
-	t.Helper()
-	mux := http.NewServeMux()
-	mux.HandleFunc(method+" "+pattern, handler)
-	var req *http.Request
-	if body != "" {
-		req = httptest.NewRequest(method, reqPath, strings.NewReader(body))
-	} else {
-		req = httptest.NewRequest(method, reqPath, http.NoBody)
-	}
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-	return w
 }
 
 func TestHandleListResourceProviderTraits(t *testing.T) {
@@ -229,7 +213,7 @@ func TestHandleResourceProviderTraits_CRDMode(t *testing.T) {
 		body := `{"traits":["NEW_TRAIT_1","NEW_TRAIT_2"],"resource_provider_generation":0}`
 		w := serveHandlerWithBody(t, "PUT", "/resource_providers/{uuid}/traits",
 			sPut.HandleUpdateResourceProviderTraits,
-			"/resource_providers/c1c2c3c4-d5d6-e7e8-f9f0-a1a2a3a4a5a6/traits", body)
+			"/resource_providers/c1c2c3c4-d5d6-e7e8-f9f0-a1a2a3a4a5a6/traits", strings.NewReader(body))
 		if w.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 		}
@@ -260,7 +244,7 @@ func TestHandleResourceProviderTraits_CRDMode(t *testing.T) {
 		body := `{"traits":["T1"],"resource_provider_generation":999}`
 		w := serveHandlerWithBody(t, "PUT", "/resource_providers/{uuid}/traits",
 			sConflict.HandleUpdateResourceProviderTraits,
-			"/resource_providers/d1d2d3d4-e5e6-f7f8-a9a0-b1b2b3b4b5b6/traits", body)
+			"/resource_providers/d1d2d3d4-e5e6-f7f8-a9a0-b1b2b3b4b5b6/traits", strings.NewReader(body))
 		if w.Code != http.StatusConflict {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusConflict)
 		}
@@ -270,7 +254,7 @@ func TestHandleResourceProviderTraits_CRDMode(t *testing.T) {
 		body := `{"traits":["T1"],"resource_provider_generation":0}`
 		w := serveHandlerWithBody(t, "PUT", "/resource_providers/{uuid}/traits",
 			s.HandleUpdateResourceProviderTraits,
-			"/resource_providers/e1e2e3e4-f5f6-a7a8-b9b0-c1c2c3c4c5c6/traits", body)
+			"/resource_providers/e1e2e3e4-f5f6-a7a8-b9b0-c1c2c3c4c5c6/traits", strings.NewReader(body))
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
 		}
@@ -279,7 +263,7 @@ func TestHandleResourceProviderTraits_CRDMode(t *testing.T) {
 	t.Run("PUT returns 400 for malformed body", func(t *testing.T) {
 		w := serveHandlerWithBody(t, "PUT", "/resource_providers/{uuid}/traits",
 			s.HandleUpdateResourceProviderTraits,
-			"/resource_providers/"+validUUID+"/traits", "not json")
+			"/resource_providers/"+validUUID+"/traits", strings.NewReader("not json"))
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
 		}
