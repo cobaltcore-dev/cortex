@@ -5,6 +5,7 @@ package v1alpha1
 
 import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -212,6 +213,7 @@ type ReservationStatus struct {
 // +kubebuilder:printcolumn:name="Host",type="string",JSONPath=".status.host"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:printcolumn:name="ResourceGroup",type="string",JSONPath=".spec.committedResourceReservation.resourceGroup"
+// +kubebuilder:printcolumn:name="HA ResourceGroup",type="string",JSONPath=".spec.failoverReservation.resourceGroup",priority=1
 // +kubebuilder:printcolumn:name="Project",type="string",JSONPath=".spec.committedResourceReservation.projectID"
 // +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
 // +kubebuilder:printcolumn:name="StartTime",type="string",JSONPath=".spec.startTime",priority=1
@@ -246,6 +248,11 @@ type ReservationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Reservation `json:"items"`
+}
+
+// IsReady returns true if the reservation has the Ready condition set to True.
+func (r *Reservation) IsReady() bool {
+	return meta.IsStatusConditionTrue(r.Status.Conditions, ReservationConditionReady)
 }
 
 func init() {

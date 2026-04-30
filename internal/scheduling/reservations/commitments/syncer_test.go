@@ -344,10 +344,11 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 		Spec: v1alpha1.ReservationSpec{
 			Type: v1alpha1.ReservationTypeCommittedResource,
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				ProjectID:     "old-project",
-				ResourceName:  "old-flavor",
-				ResourceGroup: "old_group",
-				Creator:       CreatorValue,
+				CommitmentUUID: "12345-67890-abcdef",
+				ProjectID:      "old-project",
+				ResourceName:   "old-flavor",
+				ResourceGroup:  "old_group",
+				Creator:        CreatorValue,
 			},
 			Resources: map[hv1.ResourceName]resource.Quantity{
 				hv1.ResourceMemory: resource.MustParse("512Mi"),

@@ -27,6 +27,10 @@ spec:
     - jsonPath: .spec.committedResourceReservation.resourceGroup
       name: ResourceGroup
       type: string
+    - jsonPath: .spec.failoverReservation.resourceGroup
+      name: HA ResourceGroup
+      priority: 1
+      type: string
     - jsonPath: .spec.committedResourceReservation.projectID
       name: Project
       type: string

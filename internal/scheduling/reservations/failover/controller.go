@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -319,8 +320,22 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 	}
 	summary.reservationsDeleted = len(emptyReservationsToDelete)
 
-	// 6. Create and assign reservations for VMs that need them
-	assignSummary, hitMaxVMsLimit := c.reconcileCreateAndAssignReservations(ctx, vms, failoverReservations, allHypervisors)
+	// 6. Fetch flavor groups for reservation sizing (if configured)
+	var flavorGroups map[string]compute.FlavorGroupFeature
+	if c.Config.UseFlavorGroupResources {
+		knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
+		fg, err := knowledge.GetAllFlavorGroups(ctx, nil)
+		if err != nil {
+			logger.Info("flavor group knowledge not available, will fall back to VM resources for sizing",
+				"error", err)
+			// flavorGroups remains nil — newFailoverReservation will fall back to VM resources
+		} else {
+			flavorGroups = fg
+		}
+	}
+
+	// 7. Create and assign reservations for VMs that need them
+	assignSummary, hitMaxVMsLimit := c.reconcileCreateAndAssignReservations(ctx, vms, failoverReservations, allHypervisors, flavorGroups)
 	summary.vmsMissingFailover = assignSummary.vmsMissingFailover
 	summary.vmsProcessed = assignSummary.vmsProcessed
 	summary.reservationsNeeded = assignSummary.reservationsNeeded
@@ -572,6 +587,7 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 	vms []VM,
 	failoverReservations []v1alpha1.Reservation,
 	allHypervisors []string,
+	flavorGroups map[string]compute.FlavorGroupFeature, // passed to resolveVMForScheduling per-VM
 ) (reconcileSummary, bool) {
 
 	logger := LoggerFromContext(ctx)
@@ -604,8 +620,11 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 		vmLogger := LoggerFromContext(vmCtx).WithValues("vmUUID", need.VM.UUID)
 		vmLogger.Info("processing VM for failover reservation")
 
+		// Resolve VM resources once per VM (may use LargestFlavor from flavor group)
+		resSpec := resolveVMSpecForScheduling(vmCtx, need.VM, c.Config.UseFlavorGroupResources, flavorGroups)
+
 		for i := range need.Count {
-			reusedRes := c.tryReuseExistingReservation(vmCtx, need.VM, failoverReservations, allHypervisors)
+			reusedRes := c.tryReuseExistingReservation(vmCtx, need.VM, failoverReservations, allHypervisors, resSpec)
 
 			if reusedRes != nil {
 				if err := c.patchReservationStatus(vmCtx, reusedRes); err != nil {
@@ -628,7 +647,7 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 				continue
 			}
 
-			newRes, err := c.scheduleAndBuildNewFailoverReservation(vmCtx, need.VM, allHypervisors, failoverReservations, excludeHypervisors)
+			newRes, err := c.scheduleAndBuildNewFailoverReservation(vmCtx, need.VM, allHypervisors, failoverReservations, excludeHypervisors, resSpec)
 			if err != nil {
 				vmLogger.V(1).Info("failed to schedule failover reservation", "error", err, "iteration", i+1, "needed", need.Count)
 				vmFailed++

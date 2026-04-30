@@ -77,6 +77,15 @@ type FailoverConfig struct {
 	// rotates to process different VMs. This ensures all VMs eventually get processed.
 	// Default: 4 (rotate every 4th reconcile cycle). Use 0 to disable rotation.
 	VMSelectionRotationInterval *int `json:"vmSelectionRotationInterval"`
+
+	// UseFlavorGroupResources when true, sizes failover reservation resources based on
+	// the LargestFlavor in the VM's flavor group instead of the VM's actual resources.
+	// This enables better sharing: a single reservation can accommodate any flavor in the
+	// group since it's sized for the largest one.
+	// When false (or when the flavor group lookup fails), falls back to using the VM's
+	// own reported resources (memory + vcpus).
+	// Default: false
+	UseFlavorGroupResources bool `json:"useFlavorGroupResources"`
 }
 
 // intPtr returns a pointer to the given int value.
