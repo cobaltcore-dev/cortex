@@ -196,7 +196,7 @@ func FromChangeCommitmentTargetState(
 	if !commitment.ExpiresAt.IsZero() {
 		endTime = &commitment.ExpiresAt
 		// check expiry time
-		if commitment.ExpiresAt.Before(time.Now()) || commitment.ExpiresAt.Equal(time.Now()) {
+		if !commitment.ExpiresAt.After(time.Now()) {
 			// commitment is already expired, ignore capacity
 			amountMultiple = 0
 		}

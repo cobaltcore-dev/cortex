@@ -361,6 +361,35 @@ func TestE2EChangeCommitments(t *testing.T) {
 			WantResp:   newAPIResponse("no hosts found"),
 			WantAbsent: []string{"commitment-uuid-e2e-batch-a", "commitment-uuid-e2e-batch-b"},
 		},
+		{
+			Name:      "lifecycle: create then delete, CR and child Reservations cleaned up",
+			Scheduler: e2eAcceptScheduler,
+			ReqJSON: buildRequestJSON(newCommitmentRequest("az-a", false, e2eInfoVersion,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-e2e-lifecycle", "confirmed", 1))),
+			WantResp: newAPIResponse(),
+			Verify: func(t *testing.T, env *e2eEnv) {
+				t.Helper()
+				env.asCRTestEnv().VerifyCRsExist([]string{"commitment-uuid-e2e-lifecycle"})
+
+				te := env.asCRTestEnv()
+				deleteJSON := buildRequestJSON(newCommitmentRequest("az-a", false, e2eInfoVersion,
+					deleteCommitment("hw_version_hana_1_ram", "project-A", "uuid-e2e-lifecycle", "confirmed", 1)))
+				resp, _, statusCode := te.CallChangeCommitmentsAPI(deleteJSON)
+				te.VerifyAPIResponse(newAPIResponse(), resp, statusCode)
+
+				env.waitForCRAbsent(t, "commitment-uuid-e2e-lifecycle")
+
+				var resList v1alpha1.ReservationList
+				if err := env.k8sClient.List(context.Background(), &resList, client.MatchingLabels{
+					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+				}); err != nil {
+					t.Fatalf("list reservations: %v", err)
+				}
+				if len(resList.Items) != 0 {
+					t.Errorf("expected 0 Reservations after delete, got %d", len(resList.Items))
+				}
+			},
+		},
 	}
 
 	for _, tc := range testCases {
