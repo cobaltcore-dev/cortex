@@ -117,7 +117,7 @@ The controller's job is to keep child `Reservation` CRDs in sync with the desire
 
 - **`pending`**: Cortex is being asked for a yes/no decision. If placement fails for any reason, child Reservations are removed and the CR is marked Rejected. The caller (e.g. the change-commitments API) reads the outcome and reports back to Limes. No retry.
 
-- **`guaranteed` / `confirmed`**: Cortex is expected to honour the commitment. The default is to keep retrying until placement succeeds (`Ready=False, Reason=Reserving`). Callers that can accept "no" as an answer (e.g. the change-commitments API on a resize request) set `Spec.AllowRejection=true`; the controller then rejects on failure instead of retrying.
+- **`guaranteed` / `confirmed`**: Cortex is expected to honour the commitment. The default is to keep retrying until placement succeeds (`Ready=False, Reason=Reserving`). Callers that can accept "no" as an answer set `Spec.AllowRejection=true` (the change-commitments API sets this for confirming requests — new commitments, resizes); the controller then rejects on failure instead of retrying.
 
 - **On rejection**: rolls back child Reservations to the last successfully placed quantity (`Status.AcceptedAmount`). For a CR that was never accepted, this means removing all child Reservations.
 
@@ -252,8 +252,8 @@ The change-commitments API receives batched commitment changes from Limes and ap
 **Request Semantics**: A request can contain multiple commitment changes across different projects and flavor groups. The semantic is **all-or-nothing** — if any commitment in the batch cannot be fulfilled (e.g., insufficient capacity), the entire request is rejected and rolled back.
 
 **Operations**:
-1. For each commitment in the batch, create or update a `CommittedResource` CRD with `Spec.AllowRejection=true` (snapshots the previous spec for rollback)
-2. Poll `CommittedResource.Status.Conditions[Ready]` until each reaches a terminal state: `Reason=Accepted` (success), `Reason=Planned` (deferred; accepted), or `Reason=Rejected` (failure)
+1. For each commitment in the batch, create or update a `CommittedResource` CRD. `Spec.AllowRejection` mirrors the request's `RequiresConfirmation` flag: `true` for changes where Limes needs a yes/no answer (new commitments, resizes), `false` for non-confirming changes (deletions, status-only transitions) where Limes doesn't act on the rejection reason
+2. Poll `CommittedResource.Status.Conditions[Ready]` until each reaches a terminal state: `Reason=Accepted` (success), `Reason=Planned` (deferred; accepted), or `Reason=Rejected` (failure) — only for confirming changes; non-confirming changes return immediately without polling
 3. On any failure or timeout, restore all modified `CommittedResource` CRDs to their pre-request specs (or delete newly-created ones)
 
 The `CommittedResource` controller handles all downstream `Reservation` CRUD. `AllowRejection=true` tells it to reject and roll back child Reservations on placement failure rather than retrying indefinitely.

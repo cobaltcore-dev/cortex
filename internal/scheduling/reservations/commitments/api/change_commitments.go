@@ -52,6 +52,9 @@ type crSnapshot struct {
 // HandleChangeCommitments implements POST /commitments/v1/change-commitments from the Limes LIQUID API.
 // It writes CommittedResource CRDs (one per commitment) and polls their status conditions until
 // the controller confirms or rejects each one. On any failure the whole batch is rolled back.
+//
+// See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/commitment.go
+// See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid
 func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	resp := liquid.CommitmentChangeResponse{}

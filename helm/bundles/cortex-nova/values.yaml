@@ -141,7 +141,7 @@ cortex-scheduling-controllers:
     # Number of top hosts to shuffle for evacuation requests.
     # Set to 0 or negative to disable shuffling.
     evacuationShuffleK: 3
-    reservationController:
+    committedResourceReservationController:
       # Maps flavor group IDs to pipeline names; "*" acts as catch-all fallback
       flavorGroupPipelines:
         "2152": "kvm-hana-bin-packing"  # HANA flavor group
@@ -158,7 +158,7 @@ cortex-scheduling-controllers:
     committedResourceController:
       # Back-off interval while CommittedResource placement is pending or failed
       requeueIntervalRetry: "1m"
-    api:
+    committedResourceAPI:
       # Timeout for watching CommittedResource CRDs before rolling back
       watchTimeout: "10s"
       # How often to poll CommittedResource CRD conditions during watch

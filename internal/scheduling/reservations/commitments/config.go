@@ -13,9 +13,9 @@ import (
 // Each controller and the API have their own sub-struct so that unrelated
 // fields are never visible to the wrong component.
 type Config struct {
-	ReservationController       ReservationControllerConfig       `json:"reservationController"`
+	ReservationController       ReservationControllerConfig       `json:"committedResourceReservationController"`
 	CommittedResourceController CommittedResourceControllerConfig `json:"committedResourceController"`
-	API                         APIConfig                         `json:"api"`
+	API                         APIConfig                         `json:"committedResourceAPI"`
 
 	// DatasourceName is the name of the Datasource CRD that provides database
 	// connection info. Used to construct the UsageDBClient for report-usage.
