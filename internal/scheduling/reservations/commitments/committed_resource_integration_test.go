@@ -55,6 +55,20 @@ func newCRIntegrationEnv(t *testing.T) *crIntegrationEnv {
 			&v1alpha1.Reservation{},
 			&v1alpha1.Knowledge{},
 		).
+		WithIndex(&v1alpha1.Reservation{}, idxReservationByCommitmentUUID, func(obj client.Object) []string {
+			res, ok := obj.(*v1alpha1.Reservation)
+			if !ok || res.Spec.CommittedResourceReservation == nil || res.Spec.CommittedResourceReservation.CommitmentUUID == "" {
+				return nil
+			}
+			return []string{res.Spec.CommittedResourceReservation.CommitmentUUID}
+		}).
+		WithIndex(&v1alpha1.CommittedResource{}, idxCommittedResourceByUUID, func(obj client.Object) []string {
+			cr, ok := obj.(*v1alpha1.CommittedResource)
+			if !ok || cr.Spec.CommitmentUUID == "" {
+				return nil
+			}
+			return []string{cr.Spec.CommitmentUUID}
+		}).
 		Build()
 
 	schedulerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -67,19 +81,19 @@ func newCRIntegrationEnv(t *testing.T) *crIntegrationEnv {
 	crCtrl := &CommittedResourceController{
 		Client: k8sClient,
 		Scheme: scheme,
-		Conf:   Config{RequeueIntervalRetry: 5 * time.Minute},
+		Conf:   CommittedResourceControllerConfig{RequeueIntervalRetry: metav1.Duration{Duration: 5 * time.Minute}},
 	}
 
 	resCtrl := &CommitmentReservationController{
 		Client: k8sClient,
 		Scheme: scheme,
-		Conf: Config{
+		Conf: ReservationControllerConfig{
 			SchedulerURL:          schedulerServer.URL,
-			AllocationGracePeriod: 15 * time.Minute,
-			RequeueIntervalActive: 5 * time.Minute,
+			AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute},
+			RequeueIntervalActive: metav1.Duration{Duration: 5 * time.Minute},
 		},
 	}
-	if err := resCtrl.Init(context.Background(), k8sClient, resCtrl.Conf); err != nil {
+	if err := resCtrl.Init(context.Background(), resCtrl.Conf); err != nil {
 		t.Fatalf("resCtrl.Init: %v", err)
 	}
 
@@ -136,196 +150,347 @@ func (e *crIntegrationEnv) getCR(t *testing.T, name string) v1alpha1.CommittedRe
 	return cr
 }
 
+// reconcileChildReservations runs the reservation controller twice on every child Reservation
+// for crName (first reconcile sets TargetHost, second sets Ready=True), then re-reconciles
+// the CR so it can observe the placement outcomes.
+func (e *crIntegrationEnv) reconcileChildReservations(t *testing.T, crName string) {
+	t.Helper()
+	for _, res := range e.listChildReservations(t, crName) {
+		e.reconcileReservation(t, res.Name) // calls scheduler → sets TargetHost
+		e.reconcileReservation(t, res.Name) // syncs TargetHost to Status → Ready=True
+	}
+	e.reconcileCR(t, crName)
+}
+
 // ============================================================================
 // Integration tests
 // ============================================================================
 
-// TestCRLifecycle_PlannedToConfirmed verifies that transitioning a CR from planned
-// to confirmed causes the CR controller to create child Reservation CRDs.
-func TestCRLifecycle_PlannedToConfirmed(t *testing.T) {
-	env := newCRIntegrationEnv(t)
-	defer env.close()
+// TestCRLifecycle covers the multi-step state transitions that require imperative
+// mid-test patches and cannot be expressed as a purely declarative table.
+func TestCRLifecycle(t *testing.T) {
+	t.Run("planned→confirmed: child Reservations created and placed", func(t *testing.T) {
+		env := newCRIntegrationEnv(t)
+		defer env.close()
 
-	cr := newTestCommittedResource("my-cr", v1alpha1.CommitmentStatusPlanned)
-	if err := env.k8sClient.Create(context.Background(), cr); err != nil {
-		t.Fatalf("create CR: %v", err)
-	}
+		cr := newTestCommittedResource("my-cr", v1alpha1.CommitmentStatusPlanned)
+		if err := env.k8sClient.Create(context.Background(), cr); err != nil {
+			t.Fatalf("create CR: %v", err)
+		}
 
-	// Reconcile as planned: finalizer added, no Reservations.
-	env.reconcileCR(t, cr.Name)
-	env.reconcileCR(t, cr.Name)
-	if got := env.listChildReservations(t, cr.Name); len(got) != 0 {
-		t.Fatalf("planned: expected 0 reservations, got %d", len(got))
-	}
-	crState := env.getCR(t, cr.Name)
-	cond := meta.FindStatusCondition(crState.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
-	if cond == nil || cond.Reason != "Planned" {
-		t.Errorf("planned: expected Reason=Planned, got %v", cond)
-	}
+		// Reconcile as planned: finalizer added, no Reservations.
+		env.reconcileCR(t, cr.Name)
+		env.reconcileCR(t, cr.Name)
+		if got := env.listChildReservations(t, cr.Name); len(got) != 0 {
+			t.Fatalf("planned: expected 0 reservations, got %d", len(got))
+		}
+		crState := env.getCR(t, cr.Name)
+		cond := meta.FindStatusCondition(crState.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+		if cond == nil || cond.Reason != "Planned" {
+			t.Errorf("planned: expected Reason=Planned, got %v", cond)
+		}
 
-	// Transition to confirmed.
-	patch := client.MergeFrom(crState.DeepCopy())
-	crState.Spec.State = v1alpha1.CommitmentStatusConfirmed
-	if err := env.k8sClient.Patch(context.Background(), &crState, patch); err != nil {
-		t.Fatalf("patch state to confirmed: %v", err)
-	}
+		// Transition to confirmed.
+		patch := client.MergeFrom(crState.DeepCopy())
+		crState.Spec.State = v1alpha1.CommitmentStatusConfirmed
+		if err := env.k8sClient.Patch(context.Background(), &crState, patch); err != nil {
+			t.Fatalf("patch state to confirmed: %v", err)
+		}
+		env.reconcileCR(t, cr.Name)
 
-	env.reconcileCR(t, cr.Name)
+		children := env.listChildReservations(t, cr.Name)
+		if len(children) != 1 {
+			t.Fatalf("confirmed: expected 1 reservation, got %d", len(children))
+		}
+		env.reconcileChildReservations(t, cr.Name)
 
-	children := env.listChildReservations(t, cr.Name)
-	if len(children) != 1 {
-		t.Fatalf("confirmed: expected 1 reservation, got %d", len(children))
-	}
-	crState = env.getCR(t, cr.Name)
-	if !meta.IsStatusConditionTrue(crState.Status.Conditions, v1alpha1.CommittedResourceConditionReady) {
-		t.Errorf("confirmed: expected Ready=True")
-	}
-}
+		crState = env.getCR(t, cr.Name)
+		if !meta.IsStatusConditionTrue(crState.Status.Conditions, v1alpha1.CommittedResourceConditionReady) {
+			t.Errorf("confirmed: expected Ready=True")
+		}
+	})
 
-// TestCRLifecycle_ConfirmedToExpired verifies that transitioning a CR to expired
-// deletes all child Reservation CRDs and marks Ready=False.
-func TestCRLifecycle_ConfirmedToExpired(t *testing.T) {
-	env := newCRIntegrationEnv(t)
-	defer env.close()
+	t.Run("confirmed→expired: child Reservations deleted, CR marked inactive", func(t *testing.T) {
+		env := newCRIntegrationEnv(t)
+		defer env.close()
 
-	cr := newTestCommittedResource("my-cr", v1alpha1.CommitmentStatusConfirmed)
-	if err := env.k8sClient.Create(context.Background(), cr); err != nil {
-		t.Fatalf("create CR: %v", err)
-	}
+		cr := newTestCommittedResource("my-cr", v1alpha1.CommitmentStatusConfirmed)
+		if err := env.k8sClient.Create(context.Background(), cr); err != nil {
+			t.Fatalf("create CR: %v", err)
+		}
 
-	// Bring to confirmed+Ready=True.
-	env.reconcileCR(t, cr.Name) // adds finalizer
-	env.reconcileCR(t, cr.Name) // creates Reservations
+		// Bring to confirmed+Ready=True.
+		env.reconcileCR(t, cr.Name)                // adds finalizer
+		env.reconcileCR(t, cr.Name)                // creates Reservations
+		env.reconcileChildReservations(t, cr.Name) // places slots → Ready=True
 
-	if got := env.listChildReservations(t, cr.Name); len(got) != 1 {
-		t.Fatalf("pre-expire: expected 1 reservation, got %d", len(got))
-	}
+		if got := env.listChildReservations(t, cr.Name); len(got) != 1 {
+			t.Fatalf("pre-expire: expected 1 reservation, got %d", len(got))
+		}
 
-	// Transition to expired.
-	crState := env.getCR(t, cr.Name)
-	patch := client.MergeFrom(crState.DeepCopy())
-	crState.Spec.State = v1alpha1.CommitmentStatusExpired
-	if err := env.k8sClient.Patch(context.Background(), &crState, patch); err != nil {
-		t.Fatalf("patch state to expired: %v", err)
-	}
+		// Transition to expired.
+		crState := env.getCR(t, cr.Name)
+		patch := client.MergeFrom(crState.DeepCopy())
+		crState.Spec.State = v1alpha1.CommitmentStatusExpired
+		if err := env.k8sClient.Patch(context.Background(), &crState, patch); err != nil {
+			t.Fatalf("patch state to expired: %v", err)
+		}
+		env.reconcileCR(t, cr.Name)
 
-	env.reconcileCR(t, cr.Name)
+		if got := env.listChildReservations(t, cr.Name); len(got) != 0 {
+			t.Errorf("expired: expected 0 reservations, got %d", len(got))
+		}
+		crState = env.getCR(t, cr.Name)
+		cond := meta.FindStatusCondition(crState.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+		if cond == nil || cond.Status != metav1.ConditionFalse {
+			t.Errorf("expired: expected Ready=False, got %v", cond)
+		}
+		if cond != nil && cond.Reason != string(v1alpha1.CommitmentStatusExpired) {
+			t.Errorf("expired: expected Reason=%s, got %s", v1alpha1.CommitmentStatusExpired, cond.Reason)
+		}
+	})
 
-	if got := env.listChildReservations(t, cr.Name); len(got) != 0 {
-		t.Errorf("expired: expected 0 reservations, got %d", len(got))
-	}
-	crState = env.getCR(t, cr.Name)
-	cond := meta.FindStatusCondition(crState.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
-	if cond == nil || cond.Status != metav1.ConditionFalse {
-		t.Errorf("expired: expected Ready=False, got %v", cond)
-	}
-	if cond != nil && cond.Reason != string(v1alpha1.CommitmentStatusExpired) {
-		t.Errorf("expired: expected Reason=%s, got %s", v1alpha1.CommitmentStatusExpired, cond.Reason)
-	}
-}
+	t.Run("reservation placement: two reconciles set TargetHost then Ready=True", func(t *testing.T) {
+		env := newCRIntegrationEnv(t)
+		defer env.close()
 
-// TestCRLifecycle_ReservationControllerPlacesChild verifies that after the CR controller
-// creates a child Reservation, the ReservationController can place it (scheduler call →
-// TargetHost set → Ready=True on the Reservation).
-func TestCRLifecycle_ReservationControllerPlacesChild(t *testing.T) {
-	env := newCRIntegrationEnv(t)
-	defer env.close()
+		cr := newTestCommittedResource("my-cr", v1alpha1.CommitmentStatusConfirmed)
+		if err := env.k8sClient.Create(context.Background(), cr); err != nil {
+			t.Fatalf("create CR: %v", err)
+		}
 
-	cr := newTestCommittedResource("my-cr", v1alpha1.CommitmentStatusConfirmed)
-	if err := env.k8sClient.Create(context.Background(), cr); err != nil {
-		t.Fatalf("create CR: %v", err)
-	}
+		env.reconcileCR(t, cr.Name)
+		env.reconcileCR(t, cr.Name)
 
-	// CR controller creates child Reservation.
-	env.reconcileCR(t, cr.Name)
-	env.reconcileCR(t, cr.Name)
+		children := env.listChildReservations(t, cr.Name)
+		if len(children) != 1 {
+			t.Fatalf("expected 1 child reservation, got %d", len(children))
+		}
+		child := children[0]
 
-	children := env.listChildReservations(t, cr.Name)
-	if len(children) != 1 {
-		t.Fatalf("expected 1 child reservation, got %d", len(children))
-	}
-	child := children[0]
+		// First reconcile: scheduler call → TargetHost written to Spec.
+		env.reconcileReservation(t, child.Name)
+		var afterFirst v1alpha1.Reservation
+		if err := env.k8sClient.Get(context.Background(), types.NamespacedName{Name: child.Name}, &afterFirst); err != nil {
+			t.Fatalf("get reservation after first reconcile: %v", err)
+		}
+		if afterFirst.Spec.TargetHost == "" {
+			t.Fatalf("expected TargetHost set after first reservation reconcile")
+		}
 
-	// Reservation controller places it (first reconcile: calls scheduler → sets TargetHost).
-	env.reconcileReservation(t, child.Name)
+		// Second reconcile: TargetHost synced to Status, Ready=True.
+		env.reconcileReservation(t, child.Name)
+		var afterSecond v1alpha1.Reservation
+		if err := env.k8sClient.Get(context.Background(), types.NamespacedName{Name: child.Name}, &afterSecond); err != nil {
+			t.Fatalf("get reservation after second reconcile: %v", err)
+		}
+		if !meta.IsStatusConditionTrue(afterSecond.Status.Conditions, v1alpha1.ReservationConditionReady) {
+			t.Errorf("expected reservation Ready=True after placement, got %v", afterSecond.Status.Conditions)
+		}
+		if afterSecond.Status.Host != "host-1" {
+			t.Errorf("expected Status.Host=host-1, got %q", afterSecond.Status.Host)
+		}
+	})
 
-	var afterFirst v1alpha1.Reservation
-	if err := env.k8sClient.Get(context.Background(), types.NamespacedName{Name: child.Name}, &afterFirst); err != nil {
-		t.Fatalf("get reservation after first reconcile: %v", err)
-	}
-	if afterFirst.Spec.TargetHost == "" {
-		t.Fatalf("expected TargetHost set after first reservation reconcile")
-	}
+	t.Run("deletion: finalizer removed, child Reservations cleaned up", func(t *testing.T) {
+		env := newCRIntegrationEnv(t)
+		defer env.close()
 
-	// Second reconcile: syncs TargetHost to Status, sets Ready=True.
-	env.reconcileReservation(t, child.Name)
+		cr := newTestCommittedResource("my-cr", v1alpha1.CommitmentStatusConfirmed)
+		if err := env.k8sClient.Create(context.Background(), cr); err != nil {
+			t.Fatalf("create CR: %v", err)
+		}
 
-	var afterSecond v1alpha1.Reservation
-	if err := env.k8sClient.Get(context.Background(), types.NamespacedName{Name: child.Name}, &afterSecond); err != nil {
-		t.Fatalf("get reservation after second reconcile: %v", err)
-	}
-	if !meta.IsStatusConditionTrue(afterSecond.Status.Conditions, v1alpha1.ReservationConditionReady) {
-		t.Errorf("expected reservation Ready=True after placement, got %v", afterSecond.Status.Conditions)
-	}
-	if afterSecond.Status.Host != "host-1" {
-		t.Errorf("expected Status.Host=host-1, got %q", afterSecond.Status.Host)
-	}
-}
-
-// TestCRLifecycle_Deletion verifies that deleting a CR cleans up all child Reservations.
-func TestCRLifecycle_Deletion(t *testing.T) {
-	env := newCRIntegrationEnv(t)
-	defer env.close()
-
-	cr := newTestCommittedResource("my-cr", v1alpha1.CommitmentStatusConfirmed)
-	if err := env.k8sClient.Create(context.Background(), cr); err != nil {
-		t.Fatalf("create CR: %v", err)
-	}
-
-	// newTestCommittedResource pre-populates the finalizer, so Delete() will set
-	// DeletionTimestamp without needing a prior reconcile.
-
-	// Pre-create a child Reservation to verify it gets cleaned up on deletion.
-	child := &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "my-cr-0",
-			Labels: map[string]string{
-				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+		// Pre-create a child Reservation to verify it gets cleaned up on deletion.
+		// newTestCommittedResource pre-populates the finalizer, so Delete() immediately sets DeletionTimestamp.
+		child := &v1alpha1.Reservation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "my-cr-0",
+				Labels: map[string]string{
+					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+				},
 			},
-		},
-		Spec: v1alpha1.ReservationSpec{
-			Type: v1alpha1.ReservationTypeCommittedResource,
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				CommitmentUUID: "test-uuid-1234",
+			Spec: v1alpha1.ReservationSpec{
+				Type: v1alpha1.ReservationTypeCommittedResource,
+				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+					CommitmentUUID: "test-uuid-1234",
+				},
 			},
-		},
-	}
-	if err := env.k8sClient.Create(context.Background(), child); err != nil {
-		t.Fatalf("create child reservation: %v", err)
-	}
+		}
+		if err := env.k8sClient.Create(context.Background(), child); err != nil {
+			t.Fatalf("create child reservation: %v", err)
+		}
 
-	// Delete sets DeletionTimestamp (object has finalizer, so it is not removed yet).
-	crState := env.getCR(t, cr.Name)
-	if err := env.k8sClient.Delete(context.Background(), &crState); err != nil {
-		t.Fatalf("delete CR: %v", err)
-	}
+		crState := env.getCR(t, cr.Name)
+		if err := env.k8sClient.Delete(context.Background(), &crState); err != nil {
+			t.Fatalf("delete CR: %v", err)
+		}
+		env.reconcileCR(t, cr.Name)
 
-	env.reconcileCR(t, cr.Name)
-
-	if got := env.listChildReservations(t, cr.Name); len(got) != 0 {
-		t.Errorf("post-deletion: expected 0 reservations, got %d", len(got))
-	}
-	// Finalizer removed — object either gone or has no finalizer.
-	var final v1alpha1.CommittedResource
-	err := env.k8sClient.Get(context.Background(), types.NamespacedName{Name: cr.Name}, &final)
-	if client.IgnoreNotFound(err) != nil {
-		t.Fatalf("unexpected error after deletion: %v", err)
-	}
-	if err == nil {
-		for _, f := range final.Finalizers {
-			if f == crFinalizer {
-				t.Errorf("finalizer not removed after deletion reconcile")
+		if got := env.listChildReservations(t, cr.Name); len(got) != 0 {
+			t.Errorf("post-deletion: expected 0 reservations, got %d", len(got))
+		}
+		var final v1alpha1.CommittedResource
+		err := env.k8sClient.Get(context.Background(), types.NamespacedName{Name: cr.Name}, &final)
+		if client.IgnoreNotFound(err) != nil {
+			t.Fatalf("unexpected error after deletion: %v", err)
+		}
+		if err == nil {
+			for _, f := range final.Finalizers {
+				if f == crFinalizer {
+					t.Errorf("finalizer not removed after deletion reconcile")
+				}
 			}
 		}
-	}
+	})
+
+	t.Run("confirmed→superseded: child Reservations deleted, CR marked inactive", func(t *testing.T) {
+		env := newCRIntegrationEnv(t)
+		defer env.close()
+
+		cr := newTestCommittedResource("my-cr", v1alpha1.CommitmentStatusConfirmed)
+		if err := env.k8sClient.Create(context.Background(), cr); err != nil {
+			t.Fatalf("create CR: %v", err)
+		}
+
+		env.reconcileCR(t, cr.Name)
+		env.reconcileCR(t, cr.Name)
+		env.reconcileChildReservations(t, cr.Name)
+
+		if got := env.listChildReservations(t, cr.Name); len(got) != 1 {
+			t.Fatalf("pre-supersede: expected 1 reservation, got %d", len(got))
+		}
+
+		crState := env.getCR(t, cr.Name)
+		patch := client.MergeFrom(crState.DeepCopy())
+		crState.Spec.State = v1alpha1.CommitmentStatusSuperseded
+		if err := env.k8sClient.Patch(context.Background(), &crState, patch); err != nil {
+			t.Fatalf("patch state to superseded: %v", err)
+		}
+		env.reconcileCR(t, cr.Name)
+
+		if got := env.listChildReservations(t, cr.Name); len(got) != 0 {
+			t.Errorf("superseded: expected 0 reservations, got %d", len(got))
+		}
+		crState = env.getCR(t, cr.Name)
+		cond := meta.FindStatusCondition(crState.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+		if cond == nil || cond.Status != metav1.ConditionFalse {
+			t.Errorf("superseded: expected Ready=False, got %v", cond)
+		}
+		if cond != nil && cond.Reason != string(v1alpha1.CommitmentStatusSuperseded) {
+			t.Errorf("superseded: expected Reason=%s, got %s", v1alpha1.CommitmentStatusSuperseded, cond.Reason)
+		}
+	})
+
+	t.Run("idempotency: extra reconciles after Accepted do not create extra slots", func(t *testing.T) {
+		env := newCRIntegrationEnv(t)
+		defer env.close()
+
+		cr := newTestCommittedResource("my-cr", v1alpha1.CommitmentStatusConfirmed)
+		if err := env.k8sClient.Create(context.Background(), cr); err != nil {
+			t.Fatalf("create CR: %v", err)
+		}
+
+		env.reconcileCR(t, cr.Name)
+		env.reconcileCR(t, cr.Name)
+		env.reconcileChildReservations(t, cr.Name)
+
+		if got := env.listChildReservations(t, cr.Name); len(got) != 1 {
+			t.Fatalf("pre-idempotency check: expected 1 reservation, got %d", len(got))
+		}
+
+		env.reconcileCR(t, cr.Name)
+		env.reconcileCR(t, cr.Name)
+
+		if got := env.listChildReservations(t, cr.Name); len(got) != 1 {
+			t.Errorf("idempotency: expected 1 reservation after extra reconciles, got %d", len(got))
+		}
+		crState := env.getCR(t, cr.Name)
+		if !meta.IsStatusConditionTrue(crState.Status.Conditions, v1alpha1.CommittedResourceConditionReady) {
+			t.Errorf("idempotency: expected CR to remain Ready=True after extra reconciles")
+		}
+	})
+
+	t.Run("AllowRejection=false: stays Reserving when scheduler rejects", func(t *testing.T) {
+		hypervisor := &hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "host-1"}}
+		env := newIntgEnv(t, []client.Object{newTestFlavorKnowledge(), hypervisor}, intgRejectScheduler)
+		defer env.close()
+
+		cr := newTestCommittedResource("my-cr", v1alpha1.CommitmentStatusConfirmed)
+		// AllowRejection stays false (the default), so placement failure must requeue, not reject.
+		if err := env.k8sClient.Create(context.Background(), cr); err != nil {
+			t.Fatalf("create CR: %v", err)
+		}
+
+		ctx := context.Background()
+		crReq := ctrl.Request{NamespacedName: types.NamespacedName{Name: cr.Name}}
+		for range 3 {
+			env.crController.Reconcile(ctx, crReq) //nolint:errcheck
+			var resList v1alpha1.ReservationList
+			env.k8sClient.List(ctx, &resList, client.MatchingLabels{ //nolint:errcheck
+				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+			})
+			for _, res := range resList.Items {
+				resReq := ctrl.Request{NamespacedName: types.NamespacedName{Name: res.Name}}
+				env.resController.Reconcile(ctx, resReq) //nolint:errcheck
+				env.resController.Reconcile(ctx, resReq) //nolint:errcheck
+			}
+			env.crController.Reconcile(ctx, crReq) //nolint:errcheck
+		}
+
+		var final v1alpha1.CommittedResource
+		if err := env.k8sClient.Get(ctx, types.NamespacedName{Name: cr.Name}, &final); err != nil {
+			t.Fatalf("get CR: %v", err)
+		}
+		cond := meta.FindStatusCondition(final.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+		if cond == nil {
+			t.Fatalf("no Ready condition")
+		}
+		if cond.Reason == v1alpha1.CommittedResourceReasonRejected {
+			t.Errorf("AllowRejection=false: CR must not transition to Rejected, got Reason=%s", cond.Reason)
+		}
+		if cond.Reason != v1alpha1.CommittedResourceReasonReserving {
+			t.Errorf("AllowRejection=false: expected Reason=Reserving, got %s", cond.Reason)
+		}
+	})
+
+	t.Run("externally deleted child Reservation is recreated by CR controller", func(t *testing.T) {
+		env := newCRIntegrationEnv(t)
+		defer env.close()
+
+		cr := newTestCommittedResource("my-cr", v1alpha1.CommitmentStatusConfirmed)
+		if err := env.k8sClient.Create(context.Background(), cr); err != nil {
+			t.Fatalf("create CR: %v", err)
+		}
+
+		env.reconcileCR(t, cr.Name)
+		env.reconcileCR(t, cr.Name)
+		env.reconcileChildReservations(t, cr.Name)
+
+		children := env.listChildReservations(t, cr.Name)
+		if len(children) != 1 {
+			t.Fatalf("expected 1 child reservation before deletion, got %d", len(children))
+		}
+
+		// Simulate out-of-band deletion of the slot.
+		child := children[0]
+		if err := env.k8sClient.Delete(context.Background(), &child); err != nil {
+			t.Fatalf("delete child reservation: %v", err)
+		}
+
+		// CR controller detects the missing slot and recreates it.
+		env.reconcileCR(t, cr.Name)
+		// Place the new slot.
+		env.reconcileChildReservations(t, cr.Name)
+		// CR controller observes Ready=True on the recreated slot.
+		env.reconcileCR(t, cr.Name)
+
+		if got := env.listChildReservations(t, cr.Name); len(got) != 1 {
+			t.Errorf("expected 1 reservation after recreation, got %d", len(got))
+		}
+		crState := env.getCR(t, cr.Name)
+		if !meta.IsStatusConditionTrue(crState.Status.Conditions, v1alpha1.CommittedResourceConditionReady) {
+			t.Errorf("expected CR to be Ready=True after slot recreation")
+		}
+	})
 }

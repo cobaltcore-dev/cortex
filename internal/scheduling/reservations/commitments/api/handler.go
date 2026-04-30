@@ -20,7 +20,7 @@ var apiLog = ctrl.Log.WithName("committed-resource")
 // HTTPAPI implements Limes LIQUID commitment validation endpoints.
 type HTTPAPI struct {
 	client          client.Client
-	config          commitments.Config
+	config          commitments.APIConfig
 	usageDB         commitments.UsageDBClient
 	monitor         ChangeCommitmentsAPIMonitor
 	usageMonitor    ReportUsageAPIMonitor
@@ -31,11 +31,11 @@ type HTTPAPI struct {
 }
 
 func NewAPI(client client.Client) *HTTPAPI {
-	return NewAPIWithConfig(client, commitments.DefaultConfig(), nil)
+	return NewAPIWithConfig(client, commitments.DefaultAPIConfig(), nil)
 }
 
 // NewAPIWithConfig creates an HTTPAPI with the given config and optional usageDB client.
-func NewAPIWithConfig(k8sClient client.Client, config commitments.Config, usageDB commitments.UsageDBClient) *HTTPAPI {
+func NewAPIWithConfig(k8sClient client.Client, config commitments.APIConfig, usageDB commitments.UsageDBClient) *HTTPAPI {
 	return &HTTPAPI{
 		client:          k8sClient,
 		config:          config,
@@ -58,9 +58,9 @@ func (api *HTTPAPI) Init(mux *http.ServeMux, registry prometheus.Registerer, log
 	mux.HandleFunc("/commitments/v1/projects/", api.handleProjectEndpoint) // routes to report-usage or quota
 
 	log.Info("commitments API initialized",
-		"changeCommitmentsEnabled", api.config.EnableChangeCommitmentsAPI,
-		"reportUsageEnabled", api.config.EnableReportUsageAPI,
-		"reportCapacityEnabled", api.config.EnableReportCapacityAPI)
+		"changeCommitmentsEnabled", api.config.EnableChangeCommitments,
+		"reportUsageEnabled", api.config.EnableReportUsage,
+		"reportCapacityEnabled", api.config.EnableReportCapacity)
 }
 
 // handleProjectEndpoint routes /commitments/v1/projects/:project_id/... requests to the appropriate handler.

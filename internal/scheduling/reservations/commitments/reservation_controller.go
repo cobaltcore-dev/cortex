@@ -37,9 +37,22 @@ type CommitmentReservationController struct {
 	// Kubernetes scheme to use for the reservations.
 	Scheme *runtime.Scheme
 	// Configuration for the controller.
-	Conf Config
+	Conf ReservationControllerConfig
 	// SchedulerClient for making scheduler API calls.
 	SchedulerClient *reservations.SchedulerClient
+}
+
+// echoParentGeneration copies Spec.CommittedResourceReservation.ParentGeneration to
+// Status.CommittedResourceReservation.ObservedParentGeneration so the CommittedResource
+// controller can confirm this reservation was processed for the current CR generation.
+func echoParentGeneration(res *v1alpha1.Reservation) {
+	if res.Spec.CommittedResourceReservation == nil {
+		return
+	}
+	if res.Status.CommittedResourceReservation == nil {
+		res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{}
+	}
+	res.Status.CommittedResourceReservation.ObservedParentGeneration = res.Spec.CommittedResourceReservation.ParentGeneration
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -76,6 +89,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			Reason:  "MissingResourceName",
 			Message: "reservation has no resource name",
 		})
+		echoParentGeneration(&res)
 		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			// Ignore not-found errors during background deletion
@@ -92,6 +106,19 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	if res.IsReady() {
 		logger.V(1).Info("reservation is active, verifying allocations")
 
+		// Sync ObservedParentGeneration if the CR controller bumped ParentGeneration since
+		// the last time this reservation was processed (e.g. after a spec update). Without
+		// this patch the CR controller would spin in Reserving forever for already-ready slots.
+		if res.Spec.CommittedResourceReservation != nil &&
+			(res.Status.CommittedResourceReservation == nil ||
+				res.Status.CommittedResourceReservation.ObservedParentGeneration != res.Spec.CommittedResourceReservation.ParentGeneration) {
+			old := res.DeepCopy()
+			echoParentGeneration(&res)
+			if err := r.Status().Patch(ctx, &res, client.MergeFrom(old)); client.IgnoreNotFound(err) != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
 		// Verify all allocations in Spec against actual VM state
 		result, err := r.reconcileAllocations(ctx, &res)
 		if err != nil {
@@ -102,9 +129,9 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		// Requeue with appropriate interval based on allocation state
 		// Use shorter interval if there are allocations in grace period for faster verification
 		if result.HasAllocationsInGracePeriod {
-			return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalGracePeriod}, nil
+			return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalGracePeriod.Duration}, nil
 		}
-		return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalActive}, nil
+		return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalActive.Duration}, nil
 	}
 
 	// TODO trigger re-placement of unused reservations over time
@@ -126,6 +153,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			Reason:  "PreAllocated",
 			Message: "reservation pre-allocated with VM allocations",
 		})
+		echoParentGeneration(&res)
 		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			// Ignore not-found errors during background deletion
@@ -155,6 +183,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			Reason:  "ReservationActive",
 			Message: "reservation is successfully scheduled",
 		})
+		echoParentGeneration(&res)
 		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			// Ignore not-found errors during background deletion
@@ -189,7 +218,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		logger.Info("flavor knowledge not ready, requeueing",
 			"resourceName", resourceName,
 			"error", err)
-		return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalRetry}, nil
+		return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalRetry.Duration}, nil
 	}
 
 	// Search for the flavor across all flavor groups
@@ -224,11 +253,12 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			Reason:  "NoHostsAvailable",
 			Message: "no hypervisors available for scheduling",
 		})
+		echoParentGeneration(&res)
 		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
-		return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalRetry}, nil
+		return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalRetry.Duration}, nil
 	}
 
 	// Select appropriate pipeline based on flavor group
@@ -271,6 +301,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			Reason:  "NoHostsFound",
 			Message: "no hosts found for reservation",
 		})
+		echoParentGeneration(&res)
 		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			// Ignore not-found errors during background deletion
@@ -370,7 +401,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 
 	for vmUUID, allocation := range res.Spec.CommittedResourceReservation.Allocations {
 		allocationAge := now.Sub(allocation.CreationTimestamp.Time)
-		isInGracePeriod := allocationAge < r.Conf.AllocationGracePeriod
+		isInGracePeriod := allocationAge < r.Conf.AllocationGracePeriod.Duration
 
 		if isInGracePeriod {
 			// New allocation: VM may not yet appear in the HV CRD (still spawning).
@@ -395,7 +426,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 				"reservation", res.Name,
 				"expectedHost", expectedHost,
 				"allocationAge", allocationAge,
-				"gracePeriod", r.Conf.AllocationGracePeriod)
+				"gracePeriod", r.Conf.AllocationGracePeriod.Duration)
 		}
 	}
 
@@ -498,11 +529,9 @@ func (r *CommitmentReservationController) hypervisorToReservations(ctx context.C
 }
 
 // Init initializes the reconciler with required clients and DB connection.
-func (r *CommitmentReservationController) Init(ctx context.Context, client client.Client, conf Config) error {
-	// Initialize scheduler client
+func (r *CommitmentReservationController) Init(ctx context.Context, conf ReservationControllerConfig) error {
 	r.SchedulerClient = reservations.NewSchedulerClient(conf.SchedulerURL)
 	logf.FromContext(ctx).Info("scheduler client initialized for commitment reservation controller", "url", conf.SchedulerURL)
-
 	return nil
 }
 
@@ -543,7 +572,7 @@ var commitmentReservationPredicate = predicate.Funcs{
 // SetupWithManager sets up the controller with the Manager.
 func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-		if err := r.Init(ctx, mgr.GetClient(), r.Conf); err != nil {
+		if err := r.Init(ctx, r.Conf); err != nil {
 			return err
 		}
 		return nil

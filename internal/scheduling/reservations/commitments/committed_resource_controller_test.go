@@ -10,6 +10,7 @@ import (
 	"time"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -106,6 +107,20 @@ func newCRTestClient(scheme *runtime.Scheme, objects ...client.Object) client.Cl
 		WithScheme(scheme).
 		WithObjects(objects...).
 		WithStatusSubresource(&v1alpha1.CommittedResource{}, &v1alpha1.Reservation{}).
+		WithIndex(&v1alpha1.Reservation{}, idxReservationByCommitmentUUID, func(obj client.Object) []string {
+			res, ok := obj.(*v1alpha1.Reservation)
+			if !ok || res.Spec.CommittedResourceReservation == nil || res.Spec.CommittedResourceReservation.CommitmentUUID == "" {
+				return nil
+			}
+			return []string{res.Spec.CommittedResourceReservation.CommitmentUUID}
+		}).
+		WithIndex(&v1alpha1.CommittedResource{}, idxCommittedResourceByUUID, func(obj client.Object) []string {
+			cr, ok := obj.(*v1alpha1.CommittedResource)
+			if !ok || cr.Spec.CommitmentUUID == "" {
+				return nil
+			}
+			return []string{cr.Spec.CommitmentUUID}
+		}).
 		Build()
 }
 
@@ -151,6 +166,39 @@ func countChildReservations(t *testing.T, k8sClient client.Client, commitmentUUI
 		}
 	}
 	return count
+}
+
+// setChildReservationsReady simulates the reservation controller by marking all child
+// Reservations for the given commitmentUUID as Ready=True and echoing ParentGeneration
+// into ObservedParentGeneration (matching what echoParentGeneration does in production).
+func setChildReservationsReady(t *testing.T, k8sClient client.Client, commitmentUUID string) {
+	t.Helper()
+	var list v1alpha1.ReservationList
+	if err := k8sClient.List(context.Background(), &list, client.MatchingLabels{
+		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+	}); err != nil {
+		t.Fatalf("list reservations: %v", err)
+	}
+	for i := range list.Items {
+		res := &list.Items[i]
+		if res.Spec.CommittedResourceReservation == nil ||
+			res.Spec.CommittedResourceReservation.CommitmentUUID != commitmentUUID {
+			continue
+		}
+		res.Status.Conditions = []metav1.Condition{{
+			Type:               v1alpha1.ReservationConditionReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "ReservationActive",
+			LastTransitionTime: metav1.Now(),
+		}}
+		if res.Status.CommittedResourceReservation == nil {
+			res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{}
+		}
+		res.Status.CommittedResourceReservation.ObservedParentGeneration = res.Spec.CommittedResourceReservation.ParentGeneration
+		if err := k8sClient.Status().Update(context.Background(), res); err != nil {
+			t.Fatalf("set reservation Ready=True: %v", err)
+		}
+	}
 }
 
 // ============================================================================
@@ -208,10 +256,21 @@ func TestCommittedResourceController_Reconcile(t *testing.T) {
 				objects = append(objects, newTestFlavorKnowledge())
 			}
 			k8sClient := newCRTestClient(scheme, objects...)
-			controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: Config{}}
+			controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: CommittedResourceControllerConfig{}}
 
+			// First reconcile: creates Reservation CRDs; if slots are expected, controller
+			// waits for the reservation controller to set Ready=True before accepting.
 			if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
-				t.Fatalf("reconcile: %v", err)
+				t.Fatalf("reconcile 1: %v", err)
+			}
+
+			if tt.expectedSlots > 0 {
+				// Simulate reservation controller: mark all child reservations as Ready=True.
+				setChildReservationsReady(t, k8sClient, cr.Spec.CommitmentUUID)
+				// Second reconcile: sees all Ready=True and accepts.
+				if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
+					t.Fatalf("reconcile 2: %v", err)
+				}
 			}
 
 			assertCondition(t, k8sClient, cr.Name, tt.expectedStatus, tt.expectedReason)
@@ -260,7 +319,7 @@ func TestCommittedResourceController_InactiveStates(t *testing.T) {
 				},
 			}
 			k8sClient := newCRTestClient(scheme, cr, existing)
-			controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: Config{}}
+			controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: CommittedResourceControllerConfig{}}
 
 			if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
 				t.Fatalf("reconcile: %v", err)
@@ -288,10 +347,18 @@ func TestCommittedResourceController_PlacementFailure(t *testing.T) {
 		expectRequeue  bool
 	}{
 		{
-			name:           "pending: always rejects on failure, no retry",
+			name:           "pending AllowRejection=true: rejects on failure, no retry",
 			state:          v1alpha1.CommitmentStatusPending,
+			allowRejection: true,
 			expectedReason: "Rejected",
 			expectRequeue:  false,
+		},
+		{
+			name:           "pending AllowRejection=false: retries on failure",
+			state:          v1alpha1.CommitmentStatusPending,
+			allowRejection: false,
+			expectedReason: "Reserving",
+			expectRequeue:  true,
 		},
 		{
 			name:           "guaranteed AllowRejection=true: rejects on failure, no retry",
@@ -332,7 +399,7 @@ func TestCommittedResourceController_PlacementFailure(t *testing.T) {
 			controller := &CommittedResourceController{
 				Client: k8sClient,
 				Scheme: scheme,
-				Conf:   Config{RequeueIntervalRetry: 1 * time.Minute},
+				Conf:   CommittedResourceControllerConfig{RequeueIntervalRetry: metav1.Duration{Duration: 1 * time.Minute}},
 			}
 
 			result, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name))
@@ -354,8 +421,58 @@ func TestCommittedResourceController_PlacementFailure(t *testing.T) {
 	}
 }
 
+func TestCommittedResourceController_Rollback(t *testing.T) {
+	scheme := newCRTestScheme(t)
+
+	// CR at generation 2; AcceptedAmount reflects what was accepted at generation 1.
+	cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
+	cr.Generation = 2
+	accepted := resource.MustParse("4Gi")
+	cr.Status.AcceptedAmount = &accepted
+
+	// Existing reservation with stale ParentGeneration from the previous generation.
+	existing := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-cr-0",
+			Labels: map[string]string{
+				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+			},
+		},
+		Spec: v1alpha1.ReservationSpec{
+			Type:             v1alpha1.ReservationTypeCommittedResource,
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			AvailabilityZone: "test-az",
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: resource.MustParse("4Gi"),
+				hv1.ResourceCPU:    resource.MustParse("2"),
+			},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				CommitmentUUID:   "test-uuid-1234",
+				ProjectID:        "test-project",
+				DomainID:         "test-domain",
+				ResourceGroup:    "test-group",
+				ParentGeneration: 1, // stale
+			},
+		},
+	}
+
+	k8sClient := newCRTestClient(scheme, cr, existing, newTestFlavorKnowledge())
+	controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: CommittedResourceControllerConfig{}}
+
+	if err := controller.rollbackToAccepted(context.Background(), logr.Discard(), cr); err != nil {
+		t.Fatalf("rollbackToAccepted: %v", err)
+	}
+
+	var res v1alpha1.Reservation
+	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "test-cr-0"}, &res); err != nil {
+		t.Fatalf("get reservation: %v", err)
+	}
+	if got := res.Spec.CommittedResourceReservation.ParentGeneration; got != cr.Generation {
+		t.Errorf("ParentGeneration: want %d, got %d", cr.Generation, got)
+	}
+}
+
 func TestCommittedResourceController_BadSpec(t *testing.T) {
-	// Invalid UUID fails commitmentUUIDPattern — permanently broken regardless of AllowRejection.
 	scheme := newCRTestScheme(t)
 	cr := &v1alpha1.CommittedResource{
 		ObjectMeta: metav1.ObjectMeta{
@@ -374,7 +491,7 @@ func TestCommittedResourceController_BadSpec(t *testing.T) {
 		},
 	}
 	k8sClient := newCRTestClient(scheme, cr, newTestFlavorKnowledge())
-	controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: Config{}}
+	controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: CommittedResourceControllerConfig{}}
 
 	if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
 		t.Fatalf("reconcile: %v", err)
@@ -390,11 +507,18 @@ func TestCommittedResourceController_Idempotent(t *testing.T) {
 	scheme := newCRTestScheme(t)
 	cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
 	k8sClient := newCRTestClient(scheme, cr, newTestFlavorKnowledge())
-	controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: Config{}}
+	controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: CommittedResourceControllerConfig{}}
 
-	for i := range 3 {
+	// Round 1: creates reservation, waits for placement.
+	if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
+		t.Fatalf("reconcile 1: %v", err)
+	}
+	// Simulate reservation controller setting Ready=True.
+	setChildReservationsReady(t, k8sClient, cr.Spec.CommitmentUUID)
+	// Rounds 2 and 3: accepts, then stays accepted.
+	for i := 2; i <= 3; i++ {
 		if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
-			t.Fatalf("reconcile %d: %v", i+1, err)
+			t.Fatalf("reconcile %d: %v", i, err)
 		}
 	}
 
@@ -422,7 +546,7 @@ func TestCommittedResourceController_Deletion(t *testing.T) {
 		},
 	}
 	k8sClient := newCRTestClient(scheme, cr, child)
-	controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: Config{}}
+	controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: CommittedResourceControllerConfig{}}
 
 	if err := k8sClient.Delete(context.Background(), cr); err != nil {
 		t.Fatalf("delete CR: %v", err)
