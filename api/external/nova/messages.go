@@ -151,6 +151,11 @@ const (
 	ReserveForFailoverIntent v1alpha1.SchedulingIntent = "reserve_for_failover"
 	// ReserveForCommittedResourceIntent indicates that the request is for CR reservation scheduling.
 	ReserveForCommittedResourceIntent v1alpha1.SchedulingIntent = "reserve_for_committed_resource"
+
+	// HintKeyResourceGroup is the scheduler hint key used to pass the resource group
+	// (e.g., flavor group name) for failover reservation scheduling.
+	// The weigher uses this to compare against existing reservations' ResourceGroup.
+	HintKeyResourceGroup = "_cortex_resource_group"
 )
 
 // GetIntent analyzes the request spec and determines the intent of the scheduling request.

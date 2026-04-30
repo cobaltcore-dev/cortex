@@ -9,8 +9,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/gophercloud/gophercloud/v2"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -18,15 +23,11 @@ import (
 // e2eTestResourceProviderTraits tests the
 // /resource_providers/{uuid}/traits endpoints.
 //
-//  1. Pre-cleanup: DELETE leftover RP traits, RP, and custom trait (ignore 404).
-//  2. Create fixtures: PUT a custom trait, POST a test RP.
-//  3. GET /{uuid}/traits — verify the trait list is empty, store generation.
-//  4. PUT /{uuid}/traits — associate the custom trait with the RP.
-//  5. GET /{uuid}/traits — verify the custom trait is now present.
-//  6. DELETE /{uuid}/traits — disassociate all traits from the RP.
-//  7. GET /{uuid}/traits — verify the trait list is empty again.
-//  8. Cleanup: DELETE the test RP and custom trait.
-func e2eTestResourceProviderTraits(ctx context.Context, _ client.Client) error {
+// In passthrough mode: exercises the upstream placement path with a
+// dynamically created resource provider.
+// In hybrid/crd mode: exercises the spec.groups-backed CRD path using a
+// real KVM hypervisor discovered from the cluster.
+func e2eTestResourceProviderTraits(ctx context.Context, cl client.Client) error {
 	log := logf.FromContext(ctx)
 	log.Info("Running resource provider traits endpoint e2e test")
 	config, err := conf.GetConfig[e2eRootConfig]()
@@ -42,14 +43,19 @@ func e2eTestResourceProviderTraits(ctx context.Context, _ client.Client) error {
 	}
 	log.Info("Successfully created openstack client for resource provider traits e2e test")
 
-	// Resource provider trait writes (PUT/DELETE) are not yet implemented in
-	// crd mode, and the test RP created via POST won't exist as a Hypervisor
-	// CRD either, so skip the entire test in crd mode.
-	rpTraitsMode := e2eCurrentMode(ctx)
-	if rpTraitsMode == FeatureModeCRD {
-		log.Info("Skipping resource provider traits e2e test because mode is crd (writes not implemented)")
-		return nil
+	mode := e2eCurrentMode(ctx)
+	switch mode {
+	case FeatureModePassthrough:
+		return e2ePassthroughResourceProviderTraits(ctx, sc)
+	case FeatureModeHybrid, FeatureModeCRD:
+		return e2eCRDResourceProviderTraits(ctx, sc, cl)
+	default:
+		return fmt.Errorf("unexpected mode %q", mode)
 	}
+}
+
+func e2ePassthroughResourceProviderTraits(ctx context.Context, sc *gophercloud.ServiceClient) error {
+	log := logf.FromContext(ctx)
 
 	const testRPUUID = "e2e10000-0000-0000-0000-000000000003"
 	const testRPName = "cortex-e2e-test-rp-traits"
@@ -145,8 +151,7 @@ func e2eTestResourceProviderTraits(ctx context.Context, _ client.Client) error {
 	log.Info("Successfully created test resource provider for RP traits test",
 		"uuid", testRPUUID)
 
-	// Deferred cleanup: always delete test fixtures on exit so a failed
-	// assertion doesn't leave the fixed UUID/trait behind.
+	// Deferred cleanup.
 	defer func() {
 		log.Info("Deferred cleanup: deleting test resources")
 		for _, c := range []struct {
@@ -174,12 +179,11 @@ func e2eTestResourceProviderTraits(ctx context.Context, _ client.Client) error {
 		}
 	}()
 
-	// Test GET /resource_providers/{uuid}/traits (empty).
+	// Test GET (empty).
 	log.Info("Testing GET /resource_providers/{uuid}/traits (empty)", "uuid", testRPUUID)
 	req, err = http.NewRequestWithContext(ctx,
 		http.MethodGet, sc.Endpoint+"/resource_providers/"+testRPUUID+"/traits", http.NoBody)
 	if err != nil {
-		log.Error(err, "failed to create GET request for RP traits", "uuid", testRPUUID)
 		return err
 	}
 	req.Header.Set("X-Auth-Token", sc.TokenID)
@@ -187,49 +191,36 @@ func e2eTestResourceProviderTraits(ctx context.Context, _ client.Client) error {
 	req.Header.Set("Accept", "application/json")
 	resp, err = sc.HTTPClient.Do(req)
 	if err != nil {
-		log.Error(err, "failed to send GET request for RP traits", "uuid", testRPUUID)
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		log.Error(err, "GET RP traits returned an error", "uuid", testRPUUID)
-		return err
+		return fmt.Errorf("GET RP traits: unexpected status %d", resp.StatusCode)
 	}
 	var traitsResp struct {
 		Traits                     []string `json:"traits"`
 		ResourceProviderGeneration int      `json:"resource_provider_generation"`
 	}
-	err = json.NewDecoder(resp.Body).Decode(&traitsResp)
-	if err != nil {
-		log.Error(err, "failed to decode RP traits response", "uuid", testRPUUID)
+	if err := json.NewDecoder(resp.Body).Decode(&traitsResp); err != nil {
 		return err
 	}
 	if len(traitsResp.Traits) != 0 {
-		err := fmt.Errorf("expected 0 initial traits, got %d", len(traitsResp.Traits))
-		log.Error(err, "initial traits not empty", "uuid", testRPUUID)
-		return err
+		return fmt.Errorf("expected 0 initial traits, got %d", len(traitsResp.Traits))
 	}
-	log.Info("Successfully retrieved empty traits for test resource provider",
-		"uuid", testRPUUID, "traits", len(traitsResp.Traits),
-		"generation", traitsResp.ResourceProviderGeneration)
+	log.Info("Verified empty traits", "generation", traitsResp.ResourceProviderGeneration)
 
-	// Test PUT /resource_providers/{uuid}/traits (associate trait).
-	log.Info("Testing PUT /resource_providers/{uuid}/traits to associate trait",
-		"uuid", testRPUUID, "trait", testTrait)
+	// Test PUT (associate trait).
 	putBody, err := json.Marshal(map[string]any{
 		"resource_provider_generation": traitsResp.ResourceProviderGeneration,
 		"traits":                       []string{testTrait},
 	})
 	if err != nil {
-		log.Error(err, "failed to marshal request body")
 		return err
 	}
 	req, err = http.NewRequestWithContext(ctx,
 		http.MethodPut, sc.Endpoint+"/resource_providers/"+testRPUUID+"/traits",
 		bytes.NewReader(putBody))
 	if err != nil {
-		log.Error(err, "failed to create PUT request for RP traits", "uuid", testRPUUID)
 		return err
 	}
 	req.Header.Set("X-Auth-Token", sc.TokenID)
@@ -238,25 +229,18 @@ func e2eTestResourceProviderTraits(ctx context.Context, _ client.Client) error {
 	req.Header.Set("Accept", "application/json")
 	resp, err = sc.HTTPClient.Do(req)
 	if err != nil {
-		log.Error(err, "failed to send PUT request for RP traits", "uuid", testRPUUID)
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		log.Error(err, "PUT RP traits returned an error", "uuid", testRPUUID)
-		return err
+		return fmt.Errorf("PUT RP traits: unexpected status %d", resp.StatusCode)
 	}
-	log.Info("Successfully associated trait with test resource provider",
-		"uuid", testRPUUID, "trait", testTrait)
+	log.Info("Successfully associated trait")
 
-	// Test GET /resource_providers/{uuid}/traits (after PUT).
-	log.Info("Testing GET /resource_providers/{uuid}/traits (after PUT)",
-		"uuid", testRPUUID)
+	// Test GET (after PUT).
 	req, err = http.NewRequestWithContext(ctx,
 		http.MethodGet, sc.Endpoint+"/resource_providers/"+testRPUUID+"/traits", http.NoBody)
 	if err != nil {
-		log.Error(err, "failed to create GET request for RP traits", "uuid", testRPUUID)
 		return err
 	}
 	req.Header.Set("X-Auth-Token", sc.TokenID)
@@ -264,128 +248,270 @@ func e2eTestResourceProviderTraits(ctx context.Context, _ client.Client) error {
 	req.Header.Set("Accept", "application/json")
 	resp, err = sc.HTTPClient.Do(req)
 	if err != nil {
-		log.Error(err, "failed to send GET request for RP traits", "uuid", testRPUUID)
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		log.Error(err, "GET RP traits returned an error", "uuid", testRPUUID)
+	if err := json.NewDecoder(resp.Body).Decode(&traitsResp); err != nil {
 		return err
 	}
-	err = json.NewDecoder(resp.Body).Decode(&traitsResp)
-	if err != nil {
-		log.Error(err, "failed to decode RP traits response", "uuid", testRPUUID)
-		return err
+	if !slices.Contains(traitsResp.Traits, testTrait) {
+		return fmt.Errorf("expected trait %s, got %v", testTrait, traitsResp.Traits)
 	}
-	if len(traitsResp.Traits) != 1 || traitsResp.Traits[0] != testTrait {
-		err := fmt.Errorf("expected trait %s, got %v", testTrait, traitsResp.Traits)
-		log.Error(err, "trait mismatch", "uuid", testRPUUID)
-		return err
-	}
-	log.Info("Successfully verified trait on test resource provider",
-		"uuid", testRPUUID, "traits", traitsResp.Traits)
+	log.Info("Verified trait present after PUT")
 
-	// Test DELETE /resource_providers/{uuid}/traits.
-	log.Info("Testing DELETE /resource_providers/{uuid}/traits", "uuid", testRPUUID)
+	// Test DELETE.
 	req, err = http.NewRequestWithContext(ctx,
 		http.MethodDelete, sc.Endpoint+"/resource_providers/"+testRPUUID+"/traits", http.NoBody)
 	if err != nil {
-		log.Error(err, "failed to create DELETE request for RP traits", "uuid", testRPUUID)
 		return err
 	}
 	req.Header.Set("X-Auth-Token", sc.TokenID)
 	req.Header.Set("OpenStack-API-Version", "placement 1.6")
 	resp, err = sc.HTTPClient.Do(req)
 	if err != nil {
-		log.Error(err, "failed to send DELETE request for RP traits", "uuid", testRPUUID)
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		log.Error(err, "DELETE RP traits returned an error", "uuid", testRPUUID)
-		return err
+		return fmt.Errorf("DELETE RP traits: unexpected status %d", resp.StatusCode)
 	}
-	log.Info("Successfully deleted traits from test resource provider", "uuid", testRPUUID)
+	log.Info("Successfully deleted traits")
 
-	// Verify traits cleared.
-	log.Info("Verifying traits cleared on test resource provider", "uuid", testRPUUID)
-	req, err = http.NewRequestWithContext(ctx,
-		http.MethodGet, sc.Endpoint+"/resource_providers/"+testRPUUID+"/traits", http.NoBody)
-	if err != nil {
-		log.Error(err, "failed to create GET request for RP traits", "uuid", testRPUUID)
-		return err
-	}
-	req.Header.Set("X-Auth-Token", sc.TokenID)
-	req.Header.Set("OpenStack-API-Version", "placement 1.6")
-	req.Header.Set("Accept", "application/json")
-	resp, err = sc.HTTPClient.Do(req)
-	if err != nil {
-		log.Error(err, "failed to send GET request for RP traits", "uuid", testRPUUID)
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		log.Error(err, "GET RP traits returned an error", "uuid", testRPUUID)
-		return err
-	}
-	err = json.NewDecoder(resp.Body).Decode(&traitsResp)
-	if err != nil {
-		log.Error(err, "failed to decode RP traits response", "uuid", testRPUUID)
-		return err
-	}
-	if len(traitsResp.Traits) != 0 {
-		err := fmt.Errorf("expected 0 traits, got %d", len(traitsResp.Traits))
-		log.Error(err, "traits not cleared", "uuid", testRPUUID)
-		return err
-	}
-	log.Info("Verified traits cleared on test resource provider", "uuid", testRPUUID)
-
-	// Cleanup: delete the test resource provider and custom trait.
-	log.Info("Cleaning up test resources")
+	// Cleanup.
 	req, err = http.NewRequestWithContext(ctx,
 		http.MethodDelete, sc.Endpoint+"/resource_providers/"+testRPUUID, http.NoBody)
 	if err != nil {
-		log.Error(err, "failed to create DELETE request for resource provider", "uuid", testRPUUID)
 		return err
 	}
 	req.Header.Set("X-Auth-Token", sc.TokenID)
 	req.Header.Set("OpenStack-API-Version", "placement 1.6")
 	resp, err = sc.HTTPClient.Do(req)
 	if err != nil {
-		log.Error(err, "failed to send DELETE request for resource provider", "uuid", testRPUUID)
 		return err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		log.Error(err, "DELETE resource provider returned an error", "uuid", testRPUUID)
-		return err
-	}
-	log.Info("Successfully deleted test resource provider", "uuid", testRPUUID)
+	resp.Body.Close()
 
 	req, err = http.NewRequestWithContext(ctx,
 		http.MethodDelete, sc.Endpoint+"/traits/"+testTrait, http.NoBody)
 	if err != nil {
-		log.Error(err, "failed to create DELETE request for trait", "trait", testTrait)
 		return err
 	}
 	req.Header.Set("X-Auth-Token", sc.TokenID)
 	req.Header.Set("OpenStack-API-Version", "placement 1.6")
 	resp, err = sc.HTTPClient.Do(req)
 	if err != nil {
-		log.Error(err, "failed to send DELETE request for trait", "trait", testTrait)
+		return err
+	}
+	resp.Body.Close()
+
+	return nil
+}
+
+// e2eCRDResourceProviderTraits tests the CRD/hybrid path by discovering a
+// real KVM hypervisor in the cluster, seeding spec.groups, and exercising
+// GET/PUT/DELETE through the shim.
+func e2eCRDResourceProviderTraits(ctx context.Context, sc *gophercloud.ServiceClient, cl client.Client) error {
+	log := logf.FromContext(ctx)
+
+	// Discover a KVM hypervisor with a non-empty OpenStack ID.
+	var hvs hv1.HypervisorList
+	if err := cl.List(ctx, &hvs); err != nil {
+		log.Error(err, "failed to list hypervisors for CRD traits path")
+		return err
+	}
+	var kvmHV *hv1.Hypervisor
+	for i := range hvs.Items {
+		if hvs.Items[i].Status.HypervisorID != "" {
+			kvmHV = &hvs.Items[i]
+			break
+		}
+	}
+	if kvmHV == nil {
+		log.Info("No KVM hypervisors with OpenStack ID found, skipping CRD traits tests")
+		return nil
+	}
+	kvmUUID := kvmHV.Status.HypervisorID
+	log.Info("Using KVM hypervisor for CRD traits e2e tests", "uuid", kvmUUID, "name", kvmHV.Name)
+
+	// Save original groups for restoration.
+	originalGroups := kvmHV.Spec.Groups
+
+	// Seed spec.groups with test traits (preserve non-trait groups).
+	const testTrait1 = "CUSTOM_E2E_CRD_TRAIT_1"
+	const testTrait2 = "CUSTOM_E2E_CRD_TRAIT_2"
+	var nonTraitGroups []hv1.Group
+	for i := range kvmHV.Spec.Groups {
+		if kvmHV.Spec.Groups[i].Trait == nil {
+			nonTraitGroups = append(nonTraitGroups, kvmHV.Spec.Groups[i])
+		}
+	}
+	nonTraitGroups = append(nonTraitGroups,
+		hv1.Group{Trait: &hv1.TraitGroup{Name: testTrait1}},
+		hv1.Group{Trait: &hv1.TraitGroup{Name: testTrait2}},
+	)
+	kvmHV.Spec.Groups = nonTraitGroups
+	if err := cl.Update(ctx, kvmHV); err != nil {
+		return fmt.Errorf("failed to seed spec.groups with test traits: %w", err)
+	}
+	log.Info("Seeded spec.groups with test traits", "uuid", kvmUUID)
+
+	// Always restore original groups on exit (retry on conflict).
+	defer func() {
+		log.Info("Restoring original spec.groups", "uuid", kvmUUID)
+		for range 5 {
+			if err := cl.Get(ctx, client.ObjectKeyFromObject(kvmHV), kvmHV); err != nil {
+				log.Error(err, "failed to refetch hypervisor for restoration")
+				return
+			}
+			kvmHV.Spec.Groups = originalGroups
+			if err := cl.Update(ctx, kvmHV); err != nil {
+				if apierrors.IsConflict(err) {
+					continue
+				}
+				log.Error(err, "failed to restore original spec.groups")
+				return
+			}
+			return
+		}
+		log.Error(nil, "exhausted retries restoring original spec.groups")
+	}()
+
+	// Refetch to get updated generation.
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(kvmHV), kvmHV); err != nil {
+		return fmt.Errorf("failed to refetch hypervisor after seed: %w", err)
+	}
+
+	// Test GET — should return the seeded traits.
+	// Poll because the shim's informer cache may take a moment to observe the update.
+	log.Info("Testing GET /resource_providers/{uuid}/traits (CRD)", "uuid", kvmUUID)
+	var traitsResp struct {
+		Traits                     []string `json:"traits"`
+		ResourceProviderGeneration int64    `json:"resource_provider_generation"`
+	}
+	if err := e2ePollUntil(ctx, 10*time.Second, func() (bool, error) {
+		req, err := http.NewRequestWithContext(ctx,
+			http.MethodGet, sc.Endpoint+"/resource_providers/"+kvmUUID+"/traits", http.NoBody)
+		if err != nil {
+			return false, err
+		}
+		req.Header.Set("X-Auth-Token", sc.TokenID)
+		req.Header.Set("OpenStack-API-Version", "placement 1.6")
+		req.Header.Set("Accept", "application/json")
+		resp, err := sc.HTTPClient.Do(req)
+		if err != nil {
+			return false, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return false, fmt.Errorf("GET CRD traits: expected 200, got %d", resp.StatusCode)
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&traitsResp); err != nil {
+			return false, fmt.Errorf("failed to decode CRD traits response: %w", err)
+		}
+		return slices.Contains(traitsResp.Traits, testTrait1) &&
+			slices.Contains(traitsResp.Traits, testTrait2), nil
+	}); err != nil {
+		return fmt.Errorf("waiting for seeded traits: %w (got %v)", err, traitsResp.Traits)
+	}
+	log.Info("Verified GET returns seeded traits from CRD",
+		"traits", traitsResp.Traits, "generation", traitsResp.ResourceProviderGeneration)
+
+	// Test PUT — replace traits.
+	const replacementTrait = "CUSTOM_E2E_CRD_REPLACED"
+	putBody, err := json.Marshal(map[string]any{
+		"resource_provider_generation": traitsResp.ResourceProviderGeneration,
+		"traits":                       []string{replacementTrait},
+	})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx,
+		http.MethodPut, sc.Endpoint+"/resource_providers/"+kvmUUID+"/traits",
+		bytes.NewReader(putBody))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Auth-Token", sc.TokenID)
+	req.Header.Set("OpenStack-API-Version", "placement 1.6")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	resp, err := sc.HTTPClient.Do(req)
+	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		log.Error(err, "DELETE trait returned an error", "trait", testTrait)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("PUT CRD traits: expected 200, got %d", resp.StatusCode)
+	}
+	log.Info("Successfully replaced traits via PUT (CRD)")
+
+	// Test PUT with stale generation — should return 409.
+	putBody, err = json.Marshal(map[string]any{
+		"resource_provider_generation": traitsResp.ResourceProviderGeneration,
+		"traits":                       []string{"STALE"},
+	})
+	if err != nil {
 		return err
 	}
-	log.Info("Successfully deleted custom trait", "trait", testTrait)
+	req, err = http.NewRequestWithContext(ctx,
+		http.MethodPut, sc.Endpoint+"/resource_providers/"+kvmUUID+"/traits",
+		bytes.NewReader(putBody))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Auth-Token", sc.TokenID)
+	req.Header.Set("OpenStack-API-Version", "placement 1.6")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	resp, err = sc.HTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		return fmt.Errorf("PUT CRD traits (stale gen): expected 409, got %d", resp.StatusCode)
+	}
+	log.Info("Verified generation conflict returns 409")
+
+	// Test GET — verify replacement persisted.
+	req, err = http.NewRequestWithContext(ctx,
+		http.MethodGet, sc.Endpoint+"/resource_providers/"+kvmUUID+"/traits", http.NoBody)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Auth-Token", sc.TokenID)
+	req.Header.Set("OpenStack-API-Version", "placement 1.6")
+	req.Header.Set("Accept", "application/json")
+	resp, err = sc.HTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if err := json.NewDecoder(resp.Body).Decode(&traitsResp); err != nil {
+		return err
+	}
+	if len(traitsResp.Traits) != 1 || traitsResp.Traits[0] != replacementTrait {
+		return fmt.Errorf("expected [%s], got %v", replacementTrait, traitsResp.Traits)
+	}
+	log.Info("Verified replacement trait persisted")
+
+	// Test DELETE — remove all traits.
+	req, err = http.NewRequestWithContext(ctx,
+		http.MethodDelete, sc.Endpoint+"/resource_providers/"+kvmUUID+"/traits", http.NoBody)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Auth-Token", sc.TokenID)
+	req.Header.Set("OpenStack-API-Version", "placement 1.6")
+	resp, err = sc.HTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("DELETE CRD traits: expected 204, got %d", resp.StatusCode)
+	}
+	log.Info("Verified DELETE returns 204")
 
 	return nil
 }

@@ -212,3 +212,27 @@ func RunE2E(ctx context.Context, cl client.Client) error {
 		"took_ms", time.Since(totalStart).Milliseconds())
 	return nil
 }
+
+// e2ePollUntil retries check at short intervals until it returns true or the
+// timeout expires. Used to wait for the informer cache to pick up a CRD
+// update before asserting via the HTTP API.
+func e2ePollUntil(ctx context.Context, timeout time.Duration, check func() (bool, error)) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		ok, err := check()
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out after %s waiting for condition", timeout)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+}

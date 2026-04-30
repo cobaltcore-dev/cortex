@@ -1,0 +1,52 @@
+name: Claude Code Release Orchestrator
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - release
+
+jobs:
+  release:
+    if: false # Temporarily disabled
+    runs-on: ubuntu-latest
+    concurrency:
+      group: changelog-release
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - uses: ./.github/actions/setup-claude-code-action
+
+      - uses: ./.github/actions/start-litellm-proxy
+        env:
+          AICORE_RESOURCE_GROUP: ${{ secrets.AICORE_RESOURCE_GROUP }}
+          AICORE_BASE_URL: ${{ secrets.AICORE_BASE_URL }}
+          AICORE_AUTH_URL: ${{ secrets.AICORE_AUTH_URL }}
+          AICORE_CLIENT_ID: ${{ secrets.AICORE_CLIENT_ID }}
+          AICORE_CLIENT_SECRET: ${{ secrets.AICORE_CLIENT_SECRET }}
+
+      - uses: ./.claude-code-action
+        with:
+          claude_args: |
+            --max-turns 1000
+            --permission-mode auto
+            --allowedTools "Read,Write,Edit,Bash(*),WebSearch,WebFetch,Agent"
+          use_litellm: "true"
+          litellm_model: "sap/anthropic--claude-4.6-opus"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          show_full_output: "true"
+          prompt: "/release ${{ github.event.pull_request.number }}"
+
+      - uses: ./.github/actions/stop-litellm-proxy
+        if: always()
