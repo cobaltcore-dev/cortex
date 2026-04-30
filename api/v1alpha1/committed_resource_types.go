@@ -147,6 +147,10 @@ const (
 	// CommittedResourceConditionReady indicates whether the CommittedResource has been
 	// successfully reconciled into active Reservation CRDs.
 	CommittedResourceConditionReady = "Ready"
+
+	// CommittedResourceReasonPlanned is set when the CommittedResource start time has not
+	// yet been reached and no Reservation slots have been created.
+	CommittedResourceReasonPlanned = "Planned"
 )
 
 // +kubebuilder:object:root=true
