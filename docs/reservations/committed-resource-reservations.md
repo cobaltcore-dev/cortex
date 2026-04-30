@@ -123,6 +123,25 @@ The controller's job is to keep child `Reservation` CRDs in sync with the desire
 
 The controller communicates with the Reservation controller only through CRDs — no direct calls.
 
+**Reconcile trigger flow:**
+
+```mermaid
+sequenceDiagram
+    participant API as Change-Commitments API
+    participant CRCtrl as CR Controller
+    participant CRCRD as CommittedResource CRD
+    participant ResCRD as Reservation CRD
+    participant ResCtrl as Reservation Controller
+
+    API->>CRCRD: write (create/update)
+    CRCRD-->>CRCtrl: watch fires
+    CRCtrl->>ResCRD: create/update child slots
+    ResCRD-->>ResCtrl: watch fires
+    ResCtrl->>ResCRD: update (ObservedParentGeneration, Ready=True/False)
+    ResCRD-->>CRCtrl: watch fires (Reservation→parent CR lookup)
+    CRCtrl->>CRCRD: update status (Accepted / Reserving / Rejected)
+```
+
 ### Reservation Lifecycle
 
 | Component | Event | Timing | Action |
