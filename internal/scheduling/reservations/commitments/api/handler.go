@@ -26,6 +26,7 @@ type HTTPAPI struct {
 	usageMonitor    ReportUsageAPIMonitor
 	capacityMonitor ReportCapacityAPIMonitor
 	infoMonitor     InfoAPIMonitor
+	quotaMonitor    QuotaAPIMonitor
 	// Mutex to serialize change-commitments requests
 	changeMutex sync.Mutex
 }
@@ -44,6 +45,7 @@ func NewAPIWithConfig(k8sClient client.Client, config commitments.Config, usageD
 		usageMonitor:    NewReportUsageAPIMonitor(),
 		capacityMonitor: NewReportCapacityAPIMonitor(),
 		infoMonitor:     NewInfoAPIMonitor(),
+		quotaMonitor:    NewQuotaAPIMonitor(),
 	}
 }
 
@@ -52,6 +54,7 @@ func (api *HTTPAPI) Init(mux *http.ServeMux, registry prometheus.Registerer, log
 	registry.MustRegister(&api.usageMonitor)
 	registry.MustRegister(&api.capacityMonitor)
 	registry.MustRegister(&api.infoMonitor)
+	registry.MustRegister(&api.quotaMonitor)
 	mux.HandleFunc("/commitments/v1/change-commitments", api.HandleChangeCommitments)
 	mux.HandleFunc("/commitments/v1/report-capacity", api.HandleReportCapacity)
 	mux.HandleFunc("/commitments/v1/info", api.HandleInfo)
