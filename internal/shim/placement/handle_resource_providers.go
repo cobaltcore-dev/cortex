@@ -115,7 +115,8 @@ func (s *Shim) HandleCreateResourceProvider(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	switch s.config.Features.ResourceProviders.orDefault() {
+	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders)
+	switch mode {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 		return
@@ -184,7 +185,7 @@ func (s *Shim) HandleCreateResourceProvider(w http.ResponseWriter, r *http.Reque
 	}
 
 	// No conflict — forward to upstream placement (hybrid) or reject (crd).
-	if s.config.Features.ResourceProviders.orDefault() == FeatureModeCRD {
+	if mode == FeatureModeCRD {
 		log.Info("crd mode: non-kvm resource provider create not supported", "name", req.Name)
 		http.Error(w, "resource provider not found", http.StatusNotFound)
 		return
@@ -209,7 +210,8 @@ func (s *Shim) HandleShowResourceProvider(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	switch s.config.Features.ResourceProviders.orDefault() {
+	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders)
+	switch mode {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 		return
@@ -229,7 +231,7 @@ func (s *Shim) HandleShowResourceProvider(w http.ResponseWriter, r *http.Request
 	var hvs hv1.HypervisorList
 	err := s.List(ctx, &hvs, client.MatchingFields{idxHypervisorOpenStackId: uuid})
 	if apierrors.IsNotFound(err) || len(hvs.Items) == 0 {
-		if s.config.Features.ResourceProviders.orDefault() == FeatureModeCRD {
+		if mode == FeatureModeCRD {
 			log.Info("resource provider not found in kubernetes (crd mode)", "uuid", uuid)
 			http.Error(w, "resource provider not found", http.StatusNotFound)
 			return
@@ -278,7 +280,8 @@ func (s *Shim) HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	switch s.config.Features.ResourceProviders.orDefault() {
+	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders)
+	switch mode {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 		return
@@ -315,7 +318,7 @@ func (s *Shim) HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Reque
 	var hvs hv1.HypervisorList
 	err = s.List(ctx, &hvs, client.MatchingFields{idxHypervisorOpenStackId: uuid})
 	if apierrors.IsNotFound(err) || len(hvs.Items) == 0 {
-		if s.config.Features.ResourceProviders.orDefault() == FeatureModeCRD {
+		if mode == FeatureModeCRD {
 			log.Info("resource provider not found in kubernetes (crd mode)", "uuid", uuid)
 			http.Error(w, "resource provider not found", http.StatusNotFound)
 			return
@@ -373,7 +376,8 @@ func (s *Shim) HandleDeleteResourceProvider(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	switch s.config.Features.ResourceProviders.orDefault() {
+	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders)
+	switch mode {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 		return
@@ -393,7 +397,7 @@ func (s *Shim) HandleDeleteResourceProvider(w http.ResponseWriter, r *http.Reque
 	var hvs hv1.HypervisorList
 	err := s.List(ctx, &hvs, client.MatchingFields{idxHypervisorOpenStackId: uuid})
 	if apierrors.IsNotFound(err) || len(hvs.Items) == 0 {
-		if s.config.Features.ResourceProviders.orDefault() == FeatureModeCRD {
+		if mode == FeatureModeCRD {
 			log.Info("resource provider not found in kubernetes (crd mode)", "uuid", uuid)
 			http.Error(w, "resource provider not found", http.StatusNotFound)
 			return
@@ -448,7 +452,7 @@ type listResourceProvidersResponse struct {
 //
 // See: https://docs.openstack.org/api-ref/placement/#list-resource-providers
 func (s *Shim) HandleListResourceProviders(w http.ResponseWriter, r *http.Request) {
-	switch s.config.Features.ResourceProviders.orDefault() {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders) {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 	case FeatureModeHybrid:

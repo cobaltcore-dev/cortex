@@ -47,6 +47,15 @@ func e2eTestAllocationCandidates(ctx context.Context, _ client.Client) error {
 	const testRC = "CUSTOM_CORTEX_E2E_CAND_RC"
 	const apiVersion = "placement 1.26"
 
+	// Probe: for non-passthrough modes, verify endpoint returns 501.
+	unimplemented, err := e2eProbeUnimplemented(ctx, sc, sc.Endpoint+"/allocation_candidates?resources=VCPU:1")
+	if err != nil {
+		return fmt.Errorf("probe: %w", err)
+	}
+	if unimplemented {
+		return nil
+	}
+
 	// Pre-cleanup: delete leftover test resources from a prior run.
 	log.Info("Pre-cleanup: deleting leftover test resources")
 	for _, cleanup := range []struct {
@@ -296,5 +305,5 @@ func e2eTestAllocationCandidates(ctx context.Context, _ client.Client) error {
 }
 
 func init() {
-	e2eTests = append(e2eTests, e2eTest{name: "allocation_candidates", run: e2eTestAllocationCandidates})
+	e2eTests = append(e2eTests, e2eTest{name: "allocation_candidates", run: e2eWrapWithModes(e2eTestAllocationCandidates)})
 }

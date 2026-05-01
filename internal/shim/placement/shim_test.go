@@ -83,6 +83,18 @@ func serveHandler(t *testing.T, method, pattern string, handler http.HandlerFunc
 	return w
 }
 
+// serveHandlerWithBody is like serveHandler but allows providing a request body.
+func serveHandlerWithBody(t *testing.T, method, pattern string, handler http.HandlerFunc, reqPath string, body io.Reader) *httptest.ResponseRecorder {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc(method+" "+pattern, handler)
+	req := httptest.NewRequest(method, reqPath, body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	return w
+}
+
 func TestForward(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -482,6 +494,30 @@ func TestConfigValidateTraitsCRDRequiresConfig(t *testing.T) {
 	}
 }
 
+func TestConfigValidateResourceClassesCRDRequiresConfig(t *testing.T) {
+	t.Setenv("POD_NAMESPACE", "")
+
+	c := config{
+		PlacementURL: "http://placement:8778",
+		Features:     featuresConfig{ResourceClasses: FeatureModeCRD},
+	}
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when resourceClasses mode is crd without config")
+	}
+	c.ResourceClasses = &resourceClassesConfig{}
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when resourceClasses.configMapName is empty")
+	}
+	c.ResourceClasses.ConfigMapName = "cortex-placement-shim-resource-classes"
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when POD_NAMESPACE is not set")
+	}
+	t.Setenv("POD_NAMESPACE", "default")
+	if err := c.validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestWrapHandlerWithAuth(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -558,6 +594,140 @@ func TestWrapHandlerWithAuth(t *testing.T) {
 		wrapped(w, req)
 		if w.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+	})
+}
+
+func TestFeatureModeFromConfOrHeader(t *testing.T) {
+	s := &Shim{config: config{
+		Traits: &traitsConfig{ConfigMapName: "test"},
+	}}
+
+	t.Run("returns configured mode when no override", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		got := s.featureModeFromConfOrHeader(req, FeatureModeHybrid)
+		if got != FeatureModeHybrid {
+			t.Fatalf("got %q, want %q", got, FeatureModeHybrid)
+		}
+	})
+
+	t.Run("defaults empty configured mode to passthrough", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		got := s.featureModeFromConfOrHeader(req, "")
+		if got != FeatureModePassthrough {
+			t.Fatalf("got %q, want %q", got, FeatureModePassthrough)
+		}
+	})
+
+	t.Run("returns override when present in context and backing config exists", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		ctx := context.WithValue(req.Context(), featureModeOverrideKey, FeatureModeCRD)
+		req = req.WithContext(ctx)
+		got := s.featureModeFromConfOrHeader(req, FeatureModePassthrough)
+		if got != FeatureModeCRD {
+			t.Fatalf("got %q, want %q", got, FeatureModeCRD)
+		}
+	})
+
+	t.Run("override to hybrid/crd ignored when no backing config", func(t *testing.T) {
+		bare := &Shim{}
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		ctx := context.WithValue(req.Context(), featureModeOverrideKey, FeatureModeCRD)
+		req = req.WithContext(ctx)
+		got := bare.featureModeFromConfOrHeader(req, FeatureModePassthrough)
+		if got != FeatureModePassthrough {
+			t.Fatalf("got %q, want %q (override should be rejected without backing config)", got, FeatureModePassthrough)
+		}
+	})
+
+	t.Run("override to passthrough always allowed", func(t *testing.T) {
+		bare := &Shim{}
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		ctx := context.WithValue(req.Context(), featureModeOverrideKey, FeatureModePassthrough)
+		req = req.WithContext(ctx)
+		got := bare.featureModeFromConfOrHeader(req, FeatureModeHybrid)
+		if got != FeatureModePassthrough {
+			t.Fatalf("got %q, want %q", got, FeatureModePassthrough)
+		}
+	})
+
+	t.Run("override defaults empty to passthrough", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		ctx := context.WithValue(req.Context(), featureModeOverrideKey, FeatureMode(""))
+		req = req.WithContext(ctx)
+		got := s.featureModeFromConfOrHeader(req, FeatureModeHybrid)
+		if got != FeatureModePassthrough {
+			t.Fatalf("got %q, want %q", got, FeatureModePassthrough)
+		}
+	})
+}
+
+func TestWrapHandlerFeatureModeOverride(t *testing.T) {
+	t.Run("valid header injects override into context", func(t *testing.T) {
+		var gotMode FeatureMode
+		down, up := newTestTimers()
+		s := &Shim{
+			config:                 config{PlacementURL: "http://unused"},
+			maxBodyLogSize:         4096,
+			downstreamRequestTimer: down,
+			upstreamRequestTimer:   up,
+		}
+		wrapped := s.wrapHandler("/test", func(w http.ResponseWriter, r *http.Request) {
+			if override, ok := r.Context().Value(featureModeOverrideKey).(FeatureMode); ok {
+				gotMode = override
+			}
+			w.WriteHeader(http.StatusOK)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
+		req.Header.Set(headerFeatureModeOverride, string(FeatureModeCRD))
+		w := httptest.NewRecorder()
+		wrapped(w, req)
+		if gotMode != FeatureModeCRD {
+			t.Fatalf("context override = %q, want %q", gotMode, FeatureModeCRD)
+		}
+	})
+
+	t.Run("invalid header value is ignored", func(t *testing.T) {
+		var gotOverride bool
+		down, up := newTestTimers()
+		s := &Shim{
+			config:                 config{PlacementURL: "http://unused"},
+			maxBodyLogSize:         4096,
+			downstreamRequestTimer: down,
+			upstreamRequestTimer:   up,
+		}
+		wrapped := s.wrapHandler("/test", func(w http.ResponseWriter, r *http.Request) {
+			_, gotOverride = r.Context().Value(featureModeOverrideKey).(FeatureMode)
+			w.WriteHeader(http.StatusOK)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
+		req.Header.Set(headerFeatureModeOverride, "bogus")
+		w := httptest.NewRecorder()
+		wrapped(w, req)
+		if gotOverride {
+			t.Fatal("override should not be set for invalid mode value")
+		}
+	})
+
+	t.Run("empty header value is ignored", func(t *testing.T) {
+		var gotOverride bool
+		down, up := newTestTimers()
+		s := &Shim{
+			config:                 config{PlacementURL: "http://unused"},
+			maxBodyLogSize:         4096,
+			downstreamRequestTimer: down,
+			upstreamRequestTimer:   up,
+		}
+		wrapped := s.wrapHandler("/test", func(w http.ResponseWriter, r *http.Request) {
+			_, gotOverride = r.Context().Value(featureModeOverrideKey).(FeatureMode)
+			w.WriteHeader(http.StatusOK)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
+		req.Header.Set(headerFeatureModeOverride, "")
+		w := httptest.NewRecorder()
+		wrapped(w, req)
+		if gotOverride {
+			t.Fatal("override should not be set for empty header")
 		}
 	})
 }

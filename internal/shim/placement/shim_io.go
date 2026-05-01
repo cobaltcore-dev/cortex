@@ -113,6 +113,14 @@ func (s *Shim) wrapHandler(pattern string, next http.HandlerFunc) http.HandlerFu
 			log = log.WithValues("requestID", reqID)
 			ctx = context.WithValue(ctx, requestIDKey, reqID)
 		}
+
+		// Read the feature mode override header and store in context.
+		if raw := r.Header.Get(headerFeatureModeOverride); raw != "" {
+			if fm := FeatureMode(raw); fm.valid() && fm != "" {
+				ctx = context.WithValue(ctx, featureModeOverrideKey, fm)
+			}
+		}
+
 		ctx = logf.IntoContext(ctx, log)
 		r = r.WithContext(ctx)
 
