@@ -70,12 +70,21 @@ type APIConfig struct {
 func (c *Config) ApplyDefaults() {
 	c.ReservationController.applyDefaults()
 	c.CommittedResourceController.applyDefaults()
-	// APIConfig booleans: false is a valid operator choice, so no defaults applied.
+	d := DefaultAPIConfig()
+	if !c.API.EnableChangeCommitments {
+		c.API.EnableChangeCommitments = d.EnableChangeCommitments
+	}
+	if !c.API.EnableReportUsage {
+		c.API.EnableReportUsage = d.EnableReportUsage
+	}
+	if !c.API.EnableReportCapacity {
+		c.API.EnableReportCapacity = d.EnableReportCapacity
+	}
 	if c.API.WatchTimeout.Duration == 0 {
-		c.API.WatchTimeout = DefaultAPIConfig().WatchTimeout
+		c.API.WatchTimeout = d.WatchTimeout
 	}
 	if c.API.WatchPollInterval.Duration == 0 {
-		c.API.WatchPollInterval = DefaultAPIConfig().WatchPollInterval
+		c.API.WatchPollInterval = d.WatchPollInterval
 	}
 }
 

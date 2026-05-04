@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	. "github.com/majewsky/gg/option"
@@ -152,42 +153,49 @@ func e2eRoundTripResource(
 
 	rejectionReason := e2eSendChangeCommitments(ctx, baseURL, createReq)
 	if rejectionReason != "" {
+		// Only capacity rejections (no hosts available) are expected in production clusters.
+		// Any other reason (flavor group ineligible, config error, timeout) indicates a
+		// regression and should surface as a failure.
+		if !strings.Contains(rejectionReason, "no hosts found") {
+			panic(fmt.Sprintf("round-trip check: commitment rejected with unexpected reason for resource %s: %s", resourceName, rejectionReason))
+		}
 		slog.Info("round-trip check: commitment rejected — no capacity, continuing",
 			"resource", resourceName, "reason", rejectionReason)
 		return
 	}
 	slog.Info("round-trip check: commitment accepted", "resource", resourceName, "uuid", testUUID)
 
-	// Smoke-check the usage API: verifies the usage calculation pipeline works for this project.
-	e2eCheckUsageAPI(ctx, baseURL, az, projectID)
-
-	// Delete — failure here is an infrastructure error, not a capacity issue.
-	deleteReq := liquid.CommitmentChangeRequest{
-		InfoVersion: infoVersion,
-		AZ:          az,
-		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
-			projectID: {
-				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
-					resourceName: {
-						TotalConfirmedBefore: amount,
-						Commitments: []liquid.Commitment{{
-							UUID:      testUUID,
-							Amount:    amount,
-							OldStatus: Some(liquid.CommitmentStatusConfirmed),
-							NewStatus: None[liquid.CommitmentStatus](),
-							ExpiresAt: expiresAt,
-						}},
+	// Register cleanup immediately so it runs even if the usage check panics.
+	defer func() {
+		deleteReq := liquid.CommitmentChangeRequest{
+			InfoVersion: infoVersion,
+			AZ:          az,
+			ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+				projectID: {
+					ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+						resourceName: {
+							TotalConfirmedBefore: amount,
+							Commitments: []liquid.Commitment{{
+								UUID:      testUUID,
+								Amount:    amount,
+								OldStatus: Some(liquid.CommitmentStatusConfirmed),
+								NewStatus: None[liquid.CommitmentStatus](),
+								ExpiresAt: expiresAt,
+							}},
+						},
 					},
 				},
 			},
-		},
-	}
+		}
+		slog.Info("round-trip check: deleting test commitment", "resource", resourceName, "uuid", testUUID)
+		if reason := e2eSendChangeCommitments(ctx, baseURL, deleteReq); reason != "" {
+			panic(fmt.Sprintf("round-trip check: delete of test commitment %s was rejected: %s", testUUID, reason))
+		}
+		slog.Info("round-trip check: commitment deleted", "resource", resourceName, "uuid", testUUID)
+	}()
 
-	slog.Info("round-trip check: deleting test commitment", "resource", resourceName, "uuid", testUUID)
-	if reason := e2eSendChangeCommitments(ctx, baseURL, deleteReq); reason != "" {
-		panic(fmt.Sprintf("round-trip check: delete of test commitment %s was rejected: %s", testUUID, reason))
-	}
-	slog.Info("round-trip check: commitment deleted", "resource", resourceName, "uuid", testUUID)
+	// Smoke-check the usage API: verifies the usage calculation pipeline works for this project.
+	e2eCheckUsageAPI(ctx, baseURL, az, projectID)
 }
 
 // e2eCheckUsageAPI calls POST /commitments/v1/projects/:id/report-usage and verifies 200.

@@ -365,6 +365,9 @@ func (r *CommittedResourceController) SetupWithManager(mgr ctrl.Manager, mcl *mu
 	if err != nil {
 		return err
 	}
+	// MaxConcurrentReconciles=1: the change-commitments API handler snapshots each CR's spec
+	// before writing and restores it on rollback. Concurrent reconciles across overlapping
+	// batch requests could interleave those snapshots and produce incorrect rollback state.
 	return bldr.Named("committed-resource").
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1,

@@ -363,6 +363,7 @@ func main() {
 
 	// Initialize commitments API for LIQUID interface (Postgres-backed usage reporting).
 	commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
+	commitmentsConfig.ApplyDefaults()
 	var commitmentsUsageDB commitments.UsageDBClient
 	if commitmentsConfig.DatasourceName != "" {
 		commitmentsUsageDB = commitments.NewDBUsageClient(multiclusterClient, commitmentsConfig.DatasourceName)

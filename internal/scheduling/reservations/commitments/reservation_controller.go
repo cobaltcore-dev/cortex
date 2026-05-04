@@ -609,7 +609,10 @@ func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl
 
 	return bldr.Named("commitment-reservation").
 		WithOptions(controller.Options{
-			// We want to process reservations one at a time to avoid overbooking.
+			// MaxConcurrentReconciles=1: conservative default. Note that this does NOT prevent
+			// the cache-staleness race where two back-to-back reconciles both pick the same host
+			// before the first write is visible to the capacity filter — that requires pessimistic
+			// blocking at the scheduler level.
 			MaxConcurrentReconciles: 1,
 		}).
 		Complete(r)
