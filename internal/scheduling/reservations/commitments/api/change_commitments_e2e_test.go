@@ -123,6 +123,9 @@ func newE2EEnv(t *testing.T, flavors []*TestFlavor, infoVersion int64, scheduler
 	cfg := commitments.DefaultAPIConfig()
 	cfg.WatchTimeout = metav1.Duration{Duration: 5 * time.Second}
 	cfg.WatchPollInterval = metav1.Duration{Duration: 100 * time.Millisecond}
+	cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
+		"*": {RAM: commitments.ResourceTypeConfig{HandlesCommitments: true, HasCapacity: true}},
+	}
 	api := NewAPIWithConfig(k8sClient, cfg, nil)
 	mux := http.NewServeMux()
 	api.Init(mux, prometheus.NewRegistry(), log.Log)

@@ -189,8 +189,8 @@ ProcessLoop:
 				break ProcessLoop
 			}
 
-			if !commitments.FlavorGroupAcceptsCommitments(&flavorGroup) {
-				failedReason = commitments.FlavorGroupCommitmentRejectionReason(&flavorGroup)
+			if !api.config.ResourceConfigForGroup(flavorGroupName).RAM.HandlesCommitments {
+				failedReason = fmt.Sprintf("flavor group %q is not configured to handle commitments", flavorGroupName)
 				rollback = true
 				break ProcessLoop
 			}
