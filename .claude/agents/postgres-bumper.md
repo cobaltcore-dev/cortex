@@ -145,7 +145,9 @@ git push -u origin chore/bump-postgres
    - What was updated (debian digest, PG_VERSION, PG_MAJOR)
    - Old → new values
    - Whether this is a patch or major upgrade
-   - For major upgrades: note that the helm chart's versioned naming will create a new StatefulSet alongside the old one, and the post-upgrade cleanup Job will remove the old resources automatically. The database is a cache and will be re-populated by the cortex knowledge module.
+   - For major upgrades, include the following IMPORTANT note prominently in the motivation so it appears in the PR description:
+
+     IMPORTANT: This is a major PostgreSQL upgrade. The helm chart's versioned naming will create a NEW StatefulSet and Service (e.g. cortex-nova-postgresql-v18) alongside the old one (cortex-nova-postgresql-v17). The old deployment will NOT be removed automatically. After deploying this change and confirming the new instance is healthy and re-populated by the knowledge module, operators must manually delete the old StatefulSet and its PVC (e.g. `kubectl delete statefulset cortex-nova-postgresql-v17 && kubectl delete pvc data-cortex-nova-postgresql-v17-0`).
 
 ---
 
