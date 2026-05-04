@@ -81,6 +81,21 @@ func newFakeClient(t *testing.T, objs ...client.Object) client.Client {
 		}
 		return []string{hv.Name}
 	})
+	builder = builder.WithIndex(&hv1.Hypervisor{}, idxBookingConsumerUUID, func(obj client.Object) []string {
+		hv, ok := obj.(*hv1.Hypervisor)
+		if !ok {
+			return nil
+		}
+		consumers := hv1.GetConsumers(hv.Spec.Bookings)
+		if len(consumers) == 0 {
+			return nil
+		}
+		uuids := make([]string, 0, len(consumers))
+		for _, c := range consumers {
+			uuids = append(uuids, c.UUID)
+		}
+		return uuids
+	})
 	return builder.Build()
 }
 
