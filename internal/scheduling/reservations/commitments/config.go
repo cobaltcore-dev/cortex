@@ -71,15 +71,6 @@ func (c *Config) ApplyDefaults() {
 	c.ReservationController.applyDefaults()
 	c.CommittedResourceController.applyDefaults()
 	d := DefaultAPIConfig()
-	if !c.API.EnableChangeCommitments {
-		c.API.EnableChangeCommitments = d.EnableChangeCommitments
-	}
-	if !c.API.EnableReportUsage {
-		c.API.EnableReportUsage = d.EnableReportUsage
-	}
-	if !c.API.EnableReportCapacity {
-		c.API.EnableReportCapacity = d.EnableReportCapacity
-	}
 	if c.API.WatchTimeout.Duration == 0 {
 		c.API.WatchTimeout = d.WatchTimeout
 	}

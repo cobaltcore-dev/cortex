@@ -153,6 +153,11 @@ cortex-scheduling-controllers:
       requeueIntervalActive: "5m"
       # Back-off interval when knowledge is unavailable
       requeueIntervalRetry: "1m"
+      # Back-off interval while a VM allocation is still within allocationGracePeriod
+      requeueIntervalGracePeriod: "1m"
+      # How long after a VM is allocated to a reservation before it is expected to appear
+      # on the target host; allocations not confirmed within this window are removed
+      allocationGracePeriod: "15m"
       # URL of the nova external scheduler API for placement decisions
       schedulerURL: "http://localhost:8080/scheduler/nova/external"
     committedResourceController:
