@@ -138,4 +138,4 @@ cortex-knowledge-controllers:
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
   fullnameOverride: cortex-cinder-postgresql
-  major: "17"
+  major: "18"
