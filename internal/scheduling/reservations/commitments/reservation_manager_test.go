@@ -342,3 +342,86 @@ func TestNewReservation_SelectsAppropriateFlavor(t *testing.T) {
 		})
 	}
 }
+
+// variableRatioFlavorGroup returns a flavor group with varying CPU:RAM ratios (GP-style).
+// Flavors are sorted descending by memory then vCPUs, matching the knowledge extractor order.
+func variableRatioFlavorGroup() compute.FlavorGroupFeature {
+	minRatio := uint64(2048) // MiB/vCPU
+	maxRatio := uint64(8192) // MiB/vCPU
+	return compute.FlavorGroupFeature{
+		Name: "gp-group",
+		Flavors: []compute.FlavorInGroup{
+			{Name: "c4_m32", VCPUs: 4, MemoryMB: 32768, DiskGB: 100}, // 8 GiB/vCPU
+			{Name: "c8_m16", VCPUs: 8, MemoryMB: 16384, DiskGB: 50},  // 2 GiB/vCPU
+			{Name: "c4_m8", VCPUs: 4, MemoryMB: 8192, DiskGB: 25},    // 2 GiB/vCPU
+		},
+		SmallestFlavor:  compute.FlavorInGroup{Name: "c4_m8", VCPUs: 4, MemoryMB: 8192, DiskGB: 25},
+		LargestFlavor:   compute.FlavorInGroup{Name: "c4_m32", VCPUs: 4, MemoryMB: 32768, DiskGB: 100},
+		RamCoreRatioMin: &minRatio,
+		RamCoreRatioMax: &maxRatio,
+	}
+}
+
+func TestNewReservation_VariableRatioGroup_SelectsLargestByMemory(t *testing.T) {
+	// For GP (variable CPU:RAM ratio) groups, flavor selection is driven by memory
+	// descending, not by ratio. The largest flavor fitting the delta is always chosen.
+	manager := &ReservationManager{}
+	fg := variableRatioFlavorGroup()
+
+	tests := []struct {
+		name          string
+		deltaMemoryMB int64
+		wantFlavor    string
+		wantCores     int64
+	}{
+		{
+			name:          "delta fits c4_m32: picks largest by memory",
+			deltaMemoryMB: 32768,
+			wantFlavor:    "c4_m32",
+			wantCores:     4,
+		},
+		{
+			name:          "delta larger than all: picks largest (c4_m32)",
+			deltaMemoryMB: 65536,
+			wantFlavor:    "c4_m32",
+			wantCores:     4,
+		},
+		{
+			name:          "delta between c4_m32 and c8_m16: picks c8_m16",
+			deltaMemoryMB: 24576, // 24 GiB — c8_m16 (16 GiB) fits, c4_m32 (32 GiB) doesn't
+			wantFlavor:    "c8_m16",
+			wantCores:     8,
+		},
+		{
+			name:          "delta equals c8_m16: picks c8_m16 (more vCPUs than c4_m8 at same memory)",
+			deltaMemoryMB: 16384,
+			wantFlavor:    "c8_m16",
+			wantCores:     8,
+		},
+		{
+			name:          "delta fits only c4_m8: picks smallest",
+			deltaMemoryMB: 8192,
+			wantFlavor:    "c4_m8",
+			wantCores:     4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			deltaBytes := tt.deltaMemoryMB * 1024 * 1024
+			state := &CommitmentState{
+				CommitmentUUID:  "test-uuid",
+				ProjectID:       "project-1",
+				FlavorGroupName: "gp-group",
+			}
+			res := manager.newReservation(state, 0, deltaBytes, fg, "test")
+			if got := res.Spec.CommittedResourceReservation.ResourceName; got != tt.wantFlavor {
+				t.Errorf("flavor: want %s, got %s", tt.wantFlavor, got)
+			}
+			cpuQty := res.Spec.Resources[hv1.ResourceCPU]
+			if got := cpuQty.Value(); got != tt.wantCores {
+				t.Errorf("cores: want %d, got %d", tt.wantCores, got)
+			}
+		})
+	}
+}

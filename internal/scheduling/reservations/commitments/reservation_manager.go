@@ -172,8 +172,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 
 	// Phase 5 (CREATE): Create new reservations (capacity increased)
 	for deltaMemoryBytes > 0 {
-		// Need to create new reservation slots, always prefer largest flavor within the group
-		// TODO more sophisticated flavor selection, especially with flavors of different cpu/memory ratio
+		// Select the largest flavor that fits the remaining delta (flavors sorted descending by memory).
 		reservation := m.newReservation(desiredState, nextSlotIndex, deltaMemoryBytes, flavorGroup, creator)
 		result.TouchedReservations = append(result.TouchedReservations, *reservation)
 		memValue := reservation.Spec.Resources[hv1.ResourceMemory]
@@ -283,7 +282,8 @@ func (m *ReservationManager) newReservation(
 	}
 	name := fmt.Sprintf("%s%d", namePrefix, slotIndex)
 
-	// Select first flavor that fits remaining memory (flavors sorted descending by size)
+	// Select largest flavor that fits remaining memory (flavors sorted descending by memory then vCPUs).
+	// This works for both fixed and varying CPU:RAM ratio groups.
 	flavorInGroup := flavorGroup.Flavors[len(flavorGroup.Flavors)-1] // default to smallest
 	memoryBytes := deltaMemoryBytes
 	cpus := int64(flavorInGroup.VCPUs) //nolint:gosec // VCPUs from flavor specs, realistically bounded

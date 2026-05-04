@@ -73,6 +73,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	} else {
 		ctx = WithNewGlobalRequestID(ctx)
 	}
+	ctx = reservations.WithRequestID(ctx, req.Name)
 	logger := LoggerFromContext(ctx).WithValues("component", "controller", "reservation", req.Name)
 
 	// filter for CR reservations
