@@ -63,3 +63,10 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Versioned fully qualified app name (appends -v<major> to the fullname).
+*/}}
+{{- define "cortex-postgres.versionedFullname" -}}
+{{- printf "%s-v%s" (include "cortex-postgres.fullname" .) .Values.major | trunc 63 | trimSuffix "-" }}
+{{- end }}

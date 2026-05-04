@@ -38,7 +38,7 @@ sharedSSOCert: &sharedSSOCert
   selfSigned: "false"
 
 postgres:
-  host: cortex-nova-postgresql
+  host: cortex-nova-postgresql-v17
   user: postgres
   password: secret
   database: postgres
@@ -228,3 +228,4 @@ cortex-knowledge-controllers:
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
   fullnameOverride: cortex-nova-postgresql
+  major: "17"
