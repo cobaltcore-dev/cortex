@@ -43,15 +43,22 @@ This gives the highest available major version (e.g. `18`).
 
 ### 1d. Fetch the upstream Dockerfile for the target major
 
-Determine the debian codename used by upstream for the target major:
+Determine the debian codename used by upstream for the target major. The upstream directory contains multiple variants (e.g. bookworm, trixie, plus alpine). Select the codename deterministically by preferring the newest non-alpine Debian suite. Use this approach:
 
+```bash
+# List available variants for the target major
+VARIANTS=$(curl -sL https://api.github.com/repos/docker-library/postgres/contents/<TARGET_MAJOR> | jq -r '.[].name' | grep -v alpine)
+
+# Prefer the newest Debian codename (sorted alphabetically, last is newest for current naming)
+# Known Debian suites in order: bookworm (12), trixie (13), forky (14)
+CODENAME=$(echo "$VARIANTS" | grep -m1 'trixie' || echo "$VARIANTS" | grep -m1 'forky' || echo "$VARIANTS" | grep -m1 'bookworm' || echo "$VARIANTS" | tail -1)
 ```
-curl -sL https://api.github.com/repos/docker-library/postgres/contents/<TARGET_MAJOR> | jq -r '.[].name' | grep -v alpine | head -1
-```
+
+If the current Dockerfile already uses a codename that is available for the target major, prefer that codename to minimize churn. Only switch codenames when the current one is no longer available upstream.
 
 Then fetch the upstream Dockerfile:
 
-```
+```bash
 curl -sL https://raw.githubusercontent.com/docker-library/postgres/master/<TARGET_MAJOR>/<CODENAME>/Dockerfile
 ```
 

@@ -66,7 +66,10 @@ Create the name of the service account to use
 
 {{/*
 Versioned fully qualified app name (appends -v<major> to the fullname).
+Truncates the base name to leave room for the suffix within the 63-char DNS limit.
 */}}
 {{- define "cortex-postgres.versionedFullname" -}}
-{{- printf "%s-v%s" (include "cortex-postgres.fullname" .) .Values.major | trunc 63 | trimSuffix "-" }}
+{{- $suffix := printf "-v%s" .Values.major -}}
+{{- $base := include "cortex-postgres.fullname" . -}}
+{{- printf "%s%s" ($base | trunc (int (sub 63 (len $suffix)))) $suffix | trimSuffix "-" }}
 {{- end }}
