@@ -20,7 +20,7 @@ Cortex reserves hypervisor capacity for customers who pre-commit resources (comm
 The CR reservation implementation is located in `internal/scheduling/reservations/commitments/`. Key components include:
 - `CommittedResource` controller (`committed_resource_controller.go`) — acceptance, rejection, child Reservation CRUD
 - `Reservation` controller (`reservation_controller.go`) — placement, VM allocation verification
-- API endpoints (`api_*.go`)
+- API endpoints (`api/`)
 - Capacity and usage calculation logic (`capacity.go`, `usage.go`)
 - Syncer for periodic state sync (`syncer.go`)
 
