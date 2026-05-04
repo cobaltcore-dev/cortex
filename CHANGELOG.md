@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-05-04 — [#793](https://github.com/cobaltcore-dev/cortex/pull/793)
+
+### cortex v0.0.45 (sha-1d4f049c)
+
+Non-breaking changes:
+- Fix capacity filter to correctly account for multi-VM CommittedResource reservation slots — confirmed VMs are now summed (not just the last one), blocks are clamped to zero when confirmed exceeds slot size, and spec-only VMs larger than remaining slot are fully covered
+- Expose `prometheusDatasourceControllerParallelReconciles` config option to allow parallel reconciles in the Prometheus datasource controller, reducing initial sync latency
+- Remove `Conf` field from PrometheusDatasourceReconciler — config is now loaded internally via `conf.GetConfig` during `SetupWithManager`
+
+### cortex-nova v0.0.58 (sha-1d4f049c)
+
+Non-breaking changes:
+- Remove all committed resource related Prometheus alerts (info API, change API, usage API, capacity API, and syncer alerts)
+
 ## 2026-05-04 — [#779](https://github.com/cobaltcore-dev/cortex/pull/779)
 
 ### cortex v0.0.45 (sha-1fb35660)
