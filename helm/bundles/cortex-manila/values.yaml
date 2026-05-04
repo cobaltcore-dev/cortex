@@ -38,7 +38,7 @@ sharedSSOCert: &sharedSSOCert
   selfSigned: "false"
 
 postgres:
-  host: cortex-manila-postgresql-v17
+  host: cortex-manila-postgresql-v18
   user: postgres
   password: secret
   database: postgres

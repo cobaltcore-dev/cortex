@@ -38,7 +38,7 @@ sharedSSOCert: &sharedSSOCert
   selfSigned: "false"
 
 postgres:
-  host: cortex-cinder-postgresql-v17
+  host: cortex-cinder-postgresql-v18
   user: postgres
   password: secret
   database: postgres
