@@ -6,4 +6,4 @@ name: cortex-postgres
 description: Postgres setup for Cortex.
 type: application
 version: 0.5.14
-appVersion: "sha-bdda1892"
+appVersion: "sha-88f03a41"
