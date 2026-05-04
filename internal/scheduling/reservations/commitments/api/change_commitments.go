@@ -247,6 +247,10 @@ ProcessLoop:
 				cr.Name = crName
 				if _, err := controllerutil.CreateOrUpdate(ctx, api.client, cr, func() error {
 					applyCRSpec(cr, stateDesired, allowRejection)
+					if cr.Annotations == nil {
+						cr.Annotations = make(map[string]string)
+					}
+					cr.Annotations[v1alpha1.AnnotationCreatorRequestID] = reservations.GlobalRequestIDFromContext(ctx)
 					return nil
 				}); err != nil {
 					failedReason = fmt.Sprintf("commitment %s: failed to write CommittedResource CRD: %v", commitment.UUID, err)
