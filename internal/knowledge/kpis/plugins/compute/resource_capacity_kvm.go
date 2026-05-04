@@ -9,9 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -177,8 +175,7 @@ func aggregateReservationsByHost(reservations []v1alpha1.Reservation) (
 			continue
 		}
 
-		readyCondition := meta.FindStatusCondition(reservation.Status.Conditions, v1alpha1.ReservationConditionReady)
-		if readyCondition == nil || readyCondition.Status != metav1.ConditionTrue {
+		if !reservation.IsReady() {
 			continue
 		}
 

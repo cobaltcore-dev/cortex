@@ -15,6 +15,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// FindFlavorInGroups searches all flavor groups for a flavor by name.
+// Returns the flavor group name and flavor details, or an error if the flavor
+// is not found in any group.
+func FindFlavorInGroups(flavorName string, flavorGroups map[string]compute.FlavorGroupFeature) (groupName string, flavor *compute.FlavorInGroup, err error) {
+	for gName, fg := range flavorGroups {
+		for i, f := range fg.Flavors {
+			if f.Name == flavorName {
+				return gName, &fg.Flavors[i], nil
+			}
+		}
+	}
+	return "", nil, fmt.Errorf("flavor %q not found in any flavor group", flavorName)
+}
+
 // FlavorGroupKnowledgeClient accesses flavor group data from Knowledge CRDs.
 type FlavorGroupKnowledgeClient struct {
 	client.Client

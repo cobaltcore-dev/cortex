@@ -4,6 +4,7 @@
 package compute
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -36,6 +37,16 @@ type kvmMetricLabels struct {
 	Decommissioned   string
 	ExternalCustomer string
 	Maintenance      string
+}
+
+var fqNameRe = regexp.MustCompile(`fqName: "([^"]+)"`)
+
+func getMetricName(desc string) string {
+	match := fqNameRe.FindStringSubmatch(desc)
+	if len(match) > 1 {
+		return match[1]
+	}
+	return ""
 }
 
 type kvmExpectedMetric struct {

@@ -50,7 +50,7 @@ func (s *Shim) HandleGetRoot(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	switch s.config.Features.Root.orDefault() {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.Root, s.config.Versioning != nil) {
 	case FeatureModePassthrough:
 		log.Info("forwarding GET / to upstream placement")
 		s.forward(w, r)

@@ -580,7 +580,7 @@ func newUsageTestEnv(
 	}
 
 	// Create API with mock DB client
-	api := NewAPIWithConfig(k8sClient, commitments.DefaultConfig(), dbClient)
+	api := NewAPIWithConfig(k8sClient, commitments.DefaultAPIConfig(), dbClient)
 	mux := http.NewServeMux()
 	registry := prometheus.NewRegistry()
 	api.Init(mux, registry, log.Log)

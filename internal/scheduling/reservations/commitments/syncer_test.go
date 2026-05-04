@@ -7,14 +7,15 @@ import (
 	"context"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -273,44 +274,31 @@ func TestSyncer_SyncReservations_InstanceCommitments(t *testing.T) {
 		return
 	}
 
-	// Verify that reservations were created
-	var reservations v1alpha1.ReservationList
-	err = k8sClient.List(context.Background(), &reservations)
-	if err != nil {
-		t.Errorf("Failed to list reservations: %v", err)
-		return
+	// Verify one CommittedResource CRD was created with the correct spec
+	var crList v1alpha1.CommittedResourceList
+	if err := k8sClient.List(context.Background(), &crList); err != nil {
+		t.Fatalf("Failed to list committed resources: %v", err)
 	}
-
-	// Should have 2 reservations (Amount = 2, each for smallest flavor)
-	if len(reservations.Items) != 2 {
-		t.Errorf("Expected 2 reservations, got %d", len(reservations.Items))
-		return
+	if len(crList.Items) != 1 {
+		t.Fatalf("Expected 1 CommittedResource, got %d", len(crList.Items))
 	}
-
-	// Verify the first reservation
-	res := reservations.Items[0]
-	if res.Spec.CommittedResourceReservation == nil {
-		t.Errorf("Expected CommittedResourceReservation to be set")
-		return
+	cr := crList.Items[0]
+	if cr.Name != "commitment-12345-67890-abcdef" {
+		t.Errorf("Expected name commitment-12345-67890-abcdef, got %s", cr.Name)
 	}
-	if res.Spec.CommittedResourceReservation.ProjectID != "test-project-1" {
-		t.Errorf("Expected project ID test-project-1, got %v", res.Spec.CommittedResourceReservation.ProjectID)
+	if cr.Spec.ProjectID != "test-project-1" {
+		t.Errorf("Expected projectID test-project-1, got %s", cr.Spec.ProjectID)
 	}
-
-	if res.Spec.CommittedResourceReservation.ResourceGroup != "test_group_v1" {
-		t.Errorf("Expected resource group test_group_v1, got %v", res.Spec.CommittedResourceReservation.ResourceGroup)
+	if cr.Spec.FlavorGroupName != "test_group_v1" {
+		t.Errorf("Expected flavorGroupName test_group_v1, got %s", cr.Spec.FlavorGroupName)
 	}
-
-	// Check resource values - should be sized for the flavor that fits
-	// With 2048MB total capacity, we can fit 2x 1024MB flavors
-	expectedMemory := resource.MustParse("1073741824") // 1024MB in bytes
-	if !res.Spec.Resources[hv1.ResourceMemory].Equal(expectedMemory) {
-		t.Errorf("Expected memory %v, got %v", expectedMemory, res.Spec.Resources[hv1.ResourceMemory])
+	if cr.Spec.State != v1alpha1.CommitmentStatusConfirmed {
+		t.Errorf("Expected state confirmed, got %s", cr.Spec.State)
 	}
-
-	expectedVCPUs := resource.MustParse("2")
-	if !res.Spec.Resources[hv1.ResourceCPU].Equal(expectedVCPUs) {
-		t.Errorf("Expected vCPUs %v, got %v", expectedVCPUs, res.Spec.Resources[hv1.ResourceCPU])
+	// Amount = 2 slots × 1024 MiB = 2 GiB
+	expectedAmount := resource.NewQuantity(2*1024*1024*1024, resource.BinarySI)
+	if !cr.Spec.Amount.Equal(*expectedAmount) {
+		t.Errorf("Expected amount %v, got %v", expectedAmount, cr.Spec.Amount)
 	}
 }
 
@@ -320,7 +308,6 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 		t.Fatalf("Failed to add scheme: %v", err)
 	}
 
-	// Create flavor group knowledge CRD
 	flavorGroupsKnowledge := createFlavorGroupKnowledge(t, map[string]FlavorGroupData{
 		"new_group_v1": {
 			LargestFlavorName:      "new-flavor",
@@ -332,36 +319,26 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 		},
 	})
 
-	// Create an existing reservation with mismatched project/flavor group
-	// The ReservationManager will delete this and create a new one
-	existingReservation := &v1alpha1.Reservation{
-		ObjectMeta: ctrl.ObjectMeta{
-			Name: "commitment-12345-67890-abcdef-0",
-			Labels: map[string]string{
-				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-			},
-		},
-		Spec: v1alpha1.ReservationSpec{
-			Type: v1alpha1.ReservationTypeCommittedResource,
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				ProjectID:     "old-project",
-				ResourceName:  "old-flavor",
-				ResourceGroup: "old_group",
-				Creator:       CreatorValue,
-			},
-			Resources: map[hv1.ResourceName]resource.Quantity{
-				hv1.ResourceMemory: resource.MustParse("512Mi"),
-				hv1.ResourceCPU:    resource.MustParse("1"),
-			},
+	// Pre-existing CommittedResource CRD with stale spec; syncer should update it.
+	existingCR := &v1alpha1.CommittedResource{
+		ObjectMeta: metav1.ObjectMeta{Name: "commitment-12345-67890-abcdef"},
+		Spec: v1alpha1.CommittedResourceSpec{
+			CommitmentUUID:   "12345-67890-abcdef",
+			FlavorGroupName:  "old_group",
+			ResourceType:     v1alpha1.CommittedResourceTypeMemory,
+			Amount:           *resource.NewQuantity(512*1024*1024, resource.BinarySI),
+			ProjectID:        "old-project",
+			DomainID:         "old-domain",
+			AvailabilityZone: "az1",
+			State:            v1alpha1.CommitmentStatusConfirmed,
 		},
 	}
 
 	k8sClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(existingReservation, flavorGroupsKnowledge).
+		WithObjects(existingCR, flavorGroupsKnowledge).
 		Build()
 
-	// Create mock commitment that will replace the existing reservation
 	mockCommitments := []Commitment{
 		{
 			ID:               1,
@@ -386,57 +363,29 @@ func TestSyncer_SyncReservations_UpdateExisting(t *testing.T) {
 			return result, nil
 		},
 		listProjectsFunc: func(ctx context.Context) ([]Project, error) {
-			return []Project{
-				{ID: "new-project", DomainID: "new-domain", Name: "New Project"},
-			}, nil
-		},
-		listServersFunc: func(ctx context.Context, projects ...Project) (map[string][]Server, error) {
-			return map[string][]Server{}, nil // No active servers
-		},
-		initFunc: func(ctx context.Context, client client.Client, conf SyncerConfig) error {
-			// No-op for init
-			return nil
+			return []Project{{ID: "new-project", DomainID: "new-domain"}}, nil
 		},
 	}
 
-	syncer := &Syncer{
-		CommitmentsClient: mockClient,
-		Client:            k8sClient,
+	syncer := &Syncer{CommitmentsClient: mockClient, Client: k8sClient}
+
+	if err := syncer.SyncReservations(context.Background()); err != nil {
+		t.Fatalf("SyncReservations() error = %v", err)
 	}
 
-	err := syncer.SyncReservations(context.Background())
-	if err != nil {
-		t.Errorf("SyncReservations() error = %v", err)
-		return
+	var crList v1alpha1.CommittedResourceList
+	if err := k8sClient.List(context.Background(), &crList); err != nil {
+		t.Fatalf("Failed to list committed resources: %v", err)
 	}
-
-	// Verify that reservations were updated (old one deleted, new one created)
-	// The new reservation will be at index 0 since the old one was deleted first
-	var reservations v1alpha1.ReservationList
-	err = k8sClient.List(context.Background(), &reservations)
-	if err != nil {
-		t.Errorf("Failed to list reservations: %v", err)
-		return
+	if len(crList.Items) != 1 {
+		t.Fatalf("Expected 1 CommittedResource, got %d", len(crList.Items))
 	}
-
-	if len(reservations.Items) != 1 {
-		t.Errorf("Expected 1 reservation, got %d", len(reservations.Items))
-		return
+	cr := crList.Items[0]
+	if cr.Spec.ProjectID != "new-project" {
+		t.Errorf("Expected projectID new-project, got %s", cr.Spec.ProjectID)
 	}
-
-	newReservation := reservations.Items[0]
-
-	// Verify the new reservation has correct values
-	if newReservation.Spec.CommittedResourceReservation == nil {
-		t.Errorf("Expected CommittedResourceReservation to be set")
-		return
-	}
-	if newReservation.Spec.CommittedResourceReservation.ProjectID != "new-project" {
-		t.Errorf("Expected project ID new-project, got %v", newReservation.Spec.CommittedResourceReservation.ProjectID)
-	}
-
-	if newReservation.Spec.CommittedResourceReservation.ResourceGroup != "new_group_v1" {
-		t.Errorf("Expected resource group new_group_v1, got %v", newReservation.Spec.CommittedResourceReservation.ResourceGroup)
+	if cr.Spec.FlavorGroupName != "new_group_v1" {
+		t.Errorf("Expected flavorGroupName new_group_v1, got %s", cr.Spec.FlavorGroupName)
 	}
 }
 
@@ -510,19 +459,14 @@ func TestSyncer_SyncReservations_UnitMismatch(t *testing.T) {
 		return
 	}
 
-	// Verify that NO reservations were created due to unit mismatch
-	// The commitment is skipped and Cortex trusts existing CRDs
-	var reservations v1alpha1.ReservationList
-	err = k8sClient.List(context.Background(), &reservations)
-	if err != nil {
-		t.Errorf("Failed to list reservations: %v", err)
-		return
+	// Verify that NO CommittedResource CRDs were created due to unit mismatch.
+	// The commitment is skipped and Cortex trusts existing CRDs.
+	var crList v1alpha1.CommittedResourceList
+	if err := k8sClient.List(context.Background(), &crList); err != nil {
+		t.Fatalf("Failed to list committed resources: %v", err)
 	}
-
-	// Should have 0 reservations - commitment is skipped due to unit mismatch
-	// Cortex waits for Limes to update the unit before processing
-	if len(reservations.Items) != 0 {
-		t.Errorf("Expected 0 reservations (commitment skipped due to unit mismatch), got %d", len(reservations.Items))
+	if len(crList.Items) != 0 {
+		t.Errorf("Expected 0 CommittedResource CRDs (commitment skipped due to unit mismatch), got %d", len(crList.Items))
 	}
 }
 
@@ -594,16 +538,13 @@ func TestSyncer_SyncReservations_UnitMatch(t *testing.T) {
 		return
 	}
 
-	// Verify that reservations were created
-	var reservations v1alpha1.ReservationList
-	err = k8sClient.List(context.Background(), &reservations)
-	if err != nil {
-		t.Errorf("Failed to list reservations: %v", err)
-		return
+	// Verify that one CommittedResource CRD was created
+	var crList v1alpha1.CommittedResourceList
+	if err := k8sClient.List(context.Background(), &crList); err != nil {
+		t.Fatalf("Failed to list committed resources: %v", err)
 	}
-
-	if len(reservations.Items) != 2 {
-		t.Errorf("Expected 2 reservations, got %d", len(reservations.Items))
+	if len(crList.Items) != 1 {
+		t.Errorf("Expected 1 CommittedResource CRD, got %d", len(crList.Items))
 	}
 }
 
@@ -679,16 +620,13 @@ func TestSyncer_SyncReservations_EmptyUUID(t *testing.T) {
 		return
 	}
 
-	// Verify that no reservations were created due to empty UUID
-	var reservations v1alpha1.ReservationList
-	err = k8sClient.List(context.Background(), &reservations)
-	if err != nil {
-		t.Errorf("Failed to list reservations: %v", err)
-		return
+	// Verify that no CommittedResource CRDs were created due to empty UUID
+	var crList v1alpha1.CommittedResourceList
+	if err := k8sClient.List(context.Background(), &crList); err != nil {
+		t.Fatalf("Failed to list committed resources: %v", err)
 	}
-
-	if len(reservations.Items) != 0 {
-		t.Errorf("Expected 0 reservations due to empty UUID, got %d", len(reservations.Items))
+	if len(crList.Items) != 0 {
+		t.Errorf("Expected 0 CommittedResource CRDs due to empty UUID, got %d", len(crList.Items))
 	}
 }
 
@@ -710,16 +648,16 @@ func TestSyncer_SyncReservations_StatusFilter(t *testing.T) {
 	})
 
 	tests := []struct {
-		name              string
-		status            string
-		expectReservation bool
+		name     string
+		status   string
+		expectCR bool
 	}{
-		{"confirmed is processed", "confirmed", true},
-		{"guaranteed is processed", "guaranteed", true},
-		{"planned is skipped", "planned", false},
-		{"pending is skipped", "pending", false},
-		{"superseded is skipped", "superseded", false},
-		{"expired is skipped", "expired", false},
+		{"confirmed creates CR", "confirmed", true},
+		{"guaranteed creates CR", "guaranteed", true},
+		{"planned creates CR", "planned", true},
+		{"pending creates CR", "pending", true},
+		{"superseded does not create CR", "superseded", false},
+		{"expired does not create CR", "expired", false},
 		{"empty status is skipped", "", false},
 	}
 
@@ -768,17 +706,288 @@ func TestSyncer_SyncReservations_StatusFilter(t *testing.T) {
 				t.Fatalf("SyncReservations() error = %v", err)
 			}
 
-			var reservations v1alpha1.ReservationList
-			if err := k8sClient.List(context.Background(), &reservations); err != nil {
-				t.Fatalf("Failed to list reservations: %v", err)
+			var crList v1alpha1.CommittedResourceList
+			if err := k8sClient.List(context.Background(), &crList); err != nil {
+				t.Fatalf("Failed to list committed resources: %v", err)
 			}
 
-			if tc.expectReservation && len(reservations.Items) == 0 {
-				t.Errorf("status=%q: expected reservation to be created, got none", tc.status)
+			if tc.expectCR && len(crList.Items) == 0 {
+				t.Errorf("status=%q: expected CommittedResource CRD to be created, got none", tc.status)
 			}
-			if !tc.expectReservation && len(reservations.Items) != 0 {
-				t.Errorf("status=%q: expected no reservation, got %d", tc.status, len(reservations.Items))
+			if !tc.expectCR && len(crList.Items) != 0 {
+				t.Errorf("status=%q: expected no CommittedResource CRD, got %d", tc.status, len(crList.Items))
 			}
 		})
+	}
+}
+
+func TestSyncer_SyncReservations_StaleCRCount(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheme: %v", err)
+	}
+
+	flavorGroupsKnowledge := createFlavorGroupKnowledge(t, map[string]FlavorGroupData{
+		"test_group_v1": {
+			LargestFlavorName:      "test-flavor",
+			LargestFlavorVCPUs:     2,
+			LargestFlavorMemoryMB:  1024,
+			SmallestFlavorName:     "test-flavor",
+			SmallestFlavorVCPUs:    2,
+			SmallestFlavorMemoryMB: 1024,
+		},
+	})
+
+	// Pre-existing CRD whose commitment no longer appears in Limes
+	staleCR := &v1alpha1.CommittedResource{
+		ObjectMeta: metav1.ObjectMeta{Name: "commitment-stale-uuid-1234"},
+		Spec: v1alpha1.CommittedResourceSpec{
+			CommitmentUUID:   "stale-uuid-1234",
+			FlavorGroupName:  "test_group_v1",
+			ResourceType:     v1alpha1.CommittedResourceTypeMemory,
+			Amount:           *resource.NewQuantity(1024*1024*1024, resource.BinarySI),
+			ProjectID:        "test-project",
+			DomainID:         "test-domain",
+			AvailabilityZone: "az1",
+			State:            v1alpha1.CommitmentStatusConfirmed,
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+		},
+	}
+
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(staleCR, flavorGroupsKnowledge).
+		Build()
+
+	// Limes returns no commitments (stale-uuid-1234 is gone)
+	mockClient := &mockCommitmentsClient{
+		listCommitmentsByIDFunc: func(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
+			return map[string]Commitment{}, nil
+		},
+		listProjectsFunc: func(ctx context.Context) ([]Project, error) {
+			return []Project{{ID: "test-project", DomainID: "test-domain"}}, nil
+		},
+	}
+
+	monitor := NewSyncerMonitor()
+	syncer := &Syncer{CommitmentsClient: mockClient, Client: k8sClient, monitor: monitor}
+
+	if err := syncer.SyncReservations(context.Background()); err != nil {
+		t.Fatalf("SyncReservations() error = %v", err)
+	}
+
+	// Stale CRD must still exist (syncer does not delete)
+	var crList v1alpha1.CommittedResourceList
+	if err := k8sClient.List(context.Background(), &crList); err != nil {
+		t.Fatalf("Failed to list committed resources: %v", err)
+	}
+	if len(crList.Items) != 1 {
+		t.Errorf("Expected stale CRD to be preserved, got %d CRDs", len(crList.Items))
+	}
+
+	// Gauge must reflect the stale count
+	ch := make(chan prometheus.Metric, 10)
+	monitor.staleCRs.Collect(ch)
+	close(ch)
+	m := <-ch
+	var dto dto.Metric
+	if err := m.Write(&dto); err != nil {
+		t.Fatalf("failed to read metric: %v", err)
+	}
+	if got := dto.GetGauge().GetValue(); got != 1 {
+		t.Errorf("Expected staleCRs gauge=1, got %v", got)
+	}
+}
+
+func TestSyncer_SyncReservations_TerminalState_NoCRDExists(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheme: %v", err)
+	}
+
+	flavorGroupsKnowledge := createFlavorGroupKnowledge(t, map[string]FlavorGroupData{
+		"test_group_v1": {SmallestFlavorName: "f", SmallestFlavorVCPUs: 2, SmallestFlavorMemoryMB: 1024,
+			LargestFlavorName: "f", LargestFlavorVCPUs: 2, LargestFlavorMemoryMB: 1024},
+	})
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(flavorGroupsKnowledge).Build()
+
+	for _, status := range []string{"superseded", "expired"} {
+		t.Run(status, func(t *testing.T) {
+			mockClient := &mockCommitmentsClient{
+				listCommitmentsByIDFunc: func(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
+					return map[string]Commitment{
+						"term-uuid-1234": {
+							ID: 1, UUID: "term-uuid-1234", ServiceType: "compute",
+							ResourceName: "hw_version_test_group_v1_ram", AvailabilityZone: "az1",
+							Amount: 1, Status: status, ProjectID: "p", DomainID: "d",
+						},
+					}, nil
+				},
+				listProjectsFunc: func(ctx context.Context) ([]Project, error) {
+					return []Project{{ID: "p", DomainID: "d"}}, nil
+				},
+			}
+			syncer := &Syncer{CommitmentsClient: mockClient, Client: k8sClient}
+			if err := syncer.SyncReservations(context.Background()); err != nil {
+				t.Fatalf("SyncReservations() error = %v", err)
+			}
+			var crList v1alpha1.CommittedResourceList
+			if err := k8sClient.List(context.Background(), &crList); err != nil {
+				t.Fatalf("Failed to list: %v", err)
+			}
+			if len(crList.Items) != 0 {
+				t.Errorf("status=%q: expected no CRD to be created, got %d", status, len(crList.Items))
+			}
+		})
+	}
+}
+
+func TestSyncer_SyncReservations_TerminalState_ExistingCRDUpdated(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheme: %v", err)
+	}
+
+	flavorGroupsKnowledge := createFlavorGroupKnowledge(t, map[string]FlavorGroupData{
+		"test_group_v1": {SmallestFlavorName: "f", SmallestFlavorVCPUs: 2, SmallestFlavorMemoryMB: 1024,
+			LargestFlavorName: "f", LargestFlavorVCPUs: 2, LargestFlavorMemoryMB: 1024},
+	})
+
+	existingCR := &v1alpha1.CommittedResource{
+		ObjectMeta: metav1.ObjectMeta{Name: "commitment-term-uuid-1234"},
+		Spec: v1alpha1.CommittedResourceSpec{
+			CommitmentUUID: "term-uuid-1234", FlavorGroupName: "test_group_v1",
+			ResourceType: v1alpha1.CommittedResourceTypeMemory,
+			Amount:       *resource.NewQuantity(1024*1024*1024, resource.BinarySI),
+			ProjectID:    "p", DomainID: "d", AvailabilityZone: "az1",
+			State: v1alpha1.CommitmentStatusConfirmed,
+		},
+	}
+
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingCR, flavorGroupsKnowledge).Build()
+
+	mockClient := &mockCommitmentsClient{
+		listCommitmentsByIDFunc: func(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
+			return map[string]Commitment{
+				"term-uuid-1234": {
+					ID: 1, UUID: "term-uuid-1234", ServiceType: "compute",
+					ResourceName: "hw_version_test_group_v1_ram", AvailabilityZone: "az1",
+					Amount: 1, Status: "superseded", ProjectID: "p", DomainID: "d",
+				},
+			}, nil
+		},
+		listProjectsFunc: func(ctx context.Context) ([]Project, error) {
+			return []Project{{ID: "p", DomainID: "d"}}, nil
+		},
+	}
+
+	syncer := &Syncer{CommitmentsClient: mockClient, Client: k8sClient}
+	if err := syncer.SyncReservations(context.Background()); err != nil {
+		t.Fatalf("SyncReservations() error = %v", err)
+	}
+
+	var crList v1alpha1.CommittedResourceList
+	if err := k8sClient.List(context.Background(), &crList); err != nil {
+		t.Fatalf("Failed to list: %v", err)
+	}
+	if len(crList.Items) != 1 {
+		t.Fatalf("Expected CRD to be preserved, got %d", len(crList.Items))
+	}
+	if crList.Items[0].Spec.State != v1alpha1.CommitmentStatusSuperseded {
+		t.Errorf("Expected state superseded, got %s", crList.Items[0].Spec.State)
+	}
+}
+
+func TestSyncer_SyncReservations_ExpiredByTime_NoCRDCreated(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheme: %v", err)
+	}
+
+	flavorGroupsKnowledge := createFlavorGroupKnowledge(t, map[string]FlavorGroupData{
+		"test_group_v1": {SmallestFlavorName: "f", SmallestFlavorVCPUs: 2, SmallestFlavorMemoryMB: 1024,
+			LargestFlavorName: "f", LargestFlavorVCPUs: 2, LargestFlavorMemoryMB: 1024},
+	})
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(flavorGroupsKnowledge).Build()
+
+	pastTime := uint64(1) // Unix epoch — well in the past
+	mockClient := &mockCommitmentsClient{
+		listCommitmentsByIDFunc: func(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
+			return map[string]Commitment{
+				"exp-uuid-1234": {
+					ID: 1, UUID: "exp-uuid-1234", ServiceType: "compute",
+					ResourceName: "hw_version_test_group_v1_ram", AvailabilityZone: "az1",
+					Amount: 1, Status: "confirmed", ExpiresAt: pastTime,
+					ProjectID: "p", DomainID: "d",
+				},
+			}, nil
+		},
+		listProjectsFunc: func(ctx context.Context) ([]Project, error) {
+			return []Project{{ID: "p", DomainID: "d"}}, nil
+		},
+	}
+
+	syncer := &Syncer{CommitmentsClient: mockClient, Client: k8sClient}
+	if err := syncer.SyncReservations(context.Background()); err != nil {
+		t.Fatalf("SyncReservations() error = %v", err)
+	}
+
+	var crList v1alpha1.CommittedResourceList
+	if err := k8sClient.List(context.Background(), &crList); err != nil {
+		t.Fatalf("Failed to list: %v", err)
+	}
+	if len(crList.Items) != 0 {
+		t.Errorf("Expected no CRD created for past-expiry confirmed commitment, got %d", len(crList.Items))
+	}
+}
+
+func TestSyncer_SyncReservations_GC_ExpiredEndTime(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheme: %v", err)
+	}
+
+	flavorGroupsKnowledge := createFlavorGroupKnowledge(t, map[string]FlavorGroupData{
+		"test_group_v1": {SmallestFlavorName: "f", SmallestFlavorVCPUs: 2, SmallestFlavorMemoryMB: 1024,
+			LargestFlavorName: "f", LargestFlavorVCPUs: 2, LargestFlavorMemoryMB: 1024},
+	})
+
+	pastTime := metav1.NewTime(time.Now().Add(-time.Hour))
+	expiredCR := &v1alpha1.CommittedResource{
+		ObjectMeta: metav1.ObjectMeta{Name: "commitment-gc-uuid-1234"},
+		Spec: v1alpha1.CommittedResourceSpec{
+			CommitmentUUID: "gc-uuid-1234", FlavorGroupName: "test_group_v1",
+			ResourceType: v1alpha1.CommittedResourceTypeMemory,
+			Amount:       *resource.NewQuantity(1024*1024*1024, resource.BinarySI),
+			ProjectID:    "p", DomainID: "d", AvailabilityZone: "az1",
+			State:            v1alpha1.CommitmentStatusConfirmed,
+			EndTime:          &pastTime,
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+		},
+	}
+
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(expiredCR, flavorGroupsKnowledge).Build()
+
+	// Limes no longer returns this commitment
+	mockClient := &mockCommitmentsClient{
+		listCommitmentsByIDFunc: func(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
+			return map[string]Commitment{}, nil
+		},
+		listProjectsFunc: func(ctx context.Context) ([]Project, error) {
+			return []Project{{ID: "p", DomainID: "d"}}, nil
+		},
+	}
+
+	syncer := &Syncer{CommitmentsClient: mockClient, Client: k8sClient}
+	if err := syncer.SyncReservations(context.Background()); err != nil {
+		t.Fatalf("SyncReservations() error = %v", err)
+	}
+
+	var crList v1alpha1.CommittedResourceList
+	if err := k8sClient.List(context.Background(), &crList); err != nil {
+		t.Fatalf("Failed to list: %v", err)
+	}
+	if len(crList.Items) != 0 {
+		t.Errorf("Expected expired CRD to be GC'd, got %d CRDs", len(crList.Items))
 	}
 }

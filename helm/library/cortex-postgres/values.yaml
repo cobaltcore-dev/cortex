@@ -3,6 +3,8 @@
 
 fullnameOverride: cortex-postgresql
 
+major: "18"
+
 image:
   repository: ghcr.io/cobaltcore-dev/cortex-postgres
   pullPolicy: IfNotPresent

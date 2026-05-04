@@ -36,7 +36,7 @@ func (api *HTTPAPI) HandleReportUsage(w http.ResponseWriter, r *http.Request) {
 	log := apiLog.WithValues("requestID", requestID, "endpoint", "report-usage")
 
 	// Check if API is enabled
-	if !api.config.EnableReportUsageAPI {
+	if !api.config.EnableReportUsage {
 		statusCode = http.StatusServiceUnavailable
 		log.Info("report-usage API is disabled, rejecting request")
 		http.Error(w, "report-usage API is disabled", statusCode)

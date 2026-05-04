@@ -5,22 +5,22 @@
 apiVersion: autoscaling.k8s.io/v1
 kind: VerticalPodAutoscaler
 metadata:
-  name: {{ include "cortex-postgres.fullname" . }}-vpa
+  name: {{ include "cortex-postgres.versionedFullname" . }}-vpa
   labels:
-    app: {{ include "cortex-postgres.fullname" . }}
+    app: {{ include "cortex-postgres.versionedFullname" . }}
     {{- include "cortex-postgres.labels" . | nindent 4 }}
 spec:
   targetRef:
     apiVersion: "apps/v1"
-    kind: "Deployment"
-    name: {{ include "cortex-postgres.fullname" . }}
+    kind: "StatefulSet"
+    name: {{ include "cortex-postgres.versionedFullname" . }}
   updatePolicy:
     updateMode: "Initial"
     minReplicas: 1
     maxReplicas: 1
   resourcePolicy:
     containerPolicies:
-      - containerName: {{ include "cortex-postgres.fullname" . }}
+      - containerName: {{ include "cortex-postgres.versionedFullname" . }}
         mode: "Auto"
         minAllowed:
           cpu: {{ .Values.resources.requests.cpu }}

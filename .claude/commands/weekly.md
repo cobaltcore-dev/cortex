@@ -58,7 +58,7 @@ Before dispatching subagents, gather all currently open pull requests so finding
 
 ## Phase 4: Dispatch — Hand off to subagents in parallel
 
-Dispatch both subagents **in parallel** using the Agent tool. Each subagent investigates and reports findings — they do NOT open pull requests.
+Dispatch all subagents **in parallel** using the Agent tool. The bug detective and docs expert investigate and report findings — they do NOT open pull requests. The postgres bumper is self-contained and opens its own PR if an update is needed.
 
 ### Subagent 1: Bug Detective
 
@@ -75,6 +75,15 @@ Use `subagent_type: "general-purpose"`.
 Read the instructions from `.claude/agents/docs-expert.md`. Send the agent a prompt that includes:
 1. The full digest from Phase 2
 2. The full instructions from the docs-expert agent file
+
+### Subagent 3: Postgres Bumper
+
+Use `subagent_type: "general-purpose"`.
+
+Read the instructions from `.claude/agents/postgres-bumper.md`. Send the agent a prompt that includes:
+1. The full instructions from the postgres-bumper agent file
+
+This agent does NOT need the weekly digest — it checks upstream independently and opens its own PR if an update is available.
 
 ---
 
@@ -135,6 +144,9 @@ After all work is done, produce a short summary:
 - Findings: N gaps found
 - Skipped (already covered by open PRs): N
 - PRs opened: list PR numbers/titles, or "none"
+
+### Postgres Bumper
+- Result: <"no update needed" / "patch update PR #NNN" / "major upgrade PR #NNN" / "skipped — existing PR found">
 
 ### Backlog (for future runs)
 - <title> — <one-line description>

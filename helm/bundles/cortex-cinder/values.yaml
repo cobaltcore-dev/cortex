@@ -38,7 +38,7 @@ sharedSSOCert: &sharedSSOCert
   selfSigned: "false"
 
 postgres:
-  host: cortex-cinder-postgresql
+  host: cortex-cinder-postgresql-v18
   user: postgres
   password: secret
   database: postgres
@@ -138,3 +138,4 @@ cortex-knowledge-controllers:
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
   fullnameOverride: cortex-cinder-postgresql
+  major: "18"

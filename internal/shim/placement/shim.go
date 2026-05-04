@@ -52,6 +52,18 @@ type requestIDContextKey struct{}
 // header value through the request lifecycle for tracing.
 var requestIDKey = requestIDContextKey{}
 
+// featureModeOverrideContextKey is a separate type for the per-request feature
+// mode override injected via the X-Cortex-Feature-Mode header.
+type featureModeOverrideContextKey struct{}
+
+// featureModeOverrideKey is the context key used to propagate the feature mode
+// override from the middleware to handlers.
+var featureModeOverrideKey = featureModeOverrideContextKey{}
+
+// headerFeatureModeOverride is the HTTP header that allows e2e tests to
+// override the configured feature mode on a per-request basis.
+const headerFeatureModeOverride = "X-Cortex-Feature-Mode"
+
 // FeatureMode controls how an endpoint group interacts with upstream
 // placement and the hypervisor CRD.
 type FeatureMode string
@@ -88,16 +100,40 @@ func (m FeatureMode) valid() bool {
 }
 
 // dispatchPassthroughOnly forwards in passthrough mode, returns 501 for
-// hybrid/crd, and 500 for unknown modes.
+// hybrid/crd, and 500 for unknown modes. These endpoints have no backing
+// config requirement so we pass true — the 501 response already guards
+// against actual nil dereferences.
 func (s *Shim) dispatchPassthroughOnly(w http.ResponseWriter, r *http.Request, mode FeatureMode) {
-	switch mode.orDefault() {
+	resolved := s.featureModeFromConfOrHeader(r, mode, true)
+	switch resolved {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 	case FeatureModeHybrid, FeatureModeCRD:
-		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", mode), http.StatusNotImplemented)
+		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", resolved), http.StatusNotImplemented)
 	default:
 		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
 	}
+}
+
+// featureModeFromConfOrHeader returns the effective feature mode for the
+// current request. If a valid override is present in the request context
+// (injected by wrapHandler from the X-Cortex-Feature-Mode header), the
+// override takes precedence — unless it would escalate to hybrid/crd without
+// the endpoint's backing config being available. Callers pass hasBackingConfig
+// to indicate whether the infrastructure required by hybrid/crd mode for their
+// specific endpoint was validated at startup.
+func (s *Shim) featureModeFromConfOrHeader(r *http.Request, configured FeatureMode, hasBackingConfig bool) FeatureMode {
+	override, ok := r.Context().Value(featureModeOverrideKey).(FeatureMode)
+	if !ok {
+		return configured.orDefault()
+	}
+	resolved := override.orDefault()
+	if resolved == FeatureModeHybrid || resolved == FeatureModeCRD {
+		if !hasBackingConfig {
+			return configured.orDefault()
+		}
+	}
+	return resolved
 }
 
 // featuresConfig controls the feature mode for each endpoint group.
@@ -129,6 +165,14 @@ type versioningConfig struct {
 // features.traits is hybrid or crd.
 type traitsConfig struct {
 	// ConfigMapName is the name of the ConfigMap used to persist traits.
+	// Must exist in the same namespace as the shim pod.
+	ConfigMapName string `json:"configMapName"`
+}
+
+// resourceClassesConfig configures the local resource class store used when
+// features.resourceClasses is hybrid or crd.
+type resourceClassesConfig struct {
+	// ConfigMapName is the name of the ConfigMap used to persist resource classes.
 	// Must exist in the same namespace as the shim pod.
 	ConfigMapName string `json:"configMapName"`
 }
@@ -178,6 +222,9 @@ type config struct {
 	// Traits configures the local trait store used when
 	// features.traits is hybrid or crd.
 	Traits *traitsConfig `json:"traits,omitempty"`
+	// ResourceClasses configures the local resource class store used when
+	// features.resourceClasses is hybrid or crd.
+	ResourceClasses *resourceClassesConfig `json:"resourceClasses,omitempty"`
 }
 
 // validate checks the config for required fields and returns an error if the
@@ -213,15 +260,27 @@ func (c *config) validate() error {
 		}
 	}
 	traitsMode := c.Features.Traits.orDefault()
-	if traitsMode == FeatureModeHybrid || traitsMode == FeatureModeCRD {
-		if c.Traits == nil {
-			return fmt.Errorf("traits config is required when features.traits is %s", traitsMode)
-		}
+	if traitsMode != FeatureModePassthrough && c.Traits == nil {
+		return fmt.Errorf("traits config is required when features.traits is %s", traitsMode)
+	}
+	if c.Traits != nil {
 		if c.Traits.ConfigMapName == "" {
-			return fmt.Errorf("traits.configMapName is required when features.traits is %s", traitsMode)
+			return errors.New("traits.configMapName is required when traits config is present")
 		}
-		if traitsMode == FeatureModeCRD && os.Getenv("POD_NAMESPACE") == "" {
-			return errors.New("pod namespace (POD_NAMESPACE) is required when features.traits is crd")
+		if os.Getenv("POD_NAMESPACE") == "" {
+			return errors.New("pod namespace (POD_NAMESPACE) is required when traits config is present")
+		}
+	}
+	rcMode := c.Features.ResourceClasses.orDefault()
+	if rcMode != FeatureModePassthrough && c.ResourceClasses == nil {
+		return fmt.Errorf("resourceClasses config is required when features.resourceClasses is %s", rcMode)
+	}
+	if c.ResourceClasses != nil {
+		if c.ResourceClasses.ConfigMapName == "" {
+			return errors.New("resourceClasses.configMapName is required when resourceClasses config is present")
+		}
+		if os.Getenv("POD_NAMESPACE") == "" {
+			return errors.New("pod namespace (POD_NAMESPACE) is required when resourceClasses config is present")
 		}
 	}
 	if c.Auth != nil && c.KeystoneURL == "" {
@@ -269,8 +328,8 @@ type Shim struct {
 	tokenCache *tokenCache
 	// tokenIntrospector validates tokens against Keystone.
 	tokenIntrospector tokenIntrospector
-	// resourceLocker serializes writes to the custom traits ConfigMap
-	// across replicas using a Kubernetes Lease.
+	// resourceLocker serializes writes to ConfigMaps across replicas
+	// using a Kubernetes Lease.
 	resourceLocker *resourcelock.ResourceLocker
 	// placementServiceClient is an authenticated gophercloud service client
 	// used by background tasks (trait sync) to make requests to upstream
@@ -399,7 +458,36 @@ func (s *Shim) Start(ctx context.Context) error {
 	if err := s.initPlacementServiceClient(ctx); err != nil {
 		return err
 	}
-	go s.startTraitSyncLoop(ctx)
+	if s.config.Traits != nil {
+		ts := NewTraitSyncer(
+			s.Client,
+			s.config.Traits.ConfigMapName,
+			os.Getenv("POD_NAMESPACE"),
+			s.placementServiceClient,
+			s.resourceLocker,
+		)
+		if err := ts.Init(ctx); err != nil {
+			return err
+		}
+		if s.config.Features.Traits.orDefault() != FeatureModeCRD {
+			go ts.Run(ctx)
+		}
+	}
+	if s.config.ResourceClasses != nil {
+		rs := NewResourceClassSyncer(
+			s.Client,
+			s.config.ResourceClasses.ConfigMapName,
+			os.Getenv("POD_NAMESPACE"),
+			s.placementServiceClient,
+			s.resourceLocker,
+		)
+		if err := rs.Init(ctx); err != nil {
+			return err
+		}
+		if s.config.Features.ResourceClasses.orDefault() != FeatureModeCRD {
+			go rs.Run(ctx)
+		}
+	}
 	return nil
 }
 
@@ -472,13 +560,10 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 		Buckets: prometheus.DefBuckets,
 	}, []string{"method", "pattern", "responsecode"})
 
-	traitsMode := s.config.Features.Traits.orDefault()
-	if traitsMode == FeatureModeHybrid || traitsMode == FeatureModeCRD {
-		s.resourceLocker = resourcelock.NewResourceLocker(
-			s.Client,
-			os.Getenv("POD_NAMESPACE"),
-		)
-	}
+	s.resourceLocker = resourcelock.NewResourceLocker(
+		s.Client,
+		os.Getenv("POD_NAMESPACE"),
+	)
 
 	// Check that the provided client is a multicluster client, since we need
 	// that to watch for hypervisors across clusters.

@@ -144,7 +144,7 @@ We use three different scheduler pipelines for failover reservations, each servi
 
 **Why:** When reusing a reservation, capacity is already reserved on the target host. We only need to verify that the VM is compatible with the host (traits, capabilities, AZ, etc.) without checking if there's enough free capacity.
 
-### `kvm-valid-host-new-failover-reservation`
+### `kvm-new-failover-reservation`
 **Used when:** Creating a new failover reservation.
 
 **Why:** When creating a new reservation, we need to find a host that:

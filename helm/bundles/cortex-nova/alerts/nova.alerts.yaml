@@ -505,7 +505,25 @@ groups:
         CRD retrieval. Limes scrapes may time out, affecting capacity reporting.
 
   # Committed Resource Syncer Alerts
-  - alert: CortexNovaCommittedResourceSyncerErrorsHigh
+  # These alerts only fire when the syncer is enabled (metrics are only registered when enabled).
+  # Absent metrics = syncer disabled = alerts inactive by design.
+  - alert: CortexNovaCommittedResourceSyncerNotRunning
+    expr: increase(cortex_committed_resource_syncer_duration_seconds_count{service="cortex-nova-metrics"}[3h]) < 1
+    for: 15m
+    labels:
+      context: committed-resource-syncer
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource syncer has not run in 3 hours"
+      description: >
+        No commitment sync has completed in the last 3 hours. The syncer runs hourly,
+        so at least 2 runs should appear in this window. Check that the syncer task
+        is healthy and Limes is reachable.
+
+  - alert: CortexNovaCommittedResourceSyncerErrors
     expr: increase(cortex_committed_resource_syncer_errors_total{service="cortex-nova-metrics"}[1h]) > 3
     for: 5m
     labels:
@@ -515,107 +533,14 @@ groups:
       severity: warning
       support_group: workload-management
     annotations:
-      summary: "Committed Resource syncer experiencing errors"
+      summary: "Committed Resource syncer is repeatedly failing"
       description: >
-        The committed resource syncer has encountered multiple errors in the last hour.
-        This may indicate connectivity issues with Limes, malformed API responses,
-        or failures writing reservation CRDs. Check the syncer logs for error details.
-
-  - alert: CortexNovaCommittedResourceSyncerUnitMismatchRateHigh
-    expr: |
-      (
-        sum(rate(cortex_committed_resource_syncer_commitments_skipped_total{service="cortex-nova-metrics", reason="unit_mismatch"}[1h]))
-        / sum(rate(cortex_committed_resource_syncer_commitments_total{service="cortex-nova-metrics"}[1h]))
-      ) > 0.05
-      and on() sum(rate(cortex_committed_resource_syncer_commitments_total{service="cortex-nova-metrics"}[1h])) > 0
-    for: 15m
-    labels:
-      context: committed-resource-syncer
-      dashboard: cortex-status-dashboard/cortex-status-dashboard
-      service: cortex
-      severity: warning
-      support_group: workload-management
-    annotations:
-      summary: "Committed Resource syncer unit mismatch rate >5%"
-      description: >
-        More than 5% of commitments are being skipped due to unit mismatches between
-        Limes and Cortex flavor groups. This happens when Limes has not yet been
-        updated to use the new unit format after a flavor group change. The affected
-        commitments will keep their existing reservations until Limes notices the update.
-        Check the logs if this error persists for longer time.
-
-  - alert: CortexNovaCommittedResourceSyncerUnknownFlavorGroupRateHigh
-    expr: |
-      (
-        sum(rate(cortex_committed_resource_syncer_commitments_skipped_total{service="cortex-nova-metrics", reason="unknown_flavor_group"}[1h]))
-        / sum(rate(cortex_committed_resource_syncer_commitments_total{service="cortex-nova-metrics"}[1h]))
-      ) > 0
-      and on() sum(rate(cortex_committed_resource_syncer_commitments_total{service="cortex-nova-metrics"}[1h])) > 0
-    for: 15m
-    labels:
-      context: committed-resource-syncer
-      dashboard: cortex-status-dashboard/cortex-status-dashboard
-      service: cortex
-      severity: warning
-      support_group: workload-management
-    annotations:
-      summary: "Committed Resource syncer unknown flavor group rate >0%"
-      description: >
-        Some commitments reference flavor groups that don't exist in
-        Cortex Knowledge (anymore). This may indicate that flavor group configuration is
-        out of sync between Limes and Cortex, or that Knowledge extraction is failing.
-        Check the flavor group Knowledge CRD and history to see what was changed.
-
-  - alert: CortexNovaCommittedResourceSyncerLocalChangeRateHigh
-    expr: |
-      (
-        (
-          rate(cortex_committed_resource_syncer_reservations_created_total{service="cortex-nova-metrics"}[1h]) +
-          rate(cortex_committed_resource_syncer_reservations_deleted_total{service="cortex-nova-metrics"}[1h]) +
-          rate(cortex_committed_resource_syncer_reservations_repaired_total{service="cortex-nova-metrics"}[1h])
-        ) / rate(cortex_committed_resource_syncer_commitments_processed_total{service="cortex-nova-metrics"}[1h])
-      ) > 0.01
-      and on() rate(cortex_committed_resource_syncer_commitments_processed_total{service="cortex-nova-metrics"}[1h]) > 0
-    for: 15m
-    labels:
-      context: committed-resource-syncer
-      dashboard: cortex-status-dashboard/cortex-status-dashboard
-      service: cortex
-      severity: warning
-      support_group: workload-management
-    annotations:
-      summary: "Committed Resource syncer local change rate >1%"
-      description: >
-        More than 1% of synced commitments are requiring reservation changes
-        (creates, deletes, or repairs). This is higher than expected for steady-state
-        operation and may indicate data inconsistencies, external modifications to
-        reservations, or issues with the CRDs. Check Cortex logs for details.
-
-  - alert: CortexNovaCommittedResourceSyncerRepairRateHigh
-    expr: |
-      (
-        rate(cortex_committed_resource_syncer_reservations_repaired_total{service="cortex-nova-metrics"}[1h])
-        / rate(cortex_committed_resource_syncer_commitments_processed_total{service="cortex-nova-metrics"}[1h])
-      ) > 0
-      and on() rate(cortex_committed_resource_syncer_commitments_processed_total{service="cortex-nova-metrics"}[1h]) > 0
-    for: 15m
-    labels:
-      context: committed-resource-syncer
-      dashboard: cortex-status-dashboard/cortex-status-dashboard
-      service: cortex
-      severity: warning
-      support_group: workload-management
-    annotations:
-      summary: "Committed Resource syncer repair rate >0%"
-      description: >
-        Some commitments have reservations that needed repair
-        (wrong metadata like project ID or flavor group). This may indicate data
-        corruption, bugs in reservation creation, or external modifications.
-        Reservations are automatically repaired, but the root cause should be
-        investigated if this alert persists.
+        The committed resource syncer has encountered more than 3 errors in the last
+        hour. Check syncer logs for details; common causes are connectivity issues
+        with Limes or failures writing CommittedResource CRDs.
 
   - alert: CortexNovaDoesntFindValidKVMHosts
-    expr: sum by (az, hvtype) (cortex_vm_faults{hvtype=~"CH|QEMU",faultmsg=~".*No valid host was found.*"}) > 0
+    expr: sum by (az, hvtype) (increase(cortex_vm_faults{hvtype=~"CH|QEMU",faultmsg=~".*No valid host was found.*"}[5m])) > 0
     for: 5m
     labels:
       context: scheduling
@@ -627,7 +552,7 @@ groups:
     annotations:
       summary: "Nova scheduling cannot find valid KVM hosts"
       description: >
-        Cortex is seeing faulty vms in `{{$labels.az}}` where Nova scheduling
+        Cortex is seeing new faulty vms in `{{$labels.az}}` where Nova scheduling
         failed to find a valid `{{$labels.hvtype}}` host. This may indicate
         capacity issues, misconfigured filters, or resource constraints in the
         datacenter. Investigate the affected VMs and hypervisor availability.
