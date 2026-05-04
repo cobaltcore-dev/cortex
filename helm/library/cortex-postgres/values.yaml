@@ -3,7 +3,7 @@
 
 fullnameOverride: cortex-postgresql
 
-major: "17"
+major: "18"
 
 image:
   repository: ghcr.io/cobaltcore-dev/cortex-postgres

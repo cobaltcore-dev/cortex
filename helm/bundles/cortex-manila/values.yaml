@@ -38,7 +38,7 @@ sharedSSOCert: &sharedSSOCert
   selfSigned: "false"
 
 postgres:
-  host: cortex-manila-postgresql-v17
+  host: cortex-manila-postgresql-v18
   user: postgres
   password: secret
   database: postgres
@@ -138,4 +138,4 @@ cortex-knowledge-controllers:
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
   fullnameOverride: cortex-manila-postgresql
-  major: "17"
+  major: "18"

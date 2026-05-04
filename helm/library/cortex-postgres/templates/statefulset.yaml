@@ -39,14 +39,12 @@ spec:
                 secretKeyRef:
                   name: {{ include "cortex-postgres.versionedFullname" . }}-secret
                   key: postgres-password
-            - name: PGDATA
-              value: /var/lib/postgresql/data/pgdata
           ports:
             - containerPort: 5432
               name: postgresql
           volumeMounts:
             - name: data
-              mountPath: /var/lib/postgresql/data
+              mountPath: /var/lib/postgresql
             - name: max-conns
               mountPath: /docker-entrypoint-initdb.d/max_conns.sql
               subPath: max_conns.sql
