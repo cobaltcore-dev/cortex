@@ -115,7 +115,7 @@ func (s *Shim) HandleCreateResourceProvider(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders)
+	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders, true)
 	switch mode {
 	case FeatureModePassthrough:
 		s.forward(w, r)
@@ -210,7 +210,7 @@ func (s *Shim) HandleShowResourceProvider(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders)
+	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders, true)
 	switch mode {
 	case FeatureModePassthrough:
 		s.forward(w, r)
@@ -280,7 +280,7 @@ func (s *Shim) HandleUpdateResourceProvider(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders)
+	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders, true)
 	switch mode {
 	case FeatureModePassthrough:
 		s.forward(w, r)
@@ -376,7 +376,7 @@ func (s *Shim) HandleDeleteResourceProvider(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders)
+	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders, true)
 	switch mode {
 	case FeatureModePassthrough:
 		s.forward(w, r)
@@ -452,7 +452,7 @@ type listResourceProvidersResponse struct {
 //
 // See: https://docs.openstack.org/api-ref/placement/#list-resource-providers
 func (s *Shim) HandleListResourceProviders(w http.ResponseWriter, r *http.Request) {
-	switch s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders) {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviders, true) {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 	case FeatureModeHybrid:
