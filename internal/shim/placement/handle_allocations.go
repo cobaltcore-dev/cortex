@@ -98,7 +98,7 @@ func hvToPlacementResources(resources map[hv1.ResourceName]resource.Quantity) ma
 //
 // https://docs.openstack.org/api-ref/placement/#manage-allocations
 func (s *Shim) HandleManageAllocations(w http.ResponseWriter, r *http.Request) {
-	switch s.featureModeFromConfOrHeader(r, s.config.Features.Allocations) {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.Allocations, true) {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 	case FeatureModeHybrid:
@@ -287,7 +287,7 @@ func (s *Shim) HandleListAllocations(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	switch s.featureModeFromConfOrHeader(r, s.config.Features.Allocations) {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.Allocations, true) {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 	case FeatureModeHybrid:
@@ -421,7 +421,7 @@ func (s *Shim) HandleUpdateAllocations(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	switch s.featureModeFromConfOrHeader(r, s.config.Features.Allocations) {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.Allocations, true) {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 	case FeatureModeHybrid:
@@ -646,7 +646,7 @@ func (s *Shim) HandleDeleteAllocations(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	switch s.featureModeFromConfOrHeader(r, s.config.Features.Allocations) {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.Allocations, true) {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 	case FeatureModeHybrid:
