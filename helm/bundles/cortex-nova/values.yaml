@@ -209,6 +209,8 @@ cortex-scheduling-controllers:
     limitOneNewReservationPerHypervisor: false
     # Size failover reservations based on LargestFlavor in the flavor group
     useFlavorGroupResources: false
+    # How often the commitments syncer reconciles Limes commitments to Reservation CRDs
+    committedResourceSyncInterval: "1h"
 
 cortex-knowledge-controllers:
   <<: *cortex

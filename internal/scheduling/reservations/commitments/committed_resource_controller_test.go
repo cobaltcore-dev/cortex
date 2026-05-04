@@ -528,6 +528,111 @@ func TestCommittedResourceController_Idempotent(t *testing.T) {
 	assertCondition(t, k8sClient, cr.Name, metav1.ConditionTrue, "Accepted")
 }
 
+// ============================================================================
+// Tests: checkChildReservationStatus generation guard
+// ============================================================================
+
+// TestCheckChildReservationStatus_GenerationGuard verifies the two-pass logic that
+// distinguishes a stale Ready=False (previous generation) from a current failure.
+func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
+	tests := []struct {
+		name          string
+		obsGen        int64
+		condStatus    metav1.ConditionStatus // "" = no condition set
+		condMessage   string
+		wantAllReady  bool
+		wantAnyFailed bool
+		wantReason    string
+	}{
+		{
+			name:          "Ready=False at stale generation: treated as pending",
+			obsGen:        1,
+			condStatus:    metav1.ConditionFalse,
+			condMessage:   "no hosts available",
+			wantAllReady:  false,
+			wantAnyFailed: false,
+		},
+		{
+			name:          "Ready=False at current generation: is a current failure",
+			obsGen:        2,
+			condStatus:    metav1.ConditionFalse,
+			condMessage:   "no hosts available",
+			wantAllReady:  false,
+			wantAnyFailed: true,
+			wantReason:    "no hosts available",
+		},
+		{
+			name:         "Ready=True at current generation: allReady",
+			obsGen:       2,
+			condStatus:   metav1.ConditionTrue,
+			wantAllReady: true,
+		},
+		{
+			name:          "no condition yet at current generation: still pending",
+			obsGen:        2,
+			condStatus:    "", // no condition
+			wantAllReady:  false,
+			wantAnyFailed: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := newCRTestScheme(t)
+			cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
+			cr.Generation = 2
+
+			child := &v1alpha1.Reservation{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-cr-0",
+					Labels: map[string]string{
+						v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+					},
+				},
+				Spec: v1alpha1.ReservationSpec{
+					Type: v1alpha1.ReservationTypeCommittedResource,
+					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+						CommitmentUUID:   cr.Spec.CommitmentUUID,
+						ParentGeneration: cr.Generation,
+					},
+				},
+			}
+			k8sClient := newCRTestClient(scheme, child)
+
+			child.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
+				ObservedParentGeneration: tt.obsGen,
+			}
+			if tt.condStatus != "" {
+				child.Status.Conditions = []metav1.Condition{{
+					Type:               v1alpha1.ReservationConditionReady,
+					Status:             tt.condStatus,
+					Reason:             "Test",
+					Message:            tt.condMessage,
+					LastTransitionTime: metav1.Now(),
+				}}
+			}
+			if err := k8sClient.Status().Update(context.Background(), child); err != nil {
+				t.Fatalf("set reservation status: %v", err)
+			}
+
+			controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme}
+			allReady, anyFailed, reason, err := controller.checkChildReservationStatus(context.Background(), cr, 1)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if allReady != tt.wantAllReady {
+				t.Errorf("allReady: want %v, got %v", tt.wantAllReady, allReady)
+			}
+			if anyFailed != tt.wantAnyFailed {
+				t.Errorf("anyFailed: want %v, got %v", tt.wantAnyFailed, anyFailed)
+			}
+			if reason != tt.wantReason {
+				t.Errorf("reason: want %q, got %q", tt.wantReason, reason)
+			}
+		})
+	}
+}
+
 func TestCommittedResourceController_Deletion(t *testing.T) {
 	scheme := newCRTestScheme(t)
 	cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)

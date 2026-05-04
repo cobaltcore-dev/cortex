@@ -537,6 +537,19 @@ func intgAcceptFirstScheduler(count int) http.HandlerFunc {
 	}
 }
 
+// intgRejectFirstScheduler returns a handler that rejects the first count placement calls
+// and accepts all subsequent ones. Used to test AllowRejection=false retry-until-success paths.
+func intgRejectFirstScheduler(count int) http.HandlerFunc {
+	var calls atomic.Int32
+	return func(w http.ResponseWriter, r *http.Request) {
+		if int(calls.Add(1)) <= count {
+			intgRejectScheduler(w, r)
+		} else {
+			intgAcceptScheduler(w, r)
+		}
+	}
+}
+
 // ============================================================================
 // Test object builders
 // ============================================================================

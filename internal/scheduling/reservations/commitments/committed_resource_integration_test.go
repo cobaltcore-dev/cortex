@@ -24,6 +24,7 @@ import (
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -491,6 +492,142 @@ func TestCRLifecycle(t *testing.T) {
 		crState := env.getCR(t, cr.Name)
 		if !meta.IsStatusConditionTrue(crState.Status.Conditions, v1alpha1.CommittedResourceConditionReady) {
 			t.Errorf("expected CR to be Ready=True after slot recreation")
+		}
+	})
+
+	t.Run("AcceptedAt: set when CR accepted", func(t *testing.T) {
+		env := newCRIntegrationEnv(t)
+		defer env.close()
+
+		cr := newTestCommittedResource("my-cr", v1alpha1.CommitmentStatusConfirmed)
+		if err := env.k8sClient.Create(context.Background(), cr); err != nil {
+			t.Fatalf("create CR: %v", err)
+		}
+
+		env.reconcileCR(t, cr.Name)
+		env.reconcileCR(t, cr.Name)
+		env.reconcileChildReservations(t, cr.Name)
+
+		crState := env.getCR(t, cr.Name)
+		if !meta.IsStatusConditionTrue(crState.Status.Conditions, v1alpha1.CommittedResourceConditionReady) {
+			t.Fatalf("expected CR to be Ready=True")
+		}
+		if crState.Status.AcceptedAt == nil {
+			t.Errorf("expected AcceptedAt to be set on acceptance")
+		}
+		if crState.Status.AcceptedAmount == nil {
+			t.Errorf("expected AcceptedAmount to be set on acceptance")
+		} else if crState.Status.AcceptedAmount.Cmp(resource.MustParse("4Gi")) != 0 {
+			t.Errorf("AcceptedAmount: want 4Gi, got %s", crState.Status.AcceptedAmount.String())
+		}
+	})
+
+	t.Run("resize failure: rolls back to AcceptedAmount, prior slot preserved", func(t *testing.T) {
+		// Scheduler: accepts the first placement call (initial 4 GiB slot), rejects all subsequent.
+		objects := []client.Object{newTestFlavorKnowledge(), intgHypervisor("host-1")}
+		env := newIntgEnv(t, objects, intgAcceptFirstScheduler(1))
+		defer env.close()
+
+		cr := intgCRAllowRejection("my-cr", "uuid-resize-0001", v1alpha1.CommitmentStatusConfirmed)
+		if err := env.k8sClient.Create(context.Background(), cr); err != nil {
+			t.Fatalf("create CR: %v", err)
+		}
+
+		// Phase 1: accept at 4 GiB (1 slot). Uses 1 scheduler call.
+		intgDriveToTerminal(t, env, []string{cr.Name})
+		var crState v1alpha1.CommittedResource
+		if err := env.k8sClient.Get(context.Background(), types.NamespacedName{Name: cr.Name}, &crState); err != nil {
+			t.Fatalf("get CR: %v", err)
+		}
+		if !meta.IsStatusConditionTrue(crState.Status.Conditions, v1alpha1.CommittedResourceConditionReady) {
+			t.Fatalf("phase 1: expected CR to be Ready=True after initial placement")
+		}
+		if crState.Status.AcceptedAmount == nil || crState.Status.AcceptedAmount.Cmp(resource.MustParse("4Gi")) != 0 {
+			t.Fatalf("phase 1: AcceptedAmount must be 4Gi, got %v", crState.Status.AcceptedAmount)
+		}
+
+		// Phase 2: resize to 8 GiB (needs 2 slots). Scheduler has no more accepts.
+		patch := client.MergeFrom(crState.DeepCopy())
+		crState.Spec.Amount = resource.MustParse("8Gi")
+		if err := env.k8sClient.Patch(context.Background(), &crState, patch); err != nil {
+			t.Fatalf("patch CR to 8Gi: %v", err)
+		}
+
+		ctx := context.Background()
+		crReq := ctrl.Request{NamespacedName: types.NamespacedName{Name: cr.Name}}
+
+		// CR controller: applyReservationState bumps gen on existing slot, creates 2nd slot.
+		env.crController.Reconcile(ctx, crReq) //nolint:errcheck
+		// Reservation controller: existing slot echoes new ParentGeneration (no scheduler call);
+		// new slot calls scheduler → rejected.
+		var resList v1alpha1.ReservationList
+		env.k8sClient.List(ctx, &resList, client.MatchingLabels{ //nolint:errcheck
+			v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+		})
+		for _, res := range resList.Items {
+			resReq := ctrl.Request{NamespacedName: types.NamespacedName{Name: res.Name}}
+			env.resController.Reconcile(ctx, resReq) //nolint:errcheck
+			env.resController.Reconcile(ctx, resReq) //nolint:errcheck
+		}
+		// CR controller: detects 2nd slot Ready=False → rollbackToAccepted (keeps 1 slot) → Rejected.
+		env.crController.Reconcile(ctx, crReq) //nolint:errcheck
+
+		// Rollback must preserve 1 slot (matching AcceptedAmount=4Gi), not delete all.
+		var finalList v1alpha1.ReservationList
+		if err := env.k8sClient.List(ctx, &finalList, client.MatchingLabels{
+			v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+		}); err != nil {
+			t.Fatalf("list reservations: %v", err)
+		}
+		if len(finalList.Items) != 1 {
+			t.Errorf("resize rollback: want 1 slot (AcceptedAmount), got %d", len(finalList.Items))
+		}
+		intgAssertCRCondition(t, env.k8sClient, []string{cr.Name}, metav1.ConditionFalse, v1alpha1.CommittedResourceReasonRejected)
+	})
+
+	t.Run("AllowRejection=false: eventually accepted after scheduler starts accepting", func(t *testing.T) {
+		// Scheduler rejects the first 2 calls (one per reservation controller reconcile pair),
+		// then accepts all subsequent. AllowRejection=false means the CR controller retries rather
+		// than rejecting, so the CR must eventually reach Accepted once the scheduler cooperates.
+		objects := []client.Object{newTestFlavorKnowledge(), intgHypervisor("host-1")}
+		env := newIntgEnv(t, objects, intgRejectFirstScheduler(2))
+		defer env.close()
+
+		cr := newTestCommittedResource("my-cr", v1alpha1.CommitmentStatusConfirmed)
+		// AllowRejection stays false (default), so placement failure must requeue, not reject.
+		if err := env.k8sClient.Create(context.Background(), cr); err != nil {
+			t.Fatalf("create CR: %v", err)
+		}
+
+		ctx := context.Background()
+		crReq := ctrl.Request{NamespacedName: types.NamespacedName{Name: cr.Name}}
+		for range 3 {
+			env.crController.Reconcile(ctx, crReq) //nolint:errcheck
+			var resList v1alpha1.ReservationList
+			env.k8sClient.List(ctx, &resList, client.MatchingLabels{ //nolint:errcheck
+				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+			})
+			for _, res := range resList.Items {
+				resReq := ctrl.Request{NamespacedName: types.NamespacedName{Name: res.Name}}
+				env.resController.Reconcile(ctx, resReq) //nolint:errcheck
+				env.resController.Reconcile(ctx, resReq) //nolint:errcheck
+			}
+			env.crController.Reconcile(ctx, crReq) //nolint:errcheck
+		}
+
+		var final v1alpha1.CommittedResource
+		if err := env.k8sClient.Get(ctx, types.NamespacedName{Name: cr.Name}, &final); err != nil {
+			t.Fatalf("get CR: %v", err)
+		}
+		cond := meta.FindStatusCondition(final.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+		if cond == nil {
+			t.Fatalf("no Ready condition after retries")
+		}
+		if cond.Reason == v1alpha1.CommittedResourceReasonRejected {
+			t.Errorf("AllowRejection=false: CR must not be Rejected, got Reason=%s", cond.Reason)
+		}
+		if cond.Status != metav1.ConditionTrue || cond.Reason != v1alpha1.CommittedResourceReasonAccepted {
+			t.Errorf("AllowRejection=false: expected Ready=True/Accepted after retries, got Ready=%s/Reason=%s", cond.Status, cond.Reason)
 		}
 	})
 }

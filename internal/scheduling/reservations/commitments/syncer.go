@@ -33,20 +33,6 @@ type SyncerConfig struct {
 	SyncInterval time.Duration `json:"committedResourceSyncInterval"`
 }
 
-func DefaultSyncerConfig() SyncerConfig {
-	return SyncerConfig{
-		SyncInterval: time.Hour,
-	}
-}
-
-// ApplyDefaults fills in any unset values with defaults.
-func (c *SyncerConfig) ApplyDefaults() {
-	defaults := DefaultSyncerConfig()
-	if c.SyncInterval == 0 {
-		c.SyncInterval = defaults.SyncInterval
-	}
-	// Note: KeystoneSecretRef and SSOSecretRef are not defaulted as they require explicit configuration
-}
 
 type Syncer struct {
 	// Client to fetch commitments from Limes

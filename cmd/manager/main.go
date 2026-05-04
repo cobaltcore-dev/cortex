@@ -363,7 +363,6 @@ func main() {
 
 	// Initialize commitments API for LIQUID interface (Postgres-backed usage reporting).
 	commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
-	commitmentsConfig.ApplyDefaults()
 	var commitmentsUsageDB commitments.UsageDBClient
 	if commitmentsConfig.DatasourceName != "" {
 		commitmentsUsageDB = commitments.NewDBUsageClient(multiclusterClient, commitmentsConfig.DatasourceName)
@@ -539,7 +538,6 @@ func main() {
 		monitor := reservations.NewMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&monitor)
 		commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
-		commitmentsConfig.ApplyDefaults()
 
 		if err := (&commitments.CommitmentReservationController{
 			Client: multiclusterClient,
@@ -723,7 +721,6 @@ func main() {
 		must.Succeed(metrics.Registry.Register(syncerMonitor))
 		syncer := commitments.NewSyncer(multiclusterClient, syncerMonitor)
 		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
-		syncerConfig.ApplyDefaults()
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: syncerConfig.SyncInterval,
