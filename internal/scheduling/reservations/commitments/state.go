@@ -97,6 +97,13 @@ type CommitmentState struct {
 	// When set (e.g. "<cr-name>-"), Reservation CRDs are named "<NamePrefix><slot-index>".
 	// Used by the CommittedResource controller; leave empty for the legacy syncer path.
 	NamePrefix string
+	// ParentGeneration is the Generation of the parent CommittedResource CRD. Written into
+	// Reservation spec so the Reservation controller can echo it back in status, letting
+	// the CR controller detect when all children have been processed for the current spec.
+	// Zero for syncer-created reservations (no parent CR).
+	ParentGeneration int64
+	// State is the lifecycle state from Limes (planned/pending/guaranteed/confirmed/superseded/expired).
+	State v1alpha1.CommitmentStatus
 }
 
 // FromCommitment converts Limes commitment to CommitmentState.
@@ -144,6 +151,7 @@ func FromCommitment(
 		AvailabilityZone: commitment.AvailabilityZone,
 		StartTime:        startTime,
 		EndTime:          endTime,
+		State:            v1alpha1.CommitmentStatus(commitment.Status),
 	}, nil
 }
 
@@ -151,6 +159,7 @@ func FromCommitment(
 func FromChangeCommitmentTargetState(
 	commitment liquid.Commitment,
 	projectID string,
+	domainID string,
 	flavorGroupName string,
 	flavorGroup compute.FlavorGroupFeature,
 	az string,
@@ -166,8 +175,8 @@ func FromChangeCommitmentTargetState(
 	var endTime *time.Time
 
 	switch commitment.NewStatus.UnwrapOr("none") {
-	// guaranteed and confirmed commitments are honored with start time now
-	case liquid.CommitmentStatusGuaranteed, liquid.CommitmentStatusConfirmed:
+	// pending, guaranteed, confirmed commitments are honored with Reservation slots.
+	case liquid.CommitmentStatusPending, liquid.CommitmentStatusGuaranteed, liquid.CommitmentStatusConfirmed:
 		amountMultiple = commitment.Amount
 		// Set start time: use ConfirmBy if available (when the commitment was confirmed),
 		// otherwise use time.Now() for immediate confirmation
@@ -187,7 +196,7 @@ func FromChangeCommitmentTargetState(
 	if !commitment.ExpiresAt.IsZero() {
 		endTime = &commitment.ExpiresAt
 		// check expiry time
-		if commitment.ExpiresAt.Before(time.Now()) || commitment.ExpiresAt.Equal(time.Now()) {
+		if !commitment.ExpiresAt.After(time.Now()) {
 			// commitment is already expired, ignore capacity
 			amountMultiple = 0
 		}
@@ -203,11 +212,13 @@ func FromChangeCommitmentTargetState(
 	return &CommitmentState{
 		CommitmentUUID:   string(commitment.UUID),
 		ProjectID:        projectID,
+		DomainID:         domainID,
 		FlavorGroupName:  flavorGroupName,
 		TotalMemoryBytes: totalMemoryBytes,
 		AvailabilityZone: az,
 		StartTime:        startTime,
 		EndTime:          endTime,
+		State:            v1alpha1.CommitmentStatus(commitment.NewStatus.UnwrapOr("")),
 	}, nil
 }
 

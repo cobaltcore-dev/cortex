@@ -141,35 +141,39 @@ cortex-scheduling-controllers:
     # Number of top hosts to shuffle for evacuation requests.
     # Set to 0 or negative to disable shuffling.
     evacuationShuffleK: 3
-    # CommittedResourceFlavorGroupPipelines maps flavor group IDs to pipeline names for CR reservations
-    # This allows different scheduling strategies per flavor group (e.g., HANA vs GP)
-    committedResourceFlavorGroupPipelines:
-      "2152": "kvm-hana-bin-packing"  # HANA flavor group
-      "2101": "kvm-general-purpose-load-balancing"  # General Purpose flavor group
-      "*": "kvm-general-purpose-load-balancing"  # Catch-all fallback
-    # Default pipeline for CR reservations when no CommittedResourceFlavorGroupPipelines entry matches
-    committedResourcePipelineDefault: "kvm-general-purpose-load-balancing"
-    # How often to re-verify active reservations
-    # 5m = 300000000000 nanoseconds
-    committedResourceRequeueIntervalActive: 300000000000
-    # How often to retry when knowledge is not ready
-    # 1m = 60000000000 nanoseconds
-    committedResourceRequeueIntervalRetry: 60000000000
-    # Timeout for watching reservations to become ready before rolling back
-    # 10s = 10000000000 nanoseconds
-    committedResourceChangeAPIWatchReservationsTimeout: 10000000000
-    # How often to poll reservation status during watch
-    # 500ms = 500000000 nanoseconds
-    committedResourceChangeAPIWatchReservationsPollInterval: 500000000
-    # Whether the change-commitments API endpoint is active
-    # When false, the endpoint returns HTTP 503. The info endpoint remains available.
-    committedResourceEnableChangeCommitmentsAPI: true
-    # Whether the report-usage API endpoint is active
-    # When false, the endpoint returns HTTP 503.
-    committedResourceEnableReportUsageAPI: true
-    # Whether the report-capacity API endpoint is active
-    # When false, the endpoint returns HTTP 503.
-    committedResourceEnableReportCapacityAPI: true
+    committedResourceReservationController:
+      # Maps flavor group IDs to pipeline names; "*" acts as catch-all fallback
+      flavorGroupPipelines:
+        "2152": "kvm-hana-bin-packing"  # HANA flavor group
+        "2101": "kvm-general-purpose-load-balancing"  # General Purpose flavor group
+        "*": "kvm-general-purpose-load-balancing"  # Catch-all fallback
+      # Fallback pipeline when no flavorGroupPipelines entry matches
+      pipelineDefault: "kvm-general-purpose-load-balancing"
+      # How often to re-verify active Reservation CRDs (healthy state)
+      requeueIntervalActive: "5m"
+      # Back-off interval when knowledge is unavailable
+      requeueIntervalRetry: "1m"
+      # Back-off interval while a VM allocation is still within allocationGracePeriod
+      requeueIntervalGracePeriod: "1m"
+      # How long after a VM is allocated to a reservation before it is expected to appear
+      # on the target host; allocations not confirmed within this window are removed
+      allocationGracePeriod: "15m"
+      # URL of the nova external scheduler API for placement decisions
+      schedulerURL: "http://localhost:8080/scheduler/nova/external"
+    committedResourceController:
+      # Back-off interval while CommittedResource placement is pending or failed
+      requeueIntervalRetry: "1m"
+    committedResourceAPI:
+      # Timeout for watching CommittedResource CRDs before rolling back
+      watchTimeout: "10s"
+      # How often to poll CommittedResource CRD conditions during watch
+      watchPollInterval: "500ms"
+      # When false, the endpoint returns HTTP 503; the info endpoint remains available.
+      enableChangeCommitments: true
+      # When false, the endpoint returns HTTP 503.
+      enableReportUsage: true
+      # When false, the endpoint returns HTTP 503.
+      enableReportCapacity: true
     # OvercommitMappings is a list of mappings that map hypervisor traits to
     # overcommit ratios. Note that this list is applied in order, so if there
     # are multiple mappings applying to the same hypervisors, the last mapping
@@ -178,7 +182,7 @@ cortex-scheduling-controllers:
     # Failover reservations controller configuration
     # Name of the Datasource CRD that provides database connection info for Nova VM data
     datasourceName: nova-servers
-    # URL of the nova external scheduler API for placement decisions
+    # URL of the nova external scheduler API for placement decisions (used by failover controller)
     schedulerURL: "http://localhost:8080/scheduler/nova/external"
     # Maps flavor name patterns (glob) to required failover count
     # Example: {"hana_*": 2, "m1.xlarge": 1}
@@ -205,6 +209,8 @@ cortex-scheduling-controllers:
     limitOneNewReservationPerHypervisor: false
     # Size failover reservations based on LargestFlavor in the flavor group
     useFlavorGroupResources: false
+    # How often the commitments syncer reconciles Limes commitments to Reservation CRDs
+    committedResourceSyncInterval: "1h"
 
 cortex-knowledge-controllers:
   <<: *cortex

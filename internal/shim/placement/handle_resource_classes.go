@@ -34,7 +34,7 @@ func (s *Shim) HandleListResourceClasses(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	switch s.featureModeFromConfOrHeader(r, s.config.Features.ResourceClasses) {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.ResourceClasses, s.config.ResourceClasses != nil) {
 	case FeatureModePassthrough, FeatureModeHybrid:
 		s.forward(w, r)
 		return
@@ -77,7 +77,7 @@ func (s *Shim) HandleCreateResourceClass(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceClasses)
+	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceClasses, s.config.ResourceClasses != nil)
 	switch mode {
 	case FeatureModePassthrough:
 		s.forward(w, r)
@@ -170,7 +170,7 @@ func (s *Shim) HandleShowResourceClass(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	switch s.featureModeFromConfOrHeader(r, s.config.Features.ResourceClasses) {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.ResourceClasses, s.config.ResourceClasses != nil) {
 	case FeatureModePassthrough, FeatureModeHybrid:
 		s.forward(w, r)
 		return
@@ -215,7 +215,7 @@ func (s *Shim) HandleUpdateResourceClass(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceClasses)
+	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceClasses, s.config.ResourceClasses != nil)
 	switch mode {
 	case FeatureModePassthrough:
 		s.forward(w, r)
@@ -297,7 +297,7 @@ func (s *Shim) HandleDeleteResourceClass(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
-	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceClasses)
+	mode := s.featureModeFromConfOrHeader(r, s.config.Features.ResourceClasses, s.config.ResourceClasses != nil)
 	switch mode {
 	case FeatureModePassthrough:
 		s.forward(w, r)
