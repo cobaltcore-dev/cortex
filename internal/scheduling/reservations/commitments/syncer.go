@@ -33,7 +33,6 @@ type SyncerConfig struct {
 	SyncInterval time.Duration `json:"committedResourceSyncInterval"`
 }
 
-
 type Syncer struct {
 	// Client to fetch commitments from Limes
 	CommitmentsClient
