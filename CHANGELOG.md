@@ -2,17 +2,20 @@
 
 ## 2026-05-04 — [#793](https://github.com/cobaltcore-dev/cortex/pull/793)
 
-### cortex v0.0.45 (sha-1d4f049c)
+### cortex v0.0.45 (sha-ab6eb45d)
 
 Non-breaking changes:
 - Fix capacity filter to correctly account for multi-VM CommittedResource reservation slots — confirmed VMs are now summed (not just the last one), blocks are clamped to zero when confirmed exceeds slot size, and spec-only VMs larger than remaining slot are fully covered
 - Expose `prometheusDatasourceControllerParallelReconciles` config option to allow parallel reconciles in the Prometheus datasource controller, reducing initial sync latency
 - Remove `Conf` field from PrometheusDatasourceReconciler — config is now loaded internally via `conf.GetConfig` during `SetupWithManager`
+- Add operator-controlled per-resource-type config (`flavorGroupResourceConfig`) for committed resources, replacing runtime derivation from flavor group metadata; supports wildcard (`*`) catch-all for unknown groups
+- Propagate `AnnotationCreatorRequestID` from the change-commitments API to the CommittedResource CRD and through the reservation controller for end-to-end request tracing
 
-### cortex-nova v0.0.58 (sha-1d4f049c)
+### cortex-nova v0.0.58 (sha-ab6eb45d)
 
 Non-breaking changes:
 - Remove all committed resource related Prometheus alerts (info API, change API, usage API, capacity API, and syncer alerts)
+- Add `flavorGroupResourceConfig` to cortex-nova values.yaml with a wildcard default that sets `hasCapacity: true` for ram, cores, and instances
 
 ## 2026-05-04 — [#779](https://github.com/cobaltcore-dev/cortex/pull/779)
 
