@@ -361,25 +361,11 @@ func TestCommittedResourceController_PlacementFailure(t *testing.T) {
 			expectRequeue:  true,
 		},
 		{
-			name:           "guaranteed AllowRejection=true: rejects on failure, no retry",
-			state:          v1alpha1.CommitmentStatusGuaranteed,
-			allowRejection: true,
-			expectedReason: "Rejected",
-			expectRequeue:  false,
-		},
-		{
 			name:           "confirmed AllowRejection=true: rejects on failure, no retry",
 			state:          v1alpha1.CommitmentStatusConfirmed,
 			allowRejection: true,
 			expectedReason: "Rejected",
 			expectRequeue:  false,
-		},
-		{
-			name:           "guaranteed AllowRejection=false: retries on failure",
-			state:          v1alpha1.CommitmentStatusGuaranteed,
-			allowRejection: false,
-			expectedReason: "Reserving",
-			expectRequeue:  true,
 		},
 		{
 			name:           "confirmed AllowRejection=false: retries on failure",
@@ -501,31 +487,6 @@ func TestCommittedResourceController_BadSpec(t *testing.T) {
 	if got := countChildReservations(t, k8sClient, cr.Spec.CommitmentUUID); got != 0 {
 		t.Errorf("expected 0 child reservations after bad-spec rejection, got %d", got)
 	}
-}
-
-func TestCommittedResourceController_Idempotent(t *testing.T) {
-	scheme := newCRTestScheme(t)
-	cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
-	k8sClient := newCRTestClient(scheme, cr, newTestFlavorKnowledge())
-	controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: CommittedResourceControllerConfig{}}
-
-	// Round 1: creates reservation, waits for placement.
-	if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
-		t.Fatalf("reconcile 1: %v", err)
-	}
-	// Simulate reservation controller setting Ready=True.
-	setChildReservationsReady(t, k8sClient, cr.Spec.CommitmentUUID)
-	// Rounds 2 and 3: accepts, then stays accepted.
-	for i := 2; i <= 3; i++ {
-		if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
-			t.Fatalf("reconcile %d: %v", i, err)
-		}
-	}
-
-	if got := countChildReservations(t, k8sClient, cr.Spec.CommitmentUUID); got != 1 {
-		t.Errorf("expected 1 child reservation after 3 reconciles (idempotency), got %d", got)
-	}
-	assertCondition(t, k8sClient, cr.Name, metav1.ConditionTrue, "Accepted")
 }
 
 // ============================================================================

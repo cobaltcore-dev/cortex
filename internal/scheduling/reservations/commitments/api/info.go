@@ -113,11 +113,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 	// Build resources map
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo)
 	for groupName, groupData := range flavorGroups {
-		// Determine if this group accepts commitments (requires fixed RAM/core ratio)
-		handlesCommitments := commitments.FlavorGroupAcceptsCommitments(&groupData)
-
-		// All flavor groups are registered for usage reporting.
-		// Only those with a fixed RAM/core ratio have HandlesCommitments=true.
+		resCfg := api.config.ResourceConfigForGroup(groupName)
 
 		flavorNames := make([]string, 0, len(groupData.Flavors))
 		for _, flavor := range groupData.Flavors {
@@ -157,12 +153,12 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 				groupData.SmallestFlavor.MemoryMB,
 				flavorListStr,
 			),
-			Unit:                ramUnit, // Non-standard unit: multiples of smallest flavor RAM
+			Unit:                ramUnit,
 			Topology:            liquid.AZAwareTopology,
 			NeedsResourceDemand: false,
-			HasCapacity:         true, // We report capacity via /commitments/v1/report-capacity
-			HasQuota:            false,
-			HandlesCommitments:  handlesCommitments, // Only groups with fixed ratio accept commitments
+			HasCapacity:         resCfg.RAM.HasCapacity,
+			HasQuota:            resCfg.RAM.HasQuota,
+			HandlesCommitments:  resCfg.RAM.HandlesCommitments,
 			Attributes:          attrsJSON,
 		}
 
@@ -173,13 +169,13 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 				"CPU cores (usable by: %s)",
 				flavorListStr,
 			),
-			Unit:                liquid.UnitNone,        // Countable unit (omitted in JSON = "1")
-			Topology:            liquid.AZAwareTopology, // Same topology as RAM
+			Unit:                liquid.UnitNone,
+			Topology:            liquid.AZAwareTopology,
 			NeedsResourceDemand: false,
-			HasCapacity:         true,      // We report capacity (as 0 for now)
-			HasQuota:            false,     // No quota enforcement
-			HandlesCommitments:  false,     // Cores are derived from RAM commitments
-			Attributes:          attrsJSON, // Same attributes (ratio info)
+			HasCapacity:         resCfg.Cores.HasCapacity,
+			HasQuota:            resCfg.Cores.HasQuota,
+			HandlesCommitments:  resCfg.Cores.HandlesCommitments,
+			Attributes:          attrsJSON,
 		}
 
 		// === 3. Instances Resource ===
@@ -189,13 +185,13 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 				"instances (usable by: %s)",
 				flavorListStr,
 			),
-			Unit:                liquid.UnitNone,        // Countable unit (omitted in JSON = "1")
-			Topology:            liquid.AZAwareTopology, // Same topology as RAM
+			Unit:                liquid.UnitNone,
+			Topology:            liquid.AZAwareTopology,
 			NeedsResourceDemand: false,
-			HasCapacity:         true,      // We report capacity (as 0 for now)
-			HasQuota:            false,     // No quota enforcement
-			HandlesCommitments:  false,     // Instances are derived from RAM commitments
-			Attributes:          attrsJSON, // Same attributes
+			HasCapacity:         resCfg.Instances.HasCapacity,
+			HasQuota:            resCfg.Instances.HasQuota,
+			HandlesCommitments:  resCfg.Instances.HandlesCommitments,
+			Attributes:          attrsJSON,
 		}
 
 		logger.V(1).Info("registered flavor group resources",

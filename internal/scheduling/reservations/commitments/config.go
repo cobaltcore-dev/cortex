@@ -49,6 +49,20 @@ type CommittedResourceControllerConfig struct {
 	RequeueIntervalRetry metav1.Duration `json:"requeueIntervalRetry"`
 }
 
+// ResourceTypeConfig holds per-resource flags for a single resource type within a flavor group.
+type ResourceTypeConfig struct {
+	HandlesCommitments bool `json:"handlesCommitments"`
+	HasCapacity        bool `json:"hasCapacity"`
+	HasQuota           bool `json:"hasQuota"`
+}
+
+// FlavorGroupResourcesConfig groups resource type configs for the three resources of a flavor group.
+type FlavorGroupResourcesConfig struct {
+	RAM       ResourceTypeConfig `json:"ram"`
+	Cores     ResourceTypeConfig `json:"cores"`
+	Instances ResourceTypeConfig `json:"instances"`
+}
+
 // APIConfig holds configuration for the LIQUID commitment HTTP endpoints.
 type APIConfig struct {
 	// EnableChangeCommitments controls whether the change-commitments endpoint is active.
@@ -64,6 +78,22 @@ type APIConfig struct {
 	// WatchPollInterval is how frequently the change-commitments handler polls
 	// CommittedResource CRD conditions while waiting for the controller outcome.
 	WatchPollInterval metav1.Duration `json:"watchPollInterval"`
+	// FlavorGroupResourceConfig maps flavor group IDs to resource flag configs; "*" acts as catch-all.
+	FlavorGroupResourceConfig map[string]FlavorGroupResourcesConfig `json:"flavorGroupResourceConfig,omitempty"`
+}
+
+// ResourceConfigForGroup returns the resource config for the given flavor group ID,
+// falling back to the "*" catch-all if no exact match exists.
+func (c APIConfig) ResourceConfigForGroup(groupID string) FlavorGroupResourcesConfig {
+	if c.FlavorGroupResourceConfig != nil {
+		if cfg, ok := c.FlavorGroupResourceConfig[groupID]; ok {
+			return cfg
+		}
+		if cfg, ok := c.FlavorGroupResourceConfig["*"]; ok {
+			return cfg
+		}
+	}
+	return FlavorGroupResourcesConfig{}
 }
 
 func DefaultAPIConfig() APIConfig {

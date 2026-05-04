@@ -144,6 +144,9 @@ func TestHandleChangeCommitments(t *testing.T) {
 				cfg := commitments.DefaultAPIConfig()
 				cfg.WatchTimeout = metav1.Duration{}
 				cfg.WatchPollInterval = metav1.Duration{Duration: 100 * time.Millisecond}
+				cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
+					"*": {RAM: commitments.ResourceTypeConfig{HandlesCommitments: true, HasCapacity: true}},
+				}
 				return &cfg
 			}(),
 			ExpectedAPIResponse: newAPIResponse("timeout reached while processing commitment changes"),
@@ -709,7 +712,16 @@ func newCRTestEnv(t *testing.T, tc CommitmentChangeTestCase) *CRTestEnv {
 	if tc.CustomConfig != nil {
 		api = NewAPIWithConfig(wrapped, *tc.CustomConfig, nil)
 	} else {
-		api = NewAPI(wrapped)
+		// Default test config: all flavor groups accept RAM commitments via wildcard.
+		cfg := commitments.DefaultAPIConfig()
+		cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
+			"*": {
+				RAM:       commitments.ResourceTypeConfig{HandlesCommitments: true, HasCapacity: true},
+				Cores:     commitments.ResourceTypeConfig{HasCapacity: true},
+				Instances: commitments.ResourceTypeConfig{HasCapacity: true},
+			},
+		}
+		api = NewAPIWithConfig(wrapped, cfg, nil)
 	}
 	mux := http.NewServeMux()
 	registry := prometheus.NewRegistry()
