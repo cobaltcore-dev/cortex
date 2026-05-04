@@ -219,7 +219,8 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 		"version", version)
 
 	return liquid.ServiceInfo{
-		Version:   version,
-		Resources: resources,
+		Version:                                version,
+		Resources:                              resources,
+		CommitmentHandlingNeedsProjectMetadata: true,
 	}, nil
 }

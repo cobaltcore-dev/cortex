@@ -31,7 +31,7 @@ func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("X-Request-ID", requestID)
 
 	// Check if API is enabled
-	if !api.config.EnableReportCapacityAPI {
+	if !api.config.EnableReportCapacity {
 		statusCode = http.StatusServiceUnavailable
 		http.Error(w, "report-capacity API is disabled", statusCode)
 		api.recordCapacityMetrics(statusCode, startTime)
