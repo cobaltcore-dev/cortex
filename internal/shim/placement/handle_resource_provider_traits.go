@@ -44,7 +44,7 @@ func (s *Shim) HandleListResourceProviderTraits(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	switch s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviderTraits) {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviderTraits, true) {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 	case FeatureModeHybrid:
@@ -127,7 +127,7 @@ func (s *Shim) HandleUpdateResourceProviderTraits(w http.ResponseWriter, r *http
 	if !ok {
 		return
 	}
-	switch s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviderTraits) {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviderTraits, true) {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 	case FeatureModeHybrid:
@@ -281,7 +281,7 @@ func (s *Shim) HandleDeleteResourceProviderTraits(w http.ResponseWriter, r *http
 	if !ok {
 		return
 	}
-	switch s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviderTraits) {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.ResourceProviderTraits, true) {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 	case FeatureModeHybrid:
