@@ -12,9 +12,8 @@ import (
 	"net/http"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -111,6 +110,165 @@ func (s *Shim) HandleManageAllocations(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// manageAllocationsRequest represents the batch body for POST /allocations.
+// It is keyed by consumer UUID.
+type manageAllocationsRequest map[string]allocationsRequest
+
+// manageAllocationsHybrid handles the batch POST by splitting each consumer's
+// allocations into KVM and non-KVM sets. Non-KVM allocations are forwarded to
+// upstream as a batch; KVM allocations are written to Hypervisor CRDs.
+func (s *Shim) manageAllocationsHybrid(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
+
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Error(err, "failed to read request body")
+		http.Error(w, "failed to read request body", http.StatusBadRequest)
+		return
+	}
+
+	var batch manageAllocationsRequest
+	if err := json.Unmarshal(bodyBytes, &batch); err != nil {
+		http.Error(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	log.Info("managing batch allocations (hybrid)", "consumers", len(batch))
+
+	// Separate KVM from non-KVM across all consumers.
+	type kvmWork struct {
+		consumerUUID   string
+		req            *allocationsRequest
+		kvmAllocs      map[string]allocationEntry
+		kvmHypervisors map[string]*hv1.Hypervisor
+	}
+	var kvmWorkItems []kvmWork
+	nonKvmBatch := make(manageAllocationsRequest)
+
+	for consumerUUID, consumerReq := range batch {
+		kvmA := make(map[string]allocationEntry)
+		nonKvmA := make(map[string]allocationEntry)
+		kvmHVs := make(map[string]*hv1.Hypervisor)
+
+		for rpUUID, entry := range consumerReq.Allocations {
+			var hvs hv1.HypervisorList
+			if err := s.List(ctx, &hvs, client.MatchingFields{idxHypervisorOpenStackId: rpUUID}); err == nil && len(hvs.Items) == 1 {
+				kvmA[rpUUID] = entry
+				hv := hvs.Items[0]
+				kvmHVs[rpUUID] = &hv
+			} else {
+				nonKvmA[rpUUID] = entry
+			}
+		}
+
+		if len(nonKvmA) > 0 {
+			nonKvmBatch[consumerUUID] = allocationsRequest{
+				Allocations:        nonKvmA,
+				ConsumerGeneration: consumerReq.ConsumerGeneration,
+				ProjectID:          consumerReq.ProjectID,
+				UserID:             consumerReq.UserID,
+				ConsumerType:       consumerReq.ConsumerType,
+			}
+		}
+		if len(kvmA) > 0 {
+			cr := consumerReq
+			kvmWorkItems = append(kvmWorkItems, kvmWork{
+				consumerUUID:   consumerUUID,
+				req:            &cr,
+				kvmAllocs:      kvmA,
+				kvmHypervisors: kvmHVs,
+			})
+		}
+	}
+
+	// Forward non-KVM portion to upstream first.
+	if len(nonKvmBatch) > 0 {
+		log.Info("forwarding non-KVM allocations to upstream (hybrid batch)", "consumers", len(nonKvmBatch))
+		upstreamBody, err := json.Marshal(nonKvmBatch)
+		if err != nil {
+			log.Error(err, "failed to marshal upstream batch request")
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(upstreamBody))
+		rec := &statusRecorder{ResponseWriter: w, header: make(http.Header)}
+		s.forward(rec, r)
+		if rec.statusCode >= 300 {
+			for k, vs := range rec.header {
+				for _, v := range vs {
+					w.Header().Add(k, v)
+				}
+			}
+			w.WriteHeader(rec.statusCode)
+			if _, err := w.Write(rec.body.Bytes()); err != nil {
+				log.Error(err, "failed to write response body")
+			}
+			return
+		}
+	}
+
+	// Write KVM bookings.
+	for _, work := range kvmWorkItems {
+		if err := s.writeKVMBookings(ctx, work.consumerUUID, work.req, work.kvmAllocs, work.kvmHypervisors); err != nil {
+			log.Error(err, "failed to write KVM bookings in batch", "consumer", work.consumerUUID)
+			if apierrors.IsConflict(err) {
+				http.Error(w, "consumer generation conflict", http.StatusConflict)
+				return
+			}
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// manageAllocationsCRD handles the batch POST exclusively via CRDs. All
+// resource providers across all consumers must resolve to known Hypervisor CRs.
+func (s *Shim) manageAllocationsCRD(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
+
+	var batch manageAllocationsRequest
+	if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
+		http.Error(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	log.Info("managing batch allocations (crd)", "consumers", len(batch))
+
+	for consumerUUID, consumerReq := range batch {
+		kvmAllocs := make(map[string]allocationEntry)
+		kvmHypervisors := make(map[string]*hv1.Hypervisor)
+
+		for rpUUID, entry := range consumerReq.Allocations {
+			var hvs hv1.HypervisorList
+			if err := s.List(ctx, &hvs, client.MatchingFields{idxHypervisorOpenStackId: rpUUID}); err != nil || len(hvs.Items) != 1 {
+				log.Info("resource provider not found in CRD (crd mode)", "rpUUID", rpUUID)
+				http.Error(w, fmt.Sprintf("resource provider %s not found", rpUUID), http.StatusBadRequest)
+				return
+			}
+			kvmAllocs[rpUUID] = entry
+			hv := hvs.Items[0]
+			kvmHypervisors[rpUUID] = &hv
+		}
+
+		cr := consumerReq
+		if err := s.writeKVMBookings(ctx, consumerUUID, &cr, kvmAllocs, kvmHypervisors); err != nil {
+			log.Error(err, "failed to write KVM bookings in batch", "consumer", consumerUUID)
+			if apierrors.IsConflict(err) {
+				http.Error(w, "consumer generation conflict", http.StatusConflict)
+				return
+			}
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // HandleListAllocations handles GET /allocations/{consumer_uuid} requests.
 //
 // Returns all allocation records for the consumer identified by
@@ -139,6 +297,110 @@ func (s *Shim) HandleListAllocations(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
 	}
+}
+
+// listAllocationsHybrid merges allocations from upstream Placement with
+// bookings stored in Hypervisor CRDs. CRD data takes precedence when the same
+// resource provider appears in both sources.
+func (s *Shim) listAllocationsHybrid(w http.ResponseWriter, r *http.Request, consumerUUID string) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
+
+	s.forwardWithHook(w, r, func(w http.ResponseWriter, resp *http.Response) {
+		if resp.StatusCode != http.StatusOK {
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				log.Error(err, "failed to read upstream response body")
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				return
+			}
+			for k, vs := range resp.Header {
+				for _, v := range vs {
+					w.Header().Add(k, v)
+				}
+			}
+			w.WriteHeader(resp.StatusCode)
+			if _, err := w.Write(body); err != nil {
+				log.Error(err, "failed to write response body")
+			}
+			return
+		}
+
+		var upstreamResp allocationsResponse
+		if err := json.NewDecoder(resp.Body).Decode(&upstreamResp); err != nil {
+			log.Error(err, "failed to decode upstream allocations response")
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+		if upstreamResp.Allocations == nil {
+			upstreamResp.Allocations = make(map[string]allocationEntry)
+		}
+
+		// Look up consumer in CRD.
+		var hvs hv1.HypervisorList
+		if err := s.List(ctx, &hvs, client.MatchingFields{idxBookingConsumerUUID: consumerUUID}); err != nil && !apierrors.IsNotFound(err) {
+			log.Error(err, "failed to look up consumer in CRD")
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		// Merge CRD bookings into the response. CRD takes precedence on collision.
+		for _, hv := range hvs.Items {
+			consumer := hv1.GetConsumer(hv.Spec.Bookings, consumerUUID)
+			if consumer == nil {
+				continue
+			}
+			rpUUID := hv.Status.HypervisorID
+			upstreamResp.Allocations[rpUUID] = allocationEntry{
+				Resources: hvToPlacementResources(consumer.Resources),
+			}
+			if upstreamResp.ConsumerGeneration == nil {
+				upstreamResp.ConsumerGeneration = consumer.ConsumerGeneration
+			}
+			if upstreamResp.ProjectID == "" {
+				upstreamResp.ProjectID = consumer.ProjectID
+			}
+			if upstreamResp.UserID == "" {
+				upstreamResp.UserID = consumer.UserID
+			}
+		}
+
+		s.writeJSON(w, http.StatusOK, upstreamResp)
+	})
+}
+
+// listAllocationsCRD retrieves allocations exclusively from Hypervisor CRDs,
+// returning an empty allocations map if the consumer has no bookings.
+func (s *Shim) listAllocationsCRD(w http.ResponseWriter, r *http.Request, consumerUUID string) {
+	ctx := r.Context()
+	log := logf.FromContext(ctx)
+
+	var hvs hv1.HypervisorList
+	if err := s.List(ctx, &hvs, client.MatchingFields{idxBookingConsumerUUID: consumerUUID}); err != nil && !apierrors.IsNotFound(err) {
+		log.Error(err, "failed to look up consumer in CRD")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	resp := allocationsResponse{
+		Allocations: make(map[string]allocationEntry),
+	}
+
+	for _, hv := range hvs.Items {
+		consumer := hv1.GetConsumer(hv.Spec.Bookings, consumerUUID)
+		if consumer == nil {
+			continue
+		}
+		rpUUID := hv.Status.HypervisorID
+		resp.Allocations[rpUUID] = allocationEntry{
+			Resources: hvToPlacementResources(consumer.Resources),
+		}
+		resp.ConsumerGeneration = consumer.ConsumerGeneration
+		resp.ProjectID = consumer.ProjectID
+		resp.UserID = consumer.UserID
+	}
+
+	s.writeJSON(w, http.StatusOK, resp)
 }
 
 // HandleUpdateAllocations handles PUT /allocations/{consumer_uuid} requests.
@@ -171,34 +433,10 @@ func (s *Shim) HandleUpdateAllocations(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleDeleteAllocations handles DELETE /allocations/{consumer_uuid} requests.
-//
-// Removes all allocation records for the consumer across all resource
-// providers. Returns 204 No Content on success, or 404 Not Found if the
-// consumer has no existing allocations.
-//
-// https://docs.openstack.org/api-ref/placement/#delete-allocations
-func (s *Shim) HandleDeleteAllocations(w http.ResponseWriter, r *http.Request) {
-	consumerUUID, ok := requiredUUIDPathParam(w, r, "consumer_uuid")
-	if !ok {
-		return
-	}
-	switch s.featureModeFromConfOrHeader(r, s.config.Features.Allocations) {
-	case FeatureModePassthrough:
-		s.forward(w, r)
-	case FeatureModeHybrid:
-		s.deleteAllocationsHybrid(w, r, consumerUUID)
-	case FeatureModeCRD:
-		s.deleteAllocationsCRD(w, r, consumerUUID)
-	default:
-		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// PUT /allocations/{consumer_uuid} — hybrid and crd
-// ---------------------------------------------------------------------------
-
+// updateAllocationsHybrid splits the allocation set into KVM-managed resource
+// providers (written to Hypervisor CRDs) and non-KVM providers (forwarded to
+// upstream Placement). Non-KVM allocations are forwarded first; only if
+// upstream succeeds are KVM bookings persisted.
 func (s *Shim) updateAllocationsHybrid(w http.ResponseWriter, r *http.Request, consumerUUID string) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
@@ -257,7 +495,9 @@ func (s *Shim) updateAllocationsHybrid(w http.ResponseWriter, r *http.Request, c
 				}
 			}
 			w.WriteHeader(rec.statusCode)
-			w.Write(rec.body.Bytes()) //nolint:errcheck
+			if _, err := w.Write(rec.body.Bytes()); err != nil {
+				log.Error(err, "failed to write response body")
+			}
 			return
 		}
 	}
@@ -276,6 +516,9 @@ func (s *Shim) updateAllocationsHybrid(w http.ResponseWriter, r *http.Request, c
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// updateAllocationsCRD handles PUT /allocations/{consumer_uuid} exclusively
+// via CRDs. All resource providers in the request must resolve to a known
+// Hypervisor CR; otherwise the request is rejected with 400.
 func (s *Shim) updateAllocationsCRD(w http.ResponseWriter, r *http.Request, consumerUUID string) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
@@ -323,9 +566,10 @@ func (s *Shim) writeKVMBookings(
 	kvmAllocs map[string]allocationEntry,
 	kvmHypervisors map[string]*hv1.Hypervisor,
 ) error {
+
 	log := logf.FromContext(ctx)
 
-	hvGR := schema.GroupResource{Group: "kvm.cloud.sap", Resource: "hypervisors"}
+	hvGR := hv1.GroupVersion.WithResource("hypervisors").GroupResource()
 	for rpUUID, entry := range kvmAllocs {
 		hv := kvmHypervisors[rpUUID]
 		existing := hv1.GetConsumer(hv.Spec.Bookings, consumerUUID)
@@ -390,64 +634,35 @@ func (s *Shim) writeKVMBookings(
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-// GET /allocations/{consumer_uuid} — hybrid and crd
-// ---------------------------------------------------------------------------
-
-func (s *Shim) listAllocationsHybrid(w http.ResponseWriter, r *http.Request, consumerUUID string) {
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-
-	s.forwardWithHook(w, r, func(w http.ResponseWriter, resp *http.Response) {
-		var upstreamResp allocationsResponse
-		if resp.StatusCode == http.StatusOK {
-			if err := json.NewDecoder(resp.Body).Decode(&upstreamResp); err != nil {
-				log.Error(err, "failed to decode upstream allocations response")
-				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-				return
-			}
-		} else {
-			// If upstream returned non-200, initialize empty.
-			upstreamResp.Allocations = make(map[string]allocationEntry)
-		}
-		if upstreamResp.Allocations == nil {
-			upstreamResp.Allocations = make(map[string]allocationEntry)
-		}
-
-		// Look up consumer in CRD.
-		var hvs hv1.HypervisorList
-		if err := s.List(ctx, &hvs, client.MatchingFields{idxBookingConsumerUUID: consumerUUID}); err != nil && !apierrors.IsNotFound(err) {
-			log.Error(err, "failed to look up consumer in CRD")
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
-
-		// Merge CRD bookings into the response. CRD takes precedence on collision.
-		for _, hv := range hvs.Items {
-			consumer := hv1.GetConsumer(hv.Spec.Bookings, consumerUUID)
-			if consumer == nil {
-				continue
-			}
-			rpUUID := hv.Status.HypervisorID
-			upstreamResp.Allocations[rpUUID] = allocationEntry{
-				Resources: hvToPlacementResources(consumer.Resources),
-			}
-			if upstreamResp.ConsumerGeneration == nil {
-				upstreamResp.ConsumerGeneration = consumer.ConsumerGeneration
-			}
-			if upstreamResp.ProjectID == "" {
-				upstreamResp.ProjectID = consumer.ProjectID
-			}
-			if upstreamResp.UserID == "" {
-				upstreamResp.UserID = consumer.UserID
-			}
-		}
-
-		s.writeJSON(w, http.StatusOK, upstreamResp)
-	})
+// HandleDeleteAllocations handles DELETE /allocations/{consumer_uuid} requests.
+//
+// Removes all allocation records for the consumer across all resource
+// providers. Returns 204 No Content on success, or 404 Not Found if the
+// consumer has no existing allocations.
+//
+// https://docs.openstack.org/api-ref/placement/#delete-allocations
+func (s *Shim) HandleDeleteAllocations(w http.ResponseWriter, r *http.Request) {
+	consumerUUID, ok := requiredUUIDPathParam(w, r, "consumer_uuid")
+	if !ok {
+		return
+	}
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.Allocations) {
+	case FeatureModePassthrough:
+		s.forward(w, r)
+	case FeatureModeHybrid:
+		s.deleteAllocationsHybrid(w, r, consumerUUID)
+	case FeatureModeCRD:
+		s.deleteAllocationsCRD(w, r, consumerUUID)
+	default:
+		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
+	}
 }
 
-func (s *Shim) listAllocationsCRD(w http.ResponseWriter, r *http.Request, consumerUUID string) {
+// deleteAllocationsHybrid checks whether the consumer has bookings in
+// Hypervisor CRDs. If it does, those bookings are removed and the request is
+// also forwarded to upstream (tolerating a 404 from upstream). If the consumer
+// has no CRD bookings, the request is forwarded to upstream as-is.
+func (s *Shim) deleteAllocationsHybrid(w http.ResponseWriter, r *http.Request, consumerUUID string) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 
@@ -458,47 +673,19 @@ func (s *Shim) listAllocationsCRD(w http.ResponseWriter, r *http.Request, consum
 		return
 	}
 
-	resp := allocationsResponse{
-		Allocations: make(map[string]allocationEntry),
-	}
-
-	for _, hv := range hvs.Items {
-		consumer := hv1.GetConsumer(hv.Spec.Bookings, consumerUUID)
-		if consumer == nil {
-			continue
-		}
-		rpUUID := hv.Status.HypervisorID
-		resp.Allocations[rpUUID] = allocationEntry{
-			Resources: hvToPlacementResources(consumer.Resources),
-		}
-		resp.ConsumerGeneration = consumer.ConsumerGeneration
-		resp.ProjectID = consumer.ProjectID
-		resp.UserID = consumer.UserID
-	}
-
-	s.writeJSON(w, http.StatusOK, resp)
-}
-
-// ---------------------------------------------------------------------------
-// DELETE /allocations/{consumer_uuid} — hybrid and crd
-// ---------------------------------------------------------------------------
-
-func (s *Shim) deleteAllocationsHybrid(w http.ResponseWriter, r *http.Request, consumerUUID string) {
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-
-	// Forward to upstream first.
 	rec := &statusRecorder{ResponseWriter: w, header: make(http.Header)}
 	s.forward(rec, r)
-	// Upstream returning 404 is acceptable — the consumer may only exist in CRD.
-	if rec.statusCode >= 300 && rec.statusCode != http.StatusNotFound {
+
+	if len(hvs.Items) == 0 || (rec.statusCode >= 300 && rec.statusCode != http.StatusNotFound) {
 		for k, vs := range rec.header {
 			for _, v := range vs {
 				w.Header().Add(k, v)
 			}
 		}
 		w.WriteHeader(rec.statusCode)
-		w.Write(rec.body.Bytes()) //nolint:errcheck
+		if _, err := w.Write(rec.body.Bytes()); err != nil {
+			log.Error(err, "failed to write response body")
+		}
 		return
 	}
 
@@ -512,6 +699,8 @@ func (s *Shim) deleteAllocationsHybrid(w http.ResponseWriter, r *http.Request, c
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// deleteAllocationsCRD removes all bookings for the consumer exclusively from
+// Hypervisor CRDs. Returns 404 if the consumer has no existing bookings.
 func (s *Shim) deleteAllocationsCRD(w http.ResponseWriter, r *http.Request, consumerUUID string) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
@@ -569,162 +758,8 @@ func (s *Shim) removeConsumerFromCRD(ctx context.Context, consumerUUID string) e
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-// POST /allocations — hybrid and crd
-// ---------------------------------------------------------------------------
-
-// manageAllocationsRequest represents the batch body for POST /allocations.
-// It is keyed by consumer UUID.
-type manageAllocationsRequest map[string]allocationsRequest
-
-func (s *Shim) manageAllocationsHybrid(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-
-	bodyBytes, err := io.ReadAll(r.Body)
-	if err != nil {
-		log.Error(err, "failed to read request body")
-		http.Error(w, "failed to read request body", http.StatusBadRequest)
-		return
-	}
-
-	var batch manageAllocationsRequest
-	if err := json.Unmarshal(bodyBytes, &batch); err != nil {
-		http.Error(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Separate KVM from non-KVM across all consumers.
-	type kvmWork struct {
-		consumerUUID   string
-		req            *allocationsRequest
-		kvmAllocs      map[string]allocationEntry
-		kvmHypervisors map[string]*hv1.Hypervisor
-	}
-	var kvmWorkItems []kvmWork
-	nonKvmBatch := make(manageAllocationsRequest)
-
-	for consumerUUID, consumerReq := range batch {
-		kvmA := make(map[string]allocationEntry)
-		nonKvmA := make(map[string]allocationEntry)
-		kvmHVs := make(map[string]*hv1.Hypervisor)
-
-		for rpUUID, entry := range consumerReq.Allocations {
-			var hvs hv1.HypervisorList
-			if err := s.List(ctx, &hvs, client.MatchingFields{idxHypervisorOpenStackId: rpUUID}); err == nil && len(hvs.Items) == 1 {
-				kvmA[rpUUID] = entry
-				hv := hvs.Items[0]
-				kvmHVs[rpUUID] = &hv
-			} else {
-				nonKvmA[rpUUID] = entry
-			}
-		}
-
-		if len(nonKvmA) > 0 {
-			nonKvmBatch[consumerUUID] = allocationsRequest{
-				Allocations:        nonKvmA,
-				ConsumerGeneration: consumerReq.ConsumerGeneration,
-				ProjectID:          consumerReq.ProjectID,
-				UserID:             consumerReq.UserID,
-				ConsumerType:       consumerReq.ConsumerType,
-			}
-		}
-		if len(kvmA) > 0 {
-			cr := consumerReq
-			kvmWorkItems = append(kvmWorkItems, kvmWork{
-				consumerUUID:   consumerUUID,
-				req:            &cr,
-				kvmAllocs:      kvmA,
-				kvmHypervisors: kvmHVs,
-			})
-		}
-	}
-
-	// Forward non-KVM portion to upstream first.
-	if len(nonKvmBatch) > 0 {
-		upstreamBody, err := json.Marshal(nonKvmBatch)
-		if err != nil {
-			log.Error(err, "failed to marshal upstream batch request")
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
-		r.Body = io.NopCloser(bytes.NewReader(upstreamBody))
-		rec := &statusRecorder{ResponseWriter: w, header: make(http.Header)}
-		s.forward(rec, r)
-		if rec.statusCode >= 300 {
-			for k, vs := range rec.header {
-				for _, v := range vs {
-					w.Header().Add(k, v)
-				}
-			}
-			w.WriteHeader(rec.statusCode)
-			w.Write(rec.body.Bytes()) //nolint:errcheck
-			return
-		}
-	}
-
-	// Write KVM bookings.
-	for _, work := range kvmWorkItems {
-		if err := s.writeKVMBookings(ctx, work.consumerUUID, work.req, work.kvmAllocs, work.kvmHypervisors); err != nil {
-			log.Error(err, "failed to write KVM bookings in batch", "consumer", work.consumerUUID)
-			if apierrors.IsConflict(err) {
-				http.Error(w, "consumer generation conflict", http.StatusConflict)
-				return
-			}
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *Shim) manageAllocationsCRD(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	log := logf.FromContext(ctx)
-
-	var batch manageAllocationsRequest
-	if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
-		http.Error(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	for consumerUUID, consumerReq := range batch {
-		kvmAllocs := make(map[string]allocationEntry)
-		kvmHypervisors := make(map[string]*hv1.Hypervisor)
-
-		for rpUUID, entry := range consumerReq.Allocations {
-			var hvs hv1.HypervisorList
-			if err := s.List(ctx, &hvs, client.MatchingFields{idxHypervisorOpenStackId: rpUUID}); err != nil || len(hvs.Items) != 1 {
-				log.Info("resource provider not found in CRD (crd mode)", "rpUUID", rpUUID)
-				http.Error(w, fmt.Sprintf("resource provider %s not found", rpUUID), http.StatusBadRequest)
-				return
-			}
-			kvmAllocs[rpUUID] = entry
-			hv := hvs.Items[0]
-			kvmHypervisors[rpUUID] = &hv
-		}
-
-		cr := consumerReq
-		if err := s.writeKVMBookings(ctx, consumerUUID, &cr, kvmAllocs, kvmHypervisors); err != nil {
-			log.Error(err, "failed to write KVM bookings in batch", "consumer", consumerUUID)
-			if apierrors.IsConflict(err) {
-				http.Error(w, "consumer generation conflict", http.StatusConflict)
-				return
-			}
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// ---------------------------------------------------------------------------
-// statusRecorder captures the upstream response so we can inspect status before
-// committing to write the real response.
-// ---------------------------------------------------------------------------
-
+// statusRecorder captures the upstream response so we can inspect the status
+// code before committing to write the real client response.
 type statusRecorder struct {
 	http.ResponseWriter
 	statusCode int

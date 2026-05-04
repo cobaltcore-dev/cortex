@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -455,7 +454,7 @@ func e2eCRDAllocations(ctx context.Context, sc *gophercloud.ServiceClient, cl cl
 
 	// 1. Test GET /allocations/{consumer_uuid} — empty (consumer not booked).
 	log.Info("Testing GET /allocations (empty, CRD)", "consumer", consumerUUID)
-	if err := e2ePollUntil(ctx, 10*time.Second, func() (bool, error) {
+	if err := e2ePollUntil(ctx, func() (bool, error) {
 		req, err := http.NewRequestWithContext(ctx,
 			http.MethodGet, sc.Endpoint+"/allocations/"+consumerUUID, http.NoBody)
 		if err != nil {
@@ -518,24 +517,24 @@ func e2eCRDAllocations(ctx context.Context, sc *gophercloud.ServiceClient, cl cl
 	// 3. Test GET /allocations/{consumer_uuid} — verify booking present.
 	log.Info("Testing GET /allocations (after PUT, CRD)", "consumer", consumerUUID)
 	var getResp allocationsResponse
-	if err := e2ePollUntil(ctx, 10*time.Second, func() (bool, error) {
-		req, err := http.NewRequestWithContext(ctx,
+	if err := e2ePollUntil(ctx, func() (bool, error) {
+		pollReq, err := http.NewRequestWithContext(ctx,
 			http.MethodGet, sc.Endpoint+"/allocations/"+consumerUUID, http.NoBody)
 		if err != nil {
 			return false, err
 		}
-		req.Header.Set("X-Auth-Token", sc.TokenID)
-		req.Header.Set("OpenStack-API-Version", apiVersion)
-		req.Header.Set("Accept", "application/json")
-		resp, err := sc.HTTPClient.Do(req)
+		pollReq.Header.Set("X-Auth-Token", sc.TokenID)
+		pollReq.Header.Set("OpenStack-API-Version", apiVersion)
+		pollReq.Header.Set("Accept", "application/json")
+		pollResp, err := sc.HTTPClient.Do(pollReq)
 		if err != nil {
 			return false, err
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return false, fmt.Errorf("GET /allocations (after PUT): expected 200, got %d", resp.StatusCode)
+		defer pollResp.Body.Close()
+		if pollResp.StatusCode != http.StatusOK {
+			return false, fmt.Errorf("GET /allocations (after PUT): expected 200, got %d", pollResp.StatusCode)
 		}
-		if err := json.NewDecoder(resp.Body).Decode(&getResp); err != nil {
+		if err := json.NewDecoder(pollResp.Body).Decode(&getResp); err != nil {
 			return false, err
 		}
 		_, ok := getResp.Allocations[kvmUUID]
@@ -621,24 +620,24 @@ func e2eCRDAllocations(ctx context.Context, sc *gophercloud.ServiceClient, cl cl
 
 	// Verify second consumer's allocation.
 	var getResp2 allocationsResponse
-	if err := e2ePollUntil(ctx, 10*time.Second, func() (bool, error) {
-		req, err := http.NewRequestWithContext(ctx,
+	if err := e2ePollUntil(ctx, func() (bool, error) {
+		pollReq, err := http.NewRequestWithContext(ctx,
 			http.MethodGet, sc.Endpoint+"/allocations/"+consumerUUID2, http.NoBody)
 		if err != nil {
 			return false, err
 		}
-		req.Header.Set("X-Auth-Token", sc.TokenID)
-		req.Header.Set("OpenStack-API-Version", apiVersion)
-		req.Header.Set("Accept", "application/json")
-		resp, err := sc.HTTPClient.Do(req)
+		pollReq.Header.Set("X-Auth-Token", sc.TokenID)
+		pollReq.Header.Set("OpenStack-API-Version", apiVersion)
+		pollReq.Header.Set("Accept", "application/json")
+		pollResp, err := sc.HTTPClient.Do(pollReq)
 		if err != nil {
 			return false, err
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return false, fmt.Errorf("GET /allocations (consumer2): expected 200, got %d", resp.StatusCode)
+		defer pollResp.Body.Close()
+		if pollResp.StatusCode != http.StatusOK {
+			return false, fmt.Errorf("GET /allocations (consumer2): expected 200, got %d", pollResp.StatusCode)
 		}
-		if err := json.NewDecoder(resp.Body).Decode(&getResp2); err != nil {
+		if err := json.NewDecoder(pollResp.Body).Decode(&getResp2); err != nil {
 			return false, err
 		}
 		_, ok := getResp2.Allocations[kvmUUID]
@@ -670,25 +669,25 @@ func e2eCRDAllocations(ctx context.Context, sc *gophercloud.ServiceClient, cl cl
 	}
 
 	// 7. Verify GET after DELETE returns empty.
-	if err := e2ePollUntil(ctx, 10*time.Second, func() (bool, error) {
-		req, err := http.NewRequestWithContext(ctx,
+	if err := e2ePollUntil(ctx, func() (bool, error) {
+		pollReq, err := http.NewRequestWithContext(ctx,
 			http.MethodGet, sc.Endpoint+"/allocations/"+consumerUUID, http.NoBody)
 		if err != nil {
 			return false, err
 		}
-		req.Header.Set("X-Auth-Token", sc.TokenID)
-		req.Header.Set("OpenStack-API-Version", apiVersion)
-		req.Header.Set("Accept", "application/json")
-		resp, err := sc.HTTPClient.Do(req)
+		pollReq.Header.Set("X-Auth-Token", sc.TokenID)
+		pollReq.Header.Set("OpenStack-API-Version", apiVersion)
+		pollReq.Header.Set("Accept", "application/json")
+		pollResp, err := sc.HTTPClient.Do(pollReq)
 		if err != nil {
 			return false, err
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return false, fmt.Errorf("GET /allocations (post-delete): expected 200, got %d", resp.StatusCode)
+		defer pollResp.Body.Close()
+		if pollResp.StatusCode != http.StatusOK {
+			return false, fmt.Errorf("GET /allocations (post-delete): expected 200, got %d", pollResp.StatusCode)
 		}
 		var r allocationsResponse
-		if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+		if err := json.NewDecoder(pollResp.Body).Decode(&r); err != nil {
 			return false, err
 		}
 		return len(r.Allocations) == 0, nil

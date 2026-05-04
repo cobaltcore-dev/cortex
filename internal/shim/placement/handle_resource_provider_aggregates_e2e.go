@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
-	"time"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -369,7 +368,7 @@ func e2eCRDResourceProviderAggregates(ctx context.Context, sc *gophercloud.Servi
 		Aggregates                 []string `json:"aggregates"`
 		ResourceProviderGeneration int64    `json:"resource_provider_generation"`
 	}
-	if err := e2ePollUntil(ctx, 10*time.Second, func() (bool, error) {
+	if err := e2ePollUntil(ctx, func() (bool, error) {
 		req, err := http.NewRequestWithContext(ctx,
 			http.MethodGet, sc.Endpoint+"/resource_providers/"+kvmUUID+"/aggregates", http.NoBody)
 		if err != nil {

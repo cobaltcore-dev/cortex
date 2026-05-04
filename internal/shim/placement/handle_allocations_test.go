@@ -99,7 +99,7 @@ const (
 	testRPUUID2      = "66666666-7777-8888-9999-aaaaaaaaaaaa"
 )
 
-func testHypervisorWithBooking(name, openstackID, consumerUUID string, vcpu int64, memMB int64) *hv1.Hypervisor {
+func testHypervisorWithBooking(name, openstackID string, vcpu, memMB int64) *hv1.Hypervisor {
 	gen := int64(1)
 	return &hv1.Hypervisor{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
@@ -107,7 +107,7 @@ func testHypervisorWithBooking(name, openstackID, consumerUUID string, vcpu int6
 		Spec: hv1.HypervisorSpec{
 			Bookings: []hv1.Booking{
 				{Consumer: &hv1.ConsumerBooking{
-					UUID:               consumerUUID,
+					UUID:               testConsumerUUID,
 					Resources:          map[hv1.ResourceName]resource.Quantity{hv1.ResourceCPU: *resource.NewQuantity(vcpu, resource.DecimalSI), hv1.ResourceMemory: *resource.NewQuantity(memMB*1024*1024, resource.BinarySI)},
 					ConsumerGeneration: &gen,
 					ProjectID:          "proj-1",
@@ -160,7 +160,7 @@ func TestUpdateAllocations_CRD_NewConsumer(t *testing.T) {
 }
 
 func TestUpdateAllocations_CRD_GenerationMismatch(t *testing.T) {
-	hv := testHypervisorWithBooking("hv-node-1", testRPUUID, testConsumerUUID, 2, 4096)
+	hv := testHypervisorWithBooking("hv-node-1", testRPUUID, 2, 4096)
 	s := newAllocationsTestShim(t, FeatureModeCRD, 0, "", hv)
 
 	wrongGen := int64(99)
@@ -189,7 +189,7 @@ func TestUpdateAllocations_CRD_UnknownRP(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestListAllocations_CRD_Found(t *testing.T) {
-	hv := testHypervisorWithBooking("hv-node-1", testRPUUID, testConsumerUUID, 4, 8192)
+	hv := testHypervisorWithBooking("hv-node-1", testRPUUID, 4, 8192)
 	s := newAllocationsTestShim(t, FeatureModeCRD, 0, "", hv)
 
 	w := serveHandler(t, "GET", "/allocations/{consumer_uuid}",
@@ -232,8 +232,8 @@ func TestListAllocations_CRD_NotFound(t *testing.T) {
 }
 
 func TestListAllocations_CRD_MultiCR(t *testing.T) {
-	hv1obj := testHypervisorWithBooking("hv-node-1", testRPUUID, testConsumerUUID, 4, 8192)
-	hv2obj := testHypervisorWithBooking("hv-node-2", testRPUUID2, testConsumerUUID, 2, 4096)
+	hv1obj := testHypervisorWithBooking("hv-node-1", testRPUUID, 4, 8192)
+	hv2obj := testHypervisorWithBooking("hv-node-2", testRPUUID2, 2, 4096)
 	s := newAllocationsTestShim(t, FeatureModeCRD, 0, "", hv1obj, hv2obj)
 
 	w := serveHandler(t, "GET", "/allocations/{consumer_uuid}",
@@ -256,7 +256,7 @@ func TestListAllocations_CRD_MultiCR(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDeleteAllocations_CRD_Found(t *testing.T) {
-	hv := testHypervisorWithBooking("hv-node-1", testRPUUID, testConsumerUUID, 4, 8192)
+	hv := testHypervisorWithBooking("hv-node-1", testRPUUID, 4, 8192)
 	s := newAllocationsTestShim(t, FeatureModeCRD, 0, "", hv)
 
 	w := serveHandler(t, "DELETE", "/allocations/{consumer_uuid}",
@@ -316,7 +316,7 @@ func TestUpdateAllocations_Hybrid_NonKVMOnly(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestListAllocations_Hybrid_Merge(t *testing.T) {
-	hv := testHypervisorWithBooking("hv-node-1", testRPUUID, testConsumerUUID, 4, 8192)
+	hv := testHypervisorWithBooking("hv-node-1", testRPUUID, 4, 8192)
 	upstreamBody := `{"allocations":{"upstream-rp-uuid":{"resources":{"VCPU":2}}},"consumer_generation":1,"project_id":"proj-1","user_id":"user-1"}`
 	s := newAllocationsTestShim(t, FeatureModeHybrid, http.StatusOK, upstreamBody, hv)
 
@@ -346,7 +346,7 @@ func TestListAllocations_Hybrid_Merge(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDeleteAllocations_Hybrid(t *testing.T) {
-	hv := testHypervisorWithBooking("hv-node-1", testRPUUID, testConsumerUUID, 4, 8192)
+	hv := testHypervisorWithBooking("hv-node-1", testRPUUID, 4, 8192)
 	s := newAllocationsTestShim(t, FeatureModeHybrid, http.StatusNoContent, "", hv)
 
 	w := serveHandler(t, "DELETE", "/allocations/{consumer_uuid}",
@@ -357,7 +357,7 @@ func TestDeleteAllocations_Hybrid(t *testing.T) {
 }
 
 func TestDeleteAllocations_Hybrid_UpstreamFails(t *testing.T) {
-	hv := testHypervisorWithBooking("hv-node-1", testRPUUID, testConsumerUUID, 4, 8192)
+	hv := testHypervisorWithBooking("hv-node-1", testRPUUID, 4, 8192)
 	s := newAllocationsTestShim(t, FeatureModeHybrid, http.StatusInternalServerError, "upstream error", hv)
 
 	w := serveHandler(t, "DELETE", "/allocations/{consumer_uuid}",
