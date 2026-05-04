@@ -615,7 +615,7 @@ groups:
         investigated if this alert persists.
 
   - alert: CortexNovaDoesntFindValidKVMHosts
-    expr: sum by (az, hvtype) (cortex_vm_faults{hvtype=~"CH|QEMU",faultmsg=~".*No valid host was found.*"}) > 0
+    expr: sum by (az, hvtype) (increase(cortex_vm_faults{hvtype=~"CH|QEMU",faultmsg=~".*No valid host was found.*"}[5m])) > 0
     for: 5m
     labels:
       context: scheduling
@@ -627,7 +627,7 @@ groups:
     annotations:
       summary: "Nova scheduling cannot find valid KVM hosts"
       description: >
-        Cortex is seeing faulty vms in `{{$labels.az}}` where Nova scheduling
+        Cortex is seeing new faulty vms in `{{$labels.az}}` where Nova scheduling
         failed to find a valid `{{$labels.hvtype}}` host. This may indicate
         capacity issues, misconfigured filters, or resource constraints in the
         datacenter. Investigate the affected VMs and hypervisor availability.
