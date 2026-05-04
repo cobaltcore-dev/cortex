@@ -22,7 +22,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: cleanup
-          image: bitnami/kubectl:latest
+          image: "{{ .Values.cleanup.image.repository }}:{{ .Values.cleanup.image.tag }}"
           command: ["/bin/sh", "-c"]
           args:
             - |

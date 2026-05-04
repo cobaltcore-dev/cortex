@@ -22,3 +22,8 @@ resources:
 
 auth:
   password: secret
+
+cleanup:
+  image:
+    repository: bitnami/kubectl
+    tag: latest
