@@ -95,6 +95,8 @@ cortex: &cortex
           - cortex.cloud/v1alpha1/ReservationList
           - cortex.cloud/v1alpha1/CommittedResource
           - cortex.cloud/v1alpha1/CommittedResourceList
+          - cortex.cloud/v1alpha1/FlavorGroupCapacity
+          - cortex.cloud/v1alpha1/FlavorGroupCapacityList
           - kvm.cloud.sap/v1/Hypervisor
           - kvm.cloud.sap/v1/HypervisorList
           - v1/Secret
