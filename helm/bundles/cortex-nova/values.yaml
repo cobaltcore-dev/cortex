@@ -95,6 +95,8 @@ cortex: &cortex
           - cortex.cloud/v1alpha1/ReservationList
           - cortex.cloud/v1alpha1/CommittedResource
           - cortex.cloud/v1alpha1/CommittedResourceList
+          - cortex.cloud/v1alpha1/ProjectQuota
+          - cortex.cloud/v1alpha1/ProjectQuotaList
           - kvm.cloud.sap/v1/Hypervisor
           - kvm.cloud.sap/v1/HypervisorList
           - v1/Secret
@@ -133,6 +135,7 @@ cortex-scheduling-controllers:
       - hypervisor-overcommit-controller
       - committed-resource-reservations-controller
       - failover-reservations-controller
+      - quota-controller
     enabledTasks:
       - nova-history-cleanup-task
     # If true, the external scheduler API will limit the list of hosts in its
@@ -170,6 +173,9 @@ cortex-scheduling-controllers:
     # Whether the report-capacity API endpoint is active
     # When false, the endpoint returns HTTP 503.
     committedResourceEnableReportCapacityAPI: true
+    # Whether the quota API endpoint is active
+    # When false, the endpoint returns HTTP 503.
+    committedResourceEnableQuotaAPI: true
     # OvercommitMappings is a list of mappings that map hypervisor traits to
     # overcommit ratios. Note that this list is applied in order, so if there
     # are multiple mappings applying to the same hypervisors, the last mapping

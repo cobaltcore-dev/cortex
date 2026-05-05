@@ -59,6 +59,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	commitmentsapi "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/quota"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
@@ -687,6 +688,67 @@ func main() {
 			"trustHypervisorLocation", failoverConfig.TrustHypervisorLocation,
 			"maxVMsToProcess", failoverConfig.MaxVMsToProcess,
 			"vmSelectionRotationInterval", failoverConfig.VMSelectionRotationInterval)
+	}
+
+	if slices.Contains(mainConfig.EnabledControllers, "quota-controller") {
+		setupLog.Info("enabling controller", "controller", "quota-controller")
+		quotaConfig := conf.GetConfigOrDie[quota.QuotaControllerConfig]()
+		quotaConfig.ApplyDefaults()
+
+		// Get datasource name from the failover/commitments config (shared dependency)
+		datasourceName := conf.GetConfigOrDie[failover.FailoverConfig]().DatasourceName
+		if datasourceName == "" {
+			setupLog.Error(nil, "quota-controller requires datasourceName to be configured")
+			os.Exit(1)
+		}
+
+		quotaMetrics := quota.NewQuotaMetrics(metrics.Registry)
+
+		// Defer initialization until the manager starts (cache must be ready for postgres reader)
+		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+			// Create PostgresReader from the configured Datasource CRD
+			postgresReader, err := external.NewPostgresReader(ctx, multiclusterClient, datasourceName)
+			if err != nil {
+				setupLog.Error(err, "unable to create postgres reader for quota controller",
+					"datasourceName", datasourceName)
+				return err
+			}
+
+			// Create NovaReader and DBVMSource
+			novaReader := external.NewNovaReader(postgresReader)
+			vmSource := failover.NewDBVMSource(novaReader)
+
+			// Create the quota controller
+			quotaController := quota.NewQuotaController(
+				multiclusterClient,
+				vmSource,
+				quotaConfig,
+				quotaMetrics,
+			)
+
+			// Set up the watch-based reconciler (ProjectQuota spec changes, CR changes)
+			if err := quotaController.SetupWithManager(mgr); err != nil {
+				setupLog.Error(err, "unable to set up quota controller")
+				return err
+			}
+
+			// Set up the HV watcher for incremental TotalUsage updates
+			if err := quotaController.SetupHVWatcher(mgr); err != nil {
+				setupLog.Error(err, "unable to set up quota HV watcher")
+				return err
+			}
+
+			setupLog.Info("quota-controller starting",
+				"fullReconcileInterval", quotaConfig.FullReconcileInterval.Duration,
+				"crStateFilter", quotaConfig.CRStateFilter)
+
+			// Start the periodic full reconciliation loop
+			return quotaController.Start(ctx)
+		})); err != nil {
+			setupLog.Error(err, "unable to add quota controller to manager")
+			os.Exit(1)
+		}
+		setupLog.Info("quota-controller registered")
 	}
 
 	// +kubebuilder:scaffold:builder

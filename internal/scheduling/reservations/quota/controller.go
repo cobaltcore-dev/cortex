@@ -180,9 +180,14 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// Read persisted TotalUsage (already computed by full reconcile or incremental)
 	totalUsage := pq.Status.TotalUsage
 	if totalUsage == nil {
-		// No TotalUsage yet — full reconcile hasn't run. Skip.
-		logger.V(1).Info("no TotalUsage persisted yet, skipping PaygUsage recompute")
-		return ctrl.Result{}, nil
+		// No TotalUsage yet — compute it now for this single project (bootstrap case).
+		logger.Info("no TotalUsage persisted yet, computing for this project")
+		var err error
+		totalUsage, err = c.computeTotalUsageForProject(ctx, projectID)
+		if err != nil {
+			logger.Error(err, "failed to compute TotalUsage for project")
+			return ctrl.Result{}, err
+		}
 	}
 
 	// List CRs for this project (from local cache)
@@ -199,8 +204,9 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// Derive PaygUsage
 	paygUsage := derivePaygUsage(totalUsage, crUsage)
 
-	// Write updated PaygUsage with conflict retry (keep TotalUsage unchanged)
-	if err := c.updateProjectQuotaStatusWithRetry(ctx, pq.Name, totalUsage, paygUsage, false); err != nil {
+	// Write updated status with conflict retry (full=true for bootstrap to set LastFullReconcileAt)
+	isBootstrap := pq.Status.TotalUsage == nil
+	if err := c.updateProjectQuotaStatusWithRetry(ctx, pq.Name, totalUsage, paygUsage, isBootstrap); err != nil {
 		logger.Error(err, "failed to update ProjectQuota status")
 		return ctrl.Result{}, err
 	}
@@ -208,8 +214,33 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// Record metrics
 	c.recordUsageMetrics(projectID, totalUsage, paygUsage, crUsage)
 
-	logger.V(1).Info("PaygUsage recomputed", "project", projectID)
+	logger.V(1).Info("PaygUsage recomputed", "project", projectID, "bootstrap", isBootstrap)
 	return ctrl.Result{}, nil
+}
+
+// computeTotalUsageForProject computes TotalUsage for a single project by reading
+// all VMs from Postgres and filtering to the target project. Used as bootstrap when
+// a ProjectQuota is first created and has no persisted TotalUsage yet.
+func (c *QuotaController) computeTotalUsageForProject(ctx context.Context, projectID string) (map[string]v1alpha1.ResourceQuotaUsage, error) {
+	// Fetch flavor groups from Knowledge CRD
+	flavorGroupClient := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
+	flavorGroups, err := flavorGroupClient.GetAllFlavorGroups(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get flavor groups: %w", err)
+	}
+
+	// Build flavorName → flavorGroup lookup
+	flavorToGroup := buildFlavorToGroupMap(flavorGroups)
+
+	// Fetch all VMs and compute usage (only the target project's data will be used)
+	vms, err := c.VMSource.ListVMs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list VMs: %w", err)
+	}
+
+	// Compute totalUsage for all projects and return just this one
+	totalUsageByProject := c.computeTotalUsage(vms, flavorToGroup, flavorGroups)
+	return totalUsageByProject[projectID], nil
 }
 
 // ============================================================================
