@@ -808,6 +808,43 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 	}
 }
 
+func TestFilterHasEnoughCapacity_IgnoredReservationTypes_CallTime(t *testing.T) {
+	scheme := buildTestScheme(t)
+
+	// Same two-host setup as the YAML-path test: CR on host1, Failover on host2.
+	// Each blocks 4 CPU, leaving 4 free; request needs 8 CPU so both hosts fail without ignoring.
+	hypervisors := []*hv1.Hypervisor{
+		newHypervisor("host1", "16", "8", "32Gi", "16Gi"),
+		newHypervisor("host2", "16", "8", "32Gi", "16Gi"),
+	}
+	reservations := []*v1alpha1.Reservation{
+		newCommittedReservation("cr-res", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
+		newFailoverReservation("failover-res", "host2", "4", "8Gi", map[string]string{"other-vm": "host3"}),
+	}
+	request := newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"})
+
+	objects := make([]client.Object, 0, len(hypervisors)+len(reservations))
+	for _, h := range hypervisors {
+		objects = append(objects, h.DeepCopy())
+	}
+	for _, r := range reservations {
+		objects = append(objects, r.DeepCopy())
+	}
+
+	step := &FilterHasEnoughCapacity{}
+	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+	step.Options = FilterHasEnoughCapacityOpts{LockReserved: true} // no YAML-level ignores
+
+	// Call-time: ignore CR reservations → host1 passes, host2 still blocked by failover.
+	result, err := step.Run(slog.Default(), request, lib.Options{
+		IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	assertActivations(t, result.Activations, []string{"host1"}, []string{"host2"})
+}
+
 func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T) {
 	scheme := buildTestScheme(t)
 

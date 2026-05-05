@@ -299,6 +299,16 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType, opts Optio
 	hosts := p.sortHostsByWeights(outWeights)
 	traceLog.Info("scheduler: sorted hosts", "hosts", hosts)
 
+	if opts.MaxCandidates > 0 && len(hosts) > opts.MaxCandidates {
+		hosts = hosts[:opts.MaxCandidates]
+		// Drop trimmed hosts from outWeights so AggregatedOutWeights stays consistent.
+		for host := range outWeights {
+			if !slices.Contains(hosts, host) {
+				delete(outWeights, host)
+			}
+		}
+	}
+
 	// Collect some metrics about the pipeline execution.
 	go p.monitor.observePipelineResult(request, hosts)
 

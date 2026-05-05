@@ -928,3 +928,77 @@ func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
 
 // Error variable for testing
 var errGathererFailed = errors.New("gatherer failed")
+
+func TestFilterWeigherPipelineController_PeekReadOnly(t *testing.T) {
+	validRequest := api.ExternalSchedulerRequest{
+		Spec: api.NovaObject[api.NovaSpec]{
+			Data: api.NovaSpec{NumInstances: 1},
+		},
+	}
+	validRaw, err := json.Marshal(validRequest)
+	if err != nil {
+		t.Fatalf("failed to marshal test request: %v", err)
+	}
+
+	c := &FilterWeigherPipelineController{}
+	c.PipelineConfigs = map[string]v1alpha1.Pipeline{
+		"test-pipeline": {
+			Spec: v1alpha1.PipelineSpec{CreateHistory: false},
+		},
+	}
+
+	tests := []struct {
+		name     string
+		decision *v1alpha1.Decision
+		want     bool
+	}{
+		{
+			name: "nil NovaRaw defaults to exclusive lock",
+			decision: &v1alpha1.Decision{
+				Spec: v1alpha1.DecisionSpec{
+					PipelineRef: corev1.ObjectReference{Name: "test-pipeline"},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "invalid JSON defaults to exclusive lock",
+			decision: &v1alpha1.Decision{
+				Spec: v1alpha1.DecisionSpec{
+					PipelineRef: corev1.ObjectReference{Name: "test-pipeline"},
+					NovaRaw:     &runtime.RawExtension{Raw: []byte("not-json")},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "unknown pipeline defaults to exclusive lock",
+			decision: &v1alpha1.Decision{
+				Spec: v1alpha1.DecisionSpec{
+					PipelineRef: corev1.ObjectReference{Name: "unknown-pipeline"},
+					NovaRaw:     &runtime.RawExtension{Raw: validRaw},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "valid request with non-ReadOnly intent uses exclusive lock",
+			decision: &v1alpha1.Decision{
+				Spec: v1alpha1.DecisionSpec{
+					PipelineRef: corev1.ObjectReference{Name: "test-pipeline"},
+					NovaRaw:     &runtime.RawExtension{Raw: validRaw},
+				},
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := c.peekReadOnly(tt.decision)
+			if got != tt.want {
+				t.Errorf("expected peekReadOnly = %v, got %v", tt.want, got)
+			}
+		})
+	}
+}

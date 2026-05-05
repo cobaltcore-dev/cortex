@@ -372,3 +372,59 @@ func TestFilterWeigherPipelineMonitor_SubPipeline(t *testing.T) {
 		t.Error("original monitor should not be modified")
 	}
 }
+
+func TestPipeline_MaxCandidates(t *testing.T) {
+	// Pipeline that passes all 4 hosts with descending weights.
+	pipeline := &filterWeigherPipeline[mockFilterWeigherPipelineRequest]{
+		filters:       map[string]Filter[mockFilterWeigherPipelineRequest]{},
+		filtersOrder:  []string{},
+		weighersOrder: []string{},
+		weighers:      map[string]Weigher[mockFilterWeigherPipelineRequest]{},
+	}
+	request := mockFilterWeigherPipelineRequest{
+		Hosts:   []string{"host1", "host2", "host3", "host4"},
+		Weights: map[string]float64{"host1": 4.0, "host2": 3.0, "host3": 2.0, "host4": 1.0},
+	}
+
+	tests := []struct {
+		name          string
+		maxCandidates int
+		wantLen       int
+		wantFirst     string
+	}{
+		{"no limit", 0, 4, "host1"},
+		{"limit to 2", 2, 2, "host1"},
+		{"limit to 1", 1, 1, "host1"},
+		{"limit larger than hosts", 10, 4, "host1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := pipeline.Run(request, Options{MaxCandidates: tt.maxCandidates})
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			if len(result.OrderedHosts) != tt.wantLen {
+				t.Errorf("expected %d hosts, got %d: %v", tt.wantLen, len(result.OrderedHosts), result.OrderedHosts)
+			}
+			if len(result.OrderedHosts) > 0 && result.OrderedHosts[0] != tt.wantFirst {
+				t.Errorf("expected first host %s, got %s", tt.wantFirst, result.OrderedHosts[0])
+			}
+			if tt.maxCandidates > 0 && len(result.OrderedHosts) <= tt.maxCandidates {
+				// AggregatedOutWeights must only contain returned hosts.
+				for host := range result.AggregatedOutWeights {
+					found := false
+					for _, h := range result.OrderedHosts {
+						if h == host {
+							found = true
+							break
+						}
+					}
+					if !found {
+						t.Errorf("AggregatedOutWeights contains trimmed host %s", host)
+					}
+				}
+			}
+		})
+	}
+}

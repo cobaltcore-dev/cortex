@@ -106,7 +106,8 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		}
 
 		// Check if this reservation type should be ignored
-		if slices.Contains(s.Options.IgnoredReservationTypes, reservation.Spec.Type) {
+		if slices.Contains(s.Options.IgnoredReservationTypes, reservation.Spec.Type) ||
+			slices.Contains(opts.IgnoredReservationTypes, reservation.Spec.Type) {
 			traceLog.Debug("ignoring reservation type", "type", reservation.Spec.Type, "reservation", reservation.Name)
 			continue
 		}
