@@ -4,6 +4,7 @@
 package filters
 
 import (
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"log/slog"
 	"testing"
 
@@ -309,7 +310,7 @@ func TestNodeAvailableFilter_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filter := &NodeAvailableFilter{}
-			result, err := filter.Run(slog.Default(), tt.request)
+			result, err := filter.Run(slog.Default(), tt.request, lib.Options{})
 
 			if err != nil {
 				t.Errorf("expected Run() to succeed, got error: %v", err)

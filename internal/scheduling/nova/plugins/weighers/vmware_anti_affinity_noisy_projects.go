@@ -52,7 +52,7 @@ func (s *VMwareAntiAffinityNoisyProjectsStep) Init(ctx context.Context, client c
 }
 
 // Downvote the hosts a project is currently running on if it's noisy.
-func (s *VMwareAntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *VMwareAntiAffinityNoisyProjectsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest, opts lib.Options) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	result.Statistics["avg cpu usage of this project"] = s.PrepareStats(request, "%")

@@ -30,6 +30,7 @@ func (opts FilterExcludeHostsStepOpts) Validate() error { return nil }
 func (s *FilterExcludeHostsStep) Run(
 	traceLog *slog.Logger,
 	request api.ExternalSchedulerRequest,
+	opts lib.Options,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)

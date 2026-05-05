@@ -31,7 +31,7 @@ func (m *mockFilter[RequestType]) Validate(ctx context.Context, params v1alpha1.
 	}
 	return m.ValidateFunc(ctx, params)
 }
-func (m *mockFilter[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
+func (m *mockFilter[RequestType]) Run(traceLog *slog.Logger, request RequestType, opts Options) (*FilterWeigherPipelineStepResult, error) {
 	if m.RunFunc == nil {
 		return &FilterWeigherPipelineStepResult{}, nil
 	}

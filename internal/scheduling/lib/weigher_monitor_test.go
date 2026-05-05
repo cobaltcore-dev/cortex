@@ -100,7 +100,7 @@ func TestWeigherMonitor_Run(t *testing.T) {
 		Weights: map[string]float64{"host1": 0.1, "host2": 0.2, "host3": 0.3},
 	}
 
-	result, err := wm.Run(slog.Default(), request)
+	result, err := wm.Run(slog.Default(), request, Options{})
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}

@@ -85,7 +85,7 @@ func (s *VMwareBinpackStep) Init(ctx context.Context, client client.Client, weig
 }
 
 // Run this weigher in the pipeline after filters have been executed.
-func (s *VMwareBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *VMwareBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest, opts lib.Options) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	result.Statistics["binpack score"] = s.PrepareStats(request, "float")
 

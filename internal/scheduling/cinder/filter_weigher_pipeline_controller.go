@@ -121,7 +121,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		return err
 	}
 
-	result, err := pipeline.Run(request)
+	result, err := pipeline.Run(request, lib.Options{})
 	if err != nil {
 		log.Error(err, "failed to run pipeline")
 		return err

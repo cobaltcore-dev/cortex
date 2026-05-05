@@ -57,7 +57,7 @@ type KVMPreferSmallerHostsStep struct {
 }
 
 // Run this weigher in the pipeline after filters have been executed.
-func (s *KVMPreferSmallerHostsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMPreferSmallerHostsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest, opts lib.Options) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	result.Statistics["small host score"] = s.PrepareStats(request, "float")
 

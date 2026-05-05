@@ -27,7 +27,7 @@ func (f *NodeCapacityFilter) Validate(ctx context.Context, params v1alpha1.Param
 	return nil
 }
 
-func (NodeCapacityFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (NodeCapacityFilter) Run(traceLog *slog.Logger, request pods.PodPipelineRequest, opts lib.Options) (*lib.FilterWeigherPipelineStepResult, error) {
 	activations := make(map[string]float64)
 	stats := make(map[string]lib.FilterWeigherPipelineStepStatistics)
 

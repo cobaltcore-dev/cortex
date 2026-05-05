@@ -156,7 +156,7 @@ func TestFilterValidator_Run(t *testing.T) {
 			}
 			traceLog := slog.Default()
 
-			result, err := validator.Run(traceLog, request)
+			result, err := validator.Run(traceLog, request, Options{})
 
 			if tt.expectError && err == nil {
 				t.Error("expected error but got nil")

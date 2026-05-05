@@ -4,6 +4,7 @@
 package filters
 
 import (
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"log/slog"
 	"testing"
 
@@ -331,7 +332,7 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterHostInstructionsStep{}
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(slog.Default(), tt.request, lib.Options{})
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

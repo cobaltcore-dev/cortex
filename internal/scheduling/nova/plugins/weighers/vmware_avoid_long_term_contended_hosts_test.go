@@ -4,6 +4,7 @@
 package weighers
 
 import (
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"context"
 	"log/slog"
 	"strings"
@@ -256,7 +257,7 @@ func TestVMwareAvoidLongTermContendedHostsStep_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(slog.Default(), tt.request, lib.Options{})
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

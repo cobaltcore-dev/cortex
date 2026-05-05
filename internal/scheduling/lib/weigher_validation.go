@@ -35,8 +35,8 @@ func validateWeigher[RequestType FilterWeigherPipelineRequest](weigher Weigher[R
 }
 
 // Run the weigher and validate what happens.
-func (s *WeigherValidator[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
-	result, err := s.Weigher.Run(traceLog, request)
+func (s *WeigherValidator[RequestType]) Run(traceLog *slog.Logger, request RequestType, opts Options) (*FilterWeigherPipelineStepResult, error) {
+	result, err := s.Weigher.Run(traceLog, request, opts)
 	if err != nil {
 		return nil, err
 	}

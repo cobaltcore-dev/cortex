@@ -72,7 +72,7 @@ func TestPipeline_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := pipeline.Run(tt.request)
+			result, err := pipeline.Run(tt.request, Options{})
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -221,7 +221,7 @@ func TestPipeline_RunFilters(t *testing.T) {
 		Weights: map[string]float64{"host1": 0.0, "host2": 0.0, "host3": 0.0},
 	}
 
-	req, _ := p.runFilters(slog.Default(), request)
+	req, _ := p.runFilters(slog.Default(), request, Options{})
 	if len(req.Hosts) != 2 {
 		t.Fatalf("expected 2 step results, got %d", len(req.Hosts))
 	}

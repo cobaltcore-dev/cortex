@@ -4,6 +4,7 @@
 package filters
 
 import (
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"log/slog"
 	"testing"
 
@@ -553,7 +554,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 				WithScheme(scheme).
 				WithObjects(hvs...).
 				Build()
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(slog.Default(), tt.request, lib.Options{})
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -628,7 +629,7 @@ func TestFilterCapabilitiesStep_DoesNotMutateExtraSpecs(t *testing.T) {
 		WithObjects(hvs...).
 		Build()
 
-	_, err = step.Run(slog.Default(), request)
+	_, err = step.Run(slog.Default(), request, lib.Options{})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

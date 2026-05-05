@@ -19,7 +19,7 @@ type FilterAggregateMetadata struct {
 
 // Restrict hosts to specific projects if they are in an aggregate that has
 // the "filter_tenant_id" metadata key set.
-func (s *FilterAggregateMetadata) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterAggregateMetadata) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest, opts lib.Options) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	hvs := &hv1.HypervisorList{}

@@ -31,7 +31,7 @@ func (f *NoopFilter) Validate(ctx context.Context, params v1alpha1.Parameters) e
 // not in the map are considered as filtered out.
 // Provide a traceLog that contains the global request id and should
 // be used to log the step's execution.
-func (NoopFilter) Run(traceLog *slog.Logger, request ironcore.MachinePipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (NoopFilter) Run(traceLog *slog.Logger, request ironcore.MachinePipelineRequest, opts lib.Options) (*lib.FilterWeigherPipelineStepResult, error) {
 	activations := make(map[string]float64, len(request.Pools))
 	stats := make(map[string]lib.FilterWeigherPipelineStepStatistics)
 	// Usually you would do some filtering here, or adjust the weights.

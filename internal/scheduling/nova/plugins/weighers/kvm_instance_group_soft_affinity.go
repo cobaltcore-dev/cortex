@@ -26,7 +26,7 @@ type KVMInstanceGroupSoftAffinityStep struct {
 	lib.BaseWeigher[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
-func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest, opts lib.Options) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	result.Statistics["affinity"] = s.PrepareStats(request, "float")
 

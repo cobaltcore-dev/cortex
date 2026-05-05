@@ -4,6 +4,7 @@
 package weighers
 
 import (
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"log/slog"
 	"strings"
 	"testing"
@@ -599,7 +600,7 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			step.Options = tt.opts
 
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(slog.Default(), tt.request, lib.Options{})
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil")

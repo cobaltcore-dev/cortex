@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -77,10 +76,6 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 	c.processMu.Lock()
 	defer c.processMu.Unlock()
 
-	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
-	if !ok {
-		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
-	}
 	err := c.process(ctx, decision)
 	if err != nil {
 		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
@@ -96,9 +91,6 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 			Reason:  "PipelineRunSucceeded",
 			Message: "pipeline run succeeded",
 		})
-	}
-	if pipelineConf.Spec.CreateHistory {
-		c.upsertHistory(ctx, decision, err)
 	}
 	return err
 }
@@ -166,7 +158,11 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		log.Info("gathered all placement candidates", "numHosts", len(request.Hosts))
 	}
 
-	result, err := pipeline.Run(request)
+	opts := c.buildOptions(pipelineConf)
+	result, err := pipeline.Run(request, opts)
+	if opts.RecordHistory {
+		c.upsertHistory(ctx, decision, err)
+	}
 	if err != nil {
 		log.Error(err, "failed to run pipeline")
 		return err
@@ -183,6 +179,12 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 }
 
 // The base controller will delegate the pipeline creation down to this method.
+func (c *FilterWeigherPipelineController) buildOptions(pipelineConf v1alpha1.Pipeline) lib.Options {
+	return lib.Options{
+		RecordHistory: pipelineConf.Spec.CreateHistory,
+	}
+}
+
 func (c *FilterWeigherPipelineController) InitPipeline(
 	ctx context.Context,
 	p v1alpha1.Pipeline,
