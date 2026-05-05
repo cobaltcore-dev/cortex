@@ -23,35 +23,43 @@ type FlavorGroupCapacitySpec struct {
 	AvailabilityZone string `json:"availabilityZone"`
 }
 
-// FlavorGroupCapacityStatus defines the observed state of FlavorGroupCapacity.
-type FlavorGroupCapacityStatus struct {
-	// TotalCapacity is the total schedulable slots in an empty-datacenter scenario.
-	// Computed as sum of floor(EffectiveCapacity.Memory / smallestFlavorMemory) across
-	// all hosts eligible for this flavor group (empty-state scheduler probe).
-	// +kubebuilder:validation:Optional
-	TotalCapacity int64 `json:"totalCapacity,omitempty"`
+// FlavorCapacityStatus holds per-flavor capacity numbers for one (flavor group × AZ) pair.
+type FlavorCapacityStatus struct {
+	// FlavorName is the OpenStack flavor name (e.g. "hana-v2-small").
+	FlavorName string `json:"flavorName"`
 
-	// TotalHosts is the number of hosts eligible for this flavor group in the empty-state probe.
-	// +kubebuilder:validation:Optional
-	TotalHosts int64 `json:"totalHosts,omitempty"`
-
-	// TotalPlaceable is the schedulable slots remaining given current VM allocations.
-	// Computed from the current-state scheduler probe.
-	// +kubebuilder:validation:Optional
-	TotalPlaceable int64 `json:"totalPlaceable,omitempty"`
-
-	// PlaceableHosts is the number of hosts still able to accept a new smallest-flavor VM.
+	// PlaceableHosts is the number of hosts that can still fit this flavor given current allocations.
 	// +kubebuilder:validation:Optional
 	PlaceableHosts int64 `json:"placeableHosts,omitempty"`
+
+	// PlaceableVMs is the number of VM slots remaining for this flavor given current allocations.
+	// +kubebuilder:validation:Optional
+	PlaceableVMs int64 `json:"placeableVms,omitempty"`
+
+	// TotalCapacityHosts is the number of eligible hosts in an empty-datacenter scenario.
+	// +kubebuilder:validation:Optional
+	TotalCapacityHosts int64 `json:"totalCapacityHosts,omitempty"`
+
+	// TotalCapacityVMSlots is the maximum number of VM slots in an empty-datacenter scenario.
+	// +kubebuilder:validation:Optional
+	TotalCapacityVMSlots int64 `json:"totalCapacityVmSlots,omitempty"`
+}
+
+// FlavorGroupCapacityStatus defines the observed state of FlavorGroupCapacity.
+type FlavorGroupCapacityStatus struct {
+	// Flavors holds per-flavor capacity data for all flavors in the group.
+	// +kubebuilder:validation:Optional
+	Flavors []FlavorCapacityStatus `json:"flavors,omitempty"`
+
+	// CommittedCapacity is the sum of AcceptedAmount across active CommittedResource CRDs,
+	// expressed in multiples of the smallest flavor's memory.
+	// +kubebuilder:validation:Optional
+	CommittedCapacity int64 `json:"committedCapacity,omitempty"`
 
 	// TotalInstances is the total number of VM instances running on hypervisors in this AZ,
 	// derived from Hypervisor CRD Status.Instances (not filtered by flavor group).
 	// +kubebuilder:validation:Optional
 	TotalInstances int64 `json:"totalInstances,omitempty"`
-
-	// CommittedCapacity is the sum of AcceptedAmount across Ready=True CommittedResource CRDs.
-	// +kubebuilder:validation:Optional
-	CommittedCapacity int64 `json:"committedCapacity,omitempty"`
 
 	// LastReconcileAt is the timestamp of the last successful reconcile.
 	// +kubebuilder:validation:Optional
@@ -67,9 +75,7 @@ type FlavorGroupCapacityStatus struct {
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="FlavorGroup",type="string",JSONPath=".spec.flavorGroup"
 // +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
-// +kubebuilder:printcolumn:name="TotalCapacity",type="integer",JSONPath=".status.totalCapacity"
-// +kubebuilder:printcolumn:name="TotalPlaceable",type="integer",JSONPath=".status.totalPlaceable"
-// +kubebuilder:printcolumn:name="TotalHosts",type="integer",JSONPath=".status.totalHosts"
+// +kubebuilder:printcolumn:name="TotalInstances",type="integer",JSONPath=".status.totalInstances"
 // +kubebuilder:printcolumn:name="LastReconcile",type="date",JSONPath=".status.lastReconcileAt"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 

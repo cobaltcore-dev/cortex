@@ -6,6 +6,7 @@ package capacity
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"sort"
 	"strings"
 	"time"
@@ -27,7 +28,7 @@ import (
 var log = ctrl.Log.WithName("capacity-controller").WithValues("module", "capacity")
 
 // Controller reconciles FlavorGroupCapacity CRDs on a fixed interval.
-// For each (flavor group × AZ) pair it runs two scheduler probes and updates the CRD status.
+// For each (flavor group × AZ) pair it probes all flavors in the group and updates the CRD status.
 type Controller struct {
 	client          client.Client
 	schedulerClient *reservations.SchedulerClient
@@ -102,29 +103,13 @@ func (c *Controller) reconcileOne(
 	allHVs []hv1.Hypervisor,
 ) error {
 
-	smallestFlavor := groupData.SmallestFlavor
-	smallestFlavorBytes := int64(smallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec
+	smallestFlavorBytes := int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec
 	if smallestFlavorBytes <= 0 {
-		return fmt.Errorf("smallest flavor %q has invalid memory %d MB", smallestFlavor.Name, smallestFlavor.MemoryMB)
-	}
-
-	// Empty-state probe: scheduler ignores all current VM allocations.
-	totalCapacity, totalHosts, totalErr := c.probeScheduler(ctx, smallestFlavor, az, c.config.TotalPipeline, hvByName, smallestFlavorBytes)
-
-	// Current-state probe: scheduler considers current VM allocations.
-	totalPlaceable, placeableHosts, placeableErr := c.probeScheduler(ctx, smallestFlavor, az, c.config.PlaceablePipeline, hvByName, smallestFlavorBytes)
-
-	// Count total instances on hypervisors in this AZ.
-	totalInstances := countInstancesInAZ(allHVs, az)
-
-	committedCapacity, committedErr := c.sumCommittedCapacity(ctx, groupName, az, smallestFlavorBytes)
-	if committedErr != nil {
-		log.Error(committedErr, "failed to sum committed capacity", "flavorGroup", groupName, "az", az)
-		committedCapacity = 0
+		return fmt.Errorf("smallest flavor %q has invalid memory %d MB",
+			groupData.SmallestFlavor.Name, groupData.SmallestFlavor.MemoryMB)
 	}
 
 	crdName := crdNameFor(groupName, az)
-	fresh := totalErr == nil && placeableErr == nil
 
 	var existing v1alpha1.FlavorGroupCapacity
 	err := c.client.Get(ctx, types.NamespacedName{Name: crdName}, &existing)
@@ -143,35 +128,67 @@ func (c *Controller) reconcileOne(
 		return fmt.Errorf("failed to get FlavorGroupCapacity %s: %w", crdName, err)
 	}
 
+	// Build a lookup of existing per-flavor data so we can preserve stale values on probe failure.
+	existingByName := make(map[string]v1alpha1.FlavorCapacityStatus, len(existing.Status.Flavors))
+	for _, f := range existing.Status.Flavors {
+		existingByName[f.FlavorName] = f
+	}
+
+	// Probe all flavors in the group. Sort for stable CRD output.
+	flavors := make([]compute.FlavorInGroup, len(groupData.Flavors))
+	copy(flavors, groupData.Flavors)
+	sort.Slice(flavors, func(i, j int) bool { return flavors[i].Name < flavors[j].Name })
+
+	allFresh := true
+	newFlavors := make([]v1alpha1.FlavorCapacityStatus, 0, len(flavors))
+	for _, flavor := range flavors {
+		cur := existingByName[flavor.Name]
+		cur.FlavorName = flavor.Name
+
+		totalVMSlots, totalHosts, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName)
+		placeableVMs, placeableHosts, placeableErr := c.probeScheduler(ctx, flavor, az, c.config.PlaceablePipeline, hvByName)
+
+		if totalErr != nil {
+			allFresh = false
+		} else {
+			cur.TotalCapacityVMSlots = totalVMSlots
+			cur.TotalCapacityHosts = totalHosts
+		}
+		if placeableErr != nil {
+			allFresh = false
+		} else {
+			cur.PlaceableVMs = placeableVMs
+			cur.PlaceableHosts = placeableHosts
+		}
+		newFlavors = append(newFlavors, cur)
+	}
+
+	// Count total instances and committed capacity (always available regardless of probe results).
+	totalInstances := countInstancesInAZ(allHVs, az)
+	committedCapacity, committedErr := c.sumCommittedCapacity(ctx, groupName, az, smallestFlavorBytes)
+	if committedErr != nil {
+		log.Error(committedErr, "failed to sum committed capacity", "flavorGroup", groupName, "az", az)
+		committedCapacity = 0
+	}
+
 	patch := client.MergeFrom(existing.DeepCopy())
-	if totalErr == nil {
-		existing.Status.TotalCapacity = totalCapacity
-		existing.Status.TotalHosts = totalHosts
-		existing.Status.TotalInstances = totalInstances
-		existing.Status.CommittedCapacity = committedCapacity
-	}
-	if placeableErr == nil {
-		existing.Status.TotalPlaceable = totalPlaceable
-		existing.Status.PlaceableHosts = placeableHosts
-	}
+	existing.Status.Flavors = newFlavors
+	existing.Status.TotalInstances = totalInstances
+	existing.Status.CommittedCapacity = committedCapacity
 	existing.Status.LastReconcileAt = metav1.Now()
 
 	freshCondition := metav1.Condition{
 		Type:               v1alpha1.FlavorGroupCapacityConditionReady,
 		ObservedGeneration: existing.Generation,
 	}
-	if fresh {
+	if allFresh {
 		freshCondition.Status = metav1.ConditionTrue
 		freshCondition.Reason = "ReconcileSucceeded"
 		freshCondition.Message = "capacity data is up-to-date"
 	} else {
 		freshCondition.Status = metav1.ConditionFalse
 		freshCondition.Reason = "ReconcileFailed"
-		if totalErr != nil {
-			freshCondition.Message = fmt.Sprintf("empty-state probe failed: %v", totalErr)
-		} else {
-			freshCondition.Message = fmt.Sprintf("current-state probe failed: %v", placeableErr)
-		}
+		freshCondition.Message = "one or more flavor probes failed"
 	}
 	meta.SetStatusCondition(&existing.Status.Conditions, freshCondition)
 
@@ -181,14 +198,19 @@ func (c *Controller) reconcileOne(
 	return nil
 }
 
-// probeScheduler calls the scheduler with the given pipeline and returns capacity + host count.
+// probeScheduler calls the scheduler with the given pipeline and returns VM slots + host count.
+// Capacity is computed as sum of floor(hostMemory / flavorMemory) across returned hosts.
 func (c *Controller) probeScheduler(
 	ctx context.Context,
 	flavor compute.FlavorInGroup,
 	az, pipeline string,
 	hvByName map[string]hv1.Hypervisor,
-	smallestFlavorBytes int64,
 ) (capacity, hosts int64, err error) {
+
+	flavorBytes := int64(flavor.MemoryMB) * 1024 * 1024 //nolint:gosec
+	if flavorBytes <= 0 {
+		return 0, 0, fmt.Errorf("flavor %q has invalid memory %d MB", flavor.Name, flavor.MemoryMB)
+	}
 
 	resp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
 		InstanceUUID:     uuid.New().String(),
@@ -222,7 +244,7 @@ func (c *Controller) probeScheduler(
 			continue
 		}
 		if capBytes := memCap.Value(); capBytes > 0 {
-			capacity += capBytes / smallestFlavorBytes
+			capacity += capBytes / flavorBytes
 		}
 	}
 	return capacity, hosts, nil
@@ -290,12 +312,19 @@ func countInstancesInAZ(hvs []hv1.Hypervisor, az string) int64 {
 	return total
 }
 
-// crdNameFor produces a valid DNS subdomain name for a (flavorGroup, az) pair.
-// Underscores and dots are replaced with dashes; the result is lowercased.
+// crdNameFor produces a collision-safe DNS label for a (flavorGroup, az) pair.
+// A 6-hex-char FNV-1a hash of the raw inputs is appended so that pairs differing only
+// by characters that sanitise identically (e.g. "." vs "-") still get unique names.
 func crdNameFor(flavorGroup, az string) string {
-	combined := flavorGroup + "-" + az
-	combined = strings.ToLower(combined)
-	combined = strings.ReplaceAll(combined, "_", "-")
-	combined = strings.ReplaceAll(combined, ".", "-")
-	return combined
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(flavorGroup + "\x00" + az))
+	suffix := fmt.Sprintf("%06x", h.Sum32()&0xFFFFFF)
+
+	prefix := strings.ToLower(flavorGroup + "-" + az)
+	prefix = strings.ReplaceAll(prefix, "_", "-")
+	prefix = strings.ReplaceAll(prefix, ".", "-")
+	if len(prefix) > 56 { // 56 + "-" + 6 = 63 chars (DNS label limit)
+		prefix = prefix[:56]
+	}
+	return prefix + "-" + suffix
 }

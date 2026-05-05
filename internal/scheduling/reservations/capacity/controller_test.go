@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"sort"
 	"testing"
 
@@ -41,15 +42,17 @@ func newTestScheme(t *testing.T) *runtime.Scheme {
 // newFlavorGroupKnowledge creates a ready Knowledge CRD with a single flavor group.
 func newFlavorGroupKnowledge(t *testing.T, groupName string, smallestMemoryMB uint64) *v1alpha1.Knowledge {
 	t.Helper()
+	smallestFlavor := compute.FlavorInGroup{
+		Name:       groupName + "-small",
+		MemoryMB:   smallestMemoryMB,
+		VCPUs:      2,
+		ExtraSpecs: map[string]string{"hw:cpu_policy": "dedicated"},
+	}
 	features := []compute.FlavorGroupFeature{
 		{
-			Name: groupName,
-			SmallestFlavor: compute.FlavorInGroup{
-				Name:       groupName + "-small",
-				MemoryMB:   smallestMemoryMB,
-				VCPUs:      2,
-				ExtraSpecs: map[string]string{"hw:cpu_policy": "dedicated"},
-			},
+			Name:           groupName,
+			SmallestFlavor: smallestFlavor,
+			Flavors:        []compute.FlavorInGroup{smallestFlavor},
 		},
 	}
 	raw, err := v1alpha1.BoxFeatureList(features)
@@ -108,19 +111,44 @@ func newMockSchedulerServer(t *testing.T, hosts []string) *httptest.Server {
 
 // --- unit tests for pure helper functions ---
 
+var (
+	dnsLabelRE   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$`)
+	hashSuffixRE = regexp.MustCompile(`^[0-9a-f]{6}$`)
+)
+
 func TestCrdNameFor(t *testing.T) {
 	tests := []struct {
-		group, az, want string
+		group, az  string
+		wantPrefix string
 	}{
-		{"2101", "qa-de-1a", "2101-qa-de-1a"},
-		{"My_Group", "eu.west.1", "my-group-eu-west-1"},
-		{"G", "AZ_1", "g-az-1"},
+		{"hana-v2", "qa-de-1a", "hana-v2-qa-de-1a-"},
+		{"My_Group", "eu.west.1", "my-group-eu-west-1-"},
+		{"G", "AZ_1", "g-az-1-"},
 	}
 	for _, tt := range tests {
 		got := crdNameFor(tt.group, tt.az)
-		if got != tt.want {
-			t.Errorf("crdNameFor(%q, %q) = %q, want %q", tt.group, tt.az, got, tt.want)
+		// Must be a valid DNS label (lowercase, hyphens, ≤63 chars).
+		if len(got) > 63 {
+			t.Errorf("crdNameFor(%q, %q) = %q (len=%d > 63)", tt.group, tt.az, got, len(got))
 		}
+		if !dnsLabelRE.MatchString(got) {
+			t.Errorf("crdNameFor(%q, %q) = %q is not a valid DNS label", tt.group, tt.az, got)
+		}
+		// Must start with the expected sanitised prefix followed by a 6-hex-char hash suffix.
+		if len(got) < len(tt.wantPrefix)+6 || got[:len(tt.wantPrefix)] != tt.wantPrefix {
+			t.Errorf("crdNameFor(%q, %q) = %q, want prefix %q + 6 hex chars", tt.group, tt.az, got, tt.wantPrefix)
+		}
+		hashPart := got[len(tt.wantPrefix):]
+		if !hashSuffixRE.MatchString(hashPart) {
+			t.Errorf("crdNameFor(%q, %q) hash suffix %q is not 6 hex chars", tt.group, tt.az, hashPart)
+		}
+	}
+
+	// Inputs that differ only by "." vs "-" must produce different CRD names.
+	dotName := crdNameFor("hana.v2", "qa-de-1a")
+	dashName := crdNameFor("hana-v2", "qa-de-1a")
+	if dotName == dashName {
+		t.Errorf("crdNameFor collision: hana.v2 and hana-v2 both produced %q", dotName)
 	}
 }
 
@@ -191,8 +219,10 @@ func TestReconcileOne_CreatesCRD(t *testing.T) {
 		PlaceablePipeline: "kvm-general-purpose",
 	})
 
+	smallFlavor := compute.FlavorInGroup{Name: groupName + "-small", MemoryMB: memMB, VCPUs: 2}
 	groupData := compute.FlavorGroupFeature{
-		SmallestFlavor: compute.FlavorInGroup{Name: groupName + "-small", MemoryMB: memMB},
+		SmallestFlavor: smallFlavor,
+		Flavors:        []compute.FlavorInGroup{smallFlavor},
 	}
 	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
 
@@ -200,22 +230,31 @@ func TestReconcileOne_CreatesCRD(t *testing.T) {
 		t.Fatalf("reconcileOne failed: %v", err)
 	}
 
-	// Verify CRD was created with correct status
 	var crd v1alpha1.FlavorGroupCapacity
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdNameFor(groupName, az)}, &crd); err != nil {
 		t.Fatalf("failed to get CRD: %v", err)
 	}
-	if crd.Status.TotalCapacity != 1 {
-		t.Errorf("TotalCapacity = %d, want 1", crd.Status.TotalCapacity)
+	if len(crd.Status.Flavors) != 1 {
+		t.Fatalf("len(Status.Flavors) = %d, want 1", len(crd.Status.Flavors))
 	}
-	if crd.Status.TotalHosts != 1 {
-		t.Errorf("TotalHosts = %d, want 1", crd.Status.TotalHosts)
+	f := crd.Status.Flavors[0]
+	if f.FlavorName != groupName+"-small" {
+		t.Errorf("FlavorName = %q, want %q", f.FlavorName, groupName+"-small")
+	}
+	if f.TotalCapacityVMSlots != 1 {
+		t.Errorf("TotalCapacityVMSlots = %d, want 1", f.TotalCapacityVMSlots)
+	}
+	if f.TotalCapacityHosts != 1 {
+		t.Errorf("TotalCapacityHosts = %d, want 1", f.TotalCapacityHosts)
+	}
+	if f.PlaceableVMs != 1 {
+		t.Errorf("PlaceableVMs = %d, want 1", f.PlaceableVMs)
+	}
+	if f.PlaceableHosts != 1 {
+		t.Errorf("PlaceableHosts = %d, want 1", f.PlaceableHosts)
 	}
 	if crd.Status.TotalInstances != 1 {
 		t.Errorf("TotalInstances = %d, want 1", crd.Status.TotalInstances)
-	}
-	if crd.Status.TotalPlaceable != 1 {
-		t.Errorf("TotalPlaceable = %d, want 1", crd.Status.TotalPlaceable)
 	}
 }
 
@@ -247,8 +286,10 @@ func TestReconcileOne_SetsReadyConditionFalseOnSchedulerError(t *testing.T) {
 		PlaceablePipeline: "kvm-general-purpose",
 	})
 
+	smallFlavor := compute.FlavorInGroup{Name: groupName + "-small", MemoryMB: memMB, VCPUs: 2}
 	groupData := compute.FlavorGroupFeature{
-		SmallestFlavor: compute.FlavorInGroup{Name: groupName + "-small", MemoryMB: memMB},
+		SmallestFlavor: smallFlavor,
+		Flavors:        []compute.FlavorInGroup{smallFlavor},
 	}
 
 	// reconcileOne returns no error itself (it continues on probe failure), but sets Ready=False
@@ -309,8 +350,10 @@ func TestReconcileOne_IdempotentUpdate(t *testing.T) {
 		PlaceablePipeline: "kvm-general-purpose",
 	})
 
+	smallFlavor := compute.FlavorInGroup{Name: groupName + "-small", MemoryMB: memMB, VCPUs: 2}
 	groupData := compute.FlavorGroupFeature{
-		SmallestFlavor: compute.FlavorInGroup{Name: groupName + "-small", MemoryMB: memMB},
+		SmallestFlavor: smallFlavor,
+		Flavors:        []compute.FlavorInGroup{smallFlavor},
 	}
 	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
 
@@ -327,8 +370,11 @@ func TestReconcileOne_IdempotentUpdate(t *testing.T) {
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdName}, &crd); err != nil {
 		t.Fatalf("failed to get CRD: %v", err)
 	}
-	if crd.Status.TotalCapacity != 1 {
-		t.Errorf("TotalCapacity = %d, want 1", crd.Status.TotalCapacity)
+	if len(crd.Status.Flavors) != 1 {
+		t.Fatalf("len(Status.Flavors) = %d, want 1", len(crd.Status.Flavors))
+	}
+	if crd.Status.Flavors[0].TotalCapacityVMSlots != 1 {
+		t.Errorf("TotalCapacityVMSlots = %d, want 1", crd.Status.Flavors[0].TotalCapacityVMSlots)
 	}
 }
 
@@ -383,7 +429,7 @@ func TestProbeScheduler_CapacityCalculation(t *testing.T) {
 	}
 	flavor := compute.FlavorInGroup{Name: "test-flavor", MemoryMB: memMB}
 
-	capacity, hosts, err := c.probeScheduler(context.Background(), flavor, "az-a", "test-pipeline", hvByName, memBytes)
+	capacity, hosts, err := c.probeScheduler(context.Background(), flavor, "az-a", "test-pipeline", hvByName)
 	if err != nil {
 		t.Fatalf("probeScheduler failed: %v", err)
 	}
