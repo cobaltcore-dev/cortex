@@ -177,6 +177,7 @@ func TestBuildVMAttributes(t *testing.T) {
 		MemoryMB:   4096,
 		VCPUs:      16,
 		DiskGB:     100,
+		OSType:     "windows8Server64Guest",
 	}
 
 	t.Run("with commitment", func(t *testing.T) {
@@ -186,7 +187,11 @@ func TestBuildVMAttributes(t *testing.T) {
 			t.Errorf("status = %v, expected ACTIVE", attrs["status"])
 		}
 
-		for _, absent := range []string{"metadata", "tags", "os_type"} {
+		if attrs["os_type"] != "windows8Server64Guest" {
+			t.Errorf("os_type = %v, expected windows8Server64Guest", attrs["os_type"])
+		}
+
+		for _, absent := range []string{"metadata", "tags"} {
 			if _, present := attrs[absent]; present {
 				t.Errorf("%s must not appear in output (not available from Postgres cache)", absent)
 			}

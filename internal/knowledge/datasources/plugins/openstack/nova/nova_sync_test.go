@@ -56,6 +56,10 @@ func (m *mockNovaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error)
 	return []Aggregate{{Name: "aggregate1"}}, nil
 }
 
+func (m *mockNovaAPI) GetAllImages(ctx context.Context) ([]Image, error) {
+	return []Image{{ID: "img-1", OSType: "windows8Server64Guest"}}, nil
+}
+
 func TestNovaSyncer_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}

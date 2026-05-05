@@ -338,6 +338,30 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
+  name: nova-images
+spec:
+  schedulingDomain: nova
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.openstack.sso.enabled }}
+  ssoSecretRef:
+    name: cortex-nova-openstack-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: openstack
+  openstack:
+    syncInterval: 3600s
+    secretRef:
+      name: cortex-nova-openstack-keystone
+      namespace: {{ .Release.Namespace }}
+    type: nova
+    nova:
+      type: images
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Datasource
+metadata:
   name: limes-project-commitments
 spec:
   schedulingDomain: nova

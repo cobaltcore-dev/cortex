@@ -429,6 +429,7 @@ type TestVMUsage struct {
 	AZ        string
 	Host      string
 	CreatedAt time.Time
+	OSType    string // pre-computed os_type, e.g. "windows8Server64Guest" or "unknown"
 }
 
 func newTestVMUsage(uuid string, flavor *TestFlavor, projectID, az, host string, createdAt time.Time) *TestVMUsage {
@@ -467,6 +468,7 @@ type ExpectedVMUsage struct {
 	CommitmentID string  // Empty string = PAYG
 	MemoryMB     uint64  // For verification
 	VideoRAMMiB  *uint64 // nil = expect field absent
+	OSType       string  // Empty string = skip check
 }
 
 // ============================================================================
@@ -499,6 +501,10 @@ func (m *mockUsageDBClient) addVM(vm *TestVMUsage) {
 		extraSpecs["hw_video:ram_max_mb"] = strconv.FormatUint(*vm.Flavor.VideoRAMMiB, 10)
 	}
 	extrasJSON, _ := json.Marshal(extraSpecs) //nolint:errcheck // test helper, always valid
+	osType := vm.OSType
+	if osType == "" {
+		osType = "unknown"
+	}
 	row := commitments.VMRow{
 		ID:           vm.UUID,
 		Name:         vm.UUID,
@@ -511,6 +517,7 @@ func (m *mockUsageDBClient) addVM(vm *TestVMUsage) {
 		FlavorVCPUs:  uint64(vm.Flavor.VCPUs),    //nolint:gosec
 		FlavorDisk:   vm.Flavor.DiskGB,
 		FlavorExtras: string(extrasJSON),
+		OSType:       osType,
 	}
 	m.rows[vm.ProjectID] = append(m.rows[vm.ProjectID], row)
 }
@@ -846,6 +853,12 @@ func verifyUsageReport(t *testing.T, tc UsageReportTestCase, actual liquid.Servi
 						t.Errorf("Resource %s AZ %s VM %s: expected no video_ram_mib, got %d",
 							instancesResourceName, azName, expectedVM.UUID, *actualVM.Flavor.VideoMemoryMiB)
 					}
+				}
+
+				// Verify os_type when specified
+				if expectedVM.OSType != "" && actualVM.OSType != expectedVM.OSType {
+					t.Errorf("Resource %s AZ %s VM %s: expected os_type %q, got %q",
+						instancesResourceName, azName, expectedVM.UUID, expectedVM.OSType, actualVM.OSType)
 				}
 
 				// Assert HWVersion is absent from the serialized output (must not appear per LIQUID schema)

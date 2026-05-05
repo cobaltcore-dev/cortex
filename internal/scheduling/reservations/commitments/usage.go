@@ -30,7 +30,7 @@ type UsageDBClient interface {
 	ListProjectVMs(ctx context.Context, projectID string) ([]VMRow, error)
 }
 
-// VMRow is the result of a joined server+flavor query from Postgres.
+// VMRow is the result of a joined server+flavor+image query from Postgres.
 type VMRow struct {
 	ID           string
 	Name         string
@@ -43,6 +43,7 @@ type VMRow struct {
 	FlavorVCPUs  uint64
 	FlavorDisk   uint64
 	FlavorExtras string // JSON string of flavor extra_specs
+	OSType       string // pre-computed from Glance image properties; "unknown" when not found
 }
 
 // CommitmentStateWithUsage extends CommitmentState with usage tracking for billing calculations.
@@ -95,6 +96,7 @@ type VMUsageInfo struct {
 	VCPUs         uint64
 	DiskGB        uint64
 	VideoRAMMiB   *uint64 // optional, from flavor extra_specs hw_video:ram_max_mb
+	OSType        string  // pre-computed from Glance image; "unknown" for volume-booted or unmapped images
 	AZ            string
 	Hypervisor    string
 	CreatedAt     time.Time
@@ -336,6 +338,7 @@ func (c *UsageCalculator) getProjectVMs(
 			VCPUs:         row.FlavorVCPUs,
 			DiskGB:        row.FlavorDisk,
 			VideoRAMMiB:   videoRAMMiB,
+			OSType:        row.OSType,
 			AZ:            string(normalizedAZ),
 			Hypervisor:    row.Hypervisor,
 			CreatedAt:     createdAt,
@@ -588,8 +591,9 @@ func buildVMAttributes(vm VMUsageInfo, commitmentID string) map[string]any {
 	}
 
 	result := map[string]any{
-		"status": vm.Status,
-		"flavor": flavor,
+		"status":  vm.Status,
+		"flavor":  flavor,
+		"os_type": vm.OSType,
 	}
 
 	// Add commitment_id - nil for PAYG, string for committed
@@ -638,7 +642,7 @@ func (c *dbUsageClient) getReader(ctx context.Context) (*external.PostgresReader
 	return reader, nil
 }
 
-// vmQueryRow is the scan target for the server+flavor JOIN query.
+// vmQueryRow is the scan target for the server+flavor+image JOIN query.
 type vmQueryRow struct {
 	ID           string `db:"id"`
 	Name         string `db:"name"`
@@ -651,6 +655,7 @@ type vmQueryRow struct {
 	FlavorVCPUs  uint64 `db:"flavor_vcpus"`
 	FlavorDisk   uint64 `db:"flavor_disk"`
 	FlavorExtras string `db:"flavor_extras"`
+	OSType       string `db:"os_type"`
 }
 
 // ListProjectVMs returns all VMs for a project joined with their flavor data from Postgres.
@@ -669,9 +674,11 @@ func (c *dbUsageClient) ListProjectVMs(ctx context.Context, projectID string) ([
 			COALESCE(f.ram, 0)          AS flavor_ram,
 			COALESCE(f.vcpus, 0)        AS flavor_vcpus,
 			COALESCE(f.disk, 0)         AS flavor_disk,
-			COALESCE(f.extra_specs, '') AS flavor_extras
+			COALESCE(f.extra_specs, '') AS flavor_extras,
+			COALESCE(i.os_type, 'unknown') AS os_type
 		FROM ` + nova.Server{}.TableName() + ` s
 		LEFT JOIN ` + nova.Flavor{}.TableName() + ` f ON f.name = s.flavor_name
+		LEFT JOIN ` + nova.Image{}.TableName() + ` i ON i.id = s.image_ref
 		WHERE s.tenant_id = $1`
 
 	var rows []vmQueryRow
