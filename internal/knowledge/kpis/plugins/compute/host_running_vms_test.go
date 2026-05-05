@@ -10,7 +10,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,7 +41,7 @@ func TestHostRunningVMsKPI_Collect(t *testing.T) {
 			Enabled:          true,
 			Decommissioned:   true,
 			ExternalCustomer: true,
-			PinnedProjects:   testlib.Ptr("project-123,project-456"),
+			PinnedProjects:   new("project-123,project-456"),
 		},
 		// Should be ignored since its an ironic host
 		&compute.HostDetails{
