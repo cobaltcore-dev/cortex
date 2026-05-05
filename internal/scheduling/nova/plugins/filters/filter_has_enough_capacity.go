@@ -196,6 +196,10 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		// Oversize spec-only: if a pending VM is larger than the remaining slot, block its full size.
 		var resourcesToBlock map[hv1.ResourceName]resource.Quantity
 		if reservation.Spec.Type == v1alpha1.ReservationTypeCommittedResource &&
+			// When ignoring allocations (empty-datacenter scenario) VM resources are not
+			// deducted, so the confirmed-VM adjustment would under-block: always use the
+			// full slot instead.
+			!s.Options.IgnoreAllocations &&
 			// if the reservation is not being migrated, block only unused resources
 			reservation.Spec.TargetHost == reservation.Status.Host &&
 			reservation.Spec.CommittedResourceReservation != nil &&
