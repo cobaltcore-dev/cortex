@@ -51,8 +51,10 @@ type CommitmentStateWithUsage struct {
 	CommitmentState
 	// RemainingMemoryBytes is the uncommitted capacity left for VM assignment
 	RemainingMemoryBytes int64
-	// AssignedVMs tracks which VMs have been assigned to this commitment
-	AssignedVMs []string
+	// AssignedInstances tracks which VM instances have been assigned to this commitment
+	AssignedInstances []string
+	// UsedVCPUs is the total vCPU count of assigned VM instances
+	UsedVCPUs int64
 }
 
 // NewCommitmentStateWithUsage creates a CommitmentStateWithUsage from a CommitmentState.
@@ -60,16 +62,17 @@ func NewCommitmentStateWithUsage(state *CommitmentState) *CommitmentStateWithUsa
 	return &CommitmentStateWithUsage{
 		CommitmentState:      *state,
 		RemainingMemoryBytes: state.TotalMemoryBytes,
-		AssignedVMs:          []string{},
+		AssignedInstances:    []string{},
 	}
 }
 
 // AssignVM attempts to assign a VM to this commitment if there's enough capacity.
 // Returns true if the VM was assigned, false if not enough capacity.
-func (c *CommitmentStateWithUsage) AssignVM(vmUUID string, vmMemoryBytes int64) bool {
+func (c *CommitmentStateWithUsage) AssignVM(vmUUID string, vmMemoryBytes, vCPUs int64) bool {
 	if c.RemainingMemoryBytes >= vmMemoryBytes {
 		c.RemainingMemoryBytes -= vmMemoryBytes
-		c.AssignedVMs = append(c.AssignedVMs, vmUUID)
+		c.UsedVCPUs += vCPUs
+		c.AssignedInstances = append(c.AssignedInstances, vmUUID)
 		return true
 	}
 	return false
@@ -113,53 +116,73 @@ func NewUsageCalculator(client client.Client, usageDB UsageDBClient) *UsageCalcu
 }
 
 // CalculateUsage computes the usage report for a specific project.
+// VM-to-commitment assignment is read from CommittedResource CRD status (pre-computed by the
+// UsageReconciler). If a CR has no usage status yet, its VMs appear as PAYG until the first
+// reconcile completes (within one CooldownInterval).
 func (c *UsageCalculator) CalculateUsage(
 	ctx context.Context,
 	log logr.Logger,
 	projectID string,
 	allAZs []liquid.AvailabilityZone,
 ) (liquid.ServiceUsageReport, error) {
-	// Step 1: Get flavor groups from knowledge
+
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to get flavor groups: %w", err)
 	}
 
-	// Get info version from Knowledge CRD (used by Limes to detect metadata changes)
 	var infoVersion int64 = -1
 	if knowledgeCRD, err := knowledge.Get(ctx); err == nil && knowledgeCRD != nil && !knowledgeCRD.Status.LastContentChange.IsZero() {
 		infoVersion = knowledgeCRD.Status.LastContentChange.Unix()
 	}
 
-	// Step 2: Build commitment capacity map from K8s Reservation CRDs
-	commitmentsByAZFlavorGroup, err := c.buildCommitmentCapacityMap(ctx, log, projectID)
+	vmAssignments, err := c.BuildVMAssignmentsFromStatus(ctx, projectID)
 	if err != nil {
-		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to build commitment capacity map: %w", err)
+		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to read VM assignments from CRD status: %w", err)
 	}
 
-	// Step 3: Get and sort VMs for the project
 	vms, err := c.getProjectVMs(ctx, log, projectID, flavorGroups, allAZs)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to get project VMs: %w", err)
 	}
-	sortVMsForUsageCalculation(vms)
 
-	// Step 4: Assign VMs to commitments
-	vmAssignments, assignedToCommitments := c.assignVMsToCommitments(vms, commitmentsByAZFlavorGroup)
-
-	// Step 5: Build the response
 	report := c.buildUsageResponse(vms, vmAssignments, flavorGroups, allAZs, infoVersion)
 
+	assignedToCommitments := 0
+	for _, commitmentUUID := range vmAssignments {
+		if commitmentUUID != "" {
+			assignedToCommitments++
+		}
+	}
 	log.Info("completed usage report",
 		"projectID", projectID,
 		"vmCount", len(vms),
 		"assignedToCommitments", assignedToCommitments,
 		"payg", len(vms)-assignedToCommitments,
-		"commitments", countCommitmentStates(commitmentsByAZFlavorGroup),
 		"resources", len(report.Resources))
 
 	return report, nil
+}
+
+// BuildVMAssignmentsFromStatus reads pre-computed VM-to-commitment assignments from
+// CommittedResource CRD status. Returns a map of vmUUID → commitmentUUID (empty string = PAYG).
+// This is the read path that replaces the inline assignment algorithm in the usage API.
+func (c *UsageCalculator) BuildVMAssignmentsFromStatus(ctx context.Context, projectID string) (map[string]string, error) {
+	var crList v1alpha1.CommittedResourceList
+	if err := c.client.List(ctx, &crList); err != nil {
+		return nil, fmt.Errorf("failed to list CommittedResources: %w", err)
+	}
+	assignments := make(map[string]string)
+	for _, cr := range crList.Items {
+		if cr.Spec.ProjectID != projectID {
+			continue
+		}
+		for _, vmUUID := range cr.Status.AssignedInstances {
+			assignments[vmUUID] = cr.Spec.CommitmentUUID
+		}
+	}
+	return assignments, nil
 }
 
 // azFlavorGroupKey creates a deterministic key for az:flavorGroup lookups.
@@ -390,7 +413,7 @@ func (c *UsageCalculator) assignVMsToCommitments(
 
 		// Try to assign to first commitment with remaining capacity
 		for _, commitment := range commitments {
-			if commitment.AssignVM(vm.UUID, vmMemoryBytes) {
+			if commitment.AssignVM(vm.UUID, vmMemoryBytes, int64(vm.VCPUs)) { //nolint:gosec // VCPUs from Nova, realistically bounded
 				vmAssignments[vm.UUID] = commitment.CommitmentUUID
 				assigned = true
 				assignedCount++

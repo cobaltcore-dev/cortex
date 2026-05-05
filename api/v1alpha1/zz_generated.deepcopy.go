@@ -192,6 +192,11 @@ func (in *CommittedResourceStatus) DeepCopyInto(out *CommittedResourceStatus) {
 		x := (*in).DeepCopy()
 		*out = &x
 	}
+	if in.AcceptedSpec != nil {
+		in, out := &in.AcceptedSpec, &out.AcceptedSpec
+		*out = new(CommittedResourceSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.AcceptedAt != nil {
 		in, out := &in.AcceptedAt, &out.AcceptedAt
 		*out = (*in).DeepCopy()
@@ -204,15 +209,17 @@ func (in *CommittedResourceStatus) DeepCopyInto(out *CommittedResourceStatus) {
 		in, out := &in.LastReconcileAt, &out.LastReconcileAt
 		*out = (*in).DeepCopy()
 	}
-	if in.AssignedVMs != nil {
-		in, out := &in.AssignedVMs, &out.AssignedVMs
+	if in.AssignedInstances != nil {
+		in, out := &in.AssignedInstances, &out.AssignedInstances
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
-	if in.UsedAmount != nil {
-		in, out := &in.UsedAmount, &out.UsedAmount
-		x := (*in).DeepCopy()
-		*out = &x
+	if in.UsedResources != nil {
+		in, out := &in.UsedResources, &out.UsedResources
+		*out = make(map[string]resource.Quantity, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val.DeepCopy()
+		}
 	}
 	if in.LastUsageReconcileAt != nil {
 		in, out := &in.LastUsageReconcileAt, &out.LastUsageReconcileAt

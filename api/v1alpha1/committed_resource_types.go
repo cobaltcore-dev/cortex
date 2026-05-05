@@ -111,6 +111,18 @@ type CommittedResourceStatus struct {
 	// +kubebuilder:validation:Optional
 	AcceptedAmount *resource.Quantity `json:"acceptedAmount,omitempty"`
 
+	// AcceptedSpec is a snapshot of Spec from the last successful reconcile.
+	// Used by rollbackToAccepted to restore the exact previously-accepted placement (AZ, amount,
+	// project, domain, flavor group) even when the current spec has already been mutated to a new value.
+	// +kubebuilder:validation:Optional
+	AcceptedSpec *CommittedResourceSpec `json:"acceptedSpec,omitempty"`
+
+	// ConsecutiveFailures counts reconcile cycles that ended in a placement failure (applyErr or anyFailed).
+	// Reset to 0 on successful acceptance. Used to compute exponential backoff for the retry interval
+	// and to suppress Reservation watch re-enqueues while backing off.
+	// +kubebuilder:validation:Optional
+	ConsecutiveFailures int32 `json:"consecutiveFailures,omitempty"`
+
 	// AcceptedAt is when the controller last successfully reconciled the spec into Reservation slots.
 	// +kubebuilder:validation:Optional
 	AcceptedAt *metav1.Time `json:"acceptedAt,omitempty"`
@@ -124,17 +136,17 @@ type CommittedResourceStatus struct {
 	// +kubebuilder:validation:Optional
 	LastReconcileAt *metav1.Time `json:"lastReconcileAt,omitempty"`
 
-	// AssignedVMs holds the UUIDs of VMs deterministically assigned to this committed resource.
-	// Populated by the usage reconciler; used to compute UsedAmount and drive the quota controller.
+	// AssignedInstances holds the UUIDs of VM instances deterministically assigned to this committed resource.
+	// Populated by the usage reconciler; used to compute UsedResources and drive the quota controller.
 	// +kubebuilder:validation:Optional
-	AssignedVMs []string `json:"assignedVMs,omitempty"`
+	AssignedInstances []string `json:"assignedInstances,omitempty"`
 
-	// UsedAmount is the sum of assigned VM resources expressed in the same units as Spec.Amount.
-	// Populated by the usage reconciler.
+	// UsedResources is the total resource consumption of assigned VM instances, keyed by resource type
+	// (e.g. "memory" in MiB binary SI, "cpu" as core count). Populated by the usage reconciler.
 	// +kubebuilder:validation:Optional
-	UsedAmount *resource.Quantity `json:"usedAmount,omitempty"`
+	UsedResources map[string]resource.Quantity `json:"usedResources,omitempty"`
 
-	// LastUsageReconcileAt is when the usage reconciler last updated AssignedVMs and UsedAmount.
+	// LastUsageReconcileAt is when the usage reconciler last updated AssignedInstances and UsedResources.
 	// +kubebuilder:validation:Optional
 	LastUsageReconcileAt *metav1.Time `json:"lastUsageReconcileAt,omitempty"`
 
@@ -164,7 +176,8 @@ const (
 // +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
 // +kubebuilder:printcolumn:name="Amount",type="string",JSONPath=".spec.amount"
 // +kubebuilder:printcolumn:name="AcceptedAmount",type="string",JSONPath=".status.acceptedAmount"
-// +kubebuilder:printcolumn:name="UsedAmount",type="string",JSONPath=".status.usedAmount"
+// +kubebuilder:printcolumn:name="UsedMemory",type="string",JSONPath=".status.usedResources.memory",priority=1
+// +kubebuilder:printcolumn:name="UsedCPU",type="string",JSONPath=".status.usedResources.cpu",priority=1
 // +kubebuilder:printcolumn:name="State",type="string",JSONPath=".spec.state"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:printcolumn:name="StartTime",type="date",JSONPath=".spec.startTime",priority=1

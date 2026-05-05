@@ -318,8 +318,9 @@ func printCommitments(crs []v1alpha1.CommittedResource) {
 			}(),
 		)
 
-		if cr.Status.UsedAmount != nil {
-			fmt.Printf("    used=%-12s\n", cr.Status.UsedAmount.String())
+		if mem, ok := cr.Status.UsedResources["memory"]; ok {
+			cpu := cr.Status.UsedResources["cpu"]
+			fmt.Printf("    used=%-12s  usedCPU=%s\n", mem.String(), cpu.String())
 		}
 
 		endStr := gray("no expiry")

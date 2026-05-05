@@ -286,6 +286,12 @@ func TestCommittedResourceController_Reconcile(t *testing.T) {
 				if updated.Status.AcceptedAmount == nil {
 					t.Errorf("expected AcceptedAmount to be set on acceptance")
 				}
+				if updated.Status.AcceptedSpec == nil {
+					t.Errorf("expected AcceptedSpec to be set on acceptance")
+				} else if updated.Status.AcceptedSpec.AvailabilityZone != cr.Spec.AvailabilityZone {
+					t.Errorf("AcceptedSpec.AvailabilityZone: want %q, got %q",
+						cr.Spec.AvailabilityZone, updated.Status.AcceptedSpec.AvailabilityZone)
+				}
 			}
 		})
 	}
@@ -455,6 +461,239 @@ func TestCommittedResourceController_Rollback(t *testing.T) {
 	}
 	if got := res.Spec.CommittedResourceReservation.ParentGeneration; got != cr.Generation {
 		t.Errorf("ParentGeneration: want %d, got %d", cr.Generation, got)
+	}
+}
+
+// TestCommittedResourceController_RollbackUsesAcceptedSpecAZ verifies that rollbackToAccepted
+// targets the AZ from AcceptedSpec, not from the current (mutated) Spec. This is the core fix
+// for the oscillation bug where a failed AZ change left the CR stuck placing reservations in
+// the wrong AZ on every retry.
+func TestCommittedResourceController_RollbackUsesAcceptedSpecAZ(t *testing.T) {
+	scheme := newCRTestScheme(t)
+
+	// Spec has been mutated to a new AZ that failed placement.
+	cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
+	cr.Spec.AvailabilityZone = "new-az" // the failed AZ
+	cr.Generation = 2
+
+	accepted := resource.MustParse("4Gi")
+	acceptedSpec := cr.Spec
+	acceptedSpec.AvailabilityZone = "accepted-az" // last successfully placed AZ
+	cr.Status.AcceptedAmount = &accepted
+	cr.Status.AcceptedSpec = &acceptedSpec
+
+	// Existing reservation was placed in the wrong AZ by the failed rollback.
+	existing := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-cr-0",
+			Labels: map[string]string{
+				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+			},
+		},
+		Spec: v1alpha1.ReservationSpec{
+			Type:             v1alpha1.ReservationTypeCommittedResource,
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			AvailabilityZone: "new-az", // wrong AZ
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: resource.MustParse("4Gi"),
+				hv1.ResourceCPU:    resource.MustParse("2"),
+			},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				CommitmentUUID:   "test-uuid-1234",
+				ProjectID:        "test-project",
+				DomainID:         "test-domain",
+				ResourceGroup:    "test-group",
+				ParentGeneration: 2,
+			},
+		},
+	}
+
+	k8sClient := newCRTestClient(scheme, cr, existing, newTestFlavorKnowledge())
+	controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: CommittedResourceControllerConfig{}}
+
+	if err := controller.rollbackToAccepted(context.Background(), logr.Discard(), cr); err != nil {
+		t.Fatalf("rollbackToAccepted: %v", err)
+	}
+
+	// The reservation manager deletes the wrong-AZ reservation and creates a new one
+	// with the accepted AZ from AcceptedSpec.
+	var list v1alpha1.ReservationList
+	if err := k8sClient.List(context.Background(), &list, client.MatchingLabels{
+		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+	}); err != nil {
+		t.Fatalf("list reservations: %v", err)
+	}
+	if len(list.Items) != 1 {
+		t.Fatalf("expected 1 reservation after rollback, got %d", len(list.Items))
+	}
+	if got := list.Items[0].Spec.AvailabilityZone; got != "accepted-az" {
+		t.Errorf("rollback: reservation AZ: want %q (from AcceptedSpec), got %q (wrong: from current Spec)", "accepted-az", got)
+	}
+}
+
+// TestCommittedResourceController_ConsecutiveFailures verifies that ConsecutiveFailures
+// increments on each placement failure (AllowRejection=false) and resets to 0 on acceptance.
+// It also checks that the retry delay grows with each failure.
+// TestCommittedResourceController_RejectedStaysRejected verifies that a CR rejected on one
+// reconcile cycle stays rejected on subsequent cycles triggered by Reservation watch events,
+// without re-applying the bad spec. This is the oscillation regression test: without the
+// isRejectedForGeneration guard the controller would re-apply the bad spec on every
+// Reservation watch re-enqueue, undoing the rollback each time.
+func TestCommittedResourceController_RejectedStaysRejected(t *testing.T) {
+	tests := []struct {
+		name  string
+		state v1alpha1.CommitmentStatus
+	}{
+		{name: "confirmed", state: v1alpha1.CommitmentStatusConfirmed},
+		{name: "pending", state: v1alpha1.CommitmentStatusPending},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := newCRTestScheme(t)
+
+			// CR was previously accepted at AZ "accepted-az".
+			cr := newTestCommittedResource("test-cr", tt.state)
+			cr.Spec.AllowRejection = true
+			cr.Spec.AvailabilityZone = "bad-az" // spec was mutated to a failing AZ
+			cr.Generation = 2
+			accepted := resource.MustParse("4Gi")
+			acceptedSpec := cr.Spec.DeepCopy()
+			acceptedSpec.AvailabilityZone = "accepted-az"
+			cr.Status.AcceptedAmount = &accepted
+			cr.Status.AcceptedSpec = acceptedSpec
+
+			// No Knowledge → placement always fails.
+			k8sClient := newCRTestClient(scheme, cr)
+			controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: CommittedResourceControllerConfig{}}
+
+			// Reconcile 1: applies bad spec → fails → rollback + Rejected.
+			if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
+				t.Fatalf("reconcile 1: %v", err)
+			}
+			assertCondition(t, k8sClient, cr.Name, metav1.ConditionFalse, v1alpha1.CommittedResourceReasonRejected)
+
+			// Reconcile 2: simulates Reservation watch re-enqueue after rollback.
+			// Must stay Rejected without re-applying the bad spec.
+			if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
+				t.Fatalf("reconcile 2: %v", err)
+			}
+			assertCondition(t, k8sClient, cr.Name, metav1.ConditionFalse, v1alpha1.CommittedResourceReasonRejected)
+
+			// Reconcile 3: another watch event — still stable.
+			if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
+				t.Fatalf("reconcile 3: %v", err)
+			}
+			assertCondition(t, k8sClient, cr.Name, metav1.ConditionFalse, v1alpha1.CommittedResourceReasonRejected)
+
+			// For committed state: rollback reservations should be in accepted-az, not bad-az.
+			if tt.state == v1alpha1.CommitmentStatusConfirmed {
+				var list v1alpha1.ReservationList
+				if err := k8sClient.List(context.Background(), &list, client.MatchingLabels{
+					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+				}); err != nil {
+					t.Fatalf("list reservations: %v", err)
+				}
+				for _, res := range list.Items {
+					if res.Spec.AvailabilityZone == "bad-az" {
+						t.Errorf("rollback reservation still points to bad-az after %d reconciles — oscillation not fixed", 3)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestCommittedResourceController_ConsecutiveFailures(t *testing.T) {
+	scheme := newCRTestScheme(t)
+	cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
+	cr.Spec.AllowRejection = false
+	base := 30 * time.Second
+	k8sClient := newCRTestClient(scheme, cr) // no Knowledge → placement fails
+	controller := &CommittedResourceController{
+		Client: k8sClient,
+		Scheme: scheme,
+		Conf:   CommittedResourceControllerConfig{RequeueIntervalRetry: metav1.Duration{Duration: base}},
+	}
+
+	getCR := func() v1alpha1.CommittedResource {
+		t.Helper()
+		var updated v1alpha1.CommittedResource
+		if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: cr.Name}, &updated); err != nil {
+			t.Fatalf("get CR: %v", err)
+		}
+		return updated
+	}
+
+	// First failure: ConsecutiveFailures 0→1, delay = base * 2^0.
+	result1, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name))
+	if err != nil {
+		t.Fatalf("reconcile 1: %v", err)
+	}
+	if got := getCR().Status.ConsecutiveFailures; got != 1 {
+		t.Errorf("after failure 1: ConsecutiveFailures want 1, got %d", got)
+	}
+	if result1.RequeueAfter != base {
+		t.Errorf("after failure 1: RequeueAfter want %v, got %v", base, result1.RequeueAfter)
+	}
+
+	// Second failure: ConsecutiveFailures 1→2, delay = base * 2^1.
+	result2, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name))
+	if err != nil {
+		t.Fatalf("reconcile 2: %v", err)
+	}
+	if got := getCR().Status.ConsecutiveFailures; got != 2 {
+		t.Errorf("after failure 2: ConsecutiveFailures want 2, got %d", got)
+	}
+	if result2.RequeueAfter != 2*base {
+		t.Errorf("after failure 2: RequeueAfter want %v, got %v", 2*base, result2.RequeueAfter)
+	}
+
+	// Add Knowledge so placement succeeds; simulate reservation controller marking ready.
+	if err := k8sClient.Create(context.Background(), newTestFlavorKnowledge()); err != nil {
+		t.Fatalf("create knowledge: %v", err)
+	}
+	if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
+		t.Fatalf("reconcile 3 (apply): %v", err)
+	}
+	setChildReservationsReady(t, k8sClient, cr.Spec.CommitmentUUID)
+	if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
+		t.Fatalf("reconcile 4 (accept): %v", err)
+	}
+
+	// Acceptance resets ConsecutiveFailures to 0.
+	if got := getCR().Status.ConsecutiveFailures; got != 0 {
+		t.Errorf("after acceptance: ConsecutiveFailures want 0, got %d", got)
+	}
+}
+
+func TestRetryDelay(t *testing.T) {
+	base := 30 * time.Second
+	maxDelay := 30 * time.Minute
+	controller := &CommittedResourceController{
+		Conf: CommittedResourceControllerConfig{
+			RequeueIntervalRetry: metav1.Duration{Duration: base},
+			MaxRequeueInterval:   metav1.Duration{Duration: maxDelay},
+		},
+	}
+	tests := []struct {
+		failures int32
+		want     time.Duration
+	}{
+		{0, 30 * time.Second},  // base * 2^0
+		{1, 60 * time.Second},  // base * 2^1
+		{2, 2 * time.Minute},   // base * 2^2
+		{5, 16 * time.Minute},  // base * 2^5 = 960s
+		{6, 30 * time.Minute},  // base * 2^6 = 1920s → capped at 30min
+		{10, 30 * time.Minute}, // exp capped at 6, still 30min
+	}
+	for _, tt := range tests {
+		cr := &v1alpha1.CommittedResource{
+			Status: v1alpha1.CommittedResourceStatus{ConsecutiveFailures: tt.failures},
+		}
+		if got := controller.retryDelay(cr); got != tt.want {
+			t.Errorf("failures=%d: want %v, got %v", tt.failures, tt.want, got)
+		}
 	}
 }
 

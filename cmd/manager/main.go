@@ -548,12 +548,28 @@ func main() {
 			os.Exit(1)
 		}
 
+		crControllerConf := commitmentsConfig.CommittedResourceController
+		crControllerConf.ApplyDefaults()
 		if err := (&commitments.CommittedResourceController{
 			Client: multiclusterClient,
 			Scheme: mgr.GetScheme(),
-			Conf:   commitmentsConfig.CommittedResourceController,
+			Conf:   crControllerConf,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "CommittedResource")
+			os.Exit(1)
+		}
+
+		usageReconcilerMonitor := commitments.NewUsageReconcilerMonitor()
+		metrics.Registry.MustRegister(&usageReconcilerMonitor)
+		usageReconcilerConf := commitmentsConfig.UsageReconciler
+		usageReconcilerConf.ApplyDefaults()
+		if err := (&commitments.UsageReconciler{
+			Client:  multiclusterClient,
+			Conf:    usageReconcilerConf,
+			UsageDB: commitmentsUsageDB,
+			Monitor: usageReconcilerMonitor,
+		}).SetupWithManager(mgr, multiclusterClient); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "CommittedResourceUsage")
 			os.Exit(1)
 		}
 	}

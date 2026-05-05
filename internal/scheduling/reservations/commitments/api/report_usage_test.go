@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -562,14 +564,35 @@ func newUsageTestEnv(
 	knowledgeCRD := createKnowledgeCRD(flavorGroups)
 	k8sReservations = append(k8sReservations, knowledgeCRD)
 
+	// Create CommittedResource CRDs (one per unique commitment).
+	// The usage reconciler writes assignment results into these; CalculateUsage reads them back.
+	seenCommitments := make(map[string]bool)
+	var crObjects []client.Object
+	for _, tr := range reservations {
+		if seenCommitments[tr.CommitmentID] {
+			continue
+		}
+		seenCommitments[tr.CommitmentID] = true
+		crObjects = append(crObjects, tr.toCommittedResourceCRD())
+	}
+
+	k8sReservations = append(k8sReservations, crObjects...)
 	k8sClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(k8sReservations...).
 		WithStatusSubresource(&v1alpha1.Reservation{}).
 		WithStatusSubresource(&v1alpha1.Knowledge{}).
+		WithStatusSubresource(&v1alpha1.CommittedResource{}).
 		WithIndex(&v1alpha1.Reservation{}, "spec.type", func(obj client.Object) []string {
 			res := obj.(*v1alpha1.Reservation)
 			return []string{string(res.Spec.Type)}
+		}).
+		WithIndex(&v1alpha1.CommittedResource{}, "spec.commitmentUUID", func(obj client.Object) []string {
+			cr, ok := obj.(*v1alpha1.CommittedResource)
+			if !ok {
+				return nil
+			}
+			return []string{cr.Spec.CommitmentUUID}
 		}).
 		Build()
 
@@ -577,6 +600,25 @@ func newUsageTestEnv(
 	dbClient := newMockUsageDBClient()
 	for _, vm := range vms {
 		dbClient.addVM(vm)
+	}
+
+	// Run usage reconciler to populate CommittedResource.Status with VM assignments.
+	// CalculateUsage reads from this status, so the API returns the correct commitment assignments.
+	if len(crObjects) > 0 {
+		rec := &commitments.UsageReconciler{
+			Client:  k8sClient,
+			Conf:    commitments.UsageReconcilerConfig{CooldownInterval: metav1.Duration{Duration: 0}},
+			UsageDB: dbClient,
+			Monitor: commitments.NewUsageReconcilerMonitor(),
+		}
+		ctx := context.Background()
+		for _, obj := range crObjects {
+			cr := obj.(*v1alpha1.CommittedResource)
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: cr.Name}}
+			if _, err := rec.Reconcile(ctx, req); err != nil {
+				t.Fatalf("usage reconciler failed for %s: %v", cr.Name, err)
+			}
+		}
 	}
 
 	// Create API with mock DB client
@@ -847,6 +889,25 @@ type vmFlavorAttrs struct {
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+// toCommittedResourceCRD creates a minimal CommittedResource CRD for this commitment.
+// Used by the test setup to pre-populate the CR objects that the usage reconciler writes status into.
+func (tr *UsageTestReservation) toCommittedResourceCRD() *v1alpha1.CommittedResource {
+	amount := resource.MustParse(strconv.FormatInt(tr.Flavor.MemoryMB*int64(tr.Count), 10) + "Mi")
+	return &v1alpha1.CommittedResource{
+		ObjectMeta: metav1.ObjectMeta{Name: "cr-" + tr.CommitmentID},
+		Spec: v1alpha1.CommittedResourceSpec{
+			CommitmentUUID:   tr.CommitmentID,
+			ProjectID:        tr.ProjectID,
+			DomainID:         "test-domain",
+			AvailabilityZone: tr.AZ,
+			FlavorGroupName:  tr.Flavor.Group,
+			ResourceType:     v1alpha1.CommittedResourceTypeMemory,
+			State:            v1alpha1.CommitmentStatusConfirmed,
+			Amount:           amount,
+		},
+	}
+}
 
 // toK8sReservation converts a UsageTestReservation to a K8s Reservation.
 func (tr *UsageTestReservation) toK8sReservation(number int) *v1alpha1.Reservation {

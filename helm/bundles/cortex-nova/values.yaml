@@ -190,6 +190,11 @@ cortex-scheduling-controllers:
             handlesCommitments: false
             hasCapacity: true
             hasQuota: false
+    committedResourceUsageReconciler:
+      # Minimum time between usage reconcile runs for the same CommittedResource.
+      # Also acts as the periodic fallback interval: a successful reconcile schedules
+      # the next run after this duration, so this is also the maximum status staleness.
+      cooldownInterval: "5m"
     # OvercommitMappings is a list of mappings that map hypervisor traits to
     # overcommit ratios. Note that this list is applied in order, so if there
     # are multiple mappings applying to the same hypervisors, the last mapping
