@@ -392,7 +392,8 @@ func (s *Syncer) applyCommittedResourceSpec(cr *v1alpha1.CommittedResource, stat
 	cr.Spec.ProjectID = state.ProjectID
 	cr.Spec.DomainID = state.DomainID
 	cr.Spec.State = state.State
-	cr.Spec.AllowRejection = false
+	// AllowRejection is not set here: the API path (applyCRSpec) sets it explicitly,
+	// and callers that go through CreateOrUpdate preserve the existing value.
 
 	if state.StartTime != nil {
 		t := metav1.NewTime(*state.StartTime)
@@ -413,7 +414,12 @@ func (s *Syncer) upsertCommittedResource(ctx context.Context, logger logr.Logger
 	cr.Name = "commitment-" + state.CommitmentUUID
 
 	op, err := controllerutil.CreateOrUpdate(ctx, s.Client, cr, func() error {
+		// AllowRejection is an API execution flag, not a Limes commitment property.
+		// Preserve the existing value so a syncer write never clobbers an in-flight
+		// change-commitments request. For new CRDs the zero value (false) is correct.
+		allowRejection := cr.Spec.AllowRejection
 		s.applyCommittedResourceSpec(cr, state)
+		cr.Spec.AllowRejection = allowRejection
 		return nil
 	})
 	if err != nil {
