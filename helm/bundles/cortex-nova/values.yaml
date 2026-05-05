@@ -114,9 +114,6 @@ cortex: &cortex
 cortex-scheduling-controllers:
   <<: *cortex
   namePrefix: cortex-nova-scheduling
-  rbac:
-    # The cortex nova scheduling controllers need hypervisor crd access.
-    hypervisor: {enable: true}
   # Enable webhook that will validate CRDs for the scheduling controllers.
   webhook: {enable: true}
   certmanager: {enable: true} # Needed for the webhook TLS certificates.
@@ -231,9 +228,6 @@ cortex-scheduling-controllers:
 cortex-knowledge-controllers:
   <<: *cortex
   namePrefix: cortex-nova-knowledge
-  rbac:
-    # The cortex nova scheduling controllers need hypervisor crd access.
-    hypervisor: {enable: true}
   conf:
     <<: *cortexConf
     leaderElectionID: cortex-nova-knowledge
