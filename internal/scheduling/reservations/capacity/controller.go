@@ -144,12 +144,16 @@ func (c *Controller) reconcileOne(
 	}
 
 	patch := client.MergeFrom(existing.DeepCopy())
-	existing.Status.TotalCapacity = totalCapacity
-	existing.Status.TotalHosts = totalHosts
-	existing.Status.TotalPlaceable = totalPlaceable
-	existing.Status.PlaceableHosts = placeableHosts
-	existing.Status.TotalInstances = totalInstances
-	existing.Status.CommittedCapacity = committedCapacity
+	if totalErr == nil {
+		existing.Status.TotalCapacity = totalCapacity
+		existing.Status.TotalHosts = totalHosts
+		existing.Status.TotalInstances = totalInstances
+		existing.Status.CommittedCapacity = committedCapacity
+	}
+	if placeableErr == nil {
+		existing.Status.TotalPlaceable = totalPlaceable
+		existing.Status.PlaceableHosts = placeableHosts
+	}
 	existing.Status.LastReconcileAt = metav1.Now()
 
 	freshCondition := metav1.Condition{
