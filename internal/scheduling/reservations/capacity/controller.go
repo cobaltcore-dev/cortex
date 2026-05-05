@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	schedulerapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 )
@@ -212,6 +213,14 @@ func (c *Controller) probeScheduler(
 		return 0, 0, fmt.Errorf("flavor %q has invalid memory %d MB", flavor.Name, flavor.MemoryMB)
 	}
 
+	// Build EligibleHosts from all known hypervisors so that novaLimitHostsToRequest
+	// (which filters the response to hosts present in the request) does not zero out
+	// the result. The AZ filter in the pipeline handles narrowing to the correct AZ.
+	eligibleHosts := make([]schedulerapi.ExternalSchedulerHost, 0, len(hvByName))
+	for name := range hvByName {
+		eligibleHosts = append(eligibleHosts, schedulerapi.ExternalSchedulerHost{ComputeHost: name})
+	}
+
 	resp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
 		InstanceUUID:     uuid.New().String(),
 		ProjectID:        "cortex-capacity-probe",
@@ -221,6 +230,7 @@ func (c *Controller) probeScheduler(
 		FlavorExtraSpecs: flavor.ExtraSpecs,
 		AvailabilityZone: az,
 		Pipeline:         pipeline,
+		EligibleHosts:    eligibleHosts,
 	})
 	if err != nil {
 		return 0, 0, fmt.Errorf("scheduler call failed (pipeline=%s): %w", pipeline, err)
