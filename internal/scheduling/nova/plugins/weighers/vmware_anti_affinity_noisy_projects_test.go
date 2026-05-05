@@ -12,7 +12,6 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -84,19 +83,19 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Init(t *testing.T) {
 	params := []v1alpha1.Parameter{
 		{
 			Key:        "avgCPUUsageLowerBound",
-			FloatValue: testlib.Ptr(20.0),
+			FloatValue: new(20.0),
 		},
 		{
 			Key:        "avgCPUUsageUpperBound",
-			FloatValue: testlib.Ptr(100.0),
+			FloatValue: new(100.0),
 		},
 		{
 			Key:        "avgCPUUsageActivationLowerBound",
-			FloatValue: testlib.Ptr(0.0),
+			FloatValue: new(0.0),
 		},
 		{
 			Key:        "avgCPUUsageActivationUpperBound",
-			FloatValue: testlib.Ptr(-0.5),
+			FloatValue: new(-0.5),
 		},
 	}
 

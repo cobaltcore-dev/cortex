@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -40,8 +39,8 @@ func TestDetector_Init(t *testing.T) {
 	step := BaseDetector[mockDetectorOptions]{}
 	cl := fake.NewClientBuilder().Build()
 	params := []v1alpha1.Parameter{
-		{Key: "option1", StringValue: testlib.Ptr("value1")},
-		{Key: "option2", IntValue: testlib.Ptr(int64(2))},
+		{Key: "option1", StringValue: new("value1")},
+		{Key: "option2", IntValue: new(int64(2))},
 	}
 	err := step.Init(t.Context(), cl, v1alpha1.DetectorSpec{
 		Params: params,
@@ -63,8 +62,8 @@ func TestDetector_Init_InvalidJSON(t *testing.T) {
 	step := BaseDetector[mockDetectorOptions]{}
 	cl := fake.NewClientBuilder().Build()
 	params := []v1alpha1.Parameter{
-		{Key: "option1", StringValue: testlib.Ptr("value1")},
-		{Key: "option2", StringValue: testlib.Ptr("value2")}, // Invalid int value
+		{Key: "option1", StringValue: new("value1")},
+		{Key: "option2", StringValue: new("value2")}, // Invalid int value
 	}
 	err := step.Init(t.Context(), cl, v1alpha1.DetectorSpec{
 		Params: params,
@@ -271,8 +270,8 @@ func TestBaseDetector_Validate(t *testing.T) {
 		{
 			name: "valid params",
 			params: []v1alpha1.Parameter{
-				{Key: "option1", StringValue: testlib.Ptr("value1")},
-				{Key: "option2", IntValue: testlib.Ptr(int64(2))},
+				{Key: "option1", StringValue: new("value1")},
+				{Key: "option2", IntValue: new(int64(2))},
 			},
 			expectError: false,
 		},
@@ -284,8 +283,8 @@ func TestBaseDetector_Validate(t *testing.T) {
 		{
 			name: "invalid JSON",
 			params: []v1alpha1.Parameter{
-				{Key: "option1", StringValue: testlib.Ptr("value1")},
-				{Key: "option2", StringValue: testlib.Ptr("value2")},
+				{Key: "option1", StringValue: new("value1")},
+				{Key: "option2", StringValue: new("value2")},
 			},
 			expectError: true,
 		},
