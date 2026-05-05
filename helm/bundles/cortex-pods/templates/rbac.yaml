@@ -1,11 +1,7 @@
-{{- if .Values.rbac.pods.enable }}
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  labels:
-    {{- include "chart.labels" . | nindent 4 }}
-  name: {{ .Values.namePrefix }}-manager-role-pods
+  name: cortex-pods-manager-role-pods
 rules:
 - apiGroups:
   - ""
@@ -48,4 +44,16 @@ rules:
   - pods/binding
   verbs:
   - create
-{{- end -}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cortex-pods-manager-rolebinding-pods
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cortex-pods-manager-role-pods
+subjects:
+- kind: ServiceAccount
+  name: cortex-pods-controller-manager
+  namespace: {{ .Release.Namespace }}

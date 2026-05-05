@@ -1,11 +1,7 @@
-{{- if .Values.rbac.ironcore.enable }}
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  labels:
-    {{- include "chart.labels" . | nindent 4 }}
-  name: {{ .Values.namePrefix }}-manager-role-ironcore
+  name: cortex-ironcore-manager-role-ironcore
 rules:
 - apiGroups:
   - compute.ironcore.dev
@@ -39,4 +35,16 @@ rules:
   - get
   - patch
   - update
-{{- end -}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cortex-ironcore-manager-rolebinding-ironcore
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cortex-ironcore-manager-role-ironcore
+subjects:
+- kind: ServiceAccount
+  name: cortex-ironcore-controller-manager
+  namespace: {{ .Release.Namespace }}
