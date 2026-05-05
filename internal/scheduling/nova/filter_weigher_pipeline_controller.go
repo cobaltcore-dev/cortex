@@ -158,7 +158,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		log.Info("gathered all placement candidates", "numHosts", len(request.Hosts))
 	}
 
-	opts := c.buildOptions(pipelineConf)
+	opts := c.buildOptions(request, pipelineConf)
 	result, err := pipeline.Run(request, opts)
 	if opts.RecordHistory {
 		c.upsertHistory(ctx, decision, err)
@@ -179,10 +179,18 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 }
 
 // The base controller will delegate the pipeline creation down to this method.
-func (c *FilterWeigherPipelineController) buildOptions(pipelineConf v1alpha1.Pipeline) lib.Options {
-	return lib.Options{
+func (c *FilterWeigherPipelineController) buildOptions(request api.ExternalSchedulerRequest, pipelineConf v1alpha1.Pipeline) lib.Options {
+	opts := lib.Options{
 		RecordHistory: pipelineConf.Spec.CreateHistory,
 	}
+	intent, err := request.GetIntent()
+	if err == nil {
+		switch intent {
+		case api.ReserveForCommittedResourceIntent, api.ReserveForFailoverIntent:
+			opts.LockReservations = true
+		}
+	}
+	return opts
 }
 
 func (c *FilterWeigherPipelineController) InitPipeline(

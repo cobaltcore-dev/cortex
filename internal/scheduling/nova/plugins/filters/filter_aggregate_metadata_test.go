@@ -4,8 +4,8 @@
 package filters
 
 import (
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"context"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"log/slog"
 	"testing"
 

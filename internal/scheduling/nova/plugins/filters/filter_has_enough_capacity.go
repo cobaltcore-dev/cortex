@@ -122,18 +122,14 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			// Check if this is a CR reservation scheduling request.
 			// If so, we should NOT unlock any CR reservations to prevent overbooking.
 			// CR capacity should only be unlocked for actual VM scheduling.
-			intent, err := request.GetIntent()
 			switch {
-			case err == nil && intent == api.ReserveForCommittedResourceIntent:
-				traceLog.Debug("keeping CR reservation locked for CR reservation scheduling",
+			case opts.LockReservations || s.Options.LockReserved:
+				traceLog.Debug("keeping CR reservation locked",
 					"reservation", reservation.Name,
-					"intent", intent)
+					"lockReservations", opts.LockReservations,
+					"lockReserved", s.Options.LockReserved)
 				// Don't continue - fall through to block the resources
-			case !s.Options.LockReserved &&
-				// For committed resource reservations: unlock resources only if:
-				// 1. Project ID matches
-				// 2. ResourceGroup matches the flavor's hw_version
-				reservation.Spec.CommittedResourceReservation.ProjectID == request.Spec.Data.ProjectID &&
+			case reservation.Spec.CommittedResourceReservation.ProjectID == request.Spec.Data.ProjectID &&
 				reservation.Spec.CommittedResourceReservation.ResourceGroup == request.Spec.Data.Flavor.Data.ExtraSpecs["hw_version"]:
 				traceLog.Info("unlocking resources reserved by matching committed resource reservation with allocation",
 					"reservation", reservation.Name,

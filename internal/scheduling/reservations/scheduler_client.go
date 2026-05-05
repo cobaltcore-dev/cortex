@@ -12,6 +12,7 @@ import (
 	"time"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/go-logr/logr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -78,6 +79,10 @@ type ScheduleReservationRequest struct {
 	// SchedulerHints are hints passed to the scheduler pipeline.
 	// Used to set _nova_check_type for evacuation intent detection.
 	SchedulerHints map[string]any
+	// Options configures the pipeline behavior for this scheduling call.
+	// These are derived from intent in buildOptions for the current HTTP path;
+	// will be passed directly once the scheduler client is a direct Go call.
+	Options lib.Options
 }
 
 // ScheduleReservationResponse contains the result of scheduling a reservation.
