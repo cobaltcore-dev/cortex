@@ -37,8 +37,14 @@ type ExternalSchedulerRequest struct {
 
 	// The name of the pipeline to execute.
 	Pipeline string `json:"pipeline"`
+
+	// Options configure the pipeline behavior for this scheduling call.
+	// Set by the caller (CR controller, failover controller, Nova).
+	// Nova does not set these; Cortex fills in config-derived defaults server-side.
+	Options lib.Options `json:"options,omitempty"`
 }
 
+func (r ExternalSchedulerRequest) GetOptions() lib.Options { return r.Options }
 func (r ExternalSchedulerRequest) GetHosts() []string {
 	hosts := make([]string, len(r.Hosts))
 	for i, host := range r.Hosts {

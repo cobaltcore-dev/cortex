@@ -15,8 +15,11 @@ type PodPipelineRequest struct {
 	Nodes []corev1.Node `json:"nodes"`
 	// The pod to be scheduled.
 	Pod corev1.Pod `json:"pod"`
+	// Options configure the pipeline behavior for this scheduling call.
+	Options lib.Options
 }
 
+func (r PodPipelineRequest) GetOptions() lib.Options { return r.Options }
 func (r PodPipelineRequest) GetHosts() []string {
 	hosts := make([]string, len(r.Nodes))
 	for i, host := range r.Nodes {

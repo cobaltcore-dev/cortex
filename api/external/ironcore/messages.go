@@ -13,8 +13,11 @@ import (
 type MachinePipelineRequest struct {
 	// The available machine pools.
 	Pools []ironcorev1alpha1.MachinePool `json:"pools"`
+	// Options configure the pipeline behavior for this scheduling call.
+	Options lib.Options
 }
 
+func (r MachinePipelineRequest) GetOptions() lib.Options { return r.Options }
 func (r MachinePipelineRequest) GetHosts() []string {
 	hosts := make([]string, len(r.Pools))
 	for i, host := range r.Pools {

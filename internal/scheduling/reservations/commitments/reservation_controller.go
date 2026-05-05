@@ -286,18 +286,18 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		SchedulerHints: map[string]any{
 			"_nova_check_type": string(schedulerdelegationapi.ReserveForCommittedResourceIntent),
 		},
-		Options: lib.Options{
-			ReadOnly:                false, // mutates state (reservation placement)
-			LockReservations:        true,  // don't unlock CR reservations; finding a slot, not placing a VM
-			AssumeEmptyHosts:        false,
-			IgnoredReservationTypes: nil,
-			MaxCandidates:           1,
-			RecordHistory:           false,
-			CreateInflight:          false,
-		},
+	}
+	scheduleOpts := lib.Options{
+		ReadOnly:                false, // mutates state (reservation placement)
+		LockReservations:        true,  // don't unlock CR reservations; finding a slot, not placing a VM
+		AssumeEmptyHosts:        false,
+		IgnoredReservationTypes: nil,
+		MaxCandidates:           1,
+		RecordHistory:           false,
+		CreateInflight:          false, // not a VM placement; no pessimistic blocking needed
 	}
 
-	scheduleResp, err := r.SchedulerClient.ScheduleReservation(ctx, scheduleReq)
+	scheduleResp, err := r.SchedulerClient.ScheduleReservation(ctx, scheduleReq, scheduleOpts)
 	if err != nil {
 		logger.Error(err, "failed to schedule reservation")
 		return ctrl.Result{}, err

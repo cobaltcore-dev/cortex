@@ -30,8 +30,11 @@ type ExternalSchedulerRequest struct {
 	Weights map[string]float64 `json:"weights"`
 	// The name of the pipeline to execute.
 	Pipeline string `json:"pipeline"`
+	// Options configure the pipeline behavior for this scheduling call.
+	Options lib.Options `json:"options,omitempty"`
 }
 
+func (r ExternalSchedulerRequest) GetOptions() lib.Options { return r.Options }
 func (r ExternalSchedulerRequest) GetHosts() []string {
 	hosts := make([]string, len(r.Hosts))
 	for i, host := range r.Hosts {

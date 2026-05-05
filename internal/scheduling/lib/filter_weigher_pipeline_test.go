@@ -72,7 +72,7 @@ func TestPipeline_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := pipeline.Run(tt.request, Options{})
+			result, err := pipeline.Run(tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -400,7 +400,9 @@ func TestPipeline_MaxCandidates(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := pipeline.Run(request, Options{MaxCandidates: tt.maxCandidates})
+			req := request
+			req.Options = Options{MaxCandidates: tt.maxCandidates}
+			result, err := pipeline.Run(req)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

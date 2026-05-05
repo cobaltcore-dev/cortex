@@ -79,10 +79,6 @@ type ScheduleReservationRequest struct {
 	// SchedulerHints are hints passed to the scheduler pipeline.
 	// Used to set _nova_check_type for evacuation intent detection.
 	SchedulerHints map[string]any
-	// Options configures the pipeline behavior for this scheduling call.
-	// These are derived from intent in buildOptions for the current HTTP path;
-	// will be passed directly once the scheduler client is a direct Go call.
-	Options lib.Options
 }
 
 // ScheduleReservationResponse contains the result of scheduling a reservation.
@@ -94,7 +90,7 @@ type ScheduleReservationResponse struct {
 
 // ScheduleReservation calls the external scheduler API to find a host for a reservation.
 // The context should contain GlobalRequestID and RequestID for logging (use WithGlobalRequestID/WithRequestID).
-func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleReservationRequest) (*ScheduleReservationResponse, error) {
+func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleReservationRequest, opts lib.Options) (*ScheduleReservationResponse, error) {
 	logger := loggerFromContext(ctx)
 
 	// Build weights map (all zero for reservations)
@@ -120,6 +116,7 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 		Pipeline: req.Pipeline,
 		Hosts:    req.EligibleHosts,
 		Weights:  weights,
+		Options:  opts,
 		Context: api.NovaRequestContext{
 			RequestID:       RequestIDFromContext(ctx),
 			GlobalRequestID: globalReqID,

@@ -930,22 +930,19 @@ func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
 var errGathererFailed = errors.New("gatherer failed")
 
 func TestFilterWeigherPipelineController_PeekReadOnly(t *testing.T) {
-	validRequest := api.ExternalSchedulerRequest{
-		Spec: api.NovaObject[api.NovaSpec]{
-			Data: api.NovaSpec{NumInstances: 1},
-		},
-	}
-	validRaw, err := json.Marshal(validRequest)
-	if err != nil {
-		t.Fatalf("failed to marshal test request: %v", err)
+	makeRaw := func(readOnly bool) []byte {
+		r := api.ExternalSchedulerRequest{
+			Spec:    api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{NumInstances: 1}},
+			Options: lib.Options{ReadOnly: readOnly},
+		}
+		raw, err := json.Marshal(r)
+		if err != nil {
+			panic(err)
+		}
+		return raw
 	}
 
 	c := &FilterWeigherPipelineController{}
-	c.PipelineConfigs = map[string]v1alpha1.Pipeline{
-		"test-pipeline": {
-			Spec: v1alpha1.PipelineSpec{CreateHistory: false},
-		},
-	}
 
 	tests := []struct {
 		name     string
@@ -972,24 +969,24 @@ func TestFilterWeigherPipelineController_PeekReadOnly(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "unknown pipeline defaults to exclusive lock",
+			name: "ReadOnly=false uses exclusive lock",
 			decision: &v1alpha1.Decision{
 				Spec: v1alpha1.DecisionSpec{
-					PipelineRef: corev1.ObjectReference{Name: "unknown-pipeline"},
-					NovaRaw:     &runtime.RawExtension{Raw: validRaw},
+					PipelineRef: corev1.ObjectReference{Name: "test-pipeline"},
+					NovaRaw:     &runtime.RawExtension{Raw: makeRaw(false)},
 				},
 			},
 			want: false,
 		},
 		{
-			name: "valid request with non-ReadOnly intent uses exclusive lock",
+			name: "ReadOnly=true uses read lock",
 			decision: &v1alpha1.Decision{
 				Spec: v1alpha1.DecisionSpec{
 					PipelineRef: corev1.ObjectReference{Name: "test-pipeline"},
-					NovaRaw:     &runtime.RawExtension{Raw: validRaw},
+					NovaRaw:     &runtime.RawExtension{Raw: makeRaw(true)},
 				},
 			},
-			want: false,
+			want: true,
 		},
 	}
 

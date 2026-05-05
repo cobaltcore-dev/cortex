@@ -174,9 +174,12 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		log.Info("gathered all placement candidates", "numHosts", len(request.Hosts))
 	}
 
-	opts := c.buildOptions(request, pipelineConf)
-	result, err := pipeline.Run(request, opts)
-	if opts.RecordHistory {
+	// Fill RecordHistory from config if the caller didn't set it.
+	if !request.Options.RecordHistory {
+		request.Options.RecordHistory = pipelineConf.Spec.CreateHistory
+	}
+	result, err := pipeline.Run(request)
+	if request.Options.RecordHistory {
 		c.upsertHistory(ctx, decision, err)
 	}
 	if err != nil {
@@ -204,26 +207,7 @@ func (c *FilterWeigherPipelineController) peekReadOnly(decision *v1alpha1.Decisi
 	if err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request); err != nil {
 		return false
 	}
-	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
-	if !ok {
-		return false
-	}
-	return c.buildOptions(request, pipelineConf).ReadOnly
-}
-
-// The base controller will delegate the pipeline creation down to this method.
-func (c *FilterWeigherPipelineController) buildOptions(request api.ExternalSchedulerRequest, pipelineConf v1alpha1.Pipeline) lib.Options {
-	opts := lib.Options{
-		RecordHistory: pipelineConf.Spec.CreateHistory,
-	}
-	intent, err := request.GetIntent()
-	if err == nil {
-		switch intent {
-		case api.ReserveForCommittedResourceIntent, api.ReserveForFailoverIntent:
-			opts.LockReservations = true
-		}
-	}
-	return opts
+	return request.Options.ReadOnly
 }
 
 func (c *FilterWeigherPipelineController) InitPipeline(

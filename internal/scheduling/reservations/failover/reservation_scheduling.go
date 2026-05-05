@@ -11,6 +11,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 )
 
@@ -91,7 +92,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		"eligibleHypervisors", len(eligibleHypervisors),
 		"ignoreHypervisors", ignoreHypervisors)
 
-	scheduleResp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq)
+	scheduleResp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq, lib.Options{LockReservations: true})
 	if err != nil {
 		logger.Error(err, "failed to schedule failover reservation", "vmUUID", vm.UUID, "pipeline", pipeline)
 		return nil, fmt.Errorf("failed to schedule failover reservation: %w", err)
@@ -222,7 +223,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		"vmCurrentHost", vm.CurrentHypervisor,
 		"pipeline", PipelineAcknowledgeFailoverReservation)
 
-	resp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq)
+	resp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq, lib.Options{ReadOnly: true})
 	if err != nil {
 		logger.Error(err, "failed to validate VM for reservation host", "vmUUID", vm.UUID, "reservationHost", reservationHost)
 		return false, fmt.Errorf("failed to validate VM for reservation host: %w", err)
