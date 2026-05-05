@@ -14,10 +14,10 @@ metadata:
   name: cortex-nova-secret-reader-binding
 subjects:
   - kind: ServiceAccount
-    name: cortex-nova-scheduling-controller-manager
+    name: {{ (index .Values "cortex-scheduling-controllers").namePrefix }}-controller-manager
     namespace: {{ .Release.Namespace }}
   - kind: ServiceAccount
-    name: cortex-nova-knowledge-controller-manager
+    name: {{ (index .Values "cortex-knowledge-controllers").namePrefix }}-controller-manager
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
@@ -49,25 +49,25 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: cortex-nova-scheduling-manager-rolebinding-hypervisor
+  name: {{ (index .Values "cortex-scheduling-controllers").namePrefix }}-manager-rolebinding-hypervisor
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: cortex-nova-manager-role-hypervisor
 subjects:
 - kind: ServiceAccount
-  name: cortex-nova-scheduling-controller-manager
+  name: {{ (index .Values "cortex-scheduling-controllers").namePrefix }}-controller-manager
   namespace: {{ .Release.Namespace }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: cortex-nova-knowledge-manager-rolebinding-hypervisor
+  name: {{ (index .Values "cortex-knowledge-controllers").namePrefix }}-manager-rolebinding-hypervisor
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: cortex-nova-manager-role-hypervisor
 subjects:
 - kind: ServiceAccount
-  name: cortex-nova-knowledge-controller-manager
+  name: {{ (index .Values "cortex-knowledge-controllers").namePrefix }}-controller-manager
   namespace: {{ .Release.Namespace }}

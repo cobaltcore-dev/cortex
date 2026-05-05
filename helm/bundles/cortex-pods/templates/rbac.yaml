@@ -1,7 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: cortex-pods-manager-role-pods
+  name: {{ .Values.cortex.namePrefix }}-manager-role-pods
 rules:
 - apiGroups:
   - ""
@@ -48,12 +48,12 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: cortex-pods-manager-rolebinding-pods
+  name: {{ .Values.cortex.namePrefix }}-manager-rolebinding-pods
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: cortex-pods-manager-role-pods
+  name: {{ .Values.cortex.namePrefix }}-manager-role-pods
 subjects:
 - kind: ServiceAccount
-  name: cortex-pods-controller-manager
+  name: {{ .Values.cortex.namePrefix }}-controller-manager
   namespace: {{ .Release.Namespace }}
