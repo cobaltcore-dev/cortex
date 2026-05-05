@@ -171,16 +171,26 @@ func TestHandleQuota_CreateAndUpdate(t *testing.T) {
 					},
 				},
 			},
+			metadata: &liquid.ProjectMetadata{
+				UUID:   "project-abc-123",
+				Domain: liquid.DomainMetadata{UUID: "domain-1"},
+			},
 			expectQuota: map[string]int64{"hw_version_hana_1_ram": 100},
 			expectPerAZ: map[string]map[string]int64{
 				"hw_version_hana_1_ram": {"az-a": 60, "az-b": 40},
 			},
+			expectDomain: "domain-1",
 		},
 		{
-			name:        "Create_EmptyResources",
-			projectID:   "project-empty",
-			resources:   map[liquid.ResourceName]liquid.ResourceQuotaRequest{},
-			expectQuota: map[string]int64{},
+			name:      "Create_EmptyResources",
+			projectID: "project-empty",
+			resources: map[liquid.ResourceName]liquid.ResourceQuotaRequest{},
+			metadata: &liquid.ProjectMetadata{
+				UUID:   "project-empty",
+				Domain: liquid.DomainMetadata{UUID: "domain-1"},
+			},
+			expectQuota:  map[string]int64{},
+			expectDomain: "domain-1",
 		},
 		{
 			name:      "Create_WithMetadata",
@@ -215,6 +225,14 @@ func TestHandleQuota_CreateAndUpdate(t *testing.T) {
 				},
 			},
 			projectID: "project-xyz",
+			metadata: &liquid.ProjectMetadata{
+				UUID: "project-xyz",
+				Name: "original-project-name",
+				Domain: liquid.DomainMetadata{
+					UUID: "original-domain",
+					Name: "original-domain-name",
+				},
+			},
 			resources: map[liquid.ResourceName]liquid.ResourceQuotaRequest{
 				"hw_version_hana_1_ram": {
 					Quota: 200,

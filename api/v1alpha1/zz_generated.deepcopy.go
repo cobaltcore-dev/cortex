@@ -1522,6 +1522,10 @@ func (in *ProjectQuotaStatus) DeepCopyInto(out *ProjectQuotaStatus) {
 		in, out := &in.LastReconcileAt, &out.LastReconcileAt
 		*out = (*in).DeepCopy()
 	}
+	if in.LastFullReconcileAt != nil {
+		in, out := &in.LastFullReconcileAt, &out.LastFullReconcileAt
+		*out = (*in).DeepCopy()
+	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]v1.Condition, len(*in))

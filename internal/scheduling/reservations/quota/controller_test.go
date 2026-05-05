@@ -501,7 +501,8 @@ func TestAccumulateAddedVM_KnownFlavor(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "quota-project-a"},
 		Spec:       v1alpha1.ProjectQuotaSpec{ProjectID: "project-a"},
 		Status: v1alpha1.ProjectQuotaStatus{
-			LastReconcileAt: &lastReconcile,
+			LastReconcileAt:     &lastReconcile,
+			LastFullReconcileAt: &lastReconcile,
 		},
 	}
 

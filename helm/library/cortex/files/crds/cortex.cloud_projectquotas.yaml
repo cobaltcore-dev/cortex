@@ -179,9 +179,16 @@ spec:
                   - type
                   type: object
                 type: array
+              lastFullReconcileAt:
+                description: |-
+                  LastFullReconcileAt is when the periodic full reconcile last completed for this project.
+                  Used as the watermark for isVMNewSinceLastReconcile (incremental add detection).
+                  Only updated by ReconcilePeriodic, NOT by PaygUsage recomputes or incremental deltas.
+                format: date-time
+                type: string
               lastReconcileAt:
                 description: LastReconcileAt is when the controller last reconciled
-                  this project's quota.
+                  this project's quota (any path).
                 format: date-time
                 type: string
               paygUsage:

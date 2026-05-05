@@ -16,6 +16,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -83,6 +84,11 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 		domainName = meta.Domain.Name
 	}
 
+	if domainID == "" {
+		api.quotaError(w, http.StatusBadRequest, "missing domain UUID in project metadata", startTime)
+		return
+	}
+
 	// Build the spec quota map from the liquid request.
 	// liquid API uses uint64; our CRD uses int64 (K8s convention).
 	// Guard against overflow: uint64 values > MaxInt64 would wrap to negative.
@@ -108,40 +114,43 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 		specQuota[string(resourceName)] = rq
 	}
 
-	// Create or update ProjectQuota CRD
+	// Create or update ProjectQuota CRD with retry-on-conflict to handle
+	// concurrent status updates from the quota controller.
 	crdName := projectQuotaCRDName(projectID)
 	ctx := r.Context()
 
-	var existing v1alpha1.ProjectQuota
-	err = api.client.Get(ctx, client.ObjectKey{Name: crdName}, &existing)
-	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			// Real error
-			log.Error(err, "failed to get existing ProjectQuota", "name", crdName)
-			api.quotaError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to check existing quota: %v", err), startTime)
-			return
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		var existing v1alpha1.ProjectQuota
+		getErr := api.client.Get(ctx, client.ObjectKey{Name: crdName}, &existing)
+		if getErr != nil {
+			if !apierrors.IsNotFound(getErr) {
+				return getErr
+			}
+			// Not found -- create new
+			pq := &v1alpha1.ProjectQuota{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: crdName,
+				},
+				Spec: v1alpha1.ProjectQuotaSpec{
+					ProjectID:   projectID,
+					ProjectName: projectName,
+					DomainID:    domainID,
+					DomainName:  domainName,
+					Quota:       specQuota,
+				},
+			}
+			if createErr := api.client.Create(ctx, pq); createErr != nil {
+				// If another request just created it, retry will fetch and update
+				if apierrors.IsAlreadyExists(createErr) {
+					return createErr
+				}
+				return createErr
+			}
+			log.V(1).Info("created ProjectQuota", "name", crdName, "projectID", projectID, "resources", len(specQuota))
+			return nil
 		}
-		// Not found — create new
-		pq := &v1alpha1.ProjectQuota{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: crdName,
-			},
-			Spec: v1alpha1.ProjectQuotaSpec{
-				ProjectID:   projectID,
-				ProjectName: projectName,
-				DomainID:    domainID,
-				DomainName:  domainName,
-				Quota:       specQuota,
-			},
-		}
-		if err := api.client.Create(ctx, pq); err != nil {
-			log.Error(err, "failed to create ProjectQuota", "name", crdName)
-			api.quotaError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to create quota: %v", err), startTime)
-			return
-		}
-		log.V(1).Info("created ProjectQuota", "name", crdName, "projectID", projectID, "resources", len(specQuota))
-	} else {
-		// Update existing
+
+		// Update existing (re-fetched on each retry to get fresh resourceVersion)
 		existing.Spec.Quota = specQuota
 		if projectName != "" {
 			existing.Spec.ProjectName = projectName
@@ -152,12 +161,16 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 		if domainName != "" {
 			existing.Spec.DomainName = domainName
 		}
-		if err := api.client.Update(ctx, &existing); err != nil {
-			log.Error(err, "failed to update ProjectQuota", "name", crdName)
-			api.quotaError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to update quota: %v", err), startTime)
-			return
+		if updateErr := api.client.Update(ctx, &existing); updateErr != nil {
+			return updateErr
 		}
 		log.V(1).Info("updated ProjectQuota", "name", crdName, "projectID", projectID, "resources", len(specQuota))
+		return nil
+	})
+	if err != nil {
+		log.Error(err, "failed to create/update ProjectQuota", "name", crdName)
+		api.quotaError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to persist quota: %v", err), startTime)
+		return
 	}
 
 	// Return 204 No Content as expected by the LIQUID API

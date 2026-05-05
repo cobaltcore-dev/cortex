@@ -81,9 +81,15 @@ type ProjectQuotaStatus struct {
 	// +kubebuilder:validation:Optional
 	PaygUsage map[string]ResourceQuotaUsage `json:"paygUsage,omitempty"`
 
-	// LastReconcileAt is when the controller last reconciled this project's quota.
+	// LastReconcileAt is when the controller last reconciled this project's quota (any path).
 	// +kubebuilder:validation:Optional
 	LastReconcileAt *metav1.Time `json:"lastReconcileAt,omitempty"`
+
+	// LastFullReconcileAt is when the periodic full reconcile last completed for this project.
+	// Used as the watermark for isVMNewSinceLastReconcile (incremental add detection).
+	// Only updated by ReconcilePeriodic, NOT by PaygUsage recomputes or incremental deltas.
+	// +kubebuilder:validation:Optional
+	LastFullReconcileAt *metav1.Time `json:"lastFullReconcileAt,omitempty"`
 
 	// Conditions holds the current status conditions.
 	// +kubebuilder:validation:Optional

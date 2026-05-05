@@ -329,6 +329,7 @@ func buildVMsFromHypervisors(hypervisorList *hv1.HypervisorList, postgresVMs []V
 				ProjectID:         pgVM.ProjectID,
 				CurrentHypervisor: hv.Name, // Use hypervisor CRD location, not postgres
 				AvailabilityZone:  pgVM.AvailabilityZone,
+				CreatedAt:         pgVM.CreatedAt,
 				Resources:         pgVM.Resources,
 				FlavorExtraSpecs:  pgVM.FlavorExtraSpecs,
 			}

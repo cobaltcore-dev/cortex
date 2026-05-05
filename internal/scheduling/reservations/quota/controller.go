@@ -127,8 +127,8 @@ func (c *QuotaController) ReconcilePeriodic(ctx context.Context) error {
 		// Derive PaygUsage = TotalUsage - CRUsage (clamp >= 0)
 		paygUsage := derivePaygUsage(projectTotalUsage, crUsage)
 
-		// Write status with conflict retry
-		if err := c.updateProjectQuotaStatusWithRetry(ctx, pq.Name, projectTotalUsage, paygUsage); err != nil {
+		// Write status with conflict retry (full reconcile sets LastFullReconcileAt)
+		if err := c.updateProjectQuotaStatusWithRetry(ctx, pq.Name, projectTotalUsage, paygUsage, true); err != nil {
 			logger.Error(err, "failed to update ProjectQuota status", "project", projectID)
 			skipped++
 			continue
@@ -200,7 +200,7 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	paygUsage := derivePaygUsage(totalUsage, crUsage)
 
 	// Write updated PaygUsage with conflict retry (keep TotalUsage unchanged)
-	if err := c.updateProjectQuotaStatusWithRetry(ctx, pq.Name, totalUsage, paygUsage); err != nil {
+	if err := c.updateProjectQuotaStatusWithRetry(ctx, pq.Name, totalUsage, paygUsage, false); err != nil {
 		logger.Error(err, "failed to update ProjectQuota status")
 		return ctrl.Result{}, err
 	}
@@ -408,12 +408,12 @@ func (c *QuotaController) isVMNewSinceLastReconcile(ctx context.Context, vm *fai
 		return false
 	}
 
-	if pq.Status.LastReconcileAt == nil {
+	if pq.Status.LastFullReconcileAt == nil {
 		// No full reconcile has run yet -- skip incremental updates
 		return false
 	}
 
-	// Parse the VM's creation time and compare with last reconcile
+	// Parse the VM's creation time and compare with last FULL reconcile
 	vmCreatedAt, err := time.Parse("2006-01-02T15:04:05Z", vm.CreatedAt)
 	if err != nil {
 		// Try alternative format with timezone offset
@@ -424,7 +424,7 @@ func (c *QuotaController) isVMNewSinceLastReconcile(ctx context.Context, vm *fai
 		}
 	}
 
-	return vmCreatedAt.After(pq.Status.LastReconcileAt.Time)
+	return vmCreatedAt.After(pq.Status.LastFullReconcileAt.Time)
 }
 
 // accumulateRemovedVM looks up a deleted VM and accumulates its resource contribution as a decrement.
@@ -554,8 +554,9 @@ func (c *QuotaController) applyDeltaAndUpdateStatus(
 func (c *QuotaController) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("quota-controller").
-		// Watch ProjectQuota for spec changes (Limes pushes quota)
-		For(&v1alpha1.ProjectQuota{}).
+		// Watch ProjectQuota for spec/generation changes only (ignore status-only updates
+		// to avoid infinite reconcile loops since Reconcile() updates status).
+		For(&v1alpha1.ProjectQuota{}, builder.WithPredicates(projectQuotaGenerationChangePredicate())).
 		// Watch CommittedResource for status changes (UsedAmount updates)
 		Watches(
 			&v1alpha1.CommittedResource{},
@@ -776,11 +777,13 @@ func derivePaygUsage(
 
 // updateProjectQuotaStatusWithRetry writes TotalUsage + PaygUsage + LastReconcileAt
 // with retry-on-conflict to handle concurrent updates.
+// If fullReconcile is true, also updates LastFullReconcileAt.
 func (c *QuotaController) updateProjectQuotaStatusWithRetry(
 	ctx context.Context,
 	pqName string,
 	totalUsage map[string]v1alpha1.ResourceQuotaUsage,
 	paygUsage map[string]v1alpha1.ResourceQuotaUsage,
+	fullReconcile bool,
 ) error {
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -794,7 +797,9 @@ func (c *QuotaController) updateProjectQuotaStatusWithRetry(
 		pq.Status.PaygUsage = paygUsage
 		now := metav1.Now()
 		pq.Status.LastReconcileAt = &now
-
+		if fullReconcile {
+			pq.Status.LastFullReconcileAt = &now
+		}
 		return c.Status().Update(ctx, &pq)
 	})
 }
@@ -909,6 +914,12 @@ func crUsedAmountChangePredicate() predicate.Predicate {
 		DeleteFunc:  func(_ event.DeleteEvent) bool { return true },
 		GenericFunc: func(_ event.GenericEvent) bool { return false },
 	}
+}
+
+// projectQuotaGenerationChangePredicate triggers only when the ProjectQuota's generation changes
+// (i.e., spec was modified). This prevents infinite reconcile loops from status-only updates.
+func projectQuotaGenerationChangePredicate() predicate.Predicate {
+	return predicate.GenerationChangedPredicate{}
 }
 
 // hvInstanceChangePredicate always returns true for updates.
