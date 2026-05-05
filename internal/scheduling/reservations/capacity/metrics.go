@@ -5,6 +5,7 @@ package capacity
 
 import (
 	"context"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
@@ -72,7 +73,9 @@ func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
 // Collect implements prometheus.Collector — lists all FlavorGroupCapacity CRDs and exports gauges.
 func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	var list v1alpha1.FlavorGroupCapacityList
-	if err := m.client.List(context.Background(), &list); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := m.client.List(ctx, &list); err != nil {
 		log.Error(err, "failed to list FlavorGroupCapacity CRDs for metrics")
 		return
 	}
