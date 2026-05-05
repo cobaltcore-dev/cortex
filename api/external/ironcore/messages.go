@@ -14,7 +14,7 @@ type MachinePipelineRequest struct {
 	// The available machine pools.
 	Pools []ironcorev1alpha1.MachinePool `json:"pools"`
 	// Options configure the pipeline behavior for this scheduling call.
-	Options lib.Options
+	Options lib.Options `json:"options,omitempty"`
 }
 
 func (r MachinePipelineRequest) GetOptions() lib.Options { return r.Options }

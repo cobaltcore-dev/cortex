@@ -16,7 +16,7 @@ type PodPipelineRequest struct {
 	// The pod to be scheduled.
 	Pod corev1.Pod `json:"pod"`
 	// Options configure the pipeline behavior for this scheduling call.
-	Options lib.Options
+	Options lib.Options `json:"options,omitempty"`
 }
 
 func (r PodPipelineRequest) GetOptions() lib.Options { return r.Options }

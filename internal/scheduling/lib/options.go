@@ -16,7 +16,9 @@ import (
 // Consumed by steps: ReadOnly, LockReservations, AssumeEmptyHosts, IgnoredReservationTypes.
 // Consumed by the controller after pipeline.Run(): RecordHistory, CreateInflight.
 type Options struct {
-	// ReadOnly means the pipeline could run without using the mutex, i.e. concurrent runs are ok.
+	// ReadOnly means the pipeline run does not modify shared scheduling state (reservations,
+	// history, inflight records). Concurrent read-only runs are safe under a shared read lock.
+	// Note: the controller may still write the Decision status after Run() regardless of this flag.
 	ReadOnly bool
 	// LockReservations prevents reservation unlocking, e.g. in the capacity filter.
 	// Set when finding hosts for new reservations (failover, CR) to see true available capacity.
@@ -38,10 +40,10 @@ type Options struct {
 // Validate checks for mutually exclusive or inconsistent option combinations.
 func (o Options) Validate() error {
 	if o.ReadOnly && o.RecordHistory {
-		return errors.New("ReadOnly and RecordHistory are mutually exclusive: read-only runs must not mutate state")
+		return errors.New("ReadOnly and RecordHistory are mutually exclusive: read-only runs must not write scheduling history")
 	}
 	if o.ReadOnly && o.CreateInflight {
-		return errors.New("ReadOnly and CreateInflight are mutually exclusive: read-only runs must not mutate state")
+		return errors.New("ReadOnly and CreateInflight are mutually exclusive: read-only runs must not create inflight reservations")
 	}
 	return nil
 }
