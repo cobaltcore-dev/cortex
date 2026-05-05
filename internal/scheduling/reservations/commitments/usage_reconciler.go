@@ -5,7 +5,6 @@ package commitments
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -105,10 +104,12 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	now := metav1.Now()
 	written := 0
 	totalAssigned := 0
+	var writeErr error
 	for _, group := range commitmentsByAZFG {
 		for _, state := range group {
 			if err := r.writeUsageStatus(ctx, state, now); err != nil {
 				logger.Error(err, "failed to write usage status", "commitmentUUID", state.CommitmentUUID)
+				writeErr = err
 			} else {
 				written++
 				totalAssigned += len(state.AssignedInstances)
@@ -118,6 +119,9 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 				}
 			}
 		}
+	}
+	if writeErr != nil {
+		return ctrl.Result{}, writeErr
 	}
 
 	r.Monitor.reconcileDuration.WithLabelValues("success").Observe(time.Since(start).Seconds())
@@ -204,13 +208,7 @@ func (r *UsageReconciler) hypervisorToCommittedResources(ctx context.Context, ob
 
 // SetupWithManager registers the usage reconciler with the controller manager.
 func (r *UsageReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
-	ctx := context.Background()
-	if err := indexCommittedResourceByUUID(ctx, mcl); err != nil {
-		return fmt.Errorf("failed to set up committed resource field index: %w", err)
-	}
-
 	bldr := multicluster.BuildController(mcl, mgr)
-
 	// Watch CommittedResource spec changes (generation change = spec changed; status-only
 	// updates do not increment generation and are suppressed to avoid reconcile loops).
 	var err error

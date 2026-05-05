@@ -438,6 +438,9 @@ func (r *CommittedResourceController) SetupWithManager(mgr ctrl.Manager, mcl *mu
 	if err := indexReservationByCommitmentUUID(ctx, mcl); err != nil {
 		return fmt.Errorf("failed to set up reservation field index: %w", err)
 	}
+	if err := indexCommittedResourceByUUID(ctx, mcl); err != nil {
+		return fmt.Errorf("failed to set up committed resource field index: %w", err)
+	}
 
 	bldr := multicluster.BuildController(mcl, mgr)
 	var err error
