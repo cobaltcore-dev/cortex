@@ -57,7 +57,7 @@ func (c *Controller) Start(ctx context.Context) error {
 			if err := c.reconcileAll(ctx); err != nil {
 				log.Error(err, "reconcile cycle failed")
 			}
-			timer.Reset(c.config.ReconcileInterval)
+			timer.Reset(c.config.ReconcileInterval.Duration)
 		}
 	}
 }
