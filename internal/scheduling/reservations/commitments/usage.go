@@ -480,6 +480,7 @@ func (c *UsageCalculator) buildUsageResponse(
 
 		subresource, err := liquid.SubresourceBuilder[map[string]any]{
 			ID:         vm.UUID,
+			Name:       vm.Name,
 			Attributes: attributes,
 		}.Finalize()
 		if err != nil {
