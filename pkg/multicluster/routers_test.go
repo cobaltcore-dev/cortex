@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -34,7 +33,7 @@ func TestHypervisorResourceRouter_Match(t *testing.T) {
 		},
 		{
 			name: "matching AZ pointer",
-			obj: testlib.Ptr(hv1.Hypervisor{
+			obj: new(hv1.Hypervisor{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{"topology.kubernetes.io/zone": "qa-de-1a"},
 				},
@@ -135,7 +134,7 @@ func TestHistoryResourceRouter_Match(t *testing.T) {
 		},
 		{
 			name: "matching AZ pointer",
-			obj: testlib.Ptr(v1alpha1.History{
+			obj: new(v1alpha1.History{
 				Spec: v1alpha1.HistorySpec{
 					AvailabilityZone: &az,
 				},
@@ -240,7 +239,7 @@ func TestReservationsResourceRouter_Match(t *testing.T) {
 		},
 		{
 			name: "matching AZ pointer",
-			obj: testlib.Ptr(v1alpha1.Reservation{
+			obj: new(v1alpha1.Reservation{
 				Spec: v1alpha1.ReservationSpec{
 					AvailabilityZone: "qa-de-1a",
 				},

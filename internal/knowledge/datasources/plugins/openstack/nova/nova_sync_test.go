@@ -12,7 +12,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 )
 
 type mockNovaAPI struct{}
@@ -133,7 +132,7 @@ func TestNovaSyncer_SyncDeletedServers(t *testing.T) {
 		},
 		{
 			Name:                              "custom time",
-			DeletedServersChangesSinceMinutes: testlib.Ptr(60),
+			DeletedServersChangesSinceMinutes: new(60),
 			ExpectedAmountOfDeletedServers:    1,
 		},
 	}
