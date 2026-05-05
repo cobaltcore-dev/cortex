@@ -191,7 +191,7 @@ func TestIntegration(t *testing.T) {
 				},
 				// Step 2: HV diff adds vm-1 (which was created BEFORE last reconcile = migration)
 				{
-					Type: "hv_diff",
+					Type:  "hv_diff",
 					OldHV: makeHV("hv-2", []hv1.Instance{}),
 					NewHV: makeHV("hv-2", []hv1.Instance{
 						activeInstance("vm-1"), // migrated here, created before reconcile
@@ -498,7 +498,7 @@ func TestIntegration(t *testing.T) {
 					// TotalUsage now has phantom's contribution (drift)
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 4, "az-2": 1}}, // 3+1 drift
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 4, "az-2": 1}},  // 3+1 drift
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 32, "az-2": 8}}, // 24+8 drift
 							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
@@ -512,7 +512,7 @@ func TestIntegration(t *testing.T) {
 					OverrideVMs: baseVMsPtr(),
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}}, // corrected
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}},  // corrected
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}}, // corrected
 							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
@@ -638,7 +638,7 @@ func TestIntegration(t *testing.T) {
 						activeInstance("vm-2"),
 						activeInstance("vm-new-a"),
 					}),
-					
+
 					OverrideVMs: withExtraVMs(
 						failover.VM{
 							UUID: "vm-new-a", FlavorName: "m1.hana_v2.small",
@@ -652,7 +652,7 @@ func TestIntegration(t *testing.T) {
 					),
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}}, // 4-1=3
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}},  // 4-1=3
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}}, // 32-8=24
 							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
@@ -681,7 +681,7 @@ func TestIntegration(t *testing.T) {
 					},
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 4, "az-2": 1}}, // corrected up
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 4, "az-2": 1}},  // corrected up
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 32, "az-2": 8}}, // corrected up
 							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
@@ -1172,7 +1172,7 @@ func reconcileRequest(name string) ctrl.Request {
 	return ctrl.Request{NamespacedName: client.ObjectKey{Name: name}}
 }
 
-func makePQ(projectID string, lastReconcileAt *metav1.Time) *v1alpha1.ProjectQuota {
+func makePQ(projectID string, lastReconcileAt *metav1.Time) *v1alpha1.ProjectQuota { //nolint:unparam
 	return &v1alpha1.ProjectQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: "quota-" + projectID},
 		Spec:       v1alpha1.ProjectQuotaSpec{ProjectID: projectID, DomainID: "domain-1"},
@@ -1182,7 +1182,7 @@ func makePQ(projectID string, lastReconcileAt *metav1.Time) *v1alpha1.ProjectQuo
 	}
 }
 
-func makeCR(name, projectID, flavorGroup, az string, resourceType v1alpha1.CommittedResourceType, state v1alpha1.CommitmentStatus, usedAmount *int64) *v1alpha1.CommittedResource {
+func makeCR(name, projectID, flavorGroup, az string, resourceType v1alpha1.CommittedResourceType, state v1alpha1.CommitmentStatus, usedAmount *int64) *v1alpha1.CommittedResource { //nolint:unparam
 	cr := &v1alpha1.CommittedResource{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec: v1alpha1.CommittedResourceSpec{
