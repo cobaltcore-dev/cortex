@@ -435,8 +435,8 @@ func (r *CommittedResourceController) patchNotReady(ctx context.Context, cr *v1a
 // SetupWithManager sets up the controller with the Manager.
 func (r *CommittedResourceController) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	ctx := context.Background()
-	if err := IndexFields(ctx, mcl); err != nil {
-		return fmt.Errorf("failed to set up field indexes: %w", err)
+	if err := indexReservationByCommitmentUUID(ctx, mcl); err != nil {
+		return fmt.Errorf("failed to set up reservation field index: %w", err)
 	}
 
 	bldr := multicluster.BuildController(mcl, mgr)

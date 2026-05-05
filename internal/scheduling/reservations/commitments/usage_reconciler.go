@@ -5,6 +5,7 @@ package commitments
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -203,6 +204,11 @@ func (r *UsageReconciler) hypervisorToCommittedResources(ctx context.Context, ob
 
 // SetupWithManager registers the usage reconciler with the controller manager.
 func (r *UsageReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
+	ctx := context.Background()
+	if err := indexCommittedResourceByUUID(ctx, mcl); err != nil {
+		return fmt.Errorf("failed to set up committed resource field index: %w", err)
+	}
+
 	bldr := multicluster.BuildController(mcl, mgr)
 
 	// Watch CommittedResource spec changes (generation change = spec changed; status-only

@@ -16,11 +16,11 @@ import (
 const idxCommittedResourceByUUID = "spec.commitmentUUID"
 const idxReservationByCommitmentUUID = "spec.committedResourceReservation.commitmentUUID"
 
-// IndexFields registers field indexes required by the CommittedResource controller.
-func IndexFields(ctx context.Context, mcl *multicluster.Client) error {
+// indexCommittedResourceByUUID registers the index used by UsageReconciler to look up
+// CommittedResources by their CommitmentUUID.
+func indexCommittedResourceByUUID(ctx context.Context, mcl *multicluster.Client) error {
 	log := logf.FromContext(ctx)
-	log.Info("Setting up field indexes for the CommittedResource controller")
-	if err := mcl.IndexField(ctx,
+	return mcl.IndexField(ctx,
 		&v1alpha1.CommittedResource{},
 		&v1alpha1.CommittedResourceList{},
 		idxCommittedResourceByUUID,
@@ -35,11 +35,14 @@ func IndexFields(ctx context.Context, mcl *multicluster.Client) error {
 			}
 			return []string{cr.Spec.CommitmentUUID}
 		},
-	); err != nil {
-		log.Error(err, "failed to set up index for commitmentUUID")
-		return err
-	}
-	if err := mcl.IndexField(ctx,
+	)
+}
+
+// indexReservationByCommitmentUUID registers the index used by CommittedResourceController to
+// look up child Reservations by their CommitmentUUID.
+func indexReservationByCommitmentUUID(ctx context.Context, mcl *multicluster.Client) error {
+	log := logf.FromContext(ctx)
+	return mcl.IndexField(ctx,
 		&v1alpha1.Reservation{},
 		&v1alpha1.ReservationList{},
 		idxReservationByCommitmentUUID,
@@ -54,10 +57,5 @@ func IndexFields(ctx context.Context, mcl *multicluster.Client) error {
 			}
 			return []string{res.Spec.CommittedResourceReservation.CommitmentUUID}
 		},
-	); err != nil {
-		log.Error(err, "failed to set up index for reservation commitmentUUID")
-		return err
-	}
-	log.Info("Successfully set up field indexes")
-	return nil
+	)
 }
