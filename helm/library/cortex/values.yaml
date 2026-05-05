@@ -55,15 +55,6 @@ controllerManager:
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:
   enable: true
-  # Whether the ironcore roles should be deployed as well.
-  ironcore:
-    enable: false
-  pods:
-    enable: false
-  # Whether hypervisor operator/crd related roles should be deployed.
-  # See: https://github.com/cobaltcore-dev/openstack-hypervisor-operator
-  hypervisor:
-    enable: false
 
 # [CRDs]: To enable the CRDs
 crd:
@@ -99,8 +90,7 @@ prometheus:
 certmanager:
   enable: false
 
-# [WEBHOOK]: To enable validating webhook for Pipeline resources set true
-# Note: When enabled, cert-manager is typically also required for TLS certificates
+# [WEBHOOK]: To enable webhook args, ports, and cert volume mounts on the manager
 webhook:
   enable: false
 
