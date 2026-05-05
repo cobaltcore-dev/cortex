@@ -3,7 +3,11 @@
 
 package lib
 
-import "github.com/cobaltcore-dev/cortex/api/v1alpha1"
+import (
+	"errors"
+
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+)
 
 // Options configure the behavior of a single pipeline run at call time.
 // These are distinct from per-step YAML options (FilterWeigherPipelineStepOpts),
@@ -29,4 +33,15 @@ type Options struct {
 	RecordHistory bool
 	// CreateInflight creates pessimistic blocking reservations for all returned candidates.
 	CreateInflight bool
+}
+
+// Validate checks for mutually exclusive or inconsistent option combinations.
+func (o Options) Validate() error {
+	if o.ReadOnly && o.RecordHistory {
+		return errors.New("ReadOnly and RecordHistory are mutually exclusive: read-only runs must not mutate state")
+	}
+	if o.ReadOnly && o.CreateInflight {
+		return errors.New("ReadOnly and CreateInflight are mutually exclusive: read-only runs must not mutate state")
+	}
+	return nil
 }

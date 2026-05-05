@@ -265,6 +265,9 @@ func (s *filterWeigherPipeline[RequestType]) sortHostsByWeights(weights map[stri
 
 // Evaluate the pipeline and return a list of hosts in order of preference.
 func (p *filterWeigherPipeline[RequestType]) Run(request RequestType, opts Options) (v1alpha1.DecisionResult, error) {
+	if err := opts.Validate(); err != nil {
+		return v1alpha1.DecisionResult{}, err
+	}
 	slogArgs := request.GetTraceLogArgs()
 	slogArgsAny := make([]any, 0, len(slogArgs))
 	for _, arg := range slogArgs {
