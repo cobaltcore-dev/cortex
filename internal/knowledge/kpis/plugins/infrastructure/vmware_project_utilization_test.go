@@ -33,24 +33,8 @@ func buildMetricKey(name string, labels map[string]string) string {
 	}
 }
 
-func hostLabels(computeHost, az string) map[string]string {
-	return map[string]string{
-		"availability_zone":  az,
-		"compute_host":       computeHost,
-		"cpu_architecture":   "",
-		"workload_type":      "",
-		"hypervisor_family":  "vmware",
-		"enabled":            "false",
-		"decommissioned":     "false",
-		"external_customer":  "false",
-		"disabled_reason":    "-",
-		"pinned_projects":    "false",
-		"pinned_project_ids": "",
-	}
-}
-
 func instanceMetric(computeHost, az, projectID, projectName, flavorName string, value float64) collectedVMwareMetric {
-	labels := hostLabels(computeHost, az)
+	labels := mockVMwareHostLabels(computeHost, az)
 	labels["project_id"] = projectID
 	labels["project_name"] = projectName
 	labels["flavor_name"] = flavorName
@@ -58,7 +42,7 @@ func instanceMetric(computeHost, az, projectID, projectName, flavorName string, 
 }
 
 func capacityMetric(computeHost, az, projectID, projectName, resource string, value float64) collectedVMwareMetric {
-	labels := hostLabels(computeHost, az)
+	labels := mockVMwareHostLabels(computeHost, az)
 	labels["project_id"] = projectID
 	labels["project_name"] = projectName
 	labels["resource"] = resource

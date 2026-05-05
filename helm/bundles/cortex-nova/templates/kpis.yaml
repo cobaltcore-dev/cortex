@@ -30,20 +30,6 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: vmware-host-capacity
-spec:
-  schedulingDomain: nova
-  impl: vmware_host_capacity_kpi
-  dependencies:
-    knowledges:
-      - name: host-details
-      - name: host-utilization
-  description: |
-    This KPI tracks the total, utilized, reserved and failover capacity of VMware hosts.
----
-apiVersion: cortex.cloud/v1alpha1
-kind: KPI
-metadata:
   name: host-running-vms
 spec:
   schedulingDomain: nova
@@ -188,21 +174,6 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: vmware-commitments
-spec:
-  schedulingDomain: nova
-  impl: vmware_commitments_kpi
-  dependencies:
-    datasources:
-      - name: limes-project-commitments
-      - name: nova-flavors
-      - name: nova-servers
-  description: |
-    This KPI tracks unused VMware commitments based on project commitments and usage.
----
-apiVersion: cortex.cloud/v1alpha1
-kind: KPI
-metadata:
   name: vmware-project-utilization
 spec:
   schedulingDomain: nova
@@ -216,3 +187,32 @@ spec:
       - name: host-details
   description: |
     This KPI tracks the resource utilization of projects running VMs on VMware hosts.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: vmware-resource-commitments
+spec:
+  schedulingDomain: nova
+  impl: vmware_resource_commitments_kpi
+  dependencies:
+    datasources:
+      - name: nova-servers
+      - name: nova-flavors
+      - name: limes-project-commitments
+  description: |
+    This KPI tracks the resource commitments of projects running VMs on VMware hosts.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: vmware-host-capacity
+spec:
+  schedulingDomain: nova
+  impl: vmware_host_capacity_kpi
+  dependencies:
+    knowledges:
+      - name: host-details
+      - name: host-utilization
+  description: |
+    This KPI tracks the capacity and utilization of VMware hosts in terms of CPU, RAM, and disk resources.

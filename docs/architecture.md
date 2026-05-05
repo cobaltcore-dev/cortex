@@ -120,20 +120,19 @@ Both `hybrid` and `crd` modes require a `versioning` config block with `id`, `mi
 
 ### Traits
 
-When `features.traits` is set to `hybrid` or `crd`, the shim serves OpenStack Placement traits from a pair of Kubernetes ConfigMaps instead of forwarding to upstream:
+When `features.traits` is set to `hybrid` or `crd`, the shim serves OpenStack Placement traits from a single Kubernetes ConfigMap instead of forwarding to upstream. The ConfigMap name is set by `traits.configMapName` in the shim config and is owned by the shim.
 
-- **Static ConfigMap** (Helm-managed): Contains the standard OpenStack traits deployed via Helm. Its name is set by `traits.configMapName` in the shim config.
-- **Custom ConfigMap** (shim-managed): Stores `CUSTOM_*` traits created at runtime through PUT requests. Named `{configMapName}-custom`.
+On startup, a `TraitSyncer` initializes the ConfigMap (creating it if it does not exist). In the background, the syncer periodically fetches traits from upstream placement (every 60 seconds with jitter) and writes them into the ConfigMap, keeping the local view in sync.
 
 The trait endpoints support the full OpenStack Placement traits API:
-- `GET /traits` returns a sorted, merged list from both ConfigMaps, with optional filtering via the `name` query parameter (`in:TRAIT_A,TRAIT_B` or `startswith:CUSTOM_`).
-- `GET /traits/{name}` checks both ConfigMaps for existence.
+- `GET /traits` returns a sorted list from the ConfigMap, with optional filtering via the `name` query parameter (`in:TRAIT_A,TRAIT_B` or `startswith:CUSTOM_`).
+- `GET /traits/{name}` checks the ConfigMap for existence.
 - `PUT /traits/{name}` creates custom traits (only `CUSTOM_*` prefixed names are allowed).
 - `DELETE /traits/{name}` removes custom traits.
 
-Writes to the custom ConfigMap are serialized across replicas using a Kubernetes Lease-backed distributed lock (see `pkg/resourcelock`). This prevents concurrent writes from corrupting the ConfigMap data.
+Writes to the ConfigMap are serialized across replicas using a Kubernetes Lease-backed distributed lock (see `pkg/resourcelock`). This prevents concurrent writes from corrupting the ConfigMap data.
 
-In **hybrid** mode, `GET`, `PUT`, and `DELETE` trait requests are forwarded to upstream Placement (so upstream always has the latest data), and a **periodic sync loop** runs in the background (every 60 seconds with jitter) to fetch traits from upstream and write them into the static ConfigMap. This keeps the local view in sync with upstream and prepares for cutover to `crd` mode. In **crd** mode, traits are served exclusively from the local ConfigMaps with no upstream dependency.
+In **hybrid** mode, PUT and DELETE requests are forwarded to upstream placement via the `forwardWithHook` pattern; on success, the trait is eagerly added to or removed from the local ConfigMap so the local view is immediately consistent. GET requests in hybrid mode are also forwarded to upstream. In **crd** mode, traits are served exclusively from the local ConfigMap with no upstream dependency.
 
 ### Authentication
 

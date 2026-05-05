@@ -27,6 +27,10 @@ spec:
     - jsonPath: .spec.committedResourceReservation.resourceGroup
       name: ResourceGroup
       type: string
+    - jsonPath: .spec.failoverReservation.resourceGroup
+      name: HA ResourceGroup
+      priority: 1
+      type: string
     - jsonPath: .spec.committedResourceReservation.projectID
       name: Project
       type: string
@@ -134,6 +138,16 @@ spec:
                     type: string
                   domainID:
                     type: string
+                  parentGeneration:
+                    description: |-
+                      ParentGeneration is the Generation of the CommittedResource CRD at the time this
+                      reservation was last written by the CommittedResource controller. The Reservation
+                      controller echoes it to Status.CommittedResourceReservation.ObservedParentGeneration
+                      once it has processed the reservation, allowing the CR controller to wait until
+                      all child reservations are up-to-date before accepting.
+                      Zero means the field is not set (syncer-created reservations, no parent CR).
+                    format: int64
+                    type: integer
                   projectID:
                     type: string
                   resourceGroup:
@@ -208,6 +222,13 @@ spec:
                       Allocations maps VM/instance UUIDs to the host they are currently running on.
                       Key: VM/instance UUID, Value: Host name where the VM is currently running.
                     type: object
+                  observedParentGeneration:
+                    description: |-
+                      ObservedParentGeneration is the Spec.CommittedResourceReservation.ParentGeneration value
+                      that this Reservation controller last processed. When it matches ParentGeneration in spec,
+                      the CR controller knows this reservation is up-to-date for the current CR spec version.
+                    format: int64
+                    type: integer
                 type: object
               conditions:
                 description: |-

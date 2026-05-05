@@ -10,7 +10,6 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	"k8s.io/apimachinery/pkg/api/meta"
 )
 
 // Options for the KVM failover evacuation weigher.
@@ -72,8 +71,7 @@ func (s *KVMFailoverEvacuationStep) Run(traceLog *slog.Logger, request api.Exter
 	failoverHosts := make(map[string]bool)
 	for _, reservation := range reservations.Items {
 		// Only consider active failover reservations (Ready condition is True)
-		readyCondition := meta.FindStatusCondition(reservation.Status.Conditions, v1alpha1.ReservationConditionReady)
-		if readyCondition == nil || readyCondition.Status != "True" {
+		if !reservation.IsReady() {
 			continue
 		}
 		if reservation.Spec.Type != v1alpha1.ReservationTypeFailover {

@@ -8,9 +8,6 @@ cortex:
   # Grant cortex access to ironcore resources.
   crd:
     enable: true
-  rbac:
-    ironcore:
-      enable: true
   # Use our locally built image.
   controllerManager:
     container:

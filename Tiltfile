@@ -60,30 +60,29 @@ helm_repo(
 )
 
 ########### Certmanager
-# Certmanager is required for the validating webhooks in the cortex bundles, so
-# we need to deploy it before the bundles. If you don't need the webhooks locally,
-# you can disable them in the values.yaml and skip deploying certmanager.
-cache_dir = '.tilt/cert-manager'
-cert_manager_version = 'v1.19.3'
-if not os.path.exists(cache_dir):
-    local('mkdir -p ' + cache_dir)
-if not os.path.exists(cache_dir + '/cert-manager-' + cert_manager_version + '.yaml'):
-    url = 'https://github.com/cert-manager/cert-manager/releases/download/' + cert_manager_version + '/cert-manager.yaml'
-    local('curl -L ' + url + ' -o ' + cache_dir + '/cert-manager-' + cert_manager_version + '.yaml')
-local('kubectl apply -f ' + cache_dir + '/cert-manager-' + cert_manager_version + '.yaml')
-# Patch all three cert-manager deployments to add runAsUser for Docker Desktop compatibility
-patch_json = '{"spec":{"template":{"spec":{"securityContext":{"runAsUser":1000}}}}}'
-local('kubectl patch deployment cert-manager -n cert-manager --type=strategic -p \'' + patch_json + '\'')
-local('kubectl patch deployment cert-manager-cainjector -n cert-manager --type=strategic -p \'' + patch_json + '\'')
-local('kubectl patch deployment cert-manager-webhook -n cert-manager --type=strategic -p \'' + patch_json + '\'')
-# Wait for all three deployments to be ready
-local('kubectl wait --namespace cert-manager --for=condition=available deployment/cert-manager --timeout=120s')
-local('kubectl wait --namespace cert-manager --for=condition=available deployment/cert-manager-cainjector --timeout=120s')
-local('kubectl wait --namespace cert-manager --for=condition=available deployment/cert-manager-webhook --timeout=120s')
+# Certmanager is required for the validating webhook in the cortex-nova bundle.
+def setup_certmanager():
+    cache_dir = '.tilt/cert-manager'
+    cert_manager_version = 'v1.19.3'
+    if not os.path.exists(cache_dir):
+        local('mkdir -p ' + cache_dir)
+    if not os.path.exists(cache_dir + '/cert-manager-' + cert_manager_version + '.yaml'):
+        url = 'https://github.com/cert-manager/cert-manager/releases/download/' + cert_manager_version + '/cert-manager.yaml'
+        local('curl -L ' + url + ' -o ' + cache_dir + '/cert-manager-' + cert_manager_version + '.yaml')
+    local('kubectl apply -f ' + cache_dir + '/cert-manager-' + cert_manager_version + '.yaml')
+    # Patch all three cert-manager deployments to add runAsUser for Docker Desktop compatibility
+    patch_json = '{"spec":{"template":{"spec":{"securityContext":{"runAsUser":1000}}}}}'
+    local('kubectl patch deployment cert-manager -n cert-manager --type=strategic -p \'' + patch_json + '\'')
+    local('kubectl patch deployment cert-manager-cainjector -n cert-manager --type=strategic -p \'' + patch_json + '\'')
+    local('kubectl patch deployment cert-manager-webhook -n cert-manager --type=strategic -p \'' + patch_json + '\'')
+    # Wait for all three deployments to be ready
+    local('kubectl wait --namespace cert-manager --for=condition=available deployment/cert-manager --timeout=120s')
+    local('kubectl wait --namespace cert-manager --for=condition=available deployment/cert-manager-cainjector --timeout=120s')
+    local('kubectl wait --namespace cert-manager --for=condition=available deployment/cert-manager-webhook --timeout=120s')
 
 ########### Dependency CRDs
 # Make sure the local cluster is running if you are running into startup issues here.
-url = 'https://raw.githubusercontent.com/cobaltcore-dev/openstack-hypervisor-operator/refs/heads/main/charts/openstack-hypervisor-operator/crds/kvm.cloud.sap_hypervisors.yaml'
+url = 'https://raw.githubusercontent.com/cobaltcore-dev/openstack-hypervisor-operator/d35f2bc2c5d4fd634b17e7a8dd77ff3025758fbb/charts/openstack-hypervisor-operator/crds/kvm.cloud.sap_hypervisors.yaml'
 local('curl -L ' + url + ' | kubectl apply -f -')
 
 ########### Cortex Manager & CRDs
@@ -195,8 +194,9 @@ k8s_yaml(helm('./helm/bundles/cortex-crds', name='cortex-crds', set=crd_extra_va
 
 if 'nova' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Nova bundle")
+    setup_certmanager()
     k8s_yaml(helm('./helm/bundles/cortex-nova', name='cortex-nova', values=tilt_values, set=env_set_overrides))
-    k8s_resource('cortex-nova-postgresql', labels=['Cortex-Nova'], port_forwards=[
+    k8s_resource('cortex-nova-postgresql-v18', labels=['Cortex-Nova'], port_forwards=[
         port_forward(8000, 5432),
     ])
     k8s_resource('cortex-nova-scheduling-controller-manager', labels=['Cortex-Nova'], port_forwards=[
@@ -221,7 +221,7 @@ if 'nova' in ACTIVE_DEPLOYMENTS:
 if 'manila' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Manila bundle")
     k8s_yaml(helm('./helm/bundles/cortex-manila', name='cortex-manila', values=tilt_values, set=env_set_overrides))
-    k8s_resource('cortex-manila-postgresql', labels=['Cortex-Manila'], port_forwards=[
+    k8s_resource('cortex-manila-postgresql-v18', labels=['Cortex-Manila'], port_forwards=[
         port_forward(8002, 5432),
     ])
     k8s_resource('cortex-manila-scheduling-controller-manager', labels=['Cortex-Manila'], port_forwards=[
@@ -238,7 +238,7 @@ if 'manila' in ACTIVE_DEPLOYMENTS:
 
 if 'cinder' in ACTIVE_DEPLOYMENTS:
     k8s_yaml(helm('./helm/bundles/cortex-cinder', name='cortex-cinder', values=tilt_values, set=env_set_overrides))
-    k8s_resource('cortex-cinder-postgresql', labels=['Cortex-Cinder'], port_forwards=[
+    k8s_resource('cortex-cinder-postgresql-v18', labels=['Cortex-Cinder'], port_forwards=[
         port_forward(8004, 5432),
     ])
     k8s_resource('cortex-cinder-scheduling-controller-manager', labels=['Cortex-Cinder'], port_forwards=[

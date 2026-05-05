@@ -100,9 +100,11 @@ func (m FeatureMode) valid() bool {
 }
 
 // dispatchPassthroughOnly forwards in passthrough mode, returns 501 for
-// hybrid/crd, and 500 for unknown modes.
+// hybrid/crd, and 500 for unknown modes. These endpoints have no backing
+// config requirement so we pass true — the 501 response already guards
+// against actual nil dereferences.
 func (s *Shim) dispatchPassthroughOnly(w http.ResponseWriter, r *http.Request, mode FeatureMode) {
-	resolved := s.featureModeFromConfOrHeader(r, mode)
+	resolved := s.featureModeFromConfOrHeader(r, mode, true)
 	switch resolved {
 	case FeatureModePassthrough:
 		s.forward(w, r)
@@ -116,18 +118,18 @@ func (s *Shim) dispatchPassthroughOnly(w http.ResponseWriter, r *http.Request, m
 // featureModeFromConfOrHeader returns the effective feature mode for the
 // current request. If a valid override is present in the request context
 // (injected by wrapHandler from the X-Cortex-Feature-Mode header), the
-// override takes precedence — unless it would escalate from passthrough into
-// a mode that requires backing config (Versioning, Traits) that was not
-// validated at startup. In that case the override is ignored and the
-// configured default is returned.
-func (s *Shim) featureModeFromConfOrHeader(r *http.Request, configured FeatureMode) FeatureMode {
+// override takes precedence — unless it would escalate to hybrid/crd without
+// the endpoint's backing config being available. Callers pass hasBackingConfig
+// to indicate whether the infrastructure required by hybrid/crd mode for their
+// specific endpoint was validated at startup.
+func (s *Shim) featureModeFromConfOrHeader(r *http.Request, configured FeatureMode, hasBackingConfig bool) FeatureMode {
 	override, ok := r.Context().Value(featureModeOverrideKey).(FeatureMode)
 	if !ok {
 		return configured.orDefault()
 	}
 	resolved := override.orDefault()
 	if resolved == FeatureModeHybrid || resolved == FeatureModeCRD {
-		if s.config.Versioning == nil && s.config.Traits == nil {
+		if !hasBackingConfig {
 			return configured.orDefault()
 		}
 	}
@@ -163,6 +165,14 @@ type versioningConfig struct {
 // features.traits is hybrid or crd.
 type traitsConfig struct {
 	// ConfigMapName is the name of the ConfigMap used to persist traits.
+	// Must exist in the same namespace as the shim pod.
+	ConfigMapName string `json:"configMapName"`
+}
+
+// resourceClassesConfig configures the local resource class store used when
+// features.resourceClasses is hybrid or crd.
+type resourceClassesConfig struct {
+	// ConfigMapName is the name of the ConfigMap used to persist resource classes.
 	// Must exist in the same namespace as the shim pod.
 	ConfigMapName string `json:"configMapName"`
 }
@@ -212,6 +222,9 @@ type config struct {
 	// Traits configures the local trait store used when
 	// features.traits is hybrid or crd.
 	Traits *traitsConfig `json:"traits,omitempty"`
+	// ResourceClasses configures the local resource class store used when
+	// features.resourceClasses is hybrid or crd.
+	ResourceClasses *resourceClassesConfig `json:"resourceClasses,omitempty"`
 }
 
 // validate checks the config for required fields and returns an error if the
@@ -247,15 +260,27 @@ func (c *config) validate() error {
 		}
 	}
 	traitsMode := c.Features.Traits.orDefault()
-	if traitsMode == FeatureModeHybrid || traitsMode == FeatureModeCRD {
-		if c.Traits == nil {
-			return fmt.Errorf("traits config is required when features.traits is %s", traitsMode)
-		}
+	if traitsMode != FeatureModePassthrough && c.Traits == nil {
+		return fmt.Errorf("traits config is required when features.traits is %s", traitsMode)
+	}
+	if c.Traits != nil {
 		if c.Traits.ConfigMapName == "" {
-			return fmt.Errorf("traits.configMapName is required when features.traits is %s", traitsMode)
+			return errors.New("traits.configMapName is required when traits config is present")
 		}
-		if traitsMode == FeatureModeCRD && os.Getenv("POD_NAMESPACE") == "" {
-			return errors.New("pod namespace (POD_NAMESPACE) is required when features.traits is crd")
+		if os.Getenv("POD_NAMESPACE") == "" {
+			return errors.New("pod namespace (POD_NAMESPACE) is required when traits config is present")
+		}
+	}
+	rcMode := c.Features.ResourceClasses.orDefault()
+	if rcMode != FeatureModePassthrough && c.ResourceClasses == nil {
+		return fmt.Errorf("resourceClasses config is required when features.resourceClasses is %s", rcMode)
+	}
+	if c.ResourceClasses != nil {
+		if c.ResourceClasses.ConfigMapName == "" {
+			return errors.New("resourceClasses.configMapName is required when resourceClasses config is present")
+		}
+		if os.Getenv("POD_NAMESPACE") == "" {
+			return errors.New("pod namespace (POD_NAMESPACE) is required when resourceClasses config is present")
 		}
 	}
 	if c.Auth != nil && c.KeystoneURL == "" {
@@ -303,8 +328,8 @@ type Shim struct {
 	tokenCache *tokenCache
 	// tokenIntrospector validates tokens against Keystone.
 	tokenIntrospector tokenIntrospector
-	// resourceLocker serializes writes to the custom traits ConfigMap
-	// across replicas using a Kubernetes Lease.
+	// resourceLocker serializes writes to ConfigMaps across replicas
+	// using a Kubernetes Lease.
 	resourceLocker *resourcelock.ResourceLocker
 	// placementServiceClient is an authenticated gophercloud service client
 	// used by background tasks (trait sync) to make requests to upstream
@@ -433,7 +458,36 @@ func (s *Shim) Start(ctx context.Context) error {
 	if err := s.initPlacementServiceClient(ctx); err != nil {
 		return err
 	}
-	go s.startTraitSyncLoop(ctx)
+	if s.config.Traits != nil {
+		ts := NewTraitSyncer(
+			s.Client,
+			s.config.Traits.ConfigMapName,
+			os.Getenv("POD_NAMESPACE"),
+			s.placementServiceClient,
+			s.resourceLocker,
+		)
+		if err := ts.Init(ctx); err != nil {
+			return err
+		}
+		if s.config.Features.Traits.orDefault() != FeatureModeCRD {
+			go ts.Run(ctx)
+		}
+	}
+	if s.config.ResourceClasses != nil {
+		rs := NewResourceClassSyncer(
+			s.Client,
+			s.config.ResourceClasses.ConfigMapName,
+			os.Getenv("POD_NAMESPACE"),
+			s.placementServiceClient,
+			s.resourceLocker,
+		)
+		if err := rs.Init(ctx); err != nil {
+			return err
+		}
+		if s.config.Features.ResourceClasses.orDefault() != FeatureModeCRD {
+			go rs.Run(ctx)
+		}
+	}
 	return nil
 }
 

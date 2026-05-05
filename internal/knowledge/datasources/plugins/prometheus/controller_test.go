@@ -31,7 +31,7 @@ func TestPrometheusDatasourceReconciler_Creation(t *testing.T) {
 	reconciler := &PrometheusDatasourceReconciler{
 		Client:  client,
 		Scheme:  scheme,
-		Conf:    PrometheusDatasourceReconcilerConfig{SchedulingDomain: "test-operator"},
+		conf:    config{SchedulingDomain: "test-operator"},
 		Monitor: datasources.Monitor{},
 	}
 
@@ -43,8 +43,8 @@ func TestPrometheusDatasourceReconciler_Creation(t *testing.T) {
 		t.Error("Scheme should not be nil")
 	}
 
-	if reconciler.Conf.SchedulingDomain != "test-operator" {
-		t.Errorf("Expected scheduling domain 'test-operator', got %s", reconciler.Conf.SchedulingDomain)
+	if reconciler.conf.SchedulingDomain != "test-operator" {
+		t.Errorf("Expected scheduling domain 'test-operator', got %s", reconciler.conf.SchedulingDomain)
 	}
 }
 

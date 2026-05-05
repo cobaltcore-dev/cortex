@@ -61,9 +61,6 @@ func e2eTestResourceProviders(ctx context.Context, cl client.Client) error {
 	// The VMware path creates synthetic test RPs against upstream placement.
 	// In crd mode there is no upstream, so skip it.
 	mode := e2eCurrentMode(ctx)
-	if mode == "" {
-		mode = config.Features.ResourceProviders.orDefault()
-	}
 	if mode != FeatureModeCRD {
 		log.Info("=== VMware path: passthrough resource provider tests ===")
 		if err := e2eVMwareResourceProviders(ctx, sc); err != nil {

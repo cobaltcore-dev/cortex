@@ -19,10 +19,13 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	"github.com/sapcc/go-api-declarations/liquid"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // sortedKeys returns map keys sorted alphabetically for deterministic iteration.
@@ -37,42 +40,47 @@ func sortedKeys[K ~string, V any](m map[K]V) []K {
 	return keys
 }
 
-// implements POST /commitments/v1/change-commitments from Limes LIQUID API:
+// crSnapshot captures a CommittedResource CRD's prior state for batch rollback.
+// prevSpec is nil when the CRD was newly created (i.e. did not exist before the batch).
+// wasDeleted is true when the batch operation deleted the CRD; rollback must re-create it.
+type crSnapshot struct {
+	crName     string
+	prevSpec   *v1alpha1.CommittedResourceSpec
+	wasDeleted bool
+}
+
+// HandleChangeCommitments implements POST /commitments/v1/change-commitments from the Limes LIQUID API.
+// It writes CommittedResource CRDs (one per commitment) and polls their status conditions until
+// the controller confirms or rejects each one. On any failure the whole batch is rolled back.
+//
 // See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/commitment.go
 // See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid
-//
-// This endpoint handles commitment changes by creating/updating/deleting Reservation CRDs based on the commitment lifecycle.
-// A request may contain multiple commitment changes which are processed in a single transaction. If any change fails, all changes are rolled back.
 func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
-	// Initialize
 	resp := liquid.CommitmentChangeResponse{}
 	req := liquid.CommitmentChangeRequest{}
 	statusCode := http.StatusOK
 
-	// Extract or generate request ID for tracing - always set in response header
 	requestID := r.Header.Get("X-Request-ID")
 	if requestID == "" {
 		requestID = uuid.New().String()
 	}
 	w.Header().Set("X-Request-ID", requestID)
 
-	// Check if API is enabled
-	if !api.config.EnableChangeCommitmentsAPI {
+	if !api.config.EnableChangeCommitments {
 		statusCode = http.StatusServiceUnavailable
 		http.Error(w, "change-commitments API is disabled", statusCode)
 		api.recordMetrics(req, resp, statusCode, startTime)
 		return
 	}
 
-	// Serialize all change-commitments requests
+	// Serialize all change-commitments requests so the controller sees a consistent world.
 	api.changeMutex.Lock()
 	defer api.changeMutex.Unlock()
 
 	ctx := reservations.WithGlobalRequestID(context.Background(), "committed-resource-"+requestID)
 	logger := commitments.LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/change-commitments")
 
-	// Only accept POST method
 	if r.Method != http.MethodPost {
 		statusCode = http.StatusMethodNotAllowed
 		http.Error(w, "Method not allowed", statusCode)
@@ -80,7 +88,6 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Parse request body
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		logger.Error(err, "invalid request body")
 		statusCode = http.StatusBadRequest
@@ -91,7 +98,6 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 
 	logger.Info("received change commitments request", "affectedProjects", len(req.ByProject), "dryRun", req.DryRun, "availabilityZone", req.AZ)
 
-	// Check for dry run -> early reject, not supported yet
 	if req.DryRun {
 		resp.RejectionReason = "Dry run not supported yet"
 		api.recordMetrics(req, resp, statusCode, startTime)
@@ -104,26 +110,17 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Process commitment changes
-	// For now, we'll implement a simplified path that checks capacity for immediate start CRs
-
 	if err := api.processCommitmentChanges(ctx, w, logger, req, &resp); err != nil {
-		// Error already written to response by processCommitmentChanges
-		// Determine status code from error context (409 or 503)
 		if strings.Contains(err.Error(), "version mismatch") {
 			statusCode = http.StatusConflict
 		} else if strings.Contains(err.Error(), "caches not ready") {
 			statusCode = http.StatusServiceUnavailable
 		}
-		// Record metrics for error cases
 		api.recordMetrics(req, resp, statusCode, startTime)
 		return
 	}
 
-	// Record metrics
 	api.recordMetrics(req, resp, statusCode, startTime)
-
-	// Return response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
@@ -132,11 +129,6 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 }
 
 func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.ResponseWriter, logger logr.Logger, req liquid.CommitmentChangeRequest, resp *liquid.CommitmentChangeResponse) error {
-	manager := commitments.NewReservationManager(api.client)
-	requireRollback := false
-	failedCommitments := make(map[string]string) // commitmentUUID to reason for failure, for better response messages in case of rollback
-	creatorRequestID := reservations.GlobalRequestIDFromContext(ctx)
-
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
@@ -145,12 +137,10 @@ func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.Respons
 		return errors.New("caches not ready")
 	}
 
-	// Validate InfoVersion from request matches current version (= last content change of flavor group knowledge)
 	var currentVersion int64 = -1
 	if knowledgeCRD, err := knowledge.Get(ctx); err == nil && knowledgeCRD != nil && !knowledgeCRD.Status.LastContentChange.IsZero() {
 		currentVersion = knowledgeCRD.Status.LastContentChange.Unix()
 	}
-
 	if req.InfoVersion != currentVersion {
 		logger.Info("version mismatch in commitment change request",
 			"requestVersion", req.InfoVersion,
@@ -160,160 +150,170 @@ func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.Respons
 		return errors.New("version mismatch")
 	}
 
-	statesBefore := make(map[string]*commitments.CommitmentState) // map of commitmentID to existing state for rollback
-	var reservationsToWatch []v1alpha1.Reservation
+	// If Limes does not require confirmation for this batch (e.g. deletions, status-only transitions),
+	// the controller must not reject — it must retry until it succeeds (AllowRejection=false).
+	// Conversely, when Limes requires confirmation, the controller may reject and report back.
+	allowRejection := req.RequiresConfirmation()
 
-	if req.DryRun {
-		resp.RejectionReason = "Dry run not supported yet"
-		return nil
-	}
+	var (
+		toWatch      []string     // CRD names to poll for terminal conditions (upserts only)
+		snapshots    []crSnapshot // ordered list for deterministic rollback
+		failedReason string
+		rollback     bool
+	)
 
 ProcessLoop:
 	for _, projectID := range sortedKeys(req.ByProject) {
 		projectChanges := req.ByProject[projectID]
+
+		// Extract domain ID from Keystone project metadata if Limes provided it.
+		domainID := ""
+		if pm := projectChanges.ProjectMetadata.UnwrapOr(liquid.ProjectMetadata{}); pm.Domain.UUID != "" {
+			domainID = pm.Domain.UUID
+		}
+
 		for _, resourceName := range sortedKeys(projectChanges.ByResource) {
 			resourceChanges := projectChanges.ByResource[resourceName]
-			// Validate resource name pattern (instances_group_*)
+
 			flavorGroupName, err := commitments.GetFlavorGroupNameFromResource(string(resourceName))
 			if err != nil {
-				resp.RejectionReason = fmt.Sprintf("project with unknown resource name %s: %v", projectID, err)
-				requireRollback = true
+				failedReason = fmt.Sprintf("project with unknown resource name %s: %v", projectID, err)
+				rollback = true
 				break ProcessLoop
 			}
 
-			// Verify flavor group exists in Knowledge CRDs
-			flavorGroup, flavorGroupExists := flavorGroups[flavorGroupName]
-			if !flavorGroupExists {
-				resp.RejectionReason = "flavor group not found: " + flavorGroupName
-				requireRollback = true
+			flavorGroup, ok := flavorGroups[flavorGroupName]
+			if !ok {
+				failedReason = "flavor group not found: " + flavorGroupName
+				rollback = true
 				break ProcessLoop
 			}
 
-			// Reject commitments for flavor groups that don't accept CRs
-			if !commitments.FlavorGroupAcceptsCommitments(&flavorGroup) {
-				resp.RejectionReason = commitments.FlavorGroupCommitmentRejectionReason(&flavorGroup)
-				requireRollback = true
+			if !api.config.ResourceConfigForGroup(flavorGroupName).RAM.HandlesCommitments {
+				failedReason = fmt.Sprintf("flavor group %q is not configured to handle commitments", flavorGroupName)
+				rollback = true
 				break ProcessLoop
 			}
 
 			for _, commitment := range resourceChanges.Commitments {
-				logger.V(1).Info("processing commitment", "commitmentUUID", commitment.UUID, "oldStatus", commitment.OldStatus.UnwrapOr("none"), "newStatus", commitment.NewStatus.UnwrapOr("none"))
+				isDelete := commitment.NewStatus.IsNone()
+				crName := "commitment-" + string(commitment.UUID)
 
-				// TODO add configurable upper limit validation for commitment size (number of instances) to prevent excessive reservation creation
-				// TODO add domain
+				logger.V(1).Info("processing commitment",
+					"commitmentUUID", commitment.UUID,
+					"oldStatus", commitment.OldStatus.UnwrapOr("none"),
+					"newStatus", commitment.NewStatus.UnwrapOr("none"),
+					"delete", isDelete)
 
-				// List all committed resource reservations, then filter by name prefix
-				var all_reservations v1alpha1.ReservationList
-				if err := api.client.List(ctx, &all_reservations, client.MatchingLabels{
-					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-				}); err != nil {
-					failedCommitments[string(commitment.UUID)] = "failed to list reservations"
-					logger.Info("failed to list reservations for commitment", "commitmentUUID", commitment.UUID, "error", err)
-					requireRollback = true
-					break ProcessLoop
-				}
-
-				// Filter by name prefix to find reservations for this commitment
-				namePrefix := fmt.Sprintf("commitment-%s-", string(commitment.UUID))
-				var existing_reservations v1alpha1.ReservationList
-				for _, res := range all_reservations.Items {
-					if len(res.Name) >= len(namePrefix) && res.Name[:len(namePrefix)] == namePrefix {
-						existing_reservations.Items = append(existing_reservations.Items, res)
-					}
-				}
-
-				var stateBefore *commitments.CommitmentState
-				if len(existing_reservations.Items) == 0 {
-					stateBefore = &commitments.CommitmentState{
-						CommitmentUUID:   string(commitment.UUID),
-						ProjectID:        string(projectID),
-						FlavorGroupName:  flavorGroupName,
-						TotalMemoryBytes: 0,
-					}
-				} else {
-					stateBefore, err = commitments.FromReservations(existing_reservations.Items)
-					if err != nil {
-						failedCommitments[string(commitment.UUID)] = "failed to parse existing commitment reservations"
-						logger.Info("failed to get existing state for commitment", "commitmentUUID", commitment.UUID, "error", err)
-						requireRollback = true
+				// Snapshot the current spec before mutation so we can restore it on rollback.
+				snap := crSnapshot{crName: crName}
+				existing := &v1alpha1.CommittedResource{}
+				if err := api.client.Get(ctx, types.NamespacedName{Name: crName}, existing); err != nil {
+					if !apierrors.IsNotFound(err) {
+						failedReason = fmt.Sprintf("commitment %s: failed to read pre-update snapshot: %v", commitment.UUID, err)
+						rollback = true
 						break ProcessLoop
 					}
+					// Not found: CR is new (or already absent for deletes), prevSpec stays nil.
+				} else {
+					specCopy := existing.Spec
+					snap.prevSpec = &specCopy
 				}
-				statesBefore[string(commitment.UUID)] = stateBefore
 
-				// get desired state
-				stateDesired, err := commitments.FromChangeCommitmentTargetState(commitment, string(projectID), flavorGroupName, flavorGroup, string(req.AZ))
+				if isDelete {
+					// Limes is removing this commitment; delete the CRD if it exists.
+					snap.wasDeleted = true
+					if snap.prevSpec != nil {
+						if err := api.client.Delete(ctx, existing); err != nil && !apierrors.IsNotFound(err) {
+							failedReason = fmt.Sprintf("commitment %s: failed to delete CommittedResource CRD: %v", commitment.UUID, err)
+							rollback = true
+							break ProcessLoop
+						}
+						logger.V(1).Info("deleted CommittedResource CRD", "name", crName)
+					}
+					snapshots = append(snapshots, snap)
+					continue
+				}
+
+				stateDesired, err := commitments.FromChangeCommitmentTargetState(
+					commitment, string(projectID), domainID, flavorGroupName, flavorGroup, string(req.AZ))
 				if err != nil {
-					failedCommitments[string(commitment.UUID)] = err.Error()
-					logger.Info("failed to get desired state for commitment", "commitmentUUID", commitment.UUID, "error", err)
-					requireRollback = true
+					failedReason = fmt.Sprintf("commitment %s: %s", commitment.UUID, err)
+					rollback = true
 					break ProcessLoop
 				}
-				// Set creator request ID for traceability across controller reconciles
-				stateDesired.CreatorRequestID = creatorRequestID
 
-				logger.V(1).Info("applying commitment state change", "commitmentUUID", commitment.UUID, "oldMemory", stateBefore.TotalMemoryBytes, "desiredMemory", stateDesired.TotalMemoryBytes)
-
-				applyResult, err := manager.ApplyCommitmentState(ctx, logger, stateDesired, flavorGroups, "changeCommitmentsApi")
-				if err != nil {
-					failedCommitments[string(commitment.UUID)] = "failed to apply commitment state"
-					logger.Info("failed to apply commitment state for commitment", "commitmentUUID", commitment.UUID, "error", err)
-					requireRollback = true
+				cr := &v1alpha1.CommittedResource{}
+				cr.Name = crName
+				if _, err := controllerutil.CreateOrUpdate(ctx, api.client, cr, func() error {
+					applyCRSpec(cr, stateDesired, allowRejection)
+					if cr.Annotations == nil {
+						cr.Annotations = make(map[string]string)
+					}
+					cr.Annotations[v1alpha1.AnnotationCreatorRequestID] = reservations.GlobalRequestIDFromContext(ctx)
+					return nil
+				}); err != nil {
+					failedReason = fmt.Sprintf("commitment %s: failed to write CommittedResource CRD: %v", commitment.UUID, err)
+					rollback = true
 					break ProcessLoop
 				}
-				logger.V(1).Info("applied commitment state change", "commitmentUUID", commitment.UUID, "touchedReservations", len(applyResult.TouchedReservations), "deletedReservations", len(applyResult.RemovedReservations))
-				reservationsToWatch = append(reservationsToWatch, applyResult.TouchedReservations...)
+
+				toWatch = append(toWatch, crName)
+				snapshots = append(snapshots, snap)
+				logger.V(1).Info("upserted CommittedResource CRD", "name", crName)
 			}
 		}
 	}
 
-	// TODO make the rollback defer safe
-	if !requireRollback {
-		logger.Info("applied commitment changes, now watching for reservation readiness", "reservationsToWatch", len(reservationsToWatch))
-
-		time_start := time.Now()
-
-		if failedReservations, errors := watchReservationsUntilReady(ctx, logger, api.client, reservationsToWatch, api.config.ChangeAPIWatchReservationsTimeout, api.config.ChangeAPIWatchReservationsPollInterval); len(failedReservations) > 0 || len(errors) > 0 {
-			logger.Info("reservations failed to become ready, initiating rollback",
-				"failedReservations", len(failedReservations),
-				"errors", errors)
-
-			for _, res := range failedReservations {
-				failedCommitments[res.Spec.CommittedResourceReservation.CommitmentUUID] = "not sufficient capacity"
-			}
-			if len(failedReservations) == 0 {
-				resp.RejectionReason += "timeout reached while processing commitment changes"
-				api.monitor.timeouts.Inc()
-			}
-			requireRollback = true
+	if !rollback {
+		// Non-confirming changes (RequiresConfirmation=false): Limes ignores our RejectionReason,
+		// so there is no point blocking on the controller outcome. The CRDs are written with
+		// AllowRejection=false, meaning the controller will retry indefinitely in the background.
+		if !allowRejection {
+			logger.Info("non-confirming changes applied, returning without polling", "count", len(toWatch))
+			return nil
 		}
 
-		logger.Info("finished watching reservation", "totalSchedulingTimeSeconds", time.Since(time_start).Seconds())
+		logger.Info("CommittedResource CRDs written, polling for controller outcome", "count", len(toWatch))
+		watchStart := time.Now()
+
+		rejected, watchErrs := watchCRsUntilReady(
+			ctx, logger, api.client, toWatch,
+			api.config.WatchTimeout.Duration,
+			api.config.WatchPollInterval.Duration,
+		)
+
+		logger.Info("polling complete", "duration", time.Since(watchStart).Round(time.Millisecond))
+
+		switch {
+		case len(rejected) > 0:
+			var b strings.Builder
+			fmt.Fprintf(&b, "%d commitment(s) failed to apply:", len(rejected))
+			for _, crName := range toWatch { // iterate toWatch for deterministic order
+				if reason, ok := rejected[crName]; ok {
+					fmt.Fprintf(&b, "\n- commitment %s: %s", strings.TrimPrefix(crName, "commitment-"), reason)
+				}
+			}
+			failedReason = b.String()
+			rollback = true
+		case len(watchErrs) > 0:
+			msgs := make([]string, len(watchErrs))
+			for i, e := range watchErrs {
+				msgs[i] = e.Error()
+			}
+			failedReason = "timeout reached while processing commitment changes: " + strings.Join(msgs, "; ")
+			api.monitor.timeouts.Inc()
+			rollback = true
+		}
 	}
 
-	if requireRollback {
-		// Build rejection reason from failed commitments
-		if len(failedCommitments) > 0 {
-			var reasonBuilder strings.Builder
-			fmt.Fprintf(&reasonBuilder, "%d commitment(s) failed to apply: ", len(failedCommitments))
-			for commitmentUUID, reason := range failedCommitments {
-				fmt.Fprintf(&reasonBuilder, "\n- commitment %s: %s", commitmentUUID, reason)
-			}
-			resp.RejectionReason = reasonBuilder.String()
+	if rollback {
+		resp.RejectionReason = failedReason
+		logger.Info("rolling back CommittedResource CRDs", "reason", failedReason, "count", len(snapshots))
+		for i := len(snapshots) - 1; i >= 0; i-- {
+			rollbackCR(ctx, logger, api.client, snapshots[i])
 		}
-
-		logger.Info("rollback of commitment changes")
-		for commitmentUUID, state := range statesBefore {
-			// Rollback to statesBefore for this commitment
-			logger.Info("applying rollback for commitment", "commitmentUUID", commitmentUUID, "stateBefore", state)
-			_, err := manager.ApplyCommitmentState(ctx, logger, state, flavorGroups, "changeCommitmentsApiRollback")
-			if err != nil {
-				logger.Info("failed to apply rollback state for commitment", "commitmentUUID", commitmentUUID, "error", err)
-				// continue with best effort rollback for other projects
-			}
-		}
-
-		logger.Info("finished applying rollbacks for commitment changes", "reasonOfRollback", resp.RejectionReason)
+		logger.Info("rollback complete")
 		return nil
 	}
 
@@ -321,111 +321,139 @@ ProcessLoop:
 	return nil
 }
 
-// watchReservationsUntilReady polls until all reservations reach Ready=True or timeout.
-// Returns failed reservations and any errors encountered.
-func watchReservationsUntilReady(
+// watchCRsUntilReady polls CommittedResource conditions until each CRD reaches a terminal state:
+//   - Ready=True (Accepted) — success
+//   - Ready=False, Reason=Planned — success; controller reserves capacity at activation time
+//   - Ready=False, Reason=Rejected — failure; reason reported to caller
+//
+// Returns a map of crName → rejection reason for failed CRDs, and any polling errors (e.g. timeout).
+func watchCRsUntilReady(
 	ctx context.Context,
 	logger logr.Logger,
 	k8sClient client.Client,
-	reservations []v1alpha1.Reservation,
+	crNames []string,
 	timeout time.Duration,
 	pollInterval time.Duration,
-) (failedReservations []v1alpha1.Reservation, errors []error) {
+) (rejected map[string]string, errs []error) {
 
-	if len(reservations) == 0 {
-		return failedReservations, nil
+	if len(crNames) == 0 {
+		return nil, nil
 	}
 
+	rejected = make(map[string]string)
 	deadline := time.Now().Add(timeout)
-	startTime := time.Now()
-	totalReservations := len(reservations)
 
-	reservationsToWatch := make([]v1alpha1.Reservation, len(reservations))
-	copy(reservationsToWatch, reservations)
-
-	// Track successful reservations for summary
-	var successfulReservations []string
-	pollCount := 0
+	pending := make(map[string]struct{}, len(crNames))
+	for _, name := range crNames {
+		pending[name] = struct{}{}
+	}
 
 	for {
-		pollCount++
-		var stillWaiting []v1alpha1.Reservation
 		if time.Now().After(deadline) {
-			errors = append(errors, fmt.Errorf("timeout after %v waiting for reservations to become ready", timeout))
-			// Log summary on timeout
-			logger.Info("reservation watch completed (timeout)",
-				"total", totalReservations,
-				"ready", len(successfulReservations),
-				"failed", len(failedReservations),
-				"timedOut", len(reservationsToWatch),
-				"duration", time.Since(startTime).Round(time.Millisecond),
-				"polls", pollCount)
-			return failedReservations, errors
+			errs = append(errs, fmt.Errorf("timeout after %v waiting for %d CommittedResource CRD(s)", timeout, len(pending)))
+			return rejected, errs
 		}
 
-		for _, res := range reservationsToWatch {
-			// Fetch current state
-			var current v1alpha1.Reservation
-			nn := types.NamespacedName{
-				Name:      res.Name,
-				Namespace: res.Namespace,
+		for name := range pending {
+			cr := &v1alpha1.CommittedResource{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: name}, cr); err != nil {
+				continue // transient; keep waiting
 			}
 
-			if err := k8sClient.Get(ctx, nn, &current); err != nil {
-				// Reservation is still in process of being created, or there is a transient error
-				stillWaiting = append(stillWaiting, res)
-				continue
+			cond := meta.FindStatusCondition(cr.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+			if cond == nil {
+				continue // controller hasn't reconciled yet
 			}
 
-			// Check Ready condition
-			readyCond := meta.FindStatusCondition(
-				current.Status.Conditions,
-				v1alpha1.ReservationConditionReady,
-			)
-
-			if readyCond == nil {
-				// Condition not set yet, keep waiting
-				stillWaiting = append(stillWaiting, res)
-				continue
-			}
-
-			switch readyCond.Status {
-			case metav1.ConditionTrue:
-				// Only consider truly ready if Status.Host is populated
-				if current.Spec.TargetHost == "" || current.Status.Host == "" {
-					stillWaiting = append(stillWaiting, res)
-					continue
-				}
-				// Reservation is successfully scheduled - track for summary
-				successfulReservations = append(successfulReservations, current.Name)
-
-			case metav1.ConditionFalse:
-				// Any failure reason counts as failed
-				failedReservations = append(failedReservations, current)
-			case metav1.ConditionUnknown:
-				stillWaiting = append(stillWaiting, res)
+			switch {
+			case cond.Status == metav1.ConditionTrue:
+				delete(pending, name)
+			case cond.Status == metav1.ConditionFalse && cond.Reason == v1alpha1.CommittedResourceReasonPlanned:
+				delete(pending, name) // planned = accepted; controller will reserve at activation
+			case cond.Status == metav1.ConditionFalse && cond.Reason == v1alpha1.CommittedResourceReasonRejected:
+				delete(pending, name)
+				rejected[name] = cond.Message
+				// Reason=Reserving: controller is placing slots; keep waiting.
 			}
 		}
 
-		if len(stillWaiting) == 0 {
-			// All reservations have reached a terminal state - log summary
-			logger.Info("reservation watch completed",
-				"total", totalReservations,
-				"ready", len(successfulReservations),
-				"failed", len(failedReservations),
-				"duration", time.Since(startTime).Round(time.Millisecond),
-				"polls", pollCount)
-			return failedReservations, errors
+		if len(pending) == 0 {
+			return rejected, nil
 		}
 
-		reservationsToWatch = stillWaiting
-
-		// Wait before next poll
 		select {
 		case <-time.After(pollInterval):
-			// Continue polling
 		case <-ctx.Done():
-			return failedReservations, append(errors, fmt.Errorf("context cancelled while waiting for reservations: %w", ctx.Err()))
+			return rejected, append(errs, fmt.Errorf("context cancelled: %w", ctx.Err()))
 		}
+		logger.V(1).Info("polling CommittedResource CRDs", "pending", len(pending))
+	}
+}
+
+// rollbackCR reverses the batch-local change to a single CommittedResource CRD.
+//   - wasDeleted=true, prevSpec!=nil: CRD was deleted; re-create it from the snapshot.
+//   - wasDeleted=true, prevSpec==nil: CRD was absent before and after; nothing to do.
+//   - wasDeleted=false, prevSpec==nil: CRD was newly created; delete it.
+//   - wasDeleted=false, prevSpec!=nil: CRD was updated; restore its spec.
+func rollbackCR(ctx context.Context, logger logr.Logger, k8sClient client.Client, snap crSnapshot) {
+	if snap.wasDeleted {
+		if snap.prevSpec == nil {
+			return // was absent before deletion attempt; nothing to undo
+		}
+		cr := &v1alpha1.CommittedResource{}
+		cr.Name = snap.crName
+		cr.Spec = *snap.prevSpec
+		if err := k8sClient.Create(ctx, cr); client.IgnoreAlreadyExists(err) != nil {
+			logger.Error(err, "failed to re-create CommittedResource CRD during rollback", "name", snap.crName)
+		}
+		return
+	}
+
+	if snap.prevSpec == nil {
+		cr := &v1alpha1.CommittedResource{}
+		cr.Name = snap.crName
+		if err := k8sClient.Delete(ctx, cr); client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "failed to delete CommittedResource CRD during rollback", "name", snap.crName)
+		}
+		return
+	}
+
+	cr := &v1alpha1.CommittedResource{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: snap.crName}, cr); err != nil {
+		logger.Error(err, "failed to fetch CommittedResource CRD for rollback", "name", snap.crName)
+		return
+	}
+	cr.Spec = *snap.prevSpec
+	if err := k8sClient.Update(ctx, cr); err != nil {
+		logger.Error(err, "failed to restore CommittedResource CRD spec during rollback", "name", snap.crName)
+	}
+}
+
+// applyCRSpec writes CommitmentState fields into a CommittedResource CRD spec.
+// allowRejection=true for the change-commitments API path: the controller may reject
+// on failure and the API reports the outcome to Limes.
+func applyCRSpec(cr *v1alpha1.CommittedResource, state *commitments.CommitmentState, allowRejection bool) {
+	cr.Spec.CommitmentUUID = state.CommitmentUUID
+	cr.Spec.SchedulingDomain = v1alpha1.SchedulingDomainNova
+	cr.Spec.FlavorGroupName = state.FlavorGroupName
+	cr.Spec.ResourceType = v1alpha1.CommittedResourceTypeMemory
+	cr.Spec.Amount = *resource.NewQuantity(state.TotalMemoryBytes, resource.BinarySI)
+	cr.Spec.AvailabilityZone = state.AvailabilityZone
+	cr.Spec.ProjectID = state.ProjectID
+	cr.Spec.DomainID = state.DomainID
+	cr.Spec.State = state.State
+	cr.Spec.AllowRejection = allowRejection
+
+	if state.StartTime != nil {
+		t := metav1.NewTime(*state.StartTime)
+		cr.Spec.StartTime = &t
+	} else {
+		cr.Spec.StartTime = nil
+	}
+	if state.EndTime != nil {
+		t := metav1.NewTime(*state.EndTime)
+		cr.Spec.EndTime = &t
+	} else {
+		cr.Spec.EndTime = nil
 	}
 }

@@ -83,6 +83,18 @@ func serveHandler(t *testing.T, method, pattern string, handler http.HandlerFunc
 	return w
 }
 
+// serveHandlerWithBody is like serveHandler but allows providing a request body.
+func serveHandlerWithBody(t *testing.T, method, pattern string, handler http.HandlerFunc, reqPath string, body io.Reader) *httptest.ResponseRecorder {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc(method+" "+pattern, handler)
+	req := httptest.NewRequest(method, reqPath, body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	return w
+}
+
 func TestForward(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -482,6 +494,30 @@ func TestConfigValidateTraitsCRDRequiresConfig(t *testing.T) {
 	}
 }
 
+func TestConfigValidateResourceClassesCRDRequiresConfig(t *testing.T) {
+	t.Setenv("POD_NAMESPACE", "")
+
+	c := config{
+		PlacementURL: "http://placement:8778",
+		Features:     featuresConfig{ResourceClasses: FeatureModeCRD},
+	}
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when resourceClasses mode is crd without config")
+	}
+	c.ResourceClasses = &resourceClassesConfig{}
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when resourceClasses.configMapName is empty")
+	}
+	c.ResourceClasses.ConfigMapName = "cortex-placement-shim-resource-classes"
+	if err := c.validate(); err == nil {
+		t.Fatal("expected error when POD_NAMESPACE is not set")
+	}
+	t.Setenv("POD_NAMESPACE", "default")
+	if err := c.validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestWrapHandlerWithAuth(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -569,7 +605,7 @@ func TestFeatureModeFromConfOrHeader(t *testing.T) {
 
 	t.Run("returns configured mode when no override", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-		got := s.featureModeFromConfOrHeader(req, FeatureModeHybrid)
+		got := s.featureModeFromConfOrHeader(req, FeatureModeHybrid, true)
 		if got != FeatureModeHybrid {
 			t.Fatalf("got %q, want %q", got, FeatureModeHybrid)
 		}
@@ -577,7 +613,7 @@ func TestFeatureModeFromConfOrHeader(t *testing.T) {
 
 	t.Run("defaults empty configured mode to passthrough", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-		got := s.featureModeFromConfOrHeader(req, "")
+		got := s.featureModeFromConfOrHeader(req, "", true)
 		if got != FeatureModePassthrough {
 			t.Fatalf("got %q, want %q", got, FeatureModePassthrough)
 		}
@@ -587,7 +623,7 @@ func TestFeatureModeFromConfOrHeader(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		ctx := context.WithValue(req.Context(), featureModeOverrideKey, FeatureModeCRD)
 		req = req.WithContext(ctx)
-		got := s.featureModeFromConfOrHeader(req, FeatureModePassthrough)
+		got := s.featureModeFromConfOrHeader(req, FeatureModePassthrough, true)
 		if got != FeatureModeCRD {
 			t.Fatalf("got %q, want %q", got, FeatureModeCRD)
 		}
@@ -598,7 +634,7 @@ func TestFeatureModeFromConfOrHeader(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		ctx := context.WithValue(req.Context(), featureModeOverrideKey, FeatureModeCRD)
 		req = req.WithContext(ctx)
-		got := bare.featureModeFromConfOrHeader(req, FeatureModePassthrough)
+		got := bare.featureModeFromConfOrHeader(req, FeatureModePassthrough, false)
 		if got != FeatureModePassthrough {
 			t.Fatalf("got %q, want %q (override should be rejected without backing config)", got, FeatureModePassthrough)
 		}
@@ -609,7 +645,7 @@ func TestFeatureModeFromConfOrHeader(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		ctx := context.WithValue(req.Context(), featureModeOverrideKey, FeatureModePassthrough)
 		req = req.WithContext(ctx)
-		got := bare.featureModeFromConfOrHeader(req, FeatureModeHybrid)
+		got := bare.featureModeFromConfOrHeader(req, FeatureModeHybrid, false)
 		if got != FeatureModePassthrough {
 			t.Fatalf("got %q, want %q", got, FeatureModePassthrough)
 		}
@@ -619,7 +655,7 @@ func TestFeatureModeFromConfOrHeader(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		ctx := context.WithValue(req.Context(), featureModeOverrideKey, FeatureMode(""))
 		req = req.WithContext(ctx)
-		got := s.featureModeFromConfOrHeader(req, FeatureModeHybrid)
+		got := s.featureModeFromConfOrHeader(req, FeatureModeHybrid, true)
 		if got != FeatureModePassthrough {
 			t.Fatalf("got %q, want %q", got, FeatureModePassthrough)
 		}

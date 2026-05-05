@@ -38,7 +38,7 @@ sharedSSOCert: &sharedSSOCert
   selfSigned: "false"
 
 postgres:
-  host: cortex-manila-postgresql
+  host: cortex-manila-postgresql-v18
   user: postgres
   password: secret
   database: postgres
@@ -105,9 +105,6 @@ cortex: &cortex
 cortex-scheduling-controllers:
   <<: *cortex
   namePrefix: cortex-manila-scheduling
-  # Enable webhook that will validate CRDs for the scheduling controllers.
-  webhook: {enable: true}
-  certmanager: {enable: true} # Needed for the webhook TLS certificates.
   conf:
     <<: *cortexConf
     leaderElectionID: cortex-manila-scheduling
@@ -138,3 +135,4 @@ cortex-knowledge-controllers:
 # Custom configuration for the cortex postgres chart.
 cortex-postgres:
   fullnameOverride: cortex-manila-postgresql
+  major: "18"

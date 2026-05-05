@@ -12,6 +12,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	corev1 "k8s.io/api/core/v1"
@@ -20,19 +21,24 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-type PrometheusDatasourceReconcilerConfig struct {
+type config struct {
 	// The controller will only touch resources with this scheduling domain.
 	SchedulingDomain v1alpha1.SchedulingDomain `json:"schedulingDomain"`
 	// Secret ref to keystone credentials stored in a k8s secret.
 	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
 	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
 	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
+	// The number of parallel reconciles to allow for the controller.
+	// By default, this will be set to 1.
+	ParallelReconciles *int `json:"prometheusDatasourceControllerParallelReconciles,omitempty"`
 }
 
 type PrometheusDatasourceReconciler struct {
@@ -41,7 +47,7 @@ type PrometheusDatasourceReconciler struct {
 	// Kubernetes scheme to use for the deschedulings.
 	Scheme *runtime.Scheme
 	// Config for the reconciler.
-	Conf PrometheusDatasourceReconcilerConfig
+	conf config
 	// Monitor for tracking the datasource syncs.
 	Monitor datasources.Monitor
 }
@@ -199,15 +205,20 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 }
 
 func (r *PrometheusDatasourceReconciler) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
+	var err error
+	r.conf, err = conf.GetConfig[config]()
+	if err != nil {
+		return err
+	}
 	bldr := multicluster.BuildController(mcl, mgr)
 	// Watch datasource changes across all clusters.
-	bldr, err := bldr.WatchesMulticluster(
+	bldr, err = bldr.WatchesMulticluster(
 		&v1alpha1.Datasource{},
 		&handler.EnqueueRequestForObject{},
 		predicate.NewPredicateFuncs(func(obj client.Object) bool {
 			// Only react to datasources matching the operator.
 			ds := obj.(*v1alpha1.Datasource)
-			if ds.Spec.SchedulingDomain != r.Conf.SchedulingDomain {
+			if ds.Spec.SchedulingDomain != r.conf.SchedulingDomain {
 				return false
 			}
 			// Only react to prometheus datasources.
@@ -218,5 +229,14 @@ func (r *PrometheusDatasourceReconciler) SetupWithManager(mgr manager.Manager, m
 		return err
 	}
 	return bldr.Named("cortex-prometheus-datasource").
+		WithOptions(controller.TypedOptions[reconcile.Request]{
+			// Allow parallel reconciles if configured, otherwise default to 1.
+			MaxConcurrentReconciles: func() int {
+				if r.conf.ParallelReconciles != nil {
+					return *r.conf.ParallelReconciles
+				}
+				return 1
+			}(),
+		}).
 		Complete(r)
 }
