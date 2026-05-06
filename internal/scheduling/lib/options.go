@@ -12,9 +12,6 @@ import (
 // Options configure the behavior of a single pipeline run at call time.
 // These are distinct from per-step YAML options (FilterWeigherPipelineStepOpts),
 // which are static and set when the pipeline is initialized.
-//
-// Consumed by steps: ReadOnly, LockReservations, AssumeEmptyHosts, IgnoredReservationTypes.
-// Consumed by the controller after pipeline.Run(): RecordHistory, CreateInflight.
 type Options struct {
 	// ReadOnly means the pipeline run does not modify shared scheduling state (reservations,
 	// history, inflight records). Concurrent read-only runs are safe under a shared read lock.

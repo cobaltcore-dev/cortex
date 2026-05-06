@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 	"math"
+	"slices"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -415,14 +416,7 @@ func TestPipeline_MaxCandidates(t *testing.T) {
 			if tt.maxCandidates > 0 && len(result.OrderedHosts) <= tt.maxCandidates {
 				// AggregatedOutWeights must only contain returned hosts.
 				for host := range result.AggregatedOutWeights {
-					found := false
-					for _, h := range result.OrderedHosts {
-						if h == host {
-							found = true
-							break
-						}
-					}
-					if !found {
+					if !slices.Contains(result.OrderedHosts, host) {
 						t.Errorf("AggregatedOutWeights contains trimmed host %s", host)
 					}
 				}

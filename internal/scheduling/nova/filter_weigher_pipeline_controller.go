@@ -84,6 +84,8 @@ func (c *FilterWeigherPipelineController) Reconcile(ctx context.Context, req ctr
 
 // Process the decision from the API. Should create and return the updated decision.
 func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error {
+	// Read-only runs share the cached decision state; no re-fetch needed because they
+	// don't observe writes from concurrent exclusive-lock runs.
 	if c.peekReadOnly(decision) {
 		c.processMu.RLock()
 		defer c.processMu.RUnlock()
