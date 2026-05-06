@@ -561,16 +561,20 @@ func main() {
 
 		usageReconcilerMonitor := commitments.NewUsageReconcilerMonitor()
 		metrics.Registry.MustRegister(&usageReconcilerMonitor)
-		usageReconcilerConf := commitmentsConfig.UsageReconciler
-		usageReconcilerConf.ApplyDefaults()
-		if err := (&commitments.UsageReconciler{
-			Client:  multiclusterClient,
-			Conf:    usageReconcilerConf,
-			UsageDB: commitmentsUsageDB,
-			Monitor: usageReconcilerMonitor,
-		}).SetupWithManager(mgr, multiclusterClient); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "CommittedResourceUsage")
-			os.Exit(1)
+		if commitmentsUsageDB == nil {
+			setupLog.Error(nil, "UsageReconciler requires a datasource but commitments.datasourceName is not configured — skipping")
+		} else {
+			usageReconcilerConf := commitmentsConfig.UsageReconciler
+			usageReconcilerConf.ApplyDefaults()
+			if err := (&commitments.UsageReconciler{
+				Client:  multiclusterClient,
+				Conf:    usageReconcilerConf,
+				UsageDB: commitmentsUsageDB,
+				Monitor: usageReconcilerMonitor,
+			}).SetupWithManager(mgr, multiclusterClient); err != nil {
+				setupLog.Error(err, "unable to create controller", "controller", "CommittedResourceUsage")
+				os.Exit(1)
+			}
 		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "datasource-controllers") {

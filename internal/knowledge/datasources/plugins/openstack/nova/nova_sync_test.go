@@ -272,3 +272,35 @@ func TestNovaSyncer_SyncAggregates(t *testing.T) {
 		t.Fatalf("expected 1 aggregate, got %d", n)
 	}
 }
+
+func TestNovaSyncer_SyncImages(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer dbEnv.Close()
+	mon := datasources.Monitor{}
+	syncer := &NovaSyncer{
+		DB:   testDB,
+		Mon:  mon,
+		Conf: v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeImages},
+		API:  &mockNovaAPI{},
+	}
+
+	ctx := t.Context()
+	if err := syncer.Init(ctx); err != nil {
+		t.Fatalf("failed to init images syncer: %v", err)
+	}
+	n, err := syncer.SyncAllImages(ctx)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("expected 1 image, got %d", n)
+	}
+	var images []Image
+	if _, err := testDB.Select(&images, "SELECT * FROM "+Image{}.TableName()); err != nil {
+		t.Fatalf("select images: %v", err)
+	}
+	if len(images) != 1 || images[0].ID != "img-1" || images[0].OSType != "windows8Server64Guest" {
+		t.Errorf("unexpected images in DB: %+v", images)
+	}
+}

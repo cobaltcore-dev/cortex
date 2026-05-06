@@ -355,11 +355,11 @@ func (r *CommittedResourceController) rollbackToAccepted(ctx context.Context, lo
 		tempCR := v1alpha1.CommittedResource{Spec: *cr.Status.AcceptedSpec}
 		state, err = FromCommittedResource(tempCR)
 	} else {
-		// Legacy fallback: AcceptedSpec not yet populated (CR accepted before this field existed).
-		state, err = FromCommittedResource(*cr)
-		if err == nil {
-			state.TotalMemoryBytes = cr.Status.AcceptedAmount.Value()
-		}
+		// AcceptedSpec not yet populated (CR accepted before this field existed).
+		// We cannot determine the previous placement, so delete all child reservations.
+		// The controller will recreate them on the next reconcile using the current spec.
+		logger.Info("AcceptedSpec missing during rollback, deleting child reservations for controller repair")
+		return r.deleteChildReservations(ctx, cr)
 	}
 	if err != nil {
 		logger.Error(err, "invalid spec during rollback, deleting all child reservations")
@@ -472,7 +472,10 @@ func (r *CommittedResourceController) SetupWithManager(mgr ctrl.Manager, mcl *mu
 				return nil
 			}
 			cr := &crList.Items[0]
-			if cr.Status.ConsecutiveFailures >= maxConsecutiveFailuresForSlowdown {
+			// Suppress fast-path re-enqueues only when the reservation belongs to the current
+			// generation AND failures are high. A new spec (higher generation) gets a fresh start.
+			if cr.Status.ConsecutiveFailures >= maxConsecutiveFailuresForSlowdown &&
+				res.Spec.CommittedResourceReservation.ParentGeneration == cr.Generation {
 				LoggerFromContext(ctx).V(1).Info("placement failures exceeded threshold, watch re-enqueues suppressed — retrying via backoff timer only",
 					"name", cr.Name, "consecutiveFailures", cr.Status.ConsecutiveFailures, "threshold", maxConsecutiveFailuresForSlowdown)
 				return nil

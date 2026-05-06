@@ -416,11 +416,13 @@ func TestCommittedResourceController_PlacementFailure(t *testing.T) {
 func TestCommittedResourceController_Rollback(t *testing.T) {
 	scheme := newCRTestScheme(t)
 
-	// CR at generation 2; AcceptedAmount reflects what was accepted at generation 1.
+	// CR at generation 2; AcceptedSpec and AcceptedAmount reflect what was accepted at generation 1.
 	cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
 	cr.Generation = 2
 	accepted := resource.MustParse("4Gi")
 	cr.Status.AcceptedAmount = &accepted
+	acceptedSpec := cr.Spec
+	cr.Status.AcceptedSpec = &acceptedSpec
 
 	// Existing reservation with stale ParentGeneration from the previous generation.
 	existing := &v1alpha1.Reservation{
@@ -531,7 +533,53 @@ func TestCommittedResourceController_RollbackUsesAcceptedSpecAZ(t *testing.T) {
 	}
 }
 
-// TestCommittedResourceController_ConsecutiveFailures verifies that ConsecutiveFailures
+// TestCommittedResourceController_RollbackNilAcceptedSpec verifies that when AcceptedSpec is
+// absent (pre-dates the field), rollbackToAccepted deletes child reservations rather than
+// attempting a rollback with stale/wrong placement data. The controller repairs state on
+// the next reconcile via ApplyCommitmentState.
+func TestCommittedResourceController_RollbackNilAcceptedSpec(t *testing.T) {
+	scheme := newCRTestScheme(t)
+
+	cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
+	cr.Generation = 2
+	accepted := resource.MustParse("4Gi")
+	cr.Status.AcceptedAmount = &accepted
+	// AcceptedSpec intentionally nil — simulates a CR accepted before the field existed.
+
+	existing := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-cr-0",
+			Labels: map[string]string{
+				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+			},
+		},
+		Spec: v1alpha1.ReservationSpec{
+			Type: v1alpha1.ReservationTypeCommittedResource,
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				CommitmentUUID: "test-uuid-1234",
+				ProjectID:      "test-project",
+			},
+		},
+	}
+
+	k8sClient := newCRTestClient(scheme, cr, existing, newTestFlavorKnowledge())
+	controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: CommittedResourceControllerConfig{}}
+
+	if err := controller.rollbackToAccepted(context.Background(), logr.Discard(), cr); err != nil {
+		t.Fatalf("rollbackToAccepted: %v", err)
+	}
+
+	var list v1alpha1.ReservationList
+	if err := k8sClient.List(context.Background(), &list, client.MatchingLabels{
+		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+	}); err != nil {
+		t.Fatalf("list reservations: %v", err)
+	}
+	if len(list.Items) != 0 {
+		t.Errorf("expected all reservations deleted when AcceptedSpec is nil, got %d", len(list.Items))
+	}
+}
+
 // increments on each placement failure (AllowRejection=false) and resets to 0 on acceptance.
 // It also checks that the retry delay grows with each failure.
 // TestCommittedResourceController_RejectedStaysRejected verifies that a CR rejected on one

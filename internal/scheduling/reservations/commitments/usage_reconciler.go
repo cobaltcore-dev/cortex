@@ -42,8 +42,17 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// Only active commitments have assigned VMs.
+	// Only active commitments have assigned VMs. Clear stale usage status if present.
 	if cr.Spec.State != v1alpha1.CommitmentStatusConfirmed && cr.Spec.State != v1alpha1.CommitmentStatusGuaranteed {
+		if len(cr.Status.AssignedInstances) > 0 || len(cr.Status.UsedResources) > 0 {
+			old := cr.DeepCopy()
+			cr.Status.AssignedInstances = nil
+			cr.Status.UsedResources = nil
+			cr.Status.LastUsageReconcileAt = nil
+			if err := r.Status().Patch(ctx, &cr, client.MergeFrom(old)); err != nil {
+				return ctrl.Result{}, client.IgnoreNotFound(err)
+			}
+		}
 		return ctrl.Result{}, nil
 	}
 

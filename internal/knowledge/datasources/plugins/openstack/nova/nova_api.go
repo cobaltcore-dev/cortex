@@ -457,6 +457,18 @@ func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 // GetAllImages fetches all Glance images and returns them with pre-computed os_type.
 // See deriveOSType for the derivation logic.
 func (api *novaAPI) GetAllImages(ctx context.Context) ([]Image, error) {
+	if api.glance == nil {
+		return nil, fmt.Errorf("glance client not initialized: datasource type must be %q", v1alpha1.NovaDatasourceTypeImages)
+	}
+
+	label := Image{}.TableName()
+	slog.Info("fetching nova data", "label", label)
+	if api.mon.RequestTimer != nil {
+		hist := api.mon.RequestTimer.WithLabelValues(label)
+		timer := prometheus.NewTimer(hist)
+		defer timer.ObserveDuration()
+	}
+
 	var result []Image
 	opts := glanceimages.ListOpts{Limit: 1000}
 	err := glanceimages.List(api.glance, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
@@ -475,6 +487,7 @@ func (api *novaAPI) GetAllImages(ctx context.Context) ([]Image, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to list Glance images: %w", err)
 	}
+	slog.Info("fetched", "label", label, "count", len(result))
 	return result, nil
 }
 
