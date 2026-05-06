@@ -162,7 +162,6 @@ func (k *KVMHostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		cpuTotal, hasCPUTotal := hypervisor.getResourceCapacity(hv1.ResourceCPU)
 
 		ramTotal, hasRAMTotal := hypervisor.getResourceCapacity(hv1.ResourceMemory)
-		ramTotalBytes := ramTotal.AsApproximateFloat64() * 1024 * 1024
 
 		if !hasCPUTotal || !hasRAMTotal {
 			slog.Warn("hypervisor missing cpu or ram capacity, skipping", "host", hypervisor.Name)
@@ -185,7 +184,7 @@ func (k *KVMHostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		labels := hypervisor.getHostLabels()
 
 		ch <- prometheus.MustNewConstMetric(k.totalCapacityPerHost, prometheus.GaugeValue, cpuTotal.AsApproximateFloat64(), append(labels, "cpu")...)
-		ch <- prometheus.MustNewConstMetric(k.totalCapacityPerHost, prometheus.GaugeValue, ramTotalBytes, append(labels, "ram")...)
+		ch <- prometheus.MustNewConstMetric(k.totalCapacityPerHost, prometheus.GaugeValue, ramTotal.AsApproximateFloat64(), append(labels, "ram")...)
 
 		ch <- prometheus.MustNewConstMetric(k.capacityPerHost, prometheus.GaugeValue, cpuUsed.AsApproximateFloat64(), append(labels, "cpu", "utilized")...)
 		ch <- prometheus.MustNewConstMetric(k.capacityPerHost, prometheus.GaugeValue, ramUsed.AsApproximateFloat64(), append(labels, "ram", "utilized")...)

@@ -139,8 +139,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				kvmUsageMetric("node001-bb088", "ram", "reserved", "qa-1a", "bb088", 0),
 				kvmUsageMetric("node001-bb088", "cpu", "failover", "qa-1a", "bb088", 0),
 				kvmUsageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 0),
-				kvmUsageMetric("node001-bb088", "cpu", "payg", "qa-1a", "bb088", 64),           // 128-64-0-0
-				kvmUsageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 274877906944), // 512Gi-256Gi
+				kvmUsageMetric("node001-bb088", "cpu", "available", "qa-1a", "bb088", 64),           // 128-64-0-0
+				kvmUsageMetric("node001-bb088", "ram", "available", "qa-1a", "bb088", 274877906944), // 512Gi-256Gi
 			},
 		},
 		{
@@ -179,8 +179,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				kvmUsageMetric("node001-bb088", "ram", "reserved", "qa-1a", "bb088", 0),
 				kvmUsageMetric("node001-bb088", "cpu", "failover", "qa-1a", "bb088", 0),
 				kvmUsageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 0),
-				kvmUsageMetric("node001-bb088", "cpu", "payg", "qa-1a", "bb088", 64),           // 128-64-0-0
-				kvmUsageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 274877906944), // 512Gi-256Gi
+				kvmUsageMetric("node001-bb088", "cpu", "available", "qa-1a", "bb088", 64),           // 128-64-0-0
+				kvmUsageMetric("node001-bb088", "ram", "available", "qa-1a", "bb088", 274877906944), // 512Gi-256Gi
 			},
 		},
 		{
@@ -262,8 +262,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				kvmUsageMetric("node001-bb088", "ram", "reserved", "qa-1a", "bb088", 0),
 				kvmUsageMetric("node001-bb088", "cpu", "failover", "qa-1a", "bb088", 0),
 				kvmUsageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 0),
-				kvmUsageMetric("node001-bb088", "cpu", "payg", "qa-1a", "bb088", 64),           // 128-64-0-0
-				kvmUsageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 274877906944), // 512Gi-256Gi
+				kvmUsageMetric("node001-bb088", "cpu", "available", "qa-1a", "bb088", 64),           // 128-64-0-0
+				kvmUsageMetric("node001-bb088", "ram", "available", "qa-1a", "bb088", 274877906944), // 512Gi-256Gi
 			},
 		},
 		{
@@ -312,8 +312,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					{Name: "cortex_kvm_host_capacity_usage", Labels: l("ram", "reserved"), Value: 0},
 					{Name: "cortex_kvm_host_capacity_usage", Labels: l("cpu", "failover"), Value: 0},
 					{Name: "cortex_kvm_host_capacity_usage", Labels: l("ram", "failover"), Value: 0},
-					{Name: "cortex_kvm_host_capacity_usage", Labels: l("cpu", "payg"), Value: 128},          // 256-128-0-0
-					{Name: "cortex_kvm_host_capacity_usage", Labels: l("ram", "payg"), Value: 549755813888}, // 1Ti-512Gi
+					{Name: "cortex_kvm_host_capacity_usage", Labels: l("cpu", "available"), Value: 128},          // 256-128-0-0
+					{Name: "cortex_kvm_host_capacity_usage", Labels: l("ram", "available"), Value: 549755813888}, // 1Ti-512Gi
 				}
 			}(),
 		},
@@ -363,8 +363,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					{Name: "cortex_kvm_host_capacity_usage", Labels: l("ram", "reserved"), Value: 0},
 					{Name: "cortex_kvm_host_capacity_usage", Labels: l("cpu", "failover"), Value: 0},
 					{Name: "cortex_kvm_host_capacity_usage", Labels: l("ram", "failover"), Value: 0},
-					{Name: "cortex_kvm_host_capacity_usage", Labels: l("cpu", "payg"), Value: 32},           // 64-32-0-0
-					{Name: "cortex_kvm_host_capacity_usage", Labels: l("ram", "payg"), Value: 137438953472}, // 256Gi-128Gi
+					{Name: "cortex_kvm_host_capacity_usage", Labels: l("cpu", "available"), Value: 32},           // 64-32-0-0
+					{Name: "cortex_kvm_host_capacity_usage", Labels: l("ram", "available"), Value: 137438953472}, // 256Gi-128Gi
 				}
 			}(),
 		},
@@ -429,8 +429,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					kvmUsageMetric("node010-bb100", "ram", "reserved", "qa-1a", "bb100", 0),
 					kvmUsageMetric("node010-bb100", "cpu", "failover", "qa-1a", "bb100", 0),
 					kvmUsageMetric("node010-bb100", "ram", "failover", "qa-1a", "bb100", 0),
-					kvmUsageMetric("node010-bb100", "cpu", "payg", "qa-1a", "bb100", 50),           // 100-50-0-0
-					kvmUsageMetric("node010-bb100", "ram", "payg", "qa-1a", "bb100", 107374182400), // 200Gi-100Gi
+					kvmUsageMetric("node010-bb100", "cpu", "available", "qa-1a", "bb100", 50),           // 100-50-0-0
+					kvmUsageMetric("node010-bb100", "ram", "available", "qa-1a", "bb100", 107374182400), // 200Gi-100Gi
 					{Name: "cortex_kvm_host_capacity_total", Labels: sapphire("cpu", ""), Value: 200},
 					{Name: "cortex_kvm_host_capacity_total", Labels: sapphire("ram", ""), Value: 429496729600}, // 400Gi
 					{Name: "cortex_kvm_host_capacity_usage", Labels: sapphire("cpu", "utilized"), Value: 150},
@@ -439,8 +439,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					{Name: "cortex_kvm_host_capacity_usage", Labels: sapphire("ram", "reserved"), Value: 0},
 					{Name: "cortex_kvm_host_capacity_usage", Labels: sapphire("cpu", "failover"), Value: 0},
 					{Name: "cortex_kvm_host_capacity_usage", Labels: sapphire("ram", "failover"), Value: 0},
-					{Name: "cortex_kvm_host_capacity_usage", Labels: sapphire("cpu", "payg"), Value: 50},           // 200-150-0-0
-					{Name: "cortex_kvm_host_capacity_usage", Labels: sapphire("ram", "payg"), Value: 107374182400}, // 400Gi-300Gi
+					{Name: "cortex_kvm_host_capacity_usage", Labels: sapphire("cpu", "available"), Value: 50},           // 200-150-0-0
+					{Name: "cortex_kvm_host_capacity_usage", Labels: sapphire("ram", "available"), Value: 107374182400}, // 400Gi-300Gi
 				}
 			}(),
 		},
@@ -473,8 +473,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				kvmUsageMetric("node004-bb091", "ram", "reserved", "qa-1d", "bb091", 0),
 				kvmUsageMetric("node004-bb091", "cpu", "failover", "qa-1d", "bb091", 0),
 				kvmUsageMetric("node004-bb091", "ram", "failover", "qa-1d", "bb091", 0),
-				kvmUsageMetric("node004-bb091", "cpu", "payg", "qa-1d", "bb091", 96),           // 96-0-0-0
-				kvmUsageMetric("node004-bb091", "ram", "payg", "qa-1d", "bb091", 412316860416), // 384Gi-0
+				kvmUsageMetric("node004-bb091", "cpu", "available", "qa-1d", "bb091", 96),           // 96-0-0-0
+				kvmUsageMetric("node004-bb091", "ram", "available", "qa-1d", "bb091", 412316860416), // 384Gi-0
 			},
 		},
 		{
@@ -530,9 +530,9 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				kvmUsageMetric("node001-bb088", "cpu", "reserved", "qa-1a", "bb088", 0),
 				kvmUsageMetric("node001-bb088", "ram", "reserved", "qa-1a", "bb088", 0),
 				kvmUsageMetric("node001-bb088", "cpu", "failover", "qa-1a", "bb088", 16),
-				kvmUsageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 68719476736), // 64Gi
-				kvmUsageMetric("node001-bb088", "cpu", "payg", "qa-1a", "bb088", 48),              // 128-64-0-16
-				kvmUsageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 206158430208),    // 512Gi-256Gi-0-64Gi = 192Gi
+				kvmUsageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 68719476736),   // 64Gi
+				kvmUsageMetric("node001-bb088", "cpu", "available", "qa-1a", "bb088", 48),           // 128-64-0-16
+				kvmUsageMetric("node001-bb088", "ram", "available", "qa-1a", "bb088", 206158430208), // 512Gi-256Gi-0-64Gi = 192Gi
 			},
 		},
 		{
@@ -599,8 +599,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				kvmUsageMetric("node001-bb088", "ram", "reserved", "qa-1a", "bb088", 103079215104), // 96Gi
 				kvmUsageMetric("node001-bb088", "cpu", "failover", "qa-1a", "bb088", 0),
 				kvmUsageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 0),
-				kvmUsageMetric("node001-bb088", "cpu", "payg", "qa-1a", "bb088", 40),           // 128-64-24-0
-				kvmUsageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 171798691840), // 512Gi-256Gi-96Gi-0 = 160Gi
+				kvmUsageMetric("node001-bb088", "cpu", "available", "qa-1a", "bb088", 40),           // 128-64-24-0
+				kvmUsageMetric("node001-bb088", "ram", "available", "qa-1a", "bb088", 171798691840), // 512Gi-256Gi-96Gi-0 = 160Gi
 			},
 		},
 		{
@@ -658,8 +658,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				// Non-ready reservation ignored, so failover = 0
 				kvmUsageMetric("node001-bb088", "cpu", "failover", "qa-1a", "bb088", 0),
 				kvmUsageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 0),
-				kvmUsageMetric("node001-bb088", "cpu", "payg", "qa-1a", "bb088", 64),           // 128-64-0-0
-				kvmUsageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 274877906944), // 512Gi-256Gi
+				kvmUsageMetric("node001-bb088", "cpu", "available", "qa-1a", "bb088", 64),           // 128-64-0-0
+				kvmUsageMetric("node001-bb088", "ram", "available", "qa-1a", "bb088", 274877906944), // 512Gi-256Gi
 			},
 		},
 		{
@@ -736,9 +736,9 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				kvmUsageMetric("node001-bb088", "ram", "reserved", "qa-1a", "bb088", 0),
 				// failover = 8+12=20 CPU, 32Gi+48Gi=80Gi RAM
 				kvmUsageMetric("node001-bb088", "cpu", "failover", "qa-1a", "bb088", 20),
-				kvmUsageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 85899345920), // 80Gi
-				kvmUsageMetric("node001-bb088", "cpu", "payg", "qa-1a", "bb088", 44),              // 128-64-0-20
-				kvmUsageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 188978561024),    // 512Gi-256Gi-0-80Gi = 176Gi
+				kvmUsageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 85899345920),   // 80Gi
+				kvmUsageMetric("node001-bb088", "cpu", "available", "qa-1a", "bb088", 44),           // 128-64-0-20
+				kvmUsageMetric("node001-bb088", "ram", "available", "qa-1a", "bb088", 188978561024), // 512Gi-256Gi-0-80Gi = 176Gi
 			},
 		},
 		{
@@ -812,8 +812,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				kvmUsageMetric("node001-bb088", "ram", "reserved", "qa-1a", "bb088", 42949672960), // 40Gi
 				kvmUsageMetric("node001-bb088", "cpu", "failover", "qa-1a", "bb088", 20),
 				kvmUsageMetric("node001-bb088", "ram", "failover", "qa-1a", "bb088", 42949672960), // 40Gi
-				kvmUsageMetric("node001-bb088", "cpu", "payg", "qa-1a", "bb088", 0),
-				kvmUsageMetric("node001-bb088", "ram", "payg", "qa-1a", "bb088", 0),
+				kvmUsageMetric("node001-bb088", "cpu", "available", "qa-1a", "bb088", 0),
+				kvmUsageMetric("node001-bb088", "ram", "available", "qa-1a", "bb088", 0),
 			},
 		},
 	}
