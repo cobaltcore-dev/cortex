@@ -312,7 +312,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					{Name: "cortex_kvm_host_capacity_usage", Labels: l("ram", "reserved"), Value: 0},
 					{Name: "cortex_kvm_host_capacity_usage", Labels: l("cpu", "failover"), Value: 0},
 					{Name: "cortex_kvm_host_capacity_usage", Labels: l("ram", "failover"), Value: 0},
-					{Name: "cortex_kvm_host_capacity_usage", Labels: l("cpu", "payg"), Value: 128},           // 256-128-0-0
+					{Name: "cortex_kvm_host_capacity_usage", Labels: l("cpu", "payg"), Value: 128},          // 256-128-0-0
 					{Name: "cortex_kvm_host_capacity_usage", Labels: l("ram", "payg"), Value: 549755813888}, // 1Ti-512Gi
 				}
 			}(),
@@ -363,7 +363,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					{Name: "cortex_kvm_host_capacity_usage", Labels: l("ram", "reserved"), Value: 0},
 					{Name: "cortex_kvm_host_capacity_usage", Labels: l("cpu", "failover"), Value: 0},
 					{Name: "cortex_kvm_host_capacity_usage", Labels: l("ram", "failover"), Value: 0},
-					{Name: "cortex_kvm_host_capacity_usage", Labels: l("cpu", "payg"), Value: 32},            // 64-32-0-0
+					{Name: "cortex_kvm_host_capacity_usage", Labels: l("cpu", "payg"), Value: 32},           // 64-32-0-0
 					{Name: "cortex_kvm_host_capacity_usage", Labels: l("ram", "payg"), Value: 137438953472}, // 256Gi-128Gi
 				}
 			}(),
@@ -439,7 +439,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					{Name: "cortex_kvm_host_capacity_usage", Labels: sapphire("ram", "reserved"), Value: 0},
 					{Name: "cortex_kvm_host_capacity_usage", Labels: sapphire("cpu", "failover"), Value: 0},
 					{Name: "cortex_kvm_host_capacity_usage", Labels: sapphire("ram", "failover"), Value: 0},
-					{Name: "cortex_kvm_host_capacity_usage", Labels: sapphire("cpu", "payg"), Value: 50},            // 200-150-0-0
+					{Name: "cortex_kvm_host_capacity_usage", Labels: sapphire("cpu", "payg"), Value: 50},           // 200-150-0-0
 					{Name: "cortex_kvm_host_capacity_usage", Labels: sapphire("ram", "payg"), Value: 107374182400}, // 400Gi-300Gi
 				}
 			}(),
