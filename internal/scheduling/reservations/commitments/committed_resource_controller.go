@@ -339,8 +339,9 @@ func (r *CommittedResourceController) rollbackToAccepted(ctx context.Context, lo
 		state, err = FromCommittedResource(tempCR)
 	} else {
 		// AcceptedSpec not yet populated (CR accepted before this field existed).
-		// We cannot determine the previous placement, so delete all child reservations.
-		// The controller will recreate them on the next reconcile using the current spec.
+		// We cannot determine the previous placement so delete all child reservations.
+		// The CR stays in Rejected state until the user submits a new spec; the new generation
+		// then clears isRejectedForGeneration and the controller re-applies.
 		logger.Info("AcceptedSpec missing during rollback, deleting child reservations for controller repair")
 		return r.deleteChildReservations(ctx, cr)
 	}
@@ -420,9 +421,6 @@ func (r *CommittedResourceController) SetupWithManager(mgr ctrl.Manager, mcl *mu
 	ctx := context.Background()
 	if err := indexReservationByCommitmentUUID(ctx, mcl); err != nil {
 		return fmt.Errorf("failed to set up reservation field index: %w", err)
-	}
-	if err := indexCommittedResourceByUUID(ctx, mcl); err != nil {
-		return fmt.Errorf("failed to set up committed resource field index: %w", err)
 	}
 
 	bldr := multicluster.BuildController(mcl, mgr)

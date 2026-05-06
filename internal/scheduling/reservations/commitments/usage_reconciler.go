@@ -5,6 +5,7 @@ package commitments
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -152,10 +153,6 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			} else {
 				written++
 				totalAssigned += len(state.AssignedInstances)
-				// Observe status age: how long ago was it last reconciled before this run.
-				if cr.Status.LastUsageReconcileAt != nil {
-					r.Monitor.statusAge.Observe(now.Time.Sub(cr.Status.LastUsageReconcileAt.Time).Seconds())
-				}
 			}
 		}
 	}
@@ -164,7 +161,12 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	r.Monitor.reconcileDuration.WithLabelValues("success").Observe(time.Since(start).Seconds())
-	r.Monitor.assignedInstances.Set(float64(totalAssigned))
+	// Observe status age once per reconcile, not once per commitment, to avoid biasing the
+	// histogram toward projects with many commitments.
+	if written > 0 && cr.Status.LastUsageReconcileAt != nil {
+		r.Monitor.statusAge.Observe(now.Time.Sub(cr.Status.LastUsageReconcileAt.Time).Seconds())
+	}
+	r.Monitor.assignedInstances.WithLabelValues(cr.Spec.ProjectID).Set(float64(totalAssigned))
 
 	logger.Info("usage reconcile complete",
 		"commitments", written,
@@ -250,6 +252,10 @@ func (r *UsageReconciler) hypervisorToCommittedResources(ctx context.Context, ob
 func (r *UsageReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	log := ctrl.Log.WithName("committed-resource-usage")
 	log.Info("starting usage reconciler", "cooldownInterval", r.Conf.CooldownInterval.Duration)
+
+	if err := indexCommittedResourceByUUID(context.Background(), mcl); err != nil {
+		return fmt.Errorf("failed to set up committed resource field index: %w", err)
+	}
 
 	bldr := multicluster.BuildController(mcl, mgr)
 

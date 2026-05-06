@@ -11,7 +11,7 @@ import (
 type UsageReconcilerMonitor struct {
 	reconcileDuration *prometheus.HistogramVec
 	statusAge         prometheus.Histogram
-	assignedInstances prometheus.Gauge
+	assignedInstances *prometheus.GaugeVec
 }
 
 // NewUsageReconcilerMonitor creates a new monitor with Prometheus metrics.
@@ -27,10 +27,10 @@ func NewUsageReconcilerMonitor() UsageReconcilerMonitor {
 			Help:    "Age of CommittedResource usage status at reconcile time, in seconds. Distribution across all active commitments shows freshness spread.",
 			Buckets: []float64{30, 60, 120, 300, 600, 900, 1800},
 		}),
-		assignedInstances: prometheus.NewGauge(prometheus.GaugeOpts{
+		assignedInstances: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "cortex_cr_usage_assigned_vms_total",
-			Help: "Total number of VMs currently assigned to committed resources across all active commitments.",
-		}),
+			Help: "Number of VMs currently assigned to committed resources for a project.",
+		}, []string{"project_id"}),
 	}
 
 	// Pre-initialize result labels so metrics appear before the first reconcile.
