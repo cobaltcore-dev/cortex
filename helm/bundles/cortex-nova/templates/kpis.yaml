@@ -183,6 +183,7 @@ spec:
       - name: nova-servers
       - name: nova-flavors
       - name: identity-projects
+      - name: identity-domains
     knowledges:
       - name: host-details
   description: |
