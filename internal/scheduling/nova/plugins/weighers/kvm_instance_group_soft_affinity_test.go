@@ -4,7 +4,6 @@
 package weighers
 
 import (
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"log/slog"
 	"testing"
 
@@ -347,7 +346,7 @@ func TestKVMInstanceGroupSoftAffinityStep_Run(t *testing.T) {
 			step := &KVMInstanceGroupSoftAffinityStep{}
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 
-			result, err := step.Run(slog.Default(), tt.request, lib.Options{})
+			result, err := step.Run(slog.Default(), tt.request)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil")

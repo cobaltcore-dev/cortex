@@ -43,6 +43,6 @@ func (wm *WeigherMonitor[RequestType]) Validate(ctx context.Context, params v1al
 }
 
 // Run the weigher and observe its execution.
-func (wm *WeigherMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestType, opts Options) (*FilterWeigherPipelineStepResult, error) {
-	return wm.monitor.RunWrapped(traceLog, request, opts, wm.weigher)
+func (wm *WeigherMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
+	return wm.monitor.RunWrapped(traceLog, request, wm.weigher)
 }

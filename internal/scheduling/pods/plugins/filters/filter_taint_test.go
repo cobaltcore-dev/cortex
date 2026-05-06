@@ -4,7 +4,6 @@
 package filters
 
 import (
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"log/slog"
 	"testing"
 
@@ -253,7 +252,7 @@ func TestTaintFilter_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filter := &TaintFilter{}
-			result, err := filter.Run(slog.Default(), tt.request, lib.Options{})
+			result, err := filter.Run(slog.Default(), tt.request)
 
 			if err != nil {
 				t.Errorf("expected Run() to succeed, got error: %v", err)

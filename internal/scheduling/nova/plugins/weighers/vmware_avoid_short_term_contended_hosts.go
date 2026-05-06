@@ -61,7 +61,7 @@ func (s *VMwareAvoidShortTermContendedHostsStep) Init(ctx context.Context, clien
 }
 
 // Downvote hosts that are highly contended.
-func (s *VMwareAvoidShortTermContendedHostsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest, opts lib.Options) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *VMwareAvoidShortTermContendedHostsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")

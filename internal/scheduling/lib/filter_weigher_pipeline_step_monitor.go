@@ -65,7 +65,6 @@ func monitorStep[RequestType FilterWeigherPipelineRequest](stepName string, m Fi
 func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
 	traceLog *slog.Logger,
 	request RequestType,
-	opts Options,
 	step FilterWeigherPipelineStep[RequestType],
 ) (*FilterWeigherPipelineStepResult, error) {
 
@@ -75,7 +74,7 @@ func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
 	}
 
 	inWeights := request.GetWeights()
-	stepResult, err := step.Run(traceLog, request, opts)
+	stepResult, err := step.Run(traceLog, request)
 	if err != nil {
 		return nil, err
 	}

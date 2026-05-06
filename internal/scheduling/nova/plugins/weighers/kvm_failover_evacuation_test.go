@@ -4,7 +4,6 @@
 package weighers
 
 import (
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"log/slog"
 	"testing"
 
@@ -265,7 +264,7 @@ func TestKVMFailoverEvacuationStep_Run(t *testing.T) {
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			step.Options = tt.opts
 
-			result, err := step.Run(slog.Default(), tt.request, lib.Options{})
+			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

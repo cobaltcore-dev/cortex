@@ -100,7 +100,7 @@ func (s *FilterRequestedDestinationStep) processRequestedHost(
 // The requested destination can include a specific host, aggregates, or both.
 // When both are specified, aggregate filtering is applied first, followed by
 // host filtering.
-func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest, opts lib.Options) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	rd := request.Spec.Data.RequestedDestination
 	if rd == nil {

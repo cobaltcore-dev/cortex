@@ -96,7 +96,7 @@ func TestWeigherValidator_Run_ValidHosts(t *testing.T) {
 		Weigher: mockStep,
 	}
 
-	result, err := validator.Run(slog.Default(), request, Options{})
+	result, err := validator.Run(slog.Default(), request)
 	if err != nil {
 		t.Errorf("Run() error = %v, want nil", err)
 	}
@@ -130,7 +130,7 @@ func TestWeigherValidator_Run_HostNumberMismatch(t *testing.T) {
 		Weigher: mockStep,
 	}
 
-	result, err := validator.Run(slog.Default(), request, Options{})
+	result, err := validator.Run(slog.Default(), request)
 	if err == nil {
 		t.Errorf("Run() error = nil, want error")
 	}

@@ -20,7 +20,7 @@ type FilterStatusConditionsStep struct {
 
 // Check that all status conditions meet the expected values, for example,
 // that the hypervisor is ready and not disabled.
-func (s *FilterStatusConditionsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest, opts lib.Options) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterStatusConditionsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	hvs := &hv1.HypervisorList{}

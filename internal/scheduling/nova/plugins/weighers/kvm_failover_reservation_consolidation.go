@@ -78,7 +78,7 @@ type KVMFailoverReservationConsolidationStep struct {
 // Run the weigher step.
 // For reserve_for_failover requests, hosts are scored based on existing failover reservation density
 // and same-spec diversity. For all other request types, this weigher has no effect.
-func (s *KVMFailoverReservationConsolidationStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest, opts lib.Options) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMFailoverReservationConsolidationStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	intent, err := request.GetIntent()

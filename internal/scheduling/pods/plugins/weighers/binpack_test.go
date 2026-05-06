@@ -4,7 +4,6 @@
 package weighers
 
 import (
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"log/slog"
 	"math"
 	"testing"
@@ -258,7 +257,7 @@ func TestBinpackingStep_Run(t *testing.T) {
 				},
 			}
 
-			result, err := tt.step.Run(slog.Default(), tt.request, lib.Options{})
+			result, err := tt.step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

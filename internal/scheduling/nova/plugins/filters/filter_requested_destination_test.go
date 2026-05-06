@@ -578,7 +578,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 				},
 			}
 
-			result, err := step.Run(slog.Default(), tt.request, lib.Options{})
+			result, err := step.Run(slog.Default(), tt.request)
 
 			if tt.expectErr {
 				if err == nil {
@@ -777,7 +777,7 @@ func TestFilterRequestedDestinationStep_Run_ClientError(t *testing.T) {
 		},
 	}
 
-	_, err := step.Run(slog.Default(), request, lib.Options{})
+	_, err := step.Run(slog.Default(), request)
 	if err == nil {
 		t.Errorf("expected error when client fails, got none")
 	}

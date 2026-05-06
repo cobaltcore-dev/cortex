@@ -139,7 +139,6 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 func (p *filterWeigherPipeline[RequestType]) runFilters(
 	log *slog.Logger,
 	request RequestType,
-	opts Options,
 ) (filteredRequest RequestType, stepResults []v1alpha1.StepResult) {
 
 	filteredRequest = request
@@ -147,7 +146,7 @@ func (p *filterWeigherPipeline[RequestType]) runFilters(
 		filter := p.filters[filterName]
 		stepLog := log.With("filter", filterName)
 		stepLog.Info("scheduler: running filter")
-		result, err := filter.Run(stepLog, filteredRequest, opts)
+		result, err := filter.Run(stepLog, filteredRequest)
 		if errors.Is(err, ErrStepSkipped) {
 			stepLog.Info("scheduler: filter skipped")
 			continue
@@ -172,7 +171,6 @@ func (p *filterWeigherPipeline[RequestType]) runFilters(
 func (p *filterWeigherPipeline[RequestType]) runWeighers(
 	log *slog.Logger,
 	filteredRequest RequestType,
-	opts Options,
 ) map[string]map[string]float64 {
 
 	activationsByStep := map[string]map[string]float64{}
@@ -184,7 +182,7 @@ func (p *filterWeigherPipeline[RequestType]) runWeighers(
 		wg.Go(func() {
 			stepLog := log.With("weigher", weigherName)
 			stepLog.Info("scheduler: running weigher")
-			result, err := weigher.Run(stepLog, filteredRequest, opts)
+			result, err := weigher.Run(stepLog, filteredRequest)
 			if errors.Is(err, ErrStepSkipped) {
 				stepLog.Info("scheduler: weigher skipped")
 				return
@@ -286,7 +284,7 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 
 	// Run filters first to reduce the number of hosts.
 	// Any weights assigned to filtered out hosts are ignored.
-	filteredRequest, filterStepResults := p.runFilters(traceLog, request, opts)
+	filteredRequest, filterStepResults := p.runFilters(traceLog, request)
 	traceLog.Info(
 		"scheduler: finished filters",
 		"remainingHosts", filteredRequest.GetHosts(),
@@ -297,7 +295,7 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 	for _, host := range filteredRequest.GetHosts() {
 		remainingWeights[host] = inWeights[host]
 	}
-	stepWeights := p.runWeighers(traceLog, filteredRequest, opts)
+	stepWeights := p.runWeighers(traceLog, filteredRequest)
 	outWeights := p.applyWeights(traceLog, stepWeights, remainingWeights)
 	traceLog.Info("scheduler: output weights", "weights", outWeights)
 
@@ -305,6 +303,7 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 	traceLog.Info("scheduler: sorted hosts", "hosts", hosts)
 
 	if opts.MaxCandidates > 0 && len(hosts) > opts.MaxCandidates {
+		traceLog.Info("scheduler: trimming candidate list", "maxCandidates", opts.MaxCandidates, "before", len(hosts))
 		hosts = hosts[:opts.MaxCandidates]
 		// Drop trimmed hosts from outWeights so AggregatedOutWeights stays consistent.
 		for host := range outWeights {

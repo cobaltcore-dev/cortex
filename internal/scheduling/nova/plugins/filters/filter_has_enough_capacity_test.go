@@ -584,7 +584,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			step.Options = tt.opts
 
-			result, err := step.Run(slog.Default(), tt.request, lib.Options{})
+			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -799,7 +799,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 				IgnoredReservationTypes: tt.ignoredReservationTypes,
 			}
 
-			result, err := step.Run(slog.Default(), tt.request, lib.Options{})
+			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -836,9 +836,10 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes_CallTime(t *testing.T) 
 	step.Options = FilterHasEnoughCapacityOpts{LockReserved: true} // no YAML-level ignores
 
 	// Call-time: ignore CR reservations → host1 passes, host2 still blocked by failover.
-	result, err := step.Run(slog.Default(), request, lib.Options{
+	request.Options = lib.Options{
 		IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
-	})
+	}
+	result, err := step.Run(slog.Default(), request)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -1003,8 +1004,9 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 			step := &FilterHasEnoughCapacity{}
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			step.Options = tt.opts
+			tt.request.Options = tt.pipelineOpts
 
-			result, err := step.Run(slog.Default(), tt.request, tt.pipelineOpts)
+			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -1054,7 +1056,7 @@ func TestFilterHasEnoughCapacity_PlannedCRDoesNotBlock(t *testing.T) {
 	step.Options = FilterHasEnoughCapacityOpts{LockReserved: false}
 
 	request := newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 4, "8Gi", false, []string{"host1"})
-	result, err := step.Run(slog.Default(), request, lib.Options{})
+	result, err := step.Run(slog.Default(), request)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -1127,7 +1129,7 @@ func TestFilterHasEnoughCapacity_NilEffectiveCapacityFallback(t *testing.T) {
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			step.Options = FilterHasEnoughCapacityOpts{LockReserved: false}
 
-			result, err := step.Run(slog.Default(), tt.request, lib.Options{})
+			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -1326,7 +1328,7 @@ func TestFilterHasEnoughCapacity_VMInterReservationMigration(t *testing.T) {
 			step.Options = FilterHasEnoughCapacityOpts{LockReserved: false}
 
 			request := newNovaRequest("instance-new", thirdParty, "m1.small", flavorGroup, 3, "6Gi", false, []string{"hv-a", "hv-b"})
-			result, err := step.Run(slog.Default(), request, lib.Options{})
+			result, err := step.Run(slog.Default(), request)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

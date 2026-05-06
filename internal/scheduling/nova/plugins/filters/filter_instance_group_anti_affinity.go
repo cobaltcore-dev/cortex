@@ -22,7 +22,6 @@ type FilterInstanceGroupAntiAffinityStep struct {
 func (s *FilterInstanceGroupAntiAffinityStep) Run(
 	traceLog *slog.Logger,
 	request api.ExternalSchedulerRequest,
-	opts lib.Options,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)

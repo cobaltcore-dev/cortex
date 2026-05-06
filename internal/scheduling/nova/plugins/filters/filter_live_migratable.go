@@ -51,7 +51,6 @@ func (s *FilterLiveMigratableStep) checkHasSufficientFeatures(
 func (s *FilterLiveMigratableStep) Run(
 	traceLog *slog.Logger,
 	request api.ExternalSchedulerRequest,
-	opts lib.Options,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)

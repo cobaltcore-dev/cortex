@@ -100,7 +100,7 @@ func TestFilterMonitor_Run(t *testing.T) {
 		Weights: map[string]float64{"host1": 0.1, "host2": 0.2, "host3": 0.3},
 	}
 
-	result, err := fm.Run(slog.Default(), request, Options{})
+	result, err := fm.Run(slog.Default(), request)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}

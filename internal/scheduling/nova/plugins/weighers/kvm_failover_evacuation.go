@@ -50,7 +50,7 @@ type KVMFailoverEvacuationStep struct {
 // Run the weigher step.
 // For evacuation requests, hosts matching a failover reservation where the VM is in Allocations get a higher weight.
 // For non-evacuation requests (e.g., live migration, rebuild), this weigher has no effect.
-func (s *KVMFailoverEvacuationStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest, opts lib.Options) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMFailoverEvacuationStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	intent, err := request.GetIntent()
