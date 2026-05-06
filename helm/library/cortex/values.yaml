@@ -90,7 +90,8 @@ prometheus:
 certmanager:
   enable: false
 
-# [WEBHOOK]: To enable webhook args, ports, and cert volume mounts on the manager
+# [WEBHOOK]: To enable validating webhook for Pipeline resources set true
+# Note: When enabled, cert-manager is typically also required for TLS certificates
 webhook:
   enable: false
 
