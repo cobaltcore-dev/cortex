@@ -202,6 +202,7 @@ spec:
       - name: nova-flavors
       - name: limes-project-commitments
       - name: identity-domains
+      - name: identity-projects
   description: |
     This KPI tracks the resource commitments of projects running VMs on VMware hosts.
 ---
