@@ -121,7 +121,6 @@ func (k *KVMProjectUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerProjectAndHost, prometheus.GaugeValue, projectCapacityUsage.TotalRAMMB*1024*1024, append(hostLabels, "memory")...)
 		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerProjectAndHost, prometheus.GaugeValue, projectCapacityUsage.TotalDiskGB*1024*1024*1024, append(hostLabels, "disk")...)
 	}
-
 }
 
 // getKVMHosts retrieves the list of KVM hosts and their details from the database, returning a map keyed by compute host name.

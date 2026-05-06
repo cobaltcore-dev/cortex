@@ -113,10 +113,7 @@ func (h kvmHost) getHostLabels() []string {
 		}
 	}
 
-	maintenance := false
-	if h.Spec.Maintenance != hv1.MaintenanceUnset {
-		maintenance = true
-	}
+	maintenance := h.Spec.Maintenance != hv1.MaintenanceUnset
 
 	return []string{
 		h.Name,
