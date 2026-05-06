@@ -23,6 +23,7 @@ var supportedKPIs = map[string]plugins.KPI{
 	"vm_commitments_kpi":           &compute.VMCommitmentsKPI{},
 	"vm_faults_kpi":                &compute.VMFaultsKPI{},
 
+	"kvm_project_utilization_kpi":     &infrastructure.KVMProjectUtilizationKPI{},
 	"vmware_project_utilization_kpi":  &infrastructure.VMwareProjectUtilizationKPI{},
 	"vmware_resource_commitments_kpi": &infrastructure.VMwareResourceCommitmentsKPI{},
 	"vmware_host_capacity_kpi":        &infrastructure.VMwareHostCapacityKPI{},
