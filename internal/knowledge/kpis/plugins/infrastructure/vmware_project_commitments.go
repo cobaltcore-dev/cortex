@@ -67,13 +67,13 @@ func (k *VMwareProjectCommitmentsKPI) Collect(ch chan<- prometheus.Metric) {
 
 	flavorsByName, err := k.getFlavorsByName()
 	if err != nil {
-		slog.Error("vmware_resource_commitments: failed to load flavors", "err", err)
+		slog.Error("vmware_project_commitments: failed to load flavors", "err", err)
 		return
 	}
 
 	projects, err := k.getProjectsWithDomains()
 	if err != nil {
-		slog.Error("vmware_resource_commitments: failed to load projects with domains", "err", err)
+		slog.Error("vmware_project_commitments: failed to load projects with domains", "err", err)
 		return
 	}
 
@@ -166,12 +166,12 @@ func (k *VMwareProjectCommitmentsKPI) getRunningHanaServers() ([]nova.Server, er
 func (k *VMwareProjectCommitmentsKPI) collectGeneralPurpose(ch chan<- prometheus.Metric, flavorsByName map[string]nova.Flavor, projects map[string]projectWithDomain) {
 	commitments, err := k.getGeneralPurposeCommitments()
 	if err != nil {
-		slog.Error("vmware_resource_commitments: failed to load gp commitments", "err", err)
+		slog.Error("vmware_project_commitments: failed to load gp commitments", "err", err)
 		return
 	}
 	servers, err := k.getGeneralPurposeServers()
 	if err != nil {
-		slog.Error("vmware_resource_commitments: failed to load gp servers", "err", err)
+		slog.Error("vmware_project_commitments: failed to load gp servers", "err", err)
 		return
 	}
 
@@ -185,7 +185,7 @@ func (k *VMwareProjectCommitmentsKPI) collectGeneralPurpose(ch chan<- prometheus
 		case "ram":
 			bytes, err := bytesFromUnit(float64(c.Amount), c.Unit)
 			if err != nil {
-				slog.Warn("vmware_resource_commitments: unknown ram unit", "unit", c.Unit, "err", err)
+				slog.Warn("vmware_project_commitments: unknown ram unit", "unit", c.Unit, "err", err)
 				continue
 			}
 			committed[gpKey{c.ProjectID, c.AvailabilityZone, "ram"}] += bytes
@@ -196,7 +196,7 @@ func (k *VMwareProjectCommitmentsKPI) collectGeneralPurpose(ch chan<- prometheus
 	for _, s := range servers {
 		flavor, ok := flavorsByName[s.FlavorName]
 		if !ok {
-			slog.Warn("vmware_resource_commitments: gp flavor not found", "flavor", s.FlavorName)
+			slog.Warn("vmware_project_commitments: gp flavor not found", "flavor", s.FlavorName)
 			continue
 		}
 		used[gpKey{s.TenantID, s.OSEXTAvailabilityZone, "cpu"}] += float64(flavor.VCPUs)
