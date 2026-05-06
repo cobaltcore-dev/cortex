@@ -217,7 +217,7 @@ func (k *VMwareProjectUtilizationKPI) queryProjectInstanceCount() ([]vmwareProje
 		WHERE s.status NOT IN ('DELETED', 'ERROR')
 		  AND s.os_ext_srv_attr_host LIKE '` + vmwareComputeHostPattern + `'
 		  AND s.os_ext_srv_attr_host NOT LIKE '` + vmwareIronicComputeHostPattern + `'
-		GROUP BY s.tenant_id, p.name, d.id, d.name, s.os_ext_srv_attr_host, s.flavor_name, s.os_ext_az_availability_zone
+		GROUP BY s.tenant_id, p.name, p.domain_id, d.name, s.os_ext_srv_attr_host, s.flavor_name, s.os_ext_az_availability_zone
 	`
 	var usages []vmwareProjectInstanceCount
 	if _, err := k.DB.Select(&usages, query); err != nil {
