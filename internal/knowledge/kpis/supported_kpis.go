@@ -13,7 +13,6 @@ import (
 
 // Configuration of supported kpis.
 var supportedKPIs = map[string]plugins.KPI{
-	"kvm_host_capacity_kpi":        &compute.KVMResourceCapacityKPI{},
 	"vmware_host_contention_kpi":   &compute.VMwareHostContentionKPI{},
 	"vmware_project_noisiness_kpi": &compute.VMwareProjectNoisinessKPI{},
 	"host_running_vms_kpi":         &compute.HostRunningVMsKPI{},
@@ -23,6 +22,7 @@ var supportedKPIs = map[string]plugins.KPI{
 	"vm_commitments_kpi":           &compute.VMCommitmentsKPI{},
 	"vm_faults_kpi":                &compute.VMFaultsKPI{},
 
+	"kvm_host_capacity_kpi":          &infrastructure.KVMHostCapacityKPI{},
 	"kvm_project_utilization_kpi":    &infrastructure.KVMProjectUtilizationKPI{},
 	"vmware_project_utilization_kpi": &infrastructure.VMwareProjectUtilizationKPI{},
 	"vmware_project_commitments_kpi": &infrastructure.VMwareProjectCommitmentsKPI{},

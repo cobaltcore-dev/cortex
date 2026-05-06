@@ -1,13 +1,11 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package compute
+package infrastructure
 
 import (
 	"context"
 	"log/slog"
-	"strconv"
-	"strings"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,141 +19,43 @@ import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
-type kvmHost struct {
-	hv1.Hypervisor
-}
-
-// getResourceCapacity attempts to retrieve the effective capacity for the specified resource from the hypervisor status, falling back to the physical capacity if effective capacity is not available. It returns the capacity quantity and a boolean indicating whether any capacity information was found.
-func (k kvmHost) getResourceCapacity(resourceName hv1.ResourceName) (capacity resource.Quantity, ok bool) {
-	if k.Status.EffectiveCapacity != nil {
-		qty, exists := k.Status.EffectiveCapacity[resourceName]
-		if exists && !qty.IsZero() {
-			return qty, true
-		}
-	}
-	if k.Status.Capacity == nil {
-		return resource.Quantity{}, false
-	}
-	qty, exists := k.Status.Capacity[resourceName]
-	if !exists || qty.IsZero() {
-		return resource.Quantity{}, false
-	}
-	return qty, true
-}
-
-func (k kvmHost) getResourceAllocation(resourceName hv1.ResourceName) (allocation resource.Quantity) {
-	if k.Status.Allocation == nil {
-		return resource.MustParse("0")
-	}
-
-	qty, exists := k.Status.Allocation[resourceName]
-	if !exists {
-		return resource.MustParse("0")
-	}
-	return qty
-}
-
-func (k kvmHost) getLabels() kvmHostLabels {
-	decommissioned := false
-	externalCustomer := false
-	workloadType := "general-purpose"
-	cpuArchitecture := "cascade-lake"
-
-	for _, trait := range k.Status.Traits {
-		switch trait {
-		case "CUSTOM_HW_SAPPHIRE_RAPIDS":
-			cpuArchitecture = "sapphire-rapids"
-		case "CUSTOM_HANA_EXCLUSIVE_HOST":
-			workloadType = "hana"
-		case "CUSTOM_DECOMMISSIONING":
-			decommissioned = true
-		case "CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE":
-			externalCustomer = true
-		}
-	}
-
-	return kvmHostLabels{
-		computeHost:      k.Name,
-		availabilityZone: k.Labels["topology.kubernetes.io/zone"],
-		buildingBlock:    getBuildingBlock(k.Name),
-		cpuArchitecture:  cpuArchitecture,
-		workloadType:     workloadType,
-		enabled:          strconv.FormatBool(true),
-		decommissioned:   strconv.FormatBool(decommissioned),
-		externalCustomer: strconv.FormatBool(externalCustomer),
-		maintenance:      strconv.FormatBool(false),
-	}
-}
-
-// Assuming hypervisor names are in the format nodeXXX-bbYY
-func getBuildingBlock(hostName string) string {
-	parts := strings.Split(hostName, "-")
-	if len(parts) > 1 {
-		return parts[1]
-	}
-	return "unknown"
-}
-
 // hostReservationResources holds aggregated CPU and memory reservation quantities for a single hypervisor.
 type hostReservationResources struct {
 	cpu    resource.Quantity
 	memory resource.Quantity
 }
 
-type KVMResourceCapacityKPI struct {
+type KVMHostCapacityKPI struct {
 	// Common base for all KPIs that provides standard functionality.
 	plugins.BaseKPI[struct{}] // No options passed through yaml config
 	totalCapacityPerHost      *prometheus.Desc
 	capacityPerHost           *prometheus.Desc
 }
 
-func (KVMResourceCapacityKPI) GetName() string {
+func (KVMHostCapacityKPI) GetName() string {
 	return "kvm_host_capacity_kpi"
 }
 
-func (k *KVMResourceCapacityKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
+func (k *KVMHostCapacityKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
 	if err := k.BaseKPI.Init(db, client, opts); err != nil {
 		return err
 	}
 	k.totalCapacityPerHost = prometheus.NewDesc(
 		"cortex_kvm_host_capacity_total",
-		"Total resource capacity on the KVM hosts (individually by host).",
-		[]string{
-			"compute_host",
-			"resource",
-			"availability_zone",
-			"building_block",
-			"cpu_architecture",
-			"workload_type",
-			"enabled",
-			"decommissioned",
-			"external_customer",
-			"maintenance",
-		},
+		"Total resource capacity on the KVM hosts (individually by host). CPU in vCPUs, memory in bytes.",
+		append(kvmHostLabels, "resource"),
 		nil,
 	)
 	k.capacityPerHost = prometheus.NewDesc(
 		"cortex_kvm_host_capacity_usage",
-		"Resource capacity usage on the KVM hosts (individually by host).",
-		[]string{
-			"compute_host",
-			"resource",
-			"type",
-			"availability_zone",
-			"building_block",
-			"cpu_architecture",
-			"workload_type",
-			"enabled",
-			"decommissioned",
-			"external_customer",
-			"maintenance",
-		},
+		"Resource capacity usage on the KVM hosts (individually by host). CPU in vCPUs, memory in bytes.",
+		append(kvmHostLabels, "resource", "type"),
 		nil,
 	)
 	return nil
 }
 
-func (k *KVMResourceCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
+func (k *KVMHostCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.totalCapacityPerHost
 	ch <- k.capacityPerHost
 }
@@ -230,7 +130,7 @@ func aggregateReservationsByHost(reservations []v1alpha1.Reservation) (
 	return failoverByHost, committedNotInUseByHost
 }
 
-func (k *KVMResourceCapacityKPI) getHypervisors() ([]kvmHost, error) {
+func (k *KVMHostCapacityKPI) getHypervisors() ([]kvmHost, error) {
 	hvs := &hv1.HypervisorList{}
 	if err := k.Client.List(context.Background(), hvs); err != nil {
 		return nil, err
@@ -243,7 +143,7 @@ func (k *KVMResourceCapacityKPI) getHypervisors() ([]kvmHost, error) {
 	return hosts, nil
 }
 
-func (k *KVMResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
+func (k *KVMHostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	hypervisors, err := k.getHypervisors()
 	if err != nil {
 		slog.Error("failed to get hypervisors", "error", err)
@@ -260,7 +160,9 @@ func (k *KVMResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 
 	for _, hypervisor := range hypervisors {
 		cpuTotal, hasCPUTotal := hypervisor.getResourceCapacity(hv1.ResourceCPU)
+
 		ramTotal, hasRAMTotal := hypervisor.getResourceCapacity(hv1.ResourceMemory)
+		ramTotalBytes := ramTotal.AsApproximateFloat64() * 1024 * 1024
 
 		if !hasCPUTotal || !hasRAMTotal {
 			slog.Warn("hypervisor missing cpu or ram capacity, skipping", "host", hypervisor.Name)
@@ -276,22 +178,23 @@ func (k *KVMResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 
 		cpuReserved := committedRes.cpu
 		ramReserved := committedRes.memory
+
 		cpuFailover := failoverRes.cpu
 		ramFailover := failoverRes.memory
 
-		labels := hypervisor.getLabels()
+		labels := hypervisor.getHostLabels()
 
-		k.emitTotal(ch, "cpu", cpuTotal.AsApproximateFloat64(), labels)
-		k.emitTotal(ch, "ram", ramTotal.AsApproximateFloat64(), labels)
+		ch <- prometheus.MustNewConstMetric(k.totalCapacityPerHost, prometheus.GaugeValue, cpuTotal.AsApproximateFloat64(), append(labels, "cpu")...)
+		ch <- prometheus.MustNewConstMetric(k.totalCapacityPerHost, prometheus.GaugeValue, ramTotalBytes, append(labels, "ram")...)
 
-		k.emitUsage(ch, "cpu", cpuUsed.AsApproximateFloat64(), "utilized", labels)
-		k.emitUsage(ch, "ram", ramUsed.AsApproximateFloat64(), "utilized", labels)
+		ch <- prometheus.MustNewConstMetric(k.capacityPerHost, prometheus.GaugeValue, cpuUsed.AsApproximateFloat64(), append(labels, "cpu", "utilized")...)
+		ch <- prometheus.MustNewConstMetric(k.capacityPerHost, prometheus.GaugeValue, ramUsed.AsApproximateFloat64(), append(labels, "ram", "utilized")...)
 
-		k.emitUsage(ch, "cpu", cpuReserved.AsApproximateFloat64(), "reserved", labels)
-		k.emitUsage(ch, "ram", ramReserved.AsApproximateFloat64(), "reserved", labels)
+		ch <- prometheus.MustNewConstMetric(k.capacityPerHost, prometheus.GaugeValue, cpuReserved.AsApproximateFloat64(), append(labels, "cpu", "reserved")...)
+		ch <- prometheus.MustNewConstMetric(k.capacityPerHost, prometheus.GaugeValue, ramReserved.AsApproximateFloat64(), append(labels, "ram", "reserved")...)
 
-		k.emitUsage(ch, "cpu", cpuFailover.AsApproximateFloat64(), "failover", labels)
-		k.emitUsage(ch, "ram", ramFailover.AsApproximateFloat64(), "failover", labels)
+		ch <- prometheus.MustNewConstMetric(k.capacityPerHost, prometheus.GaugeValue, cpuFailover.AsApproximateFloat64(), append(labels, "cpu", "failover")...)
+		ch <- prometheus.MustNewConstMetric(k.capacityPerHost, prometheus.GaugeValue, ramFailover.AsApproximateFloat64(), append(labels, "ram", "failover")...)
 
 		// Calculate PAYG capacity
 		paygCPU := cpuTotal.DeepCopy()
@@ -310,57 +213,7 @@ func (k *KVMResourceCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 			paygRAM = resource.MustParse("0")
 		}
 
-		k.emitUsage(ch, "cpu", paygCPU.AsApproximateFloat64(), "payg", labels)
-		k.emitUsage(ch, "ram", paygRAM.AsApproximateFloat64(), "payg", labels)
+		ch <- prometheus.MustNewConstMetric(k.capacityPerHost, prometheus.GaugeValue, paygCPU.AsApproximateFloat64(), append(labels, "cpu", "available")...)
+		ch <- prometheus.MustNewConstMetric(k.capacityPerHost, prometheus.GaugeValue, paygRAM.AsApproximateFloat64(), append(labels, "ram", "available")...)
 	}
-}
-
-// kvmHostLabels holds precomputed label values derived from a hypervisor.
-type kvmHostLabels struct {
-	computeHost      string
-	availabilityZone string
-	buildingBlock    string
-	cpuArchitecture  string
-	workloadType     string
-	enabled          string
-	decommissioned   string
-	externalCustomer string
-	maintenance      string
-}
-
-func (k *KVMResourceCapacityKPI) emitTotal(ch chan<- prometheus.Metric, resourceName string, value float64, l kvmHostLabels) {
-	ch <- prometheus.MustNewConstMetric(
-		k.totalCapacityPerHost,
-		prometheus.GaugeValue,
-		value,
-		l.computeHost,
-		resourceName,
-		l.availabilityZone,
-		l.buildingBlock,
-		l.cpuArchitecture,
-		l.workloadType,
-		l.enabled,
-		l.decommissioned,
-		l.externalCustomer,
-		l.maintenance,
-	)
-}
-
-func (k *KVMResourceCapacityKPI) emitUsage(ch chan<- prometheus.Metric, resourceName string, value float64, capacityType string, l kvmHostLabels) {
-	ch <- prometheus.MustNewConstMetric(
-		k.capacityPerHost,
-		prometheus.GaugeValue,
-		value,
-		l.computeHost,
-		resourceName,
-		capacityType,
-		l.availabilityZone,
-		l.buildingBlock,
-		l.cpuArchitecture,
-		l.workloadType,
-		l.enabled,
-		l.decommissioned,
-		l.externalCustomer,
-		l.maintenance,
-	)
 }
