@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func mockVMwareHostLabels(computeHost, az string) map[string]string {
@@ -24,7 +26,7 @@ func mockVMwareHostLabels(computeHost, az string) map[string]string {
 	}
 }
 
-func TestVMwareHostGetHostLabels(t *testing.T) {
+func TestVMwareHost_GetHostLabels(t *testing.T) {
 	str := func(s string) *string { return &s }
 
 	tests := []struct {
@@ -86,6 +88,110 @@ func TestVMwareHostGetHostLabels(t *testing.T) {
 			for i, want := range tt.want {
 				if got[i] != want {
 					t.Errorf("label[%d] (%s) = %q, want %q", i, vmwareHostLabels[i], got[i], want)
+				}
+			}
+		})
+	}
+}
+
+func TestKVMHost_GetHostLabels(t *testing.T) {
+	tests := []struct {
+		name string
+		host kvmHost
+		want []string
+	}{
+		{
+			name: "defaults with no traits and no labels",
+			host: kvmHost{hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
+			}},
+			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false"},
+		},
+		{
+			name: "availability zone from label",
+			host: kvmHost{hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "node001-bb01",
+					Labels: map[string]string{"topology.kubernetes.io/zone": "az1"},
+				},
+			}},
+			want: []string{"node001-bb01", "az1", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false"},
+		},
+		{
+			name: "name without dash results in unknown building block",
+			host: kvmHost{hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{Name: "nodewithoutdash"},
+			}},
+			want: []string{"nodewithoutdash", "unknown", "unknown", "cascade-lake", "general-purpose", "true", "false", "false", "false"},
+		},
+		{
+			name: "sapphire rapids trait",
+			host: kvmHost{hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
+				Status:     hv1.HypervisorStatus{Traits: []string{"CUSTOM_HW_SAPPHIRE_RAPIDS"}},
+			}},
+			want: []string{"node001-bb01", "unknown", "bb01", "sapphire-rapids", "general-purpose", "true", "false", "false", "false"},
+		},
+		{
+			name: "hana exclusive host trait",
+			host: kvmHost{hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
+				Status:     hv1.HypervisorStatus{Traits: []string{"CUSTOM_HANA_EXCLUSIVE_HOST"}},
+			}},
+			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "hana", "true", "false", "false", "false"},
+		},
+		{
+			name: "decommissioning trait",
+			host: kvmHost{hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
+				Status:     hv1.HypervisorStatus{Traits: []string{"CUSTOM_DECOMMISSIONING"}},
+			}},
+			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "true", "false", "false"},
+		},
+		{
+			name: "external customer exclusive trait",
+			host: kvmHost{hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
+				Status:     hv1.HypervisorStatus{Traits: []string{"CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE"}},
+			}},
+			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "true", "false"},
+		},
+		{
+			name: "maintenance set",
+			host: kvmHost{hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
+				Spec:       hv1.HypervisorSpec{Maintenance: hv1.MaintenanceManual},
+			}},
+			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "true"},
+		},
+		{
+			name: "all traits and maintenance set",
+			host: kvmHost{hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "node001-bb42",
+					Labels: map[string]string{"topology.kubernetes.io/zone": "az3"},
+				},
+				Spec: hv1.HypervisorSpec{Maintenance: hv1.MaintenanceAuto},
+				Status: hv1.HypervisorStatus{Traits: []string{
+					"CUSTOM_HW_SAPPHIRE_RAPIDS",
+					"CUSTOM_HANA_EXCLUSIVE_HOST",
+					"CUSTOM_DECOMMISSIONING",
+					"CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE",
+				}},
+			}},
+			want: []string{"node001-bb42", "az3", "bb42", "sapphire-rapids", "hana", "true", "true", "true", "true"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.host.getHostLabels()
+			if len(got) != len(kvmHostLabels) {
+				t.Fatalf("getHostLabels() returned %d values, want %d (matching kvmHostLabels)", len(got), len(kvmHostLabels))
+			}
+			for i, want := range tt.want {
+				if got[i] != want {
+					t.Errorf("label[%d] (%s) = %q, want %q", i, kvmHostLabels[i], got[i], want)
 				}
 			}
 		})

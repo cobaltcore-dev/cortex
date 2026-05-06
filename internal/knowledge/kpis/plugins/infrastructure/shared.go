@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 const (
@@ -18,6 +21,7 @@ const (
 	hypervisorFamilyVMware         = "vmware"
 	vmwareComputeHostPattern       = "nova-compute-%"
 	vmwareIronicComputeHostPattern = "nova-compute-ironic-%"
+	kvmComputeHostPattern          = "node%-bb%"
 )
 
 // vmwareHost wraps HostDetails with Prometheus metric helpers.
@@ -61,6 +65,98 @@ var vmwareHostLabels = []string{
 	"disabled_reason",
 	"pinned_projects",
 	"pinned_project_ids",
+}
+
+var kvmHostLabels = []string{
+	"compute_host",
+	"availability_zone",
+	"building_block",
+	"cpu_architecture",
+	"workload_type",
+	"enabled",
+	"decommissioned",
+	"external_customer",
+	"maintenance",
+}
+
+type kvmHost struct {
+	hv1.Hypervisor
+}
+
+func (h kvmHost) getHostLabels() []string {
+	decommissioned := false
+	externalCustomer := false
+	workloadType := "general-purpose"
+	cpuArchitecture := "cascade-lake"
+
+	availabilityZone := h.Labels["topology.kubernetes.io/zone"]
+	if availabilityZone == "" {
+		availabilityZone = "unknown"
+	}
+
+	buildingBlock := "unknown"
+	// Assuming hypervisor names are in the format nodeXXX-bbYY
+	parts := strings.Split(h.Name, "-")
+	if len(parts) > 1 {
+		buildingBlock = parts[1]
+	}
+
+	for _, trait := range h.Status.Traits {
+		switch trait {
+		case "CUSTOM_HW_SAPPHIRE_RAPIDS":
+			cpuArchitecture = "sapphire-rapids"
+		case "CUSTOM_HANA_EXCLUSIVE_HOST":
+			workloadType = "hana"
+		case "CUSTOM_DECOMMISSIONING":
+			decommissioned = true
+		case "CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE":
+			externalCustomer = true
+		}
+	}
+
+	maintenance := h.Spec.Maintenance != hv1.MaintenanceUnset
+
+	return []string{
+		h.Name,
+		availabilityZone,
+		buildingBlock,
+		cpuArchitecture,
+		workloadType,
+		strconv.FormatBool(true),
+		strconv.FormatBool(decommissioned),
+		strconv.FormatBool(externalCustomer),
+		strconv.FormatBool(maintenance),
+	}
+}
+
+// getResourceCapacity attempts to retrieve the effective capacity for the specified resource from the hypervisor status, falling back to the physical capacity if effective capacity is not available. It returns the capacity quantity and a boolean indicating whether any capacity information was found.
+func (k kvmHost) getResourceCapacity(resourceName hv1.ResourceName) (capacity resource.Quantity, ok bool) {
+	if k.Status.EffectiveCapacity != nil {
+		qty, exists := k.Status.EffectiveCapacity[resourceName]
+		if exists && !qty.IsZero() {
+			return qty, true
+		}
+	}
+	if k.Status.Capacity == nil {
+		return resource.Quantity{}, false
+	}
+	qty, exists := k.Status.Capacity[resourceName]
+	if !exists || qty.IsZero() {
+		return resource.Quantity{}, false
+	}
+	return qty, true
+}
+
+func (k kvmHost) getResourceAllocation(resourceName hv1.ResourceName) (allocation resource.Quantity) {
+	if k.Status.Allocation == nil {
+		return resource.MustParse("0")
+	}
+
+	qty, exists := k.Status.Allocation[resourceName]
+	if !exists {
+		return resource.MustParse("0")
+	}
+	return qty
 }
 
 var fqNameRe = regexp.MustCompile(`fqName: "([^"]+)"`)
