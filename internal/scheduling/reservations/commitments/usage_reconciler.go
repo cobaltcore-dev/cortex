@@ -9,12 +9,14 @@ import (
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -49,6 +51,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			cr.Status.AssignedInstances = nil
 			cr.Status.UsedResources = nil
 			cr.Status.LastUsageReconcileAt = nil
+			cr.Status.UsageObservedGeneration = nil
 			if err := r.Status().Patch(ctx, &cr, client.MergeFrom(old)); err != nil {
 				return ctrl.Result{}, client.IgnoreNotFound(err)
 			}
@@ -57,7 +60,23 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	cooldown := r.Conf.CooldownInterval.Duration
-	if cr.Status.LastUsageReconcileAt != nil {
+
+	// Gate: wait until the CR controller has accepted the current generation.
+	// The CR controller writes the Ready condition (with ObservedGeneration) only after
+	// updating the AcceptedSpec. Running before that would read stale capacity.
+	// We don't requeue here — the acceptedGenerationPredicate watch fires when the
+	// condition is written, triggering a fresh reconcile at that point.
+	readyCond := meta.FindStatusCondition(cr.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+	if readyCond == nil || readyCond.ObservedGeneration != cr.Generation || readyCond.Status != metav1.ConditionTrue {
+		return ctrl.Result{}, nil
+	}
+
+	// Bypass cooldown when the spec generation has advanced since the last usage reconcile.
+	// This ensures spec changes (e.g. shrink) are reflected immediately rather than waiting
+	// for the next cooldown interval — follows the Kubernetes observedGeneration pattern.
+	generationAdvanced := cr.Status.UsageObservedGeneration == nil ||
+		*cr.Status.UsageObservedGeneration != cr.Generation
+	if !generationAdvanced && cr.Status.LastUsageReconcileAt != nil {
 		if elapsed := time.Since(cr.Status.LastUsageReconcileAt.Time); elapsed < cooldown {
 			return ctrl.Result{RequeueAfter: cooldown - elapsed}, nil
 		}
@@ -169,6 +188,7 @@ func (r *UsageReconciler) writeUsageStatus(ctx context.Context, state *Commitmen
 		"cpu":    *usedCores,
 	}
 	target.Status.LastUsageReconcileAt = &now
+	target.Status.UsageObservedGeneration = &target.Generation
 
 	return r.Status().Patch(ctx, target, client.MergeFrom(old))
 }
@@ -218,13 +238,17 @@ func (r *UsageReconciler) hypervisorToCommittedResources(ctx context.Context, ob
 // SetupWithManager registers the usage reconciler with the controller manager.
 func (r *UsageReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	bldr := multicluster.BuildController(mcl, mgr)
-	// Watch CommittedResource spec changes (generation change = spec changed; status-only
-	// updates do not increment generation and are suppressed to avoid reconcile loops).
+
+	// Watch CommittedResource status updates where the CR controller has just accepted the
+	// current generation. Fires when the Ready condition's ObservedGeneration advances to match
+	// metadata.generation. We intentionally do NOT watch spec changes (GenerationChangedPredicate):
+	// capacity is read from AcceptedSpec in status, which is only valid after the CR controller
+	// has finished — so triggering on spec changes would always hit the readiness gate and do nothing.
 	var err error
 	bldr, err = bldr.WatchesMulticluster(
 		&v1alpha1.CommittedResource{},
 		&handler.EnqueueRequestForObject{},
-		predicate.GenerationChangedPredicate{},
+		acceptedGenerationPredicate{},
 	)
 	if err != nil {
 		return err
@@ -247,4 +271,33 @@ func (r *UsageReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.C
 			MaxConcurrentReconciles: 1,
 		}).
 		Complete(r)
+}
+
+// acceptedGenerationPredicate fires on status-only updates where the CR controller has
+// just accepted the current spec generation — i.e. the Ready condition's ObservedGeneration
+// advanced to match metadata.generation. This drives the usage reconciler immediately after
+// the CR controller finishes, without any polling timeout.
+type acceptedGenerationPredicate struct{ predicate.Funcs }
+
+func (acceptedGenerationPredicate) Update(e event.UpdateEvent) bool {
+	oldCR, ok1 := e.ObjectOld.(*v1alpha1.CommittedResource)
+	newCR, ok2 := e.ObjectNew.(*v1alpha1.CommittedResource)
+	if !ok1 || !ok2 {
+		return false
+	}
+	// Only react to status-only updates; spec changes are handled by GenerationChangedPredicate.
+	if oldCR.Generation != newCR.Generation {
+		return false
+	}
+	oldCond := meta.FindStatusCondition(oldCR.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+	newCond := meta.FindStatusCondition(newCR.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+	if newCond == nil {
+		return false
+	}
+	var oldObservedGen int64
+	if oldCond != nil {
+		oldObservedGen = oldCond.ObservedGeneration
+	}
+	// Fire only when ObservedGeneration advances to match the current spec generation.
+	return oldObservedGen != newCond.ObservedGeneration && newCond.ObservedGeneration == newCR.Generation
 }

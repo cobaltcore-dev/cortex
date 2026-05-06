@@ -907,17 +907,36 @@ type vmFlavorAttrs struct {
 // Used by the test setup to pre-populate the CR objects that the usage reconciler writes status into.
 func (tr *UsageTestReservation) toCommittedResourceCRD() *v1alpha1.CommittedResource {
 	amount := resource.MustParse(strconv.FormatInt(tr.Flavor.MemoryMB*int64(tr.Count), 10) + "Mi")
+	spec := v1alpha1.CommittedResourceSpec{
+		CommitmentUUID:   tr.CommitmentID,
+		ProjectID:        tr.ProjectID,
+		DomainID:         "test-domain",
+		AvailabilityZone: tr.AZ,
+		FlavorGroupName:  tr.Flavor.Group,
+		ResourceType:     v1alpha1.CommittedResourceTypeMemory,
+		State:            v1alpha1.CommitmentStatusConfirmed,
+		Amount:           amount,
+	}
+	if !tr.StartTime.IsZero() {
+		spec.StartTime = &metav1.Time{Time: tr.StartTime}
+	}
 	return &v1alpha1.CommittedResource{
 		ObjectMeta: metav1.ObjectMeta{Name: "cr-" + tr.CommitmentID},
-		Spec: v1alpha1.CommittedResourceSpec{
-			CommitmentUUID:   tr.CommitmentID,
-			ProjectID:        tr.ProjectID,
-			DomainID:         "test-domain",
-			AvailabilityZone: tr.AZ,
-			FlavorGroupName:  tr.Flavor.Group,
-			ResourceType:     v1alpha1.CommittedResourceTypeMemory,
-			State:            v1alpha1.CommitmentStatusConfirmed,
-			Amount:           amount,
+		Spec:       spec,
+		Status: v1alpha1.CommittedResourceStatus{
+			AcceptedAmount: &amount,
+			AcceptedSpec:   &spec,
+			// Simulate the CR controller having accepted the current generation (0 for fake client).
+			// Without this, the usage reconciler's readiness gate blocks usage calculation.
+			Conditions: []metav1.Condition{
+				{
+					Type:               v1alpha1.CommittedResourceConditionReady,
+					Status:             metav1.ConditionTrue,
+					Reason:             v1alpha1.CommittedResourceReasonAccepted,
+					ObservedGeneration: 0,
+					LastTransitionTime: metav1.Now(),
+				},
+			},
 		},
 	}
 }

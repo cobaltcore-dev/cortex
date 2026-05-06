@@ -332,21 +332,40 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 				}
 				seen[uuid] = true
 				amount := resource.MustParse("4Gi")
+				spec := v1alpha1.CommittedResourceSpec{
+					CommitmentUUID:   uuid,
+					ProjectID:        r.Spec.CommittedResourceReservation.ProjectID,
+					DomainID:         "test-domain",
+					AvailabilityZone: r.Spec.AvailabilityZone,
+					FlavorGroupName:  r.Spec.CommittedResourceReservation.ResourceGroup,
+					ResourceType:     v1alpha1.CommittedResourceTypeMemory,
+					State:            v1alpha1.CommitmentStatusConfirmed,
+					Amount:           amount,
+					StartTime:        r.Spec.StartTime,
+					EndTime:          r.Spec.EndTime,
+				}
 				cr := &v1alpha1.CommittedResource{
 					ObjectMeta: metav1.ObjectMeta{Name: "cr-" + uuid},
-					Spec: v1alpha1.CommittedResourceSpec{
-						CommitmentUUID:   uuid,
-						ProjectID:        r.Spec.CommittedResourceReservation.ProjectID,
-						DomainID:         "test-domain",
-						AvailabilityZone: r.Spec.AvailabilityZone,
-						FlavorGroupName:  r.Spec.CommittedResourceReservation.ResourceGroup,
-						ResourceType:     v1alpha1.CommittedResourceTypeMemory,
-						State:            v1alpha1.CommitmentStatusConfirmed,
-						Amount:           amount,
-					},
+					Spec:       spec,
 				}
 				if err := k8sClient.Create(ctx, cr); err != nil {
 					t.Fatalf("failed to create CommittedResource %s: %v", uuid, err)
+				}
+				cr.Status = v1alpha1.CommittedResourceStatus{
+					AcceptedAmount: &amount,
+					AcceptedSpec:   &spec,
+					Conditions: []metav1.Condition{
+						{
+							Type:               v1alpha1.CommittedResourceConditionReady,
+							Status:             metav1.ConditionTrue,
+							Reason:             v1alpha1.CommittedResourceReasonAccepted,
+							ObservedGeneration: 0,
+							LastTransitionTime: metav1.Now(),
+						},
+					},
+				}
+				if err := k8sClient.Status().Update(ctx, cr); err != nil {
+					t.Fatalf("failed to update CommittedResource status %s: %v", uuid, err)
 				}
 				rec := &commitments.UsageReconciler{
 					Client:  k8sClient,

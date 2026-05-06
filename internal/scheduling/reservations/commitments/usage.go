@@ -192,42 +192,42 @@ func azFlavorGroupKey(az, flavorGroup string) string {
 	return az + ":" + flavorGroup
 }
 
-// buildCommitmentCapacityMap retrieves all CR reservations for a project and builds
-// a map of az:flavorGroup -> list of CommitmentStateWithUsage, sorted for deterministic assignment.
+// buildCommitmentCapacityMap builds a map of az:flavorGroup -> list of CommitmentStateWithUsage
+// from CommittedResource CRD status (AcceptedAmount + AcceptedSpec).
+// Using AcceptedAmount gives the billing-perspective capacity — what was confirmed — rather than
+// the sum of internally-placed Reservation slots, which can lag behind spec changes.
 func (c *UsageCalculator) buildCommitmentCapacityMap(
 	ctx context.Context,
 	log logr.Logger,
 	projectID string,
 ) (map[string][]*CommitmentStateWithUsage, error) {
-	// List all committed resource reservations
-	var allReservations v1alpha1.ReservationList
-	if err := c.client.List(ctx, &allReservations, client.MatchingLabels{
-		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-	}); err != nil {
-		return nil, fmt.Errorf("failed to list reservations: %w", err)
+
+	var allCRs v1alpha1.CommittedResourceList
+	if err := c.client.List(ctx, &allCRs); err != nil {
+		return nil, fmt.Errorf("failed to list CommittedResources: %w", err)
 	}
 
-	// Group reservations by commitment UUID, filtering by project
-	reservationsByCommitment := make(map[string][]v1alpha1.Reservation)
-	for _, res := range allReservations.Items {
-		if res.Spec.CommittedResourceReservation == nil {
-			continue
-		}
-		if res.Spec.CommittedResourceReservation.ProjectID != projectID {
-			continue
-		}
-		commitmentUUID := res.Spec.CommittedResourceReservation.CommitmentUUID
-		reservationsByCommitment[commitmentUUID] = append(reservationsByCommitment[commitmentUUID], res)
-	}
-
-	// Build CommitmentState for each commitment and group by az:flavorGroup
-	// Only include commitments that are currently active (started and not expired)
 	now := time.Now()
 	result := make(map[string][]*CommitmentStateWithUsage)
-	for _, reservations := range reservationsByCommitment {
-		state, err := FromReservations(reservations)
+	for _, cr := range allCRs.Items {
+		if cr.Spec.ProjectID != projectID {
+			continue
+		}
+		if cr.Spec.State != v1alpha1.CommitmentStatusConfirmed && cr.Spec.State != v1alpha1.CommitmentStatusGuaranteed {
+			continue
+		}
+		if cr.Status.AcceptedSpec == nil || cr.Status.AcceptedAmount == nil {
+			log.V(1).Info("skipping CR with no accepted spec/amount", "cr", cr.Name)
+			continue
+		}
+
+		// Build state from the accepted spec snapshot so capacity always reflects
+		// what was confirmed, not the potentially-mutated current spec.
+		tempCR := v1alpha1.CommittedResource{Spec: *cr.Status.AcceptedSpec}
+		tempCR.Spec.Amount = *cr.Status.AcceptedAmount
+		state, err := FromCommittedResource(tempCR)
 		if err != nil {
-			log.Error(err, "failed to build commitment state from reservations")
+			log.Error(err, "skipping CR with invalid accepted spec", "cr", cr.Name)
 			continue
 		}
 

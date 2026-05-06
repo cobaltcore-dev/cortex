@@ -225,6 +225,11 @@ func (in *CommittedResourceStatus) DeepCopyInto(out *CommittedResourceStatus) {
 		in, out := &in.LastUsageReconcileAt, &out.LastUsageReconcileAt
 		*out = (*in).DeepCopy()
 	}
+	if in.UsageObservedGeneration != nil {
+		in, out := &in.UsageObservedGeneration, &out.UsageObservedGeneration
+		*out = new(int64)
+		**out = **in
+	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]v1.Condition, len(*in))

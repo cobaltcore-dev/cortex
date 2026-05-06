@@ -150,6 +150,13 @@ type CommittedResourceStatus struct {
 	// +kubebuilder:validation:Optional
 	LastUsageReconcileAt *metav1.Time `json:"lastUsageReconcileAt,omitempty"`
 
+	// UsageObservedGeneration is the CR generation that the usage reconciler last processed.
+	// Follows the Kubernetes observedGeneration pattern: when this differs from
+	// metadata.generation the cooldown is bypassed so spec changes (e.g. shrink) are reflected
+	// immediately rather than waiting for the next cooldown interval.
+	// +kubebuilder:validation:Optional
+	UsageObservedGeneration *int64 `json:"usageObservedGeneration,omitempty"`
+
 	// Conditions holds the current status conditions.
 	// +kubebuilder:validation:Optional
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`

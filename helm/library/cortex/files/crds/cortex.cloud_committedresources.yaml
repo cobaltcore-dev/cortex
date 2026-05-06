@@ -367,6 +367,14 @@ spec:
                   updated AssignedInstances and UsedResources.
                 format: date-time
                 type: string
+              usageObservedGeneration:
+                description: |-
+                  UsageObservedGeneration is the CR generation that the usage reconciler last processed.
+                  Follows the Kubernetes observedGeneration pattern: when this differs from
+                  metadata.generation the cooldown is bypassed so spec changes (e.g. shrink) are reflected
+                  immediately rather than waiting for the next cooldown interval.
+                format: int64
+                type: integer
               usedResources:
                 additionalProperties:
                   anyOf:
