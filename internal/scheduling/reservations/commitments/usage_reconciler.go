@@ -8,6 +8,7 @@ import (
 	"time"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/go-logr/logr"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -44,8 +45,11 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	log := ctrl.LoggerFrom(ctx).WithValues("component", "usage-reconciler", "committedResource", req.Name)
+
 	// Only active commitments have assigned VMs. Clear stale usage status if present.
 	if cr.Spec.State != v1alpha1.CommitmentStatusConfirmed && cr.Spec.State != v1alpha1.CommitmentStatusGuaranteed {
+		log.Info("skipping: commitment state is not active", "state", cr.Spec.State)
 		if len(cr.Status.AssignedInstances) > 0 || len(cr.Status.UsedResources) > 0 {
 			old := cr.DeepCopy()
 			cr.Status.AssignedInstances = nil
@@ -68,6 +72,10 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// condition is written, triggering a fresh reconcile at that point.
 	readyCond := meta.FindStatusCondition(cr.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
 	if readyCond == nil || readyCond.ObservedGeneration != cr.Generation || readyCond.Status != metav1.ConditionTrue {
+		log.Info("skipping: Ready condition not yet accepted for current generation",
+			"generation", cr.Generation,
+			"readyCondFound", readyCond != nil,
+		)
 		return ctrl.Result{}, nil
 	}
 
@@ -82,11 +90,13 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		}
 	}
 
-	logger := ctrl.LoggerFrom(ctx).WithValues(
-		"component", "usage-reconciler",
-		"committedResource", req.Name,
-		"projectID", cr.Spec.ProjectID,
-	)
+	log = log.WithValues("projectID", cr.Spec.ProjectID)
+	trigger := "periodic"
+	if generationAdvanced {
+		trigger = "generation-change"
+	}
+	logger := log
+	logger.Info("usage reconcile starting", "trigger", trigger, "generation", cr.Generation)
 
 	calc := &UsageCalculator{client: r.Client, usageDB: r.UsageDB}
 
@@ -103,6 +113,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, err
 	}
 	if len(commitmentsByAZFG) == 0 {
+		logger.Info("no active commitments found for project, retrying after cooldown")
 		return ctrl.Result{RequeueAfter: cooldown}, nil
 	}
 
@@ -237,6 +248,9 @@ func (r *UsageReconciler) hypervisorToCommittedResources(ctx context.Context, ob
 
 // SetupWithManager registers the usage reconciler with the controller manager.
 func (r *UsageReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
+	log := ctrl.Log.WithName("committed-resource-usage")
+	log.Info("starting usage reconciler", "cooldownInterval", r.Conf.CooldownInterval.Duration)
+
 	bldr := multicluster.BuildController(mcl, mgr)
 
 	// Watch CommittedResource status updates where the CR controller has just accepted the
@@ -248,7 +262,7 @@ func (r *UsageReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.C
 	bldr, err = bldr.WatchesMulticluster(
 		&v1alpha1.CommittedResource{},
 		&handler.EnqueueRequestForObject{},
-		acceptedGenerationPredicate{},
+		acceptedGenerationPredicate{log: log},
 	)
 	if err != nil {
 		return err
@@ -274,12 +288,17 @@ func (r *UsageReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.C
 }
 
 // acceptedGenerationPredicate fires on status-only updates where the CR controller has
-// just accepted the current spec generation — i.e. the Ready condition's ObservedGeneration
-// advanced to match metadata.generation. This drives the usage reconciler immediately after
-// the CR controller finishes, without any polling timeout.
-type acceptedGenerationPredicate struct{ predicate.Funcs }
+// accepted the current spec generation (Ready=True, ObservedGeneration==metadata.generation)
+// but the usage reconciler hasn't yet processed it (UsageObservedGeneration lags behind).
+// Checking usage lag instead of Ready advancement makes it resilient to the race between
+// the predicate firing and the reconciler reading from cache: if the first reconcile misses
+// the window, the next status-only update re-fires the predicate.
+type acceptedGenerationPredicate struct {
+	predicate.Funcs
+	log logr.Logger
+}
 
-func (acceptedGenerationPredicate) Update(e event.UpdateEvent) bool {
+func (p acceptedGenerationPredicate) Update(e event.UpdateEvent) bool {
 	oldCR, ok1 := e.ObjectOld.(*v1alpha1.CommittedResource)
 	newCR, ok2 := e.ObjectNew.(*v1alpha1.CommittedResource)
 	if !ok1 || !ok2 {
@@ -289,15 +308,16 @@ func (acceptedGenerationPredicate) Update(e event.UpdateEvent) bool {
 	if oldCR.Generation != newCR.Generation {
 		return false
 	}
-	oldCond := meta.FindStatusCondition(oldCR.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
 	newCond := meta.FindStatusCondition(newCR.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
-	if newCond == nil {
+	if newCond == nil || newCond.Status != metav1.ConditionTrue || newCond.ObservedGeneration != newCR.Generation {
 		return false
 	}
-	var oldObservedGen int64
-	if oldCond != nil {
-		oldObservedGen = oldCond.ObservedGeneration
+	// Don't fire if usage is already up to date for the accepted generation.
+	if newCR.Status.UsageObservedGeneration != nil && *newCR.Status.UsageObservedGeneration >= newCond.ObservedGeneration {
+		return false
 	}
-	// Fire only when ObservedGeneration advances to match the current spec generation.
-	return oldObservedGen != newCond.ObservedGeneration && newCond.ObservedGeneration == newCR.Generation
+	p.log.Info("predicate fired: Ready accepted, usage not yet up to date",
+		"name", newCR.Name, "generation", newCR.Generation,
+		"usageObservedGeneration", newCR.Status.UsageObservedGeneration)
+	return true
 }
