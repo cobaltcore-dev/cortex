@@ -26,6 +26,10 @@ const (
 	// by their metadata.name field, which represents the name of the hypervisor
 	// in Kubernetes.
 	idxHypervisorName = "metadata.name"
+	// idxBookingConsumerUUID is the name of the index for looking up
+	// hypervisors by the consumer UUIDs in their spec.bookings entries.
+	// A single hypervisor may index multiple consumer UUIDs.
+	idxBookingConsumerUUID = "spec.bookings.consumer.uuid"
 )
 
 // IndexFields indexes all fields that are needed by the shim to quickly
@@ -76,6 +80,27 @@ func IndexFields(ctx context.Context, mcl *multicluster.Client) error {
 		return err
 	}
 	log.Info("Successfully set up index for hypervisor name")
+
+	if err := mcl.IndexField(ctx, h, hl, idxBookingConsumerUUID, func(obj client.Object) []string {
+		hv, ok := obj.(*hv1.Hypervisor)
+		if !ok {
+			log.Error(errors.New("unexpected type"), "object", obj)
+			return nil
+		}
+		consumers := hv1.GetConsumers(hv.Spec.Bookings)
+		if len(consumers) == 0 {
+			return nil
+		}
+		uuids := make([]string, 0, len(consumers))
+		for _, c := range consumers {
+			uuids = append(uuids, c.UUID)
+		}
+		return uuids
+	}); err != nil {
+		log.Error(err, "failed to set up index for booking consumer UUID")
+		return err
+	}
+	log.Info("Successfully set up index for booking consumer UUID")
 
 	return nil
 }

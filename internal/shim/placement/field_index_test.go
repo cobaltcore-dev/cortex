@@ -118,6 +118,7 @@ func TestIndexFields_RegistersAllIndexes(t *testing.T) {
 		idxHypervisorOpenStackId,
 		idxHypervisorKubernetesId,
 		idxHypervisorName,
+		idxBookingConsumerUUID,
 	}
 	if len(cc.calls) != len(wantFields) {
 		t.Fatalf("got %d IndexField calls, want %d", len(cc.calls), len(wantFields))
@@ -283,4 +284,62 @@ func strSliceEqual(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func TestExtractor_BookingConsumerUUID(t *testing.T) {
+	cc := &captureCache{}
+	mcl := buildClient(t, cc)
+	if err := IndexFields(context.Background(), mcl); err != nil {
+		t.Fatalf("IndexFields: %v", err)
+	}
+	fn := extractorByField(t, cc.calls, idxBookingConsumerUUID)
+
+	tests := []struct {
+		name string
+		obj  client.Object
+		want []string
+	}{
+		{
+			name: "hypervisor with consumer bookings",
+			obj: &hv1.Hypervisor{
+				Spec: hv1.HypervisorSpec{
+					Bookings: []hv1.Booking{
+						{Consumer: &hv1.ConsumerBooking{UUID: "consumer-aaa"}},
+						{Consumer: &hv1.ConsumerBooking{UUID: "consumer-bbb"}},
+						{Reservation: &hv1.ReservationBooking{Name: "nova-reserved"}},
+					},
+				},
+			},
+			want: []string{"consumer-aaa", "consumer-bbb"},
+		},
+		{
+			name: "hypervisor with no bookings",
+			obj:  &hv1.Hypervisor{},
+			want: nil,
+		},
+		{
+			name: "hypervisor with only reservation bookings",
+			obj: &hv1.Hypervisor{
+				Spec: hv1.HypervisorSpec{
+					Bookings: []hv1.Booking{
+						{Reservation: &hv1.ReservationBooking{Name: "nova-reserved"}},
+					},
+				},
+			},
+			want: nil,
+		},
+		{
+			name: "wrong type",
+			obj:  &corev1.ConfigMap{},
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := fn(tt.obj)
+			if !strSliceEqual(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
