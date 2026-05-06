@@ -34,7 +34,7 @@ func setupResourceCommitmentsDB(t *testing.T) (testDB *db.DB, cleanup func()) {
 // segment since the descriptor does not include that label.
 func collectResourceCommitmentsMetrics(t *testing.T, testDB *db.DB) map[string]float64 {
 	t.Helper()
-	kpi := &VMwareResourceCommitmentsKPI{}
+	kpi := &VMwareProjectCommitmentsKPI{}
 	if err := kpi.Init(testDB, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("failed to init KPI: %v", err)
 	}
@@ -70,16 +70,16 @@ func hKey(az, cpuArch, resource, projectID string) string {
 	return "cortex_vmware_commitments_hana_resources|" + az + "|" + cpuArch + "|" + resource + "|" + projectID
 }
 
-func TestVMwareResourceCommitmentsKPI_Init(t *testing.T) {
+func TestVMwareProjectCommitmentsKPI_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}
 	defer dbEnv.Close()
-	kpi := &VMwareResourceCommitmentsKPI{}
+	kpi := &VMwareProjectCommitmentsKPI{}
 	if err := kpi.Init(&testDB, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
-func TestVMwareResourceCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
+func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 	tests := []struct {
 		name        string
 		commitments []limes.Commitment
@@ -303,7 +303,7 @@ func TestVMwareResourceCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 	}
 }
 
-func TestVMwareResourceCommitmentsKPI_Collect_HANA(t *testing.T) {
+func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 	tests := []struct {
 		name        string
 		commitments []limes.Commitment

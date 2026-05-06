@@ -24,7 +24,7 @@ import (
 // For general purpose workloads its not possible to differentiate the cpu architecture. To avoid weird behavior in a dashboard we don't export this label for the metric.
 // For HANA flavors the cpu architecture is part of the flavor name (_v2 suffix for sapphire rapids, without suffix for cascade lake).
 // For both types of workload however we can not determine on which host the commitment is fulfilled.
-type VMwareResourceCommitmentsKPI struct {
+type VMwareProjectCommitmentsKPI struct {
 	// BaseKPI provides common fields and methods for all KPIs, such as database connection and Kubernetes client.
 	plugins.BaseKPI[struct{}]
 
@@ -32,11 +32,11 @@ type VMwareResourceCommitmentsKPI struct {
 	unusedHanaCommittedResourcesPerProject    *prometheus.Desc
 }
 
-func (k *VMwareResourceCommitmentsKPI) GetName() string {
+func (k *VMwareProjectCommitmentsKPI) GetName() string {
 	return "vmware_resource_commitments_kpi"
 }
 
-func (k *VMwareResourceCommitmentsKPI) Init(dbConn *db.DB, c client.Client, opts conf.RawOpts) error {
+func (k *VMwareProjectCommitmentsKPI) Init(dbConn *db.DB, c client.Client, opts conf.RawOpts) error {
 	if err := k.BaseKPI.Init(dbConn, c, opts); err != nil {
 		return err
 	}
@@ -54,12 +54,12 @@ func (k *VMwareResourceCommitmentsKPI) Init(dbConn *db.DB, c client.Client, opts
 	return nil
 }
 
-func (k *VMwareResourceCommitmentsKPI) Describe(ch chan<- *prometheus.Desc) {
+func (k *VMwareProjectCommitmentsKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.unusedGeneralPurposeCommitmentsPerProject
 	ch <- k.unusedHanaCommittedResourcesPerProject
 }
 
-func (k *VMwareResourceCommitmentsKPI) Collect(ch chan<- prometheus.Metric) {
+func (k *VMwareProjectCommitmentsKPI) Collect(ch chan<- prometheus.Metric) {
 	if k.DB == nil {
 		return
 	}
@@ -75,7 +75,7 @@ func (k *VMwareResourceCommitmentsKPI) Collect(ch chan<- prometheus.Metric) {
 }
 
 // getFlavorsByName loads all flavors and returns them keyed by name.
-func (k *VMwareResourceCommitmentsKPI) getFlavorsByName() (map[string]nova.Flavor, error) {
+func (k *VMwareProjectCommitmentsKPI) getFlavorsByName() (map[string]nova.Flavor, error) {
 	var flavors []nova.Flavor
 	if _, err := k.DB.Select(&flavors, "SELECT * FROM "+nova.Flavor{}.TableName()); err != nil {
 		return nil, err
@@ -88,7 +88,7 @@ func (k *VMwareResourceCommitmentsKPI) getFlavorsByName() (map[string]nova.Flavo
 }
 
 // getGeneralPurposeCommitments loads confirmed/guaranteed cores and ram commitments.
-func (k *VMwareResourceCommitmentsKPI) getGeneralPurposeCommitments() ([]limes.Commitment, error) {
+func (k *VMwareProjectCommitmentsKPI) getGeneralPurposeCommitments() ([]limes.Commitment, error) {
 	var commitments []limes.Commitment
 	if _, err := k.DB.Select(&commitments, `
 		SELECT * FROM `+limes.Commitment{}.TableName()+`
@@ -103,7 +103,7 @@ func (k *VMwareResourceCommitmentsKPI) getGeneralPurposeCommitments() ([]limes.C
 
 // getGeneralPurposeServers loads running non-HANA servers for general purpose usage accounting.
 // KVM-specific flavors are filtered out in Go since SQL LIKE cannot express the segment-exact pattern.
-func (k *VMwareResourceCommitmentsKPI) getGeneralPurposeServers() ([]nova.Server, error) {
+func (k *VMwareProjectCommitmentsKPI) getGeneralPurposeServers() ([]nova.Server, error) {
 	var servers []nova.Server
 	if _, err := k.DB.Select(&servers, `
 		SELECT * FROM `+nova.Server{}.TableName()+`
@@ -122,7 +122,7 @@ func (k *VMwareResourceCommitmentsKPI) getGeneralPurposeServers() ([]nova.Server
 }
 
 // getHanaInstanceCommitments loads confirmed/guaranteed HANA instance commitments.
-func (k *VMwareResourceCommitmentsKPI) getHanaInstanceCommitments() ([]limes.Commitment, error) {
+func (k *VMwareProjectCommitmentsKPI) getHanaInstanceCommitments() ([]limes.Commitment, error) {
 	var commitments []limes.Commitment
 	if _, err := k.DB.Select(&commitments, `
 		SELECT * FROM `+limes.Commitment{}.TableName()+`
@@ -136,7 +136,7 @@ func (k *VMwareResourceCommitmentsKPI) getHanaInstanceCommitments() ([]limes.Com
 }
 
 // getRunningHanaServers loads all running HANA VMware servers (KVM HANA flavors excluded in Go).
-func (k *VMwareResourceCommitmentsKPI) getRunningHanaServers() ([]nova.Server, error) {
+func (k *VMwareProjectCommitmentsKPI) getRunningHanaServers() ([]nova.Server, error) {
 	var servers []nova.Server
 	if _, err := k.DB.Select(&servers, `
 		SELECT * FROM `+nova.Server{}.TableName()+`
@@ -156,7 +156,7 @@ func (k *VMwareResourceCommitmentsKPI) getRunningHanaServers() ([]nova.Server, e
 
 // collectGeneralPurpose computes and emits unused general purpose committed resources per project.
 // Unused = committed - in-use (clamped to zero; zero values are not emitted).
-func (k *VMwareResourceCommitmentsKPI) collectGeneralPurpose(ch chan<- prometheus.Metric, flavorsByName map[string]nova.Flavor) {
+func (k *VMwareProjectCommitmentsKPI) collectGeneralPurpose(ch chan<- prometheus.Metric, flavorsByName map[string]nova.Flavor) {
 	commitments, err := k.getGeneralPurposeCommitments()
 	if err != nil {
 		slog.Error("vmware_resource_commitments: failed to load gp commitments", "err", err)
@@ -213,7 +213,7 @@ func (k *VMwareResourceCommitmentsKPI) collectGeneralPurpose(ch chan<- prometheu
 // collectHana computes and emits unused committed HANA instance resources per project.
 // Each HANA instance commitment is compared against running servers; the remainder is
 // translated to cpu/ram/disk capacity using the flavor spec.
-func (k *VMwareResourceCommitmentsKPI) collectHana(ch chan<- prometheus.Metric, flavorsByName map[string]nova.Flavor) {
+func (k *VMwareProjectCommitmentsKPI) collectHana(ch chan<- prometheus.Metric, flavorsByName map[string]nova.Flavor) {
 	commitments, err := k.getHanaInstanceCommitments()
 	if err != nil {
 		slog.Error("vmware_resource_commitments: failed to load hana commitments", "err", err)
