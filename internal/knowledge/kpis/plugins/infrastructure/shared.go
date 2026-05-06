@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 const (
@@ -18,6 +20,7 @@ const (
 	hypervisorFamilyVMware         = "vmware"
 	vmwareComputeHostPattern       = "nova-compute-%"
 	vmwareIronicComputeHostPattern = "nova-compute-ironic-%"
+	kvmComputeHostPattern          = "node%-bb%"
 )
 
 // vmwareHost wraps HostDetails with Prometheus metric helpers.
@@ -61,6 +64,68 @@ var vmwareHostLabels = []string{
 	"disabled_reason",
 	"pinned_projects",
 	"pinned_project_ids",
+}
+
+var kvmHostLabels = []string{
+	"compute_host",
+	"availability_zone",
+	"building_block",
+	"cpu_architecture",
+	"workload_type",
+	"enabled",
+	"decommissioned",
+	"external_customer",
+	"maintenance",
+}
+
+type kvmHost struct {
+	hv1.Hypervisor
+}
+
+func (h kvmHost) getHostLabels() []string {
+	decommissioned := false
+	externalCustomer := false
+	workloadType := "general-purpose"
+	cpuArchitecture := "cascade-lake"
+
+	availabilityZone := h.Labels["topology.kubernetes.io/zone"]
+	if availabilityZone == "" {
+		availabilityZone = "unknown"
+	}
+
+	buildingBlock := "unknown"
+	// Assuming hypervisor names are in the format nodeXXX-bbYY
+	parts := strings.Split(h.Name, "-")
+	if len(parts) > 1 {
+		buildingBlock = parts[1]
+	}
+
+	for _, trait := range h.Status.Traits {
+		switch trait {
+		case "CUSTOM_HW_SAPPHIRE_RAPIDS":
+			cpuArchitecture = "sapphire-rapids"
+		case "CUSTOM_HANA_EXCLUSIVE_HOST":
+			workloadType = "hana"
+		case "CUSTOM_DECOMMISSIONING":
+			decommissioned = true
+		case "CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE":
+			externalCustomer = true
+		}
+	}
+
+	maintenance := h.Spec.Maintenance != hv1.MaintenanceUnset
+
+	return []string{
+		h.Name,
+		availabilityZone,
+		buildingBlock,
+		cpuArchitecture,
+		workloadType,
+		strconv.FormatBool(true),
+		strconv.FormatBool(decommissioned),
+		strconv.FormatBool(externalCustomer),
+		strconv.FormatBool(maintenance),
+	}
 }
 
 var fqNameRe = regexp.MustCompile(`fqName: "([^"]+)"`)
