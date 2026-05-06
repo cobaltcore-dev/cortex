@@ -16,7 +16,7 @@ import (
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
-func setupResourceCommitmentsDB(t *testing.T) (testDB *db.DB, cleanup func()) {
+func setupProjectCommitmentsDB(t *testing.T) (testDB *db.DB, cleanup func()) {
 	t.Helper()
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB = &db.DB{DbMap: dbEnv.DbMap}
@@ -32,10 +32,10 @@ func setupResourceCommitmentsDB(t *testing.T) (testDB *db.DB, cleanup func()) {
 	return testDB, dbEnv.Close
 }
 
-// collectResourceCommitmentsMetrics runs the KPI and returns all emitted metrics keyed by
+// collectProjectCommitmentsMetrics runs the KPI and returns all emitted metrics keyed by
 // "metricName|az|cpu_architecture|resource|project_id|project_name|domain_id|domain_name".
 // GP metrics have an empty cpu_architecture segment since the descriptor does not include that label.
-func collectResourceCommitmentsMetrics(t *testing.T, testDB *db.DB) map[string]float64 {
+func collectProjectCommitmentsMetrics(t *testing.T, testDB *db.DB) map[string]float64 {
 	t.Helper()
 	kpi := &VMwareProjectCommitmentsKPI{}
 	if err := kpi.Init(testDB, nil, conf.NewRawOpts("{}")); err != nil {
@@ -306,7 +306,7 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			testDB, cleanup := setupResourceCommitmentsDB(t)
+			testDB, cleanup := setupProjectCommitmentsDB(t)
 			defer cleanup()
 
 			var rows []any
@@ -331,7 +331,7 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 				}
 			}
 
-			got := collectResourceCommitmentsMetrics(t, testDB)
+			got := collectProjectCommitmentsMetrics(t, testDB)
 
 			if len(got) != len(tt.want) {
 				t.Errorf("expected %d metrics, got %d: %v", len(tt.want), len(got), got)
@@ -562,7 +562,7 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			testDB, cleanup := setupResourceCommitmentsDB(t)
+			testDB, cleanup := setupProjectCommitmentsDB(t)
 			defer cleanup()
 
 			var rows []any
@@ -587,7 +587,7 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 				}
 			}
 
-			got := collectResourceCommitmentsMetrics(t, testDB)
+			got := collectProjectCommitmentsMetrics(t, testDB)
 
 			if len(got) != len(tt.want) {
 				t.Errorf("expected %d metrics, got %d: %v", len(tt.want), len(got), got)
