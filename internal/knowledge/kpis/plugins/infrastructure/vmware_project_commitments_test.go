@@ -64,13 +64,13 @@ func collectResourceCommitmentsMetrics(t *testing.T, testDB *db.DB) map[string]f
 
 // gpKey builds the expected map key for a general-purpose metric.
 // cpu_architecture is always empty because the GP metric descriptor omits that label.
-func gpKey(az, resource, projectID, projectName, domainID, domainName string) string {
-	return "cortex_vmware_commitments_general_purpose|" + az + "||" + resource + "|" + projectID + "|" + projectName + "|" + domainID + "|" + domainName
+func gpKey(az, resource string, p projectWithDomain) string {
+	return "cortex_vmware_commitments_general_purpose|" + az + "||" + resource + "|" + p.ProjectID + "|" + p.ProjectName + "|" + p.DomainID + "|" + p.DomainName
 }
 
 // hKey builds the expected map key for a HANA metric.
-func hKey(az, cpuArch, resource, projectID, projectName, domainID, domainName string) string {
-	return "cortex_vmware_commitments_hana_resources|" + az + "|" + cpuArch + "|" + resource + "|" + projectID + "|" + projectName + "|" + domainID + "|" + domainName
+func hKey(az, cpuArch, resource string, p projectWithDomain) string {
+	return "cortex_vmware_commitments_hana_resources|" + az + "|" + cpuArch + "|" + resource + "|" + p.ProjectID + "|" + p.ProjectName + "|" + p.DomainID + "|" + p.DomainName
 }
 
 func TestVMwareProjectCommitmentsKPI_Init(t *testing.T) {
@@ -88,6 +88,8 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 	p1 := identity.Project{ID: "p1", Name: "project-one", DomainID: "d1", Enabled: true}
 	p2 := identity.Project{ID: "p2", Name: "project-two", DomainID: "d1", Enabled: true}
 	d1 := identity.Domain{ID: "d1", Name: "domain-one", Enabled: true}
+	pd1 := projectWithDomain{ProjectID: "p1", ProjectName: "project-one", DomainID: "d1", DomainName: "domain-one"}
+	pd2 := projectWithDomain{ProjectID: "p2", ProjectName: "project-two", DomainID: "d1", DomainName: "domain-one"}
 
 	tests := []struct {
 		name        string
@@ -110,7 +112,7 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			projects: []identity.Project{p1},
 			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "cpu", "p1", "project-one", "d1", "domain-one"): 10,
+				gpKey("az1", "cpu", pd1): 10,
 			},
 		},
 		{
@@ -121,7 +123,7 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			projects: []identity.Project{p1},
 			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "ram", "p1", "project-one", "d1", "domain-one"): 1024 * 1024 * 1024,
+				gpKey("az1", "ram", pd1): 1024 * 1024 * 1024,
 			},
 		},
 		{
@@ -132,7 +134,7 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			projects: []identity.Project{p1},
 			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "ram", "p1", "project-one", "d1", "domain-one"): 2 * 1024 * 1024 * 1024,
+				gpKey("az1", "ram", pd1): 2 * 1024 * 1024 * 1024,
 			},
 		},
 		{
@@ -150,7 +152,7 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			projects: []identity.Project{p1},
 			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "cpu", "p1", "project-one", "d1", "domain-one"): 4, // 10 - 2×3 = 4
+				gpKey("az1", "cpu", pd1): 4, // 10 - 2×3 = 4
 			},
 		},
 		{
@@ -197,7 +199,7 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			projects: []identity.Project{p1},
 			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "cpu", "p1", "project-one", "d1", "domain-one"): 10,
+				gpKey("az1", "cpu", pd1): 10,
 			},
 		},
 		{
@@ -214,7 +216,7 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			projects: []identity.Project{p1},
 			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "cpu", "p1", "project-one", "d1", "domain-one"): 10,
+				gpKey("az1", "cpu", pd1): 10,
 			},
 		},
 		{
@@ -233,7 +235,7 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			projects: []identity.Project{p1},
 			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "cpu", "p1", "project-one", "d1", "domain-one"): 8, // only 1 ACTIVE × 2 subtracted
+				gpKey("az1", "cpu", pd1): 8, // only 1 ACTIVE × 2 subtracted
 			},
 		},
 		{
@@ -244,7 +246,7 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			projects: []identity.Project{p1},
 			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "cpu", "p1", "project-one", "d1", "domain-one"): 5,
+				gpKey("az1", "cpu", pd1): 5,
 			},
 		},
 		{
@@ -276,9 +278,9 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			projects: []identity.Project{p1, p2},
 			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "cpu", "p1", "project-one", "d1", "domain-one"):  15,
-				gpKey("az2", "cpu", "p1", "project-one", "d1", "domain-one"):  20,
-				gpKey("az1", "cpu", "p2", "project-two", "d1", "domain-one"): 8,
+				gpKey("az1", "cpu", pd1): 15,
+				gpKey("az2", "cpu", pd1): 20,
+				gpKey("az1", "cpu", pd2): 8,
 			},
 		},
 		{
@@ -296,8 +298,8 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			projects: []identity.Project{p1},
 			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "cpu", "p1", "project-one", "d1", "domain-one"): 6,                         // 8 - 1×2
-				gpKey("az1", "ram", "p1", "project-one", "d1", "domain-one"): (512 - 256) * 1024 * 1024, // 512MiB - 256MB (flavor.RAM is in MB)
+				gpKey("az1", "cpu", pd1): 6,                         // 8 - 1×2
+				gpKey("az1", "ram", pd1): (512 - 256) * 1024 * 1024, // 512MiB - 256MB (flavor.RAM is in MB)
 			},
 		},
 	}
@@ -353,6 +355,8 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 	p1 := identity.Project{ID: "p1", Name: "project-one", DomainID: "d1", Enabled: true}
 	p2 := identity.Project{ID: "p2", Name: "project-two", DomainID: "d1", Enabled: true}
 	d1 := identity.Domain{ID: "d1", Name: "domain-one", Enabled: true}
+	pd1 := projectWithDomain{ProjectID: "p1", ProjectName: "project-one", DomainID: "d1", DomainName: "domain-one"}
+	pd2 := projectWithDomain{ProjectID: "p2", ProjectName: "project-two", DomainID: "d1", DomainName: "domain-one"}
 
 	tests := []struct {
 		name        string
@@ -378,9 +382,9 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 			projects: []identity.Project{p1},
 			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				hKey("az1", "cascade-lake", "cpu", "p1", "project-one", "d1", "domain-one"):  2 * 128,
-				hKey("az1", "cascade-lake", "ram", "p1", "project-one", "d1", "domain-one"):  2 * 1638400 * 1024 * 1024,
-				hKey("az1", "cascade-lake", "disk", "p1", "project-one", "d1", "domain-one"): 2 * 100 * 1024 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "cpu", pd1):  2 * 128,
+				hKey("az1", "cascade-lake", "ram", pd1):  2 * 1638400 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "disk", pd1): 2 * 100 * 1024 * 1024 * 1024,
 			},
 		},
 		{
@@ -397,9 +401,9 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 			projects: []identity.Project{p1},
 			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				hKey("az1", "cascade-lake", "cpu", "p1", "project-one", "d1", "domain-one"):  2 * 128,
-				hKey("az1", "cascade-lake", "ram", "p1", "project-one", "d1", "domain-one"):  2 * 1638400 * 1024 * 1024,
-				hKey("az1", "cascade-lake", "disk", "p1", "project-one", "d1", "domain-one"): 2 * 100 * 1024 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "cpu", pd1):  2 * 128,
+				hKey("az1", "cascade-lake", "ram", pd1):  2 * 1638400 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "disk", pd1): 2 * 100 * 1024 * 1024 * 1024,
 			},
 		},
 		{
@@ -445,9 +449,9 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 			projects: []identity.Project{p1},
 			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				hKey("az1", "sapphire-rapids", "cpu", "p1", "project-one", "d1", "domain-one"):  256,
-				hKey("az1", "sapphire-rapids", "ram", "p1", "project-one", "d1", "domain-one"):  3276800 * 1024 * 1024,
-				hKey("az1", "sapphire-rapids", "disk", "p1", "project-one", "d1", "domain-one"): 200 * 1024 * 1024 * 1024,
+				hKey("az1", "sapphire-rapids", "cpu", pd1):  256,
+				hKey("az1", "sapphire-rapids", "ram", pd1):  3276800 * 1024 * 1024,
+				hKey("az1", "sapphire-rapids", "disk", pd1): 200 * 1024 * 1024 * 1024,
 			},
 		},
 		{
@@ -463,12 +467,12 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 			projects: []identity.Project{p1},
 			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				hKey("az1", "cascade-lake", "cpu", "p1", "project-one", "d1", "domain-one"):     2 * 128,
-				hKey("az1", "cascade-lake", "ram", "p1", "project-one", "d1", "domain-one"):     2 * 1638400 * 1024 * 1024,
-				hKey("az1", "cascade-lake", "disk", "p1", "project-one", "d1", "domain-one"):    2 * 100 * 1024 * 1024 * 1024,
-				hKey("az1", "sapphire-rapids", "cpu", "p1", "project-one", "d1", "domain-one"):  1 * 128,
-				hKey("az1", "sapphire-rapids", "ram", "p1", "project-one", "d1", "domain-one"):  1 * 1638400 * 1024 * 1024,
-				hKey("az1", "sapphire-rapids", "disk", "p1", "project-one", "d1", "domain-one"): 1 * 100 * 1024 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "cpu", pd1):     2 * 128,
+				hKey("az1", "cascade-lake", "ram", pd1):     2 * 1638400 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "disk", pd1):    2 * 100 * 1024 * 1024 * 1024,
+				hKey("az1", "sapphire-rapids", "cpu", pd1):  1 * 128,
+				hKey("az1", "sapphire-rapids", "ram", pd1):  1 * 1638400 * 1024 * 1024,
+				hKey("az1", "sapphire-rapids", "disk", pd1): 1 * 100 * 1024 * 1024 * 1024,
 			},
 		},
 		{
@@ -500,9 +504,9 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 			projects: []identity.Project{p1},
 			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				hKey("az1", "cascade-lake", "cpu", "p1", "project-one", "d1", "domain-one"):  2 * 64, // 3 committed - 1 ACTIVE = 2 unused
-				hKey("az1", "cascade-lake", "ram", "p1", "project-one", "d1", "domain-one"):  2 * 819200 * 1024 * 1024,
-				hKey("az1", "cascade-lake", "disk", "p1", "project-one", "d1", "domain-one"): 2 * 50 * 1024 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "cpu", pd1):  2 * 64, // 3 committed - 1 ACTIVE = 2 unused
+				hKey("az1", "cascade-lake", "ram", pd1):  2 * 819200 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "disk", pd1): 2 * 50 * 1024 * 1024 * 1024,
 			},
 		},
 		{
@@ -516,9 +520,9 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 			projects: []identity.Project{p1},
 			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				hKey("az1", "cascade-lake", "cpu", "p1", "project-one", "d1", "domain-one"):  64,
-				hKey("az1", "cascade-lake", "ram", "p1", "project-one", "d1", "domain-one"):  819200 * 1024 * 1024,
-				hKey("az1", "cascade-lake", "disk", "p1", "project-one", "d1", "domain-one"): 50 * 1024 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "cpu", pd1):  64,
+				hKey("az1", "cascade-lake", "ram", pd1):  819200 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "disk", pd1): 50 * 1024 * 1024 * 1024,
 			},
 		},
 		{
@@ -543,15 +547,15 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 			projects: []identity.Project{p1, p2},
 			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				hKey("az1", "cascade-lake", "cpu", "p1", "project-one", "d1", "domain-one"):  2 * 64,
-				hKey("az1", "cascade-lake", "ram", "p1", "project-one", "d1", "domain-one"):  2 * 819200 * 1024 * 1024,
-				hKey("az1", "cascade-lake", "disk", "p1", "project-one", "d1", "domain-one"): 2 * 50 * 1024 * 1024 * 1024,
-				hKey("az2", "cascade-lake", "cpu", "p1", "project-one", "d1", "domain-one"):  3 * 64,
-				hKey("az2", "cascade-lake", "ram", "p1", "project-one", "d1", "domain-one"):  3 * 819200 * 1024 * 1024,
-				hKey("az2", "cascade-lake", "disk", "p1", "project-one", "d1", "domain-one"): 3 * 50 * 1024 * 1024 * 1024,
-				hKey("az1", "cascade-lake", "cpu", "p2", "project-two", "d1", "domain-one"):  1 * 64,
-				hKey("az1", "cascade-lake", "ram", "p2", "project-two", "d1", "domain-one"):  1 * 819200 * 1024 * 1024,
-				hKey("az1", "cascade-lake", "disk", "p2", "project-two", "d1", "domain-one"): 1 * 50 * 1024 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "cpu", pd1):  2 * 64,
+				hKey("az1", "cascade-lake", "ram", pd1):  2 * 819200 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "disk", pd1): 2 * 50 * 1024 * 1024 * 1024,
+				hKey("az2", "cascade-lake", "cpu", pd1):  3 * 64,
+				hKey("az2", "cascade-lake", "ram", pd1):  3 * 819200 * 1024 * 1024,
+				hKey("az2", "cascade-lake", "disk", pd1): 3 * 50 * 1024 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "cpu", pd2):  1 * 64,
+				hKey("az1", "cascade-lake", "ram", pd2):  1 * 819200 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "disk", pd2): 1 * 50 * 1024 * 1024 * 1024,
 			},
 		},
 	}
