@@ -5,6 +5,7 @@ package commitments
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -22,6 +23,10 @@ import (
 var (
 	// CreatorValue identifies reservations created by this syncer.
 	CreatorValue = "commitments-syncer"
+
+	// errAZChanged is a sentinel returned from CreateOrUpdate mutateFns when the existing CR's
+	// AZ differs from the desired state. The caller logs an error and skips the CR.
+	errAZChanged = errors.New("availability zone changed")
 )
 
 type SyncerConfig struct {
@@ -414,6 +419,9 @@ func (s *Syncer) upsertCommittedResource(ctx context.Context, logger logr.Logger
 	cr.Name = "commitment-" + state.CommitmentUUID
 
 	op, err := controllerutil.CreateOrUpdate(ctx, s.Client, cr, func() error {
+		if cr.Spec.AvailabilityZone != "" && cr.Spec.AvailabilityZone != state.AvailabilityZone {
+			return errAZChanged
+		}
 		// AllowRejection is an API execution flag, not a Limes commitment property.
 		// Preserve the existing value so a syncer write never clobbers an in-flight
 		// change-commitments request. For new CRDs the zero value (false) is correct.
@@ -422,6 +430,14 @@ func (s *Syncer) upsertCommittedResource(ctx context.Context, logger logr.Logger
 		cr.Spec.AllowRejection = allowRejection
 		return nil
 	})
+	if errors.Is(err, errAZChanged) {
+		logger.Error(nil, "availability zone mismatch on existing commitment — skipping sync",
+			"commitmentUUID", state.CommitmentUUID,
+			"currentAZ", cr.Spec.AvailabilityZone,
+			"requestedAZ", state.AvailabilityZone,
+		)
+		return controllerutil.OperationResultNone, nil
+	}
 	if err != nil {
 		return op, err
 	}
@@ -443,6 +459,14 @@ func (s *Syncer) updateCommittedResourceIfExists(ctx context.Context, logger log
 			return controllerutil.OperationResultNone, nil
 		}
 		return controllerutil.OperationResultNone, err
+	}
+	if cr.Spec.AvailabilityZone != "" && cr.Spec.AvailabilityZone != state.AvailabilityZone {
+		logger.Error(nil, "availability zone mismatch on existing commitment — skipping sync",
+			"commitmentUUID", state.CommitmentUUID,
+			"currentAZ", cr.Spec.AvailabilityZone,
+			"requestedAZ", state.AvailabilityZone,
+		)
+		return controllerutil.OperationResultNone, nil
 	}
 	s.applyCommittedResourceSpec(cr, state)
 	if err := s.Update(ctx, cr); err != nil {

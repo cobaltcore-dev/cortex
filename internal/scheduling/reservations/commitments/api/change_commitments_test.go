@@ -130,37 +130,21 @@ func TestHandleChangeCommitments(t *testing.T) {
 			ExpectedAPIResponse: newAPIResponse("uuid-b: not sufficient capacity"),
 			ExpectedDeletedCRs:  []string{"commitment-uuid-a", "commitment-uuid-b"},
 		},
-		// --- Stale condition bug ---
+		// --- AZ immutability ---
 		{
-			// Regression: when an already-accepted CR is updated (e.g. AZ change), the old
-			// Ready=True condition from the previous reconcile must not cause the polling loop
-			// to return 200 OK before the controller has processed the new spec.
-			// NoCondition simulates the real async case where the controller hasn't reconciled yet.
-			Name:    "AZ update on already-accepted CR: stale Ready=True must not cause premature 200 OK",
+			// AZ is immutable once set on a CommittedResource. Attempting to change it via
+			// change-commitments must be rejected immediately, before any polling or controller
+			// interaction, and the CR must remain at its original spec.
+			Name:    "AZ change on existing CR: must be rejected",
 			Flavors: []*TestFlavor{m1Small},
 			ExistingCRs: []*TestCR{
 				{CommitmentUUID: "uuid-az-stale", State: v1alpha1.CommitmentStatusConfirmed,
 					AmountMiB: 1024, ProjectID: "project-A", AZ: "az-old", ReadyCondition: true},
 			},
-			// Fake controller is suppressed: simulates the controller not yet having reconciled
-			// the updated spec. The only condition on the CR is the stale one from generation 1.
-			NoCondition: []string{"commitment-uuid-az-stale"},
 			CommitmentRequest: newCommitmentRequest("az-new", false, 1234,
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-az-stale", "confirmed", 2)),
-			CustomConfig: func() *commitments.APIConfig {
-				cfg := commitments.DefaultAPIConfig()
-				// Short but non-zero: long enough for the polling loop to read the stale
-				// condition, short enough that the test doesn't take long.
-				cfg.WatchTimeout = metav1.Duration{Duration: 50 * time.Millisecond}
-				cfg.WatchPollInterval = metav1.Duration{Duration: 10 * time.Millisecond}
-				cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
-					"*": {RAM: commitments.ResourceTypeConfig{HandlesCommitments: true, HasCapacity: true}},
-				}
-				return &cfg
-			}(),
-			// The polling loop must not trust the stale condition and must time out.
-			ExpectedAPIResponse: newAPIResponse("timeout reached"),
-			// CR spec is rolled back on timeout.
+			ExpectedAPIResponse: newAPIResponse("cannot change availability zone"),
+			// CR spec must not have changed.
 			ExpectedCRSpecs: map[string]int64{"commitment-uuid-az-stale": 1024 * 1024 * 1024},
 		},
 		// --- Timeout ---

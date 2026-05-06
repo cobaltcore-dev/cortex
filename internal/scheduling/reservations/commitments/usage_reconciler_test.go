@@ -339,8 +339,8 @@ func TestUsageReconciler_HypervisorToCommittedResources(t *testing.T) {
 		if len(reqs) != 1 {
 			t.Fatalf("got %d requests, want 1", len(reqs))
 		}
-		if reqs[0].NamespacedName.Name != cr.Name {
-			t.Errorf("request name = %q, want %q", reqs[0].NamespacedName.Name, cr.Name)
+		if reqs[0].Name != cr.Name {
+			t.Errorf("request name = %q, want %q", reqs[0].Name, cr.Name)
 		}
 	})
 

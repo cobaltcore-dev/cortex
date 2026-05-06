@@ -259,6 +259,10 @@ ProcessLoop:
 				cr := &v1alpha1.CommittedResource{}
 				cr.Name = crName
 				if _, err := controllerutil.CreateOrUpdate(ctx, api.client, cr, func() error {
+					if cr.Spec.AvailabilityZone != "" && cr.Spec.AvailabilityZone != stateDesired.AvailabilityZone {
+						return fmt.Errorf("cannot change availability zone of commitment %s: current=%q requested=%q",
+							commitment.UUID, cr.Spec.AvailabilityZone, stateDesired.AvailabilityZone)
+					}
 					applyCRSpec(cr, stateDesired, allowRejection)
 					if cr.Annotations == nil {
 						cr.Annotations = make(map[string]string)
