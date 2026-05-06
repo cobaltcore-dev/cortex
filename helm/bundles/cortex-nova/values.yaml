@@ -114,9 +114,9 @@ cortex: &cortex
 cortex-scheduling-controllers:
   <<: *cortex
   namePrefix: cortex-nova-scheduling
-  # Enable webhook port, args, and cert volume mounts on the manager container.
+  # Enable webhook that will validate CRDs for the scheduling controllers.
   webhook: {enable: true}
-  certmanager: {enable: true}
+  certmanager: {enable: true} # Needed for the webhook TLS certificates.
   conf:
     <<: *cortexConf
     leaderElectionID: cortex-nova-scheduling

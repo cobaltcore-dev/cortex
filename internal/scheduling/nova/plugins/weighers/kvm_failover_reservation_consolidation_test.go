@@ -10,7 +10,6 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -115,7 +114,7 @@ func TestKVMFailoverReservationConsolidationStep_Run(t *testing.T) {
 			},
 			// Request for group-D - no same-group on any host
 			request: newFailoverReservationRequest("group-D", []string{"host1", "host2", "host3"}),
-			opts:    KVMFailoverReservationConsolidationOpts{TotalCountWeight: testlib.Ptr(1.0), SameSpecPenalty: testlib.Ptr(0.1)},
+			opts:    KVMFailoverReservationConsolidationOpts{TotalCountWeight: new(1.0), SameSpecPenalty: new(0.1)},
 			// T=4, host1: (1/4)*3=0.75, host2: (1/4)*1=0.25, host3: 0
 			expectedWeights: map[string]float64{"host1": 0.75, "host2": 0.25, "host3": 0},
 		},
@@ -136,7 +135,7 @@ func TestKVMFailoverReservationConsolidationStep_Run(t *testing.T) {
 				newFailoverReservationWithGroup("res-10", "host2", "group-D"),
 			},
 			request: newFailoverReservationRequest("group-A", []string{"host1", "host2", "host3"}),
-			opts:    KVMFailoverReservationConsolidationOpts{TotalCountWeight: testlib.Ptr(1.0), SameSpecPenalty: testlib.Ptr(0.1)},
+			opts:    KVMFailoverReservationConsolidationOpts{TotalCountWeight: new(1.0), SameSpecPenalty: new(0.1)},
 			// T=10
 			// host1: (1/10)*5 - (0.1/10)*0 = 0.5
 			// host2: (1/10)*5 - (0.1/10)*3 = 0.5 - 0.03 = 0.47
@@ -154,7 +153,7 @@ func TestKVMFailoverReservationConsolidationStep_Run(t *testing.T) {
 				newFailoverReservationWithGroup("res-5", "host2", "group-D"),
 			},
 			request: newFailoverReservationRequest("group-A", []string{"host2", "host3"}),
-			opts:    KVMFailoverReservationConsolidationOpts{TotalCountWeight: testlib.Ptr(1.0), SameSpecPenalty: testlib.Ptr(0.1)},
+			opts:    KVMFailoverReservationConsolidationOpts{TotalCountWeight: new(1.0), SameSpecPenalty: new(0.1)},
 			// T=5
 			// host2: (1/5)*5 - (0.1/5)*3 = 1.0 - 0.06 = 0.94
 			// host3: 0
@@ -164,7 +163,7 @@ func TestKVMFailoverReservationConsolidationStep_Run(t *testing.T) {
 			name:            "no reservations: all hosts get default weight (no effect)",
 			reservations:    []*v1alpha1.Reservation{},
 			request:         newFailoverReservationRequest("group-A", []string{"host1", "host2"}),
-			opts:            KVMFailoverReservationConsolidationOpts{TotalCountWeight: testlib.Ptr(1.0), SameSpecPenalty: testlib.Ptr(0.1)},
+			opts:            KVMFailoverReservationConsolidationOpts{TotalCountWeight: new(1.0), SameSpecPenalty: new(0.1)},
 			expectedWeights: map[string]float64{"host1": 0, "host2": 0},
 		},
 		{
@@ -174,7 +173,7 @@ func TestKVMFailoverReservationConsolidationStep_Run(t *testing.T) {
 			},
 			// Use a non-failover request (evacuation)
 			request:         newNovaRequest("instance-123", true, []string{"host1", "host2"}),
-			opts:            KVMFailoverReservationConsolidationOpts{TotalCountWeight: testlib.Ptr(1.0), SameSpecPenalty: testlib.Ptr(0.1)},
+			opts:            KVMFailoverReservationConsolidationOpts{TotalCountWeight: new(1.0), SameSpecPenalty: new(0.1)},
 			expectedWeights: map[string]float64{"host1": 0, "host2": 0},
 		},
 		{
@@ -184,7 +183,7 @@ func TestKVMFailoverReservationConsolidationStep_Run(t *testing.T) {
 			},
 			// Use a non-failover request (no hints = create intent)
 			request:         newNovaRequest("instance-123", false, []string{"host1", "host2"}),
-			opts:            KVMFailoverReservationConsolidationOpts{TotalCountWeight: testlib.Ptr(1.0), SameSpecPenalty: testlib.Ptr(0.1)},
+			opts:            KVMFailoverReservationConsolidationOpts{TotalCountWeight: new(1.0), SameSpecPenalty: new(0.1)},
 			expectedWeights: map[string]float64{"host1": 0, "host2": 0},
 		},
 		{
@@ -209,7 +208,7 @@ func TestKVMFailoverReservationConsolidationStep_Run(t *testing.T) {
 				newCommittedReservation("committed-1", "host2"),
 			},
 			request: newFailoverReservationRequest("group-A", []string{"host1", "host2", "host3"}),
-			opts:    KVMFailoverReservationConsolidationOpts{TotalCountWeight: testlib.Ptr(1.0), SameSpecPenalty: testlib.Ptr(0.1)},
+			opts:    KVMFailoverReservationConsolidationOpts{TotalCountWeight: new(1.0), SameSpecPenalty: new(0.1)},
 			// T=1 (only 1 failover reservation), committed reservation ignored
 			// host1: (1/1)*1 - (0.1/1)*1 = 0.9
 			// host2: 0 (committed reservation not counted)
@@ -223,7 +222,7 @@ func TestKVMFailoverReservationConsolidationStep_Run(t *testing.T) {
 				newFailoverReservation("failed-res", "host2", true, map[string]string{"vm-1": "h-1"}),
 			},
 			request: newFailoverReservationRequest("group-A", []string{"host1", "host2"}),
-			opts:    KVMFailoverReservationConsolidationOpts{TotalCountWeight: testlib.Ptr(1.0), SameSpecPenalty: testlib.Ptr(0.1)},
+			opts:    KVMFailoverReservationConsolidationOpts{TotalCountWeight: new(1.0), SameSpecPenalty: new(0.1)},
 			// T=1 (failed reservation ignored)
 			// host1: (1/1)*1 - (0.1/1)*1 = 0.9
 			// host2: 0
@@ -237,7 +236,7 @@ func TestKVMFailoverReservationConsolidationStep_Run(t *testing.T) {
 				newFailoverReservationWithGroup("res-3", "host2", "group-B"),
 			},
 			request: newFailoverReservationRequest("group-A", []string{"host1", "host2"}),
-			opts:    KVMFailoverReservationConsolidationOpts{TotalCountWeight: testlib.Ptr(2.0), SameSpecPenalty: testlib.Ptr(0.5)},
+			opts:    KVMFailoverReservationConsolidationOpts{TotalCountWeight: new(2.0), SameSpecPenalty: new(0.5)},
 			// T=3, W=2.0, P=0.5
 			// host1: (2/3)*2 - (0.5/3)*2 = 1.3333 - 0.3333 = 1.0
 			// host2: (2/3)*1 - (0.5/3)*0 = 0.6667
@@ -294,8 +293,8 @@ func TestKVMFailoverReservationConsolidationOpts_Validate(t *testing.T) {
 		{
 			name: "valid: both set, p < w",
 			opts: KVMFailoverReservationConsolidationOpts{
-				TotalCountWeight: testlib.Ptr(2.0),
-				SameSpecPenalty:  testlib.Ptr(0.5),
+				TotalCountWeight: new(2.0),
+				SameSpecPenalty:  new(0.5),
 			},
 		},
 		{
@@ -305,36 +304,36 @@ func TestKVMFailoverReservationConsolidationOpts_Validate(t *testing.T) {
 		{
 			name: "valid: both zero",
 			opts: KVMFailoverReservationConsolidationOpts{
-				TotalCountWeight: testlib.Ptr(0.0),
-				SameSpecPenalty:  testlib.Ptr(0.0),
+				TotalCountWeight: new(0.0),
+				SameSpecPenalty:  new(0.0),
 			},
 		},
 		{
 			name: "invalid: negative totalCountWeight",
 			opts: KVMFailoverReservationConsolidationOpts{
-				TotalCountWeight: testlib.Ptr(-1.0),
+				TotalCountWeight: new(-1.0),
 			},
 			wantErr: "totalCountWeight must be non-negative",
 		},
 		{
 			name: "invalid: negative sameSpecPenalty",
 			opts: KVMFailoverReservationConsolidationOpts{
-				SameSpecPenalty: testlib.Ptr(-0.1),
+				SameSpecPenalty: new(-0.1),
 			},
 			wantErr: "sameSpecPenalty must be non-negative",
 		},
 		{
 			name: "invalid: p >= w",
 			opts: KVMFailoverReservationConsolidationOpts{
-				TotalCountWeight: testlib.Ptr(1.0),
-				SameSpecPenalty:  testlib.Ptr(1.0),
+				TotalCountWeight: new(1.0),
+				SameSpecPenalty:  new(1.0),
 			},
 			wantErr: "sameSpecPenalty must be less than totalCountWeight",
 		},
 		{
 			name: "invalid: w=0 with p>0 (default penalty with zero weight)",
 			opts: KVMFailoverReservationConsolidationOpts{
-				TotalCountWeight: testlib.Ptr(0.0),
+				TotalCountWeight: new(0.0),
 				// SameSpecPenalty defaults to 0.1
 			},
 			wantErr: "sameSpecPenalty must be zero when totalCountWeight is zero",
@@ -342,8 +341,8 @@ func TestKVMFailoverReservationConsolidationOpts_Validate(t *testing.T) {
 		{
 			name: "invalid: w=0 with explicit p>0",
 			opts: KVMFailoverReservationConsolidationOpts{
-				TotalCountWeight: testlib.Ptr(0.0),
-				SameSpecPenalty:  testlib.Ptr(0.5),
+				TotalCountWeight: new(0.0),
+				SameSpecPenalty:  new(0.5),
 			},
 			wantErr: "sameSpecPenalty must be zero when totalCountWeight is zero",
 		},

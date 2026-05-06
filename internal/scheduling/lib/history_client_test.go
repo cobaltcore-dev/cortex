@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -63,7 +62,7 @@ func TestGenerateExplanation(t *testing.T) {
 		{
 			name: "result with target host only no steps",
 			result: &v1alpha1.DecisionResult{
-				TargetHost: testlib.Ptr("host-1"),
+				TargetHost: new("host-1"),
 			},
 			expected: "Selected host: host-1.",
 		},
@@ -90,7 +89,7 @@ func TestGenerateExplanation(t *testing.T) {
 						},
 					},
 				},
-				TargetHost: testlib.Ptr("host-a"),
+				TargetHost: new("host-a"),
 			},
 			expected: "Started with 3 host(s).\n\n" +
 				"filter_capacity filtered out host-c\n" +
@@ -114,7 +113,7 @@ func TestGenerateExplanation(t *testing.T) {
 						},
 					},
 				},
-				TargetHost: testlib.Ptr("host-x"),
+				TargetHost: new("host-x"),
 			},
 			expected: "Started with 2 host(s).\n\n\n2 hosts remaining (host-x, host-y)\n\nSelected host: host-x.",
 		},
@@ -130,7 +129,7 @@ func TestGenerateExplanation(t *testing.T) {
 		{
 			name: "no weights with target",
 			result: &v1alpha1.DecisionResult{
-				TargetHost: testlib.Ptr("host-1"),
+				TargetHost: new("host-1"),
 				StepResults: []v1alpha1.StepResult{
 					{StepName: "some-step", Activations: map[string]float64{}},
 				},
@@ -153,7 +152,7 @@ func TestGenerateExplanation(t *testing.T) {
 						},
 					},
 				},
-				TargetHost: testlib.Ptr("host-a"),
+				TargetHost: new("host-a"),
 			},
 			expected: "Started with 2 host(s).\n\n\n2 hosts remaining (host-a, host-b)\n\nSelected host: host-a.",
 		},
@@ -177,7 +176,7 @@ func TestGenerateExplanation(t *testing.T) {
 							Activations: surviving,
 						},
 					},
-					TargetHost: testlib.Ptr("host-000"),
+					TargetHost: new("host-000"),
 				}
 			}(),
 			expected: "Started with 50 host(s).\n\n" +
@@ -240,12 +239,12 @@ func TestHistoryClient_CreateOrUpdateHistory(t *testing.T) {
 				},
 				Status: v1alpha1.DecisionStatus{
 					Result: &v1alpha1.DecisionResult{
-						TargetHost: testlib.Ptr("compute-1"),
+						TargetHost: new("compute-1"),
 					},
 				},
 			},
 			expectHistoryLen: 0,
-			expectTargetHost: testlib.Ptr("compute-1"),
+			expectTargetHost: new("compute-1"),
 			expectSuccessful: true,
 			expectCondStatus: metav1.ConditionTrue,
 			expectReason:     v1alpha1.HistoryReasonSchedulingSucceeded,
@@ -286,12 +285,12 @@ func TestHistoryClient_CreateOrUpdateHistory(t *testing.T) {
 				},
 				Status: v1alpha1.DecisionStatus{
 					Result: &v1alpha1.DecisionResult{
-						TargetHost: testlib.Ptr("compute-2"),
+						TargetHost: new("compute-2"),
 					},
 				},
 			},
 			expectHistoryLen: 1, // pre-existing entry preserved, no current to archive
-			expectTargetHost: testlib.Ptr("compute-2"),
+			expectTargetHost: new("compute-2"),
 			expectSuccessful: true,
 			expectCondStatus: metav1.ConditionTrue,
 			expectReason:     v1alpha1.HistoryReasonSchedulingSucceeded,
@@ -312,7 +311,7 @@ func TestHistoryClient_CreateOrUpdateHistory(t *testing.T) {
 							PipelineRef: corev1.ObjectReference{Name: "old-pipeline"},
 							Intent:      v1alpha1.SchedulingIntentUnknown,
 							Successful:  true,
-							TargetHost:  testlib.Ptr("old-host"),
+							TargetHost:  new("old-host"),
 						},
 					},
 				}
@@ -331,12 +330,12 @@ func TestHistoryClient_CreateOrUpdateHistory(t *testing.T) {
 				},
 				Status: v1alpha1.DecisionStatus{
 					Result: &v1alpha1.DecisionResult{
-						TargetHost: testlib.Ptr("new-host"),
+						TargetHost: new("new-host"),
 					},
 				},
 			},
 			expectHistoryLen: 1, // old current archived
-			expectTargetHost: testlib.Ptr("new-host"),
+			expectTargetHost: new("new-host"),
 			expectSuccessful: true,
 			expectCondStatus: metav1.ConditionTrue,
 			expectReason:     v1alpha1.HistoryReasonSchedulingSucceeded,
@@ -419,7 +418,7 @@ func TestHistoryClient_CreateOrUpdateHistory(t *testing.T) {
 							Timestamp:   metav1.Now(),
 							PipelineRef: corev1.ObjectReference{Name: "prev-pipeline"},
 							Successful:  true,
-							TargetHost:  testlib.Ptr("old-backend"),
+							TargetHost:  new("old-backend"),
 						},
 						History: entries,
 					},
@@ -439,12 +438,12 @@ func TestHistoryClient_CreateOrUpdateHistory(t *testing.T) {
 				},
 				Status: v1alpha1.DecisionStatus{
 					Result: &v1alpha1.DecisionResult{
-						TargetHost: testlib.Ptr("backend-1"),
+						TargetHost: new("backend-1"),
 					},
 				},
 			},
 			expectHistoryLen: 10, // 10 existing + 1 archived current, capped to 10
-			expectTargetHost: testlib.Ptr("backend-1"),
+			expectTargetHost: new("backend-1"),
 			expectSuccessful: true,
 			expectCondStatus: metav1.ConditionTrue,
 			expectReason:     v1alpha1.HistoryReasonSchedulingSucceeded,
@@ -466,13 +465,13 @@ func TestHistoryClient_CreateOrUpdateHistory(t *testing.T) {
 				},
 				Status: v1alpha1.DecisionStatus{
 					Result: &v1alpha1.DecisionResult{
-						TargetHost:   testlib.Ptr("h1"),
+						TargetHost:   new("h1"),
 						OrderedHosts: []string{"h1", "h2", "h3", "h4", "h5"},
 					},
 				},
 			},
 			expectHistoryLen: 0,
-			expectTargetHost: testlib.Ptr("h1"),
+			expectTargetHost: new("h1"),
 			expectSuccessful: true,
 			expectCondStatus: metav1.ConditionTrue,
 			expectReason:     v1alpha1.HistoryReasonSchedulingSucceeded,
