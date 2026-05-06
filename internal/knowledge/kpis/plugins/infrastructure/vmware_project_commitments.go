@@ -34,7 +34,7 @@ type VMwareProjectCommitmentsKPI struct {
 }
 
 func (k *VMwareProjectCommitmentsKPI) GetName() string {
-	return "vmware_resource_commitments_kpi"
+	return "vmware_project_commitments_kpi"
 }
 
 func (k *VMwareProjectCommitmentsKPI) Init(dbConn *db.DB, c client.Client, opts conf.RawOpts) error {
