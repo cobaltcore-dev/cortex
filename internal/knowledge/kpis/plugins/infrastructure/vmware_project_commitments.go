@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/limes"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
@@ -44,12 +45,12 @@ func (k *VMwareProjectCommitmentsKPI) Init(dbConn *db.DB, c client.Client, opts 
 	k.unusedGeneralPurposeCommitmentsPerProject = prometheus.NewDesc(
 		"cortex_vmware_commitments_general_purpose",
 		"Committed general purpose resources that are currently unused. CPU (resource=cpu) in vCPUs, memory (resource=ram) in bytes.",
-		[]string{"availability_zone", "resource", "project_id"}, nil,
+		[]string{"availability_zone", "resource", "project_id", "project_name", "domain_id", "domain_name"}, nil,
 	)
 	k.unusedHanaCommittedResourcesPerProject = prometheus.NewDesc(
 		"cortex_vmware_commitments_hana_resources",
 		"Total committed HANA instances capacity that is currently unused, translated to resources. CPU in vCPUs, memory and disk in bytes.",
-		[]string{"availability_zone", "cpu_architecture", "resource", "project_id"}, nil,
+		[]string{"availability_zone", "cpu_architecture", "resource", "project_id", "project_name", "domain_id", "domain_name"}, nil,
 	)
 	return nil
 }
@@ -70,8 +71,14 @@ func (k *VMwareProjectCommitmentsKPI) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	k.collectGeneralPurpose(ch, flavorsByName)
-	k.collectHana(ch, flavorsByName)
+	projects, err := k.getProjectsWithDomains()
+	if err != nil {
+		slog.Error("vmware_resource_commitments: failed to load projects with domains", "err", err)
+		return
+	}
+
+	k.collectGeneralPurpose(ch, flavorsByName, projects)
+	k.collectHana(ch, flavorsByName, projects)
 }
 
 // getFlavorsByName loads all flavors and returns them keyed by name.
@@ -156,7 +163,7 @@ func (k *VMwareProjectCommitmentsKPI) getRunningHanaServers() ([]nova.Server, er
 
 // collectGeneralPurpose computes and emits unused general purpose committed resources per project.
 // Unused = committed - in-use (clamped to zero; zero values are not emitted).
-func (k *VMwareProjectCommitmentsKPI) collectGeneralPurpose(ch chan<- prometheus.Metric, flavorsByName map[string]nova.Flavor) {
+func (k *VMwareProjectCommitmentsKPI) collectGeneralPurpose(ch chan<- prometheus.Metric, flavorsByName map[string]nova.Flavor, projects map[string]projectWithDomain) {
 	commitments, err := k.getGeneralPurposeCommitments()
 	if err != nil {
 		slog.Error("vmware_resource_commitments: failed to load gp commitments", "err", err)
@@ -201,11 +208,12 @@ func (k *VMwareProjectCommitmentsKPI) collectGeneralPurpose(ch chan<- prometheus
 		if unused <= 0 {
 			continue
 		}
+		project := projects[key.projectID]
 		ch <- prometheus.MustNewConstMetric(
 			k.unusedGeneralPurposeCommitmentsPerProject,
 			prometheus.GaugeValue,
 			unused,
-			key.az, key.resource, key.projectID,
+			key.az, key.resource, key.projectID, project.ProjectName, project.DomainID, project.DomainName,
 		)
 	}
 }
@@ -213,7 +221,7 @@ func (k *VMwareProjectCommitmentsKPI) collectGeneralPurpose(ch chan<- prometheus
 // collectHana computes and emits unused committed HANA instance resources per project.
 // Each HANA instance commitment is compared against running servers; the remainder is
 // translated to cpu/ram/disk capacity using the flavor spec.
-func (k *VMwareProjectCommitmentsKPI) collectHana(ch chan<- prometheus.Metric, flavorsByName map[string]nova.Flavor) {
+func (k *VMwareProjectCommitmentsKPI) collectHana(ch chan<- prometheus.Metric, flavorsByName map[string]nova.Flavor, projects map[string]projectWithDomain) {
 	commitments, err := k.getHanaInstanceCommitments()
 	if err != nil {
 		slog.Error("vmware_resource_commitments: failed to load hana commitments", "err", err)
@@ -261,11 +269,36 @@ func (k *VMwareProjectCommitmentsKPI) collectHana(ch chan<- prometheus.Metric, f
 	}
 
 	for key, value := range totals {
+		project := projects[key.projectID]
 		ch <- prometheus.MustNewConstMetric(
 			k.unusedHanaCommittedResourcesPerProject,
 			prometheus.GaugeValue,
 			value,
-			key.az, key.cpuArch, key.resource, key.projectID,
+			key.az, key.cpuArch, key.resource, key.projectID, project.ProjectName, project.DomainID, project.DomainName,
 		)
 	}
+}
+
+type projectWithDomain struct {
+	ProjectID   string `db:"project_id"`
+	ProjectName string `db:"project_name"`
+	DomainID    string `db:"domain_id"`
+	DomainName  string `db:"domain_name"`
+}
+
+func (k *VMwareProjectCommitmentsKPI) getProjectsWithDomains() (map[string]projectWithDomain, error) {
+	var projects []projectWithDomain
+	if _, err := k.DB.Select(&projects, `
+		SELECT p.id AS project_id, p.name AS project_name, COALESCE(d.id, '') AS domain_id, COALESCE(d.name, '') AS domain_name
+		FROM `+identity.Project{}.TableName()+` p
+		LEFT JOIN `+identity.Domain{}.TableName()+` d ON p.domain_id = d.id
+	`); err != nil {
+		return nil, err
+	}
+
+	projectMap := make(map[string]projectWithDomain, len(projects))
+	for _, p := range projects {
+		projectMap[p.ProjectID] = p
+	}
+	return projectMap, nil
 }

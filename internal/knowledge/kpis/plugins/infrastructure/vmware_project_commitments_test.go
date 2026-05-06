@@ -6,6 +6,7 @@ package infrastructure
 import (
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/limes"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
@@ -23,6 +24,8 @@ func setupResourceCommitmentsDB(t *testing.T) (testDB *db.DB, cleanup func()) {
 		testDB.AddTable(limes.Commitment{}),
 		testDB.AddTable(nova.Server{}),
 		testDB.AddTable(nova.Flavor{}),
+		testDB.AddTable(identity.Project{}),
+		testDB.AddTable(identity.Domain{}),
 	); err != nil {
 		t.Fatalf("failed to create tables: %v", err)
 	}
@@ -30,8 +33,8 @@ func setupResourceCommitmentsDB(t *testing.T) (testDB *db.DB, cleanup func()) {
 }
 
 // collectResourceCommitmentsMetrics runs the KPI and returns all emitted metrics keyed by
-// "metricName|az|cpu_architecture|resource|project_id". GP metrics have an empty cpu_architecture
-// segment since the descriptor does not include that label.
+// "metricName|az|cpu_architecture|resource|project_id|project_name|domain_id|domain_name".
+// GP metrics have an empty cpu_architecture segment since the descriptor does not include that label.
 func collectResourceCommitmentsMetrics(t *testing.T, testDB *db.DB) map[string]float64 {
 	t.Helper()
 	kpi := &VMwareProjectCommitmentsKPI{}
@@ -53,7 +56,7 @@ func collectResourceCommitmentsMetrics(t *testing.T, testDB *db.DB) map[string]f
 			lbls[lp.GetName()] = lp.GetValue()
 		}
 		name := getMetricName(m.Desc().String())
-		key := name + "|" + lbls["availability_zone"] + "|" + lbls["cpu_architecture"] + "|" + lbls["resource"] + "|" + lbls["project_id"]
+		key := name + "|" + lbls["availability_zone"] + "|" + lbls["cpu_architecture"] + "|" + lbls["resource"] + "|" + lbls["project_id"] + "|" + lbls["project_name"] + "|" + lbls["domain_id"] + "|" + lbls["domain_name"]
 		result[key] = pm.GetGauge().GetValue()
 	}
 	return result
@@ -61,13 +64,13 @@ func collectResourceCommitmentsMetrics(t *testing.T, testDB *db.DB) map[string]f
 
 // gpKey builds the expected map key for a general-purpose metric.
 // cpu_architecture is always empty because the GP metric descriptor omits that label.
-func gpKey(az, resource, projectID string) string {
-	return "cortex_vmware_commitments_general_purpose|" + az + "||" + resource + "|" + projectID
+func gpKey(az, resource, projectID, projectName, domainID, domainName string) string {
+	return "cortex_vmware_commitments_general_purpose|" + az + "||" + resource + "|" + projectID + "|" + projectName + "|" + domainID + "|" + domainName
 }
 
 // hKey builds the expected map key for a HANA metric.
-func hKey(az, cpuArch, resource, projectID string) string {
-	return "cortex_vmware_commitments_hana_resources|" + az + "|" + cpuArch + "|" + resource + "|" + projectID
+func hKey(az, cpuArch, resource, projectID, projectName, domainID, domainName string) string {
+	return "cortex_vmware_commitments_hana_resources|" + az + "|" + cpuArch + "|" + resource + "|" + projectID + "|" + projectName + "|" + domainID + "|" + domainName
 }
 
 func TestVMwareProjectCommitmentsKPI_Init(t *testing.T) {
@@ -79,12 +82,20 @@ func TestVMwareProjectCommitmentsKPI_Init(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
+
 func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
+	// Reusable project/domain entries for test cases that need them.
+	p1 := identity.Project{ID: "p1", Name: "project-one", DomainID: "d1", Enabled: true}
+	p2 := identity.Project{ID: "p2", Name: "project-two", DomainID: "d1", Enabled: true}
+	d1 := identity.Domain{ID: "d1", Name: "domain-one", Enabled: true}
+
 	tests := []struct {
 		name        string
 		commitments []limes.Commitment
 		servers     []nova.Server
 		flavors     []nova.Flavor
+		projects    []identity.Project
+		domains     []identity.Domain
 		want        map[string]float64
 	}{
 		{
@@ -96,8 +107,10 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			commitments: []limes.Commitment{
 				{ID: 1, UUID: "c1", ServiceType: "compute", ResourceName: "cores", AvailabilityZone: "az1", Amount: 10, Status: "confirmed", ProjectID: "p1"},
 			},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "cpu", "p1"): 10,
+				gpKey("az1", "cpu", "p1", "project-one", "d1", "domain-one"): 10,
 			},
 		},
 		{
@@ -105,8 +118,10 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			commitments: []limes.Commitment{
 				{ID: 1, UUID: "c1", ServiceType: "compute", ResourceName: "ram", AvailabilityZone: "az1", Amount: 1024, Unit: "MiB", Status: "confirmed", ProjectID: "p1"},
 			},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "ram", "p1"): 1024 * 1024 * 1024,
+				gpKey("az1", "ram", "p1", "project-one", "d1", "domain-one"): 1024 * 1024 * 1024,
 			},
 		},
 		{
@@ -114,8 +129,10 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			commitments: []limes.Commitment{
 				{ID: 1, UUID: "c1", ServiceType: "compute", ResourceName: "ram", AvailabilityZone: "az1", Amount: 2, Unit: "GiB", Status: "confirmed", ProjectID: "p1"},
 			},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "ram", "p1"): 2 * 1024 * 1024 * 1024,
+				gpKey("az1", "ram", "p1", "project-one", "d1", "domain-one"): 2 * 1024 * 1024 * 1024,
 			},
 		},
 		{
@@ -130,8 +147,10 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "small", VCPUs: 3, RAM: 0, Disk: 0},
 			},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "cpu", "p1"): 4, // 10 - 2×3 = 4
+				gpKey("az1", "cpu", "p1", "project-one", "d1", "domain-one"): 4, // 10 - 2×3 = 4
 			},
 		},
 		{
@@ -145,7 +164,9 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "small", VCPUs: 4, RAM: 0, Disk: 0},
 			},
-			want: map[string]float64{},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
+			want:     map[string]float64{},
 		},
 		{
 			name: "over-used cpu produces no metric",
@@ -158,7 +179,9 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "large", VCPUs: 8, RAM: 0, Disk: 0},
 			},
-			want: map[string]float64{},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
+			want:     map[string]float64{},
 		},
 		{
 			name: "hana servers not counted against gp commitments",
@@ -171,8 +194,10 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "hana_small", VCPUs: 8, RAM: 0, Disk: 0},
 			},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "cpu", "p1"): 10,
+				gpKey("az1", "cpu", "p1", "project-one", "d1", "domain-one"): 10,
 			},
 		},
 		{
@@ -186,8 +211,10 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "m1_k_small", VCPUs: 4, RAM: 0, Disk: 0},
 			},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "cpu", "p1"): 10,
+				gpKey("az1", "cpu", "p1", "project-one", "d1", "domain-one"): 10,
 			},
 		},
 		{
@@ -203,8 +230,10 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "small", VCPUs: 2, RAM: 0, Disk: 0},
 			},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "cpu", "p1"): 8, // only 1 ACTIVE × 2 subtracted
+				gpKey("az1", "cpu", "p1", "project-one", "d1", "domain-one"): 8, // only 1 ACTIVE × 2 subtracted
 			},
 		},
 		{
@@ -212,8 +241,10 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			commitments: []limes.Commitment{
 				{ID: 1, UUID: "c1", ServiceType: "compute", ResourceName: "cores", AvailabilityZone: "az1", Amount: 5, Status: "guaranteed", ProjectID: "p1"},
 			},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "cpu", "p1"): 5,
+				gpKey("az1", "cpu", "p1", "project-one", "d1", "domain-one"): 5,
 			},
 		},
 		{
@@ -221,14 +252,18 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			commitments: []limes.Commitment{
 				{ID: 1, UUID: "c1", ServiceType: "compute", ResourceName: "cores", AvailabilityZone: "az1", Amount: 100, Status: "pending", ProjectID: "p1"},
 			},
-			want: map[string]float64{},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
+			want:     map[string]float64{},
 		},
 		{
 			name: "non-compute service type excluded",
 			commitments: []limes.Commitment{
 				{ID: 1, UUID: "c1", ServiceType: "network", ResourceName: "cores", AvailabilityZone: "az1", Amount: 100, Status: "confirmed", ProjectID: "p1"},
 			},
-			want: map[string]float64{},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
+			want:     map[string]float64{},
 		},
 		{
 			name: "multiple commitments per project and AZ summed",
@@ -238,10 +273,12 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 				{ID: 3, UUID: "c3", ServiceType: "compute", ResourceName: "cores", AvailabilityZone: "az2", Amount: 20, Status: "confirmed", ProjectID: "p1"},
 				{ID: 4, UUID: "c4", ServiceType: "compute", ResourceName: "cores", AvailabilityZone: "az1", Amount: 8, Status: "confirmed", ProjectID: "p2"},
 			},
+			projects: []identity.Project{p1, p2},
+			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "cpu", "p1"): 15,
-				gpKey("az2", "cpu", "p1"): 20,
-				gpKey("az1", "cpu", "p2"): 8,
+				gpKey("az1", "cpu", "p1", "project-one", "d1", "domain-one"):  15,
+				gpKey("az2", "cpu", "p1", "project-one", "d1", "domain-one"):  20,
+				gpKey("az1", "cpu", "p2", "project-two", "d1", "domain-one"): 8,
 			},
 		},
 		{
@@ -256,9 +293,11 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "medium", VCPUs: 2, RAM: 256, Disk: 0},
 			},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				gpKey("az1", "cpu", "p1"): 6,                         // 8 - 1×2
-				gpKey("az1", "ram", "p1"): (512 - 256) * 1024 * 1024, // 512MiB - 256MB (flavor.RAM is in MB)
+				gpKey("az1", "cpu", "p1", "project-one", "d1", "domain-one"): 6,                         // 8 - 1×2
+				gpKey("az1", "ram", "p1", "project-one", "d1", "domain-one"): (512 - 256) * 1024 * 1024, // 512MiB - 256MB (flavor.RAM is in MB)
 			},
 		},
 	}
@@ -277,6 +316,12 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 			}
 			for i := range tt.flavors {
 				rows = append(rows, &tt.flavors[i])
+			}
+			for i := range tt.projects {
+				rows = append(rows, &tt.projects[i])
+			}
+			for i := range tt.domains {
+				rows = append(rows, &tt.domains[i])
 			}
 			if len(rows) > 0 {
 				if err := testDB.Insert(rows...); err != nil {
@@ -304,11 +349,18 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 }
 
 func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
+	// Reusable project/domain entries for test cases that need them.
+	p1 := identity.Project{ID: "p1", Name: "project-one", DomainID: "d1", Enabled: true}
+	p2 := identity.Project{ID: "p2", Name: "project-two", DomainID: "d1", Enabled: true}
+	d1 := identity.Domain{ID: "d1", Name: "domain-one", Enabled: true}
+
 	tests := []struct {
 		name        string
 		commitments []limes.Commitment
 		servers     []nova.Server
 		flavors     []nova.Flavor
+		projects    []identity.Project
+		domains     []identity.Domain
 		want        map[string]float64
 	}{
 		{
@@ -323,10 +375,12 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "hana_c128_m1600", VCPUs: 128, RAM: 1638400, Disk: 100},
 			},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				hKey("az1", "cascade-lake", "cpu", "p1"):  2 * 128,
-				hKey("az1", "cascade-lake", "ram", "p1"):  2 * 1638400 * 1024 * 1024,
-				hKey("az1", "cascade-lake", "disk", "p1"): 2 * 100 * 1024 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "cpu", "p1", "project-one", "d1", "domain-one"):  2 * 128,
+				hKey("az1", "cascade-lake", "ram", "p1", "project-one", "d1", "domain-one"):  2 * 1638400 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "disk", "p1", "project-one", "d1", "domain-one"): 2 * 100 * 1024 * 1024 * 1024,
 			},
 		},
 		{
@@ -340,10 +394,12 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "hana_c128_m1600", VCPUs: 128, RAM: 1638400, Disk: 100},
 			},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				hKey("az1", "cascade-lake", "cpu", "p1"):  2 * 128,
-				hKey("az1", "cascade-lake", "ram", "p1"):  2 * 1638400 * 1024 * 1024,
-				hKey("az1", "cascade-lake", "disk", "p1"): 2 * 100 * 1024 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "cpu", "p1", "project-one", "d1", "domain-one"):  2 * 128,
+				hKey("az1", "cascade-lake", "ram", "p1", "project-one", "d1", "domain-one"):  2 * 1638400 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "disk", "p1", "project-one", "d1", "domain-one"): 2 * 100 * 1024 * 1024 * 1024,
 			},
 		},
 		{
@@ -358,7 +414,9 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "hana_small", VCPUs: 64, RAM: 819200, Disk: 50},
 			},
-			want: map[string]float64{},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
+			want:     map[string]float64{},
 		},
 		{
 			name: "over-used hana produces no metric",
@@ -372,7 +430,9 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "hana_small", VCPUs: 64, RAM: 819200, Disk: 50},
 			},
-			want: map[string]float64{},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
+			want:     map[string]float64{},
 		},
 		{
 			name: "sapphire-rapids arch from _v2 suffix",
@@ -382,10 +442,12 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "hana_c256_m3200_v2", VCPUs: 256, RAM: 3276800, Disk: 200},
 			},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				hKey("az1", "sapphire-rapids", "cpu", "p1"):  256,
-				hKey("az1", "sapphire-rapids", "ram", "p1"):  3276800 * 1024 * 1024,
-				hKey("az1", "sapphire-rapids", "disk", "p1"): 200 * 1024 * 1024 * 1024,
+				hKey("az1", "sapphire-rapids", "cpu", "p1", "project-one", "d1", "domain-one"):  256,
+				hKey("az1", "sapphire-rapids", "ram", "p1", "project-one", "d1", "domain-one"):  3276800 * 1024 * 1024,
+				hKey("az1", "sapphire-rapids", "disk", "p1", "project-one", "d1", "domain-one"): 200 * 1024 * 1024 * 1024,
 			},
 		},
 		{
@@ -398,13 +460,15 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 				{ID: "f1", Name: "hana_c128_m1600", VCPUs: 128, RAM: 1638400, Disk: 100},
 				{ID: "f2", Name: "hana_c128_m1600_v2", VCPUs: 128, RAM: 1638400, Disk: 100},
 			},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				hKey("az1", "cascade-lake", "cpu", "p1"):     2 * 128,
-				hKey("az1", "cascade-lake", "ram", "p1"):     2 * 1638400 * 1024 * 1024,
-				hKey("az1", "cascade-lake", "disk", "p1"):    2 * 100 * 1024 * 1024 * 1024,
-				hKey("az1", "sapphire-rapids", "cpu", "p1"):  1 * 128,
-				hKey("az1", "sapphire-rapids", "ram", "p1"):  1 * 1638400 * 1024 * 1024,
-				hKey("az1", "sapphire-rapids", "disk", "p1"): 1 * 100 * 1024 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "cpu", "p1", "project-one", "d1", "domain-one"):     2 * 128,
+				hKey("az1", "cascade-lake", "ram", "p1", "project-one", "d1", "domain-one"):     2 * 1638400 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "disk", "p1", "project-one", "d1", "domain-one"):    2 * 100 * 1024 * 1024 * 1024,
+				hKey("az1", "sapphire-rapids", "cpu", "p1", "project-one", "d1", "domain-one"):  1 * 128,
+				hKey("az1", "sapphire-rapids", "ram", "p1", "project-one", "d1", "domain-one"):  1 * 1638400 * 1024 * 1024,
+				hKey("az1", "sapphire-rapids", "disk", "p1", "project-one", "d1", "domain-one"): 1 * 100 * 1024 * 1024 * 1024,
 			},
 		},
 		{
@@ -416,7 +480,9 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "hana_k_large", VCPUs: 64, RAM: 819200, Disk: 50},
 			},
-			want: map[string]float64{},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
+			want:     map[string]float64{},
 		},
 		{
 			name: "DELETED and ERROR hana servers excluded from running count",
@@ -431,10 +497,12 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "hana_small", VCPUs: 64, RAM: 819200, Disk: 50},
 			},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				hKey("az1", "cascade-lake", "cpu", "p1"):  2 * 64, // 3 committed - 1 ACTIVE = 2 unused
-				hKey("az1", "cascade-lake", "ram", "p1"):  2 * 819200 * 1024 * 1024,
-				hKey("az1", "cascade-lake", "disk", "p1"): 2 * 50 * 1024 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "cpu", "p1", "project-one", "d1", "domain-one"):  2 * 64, // 3 committed - 1 ACTIVE = 2 unused
+				hKey("az1", "cascade-lake", "ram", "p1", "project-one", "d1", "domain-one"):  2 * 819200 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "disk", "p1", "project-one", "d1", "domain-one"): 2 * 50 * 1024 * 1024 * 1024,
 			},
 		},
 		{
@@ -445,10 +513,12 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "hana_small", VCPUs: 64, RAM: 819200, Disk: 50},
 			},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				hKey("az1", "cascade-lake", "cpu", "p1"):  64,
-				hKey("az1", "cascade-lake", "ram", "p1"):  819200 * 1024 * 1024,
-				hKey("az1", "cascade-lake", "disk", "p1"): 50 * 1024 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "cpu", "p1", "project-one", "d1", "domain-one"):  64,
+				hKey("az1", "cascade-lake", "ram", "p1", "project-one", "d1", "domain-one"):  819200 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "disk", "p1", "project-one", "d1", "domain-one"): 50 * 1024 * 1024 * 1024,
 			},
 		},
 		{
@@ -456,7 +526,9 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 			commitments: []limes.Commitment{
 				{ID: 1, UUID: "h1", ServiceType: "compute", ResourceName: "instances_hana_nonexistent", AvailabilityZone: "az1", Amount: 2, Status: "confirmed", ProjectID: "p1"},
 			},
-			want: map[string]float64{},
+			projects: []identity.Project{p1},
+			domains:  []identity.Domain{d1},
+			want:     map[string]float64{},
 		},
 		{
 			name: "multiple projects and AZs aggregated per bucket",
@@ -468,16 +540,18 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "hana_small", VCPUs: 64, RAM: 819200, Disk: 50},
 			},
+			projects: []identity.Project{p1, p2},
+			domains:  []identity.Domain{d1},
 			want: map[string]float64{
-				hKey("az1", "cascade-lake", "cpu", "p1"):  2 * 64,
-				hKey("az1", "cascade-lake", "ram", "p1"):  2 * 819200 * 1024 * 1024,
-				hKey("az1", "cascade-lake", "disk", "p1"): 2 * 50 * 1024 * 1024 * 1024,
-				hKey("az2", "cascade-lake", "cpu", "p1"):  3 * 64,
-				hKey("az2", "cascade-lake", "ram", "p1"):  3 * 819200 * 1024 * 1024,
-				hKey("az2", "cascade-lake", "disk", "p1"): 3 * 50 * 1024 * 1024 * 1024,
-				hKey("az1", "cascade-lake", "cpu", "p2"):  1 * 64,
-				hKey("az1", "cascade-lake", "ram", "p2"):  1 * 819200 * 1024 * 1024,
-				hKey("az1", "cascade-lake", "disk", "p2"): 1 * 50 * 1024 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "cpu", "p1", "project-one", "d1", "domain-one"):  2 * 64,
+				hKey("az1", "cascade-lake", "ram", "p1", "project-one", "d1", "domain-one"):  2 * 819200 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "disk", "p1", "project-one", "d1", "domain-one"): 2 * 50 * 1024 * 1024 * 1024,
+				hKey("az2", "cascade-lake", "cpu", "p1", "project-one", "d1", "domain-one"):  3 * 64,
+				hKey("az2", "cascade-lake", "ram", "p1", "project-one", "d1", "domain-one"):  3 * 819200 * 1024 * 1024,
+				hKey("az2", "cascade-lake", "disk", "p1", "project-one", "d1", "domain-one"): 3 * 50 * 1024 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "cpu", "p2", "project-two", "d1", "domain-one"):  1 * 64,
+				hKey("az1", "cascade-lake", "ram", "p2", "project-two", "d1", "domain-one"):  1 * 819200 * 1024 * 1024,
+				hKey("az1", "cascade-lake", "disk", "p2", "project-two", "d1", "domain-one"): 1 * 50 * 1024 * 1024 * 1024,
 			},
 		},
 	}
@@ -496,6 +570,12 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 			}
 			for i := range tt.flavors {
 				rows = append(rows, &tt.flavors[i])
+			}
+			for i := range tt.projects {
+				rows = append(rows, &tt.projects[i])
+			}
+			for i := range tt.domains {
+				rows = append(rows, &tt.domains[i])
 			}
 			if len(rows) > 0 {
 				if err := testDB.Insert(rows...); err != nil {
