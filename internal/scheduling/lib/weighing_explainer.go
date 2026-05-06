@@ -81,10 +81,12 @@ func ExplainWeighing(result *v1alpha1.DecisionResult) string {
 
 	// Precompute effective contributions: contribution[weigherIdx][host] gives
 	// the signed weight contribution of that weigher to that host's final score.
+	// Computed for ALL ordered hosts (not just top-N) so counterfactual analysis
+	// correctly considers hosts outside the top-N that might rise to #1.
 	contributions := make([]map[string]float64, len(weigherSteps))
 	for i, step := range weigherSteps {
-		contributions[i] = make(map[string]float64, len(topHosts))
-		for _, h := range topHosts {
+		contributions[i] = make(map[string]float64, len(result.OrderedHosts))
+		for _, h := range result.OrderedHosts {
 			contributions[i][h] = multipliers[i] * math.Tanh(step.Activations[h])
 		}
 	}
@@ -104,9 +106,11 @@ func ExplainWeighing(result *v1alpha1.DecisionResult) string {
 
 	// --- Counterfactual analysis for the #1 host ---
 	// Ask: "Is there a single weigher whose removal would dethrone the #1 host?"
+	// Evaluated over ALL ordered hosts so we don't miss a host outside the top-N
+	// that would rise to #1 when a weigher is removed.
 	counterfactualReported := false
 	for i, step := range weigherSteps {
-		newRanking := computeCounterfactualRanking(topHosts, result.AggregatedOutWeights, contributions[i])
+		newRanking := computeCounterfactualRanking(result.OrderedHosts, result.AggregatedOutWeights, contributions[i])
 		if newRanking[0] != topHosts[0] {
 			fmt.Fprintf(&sb, "  Without %s, %s would be #1 instead of %s.\n",
 				step.StepName, newRanking[0], topHosts[0])
