@@ -747,6 +747,13 @@ func newCRTestEnv(t *testing.T, tc CommitmentChangeTestCase) *CRTestEnv {
 		WithScheme(scheme).
 		WithObjects(objects...).
 		WithStatusSubresource(&v1alpha1.CommittedResource{}, &v1alpha1.Knowledge{}).
+		WithIndex(&v1alpha1.Reservation{}, "spec.committedResourceReservation.commitmentUUID", func(obj client.Object) []string {
+			res, ok := obj.(*v1alpha1.Reservation)
+			if !ok || res.Spec.CommittedResourceReservation == nil {
+				return nil
+			}
+			return []string{res.Spec.CommittedResourceReservation.CommitmentUUID}
+		}).
 		Build()
 
 	noCondition := make(map[string]struct{})

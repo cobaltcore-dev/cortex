@@ -28,13 +28,10 @@ import (
 // ============================================================================
 
 // newTestCommittedResource returns a CommittedResource with sensible defaults.
-// The finalizer is pre-populated so tests can call Reconcile once without a
-// separate finalizer-add round-trip.
 func newTestCommittedResource(name string, state v1alpha1.CommitmentStatus) *v1alpha1.CommittedResource {
 	return &v1alpha1.CommittedResource{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       name,
-			Finalizers: []string{crFinalizer},
+			Name: name,
 		},
 		Spec: v1alpha1.CommittedResourceSpec{
 			CommitmentUUID:   "test-uuid-1234",
@@ -749,8 +746,7 @@ func TestCommittedResourceController_BadSpec(t *testing.T) {
 	scheme := newCRTestScheme(t)
 	cr := &v1alpha1.CommittedResource{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       "test-cr",
-			Finalizers: []string{crFinalizer},
+			Name: "test-cr",
 		},
 		Spec: v1alpha1.CommittedResourceSpec{
 			CommitmentUUID:   "x", // too short, fails commitmentUUIDPattern
@@ -878,41 +874,5 @@ func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 				t.Errorf("reason: want %q, got %q", tt.wantReason, reason)
 			}
 		})
-	}
-}
-
-func TestCommittedResourceController_Deletion(t *testing.T) {
-	scheme := newCRTestScheme(t)
-	cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
-	child := &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-cr-0",
-			Labels: map[string]string{
-				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-			},
-		},
-		Spec: v1alpha1.ReservationSpec{
-			Type: v1alpha1.ReservationTypeCommittedResource,
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				CommitmentUUID: "test-uuid-1234",
-			},
-		},
-	}
-	k8sClient := newCRTestClient(scheme, cr, child)
-	controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: CommittedResourceControllerConfig{}}
-
-	if err := k8sClient.Delete(context.Background(), cr); err != nil {
-		t.Fatalf("delete CR: %v", err)
-	}
-	if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
-		t.Fatalf("reconcile: %v", err)
-	}
-
-	if got := countChildReservations(t, k8sClient, cr.Spec.CommitmentUUID); got != 0 {
-		t.Errorf("expected 0 child reservations after deletion, got %d", got)
-	}
-	var deleted v1alpha1.CommittedResource
-	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: cr.Name}, &deleted); err == nil {
-		t.Errorf("expected CR to be gone after deletion, but it still exists with finalizers=%v", deleted.Finalizers)
 	}
 }

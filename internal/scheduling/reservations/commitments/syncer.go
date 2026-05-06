@@ -291,8 +291,8 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 
 	// Count CommittedResource CRDs present locally but absent from Limes (do not delete — Limes
 	// responses may be transient and deleting active CRDs would drop Reservation slots).
-	// Also GC CRDs whose EndTime has passed: the commitment is over, the controller's finalizer
-	// will clean up child Reservations on deletion.
+	// Also GC CRDs whose EndTime has passed: the commitment is over, child Reservations will be
+	// cleaned up by the syncer's orphan GC on the next sync cycle.
 	var existingCRs v1alpha1.CommittedResourceList
 	if err := s.List(ctx, &existingCRs); err != nil {
 		logger.Error(err, "failed to list existing committed resource CRDs")

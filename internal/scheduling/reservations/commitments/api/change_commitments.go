@@ -231,15 +231,20 @@ ProcessLoop:
 				if isDelete {
 					// Limes is removing this commitment; delete the CRD if it exists.
 					snap.wasDeleted = true
+					snapshots = append(snapshots, snap)
 					if snap.prevSpec != nil {
 						if err := api.client.Delete(ctx, existing); err != nil && !apierrors.IsNotFound(err) {
 							failedReason = fmt.Sprintf("commitment %s: failed to delete CommittedResource CRD: %v", commitment.UUID, err)
 							rollback = true
 							break ProcessLoop
 						}
+						if err := commitments.DeleteChildReservations(ctx, api.client, existing); err != nil {
+							failedReason = fmt.Sprintf("commitment %s: failed to delete child reservations: %v", commitment.UUID, err)
+							rollback = true
+							break ProcessLoop
+						}
 						logger.V(1).Info("deleted CommittedResource CRD", "name", crName)
 					}
-					snapshots = append(snapshots, snap)
 					continue
 				}
 

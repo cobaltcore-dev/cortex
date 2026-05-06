@@ -16,7 +16,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -25,8 +24,6 @@ import (
 )
 
 const (
-	crFinalizer = "committed-resource.reservations.cortex.cloud/cleanup"
-
 	// maxConsecutiveFailuresForSlowdown is the ConsecutiveFailures threshold above which the
 	// Reservation watch stops re-enqueuing this CR. Without this guard, a broken rollback creates
 	// reservation churn that bypasses RequeueAfter and keeps the controller in a tight retry loop.
@@ -58,14 +55,6 @@ func (r *CommittedResourceController) Reconcile(ctx context.Context, req ctrl.Re
 	)
 
 	if !cr.DeletionTimestamp.IsZero() {
-		return r.reconcileDeletion(ctx, logger, &cr)
-	}
-
-	if !controllerutil.ContainsFinalizer(&cr, crFinalizer) {
-		controllerutil.AddFinalizer(&cr, crFinalizer)
-		if err := r.Update(ctx, &cr); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
-		}
 		return ctrl.Result{}, nil
 	}
 
@@ -299,23 +288,17 @@ func (r *CommittedResourceController) reconcileInactive(ctx context.Context, log
 	return ctrl.Result{}, r.setNotReady(ctx, cr, string(cr.Spec.State), "commitment is no longer active")
 }
 
-func (r *CommittedResourceController) reconcileDeletion(ctx context.Context, logger logr.Logger, cr *v1alpha1.CommittedResource) (ctrl.Result, error) {
-	if err := r.deleteChildReservations(ctx, cr); err != nil {
-		return ctrl.Result{}, err
-	}
-	controllerutil.RemoveFinalizer(cr, crFinalizer)
-	if err := r.Update(ctx, cr); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-	logger.Info("committed resource deleted, child reservations cleaned up")
-	return ctrl.Result{}, nil
-}
-
 // deleteChildReservations deletes all Reservation CRDs owned by this CommittedResource,
 // identified by matching CommitmentUUID in the reservation spec.
 func (r *CommittedResourceController) deleteChildReservations(ctx context.Context, cr *v1alpha1.CommittedResource) error {
+	return DeleteChildReservations(ctx, r.Client, cr)
+}
+
+// DeleteChildReservations deletes all Reservation CRDs belonging to cr, matched by CommitmentUUID.
+// Called both by the controller on inactive/rollback transitions and by the API handler on CR deletion.
+func DeleteChildReservations(ctx context.Context, k8sClient client.Client, cr *v1alpha1.CommittedResource) error {
 	var list v1alpha1.ReservationList
-	if err := r.List(ctx, &list,
+	if err := k8sClient.List(ctx, &list,
 		client.MatchingLabels{v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource},
 		client.MatchingFields{idxReservationByCommitmentUUID: cr.Spec.CommitmentUUID},
 	); err != nil {
@@ -323,7 +306,7 @@ func (r *CommittedResourceController) deleteChildReservations(ctx context.Contex
 	}
 	for i := range list.Items {
 		res := &list.Items[i]
-		if err := r.Delete(ctx, res); client.IgnoreNotFound(err) != nil {
+		if err := k8sClient.Delete(ctx, res); client.IgnoreNotFound(err) != nil {
 			return fmt.Errorf("failed to delete reservation %s: %w", res.Name, err)
 		}
 	}
