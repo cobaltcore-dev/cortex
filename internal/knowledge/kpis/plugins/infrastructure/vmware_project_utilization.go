@@ -171,7 +171,7 @@ func (k *VMwareProjectUtilizationKPI) queryProjectCapacityUsage() ([]vmwareProje
 		SELECT
 			s.tenant_id AS project_id,
 			COALESCE(p.name, '') AS project_name,
-			COALESCE(d.id, '') AS domain_id,
+			COALESCE(p.domain_id, '') AS domain_id,
 			COALESCE(d.name, '') AS domain_name,
 			s.os_ext_srv_attr_host AS compute_host,
 			s.os_ext_az_availability_zone AS availability_zone,
