@@ -219,7 +219,8 @@ func TestVMwareProjectUtilizationKPI_queryProjectInstanceCount(t *testing.T) {
 			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-unknown"}},
 			domains:  []identity.Domain{},
 			expectedCounts: map[string]vmwareProjectInstanceCount{
-				"project-1|nova-compute-1|flavor-1|az1": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "", DomainName: "", ComputeHost: "nova-compute-1", FlavorName: "flavor-1", AvailabilityZone: "az1", InstanceCount: 1},
+				// The domain_id is extracted from the project record, so it should be "domain-unknown" even though there is no matching domain entry
+				"project-1|nova-compute-1|flavor-1|az1": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "domain-unknown", DomainName: "", ComputeHost: "nova-compute-1", FlavorName: "flavor-1", AvailabilityZone: "az1", InstanceCount: 1},
 			},
 		},
 		{
@@ -415,7 +416,8 @@ func TestVMwareProjectUtilizationKPI_queryProjectCapacityUsage(t *testing.T) {
 			domains:  []identity.Domain{},
 			flavors:  []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
 			expectedUsages: map[string]vmwareProjectCapacityUsage{
-				"project-1|nova-compute-1|az1": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "", DomainName: "", ComputeHost: "nova-compute-1", AvailabilityZone: "az1", TotalVCPUs: 2, TotalRAMMB: 4096, TotalDiskGB: 1},
+				// The domain_id is extracted from the project record, so it should be "domain-unknown" even though there is no matching domain entry
+				"project-1|nova-compute-1|az1": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "domain-unknown", DomainName: "", ComputeHost: "nova-compute-1", AvailabilityZone: "az1", TotalVCPUs: 2, TotalRAMMB: 4096, TotalDiskGB: 1},
 			},
 		},
 		{
@@ -638,10 +640,11 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
 			},
 			expectedMetrics: []collectedVMwareMetric{
-				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "", "", "flavor-1", 1),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "", "", "vcpu", 2),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "", "", "memory", 4096*1024*1024),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "", "", "disk", 1*1024*1024*1024),
+				// The domain_id is extracted from the project record, so it should be "domain-unknown" even though there is no matching domain entry
+				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-unknown", "", "flavor-1", 1),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-unknown", "", "vcpu", 2),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-unknown", "", "memory", 4096*1024*1024),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-unknown", "", "disk", 1*1024*1024*1024),
 			},
 		},
 		{
