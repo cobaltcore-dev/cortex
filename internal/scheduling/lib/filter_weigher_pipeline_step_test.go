@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -30,7 +29,7 @@ func TestBaseFilterWeigherPipelineStep_Init(t *testing.T) {
 		{
 			name: "successful initialization with valid params",
 			params: []v1alpha1.Parameter{
-				{Key: "bla", StringValue: testlib.Ptr("")},
+				{Key: "bla", StringValue: new("")},
 			},
 			expectError: false,
 		},
@@ -42,7 +41,7 @@ func TestBaseFilterWeigherPipelineStep_Init(t *testing.T) {
 		{
 			name: "error on invalid JSON params",
 			params: []v1alpha1.Parameter{
-				{Key: "unexpected", StringValue: testlib.Ptr("{invalid json}")},
+				{Key: "unexpected", StringValue: new("{invalid json}")},
 			},
 			expectError: true,
 		},
@@ -201,8 +200,8 @@ func TestBaseFilterWeigherPipelineStep_Validate(t *testing.T) {
 		{
 			name: "invalid JSON",
 			params: []v1alpha1.Parameter{
-				{Key: "option1", StringValue: testlib.Ptr("value1")},
-				{Key: "option2", StringValue: testlib.Ptr("value2")},
+				{Key: "option1", StringValue: new("value1")},
+				{Key: "option2", StringValue: new("value2")},
 			},
 			expectError: true,
 		},

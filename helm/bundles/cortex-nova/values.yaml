@@ -95,6 +95,10 @@ cortex: &cortex
           - cortex.cloud/v1alpha1/ReservationList
           - cortex.cloud/v1alpha1/CommittedResource
           - cortex.cloud/v1alpha1/CommittedResourceList
+          - cortex.cloud/v1alpha1/ProjectQuota
+          - cortex.cloud/v1alpha1/ProjectQuotaList
+          - cortex.cloud/v1alpha1/FlavorGroupCapacity
+          - cortex.cloud/v1alpha1/FlavorGroupCapacityList
           - kvm.cloud.sap/v1/Hypervisor
           - kvm.cloud.sap/v1/HypervisorList
           - v1/Secret
@@ -114,9 +118,6 @@ cortex: &cortex
 cortex-scheduling-controllers:
   <<: *cortex
   namePrefix: cortex-nova-scheduling
-  rbac:
-    # The cortex nova scheduling controllers need hypervisor crd access.
-    hypervisor: {enable: true}
   # Enable webhook that will validate CRDs for the scheduling controllers.
   webhook: {enable: true}
   certmanager: {enable: true} # Needed for the webhook TLS certificates.
@@ -133,8 +134,17 @@ cortex-scheduling-controllers:
       - hypervisor-overcommit-controller
       - committed-resource-reservations-controller
       - failover-reservations-controller
+      - quota-controller
+      - capacity-controller
+    # Pipeline used for the empty-state capacity probe (ignores allocations and reservations).
+    capacityTotalPipeline: "kvm-report-capacity"
+    # Pipeline used for the current-state capacity probe (considers current VM allocations).
+    capacityPlaceablePipeline: "kvm-general-purpose-load-balancing"
+    # How often the capacity controller re-runs its scheduler probes.
+    capacityReconcileInterval: 5m
     enabledTasks:
       - nova-history-cleanup-task
+      - commitments-sync-task
     # If true, the external scheduler API will limit the list of hosts in its
     # response to those included in the scheduling request.
     novaLimitHostsToRequest: true
@@ -161,8 +171,10 @@ cortex-scheduling-controllers:
       # URL of the nova external scheduler API for placement decisions
       schedulerURL: "http://localhost:8080/scheduler/nova/external"
     committedResourceController:
-      # Back-off interval while CommittedResource placement is pending or failed
+      # Back-off interval while CommittedResource placement is pending or failed (base for exponential backoff)
       requeueIntervalRetry: "1m"
+      # Maximum back-off interval cap for the exponential retry delay
+      maxRequeueInterval: "30m"
     committedResourceAPI:
       # Timeout for watching CommittedResource CRDs before rolling back
       watchTimeout: "10s"
@@ -174,6 +186,9 @@ cortex-scheduling-controllers:
       enableReportUsage: true
       # When false, the endpoint returns HTTP 503.
       enableReportCapacity: true
+      # Whether the quota API endpoint is active
+      # When false, the endpoint returns HTTP 503.
+      enableQuota: true
       # Maps flavor group IDs to resource flag configs; "*" acts as catch-all.
       # Controls handlesCommitments, hasCapacity, hasQuota per resource type for each group.
       flavorGroupResourceConfig:
@@ -190,6 +205,11 @@ cortex-scheduling-controllers:
             handlesCommitments: false
             hasCapacity: true
             hasQuota: false
+    committedResourceUsageReconciler:
+      # Minimum time between usage reconcile runs for the same CommittedResource.
+      # Also acts as the periodic fallback interval: a successful reconcile schedules
+      # the next run after this duration, so this is also the maximum status staleness.
+      cooldownInterval: "5m"
     # OvercommitMappings is a list of mappings that map hypervisor traits to
     # overcommit ratios. Note that this list is applied in order, so if there
     # are multiple mappings applying to the same hypervisors, the last mapping
@@ -231,9 +251,6 @@ cortex-scheduling-controllers:
 cortex-knowledge-controllers:
   <<: *cortex
   namePrefix: cortex-nova-knowledge
-  rbac:
-    # The cortex nova scheduling controllers need hypervisor crd access.
-    hypervisor: {enable: true}
   conf:
     <<: *cortexConf
     leaderElectionID: cortex-nova-knowledge

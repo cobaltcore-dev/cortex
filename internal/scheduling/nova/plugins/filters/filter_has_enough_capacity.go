@@ -25,6 +25,10 @@ type FilterHasEnoughCapacityOpts struct {
 	// When a reservation type is in this list, its capacity is not blocked.
 	// Default: empty (all reservation types are considered)
 	IgnoredReservationTypes []v1alpha1.ReservationType `json:"ignoredReservationTypes,omitempty"`
+
+	// IgnoreAllocations skips subtracting current VM allocations from host capacity.
+	// When true, only raw hardware capacity is considered (empty datacenter scenario).
+	IgnoreAllocations bool `json:"ignoreAllocations,omitempty"`
 }
 
 func (FilterHasEnoughCapacityOpts) Validate() error { return nil }
@@ -80,18 +84,20 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			freeResourcesByHost[hv.Name] = hv.Status.EffectiveCapacity
 		}
 
-		// Subtract allocated resources.
-		for resourceName, allocated := range hv.Status.Allocation {
-			free, ok := freeResourcesByHost[hv.Name][resourceName]
-			if !ok {
-				traceLog.Error(
-					"hypervisor with allocation for unknown resource",
-					"host", hv.Name, "resource", resourceName,
-				)
-				continue
+		// Subtract allocated resources (skip when ignoring allocations for empty-datacenter capacity queries).
+		if !s.Options.IgnoreAllocations {
+			for resourceName, allocated := range hv.Status.Allocation {
+				free, ok := freeResourcesByHost[hv.Name][resourceName]
+				if !ok {
+					traceLog.Error(
+						"hypervisor with allocation for unknown resource",
+						"host", hv.Name, "resource", resourceName,
+					)
+					continue
+				}
+				free.Sub(allocated)
+				freeResourcesByHost[hv.Name][resourceName] = free
 			}
-			free.Sub(allocated)
-			freeResourcesByHost[hv.Name][resourceName] = free
 		}
 	}
 
@@ -190,6 +196,10 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		// Oversize spec-only: if a pending VM is larger than the remaining slot, block its full size.
 		var resourcesToBlock map[hv1.ResourceName]resource.Quantity
 		if reservation.Spec.Type == v1alpha1.ReservationTypeCommittedResource &&
+			// When ignoring allocations (empty-datacenter scenario) VM resources are not
+			// deducted, so the confirmed-VM adjustment would under-block: always use the
+			// full slot instead.
+			!s.Options.IgnoreAllocations &&
 			// if the reservation is not being migrated, block only unused resources
 			reservation.Spec.TargetHost == reservation.Status.Host &&
 			reservation.Spec.CommittedResourceReservation != nil &&

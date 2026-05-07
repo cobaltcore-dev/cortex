@@ -35,7 +35,6 @@ General:
 - You can use `maps.Copy` instead of iteratively copying a map
 - You can use `strings.Contains` to check if some string is in another
 - You can use `slices.Contains` to check if an element is part of a slice
-- And definitely use `testlib.Ptr` for test cases that require pointer values
 
 Testing:
 - Ideally test files should be short and contain only the necessary cases

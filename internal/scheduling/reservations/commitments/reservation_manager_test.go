@@ -45,6 +45,20 @@ func newTestCRSlot(name string, memGiB int64, targetHost, resourceGroup string, 
 	}
 }
 
+// withAZ returns a copy of the reservation with the given availability zone set.
+func withAZ(res v1alpha1.Reservation, az string) v1alpha1.Reservation {
+	res.Spec.AvailabilityZone = az
+	return res
+}
+
+// withDomainID returns a copy of the reservation with the given domain ID set.
+func withDomainID(res v1alpha1.Reservation, domainID string) v1alpha1.Reservation {
+	spec := *res.Spec.CommittedResourceReservation
+	spec.DomainID = domainID
+	res.Spec.CommittedResourceReservation = &spec
+	return res
+}
+
 // testFlavorGroups returns the default flavor groups map used across tests.
 func testFlavorGroups() map[string]compute.FlavorGroupFeature {
 	return map[string]compute.FlavorGroupFeature{"test-group": testFlavorGroup()}
@@ -59,6 +73,8 @@ func TestApplyCommitmentState(t *testing.T) {
 		name                string
 		existingSlots       []v1alpha1.Reservation
 		desiredMemoryGiB    int64
+		desiredAZ           string
+		desiredDomainID     string
 		flavorGroupOverride map[string]compute.FlavorGroupFeature // nil = testFlavorGroups()
 		wantError           bool
 		wantRemovedCount    int // exact count; -1 = at least one
@@ -210,6 +226,97 @@ func TestApplyCommitmentState(t *testing.T) {
 				}
 			},
 		},
+		// ----------------------------------------------------------------
+		// AZ change must delete+recreate (re-placement required)
+		// ----------------------------------------------------------------
+		{
+			// Bug: before the fix, AZ change was handled by syncReservationMetadata which
+			// patched the spec in place, leaving the reservation pinned to a host in the wrong AZ.
+			name: "AZ change on placed reservation triggers delete and recreate",
+			existingSlots: []v1alpha1.Reservation{
+				withAZ(newTestCRSlot("commitment-abc123-0", 8, "host-1", "test-group", nil), "az-old"),
+			},
+			desiredMemoryGiB: 8,
+			desiredAZ:        "az-new",
+			wantRemovedCount: 1,
+			validateRemoved: func(t *testing.T, removed []v1alpha1.Reservation) {
+				if got := removed[0].Spec.AvailabilityZone; got != "az-old" {
+					t.Errorf("expected removed slot to have AZ az-old, got %q", got)
+				}
+			},
+			validateRemaining: func(t *testing.T, remaining []v1alpha1.Reservation) {
+				if len(remaining) != 1 {
+					t.Fatalf("expected 1 remaining slot, got %d", len(remaining))
+				}
+				r := remaining[0]
+				if got := r.Spec.AvailabilityZone; got != "az-new" {
+					t.Errorf("expected recreated slot to have AZ az-new, got %q", got)
+				}
+				if r.Spec.TargetHost != "" {
+					t.Errorf("expected recreated slot to have no TargetHost (pending re-placement), got %q", r.Spec.TargetHost)
+				}
+			},
+		},
+		{
+			name: "AZ change on unplaced reservation also triggers delete and recreate",
+			existingSlots: []v1alpha1.Reservation{
+				withAZ(newTestCRSlot("commitment-abc123-0", 8, "", "test-group", nil), "az-old"),
+			},
+			desiredMemoryGiB: 8,
+			desiredAZ:        "az-new",
+			wantRemovedCount: 1,
+			validateRemaining: func(t *testing.T, remaining []v1alpha1.Reservation) {
+				if len(remaining) != 1 {
+					t.Fatalf("expected 1 remaining slot, got %d", len(remaining))
+				}
+				if got := remaining[0].Spec.AvailabilityZone; got != "az-new" {
+					t.Errorf("expected recreated slot to have AZ az-new, got %q", got)
+				}
+			},
+		},
+		{
+			name: "matching AZ does not trigger delete",
+			existingSlots: []v1alpha1.Reservation{
+				withAZ(newTestCRSlot("commitment-abc123-0", 8, "host-1", "test-group", nil), "az-1"),
+			},
+			desiredMemoryGiB: 8,
+			desiredAZ:        "az-1",
+			wantRemovedCount: 0,
+			validateRemaining: func(t *testing.T, remaining []v1alpha1.Reservation) {
+				if len(remaining) != 1 {
+					t.Fatalf("expected 1 remaining, got %d", len(remaining))
+				}
+				if remaining[0].Spec.TargetHost != "host-1" {
+					t.Errorf("expected host-1 to be preserved, got %q", remaining[0].Spec.TargetHost)
+				}
+			},
+		},
+		// ----------------------------------------------------------------
+		// DomainID change must be synced in place (no re-placement)
+		// ----------------------------------------------------------------
+		{
+			// Bug: before the fix, DomainID was never synced — existing reservations silently
+			// kept stale domain metadata if Limes updated project information.
+			name: "DomainID change is synced in place without re-placement",
+			existingSlots: []v1alpha1.Reservation{
+				withDomainID(newTestCRSlot("commitment-abc123-0", 8, "host-1", "test-group", nil), "domain-old"),
+			},
+			desiredMemoryGiB: 8,
+			desiredDomainID:  "domain-new",
+			wantRemovedCount: 0,
+			validateRemaining: func(t *testing.T, remaining []v1alpha1.Reservation) {
+				if len(remaining) != 1 {
+					t.Fatalf("expected 1 remaining, got %d", len(remaining))
+				}
+				r := remaining[0]
+				if got := r.Spec.CommittedResourceReservation.DomainID; got != "domain-new" {
+					t.Errorf("expected DomainID domain-new, got %q", got)
+				}
+				if r.Spec.TargetHost != "host-1" {
+					t.Errorf("expected host-1 to be preserved (no re-placement), got %q", r.Spec.TargetHost)
+				}
+			},
+		},
 	}
 
 	scheme := newCRTestScheme(t)
@@ -232,6 +339,8 @@ func TestApplyCommitmentState(t *testing.T) {
 				ProjectID:        "project-1",
 				FlavorGroupName:  "test-group",
 				TotalMemoryBytes: tt.desiredMemoryGiB * 1024 * 1024 * 1024,
+				AvailabilityZone: tt.desiredAZ,
+				DomainID:         tt.desiredDomainID,
 			}
 
 			applyResult, err := manager.ApplyCommitmentState(

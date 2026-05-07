@@ -12,7 +12,6 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -86,35 +85,35 @@ func TestVMwareAvoidShortTermContendedHostsStep_Init(t *testing.T) {
 	params := []v1alpha1.Parameter{
 		{
 			Key:        "avgCPUContentionLowerBound",
-			FloatValue: testlib.Ptr(0.0),
+			FloatValue: new(0.0),
 		},
 		{
 			Key:        "avgCPUContentionUpperBound",
-			FloatValue: testlib.Ptr(100.0),
+			FloatValue: new(100.0),
 		},
 		{
 			Key:        "avgCPUContentionActivationLowerBound",
-			FloatValue: testlib.Ptr(0.0),
+			FloatValue: new(0.0),
 		},
 		{
 			Key:        "avgCPUContentionActivationUpperBound",
-			FloatValue: testlib.Ptr(-1.0),
+			FloatValue: new(-1.0),
 		},
 		{
 			Key:        "maxCPUContentionLowerBound",
-			FloatValue: testlib.Ptr(0.0),
+			FloatValue: new(0.0),
 		},
 		{
 			Key:        "maxCPUContentionUpperBound",
-			FloatValue: testlib.Ptr(100.0),
+			FloatValue: new(100.0),
 		},
 		{
 			Key:        "maxCPUContentionActivationLowerBound",
-			FloatValue: testlib.Ptr(0.0),
+			FloatValue: new(0.0),
 		},
 		{
 			Key:        "maxCPUContentionActivationUpperBound",
-			FloatValue: testlib.Ptr(-1.0),
+			FloatValue: new(-1.0),
 		},
 	}
 

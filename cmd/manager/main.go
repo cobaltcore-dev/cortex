@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -56,9 +57,11 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/capacity"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	commitmentsapi "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/quota"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
@@ -101,7 +104,10 @@ func main() {
 	restConfig := ctrl.GetConfigOrDie()
 
 	// Custom entrypoint for scheduler e2e tests.
-	if len(os.Args) == 2 {
+	// Usage: /main <subcommand> [json-override]
+	// The optional json-override is merged on top of the ConfigMap config, e.g.:
+	//   /main e2e-commitments '{"noCleanup":true,"azs":["qa-de-1a"]}'
+	if len(os.Args) >= 2 {
 		copts := client.Options{Scheme: scheme}
 		client := must.Return(client.New(restConfig, copts))
 		switch os.Args[1] {
@@ -118,7 +124,21 @@ func main() {
 			return
 		case "e2e-commitments":
 			commitmentsChecksConfig := conf.GetConfigOrDie[commitments.E2EChecksConfig]()
-			commitments.RunCommitmentsE2EChecks(ctx, commitmentsChecksConfig)
+			if len(os.Args) >= 3 {
+				if err := json.Unmarshal([]byte(os.Args[2]), &commitmentsChecksConfig); err != nil {
+					slog.Error("invalid json override for e2e-commitments", "err", err)
+					os.Exit(1)
+				}
+			}
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						slog.Error("e2e check failed", "reason", r)
+						os.Exit(1)
+					}
+				}()
+				commitments.RunCommitmentsE2EChecks(ctx, commitmentsChecksConfig)
+			}()
 			return
 		}
 	}
@@ -548,13 +568,33 @@ func main() {
 			os.Exit(1)
 		}
 
+		crControllerConf := commitmentsConfig.CommittedResourceController
+		crControllerConf.ApplyDefaults()
 		if err := (&commitments.CommittedResourceController{
 			Client: multiclusterClient,
 			Scheme: mgr.GetScheme(),
-			Conf:   commitmentsConfig.CommittedResourceController,
+			Conf:   crControllerConf,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "CommittedResource")
 			os.Exit(1)
+		}
+
+		usageReconcilerMonitor := commitments.NewUsageReconcilerMonitor()
+		metrics.Registry.MustRegister(&usageReconcilerMonitor)
+		if commitmentsUsageDB == nil {
+			setupLog.Error(nil, "UsageReconciler requires a datasource but commitments.datasourceName is not configured — skipping")
+		} else {
+			usageReconcilerConf := commitmentsConfig.UsageReconciler
+			usageReconcilerConf.ApplyDefaults()
+			if err := (&commitments.UsageReconciler{
+				Client:  multiclusterClient,
+				Conf:    usageReconcilerConf,
+				UsageDB: commitmentsUsageDB,
+				Monitor: usageReconcilerMonitor,
+			}).SetupWithManager(mgr, multiclusterClient); err != nil {
+				setupLog.Error(err, "unable to create controller", "controller", "CommittedResourceUsage")
+				os.Exit(1)
+			}
 		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "datasource-controllers") {
@@ -686,6 +726,92 @@ func main() {
 			"maxVMsToProcess", failoverConfig.MaxVMsToProcess,
 			"vmSelectionRotationInterval", failoverConfig.VMSelectionRotationInterval)
 	}
+	if slices.Contains(mainConfig.EnabledControllers, "capacity-controller") {
+		setupLog.Info("enabling controller", "controller", "capacity-controller")
+		capacityConfig := conf.GetConfigOrDie[capacity.Config]()
+		capacityConfig.ApplyDefaults()
+
+		capacityMonitor := capacity.NewMonitor(multiclusterClient)
+		if err := metrics.Registry.Register(&capacityMonitor); err != nil {
+			setupLog.Error(err, "failed to register capacity monitor metrics, continuing without metrics")
+		}
+
+		capacityController := capacity.NewController(multiclusterClient, capacityConfig)
+		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+			return capacityController.Start(ctx)
+		})); err != nil {
+			setupLog.Error(err, "unable to add capacity controller to manager")
+			os.Exit(1)
+		}
+		setupLog.Info("capacity-controller registered",
+			"schedulerURL", capacityConfig.SchedulerURL,
+			"reconcileInterval", capacityConfig.ReconcileInterval,
+			"totalPipeline", capacityConfig.TotalPipeline,
+			"placeablePipeline", capacityConfig.PlaceablePipeline)
+	}
+
+	if slices.Contains(mainConfig.EnabledControllers, "quota-controller") {
+		setupLog.Info("enabling controller", "controller", "quota-controller")
+		quotaConfig := conf.GetConfigOrDie[quota.QuotaControllerConfig]()
+		quotaConfig.ApplyDefaults()
+
+		// Get datasource name from the failover/commitments config (shared dependency)
+		failoverCfg := conf.GetConfigOrDie[failover.FailoverConfig]()
+		failoverCfg.ApplyDefaults()
+		datasourceName := failoverCfg.DatasourceName
+		if datasourceName == "" {
+			setupLog.Error(nil, "quota-controller requires datasourceName to be configured")
+			os.Exit(1)
+		}
+
+		quotaMetrics := quota.NewQuotaMetrics(metrics.Registry)
+
+		// Defer initialization until the manager starts (cache must be ready for postgres reader)
+		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+			// Create PostgresReader from the configured Datasource CRD
+			postgresReader, err := external.NewPostgresReader(ctx, multiclusterClient, datasourceName)
+			if err != nil {
+				setupLog.Error(err, "unable to create postgres reader for quota controller",
+					"datasourceName", datasourceName)
+				return err
+			}
+
+			// Create NovaReader and DBVMSource
+			novaReader := external.NewNovaReader(postgresReader)
+			vmSource := failover.NewDBVMSource(novaReader)
+
+			// Create the quota controller
+			quotaController := quota.NewQuotaController(
+				multiclusterClient,
+				vmSource,
+				quotaConfig,
+				quotaMetrics,
+			)
+
+			// Set up the watch-based reconciler (ProjectQuota spec changes, CR changes)
+			if err := quotaController.SetupWithManager(mgr); err != nil {
+				setupLog.Error(err, "unable to set up quota controller")
+				return err
+			}
+
+			// Set up the HV watcher for incremental TotalUsage updates
+			if err := quotaController.SetupHVWatcher(mgr); err != nil {
+				setupLog.Error(err, "unable to set up quota HV watcher")
+				return err
+			}
+
+			setupLog.Info("quota-controller starting",
+				"fullReconcileInterval", quotaConfig.FullReconcileInterval.Duration,
+				"crStateFilter", quotaConfig.CRStateFilter)
+
+			// Start the periodic full reconciliation loop
+			return quotaController.Start(ctx)
+		})); err != nil {
+			setupLog.Error(err, "unable to add quota controller to manager")
+			os.Exit(1)
+		}
+		setupLog.Info("quota-controller registered")
+	}
 
 	// +kubebuilder:scaffold:builder
 
@@ -722,7 +848,7 @@ func main() {
 		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
-			Interval: syncerConfig.SyncInterval,
+			Interval: syncerConfig.SyncInterval.Duration,
 			Name:     "commitments-sync-task",
 			Run:      func(ctx context.Context) error { return syncer.SyncReservations(ctx) },
 			Init:     func(ctx context.Context) error { return syncer.Init(ctx, syncerConfig) },

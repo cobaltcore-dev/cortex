@@ -11,7 +11,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
 )
@@ -130,8 +129,8 @@ func TestVMFaultsKPI_Collect(t *testing.T) {
 			Status:                "ERROR",
 			FlavorName:            "qemu-small",
 			OSEXTAvailabilityZone: "az1",
-			FaultCode:             testlib.Ptr(uint(500)),
-			FaultMessage:          testlib.Ptr("Internal error"),
+			FaultCode:             new(uint(500)),
+			FaultMessage:          new("Internal error"),
 		},
 		// Another faulty server in different AZ
 		&nova.Server{
@@ -140,8 +139,8 @@ func TestVMFaultsKPI_Collect(t *testing.T) {
 			Status:                "ERROR",
 			FlavorName:            "vmware-medium",
 			OSEXTAvailabilityZone: "az2",
-			FaultCode:             testlib.Ptr(uint(400)),
-			FaultMessage:          testlib.Ptr("Bad request"),
+			FaultCode:             new(uint(400)),
+			FaultMessage:          new("Bad request"),
 		},
 		// Server with only fault message (no code)
 		&nova.Server{
@@ -150,7 +149,7 @@ func TestVMFaultsKPI_Collect(t *testing.T) {
 			Status:                "BUILD",
 			FlavorName:            "generic-large",
 			OSEXTAvailabilityZone: "az1",
-			FaultMessage:          testlib.Ptr("Some warning"),
+			FaultMessage:          new("Some warning"),
 		},
 		// Server with flavor that doesn't exist (should be skipped)
 		&nova.Server{

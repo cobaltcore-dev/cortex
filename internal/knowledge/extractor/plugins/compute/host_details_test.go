@@ -12,7 +12,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/placement"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -44,13 +43,13 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 	}
 
 	hostPinnedProjects, err := v1alpha1.BoxFeatureList([]any{
-		&HostPinnedProjects{ComputeHost: testlib.Ptr("nova-compute-bb01"), Label: testlib.Ptr("project-123")},
-		&HostPinnedProjects{ComputeHost: testlib.Ptr("nova-compute-bb01"), Label: testlib.Ptr("project-456")},
-		&HostPinnedProjects{ComputeHost: testlib.Ptr("node001-bb02"), Label: nil},
+		&HostPinnedProjects{ComputeHost: new("nova-compute-bb01"), Label: new("project-123")},
+		&HostPinnedProjects{ComputeHost: new("nova-compute-bb01"), Label: new("project-456")},
+		&HostPinnedProjects{ComputeHost: new("node001-bb02"), Label: nil},
 		// No entry for ironic-host-1 since it is excluded in the feature host pinned projects
-		&HostPinnedProjects{ComputeHost: testlib.Ptr("node002-bb03"), Label: nil},
-		&HostPinnedProjects{ComputeHost: testlib.Ptr("node003-bb03"), Label: nil},
-		&HostPinnedProjects{ComputeHost: testlib.Ptr("node004-bb03"), Label: nil},
+		&HostPinnedProjects{ComputeHost: new("node002-bb03"), Label: nil},
+		&HostPinnedProjects{ComputeHost: new("node003-bb03"), Label: nil},
+		&HostPinnedProjects{ComputeHost: new("node004-bb03"), Label: nil},
 	})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -67,9 +66,9 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		// Host with no special traits
 		&nova.Hypervisor{ID: "uuid4", ServiceHost: "node002-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "enabled"},
 		// Host with disabled status, no entry in the resource providers
-		&nova.Hypervisor{ID: "uuid5", ServiceHost: "node003-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "disabled", ServiceDisabledReason: testlib.Ptr("example reason")},
+		&nova.Hypervisor{ID: "uuid5", ServiceHost: "node003-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "disabled", ServiceDisabledReason: new("example reason")},
 		// Host with disabled trait
-		&nova.Hypervisor{ID: "uuid6", ServiceHost: "node004-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "enabled", ServiceDisabledReason: testlib.Ptr("example reason")},
+		&nova.Hypervisor{ID: "uuid6", ServiceHost: "node004-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "enabled", ServiceDisabledReason: new("example reason")},
 	}
 
 	if err := testDB.Insert(hypervisors...); err != nil {
@@ -96,12 +95,12 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 	}
 
 	hostAvailabilityZones, err := v1alpha1.BoxFeatureList([]any{
-		&HostAZ{AvailabilityZone: testlib.Ptr("az1"), ComputeHost: "nova-compute-bb01"},
+		&HostAZ{AvailabilityZone: new("az1"), ComputeHost: "nova-compute-bb01"},
 		&HostAZ{AvailabilityZone: nil, ComputeHost: "node001-bb02"},
-		&HostAZ{AvailabilityZone: testlib.Ptr("az2"), ComputeHost: "node002-bb03"},
-		&HostAZ{AvailabilityZone: testlib.Ptr("az2"), ComputeHost: "ironic-host-01"},
-		&HostAZ{AvailabilityZone: testlib.Ptr("az2"), ComputeHost: "node003-bb03"},
-		&HostAZ{AvailabilityZone: testlib.Ptr("az2"), ComputeHost: "node004-bb03"},
+		&HostAZ{AvailabilityZone: new("az2"), ComputeHost: "node002-bb03"},
+		&HostAZ{AvailabilityZone: new("az2"), ComputeHost: "ironic-host-01"},
+		&HostAZ{AvailabilityZone: new("az2"), ComputeHost: "node003-bb03"},
+		&HostAZ{AvailabilityZone: new("az2"), ComputeHost: "node004-bb03"},
 	})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -153,7 +152,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			Enabled:          false,
 			Decommissioned:   false,
 			ExternalCustomer: false,
-			DisabledReason:   testlib.Ptr("[down] --"),
+			DisabledReason:   new("[down] --"),
 			RunningVMs:       3,
 			PinnedProjects:   nil,
 		},
@@ -181,7 +180,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			Enabled:          false,
 			Decommissioned:   false,
 			ExternalCustomer: false,
-			DisabledReason:   testlib.Ptr("[disabled] example reason"),
+			DisabledReason:   new("[disabled] example reason"),
 			RunningVMs:       2,
 			PinnedProjects:   nil,
 		},
@@ -195,7 +194,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			Enabled:          false,
 			Decommissioned:   false,
 			ExternalCustomer: false,
-			DisabledReason:   testlib.Ptr("[disabled] example reason"),
+			DisabledReason:   new("[disabled] example reason"),
 			RunningVMs:       2,
 			PinnedProjects:   nil,
 		},
@@ -211,7 +210,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			ExternalCustomer: true,
 			DisabledReason:   nil,
 			RunningVMs:       5,
-			PinnedProjects:   testlib.Ptr("project-123,project-456"),
+			PinnedProjects:   new("project-123,project-456"),
 		},
 	}
 

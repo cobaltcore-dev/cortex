@@ -196,7 +196,7 @@ k8s_yaml(helm('./helm/bundles/cortex-crds', name='cortex-crds', set=crd_extra_va
 if 'nova' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Nova bundle")
     k8s_yaml(helm('./helm/bundles/cortex-nova', name='cortex-nova', values=tilt_values, set=env_set_overrides))
-    k8s_resource('cortex-nova-postgresql', labels=['Cortex-Nova'], port_forwards=[
+    k8s_resource('cortex-nova-postgresql-v18', labels=['Cortex-Nova'], port_forwards=[
         port_forward(8000, 5432),
     ])
     k8s_resource('cortex-nova-scheduling-controller-manager', labels=['Cortex-Nova'], port_forwards=[
@@ -221,7 +221,7 @@ if 'nova' in ACTIVE_DEPLOYMENTS:
 if 'manila' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Manila bundle")
     k8s_yaml(helm('./helm/bundles/cortex-manila', name='cortex-manila', values=tilt_values, set=env_set_overrides))
-    k8s_resource('cortex-manila-postgresql', labels=['Cortex-Manila'], port_forwards=[
+    k8s_resource('cortex-manila-postgresql-v18', labels=['Cortex-Manila'], port_forwards=[
         port_forward(8002, 5432),
     ])
     k8s_resource('cortex-manila-scheduling-controller-manager', labels=['Cortex-Manila'], port_forwards=[
@@ -238,7 +238,7 @@ if 'manila' in ACTIVE_DEPLOYMENTS:
 
 if 'cinder' in ACTIVE_DEPLOYMENTS:
     k8s_yaml(helm('./helm/bundles/cortex-cinder', name='cortex-cinder', values=tilt_values, set=env_set_overrides))
-    k8s_resource('cortex-cinder-postgresql', labels=['Cortex-Cinder'], port_forwards=[
+    k8s_resource('cortex-cinder-postgresql-v18', labels=['Cortex-Cinder'], port_forwards=[
         port_forward(8004, 5432),
     ])
     k8s_resource('cortex-cinder-scheduling-controller-manager', labels=['Cortex-Cinder'], port_forwards=[

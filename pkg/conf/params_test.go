@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 )
 
 func TestUnmarshalParams_NilParameters(t *testing.T) {
@@ -47,7 +46,7 @@ func TestUnmarshalParams_StringValue(t *testing.T) {
 	}
 
 	params := v1alpha1.Parameters{
-		{Key: "name", StringValue: testlib.Ptr("test-name")},
+		{Key: "name", StringValue: new("test-name")},
 	}
 
 	var result TestStruct
@@ -67,7 +66,7 @@ func TestUnmarshalParams_BoolValue(t *testing.T) {
 	}
 
 	params := v1alpha1.Parameters{
-		{Key: "enabled", BoolValue: testlib.Ptr(true)},
+		{Key: "enabled", BoolValue: new(true)},
 	}
 
 	var result TestStruct
@@ -87,7 +86,7 @@ func TestUnmarshalParams_IntValue(t *testing.T) {
 	}
 
 	params := v1alpha1.Parameters{
-		{Key: "count", IntValue: testlib.Ptr(int64(42))},
+		{Key: "count", IntValue: new(int64(42))},
 	}
 
 	var result TestStruct
@@ -107,7 +106,7 @@ func TestUnmarshalParams_FloatValue(t *testing.T) {
 	}
 
 	params := v1alpha1.Parameters{
-		{Key: "threshold", FloatValue: testlib.Ptr(3.14)},
+		{Key: "threshold", FloatValue: new(3.14)},
 	}
 
 	var result TestStruct
@@ -127,7 +126,7 @@ func TestUnmarshalParams_StringListValue(t *testing.T) {
 	}
 
 	params := v1alpha1.Parameters{
-		{Key: "tags", StringListValue: testlib.Ptr([]string{"tag1", "tag2", "tag3"})},
+		{Key: "tags", StringListValue: new([]string{"tag1", "tag2", "tag3"})},
 	}
 
 	var result TestStruct
@@ -158,12 +157,12 @@ func TestUnmarshalParams_MultipleValues(t *testing.T) {
 	}
 
 	params := v1alpha1.Parameters{
-		{Key: "name", StringValue: testlib.Ptr("test")},
-		{Key: "count", IntValue: testlib.Ptr(int64(10))},
-		{Key: "enabled", BoolValue: testlib.Ptr(true)},
-		{Key: "threshold", FloatValue: testlib.Ptr(0.5)},
-		{Key: "tags", StringListValue: testlib.Ptr([]string{"a", "b"})},
-		{Key: "weights", FloatMapValue: testlib.Ptr(map[string]float64{"cpu": 1.0, "memory": 0.5})},
+		{Key: "name", StringValue: new("test")},
+		{Key: "count", IntValue: new(int64(10))},
+		{Key: "enabled", BoolValue: new(true)},
+		{Key: "threshold", FloatValue: new(0.5)},
+		{Key: "tags", StringListValue: new([]string{"a", "b"})},
+		{Key: "weights", FloatMapValue: new(map[string]float64{"cpu": 1.0, "memory": 0.5})},
 	}
 
 	var result TestStruct
@@ -204,8 +203,8 @@ func TestUnmarshalParams_DuplicateKeys(t *testing.T) {
 	}
 
 	params := v1alpha1.Parameters{
-		{Key: "name", StringValue: testlib.Ptr("first")},
-		{Key: "name", StringValue: testlib.Ptr("second")},
+		{Key: "name", StringValue: new("first")},
+		{Key: "name", StringValue: new("second")},
 	}
 
 	var result TestStruct
@@ -225,7 +224,7 @@ func TestUnmarshalParams_DuplicateValues(t *testing.T) {
 	}
 
 	params := v1alpha1.Parameters{
-		{Key: "name", StringValue: testlib.Ptr("first"), IntValue: testlib.Ptr(int64(1))},
+		{Key: "name", StringValue: new("first"), IntValue: new(int64(1))},
 	}
 
 	var result TestStruct
@@ -265,8 +264,8 @@ func TestUnmarshalParams_UnknownField(t *testing.T) {
 	}
 
 	params := v1alpha1.Parameters{
-		{Key: "name", StringValue: testlib.Ptr("test")},
-		{Key: "unknown", StringValue: testlib.Ptr("value")},
+		{Key: "name", StringValue: new("test")},
+		{Key: "unknown", StringValue: new("value")},
 	}
 
 	var result TestStruct
@@ -286,7 +285,7 @@ func TestUnmarshalParams_TypeMismatch(t *testing.T) {
 	}
 
 	params := v1alpha1.Parameters{
-		{Key: "count", StringValue: testlib.Ptr("not-a-number")},
+		{Key: "count", StringValue: new("not-a-number")},
 	}
 
 	var result TestStruct
@@ -307,7 +306,7 @@ func TestUnmarshalParams_OptionalFieldsMissing(t *testing.T) {
 	}
 
 	params := v1alpha1.Parameters{
-		{Key: "required", StringValue: testlib.Ptr("value")},
+		{Key: "required", StringValue: new("value")},
 	}
 
 	var result TestStruct
@@ -333,8 +332,8 @@ func TestUnmarshalParams_NestedStruct(t *testing.T) {
 	}
 
 	params := v1alpha1.Parameters{
-		{Key: "name", StringValue: testlib.Ptr("nested-test")},
-		{Key: "weight", FloatValue: testlib.Ptr(1.5)},
+		{Key: "name", StringValue: new("nested-test")},
+		{Key: "weight", FloatValue: new(1.5)},
 	}
 
 	var result TestStruct
@@ -357,7 +356,7 @@ func TestUnmarshalParams_EmptyStringList(t *testing.T) {
 	}
 
 	params := v1alpha1.Parameters{
-		{Key: "tags", StringListValue: testlib.Ptr([]string{})},
+		{Key: "tags", StringListValue: new([]string{})},
 	}
 
 	var result TestStruct
@@ -380,10 +379,10 @@ func TestUnmarshalParams_ZeroValues(t *testing.T) {
 	}
 
 	params := v1alpha1.Parameters{
-		{Key: "count", IntValue: testlib.Ptr(int64(0))},
-		{Key: "threshold", FloatValue: testlib.Ptr(0.0)},
-		{Key: "enabled", BoolValue: testlib.Ptr(false)},
-		{Key: "name", StringValue: testlib.Ptr("")},
+		{Key: "count", IntValue: new(int64(0))},
+		{Key: "threshold", FloatValue: new(0.0)},
+		{Key: "enabled", BoolValue: new(false)},
+		{Key: "name", StringValue: new("")},
 	}
 
 	var result TestStruct
@@ -413,8 +412,8 @@ func TestUnmarshalParams_NegativeValues(t *testing.T) {
 	}
 
 	params := v1alpha1.Parameters{
-		{Key: "count", IntValue: testlib.Ptr(int64(-42))},
-		{Key: "threshold", FloatValue: testlib.Ptr(-3.14)},
+		{Key: "count", IntValue: new(int64(-42))},
+		{Key: "threshold", FloatValue: new(-3.14)},
 	}
 
 	var result TestStruct
@@ -438,8 +437,8 @@ func TestUnmarshalParams_LargeValues(t *testing.T) {
 	}
 
 	params := v1alpha1.Parameters{
-		{Key: "largeInt", IntValue: testlib.Ptr(int64(9223372036854775807))},  // max int64
-		{Key: "largeFloat", FloatValue: testlib.Ptr(1.7976931348623157e+308)}, // approx max float64
+		{Key: "largeInt", IntValue: new(int64(9223372036854775807))},  // max int64
+		{Key: "largeFloat", FloatValue: new(1.7976931348623157e+308)}, // approx max float64
 	}
 
 	var result TestStruct
@@ -459,7 +458,7 @@ func TestUnmarshalParams_SpecialCharactersInString(t *testing.T) {
 	}
 
 	params := v1alpha1.Parameters{
-		{Key: "name", StringValue: testlib.Ptr(`test"with'special\chars`)},
+		{Key: "name", StringValue: new(`test"with'special\chars`)},
 	}
 
 	var result TestStruct
@@ -479,7 +478,7 @@ func TestUnmarshalParams_UnicodeInString(t *testing.T) {
 	}
 
 	params := v1alpha1.Parameters{
-		{Key: "name", StringValue: testlib.Ptr("日本語テスト🚀")},
+		{Key: "name", StringValue: new("日本語テスト🚀")},
 	}
 
 	var result TestStruct
