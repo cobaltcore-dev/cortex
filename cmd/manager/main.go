@@ -129,7 +129,15 @@ func main() {
 					os.Exit(1)
 				}
 			}
-			commitments.RunCommitmentsE2EChecks(ctx, commitmentsChecksConfig)
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						slog.Error("e2e check failed", "reason", r)
+						os.Exit(1)
+					}
+				}()
+				commitments.RunCommitmentsE2EChecks(ctx, commitmentsChecksConfig)
+			}()
 			return
 		}
 	}
