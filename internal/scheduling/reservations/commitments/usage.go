@@ -152,8 +152,8 @@ func (c *UsageCalculator) CalculateUsage(
 	report := c.buildUsageResponse(vms, vmAssignments, flavorGroups, allAZs, infoVersion)
 
 	assignedToCommitments := 0
-	for _, commitmentUUID := range vmAssignments {
-		if commitmentUUID != "" {
+	for _, vm := range vms {
+		if vmAssignments[vm.UUID] != "" {
 			assignedToCommitments++
 		}
 	}

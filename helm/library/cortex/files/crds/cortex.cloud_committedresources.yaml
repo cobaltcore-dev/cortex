@@ -349,6 +349,7 @@ spec:
                   metadata.generation the cooldown is bypassed so spec changes (e.g. shrink) are reflected
                   immediately rather than waiting for the next cooldown interval.
                 format: int64
+                minimum: 0
                 type: integer
               usedResources:
                 additionalProperties:

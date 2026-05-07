@@ -139,6 +139,7 @@ type CommittedResourceStatus struct {
 	// metadata.generation the cooldown is bypassed so spec changes (e.g. shrink) are reflected
 	// immediately rather than waiting for the next cooldown interval.
 	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=0
 	UsageObservedGeneration *int64 `json:"usageObservedGeneration,omitempty"`
 
 	// Conditions holds the current status conditions.

@@ -136,7 +136,7 @@ func CheckCommitmentsRoundTrip(ctx context.Context, config E2EChecksConfig) {
 			if !resInfo.HandlesCommitments {
 				continue
 			}
-			e2eRoundTripResource(ctx, baseURL, serviceInfo.Version, az, projectID, resourceName)
+			e2eRoundTripResource(ctx, baseURL, serviceInfo.Version, az, projectID, resourceName, config.NoCleanup)
 			checked++
 		}
 	}
@@ -154,6 +154,7 @@ func e2eRoundTripResource(
 	az liquid.AvailabilityZone,
 	projectID liquid.ProjectUUID,
 	resourceName liquid.ResourceName,
+	noCleanup bool,
 ) {
 
 	testUUID := liquid.CommitmentUUID(fmt.Sprintf("e2e-%d", time.Now().UnixMilli()))
@@ -199,6 +200,11 @@ func e2eRoundTripResource(
 
 	// Register cleanup immediately so it runs even if the usage check panics.
 	defer func() {
+		if noCleanup {
+			slog.Info("round-trip check: NoCleanup=true, keeping commitment for inspection",
+				"resource", resourceName, "uuid", testUUID)
+			return
+		}
 		deleteReq := liquid.CommitmentChangeRequest{
 			InfoVersion: infoVersion,
 			AZ:          az,
