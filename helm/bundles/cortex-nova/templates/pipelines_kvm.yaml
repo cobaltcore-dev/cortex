@@ -584,7 +584,6 @@ spec:
         VM allocations and all reservation types are ignored to represent an
         empty datacenter scenario.
       params:
-        - {key: ignoreAllocations, boolValue: true}
         - {key: ignoredReservationTypes, stringListValue: ["CommittedResourceReservation", "FailoverReservation"]}
     - name: filter_has_requested_traits
       description: |
