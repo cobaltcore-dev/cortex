@@ -5,6 +5,7 @@ package nova
 
 import (
 	"encoding/json"
+	"log/slog"
 )
 
 // OpenStack server model as returned by the Nova API under /servers/detail.
@@ -162,7 +163,9 @@ func (s *Server) UnmarshalJSON(data []byte) error {
 		var imageMap struct {
 			ID string `json:"id"`
 		}
-		if err := json.Unmarshal(aux.Image, &imageMap); err == nil {
+		if err := json.Unmarshal(aux.Image, &imageMap); err != nil {
+			slog.Warn("failed to parse image ref from server response, leaving blank", "error", err, "serverID", s.ID)
+		} else {
 			s.ImageRef = imageMap.ID
 		}
 	}

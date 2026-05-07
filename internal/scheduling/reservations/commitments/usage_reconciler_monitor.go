@@ -41,14 +41,14 @@ func NewUsageReconcilerMonitor() UsageReconcilerMonitor {
 }
 
 // Describe implements prometheus.Collector.
-func (m *UsageReconcilerMonitor) Describe(ch chan<- *prometheus.Desc) {
+func (m UsageReconcilerMonitor) Describe(ch chan<- *prometheus.Desc) {
 	m.reconcileDuration.Describe(ch)
 	m.statusAge.Describe(ch)
 	m.assignedInstances.Describe(ch)
 }
 
 // Collect implements prometheus.Collector.
-func (m *UsageReconcilerMonitor) Collect(ch chan<- prometheus.Metric) {
+func (m UsageReconcilerMonitor) Collect(ch chan<- prometheus.Metric) {
 	m.reconcileDuration.Collect(ch)
 	m.statusAge.Collect(ch)
 	m.assignedInstances.Collect(ch)

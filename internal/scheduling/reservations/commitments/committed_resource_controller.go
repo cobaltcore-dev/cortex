@@ -122,7 +122,10 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 	}
 	if !allReady {
 		// Reservation controller hasn't processed all slots yet; Reservation watch will re-enqueue.
-		return ctrl.Result{}, r.setNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement")
+		// Reset ConsecutiveFailures: applyReservationState just succeeded, so prior failures no longer
+		// apply. Without this, a high count would suppress watch re-enqueues (slowdown gate) even
+		// though placement is now working, leaving the CR stuck in Reserving state indefinitely.
+		return ctrl.Result{}, r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", 0)
 	}
 	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
 	return ctrl.Result{}, r.setAccepted(ctx, cr)
@@ -178,7 +181,10 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 	}
 	if !allReady {
 		// Reservation controller hasn't processed all slots yet; Reservation watch will re-enqueue.
-		return ctrl.Result{}, r.setNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement")
+		// Reset ConsecutiveFailures: applyReservationState just succeeded, so prior failures no longer
+		// apply. Without this, a high count would suppress watch re-enqueues (slowdown gate) even
+		// though placement is now working, leaving the CR stuck in Reserving state indefinitely.
+		return ctrl.Result{}, r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", 0)
 	}
 	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
 	return ctrl.Result{}, r.setAccepted(ctx, cr)
@@ -388,20 +394,21 @@ func (r *CommittedResourceController) retryDelay(cr *v1alpha1.CommittedResource)
 
 // setNotReady patches Ready=False on CommittedResource status.
 func (r *CommittedResourceController) setNotReady(ctx context.Context, cr *v1alpha1.CommittedResource, reason, message string) error {
-	return r.patchNotReady(ctx, cr, reason, message, false)
+	return r.patchNotReady(ctx, cr, reason, message, cr.Status.ConsecutiveFailures)
 }
 
 // setNotReadyRetry increments ConsecutiveFailures and patches Ready=False/Reserving.
 // Use this in the AllowRejection=false retry paths so the failure counter drives backoff.
 func (r *CommittedResourceController) setNotReadyRetry(ctx context.Context, cr *v1alpha1.CommittedResource, message string) error {
-	return r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, message, true)
+	return r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, message, cr.Status.ConsecutiveFailures+1)
 }
 
-func (r *CommittedResourceController) patchNotReady(ctx context.Context, cr *v1alpha1.CommittedResource, reason, message string, countFailure bool) error {
+// patchNotReady patches Ready=False and sets ConsecutiveFailures to failures.
+// Pass cr.Status.ConsecutiveFailures to keep the current count (setNotReady),
+// cr.Status.ConsecutiveFailures+1 to increment (setNotReadyRetry), or 0 to reset.
+func (r *CommittedResourceController) patchNotReady(ctx context.Context, cr *v1alpha1.CommittedResource, reason, message string, failures int32) error {
 	old := cr.DeepCopy()
-	if countFailure {
-		cr.Status.ConsecutiveFailures++
-	}
+	cr.Status.ConsecutiveFailures = failures
 	meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
 		Type:               v1alpha1.CommittedResourceConditionReady,
 		Status:             metav1.ConditionFalse,
@@ -421,6 +428,12 @@ func (r *CommittedResourceController) SetupWithManager(mgr ctrl.Manager, mcl *mu
 	ctx := context.Background()
 	if err := indexReservationByCommitmentUUID(ctx, mcl); err != nil {
 		return fmt.Errorf("failed to set up reservation field index: %w", err)
+	}
+	// Also register idxCommittedResourceByUUID here: the Reservation watch handler uses it to map
+	// Reservation→CR. The UsageReconciler registers the same index, but it may not be set up when
+	// commitmentsUsageDB is unconfigured. IndexField deduplicates, so calling it twice is safe.
+	if err := indexCommittedResourceByUUID(ctx, mcl); err != nil {
+		return fmt.Errorf("failed to set up committed resource field index: %w", err)
 	}
 
 	bldr := multicluster.BuildController(mcl, mgr)

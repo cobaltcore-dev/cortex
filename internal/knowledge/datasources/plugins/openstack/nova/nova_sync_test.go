@@ -288,7 +288,7 @@ func TestNovaSyncer_SyncImages(t *testing.T) {
 	if err := syncer.Init(ctx); err != nil {
 		t.Fatalf("failed to init images syncer: %v", err)
 	}
-	n, err := syncer.SyncAllImages(ctx)
+	n, err := syncer.Sync(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
