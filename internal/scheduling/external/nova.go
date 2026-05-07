@@ -17,6 +17,9 @@ type NovaReaderInterface interface {
 	GetAllFlavors(ctx context.Context) ([]nova.Flavor, error)
 	GetServerByID(ctx context.Context, serverID string) (*nova.Server, error)
 	GetFlavorByName(ctx context.Context, flavorName string) (*nova.Flavor, error)
+	// GetDeletedServerByID returns a deleted server by its ID from the deleted_servers table.
+	// Returns nil, nil if the server is not found in the deleted_servers table.
+	GetDeletedServerByID(ctx context.Context, serverID string) (*nova.DeletedServer, error)
 }
 
 // NovaReader provides read access to Nova data stored in the database.
@@ -106,4 +109,18 @@ func (r *NovaReader) GetFlavorByName(ctx context.Context, flavorName string) (*n
 		return nil, nil
 	}
 	return &flavors[0], nil
+}
+
+// GetDeletedServerByID returns a deleted Nova server by its ID from the deleted_servers table.
+// Returns nil, nil if the server is not found in the deleted_servers table.
+func (r *NovaReader) GetDeletedServerByID(ctx context.Context, serverID string) (*nova.DeletedServer, error) {
+	var servers []nova.DeletedServer
+	query := "SELECT * FROM " + nova.DeletedServer{}.TableName() + " WHERE id = $1"
+	if err := r.Select(ctx, &servers, query, serverID); err != nil {
+		return nil, fmt.Errorf("failed to query deleted server by ID: %w", err)
+	}
+	if len(servers) == 0 {
+		return nil, nil
+	}
+	return &servers[0], nil
 }

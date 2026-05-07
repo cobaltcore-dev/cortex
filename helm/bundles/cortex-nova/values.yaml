@@ -95,6 +95,8 @@ cortex: &cortex
           - cortex.cloud/v1alpha1/ReservationList
           - cortex.cloud/v1alpha1/CommittedResource
           - cortex.cloud/v1alpha1/CommittedResourceList
+          - cortex.cloud/v1alpha1/ProjectQuota
+          - cortex.cloud/v1alpha1/ProjectQuotaList
           - cortex.cloud/v1alpha1/FlavorGroupCapacity
           - cortex.cloud/v1alpha1/FlavorGroupCapacityList
           - kvm.cloud.sap/v1/Hypervisor
@@ -132,6 +134,7 @@ cortex-scheduling-controllers:
       - hypervisor-overcommit-controller
       - committed-resource-reservations-controller
       - failover-reservations-controller
+      - quota-controller
       - capacity-controller
     # Pipeline used for the empty-state capacity probe (ignores allocations and reservations).
     capacityTotalPipeline: "kvm-report-capacity"
@@ -182,6 +185,9 @@ cortex-scheduling-controllers:
       enableReportUsage: true
       # When false, the endpoint returns HTTP 503.
       enableReportCapacity: true
+      # Whether the quota API endpoint is active
+      # When false, the endpoint returns HTTP 503.
+      enableQuota: true
       # Maps flavor group IDs to resource flag configs; "*" acts as catch-all.
       # Controls handlesCommitments, hasCapacity, hasQuota per resource type for each group.
       flavorGroupResourceConfig:

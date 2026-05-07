@@ -478,22 +478,33 @@ func (c *UsageCalculator) buildUsageResponse(
 	}
 
 	// Build ResourceUsageReport for all flavor groups (not just those with fixed ratio)
-	for flavorGroupName := range flavorGroups {
+	for flavorGroupName, groupData := range flavorGroups {
 		// All flavor groups are included in usage reporting.
 
 		// === 1. RAM Resource ===
 		ramResourceName := liquid.ResourceName(ResourceNameRAM(flavorGroupName))
 		ramPerAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
+		// For AZSeparatedTopology resources (fixed-ratio groups), per-AZ Quota must be non-null.
+		// Use -1 ("infinite quota") as default until actual quota is read from ProjectQuota CRD.
+		ramHasAZQuota := groupData.HasFixedRamCoreRatio()
 		for _, az := range allAZs {
-			ramPerAZ[az] = &liquid.AZResourceUsageReport{
+			report := &liquid.AZResourceUsageReport{
 				Usage:        0,
 				Subresources: []liquid.Subresource{},
 			}
+			if ramHasAZQuota {
+				report.Quota = Some(int64(-1)) // infinite — will be overridden by ProjectQuota CRD
+			}
+			ramPerAZ[az] = report
 		}
 		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
 			for az, data := range azData {
 				if _, known := ramPerAZ[az]; !known {
-					ramPerAZ[az] = &liquid.AZResourceUsageReport{}
+					report := &liquid.AZResourceUsageReport{}
+					if ramHasAZQuota {
+						report.Quota = Some(int64(-1))
+					}
+					ramPerAZ[az] = report
 				}
 				ramPerAZ[az].Usage = data.ramUsage
 				ramPerAZ[az].PhysicalUsage = Some(data.ramUsage) // No overcommit for RAM

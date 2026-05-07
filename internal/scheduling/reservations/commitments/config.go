@@ -120,6 +120,9 @@ type APIConfig struct {
 	EnableReportUsage bool `json:"enableReportUsage"`
 	// EnableReportCapacity controls whether the report-capacity endpoint is active.
 	EnableReportCapacity bool `json:"enableReportCapacity"`
+	// EnableQuotaAPI controls whether the quota API endpoint is active.
+	// When false, the endpoint will return HTTP 503 Service Unavailable.
+	EnableQuotaAPI bool `json:"enableQuota"`
 	// WatchTimeout is how long the change-commitments handler polls CommittedResource
 	// CRD conditions before giving up and rolling back.
 	WatchTimeout metav1.Duration `json:"watchTimeout"`
@@ -149,6 +152,7 @@ func DefaultAPIConfig() APIConfig {
 		EnableChangeCommitments: true,
 		EnableReportUsage:       true,
 		EnableReportCapacity:    true,
+		EnableQuotaAPI:          true,
 		WatchTimeout:            metav1.Duration{Duration: 10 * time.Second},
 		WatchPollInterval:       metav1.Duration{Duration: 500 * time.Millisecond},
 	}
