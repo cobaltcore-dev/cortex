@@ -252,7 +252,7 @@ func TestUsageReconciler_Reconcile_Gates(t *testing.T) {
 
 	t.Run("generation advanced bypasses cooldown: runs past cooldown to buildCommitmentCapacityMap", func(t *testing.T) {
 		// UsageObsGen=nil means generationAdvanced=true, bypassing cooldown.
-		// The CR has no AcceptedSpec/AcceptedAmount so buildCommitmentCapacityMap returns
+		// The CR has no AcceptedSpec so buildCommitmentCapacityMap returns
 		// empty, triggering the "no active commitments" early-exit with RequeueAfter=cooldown.
 		cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
 		cr.Generation = 1

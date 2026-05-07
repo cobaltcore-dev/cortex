@@ -976,14 +976,12 @@ func TestCRLifecycle(t *testing.T) {
 		if crState.Status.AcceptedAt == nil {
 			t.Errorf("expected AcceptedAt to be set on acceptance")
 		}
-		if crState.Status.AcceptedAmount == nil {
-			t.Errorf("expected AcceptedAmount to be set on acceptance")
-		} else if crState.Status.AcceptedAmount.Cmp(resource.MustParse("4Gi")) != 0 {
-			t.Errorf("AcceptedAmount: want 4Gi, got %s", crState.Status.AcceptedAmount.String())
+		if crState.Status.AcceptedSpec == nil || crState.Status.AcceptedSpec.Amount.Cmp(resource.MustParse("4Gi")) != 0 {
+			t.Errorf("AcceptedSpec.Amount: want 4Gi, got %v", crState.Status.AcceptedSpec)
 		}
 	})
 
-	t.Run("resize failure: rolls back to AcceptedAmount, prior slot preserved", func(t *testing.T) {
+	t.Run("resize failure: rolls back to AcceptedSpec, prior slot preserved", func(t *testing.T) {
 		// Scheduler: accepts the first placement call (initial 4 GiB slot), rejects all subsequent.
 		objects := []client.Object{newTestFlavorKnowledge(), intgHypervisor("host-1")}
 		env := newIntgEnv(t, objects, intgAcceptFirstScheduler(1))
@@ -1003,8 +1001,8 @@ func TestCRLifecycle(t *testing.T) {
 		if !meta.IsStatusConditionTrue(crState.Status.Conditions, v1alpha1.CommittedResourceConditionReady) {
 			t.Fatalf("phase 1: expected CR to be Ready=True after initial placement")
 		}
-		if crState.Status.AcceptedAmount == nil || crState.Status.AcceptedAmount.Cmp(resource.MustParse("4Gi")) != 0 {
-			t.Fatalf("phase 1: AcceptedAmount must be 4Gi, got %v", crState.Status.AcceptedAmount)
+		if crState.Status.AcceptedSpec == nil || crState.Status.AcceptedSpec.Amount.Cmp(resource.MustParse("4Gi")) != 0 {
+			t.Fatalf("phase 1: AcceptedSpec.Amount must be 4Gi, got %v", crState.Status.AcceptedSpec)
 		}
 
 		// Phase 2: resize to 8 GiB (needs 2 slots). Scheduler has no more accepts.
@@ -1041,7 +1039,7 @@ func TestCRLifecycle(t *testing.T) {
 			t.Fatalf("list reservations: %v", err)
 		}
 		if len(finalList.Items) != 1 {
-			t.Errorf("resize rollback: want 1 slot (AcceptedAmount), got %d", len(finalList.Items))
+			t.Errorf("resize rollback: want 1 slot (AcceptedSpec), got %d", len(finalList.Items))
 		}
 		intgAssertCRCondition(t, env.k8sClient, []string{cr.Name}, metav1.ConditionFalse, v1alpha1.CommittedResourceReasonRejected)
 	})

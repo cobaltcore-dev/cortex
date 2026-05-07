@@ -106,22 +106,11 @@ type CommittedResourceSpec struct {
 
 // CommittedResourceStatus defines the observed state of CommittedResource.
 type CommittedResourceStatus struct {
-	// AcceptedAmount is the quantity the controller last successfully provisioned as Reservation slots.
-	// Nil if the spec has never been successfully reconciled.
-	// +kubebuilder:validation:Optional
-	AcceptedAmount *resource.Quantity `json:"acceptedAmount,omitempty"`
-
 	// AcceptedSpec is a snapshot of Spec from the last successful reconcile.
 	// Used by rollbackToAccepted to restore the exact previously-accepted placement (AZ, amount,
 	// project, domain, flavor group) even when the current spec has already been mutated to a new value.
 	// +kubebuilder:validation:Optional
 	AcceptedSpec *CommittedResourceSpec `json:"acceptedSpec,omitempty"`
-
-	// ConsecutiveFailures counts reconcile cycles that ended in a placement failure (applyErr or anyFailed).
-	// Reset to 0 on successful acceptance. Used to compute exponential backoff for the retry interval
-	// and to suppress Reservation watch re-enqueues while backing off.
-	// +kubebuilder:validation:Optional
-	ConsecutiveFailures int32 `json:"consecutiveFailures,omitempty"`
 
 	// AcceptedAt is when the controller last successfully reconciled the spec into Reservation slots.
 	// +kubebuilder:validation:Optional
@@ -182,7 +171,6 @@ const (
 // +kubebuilder:printcolumn:name="ResourceType",type="string",JSONPath=".spec.resourceType"
 // +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
 // +kubebuilder:printcolumn:name="Amount",type="string",JSONPath=".spec.amount"
-// +kubebuilder:printcolumn:name="AcceptedAmount",type="string",JSONPath=".status.acceptedAmount"
 // +kubebuilder:printcolumn:name="UsedMemory",type="string",JSONPath=".status.usedResources.memory",priority=1
 // +kubebuilder:printcolumn:name="UsedCPU",type="string",JSONPath=".status.usedResources.cpu",priority=1
 // +kubebuilder:printcolumn:name="State",type="string",JSONPath=".spec.state"

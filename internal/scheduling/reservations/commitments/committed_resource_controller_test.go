@@ -280,9 +280,6 @@ func TestCommittedResourceController_Reconcile(t *testing.T) {
 				if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: cr.Name}, &updated); err != nil {
 					t.Fatalf("get CR: %v", err)
 				}
-				if updated.Status.AcceptedAmount == nil {
-					t.Errorf("expected AcceptedAmount to be set on acceptance")
-				}
 				if updated.Status.AcceptedSpec == nil {
 					t.Errorf("expected AcceptedSpec to be set on acceptance")
 				} else if updated.Status.AcceptedSpec.AvailabilityZone != cr.Spec.AvailabilityZone {
@@ -413,11 +410,9 @@ func TestCommittedResourceController_PlacementFailure(t *testing.T) {
 func TestCommittedResourceController_Rollback(t *testing.T) {
 	scheme := newCRTestScheme(t)
 
-	// CR at generation 2; AcceptedSpec and AcceptedAmount reflect what was accepted at generation 1.
+	// CR at generation 2; AcceptedSpec reflects what was accepted at generation 1.
 	cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
 	cr.Generation = 2
-	accepted := resource.MustParse("4Gi")
-	cr.Status.AcceptedAmount = &accepted
 	acceptedSpec := cr.Spec
 	cr.Status.AcceptedSpec = &acceptedSpec
 
@@ -475,10 +470,8 @@ func TestCommittedResourceController_RollbackUsesAcceptedSpecAZ(t *testing.T) {
 	cr.Spec.AvailabilityZone = "new-az" // the failed AZ
 	cr.Generation = 2
 
-	accepted := resource.MustParse("4Gi")
 	acceptedSpec := cr.Spec
 	acceptedSpec.AvailabilityZone = "accepted-az" // last successfully placed AZ
-	cr.Status.AcceptedAmount = &accepted
 	cr.Status.AcceptedSpec = &acceptedSpec
 
 	// Existing reservation was placed in the wrong AZ by the failed rollback.
@@ -539,9 +532,7 @@ func TestCommittedResourceController_RollbackNilAcceptedSpec(t *testing.T) {
 
 	cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
 	cr.Generation = 2
-	accepted := resource.MustParse("4Gi")
-	cr.Status.AcceptedAmount = &accepted
-	// AcceptedSpec intentionally nil — simulates a CR accepted before the field existed.
+	// AcceptedSpec intentionally nil — simulates a CR that was never successfully accepted.
 
 	existing := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{
@@ -602,10 +593,8 @@ func TestCommittedResourceController_RejectedStaysRejected(t *testing.T) {
 			cr.Spec.AllowRejection = true
 			cr.Spec.AvailabilityZone = "bad-az" // spec was mutated to a failing AZ
 			cr.Generation = 2
-			accepted := resource.MustParse("4Gi")
 			acceptedSpec := cr.Spec.DeepCopy()
 			acceptedSpec.AvailabilityZone = "accepted-az"
-			cr.Status.AcceptedAmount = &accepted
 			cr.Status.AcceptedSpec = acceptedSpec
 
 			// No Knowledge → placement always fails.
@@ -649,7 +638,7 @@ func TestCommittedResourceController_RejectedStaysRejected(t *testing.T) {
 	}
 }
 
-func TestCommittedResourceController_ConsecutiveFailures(t *testing.T) {
+func TestCommittedResourceController_RetryBackoff(t *testing.T) {
 	scheme := newCRTestScheme(t)
 	cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
 	cr.Spec.AllowRejection = false
@@ -670,25 +659,33 @@ func TestCommittedResourceController_ConsecutiveFailures(t *testing.T) {
 		return updated
 	}
 
-	// First failure: ConsecutiveFailures 0→1, delay = base * 2^0.
+	// First failure: Reserving condition does not exist yet → delay = base * 2^0.
 	result1, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name))
 	if err != nil {
 		t.Fatalf("reconcile 1: %v", err)
 	}
-	if got := getCR().Status.ConsecutiveFailures; got != 1 {
-		t.Errorf("after failure 1: ConsecutiveFailures want 1, got %d", got)
-	}
 	if result1.RequeueAfter != base {
 		t.Errorf("after failure 1: RequeueAfter want %v, got %v", base, result1.RequeueAfter)
 	}
+	cond1 := meta.FindStatusCondition(getCR().Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+	if cond1 == nil || cond1.Reason != v1alpha1.CommittedResourceReasonReserving {
+		t.Fatalf("after failure 1: expected Ready=False/Reserving condition")
+	}
 
-	// Second failure: ConsecutiveFailures 1→2, delay = base * 2^1.
+	// Second failure: simulate base seconds elapsed by back-dating the condition's LastTransitionTime.
+	cr2 := getCR()
+	old2 := cr2.DeepCopy()
+	for i, c := range cr2.Status.Conditions {
+		if c.Type == v1alpha1.CommittedResourceConditionReady {
+			cr2.Status.Conditions[i].LastTransitionTime = metav1.NewTime(time.Now().Add(-base))
+		}
+	}
+	if err := k8sClient.Status().Patch(context.Background(), &cr2, client.MergeFrom(old2)); err != nil {
+		t.Fatalf("back-date condition: %v", err)
+	}
 	result2, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name))
 	if err != nil {
 		t.Fatalf("reconcile 2: %v", err)
-	}
-	if got := getCR().Status.ConsecutiveFailures; got != 2 {
-		t.Errorf("after failure 2: ConsecutiveFailures want 2, got %d", got)
 	}
 	if result2.RequeueAfter != 2*base {
 		t.Errorf("after failure 2: RequeueAfter want %v, got %v", 2*base, result2.RequeueAfter)
@@ -706,9 +703,10 @@ func TestCommittedResourceController_ConsecutiveFailures(t *testing.T) {
 		t.Fatalf("reconcile 4 (accept): %v", err)
 	}
 
-	// Acceptance resets ConsecutiveFailures to 0.
-	if got := getCR().Status.ConsecutiveFailures; got != 0 {
-		t.Errorf("after acceptance: ConsecutiveFailures want 0, got %d", got)
+	// After acceptance the Reserving condition is gone (replaced by Ready=True/Accepted).
+	acceptedCond := meta.FindStatusCondition(getCR().Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+	if acceptedCond == nil || acceptedCond.Status != metav1.ConditionTrue {
+		t.Errorf("after acceptance: expected Ready=True condition")
 	}
 }
 
@@ -722,22 +720,38 @@ func TestRetryDelay(t *testing.T) {
 		},
 	}
 	tests := []struct {
-		failures int32
-		want     time.Duration
+		elapsed time.Duration
+		want    time.Duration
 	}{
-		{0, 30 * time.Second},  // base * 2^0
-		{1, 60 * time.Second},  // base * 2^1
-		{2, 2 * time.Minute},   // base * 2^2
-		{5, 16 * time.Minute},  // base * 2^5 = 960s
-		{6, 30 * time.Minute},  // base * 2^6 = 1920s → capped at 30min
-		{10, 30 * time.Minute}, // exp capped at 6, still 30min
+		// Windows with base=30s: [0,30s)→30s, [30s,60s)→60s, [60s,120s)→120s,
+		// [120s,240s)→240s, [240s,480s)→480s, [480s,960s)→960s(16m), [960s,∞)→capped 30m.
+		// Use mid-window values to avoid boundary flakiness from time.Since epsilon.
+		{0, 30 * time.Second},                // start of first window
+		{15 * time.Second, base},             // mid [0s,30s)
+		{45 * time.Second, 2 * base},         // mid [30s,60s)
+		{90 * time.Second, 4 * base},         // mid [60s,120s)
+		{3 * time.Minute, 8 * base},          // mid [120s,240s)
+		{6 * time.Minute, 16 * base},         // mid [240s,480s)
+		{12 * time.Minute, 32 * base},        // mid [480s,960s) = 16m
+		{20 * time.Minute, 30 * time.Minute}, // [960s,∞) → capped
+		{60 * time.Minute, 30 * time.Minute}, // well beyond cap
 	}
 	for _, tt := range tests {
+		ltt := metav1.NewTime(time.Now().Add(-tt.elapsed))
 		cr := &v1alpha1.CommittedResource{
-			Status: v1alpha1.CommittedResourceStatus{ConsecutiveFailures: tt.failures},
+			Status: v1alpha1.CommittedResourceStatus{
+				Conditions: []metav1.Condition{
+					{
+						Type:               v1alpha1.CommittedResourceConditionReady,
+						Status:             metav1.ConditionFalse,
+						Reason:             v1alpha1.CommittedResourceReasonReserving,
+						LastTransitionTime: ltt,
+					},
+				},
+			},
 		}
 		if got := controller.retryDelay(cr); got != tt.want {
-			t.Errorf("failures=%d: want %v, got %v", tt.failures, tt.want, got)
+			t.Errorf("elapsed=%v: want %v, got %v", tt.elapsed, tt.want, got)
 		}
 	}
 }

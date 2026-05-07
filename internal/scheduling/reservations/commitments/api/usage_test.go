@@ -352,8 +352,7 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 					t.Fatalf("failed to create CommittedResource %s: %v", uuid, err)
 				}
 				cr.Status = v1alpha1.CommittedResourceStatus{
-					AcceptedAmount: &amount,
-					AcceptedSpec:   &spec,
+					AcceptedSpec: &spec,
 					Conditions: []metav1.Condition{
 						{
 							Type:               v1alpha1.CommittedResourceConditionReady,

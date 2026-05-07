@@ -30,9 +30,6 @@ spec:
     - jsonPath: .spec.amount
       name: Amount
       type: string
-    - jsonPath: .status.acceptedAmount
-      name: AcceptedAmount
-      type: string
     - jsonPath: .status.usedResources.memory
       name: UsedMemory
       priority: 1
@@ -171,15 +168,6 @@ spec:
           status:
             description: CommittedResourceStatus defines the observed state of CommittedResource.
             properties:
-              acceptedAmount:
-                anyOf:
-                - type: integer
-                - type: string
-                description: |-
-                  AcceptedAmount is the quantity the controller last successfully provisioned as Reservation slots.
-                  Nil if the spec has never been successfully reconciled.
-                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                x-kubernetes-int-or-string: true
               acceptedAt:
                 description: AcceptedAt is when the controller last successfully reconciled
                   the spec into Reservation slots.
@@ -344,13 +332,6 @@ spec:
                   - type
                   type: object
                 type: array
-              consecutiveFailures:
-                description: |-
-                  ConsecutiveFailures counts reconcile cycles that ended in a placement failure (applyErr or anyFailed).
-                  Reset to 0 on successful acceptance. Used to compute exponential backoff for the retry interval
-                  and to suppress Reservation watch re-enqueues while backing off.
-                format: int32
-                type: integer
               lastChanged:
                 description: |-
                   LastChanged is when the spec was last written by the syncer.

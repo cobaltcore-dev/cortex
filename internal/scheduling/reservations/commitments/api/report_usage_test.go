@@ -924,8 +924,7 @@ func (tr *UsageTestReservation) toCommittedResourceCRD() *v1alpha1.CommittedReso
 		ObjectMeta: metav1.ObjectMeta{Name: "cr-" + tr.CommitmentID},
 		Spec:       spec,
 		Status: v1alpha1.CommittedResourceStatus{
-			AcceptedAmount: &amount,
-			AcceptedSpec:   &spec,
+			AcceptedSpec: &spec,
 			// Simulate the CR controller having accepted the current generation (0 for fake client).
 			// Without this, the usage reconciler's readiness gate blocks usage calculation.
 			Conditions: []metav1.Condition{

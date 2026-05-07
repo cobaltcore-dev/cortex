@@ -24,11 +24,11 @@ import (
 )
 
 const (
-	// maxConsecutiveFailuresForSlowdown is the ConsecutiveFailures threshold above which the
-	// Reservation watch stops re-enqueuing this CR. Without this guard, a broken rollback creates
-	// reservation churn that bypasses RequeueAfter and keeps the controller in a tight retry loop.
-	// The CR is still re-enqueued by RequeueAfter (with exponential backoff) and by spec changes.
-	maxConsecutiveFailuresForSlowdown = 10
+	// maxReservingAgeForSlowdown is how long a CR can be continuously in Reserving state
+	// before the Reservation watch stops re-enqueuing it. Beyond this point only the
+	// RequeueAfter backoff timer drives retries, preventing reservation churn from a broken
+	// rollback from flooding the reconcile queue.
+	maxReservingAgeForSlowdown = 30 * time.Minute
 )
 
 // CommittedResourceController reconciles CommittedResource CRDs and owns all child Reservation CRUD.
@@ -122,10 +122,9 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 	}
 	if !allReady {
 		// Reservation controller hasn't processed all slots yet; Reservation watch will re-enqueue.
-		// Reset ConsecutiveFailures: applyReservationState just succeeded, so prior failures no longer
-		// apply. Without this, a high count would suppress watch re-enqueues (slowdown gate) even
-		// though placement is now working, leaving the CR stuck in Reserving state indefinitely.
-		return ctrl.Result{}, r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", 0)
+		// Reset the retry timer: applyReservationState just succeeded, so the watch suppression
+		// gate should not fire while we wait for slots to become ready.
+		return ctrl.Result{}, r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", true)
 	}
 	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
 	return ctrl.Result{}, r.setAccepted(ctx, cr)
@@ -181,10 +180,9 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 	}
 	if !allReady {
 		// Reservation controller hasn't processed all slots yet; Reservation watch will re-enqueue.
-		// Reset ConsecutiveFailures: applyReservationState just succeeded, so prior failures no longer
-		// apply. Without this, a high count would suppress watch re-enqueues (slowdown gate) even
-		// though placement is now working, leaving the CR stuck in Reserving state indefinitely.
-		return ctrl.Result{}, r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", 0)
+		// Reset the retry timer: applyReservationState just succeeded, so the watch suppression
+		// gate should not fire while we wait for slots to become ready.
+		return ctrl.Result{}, r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", true)
 	}
 	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
 	return ctrl.Result{}, r.setAccepted(ctx, cr)
@@ -266,11 +264,8 @@ func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Co
 func (r *CommittedResourceController) setAccepted(ctx context.Context, cr *v1alpha1.CommittedResource) error {
 	now := metav1.Now()
 	old := cr.DeepCopy()
-	acceptedAmount := cr.Spec.Amount.DeepCopy()
 	specCopy := cr.Spec.DeepCopy()
-	cr.Status.AcceptedAmount = &acceptedAmount
 	cr.Status.AcceptedSpec = specCopy
-	cr.Status.ConsecutiveFailures = 0
 	cr.Status.AcceptedAt = &now
 	meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
 		Type:               v1alpha1.CommittedResourceConditionReady,
@@ -322,10 +317,9 @@ func DeleteChildReservations(ctx context.Context, k8sClient client.Client, cr *v
 // rollbackToAccepted restores child Reservations to match Status.AcceptedSpec.
 // AcceptedSpec is a full snapshot of the spec at the last successful reconcile, so rollback always
 // targets the correct AZ, amount, project, domain — even when the current spec has been mutated.
-// Falls back to AcceptedAmount + current spec fields for CRs accepted before AcceptedSpec existed.
-// If neither is set (CR was never accepted), all child Reservations are deleted.
+// If AcceptedSpec is nil (CR was never accepted), all child Reservations are deleted.
 func (r *CommittedResourceController) rollbackToAccepted(ctx context.Context, logger logr.Logger, cr *v1alpha1.CommittedResource) error {
-	if cr.Status.AcceptedSpec == nil && cr.Status.AcceptedAmount == nil {
+	if cr.Status.AcceptedSpec == nil {
 		return r.deleteChildReservations(ctx, cr)
 	}
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: r.Client}
@@ -338,19 +332,10 @@ func (r *CommittedResourceController) rollbackToAccepted(ctx context.Context, lo
 	}
 
 	var state *CommitmentState
-	if cr.Status.AcceptedSpec != nil {
-		// Use the full accepted spec snapshot: ensures rollback targets the exact previously-accepted
-		// placement (AZ, amount, project, domain) even if the current spec has been mutated.
-		tempCR := v1alpha1.CommittedResource{Spec: *cr.Status.AcceptedSpec}
-		state, err = FromCommittedResource(tempCR)
-	} else {
-		// AcceptedSpec not yet populated (CR accepted before this field existed).
-		// We cannot determine the previous placement so delete all child reservations.
-		// The CR stays in Rejected state until the user submits a new spec; the new generation
-		// then clears isRejectedForGeneration and the controller re-applies.
-		logger.Info("AcceptedSpec missing during rollback, deleting child reservations for controller repair")
-		return r.deleteChildReservations(ctx, cr)
-	}
+	// Use the full accepted spec snapshot: ensures rollback targets the exact previously-accepted
+	// placement (AZ, amount, project, domain) even if the current spec has been mutated.
+	tempCR := v1alpha1.CommittedResource{Spec: *cr.Status.AcceptedSpec}
+	state, err = FromCommittedResource(tempCR)
 	if err != nil {
 		logger.Error(err, "invalid spec during rollback, deleting all child reservations")
 		return r.deleteChildReservations(ctx, cr)
@@ -376,16 +361,22 @@ func isRejectedForGeneration(cr *v1alpha1.CommittedResource) bool {
 }
 
 // retryDelay computes an exponential backoff interval for the AllowRejection=false retry paths.
-// Uses the pre-increment ConsecutiveFailures value: on the first failure (failures=0) the delay is
-// base * 2^0 = base; setNotReadyRetry increments to 1 afterwards, so the second failure yields 2*base.
+// The exponent is derived from the time already spent in Reserving state: each doubling period
+// advances one step, giving the same base→2*base→4*base→… sequence as a counter would, but
+// without storing a raw count in status.
 // The delay is capped at MaxRequeueInterval.
 func (r *CommittedResourceController) retryDelay(cr *v1alpha1.CommittedResource) time.Duration {
 	base := r.Conf.RequeueIntervalRetry.Duration
-	exp := cr.Status.ConsecutiveFailures
-	if exp > 6 {
-		exp = 6 // overflow guard: 2^6 = 64 fits safely in uint; MaxRequeueInterval caps the actual duration
+	cond := meta.FindStatusCondition(cr.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+	if cond == nil || cond.Reason != v1alpha1.CommittedResourceReasonReserving {
+		return base
 	}
-	delay := base * time.Duration(uint64(1)<<uint(exp)) //nolint:gosec // exp is bounded to [0,6]
+	elapsed := time.Since(cond.LastTransitionTime.Time)
+	var exp uint
+	for step := base; elapsed >= step && exp < 6; exp++ {
+		step *= 2
+	}
+	delay := base * time.Duration(uint64(1)<<exp) //nolint:gosec // exp is bounded to [0,6]
 	if maxDelay := r.Conf.MaxRequeueInterval.Duration; maxDelay > 0 && delay > maxDelay {
 		return maxDelay
 	}
@@ -394,33 +385,63 @@ func (r *CommittedResourceController) retryDelay(cr *v1alpha1.CommittedResource)
 
 // setNotReady patches Ready=False on CommittedResource status.
 func (r *CommittedResourceController) setNotReady(ctx context.Context, cr *v1alpha1.CommittedResource, reason, message string) error {
-	return r.patchNotReady(ctx, cr, reason, message, cr.Status.ConsecutiveFailures)
+	return r.patchNotReady(ctx, cr, reason, message, false)
 }
 
-// setNotReadyRetry increments ConsecutiveFailures and patches Ready=False/Reserving.
-// Use this in the AllowRejection=false retry paths so the failure counter drives backoff.
+// setNotReadyRetry patches Ready=False/Reserving for the AllowRejection=false retry paths.
+// The retry timer is not reset so that the elapsed time in Reserving state continues to
+// drive the exponential backoff in retryDelay.
 func (r *CommittedResourceController) setNotReadyRetry(ctx context.Context, cr *v1alpha1.CommittedResource, message string) error {
-	return r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, message, cr.Status.ConsecutiveFailures+1)
+	return r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, message, false)
 }
 
-// patchNotReady patches Ready=False and sets ConsecutiveFailures to failures.
-// Pass cr.Status.ConsecutiveFailures to keep the current count (setNotReady),
-// cr.Status.ConsecutiveFailures+1 to increment (setNotReadyRetry), or 0 to reset.
-func (r *CommittedResourceController) patchNotReady(ctx context.Context, cr *v1alpha1.CommittedResource, reason, message string, failures int32) error {
+// patchNotReady patches Ready=False with reason/message.
+// resetTimer=true forces LastTransitionTime to be refreshed even if reason is unchanged —
+// use this on the "apply succeeded, waiting for slots" path so the watch suppression gate
+// does not fire while placement is working.
+func (r *CommittedResourceController) patchNotReady(ctx context.Context, cr *v1alpha1.CommittedResource, reason, message string, resetTimer bool) error {
 	old := cr.DeepCopy()
-	cr.Status.ConsecutiveFailures = failures
-	meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
-		Type:               v1alpha1.CommittedResourceConditionReady,
-		Status:             metav1.ConditionFalse,
-		Reason:             reason,
-		Message:            message,
-		LastTransitionTime: metav1.Now(),
-		ObservedGeneration: cr.Generation,
-	})
+	setReadyConditionFalse(&cr.Status.Conditions, reason, message, cr.Generation, resetTimer)
 	if err := r.Status().Patch(ctx, cr, client.MergeFrom(old)); err != nil {
 		return client.IgnoreNotFound(err)
 	}
 	return nil
+}
+
+// setReadyConditionFalse sets Ready=False with the given reason/message.
+// Unlike meta.SetStatusCondition, it refreshes LastTransitionTime whenever Status OR Reason
+// changes, so retryDelay and the watch suppression gate always measure time-in-current-reason.
+// resetTimer forces a refresh even when reason is unchanged (use on the "apply succeeded,
+// waiting for slots" path to clear the failure history).
+func setReadyConditionFalse(conditions *[]metav1.Condition, reason, message string, generation int64, resetTimer bool) {
+	now := metav1.Now()
+	for i, c := range *conditions {
+		if c.Type != v1alpha1.CommittedResourceConditionReady {
+			continue
+		}
+		newCond := metav1.Condition{
+			Type:               v1alpha1.CommittedResourceConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             reason,
+			Message:            message,
+			ObservedGeneration: generation,
+		}
+		if !resetTimer && c.Status == metav1.ConditionFalse && c.Reason == reason {
+			newCond.LastTransitionTime = c.LastTransitionTime
+		} else {
+			newCond.LastTransitionTime = now
+		}
+		(*conditions)[i] = newCond
+		return
+	}
+	*conditions = append(*conditions, metav1.Condition{
+		Type:               v1alpha1.CommittedResourceConditionReady,
+		Status:             metav1.ConditionFalse,
+		Reason:             reason,
+		Message:            message,
+		ObservedGeneration: generation,
+		LastTransitionTime: now,
+	})
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -431,7 +452,7 @@ func (r *CommittedResourceController) SetupWithManager(mgr ctrl.Manager, mcl *mu
 	}
 	// Also register idxCommittedResourceByUUID here: the Reservation watch handler uses it to map
 	// Reservation→CR. The UsageReconciler registers the same index, but it may not be set up when
-	// commitmentsUsageDB is unconfigured. IndexField deduplicates, so calling it twice is safe.
+	// commitmentsUsageDB is unconfigured. The once-guard in field_index.go makes this idempotent.
 	if err := indexCommittedResourceByUUID(ctx, mcl); err != nil {
 		return fmt.Errorf("failed to set up committed resource field index: %w", err)
 	}
@@ -446,9 +467,10 @@ func (r *CommittedResourceController) SetupWithManager(mgr ctrl.Manager, mcl *mu
 		return err
 	}
 	// Re-enqueue the parent CommittedResource when a child Reservation changes (e.g. external deletion).
-	// Suppressed when ConsecutiveFailures is high: a broken rollback creates reservation churn that
-	// would bypass RequeueAfter and keep the controller in a tight loop. The Reservation watch is the
-	// fast path for normal "waiting for placement" transitions; the RequeueAfter backoff handles retry.
+	// Suppressed when the CR has been continuously in Reserving state for longer than
+	// maxReservingAgeForSlowdown: a broken rollback creates reservation churn that would bypass
+	// RequeueAfter and keep the controller in a tight loop. The Reservation watch is the fast path
+	// for normal "waiting for placement" transitions; the RequeueAfter backoff handles retry.
 	bldr, err = bldr.WatchesMulticluster(
 		&v1alpha1.Reservation{},
 		handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []ctrl.Request {
@@ -467,11 +489,16 @@ func (r *CommittedResourceController) SetupWithManager(mgr ctrl.Manager, mcl *mu
 			}
 			cr := &crList.Items[0]
 			// Suppress fast-path re-enqueues only when the reservation belongs to the current
-			// generation AND failures are high. A new spec (higher generation) gets a fresh start.
-			if cr.Status.ConsecutiveFailures >= maxConsecutiveFailuresForSlowdown &&
-				res.Spec.CommittedResourceReservation.ParentGeneration == cr.Generation {
-				LoggerFromContext(ctx).V(1).Info("placement failures exceeded threshold, watch re-enqueues suppressed — retrying via backoff timer only",
-					"name", cr.Name, "consecutiveFailures", cr.Status.ConsecutiveFailures, "threshold", maxConsecutiveFailuresForSlowdown)
+			// generation AND the CR has been in Reserving state for too long. A new spec (higher
+			// generation) gets a fresh start.
+			readyCond := meta.FindStatusCondition(cr.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+			if readyCond != nil &&
+				readyCond.Reason == v1alpha1.CommittedResourceReasonReserving &&
+				readyCond.ObservedGeneration == cr.Generation &&
+				res.Spec.CommittedResourceReservation.ParentGeneration == cr.Generation &&
+				time.Since(readyCond.LastTransitionTime.Time) > maxReservingAgeForSlowdown {
+				LoggerFromContext(ctx).V(1).Info("Reserving state age exceeded threshold, watch re-enqueues suppressed — retrying via backoff timer only",
+					"name", cr.Name, "reservingAge", time.Since(readyCond.LastTransitionTime.Time).Round(time.Second), "threshold", maxReservingAgeForSlowdown)
 				return nil
 			}
 			return []ctrl.Request{{NamespacedName: types.NamespacedName{Name: cr.Name}}}

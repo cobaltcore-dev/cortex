@@ -193,9 +193,8 @@ func azFlavorGroupKey(az, flavorGroup string) string {
 }
 
 // buildCommitmentCapacityMap builds a map of az:flavorGroup -> list of CommitmentStateWithUsage
-// from CommittedResource CRD status (AcceptedAmount + AcceptedSpec).
-// Using AcceptedAmount gives the billing-perspective capacity — what was confirmed — rather than
-// the sum of internally-placed Reservation slots, which can lag behind spec changes.
+// from CommittedResource CRD status (AcceptedSpec). Using the accepted spec snapshot gives the
+// billing-perspective capacity — what was confirmed — rather than the potentially-mutated current spec.
 func buildCommitmentCapacityMap(
 	ctx context.Context,
 	k8sClient client.Client,
@@ -217,15 +216,14 @@ func buildCommitmentCapacityMap(
 		if cr.Spec.State != v1alpha1.CommitmentStatusConfirmed && cr.Spec.State != v1alpha1.CommitmentStatusGuaranteed {
 			continue
 		}
-		if cr.Status.AcceptedSpec == nil || cr.Status.AcceptedAmount == nil {
-			log.V(1).Info("skipping CR with no accepted spec/amount", "cr", cr.Name)
+		if cr.Status.AcceptedSpec == nil {
+			log.V(1).Info("skipping CR with no accepted spec", "cr", cr.Name)
 			continue
 		}
 
 		// Build state from the accepted spec snapshot so capacity always reflects
 		// what was confirmed, not the potentially-mutated current spec.
 		tempCR := v1alpha1.CommittedResource{Spec: *cr.Status.AcceptedSpec}
-		tempCR.Spec.Amount = *cr.Status.AcceptedAmount
 		state, err := FromCommittedResource(tempCR)
 		if err != nil {
 			log.Error(err, "skipping CR with invalid accepted spec", "cr", cr.Name)

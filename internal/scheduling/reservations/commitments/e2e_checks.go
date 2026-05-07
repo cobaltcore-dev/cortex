@@ -48,6 +48,7 @@ type E2EChecksConfig struct {
 }
 
 // E2ERoundTripConfig holds optional overrides for the create→delete round-trip e2e check.
+//
 // Deprecated: use E2EChecksConfig.ProjectID and E2EChecksConfig.AZs instead.
 type E2ERoundTripConfig struct {
 	// AZ is the availability zone to use (e.g. "qa-de-1d"). Defaults to "" if not set.

@@ -312,10 +312,10 @@ func printCommitments(crs []v1alpha1.CommittedResource, showUsage bool) {
 			stateColour(cr.Spec.State),
 			cr.Spec.Amount.String(),
 			func() string {
-				if cr.Status.AcceptedAmount == nil {
+				if cr.Status.AcceptedSpec == nil {
 					return gray("—")
 				}
-				return cr.Status.AcceptedAmount.String()
+				return cr.Status.AcceptedSpec.Amount.String()
 			}(),
 		)
 
