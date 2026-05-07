@@ -229,15 +229,14 @@ func (r *UsageReconciler) hypervisorToCommittedResources(ctx context.Context, ob
 		return nil
 	}
 
-	var allCRs v1alpha1.CommittedResourceList
-	if err := r.List(ctx, &allCRs); err != nil {
-		log.Error(err, "failed to list CommittedResources for hypervisor event", "hypervisor", hvName)
-		return nil
-	}
-
 	var requests []reconcile.Request
-	for _, cr := range allCRs.Items {
-		if _, affected := projectIDs[cr.Spec.ProjectID]; affected {
+	for projectID := range projectIDs {
+		var crList v1alpha1.CommittedResourceList
+		if err := r.List(ctx, &crList, client.MatchingFields{idxCommittedResourceByProjectID: projectID}); err != nil {
+			log.Error(err, "failed to list CommittedResources for hypervisor event", "hypervisor", hvName, "projectID", projectID)
+			return nil
+		}
+		for _, cr := range crList.Items {
 			requests = append(requests, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: cr.Name},
 			})
