@@ -56,6 +56,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/capacity"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	commitmentsapi "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
@@ -685,6 +686,29 @@ func main() {
 			"trustHypervisorLocation", failoverConfig.TrustHypervisorLocation,
 			"maxVMsToProcess", failoverConfig.MaxVMsToProcess,
 			"vmSelectionRotationInterval", failoverConfig.VMSelectionRotationInterval)
+	}
+	if slices.Contains(mainConfig.EnabledControllers, "capacity-controller") {
+		setupLog.Info("enabling controller", "controller", "capacity-controller")
+		capacityConfig := conf.GetConfigOrDie[capacity.Config]()
+		capacityConfig.ApplyDefaults()
+
+		capacityMonitor := capacity.NewMonitor(multiclusterClient)
+		if err := metrics.Registry.Register(&capacityMonitor); err != nil {
+			setupLog.Error(err, "failed to register capacity monitor metrics, continuing without metrics")
+		}
+
+		capacityController := capacity.NewController(multiclusterClient, capacityConfig)
+		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+			return capacityController.Start(ctx)
+		})); err != nil {
+			setupLog.Error(err, "unable to add capacity controller to manager")
+			os.Exit(1)
+		}
+		setupLog.Info("capacity-controller registered",
+			"schedulerURL", capacityConfig.SchedulerURL,
+			"reconcileInterval", capacityConfig.ReconcileInterval,
+			"totalPipeline", capacityConfig.TotalPipeline,
+			"placeablePipeline", capacityConfig.PlaceablePipeline)
 	}
 
 	// +kubebuilder:scaffold:builder
