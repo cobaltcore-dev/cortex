@@ -172,14 +172,11 @@ func (c *UsageCalculator) CalculateUsage(
 // This is the read path that replaces the inline assignment algorithm in the usage API.
 func (c *UsageCalculator) BuildVMAssignmentsFromStatus(ctx context.Context, projectID string) (map[string]string, error) {
 	var crList v1alpha1.CommittedResourceList
-	if err := c.client.List(ctx, &crList); err != nil {
+	if err := c.client.List(ctx, &crList, client.MatchingFields{idxCommittedResourceByProjectID: projectID}); err != nil {
 		return nil, fmt.Errorf("failed to list CommittedResources: %w", err)
 	}
 	assignments := make(map[string]string)
 	for _, cr := range crList.Items {
-		if cr.Spec.ProjectID != projectID {
-			continue
-		}
 		for _, vmUUID := range cr.Status.AssignedInstances {
 			assignments[vmUUID] = cr.Spec.CommitmentUUID
 		}
@@ -203,16 +200,13 @@ func buildCommitmentCapacityMap(
 ) (map[string][]*CommitmentStateWithUsage, error) {
 
 	var allCRs v1alpha1.CommittedResourceList
-	if err := k8sClient.List(ctx, &allCRs); err != nil {
+	if err := k8sClient.List(ctx, &allCRs, client.MatchingFields{idxCommittedResourceByProjectID: projectID}); err != nil {
 		return nil, fmt.Errorf("failed to list CommittedResources: %w", err)
 	}
 
 	now := time.Now()
 	result := make(map[string][]*CommitmentStateWithUsage)
 	for _, cr := range allCRs.Items {
-		if cr.Spec.ProjectID != projectID {
-			continue
-		}
 		if cr.Spec.State != v1alpha1.CommitmentStatusConfirmed && cr.Spec.State != v1alpha1.CommitmentStatusGuaranteed {
 			continue
 		}

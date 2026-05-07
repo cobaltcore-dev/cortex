@@ -456,6 +456,9 @@ func (r *CommittedResourceController) SetupWithManager(mgr ctrl.Manager, mcl *mu
 	if err := indexCommittedResourceByUUID(ctx, mcl); err != nil {
 		return fmt.Errorf("failed to set up committed resource field index: %w", err)
 	}
+	if err := indexCommittedResourceByProjectID(ctx, mcl); err != nil {
+		return fmt.Errorf("failed to set up committed resource project index: %w", err)
+	}
 
 	bldr := multicluster.BuildController(mcl, mgr)
 	var err error

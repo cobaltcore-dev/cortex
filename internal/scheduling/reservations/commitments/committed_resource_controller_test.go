@@ -118,6 +118,13 @@ func newCRTestClient(scheme *runtime.Scheme, objects ...client.Object) client.Cl
 			}
 			return []string{cr.Spec.CommitmentUUID}
 		}).
+		WithIndex(&v1alpha1.CommittedResource{}, idxCommittedResourceByProjectID, func(obj client.Object) []string {
+			cr, ok := obj.(*v1alpha1.CommittedResource)
+			if !ok || cr.Spec.ProjectID == "" {
+				return nil
+			}
+			return []string{cr.Spec.ProjectID}
+		}).
 		Build()
 }
 

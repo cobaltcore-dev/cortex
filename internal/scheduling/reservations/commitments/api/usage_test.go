@@ -121,6 +121,13 @@ func TestUsageCalculator_CalculateUsage(t *testing.T) {
 			k8sClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(objects...).
+				WithIndex(&v1alpha1.CommittedResource{}, "spec.projectID", func(obj client.Object) []string {
+					cr, ok := obj.(*v1alpha1.CommittedResource)
+					if !ok || cr.Spec.ProjectID == "" {
+						return nil
+					}
+					return []string{cr.Spec.ProjectID}
+				}).
 				Build()
 
 			// Setup mock Nova client
@@ -310,6 +317,13 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 						return nil
 					}
 					return []string{cr.Spec.CommitmentUUID}
+				}).
+				WithIndex(&v1alpha1.CommittedResource{}, "spec.projectID", func(obj client.Object) []string {
+					cr, ok := obj.(*v1alpha1.CommittedResource)
+					if !ok || cr.Spec.ProjectID == "" {
+						return nil
+					}
+					return []string{cr.Spec.ProjectID}
 				}).
 				Build()
 
@@ -534,6 +548,13 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 			k8sClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(objects...).
+				WithIndex(&v1alpha1.CommittedResource{}, "spec.projectID", func(obj client.Object) []string {
+					cr, ok := obj.(*v1alpha1.CommittedResource)
+					if !ok || cr.Spec.ProjectID == "" {
+						return nil
+					}
+					return []string{cr.Spec.ProjectID}
+				}).
 				Build()
 
 			dbClient := &mockUsageDBClient{

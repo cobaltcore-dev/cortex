@@ -601,6 +601,13 @@ func newUsageTestEnv(
 			}
 			return []string{cr.Spec.CommitmentUUID}
 		}).
+		WithIndex(&v1alpha1.CommittedResource{}, "spec.projectID", func(obj client.Object) []string {
+			cr, ok := obj.(*v1alpha1.CommittedResource)
+			if !ok || cr.Spec.ProjectID == "" {
+				return nil
+			}
+			return []string{cr.Spec.ProjectID}
+		}).
 		Build()
 
 	// Create mock DB client with VMs

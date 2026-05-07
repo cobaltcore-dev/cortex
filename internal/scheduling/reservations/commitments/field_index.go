@@ -15,6 +15,7 @@ import (
 )
 
 const idxCommittedResourceByUUID = "spec.commitmentUUID"
+const idxCommittedResourceByProjectID = "spec.projectID"
 const idxReservationByCommitmentUUID = "spec.committedResourceReservation.commitmentUUID"
 
 // once guards ensure each field index is registered exactly once.
@@ -22,6 +23,7 @@ const idxReservationByCommitmentUUID = "spec.committedResourceReservation.commit
 // the underlying cache returns "indexer conflict" on double registration.
 var (
 	onceIndexCRByUUID          sync.Once
+	onceIndexCRByProjectID     sync.Once
 	onceIndexReservationByUUID sync.Once
 )
 
@@ -44,6 +46,31 @@ func indexCommittedResourceByUUID(ctx context.Context, mcl *multicluster.Client)
 					return nil
 				}
 				return []string{cr.Spec.CommitmentUUID}
+			},
+		)
+	})
+	return err
+}
+
+// indexCommittedResourceByProjectID registers the index used to look up CommittedResources
+// by their project ID, avoiding full-cluster scans when filtering per project.
+func indexCommittedResourceByProjectID(ctx context.Context, mcl *multicluster.Client) (err error) {
+	onceIndexCRByProjectID.Do(func() {
+		log := logf.FromContext(ctx)
+		err = mcl.IndexField(ctx,
+			&v1alpha1.CommittedResource{},
+			&v1alpha1.CommittedResourceList{},
+			idxCommittedResourceByProjectID,
+			func(obj client.Object) []string {
+				cr, ok := obj.(*v1alpha1.CommittedResource)
+				if !ok {
+					log.Error(errors.New("unexpected type"), "expected CommittedResource", "object", obj)
+					return nil
+				}
+				if cr.Spec.ProjectID == "" {
+					return nil
+				}
+				return []string{cr.Spec.ProjectID}
 			},
 		)
 	})
