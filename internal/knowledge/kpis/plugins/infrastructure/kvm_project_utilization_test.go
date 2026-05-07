@@ -5,7 +5,6 @@ package infrastructure
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
@@ -25,25 +24,6 @@ type collectedKVMMetric struct {
 	Name   string
 	Labels map[string]string
 	Value  float64
-}
-
-func mockKVMHostLabels(computeHost, az string) map[string]string {
-	bb := "unknown"
-	parts := strings.Split(computeHost, "-")
-	if len(parts) > 1 {
-		bb = parts[1]
-	}
-	return map[string]string{
-		"compute_host":      computeHost,
-		"availability_zone": az,
-		"building_block":    bb,
-		"cpu_architecture":  "cascade-lake",
-		"workload_type":     "general-purpose",
-		"enabled":           "true",
-		"decommissioned":    "false",
-		"external_customer": "false",
-		"maintenance":       "false",
-	}
 }
 
 func buildKVMMetricKey(name string, labels map[string]string) string {
