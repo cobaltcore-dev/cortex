@@ -756,8 +756,15 @@ func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavo
 	for i := range crs {
 		cr := &crs[i]
 
+		// Prefer AcceptedSpec (last successful reconcile snapshot) over Spec
+		// to avoid mis-bucketing during spec transitions.
+		spec := &cr.Spec
+		if cr.Status.AcceptedSpec != nil {
+			spec = cr.Status.AcceptedSpec
+		}
+
 		// Filter: only matching states
-		if !c.isCRStateIncluded(cr.Spec.State) {
+		if !c.isCRStateIncluded(spec.State) {
 			continue
 		}
 
@@ -769,23 +776,23 @@ func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavo
 		// Map ResourceType to resource name and extract used amount
 		var resourceName string
 		var usedAmount int64
-		switch cr.Spec.ResourceType {
+		switch spec.ResourceType {
 		case v1alpha1.CommittedResourceTypeMemory:
-			resourceName = commitments.ResourceNameRAM(cr.Spec.FlavorGroupName)
+			resourceName = commitments.ResourceNameRAM(spec.FlavorGroupName)
 			memQty, ok := cr.Status.UsedResources["memory"]
 			if !ok {
 				continue
 			}
 			// Convert bytes to commitment units (multiples of smallest flavor)
 			usedBytes := memQty.Value()
-			fg, ok := flavorGroups[cr.Spec.FlavorGroupName]
+			fg, ok := flavorGroups[spec.FlavorGroupName]
 			if !ok || fg.SmallestFlavor.MemoryMB == 0 {
 				continue
 			}
 			unitSizeBytes := int64(fg.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec // safe
 			usedAmount = usedBytes / unitSizeBytes
 		case v1alpha1.CommittedResourceTypeCores:
-			resourceName = commitments.ResourceNameCores(cr.Spec.FlavorGroupName)
+			resourceName = commitments.ResourceNameCores(spec.FlavorGroupName)
 			cpuQty, ok := cr.Status.UsedResources["cpu"]
 			if !ok {
 				continue
@@ -804,7 +811,7 @@ func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavo
 		if usage.PerAZ == nil {
 			usage.PerAZ = make(map[string]int64)
 		}
-		usage.PerAZ[cr.Spec.AvailabilityZone] += usedAmount
+		usage.PerAZ[spec.AvailabilityZone] += usedAmount
 		result[resourceName] = usage
 	}
 
