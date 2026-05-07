@@ -137,9 +137,14 @@ func TestComputeTotalUsage(t *testing.T) {
 func TestComputeCRUsage(t *testing.T) {
 	ctrl := &QuotaController{Config: DefaultQuotaControllerConfig()}
 
-	usedAmount5 := resource.MustParse("5")
-	usedAmount3 := resource.MustParse("3")
-	usedAmount2 := resource.MustParse("2")
+	// Flavor groups with SmallestFlavor.MemoryMB = 1 for simple unit conversion in tests
+	// (1 multiple = 1 MiB = 1048576 bytes)
+	testFlavorGroups := map[string]compute.FlavorGroupFeature{
+		"hana_v2": {
+			SmallestFlavor: compute.FlavorInGroup{Name: "m1.hana_v2.small", MemoryMB: 1},
+			Flavors:        []compute.FlavorInGroup{{Name: "m1.hana_v2.small", MemoryMB: 1}},
+		},
+	}
 
 	allCRs := []v1alpha1.CommittedResource{
 		{
@@ -151,7 +156,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusConfirmed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedAmount: &usedAmount5,
+				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("5Mi")},
 			},
 		},
 		{
@@ -163,7 +168,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusGuaranteed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedAmount: &usedAmount3,
+				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("3Mi")},
 			},
 		},
 		{
@@ -175,7 +180,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusConfirmed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedAmount: &usedAmount2,
+				UsedResources: map[string]resource.Quantity{"cpu": resource.MustParse("2")},
 			},
 		},
 		// Different project — should be excluded by groupCRsByProject
@@ -188,7 +193,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusConfirmed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedAmount: &usedAmount5,
+				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("5Mi")},
 			},
 		},
 		// Pending state — should be excluded by state filter
@@ -201,14 +206,14 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusPending,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedAmount: &usedAmount2,
+				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("2Mi")},
 			},
 		},
 	}
 
 	// Pre-group and pass only project-a's CRs
 	crsByProject := groupCRsByProject(allCRs)
-	result := ctrl.computeCRUsage(crsByProject["project-a"])
+	result := ctrl.computeCRUsage(crsByProject["project-a"], testFlavorGroups)
 
 	// Should include confirmed + guaranteed for project-a only
 	ramUsage := result["hw_version_hana_v2_ram"]
@@ -437,7 +442,7 @@ func TestReconcile_NilTotalUsage(t *testing.T) {
 	ctrl := &QuotaController{Config: DefaultQuotaControllerConfig()}
 
 	// computeCRUsage on nil slice should return empty map (no panic)
-	result := ctrl.computeCRUsage(nil)
+	result := ctrl.computeCRUsage(nil, nil)
 	if len(result) != 0 {
 		t.Errorf("expected empty result for nil CRs, got %d entries", len(result))
 	}

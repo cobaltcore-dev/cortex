@@ -1081,13 +1081,12 @@ func (env *integrationTestEnv) executeAction(action TestAction) {
 		}
 
 	case "cr_update":
-		// Fetch the CR, update UsedAmount, then call Reconcile
+		// Fetch the CR, update UsedResources, then call Reconcile
 		var cr v1alpha1.CommittedResource
 		if err := env.client.Get(ctx, client.ObjectKey{Name: action.CRName}, &cr); err != nil {
 			env.t.Fatalf("failed to get CR %s: %v", action.CRName, err)
 		}
-		usedQty := resource.NewQuantity(action.UsedAmount, resource.DecimalSI)
-		cr.Status.UsedAmount = usedQty
+		cr.Status.UsedResources = usedResourcesFromMultiples(cr.Spec.ResourceType, cr.Spec.FlavorGroupName, action.UsedAmount)
 		if err := env.client.Status().Update(ctx, &cr); err != nil {
 			env.t.Fatalf("failed to update CR %s status: %v", action.CRName, err)
 		}
@@ -1197,10 +1196,32 @@ func makeCR(name, projectID, flavorGroup, az string, resourceType v1alpha1.Commi
 		},
 	}
 	if usedAmount != nil {
-		qty := resource.NewQuantity(*usedAmount, resource.DecimalSI)
-		cr.Status.UsedAmount = qty
+		cr.Status.UsedResources = usedResourcesFromMultiples(resourceType, flavorGroup, *usedAmount)
 	}
 	return cr
+}
+
+// usedResourcesFromMultiples converts a "multiples" value (the old UsedAmount unit) to UsedResources.
+// For memory: multiples * smallestFlavorMB * 1024 * 1024 = bytes.
+// For cores: the value is used directly.
+func usedResourcesFromMultiples(resourceType v1alpha1.CommittedResourceType, flavorGroup string, multiples int64) map[string]resource.Quantity {
+	switch resourceType {
+	case v1alpha1.CommittedResourceTypeMemory:
+		fg, ok := testFlavorGroups[flavorGroup]
+		if !ok || fg.SmallestFlavor.MemoryMB == 0 {
+			return nil
+		}
+		bytesVal := multiples * int64(fg.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec // test only
+		return map[string]resource.Quantity{
+			"memory": *resource.NewQuantity(bytesVal, resource.BinarySI),
+		}
+	case v1alpha1.CommittedResourceTypeCores:
+		return map[string]resource.Quantity{
+			"cpu": *resource.NewQuantity(multiples, resource.DecimalSI),
+		}
+	default:
+		return nil
+	}
 }
 
 func int64Ptr(v int64) *int64 { return &v }

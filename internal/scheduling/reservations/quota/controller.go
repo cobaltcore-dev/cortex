@@ -122,9 +122,9 @@ func (c *QuotaController) ReconcilePeriodic(ctx context.Context) error {
 		projectTotalUsage := totalUsageByProject[projectID]
 
 		// Compute CRUsage for this project (using pre-grouped CRs)
-		crUsage := c.computeCRUsage(crsByProject[projectID])
+		crUsage := c.computeCRUsage(crsByProject[projectID], flavorGroups)
 
-		// Derive PaygUsage = TotalUsage - CRUsage (clamp >= 0)
+		// Derive PaygUsage
 		paygUsage := derivePaygUsage(projectTotalUsage, crUsage)
 
 		// Write status with conflict retry (full reconcile sets LastFullReconcileAt)
@@ -209,6 +209,14 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		}
 	}
 
+	// Fetch flavor groups for CRUsage computation
+	flavorGroupClient := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
+	flavorGroups, err := flavorGroupClient.GetAllFlavorGroups(ctx, nil)
+	if err != nil {
+		logger.Error(err, "failed to get flavor groups")
+		return ctrl.Result{}, err
+	}
+
 	// List CRs for this project (from local cache)
 	var crList v1alpha1.CommittedResourceList
 	if err := c.List(ctx, &crList); err != nil {
@@ -218,7 +226,7 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	crsByProject := groupCRsByProject(crList.Items)
 
 	// Compute CRUsage
-	crUsage := c.computeCRUsage(crsByProject[projectID])
+	crUsage := c.computeCRUsage(crsByProject[projectID], flavorGroups)
 
 	// Derive PaygUsage
 	paygUsage := derivePaygUsage(totalUsage, crUsage)
@@ -366,7 +374,7 @@ func (c *QuotaController) ReconcileHVDiff(ctx context.Context, oldHV, newHV *hv1
 	crsByProject := groupCRsByProject(crList.Items)
 
 	for projectID, delta := range projectDeltas {
-		if err := c.applyDeltaAndUpdateStatus(ctx, projectID, delta, crsByProject[projectID]); err != nil {
+		if err := c.applyDeltaAndUpdateStatus(ctx, projectID, delta, crsByProject[projectID], flavorGroups); err != nil {
 			logger.Error(err, "failed to apply delta for project", "project", projectID)
 			// Continue with other projects
 		}
@@ -546,6 +554,7 @@ func (c *QuotaController) applyDeltaAndUpdateStatus(
 	projectID string,
 	delta *usageDelta,
 	projectCRs []v1alpha1.CommittedResource,
+	flavorGroups map[string]compute.FlavorGroupFeature,
 ) error {
 
 	crdName := "quota-" + projectID
@@ -579,7 +588,7 @@ func (c *QuotaController) applyDeltaAndUpdateStatus(
 		}
 
 		// Recompute PaygUsage
-		crUsage := c.computeCRUsage(projectCRs)
+		crUsage := c.computeCRUsage(projectCRs, flavorGroups)
 		paygUsage := derivePaygUsage(pq.Status.TotalUsage, crUsage)
 
 		pq.Status.PaygUsage = paygUsage
@@ -740,7 +749,8 @@ func groupCRsByProject(crs []v1alpha1.CommittedResource) map[string][]v1alpha1.C
 }
 
 // computeCRUsage computes the committed resource usage from a pre-filtered slice of CRs for one project.
-func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource) map[string]v1alpha1.ResourceQuotaUsage {
+// It reads UsedResources from each CR's status and converts to commitment units (multiples for RAM, raw for cores).
+func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavorGroups map[string]compute.FlavorGroupFeature) map[string]v1alpha1.ResourceQuotaUsage {
 	result := make(map[string]v1alpha1.ResourceQuotaUsage)
 
 	for i := range crs {
@@ -751,23 +761,41 @@ func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource) map[s
 			continue
 		}
 
-		// Get UsedAmount from status
-		if cr.Status.UsedAmount == nil {
-			continue
-		}
-		usedAmount := cr.Status.UsedAmount.Value()
-		if usedAmount <= 0 {
+		// Get used amount from UsedResources map
+		if len(cr.Status.UsedResources) == 0 {
 			continue
 		}
 
-		// Map ResourceType to resource name
+		// Map ResourceType to resource name and extract used amount
 		var resourceName string
+		var usedAmount int64
 		switch cr.Spec.ResourceType {
 		case v1alpha1.CommittedResourceTypeMemory:
 			resourceName = commitments.ResourceNameRAM(cr.Spec.FlavorGroupName)
+			memQty, ok := cr.Status.UsedResources["memory"]
+			if !ok {
+				continue
+			}
+			// Convert bytes to commitment units (multiples of smallest flavor)
+			usedBytes := memQty.Value()
+			fg, ok := flavorGroups[cr.Spec.FlavorGroupName]
+			if !ok || fg.SmallestFlavor.MemoryMB == 0 {
+				continue
+			}
+			unitSizeBytes := int64(fg.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec // safe
+			usedAmount = usedBytes / unitSizeBytes
 		case v1alpha1.CommittedResourceTypeCores:
 			resourceName = commitments.ResourceNameCores(cr.Spec.FlavorGroupName)
+			cpuQty, ok := cr.Status.UsedResources["cpu"]
+			if !ok {
+				continue
+			}
+			usedAmount = cpuQty.Value()
 		default:
+			continue
+		}
+
+		if usedAmount <= 0 {
 			continue
 		}
 
@@ -940,7 +968,7 @@ func (c *QuotaController) mapCRToProjectQuota(_ context.Context, obj client.Obje
 	}
 }
 
-// crUsedAmountChangePredicate triggers only when Status.UsedAmount changes on a CommittedResource.
+// crUsedResourcesChangePredicate triggers only when Status.UsedResources changes on a CommittedResource.
 func crUsedAmountChangePredicate() predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(_ event.CreateEvent) bool { return false },
@@ -950,16 +978,17 @@ func crUsedAmountChangePredicate() predicate.Predicate {
 			if !ok1 || !ok2 {
 				return false
 			}
-			// Trigger if UsedAmount changed
-			oldUsed := ""
-			newUsed := ""
-			if oldCR.Status.UsedAmount != nil {
-				oldUsed = oldCR.Status.UsedAmount.String()
+			// Trigger if UsedResources changed
+			if len(oldCR.Status.UsedResources) != len(newCR.Status.UsedResources) {
+				return true
 			}
-			if newCR.Status.UsedAmount != nil {
-				newUsed = newCR.Status.UsedAmount.String()
+			for key, oldQty := range oldCR.Status.UsedResources {
+				newQty, ok := newCR.Status.UsedResources[key]
+				if !ok || oldQty.Cmp(newQty) != 0 {
+					return true
+				}
 			}
-			return oldUsed != newUsed
+			return false
 		},
 		DeleteFunc:  func(_ event.DeleteEvent) bool { return true },
 		GenericFunc: func(_ event.GenericEvent) bool { return false },
