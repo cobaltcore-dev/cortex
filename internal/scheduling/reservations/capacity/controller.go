@@ -260,7 +260,7 @@ func (c *Controller) probeScheduler(
 	return capacity, hosts, nil
 }
 
-// sumCommittedCapacity sums AcceptedAmount (or Spec.Amount as fallback) across all
+// sumCommittedCapacity sums AcceptedSpec.Amount (or Spec.Amount as fallback) across all
 // CommittedResource CRDs for the given (flavorGroup, az) pair with an active state
 // (guaranteed or confirmed) and resource type memory. Returns the total in slots.
 func (c *Controller) sumCommittedCapacity(ctx context.Context, groupName, az string, smallestFlavorBytes int64) (int64, error) {
@@ -284,8 +284,8 @@ func (c *Controller) sumCommittedCapacity(ctx context.Context, groupName, az str
 			continue
 		}
 		amount := cr.Spec.Amount
-		if cr.Status.AcceptedAmount != nil {
-			amount = *cr.Status.AcceptedAmount
+		if cr.Status.AcceptedSpec != nil {
+			amount = cr.Status.AcceptedSpec.Amount
 		}
 		if bytes := amount.Value(); bytes > 0 {
 			total += bytes / smallestFlavorBytes
