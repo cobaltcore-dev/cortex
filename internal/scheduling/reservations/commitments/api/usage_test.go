@@ -19,6 +19,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -119,6 +121,13 @@ func TestUsageCalculator_CalculateUsage(t *testing.T) {
 			k8sClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(objects...).
+				WithIndex(&v1alpha1.CommittedResource{}, "spec.projectID", func(obj client.Object) []string {
+					cr, ok := obj.(*v1alpha1.CommittedResource)
+					if !ok || cr.Spec.ProjectID == "" {
+						return nil
+					}
+					return []string{cr.Spec.ProjectID}
+				}).
 				Build()
 
 			// Setup mock Nova client
@@ -301,12 +310,86 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 			k8sClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(objects...).
+				WithStatusSubresource(&v1alpha1.CommittedResource{}).
+				WithIndex(&v1alpha1.CommittedResource{}, "spec.commitmentUUID", func(obj client.Object) []string {
+					cr, ok := obj.(*v1alpha1.CommittedResource)
+					if !ok {
+						return nil
+					}
+					return []string{cr.Spec.CommitmentUUID}
+				}).
+				WithIndex(&v1alpha1.CommittedResource{}, "spec.projectID", func(obj client.Object) []string {
+					cr, ok := obj.(*v1alpha1.CommittedResource)
+					if !ok || cr.Spec.ProjectID == "" {
+						return nil
+					}
+					return []string{cr.Spec.ProjectID}
+				}).
 				Build()
 
 			dbClient := &mockUsageDBClient{
 				rows: map[string][]commitments.VMRow{
 					tt.projectID: tt.vms,
 				},
+			}
+
+			// Create CommittedResource CRDs and run the usage reconciler so that
+			// CalculateUsage can read pre-computed assignments from CRD status.
+			seen := make(map[string]bool)
+			for _, r := range tt.reservations {
+				if r.Spec.CommittedResourceReservation == nil {
+					continue
+				}
+				uuid := r.Spec.CommittedResourceReservation.CommitmentUUID
+				if seen[uuid] {
+					continue
+				}
+				seen[uuid] = true
+				amount := resource.MustParse("4Gi")
+				spec := v1alpha1.CommittedResourceSpec{
+					CommitmentUUID:   uuid,
+					ProjectID:        r.Spec.CommittedResourceReservation.ProjectID,
+					DomainID:         "test-domain",
+					AvailabilityZone: r.Spec.AvailabilityZone,
+					FlavorGroupName:  r.Spec.CommittedResourceReservation.ResourceGroup,
+					ResourceType:     v1alpha1.CommittedResourceTypeMemory,
+					State:            v1alpha1.CommitmentStatusConfirmed,
+					Amount:           amount,
+					StartTime:        r.Spec.StartTime,
+					EndTime:          r.Spec.EndTime,
+				}
+				cr := &v1alpha1.CommittedResource{
+					ObjectMeta: metav1.ObjectMeta{Name: "cr-" + uuid},
+					Spec:       spec,
+				}
+				if err := k8sClient.Create(ctx, cr); err != nil {
+					t.Fatalf("failed to create CommittedResource %s: %v", uuid, err)
+				}
+				cr.Status = v1alpha1.CommittedResourceStatus{
+					AcceptedSpec: &spec,
+					Conditions: []metav1.Condition{
+						{
+							Type:               v1alpha1.CommittedResourceConditionReady,
+							Status:             metav1.ConditionTrue,
+							Reason:             v1alpha1.CommittedResourceReasonAccepted,
+							ObservedGeneration: 0,
+							LastTransitionTime: metav1.Now(),
+						},
+					},
+				}
+				if err := k8sClient.Status().Update(ctx, cr); err != nil {
+					t.Fatalf("failed to update CommittedResource status %s: %v", uuid, err)
+				}
+				rec := &commitments.UsageReconciler{
+					Client:  k8sClient,
+					Conf:    commitments.UsageReconcilerConfig{CooldownInterval: metav1.Duration{Duration: 0}},
+					UsageDB: dbClient,
+					Monitor: commitments.NewUsageReconcilerMonitor(),
+				}
+				req := ctrl.Request{NamespacedName: types.NamespacedName{Name: cr.Name}}
+				if _, err := rec.Reconcile(ctx, req); err != nil {
+					t.Fatalf("usage reconciler failed for %s: %v", uuid, err)
+				}
 			}
 
 			calc := commitments.NewUsageCalculator(k8sClient, dbClient)
@@ -465,6 +548,13 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 			k8sClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(objects...).
+				WithIndex(&v1alpha1.CommittedResource{}, "spec.projectID", func(obj client.Object) []string {
+					cr, ok := obj.(*v1alpha1.CommittedResource)
+					if !ok || cr.Spec.ProjectID == "" {
+						return nil
+					}
+					return []string{cr.Spec.ProjectID}
+				}).
 				Build()
 
 			dbClient := &mockUsageDBClient{

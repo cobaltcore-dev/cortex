@@ -52,6 +52,7 @@ const (
 	NovaDatasourceTypeFlavors        NovaDatasourceType = "flavors"
 	NovaDatasourceTypeMigrations     NovaDatasourceType = "migrations"
 	NovaDatasourceTypeAggregates     NovaDatasourceType = "aggregates"
+	NovaDatasourceTypeImages         NovaDatasourceType = "images"
 )
 
 type NovaDatasource struct {

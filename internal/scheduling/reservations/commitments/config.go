@@ -15,11 +15,35 @@ import (
 type Config struct {
 	ReservationController       ReservationControllerConfig       `json:"committedResourceReservationController"`
 	CommittedResourceController CommittedResourceControllerConfig `json:"committedResourceController"`
+	UsageReconciler             UsageReconcilerConfig             `json:"committedResourceUsageReconciler"`
 	API                         APIConfig                         `json:"committedResourceAPI"`
 
 	// DatasourceName is the name of the Datasource CRD that provides database
-	// connection info. Used to construct the UsageDBClient for report-usage.
+	// connection info. Used to construct the UsageDBClient for report-usage and usage reconciler.
 	DatasourceName string `json:"datasourceName,omitempty"`
+}
+
+// UsageReconcilerConfig holds tuning knobs for the usage reconciler.
+type UsageReconcilerConfig struct {
+	// CooldownInterval is the minimum time between usage reconcile runs for the same CommittedResource.
+	// If a reconcile ran within this window, the next trigger is deferred until the window expires.
+	// This interval also acts as the periodic fallback: every successful reconcile schedules the
+	// next run after this duration so that changes not caught by watches are still picked up.
+	CooldownInterval metav1.Duration `json:"cooldownInterval"`
+}
+
+func DefaultUsageReconcilerConfig() UsageReconcilerConfig {
+	return UsageReconcilerConfig{
+		CooldownInterval: metav1.Duration{Duration: 5 * time.Minute},
+	}
+}
+
+// ApplyDefaults fills in zero-value fields from the defaults, leaving explicitly configured values intact.
+func (c *UsageReconcilerConfig) ApplyDefaults() {
+	d := DefaultUsageReconcilerConfig()
+	if c.CooldownInterval.Duration == 0 {
+		c.CooldownInterval = d.CooldownInterval
+	}
 }
 
 // ReservationControllerConfig holds tuning knobs for the Reservation CRD controller.
@@ -45,8 +69,32 @@ type ReservationControllerConfig struct {
 
 // CommittedResourceControllerConfig holds tuning knobs for the CommittedResource CRD controller.
 type CommittedResourceControllerConfig struct {
-	// RequeueIntervalRetry is the back-off interval when placement is pending or failed.
+	// RequeueIntervalRetry is the base back-off interval when placement fails (AllowRejection=false path).
+	// The actual delay doubles with each consecutive failure: base * 2^min(failures, 6), capped at MaxRequeueInterval.
+	// If zero (unconfigured), backoff is disabled and the controller retries immediately on every failure.
 	RequeueIntervalRetry metav1.Duration `json:"requeueIntervalRetry"`
+
+	// MaxRequeueInterval caps the exponential backoff delay.
+	// Once this ceiling is reached, every subsequent retry fires after exactly this interval.
+	MaxRequeueInterval metav1.Duration `json:"maxRequeueInterval"`
+}
+
+func DefaultCommittedResourceControllerConfig() CommittedResourceControllerConfig {
+	return CommittedResourceControllerConfig{
+		RequeueIntervalRetry: metav1.Duration{Duration: 30 * time.Second},
+		MaxRequeueInterval:   metav1.Duration{Duration: 30 * time.Minute},
+	}
+}
+
+// ApplyDefaults fills in zero-value fields from the defaults, leaving explicitly configured values intact.
+func (c *CommittedResourceControllerConfig) ApplyDefaults() {
+	d := DefaultCommittedResourceControllerConfig()
+	if c.RequeueIntervalRetry.Duration == 0 {
+		c.RequeueIntervalRetry = d.RequeueIntervalRetry
+	}
+	if c.MaxRequeueInterval.Duration == 0 {
+		c.MaxRequeueInterval = d.MaxRequeueInterval
+	}
 }
 
 // ResourceTypeConfig holds per-resource flags for a single resource type within a flavor group.

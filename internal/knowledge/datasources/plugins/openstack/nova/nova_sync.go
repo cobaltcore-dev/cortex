@@ -45,6 +45,8 @@ func (s *NovaSyncer) Init(ctx context.Context) error {
 		tables = append(tables, s.DB.AddTable(Migration{}))
 	case v1alpha1.NovaDatasourceTypeAggregates:
 		tables = append(tables, s.DB.AddTable(Aggregate{}))
+	case v1alpha1.NovaDatasourceTypeImages:
+		tables = append(tables, s.DB.AddTable(Image{}))
 	}
 	return s.DB.CreateTable(tables...)
 }
@@ -67,6 +69,8 @@ func (s *NovaSyncer) Sync(ctx context.Context) (int64, error) {
 		nResults, err = s.SyncAllMigrations(ctx)
 	case v1alpha1.NovaDatasourceTypeAggregates:
 		nResults, err = s.SyncAllAggregates(ctx)
+	case v1alpha1.NovaDatasourceTypeImages:
+		nResults, err = s.SyncAllImages(ctx)
 	}
 	return nResults, err
 }
@@ -190,6 +194,26 @@ func (s *NovaSyncer) SyncAllMigrations(ctx context.Context) (int64, error) {
 		counter.Inc()
 	}
 	return int64(len(allMigrations)), nil
+}
+
+// Sync all Glance images into the database with pre-computed os_type.
+func (s *NovaSyncer) SyncAllImages(ctx context.Context) (int64, error) {
+	allImages, err := s.API.GetAllImages(ctx)
+	if err != nil {
+		return 0, err
+	}
+	err = db.ReplaceAll(s.DB, allImages...)
+	if err != nil {
+		return 0, err
+	}
+	label := Image{}.TableName()
+	if s.Mon.ObjectsGauge != nil {
+		s.Mon.ObjectsGauge.WithLabelValues(label).Set(float64(len(allImages)))
+	}
+	if s.Mon.RequestProcessedCounter != nil {
+		s.Mon.RequestProcessedCounter.WithLabelValues(label).Inc()
+	}
+	return int64(len(allImages)), nil
 }
 
 // Sync the OpenStack aggregates into the database.

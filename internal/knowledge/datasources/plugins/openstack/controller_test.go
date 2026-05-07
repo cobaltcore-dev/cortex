@@ -104,6 +104,7 @@ func TestNovaDatasourceTypeConstants(t *testing.T) {
 		{v1alpha1.NovaDatasourceTypeFlavors, "flavors"},
 		{v1alpha1.NovaDatasourceTypeMigrations, "migrations"},
 		{v1alpha1.NovaDatasourceTypeAggregates, "aggregates"},
+		{v1alpha1.NovaDatasourceTypeImages, "images"},
 	}
 
 	for _, test := range tests {

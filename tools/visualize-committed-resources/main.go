@@ -15,7 +15,7 @@
 //	--filter-group=name     Show only CRs for this flavor group (substring match)
 //	--filter-state=state    Show only CRs in this state (e.g. confirmed, reserving)
 //	--active                Shorthand: show only confirmed/guaranteed CRs
-//	--views=v1,v2,...       Views to show (default: all). Available: summary, commitments, reservations, allocations
+//	--views=v1,v2,...       Views to show (default: all). Available: summary, commitments, reservations, allocations, usage
 //	--hide=v1,v2,...        Views to hide (applied after --views)
 //	--watch=interval        Refresh interval (e.g. 2s, 5s). Clears screen between refreshes.
 package main
@@ -72,9 +72,10 @@ const (
 	viewCommitments  = "commitments"
 	viewReservations = "reservations"
 	viewAllocations  = "allocations"
+	viewUsage        = "usage"
 )
 
-var allViews = []string{viewSummary, viewCommitments, viewReservations, viewAllocations}
+var allViews = []string{viewSummary, viewCommitments, viewReservations, viewAllocations, viewUsage}
 
 type viewSet map[string]bool
 
@@ -292,7 +293,7 @@ func printSummary(crs []v1alpha1.CommittedResource, reservations []v1alpha1.Rese
 	)
 }
 
-func printCommitments(crs []v1alpha1.CommittedResource) {
+func printCommitments(crs []v1alpha1.CommittedResource, showUsage bool) {
 	printHeader(fmt.Sprintf("CommittedResources (%d)", len(crs)))
 
 	if len(crs) == 0 {
@@ -311,15 +312,21 @@ func printCommitments(crs []v1alpha1.CommittedResource) {
 			stateColour(cr.Spec.State),
 			cr.Spec.Amount.String(),
 			func() string {
-				if cr.Status.AcceptedAmount == nil {
+				if cr.Status.AcceptedSpec == nil {
 					return gray("—")
 				}
-				return cr.Status.AcceptedAmount.String()
+				return cr.Status.AcceptedSpec.Amount.String()
 			}(),
 		)
 
-		if cr.Status.UsedAmount != nil {
-			fmt.Printf("    used=%-12s\n", cr.Status.UsedAmount.String())
+		if mem, ok := cr.Status.UsedResources["memory"]; ok {
+			cpu := cr.Status.UsedResources["cpu"]
+			usageAgeStr := gray("—")
+			if cr.Status.LastUsageReconcileAt != nil {
+				usageAgeStr = age(cr.Status.LastUsageReconcileAt)
+			}
+			fmt.Printf("    used=%-12s  usedCPU=%-10s  instances=%-4d  usage-age=%s\n",
+				mem.String(), cpu.String(), len(cr.Status.AssignedInstances), usageAgeStr)
 		}
 
 		endStr := gray("no expiry")
@@ -332,6 +339,13 @@ func printCommitments(crs []v1alpha1.CommittedResource) {
 			}
 		}
 		fmt.Printf("    age=%-8s  %s\n", age(&cr.CreationTimestamp), endStr)
+
+		if showUsage && len(cr.Status.AssignedInstances) > 0 {
+			fmt.Printf("    assigned instances (%d):\n", len(cr.Status.AssignedInstances))
+			for _, inst := range cr.Status.AssignedInstances {
+				fmt.Printf("      %s\n", gray(inst))
+			}
+		}
 	}
 }
 
@@ -586,7 +600,7 @@ func printSnapshot(crs []v1alpha1.CommittedResource, reservations []v1alpha1.Res
 		printSummary(crs, reservations)
 	}
 	if views.has(viewCommitments) {
-		printCommitments(crs)
+		printCommitments(crs, views.has(viewUsage))
 	}
 	if views.has(viewReservations) {
 		printReservations(crs, reservations, views.has(viewAllocations))

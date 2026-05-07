@@ -567,7 +567,9 @@ func TestSumCommittedCapacity(t *testing.T) {
 		}
 		if acceptedAmount != "" {
 			accepted := resource.MustParse(acceptedAmount)
-			cr.Status.AcceptedAmount = &accepted
+			cr.Status.AcceptedSpec = &v1alpha1.CommittedResourceSpec{
+				Amount: accepted,
+			}
 		}
 		return cr
 	}
