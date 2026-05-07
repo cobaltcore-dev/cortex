@@ -35,7 +35,7 @@ type SyncerConfig struct {
 	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
 	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
 	// SyncInterval defines how often the syncer reconciles Limes commitments to Reservation CRDs.
-	SyncInterval time.Duration `json:"committedResourceSyncInterval"`
+	SyncInterval metav1.Duration `json:"committedResourceSyncInterval"`
 }
 
 type Syncer struct {
@@ -58,7 +58,7 @@ func NewSyncer(k8sClient client.Client, monitor *SyncerMonitor) *Syncer {
 }
 
 func (s *Syncer) Init(ctx context.Context, config SyncerConfig) error {
-	s.syncInterval = config.SyncInterval
+	s.syncInterval = config.SyncInterval.Duration
 	if err := s.CommitmentsClient.Init(ctx, s.Client, config); err != nil {
 		return err
 	}

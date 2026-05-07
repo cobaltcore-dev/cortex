@@ -144,6 +144,7 @@ cortex-scheduling-controllers:
     capacityReconcileInterval: 5m
     enabledTasks:
       - nova-history-cleanup-task
+      - commitments-sync-task
     # If true, the external scheduler API will limit the list of hosts in its
     # response to those included in the scheduling request.
     novaLimitHostsToRequest: true

@@ -848,7 +848,7 @@ func main() {
 		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
-			Interval: syncerConfig.SyncInterval,
+			Interval: syncerConfig.SyncInterval.Duration,
 			Name:     "commitments-sync-task",
 			Run:      func(ctx context.Context) error { return syncer.SyncReservations(ctx) },
 			Init:     func(ctx context.Context) error { return syncer.Init(ctx, syncerConfig) },
