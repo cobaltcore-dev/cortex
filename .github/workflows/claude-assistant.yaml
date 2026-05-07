@@ -1,9 +1,3 @@
-# NOTE: This workflow is temporarily disabled.
-# We need to determine a compliant approach for passing AI Core credentials
-# and whether utilizing the SAP AI Core Proxy is a viable and compliant option.
-# Until this is resolved, no AI Core credentials are configured and no
-# communication with AI Core takes place.
-
 name: Claude Code Assistant on Issues and PRs
 
 on:
@@ -18,7 +12,6 @@ on:
 
 jobs:
   check-allowlist:
-    if: false # Temporarily disabled
     runs-on: ubuntu-latest
     outputs:
       allowed: ${{ steps.check.outputs.allowed }}
@@ -38,7 +31,6 @@ jobs:
 
   claude:
     needs: check-allowlist
-    if: false # Temporarily disabled
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -52,9 +44,13 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
-
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.CORTEX_AI_AGENTS_APP_ID }}
+          private-key: ${{ secrets.CORTEX_AI_AGENTS_CLIENT_SECRET }}
       - uses: ./.github/actions/setup-claude-code-action
-
       - uses: ./.github/actions/start-litellm-proxy
         env:
           AICORE_RESOURCE_GROUP: ${{ secrets.AICORE_RESOURCE_GROUP }}
@@ -62,7 +58,6 @@ jobs:
           AICORE_AUTH_URL: ${{ secrets.AICORE_AUTH_URL }}
           AICORE_CLIENT_ID: ${{ secrets.AICORE_CLIENT_ID }}
           AICORE_CLIENT_SECRET: ${{ secrets.AICORE_CLIENT_SECRET }}
-
       - uses: ./.claude-code-action
         with:
           claude_args: |
@@ -73,8 +68,7 @@ jobs:
           include_comments_by_actor: "auhlig,umswmayj,juliusclausnitzer,mblos,PhilippMatthes,Varsius,henrichter,SoWieMarkus,*[bot]"
           use_litellm: "true"
           litellm_model: "sap/anthropic--claude-4.6-opus"
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ steps.app-token.outputs.token }}
           show_full_output: "true"
-
       - uses: ./.github/actions/stop-litellm-proxy
         if: always()
