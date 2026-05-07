@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Read(//root/**)",
-      "Bash(go doc:*)"
-    ]
-  }
-}
