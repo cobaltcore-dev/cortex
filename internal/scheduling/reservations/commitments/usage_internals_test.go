@@ -409,21 +409,38 @@ func TestUsageCalculator_AssignVMsToCommitments(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			calc := &UsageCalculator{}
-			assignments, count := calc.assignVMsToCommitments(tt.vms, tt.commitments)
+			assignVMsToCommitments(tt.vms, tt.commitments)
 
-			if count != tt.expectedCount {
-				t.Errorf("assigned count = %d, expected %d", count, tt.expectedCount)
+			// Derive assignment map from mutated commitment states.
+			assignments := make(map[string]string)
+			totalAssigned := 0
+			for _, states := range tt.commitments {
+				for _, state := range states {
+					for _, vmUUID := range state.AssignedInstances {
+						assignments[vmUUID] = state.CommitmentUUID
+						totalAssigned++
+					}
+				}
+			}
+
+			if totalAssigned != tt.expectedCount {
+				t.Errorf("assigned count = %d, expected %d", totalAssigned, tt.expectedCount)
 			}
 
 			for vmUUID, expectedCommitment := range tt.expectedAssignments {
 				actual, ok := assignments[vmUUID]
-				if !ok {
-					t.Errorf("VM %s not in assignments", vmUUID)
-					continue
-				}
-				if actual != expectedCommitment {
-					t.Errorf("VM %s: commitment = %q, expected %q", vmUUID, actual, expectedCommitment)
+				if expectedCommitment == "" {
+					if ok {
+						t.Errorf("VM %s should be PAYG but was assigned to %q", vmUUID, actual)
+					}
+				} else {
+					if !ok {
+						t.Errorf("VM %s not in assignments", vmUUID)
+						continue
+					}
+					if actual != expectedCommitment {
+						t.Errorf("VM %s: commitment = %q, expected %q", vmUUID, actual, expectedCommitment)
+					}
 				}
 			}
 		})

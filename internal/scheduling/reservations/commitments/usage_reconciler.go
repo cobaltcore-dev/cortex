@@ -99,8 +99,6 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	logger := log
 	logger.Info("usage reconcile starting", "trigger", trigger, "generation", cr.Generation)
 
-	calc := &UsageCalculator{client: r.Client, usageDB: r.UsageDB}
-
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: r.Client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
@@ -108,7 +106,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, err
 	}
 
-	commitmentsByAZFG, err := calc.buildCommitmentCapacityMap(ctx, logger, cr.Spec.ProjectID)
+	commitmentsByAZFG, err := buildCommitmentCapacityMap(ctx, r.Client, logger, cr.Spec.ProjectID)
 	if err != nil {
 		r.Monitor.reconcileDuration.WithLabelValues("error").Observe(time.Since(start).Seconds())
 		return ctrl.Result{}, err
@@ -133,13 +131,13 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		}
 	}
 
-	vms, err := calc.getProjectVMs(ctx, logger, cr.Spec.ProjectID, flavorGroups, allAZs)
+	vms, err := getProjectVMs(ctx, r.UsageDB, logger, cr.Spec.ProjectID, flavorGroups, allAZs)
 	if err != nil {
 		r.Monitor.reconcileDuration.WithLabelValues("error").Observe(time.Since(start).Seconds())
 		return ctrl.Result{}, err
 	}
 	sortVMsForUsageCalculation(vms)
-	calc.assignVMsToCommitments(vms, commitmentsByAZFG)
+	assignVMsToCommitments(vms, commitmentsByAZFG)
 
 	now := metav1.Now()
 	written := 0

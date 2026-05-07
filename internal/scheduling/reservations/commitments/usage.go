@@ -144,7 +144,7 @@ func (c *UsageCalculator) CalculateUsage(
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to read VM assignments from CRD status: %w", err)
 	}
 
-	vms, err := c.getProjectVMs(ctx, log, projectID, flavorGroups, allAZs)
+	vms, err := getProjectVMs(ctx, c.usageDB, log, projectID, flavorGroups, allAZs)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to get project VMs: %w", err)
 	}
@@ -196,14 +196,15 @@ func azFlavorGroupKey(az, flavorGroup string) string {
 // from CommittedResource CRD status (AcceptedAmount + AcceptedSpec).
 // Using AcceptedAmount gives the billing-perspective capacity — what was confirmed — rather than
 // the sum of internally-placed Reservation slots, which can lag behind spec changes.
-func (c *UsageCalculator) buildCommitmentCapacityMap(
+func buildCommitmentCapacityMap(
 	ctx context.Context,
+	k8sClient client.Client,
 	log logr.Logger,
 	projectID string,
 ) (map[string][]*CommitmentStateWithUsage, error) {
 
 	var allCRs v1alpha1.CommittedResourceList
-	if err := c.client.List(ctx, &allCRs); err != nil {
+	if err := k8sClient.List(ctx, &allCRs); err != nil {
 		return nil, fmt.Errorf("failed to list CommittedResources: %w", err)
 	}
 
@@ -261,19 +262,20 @@ func (c *UsageCalculator) buildCommitmentCapacityMap(
 }
 
 // getProjectVMs retrieves all VMs for a project from Postgres and enriches them with flavor group info.
-func (c *UsageCalculator) getProjectVMs(
+func getProjectVMs(
 	ctx context.Context,
+	usageDB UsageDBClient,
 	log logr.Logger,
 	projectID string,
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	allAZs []liquid.AvailabilityZone,
 ) ([]VMUsageInfo, error) {
 
-	if c.usageDB == nil {
+	if usageDB == nil {
 		return nil, errors.New("usage DB client not configured")
 	}
 
-	rows, err := c.usageDB.ListProjectVMs(ctx, projectID)
+	rows, err := usageDB.ListProjectVMs(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list VMs from Postgres: %w", err)
 	}
@@ -399,38 +401,22 @@ func sortCommitmentsForAssignment(commitments []*CommitmentStateWithUsage) {
 }
 
 // assignVMsToCommitments assigns VMs to commitments based on az:flavorGroup matching.
-// Returns a map of vmUUID -> commitmentUUID (empty string for PAYG VMs) and count of assigned VMs.
-func (c *UsageCalculator) assignVMsToCommitments(
+// Mutates each CommitmentStateWithUsage in place: AssignedInstances and RemainingMemoryBytes are updated.
+// VMs that don't fit any commitment are left unassigned (PAYG).
+func assignVMsToCommitments(
 	vms []VMUsageInfo,
 	commitmentsByAZFlavorGroup map[string][]*CommitmentStateWithUsage,
-) (vmAssignments map[string]string, assignedCount int) {
-
-	vmAssignments = make(map[string]string, len(vms))
+) {
 
 	for _, vm := range vms {
 		key := azFlavorGroupKey(vm.AZ, vm.FlavorGroup)
-		commitments := commitmentsByAZFlavorGroup[key]
-
-		vmMemoryBytes := int64(vm.MemoryMB) * 1024 * 1024 //nolint:gosec // VM memory from Nova, realistically bounded
-		assigned := false
-
-		// Try to assign to first commitment with remaining capacity
-		for _, commitment := range commitments {
+		for _, commitment := range commitmentsByAZFlavorGroup[key] {
+			vmMemoryBytes := int64(vm.MemoryMB) * 1024 * 1024                 //nolint:gosec // VM memory from Nova, realistically bounded
 			if commitment.AssignVM(vm.UUID, vmMemoryBytes, int64(vm.VCPUs)) { //nolint:gosec // VCPUs from Nova, realistically bounded
-				vmAssignments[vm.UUID] = commitment.CommitmentUUID
-				assigned = true
-				assignedCount++
 				break
 			}
 		}
-
-		if !assigned {
-			// PAYG - no commitment assignment
-			vmAssignments[vm.UUID] = ""
-		}
 	}
-
-	return vmAssignments, assignedCount
 }
 
 // azUsageData aggregates usage data for a specific flavor group and AZ.
@@ -675,7 +661,7 @@ func (c *dbUsageClient) ListProjectVMs(ctx context.Context, projectID string) ([
 			COALESCE(f.vcpus, 0)        AS flavor_vcpus,
 			COALESCE(f.disk, 0)         AS flavor_disk,
 			COALESCE(f.extra_specs, '') AS flavor_extras,
-			COALESCE(i.os_type, 'unknown') AS os_type
+			COALESCE(NULLIF(i.os_type, ''), 'unknown') AS os_type
 		FROM ` + nova.Server{}.TableName() + ` s
 		LEFT JOIN ` + nova.Flavor{}.TableName() + ` f ON f.name = s.flavor_name
 		LEFT JOIN ` + nova.Image{}.TableName() + ` i ON i.id = s.image_ref
