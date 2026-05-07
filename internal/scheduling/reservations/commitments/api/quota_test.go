@@ -106,7 +106,7 @@ func TestHandleQuota_ErrorCases(t *testing.T) {
 
 			var httpAPI *HTTPAPI
 			if tc.enableQuota != nil && !*tc.enableQuota {
-				config := commitments.DefaultConfig()
+				config := commitments.DefaultAPIConfig()
 				config.EnableQuotaAPI = false
 				httpAPI = NewAPIWithConfig(k8sClient, config, nil)
 			} else {

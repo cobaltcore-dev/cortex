@@ -23,7 +23,7 @@ func (api *HTTPAPI) recordMetrics(req liquid.CommitmentChangeRequest, resp liqui
 	commitmentCount := countCommitments(req)
 
 	// Determine result based on response
-	result := "success"
+	result := "accepted"
 	if resp.RejectionReason != "" {
 		result = "rejected"
 	}

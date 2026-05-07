@@ -50,7 +50,7 @@ func (s *Shim) HandleListResourceProviderAggregates(w http.ResponseWriter, r *ht
 	if !ok {
 		return
 	}
-	switch s.featureModeFromConfOrHeader(r, s.config.Features.Aggregates) {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.Aggregates, true) {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 	case FeatureModeHybrid:
@@ -135,7 +135,7 @@ func (s *Shim) HandleUpdateResourceProviderAggregates(w http.ResponseWriter, r *
 	if !ok {
 		return
 	}
-	switch s.featureModeFromConfOrHeader(r, s.config.Features.Aggregates) {
+	switch s.featureModeFromConfOrHeader(r, s.config.Features.Aggregates, true) {
 	case FeatureModePassthrough:
 		s.forward(w, r)
 	case FeatureModeHybrid:

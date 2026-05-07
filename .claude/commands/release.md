@@ -141,7 +141,16 @@ Prepare chart version bumps so GitHub pushes bumped charts to the registry immed
 
 For each changed library chart, patch-bump its `version` in `helm/library/<name>/Chart.yaml` (e.g. `0.0.43` → `0.1.0`), if there was no breaking change, otherwise minor-bump it. Do not touch `appVersion`. Then update the matching `dependencies[].version` entry in every `helm/bundles/*/Chart.yaml` that references it.
 
-Open a single PR to `main` with all the bumps, branch `release/bump-charts-<NNN>`, noting in the body that it should be merged before the release PR. Use the pull-request-creator agent for this subtask, and include the chart changes in the motivation so they are included in the PR description.
+### Check for existing bump PR
+
+Before creating a new PR, check if one already exists for this release:
+
+```
+gh pr list --head release/bump-charts-<NNN> --state open --json number,url
+```
+
+- **If a PR already exists**: check out the existing `release/bump-charts-<NNN>` branch, reset it to `main` (`git reset --hard origin/main`), apply the version bumps on top, force-push the branch. Then update the existing PR title and body with `gh pr edit` to reflect the latest changes.
+- **If no PR exists**: create branch `release/bump-charts-<NNN>` from `main`, apply the bumps, and open a new PR noting in the body that it should be merged before the release PR. Use the pull-request-creator agent for this subtask, and include the chart changes in the motivation so they are included in the PR description.
 
 ## Phase 4: Update the PR Description
 
@@ -149,7 +158,18 @@ Use `gh pr edit` with `--body` to update the PR description with the changelog. 
 
 ## Phase 5: Create a Changelog PR
 
-If the CHANGELOG.md does not exists, create it with a `# Changelog` header. Then create a new PR to `main` with branch `release/changelog-<NNN>`, title `Update changelog for release PR #<NNN>`, and a body noting it should be merged after the release PR. Use the pull-request-creator agent for this subtask.
+If the CHANGELOG.md does not exist, create it with a `# Changelog` header. Then prepend the new changelog entry below the header.
+
+### Check for existing changelog PR
+
+Before creating a new PR, check if one already exists for this release:
+
+```
+gh pr list --head release/changelog-<NNN> --state open --json number,url
+```
+
+- **If a PR already exists**: check out the existing `release/changelog-<NNN>` branch, reset it to `main` (`git reset --hard origin/main`), apply the changelog update on top, force-push the branch. Then update the existing PR title and body with `gh pr edit` to reflect the latest changes.
+- **If no PR exists**: create branch `release/changelog-<NNN>` from `main`, apply the changelog, and open a new PR to `main` with title `Update changelog for release PR #<NNN>` and a body noting it should be merged after the release PR. Use the pull-request-creator agent for this subtask.
 
 ## Phase 6: Summarize — Report what happened
 
@@ -159,6 +179,6 @@ After all subagents return, produce a short summary:
 ## Release #NNN Post-Open Summary
 
 - PR description updated with changelog and bump PR reference
-- Bump PR #XXX opened to update chart versions
-- Changelog PR #YYY opened to update CHANGELOG.md
+- Bump PR #XXX opened/updated to update chart versions
+- Changelog PR #YYY opened/updated to update CHANGELOG.md
 ```

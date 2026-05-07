@@ -12,7 +12,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 )
 
 func TestHostAZExtractor_Init(t *testing.T) {
@@ -52,13 +51,13 @@ func TestHostAZExtractor_Extract(t *testing.T) {
 
 	aggregates := []any{
 		// Test to find the first aggregate for computeHost1 with availability_zone != null
-		&nova.Aggregate{UUID: "agg1", Name: "something_else", AvailabilityZone: nil, ComputeHost: testlib.Ptr("host1"), Metadata: "{}"},
-		&nova.Aggregate{UUID: "agg2", Name: "az1", AvailabilityZone: testlib.Ptr("az1"), ComputeHost: testlib.Ptr("host1"), Metadata: "{}"},
+		&nova.Aggregate{UUID: "agg1", Name: "something_else", AvailabilityZone: nil, ComputeHost: new("host1"), Metadata: "{}"},
+		&nova.Aggregate{UUID: "agg2", Name: "az1", AvailabilityZone: new("az1"), ComputeHost: new("host1"), Metadata: "{}"},
 		// Test to check that we get null when there is an aggregate for computeHost2 but without availability_zone
-		&nova.Aggregate{UUID: "agg3", Name: "something_else_again", AvailabilityZone: nil, ComputeHost: testlib.Ptr("host2"), Metadata: "{}"},
+		&nova.Aggregate{UUID: "agg3", Name: "something_else_again", AvailabilityZone: nil, ComputeHost: new("host2"), Metadata: "{}"},
 		// No aggregate for computeHost3
 		// Should find an availability zone for computeHost4
-		&nova.Aggregate{UUID: "agg4", Name: "az2", AvailabilityZone: testlib.Ptr("az2"), ComputeHost: testlib.Ptr("host4"), Metadata: "{}"},
+		&nova.Aggregate{UUID: "agg4", Name: "az2", AvailabilityZone: new("az2"), ComputeHost: new("host4"), Metadata: "{}"},
 	}
 
 	if err := testDB.Insert(aggregates...); err != nil {
@@ -78,7 +77,7 @@ func TestHostAZExtractor_Extract(t *testing.T) {
 	expectedHostAZs := []HostAZ{
 		{
 			ComputeHost:      "host1",
-			AvailabilityZone: testlib.Ptr("az1"),
+			AvailabilityZone: new("az1"),
 		},
 		// Aggregate without availability_zone provided for host
 		{
@@ -92,7 +91,7 @@ func TestHostAZExtractor_Extract(t *testing.T) {
 		},
 		{
 			ComputeHost:      "host4",
-			AvailabilityZone: testlib.Ptr("az2"),
+			AvailabilityZone: new("az2"),
 		},
 	}
 

@@ -113,6 +113,10 @@ func generateExplanation(result *v1alpha1.DecisionResult, pipelineErr error) str
 		fmt.Fprintf(&sb, "\nSelected host: %s.", *result.TargetHost)
 	}
 
+	if weighingExpl := ExplainWeighing(result); weighingExpl != "" {
+		fmt.Fprintf(&sb, "\n\n%s", weighingExpl)
+	}
+
 	return strings.TrimSpace(sb.String())
 }
 

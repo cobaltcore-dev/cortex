@@ -15,6 +15,7 @@ rules:
   - reservations
   - committedresources
   - projectquotas
+  - flavorgroupcapacities
   - decisions
   - deschedulings
   - pipelines
@@ -36,6 +37,7 @@ rules:
   - reservations/finalizers
   - committedresources/finalizers
   - projectquotas/finalizers
+  - flavorgroupcapacities/finalizers
   - decisions/finalizers
   - deschedulings/finalizers
   - pipelines/finalizers
@@ -51,6 +53,7 @@ rules:
   - reservations/status
   - committedresources/status
   - projectquotas/status
+  - flavorgroupcapacities/status
   - decisions/status
   - deschedulings/status
   - pipelines/status

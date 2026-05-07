@@ -55,15 +55,6 @@ controllerManager:
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:
   enable: true
-  # Whether the ironcore roles should be deployed as well.
-  ironcore:
-    enable: false
-  pods:
-    enable: false
-  # Whether hypervisor operator/crd related roles should be deployed.
-  # See: https://github.com/cobaltcore-dev/openstack-hypervisor-operator
-  hypervisor:
-    enable: false
 
 # [CRDs]: To enable the CRDs
 crd:

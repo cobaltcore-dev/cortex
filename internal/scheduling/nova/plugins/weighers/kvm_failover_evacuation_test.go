@@ -9,7 +9,6 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -177,7 +176,7 @@ func TestKVMFailoverEvacuationStep_Run(t *testing.T) {
 				newFailoverReservation("failover-1", "host1", false, map[string]string{"instance-123": "original-host"}),
 			},
 			request:         newNovaRequest("instance-123", true, []string{"host1", "host2", "host3"}),
-			opts:            KVMFailoverEvacuationOpts{FailoverHostWeight: testlib.Ptr(1.0), DefaultHostWeight: testlib.Ptr(0.1)},
+			opts:            KVMFailoverEvacuationOpts{FailoverHostWeight: new(1.0), DefaultHostWeight: new(0.1)},
 			expectedWeights: map[string]float64{"host1": 1.0, "host2": 0.1, "host3": 0.1},
 		},
 		{
@@ -186,7 +185,7 @@ func TestKVMFailoverEvacuationStep_Run(t *testing.T) {
 				newFailoverReservation("failover-1", "host1", false, map[string]string{"other-instance": "original-host"}),
 			},
 			request:         newNovaRequest("instance-123", true, []string{"host1", "host2", "host3"}),
-			opts:            KVMFailoverEvacuationOpts{FailoverHostWeight: testlib.Ptr(1.0), DefaultHostWeight: testlib.Ptr(0.1)},
+			opts:            KVMFailoverEvacuationOpts{FailoverHostWeight: new(1.0), DefaultHostWeight: new(0.1)},
 			expectedWeights: map[string]float64{"host1": 0.1, "host2": 0.1, "host3": 0.1},
 		},
 		{
@@ -196,14 +195,14 @@ func TestKVMFailoverEvacuationStep_Run(t *testing.T) {
 				newFailoverReservation("failover-2", "host3", false, map[string]string{"instance-123": "original-host"}),
 			},
 			request:         newNovaRequest("instance-123", true, []string{"host1", "host2", "host3"}),
-			opts:            KVMFailoverEvacuationOpts{FailoverHostWeight: testlib.Ptr(1.0), DefaultHostWeight: testlib.Ptr(0.1)},
+			opts:            KVMFailoverEvacuationOpts{FailoverHostWeight: new(1.0), DefaultHostWeight: new(0.1)},
 			expectedWeights: map[string]float64{"host1": 1.0, "host2": 0.1, "host3": 1.0},
 		},
 		{
 			name:            "No reservations - all hosts get default weight",
 			reservations:    []*v1alpha1.Reservation{},
 			request:         newNovaRequest("instance-123", true, []string{"host1", "host2"}),
-			opts:            KVMFailoverEvacuationOpts{FailoverHostWeight: testlib.Ptr(1.0), DefaultHostWeight: testlib.Ptr(0.1)},
+			opts:            KVMFailoverEvacuationOpts{FailoverHostWeight: new(1.0), DefaultHostWeight: new(0.1)},
 			expectedWeights: map[string]float64{"host1": 0.1, "host2": 0.1},
 		},
 		{
@@ -212,7 +211,7 @@ func TestKVMFailoverEvacuationStep_Run(t *testing.T) {
 				newFailoverReservation("failover-1", "host1", false, map[string]string{"instance-123": "original-host"}),
 			},
 			request:         newNovaRequest("instance-123", true, []string{"host1", "host2"}),
-			opts:            KVMFailoverEvacuationOpts{FailoverHostWeight: testlib.Ptr(0.9), DefaultHostWeight: testlib.Ptr(0.05)},
+			opts:            KVMFailoverEvacuationOpts{FailoverHostWeight: new(0.9), DefaultHostWeight: new(0.05)},
 			expectedWeights: map[string]float64{"host1": 0.9, "host2": 0.05},
 		},
 		{
@@ -230,7 +229,7 @@ func TestKVMFailoverEvacuationStep_Run(t *testing.T) {
 				newFailoverReservation("failed-failover", "host1", true, map[string]string{"instance-123": "original-host"}),
 			},
 			request:         newNovaRequest("instance-123", true, []string{"host1", "host2"}),
-			opts:            KVMFailoverEvacuationOpts{FailoverHostWeight: testlib.Ptr(1.0), DefaultHostWeight: testlib.Ptr(0.1)},
+			opts:            KVMFailoverEvacuationOpts{FailoverHostWeight: new(1.0), DefaultHostWeight: new(0.1)},
 			expectedWeights: map[string]float64{"host1": 0.1, "host2": 0.1},
 		},
 		{
@@ -239,7 +238,7 @@ func TestKVMFailoverEvacuationStep_Run(t *testing.T) {
 				newCommittedReservation("committed-res", "host1"),
 			},
 			request:         newNovaRequest("instance-123", true, []string{"host1", "host2"}),
-			opts:            KVMFailoverEvacuationOpts{FailoverHostWeight: testlib.Ptr(1.0), DefaultHostWeight: testlib.Ptr(0.1)},
+			opts:            KVMFailoverEvacuationOpts{FailoverHostWeight: new(1.0), DefaultHostWeight: new(0.1)},
 			expectedWeights: map[string]float64{"host1": 0.1, "host2": 0.1},
 		},
 		{
@@ -248,7 +247,7 @@ func TestKVMFailoverEvacuationStep_Run(t *testing.T) {
 				newFailoverReservation("failover-1", "host1", false, map[string]string{"instance-123": "original-host"}),
 			},
 			request:         newNovaRequest("instance-123", false, []string{"host1", "host2", "host3"}),
-			opts:            KVMFailoverEvacuationOpts{FailoverHostWeight: testlib.Ptr(1.0), DefaultHostWeight: testlib.Ptr(0.1)},
+			opts:            KVMFailoverEvacuationOpts{FailoverHostWeight: new(1.0), DefaultHostWeight: new(0.1)},
 			expectedWeights: map[string]float64{"host1": 0, "host2": 0, "host3": 0},
 		},
 	}
@@ -285,8 +284,8 @@ func TestKVMFailoverEvacuationStep_Run(t *testing.T) {
 
 func TestKVMFailoverEvacuationOpts_Validate(t *testing.T) {
 	opts := KVMFailoverEvacuationOpts{
-		FailoverHostWeight: testlib.Ptr(1.0),
-		DefaultHostWeight:  testlib.Ptr(0.1),
+		FailoverHostWeight: new(1.0),
+		DefaultHostWeight:  new(0.1),
 	}
 	if err := opts.Validate(); err != nil {
 		t.Errorf("expected no error, got %v", err)

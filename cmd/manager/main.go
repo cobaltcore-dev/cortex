@@ -56,6 +56,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/capacity"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	commitmentsapi "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
@@ -368,7 +369,7 @@ func main() {
 	if commitmentsConfig.DatasourceName != "" {
 		commitmentsUsageDB = commitments.NewDBUsageClient(multiclusterClient, commitmentsConfig.DatasourceName)
 	}
-	commitmentsAPI := commitmentsapi.NewAPIWithConfig(multiclusterClient, commitmentsConfig, commitmentsUsageDB)
+	commitmentsAPI := commitmentsapi.NewAPIWithConfig(multiclusterClient, commitmentsConfig.API, commitmentsUsageDB)
 	commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
 
 	if slices.Contains(mainConfig.EnabledControllers, "nova-pipeline-controllers") {
@@ -539,12 +540,11 @@ func main() {
 		monitor := reservations.NewMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&monitor)
 		commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
-		commitmentsConfig.ApplyDefaults()
 
 		if err := (&commitments.CommitmentReservationController{
 			Client: multiclusterClient,
 			Scheme: mgr.GetScheme(),
-			Conf:   commitmentsConfig,
+			Conf:   commitmentsConfig.ReservationController,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "CommitmentReservation")
 			os.Exit(1)
@@ -553,7 +553,7 @@ func main() {
 		if err := (&commitments.CommittedResourceController{
 			Client: multiclusterClient,
 			Scheme: mgr.GetScheme(),
-			Conf:   commitmentsConfig,
+			Conf:   commitmentsConfig.CommittedResourceController,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "CommittedResource")
 			os.Exit(1)
@@ -575,7 +575,6 @@ func main() {
 			Client:  multiclusterClient,
 			Scheme:  mgr.GetScheme(),
 			Monitor: monitor,
-			Conf:    conf.GetConfigOrDie[prometheus.PrometheusDatasourceReconcilerConfig](),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "PrometheusDatasourceReconciler")
 			os.Exit(1)
@@ -689,6 +688,29 @@ func main() {
 			"maxVMsToProcess", failoverConfig.MaxVMsToProcess,
 			"vmSelectionRotationInterval", failoverConfig.VMSelectionRotationInterval)
 	}
+	if slices.Contains(mainConfig.EnabledControllers, "capacity-controller") {
+		setupLog.Info("enabling controller", "controller", "capacity-controller")
+		capacityConfig := conf.GetConfigOrDie[capacity.Config]()
+		capacityConfig.ApplyDefaults()
+
+		capacityMonitor := capacity.NewMonitor(multiclusterClient)
+		if err := metrics.Registry.Register(&capacityMonitor); err != nil {
+			setupLog.Error(err, "failed to register capacity monitor metrics, continuing without metrics")
+		}
+
+		capacityController := capacity.NewController(multiclusterClient, capacityConfig)
+		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+			return capacityController.Start(ctx)
+		})); err != nil {
+			setupLog.Error(err, "unable to add capacity controller to manager")
+			os.Exit(1)
+		}
+		setupLog.Info("capacity-controller registered",
+			"schedulerURL", capacityConfig.SchedulerURL,
+			"reconcileInterval", capacityConfig.ReconcileInterval,
+			"totalPipeline", capacityConfig.TotalPipeline,
+			"placeablePipeline", capacityConfig.PlaceablePipeline)
+	}
 
 	if slices.Contains(mainConfig.EnabledControllers, "quota-controller") {
 		setupLog.Info("enabling controller", "controller", "quota-controller")
@@ -780,13 +802,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	syncerMonitor := commitments.NewSyncerMonitor()
-	must.Succeed(metrics.Registry.Register(syncerMonitor))
 	if slices.Contains(mainConfig.EnabledTasks, "commitments-sync-task") {
 		setupLog.Info("starting commitments syncer")
+		syncerMonitor := commitments.NewSyncerMonitor()
+		must.Succeed(metrics.Registry.Register(syncerMonitor))
 		syncer := commitments.NewSyncer(multiclusterClient, syncerMonitor)
 		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
-		syncerConfig.ApplyDefaults()
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: syncerConfig.SyncInterval,

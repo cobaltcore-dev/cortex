@@ -557,4 +557,44 @@ spec:
         VM is allocated get a higher weight, encouraging placement on
         pre-reserved failover capacity. For non-evacuation requests, this
         weigher has no effect.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: kvm-report-capacity
+spec:
+  schedulingDomain: nova
+  description: |
+    This pipeline is used by the capacity controller to determine the
+    theoretical maximum capacity of each flavor group per availability zone,
+    as if all hosts were completely empty. It ignores current VM allocations
+    and all reservation blockings so that only raw hardware capacity is
+    considered.
+  type: filter-weigher
+  createDecisions: false
+  # Fetch all placement candidates, ignoring nova's preselection.
+  ignorePreselection: true
+  filters:
+    - name: filter_correct_az
+      description: |
+        Restricts host candidates to the requested availability zone.
+    - name: filter_has_enough_capacity
+      description: |
+        Filters hosts that cannot fit the flavor based on raw hardware capacity.
+        VM allocations and all reservation types are ignored to represent an
+        empty datacenter scenario.
+      params:
+        - {key: ignoreAllocations, boolValue: true}
+        - {key: ignoredReservationTypes, stringListValue: ["CommittedResourceReservation", "FailoverReservation"]}
+    - name: filter_has_requested_traits
+      description: |
+        Ensures hosts have the hardware traits required by the flavor.
+    - name: filter_capabilities
+      description: |
+        Ensures hosts meet the compute capabilities required by the flavor
+        extra specs (e.g., architecture, maxphysaddr bits).
+    - name: filter_status_conditions
+      description: |
+        Excludes hosts that are not ready or are disabled.
+  weighers: []
 {{- end }}

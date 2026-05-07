@@ -479,7 +479,7 @@ func (c *UsageCalculator) buildUsageResponse(
 		ramPerAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
 		// For AZSeparatedTopology resources (fixed-ratio groups), per-AZ Quota must be non-null.
 		// Use -1 ("infinite quota") as default until actual quota is read from ProjectQuota CRD.
-		ramHasAZQuota := FlavorGroupAcceptsCommitments(&groupData)
+		ramHasAZQuota := groupData.HasFixedRamCoreRatio()
 		for _, az := range allAZs {
 			report := &liquid.AZResourceUsageReport{
 				Usage:        0,

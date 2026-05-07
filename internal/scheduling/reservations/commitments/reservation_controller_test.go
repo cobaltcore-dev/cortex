@@ -80,8 +80,8 @@ func TestCommitmentReservationController_Reconcile(t *testing.T) {
 			reconciler := &CommitmentReservationController{
 				Client: k8sClient,
 				Scheme: scheme,
-				Conf: Config{
-					RequeueIntervalActive: 5 * time.Minute,
+				Conf: ReservationControllerConfig{
+					RequeueIntervalActive: metav1.Duration{Duration: 5 * time.Minute},
 				},
 			}
 
@@ -139,7 +139,7 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 	recentTime := metav1.NewTime(now.Add(-5 * time.Minute)) // 5 minutes ago (within grace period)
 	oldTime := metav1.NewTime(now.Add(-30 * time.Minute))   // 30 minutes ago (past grace period)
 
-	config := Config{AllocationGracePeriod: 15 * time.Minute}
+	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
 
 	tests := []struct {
 		name                         string
@@ -474,7 +474,7 @@ func TestCommitmentReservationController_reconcileInstanceReservation_Success(t 
 	}))
 	defer server.Close()
 
-	config := Config{
+	config := ReservationControllerConfig{
 		SchedulerURL: server.URL,
 	}
 
@@ -485,7 +485,7 @@ func TestCommitmentReservationController_reconcileInstanceReservation_Success(t 
 	}
 
 	// Initialize the reconciler (this sets up SchedulerClient)
-	if err := reconciler.Init(context.Background(), k8sClient, config); err != nil {
+	if err := reconciler.Init(context.Background(), config); err != nil {
 		t.Fatalf("Failed to initialize reconciler: %v", err)
 	}
 

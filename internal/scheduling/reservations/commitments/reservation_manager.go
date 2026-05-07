@@ -25,6 +25,9 @@ type ApplyResult struct {
 	Deleted int
 	// Repaired is the number of reservations repaired (metadata sync or recreated due to wrong config)
 	Repaired int
+	// TotalSlots is the total number of reservation slots that should exist after the apply.
+	// Used by the CR controller to wait for the correct number of children in the cache.
+	TotalSlots int
 	// TouchedReservations are reservations that were created or updated
 	TouchedReservations []v1alpha1.Reservation
 	// RemovedReservations are reservations that were deleted
@@ -91,6 +94,9 @@ func (m *ReservationManager) ApplyCommitmentState(
 
 	if !exists {
 		return nil, fmt.Errorf("flavor group not found: %s", desiredState.FlavorGroupName)
+	}
+	if len(flavorGroup.Flavors) == 0 {
+		return nil, fmt.Errorf("flavor group %s has no flavors", desiredState.FlavorGroupName)
 	}
 	deltaMemoryBytes := desiredState.TotalMemoryBytes
 	for _, res := range existing {
@@ -166,8 +172,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 
 	// Phase 5 (CREATE): Create new reservations (capacity increased)
 	for deltaMemoryBytes > 0 {
-		// Need to create new reservation slots, always prefer largest flavor within the group
-		// TODO more sophisticated flavor selection, especially with flavors of different cpu/memory ratio
+		// Select the largest flavor that fits the remaining delta (flavors sorted descending by memory).
 		reservation := m.newReservation(desiredState, nextSlotIndex, deltaMemoryBytes, flavorGroup, creator)
 		result.TouchedReservations = append(result.TouchedReservations, *reservation)
 		memValue := reservation.Spec.Resources[hv1.ResourceMemory]
@@ -210,6 +215,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 			"total", len(existing)+result.Created)
 	}
 
+	result.TotalSlots = len(existing) + result.Created
 	return result, nil
 }
 
@@ -225,7 +231,8 @@ func (m *ReservationManager) syncReservationMetadata(
 	if (state.CommitmentUUID != "" && reservation.Spec.CommittedResourceReservation.CommitmentUUID != state.CommitmentUUID) ||
 		(state.AvailabilityZone != "" && reservation.Spec.AvailabilityZone != state.AvailabilityZone) ||
 		(state.StartTime != nil && (reservation.Spec.StartTime == nil || !reservation.Spec.StartTime.Time.Equal(*state.StartTime))) ||
-		(state.EndTime != nil && (reservation.Spec.EndTime == nil || !reservation.Spec.EndTime.Time.Equal(*state.EndTime))) {
+		(state.EndTime != nil && (reservation.Spec.EndTime == nil || !reservation.Spec.EndTime.Time.Equal(*state.EndTime))) ||
+		(state.ParentGeneration != 0 && reservation.Spec.CommittedResourceReservation.ParentGeneration != state.ParentGeneration) {
 		// Apply patch
 		logger.V(1).Info("syncing reservation metadata",
 			"reservation", reservation.Name,
@@ -235,6 +242,9 @@ func (m *ReservationManager) syncReservationMetadata(
 
 		if state.CommitmentUUID != "" {
 			reservation.Spec.CommittedResourceReservation.CommitmentUUID = state.CommitmentUUID
+		}
+		if state.ParentGeneration != 0 {
+			reservation.Spec.CommittedResourceReservation.ParentGeneration = state.ParentGeneration
 		}
 
 		if state.AvailabilityZone != "" {
@@ -272,7 +282,8 @@ func (m *ReservationManager) newReservation(
 	}
 	name := fmt.Sprintf("%s%d", namePrefix, slotIndex)
 
-	// Select first flavor that fits remaining memory (flavors sorted descending by size)
+	// Select largest flavor that fits remaining memory (flavors sorted descending by memory then vCPUs).
+	// This works for both fixed and varying CPU:RAM ratio groups.
 	flavorInGroup := flavorGroup.Flavors[len(flavorGroup.Flavors)-1] // default to smallest
 	memoryBytes := deltaMemoryBytes
 	cpus := int64(flavorInGroup.VCPUs) //nolint:gosec // VCPUs from flavor specs, realistically bounded
@@ -301,13 +312,14 @@ func (m *ReservationManager) newReservation(
 			),
 		},
 		CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-			ProjectID:      state.ProjectID,
-			CommitmentUUID: state.CommitmentUUID,
-			DomainID:       state.DomainID,
-			ResourceGroup:  state.FlavorGroupName,
-			ResourceName:   flavorInGroup.Name,
-			Creator:        creator,
-			Allocations:    nil,
+			ProjectID:        state.ProjectID,
+			CommitmentUUID:   state.CommitmentUUID,
+			DomainID:         state.DomainID,
+			ResourceGroup:    state.FlavorGroupName,
+			ResourceName:     flavorInGroup.Name,
+			Creator:          creator,
+			ParentGeneration: state.ParentGeneration,
+			Allocations:      nil,
 		},
 	}
 

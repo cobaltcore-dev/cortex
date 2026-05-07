@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/sapcc/go-api-declarations/liquid"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -137,11 +138,9 @@ func TestHandleInfo_InvalidFlavorMemory(t *testing.T) {
 	}
 }
 
-func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
-	// Test that ALL flavor groups get resources created:
-	// - Three resources are created per group: _ram, _cores, _instances
-	// - Only _ram of groups with FIXED ratio has HandlesCommitments=true
-	// - All resources have HasCapacity=true
+func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
+	// Test that resource flags (HandlesCommitments, HasCapacity, HasQuota) are read from config,
+	// not derived from flavor group metadata. Both groups get resources regardless of ratio.
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add scheme: %v", err)
@@ -150,8 +149,6 @@ func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
 	// Create flavor groups knowledge with both fixed and variable ratio groups
 	features := []map[string]interface{}{
 		{
-			// Group with fixed ratio - should accept commitments
-			// Creates 3 resources: _ram, _cores, _instances
 			"name": "hana_fixed",
 			"flavors": []map[string]interface{}{
 				{"name": "hana_c4_m16", "vcpus": 4, "memoryMB": 16384, "diskGB": 50},
@@ -159,20 +156,18 @@ func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
 			},
 			"largestFlavor":  map[string]interface{}{"name": "hana_c8_m32", "vcpus": 8, "memoryMB": 32768, "diskGB": 100},
 			"smallestFlavor": map[string]interface{}{"name": "hana_c4_m16", "vcpus": 4, "memoryMB": 16384, "diskGB": 50},
-			"ramCoreRatio":   4096, // Fixed: 4096 MiB per vCPU for all flavors
+			"ramCoreRatio":   4096,
 		},
 		{
-			// Group with variable ratio - should NOT accept commitments
-			// Will be SKIPPED entirely (no resources created)
 			"name": "v2_variable",
 			"flavors": []map[string]interface{}{
-				{"name": "v2_c4_m8", "vcpus": 4, "memoryMB": 8192, "diskGB": 50},    // 2048 MiB/vCPU
-				{"name": "v2_c4_m64", "vcpus": 4, "memoryMB": 65536, "diskGB": 100}, // 16384 MiB/vCPU
+				{"name": "v2_c4_m8", "vcpus": 4, "memoryMB": 8192, "diskGB": 50},
+				{"name": "v2_c4_m64", "vcpus": 4, "memoryMB": 65536, "diskGB": 100},
 			},
 			"largestFlavor":   map[string]interface{}{"name": "v2_c4_m64", "vcpus": 4, "memoryMB": 65536, "diskGB": 100},
 			"smallestFlavor":  map[string]interface{}{"name": "v2_c4_m8", "vcpus": 4, "memoryMB": 8192, "diskGB": 50},
-			"ramCoreRatioMin": 2048,  // Variable: min ratio
-			"ramCoreRatioMax": 16384, // Variable: max ratio
+			"ramCoreRatioMin": 2048,
+			"ramCoreRatioMax": 16384,
 		},
 	}
 
@@ -199,7 +194,21 @@ func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
 		WithObjects(knowledge).
 		Build()
 
-	api := NewAPI(k8sClient)
+	// hana_fixed: ram accepts commitments and has quota; v2_variable: nothing accepts commitments
+	cfg := commitments.DefaultAPIConfig()
+	cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
+		"hana_fixed": {
+			RAM:       commitments.ResourceTypeConfig{HandlesCommitments: true, HasCapacity: true, HasQuota: true},
+			Cores:     commitments.ResourceTypeConfig{HasCapacity: true},
+			Instances: commitments.ResourceTypeConfig{HasCapacity: true},
+		},
+		"*": {
+			RAM:       commitments.ResourceTypeConfig{HasCapacity: true},
+			Cores:     commitments.ResourceTypeConfig{HasCapacity: true},
+			Instances: commitments.ResourceTypeConfig{HasCapacity: true},
+		},
+	}
+	api := NewAPIWithConfig(k8sClient, cfg, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/commitments/v1/info", http.NoBody)
 	w := httptest.NewRecorder()
@@ -217,9 +226,6 @@ func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	// Verify we have 6 resources (3 per flavor group, both groups included)
-	// hana_fixed generates: _ram, _cores, _instances
-	// v2_variable generates: _ram, _cores, _instances
 	if len(serviceInfo.Resources) != 6 {
 		t.Fatalf("expected 6 resources (3 per flavor group), got %d", len(serviceInfo.Resources))
 	}
@@ -233,7 +239,7 @@ func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
 		t.Error("hw_version_hana_fixed_ram: expected HasCapacity=true")
 	}
 	if !ramResource.HandlesCommitments {
-		t.Error("hw_version_hana_fixed_ram: expected HandlesCommitments=true (RAM is primary commitment resource)")
+		t.Error("hw_version_hana_fixed_ram: expected HandlesCommitments=true (set in config)")
 	}
 	if ramResource.Topology != liquid.AZSeparatedTopology {
 		t.Errorf("hw_version_hana_fixed_ram: expected Topology=%q, got %q", liquid.AZSeparatedTopology, ramResource.Topology)
@@ -251,7 +257,7 @@ func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
 		t.Error("hw_version_hana_fixed_cores: expected HasCapacity=true")
 	}
 	if coresResource.HandlesCommitments {
-		t.Error("hw_version_hana_fixed_cores: expected HandlesCommitments=false (cores are derived)")
+		t.Error("hw_version_hana_fixed_cores: expected HandlesCommitments=false")
 	}
 	if coresResource.Topology != liquid.AZAwareTopology {
 		t.Errorf("hw_version_hana_fixed_cores: expected Topology=%q, got %q", liquid.AZAwareTopology, coresResource.Topology)
@@ -269,7 +275,7 @@ func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
 		t.Error("hw_version_hana_fixed_instances: expected HasCapacity=true")
 	}
 	if instancesResource.HandlesCommitments {
-		t.Error("hw_version_hana_fixed_instances: expected HandlesCommitments=false (instances are derived)")
+		t.Error("hw_version_hana_fixed_instances: expected HandlesCommitments=false")
 	}
 	if instancesResource.Topology != liquid.AZAwareTopology {
 		t.Errorf("hw_version_hana_fixed_instances: expected Topology=%q, got %q", liquid.AZAwareTopology, instancesResource.Topology)
@@ -278,17 +284,16 @@ func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
 		t.Error("hw_version_hana_fixed_instances: expected HasQuota=false")
 	}
 
-	// Variable ratio group DOES have resources now, but HandlesCommitments=false for RAM
-	// Variable ratio → AZAwareTopology, no quota
+	// v2_variable is covered by "*" wildcard: HasCapacity=true, HandlesCommitments=false
 	v2RamResource, ok := serviceInfo.Resources["hw_version_v2_variable_ram"]
 	if !ok {
-		t.Fatal("expected hw_version_v2_variable_ram resource to exist (all groups included)")
+		t.Fatal("expected hw_version_v2_variable_ram resource to exist")
 	}
 	if !v2RamResource.HasCapacity {
 		t.Error("hw_version_v2_variable_ram: expected HasCapacity=true")
 	}
 	if v2RamResource.HandlesCommitments {
-		t.Error("hw_version_v2_variable_ram: expected HandlesCommitments=false (variable ratio)")
+		t.Error("hw_version_v2_variable_ram: expected HandlesCommitments=false (not in config)")
 	}
 	if v2RamResource.Topology != liquid.AZAwareTopology {
 		t.Errorf("hw_version_v2_variable_ram: expected Topology=%q, got %q", liquid.AZAwareTopology, v2RamResource.Topology)
@@ -299,7 +304,7 @@ func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
 
 	v2CoresResource, ok := serviceInfo.Resources["hw_version_v2_variable_cores"]
 	if !ok {
-		t.Fatal("expected hw_version_v2_variable_cores resource to exist (all groups included)")
+		t.Fatal("expected hw_version_v2_variable_cores resource to exist")
 	}
 	if !v2CoresResource.HasCapacity {
 		t.Error("hw_version_v2_variable_cores: expected HasCapacity=true")
@@ -316,7 +321,7 @@ func TestHandleInfo_HasCapacityEqualsHandlesCommitments(t *testing.T) {
 
 	v2InstancesResource, ok := serviceInfo.Resources["hw_version_v2_variable_instances"]
 	if !ok {
-		t.Fatal("expected hw_version_v2_variable_instances resource to exist (all groups included)")
+		t.Fatal("expected hw_version_v2_variable_instances resource to exist")
 	}
 	if !v2InstancesResource.HasCapacity {
 		t.Error("hw_version_v2_variable_instances: expected HasCapacity=true")

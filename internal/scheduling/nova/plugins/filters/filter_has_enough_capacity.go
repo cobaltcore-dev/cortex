@@ -25,6 +25,10 @@ type FilterHasEnoughCapacityOpts struct {
 	// When a reservation type is in this list, its capacity is not blocked.
 	// Default: empty (all reservation types are considered)
 	IgnoredReservationTypes []v1alpha1.ReservationType `json:"ignoredReservationTypes,omitempty"`
+
+	// IgnoreAllocations skips subtracting current VM allocations from host capacity.
+	// When true, only raw hardware capacity is considered (empty datacenter scenario).
+	IgnoreAllocations bool `json:"ignoreAllocations,omitempty"`
 }
 
 func (FilterHasEnoughCapacityOpts) Validate() error { return nil }
@@ -40,6 +44,16 @@ type FilterHasEnoughCapacity struct {
 //   - The resources reserved by active Reservations.
 //
 // In case the project and flavor match, space reserved is unlocked (slotting).
+//
+// Capacity accounting uses two sources: hv.Status.Allocation (aggregate real-time usage of
+// all running VMs) and Reservation.Status.Allocations (which VMs are confirmed on a slot,
+// maintained by the reservation controller with a one-reconcile-cycle lag). During the window
+// between a VM starting and the reservation controller reconciling, a VM appears in both
+// sources — a conservative transient over-count that self-corrects on the next reconcile.
+//
+// During a CR reservation migration (TargetHost != Status.Host), both the source and target
+// host are blocked with the full slot. The source block is intentionally conservative to
+// preserve rollback capacity if the migration fails.
 //
 // Please note that, if num_instances is larger than 1, there needs to be enough
 // capacity to place all instances on the same host. This limitation is necessary
@@ -70,18 +84,20 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			freeResourcesByHost[hv.Name] = hv.Status.EffectiveCapacity
 		}
 
-		// Subtract allocated resources.
-		for resourceName, allocated := range hv.Status.Allocation {
-			free, ok := freeResourcesByHost[hv.Name][resourceName]
-			if !ok {
-				traceLog.Error(
-					"hypervisor with allocation for unknown resource",
-					"host", hv.Name, "resource", resourceName,
-				)
-				continue
+		// Subtract allocated resources (skip when ignoring allocations for empty-datacenter capacity queries).
+		if !s.Options.IgnoreAllocations {
+			for resourceName, allocated := range hv.Status.Allocation {
+				free, ok := freeResourcesByHost[hv.Name][resourceName]
+				if !ok {
+					traceLog.Error(
+						"hypervisor with allocation for unknown resource",
+						"host", hv.Name, "resource", resourceName,
+					)
+					continue
+				}
+				free.Sub(allocated)
+				freeResourcesByHost[hv.Name][resourceName] = free
 			}
-			free.Sub(allocated)
-			freeResourcesByHost[hv.Name][resourceName] = free
 		}
 	}
 
@@ -170,39 +186,63 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			continue
 		}
 
-		// For CR reservations with allocations, calculate remaining (unallocated) resources to block.
-		// This prevents double-blocking of resources already consumed by running instances.
+		// For CR reservations with allocations, compute the effective block:
+		//   confirmed = sum of resources for VMs present in both Spec and Status allocations
+		//   specOnly  = sum of resources for VMs present in Spec but not yet in Status
+		//   remaining = max(0, Spec.Resources - confirmed)  [clamped: never negative]
+		//   block     = max(remaining, specOnly)            [spec-only VM must be fully covered]
+		//
+		// Clamping: if confirmed VMs exceed slot size (e.g. after resize), block = 0.
+		// Oversize spec-only: if a pending VM is larger than the remaining slot, block its full size.
 		var resourcesToBlock map[hv1.ResourceName]resource.Quantity
 		if reservation.Spec.Type == v1alpha1.ReservationTypeCommittedResource &&
+			// When ignoring allocations (empty-datacenter scenario) VM resources are not
+			// deducted, so the confirmed-VM adjustment would under-block: always use the
+			// full slot instead.
+			!s.Options.IgnoreAllocations &&
 			// if the reservation is not being migrated, block only unused resources
 			reservation.Spec.TargetHost == reservation.Status.Host &&
 			reservation.Spec.CommittedResourceReservation != nil &&
-			reservation.Status.CommittedResourceReservation != nil &&
-			len(reservation.Spec.CommittedResourceReservation.Allocations) > 0 &&
-			len(reservation.Status.CommittedResourceReservation.Allocations) > 0 {
-			// Start with full reservation resources
-			resourcesToBlock = make(map[hv1.ResourceName]resource.Quantity)
-			for k, v := range reservation.Spec.Resources {
-				resourcesToBlock[k] = v.DeepCopy()
+			len(reservation.Spec.CommittedResourceReservation.Allocations) > 0 {
+			confirmedResources := make(map[hv1.ResourceName]resource.Quantity)
+			specOnlyResources := make(map[hv1.ResourceName]resource.Quantity)
+
+			statusAllocs := map[string]string{}
+			if reservation.Status.CommittedResourceReservation != nil {
+				statusAllocs = reservation.Status.CommittedResourceReservation.Allocations
 			}
 
-			// Subtract already-allocated resources because those consume already resources on the host
 			for instanceUUID, allocation := range reservation.Spec.CommittedResourceReservation.Allocations {
-				// Only subtract if allocation is already present in status (VM is actually running)
-				if _, isRunning := reservation.Status.CommittedResourceReservation.Allocations[instanceUUID]; !isRunning {
-					continue
+				_, isConfirmed := statusAllocs[instanceUUID]
+				for resourceName, quantity := range allocation.Resources {
+					if isConfirmed {
+						existing := confirmedResources[resourceName]
+						existing.Add(quantity)
+						confirmedResources[resourceName] = existing
+					} else {
+						existing := specOnlyResources[resourceName]
+						existing.Add(quantity)
+						specOnlyResources[resourceName] = existing
+					}
+				}
+			}
+
+			resourcesToBlock = make(map[hv1.ResourceName]resource.Quantity)
+			zero := resource.Quantity{}
+			for resourceName, slotSize := range reservation.Spec.Resources {
+				confirmed := confirmedResources[resourceName]
+				specOnly := specOnlyResources[resourceName]
+
+				remaining := slotSize.DeepCopy()
+				remaining.Sub(confirmed)
+				if remaining.Cmp(zero) < 0 {
+					remaining = zero.DeepCopy()
 				}
 
-				for resourceName, quantity := range allocation.Resources {
-					if current, ok := resourcesToBlock[resourceName]; ok {
-						current.Sub(quantity)
-						resourcesToBlock[resourceName] = current
-						traceLog.Debug("subtracting allocated resources from reservation",
-							"reservation", reservation.Name,
-							"instanceUUID", instanceUUID,
-							"resource", resourceName,
-							"quantity", quantity.String())
-					}
+				if specOnly.Cmp(remaining) > 0 {
+					resourcesToBlock[resourceName] = specOnly.DeepCopy()
+				} else {
+					resourcesToBlock[resourceName] = remaining
 				}
 			}
 		} else {
@@ -229,7 +269,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 							"reservationType", reservation.Spec.Type,
 							"freeCPU", freeCPU.String(),
 							"blocked", cpu.String())
-						freeCPU = resource.MustParse("0")
+						freeCPU = resource.Quantity{}
 					}
 					freeResourcesByHost[host]["cpu"] = freeCPU
 				}
@@ -244,7 +284,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 							"reservationType", reservation.Spec.Type,
 							"freeMemory", freeMemory.String(),
 							"blocked", memory.String())
-						freeMemory = resource.MustParse("0")
+						freeMemory = resource.Quantity{}
 					}
 					freeResourcesByHost[host]["memory"] = freeMemory
 				}

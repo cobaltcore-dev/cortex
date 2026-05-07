@@ -100,9 +100,11 @@ func (m FeatureMode) valid() bool {
 }
 
 // dispatchPassthroughOnly forwards in passthrough mode, returns 501 for
-// hybrid/crd, and 500 for unknown modes.
+// hybrid/crd, and 500 for unknown modes. These endpoints have no backing
+// config requirement so we pass true — the 501 response already guards
+// against actual nil dereferences.
 func (s *Shim) dispatchPassthroughOnly(w http.ResponseWriter, r *http.Request, mode FeatureMode) {
-	resolved := s.featureModeFromConfOrHeader(r, mode)
+	resolved := s.featureModeFromConfOrHeader(r, mode, true)
 	switch resolved {
 	case FeatureModePassthrough:
 		s.forward(w, r)
@@ -116,18 +118,18 @@ func (s *Shim) dispatchPassthroughOnly(w http.ResponseWriter, r *http.Request, m
 // featureModeFromConfOrHeader returns the effective feature mode for the
 // current request. If a valid override is present in the request context
 // (injected by wrapHandler from the X-Cortex-Feature-Mode header), the
-// override takes precedence — unless it would escalate from passthrough into
-// a mode that requires backing config (Versioning, Traits) that was not
-// validated at startup. In that case the override is ignored and the
-// configured default is returned.
-func (s *Shim) featureModeFromConfOrHeader(r *http.Request, configured FeatureMode) FeatureMode {
+// override takes precedence — unless it would escalate to hybrid/crd without
+// the endpoint's backing config being available. Callers pass hasBackingConfig
+// to indicate whether the infrastructure required by hybrid/crd mode for their
+// specific endpoint was validated at startup.
+func (s *Shim) featureModeFromConfOrHeader(r *http.Request, configured FeatureMode, hasBackingConfig bool) FeatureMode {
 	override, ok := r.Context().Value(featureModeOverrideKey).(FeatureMode)
 	if !ok {
 		return configured.orDefault()
 	}
 	resolved := override.orDefault()
 	if resolved == FeatureModeHybrid || resolved == FeatureModeCRD {
-		if s.config.Versioning == nil && s.config.Traits == nil && s.config.ResourceClasses == nil {
+		if !hasBackingConfig {
 			return configured.orDefault()
 		}
 	}
