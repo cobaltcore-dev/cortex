@@ -322,7 +322,6 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
-					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -356,7 +355,6 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
-					CreateHistory:    false,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -403,7 +401,6 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
-					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},

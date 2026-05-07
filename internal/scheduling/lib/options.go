@@ -27,17 +27,17 @@ type Options struct {
 	// MaxCandidates limits the number of hosts returned after weighing. 0 means no limit.
 	MaxCandidates int `json:"max_candidates,omitempty"`
 
-	// RecordHistory records the placement decision in placement history.
-	// Replaces pipeline.Spec.CreateHistory once pipelines consolidate.
-	RecordHistory bool `json:"record_history,omitempty"`
+	// SkipHistory skips recording the placement decision in placement history.
+	// Defaults to false so Nova requests record history without needing to set this explicitly.
+	SkipHistory bool `json:"skip_history,omitempty"`
 	// CreateInflight creates pessimistic blocking reservations for all returned candidates.
 	CreateInflight bool `json:"create_inflight,omitempty"`
 }
 
 // Validate checks for mutually exclusive or inconsistent option combinations.
 func (o Options) Validate() error {
-	if o.ReadOnly && o.RecordHistory {
-		return errors.New("ReadOnly and RecordHistory are mutually exclusive: read-only runs must not write scheduling history")
+	if o.ReadOnly && !o.SkipHistory {
+		return errors.New("read-only runs must not write scheduling history: set SkipHistory=true")
 	}
 	if o.ReadOnly && o.CreateInflight {
 		return errors.New("ReadOnly and CreateInflight are mutually exclusive: read-only runs must not create inflight reservations")

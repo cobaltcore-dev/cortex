@@ -300,7 +300,6 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainPods,
-					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -334,7 +333,6 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainPods,
-					CreateHistory:    false,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -381,7 +379,6 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainPods,
-					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},

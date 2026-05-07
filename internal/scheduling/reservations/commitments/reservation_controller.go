@@ -293,7 +293,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		AssumeEmptyHosts:        false,
 		IgnoredReservationTypes: nil,
 		MaxCandidates:           1,
-		RecordHistory:           false,
+		SkipHistory:             true,
 		CreateInflight:          false, // not a VM placement; no pessimistic blocking needed
 	}
 

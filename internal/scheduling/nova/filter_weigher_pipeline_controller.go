@@ -176,12 +176,8 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		log.Info("gathered all placement candidates", "numHosts", len(request.Hosts))
 	}
 
-	// Fill RecordHistory from config if the caller didn't set it.
-	if !request.Options.RecordHistory {
-		request.Options.RecordHistory = pipelineConf.Spec.CreateHistory
-	}
 	result, err := pipeline.Run(request)
-	if request.Options.RecordHistory {
+	if !request.Options.SkipHistory {
 		c.upsertHistory(ctx, decision, err)
 	}
 	if err != nil {
