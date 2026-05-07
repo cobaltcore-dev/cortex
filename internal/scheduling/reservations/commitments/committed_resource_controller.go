@@ -58,6 +58,13 @@ func (r *CommittedResourceController) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, nil
 	}
 
+	// Treat time-expired CRs as inactive regardless of Spec.State.
+	// The syncer updates State to expired on its own schedule (e.g. hourly); routing directly
+	// to reconcileInactive here ensures reservation slots are deleted as soon as EndTime passes.
+	if cr.Spec.EndTime != nil && cr.Spec.EndTime.Time.Before(time.Now()) {
+		return r.reconcileInactive(ctx, logger, &cr)
+	}
+
 	switch cr.Spec.State {
 	case v1alpha1.CommitmentStatusPlanned:
 		return ctrl.Result{}, r.setNotReady(ctx, &cr, v1alpha1.CommittedResourceReasonPlanned, "commitment is not yet active")

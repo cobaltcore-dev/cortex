@@ -64,6 +64,28 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, nil
 	}
 
+	// Skip expired or not-yet-started commitments, mirroring the time guards in buildCommitmentCapacityMap.
+	// The state field may not reflect expiry immediately (syncer updates on its own schedule),
+	// so we check EndTime directly to prevent stale assignments from persisting past expiry.
+	if cr.Spec.EndTime != nil && cr.Spec.EndTime.Time.Before(start) {
+		log.Info("skipping: commitment has expired", "endTime", cr.Spec.EndTime)
+		if len(cr.Status.AssignedInstances) > 0 || len(cr.Status.UsedResources) > 0 {
+			old := cr.DeepCopy()
+			cr.Status.AssignedInstances = nil
+			cr.Status.UsedResources = nil
+			cr.Status.LastUsageReconcileAt = nil
+			cr.Status.UsageObservedGeneration = nil
+			if err := r.Status().Patch(ctx, &cr, client.MergeFrom(old)); err != nil {
+				return ctrl.Result{}, client.IgnoreNotFound(err)
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+	if cr.Spec.StartTime != nil && cr.Spec.StartTime.After(start) {
+		log.Info("skipping: commitment has not started yet", "startTime", cr.Spec.StartTime)
+		return ctrl.Result{}, nil
+	}
+
 	cooldown := r.Conf.CooldownInterval.Duration
 
 	// Gate: wait until the CR controller has accepted the current generation.

@@ -196,6 +196,47 @@ func TestUsageReconciler_Reconcile_Gates(t *testing.T) {
 		}
 	})
 
+	t.Run("expired EndTime with stale data: clears AssignedInstances and timestamps", func(t *testing.T) {
+		now := metav1.Now()
+		pastTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
+		cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
+		cr.Spec.EndTime = &pastTime
+		cr.Status.AssignedInstances = []string{"vm-1"}
+		cr.Status.LastUsageReconcileAt = &now
+
+		k8sClient := newCRTestClient(scheme, cr)
+		r := newUsageReconciler(k8sClient, cooldown)
+		_, err := r.Reconcile(context.Background(), reconcileReq(cr.Name))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		var updated v1alpha1.CommittedResource
+		if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: cr.Name}, &updated); err != nil {
+			t.Fatalf("get CR: %v", err)
+		}
+		if len(updated.Status.AssignedInstances) != 0 {
+			t.Errorf("AssignedInstances = %v, want nil", updated.Status.AssignedInstances)
+		}
+		if updated.Status.LastUsageReconcileAt != nil {
+			t.Errorf("LastUsageReconcileAt = %v, want nil", updated.Status.LastUsageReconcileAt)
+		}
+	})
+
+	t.Run("future StartTime: skips without clearing or requeuing", func(t *testing.T) {
+		futureTime := metav1.NewTime(time.Now().Add(10 * time.Minute))
+		cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusGuaranteed)
+		cr.Spec.StartTime = &futureTime
+		r := newUsageReconciler(newCRTestClient(scheme, cr), cooldown)
+		result, err := r.Reconcile(context.Background(), reconcileReq(cr.Name))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.RequeueAfter != 0 {
+			t.Errorf("RequeueAfter = %v, want 0", result.RequeueAfter)
+		}
+	})
+
 	t.Run("Ready condition absent: skips without requeue", func(t *testing.T) {
 		cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
 		r := newUsageReconciler(newCRTestClient(scheme, cr), cooldown)

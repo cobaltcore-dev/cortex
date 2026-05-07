@@ -207,11 +207,13 @@ func buildCommitmentCapacityMap(
 	now := time.Now()
 	result := make(map[string][]*CommitmentStateWithUsage)
 	for _, cr := range allCRs.Items {
-		if cr.Spec.State != v1alpha1.CommitmentStatusConfirmed && cr.Spec.State != v1alpha1.CommitmentStatusGuaranteed {
-			continue
-		}
 		if cr.Status.AcceptedSpec == nil {
 			log.V(1).Info("skipping CR with no accepted spec", "cr", cr.Name)
+			continue
+		}
+		// Use AcceptedSpec.State so sibling CRs whose spec is mid-transition (e.g. syncer just
+		// wrote expired before the CR controller accepted it) don't lose capacity prematurely.
+		if cr.Status.AcceptedSpec.State != v1alpha1.CommitmentStatusConfirmed && cr.Status.AcceptedSpec.State != v1alpha1.CommitmentStatusGuaranteed {
 			continue
 		}
 
