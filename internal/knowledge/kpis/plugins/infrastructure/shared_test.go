@@ -28,7 +28,7 @@ func mockKVMHostLabels(host, az string) map[string]string {
 		"decommissioned":    "false",
 		"external_customer": "false",
 		"maintenance":       "false",
-		"os_version":        "1.1.1",
+		"os_version":        "unknown",
 	}
 }
 
@@ -201,6 +201,14 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 				}},
 			}},
 			want: []string{"node001-bb42", "az3", "bb42", "sapphire-rapids", "hana", "true", "true", "true", "true"},
+		},
+		{
+			name: "os version set",
+			host: kvmHost{hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
+				Spec:       hv1.HypervisorSpec{OperatingSystemVersion: "1.1.1"},
+			}},
+			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false", "1.1.1"},
 		},
 	}
 
