@@ -5,6 +5,7 @@ package nova
 
 import (
 	"encoding/json"
+	"log/slog"
 )
 
 // OpenStack server model as returned by the Nova API under /servers/detail.
@@ -111,6 +112,10 @@ type Server struct {
 	// From nested server.flavor JSON
 	FlavorName string `json:"-" db:"flavor_name"`
 
+	// ImageRef is the Glance image UUID the server was booted from.
+	// Empty string for volume-booted servers.
+	ImageRef string `json:"-" db:"image_ref"`
+
 	// From nested server.fault JSON
 
 	// The error response code.
@@ -136,6 +141,8 @@ func (s *Server) UnmarshalJSON(data []byte) error {
 	aux := &struct {
 		Flavor json.RawMessage  `json:"flavor"`
 		Fault  *json.RawMessage `json:"fault,omitempty"`
+		// Nova returns image as a map {"id": "..."} for image-booted or "" for volume-booted.
+		Image json.RawMessage `json:"image"`
 		*Alias
 	}{
 		Alias: (*Alias)(s),
@@ -151,6 +158,17 @@ func (s *Server) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	s.FlavorName = flavor.Name
+	// Parse image ref: map → extract id; empty string → leave blank (volume-booted).
+	if len(aux.Image) > 0 && aux.Image[0] == '{' {
+		var imageMap struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(aux.Image, &imageMap); err != nil {
+			slog.Warn("failed to parse image ref from server response, leaving blank", "error", err, "serverID", s.ID)
+		} else {
+			s.ImageRef = imageMap.ID
+		}
+	}
 	var fault struct {
 		Code    uint    `json:"code"`
 		Created string  `json:"created"`
@@ -194,20 +212,29 @@ func (s *Server) MarshalJSON() ([]byte, error) {
 			Details: s.FaultDetails,
 		}
 	}
+	// Represent image as {"id": "<ref>"} for image-booted or "" for volume-booted.
+	var imageVal any
+	if s.ImageRef != "" {
+		imageVal = map[string]string{"id": s.ImageRef}
+	} else {
+		imageVal = ""
+	}
 	aux := &struct {
 		Flavor flavor `json:"flavor"`
 		Fault  *fault `json:"fault,omitempty"`
+		Image  any    `json:"image"`
 		*Alias
 	}{
 		Alias:  (*Alias)(s),
 		Flavor: flavorVal,
 		Fault:  faultVal,
+		Image:  imageVal,
 	}
 	return json.Marshal(aux)
 }
 
 // Table in which the openstack model is stored.
-func (Server) TableName() string { return "openstack_servers_v2" }
+func (Server) TableName() string { return "openstack_servers_v3" }
 
 // Index for the openstack model.
 func (Server) Indexes() map[string][]string { return nil }
@@ -481,3 +508,17 @@ func (Aggregate) TableName() string { return "openstack_aggregates_v2" }
 
 // Index for the openstack model.
 func (Aggregate) Indexes() map[string][]string { return nil }
+
+// Image stores pre-computed os_type for a Glance image UUID.
+// Populated by the NovaDatasourceTypeImages syncer from the Glance API.
+// Used by the CR usage API to include os_type in VM subresources without live API calls.
+type Image struct {
+	ID     string `json:"id" db:"id,primarykey"`
+	OSType string `json:"os_type" db:"os_type"`
+}
+
+// Table in which the openstack model is stored.
+func (Image) TableName() string { return "openstack_images" }
+
+// Index for the openstack model.
+func (Image) Indexes() map[string][]string { return nil }

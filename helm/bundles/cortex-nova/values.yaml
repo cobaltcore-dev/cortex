@@ -170,8 +170,10 @@ cortex-scheduling-controllers:
       # URL of the nova external scheduler API for placement decisions
       schedulerURL: "http://localhost:8080/scheduler/nova/external"
     committedResourceController:
-      # Back-off interval while CommittedResource placement is pending or failed
+      # Back-off interval while CommittedResource placement is pending or failed (base for exponential backoff)
       requeueIntervalRetry: "1m"
+      # Maximum back-off interval cap for the exponential retry delay
+      maxRequeueInterval: "30m"
     committedResourceAPI:
       # Timeout for watching CommittedResource CRDs before rolling back
       watchTimeout: "10s"
@@ -202,6 +204,11 @@ cortex-scheduling-controllers:
             handlesCommitments: false
             hasCapacity: true
             hasQuota: false
+    committedResourceUsageReconciler:
+      # Minimum time between usage reconcile runs for the same CommittedResource.
+      # Also acts as the periodic fallback interval: a successful reconcile schedules
+      # the next run after this duration, so this is also the maximum status staleness.
+      cooldownInterval: "5m"
     # OvercommitMappings is a list of mappings that map hypervisor traits to
     # overcommit ratios. Note that this list is applied in order, so if there
     # are multiple mappings applying to the same hypervisors, the last mapping

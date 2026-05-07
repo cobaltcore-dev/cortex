@@ -177,6 +177,7 @@ func TestBuildVMAttributes(t *testing.T) {
 		MemoryMB:   4096,
 		VCPUs:      16,
 		DiskGB:     100,
+		OSType:     "windows8Server64Guest",
 	}
 
 	t.Run("with commitment", func(t *testing.T) {
@@ -186,7 +187,11 @@ func TestBuildVMAttributes(t *testing.T) {
 			t.Errorf("status = %v, expected ACTIVE", attrs["status"])
 		}
 
-		for _, absent := range []string{"metadata", "tags", "os_type"} {
+		if attrs["os_type"] != "windows8Server64Guest" {
+			t.Errorf("os_type = %v, expected windows8Server64Guest", attrs["os_type"])
+		}
+
+		for _, absent := range []string{"metadata", "tags"} {
 			if _, present := attrs[absent]; present {
 				t.Errorf("%s must not appear in output (not available from Postgres cache)", absent)
 			}
@@ -404,21 +409,38 @@ func TestUsageCalculator_AssignVMsToCommitments(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			calc := &UsageCalculator{}
-			assignments, count := calc.assignVMsToCommitments(tt.vms, tt.commitments)
+			assignVMsToCommitments(tt.vms, tt.commitments)
 
-			if count != tt.expectedCount {
-				t.Errorf("assigned count = %d, expected %d", count, tt.expectedCount)
+			// Derive assignment map from mutated commitment states.
+			assignments := make(map[string]string)
+			totalAssigned := 0
+			for _, states := range tt.commitments {
+				for _, state := range states {
+					for _, vmUUID := range state.AssignedInstances {
+						assignments[vmUUID] = state.CommitmentUUID
+						totalAssigned++
+					}
+				}
+			}
+
+			if totalAssigned != tt.expectedCount {
+				t.Errorf("assigned count = %d, expected %d", totalAssigned, tt.expectedCount)
 			}
 
 			for vmUUID, expectedCommitment := range tt.expectedAssignments {
 				actual, ok := assignments[vmUUID]
-				if !ok {
-					t.Errorf("VM %s not in assignments", vmUUID)
-					continue
-				}
-				if actual != expectedCommitment {
-					t.Errorf("VM %s: commitment = %q, expected %q", vmUUID, actual, expectedCommitment)
+				if expectedCommitment == "" {
+					if ok {
+						t.Errorf("VM %s should be PAYG but was assigned to %q", vmUUID, actual)
+					}
+				} else {
+					if !ok {
+						t.Errorf("VM %s not in assignments", vmUUID)
+						continue
+					}
+					if actual != expectedCommitment {
+						t.Errorf("VM %s: commitment = %q, expected %q", vmUUID, actual, expectedCommitment)
+					}
 				}
 			}
 		})

@@ -454,7 +454,7 @@ func (e *intgEnv) reconcileChildReservations(t *testing.T, crName string) {
 // condition or the 5 s deadline is reached.
 //
 // One pass:
-//  1. CR controller (adds finalizer / creates Reservation CRDs / handles inactive states)
+//  1. CR controller (creates Reservation CRDs / handles inactive states)
 //  2. Reservation controller ×2 per slot (first call sets TargetHost, second sets Ready=True)
 //  3. CR controller again (picks up placement outcomes: Accepted or Rejected)
 func intgDriveToTerminal(t *testing.T, env *intgEnv, crNames []string) {
@@ -528,9 +528,6 @@ func intgDriveToTerminal(t *testing.T, env *intgEnv, crNames []string) {
 }
 
 func intgIsTerminalCR(cr v1alpha1.CommittedResource) bool {
-	if !cr.DeletionTimestamp.IsZero() {
-		return false // needs one more reconcile to remove its finalizer
-	}
 	cond := meta.FindStatusCondition(cr.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
 	if cond == nil {
 		return false
@@ -696,7 +693,7 @@ func TestCRLifecycle(t *testing.T) {
 			t.Fatalf("create CR: %v", err)
 		}
 
-		// Reconcile as planned: finalizer added, no Reservations.
+		// Reconcile as planned: no Reservations created.
 		env.reconcileCR(t, cr.Name)
 		env.reconcileCR(t, cr.Name)
 		if got := env.listChildReservations(t, cr.Name); len(got) != 0 {
@@ -738,8 +735,8 @@ func TestCRLifecycle(t *testing.T) {
 		}
 
 		// Bring to confirmed+Ready=True.
-		env.reconcileCR(t, cr.Name)                // adds finalizer
 		env.reconcileCR(t, cr.Name)                // creates Reservations
+		env.reconcileCR(t, cr.Name)                // picks up Reservation outcomes
 		env.reconcileChildReservations(t, cr.Name) // places slots → Ready=True
 
 		if got := env.listChildReservations(t, cr.Name); len(got) != 1 {
@@ -807,58 +804,6 @@ func TestCRLifecycle(t *testing.T) {
 		}
 		if afterSecond.Status.Host != "host-1" {
 			t.Errorf("expected Status.Host=host-1, got %q", afterSecond.Status.Host)
-		}
-	})
-
-	t.Run("deletion: finalizer removed, child Reservations cleaned up", func(t *testing.T) {
-		env := newDefaultIntgEnv(t)
-		defer env.close()
-
-		cr := newTestCommittedResource("my-cr", v1alpha1.CommitmentStatusConfirmed)
-		if err := env.k8sClient.Create(context.Background(), cr); err != nil {
-			t.Fatalf("create CR: %v", err)
-		}
-
-		// Pre-create a child Reservation to verify it gets cleaned up on deletion.
-		// newTestCommittedResource pre-populates the finalizer, so Delete() immediately sets DeletionTimestamp.
-		child := &v1alpha1.Reservation{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "my-cr-0",
-				Labels: map[string]string{
-					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-				},
-			},
-			Spec: v1alpha1.ReservationSpec{
-				Type: v1alpha1.ReservationTypeCommittedResource,
-				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-					CommitmentUUID: "test-uuid-1234",
-				},
-			},
-		}
-		if err := env.k8sClient.Create(context.Background(), child); err != nil {
-			t.Fatalf("create child reservation: %v", err)
-		}
-
-		crState := env.getCR(t, cr.Name)
-		if err := env.k8sClient.Delete(context.Background(), &crState); err != nil {
-			t.Fatalf("delete CR: %v", err)
-		}
-		env.reconcileCR(t, cr.Name)
-
-		if got := env.listChildReservations(t, cr.Name); len(got) != 0 {
-			t.Errorf("post-deletion: expected 0 reservations, got %d", len(got))
-		}
-		var final v1alpha1.CommittedResource
-		err := env.k8sClient.Get(context.Background(), types.NamespacedName{Name: cr.Name}, &final)
-		if client.IgnoreNotFound(err) != nil {
-			t.Fatalf("unexpected error after deletion: %v", err)
-		}
-		if err == nil {
-			for _, f := range final.Finalizers {
-				if f == crFinalizer {
-					t.Errorf("finalizer not removed after deletion reconcile")
-				}
-			}
 		}
 	})
 
@@ -1031,14 +976,12 @@ func TestCRLifecycle(t *testing.T) {
 		if crState.Status.AcceptedAt == nil {
 			t.Errorf("expected AcceptedAt to be set on acceptance")
 		}
-		if crState.Status.AcceptedAmount == nil {
-			t.Errorf("expected AcceptedAmount to be set on acceptance")
-		} else if crState.Status.AcceptedAmount.Cmp(resource.MustParse("4Gi")) != 0 {
-			t.Errorf("AcceptedAmount: want 4Gi, got %s", crState.Status.AcceptedAmount.String())
+		if crState.Status.AcceptedSpec == nil || crState.Status.AcceptedSpec.Amount.Cmp(resource.MustParse("4Gi")) != 0 {
+			t.Errorf("AcceptedSpec.Amount: want 4Gi, got %v", crState.Status.AcceptedSpec)
 		}
 	})
 
-	t.Run("resize failure: rolls back to AcceptedAmount, prior slot preserved", func(t *testing.T) {
+	t.Run("resize failure: rolls back to AcceptedSpec, prior slot preserved", func(t *testing.T) {
 		// Scheduler: accepts the first placement call (initial 4 GiB slot), rejects all subsequent.
 		objects := []client.Object{newTestFlavorKnowledge(), intgHypervisor("host-1")}
 		env := newIntgEnv(t, objects, intgAcceptFirstScheduler(1))
@@ -1058,8 +1001,8 @@ func TestCRLifecycle(t *testing.T) {
 		if !meta.IsStatusConditionTrue(crState.Status.Conditions, v1alpha1.CommittedResourceConditionReady) {
 			t.Fatalf("phase 1: expected CR to be Ready=True after initial placement")
 		}
-		if crState.Status.AcceptedAmount == nil || crState.Status.AcceptedAmount.Cmp(resource.MustParse("4Gi")) != 0 {
-			t.Fatalf("phase 1: AcceptedAmount must be 4Gi, got %v", crState.Status.AcceptedAmount)
+		if crState.Status.AcceptedSpec == nil || crState.Status.AcceptedSpec.Amount.Cmp(resource.MustParse("4Gi")) != 0 {
+			t.Fatalf("phase 1: AcceptedSpec.Amount must be 4Gi, got %v", crState.Status.AcceptedSpec)
 		}
 
 		// Phase 2: resize to 8 GiB (needs 2 slots). Scheduler has no more accepts.
@@ -1096,7 +1039,7 @@ func TestCRLifecycle(t *testing.T) {
 			t.Fatalf("list reservations: %v", err)
 		}
 		if len(finalList.Items) != 1 {
-			t.Errorf("resize rollback: want 1 slot (AcceptedAmount), got %d", len(finalList.Items))
+			t.Errorf("resize rollback: want 1 slot (AcceptedSpec), got %d", len(finalList.Items))
 		}
 		intgAssertCRCondition(t, env.k8sClient, []string{cr.Name}, metav1.ConditionFalse, v1alpha1.CommittedResourceReasonRejected)
 	})
