@@ -696,7 +696,9 @@ func main() {
 		quotaConfig.ApplyDefaults()
 
 		// Get datasource name from the failover/commitments config (shared dependency)
-		datasourceName := conf.GetConfigOrDie[failover.FailoverConfig]().DatasourceName
+		failoverCfg := conf.GetConfigOrDie[failover.FailoverConfig]()
+		failoverCfg.ApplyDefaults()
+		datasourceName := failoverCfg.DatasourceName
 		if datasourceName == "" {
 			setupLog.Error(nil, "quota-controller requires datasourceName to be configured")
 			os.Exit(1)

@@ -183,7 +183,6 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// Determine if this is a spec change (new CRD or quota update) vs. a CR UsedAmount change
 	specChanged := pq.Generation > pq.Status.ObservedGeneration
 
-	
 	var totalUsage map[string]v1alpha1.ResourceQuotaUsage
 	if specChanged {
 		// Spec changed (new CRD or quota update) — recompute TotalUsage from Postgres
