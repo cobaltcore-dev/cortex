@@ -4,12 +4,33 @@
 package infrastructure
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func mockKVMHostLabels(host, az string) map[string]string {
+	bb := "unknown"
+	parts := strings.Split(host, "-")
+	if len(parts) > 1 {
+		bb = parts[1]
+	}
+	return map[string]string{
+		"compute_host":      host,
+		"availability_zone": az,
+		"building_block":    bb,
+		"cpu_architecture":  "cascade-lake",
+		"workload_type":     "general-purpose",
+		"enabled":           "true",
+		"decommissioned":    "false",
+		"external_customer": "false",
+		"maintenance":       "false",
+		"os_version":        "unknown",
+	}
+}
 
 func mockVMwareHostLabels(computeHost, az string) map[string]string {
 	return map[string]string{
@@ -180,6 +201,14 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 				}},
 			}},
 			want: []string{"node001-bb42", "az3", "bb42", "sapphire-rapids", "hana", "true", "true", "true", "true"},
+		},
+		{
+			name: "os version set",
+			host: kvmHost{hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
+				Spec:       hv1.HypervisorSpec{OperatingSystemVersion: "1.1.1"},
+			}},
+			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false", "1.1.1"},
 		},
 	}
 
