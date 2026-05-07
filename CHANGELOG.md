@@ -2,7 +2,7 @@
 
 ## 2026-05-07 — [#814](https://github.com/cobaltcore-dev/cortex/pull/814)
 
-### cortex v0.0.47 (sha-7d1745d8)
+### cortex v0.0.47 (sha-b8cecd0c)
 
 Non-breaking changes:
 - Add `ProjectQuota` CRD with per-resource, per-AZ quota breakdown and PAYG (pay-as-you-go) calculation support ([#796](https://github.com/cobaltcore-dev/cortex/pull/796))
@@ -24,7 +24,7 @@ Non-breaking changes:
 - Fix: suppress nova scheduling alerts on transient `no such host` DNS errors
 - Replace `testlib.Ptr` helper with native `new()` across test files ([#801](https://github.com/cobaltcore-dev/cortex/pull/801))
 
-### cortex-nova v0.0.60 (sha-7d1745d8)
+### cortex-nova v0.0.60 (sha-b8cecd0c)
 
 Includes updated chart cortex v0.0.47.
 
