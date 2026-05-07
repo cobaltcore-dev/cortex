@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -101,7 +102,10 @@ func main() {
 	restConfig := ctrl.GetConfigOrDie()
 
 	// Custom entrypoint for scheduler e2e tests.
-	if len(os.Args) == 2 {
+	// Usage: /main <subcommand> [json-override]
+	// The optional json-override is merged on top of the ConfigMap config, e.g.:
+	//   /main e2e-commitments '{"noCleanup":true,"azs":["qa-de-1a"]}'
+	if len(os.Args) >= 2 {
 		copts := client.Options{Scheme: scheme}
 		client := must.Return(client.New(restConfig, copts))
 		switch os.Args[1] {
@@ -118,6 +122,12 @@ func main() {
 			return
 		case "e2e-commitments":
 			commitmentsChecksConfig := conf.GetConfigOrDie[commitments.E2EChecksConfig]()
+			if len(os.Args) >= 3 {
+				if err := json.Unmarshal([]byte(os.Args[2]), &commitmentsChecksConfig); err != nil {
+					slog.Error("invalid json override for e2e-commitments", "err", err)
+					os.Exit(1)
+				}
+			}
 			commitments.RunCommitmentsE2EChecks(ctx, commitmentsChecksConfig)
 			return
 		}
