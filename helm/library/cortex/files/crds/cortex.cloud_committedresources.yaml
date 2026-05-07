@@ -332,12 +332,6 @@ spec:
                   - type
                   type: object
                 type: array
-              lastChanged:
-                description: |-
-                  LastChanged is when the spec was last written by the syncer.
-                  When AcceptedAt is older than LastChanged, the controller has pending work.
-                format: date-time
-                type: string
               lastReconcileAt:
                 description: LastReconcileAt is when the controller last ran its reconcile
                   loop for this resource.

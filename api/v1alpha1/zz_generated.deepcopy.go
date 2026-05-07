@@ -196,10 +196,6 @@ func (in *CommittedResourceStatus) DeepCopyInto(out *CommittedResourceStatus) {
 		in, out := &in.AcceptedAt, &out.AcceptedAt
 		*out = (*in).DeepCopy()
 	}
-	if in.LastChanged != nil {
-		in, out := &in.LastChanged, &out.LastChanged
-		*out = (*in).DeepCopy()
-	}
 	if in.LastReconcileAt != nil {
 		in, out := &in.LastReconcileAt, &out.LastReconcileAt
 		*out = (*in).DeepCopy()

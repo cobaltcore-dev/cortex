@@ -116,11 +116,6 @@ type CommittedResourceStatus struct {
 	// +kubebuilder:validation:Optional
 	AcceptedAt *metav1.Time `json:"acceptedAt,omitempty"`
 
-	// LastChanged is when the spec was last written by the syncer.
-	// When AcceptedAt is older than LastChanged, the controller has pending work.
-	// +kubebuilder:validation:Optional
-	LastChanged *metav1.Time `json:"lastChanged,omitempty"`
-
 	// LastReconcileAt is when the controller last ran its reconcile loop for this resource.
 	// +kubebuilder:validation:Optional
 	LastReconcileAt *metav1.Time `json:"lastReconcileAt,omitempty"`
