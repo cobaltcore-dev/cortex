@@ -24,7 +24,7 @@ jobs:
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.CORTEX_AI_AGENTS_APP_ID }}
-          private-key: ${{ secrets.CORTEX_AI_AGENTS_CLIENT_SECRET }}
+          private-key: ${{ secrets.CORTEX_AI_AGENTS_CLIENT_PKEY }}
       - uses: ./.github/actions/setup-claude-code-action
       - uses: ./.github/actions/start-litellm-proxy
         env:
