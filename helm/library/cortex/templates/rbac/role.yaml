@@ -14,6 +14,7 @@ rules:
   - datasources
   - reservations
   - committedresources
+  - flavorgroupcapacities
   - decisions
   - deschedulings
   - pipelines
@@ -34,6 +35,7 @@ rules:
   - datasources/finalizers
   - reservations/finalizers
   - committedresources/finalizers
+  - flavorgroupcapacities/finalizers
   - decisions/finalizers
   - deschedulings/finalizers
   - pipelines/finalizers
@@ -48,6 +50,7 @@ rules:
   - datasources/status
   - reservations/status
   - committedresources/status
+  - flavorgroupcapacities/status
   - decisions/status
   - deschedulings/status
   - pipelines/status

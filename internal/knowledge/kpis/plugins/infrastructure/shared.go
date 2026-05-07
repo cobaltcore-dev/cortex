@@ -77,6 +77,7 @@ var kvmHostLabels = []string{
 	"decommissioned",
 	"external_customer",
 	"maintenance",
+	"os_version",
 }
 
 type kvmHost struct {
@@ -99,6 +100,11 @@ func (h kvmHost) getHostLabels() []string {
 	parts := strings.Split(h.Name, "-")
 	if len(parts) > 1 {
 		buildingBlock = parts[1]
+	}
+
+	osVersion := h.Spec.OperatingSystemVersion
+	if osVersion == "" {
+		osVersion = "unknown"
 	}
 
 	for _, trait := range h.Status.Traits {
@@ -126,6 +132,7 @@ func (h kvmHost) getHostLabels() []string {
 		strconv.FormatBool(decommissioned),
 		strconv.FormatBool(externalCustomer),
 		strconv.FormatBool(maintenance),
+		osVersion,
 	}
 }
 
