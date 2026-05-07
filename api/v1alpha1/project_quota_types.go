@@ -69,6 +69,12 @@ type ProjectQuotaSpec struct {
 // Usage values correspond to liquid.AZResourceUsageReport fields reported via /report-usage.
 // See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#AZResourceUsageReport
 type ProjectQuotaStatus struct {
+	// ObservedGeneration is the most recent spec generation that the controller has processed.
+	// Used to distinguish spec changes (which require TotalUsage recompute) from
+	// CommittedResource changes (which only need PaygUsage recompute).
+	// +kubebuilder:validation:Optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// TotalUsage tracks per-resource per-AZ total resource consumption (all VMs in this project).
 	// Persisted by the quota controller; updated by full reconcile and HV instance diffs.
 	// Key: liquid.ResourceName

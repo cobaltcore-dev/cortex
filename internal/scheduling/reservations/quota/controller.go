@@ -158,11 +158,14 @@ func (c *QuotaController) ReconcilePeriodic(ctx context.Context) error {
 
 // Reconcile handles watch-based reconciliation for a single ProjectQuota.
 // Triggered by: CR Status.UsedAmount changes or ProjectQuota spec changes.
-// It reads the persisted TotalUsage, re-lists CRs, and recomputes PaygUsage.
+//
+// Behavior depends on what changed:
+// - Spec change (Generation > ObservedGeneration): recomputes TotalUsage from Postgres + PaygUsage
+// - CR UsedAmount change (Generation == ObservedGeneration): reads persisted TotalUsage, recomputes PaygUsage only
 func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	ctx = WithNewGlobalRequestID(ctx)
 	logger := LoggerFromContext(ctx).WithValues("projectQuota", req.Name, "mode", "payg-recompute")
-	logger.V(1).Info("reconciling ProjectQuota (PaygUsage recompute)")
+	logger.V(1).Info("reconciling ProjectQuota")
 
 	// Fetch the ProjectQuota
 	var pq v1alpha1.ProjectQuota
@@ -177,16 +180,33 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	projectID := pq.Spec.ProjectID
 	ctx = reservations.WithRequestID(ctx, projectID)
 
-	// Read persisted TotalUsage (already computed by full reconcile or incremental)
-	totalUsage := pq.Status.TotalUsage
-	if totalUsage == nil {
-		// No TotalUsage yet — compute it now for this single project (bootstrap case).
-		logger.Info("no TotalUsage persisted yet, computing for this project")
+	// Determine if this is a spec change (new CRD or quota update) vs. a CR UsedAmount change
+	specChanged := pq.Generation > pq.Status.ObservedGeneration
+
+	
+	var totalUsage map[string]v1alpha1.ResourceQuotaUsage
+	if specChanged {
+		// Spec changed (new CRD or quota update) — recompute TotalUsage from Postgres
+		logger.Info("spec changed, recomputing TotalUsage from Postgres",
+			"generation", pq.Generation, "observedGeneration", pq.Status.ObservedGeneration)
 		var err error
 		totalUsage, err = c.computeTotalUsageForProject(ctx, projectID)
 		if err != nil {
 			logger.Error(err, "failed to compute TotalUsage for project")
 			return ctrl.Result{}, err
+		}
+	} else {
+		// CR UsedAmount changed — read persisted TotalUsage, only recompute PaygUsage
+		totalUsage = pq.Status.TotalUsage
+		if totalUsage == nil {
+			// Safety fallback: TotalUsage should always be set after first spec reconcile
+			logger.Info("no TotalUsage persisted, computing as fallback")
+			var err error
+			totalUsage, err = c.computeTotalUsageForProject(ctx, projectID)
+			if err != nil {
+				logger.Error(err, "failed to compute TotalUsage for project")
+				return ctrl.Result{}, err
+			}
 		}
 	}
 
@@ -204,9 +224,8 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// Derive PaygUsage
 	paygUsage := derivePaygUsage(totalUsage, crUsage)
 
-	// Write updated status with conflict retry (full=true for bootstrap to set LastFullReconcileAt)
-	isBootstrap := pq.Status.TotalUsage == nil
-	if err := c.updateProjectQuotaStatusWithRetry(ctx, pq.Name, totalUsage, paygUsage, isBootstrap); err != nil {
+	// Write updated status with conflict retry
+	if err := c.updateProjectQuotaStatusWithRetry(ctx, pq.Name, totalUsage, paygUsage, specChanged); err != nil {
 		logger.Error(err, "failed to update ProjectQuota status")
 		return ctrl.Result{}, err
 	}
@@ -214,7 +233,7 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// Record metrics
 	c.recordUsageMetrics(projectID, totalUsage, paygUsage, crUsage)
 
-	logger.V(1).Info("PaygUsage recomputed", "project", projectID, "bootstrap", isBootstrap)
+	logger.V(1).Info("reconcile completed", "project", projectID, "specChanged", specChanged)
 	return ctrl.Result{}, nil
 }
 
@@ -808,7 +827,7 @@ func derivePaygUsage(
 
 // updateProjectQuotaStatusWithRetry writes TotalUsage + PaygUsage + LastReconcileAt
 // with retry-on-conflict to handle concurrent updates.
-// If fullReconcile is true, also updates LastFullReconcileAt.
+// If fullReconcile is true, also updates LastFullReconcileAt and ObservedGeneration.
 func (c *QuotaController) updateProjectQuotaStatusWithRetry(
 	ctx context.Context,
 	pqName string,
@@ -826,6 +845,7 @@ func (c *QuotaController) updateProjectQuotaStatusWithRetry(
 
 		pq.Status.TotalUsage = totalUsage
 		pq.Status.PaygUsage = paygUsage
+		pq.Status.ObservedGeneration = pq.Generation
 		now := metav1.Now()
 		pq.Status.LastReconcileAt = &now
 		if fullReconcile {
