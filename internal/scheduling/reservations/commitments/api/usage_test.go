@@ -438,9 +438,8 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 
 // TestUsageMultipleCalculation_FloorDivision tests that RAM usage is calculated
 // using floor division to handle Nova's memory overhead correctly.
-// Nova flavors like "2 GiB" actually have 2032 MiB (not 2048) due to overhead.
-// A "4 GiB" flavor has 4080 MiB, which is 2.007× the base unit.
-// Floor division ensures 4080 / 2032 = 2 (not 3 from ceiling).
+// Nova flavors like "4 GiB" actually have 4080 MiB (not 4096) due to overhead.
+// Floor division ensures 4080 / 1024 = 3 GiB (not 4 from ceiling).
 func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 	log.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
 	ctx := context.Background()
@@ -475,7 +474,7 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 			expectedInstances: 1,
 		},
 		{
-			name: "2x flavor with overhead - floor(4080/2032) = 2 units, not 3",
+			name: "2x flavor with overhead - floor(4080/1024) = 3 GiB, not 4",
 			vms: []commitments.VMRow{
 				{
 					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
@@ -484,7 +483,7 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 					FlavorName: "g_k_c2_m4_v2", FlavorRAM: 4080, FlavorVCPUs: 2,
 				},
 			},
-			expectedRAM:       2, // floor(4080/2032) = 2, NOT 3 (ceiling would give 3)
+			expectedRAM:       3, // floor(4080/1024) = 3, NOT 4 (ceiling would give 4)
 			expectedCores:     2,
 			expectedInstances: 1,
 		},
@@ -516,12 +515,10 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 					FlavorName: "g_k_c16_m32_v2", FlavorRAM: 32752, FlavorVCPUs: 16,
 				},
 			},
-			// floor(2032/2032) + floor(4080/2032) + floor(16368/2032) + floor(32752/2032)
-			// = 1 + 2 + 8 + 16 = 27 (matches sum of vCPUs: 1+2+4+16=23... wait, that's not right)
-			// Actually cores = 1+2+4+16 = 23
-			// RAM units = 1+2+8+16 = 27
-			// These don't match because vCPUs and RAM have different ratios per flavor!
-			expectedRAM:       27, // 1 + 2 + 8 + 16
+			// floor(2032/1024) + floor(4080/1024) + floor(16368/1024) + floor(32752/1024)
+			// = 1 + 3 + 15 + 31 = 50
+			// Cores: 1 + 2 + 4 + 16 = 23
+			expectedRAM:       50, // 1 + 3 + 15 + 31
 			expectedCores:     23, // 1 + 2 + 4 + 16
 			expectedInstances: 4,
 		},

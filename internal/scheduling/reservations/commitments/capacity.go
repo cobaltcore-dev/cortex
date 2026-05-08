@@ -93,13 +93,15 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 				continue
 			}
 
-			capacity := uint64(smallest.TotalCapacityVMSlots) //nolint:gosec
+			// Convert VM slot counts to GiB using the smallest flavor's RAM size.
+			ramPerSlotGiB := groupData.SmallestFlavor.MemoryMB / 1024
+			capacity := uint64(smallest.TotalCapacityVMSlots) * ramPerSlotGiB //nolint:gosec // slot count from CRD, realistically bounded
 			azEntry := &liquid.AZResourceCapacityReport{Capacity: capacity}
 			if ready {
-				placeable := uint64(smallest.PlaceableVMs) //nolint:gosec
+				placeableGiB := uint64(smallest.PlaceableVMs) * ramPerSlotGiB //nolint:gosec // slot count from CRD, realistically bounded
 				var usage uint64
-				if capacity > placeable {
-					usage = capacity - placeable
+				if capacity > placeableGiB {
+					usage = capacity - placeableGiB
 				}
 				azEntry.Usage = Some[uint64](usage)
 			}

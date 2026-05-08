@@ -121,9 +121,9 @@ func FromCommitment(
 		return nil, err
 	}
 
-	// Calculate total memory from commitment amount (amount = multiples of smallest flavor)
-	smallestFlavorMemoryBytes := int64(flavorGroup.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory from specs, realistically bounded
-	totalMemoryBytes := int64(commitment.Amount) * smallestFlavorMemoryBytes              //nolint:gosec // commitment amount from Limes API, bounded by quota limits
+	// Calculate total memory from commitment amount (1 GiB per unit)
+	const gibInBytes = int64(1) << 30
+	totalMemoryBytes := int64(commitment.Amount) * gibInBytes //nolint:gosec // commitment amount from Limes API, bounded by quota limits
 
 	// Set start time: use ConfirmedAt if available, otherwise CreatedAt
 	var startTime *time.Time
@@ -202,12 +202,9 @@ func FromChangeCommitmentTargetState(
 		}
 	}
 
-	// Flavors are sorted by size descending, so the last one is the smallest
-	smallestFlavor := flavorGroup.SmallestFlavor
-	smallestFlavorMemoryBytes := int64(smallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory from specs, realistically bounded
-
-	// Amount represents multiples of the smallest flavor in the group
-	totalMemoryBytes := int64(amountMultiple) * smallestFlavorMemoryBytes
+	// Amount represents GiB of RAM (1 GiB per unit)
+	const gibInBytes = int64(1) << 30
+	totalMemoryBytes := int64(amountMultiple) * gibInBytes
 
 	return &CommitmentState{
 		CommitmentUUID:   string(commitment.UUID),

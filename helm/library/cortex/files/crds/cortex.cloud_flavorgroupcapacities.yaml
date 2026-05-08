@@ -174,6 +174,16 @@ spec:
                   reconcile.
                 format: date-time
                 type: string
+              totalCapacity:
+                additionalProperties:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
+                description: TotalCapacity is the total capacity of all eligible hosts
+                  in an empty-datacenter scenario.
+                type: object
               totalInstances:
                 description: |-
                   TotalInstances is the total number of VM instances running on hypervisors in this AZ,

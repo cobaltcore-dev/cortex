@@ -849,6 +849,13 @@ func (in *FlavorGroupCapacityStatus) DeepCopyInto(out *FlavorGroupCapacityStatus
 		*out = make([]FlavorCapacityStatus, len(*in))
 		copy(*out, *in)
 	}
+	if in.TotalCapacity != nil {
+		in, out := &in.TotalCapacity, &out.TotalCapacity
+		*out = make(map[string]resource.Quantity, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val.DeepCopy()
+		}
+	}
 	in.LastReconcileAt.DeepCopyInto(&out.LastReconcileAt)
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions

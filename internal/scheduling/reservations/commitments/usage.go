@@ -100,7 +100,7 @@ type VMUsageInfo struct {
 	AZ            string
 	Hypervisor    string
 	CreatedAt     time.Time
-	UsageMultiple uint64 // Memory in multiples of smallest flavor in the group
+	UsageMultiple uint64 // RAM in GiB
 }
 
 // UsageCalculator computes usage reports for Limes LIQUID API.
@@ -276,16 +276,9 @@ func getProjectVMs(
 
 	// Build flavor name -> flavor group lookup
 	flavorToGroup := make(map[string]string)
-	flavorToSmallestMemory := make(map[string]uint64) // for calculating usage multiples
 	for groupName, group := range flavorGroups {
 		for _, flavor := range group.Flavors {
 			flavorToGroup[flavor.Name] = groupName
-		}
-		// Smallest flavor in group determines the usage unit
-		if group.SmallestFlavor.Name != "" {
-			for _, flavor := range group.Flavors {
-				flavorToSmallestMemory[flavor.Name] = group.SmallestFlavor.MemoryMB
-			}
 		}
 	}
 
@@ -302,10 +295,10 @@ func getProjectVMs(
 		// Determine flavor group
 		flavorGroup := flavorToGroup[row.FlavorName]
 
-		// Calculate usage multiple (memory in units of smallest flavor)
+		// Calculate usage in GiB (FlavorRAM is in MiB)
 		var usageMultiple uint64
-		if smallestMem := flavorToSmallestMemory[row.FlavorName]; smallestMem > 0 {
-			usageMultiple = row.FlavorRAM / smallestMem
+		if row.FlavorRAM > 0 {
+			usageMultiple = row.FlavorRAM / 1024
 		}
 
 		// Normalize AZ

@@ -56,8 +56,8 @@ func TestFromCommitment_CalculatesMemoryCorrectly(t *testing.T) {
 		t.Errorf("expected FlavorGroupName test-group, got %s", state.FlavorGroupName)
 	}
 
-	// Verify memory calculation: 5 * 8192 MB = 40960 MB = 42949672960 bytes
-	expectedMemory := int64(5 * 8192 * 1024 * 1024)
+	// Verify memory calculation: 5 GiB = 5 * 1<<30 bytes
+	expectedMemory := int64(5) * (1 << 30)
 	if state.TotalMemoryBytes != expectedMemory {
 		t.Errorf("expected memory %d, got %d", expectedMemory, state.TotalMemoryBytes)
 	}

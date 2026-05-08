@@ -44,9 +44,9 @@ func TestReportUsageIntegration(t *testing.T) {
 	m1Large := &TestFlavor{Name: "m1.large", Group: "hana_1", MemoryMB: 4096, VCPUs: 16} // 4 units
 	m1XL := &TestFlavor{Name: "m1.xl", Group: "hana_1", MemoryMB: 8192, VCPUs: 32}       // 8 units
 
-	// gp_1 group: smallest = 512 MB, so 1 unit = 0.5 GB
-	gpSmall := &TestFlavor{Name: "gp.small", Group: "gp_1", MemoryMB: 512, VCPUs: 1}    // 1 unit
-	gpMedium := &TestFlavor{Name: "gp.medium", Group: "gp_1", MemoryMB: 2048, VCPUs: 4} // 4 units
+	// gp_1 group: smallest = 1024 MB = 1 GiB, so 1 unit = 1 GiB
+	gpSmall := &TestFlavor{Name: "gp.small", Group: "gp_1", MemoryMB: 1024, VCPUs: 1}   // 1 unit
+	gpMedium := &TestFlavor{Name: "gp.medium", Group: "gp_1", MemoryMB: 2048, VCPUs: 4} // 2 units
 
 	baseTime := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -290,7 +290,7 @@ func TestReportUsageIntegration(t *testing.T) {
 				"hw_version_gp_1_ram": {
 					PerAZ: map[string]ExpectedAZUsage{
 						"az-a": {
-							Usage: 4, // 2048 MB / 512 MB = 4 units
+							Usage: 2, // 2048 MB / 1024 MB = 2 units
 							VMs: []ExpectedVMUsage{
 								{UUID: "vm-gp", CommitmentID: "commit-gp", MemoryMB: 2048},
 							},

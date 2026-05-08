@@ -78,16 +78,15 @@ func TestHandleInfo_MethodNotAllowed(t *testing.T) {
 }
 
 func TestHandleInfo_InvalidFlavorMemory(t *testing.T) {
-	// Test that a 500 Internal Server Error is returned when a flavor group has invalid data.
-	//
-	// A flavor with memoryMB=0 is invalid and should trigger an HTTP 500 error.
-	// Such data could occur from a bug in the flavor groups extractor.
+	// Test that the info endpoint succeeds even when a flavor group has memoryMB=0.
+	// With the fixed GiB unit, we no longer reject zero-memory flavors at the info level;
+	// they result in zero capacity at the capacity reporting level instead.
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add scheme: %v", err)
 	}
 
-	// Create flavor group with memoryMB=0 (invalid data that could come from a buggy extractor)
+	// Create flavor group with memoryMB=0 (edge case from a buggy extractor)
 	features := []map[string]interface{}{
 		{
 			"name": "invalid_group",
@@ -132,9 +131,9 @@ func TestHandleInfo_InvalidFlavorMemory(t *testing.T) {
 	resp := w.Result()
 	defer resp.Body.Close()
 
-	// Should return 500 Internal Server Error when unit creation fails
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Errorf("expected status code %d (Internal Server Error), got %d", http.StatusInternalServerError, resp.StatusCode)
+	// Should return 200 OK — zero-memory flavor no longer causes an error
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status code %d (OK), got %d", http.StatusOK, resp.StatusCode)
 	}
 }
 
