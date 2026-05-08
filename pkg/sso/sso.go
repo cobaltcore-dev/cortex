@@ -32,7 +32,7 @@ type requestLogger struct {
 
 // RoundTrip logs the request URL before making the request.
 func (lrt *requestLogger) RoundTrip(req *http.Request) (*http.Response, error) {
-	slog.Info("making http request", "url", req.URL.String()) //nolint:gosec // structured logging key-value, not string interpolation
+	slog.Info("making http request", "url", req.URL.String())
 	return lrt.T.RoundTrip(req)
 }
 

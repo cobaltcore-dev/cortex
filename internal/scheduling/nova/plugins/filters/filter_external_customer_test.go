@@ -10,12 +10,14 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestFilterExternalCustomerStep_Run(t *testing.T) {
-	scheme, err := hv1.SchemeBuilder.Build()
+	scheme := runtime.NewScheme()
+	err := hv1.AddToScheme(scheme)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

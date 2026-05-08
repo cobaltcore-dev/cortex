@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	. "github.com/majewsky/gg/option"
 	liquid "github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/must"
+	. "go.xyrillian.de/gg/option"
 )
 
 const (
