@@ -10,6 +10,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -402,7 +403,7 @@ func TestPipeline_MaxCandidates(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := request
-			req.Options = Options{MaxCandidates: tt.maxCandidates}
+			req.Options = scheduling.Options{MaxCandidates: tt.maxCandidates}
 			result, err := pipeline.Run(req)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)

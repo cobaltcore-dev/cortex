@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
@@ -41,10 +42,10 @@ type ExternalSchedulerRequest struct {
 	// Options configure the pipeline behavior for this scheduling call.
 	// Set by the caller (CR controller, failover controller, Nova).
 	// Nova does not set these; Cortex fills in config-derived defaults server-side.
-	Options lib.Options `json:"options,omitempty"`
+	Options scheduling.Options `json:"options,omitempty"`
 }
 
-func (r ExternalSchedulerRequest) GetOptions() lib.Options { return r.Options }
+func (r ExternalSchedulerRequest) GetOptions() scheduling.Options { return r.Options }
 func (r ExternalSchedulerRequest) GetHosts() []string {
 	hosts := make([]string, len(r.Hosts))
 	for i, host := range r.Hosts {

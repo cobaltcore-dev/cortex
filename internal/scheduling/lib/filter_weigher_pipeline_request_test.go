@@ -3,7 +3,11 @@
 
 package lib
 
-import "log/slog"
+import (
+	"log/slog"
+
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
+)
 
 type mockFilterWeigherPipelineRequest struct {
 	WeightKeys   []string
@@ -11,7 +15,7 @@ type mockFilterWeigherPipelineRequest struct {
 	Hosts        []string
 	Weights      map[string]float64
 	Pipeline     string
-	Options      Options
+	Options      scheduling.Options
 }
 
 func (m mockFilterWeigherPipelineRequest) GetWeightKeys() []string        { return m.WeightKeys }
@@ -19,7 +23,7 @@ func (m mockFilterWeigherPipelineRequest) GetTraceLogArgs() []slog.Attr   { retu
 func (m mockFilterWeigherPipelineRequest) GetHosts() []string             { return m.Hosts }
 func (m mockFilterWeigherPipelineRequest) GetWeights() map[string]float64 { return m.Weights }
 func (m mockFilterWeigherPipelineRequest) GetPipeline() string            { return m.Pipeline }
-func (m mockFilterWeigherPipelineRequest) GetOptions() Options            { return m.Options }
+func (m mockFilterWeigherPipelineRequest) GetOptions() scheduling.Options { return m.Options }
 
 func (m mockFilterWeigherPipelineRequest) Filter(hosts map[string]float64) FilterWeigherPipelineRequest {
 	filteredHosts := make([]string, 0, len(hosts))

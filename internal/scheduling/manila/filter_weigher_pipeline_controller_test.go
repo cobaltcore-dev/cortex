@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/manila"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	"github.com/sapcc/go-bits/must"
@@ -49,7 +50,7 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 		},
 		Weights:  map[string]float64{"manila-share-1@backend1": 1.0, "manila-share-2@backend2": 0.5},
 		Pipeline: "test-pipeline",
-		Options:  lib.Options{SkipHistory: true},
+		Options:  scheduling.Options{SkipHistory: true},
 	}
 
 	manilaRaw, err := json.Marshal(manilaRequest)
@@ -411,7 +412,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 
 			if tt.decision.Spec.ManilaRaw != nil {
 				req := manilaRequest
-				req.Options = lib.Options{SkipHistory: !tt.createHistory}
+				req.Options = scheduling.Options{SkipHistory: !tt.createHistory}
 				raw, marshalErr := json.Marshal(req)
 				if marshalErr != nil {
 					t.Fatalf("Failed to marshal request with options: %v", marshalErr)

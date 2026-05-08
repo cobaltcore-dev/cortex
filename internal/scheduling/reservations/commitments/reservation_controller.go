@@ -23,8 +23,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -287,7 +287,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			"_nova_check_type": string(schedulerdelegationapi.ReserveForCommittedResourceIntent),
 		},
 	}
-	scheduleOpts := lib.Options{
+	scheduleOpts := scheduling.Options{
 		ReadOnly:                false, // mutates state (reservation placement)
 		LockReservations:        true,  // don't unlock CR reservations; finding a slot, not placing a VM
 		AssumeEmptyHosts:        false,

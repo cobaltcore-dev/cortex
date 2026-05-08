@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
@@ -77,7 +78,7 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 		},
 		Weights:  map[string]float64{"compute-1": 1.0, "compute-2": 0.5},
 		Pipeline: "test-pipeline",
-		Options:  lib.Options{SkipHistory: true},
+		Options:  scheduling.Options{SkipHistory: true},
 	}
 
 	novaRaw, err := json.Marshal(novaRequest)
@@ -692,7 +693,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 
 			if tt.decision.Spec.NovaRaw != nil {
 				req := novaRequest
-				req.Options = lib.Options{SkipHistory: !tt.createHistory}
+				req.Options = scheduling.Options{SkipHistory: !tt.createHistory}
 				raw, marshalErr := json.Marshal(req)
 				if marshalErr != nil {
 					t.Fatalf("Failed to marshal request with options: %v", marshalErr)
@@ -782,7 +783,7 @@ func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
 		},
 		Weights:  map[string]float64{"original-host-1": 1.0, "original-host-2": 0.5},
 		Pipeline: "test-pipeline",
-		Options:  lib.Options{SkipHistory: true},
+		Options:  scheduling.Options{SkipHistory: true},
 	}
 
 	novaRaw, err := json.Marshal(novaRequest)
@@ -936,7 +937,7 @@ func TestFilterWeigherPipelineController_PeekReadOnly(t *testing.T) {
 	makeRaw := func(readOnly bool) []byte {
 		r := api.ExternalSchedulerRequest{
 			Spec:    api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{NumInstances: 1}},
-			Options: lib.Options{ReadOnly: readOnly},
+			Options: scheduling.Options{ReadOnly: readOnly},
 		}
 		raw, err := json.Marshal(r)
 		if err != nil {
