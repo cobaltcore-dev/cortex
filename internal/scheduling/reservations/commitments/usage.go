@@ -19,8 +19,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/external"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/go-logr/logr"
-	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
+	. "go.xyrillian.de/gg/option"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 

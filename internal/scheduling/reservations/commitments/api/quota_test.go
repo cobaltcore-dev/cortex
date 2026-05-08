@@ -13,8 +13,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
-	"github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"go.xyrillian.de/gg/option"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
