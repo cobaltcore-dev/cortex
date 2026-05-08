@@ -1121,6 +1121,21 @@ func (env *integrationTestEnv) verifyTotalUsage(projectID string, expected map[s
 			}
 		}
 	}
+
+	// Ensure no unexpected AZ CRDs carry TotalUsage for this project.
+	var allPQ v1alpha1.ProjectQuotaList
+	if err := env.client.List(context.Background(), &allPQ); err != nil {
+		env.t.Fatalf("failed to list ProjectQuota objects: %v", err)
+	}
+	for _, pq := range allPQ.Items {
+		if pq.Spec.ProjectID != projectID {
+			continue
+		}
+		az := pq.Spec.AvailabilityZone
+		if _, ok := perAZ[az]; !ok && len(pq.Status.TotalUsage) > 0 {
+			env.t.Errorf("project %s AZ %s: unexpected TotalUsage in non-expected AZ CRD", projectID, az)
+		}
+	}
 }
 
 func (env *integrationTestEnv) verifyPaygUsage(projectID string, expected map[string]map[string]int64) {
@@ -1164,6 +1179,21 @@ func (env *integrationTestEnv) verifyPaygUsage(projectID string, expected map[st
 			if _, ok := expectedResources[resourceName]; !ok {
 				env.t.Errorf("project %s AZ %s: unexpected PaygUsage resource %q", projectID, az, resourceName)
 			}
+		}
+	}
+
+	// Ensure no unexpected AZ CRDs carry PaygUsage for this project.
+	var allPQ v1alpha1.ProjectQuotaList
+	if err := env.client.List(context.Background(), &allPQ); err != nil {
+		env.t.Fatalf("failed to list ProjectQuota objects: %v", err)
+	}
+	for _, pq := range allPQ.Items {
+		if pq.Spec.ProjectID != projectID {
+			continue
+		}
+		az := pq.Spec.AvailabilityZone
+		if _, ok := perAZ[az]; !ok && len(pq.Status.PaygUsage) > 0 {
+			env.t.Errorf("project %s AZ %s: unexpected PaygUsage in non-expected AZ CRD", projectID, az)
 		}
 	}
 }

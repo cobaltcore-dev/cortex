@@ -225,9 +225,9 @@ func TestComputeCRUsage(t *testing.T) {
 		t.Errorf("expected cr cores usage az-1 = 2, got %d", coresUsage["az-1"])
 	}
 
-	// az-2 should NOT be included (pending state)
-	if ramUsage["az-2"] != 0 {
-		t.Errorf("expected cr ram usage az-2 = 0 (pending excluded), got %d", ramUsage["az-2"])
+	// az-2 should NOT be included (pending state) — assert key absence, not zero value
+	if got, exists := ramUsage["az-2"]; exists {
+		t.Errorf("expected cr ram usage az-2 to be absent (pending excluded), got %d", got)
 	}
 }
 

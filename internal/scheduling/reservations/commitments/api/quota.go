@@ -16,6 +16,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -143,9 +144,13 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 					},
 				}
 				if createErr := api.client.Create(ctx, pq); createErr != nil {
-					// If another request just created it, retry will fetch and update
+					// If another request just created it, surface as a conflict so
+					// RetryOnConflict re-runs the closure and falls into the update branch.
 					if apierrors.IsAlreadyExists(createErr) {
-						return createErr
+						return apierrors.NewConflict(
+							schema.GroupResource{Group: "cortex.cloud", Resource: "projectquotas"},
+							crdName, createErr,
+						)
 					}
 					return createErr
 				}
