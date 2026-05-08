@@ -11,10 +11,10 @@ index b6d0f05..054e0b8 100644
 +    required: false
 +    default: "false"
 +  litellm_model:
-+    description: "LiteLLM model identifier (e.g., 'sap/anthropic--claude-4.6-sonnet')"
++    description: "LiteLLM model identifier (e.g., 'sap/anthropic--claude-4.6-opus')"
 +    required: false
-+    default: "sap/anthropic--claude-4.6-sonnet"
- 
++    default: "sap/anthropic--claude-4.6-opus"
+
    claude_args:
      description: "Additional arguments to pass directly to Claude CLI"
 @@ -173,10 +181,11 @@ runs:
@@ -30,12 +30,12 @@ index b6d0f05..054e0b8 100644
 +        # Install Bun via official install script (avoids github.com API token issues on GHES)
 +        curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.13"
 +        echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
- 
+
      - name: Setup Custom Bun Path
        if: inputs.path_to_bun_executable != ''
 @@ -292,13 +301,14 @@ runs:
          NODE_VERSION: ${{ env.NODE_VERSION }}
- 
+
          # Provider configuration
 -        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
 +        ANTHROPIC_API_KEY: ${{ inputs.use_litellm == 'true' && env.LITELLM_PROXY_API_KEY || inputs.anthropic_api_key }}
@@ -46,13 +46,13 @@ index b6d0f05..054e0b8 100644
          CLAUDE_CODE_USE_VERTEX: ${{ inputs.use_vertex == 'true' && '1' || '' }}
          CLAUDE_CODE_USE_FOUNDRY: ${{ inputs.use_foundry == 'true' && '1' || '' }}
 +        CLAUDE_CODE_USE_LITELLM: ${{ inputs.use_litellm == 'true' && '1' || '' }}
- 
+
          # AWS configuration
          AWS_REGION: ${{ env.AWS_REGION }}
 @@ -335,6 +345,10 @@ runs:
          MCP_TOOL_TIMEOUT: ${{ env.MCP_TOOL_TIMEOUT }}
          MAX_MCP_OUTPUT_TOKENS: ${{ env.MAX_MCP_OUTPUT_TOKENS }}
- 
+
 +        # SAP compliance configuration
 +        DISABLE_TELEMETRY: "1"
 +        DISABLE_ERROR_REPORTING: "1"
@@ -77,9 +77,9 @@ index 1f28da3..4eae3f2 100644
 +  const useLiteLLM = process.env.CLAUDE_CODE_USE_LITELLM === "1";
    const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
    const claudeCodeOAuthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
- 
+
    const errors: string[] = [];
- 
+
    // Check for mutual exclusivity between providers
 -  const activeProviders = [useBedrock, useVertex, useFoundry].filter(Boolean);
 +  const activeProviders = [useBedrock, useVertex, useFoundry, useLiteLLM].filter(Boolean);
@@ -89,7 +89,7 @@ index 1f28da3..4eae3f2 100644
 +      "Cannot use multiple providers simultaneously. Please set only one of: CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX, CLAUDE_CODE_USE_FOUNDRY, or CLAUDE_CODE_USE_LITELLM.",
      );
    }
- 
+
 -  if (!useBedrock && !useVertex && !useFoundry) {
 +  if (!useBedrock && !useVertex && !useFoundry && !useLiteLLM) {
      if (!anthropicApiKey && !claudeCodeOAuthToken) {
@@ -114,5 +114,5 @@ index 1f28da3..4eae3f2 100644
 +      );
 +    }
    }
- 
+
    if (errors.length > 0) {
