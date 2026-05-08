@@ -190,8 +190,7 @@ ProcessLoop:
 				break ProcessLoop
 			}
 
-			flavorGroup, ok := flavorGroups[flavorGroupName]
-			if !ok {
+			if _, ok := flavorGroups[flavorGroupName]; !ok {
 				failedReason = "flavor group not found: " + flavorGroupName
 				rollback = true
 				break ProcessLoop
@@ -249,7 +248,7 @@ ProcessLoop:
 				}
 
 				stateDesired, err := commitments.FromChangeCommitmentTargetState(
-					commitment, string(projectID), domainID, flavorGroupName, flavorGroup, string(req.AZ))
+					commitment, string(projectID), domainID, flavorGroupName, string(req.AZ))
 				if err != nil {
 					failedReason = fmt.Sprintf("commitment %s: %s", commitment.UUID, err)
 					rollback = true

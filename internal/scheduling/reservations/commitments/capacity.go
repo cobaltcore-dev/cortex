@@ -63,13 +63,21 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 	logger := LoggerFromContext(ctx)
 	for groupName, groupData := range flavorGroups {
 		smallestFlavorName := groupData.SmallestFlavor.Name
+		ramPerSlotGiB := groupData.SmallestFlavor.MemoryMB / 1024
+		vcpusPerSlot := groupData.SmallestFlavor.VCPUs
 
-		azCapacity := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(req.AllAZs))
+		ramAZCapacity := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(req.AllAZs))
+		coresAZCapacity := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(req.AllAZs))
+		instancesAZCapacity := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(req.AllAZs))
+
 		for _, az := range req.AllAZs {
 			crd, ok := crdByKey[groupAZKey{groupName, string(az)}]
 			if !ok {
 				// No CRD for this (group, AZ) pair — report zero.
-				azCapacity[az] = &liquid.AZResourceCapacityReport{Capacity: 0}
+				zero := &liquid.AZResourceCapacityReport{Capacity: 0}
+				ramAZCapacity[az] = zero
+				coresAZCapacity[az] = &liquid.AZResourceCapacityReport{Capacity: 0}
+				instancesAZCapacity[az] = &liquid.AZResourceCapacityReport{Capacity: 0}
 				continue
 			}
 
@@ -89,52 +97,42 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 				}
 			}
 			if smallest == nil {
-				azCapacity[az] = &liquid.AZResourceCapacityReport{Capacity: 0}
+				zero := &liquid.AZResourceCapacityReport{Capacity: 0}
+				ramAZCapacity[az] = zero
+				coresAZCapacity[az] = &liquid.AZResourceCapacityReport{Capacity: 0}
+				instancesAZCapacity[az] = &liquid.AZResourceCapacityReport{Capacity: 0}
 				continue
 			}
 
-			// Convert VM slot counts to GiB using the smallest flavor's RAM size.
-			ramPerSlotGiB := groupData.SmallestFlavor.MemoryMB / 1024
-			capacity := uint64(smallest.TotalCapacityVMSlots) * ramPerSlotGiB //nolint:gosec // slot count from CRD, realistically bounded
-			azEntry := &liquid.AZResourceCapacityReport{Capacity: capacity}
+			totalSlots := uint64(smallest.TotalCapacityVMSlots) //nolint:gosec // slot count from CRD, realistically bounded
+			ramEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots * ramPerSlotGiB}
+			coresEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots * vcpusPerSlot}
+			instancesEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots}
 			if ready {
-				placeableGiB := uint64(smallest.PlaceableVMs) * ramPerSlotGiB //nolint:gosec // slot count from CRD, realistically bounded
-				var usage uint64
-				if capacity > placeableGiB {
-					usage = capacity - placeableGiB
+				placeableSlots := uint64(smallest.PlaceableVMs) //nolint:gosec // slot count from CRD, realistically bounded
+				var usedSlots uint64
+				if totalSlots > placeableSlots {
+					usedSlots = totalSlots - placeableSlots
 				}
-				azEntry.Usage = Some[uint64](usage)
+				ramEntry.Usage = Some[uint64](usedSlots * ramPerSlotGiB)
+				coresEntry.Usage = Some[uint64](usedSlots * vcpusPerSlot)
+				instancesEntry.Usage = Some[uint64](usedSlots)
 			}
-			azCapacity[az] = azEntry
+			ramAZCapacity[az] = ramEntry
+			coresAZCapacity[az] = coresEntry
+			instancesAZCapacity[az] = instancesEntry
 		}
 
-		// All three resources share the same capacity units (multiples of smallest flavor).
 		report.Resources[liquid.ResourceName(ResourceNameRAM(groupName))] = &liquid.ResourceCapacityReport{
-			PerAZ: azCapacity,
+			PerAZ: ramAZCapacity,
 		}
 		report.Resources[liquid.ResourceName(ResourceNameCores(groupName))] = &liquid.ResourceCapacityReport{
-			PerAZ: c.copyAZCapacity(azCapacity),
+			PerAZ: coresAZCapacity,
 		}
 		report.Resources[liquid.ResourceName(ResourceNameInstances(groupName))] = &liquid.ResourceCapacityReport{
-			PerAZ: c.copyAZCapacity(azCapacity),
+			PerAZ: instancesAZCapacity,
 		}
 	}
 
 	return report, nil
-}
-
-// copyAZCapacity creates a deep copy of the AZ capacity map.
-// Each resource needs its own map instance.
-func (c *CapacityCalculator) copyAZCapacity(
-	src map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport,
-) map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport {
-
-	result := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(src))
-	for az, report := range src {
-		result[az] = &liquid.AZResourceCapacityReport{
-			Capacity: report.Capacity,
-			Usage:    report.Usage,
-		}
-	}
-	return result
 }

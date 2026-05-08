@@ -174,7 +174,7 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 		}
 
 		// Convert commitment to state using FromCommitment
-		state, err := FromCommitment(commitment, flavorGroup)
+		state, err := FromCommitment(commitment)
 		if err != nil {
 			log.Error(err, "failed to convert commitment to state",
 				"id", id,

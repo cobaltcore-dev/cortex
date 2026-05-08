@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -109,7 +108,6 @@ type CommitmentState struct {
 // FromCommitment converts Limes commitment to CommitmentState.
 func FromCommitment(
 	commitment Commitment,
-	flavorGroup compute.FlavorGroupFeature,
 ) (*CommitmentState, error) {
 	// Validate commitment UUID format
 	if !commitmentUUIDPattern.MatchString(commitment.UUID) {
@@ -161,7 +159,6 @@ func FromChangeCommitmentTargetState(
 	projectID string,
 	domainID string,
 	flavorGroupName string,
-	flavorGroup compute.FlavorGroupFeature,
 	az string,
 ) (*CommitmentState, error) {
 	// Validate commitment UUID format

@@ -32,7 +32,6 @@ func testFlavorGroup() compute.FlavorGroupFeature {
 }
 
 func TestFromCommitment_CalculatesMemoryCorrectly(t *testing.T) {
-	flavorGroup := testFlavorGroup()
 	commitment := Commitment{
 		UUID:         "test-uuid",
 		ProjectID:    "project-1",
@@ -40,7 +39,7 @@ func TestFromCommitment_CalculatesMemoryCorrectly(t *testing.T) {
 		Amount:       5, // 5 multiples of smallest flavor
 	}
 
-	state, err := FromCommitment(commitment, flavorGroup)
+	state, err := FromCommitment(commitment)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -64,7 +63,6 @@ func TestFromCommitment_CalculatesMemoryCorrectly(t *testing.T) {
 }
 
 func TestFromCommitment_InvalidResourceName(t *testing.T) {
-	flavorGroup := testFlavorGroup()
 	commitment := Commitment{
 		UUID:         "test-uuid",
 		ProjectID:    "project-1",
@@ -72,7 +70,7 @@ func TestFromCommitment_InvalidResourceName(t *testing.T) {
 		Amount:       1,
 	}
 
-	_, err := FromCommitment(commitment, flavorGroup)
+	_, err := FromCommitment(commitment)
 	if err == nil {
 		t.Fatal("expected error for invalid resource name, got nil")
 	}
