@@ -437,9 +437,9 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 }
 
 // TestUsageMultipleCalculation_FloorDivision tests that RAM usage is calculated
-// using floor division to handle Nova's memory overhead correctly.
-// Nova flavors like "4 GiB" actually have 4080 MiB (not 4096) due to overhead.
-// Floor division ensures 4080 / 1024 = 3 GiB (not 4 from ceiling).
+// by adding the 16 MiB video RAM reservation before dividing, matching actual flavor sizing.
+// Nova flavors like "4 GiB" have 4080 MiB (4096 - 16 for hw_video:ram_max_mb=16).
+// Adding 16 MiB restores the exact GiB multiple before integer division.
 func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 	log.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
 	ctx := context.Background()
@@ -460,7 +460,7 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 		expectedInstances uint64
 	}{
 		{
-			name: "single smallest flavor - 1 unit",
+			name: "single smallest flavor - 2 units",
 			vms: []commitments.VMRow{
 				{
 					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
@@ -469,12 +469,12 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 					FlavorName: "g_k_c1_m2_v2", FlavorRAM: 2032, FlavorVCPUs: 1,
 				},
 			},
-			expectedRAM:       1,
+			expectedRAM:       2,
 			expectedCores:     1,
 			expectedInstances: 1,
 		},
 		{
-			name: "2x flavor with overhead - floor(4080/1024) = 3 GiB, not 4",
+			name: "2x flavor with overhead - (4080+16)/1024 = 4 GiB",
 			vms: []commitments.VMRow{
 				{
 					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
@@ -483,7 +483,7 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 					FlavorName: "g_k_c2_m4_v2", FlavorRAM: 4080, FlavorVCPUs: 2,
 				},
 			},
-			expectedRAM:       3, // floor(4080/1024) = 3, NOT 4 (ceiling would give 4)
+			expectedRAM:       4, // (4080+16)/1024 = 4
 			expectedCores:     2,
 			expectedInstances: 1,
 		},
@@ -515,10 +515,10 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 					FlavorName: "g_k_c16_m32_v2", FlavorRAM: 32752, FlavorVCPUs: 16,
 				},
 			},
-			// floor(2032/1024) + floor(4080/1024) + floor(16368/1024) + floor(32752/1024)
-			// = 1 + 3 + 15 + 31 = 50
+			// (2032+16)/1024 + (4080+16)/1024 + (16368+16)/1024 + (32752+16)/1024
+			// = 2 + 4 + 16 + 32 = 54
 			// Cores: 1 + 2 + 4 + 16 = 23
-			expectedRAM:       50, // 1 + 3 + 15 + 31
+			expectedRAM:       54, // 2 + 4 + 16 + 32
 			expectedCores:     23, // 1 + 2 + 4 + 16
 			expectedInstances: 4,
 		},

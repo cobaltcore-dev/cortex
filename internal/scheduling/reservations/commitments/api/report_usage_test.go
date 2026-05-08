@@ -354,11 +354,11 @@ func TestReportUsageIntegration(t *testing.T) {
 			ExpectedStatusCode: http.StatusMethodNotAllowed,
 		},
 		{
-			Name:      "VM with empty AZ - normalized to unknown",
+			Name:      "VM with empty AZ - dropped from report",
 			ProjectID: "project-empty-az",
 			Flavors:   []*TestFlavor{m1Small, m1Large},
 			VMs: []*TestVMUsage{
-				// VM with empty AZ (e.g., ERROR or BUILDING state VM not yet scheduled)
+				// VM with empty AZ (e.g., ERROR or BUILDING state) — normalized to "unknown", excluded.
 				newTestVMUsageWithEmptyAZ("vm-error", m1Large, "project-empty-az", "host-1", baseTime),
 				// Normal VM with valid AZ
 				newTestVMUsage("vm-ok", m1Large, "project-empty-az", "az-a", "host-2", baseTime.Add(1*time.Hour)),
@@ -377,12 +377,7 @@ func TestReportUsageIntegration(t *testing.T) {
 								{UUID: "vm-ok", CommitmentID: "commit-1", MemoryMB: 4096},
 							},
 						},
-						"unknown": {
-							Usage: 4, // VM with empty AZ normalized to "unknown"
-							VMs: []ExpectedVMUsage{
-								{UUID: "vm-error", CommitmentID: "", MemoryMB: 4096}, // PAYG - no commitment in "unknown" AZ
-							},
-						},
+						// "unknown" AZ is excluded — VMs without a valid AZ are dropped.
 					},
 				},
 			},

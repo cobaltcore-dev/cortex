@@ -144,12 +144,20 @@ func (c *UsageCalculator) CalculateUsage(
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to read VM assignments from CRD status: %w", err)
 	}
 
+	// Fetch the ProjectQuota CRD for this project to read per-AZ quota values.
+	// May not exist if Limes has not pushed quota yet — in that case quota defaults to infinite.
+	var projectQuota *v1alpha1.ProjectQuota
+	var pqList v1alpha1.ProjectQuotaList
+	if err := c.client.List(ctx, &pqList, client.MatchingFields{idxProjectQuotaByProjectID: projectID}); err == nil && len(pqList.Items) > 0 {
+		projectQuota = &pqList.Items[0]
+	}
+
 	vms, err := getProjectVMs(ctx, c.usageDB, log, projectID, flavorGroups, allAZs)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to get project VMs: %w", err)
 	}
 
-	report := c.buildUsageResponse(vms, vmAssignments, flavorGroups, allAZs, infoVersion)
+	report := c.buildUsageResponse(vms, vmAssignments, flavorGroups, allAZs, infoVersion, projectQuota)
 
 	assignedToCommitments := 0
 	for _, vm := range vms {
@@ -295,10 +303,12 @@ func getProjectVMs(
 		// Determine flavor group
 		flavorGroup := flavorToGroup[row.FlavorName]
 
-		// Calculate usage in GiB (FlavorRAM is in MiB)
+		// Calculate usage in GiB (FlavorRAM is in MiB).
+		// Add 16 MiB before dividing: flavors reserve 16 MiB for video RAM (hw_video:ram_max_mb=16),
+		// so a nominal "2 GiB" flavor has 2032 MiB. Without the adjustment, integer division truncates.
 		var usageMultiple uint64
 		if row.FlavorRAM > 0 {
-			usageMultiple = row.FlavorRAM / 1024
+			usageMultiple = (row.FlavorRAM + 16) / 1024
 		}
 
 		// Normalize AZ
@@ -424,6 +434,7 @@ func (c *UsageCalculator) buildUsageResponse(
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	allAZs []liquid.AvailabilityZone,
 	infoVersion int64,
+	projectQuota *v1alpha1.ProjectQuota,
 ) liquid.ServiceUsageReport {
 	// Initialize resources map for all flavor groups
 	resources := make(map[liquid.ResourceName]*liquid.ResourceUsageReport)
@@ -478,7 +489,6 @@ func (c *UsageCalculator) buildUsageResponse(
 		ramResourceName := liquid.ResourceName(ResourceNameRAM(flavorGroupName))
 		ramPerAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
 		// For AZSeparatedTopology resources (fixed-ratio groups), per-AZ Quota must be non-null.
-		// Use -1 ("infinite quota") as default until actual quota is read from ProjectQuota CRD.
 		ramHasAZQuota := groupData.HasFixedRamCoreRatio()
 		for _, az := range allAZs {
 			report := &liquid.AZResourceUsageReport{
@@ -486,7 +496,15 @@ func (c *UsageCalculator) buildUsageResponse(
 				Subresources: []liquid.Subresource{},
 			}
 			if ramHasAZQuota {
-				report.Quota = Some(int64(-1)) // infinite — will be overridden by ProjectQuota CRD
+				quota := int64(-1) // default: infinite
+				if projectQuota != nil {
+					if rq, ok := projectQuota.Spec.Quota[string(ramResourceName)]; ok {
+						if q, ok := rq.PerAZ[string(az)]; ok {
+							quota = q
+						}
+					}
+				}
+				report.Quota = Some(quota)
 			}
 			ramPerAZ[az] = report
 		}

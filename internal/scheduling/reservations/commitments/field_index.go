@@ -17,6 +17,7 @@ import (
 const idxCommittedResourceByUUID = "spec.commitmentUUID"
 const idxCommittedResourceByProjectID = "spec.projectID"
 const idxReservationByCommitmentUUID = "spec.committedResourceReservation.commitmentUUID"
+const idxProjectQuotaByProjectID = "spec.projectID"
 
 // once guards ensure each field index is registered exactly once.
 // Both CommittedResourceController and UsageReconciler call indexCommittedResourceByUUID;
@@ -25,6 +26,7 @@ var (
 	onceIndexCRByUUID          sync.Once
 	onceIndexCRByProjectID     sync.Once
 	onceIndexReservationByUUID sync.Once
+	onceIndexPQByProjectID     sync.Once
 )
 
 // indexCommittedResourceByUUID registers the index used by UsageReconciler to look up
@@ -96,6 +98,31 @@ func indexReservationByCommitmentUUID(ctx context.Context, mcl *multicluster.Cli
 					return nil
 				}
 				return []string{res.Spec.CommittedResourceReservation.CommitmentUUID}
+			},
+		)
+	})
+	return err
+}
+
+// indexProjectQuotaByProjectID registers the index used by UsageCalculator to look up
+// a project's ProjectQuota CRD by its ProjectID without assuming a naming convention.
+func indexProjectQuotaByProjectID(ctx context.Context, mcl *multicluster.Client) (err error) {
+	onceIndexPQByProjectID.Do(func() {
+		log := logf.FromContext(ctx)
+		err = mcl.IndexField(ctx,
+			&v1alpha1.ProjectQuota{},
+			&v1alpha1.ProjectQuotaList{},
+			idxProjectQuotaByProjectID,
+			func(obj client.Object) []string {
+				pq, ok := obj.(*v1alpha1.ProjectQuota)
+				if !ok {
+					log.Error(errors.New("unexpected type"), "expected ProjectQuota", "object", obj)
+					return nil
+				}
+				if pq.Spec.ProjectID == "" {
+					return nil
+				}
+				return []string{pq.Spec.ProjectID}
 			},
 		)
 	})

@@ -28,6 +28,9 @@ func NewCapacityCalculator(client client.Client) *CapacityCalculator {
 // CalculateCapacity computes per-AZ capacity for all flavor groups.
 // For each flavor group, three resources are reported: _ram, _cores, _instances.
 // Capacity and usage are read from FlavorGroupCapacity CRDs pre-computed by the capacity controller.
+// Usage is approximated from slot counts (total − placeable of the smallest flavor); this may
+// slightly under-report usage when larger flavors are running, showing more free capacity than
+// reality — acceptable for capacity planning purposes.
 func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.ServiceCapacityRequest) (liquid.ServiceCapacityReport, error) {
 	// Get all flavor groups from Knowledge CRDs (needed for smallest-flavor lookup).
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
@@ -82,8 +85,7 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			}
 
 			// If the CRD data is stale, report last-known capacity but omit usage.
-			ready := apimeta.IsStatusConditionTrue(crd.Status.Conditions, v1alpha1.FlavorGroupCapacityConditionReady)
-			if !ready {
+			if !apimeta.IsStatusConditionTrue(crd.Status.Conditions, v1alpha1.FlavorGroupCapacityConditionReady) {
 				logger.Info("FlavorGroupCapacity CRD is stale, reporting capacity without usage",
 					"flavorGroup", groupName, "az", az)
 			}
@@ -108,7 +110,10 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			ramEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots * memoryMBPerSlot / 1024}
 			coresEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots * vcpusPerSlot}
 			instancesEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots}
-			if ready {
+
+			// Usage is approximated from slot counts. This may slightly under-report usage when
+			// larger flavors are running (safe direction: shows more free capacity than reality).
+			if apimeta.IsStatusConditionTrue(crd.Status.Conditions, v1alpha1.FlavorGroupCapacityConditionReady) {
 				placeableSlots := uint64(smallest.PlaceableVMs) //nolint:gosec // slot count from CRD, realistically bounded
 				var usedSlots uint64
 				if totalSlots > placeableSlots {
