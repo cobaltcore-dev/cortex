@@ -16,11 +16,11 @@ import (
 // for the multicluster client that cortex supports by default. This is used to
 // route resources to the correct cluster in a multicluster setup.
 var DefaultResourceRouters = map[schema.GroupVersionKind]ResourceRouter{
-	{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}:                  HypervisorResourceRouter{},
-	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}:            ReservationsResourceRouter{},
-	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}:                HistoryResourceRouter{},
-	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}:      CommittedResourceRouter{},
-	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "FlavorGroupCapacity"}:    FlavorGroupCapacityResourceRouter{},
+	{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}:               HypervisorResourceRouter{},
+	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}:         ReservationsResourceRouter{},
+	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}:             HistoryResourceRouter{},
+	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}:   CommittedResourceRouter{},
+	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "FlavorGroupCapacity"}: FlavorGroupCapacityResourceRouter{},
 }
 
 // ResourceRouter determines which remote cluster a resource should be written to
