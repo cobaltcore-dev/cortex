@@ -46,7 +46,7 @@ jobs:
           go-version-file: 'go.mod'
       - name: Generate GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.CORTEX_AI_AGENTS_APP_ID }}
           private-key: ${{ secrets.CORTEX_AI_AGENTS_CLIENT_PKEY }}
