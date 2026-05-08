@@ -256,18 +256,27 @@ ProcessLoop:
 					break ProcessLoop
 				}
 
-				cr := &v1alpha1.CommittedResource{}
-				cr.Name = crName
-				if _, err := controllerutil.CreateOrUpdate(ctx, api.client, cr, func() error {
-					if cr.Spec.AvailabilityZone != "" && cr.Spec.AvailabilityZone != stateDesired.AvailabilityZone {
-						return fmt.Errorf("cannot change availability zone of commitment %s: current=%q requested=%q",
-							commitment.UUID, cr.Spec.AvailabilityZone, stateDesired.AvailabilityZone)
+				// RetryOnConflict handles the race where the CommittedResource controller reconciles
+				// the CRD (bumping resourceVersion) between the Get and Update inside CreateOrUpdate.
+				var crGeneration int64
+				if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					cr := &v1alpha1.CommittedResource{}
+					cr.Name = crName
+					if _, err := controllerutil.CreateOrUpdate(ctx, api.client, cr, func() error {
+						if cr.Spec.AvailabilityZone != "" && cr.Spec.AvailabilityZone != stateDesired.AvailabilityZone {
+							return fmt.Errorf("cannot change availability zone of commitment %s: current=%q requested=%q",
+								commitment.UUID, cr.Spec.AvailabilityZone, stateDesired.AvailabilityZone)
+						}
+						applyCRSpec(cr, stateDesired, allowRejection)
+						if cr.Annotations == nil {
+							cr.Annotations = make(map[string]string)
+						}
+						cr.Annotations[v1alpha1.AnnotationCreatorRequestID] = reservations.GlobalRequestIDFromContext(ctx)
+						return nil
+					}); err != nil {
+						return err
 					}
-					applyCRSpec(cr, stateDesired, allowRejection)
-					if cr.Annotations == nil {
-						cr.Annotations = make(map[string]string)
-					}
-					cr.Annotations[v1alpha1.AnnotationCreatorRequestID] = reservations.GlobalRequestIDFromContext(ctx)
+					crGeneration = cr.Generation
 					return nil
 				}); err != nil {
 					failedReason = fmt.Sprintf("commitment %s: failed to write CommittedResource CRD: %v", commitment.UUID, err)
@@ -275,7 +284,7 @@ ProcessLoop:
 					break ProcessLoop
 				}
 
-				toWatch = append(toWatch, crWatch{name: crName, generation: cr.Generation})
+				toWatch = append(toWatch, crWatch{name: crName, generation: crGeneration})
 				snapshots = append(snapshots, snap)
 				logger.V(1).Info("upserted CommittedResource CRD", "name", crName)
 			}
