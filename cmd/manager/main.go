@@ -343,15 +343,17 @@ func main() {
 	reservationGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}
 	historyGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}
 	committedResourceGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}
+	flavorGroupCapacityGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "FlavorGroupCapacity"}
 	multiclusterClient := &multicluster.Client{
 		HomeCluster:    homeCluster,
 		HomeRestConfig: restConfig,
 		HomeScheme:     scheme,
 		ResourceRouters: map[schema.GroupVersionKind]multicluster.ResourceRouter{
-			hvGVK:                multicluster.HypervisorResourceRouter{},
-			reservationGVK:       multicluster.ReservationsResourceRouter{},
-			historyGVK:           multicluster.HistoryResourceRouter{},
-			committedResourceGVK: multicluster.CommittedResourceRouter{},
+			hvGVK:                  multicluster.HypervisorResourceRouter{},
+			reservationGVK:         multicluster.ReservationsResourceRouter{},
+			historyGVK:             multicluster.HistoryResourceRouter{},
+			committedResourceGVK:   multicluster.CommittedResourceRouter{},
+			flavorGroupCapacityGVK: multicluster.FlavorGroupCapacityResourceRouter{},
 		},
 	}
 	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
