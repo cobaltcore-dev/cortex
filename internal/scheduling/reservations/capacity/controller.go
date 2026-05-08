@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -172,10 +173,42 @@ func (c *Controller) reconcileOne(
 		committedCapacity = 0
 	}
 
+	// Compute TotalCapacity: for each flavor multiply slot count by its RAM/CPU,
+	// then take the max across all flavors independently for each resource.
+	// This reveals the most capacity because the flavor best matching the host's
+	// resource ratio saturates more resources and produces a higher product.
+	flavorSpecByName := make(map[string]compute.FlavorInGroup, len(groupData.Flavors))
+	for _, f := range groupData.Flavors {
+		flavorSpecByName[f.Name] = f
+	}
+	totalCapacity := make(map[string]resource.Quantity)
+	var maxMemBytes, maxCPUCores int64
+	for _, f := range newFlavors {
+		spec, ok := flavorSpecByName[f.FlavorName]
+		if !ok || f.TotalCapacityVMSlots <= 0 {
+			continue
+		}
+		memBytes := f.TotalCapacityVMSlots * int64(spec.MemoryMB) * 1024 * 1024 //nolint:gosec
+		cpuCores := f.TotalCapacityVMSlots * int64(spec.VCPUs)                  //nolint:gosec
+		if memBytes > maxMemBytes {
+			maxMemBytes = memBytes
+		}
+		if cpuCores > maxCPUCores {
+			maxCPUCores = cpuCores
+		}
+	}
+	if maxMemBytes > 0 {
+		totalCapacity["memory"] = *resource.NewQuantity(maxMemBytes, resource.BinarySI)
+	}
+	if maxCPUCores > 0 {
+		totalCapacity["cpu"] = *resource.NewQuantity(maxCPUCores, resource.DecimalSI)
+	}
+
 	patch := client.MergeFrom(existing.DeepCopy())
 	existing.Status.Flavors = newFlavors
 	existing.Status.TotalInstances = totalInstances
 	existing.Status.CommittedCapacity = committedCapacity
+	existing.Status.TotalCapacity = totalCapacity
 	existing.Status.LastReconcileAt = metav1.Now()
 
 	freshCondition := metav1.Condition{

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -109,7 +108,6 @@ type CommitmentState struct {
 // FromCommitment converts Limes commitment to CommitmentState.
 func FromCommitment(
 	commitment Commitment,
-	flavorGroup compute.FlavorGroupFeature,
 ) (*CommitmentState, error) {
 	// Validate commitment UUID format
 	if !commitmentUUIDPattern.MatchString(commitment.UUID) {
@@ -121,9 +119,9 @@ func FromCommitment(
 		return nil, err
 	}
 
-	// Calculate total memory from commitment amount (amount = multiples of smallest flavor)
-	smallestFlavorMemoryBytes := int64(flavorGroup.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory from specs, realistically bounded
-	totalMemoryBytes := int64(commitment.Amount) * smallestFlavorMemoryBytes              //nolint:gosec // commitment amount from Limes API, bounded by quota limits
+	// Calculate total memory from commitment amount (1 GiB per unit)
+	const gibInBytes = int64(1) << 30
+	totalMemoryBytes := int64(commitment.Amount) * gibInBytes //nolint:gosec // commitment amount from Limes API, bounded by quota limits
 
 	// Set start time: use ConfirmedAt if available, otherwise CreatedAt
 	var startTime *time.Time
@@ -161,7 +159,6 @@ func FromChangeCommitmentTargetState(
 	projectID string,
 	domainID string,
 	flavorGroupName string,
-	flavorGroup compute.FlavorGroupFeature,
 	az string,
 ) (*CommitmentState, error) {
 	// Validate commitment UUID format
@@ -202,12 +199,9 @@ func FromChangeCommitmentTargetState(
 		}
 	}
 
-	// Flavors are sorted by size descending, so the last one is the smallest
-	smallestFlavor := flavorGroup.SmallestFlavor
-	smallestFlavorMemoryBytes := int64(smallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory from specs, realistically bounded
-
-	// Amount represents multiples of the smallest flavor in the group
-	totalMemoryBytes := int64(amountMultiple) * smallestFlavorMemoryBytes
+	// Amount represents GiB of RAM (1 GiB per unit)
+	const gibInBytes = int64(1) << 30
+	totalMemoryBytes := int64(amountMultiple) * gibInBytes
 
 	return &CommitmentState{
 		CommitmentUUID:   string(commitment.UUID),

@@ -118,6 +118,13 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	if req.AZ == "" {
+		statusCode = http.StatusBadRequest
+		http.Error(w, "availability zone is required", statusCode)
+		api.recordMetrics(req, resp, statusCode, startTime)
+		return
+	}
+
 	if err := api.processCommitmentChanges(ctx, w, logger, req, &resp); err != nil {
 		if strings.Contains(err.Error(), "version mismatch") {
 			statusCode = http.StatusConflict
@@ -190,8 +197,7 @@ ProcessLoop:
 				break ProcessLoop
 			}
 
-			flavorGroup, ok := flavorGroups[flavorGroupName]
-			if !ok {
+			if _, ok := flavorGroups[flavorGroupName]; !ok {
 				failedReason = "flavor group not found: " + flavorGroupName
 				rollback = true
 				break ProcessLoop
@@ -249,25 +255,30 @@ ProcessLoop:
 				}
 
 				stateDesired, err := commitments.FromChangeCommitmentTargetState(
-					commitment, string(projectID), domainID, flavorGroupName, flavorGroup, string(req.AZ))
+					commitment, string(projectID), domainID, flavorGroupName, string(req.AZ))
 				if err != nil {
 					failedReason = fmt.Sprintf("commitment %s: %s", commitment.UUID, err)
 					rollback = true
 					break ProcessLoop
 				}
 
-				cr := &v1alpha1.CommittedResource{}
-				cr.Name = crName
-				if _, err := controllerutil.CreateOrUpdate(ctx, api.client, cr, func() error {
-					if cr.Spec.AvailabilityZone != "" && cr.Spec.AvailabilityZone != stateDesired.AvailabilityZone {
-						return fmt.Errorf("cannot change availability zone of commitment %s: current=%q requested=%q",
-							commitment.UUID, cr.Spec.AvailabilityZone, stateDesired.AvailabilityZone)
+				// RetryOnConflict handles the race where the CommittedResource controller reconciles
+				// the CRD (bumping resourceVersion) between the Get and Update inside CreateOrUpdate.
+				var crGeneration int64
+				if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					cr := &v1alpha1.CommittedResource{}
+					cr.Name = crName
+					if _, err := controllerutil.CreateOrUpdate(ctx, api.client, cr, func() error {
+						applyCRSpec(cr, stateDesired, allowRejection)
+						if cr.Annotations == nil {
+							cr.Annotations = make(map[string]string)
+						}
+						cr.Annotations[v1alpha1.AnnotationCreatorRequestID] = reservations.GlobalRequestIDFromContext(ctx)
+						return nil
+					}); err != nil {
+						return err
 					}
-					applyCRSpec(cr, stateDesired, allowRejection)
-					if cr.Annotations == nil {
-						cr.Annotations = make(map[string]string)
-					}
-					cr.Annotations[v1alpha1.AnnotationCreatorRequestID] = reservations.GlobalRequestIDFromContext(ctx)
+					crGeneration = cr.Generation
 					return nil
 				}); err != nil {
 					failedReason = fmt.Sprintf("commitment %s: failed to write CommittedResource CRD: %v", commitment.UUID, err)
@@ -275,7 +286,7 @@ ProcessLoop:
 					break ProcessLoop
 				}
 
-				toWatch = append(toWatch, crWatch{name: crName, generation: cr.Generation})
+				toWatch = append(toWatch, crWatch{name: crName, generation: crGeneration})
 				snapshots = append(snapshots, snap)
 				logger.V(1).Info("upserted CommittedResource CRD", "name", crName)
 			}

@@ -59,7 +59,7 @@ func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Calculate capacity
-	calculator := commitments.NewCapacityCalculator(api.client)
+	calculator := commitments.NewCapacityCalculator(api.client, api.config)
 	report, err := calculator.CalculateCapacity(ctx, req)
 	if err != nil {
 		logger.Error(err, "failed to calculate capacity")
