@@ -19,15 +19,19 @@ import (
 // CapacityCalculator computes capacity reports for Limes LIQUID API.
 type CapacityCalculator struct {
 	client client.Client
+	conf   APIConfig
 }
 
-func NewCapacityCalculator(client client.Client) *CapacityCalculator {
-	return &CapacityCalculator{client: client}
+func NewCapacityCalculator(client client.Client, conf APIConfig) *CapacityCalculator {
+	return &CapacityCalculator{client: client, conf: conf}
 }
 
 // CalculateCapacity computes per-AZ capacity for all flavor groups.
 // For each flavor group, three resources are reported: _ram, _cores, _instances.
 // Capacity and usage are read from FlavorGroupCapacity CRDs pre-computed by the capacity controller.
+// Usage is approximated from slot counts (total − placeable of the smallest flavor); this may
+// slightly under-report usage when larger flavors are running, showing more free capacity than
+// reality — acceptable for capacity planning purposes.
 func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.ServiceCapacityRequest) (liquid.ServiceCapacityReport, error) {
 	// Get all flavor groups from Knowledge CRDs (needed for smallest-flavor lookup).
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
@@ -62,20 +66,35 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 
 	logger := LoggerFromContext(ctx)
 	for groupName, groupData := range flavorGroups {
-		smallestFlavorName := groupData.SmallestFlavor.Name
+		resCfg := c.conf.ResourceConfigForGroup(groupName)
+		// Skip groups not configured for capacity reporting.
+		if !resCfg.RAM.HasCapacity && !resCfg.Cores.HasCapacity && !resCfg.Instances.HasCapacity {
+			continue
+		}
 
-		azCapacity := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(req.AllAZs))
+		smallestFlavorName := groupData.SmallestFlavor.Name
+		// Add 16 MiB before dividing: flavors reserve 16 MiB for video RAM (hw_video:ram_max_mb=16),
+		// so a nominal "2 GiB" flavor has 2032 MiB.
+		memoryMBPerSlot := groupData.SmallestFlavor.MemoryMB + 16
+		vcpusPerSlot := groupData.SmallestFlavor.VCPUs
+
+		ramAZCapacity := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(req.AllAZs))
+		coresAZCapacity := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(req.AllAZs))
+		instancesAZCapacity := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(req.AllAZs))
+
 		for _, az := range req.AllAZs {
 			crd, ok := crdByKey[groupAZKey{groupName, string(az)}]
 			if !ok {
 				// No CRD for this (group, AZ) pair — report zero.
-				azCapacity[az] = &liquid.AZResourceCapacityReport{Capacity: 0}
+				zero := &liquid.AZResourceCapacityReport{Capacity: 0}
+				ramAZCapacity[az] = zero
+				coresAZCapacity[az] = &liquid.AZResourceCapacityReport{Capacity: 0}
+				instancesAZCapacity[az] = &liquid.AZResourceCapacityReport{Capacity: 0}
 				continue
 			}
 
 			// If the CRD data is stale, report last-known capacity but omit usage.
-			ready := apimeta.IsStatusConditionTrue(crd.Status.Conditions, v1alpha1.FlavorGroupCapacityConditionReady)
-			if !ready {
+			if !apimeta.IsStatusConditionTrue(crd.Status.Conditions, v1alpha1.FlavorGroupCapacityConditionReady) {
 				logger.Info("FlavorGroupCapacity CRD is stale, reporting capacity without usage",
 					"flavorGroup", groupName, "az", az)
 			}
@@ -89,50 +108,51 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 				}
 			}
 			if smallest == nil {
-				azCapacity[az] = &liquid.AZResourceCapacityReport{Capacity: 0}
+				zero := &liquid.AZResourceCapacityReport{Capacity: 0}
+				ramAZCapacity[az] = zero
+				coresAZCapacity[az] = &liquid.AZResourceCapacityReport{Capacity: 0}
+				instancesAZCapacity[az] = &liquid.AZResourceCapacityReport{Capacity: 0}
 				continue
 			}
 
-			capacity := uint64(smallest.TotalCapacityVMSlots) //nolint:gosec
-			azEntry := &liquid.AZResourceCapacityReport{Capacity: capacity}
-			if ready {
-				placeable := uint64(smallest.PlaceableVMs) //nolint:gosec
-				var usage uint64
-				if capacity > placeable {
-					usage = capacity - placeable
+			totalSlots := uint64(smallest.TotalCapacityVMSlots) //nolint:gosec // slot count from CRD, realistically bounded
+			ramEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots * memoryMBPerSlot / 1024}
+			coresEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots * vcpusPerSlot}
+			instancesEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots}
+
+			// Usage is approximated from slot counts. This may slightly under-report usage when
+			// larger flavors are running (safe direction: shows more free capacity than reality).
+			if apimeta.IsStatusConditionTrue(crd.Status.Conditions, v1alpha1.FlavorGroupCapacityConditionReady) {
+				placeableSlots := uint64(smallest.PlaceableVMs) //nolint:gosec // slot count from CRD, realistically bounded
+				var usedSlots uint64
+				if totalSlots > placeableSlots {
+					usedSlots = totalSlots - placeableSlots
 				}
-				azEntry.Usage = Some[uint64](usage)
+				ramEntry.Usage = Some[uint64](usedSlots * memoryMBPerSlot / 1024)
+				coresEntry.Usage = Some[uint64](usedSlots * vcpusPerSlot)
+				instancesEntry.Usage = Some[uint64](usedSlots)
 			}
-			azCapacity[az] = azEntry
+			ramAZCapacity[az] = ramEntry
+			coresAZCapacity[az] = coresEntry
+			instancesAZCapacity[az] = instancesEntry
 		}
 
-		// All three resources share the same capacity units (multiples of smallest flavor).
-		report.Resources[liquid.ResourceName(ResourceNameRAM(groupName))] = &liquid.ResourceCapacityReport{
-			PerAZ: azCapacity,
+		if resCfg.RAM.HasCapacity {
+			report.Resources[liquid.ResourceName(ResourceNameRAM(groupName))] = &liquid.ResourceCapacityReport{
+				PerAZ: ramAZCapacity,
+			}
 		}
-		report.Resources[liquid.ResourceName(ResourceNameCores(groupName))] = &liquid.ResourceCapacityReport{
-			PerAZ: c.copyAZCapacity(azCapacity),
+		if resCfg.Cores.HasCapacity {
+			report.Resources[liquid.ResourceName(ResourceNameCores(groupName))] = &liquid.ResourceCapacityReport{
+				PerAZ: coresAZCapacity,
+			}
 		}
-		report.Resources[liquid.ResourceName(ResourceNameInstances(groupName))] = &liquid.ResourceCapacityReport{
-			PerAZ: c.copyAZCapacity(azCapacity),
+		if resCfg.Instances.HasCapacity {
+			report.Resources[liquid.ResourceName(ResourceNameInstances(groupName))] = &liquid.ResourceCapacityReport{
+				PerAZ: instancesAZCapacity,
+			}
 		}
 	}
 
 	return report, nil
-}
-
-// copyAZCapacity creates a deep copy of the AZ capacity map.
-// Each resource needs its own map instance.
-func (c *CapacityCalculator) copyAZCapacity(
-	src map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport,
-) map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport {
-
-	result := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(src))
-	for az, report := range src {
-		result[az] = &liquid.AZResourceCapacityReport{
-			Capacity: report.Capacity,
-			Usage:    report.Usage,
-		}
-	}
-	return result
 }

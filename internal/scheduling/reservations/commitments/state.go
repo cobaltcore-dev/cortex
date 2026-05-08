@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -73,6 +72,32 @@ func GetFlavorGroupNameFromResource(resourceName string) (string, error) {
 	return name, nil
 }
 
+// GetFlavorGroupAndTypeFromResource extracts the flavor group name and resource type from a
+// LIQUID resource name. Accepts _ram (memory) and _cores (CPU) suffixes.
+// _instances resources are not supported for commitments.
+func GetFlavorGroupAndTypeFromResource(resourceName string) (string, v1alpha1.CommittedResourceType, error) {
+	if !strings.HasPrefix(resourceName, resourceNamePrefix) {
+		return "", "", fmt.Errorf("invalid resource name: %s (missing prefix)", resourceName)
+	}
+	name := strings.TrimPrefix(resourceName, resourceNamePrefix)
+	switch {
+	case strings.HasSuffix(name, ResourceSuffixRAM):
+		group := strings.TrimSuffix(name, ResourceSuffixRAM)
+		if group == "" {
+			return "", "", fmt.Errorf("invalid resource name: %s (empty group name)", resourceName)
+		}
+		return group, v1alpha1.CommittedResourceTypeMemory, nil
+	case strings.HasSuffix(name, ResourceSuffixCores):
+		group := strings.TrimSuffix(name, ResourceSuffixCores)
+		if group == "" {
+			return "", "", fmt.Errorf("invalid resource name: %s (empty group name)", resourceName)
+		}
+		return group, v1alpha1.CommittedResourceTypeCores, nil
+	default:
+		return "", "", fmt.Errorf("invalid resource name: %s (only _ram and _cores resources are supported for commitments)", resourceName)
+	}
+}
+
 // CommitmentState represents desired or current commitment resource allocation.
 type CommitmentState struct {
 	// CommitmentUUID is the UUID of the commitment this state corresponds to.
@@ -83,8 +108,12 @@ type CommitmentState struct {
 	DomainID string
 	// FlavorGroupName identifies the flavor group (e.g., "hana_medium_v2")
 	FlavorGroupName string
-	// the total memory in bytes across all reservation slots
+	// ResourceType is the kind of resource committed: memory or cores.
+	ResourceType v1alpha1.CommittedResourceType
+	// TotalMemoryBytes is the total memory in bytes across all reservation slots (memory commitments only).
 	TotalMemoryBytes int64
+	// TotalCores is the number of committed CPU cores (cores commitments only).
+	TotalCores int64
 	// AvailabilityZone specifies the availability zone for this commitment
 	AvailabilityZone string
 	// StartTime is when the commitment becomes active
@@ -109,7 +138,6 @@ type CommitmentState struct {
 // FromCommitment converts Limes commitment to CommitmentState.
 func FromCommitment(
 	commitment Commitment,
-	flavorGroup compute.FlavorGroupFeature,
 ) (*CommitmentState, error) {
 	// Validate commitment UUID format
 	if !commitmentUUIDPattern.MatchString(commitment.UUID) {
@@ -121,9 +149,9 @@ func FromCommitment(
 		return nil, err
 	}
 
-	// Calculate total memory from commitment amount (amount = multiples of smallest flavor)
-	smallestFlavorMemoryBytes := int64(flavorGroup.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory from specs, realistically bounded
-	totalMemoryBytes := int64(commitment.Amount) * smallestFlavorMemoryBytes              //nolint:gosec // commitment amount from Limes API, bounded by quota limits
+	// Calculate total memory from commitment amount (1 GiB per unit)
+	const gibInBytes = int64(1) << 30
+	totalMemoryBytes := int64(commitment.Amount) * gibInBytes //nolint:gosec // commitment amount from Limes API, bounded by quota limits
 
 	// Set start time: use ConfirmedAt if available, otherwise CreatedAt
 	var startTime *time.Time
@@ -161,7 +189,7 @@ func FromChangeCommitmentTargetState(
 	projectID string,
 	domainID string,
 	flavorGroupName string,
-	flavorGroup compute.FlavorGroupFeature,
+	resourceType v1alpha1.CommittedResourceType,
 	az string,
 ) (*CommitmentState, error) {
 	// Validate commitment UUID format
@@ -202,31 +230,37 @@ func FromChangeCommitmentTargetState(
 		}
 	}
 
-	// Flavors are sorted by size descending, so the last one is the smallest
-	smallestFlavor := flavorGroup.SmallestFlavor
-	smallestFlavorMemoryBytes := int64(smallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory from specs, realistically bounded
-
-	// Amount represents multiples of the smallest flavor in the group
-	totalMemoryBytes := int64(amountMultiple) * smallestFlavorMemoryBytes
-
-	return &CommitmentState{
+	state := &CommitmentState{
 		CommitmentUUID:   string(commitment.UUID),
 		ProjectID:        projectID,
 		DomainID:         domainID,
 		FlavorGroupName:  flavorGroupName,
-		TotalMemoryBytes: totalMemoryBytes,
+		ResourceType:     resourceType,
 		AvailabilityZone: az,
 		StartTime:        startTime,
 		EndTime:          endTime,
 		State:            v1alpha1.CommitmentStatus(commitment.NewStatus.UnwrapOr("")),
-	}, nil
+	}
+
+	switch resourceType {
+	case v1alpha1.CommittedResourceTypeCores:
+		state.TotalCores = int64(amountMultiple)
+	default:
+		// Amount represents GiB of RAM (1 GiB per unit)
+		const gibInBytes = int64(1) << 30
+		state.TotalMemoryBytes = int64(amountMultiple) * gibInBytes
+	}
+
+	return state, nil
 }
 
 // FromCommittedResource reads CommitmentState from a CommittedResource CRD.
-// Only memory commitments are supported; cores support is added in a follow-up.
 func FromCommittedResource(cr v1alpha1.CommittedResource) (*CommitmentState, error) {
-	if cr.Spec.ResourceType != v1alpha1.CommittedResourceTypeMemory {
-		return nil, fmt.Errorf("unsupported resource type %q: only memory commitments are supported", cr.Spec.ResourceType)
+	switch cr.Spec.ResourceType {
+	case v1alpha1.CommittedResourceTypeMemory, v1alpha1.CommittedResourceTypeCores:
+		// supported
+	default:
+		return nil, fmt.Errorf("unsupported resource type %q", cr.Spec.ResourceType)
 	}
 
 	if !commitmentUUIDPattern.MatchString(cr.Spec.CommitmentUUID) {
@@ -238,8 +272,15 @@ func FromCommittedResource(cr v1alpha1.CommittedResource) (*CommitmentState, err
 		ProjectID:        cr.Spec.ProjectID,
 		DomainID:         cr.Spec.DomainID,
 		FlavorGroupName:  cr.Spec.FlavorGroupName,
-		TotalMemoryBytes: cr.Spec.Amount.Value(),
+		ResourceType:     cr.Spec.ResourceType,
 		AvailabilityZone: cr.Spec.AvailabilityZone,
+	}
+
+	switch cr.Spec.ResourceType {
+	case v1alpha1.CommittedResourceTypeCores:
+		state.TotalCores = cr.Spec.Amount.Value()
+	default:
+		state.TotalMemoryBytes = cr.Spec.Amount.Value()
 	}
 
 	if cr.Spec.StartTime != nil {

@@ -717,6 +717,229 @@ func TestCommittedResourceController_RetryBackoff(t *testing.T) {
 	}
 }
 
+// ============================================================================
+// Tests: reconcileCoresHeadroom
+// ============================================================================
+
+// newTestCoresCR creates a CommittedResource with ResourceType=cores.
+func newTestCoresCR(name string, state v1alpha1.CommitmentStatus, cores int64, allowRejection bool) *v1alpha1.CommittedResource {
+	return &v1alpha1.CommittedResource{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec: v1alpha1.CommittedResourceSpec{
+			CommitmentUUID:   "cores-uuid-1234",
+			FlavorGroupName:  "test-group",
+			ResourceType:     v1alpha1.CommittedResourceTypeCores,
+			Amount:           *resource.NewQuantity(cores, resource.DecimalSI),
+			AvailabilityZone: "test-az",
+			ProjectID:        "test-project",
+			DomainID:         "test-domain",
+			State:            state,
+			AllowRejection:   allowRejection,
+		},
+	}
+}
+
+// newTestFlavorGroupCapacity creates a FlavorGroupCapacity CRD with the given total cores.
+func newTestFlavorGroupCapacity(flavorGroup, az string, totalCores int64) *v1alpha1.FlavorGroupCapacity {
+	return &v1alpha1.FlavorGroupCapacity{
+		ObjectMeta: metav1.ObjectMeta{Name: flavorGroup + "-" + az},
+		Spec: v1alpha1.FlavorGroupCapacitySpec{
+			FlavorGroup:      flavorGroup,
+			AvailabilityZone: az,
+		},
+		Status: v1alpha1.FlavorGroupCapacityStatus{
+			TotalCapacity: map[string]resource.Quantity{
+				string(v1alpha1.CommittedResourceTypeCores): *resource.NewQuantity(totalCores, resource.DecimalSI),
+			},
+		},
+	}
+}
+
+func TestCommittedResourceController_CoresHeadroom(t *testing.T) {
+	tests := []struct {
+		name           string
+		state          v1alpha1.CommitmentStatus
+		requestedCores int64
+		totalCores     int64
+		allowRejection bool
+		// other accepted CPU CRs consuming cores
+		existingCores int64
+		// capacity CRD missing entirely
+		noCapacityCRD bool
+		// capacity CRD present but TotalCapacity["cores"] not set
+		noCoreCapacity bool
+		expectedStatus metav1.ConditionStatus
+		expectedReason string
+		expectRequeue  bool
+	}{
+		{
+			name:           "accepted: sufficient headroom",
+			state:          v1alpha1.CommitmentStatusConfirmed,
+			requestedCores: 4,
+			totalCores:     16,
+			existingCores:  0,
+			expectedStatus: metav1.ConditionTrue,
+			expectedReason: "Accepted",
+		},
+		{
+			name:           "accepted: headroom exactly meets request",
+			state:          v1alpha1.CommitmentStatusConfirmed,
+			requestedCores: 8,
+			totalCores:     16,
+			existingCores:  8,
+			expectedStatus: metav1.ConditionTrue,
+			expectedReason: "Accepted",
+		},
+		{
+			name:           "rejected: insufficient headroom, AllowRejection=true",
+			state:          v1alpha1.CommitmentStatusConfirmed,
+			requestedCores: 10,
+			totalCores:     16,
+			existingCores:  8,
+			allowRejection: true,
+			expectedStatus: metav1.ConditionFalse,
+			expectedReason: "Rejected",
+			expectRequeue:  false,
+		},
+		{
+			name:           "retry: insufficient headroom, AllowRejection=false",
+			state:          v1alpha1.CommitmentStatusConfirmed,
+			requestedCores: 10,
+			totalCores:     16,
+			existingCores:  8,
+			allowRejection: false,
+			expectedStatus: metav1.ConditionFalse,
+			expectedReason: "Reserving",
+			expectRequeue:  true,
+		},
+		{
+			name:           "retry: FlavorGroupCapacity CRD not found",
+			state:          v1alpha1.CommitmentStatusConfirmed,
+			requestedCores: 4,
+			noCapacityCRD:  true,
+			allowRejection: true,
+			expectedStatus: metav1.ConditionFalse,
+			expectedReason: "Reserving",
+			expectRequeue:  true,
+		},
+		{
+			name:           "retry: TotalCapacity[cores] not set",
+			state:          v1alpha1.CommitmentStatusConfirmed,
+			requestedCores: 4,
+			noCoreCapacity: true,
+			allowRejection: true,
+			expectedStatus: metav1.ConditionFalse,
+			expectedReason: "Reserving",
+			expectRequeue:  true,
+		},
+		{
+			// TotalCapacity["cores"]=0 means the capacity controller probed and found no
+			// eligible hosts (e.g. HANA flavor groups in a QA cluster). This must reject
+			// immediately rather than retrying, to avoid API timeouts.
+			name:           "rejected immediately: zero CPU capacity, AllowRejection=true",
+			state:          v1alpha1.CommitmentStatusConfirmed,
+			requestedCores: 4,
+			totalCores:     0,
+			allowRejection: true,
+			expectedStatus: metav1.ConditionFalse,
+			expectedReason: "Rejected",
+			expectRequeue:  false,
+		},
+		{
+			name:           "stays rejected: already rejected for current generation",
+			state:          v1alpha1.CommitmentStatusConfirmed,
+			requestedCores: 4,
+			totalCores:     16,
+			allowRejection: true,
+			expectedStatus: metav1.ConditionFalse,
+			expectedReason: "Rejected",
+			expectRequeue:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := newCRTestScheme(t)
+			cr := newTestCoresCR("test-cr", tt.state, tt.requestedCores, tt.allowRejection)
+
+			objects := []client.Object{cr}
+
+			if !tt.noCapacityCRD {
+				if tt.noCoreCapacity {
+					// Capacity CRD present but without the cores key.
+					fgc := &v1alpha1.FlavorGroupCapacity{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-group-test-az"},
+						Spec: v1alpha1.FlavorGroupCapacitySpec{
+							FlavorGroup:      "test-group",
+							AvailabilityZone: "test-az",
+						},
+						Status: v1alpha1.FlavorGroupCapacityStatus{
+							TotalCapacity: map[string]resource.Quantity{},
+						},
+					}
+					objects = append(objects, fgc)
+				} else {
+					objects = append(objects, newTestFlavorGroupCapacity("test-group", "test-az", tt.totalCores))
+				}
+			}
+
+			if tt.existingCores > 0 {
+				// An already-accepted cores CR consuming existingCores.
+				otherCR := newTestCoresCR("other-cr", v1alpha1.CommitmentStatusConfirmed, tt.existingCores, false)
+				otherCR.Spec.CommitmentUUID = "other-uuid-5678"
+				otherSpec := otherCR.Spec
+				otherCR.Status.AcceptedSpec = &otherSpec
+				objects = append(objects, otherCR)
+			}
+
+			k8sClient := newCRTestClient(scheme, objects...)
+
+			// For the "stays rejected" test, pre-set Rejected condition at current generation.
+			if tt.name == "stays rejected: already rejected for current generation" {
+				var fetched v1alpha1.CommittedResource
+				if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: cr.Name}, &fetched); err != nil {
+					t.Fatalf("get CR: %v", err)
+				}
+				fetched.Status.Conditions = []metav1.Condition{{
+					Type:               v1alpha1.CommittedResourceConditionReady,
+					Status:             metav1.ConditionFalse,
+					Reason:             v1alpha1.CommittedResourceReasonRejected,
+					ObservedGeneration: fetched.Generation,
+					LastTransitionTime: metav1.Now(),
+				}}
+				if err := k8sClient.Status().Update(context.Background(), &fetched); err != nil {
+					t.Fatalf("set rejected status: %v", err)
+				}
+			}
+
+			controller := &CommittedResourceController{
+				Client: k8sClient,
+				Scheme: scheme,
+				Conf:   CommittedResourceControllerConfig{RequeueIntervalRetry: metav1.Duration{Duration: 1 * time.Minute}},
+			}
+
+			result, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name))
+			if err != nil {
+				t.Fatalf("reconcile: %v", err)
+			}
+
+			assertCondition(t, k8sClient, cr.Name, tt.expectedStatus, tt.expectedReason)
+
+			if tt.expectRequeue && result.RequeueAfter == 0 {
+				t.Errorf("expected requeue, got none")
+			}
+			if !tt.expectRequeue && result.RequeueAfter != 0 {
+				t.Errorf("expected no requeue, got RequeueAfter=%v", result.RequeueAfter)
+			}
+
+			// CPU CRs must never produce Reservation CRDs.
+			if got := countChildReservations(t, k8sClient, cr.Spec.CommitmentUUID); got != 0 {
+				t.Errorf("expected 0 child reservations for cores CR, got %d", got)
+			}
+		})
+	}
+}
+
 func TestRetryDelay(t *testing.T) {
 	base := 30 * time.Second
 	maxDelay := 30 * time.Minute

@@ -44,9 +44,9 @@ func TestReportUsageIntegration(t *testing.T) {
 	m1Large := &TestFlavor{Name: "m1.large", Group: "hana_1", MemoryMB: 4096, VCPUs: 16} // 4 units
 	m1XL := &TestFlavor{Name: "m1.xl", Group: "hana_1", MemoryMB: 8192, VCPUs: 32}       // 8 units
 
-	// gp_1 group: smallest = 512 MB, so 1 unit = 0.5 GB
-	gpSmall := &TestFlavor{Name: "gp.small", Group: "gp_1", MemoryMB: 512, VCPUs: 1}    // 1 unit
-	gpMedium := &TestFlavor{Name: "gp.medium", Group: "gp_1", MemoryMB: 2048, VCPUs: 4} // 4 units
+	// gp_1 group: smallest = 1024 MB = 1 GiB, so 1 unit = 1 GiB
+	gpSmall := &TestFlavor{Name: "gp.small", Group: "gp_1", MemoryMB: 1024, VCPUs: 1}   // 1 unit
+	gpMedium := &TestFlavor{Name: "gp.medium", Group: "gp_1", MemoryMB: 2048, VCPUs: 4} // 2 units
 
 	baseTime := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -290,7 +290,7 @@ func TestReportUsageIntegration(t *testing.T) {
 				"hw_version_gp_1_ram": {
 					PerAZ: map[string]ExpectedAZUsage{
 						"az-a": {
-							Usage: 4, // 2048 MB / 512 MB = 4 units
+							Usage: 2, // 2048 MB / 1024 MB = 2 units
 							VMs: []ExpectedVMUsage{
 								{UUID: "vm-gp", CommitmentID: "commit-gp", MemoryMB: 2048},
 							},
@@ -354,11 +354,11 @@ func TestReportUsageIntegration(t *testing.T) {
 			ExpectedStatusCode: http.StatusMethodNotAllowed,
 		},
 		{
-			Name:      "VM with empty AZ - normalized to unknown",
+			Name:      "VM with empty AZ - dropped from report",
 			ProjectID: "project-empty-az",
 			Flavors:   []*TestFlavor{m1Small, m1Large},
 			VMs: []*TestVMUsage{
-				// VM with empty AZ (e.g., ERROR or BUILDING state VM not yet scheduled)
+				// VM with empty AZ (e.g., ERROR or BUILDING state) — normalized to "unknown", excluded.
 				newTestVMUsageWithEmptyAZ("vm-error", m1Large, "project-empty-az", "host-1", baseTime),
 				// Normal VM with valid AZ
 				newTestVMUsage("vm-ok", m1Large, "project-empty-az", "az-a", "host-2", baseTime.Add(1*time.Hour)),
@@ -377,10 +377,108 @@ func TestReportUsageIntegration(t *testing.T) {
 								{UUID: "vm-ok", CommitmentID: "commit-1", MemoryMB: 4096},
 							},
 						},
-						"unknown": {
-							Usage: 4, // VM with empty AZ normalized to "unknown"
+						// "unknown" AZ is excluded — VMs without a valid AZ are dropped.
+					},
+				},
+			},
+		},
+		{
+			// hana_1 has a fixed RAM/core ratio (all flavors: 256 MiB/vCPU), so _ram
+			// is AZSeparatedTopology and carries per-AZ quota. This test verifies that
+			// the per-AZ quota value is read from the ProjectQuota CRD when present.
+			Name:      "Fixed-ratio group with ProjectQuota CRD - quota reported per AZ",
+			ProjectID: "project-quota",
+			Flavors:   []*TestFlavor{m1Small, m1Large},
+			Config: &commitments.APIConfig{
+				FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
+					"hana_1": {RAM: commitments.ResourceTypeConfig{HandlesCommitments: true, HasQuota: true}},
+				},
+			},
+			VMs: []*TestVMUsage{
+				newTestVMUsage("vm-001", m1Large, "project-quota", "az-a", "host-1", baseTime),
+			},
+			Reservations: []*UsageTestReservation{
+				{CommitmentID: "commit-1", Flavor: m1Small, ProjectID: "project-quota", AZ: "az-a", Count: 4},
+			},
+			ProjectQuota: &v1alpha1.ProjectQuota{
+				ObjectMeta: metav1.ObjectMeta{Name: "quota-project-quota"},
+				Spec: v1alpha1.ProjectQuotaSpec{
+					ProjectID: "project-quota",
+					DomainID:  "test-domain",
+					Quota: map[string]v1alpha1.ResourceQuota{
+						"hw_version_hana_1_ram": {
+							Quota: 16,
+							PerAZ: map[string]int64{"az-a": 16},
+						},
+					},
+				},
+			},
+			AllAZs: []string{"az-a"},
+			Expected: map[string]ExpectedResourceUsage{
+				"hw_version_hana_1_ram": {
+					PerAZ: map[string]ExpectedAZUsage{
+						"az-a": {
+							Usage: 4,
+							Quota: func() *int64 { v := int64(16); return &v }(),
 							VMs: []ExpectedVMUsage{
-								{UUID: "vm-error", CommitmentID: "", MemoryMB: 4096}, // PAYG - no commitment in "unknown" AZ
+								{UUID: "vm-001", CommitmentID: "commit-1", MemoryMB: 4096},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			// When no ProjectQuota CRD exists for a project, quota defaults to -1 (infinite).
+			Name:      "Fixed-ratio group with no ProjectQuota CRD - infinite quota",
+			ProjectID: "project-no-quota",
+			Flavors:   []*TestFlavor{m1Small, m1Large},
+			Config: &commitments.APIConfig{
+				FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
+					"hana_1": {RAM: commitments.ResourceTypeConfig{HandlesCommitments: true, HasQuota: true}},
+				},
+			},
+			VMs: []*TestVMUsage{
+				newTestVMUsage("vm-001", m1Large, "project-no-quota", "az-a", "host-1", baseTime),
+			},
+			Reservations: []*UsageTestReservation{
+				{CommitmentID: "commit-1", Flavor: m1Small, ProjectID: "project-no-quota", AZ: "az-a", Count: 4},
+			},
+			AllAZs: []string{"az-a"},
+			Expected: map[string]ExpectedResourceUsage{
+				"hw_version_hana_1_ram": {
+					PerAZ: map[string]ExpectedAZUsage{
+						"az-a": {
+							Usage: 4,
+							Quota: func() *int64 { v := int64(-1); return &v }(),
+							VMs: []ExpectedVMUsage{
+								{UUID: "vm-001", CommitmentID: "commit-1", MemoryMB: 4096},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			// gp_1 has a variable RAM/core ratio (gpSmall=1024 MiB/vCPU, gpMedium=512 MiB/vCPU),
+			// so _ram is NOT AZSeparatedTopology and must carry no quota field.
+			Name:      "Variable-ratio group - no quota field on _ram resource",
+			ProjectID: "project-variable",
+			Flavors:   []*TestFlavor{gpSmall, gpMedium},
+			VMs: []*TestVMUsage{
+				newTestVMUsage("vm-001", gpMedium, "project-variable", "az-a", "host-1", baseTime),
+			},
+			Reservations: []*UsageTestReservation{},
+			AllAZs:       []string{"az-a"},
+			Expected: map[string]ExpectedResourceUsage{
+				"hw_version_gp_1_ram": {
+					PerAZ: map[string]ExpectedAZUsage{
+						// AssertNoQuota: quota field must be absent for variable-ratio groups.
+						"az-a": {
+							Usage:         2,
+							AssertNoQuota: true,
+							VMs: []ExpectedVMUsage{
+								{UUID: "vm-001", CommitmentID: "", MemoryMB: 2048},
 							},
 						},
 					},
@@ -407,6 +505,8 @@ type UsageReportTestCase struct {
 	Flavors            []*TestFlavor
 	VMs                []*TestVMUsage
 	Reservations       []*UsageTestReservation
+	ProjectQuota       *v1alpha1.ProjectQuota // optional; nil means no quota CRD present
+	Config             *commitments.APIConfig // optional; nil means DefaultAPIConfig
 	AllAZs             []string
 	Expected           map[string]ExpectedResourceUsage
 	ExpectedStatusCode int // 0 means expect 200 OK
@@ -459,8 +559,10 @@ type ExpectedResourceUsage struct {
 }
 
 type ExpectedAZUsage struct {
-	Usage uint64 // Usage in multiples of smallest flavor
-	VMs   []ExpectedVMUsage
+	Usage         uint64 // Usage in multiples of smallest flavor
+	Quota         *int64 // non-nil: verify this exact value (-1 = infinite)
+	AssertNoQuota bool   // true: verify quota field is absent
+	VMs           []ExpectedVMUsage
 }
 
 type ExpectedVMUsage struct {
@@ -541,6 +643,8 @@ func newUsageTestEnv(
 	vms []*TestVMUsage,
 	reservations []*UsageTestReservation,
 	flavorGroups FlavorGroupsKnowledge,
+	projectQuota *v1alpha1.ProjectQuota,
+	config *commitments.APIConfig,
 ) *UsageTestEnv {
 
 	t.Helper()
@@ -584,9 +688,14 @@ func newUsageTestEnv(
 	}
 
 	k8sReservations = append(k8sReservations, crObjects...)
+
+	builderObjs := k8sReservations
+	if projectQuota != nil {
+		builderObjs = append(builderObjs, projectQuota)
+	}
 	k8sClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(k8sReservations...).
+		WithObjects(builderObjs...).
 		WithStatusSubresource(&v1alpha1.Reservation{}).
 		WithStatusSubresource(&v1alpha1.Knowledge{}).
 		WithStatusSubresource(&v1alpha1.CommittedResource{}).
@@ -607,6 +716,13 @@ func newUsageTestEnv(
 				return nil
 			}
 			return []string{cr.Spec.ProjectID}
+		}).
+		WithIndex(&v1alpha1.ProjectQuota{}, "spec.projectID", func(obj client.Object) []string {
+			pq, ok := obj.(*v1alpha1.ProjectQuota)
+			if !ok || pq.Spec.ProjectID == "" {
+				return nil
+			}
+			return []string{pq.Spec.ProjectID}
 		}).
 		Build()
 
@@ -636,7 +752,11 @@ func newUsageTestEnv(
 	}
 
 	// Create API with mock DB client
-	api := NewAPIWithConfig(k8sClient, commitments.DefaultAPIConfig(), dbClient)
+	apiConfig := commitments.DefaultAPIConfig()
+	if config != nil && config.FlavorGroupResourceConfig != nil {
+		apiConfig.FlavorGroupResourceConfig = config.FlavorGroupResourceConfig
+	}
+	api := NewAPIWithConfig(k8sClient, apiConfig, dbClient)
 	mux := http.NewServeMux()
 	registry := prometheus.NewRegistry()
 	api.Init(mux, registry, log.Log)
@@ -726,7 +846,7 @@ func runUsageReportTest(t *testing.T, tc UsageReportTestCase) {
 	}.ToFlavorGroupsKnowledge()
 
 	// Create test environment
-	env := newUsageTestEnv(t, tc.VMs, tc.Reservations, flavorGroups)
+	env := newUsageTestEnv(t, tc.VMs, tc.Reservations, flavorGroups, tc.ProjectQuota, tc.Config)
 	defer env.Close()
 
 	// Call API
@@ -783,6 +903,25 @@ func verifyUsageReport(t *testing.T, tc UsageReportTestCase, actual liquid.Servi
 			if actualAZ.Usage != expectedAZ.Usage {
 				t.Errorf("Resource %s AZ %s: expected usage %d, got %d",
 					resourceName, azName, expectedAZ.Usage, actualAZ.Usage)
+			}
+
+			// Verify per-AZ quota when the test case specifies it.
+			if expectedAZ.Quota != nil {
+				actualQuota, hasQuota := actualAZ.Quota.Unpack()
+				if !hasQuota {
+					t.Errorf("Resource %s AZ %s: expected quota %d but quota field is absent",
+						resourceName, azName, *expectedAZ.Quota)
+				} else if actualQuota != *expectedAZ.Quota {
+					t.Errorf("Resource %s AZ %s: expected quota %d, got %d",
+						resourceName, azName, *expectedAZ.Quota, actualQuota)
+				}
+			}
+			if expectedAZ.AssertNoQuota {
+				if actualAZ.Quota.IsSome() {
+					v, _ := actualAZ.Quota.Unpack()
+					t.Errorf("Resource %s AZ %s: expected no quota field, got %d",
+						resourceName, azName, v)
+				}
 			}
 
 			// VM subresources are on the _instances resource, not _ram

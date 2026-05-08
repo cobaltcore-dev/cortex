@@ -13,6 +13,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/go-logr/logr"
+	"github.com/sapcc/go-api-declarations/liquid"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -140,9 +141,8 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 			continue
 		}
 
-		// Validate unit matches between Limes commitment and Cortex flavor group
-		// Expected format: "<memoryMB> MiB" e.g. "131072 MiB" for 128 GiB
-		expectedUnit := fmt.Sprintf("%d MiB", flavorGroup.SmallestFlavor.MemoryMB)
+		// Validate unit matches between Limes commitment and Cortex (1 GiB per unit)
+		expectedUnit := liquid.UnitGibibytes.String() // "GiB"
 		if commitment.Unit != "" && commitment.Unit != expectedUnit {
 			// Unit mismatch: Limes has not yet updated this commitment to the new unit.
 			// Skip this commitment - trust what Cortex already has stored in CRDs.
@@ -174,7 +174,7 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 		}
 
 		// Convert commitment to state using FromCommitment
-		state, err := FromCommitment(commitment, flavorGroup)
+		state, err := FromCommitment(commitment)
 		if err != nil {
 			log.Error(err, "failed to convert commitment to state",
 				"id", id,

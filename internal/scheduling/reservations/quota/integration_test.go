@@ -40,32 +40,32 @@ func TestIntegration(t *testing.T) {
 			Actions: []TestAction{
 				{
 					Type: "full_reconcile",
-					// project-a: hana_v2 az-1: (32768+65536)/32768 = 3 RAM units, 8+16=24 cores
-					// project-a: hana_v2 az-2: 32768/32768 = 1 RAM unit, 8 cores
-					// project-a: general az-1: 4096/4096 = 1 RAM unit, 2 cores
-					// project-b: general az-1: 4096/4096 = 1 RAM unit, 2 cores
+					// project-a: hana_v2 az-1: (32768+65536)/1024 = 96 GiB, 8+16=24 cores
+					// project-a: hana_v2 az-2: 32768/1024 = 32 GiB, 8 cores
+					// project-a: general az-1: 4096/1024 = 4 GiB, 2 cores
+					// project-b: general az-1: 4096/1024 = 4 GiB, 2 cores
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 96, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 						"project-b": {
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
 					// No CRs -> PaygUsage == TotalUsage
 					ExpectedPaygUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 96, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 						"project-b": {
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -92,21 +92,21 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 96, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
 					// PaygUsage = TotalUsage - CRUsage
-					// hana_v2 RAM: 3-2=1 in az-1, 1-0=1 in az-2
+					// hana_v2 RAM: 96-2=94 in az-1, 32-0=32 in az-2
 					// hana_v2 Cores: 24-10=14 in az-1, 8-0=8 in az-2
 					// general: no CRs so PaygUsage == TotalUsage
 					ExpectedPaygUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 1, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 94, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 14, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -126,9 +126,9 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 96, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -151,18 +151,18 @@ func TestIntegration(t *testing.T) {
 							ProjectID: "project-a", AvailabilityZone: "az-1",
 							CreatedAt: "2099-01-01T00:00:00Z", // far future, always AFTER last reconcile
 							Resources: map[string]resource.Quantity{
-								"memory": resource.MustParse("34359738368"), // 32768 MiB = 1 RAM unit
+								"memory": resource.MustParse("34359738368"), // 32768 MiB = 32 GiB
 								"vcpus":  resource.MustParse("8"),
 							},
 						},
 					),
 					// vm-new is created AFTER last reconcile, so it gets incremented
-					// +1 RAM unit (32768/32768), +8 cores
+					// +32 GiB RAM (32768/1024), +8 cores
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 4, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 128, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 32, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -182,9 +182,9 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 96, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -199,9 +199,9 @@ func TestIntegration(t *testing.T) {
 					// Should NOT increment -- vm-1 CreatedAt is 2025-12-01 which is before reconcile time
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 96, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -234,9 +234,9 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 96, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -255,12 +255,12 @@ func TestIntegration(t *testing.T) {
 						// vm-del gone
 					}),
 					// vm-del: IsServerActive=false, deleted info found
-					// Decrement: -1 RAM unit, -8 cores in az-1
+					// Decrement: -32 GiB RAM, -8 cores in az-1
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 2, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 64, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 16, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -282,9 +282,9 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 96, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -303,9 +303,9 @@ func TestIntegration(t *testing.T) {
 					// vm-1: IsServerActive=true, so NOT decremented
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 96, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -329,9 +329,9 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedPaygUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 2, "az-2": 1}}, // 3-1=2
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 95, "az-2": 32}}, // 96-1=95
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -343,9 +343,9 @@ func TestIntegration(t *testing.T) {
 					UsedAmount: 3,
 					ExpectedPaygUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 0, "az-2": 1}}, // 3-3=0
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 93, "az-2": 32}}, // 96-3=93
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -394,13 +394,13 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 96, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 						"project-b": {
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -410,13 +410,13 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 96, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 						"project-b": {
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -441,9 +441,9 @@ func TestIntegration(t *testing.T) {
 					// PaygUsage == TotalUsage because pending CRs are excluded
 					ExpectedPaygUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 96, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -463,9 +463,9 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 96, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -490,7 +490,7 @@ func TestIntegration(t *testing.T) {
 							ProjectID: "project-a", AvailabilityZone: "az-1",
 							CreatedAt: "2099-01-01T00:00:00Z", // after last reconcile
 							Resources: map[string]resource.Quantity{
-								"memory": resource.MustParse("34359738368"), // 32768 MiB = 1 RAM unit
+								"memory": resource.MustParse("34359738368"), // 32768 MiB = 32 GiB
 								"vcpus":  resource.MustParse("8"),
 							},
 						},
@@ -498,9 +498,9 @@ func TestIntegration(t *testing.T) {
 					// TotalUsage now has phantom's contribution (drift)
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 4, "az-2": 1}},  // 3+1 drift
-							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 32, "az-2": 8}}, // 24+8 drift
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 128, "az-2": 32}}, // 96+32 drift
+							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 32, "az-2": 8}},   // 24+8 drift
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -512,9 +512,9 @@ func TestIntegration(t *testing.T) {
 					OverrideVMs: baseVMsPtr(),
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}},  // corrected
-							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}}, // corrected
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 96, "az-2": 32}}, // corrected
+							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}},  // corrected
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -544,25 +544,25 @@ func TestIntegration(t *testing.T) {
 			},
 			Actions: []TestAction{
 				// Step 1: full reconcile establishes baseline for both projects
-				// project-a hana_v2: az-1=3 RAM / 24 cores, az-2=1 RAM / 8 cores; general: az-1=1 RAM / 2 cores
-				// project-b general: az-1=1 RAM / 2 cores
+				// project-a hana_v2: az-1=96 GiB / 24 cores, az-2=32 GiB / 8 cores; general: az-1=4 GiB / 2 cores
+				// project-b general: az-1=4 GiB / 2 cores
 				{
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 96, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 						"project-b": {
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
 				},
 				// Step 2: HV diff adds a genuine new VM to project-a (hana_v2 small, az-1)
-				// +1 RAM unit, +8 cores
+				// +32 GiB RAM, +8 cores
 				{
 					Type: "hv_diff",
 					OldHV: makeHV("hv-1", []hv1.Instance{
@@ -580,16 +580,16 @@ func TestIntegration(t *testing.T) {
 							ProjectID: "project-a", AvailabilityZone: "az-1",
 							CreatedAt: "2099-01-01T00:00:00Z",
 							Resources: map[string]resource.Quantity{
-								"memory": resource.MustParse("34359738368"), // 32768 MiB = 1 RAM unit
+								"memory": resource.MustParse("34359738368"), // 32768 MiB = 32 GiB
 								"vcpus":  resource.MustParse("8"),
 							},
 						},
 					),
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 4, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 128, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 32, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -611,20 +611,20 @@ func TestIntegration(t *testing.T) {
 							ProjectID: "project-b", AvailabilityZone: "az-1",
 							CreatedAt: "2099-01-01T00:00:00Z",
 							Resources: map[string]resource.Quantity{
-								"memory": resource.MustParse("4294967296"), // 4096 MiB = 1 RAM unit
+								"memory": resource.MustParse("4294967296"), // 4096 MiB = 4 GiB
 								"vcpus":  resource.MustParse("2"),
 							},
 						},
 					),
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-b": {
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 2}}, // 1+1 drift
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 8}}, // 4+4 drift
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 4}}, // 2+2 drift
 						},
 					},
 				},
 				// Step 4: HV diff removes vm-del from project-a (truly deleted)
-				// -1 RAM unit, -8 cores in az-1
+				// -32 GiB RAM, -8 cores in az-1
 				{
 					Type: "hv_diff",
 					OldHV: makeHV("hv-1", []hv1.Instance{
@@ -652,9 +652,9 @@ func TestIntegration(t *testing.T) {
 					),
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 3, "az-2": 1}},  // 4-1=3
-							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}}, // 32-8=24
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 96, "az-2": 32}}, // 128-32=96
+							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 24, "az-2": 8}},  // 32-8=24
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -681,13 +681,13 @@ func TestIntegration(t *testing.T) {
 					},
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 4, "az-2": 1}},  // corrected up
-							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 32, "az-2": 8}}, // corrected up
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 128, "az-2": 32}}, // corrected up
+							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 32, "az-2": 8}},   // corrected up
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 						"project-b": {
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}}, // corrected down
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}}, // corrected down
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}}, // corrected down
 						},
 					},
@@ -719,9 +719,9 @@ func TestIntegration(t *testing.T) {
 					// vm-1 migrated, NOT decremented -- totals unchanged
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 4, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 128, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 32, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -732,13 +732,13 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]v1alpha1.ResourceQuotaUsage{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 4, "az-2": 1}},
+							"hw_version_hana_v2_ram":   {PerAZ: map[string]int64{"az-1": 128, "az-2": 32}},
 							"hw_version_hana_v2_cores": {PerAZ: map[string]int64{"az-1": 32, "az-2": 8}},
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 						"project-b": {
-							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 1}},
+							"hw_version_general_ram":   {PerAZ: map[string]int64{"az-1": 4}},
 							"hw_version_general_cores": {PerAZ: map[string]int64{"az-1": 2}},
 						},
 					},
@@ -789,7 +789,7 @@ var testFlavorGroups = map[string]compute.FlavorGroupFeature{
 // project-a has VMs in BOTH flavor groups (hana_v2 and general).
 // project-b has only general VMs.
 var testVMs = []failover.VM{
-	// vm-1: hana_v2, 1 RAM unit (32768/32768), 8 cores
+	// vm-1: hana_v2, 32 GiB RAM (32768/1024), 8 cores
 	{
 		UUID: "vm-1", FlavorName: "m1.hana_v2.small",
 		ProjectID: "project-a", AvailabilityZone: "az-1",
@@ -799,7 +799,7 @@ var testVMs = []failover.VM{
 			"vcpus":  resource.MustParse("8"),
 		},
 	},
-	// vm-2: hana_v2, 2 RAM units (65536/32768), 16 cores
+	// vm-2: hana_v2, 64 GiB RAM (65536/1024), 16 cores
 	{
 		UUID: "vm-2", FlavorName: "m1.hana_v2.large",
 		ProjectID: "project-a", AvailabilityZone: "az-1",
@@ -809,7 +809,7 @@ var testVMs = []failover.VM{
 			"vcpus":  resource.MustParse("16"),
 		},
 	},
-	// vm-3: hana_v2, 1 RAM unit (32768/32768), 8 cores
+	// vm-3: hana_v2, 32 GiB RAM (32768/1024), 8 cores
 	{
 		UUID: "vm-3", FlavorName: "m1.hana_v2.small",
 		ProjectID: "project-a", AvailabilityZone: "az-2",
@@ -819,7 +819,7 @@ var testVMs = []failover.VM{
 			"vcpus":  resource.MustParse("8"),
 		},
 	},
-	// vm-4: general, 1 RAM unit (4096/4096), 2 cores
+	// vm-4: general, 4 GiB RAM (4096/1024), 2 cores
 	{
 		UUID: "vm-4", FlavorName: "m1.general.small",
 		ProjectID: "project-a", AvailabilityZone: "az-1",
@@ -829,7 +829,7 @@ var testVMs = []failover.VM{
 			"vcpus":  resource.MustParse("2"),
 		},
 	},
-	// vm-5: general, 1 RAM unit (4096/4096), 2 cores
+	// vm-5: general, 4 GiB RAM (4096/1024), 2 cores
 	{
 		UUID: "vm-5", FlavorName: "m1.general.small",
 		ProjectID: "project-b", AvailabilityZone: "az-1",
@@ -1202,16 +1202,15 @@ func makeCR(name, projectID, flavorGroup, az string, resourceType v1alpha1.Commi
 }
 
 // usedResourcesFromMultiples converts a "multiples" value (the old UsedAmount unit) to UsedResources.
-// For memory: multiples * smallestFlavorMB * 1024 * 1024 = bytes.
+// For memory: multiples * 1 GiB = bytes.
 // For cores: the value is used directly.
 func usedResourcesFromMultiples(resourceType v1alpha1.CommittedResourceType, flavorGroup string, multiples int64) map[string]resource.Quantity {
 	switch resourceType {
 	case v1alpha1.CommittedResourceTypeMemory:
-		fg, ok := testFlavorGroups[flavorGroup]
-		if !ok || fg.SmallestFlavor.MemoryMB == 0 {
+		if _, ok := testFlavorGroups[flavorGroup]; !ok {
 			return nil
 		}
-		bytesVal := multiples * int64(fg.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec // test only
+		bytesVal := multiples * 1024 * 1024 * 1024
 		return map[string]resource.Quantity{
 			"memory": *resource.NewQuantity(bytesVal, resource.BinarySI),
 		}
