@@ -65,12 +65,12 @@ func collectProjectCommitmentsMetrics(t *testing.T, testDB *db.DB) map[string]fl
 // gpKey builds the expected map key for a general-purpose metric.
 // cpu_architecture is always empty because the GP metric descriptor omits that label.
 func gpKey(az, resource string, p projectWithDomain) string {
-	return "cortex_vmware_commitments_general_purpose|" + az + "||" + resource + "|" + p.ProjectID + "|" + p.ProjectName + "|" + p.DomainID + "|" + p.DomainName
+	return "cortex_vmware_unused_commitments_general_purpose|" + az + "||" + resource + "|" + p.ProjectID + "|" + p.ProjectName + "|" + p.DomainID + "|" + p.DomainName
 }
 
 // hKey builds the expected map key for a HANA metric.
 func hKey(az, cpuArch, resource string, p projectWithDomain) string {
-	return "cortex_vmware_commitments_hana_resources|" + az + "|" + cpuArch + "|" + resource + "|" + p.ProjectID + "|" + p.ProjectName + "|" + p.DomainID + "|" + p.DomainName
+	return "cortex_vmware_unused_commitments_hana_resources|" + az + "|" + cpuArch + "|" + resource + "|" + p.ProjectID + "|" + p.ProjectName + "|" + p.DomainID + "|" + p.DomainName
 }
 
 func TestVMwareProjectCommitmentsKPI_Init(t *testing.T) {

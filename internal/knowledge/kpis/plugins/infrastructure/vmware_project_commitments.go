@@ -43,12 +43,12 @@ func (k *VMwareProjectCommitmentsKPI) Init(dbConn *db.DB, c client.Client, opts 
 	}
 
 	k.unusedGeneralPurposeCommitmentsPerProject = prometheus.NewDesc(
-		"cortex_vmware_commitments_general_purpose",
+		"cortex_vmware_unused_commitments_general_purpose",
 		"Committed general purpose resources that are currently unused. CPU (resource=cpu) in vCPUs, memory (resource=ram) in bytes.",
 		[]string{"availability_zone", "resource", "project_id", "project_name", "domain_id", "domain_name"}, nil,
 	)
 	k.unusedHanaCommittedResourcesPerProject = prometheus.NewDesc(
-		"cortex_vmware_commitments_hana_resources",
+		"cortex_vmware_unused_commitments_hana_resources",
 		"Total committed HANA instances capacity that is currently unused, translated to resources. CPU in vCPUs, memory and disk in bytes.",
 		[]string{"availability_zone", "cpu_architecture", "resource", "project_id", "project_name", "domain_id", "domain_name"}, nil,
 	)
