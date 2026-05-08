@@ -134,7 +134,7 @@ func (f FlavorGroupCapacityResourceRouter) Match(obj any, labels map[string]stri
 		return false, errors.New("cluster does not have availabilityZone label")
 	}
 	if fgc.Spec.AvailabilityZone == "" {
-		return false, errors.New("FlavorGroupCapacity does not have availability zone in spec")
+		return false, errors.New("flavor group capacity does not have availability zone in spec")
 	}
 	return fgc.Spec.AvailabilityZone == availabilityZone, nil
 }
