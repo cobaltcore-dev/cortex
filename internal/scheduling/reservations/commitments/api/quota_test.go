@@ -154,9 +154,10 @@ func TestHandleQuota_CreateAndUpdate(t *testing.T) {
 		projectID   string
 		resources   map[liquid.ResourceName]liquid.ResourceQuotaRequest
 		metadata    *liquid.ProjectMetadata
-		expectPerAZ map[string]map[string]int64 // az → resource name → expected quota
-		expectName  string
-		expectDom   string
+		expectPerAZ    map[string]map[string]int64 // az → resource name → expected quota
+		expectName     string
+		expectDom      string
+		expectDomName  string
 	}{
 		{
 			name:      "Create_WithPerAZ",
@@ -200,8 +201,9 @@ func TestHandleQuota_CreateAndUpdate(t *testing.T) {
 			expectPerAZ: map[string]map[string]int64{
 				"az-a": {"hw_version_hana_1_ram": 50},
 			},
-			expectName: "my-project-name",
-			expectDom:  "domain-uuid-456",
+			expectName:    "my-project-name",
+			expectDom:     "domain-uuid-456",
+			expectDomName: "my-domain-name",
 		},
 		{
 			name:      "Create_EmptyResources",
@@ -250,8 +252,9 @@ func TestHandleQuota_CreateAndUpdate(t *testing.T) {
 			expectPerAZ: map[string]map[string]int64{
 				"az-a": {"hw_version_hana_1_ram": 99},
 			},
-			expectName: "new-project-name",
-			expectDom:  "new-domain",
+			expectName:    "new-project-name",
+			expectDom:     "new-domain",
+			expectDomName: "new-domain-name",
 		},
 		{
 			name:      "Create_PartialAZ_OnlyOneAZ",
@@ -384,6 +387,9 @@ func TestHandleQuota_CreateAndUpdate(t *testing.T) {
 				}
 				if tc.expectDom != "" && pq.Spec.DomainID != tc.expectDom {
 					t.Errorf("CRD %q: expected DomainID %q, got %q", crdName, tc.expectDom, pq.Spec.DomainID)
+				}
+				if tc.expectDomName != "" && pq.Spec.DomainName != tc.expectDomName {
+					t.Errorf("CRD %q: expected DomainName %q, got %q", crdName, tc.expectDomName, pq.Spec.DomainName)
 				}
 			}
 		})
