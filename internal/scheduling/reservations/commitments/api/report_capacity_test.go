@@ -29,6 +29,18 @@ func TestHandleReportCapacity(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// testCapacityConfig enables capacity reporting for all groups via "*" catch-all.
+	testCapacityConfig := commitments.APIConfig{
+		EnableReportCapacity: true,
+		FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
+			"*": {
+				RAM:       commitments.ResourceTypeConfig{HasCapacity: true},
+				Cores:     commitments.ResourceTypeConfig{HasCapacity: true},
+				Instances: commitments.ResourceTypeConfig{HasCapacity: true},
+			},
+		},
+	}
+
 	// Create empty flavor groups knowledge so capacity calculation doesn't fail
 	emptyKnowledge := createEmptyFlavorGroupKnowledge()
 
@@ -37,7 +49,7 @@ func TestHandleReportCapacity(t *testing.T) {
 		WithObjects(emptyKnowledge).
 		Build()
 
-	api := NewAPI(fakeClient)
+	api := NewAPIWithConfig(fakeClient, testCapacityConfig, nil)
 
 	tests := []struct {
 		name           string
@@ -131,12 +143,22 @@ func TestCapacityCalculator(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	testCapacityConfig := commitments.APIConfig{
+		FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
+			"*": {
+				RAM:       commitments.ResourceTypeConfig{HasCapacity: true},
+				Cores:     commitments.ResourceTypeConfig{HasCapacity: true},
+				Instances: commitments.ResourceTypeConfig{HasCapacity: true},
+			},
+		},
+	}
+
 	t.Run("CalculateCapacity returns error when no flavor groups knowledge exists", func(t *testing.T) {
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
 			Build()
 
-		calculator := commitments.NewCapacityCalculator(fakeClient)
+		calculator := commitments.NewCapacityCalculator(fakeClient, testCapacityConfig)
 		req := liquid.ServiceCapacityRequest{
 			AllAZs: []liquid.AvailabilityZone{"az-one", "az-two"},
 		}
@@ -158,7 +180,7 @@ func TestCapacityCalculator(t *testing.T) {
 			WithObjects(emptyKnowledge).
 			Build()
 
-		calculator := commitments.NewCapacityCalculator(fakeClient)
+		calculator := commitments.NewCapacityCalculator(fakeClient, testCapacityConfig)
 		req := liquid.ServiceCapacityRequest{
 			AllAZs: []liquid.AvailabilityZone{"az-one", "az-two"},
 		}
@@ -183,7 +205,7 @@ func TestCapacityCalculator(t *testing.T) {
 			WithObjects(flavorGroupKnowledge).
 			Build()
 
-		calculator := commitments.NewCapacityCalculator(fakeClient)
+		calculator := commitments.NewCapacityCalculator(fakeClient, testCapacityConfig)
 		req := liquid.ServiceCapacityRequest{
 			AllAZs: []liquid.AvailabilityZone{"qa-de-1a", "qa-de-1b", "qa-de-1d"},
 		}
@@ -209,7 +231,7 @@ func TestCapacityCalculator(t *testing.T) {
 			WithObjects(flavorGroupKnowledge).
 			Build()
 
-		calculator := commitments.NewCapacityCalculator(fakeClient)
+		calculator := commitments.NewCapacityCalculator(fakeClient, testCapacityConfig)
 		req := liquid.ServiceCapacityRequest{AllAZs: []liquid.AvailabilityZone{}}
 		report, err := calculator.CalculateCapacity(context.Background(), req)
 		if err != nil {
@@ -234,7 +256,7 @@ func TestCapacityCalculator(t *testing.T) {
 			WithObjects(flavorGroupKnowledge).
 			Build()
 
-		calculator := commitments.NewCapacityCalculator(fakeClient)
+		calculator := commitments.NewCapacityCalculator(fakeClient, testCapacityConfig)
 
 		req1 := liquid.ServiceCapacityRequest{
 			AllAZs: []liquid.AvailabilityZone{"eu-de-1a", "eu-de-1b"},
@@ -270,7 +292,7 @@ func TestCapacityCalculator(t *testing.T) {
 			WithStatusSubresource(crd).
 			Build()
 
-		calculator := commitments.NewCapacityCalculator(fakeClient)
+		calculator := commitments.NewCapacityCalculator(fakeClient, testCapacityConfig)
 		req := liquid.ServiceCapacityRequest{AllAZs: []liquid.AvailabilityZone{"az-one"}}
 		report, err := calculator.CalculateCapacity(context.Background(), req)
 		if err != nil {
@@ -307,7 +329,7 @@ func TestCapacityCalculator(t *testing.T) {
 			WithStatusSubresource(crd).
 			Build()
 
-		calculator := commitments.NewCapacityCalculator(fakeClient)
+		calculator := commitments.NewCapacityCalculator(fakeClient, testCapacityConfig)
 		req := liquid.ServiceCapacityRequest{AllAZs: []liquid.AvailabilityZone{"az-one", "az-two"}}
 		report, err := calculator.CalculateCapacity(context.Background(), req)
 		if err != nil {
@@ -336,7 +358,7 @@ func TestCapacityCalculator(t *testing.T) {
 			WithStatusSubresource(crd).
 			Build()
 
-		calculator := commitments.NewCapacityCalculator(fakeClient)
+		calculator := commitments.NewCapacityCalculator(fakeClient, testCapacityConfig)
 		req := liquid.ServiceCapacityRequest{AllAZs: []liquid.AvailabilityZone{"az-one"}}
 		report, err := calculator.CalculateCapacity(context.Background(), req)
 		if err != nil {
@@ -463,20 +485,20 @@ func createTestFlavorGroupKnowledge(t *testing.T) *v1alpha1.Knowledge {
 				{
 					"name":     "test_c8_m32",
 					"vcpus":    8,
-					"memoryMB": 32768,
+					"memoryMB": 32752,
 					"diskGB":   50,
 				},
 			},
 			"largestFlavor": map[string]interface{}{
 				"name":     "test_c8_m32",
 				"vcpus":    8,
-				"memoryMB": 32768,
+				"memoryMB": 32752,
 				"diskGB":   50,
 			},
 			"smallestFlavor": map[string]interface{}{
 				"name":     "test_c8_m32",
 				"vcpus":    8,
-				"memoryMB": 32768,
+				"memoryMB": 32752,
 				"diskGB":   50,
 			},
 			// Fixed RAM/core ratio (4096 MiB per vCPU) - required for group to accept commitments

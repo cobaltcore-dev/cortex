@@ -19,10 +19,11 @@ import (
 // CapacityCalculator computes capacity reports for Limes LIQUID API.
 type CapacityCalculator struct {
 	client client.Client
+	conf   APIConfig
 }
 
-func NewCapacityCalculator(client client.Client) *CapacityCalculator {
-	return &CapacityCalculator{client: client}
+func NewCapacityCalculator(client client.Client, conf APIConfig) *CapacityCalculator {
+	return &CapacityCalculator{client: client, conf: conf}
 }
 
 // CalculateCapacity computes per-AZ capacity for all flavor groups.
@@ -65,8 +66,16 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 
 	logger := LoggerFromContext(ctx)
 	for groupName, groupData := range flavorGroups {
+		resCfg := c.conf.ResourceConfigForGroup(groupName)
+		// Skip groups not configured for capacity reporting.
+		if !resCfg.RAM.HasCapacity && !resCfg.Cores.HasCapacity && !resCfg.Instances.HasCapacity {
+			continue
+		}
+
 		smallestFlavorName := groupData.SmallestFlavor.Name
-		memoryMBPerSlot := groupData.SmallestFlavor.MemoryMB
+		// Add 16 MiB before dividing: flavors reserve 16 MiB for video RAM (hw_video:ram_max_mb=16),
+		// so a nominal "2 GiB" flavor has 2032 MiB.
+		memoryMBPerSlot := groupData.SmallestFlavor.MemoryMB + 16
 		vcpusPerSlot := groupData.SmallestFlavor.VCPUs
 
 		ramAZCapacity := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(req.AllAZs))
@@ -128,14 +137,20 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			instancesAZCapacity[az] = instancesEntry
 		}
 
-		report.Resources[liquid.ResourceName(ResourceNameRAM(groupName))] = &liquid.ResourceCapacityReport{
-			PerAZ: ramAZCapacity,
+		if resCfg.RAM.HasCapacity {
+			report.Resources[liquid.ResourceName(ResourceNameRAM(groupName))] = &liquid.ResourceCapacityReport{
+				PerAZ: ramAZCapacity,
+			}
 		}
-		report.Resources[liquid.ResourceName(ResourceNameCores(groupName))] = &liquid.ResourceCapacityReport{
-			PerAZ: coresAZCapacity,
+		if resCfg.Cores.HasCapacity {
+			report.Resources[liquid.ResourceName(ResourceNameCores(groupName))] = &liquid.ResourceCapacityReport{
+				PerAZ: coresAZCapacity,
+			}
 		}
-		report.Resources[liquid.ResourceName(ResourceNameInstances(groupName))] = &liquid.ResourceCapacityReport{
-			PerAZ: instancesAZCapacity,
+		if resCfg.Instances.HasCapacity {
+			report.Resources[liquid.ResourceName(ResourceNameInstances(groupName))] = &liquid.ResourceCapacityReport{
+				PerAZ: instancesAZCapacity,
+			}
 		}
 	}
 
