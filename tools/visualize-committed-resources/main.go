@@ -9,7 +9,7 @@
 //
 // Flags:
 //
-//	--context=ctx           Kubernetes context (default: current context)
+//	--contexts=ctx1,ctx2    Kubernetes contexts to query (default: current context)
 //	--filter-project=id     Show only CRs for this project ID (substring match)
 //	--filter-az=az          Show only CRs in this availability zone (substring match)
 //	--filter-group=name     Show only CRs for this flavor group (substring match)
@@ -37,7 +37,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
 var scheme = runtime.NewScheme()
@@ -106,17 +105,9 @@ func (vs viewSet) has(v string) bool { return vs[v] }
 
 // ── k8s client ────────────────────────────────────────────────────────────────
 
-func newClient(contextName string) (client.Client, error) {
-	if contextName == "" {
-		c, err := config.GetConfig()
-		if err != nil {
-			return nil, fmt.Errorf("getting kubeconfig: %w", err)
-		}
-		return client.New(c, client.Options{Scheme: scheme})
-	}
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+func getClientForContext(contextName string) (client.Client, error) {
 	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		loadingRules,
+		clientcmd.NewDefaultClientConfigLoadingRules(),
 		&clientcmd.ConfigOverrides{CurrentContext: contextName},
 	)
 	c, err := kubeConfig.ClientConfig()
@@ -124,6 +115,18 @@ func newClient(contextName string) (client.Client, error) {
 		return nil, fmt.Errorf("getting kubeconfig for context %q: %w", contextName, err)
 	}
 	return client.New(c, client.Options{Scheme: scheme})
+}
+
+type contextClient struct {
+	name   string
+	client client.Client
+}
+
+func contextDisplayName(ctx string) string {
+	if ctx == "" {
+		return "(current)"
+	}
+	return ctx
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -466,7 +469,7 @@ func printReservations(crs []v1alpha1.CommittedResource, reservations []v1alpha1
 // ── main ──────────────────────────────────────────────────────────────────────
 
 func main() {
-	k8sContext := flag.String("context", "", "Kubernetes context (default: current context)")
+	contextsFlag := flag.String("contexts", "", "Comma-separated Kubernetes contexts to query (default: current context)")
 	filterProject := flag.String("filter-project", "", "Show only CRs for this project ID (substring match)")
 	filterAZ := flag.String("filter-az", "", "Show only CRs in this availability zone (substring match)")
 	filterGroup := flag.String("filter-group", "", "Show only CRs for this flavor group (substring match)")
@@ -489,17 +492,28 @@ func main() {
 		active:  *activeOnly,
 	}
 
-	cl, err := newClient(*k8sContext)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+	contextNames := []string{""}
+	if *contextsFlag != "" {
+		contextNames = strings.FieldsFunc(*contextsFlag, func(r rune) bool { return r == ',' })
+		for i := range contextNames {
+			contextNames[i] = strings.TrimSpace(contextNames[i])
+		}
+	}
+	var clients []contextClient
+	for _, name := range contextNames {
+		cl, err := getClientForContext(name)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error creating client for context %q: %v\n", contextDisplayName(name), err)
+			os.Exit(1)
+		}
+		clients = append(clients, contextClient{name: name, client: cl})
 	}
 
 	ctx := context.Background()
 	var prevDigest string
 	first := true
 	for {
-		crs, reservations := fetchSnapshot(ctx, cl, f, *limitFlag)
+		crs, reservations := fetchSnapshot(ctx, clients, f, *limitFlag)
 		if d := snapshotDigest(crs, reservations); first || d != prevDigest {
 			if !first {
 				fmt.Printf("\n%s %s %s\n",
@@ -531,59 +545,75 @@ func snapshotDigest(crs []v1alpha1.CommittedResource, reservations []v1alpha1.Re
 	return b.String()
 }
 
-func fetchSnapshot(ctx context.Context, cl client.Client, f filters, limit int) ([]v1alpha1.CommittedResource, []v1alpha1.Reservation) {
-	var listOpts []client.ListOption
-	if limit > 0 {
-		listOpts = append(listOpts, client.Limit(int64(limit)))
-	}
+func fetchSnapshot(ctx context.Context, clients []contextClient, f filters, limit int) ([]v1alpha1.CommittedResource, []v1alpha1.Reservation) {
+	multiContext := len(clients) > 1
 
-	var crList v1alpha1.CommittedResourceList
-	if err := cl.List(ctx, &crList, listOpts...); err != nil {
-		fmt.Fprintf(os.Stderr, "error listing CommittedResources: %v\n", err)
-		os.Exit(1)
-	}
+	var allCRs []v1alpha1.CommittedResource
+	var allReservations []v1alpha1.Reservation
 
-	var resList v1alpha1.ReservationList
-	if err := cl.List(ctx, &resList, append(listOpts, client.MatchingLabels{
-		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-	})...); err != nil {
-		fmt.Fprintf(os.Stderr, "error listing Reservations: %v\n", err)
-		os.Exit(1)
-	}
+	for _, cc := range clients {
+		var listOpts []client.ListOption
+		if limit > 0 {
+			listOpts = append(listOpts, client.Limit(int64(limit)))
+		}
 
-	if crList.Continue != "" {
-		fmt.Fprintf(os.Stderr, yellow("warning: CR list truncated at %d — use --limit=0 or a higher value to see all\n"), limit)
-	}
-	if resList.Continue != "" {
-		fmt.Fprintf(os.Stderr, yellow("warning: Reservation list truncated at %d — use --limit=0 or a higher value to see all\n"), limit)
-	}
-	var crs []v1alpha1.CommittedResource
-	for _, cr := range crList.Items {
-		if f.match(cr) {
-			crs = append(crs, cr)
+		var crList v1alpha1.CommittedResourceList
+		if err := cc.client.List(ctx, &crList, listOpts...); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: error listing CommittedResources in context %q: %v\n", contextDisplayName(cc.name), err)
+			continue
+		}
+		var resList v1alpha1.ReservationList
+		if err := cc.client.List(ctx, &resList, append(listOpts, client.MatchingLabels{
+			v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+		})...); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: error listing Reservations in context %q: %v\n", contextDisplayName(cc.name), err)
+			continue
+		}
+
+		if crList.Continue != "" {
+			fmt.Fprintf(os.Stderr, yellow("warning: CR list truncated at %d in context %q — use --limit=0 or a higher value\n"), limit, contextDisplayName(cc.name))
+		}
+		if resList.Continue != "" {
+			fmt.Fprintf(os.Stderr, yellow("warning: Reservation list truncated at %d in context %q — use --limit=0 or a higher value\n"), limit, contextDisplayName(cc.name))
+		}
+
+		for _, cr := range crList.Items {
+			if f.match(cr) {
+				if multiContext {
+					cr.Name = cr.Name + "@" + contextDisplayName(cc.name)
+				}
+				allCRs = append(allCRs, cr)
+			}
+		}
+		for _, res := range resList.Items {
+			if res.Spec.CommittedResourceReservation == nil {
+				continue
+			}
+			if multiContext {
+				res.Name = res.Name + "@" + contextDisplayName(cc.name)
+			}
+			allReservations = append(allReservations, res)
 		}
 	}
-	sort.Slice(crs, func(i, j int) bool {
-		if crs[i].Spec.FlavorGroupName != crs[j].Spec.FlavorGroupName {
-			return crs[i].Spec.FlavorGroupName < crs[j].Spec.FlavorGroupName
+
+	sort.Slice(allCRs, func(i, j int) bool {
+		if allCRs[i].Spec.FlavorGroupName != allCRs[j].Spec.FlavorGroupName {
+			return allCRs[i].Spec.FlavorGroupName < allCRs[j].Spec.FlavorGroupName
 		}
-		return crs[i].Spec.CommitmentUUID < crs[j].Spec.CommitmentUUID
+		return allCRs[i].Spec.CommitmentUUID < allCRs[j].Spec.CommitmentUUID
 	})
 
-	matchedUUIDs := make(map[string]bool, len(crs))
-	for _, cr := range crs {
+	matchedUUIDs := make(map[string]bool, len(allCRs))
+	for _, cr := range allCRs {
 		matchedUUIDs[cr.Spec.CommitmentUUID] = true
 	}
 	var reservations []v1alpha1.Reservation
-	for _, res := range resList.Items {
-		if res.Spec.CommittedResourceReservation == nil {
-			continue
-		}
+	for _, res := range allReservations {
 		if matchedUUIDs[res.Spec.CommittedResourceReservation.CommitmentUUID] {
 			reservations = append(reservations, res)
 		}
 	}
-	return crs, reservations
+	return allCRs, reservations
 }
 
 func printSnapshot(crs []v1alpha1.CommittedResource, reservations []v1alpha1.Reservation, f filters, views viewSet) {

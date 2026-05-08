@@ -100,7 +100,7 @@ type VMUsageInfo struct {
 	AZ            string
 	Hypervisor    string
 	CreatedAt     time.Time
-	UsageMultiple uint64 // Memory in multiples of smallest flavor in the group
+	UsageMultiple uint64 // RAM in GiB
 }
 
 // UsageCalculator computes usage reports for Limes LIQUID API.
@@ -144,12 +144,20 @@ func (c *UsageCalculator) CalculateUsage(
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to read VM assignments from CRD status: %w", err)
 	}
 
+	// Fetch the ProjectQuota CRD for this project to read per-AZ quota values.
+	// May not exist if Limes has not pushed quota yet — in that case quota defaults to infinite.
+	var projectQuota *v1alpha1.ProjectQuota
+	var pqList v1alpha1.ProjectQuotaList
+	if err := c.client.List(ctx, &pqList, client.MatchingFields{idxProjectQuotaByProjectID: projectID}); err == nil && len(pqList.Items) > 0 {
+		projectQuota = &pqList.Items[0]
+	}
+
 	vms, err := getProjectVMs(ctx, c.usageDB, log, projectID, flavorGroups, allAZs)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to get project VMs: %w", err)
 	}
 
-	report := c.buildUsageResponse(vms, vmAssignments, flavorGroups, allAZs, infoVersion)
+	report := c.buildUsageResponse(vms, vmAssignments, flavorGroups, allAZs, infoVersion, projectQuota)
 
 	assignedToCommitments := 0
 	for _, vm := range vms {
@@ -276,16 +284,9 @@ func getProjectVMs(
 
 	// Build flavor name -> flavor group lookup
 	flavorToGroup := make(map[string]string)
-	flavorToSmallestMemory := make(map[string]uint64) // for calculating usage multiples
 	for groupName, group := range flavorGroups {
 		for _, flavor := range group.Flavors {
 			flavorToGroup[flavor.Name] = groupName
-		}
-		// Smallest flavor in group determines the usage unit
-		if group.SmallestFlavor.Name != "" {
-			for _, flavor := range group.Flavors {
-				flavorToSmallestMemory[flavor.Name] = group.SmallestFlavor.MemoryMB
-			}
 		}
 	}
 
@@ -302,10 +303,12 @@ func getProjectVMs(
 		// Determine flavor group
 		flavorGroup := flavorToGroup[row.FlavorName]
 
-		// Calculate usage multiple (memory in units of smallest flavor)
+		// Calculate usage in GiB (FlavorRAM is in MiB).
+		// Add 16 MiB before dividing: flavors reserve 16 MiB for video RAM (hw_video:ram_max_mb=16),
+		// so a nominal "2 GiB" flavor has 2032 MiB. Without the adjustment, integer division truncates.
 		var usageMultiple uint64
-		if smallestMem := flavorToSmallestMemory[row.FlavorName]; smallestMem > 0 {
-			usageMultiple = row.FlavorRAM / smallestMem
+		if row.FlavorRAM > 0 {
+			usageMultiple = (row.FlavorRAM + 16) / 1024
 		}
 
 		// Normalize AZ
@@ -431,6 +434,7 @@ func (c *UsageCalculator) buildUsageResponse(
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	allAZs []liquid.AvailabilityZone,
 	infoVersion int64,
+	projectQuota *v1alpha1.ProjectQuota,
 ) liquid.ServiceUsageReport {
 	// Initialize resources map for all flavor groups
 	resources := make(map[liquid.ResourceName]*liquid.ResourceUsageReport)
@@ -485,7 +489,6 @@ func (c *UsageCalculator) buildUsageResponse(
 		ramResourceName := liquid.ResourceName(ResourceNameRAM(flavorGroupName))
 		ramPerAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
 		// For AZSeparatedTopology resources (fixed-ratio groups), per-AZ Quota must be non-null.
-		// Use -1 ("infinite quota") as default until actual quota is read from ProjectQuota CRD.
 		ramHasAZQuota := groupData.HasFixedRamCoreRatio()
 		for _, az := range allAZs {
 			report := &liquid.AZResourceUsageReport{
@@ -493,21 +496,24 @@ func (c *UsageCalculator) buildUsageResponse(
 				Subresources: []liquid.Subresource{},
 			}
 			if ramHasAZQuota {
-				report.Quota = Some(int64(-1)) // infinite — will be overridden by ProjectQuota CRD
+				quota := int64(-1) // default: infinite
+				if projectQuota != nil {
+					if rq, ok := projectQuota.Spec.Quota[string(ramResourceName)]; ok {
+						if q, ok := rq.PerAZ[string(az)]; ok {
+							quota = q
+						}
+					}
+				}
+				report.Quota = Some(quota)
 			}
 			ramPerAZ[az] = report
 		}
 		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
 			for az, data := range azData {
 				if _, known := ramPerAZ[az]; !known {
-					report := &liquid.AZResourceUsageReport{}
-					if ramHasAZQuota {
-						report.Quota = Some(int64(-1))
-					}
-					ramPerAZ[az] = report
+					continue // skip VMs in AZs not in allAZs
 				}
 				ramPerAZ[az].Usage = data.ramUsage
-				ramPerAZ[az].PhysicalUsage = Some(data.ramUsage) // No overcommit for RAM
 				// Subresources are only on instances resource
 			}
 		}
@@ -527,10 +533,9 @@ func (c *UsageCalculator) buildUsageResponse(
 		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
 			for az, data := range azData {
 				if _, known := coresPerAZ[az]; !known {
-					coresPerAZ[az] = &liquid.AZResourceUsageReport{}
+					continue // skip VMs in AZs not in allAZs
 				}
 				coresPerAZ[az].Usage = data.coresUsage
-				coresPerAZ[az].PhysicalUsage = Some(data.coresUsage) // No overcommit for cores
 				// Subresources are only on instances resource
 			}
 		}
@@ -550,10 +555,9 @@ func (c *UsageCalculator) buildUsageResponse(
 		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
 			for az, data := range azData {
 				if _, known := instancesPerAZ[az]; !known {
-					instancesPerAZ[az] = &liquid.AZResourceUsageReport{}
+					continue // skip VMs in AZs not in allAZs
 				}
 				instancesPerAZ[az].Usage = data.instanceCount
-				instancesPerAZ[az].PhysicalUsage = Some(data.instanceCount)
 				instancesPerAZ[az].Subresources = data.subresources // VM details on instances resource
 			}
 		}
