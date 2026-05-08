@@ -125,6 +125,7 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 					Pipelines: map[string]lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]{
 						"machines-scheduler": createMockPipeline(),
 					},
+					HistoryManager: lib.HistoryClient{Client: client},
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
@@ -361,7 +362,7 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 			},
 			createHistory:             false,
 			expectError:               false,
-			expectHistoryCreated:      false,
+			expectHistoryCreated:      true,
 			expectMachinePoolAssigned: true,
 			expectTargetHost:          "pool1",
 		},
@@ -407,7 +408,7 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 			},
 			createHistory:             true,
 			expectError:               true,
-			expectHistoryCreated:      true, // Decision is created but processing fails
+			expectHistoryCreated:      false,
 			expectMachinePoolAssigned: false,
 		},
 	}

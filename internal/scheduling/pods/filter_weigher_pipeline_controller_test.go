@@ -122,6 +122,7 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 					Pipelines: map[string]lib.FilterWeigherPipeline[pods.PodPipelineRequest]{
 						"pods-scheduler": createMockPodPipeline(),
 					},
+					HistoryManager: lib.HistoryClient{Client: client},
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
@@ -339,7 +340,7 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 			},
 			createHistory:        false,
 			expectError:          false,
-			expectHistoryCreated: false,
+			expectHistoryCreated: true,
 			expectNodeAssigned:   true,
 			expectTargetHost:     "node1",
 		},
@@ -385,7 +386,7 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 			},
 			createHistory:        true,
 			expectError:          true,
-			expectHistoryCreated: true, // Decision is created but processing fails
+			expectHistoryCreated: false,
 			expectNodeAssigned:   false,
 		},
 	}

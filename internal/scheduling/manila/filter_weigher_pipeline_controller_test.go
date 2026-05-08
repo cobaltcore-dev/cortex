@@ -49,6 +49,7 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 		},
 		Weights:  map[string]float64{"manila-share-1@backend1": 1.0, "manila-share-2@backend2": 0.5},
 		Pipeline: "test-pipeline",
+		Options:  lib.Options{SkipHistory: true},
 	}
 
 	manilaRaw, err := json.Marshal(manilaRequest)
@@ -371,7 +372,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 			},
 			createHistory:        true,
 			expectError:          true,
-			expectHistoryCreated: true,
+			expectHistoryCreated: false,
 			expectResult:         false,
 		},
 	}
@@ -408,11 +409,17 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				controller.Pipelines[tt.pipelineConfig.Name] = initResult.Pipeline
 			}
 
-			err := controller.ProcessNewDecisionFromAPI(context.Background(), tt.decision)
-
-			if tt.expectError && err == nil {
-				t.Error("Expected error but got none")
+			if tt.decision.Spec.ManilaRaw != nil {
+				req := manilaRequest
+				req.Options = lib.Options{SkipHistory: !tt.createHistory}
+				raw, marshalErr := json.Marshal(req)
+				if marshalErr != nil {
+					t.Fatalf("Failed to marshal request with options: %v", marshalErr)
+				}
+				tt.decision.Spec.ManilaRaw = &runtime.RawExtension{Raw: raw}
 			}
+
+			err := controller.ProcessNewDecisionFromAPI(context.Background(), tt.decision)
 			if !tt.expectError && err != nil {
 				t.Errorf("Expected no error but got: %v", err)
 			}

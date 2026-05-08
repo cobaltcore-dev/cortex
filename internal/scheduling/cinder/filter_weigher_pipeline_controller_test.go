@@ -46,6 +46,7 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 		},
 		Weights:  map[string]float64{"cinder-volume-1": 1.0, "cinder-volume-2": 0.5},
 		Pipeline: "test-pipeline",
+		Options:  lib.Options{SkipHistory: true},
 	}
 
 	cinderRaw, err := json.Marshal(cinderRequest)
@@ -373,7 +374,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 			},
 			createHistory:        true,
 			expectError:          true,
-			expectHistoryCreated: true,
+			expectHistoryCreated: false,
 			expectResult:         false,
 		},
 	}
@@ -408,6 +409,16 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					t.Fatalf("Failed to init pipeline: %v", initResult)
 				}
 				controller.Pipelines[tt.pipelineConfig.Name] = initResult.Pipeline
+			}
+
+			if tt.decision.Spec.CinderRaw != nil {
+				req := cinderRequest
+				req.Options = lib.Options{SkipHistory: !tt.createHistory}
+				raw, marshalErr := json.Marshal(req)
+				if marshalErr != nil {
+					t.Fatalf("Failed to marshal request with options: %v", marshalErr)
+				}
+				tt.decision.Spec.CinderRaw = &runtime.RawExtension{Raw: raw}
 			}
 
 			err := controller.ProcessNewDecisionFromAPI(context.Background(), tt.decision)

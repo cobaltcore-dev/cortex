@@ -77,6 +77,7 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 		},
 		Weights:  map[string]float64{"compute-1": 1.0, "compute-2": 0.5},
 		Pipeline: "test-pipeline",
+		Options:  lib.Options{SkipHistory: true},
 	}
 
 	novaRaw, err := json.Marshal(novaRequest)
@@ -689,6 +690,16 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				controller.Pipelines[tt.pipeline.Name] = initResult.Pipeline
 			}
 
+			if tt.decision.Spec.NovaRaw != nil {
+				req := novaRequest
+				req.Options = lib.Options{SkipHistory: !tt.createHistory}
+				raw, marshalErr := json.Marshal(req)
+				if marshalErr != nil {
+					t.Fatalf("Failed to marshal request with options: %v", marshalErr)
+				}
+				tt.decision.Spec.NovaRaw = &runtime.RawExtension{Raw: raw}
+			}
+
 			// Call the method under test
 			err := controller.ProcessNewDecisionFromAPI(context.Background(), tt.decision)
 
@@ -771,6 +782,7 @@ func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
 		},
 		Weights:  map[string]float64{"original-host-1": 1.0, "original-host-2": 0.5},
 		Pipeline: "test-pipeline",
+		Options:  lib.Options{SkipHistory: true},
 	}
 
 	novaRaw, err := json.Marshal(novaRequest)
