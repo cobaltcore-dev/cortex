@@ -101,19 +101,19 @@ func TestComputeTotalUsage(t *testing.T) {
 	}
 
 	ramUsage := projectA["hw_version_hana_v2_ram"]
-	if ramUsage.PerAZ["az-1"] != 96 {
-		t.Errorf("expected project-a az-1 hana_v2_ram = 96, got %d", ramUsage.PerAZ["az-1"])
+	if ramUsage["az-1"] != 96 {
+		t.Errorf("expected project-a az-1 hana_v2_ram = 96, got %d", ramUsage["az-1"])
 	}
-	if ramUsage.PerAZ["az-2"] != 32 {
-		t.Errorf("expected project-a az-2 hana_v2_ram = 32, got %d", ramUsage.PerAZ["az-2"])
+	if ramUsage["az-2"] != 32 {
+		t.Errorf("expected project-a az-2 hana_v2_ram = 32, got %d", ramUsage["az-2"])
 	}
 
 	coresUsage := projectA["hw_version_hana_v2_cores"]
-	if coresUsage.PerAZ["az-1"] != 24 {
-		t.Errorf("expected project-a az-1 hana_v2_cores = 24, got %d", coresUsage.PerAZ["az-1"])
+	if coresUsage["az-1"] != 24 {
+		t.Errorf("expected project-a az-1 hana_v2_cores = 24, got %d", coresUsage["az-1"])
 	}
-	if coresUsage.PerAZ["az-2"] != 8 {
-		t.Errorf("expected project-a az-2 hana_v2_cores = 8, got %d", coresUsage.PerAZ["az-2"])
+	if coresUsage["az-2"] != 8 {
+		t.Errorf("expected project-a az-2 hana_v2_cores = 8, got %d", coresUsage["az-2"])
 	}
 
 	// project-b: general in az-1: 4096/1024 = 4 GiB RAM, 2 cores
@@ -121,11 +121,11 @@ func TestComputeTotalUsage(t *testing.T) {
 	if projectB == nil {
 		t.Fatal("expected project-b in results")
 	}
-	if projectB["hw_version_general_ram"].PerAZ["az-1"] != 4 {
-		t.Errorf("expected project-b az-1 general_ram = 4, got %d", projectB["hw_version_general_ram"].PerAZ["az-1"])
+	if projectB["hw_version_general_ram"]["az-1"] != 4 {
+		t.Errorf("expected project-b az-1 general_ram = 4, got %d", projectB["hw_version_general_ram"]["az-1"])
 	}
-	if projectB["hw_version_general_cores"].PerAZ["az-1"] != 2 {
-		t.Errorf("expected project-b az-1 general_cores = 2, got %d", projectB["hw_version_general_cores"].PerAZ["az-1"])
+	if projectB["hw_version_general_cores"]["az-1"] != 2 {
+		t.Errorf("expected project-b az-1 general_cores = 2, got %d", projectB["hw_version_general_cores"]["az-1"])
 	}
 
 	// project-c: unknown flavor → not in results
@@ -216,35 +216,35 @@ func TestComputeCRUsage(t *testing.T) {
 
 	// Should include confirmed + guaranteed for project-a only
 	ramUsage := result["hw_version_hana_v2_ram"]
-	if ramUsage.PerAZ["az-1"] != 8 { // 5 + 3
-		t.Errorf("expected cr ram usage az-1 = 8, got %d", ramUsage.PerAZ["az-1"])
+	if ramUsage["az-1"] != 8 { // 5 + 3
+		t.Errorf("expected cr ram usage az-1 = 8, got %d", ramUsage["az-1"])
 	}
 
 	coresUsage := result["hw_version_hana_v2_cores"]
-	if coresUsage.PerAZ["az-1"] != 2 {
-		t.Errorf("expected cr cores usage az-1 = 2, got %d", coresUsage.PerAZ["az-1"])
+	if coresUsage["az-1"] != 2 {
+		t.Errorf("expected cr cores usage az-1 = 2, got %d", coresUsage["az-1"])
 	}
 
 	// az-2 should NOT be included (pending state)
-	if ramUsage.PerAZ["az-2"] != 0 {
-		t.Errorf("expected cr ram usage az-2 = 0 (pending excluded), got %d", ramUsage.PerAZ["az-2"])
+	if ramUsage["az-2"] != 0 {
+		t.Errorf("expected cr ram usage az-2 = 0 (pending excluded), got %d", ramUsage["az-2"])
 	}
 }
 
 func TestDerivePaygUsage(t *testing.T) {
 	tests := []struct {
 		name       string
-		totalUsage map[string]v1alpha1.ResourceQuotaUsage
-		crUsage    map[string]v1alpha1.ResourceQuotaUsage
+		totalUsage map[string]map[string]int64
+		crUsage    map[string]map[string]int64
 		expected   map[string]map[string]int64 // resourceName -> az -> amount
 	}{
 		{
 			name: "basic subtraction",
-			totalUsage: map[string]v1alpha1.ResourceQuotaUsage{
-				"hw_version_hana_v2_ram": {PerAZ: map[string]int64{"az-1": 10, "az-2": 5}},
+			totalUsage: map[string]map[string]int64{
+				"hw_version_hana_v2_ram": {"az-1": 10, "az-2": 5},
 			},
-			crUsage: map[string]v1alpha1.ResourceQuotaUsage{
-				"hw_version_hana_v2_ram": {PerAZ: map[string]int64{"az-1": 3}},
+			crUsage: map[string]map[string]int64{
+				"hw_version_hana_v2_ram": {"az-1": 3},
 			},
 			expected: map[string]map[string]int64{
 				"hw_version_hana_v2_ram": {"az-1": 7, "az-2": 5},
@@ -252,11 +252,11 @@ func TestDerivePaygUsage(t *testing.T) {
 		},
 		{
 			name: "clamp to zero",
-			totalUsage: map[string]v1alpha1.ResourceQuotaUsage{
-				"hw_version_hana_v2_ram": {PerAZ: map[string]int64{"az-1": 2}},
+			totalUsage: map[string]map[string]int64{
+				"hw_version_hana_v2_ram": {"az-1": 2},
 			},
-			crUsage: map[string]v1alpha1.ResourceQuotaUsage{
-				"hw_version_hana_v2_ram": {PerAZ: map[string]int64{"az-1": 10}},
+			crUsage: map[string]map[string]int64{
+				"hw_version_hana_v2_ram": {"az-1": 10},
 			},
 			expected: map[string]map[string]int64{
 				"hw_version_hana_v2_ram": {"az-1": 0},
@@ -264,19 +264,19 @@ func TestDerivePaygUsage(t *testing.T) {
 		},
 		{
 			name: "no CR usage",
-			totalUsage: map[string]v1alpha1.ResourceQuotaUsage{
-				"hw_version_hana_v2_ram": {PerAZ: map[string]int64{"az-1": 5}},
+			totalUsage: map[string]map[string]int64{
+				"hw_version_hana_v2_ram": {"az-1": 5},
 			},
-			crUsage: map[string]v1alpha1.ResourceQuotaUsage{},
+			crUsage: map[string]map[string]int64{},
 			expected: map[string]map[string]int64{
 				"hw_version_hana_v2_ram": {"az-1": 5},
 			},
 		},
 		{
 			name:       "empty total usage",
-			totalUsage: map[string]v1alpha1.ResourceQuotaUsage{},
-			crUsage: map[string]v1alpha1.ResourceQuotaUsage{
-				"hw_version_hana_v2_ram": {PerAZ: map[string]int64{"az-1": 5}},
+			totalUsage: map[string]map[string]int64{},
+			crUsage: map[string]map[string]int64{
+				"hw_version_hana_v2_ram": {"az-1": 5},
 			},
 			expected: map[string]map[string]int64{},
 		},
@@ -293,9 +293,9 @@ func TestDerivePaygUsage(t *testing.T) {
 					continue
 				}
 				for az, expectedAmount := range expectedAZ {
-					if resUsage.PerAZ[az] != expectedAmount {
+					if resUsage[az] != expectedAmount {
 						t.Errorf("resource=%s az=%s: expected %d, got %d",
-							resourceName, az, expectedAmount, resUsage.PerAZ[az])
+							resourceName, az, expectedAmount, resUsage[az])
 					}
 				}
 			}
@@ -342,37 +342,37 @@ func TestBuildFlavorToGroupMap(t *testing.T) {
 }
 
 func TestIncrementDecrementUsage(t *testing.T) {
-	usage := make(map[string]v1alpha1.ResourceQuotaUsage)
+	usage := make(map[string]map[string]int64)
 
 	// Increment from empty
 	incrementUsage(usage, "res1", "az-1", 5)
-	if usage["res1"].PerAZ["az-1"] != 5 {
-		t.Errorf("expected 5 after increment, got %d", usage["res1"].PerAZ["az-1"])
+	if usage["res1"]["az-1"] != 5 {
+		t.Errorf("expected 5 after increment, got %d", usage["res1"]["az-1"])
 	}
 
 	// Increment again
 	incrementUsage(usage, "res1", "az-1", 3)
-	if usage["res1"].PerAZ["az-1"] != 8 {
-		t.Errorf("expected 8 after second increment, got %d", usage["res1"].PerAZ["az-1"])
+	if usage["res1"]["az-1"] != 8 {
+		t.Errorf("expected 8 after second increment, got %d", usage["res1"]["az-1"])
 	}
 
 	// Decrement
 	decrementUsage(usage, "res1", "az-1", 2)
-	if usage["res1"].PerAZ["az-1"] != 6 {
-		t.Errorf("expected 6 after decrement, got %d", usage["res1"].PerAZ["az-1"])
+	if usage["res1"]["az-1"] != 6 {
+		t.Errorf("expected 6 after decrement, got %d", usage["res1"]["az-1"])
 	}
 
 	// Decrement below zero → clamp to 0
 	decrementUsage(usage, "res1", "az-1", 100)
-	if usage["res1"].PerAZ["az-1"] != 0 {
-		t.Errorf("expected 0 after over-decrement, got %d", usage["res1"].PerAZ["az-1"])
+	if usage["res1"]["az-1"] != 0 {
+		t.Errorf("expected 0 after over-decrement, got %d", usage["res1"]["az-1"])
 	}
 
 	// Decrement non-existent resource (no-op)
 	decrementUsage(usage, "res2", "az-1", 5)
 	// Should not panic, and res2 should not exist
 	if _, exists := usage["res2"]; exists {
-		if usage["res2"].PerAZ != nil {
+		if usage["res2"] != nil {
 			t.Error("expected res2 to not have PerAZ after decrement on non-existent")
 		}
 	}
@@ -502,8 +502,8 @@ func TestAccumulateAddedVM_KnownFlavor(t *testing.T) {
 	}
 
 	pq := &v1alpha1.ProjectQuota{
-		ObjectMeta: metav1.ObjectMeta{Name: "quota-project-a"},
-		Spec:       v1alpha1.ProjectQuotaSpec{ProjectID: "project-a"},
+		ObjectMeta: metav1.ObjectMeta{Name: "quota-project-a-az-1"},
+		Spec:       v1alpha1.ProjectQuotaSpec{ProjectID: "project-a", AvailabilityZone: "az-1"},
 		Status: v1alpha1.ProjectQuotaStatus{
 			LastReconcileAt:     &lastReconcile,
 			LastFullReconcileAt: &lastReconcile,

@@ -7,34 +7,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ResourceQuota holds the quota for a single resource with per-AZ breakdown.
-// Maps to liquid.ResourceQuotaRequest from the LIQUID API.
-// See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#ResourceQuotaRequest
-type ResourceQuota struct {
-	// Quota is the total quota across all AZs (for compatibility).
-	// Corresponds to liquid.ResourceQuotaRequest.Quota.
-	// +kubebuilder:validation:Required
-	Quota int64 `json:"quota"`
-
-	// PerAZ holds the per-availability-zone quota breakdown.
-	// Key: availability zone name, Value: quota for that AZ.
-	// Only populated for AZSeparatedTopology resources.
-	// Corresponds to liquid.ResourceQuotaRequest.PerAZ[az].Quota.
-	// See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#AZResourceQuotaRequest
-	// +kubebuilder:validation:Optional
-	PerAZ map[string]int64 `json:"perAZ,omitempty"`
-}
-
-// ResourceQuotaUsage holds per-AZ PAYG usage for a single resource.
-type ResourceQuotaUsage struct {
-	// PerAZ holds per-availability-zone PAYG usage values.
-	// Key: availability zone name, Value: PAYG usage in that AZ.
-	// +kubebuilder:validation:Optional
-	PerAZ map[string]int64 `json:"perAZ,omitempty"`
-}
-
 // ProjectQuotaSpec defines the desired state of ProjectQuota.
 // Populated from PUT /v1/projects/:uuid/quota payloads (liquid.ServiceQuotaRequest).
+// Each ProjectQuota CRD represents quota for ONE project in ONE availability zone.
 // See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#ServiceQuotaRequest
 type ProjectQuotaSpec struct {
 	// ProjectID of the OpenStack project this quota belongs to.
@@ -57,12 +32,17 @@ type ProjectQuotaSpec struct {
 	// +kubebuilder:validation:Optional
 	DomainName string `json:"domainName,omitempty"`
 
-	// Quota maps LIQUID resource names to their per-AZ quota.
+	// AvailabilityZone is the AZ this quota CRD covers (e.g. "qa-de-1a").
+	// In a multi-cluster setup, this determines which cluster the CRD is routed to.
+	// +kubebuilder:validation:Required
+	AvailabilityZone string `json:"availabilityZone"`
+
+	// Quota maps LIQUID resource names to their quota value for THIS availability zone.
 	// Key: liquid.ResourceName (e.g. "hw_version_hana_v2_ram")
-	// Mirrors liquid.ServiceQuotaRequest.Resources with AZSeparatedTopology.
-	// See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#ServiceQuotaRequest
+	// Value: per-AZ quota from liquid.AZResourceQuotaRequest.Quota
+	// See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#AZResourceQuotaRequest
 	// +kubebuilder:validation:Optional
-	Quota map[string]ResourceQuota `json:"quota,omitempty"`
+	Quota map[string]int64 `json:"quota,omitempty"`
 }
 
 // ProjectQuotaStatus defines the observed state of ProjectQuota.
@@ -75,17 +55,17 @@ type ProjectQuotaStatus struct {
 	// +kubebuilder:validation:Optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
-	// TotalUsage tracks per-resource per-AZ total resource consumption (all VMs in this project).
+	// TotalUsage tracks per-resource total resource consumption in this AZ (all VMs in this project+AZ).
 	// Persisted by the quota controller; updated by full reconcile and HV instance diffs.
 	// Key: liquid.ResourceName
 	// +kubebuilder:validation:Optional
-	TotalUsage map[string]ResourceQuotaUsage `json:"totalUsage,omitempty"`
+	TotalUsage map[string]int64 `json:"totalUsage,omitempty"`
 
-	// PaygUsage tracks per-resource per-AZ pay-as-you-go usage.
+	// PaygUsage tracks per-resource pay-as-you-go usage in this AZ.
 	// Derived as TotalUsage - CRUsage (clamped >= 0).
 	// Key: liquid.ResourceName
 	// +kubebuilder:validation:Optional
-	PaygUsage map[string]ResourceQuotaUsage `json:"paygUsage,omitempty"`
+	PaygUsage map[string]int64 `json:"paygUsage,omitempty"`
 
 	// LastReconcileAt is when the controller last reconciled this project's quota (any path).
 	// +kubebuilder:validation:Optional
@@ -106,6 +86,7 @@ type ProjectQuotaStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Project",type="string",JSONPath=".spec.projectID"
+// +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
 // +kubebuilder:printcolumn:name="Domain",type="string",JSONPath=".spec.domainID"
 // +kubebuilder:printcolumn:name="LastReconcile",type="date",JSONPath=".status.lastReconcileAt"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
@@ -113,6 +94,8 @@ type ProjectQuotaStatus struct {
 // ProjectQuota is the Schema for the projectquotas API.
 // It persists quota values pushed by Limes via the LIQUID quota endpoint
 // (PUT /v1/projects/:uuid/quota → liquid.ServiceQuotaRequest).
+// Each CRD stores quota for one project in one availability zone.
+// In a multi-cluster setup, it is routed to the cluster serving that AZ.
 // See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#ServiceQuotaRequest
 type ProjectQuota struct {
 	metav1.TypeMeta `json:",inline"`

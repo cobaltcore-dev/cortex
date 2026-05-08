@@ -144,12 +144,13 @@ func (c *UsageCalculator) CalculateUsage(
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to read VM assignments from CRD status: %w", err)
 	}
 
-	// Fetch the ProjectQuota CRD for this project to read per-AZ quota values.
-	// May not exist if Limes has not pushed quota yet — in that case quota defaults to infinite.
-	var projectQuota *v1alpha1.ProjectQuota
+	// Fetch all per-AZ ProjectQuota CRDs for this project to read quota values.
+	// May be empty if Limes has not pushed quota yet — in that case quota defaults to infinite.
+	// Each CRD holds quota for one AZ; we build a combined map[resourceName][az] = quota.
 	var pqList v1alpha1.ProjectQuotaList
+	var quotaByResourceAZ map[string]map[string]int64
 	if err := c.client.List(ctx, &pqList, client.MatchingFields{idxProjectQuotaByProjectID: projectID}); err == nil && len(pqList.Items) > 0 {
-		projectQuota = &pqList.Items[0]
+		quotaByResourceAZ = buildCombinedQuotaMap(pqList.Items)
 	}
 
 	vms, err := getProjectVMs(ctx, c.usageDB, log, projectID, flavorGroups, allAZs)
@@ -157,7 +158,7 @@ func (c *UsageCalculator) CalculateUsage(
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to get project VMs: %w", err)
 	}
 
-	report := c.buildUsageResponse(vms, vmAssignments, flavorGroups, allAZs, infoVersion, projectQuota)
+	report := c.buildUsageResponse(vms, vmAssignments, flavorGroups, allAZs, infoVersion, quotaByResourceAZ)
 
 	assignedToCommitments := 0
 	for _, vm := range vms {
@@ -424,17 +425,34 @@ type azUsageData struct {
 	subresources  []liquid.Subresource // VM details for subresource reporting
 }
 
+// buildCombinedQuotaMap aggregates per-AZ ProjectQuota CRDs into a combined lookup map.
+// Returns quotaByResourceAZ[resourceName][az] = quota value.
+func buildCombinedQuotaMap(pqs []v1alpha1.ProjectQuota) map[string]map[string]int64 {
+	result := make(map[string]map[string]int64)
+	for _, pq := range pqs {
+		az := pq.Spec.AvailabilityZone
+		for resourceName, quota := range pq.Spec.Quota {
+			if result[resourceName] == nil {
+				result[resourceName] = make(map[string]int64)
+			}
+			result[resourceName][az] = quota
+		}
+	}
+	return result
+}
+
 // buildUsageResponse constructs the Liquid API ServiceUsageReport.
 // All flavor groups are included in the report; commitment assignment only applies
 // to groups with fixed RAM/core ratio (those that accept commitments).
 // For each flavor group, three resources are reported: _ram, _cores, _instances.
+// quotaByResourceAZ is a combined map[resourceName][az] = quota from all per-AZ ProjectQuota CRDs.
 func (c *UsageCalculator) buildUsageResponse(
 	vms []VMUsageInfo,
 	vmAssignments map[string]string,
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	allAZs []liquid.AvailabilityZone,
 	infoVersion int64,
-	projectQuota *v1alpha1.ProjectQuota,
+	quotaByResourceAZ map[string]map[string]int64,
 ) liquid.ServiceUsageReport {
 	// Initialize resources map for all flavor groups
 	resources := make(map[liquid.ResourceName]*liquid.ResourceUsageReport)
@@ -497,9 +515,9 @@ func (c *UsageCalculator) buildUsageResponse(
 			}
 			if ramHasAZQuota {
 				quota := int64(-1) // default: infinite
-				if projectQuota != nil {
-					if rq, ok := projectQuota.Spec.Quota[string(ramResourceName)]; ok {
-						if q, ok := rq.PerAZ[string(az)]; ok {
+				if quotaByResourceAZ != nil {
+					if azMap, ok := quotaByResourceAZ[string(ramResourceName)]; ok {
+						if q, ok := azMap[string(az)]; ok {
 							quota = q
 						}
 					}
