@@ -493,14 +493,9 @@ func (c *UsageCalculator) buildUsageResponse(
 		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
 			for az, data := range azData {
 				if _, known := ramPerAZ[az]; !known {
-					report := &liquid.AZResourceUsageReport{}
-					if ramHasAZQuota {
-						report.Quota = Some(int64(-1))
-					}
-					ramPerAZ[az] = report
+					continue // skip VMs in AZs not in allAZs
 				}
 				ramPerAZ[az].Usage = data.ramUsage
-				ramPerAZ[az].PhysicalUsage = Some(data.ramUsage) // No overcommit for RAM
 				// Subresources are only on instances resource
 			}
 		}
@@ -520,10 +515,9 @@ func (c *UsageCalculator) buildUsageResponse(
 		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
 			for az, data := range azData {
 				if _, known := coresPerAZ[az]; !known {
-					coresPerAZ[az] = &liquid.AZResourceUsageReport{}
+					continue // skip VMs in AZs not in allAZs
 				}
 				coresPerAZ[az].Usage = data.coresUsage
-				coresPerAZ[az].PhysicalUsage = Some(data.coresUsage) // No overcommit for cores
 				// Subresources are only on instances resource
 			}
 		}
@@ -543,10 +537,9 @@ func (c *UsageCalculator) buildUsageResponse(
 		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
 			for az, data := range azData {
 				if _, known := instancesPerAZ[az]; !known {
-					instancesPerAZ[az] = &liquid.AZResourceUsageReport{}
+					continue // skip VMs in AZs not in allAZs
 				}
 				instancesPerAZ[az].Usage = data.instanceCount
-				instancesPerAZ[az].PhysicalUsage = Some(data.instanceCount)
 				instancesPerAZ[az].Subresources = data.subresources // VM details on instances resource
 			}
 		}

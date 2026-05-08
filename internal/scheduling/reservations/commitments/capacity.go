@@ -63,7 +63,7 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 	logger := LoggerFromContext(ctx)
 	for groupName, groupData := range flavorGroups {
 		smallestFlavorName := groupData.SmallestFlavor.Name
-		ramPerSlotGiB := groupData.SmallestFlavor.MemoryMB / 1024
+		memoryMBPerSlot := groupData.SmallestFlavor.MemoryMB
 		vcpusPerSlot := groupData.SmallestFlavor.VCPUs
 
 		ramAZCapacity := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(req.AllAZs))
@@ -105,7 +105,7 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			}
 
 			totalSlots := uint64(smallest.TotalCapacityVMSlots) //nolint:gosec // slot count from CRD, realistically bounded
-			ramEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots * ramPerSlotGiB}
+			ramEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots * memoryMBPerSlot / 1024}
 			coresEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots * vcpusPerSlot}
 			instancesEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots}
 			if ready {
@@ -114,7 +114,7 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 				if totalSlots > placeableSlots {
 					usedSlots = totalSlots - placeableSlots
 				}
-				ramEntry.Usage = Some[uint64](usedSlots * ramPerSlotGiB)
+				ramEntry.Usage = Some[uint64](usedSlots * memoryMBPerSlot / 1024)
 				coresEntry.Usage = Some[uint64](usedSlots * vcpusPerSlot)
 				instancesEntry.Usage = Some[uint64](usedSlots)
 			}
