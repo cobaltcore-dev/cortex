@@ -99,6 +99,15 @@
         "config/manager/kustomization.yaml"
       ],
       "enabled": false
+    },
+    {
+      "matchPackageNames": [
+        "python"
+      ],
+      "matchFileNames": [
+        ".github/actions/setup-claude-code-action/**"
+      ],
+      "enabled": false
     }
   ],
   "prHourlyLimit": 0,
