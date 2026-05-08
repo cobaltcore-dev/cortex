@@ -181,7 +181,6 @@ func (c *Controller) reconcileOne(
 	for _, f := range groupData.Flavors {
 		flavorSpecByName[f.Name] = f
 	}
-	totalCapacity := make(map[string]resource.Quantity)
 	var maxMemBytes, maxCPUCores int64
 	for _, f := range newFlavors {
 		spec, ok := flavorSpecByName[f.FlavorName]
@@ -197,11 +196,19 @@ func (c *Controller) reconcileOne(
 			maxCPUCores = cpuCores
 		}
 	}
-	if maxMemBytes > 0 {
-		totalCapacity["memory"] = *resource.NewQuantity(maxMemBytes, resource.BinarySI)
-	}
-	if maxCPUCores > 0 {
-		totalCapacity["cpu"] = *resource.NewQuantity(maxCPUCores, resource.DecimalSI)
+
+	// Only update TotalCapacity when all probes succeeded (allFresh=true).
+	// This preserves stale values across transient probe failures and ensures
+	// the CR controller can distinguish "not yet probed" (key absent) from
+	// "probed but zero capacity" (key present, value=0).
+	var totalCapacity map[string]resource.Quantity
+	if allFresh {
+		totalCapacity = map[string]resource.Quantity{
+			string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(maxMemBytes, resource.BinarySI),
+			string(v1alpha1.CommittedResourceTypeCores):  *resource.NewQuantity(maxCPUCores, resource.DecimalSI),
+		}
+	} else {
+		totalCapacity = existing.Status.TotalCapacity
 	}
 
 	patch := client.MergeFrom(existing.DeepCopy())
