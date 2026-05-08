@@ -43,6 +43,8 @@ jobs:
           use_litellm: "true"
           litellm_model: "sap/anthropic--claude-4.6-opus"
           github_token: ${{ steps.app-token.outputs.token }}
+          bot_id: "279748396"
+          bot_name: "cortex-ai-agents[bot]"
           show_full_output: "true"
       - uses: ./.github/actions/stop-litellm-proxy
         if: always()
