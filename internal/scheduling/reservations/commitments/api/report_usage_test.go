@@ -548,10 +548,10 @@ type ExpectedResourceUsage struct {
 }
 
 type ExpectedAZUsage struct {
-	Usage       uint64 // Usage in multiples of smallest flavor
-	Quota       *int64 // non-nil: verify this exact value (-1 = infinite)
-	AssertNoQuota bool  // true: verify quota field is absent
-	VMs         []ExpectedVMUsage
+	Usage         uint64 // Usage in multiples of smallest flavor
+	Quota         *int64 // non-nil: verify this exact value (-1 = infinite)
+	AssertNoQuota bool   // true: verify quota field is absent
+	VMs           []ExpectedVMUsage
 }
 
 type ExpectedVMUsage struct {
