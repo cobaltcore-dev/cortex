@@ -39,7 +39,6 @@ jobs:
           claude_args: |
             --max-turns 1000
             --permission-mode auto
-            --effort-level max
             --allowedTools "Read,Write,Edit,Bash(*),WebSearch,WebFetch"
           use_litellm: "true"
           litellm_model: "sap/anthropic--claude-4.6-opus"
