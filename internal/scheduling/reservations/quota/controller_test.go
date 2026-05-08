@@ -93,19 +93,19 @@ func TestComputeTotalUsage(t *testing.T) {
 
 	result := ctrl.computeTotalUsage(vms, flavorToGroup, flavorGroups)
 
-	// project-a: hana_v2 in az-1: 32768+65536 = 98304 MiB / 32768 = 3 units RAM, 8+16=24 cores
-	// project-a: hana_v2 in az-2: 32768 MiB / 32768 = 1 unit RAM, 8 cores
+	// project-a: hana_v2 in az-1: (32768+65536)/1024 = 96 GiB RAM, 8+16=24 cores
+	// project-a: hana_v2 in az-2: 32768/1024 = 32 GiB RAM, 8 cores
 	projectA := result["project-a"]
 	if projectA == nil {
 		t.Fatal("expected project-a in results")
 	}
 
 	ramUsage := projectA["hw_version_hana_v2_ram"]
-	if ramUsage.PerAZ["az-1"] != 3 {
-		t.Errorf("expected project-a az-1 hana_v2_ram = 3, got %d", ramUsage.PerAZ["az-1"])
+	if ramUsage.PerAZ["az-1"] != 96 {
+		t.Errorf("expected project-a az-1 hana_v2_ram = 96, got %d", ramUsage.PerAZ["az-1"])
 	}
-	if ramUsage.PerAZ["az-2"] != 1 {
-		t.Errorf("expected project-a az-2 hana_v2_ram = 1, got %d", ramUsage.PerAZ["az-2"])
+	if ramUsage.PerAZ["az-2"] != 32 {
+		t.Errorf("expected project-a az-2 hana_v2_ram = 32, got %d", ramUsage.PerAZ["az-2"])
 	}
 
 	coresUsage := projectA["hw_version_hana_v2_cores"]
@@ -116,13 +116,13 @@ func TestComputeTotalUsage(t *testing.T) {
 		t.Errorf("expected project-a az-2 hana_v2_cores = 8, got %d", coresUsage.PerAZ["az-2"])
 	}
 
-	// project-b: general in az-1: 4096/4096=1 unit RAM, 2 cores
+	// project-b: general in az-1: 4096/1024 = 4 GiB RAM, 2 cores
 	projectB := result["project-b"]
 	if projectB == nil {
 		t.Fatal("expected project-b in results")
 	}
-	if projectB["hw_version_general_ram"].PerAZ["az-1"] != 1 {
-		t.Errorf("expected project-b az-1 general_ram = 1, got %d", projectB["hw_version_general_ram"].PerAZ["az-1"])
+	if projectB["hw_version_general_ram"].PerAZ["az-1"] != 4 {
+		t.Errorf("expected project-b az-1 general_ram = 4, got %d", projectB["hw_version_general_ram"].PerAZ["az-1"])
 	}
 	if projectB["hw_version_general_cores"].PerAZ["az-1"] != 2 {
 		t.Errorf("expected project-b az-1 general_cores = 2, got %d", projectB["hw_version_general_cores"].PerAZ["az-1"])
@@ -137,12 +137,11 @@ func TestComputeTotalUsage(t *testing.T) {
 func TestComputeCRUsage(t *testing.T) {
 	ctrl := &QuotaController{Config: DefaultQuotaControllerConfig()}
 
-	// Flavor groups with SmallestFlavor.MemoryMB = 1 for simple unit conversion in tests
-	// (1 multiple = 1 MiB = 1048576 bytes)
+	// Flavor groups — MemoryMB value is no longer used for unit conversion (now fixed at 1 GiB).
 	testFlavorGroups := map[string]compute.FlavorGroupFeature{
 		"hana_v2": {
-			SmallestFlavor: compute.FlavorInGroup{Name: "m1.hana_v2.small", MemoryMB: 1},
-			Flavors:        []compute.FlavorInGroup{{Name: "m1.hana_v2.small", MemoryMB: 1}},
+			SmallestFlavor: compute.FlavorInGroup{Name: "m1.hana_v2.small", MemoryMB: 1024},
+			Flavors:        []compute.FlavorInGroup{{Name: "m1.hana_v2.small", MemoryMB: 1024}},
 		},
 	}
 
@@ -156,7 +155,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusConfirmed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("5Mi")},
+				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("5Gi")},
 			},
 		},
 		{
@@ -168,7 +167,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusGuaranteed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("3Mi")},
+				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("3Gi")},
 			},
 		},
 		{
@@ -193,7 +192,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusConfirmed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("5Mi")},
+				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("5Gi")},
 			},
 		},
 		// Pending state — should be excluded by state filter
@@ -206,7 +205,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusPending,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("2Mi")},
+				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("2Gi")},
 			},
 		},
 	}
@@ -554,9 +553,9 @@ func TestAccumulateAddedVM_KnownFlavor(t *testing.T) {
 		t.Fatal("expected delta for project-a")
 	}
 
-	// 32768 MiB / 32768 = 1 unit RAM
-	if delta.increments["hw_version_hana_v2_ram"]["az-1"] != 1 {
-		t.Errorf("expected ram increment = 1, got %d", delta.increments["hw_version_hana_v2_ram"]["az-1"])
+	// 32768 MiB / 1024 = 32 GiB
+	if delta.increments["hw_version_hana_v2_ram"]["az-1"] != 32 {
+		t.Errorf("expected ram increment = 32, got %d", delta.increments["hw_version_hana_v2_ram"]["az-1"])
 	}
 	if delta.increments["hw_version_hana_v2_cores"]["az-1"] != 8 {
 		t.Errorf("expected cores increment = 8, got %d", delta.increments["hw_version_hana_v2_cores"]["az-1"])

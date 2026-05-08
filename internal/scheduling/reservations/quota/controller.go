@@ -418,17 +418,11 @@ func (c *QuotaController) accumulateAddedVM(
 	if !ok {
 		return // Flavor not in any group
 	}
-	fg, ok := flavorGroups[groupName]
-	if !ok {
+	if _, ok := flavorGroups[groupName]; !ok {
 		return
 	}
 
-	unitSizeMiB := int64(fg.SmallestFlavor.MemoryMB) //nolint:gosec // MemoryMB is always within int64 range
-	if unitSizeMiB == 0 {
-		return
-	}
-
-	ramUnits, coresAmount := vmResourceUnits(vm.Resources, unitSizeMiB)
+	ramUnits, coresAmount := vmResourceUnits(vm.Resources)
 
 	delta := projectDeltas[vm.ProjectID]
 	if delta == nil {
@@ -523,19 +517,13 @@ func (c *QuotaController) accumulateRemovedVM(
 	if !ok {
 		return // Flavor not in any group
 	}
-	fg, ok := flavorGroups[groupName]
-	if !ok {
+	if _, ok := flavorGroups[groupName]; !ok {
 		return
 	}
 
 	// Compute commitment units from the resolved flavor resources
-	unitSizeMiB := int64(fg.SmallestFlavor.MemoryMB) //nolint:gosec // MemoryMB is always within int64 range
-	if unitSizeMiB == 0 {
-		return
-	}
-
-	ramUnits := int64(info.RAMMiB) / unitSizeMiB //nolint:gosec // safe
-	coresAmount := int64(info.VCPUs)             //nolint:gosec // safe
+	ramUnits := int64(info.RAMMiB) / 1024 //nolint:gosec // safe
+	coresAmount := int64(info.VCPUs)      //nolint:gosec // safe
 
 	delta := projectDeltas[info.ProjectID]
 	if delta == nil {
@@ -700,19 +688,14 @@ func (c *QuotaController) computeTotalUsage(
 		if !ok {
 			continue // Flavor not in any tracked group
 		}
-		fg, ok := flavorGroups[groupName]
-		if !ok {
+		if _, ok := flavorGroups[groupName]; !ok {
 			continue
-		}
-		if fg.SmallestFlavor.MemoryMB == 0 {
-			continue // Invalid group config
 		}
 
 		ramResourceName := commitments.ResourceNameRAM(groupName)
 		coresResourceName := commitments.ResourceNameCores(groupName)
 
-		unitSizeMiB := int64(fg.SmallestFlavor.MemoryMB) //nolint:gosec // safe
-		ramUnits, coresAmount := vmResourceUnits(vm.Resources, unitSizeMiB)
+		ramUnits, coresAmount := vmResourceUnits(vm.Resources)
 
 		if _, ok := result[vm.ProjectID]; !ok {
 			result[vm.ProjectID] = make(map[string]v1alpha1.ResourceQuotaUsage)
@@ -783,14 +766,12 @@ func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavo
 			if !ok {
 				continue
 			}
-			// Convert bytes to commitment units (multiples of smallest flavor)
+			// Convert bytes to GiB (1 GiB per commitment unit)
 			usedBytes := memQty.Value()
-			fg, ok := flavorGroups[spec.FlavorGroupName]
-			if !ok || fg.SmallestFlavor.MemoryMB == 0 {
+			if _, ok := flavorGroups[spec.FlavorGroupName]; !ok {
 				continue
 			}
-			unitSizeBytes := int64(fg.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec // safe
-			usedAmount = usedBytes / unitSizeBytes
+			usedAmount = usedBytes / (1024 * 1024 * 1024)
 		case v1alpha1.CommittedResourceTypeCores:
 			resourceName = commitments.ResourceNameCores(spec.FlavorGroupName)
 			cpuQty, ok := cr.Status.UsedResources["cpu"]
@@ -889,16 +870,14 @@ func (c *QuotaController) updateProjectQuotaStatusWithRetry(
 	})
 }
 
-// vmResourceUnits computes RAM commitment units and cores from a VM's resources.
-// RAM is converted from bytes (resource.Quantity) to MiB, then divided by unitSizeMiB
-// (the smallest flavor's memory in MiB for the flavor group) to get commitment units.
-func vmResourceUnits(resources map[string]resource.Quantity, unitSizeMiB int64) (ramUnits, cores int64) {
+// vmResourceUnits computes RAM commitment units (GiB) and cores from a VM's resources.
+func vmResourceUnits(resources map[string]resource.Quantity) (ramGiB, cores int64) {
 	memQty := resources["memory"]
 	serverRAMMiB := memQty.Value() / (1024 * 1024) // bytes to MiB
-	ramUnits = serverRAMMiB / unitSizeMiB          // commitment units
+	ramGiB = serverRAMMiB / 1024                   // MiB to GiB (1 GiB per unit)
 	vcpuQty := resources["vcpus"]
 	cores = vcpuQty.Value()
-	return ramUnits, cores
+	return ramGiB, cores
 }
 
 // buildFlavorToGroupMap builds a flavorName → flavorGroupName lookup from flavor groups.
