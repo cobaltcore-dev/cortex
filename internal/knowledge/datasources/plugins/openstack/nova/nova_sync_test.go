@@ -12,7 +12,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	testlibDB "github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 )
 
 type mockNovaAPI struct{}
@@ -54,6 +53,10 @@ func (m *mockNovaAPI) GetAllMigrations(ctx context.Context) ([]Migration, error)
 
 func (m *mockNovaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 	return []Aggregate{{Name: "aggregate1"}}, nil
+}
+
+func (m *mockNovaAPI) GetAllImages(ctx context.Context) ([]Image, error) {
+	return []Image{{ID: "img-1", OSType: "windows8Server64Guest"}}, nil
 }
 
 func TestNovaSyncer_Init(t *testing.T) {
@@ -133,7 +136,7 @@ func TestNovaSyncer_SyncDeletedServers(t *testing.T) {
 		},
 		{
 			Name:                              "custom time",
-			DeletedServersChangesSinceMinutes: testlib.Ptr(60),
+			DeletedServersChangesSinceMinutes: new(60),
 			ExpectedAmountOfDeletedServers:    1,
 		},
 	}
@@ -266,5 +269,37 @@ func TestNovaSyncer_SyncAggregates(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("expected 1 aggregate, got %d", n)
+	}
+}
+
+func TestNovaSyncer_SyncImages(t *testing.T) {
+	dbEnv := testlibDB.SetupDBEnv(t)
+	testDB := db.DB{DbMap: dbEnv.DbMap}
+	defer dbEnv.Close()
+	mon := datasources.Monitor{}
+	syncer := &NovaSyncer{
+		DB:   testDB,
+		Mon:  mon,
+		Conf: v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeImages},
+		API:  &mockNovaAPI{},
+	}
+
+	ctx := t.Context()
+	if err := syncer.Init(ctx); err != nil {
+		t.Fatalf("failed to init images syncer: %v", err)
+	}
+	n, err := syncer.Sync(ctx)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("expected 1 image, got %d", n)
+	}
+	var images []Image
+	if _, err := testDB.Select(&images, "SELECT * FROM "+Image{}.TableName()); err != nil {
+		t.Fatalf("select images: %v", err)
+	}
+	if len(images) != 1 || images[0].ID != "img-1" || images[0].OSType != "windows8Server64Guest" {
+		t.Errorf("unexpected images in DB: %+v", images)
 	}
 }

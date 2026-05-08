@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -34,7 +33,7 @@ func TestHypervisorResourceRouter_Match(t *testing.T) {
 		},
 		{
 			name: "matching AZ pointer",
-			obj: testlib.Ptr(hv1.Hypervisor{
+			obj: new(hv1.Hypervisor{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{"topology.kubernetes.io/zone": "qa-de-1a"},
 				},
@@ -135,7 +134,7 @@ func TestHistoryResourceRouter_Match(t *testing.T) {
 		},
 		{
 			name: "matching AZ pointer",
-			obj: testlib.Ptr(v1alpha1.History{
+			obj: new(v1alpha1.History{
 				Spec: v1alpha1.HistorySpec{
 					AvailabilityZone: &az,
 				},
@@ -218,6 +217,101 @@ func TestHistoryResourceRouter_Match(t *testing.T) {
 	}
 }
 
+func TestFlavorGroupCapacityResourceRouter_Match(t *testing.T) {
+	router := FlavorGroupCapacityResourceRouter{}
+
+	tests := []struct {
+		name      string
+		obj       any
+		labels    map[string]string
+		wantMatch bool
+		wantErr   bool
+	}{
+		{
+			name: "matching AZ",
+			obj: v1alpha1.FlavorGroupCapacity{
+				Spec: v1alpha1.FlavorGroupCapacitySpec{
+					AvailabilityZone: "qa-de-1b",
+				},
+			},
+			labels:    map[string]string{"availabilityZone": "qa-de-1b"},
+			wantMatch: true,
+		},
+		{
+			name: "matching AZ pointer",
+			obj: &v1alpha1.FlavorGroupCapacity{
+				Spec: v1alpha1.FlavorGroupCapacitySpec{
+					AvailabilityZone: "qa-de-1b",
+				},
+			},
+			labels:    map[string]string{"availabilityZone": "qa-de-1b"},
+			wantMatch: true,
+		},
+		{
+			name: "non-matching AZ",
+			obj: v1alpha1.FlavorGroupCapacity{
+				Spec: v1alpha1.FlavorGroupCapacitySpec{
+					AvailabilityZone: "qa-de-1b",
+				},
+			},
+			labels:    map[string]string{"availabilityZone": "qa-de-1a"},
+			wantMatch: false,
+		},
+		{
+			name:    "not a FlavorGroupCapacity",
+			obj:     "not-a-flavor-group-capacity",
+			labels:  map[string]string{"availabilityZone": "qa-de-1b"},
+			wantErr: true,
+		},
+		{
+			name: "cluster missing availabilityZone label",
+			obj: v1alpha1.FlavorGroupCapacity{
+				Spec: v1alpha1.FlavorGroupCapacitySpec{
+					AvailabilityZone: "qa-de-1b",
+				},
+			},
+			labels:  map[string]string{},
+			wantErr: true,
+		},
+		{
+			name: "FlavorGroupCapacity missing availability zone",
+			obj: v1alpha1.FlavorGroupCapacity{
+				Spec: v1alpha1.FlavorGroupCapacitySpec{},
+			},
+			labels:  map[string]string{"availabilityZone": "qa-de-1b"},
+			wantErr: true,
+		},
+		{
+			name:    "typed nil pointer doesn't panic",
+			obj:     (*v1alpha1.FlavorGroupCapacity)(nil),
+			labels:  map[string]string{"availabilityZone": "qa-de-1b"},
+			wantErr: true,
+		},
+		{
+			name:      "nil object doesn't panic",
+			obj:       nil,
+			labels:    map[string]string{"availabilityZone": "qa-de-1b"},
+			wantErr:   true,
+			wantMatch: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			match, err := router.Match(tt.obj, tt.labels)
+			if tt.wantErr && err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if match != tt.wantMatch {
+				t.Errorf("expected match=%v, got %v", tt.wantMatch, match)
+			}
+		})
+	}
+}
+
 func TestReservationsResourceRouter_Match(t *testing.T) {
 	router := ReservationsResourceRouter{}
 
@@ -240,7 +334,7 @@ func TestReservationsResourceRouter_Match(t *testing.T) {
 		},
 		{
 			name: "matching AZ pointer",
-			obj: testlib.Ptr(v1alpha1.Reservation{
+			obj: new(v1alpha1.Reservation{
 				Spec: v1alpha1.ReservationSpec{
 					AvailabilityZone: "qa-de-1a",
 				},

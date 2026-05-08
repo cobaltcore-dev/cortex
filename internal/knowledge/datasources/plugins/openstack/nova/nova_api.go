@@ -10,14 +10,17 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	glanceimages "github.com/gophercloud/gophercloud/v2/openstack/image/v2/images"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -37,6 +40,8 @@ type NovaAPI interface {
 	GetAllMigrations(ctx context.Context) ([]Migration, error)
 	// Get all aggregates.
 	GetAllAggregates(ctx context.Context) ([]Aggregate, error)
+	// Get all Glance images with pre-computed os_type.
+	GetAllImages(ctx context.Context) ([]Image, error)
 }
 
 // API for OpenStack Nova.
@@ -47,8 +52,10 @@ type novaAPI struct {
 	keystoneClient keystone.KeystoneClient
 	// Nova configuration.
 	conf v1alpha1.NovaDatasource
-	// Authenticated OpenStack service client to fetch the data.
+	// Authenticated OpenStack compute service client.
 	sc *gophercloud.ServiceClient
+	// Authenticated Glance image service client (only used for NovaDatasourceTypeImages).
+	glance *gophercloud.ServiceClient
 }
 
 func NewNovaAPI(mon datasources.Monitor, k keystone.KeystoneClient, conf v1alpha1.NovaDatasource) NovaAPI {
@@ -77,6 +84,16 @@ func (api *novaAPI) Init(ctx context.Context) error {
 		// We need that to find placement resource providers for hypervisors.
 		// Since 2.61, the extra_specs are returned in the flavor details.
 		Microversion: "2.61",
+	}
+	// Initialize the Glance client only when this datasource is used for images.
+	if api.conf.Type == v1alpha1.NovaDatasourceTypeImages {
+		glanceClient, err := openstack.NewImageV2(provider, gophercloud.EndpointOpts{
+			Availability: gophercloud.Availability(sameAsKeystone),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create Glance client: %w", err)
+		}
+		api.glance = glanceClient
 	}
 	return nil
 }
@@ -435,4 +452,73 @@ func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 		}
 	}
 	return aggregates, nil
+}
+
+// GetAllImages fetches all Glance images and returns them with pre-computed os_type.
+// See deriveOSType for the derivation logic.
+func (api *novaAPI) GetAllImages(ctx context.Context) ([]Image, error) {
+	if api.glance == nil {
+		return nil, fmt.Errorf("glance client not initialized: datasource type must be %q", v1alpha1.NovaDatasourceTypeImages)
+	}
+
+	label := Image{}.TableName()
+	slog.Info("fetching nova data", "label", label)
+	if api.mon.RequestTimer != nil {
+		hist := api.mon.RequestTimer.WithLabelValues(label)
+		timer := prometheus.NewTimer(hist)
+		defer timer.ObserveDuration()
+	}
+
+	var result []Image
+	opts := glanceimages.ListOpts{Limit: 1000}
+	err := glanceimages.List(api.glance, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+		imgs, err := glanceimages.ExtractImages(page)
+		if err != nil {
+			return false, err
+		}
+		for _, img := range imgs {
+			result = append(result, Image{
+				ID:     img.ID,
+				OSType: deriveOSType(img.Properties, img.Tags),
+			})
+		}
+		return true, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list Glance images: %w", err)
+	}
+	slog.Info("fetched", "label", label, "count", len(result))
+	return result, nil
+}
+
+// deriveOSType computes os_type from image properties and tags.
+// Mirrors the logic of OSTypeProber.findFromImage in github.com/sapcc/go-bits/liquidapi,
+// with two intentional simplifications:
+//  1. No regex validation on vmware_ostype — Nova validates that field at VM boot time,
+//     so any value stored in Glance is already valid.
+//  2. Volume-booted VMs are not yet supported — os_type will be "unknown" for them.
+//     Supporting them would require per-VM Cinder calls (volume_image_metadata.vmware_ostype)
+//     either at server sync time or via a dedicated datasource.
+func deriveOSType(properties map[string]any, tags []string) string {
+	if v, ok := properties["vmware_ostype"]; ok {
+		if s, ok := v.(string); ok && s != "" {
+			return s
+		}
+	}
+	var osType string
+	for _, tag := range tags {
+		if after, ok := strings.CutPrefix(tag, "ostype:"); ok {
+			if osType == "" {
+				osType = after
+			} else {
+				// multiple ostype: tags → ambiguous, fall through to unknown
+				osType = ""
+				break
+			}
+		}
+	}
+	if osType != "" {
+		return osType
+	}
+	return "unknown"
 }

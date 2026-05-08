@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-05-07 — [#814](https://github.com/cobaltcore-dev/cortex/pull/814)
+
+### cortex v0.0.47 (sha-b8cecd0c)
+
+Non-breaking changes:
+- Add `ProjectQuota` CRD with per-resource, per-AZ quota breakdown and PAYG (pay-as-you-go) calculation support ([#796](https://github.com/cobaltcore-dev/cortex/pull/796))
+- Add `FlavorGroupCapacity` CRD and background capacity controller that pre-computes per-flavor VM slot capacity for each (flavor group × AZ) pair on a configurable interval ([#728](https://github.com/cobaltcore-dev/cortex/pull/728))
+- Report capacity from `FlavorGroupCapacity` CRDs in `POST /commitments/v1/report-capacity` — replaces placeholder zeros with real values; stale CRDs report last-known capacity
+- Move CommittedResource usage computation from the API handler into a dedicated reconciler that persists results in CRD status, making usage data available to both the LIQUID API and quota controller ([#800](https://github.com/cobaltcore-dev/cortex/pull/800))
+- Add KVM OS version as a label to KVM host capacity metrics ([#810](https://github.com/cobaltcore-dev/cortex/pull/810))
+- Add KVM project usage metrics (running VMs and resource usage per project/flavor) ([#803](https://github.com/cobaltcore-dev/cortex/pull/803))
+- Add `domain_id` and name to vmware project capacity metrics ([#802](https://github.com/cobaltcore-dev/cortex/pull/802))
+- Include `domain_id` in vmware project commitment KPI ([#806](https://github.com/cobaltcore-dev/cortex/pull/806))
+- Add weighing explainer for scheduling decisions, surfacing per-host scoring rationale ([#808](https://github.com/cobaltcore-dev/cortex/pull/808))
+- Move KVM host capacity metric into infrastructure plugins package ([#809](https://github.com/cobaltcore-dev/cortex/pull/809))
+- Remove deprecated per-compute infrastructure KPIs (`flavor_running_vms`, `host_running_vms`, `resource_capacity_kvm`) ([#807](https://github.com/cobaltcore-dev/cortex/pull/807))
+- Rename hypervisor `ClusterRoleBinding` objects to avoid `roleRef` conflicts on redeploy ([#804](https://github.com/cobaltcore-dev/cortex/pull/804))
+- Move bundle-specific RBAC templates from the library chart into individual bundle charts (`cortex-ironcore`, `cortex-pods`) ([#797](https://github.com/cobaltcore-dev/cortex/pull/797))
+- Move webhook templates from library chart back into `cortex-nova` bundle (reverts earlier move) ([#805](https://github.com/cobaltcore-dev/cortex/pull/805))
+- Fix: add `identity-domains` as a KPI dependency
+- Fix: remove `ignoreAllocations` from kvm-report-capacity pipeline to unblock deployment against older admission webhook ([#812](https://github.com/cobaltcore-dev/cortex/pull/812))
+- Fix: suppress nova scheduling alerts on transient `no such host` DNS errors
+- Replace `testlib.Ptr` helper with native `new()` across test files ([#801](https://github.com/cobaltcore-dev/cortex/pull/801))
+
+### cortex-nova v0.0.60 (sha-b8cecd0c)
+
+Includes updated chart cortex v0.0.47.
+
+Non-breaking changes:
+- Add Prometheus datasource for KVM project usage metrics
+- Add KVM project usage KPI CRD templates
+- Add KVM project utilization KPI CRD templates
+- Update `cortex-nova` RBAC to grant permissions for `FlavorGroupCapacity` and `ProjectQuota` CRDs
+
 ## 2026-05-04 — [#793](https://github.com/cobaltcore-dev/cortex/pull/793)
 
 ### cortex v0.0.46 (sha-ab6eb45d)

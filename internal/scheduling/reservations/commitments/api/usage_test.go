@@ -19,6 +19,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -119,6 +121,13 @@ func TestUsageCalculator_CalculateUsage(t *testing.T) {
 			k8sClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(objects...).
+				WithIndex(&v1alpha1.CommittedResource{}, "spec.projectID", func(obj client.Object) []string {
+					cr, ok := obj.(*v1alpha1.CommittedResource)
+					if !ok || cr.Spec.ProjectID == "" {
+						return nil
+					}
+					return []string{cr.Spec.ProjectID}
+				}).
 				Build()
 
 			// Setup mock Nova client
@@ -301,12 +310,86 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 			k8sClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(objects...).
+				WithStatusSubresource(&v1alpha1.CommittedResource{}).
+				WithIndex(&v1alpha1.CommittedResource{}, "spec.commitmentUUID", func(obj client.Object) []string {
+					cr, ok := obj.(*v1alpha1.CommittedResource)
+					if !ok {
+						return nil
+					}
+					return []string{cr.Spec.CommitmentUUID}
+				}).
+				WithIndex(&v1alpha1.CommittedResource{}, "spec.projectID", func(obj client.Object) []string {
+					cr, ok := obj.(*v1alpha1.CommittedResource)
+					if !ok || cr.Spec.ProjectID == "" {
+						return nil
+					}
+					return []string{cr.Spec.ProjectID}
+				}).
 				Build()
 
 			dbClient := &mockUsageDBClient{
 				rows: map[string][]commitments.VMRow{
 					tt.projectID: tt.vms,
 				},
+			}
+
+			// Create CommittedResource CRDs and run the usage reconciler so that
+			// CalculateUsage can read pre-computed assignments from CRD status.
+			seen := make(map[string]bool)
+			for _, r := range tt.reservations {
+				if r.Spec.CommittedResourceReservation == nil {
+					continue
+				}
+				uuid := r.Spec.CommittedResourceReservation.CommitmentUUID
+				if seen[uuid] {
+					continue
+				}
+				seen[uuid] = true
+				amount := resource.MustParse("4Gi")
+				spec := v1alpha1.CommittedResourceSpec{
+					CommitmentUUID:   uuid,
+					ProjectID:        r.Spec.CommittedResourceReservation.ProjectID,
+					DomainID:         "test-domain",
+					AvailabilityZone: r.Spec.AvailabilityZone,
+					FlavorGroupName:  r.Spec.CommittedResourceReservation.ResourceGroup,
+					ResourceType:     v1alpha1.CommittedResourceTypeMemory,
+					State:            v1alpha1.CommitmentStatusConfirmed,
+					Amount:           amount,
+					StartTime:        r.Spec.StartTime,
+					EndTime:          r.Spec.EndTime,
+				}
+				cr := &v1alpha1.CommittedResource{
+					ObjectMeta: metav1.ObjectMeta{Name: "cr-" + uuid},
+					Spec:       spec,
+				}
+				if err := k8sClient.Create(ctx, cr); err != nil {
+					t.Fatalf("failed to create CommittedResource %s: %v", uuid, err)
+				}
+				cr.Status = v1alpha1.CommittedResourceStatus{
+					AcceptedSpec: &spec,
+					Conditions: []metav1.Condition{
+						{
+							Type:               v1alpha1.CommittedResourceConditionReady,
+							Status:             metav1.ConditionTrue,
+							Reason:             v1alpha1.CommittedResourceReasonAccepted,
+							ObservedGeneration: 0,
+							LastTransitionTime: metav1.Now(),
+						},
+					},
+				}
+				if err := k8sClient.Status().Update(ctx, cr); err != nil {
+					t.Fatalf("failed to update CommittedResource status %s: %v", uuid, err)
+				}
+				rec := &commitments.UsageReconciler{
+					Client:  k8sClient,
+					Conf:    commitments.UsageReconcilerConfig{CooldownInterval: metav1.Duration{Duration: 0}},
+					UsageDB: dbClient,
+					Monitor: commitments.NewUsageReconcilerMonitor(),
+				}
+				req := ctrl.Request{NamespacedName: types.NamespacedName{Name: cr.Name}}
+				if _, err := rec.Reconcile(ctx, req); err != nil {
+					t.Fatalf("usage reconciler failed for %s: %v", uuid, err)
+				}
 			}
 
 			calc := commitments.NewUsageCalculator(k8sClient, dbClient)
@@ -354,10 +437,9 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 }
 
 // TestUsageMultipleCalculation_FloorDivision tests that RAM usage is calculated
-// using floor division to handle Nova's memory overhead correctly.
-// Nova flavors like "2 GiB" actually have 2032 MiB (not 2048) due to overhead.
-// A "4 GiB" flavor has 4080 MiB, which is 2.007× the base unit.
-// Floor division ensures 4080 / 2032 = 2 (not 3 from ceiling).
+// by adding the 16 MiB video RAM reservation before dividing, matching actual flavor sizing.
+// Nova flavors like "4 GiB" have 4080 MiB (4096 - 16 for hw_video:ram_max_mb=16).
+// Adding 16 MiB restores the exact GiB multiple before integer division.
 func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 	log.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
 	ctx := context.Background()
@@ -378,7 +460,7 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 		expectedInstances uint64
 	}{
 		{
-			name: "single smallest flavor - 1 unit",
+			name: "single smallest flavor - 2 units",
 			vms: []commitments.VMRow{
 				{
 					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
@@ -387,12 +469,12 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 					FlavorName: "g_k_c1_m2_v2", FlavorRAM: 2032, FlavorVCPUs: 1,
 				},
 			},
-			expectedRAM:       1,
+			expectedRAM:       2,
 			expectedCores:     1,
 			expectedInstances: 1,
 		},
 		{
-			name: "2x flavor with overhead - floor(4080/2032) = 2 units, not 3",
+			name: "2x flavor with overhead - (4080+16)/1024 = 4 GiB",
 			vms: []commitments.VMRow{
 				{
 					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
@@ -401,7 +483,7 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 					FlavorName: "g_k_c2_m4_v2", FlavorRAM: 4080, FlavorVCPUs: 2,
 				},
 			},
-			expectedRAM:       2, // floor(4080/2032) = 2, NOT 3 (ceiling would give 3)
+			expectedRAM:       4, // (4080+16)/1024 = 4
 			expectedCores:     2,
 			expectedInstances: 1,
 		},
@@ -433,12 +515,10 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 					FlavorName: "g_k_c16_m32_v2", FlavorRAM: 32752, FlavorVCPUs: 16,
 				},
 			},
-			// floor(2032/2032) + floor(4080/2032) + floor(16368/2032) + floor(32752/2032)
-			// = 1 + 2 + 8 + 16 = 27 (matches sum of vCPUs: 1+2+4+16=23... wait, that's not right)
-			// Actually cores = 1+2+4+16 = 23
-			// RAM units = 1+2+8+16 = 27
-			// These don't match because vCPUs and RAM have different ratios per flavor!
-			expectedRAM:       27, // 1 + 2 + 8 + 16
+			// (2032+16)/1024 + (4080+16)/1024 + (16368+16)/1024 + (32752+16)/1024
+			// = 2 + 4 + 16 + 32 = 54
+			// Cores: 1 + 2 + 4 + 16 = 23
+			expectedRAM:       54, // 2 + 4 + 16 + 32
 			expectedCores:     23, // 1 + 2 + 4 + 16
 			expectedInstances: 4,
 		},
@@ -465,6 +545,13 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 			k8sClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(objects...).
+				WithIndex(&v1alpha1.CommittedResource{}, "spec.projectID", func(obj client.Object) []string {
+					cr, ok := obj.(*v1alpha1.CommittedResource)
+					if !ok || cr.Spec.ProjectID == "" {
+						return nil
+					}
+					return []string{cr.Spec.ProjectID}
+				}).
 				Build()
 
 			dbClient := &mockUsageDBClient{

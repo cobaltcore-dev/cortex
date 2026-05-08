@@ -288,7 +288,7 @@ groups:
         pipeline status and logs for more details.
 
   - alert: CortexNovaDoesntFindValidKVMHosts
-    expr: sum by (az, hvtype) (increase(cortex_vm_faults{hvtype=~"CH|QEMU",faultmsg=~".*No valid host was found.*"}[5m])) > 0
+    expr: sum by (az, hvtype) (increase(cortex_vm_faults{hvtype=~"CH|QEMU",faultmsg=~".*No valid host was found.*",faultmsg!~".*No such host.*"}[5m])) > 0
     for: 5m
     labels:
       context: scheduling

@@ -78,16 +78,15 @@ func TestHandleInfo_MethodNotAllowed(t *testing.T) {
 }
 
 func TestHandleInfo_InvalidFlavorMemory(t *testing.T) {
-	// Test that a 500 Internal Server Error is returned when a flavor group has invalid data.
-	//
-	// A flavor with memoryMB=0 is invalid and should trigger an HTTP 500 error.
-	// Such data could occur from a bug in the flavor groups extractor.
+	// Test that the info endpoint succeeds even when a flavor group has memoryMB=0.
+	// With the fixed GiB unit, we no longer reject zero-memory flavors at the info level;
+	// they result in zero capacity at the capacity reporting level instead.
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add scheme: %v", err)
 	}
 
-	// Create flavor group with memoryMB=0 (invalid data that could come from a buggy extractor)
+	// Create flavor group with memoryMB=0 (edge case from a buggy extractor)
 	features := []map[string]interface{}{
 		{
 			"name": "invalid_group",
@@ -132,9 +131,9 @@ func TestHandleInfo_InvalidFlavorMemory(t *testing.T) {
 	resp := w.Result()
 	defer resp.Body.Close()
 
-	// Should return 500 Internal Server Error when unit creation fails
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Errorf("expected status code %d (Internal Server Error), got %d", http.StatusInternalServerError, resp.StatusCode)
+	// Should return 200 OK — zero-memory flavor no longer causes an error
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status code %d (OK), got %d", http.StatusOK, resp.StatusCode)
 	}
 }
 
@@ -194,11 +193,11 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 		WithObjects(knowledge).
 		Build()
 
-	// hana_fixed: ram accepts commitments; v2_variable: nothing accepts commitments
+	// hana_fixed: ram accepts commitments and has quota; v2_variable: nothing accepts commitments
 	cfg := commitments.DefaultAPIConfig()
 	cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
 		"hana_fixed": {
-			RAM:       commitments.ResourceTypeConfig{HandlesCommitments: true, HasCapacity: true},
+			RAM:       commitments.ResourceTypeConfig{HandlesCommitments: true, HasCapacity: true, HasQuota: true},
 			Cores:     commitments.ResourceTypeConfig{HasCapacity: true},
 			Instances: commitments.ResourceTypeConfig{HasCapacity: true},
 		},
@@ -230,6 +229,7 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 		t.Fatalf("expected 6 resources (3 per flavor group), got %d", len(serviceInfo.Resources))
 	}
 
+	// Test RAM resource: hw_version_hana_fixed_ram (fixed ratio → commitments + quota)
 	ramResource, ok := serviceInfo.Resources["hw_version_hana_fixed_ram"]
 	if !ok {
 		t.Fatal("expected hw_version_hana_fixed_ram resource to exist")
@@ -240,7 +240,14 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 	if !ramResource.HandlesCommitments {
 		t.Error("hw_version_hana_fixed_ram: expected HandlesCommitments=true (set in config)")
 	}
+	if ramResource.Topology != liquid.AZSeparatedTopology {
+		t.Errorf("hw_version_hana_fixed_ram: expected Topology=%q, got %q", liquid.AZSeparatedTopology, ramResource.Topology)
+	}
+	if !ramResource.HasQuota {
+		t.Error("hw_version_hana_fixed_ram: expected HasQuota=true (fixed ratio groups accept quotas)")
+	}
 
+	// Test Cores resource: hw_version_hana_fixed_cores (always AZAwareTopology, no quota)
 	coresResource, ok := serviceInfo.Resources["hw_version_hana_fixed_cores"]
 	if !ok {
 		t.Fatal("expected hw_version_hana_fixed_cores resource to exist")
@@ -251,7 +258,14 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 	if coresResource.HandlesCommitments {
 		t.Error("hw_version_hana_fixed_cores: expected HandlesCommitments=false")
 	}
+	if coresResource.Topology != liquid.AZAwareTopology {
+		t.Errorf("hw_version_hana_fixed_cores: expected Topology=%q, got %q", liquid.AZAwareTopology, coresResource.Topology)
+	}
+	if coresResource.HasQuota {
+		t.Error("hw_version_hana_fixed_cores: expected HasQuota=false")
+	}
 
+	// Test Instances resource: hw_version_hana_fixed_instances (always AZAwareTopology, no quota)
 	instancesResource, ok := serviceInfo.Resources["hw_version_hana_fixed_instances"]
 	if !ok {
 		t.Fatal("expected hw_version_hana_fixed_instances resource to exist")
@@ -261,6 +275,12 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 	}
 	if instancesResource.HandlesCommitments {
 		t.Error("hw_version_hana_fixed_instances: expected HandlesCommitments=false")
+	}
+	if instancesResource.Topology != liquid.AZAwareTopology {
+		t.Errorf("hw_version_hana_fixed_instances: expected Topology=%q, got %q", liquid.AZAwareTopology, instancesResource.Topology)
+	}
+	if instancesResource.HasQuota {
+		t.Error("hw_version_hana_fixed_instances: expected HasQuota=false")
 	}
 
 	// v2_variable is covered by "*" wildcard: HasCapacity=true, HandlesCommitments=false
@@ -274,6 +294,12 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 	if v2RamResource.HandlesCommitments {
 		t.Error("hw_version_v2_variable_ram: expected HandlesCommitments=false (not in config)")
 	}
+	if v2RamResource.Topology != liquid.AZAwareTopology {
+		t.Errorf("hw_version_v2_variable_ram: expected Topology=%q, got %q", liquid.AZAwareTopology, v2RamResource.Topology)
+	}
+	if v2RamResource.HasQuota {
+		t.Error("hw_version_v2_variable_ram: expected HasQuota=false (variable ratio)")
+	}
 
 	v2CoresResource, ok := serviceInfo.Resources["hw_version_v2_variable_cores"]
 	if !ok {
@@ -282,6 +308,15 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 	if !v2CoresResource.HasCapacity {
 		t.Error("hw_version_v2_variable_cores: expected HasCapacity=true")
 	}
+	if v2CoresResource.HandlesCommitments {
+		t.Error("hw_version_v2_variable_cores: expected HandlesCommitments=false")
+	}
+	if v2CoresResource.Topology != liquid.AZAwareTopology {
+		t.Errorf("hw_version_v2_variable_cores: expected Topology=%q, got %q", liquid.AZAwareTopology, v2CoresResource.Topology)
+	}
+	if v2CoresResource.HasQuota {
+		t.Error("hw_version_v2_variable_cores: expected HasQuota=false")
+	}
 
 	v2InstancesResource, ok := serviceInfo.Resources["hw_version_v2_variable_instances"]
 	if !ok {
@@ -289,5 +324,14 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 	}
 	if !v2InstancesResource.HasCapacity {
 		t.Error("hw_version_v2_variable_instances: expected HasCapacity=true")
+	}
+	if v2InstancesResource.HandlesCommitments {
+		t.Error("hw_version_v2_variable_instances: expected HandlesCommitments=false")
+	}
+	if v2InstancesResource.Topology != liquid.AZAwareTopology {
+		t.Errorf("hw_version_v2_variable_instances: expected Topology=%q, got %q", liquid.AZAwareTopology, v2InstancesResource.Topology)
+	}
+	if v2InstancesResource.HasQuota {
+		t.Error("hw_version_v2_variable_instances: expected HasQuota=false")
 	}
 }

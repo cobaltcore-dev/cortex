@@ -109,19 +109,24 @@ func (m *ReservationManager) ApplyCommitmentState(
 
 	nextSlotIndex := GetNextSlotIndex(existing)
 
-	// Phase 3 (DELETE): Delete inconsistent reservations (wrong flavor group/project)
+	// Phase 3 (DELETE): Delete inconsistent reservations (wrong flavor group, project, or AZ).
+	// AZ is included because the reservation is pinned to a specific host; changing AZ requires
+	// re-placement on a host in the new AZ — patching the spec field in place is not sufficient.
 	// They will be recreated with correct metadata in subsequent phases.
 	var validReservations []v1alpha1.Reservation
 	for _, res := range existing {
 		if res.Spec.CommittedResourceReservation.ResourceGroup != desiredState.FlavorGroupName ||
-			res.Spec.CommittedResourceReservation.ProjectID != desiredState.ProjectID {
-			log.Info("Found a reservation with wrong flavor group or project, delete and recreate afterward",
+			res.Spec.CommittedResourceReservation.ProjectID != desiredState.ProjectID ||
+			res.Spec.AvailabilityZone != desiredState.AvailabilityZone {
+			log.Info("Found a reservation with wrong flavor group, project, or AZ, delete and recreate afterward",
 				"commitmentUUID", desiredState.CommitmentUUID,
 				"name", res.Name,
 				"expectedFlavorGroup", desiredState.FlavorGroupName,
 				"actualFlavorGroup", res.Spec.CommittedResourceReservation.ResourceGroup,
 				"expectedProjectID", desiredState.ProjectID,
-				"actualProjectID", res.Spec.CommittedResourceReservation.ProjectID)
+				"actualProjectID", res.Spec.CommittedResourceReservation.ProjectID,
+				"expectedAZ", desiredState.AvailabilityZone,
+				"actualAZ", res.Spec.AvailabilityZone)
 			result.Repaired++
 			result.RemovedReservations = append(result.RemovedReservations, res)
 			memValue := res.Spec.Resources[hv1.ResourceMemory]
@@ -227,9 +232,11 @@ func (m *ReservationManager) syncReservationMetadata(
 	state *CommitmentState,
 ) (*v1alpha1.Reservation, error) {
 
-	// if any of CommitmentUUID, AZ, StarTime, EndTime differ from desired state, need to patch
+	// if any of CommitmentUUID, DomainID, StartTime, EndTime, ParentGeneration differ from desired state, need to patch.
+	// AvailabilityZone is intentionally excluded: an AZ mismatch is handled in Phase 3 (delete + recreate)
+	// because the reservation is pinned to a host and cannot simply be patched to a different AZ.
 	if (state.CommitmentUUID != "" && reservation.Spec.CommittedResourceReservation.CommitmentUUID != state.CommitmentUUID) ||
-		(state.AvailabilityZone != "" && reservation.Spec.AvailabilityZone != state.AvailabilityZone) ||
+		(state.DomainID != "" && reservation.Spec.CommittedResourceReservation.DomainID != state.DomainID) ||
 		(state.StartTime != nil && (reservation.Spec.StartTime == nil || !reservation.Spec.StartTime.Time.Equal(*state.StartTime))) ||
 		(state.EndTime != nil && (reservation.Spec.EndTime == nil || !reservation.Spec.EndTime.Time.Equal(*state.EndTime))) ||
 		(state.ParentGeneration != 0 && reservation.Spec.CommittedResourceReservation.ParentGeneration != state.ParentGeneration) {
@@ -243,12 +250,11 @@ func (m *ReservationManager) syncReservationMetadata(
 		if state.CommitmentUUID != "" {
 			reservation.Spec.CommittedResourceReservation.CommitmentUUID = state.CommitmentUUID
 		}
+		if state.DomainID != "" {
+			reservation.Spec.CommittedResourceReservation.DomainID = state.DomainID
+		}
 		if state.ParentGeneration != 0 {
 			reservation.Spec.CommittedResourceReservation.ParentGeneration = state.ParentGeneration
-		}
-
-		if state.AvailabilityZone != "" {
-			reservation.Spec.AvailabilityZone = state.AvailabilityZone
 		}
 		if state.StartTime != nil {
 			reservation.Spec.StartTime = &metav1.Time{Time: *state.StartTime}

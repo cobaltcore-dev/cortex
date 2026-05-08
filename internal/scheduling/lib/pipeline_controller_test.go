@@ -18,7 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 )
 
 func TestBasePipelineController_InitAllPipelines(t *testing.T) {
@@ -216,7 +215,7 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 			schedulingDomain:      v1alpha1.SchedulingDomainNova,
 			expectReady:           true,
 			expectInMap:           true,
-			expectAllStepsIndexed: testlib.Ptr(true),
+			expectAllStepsIndexed: new(true),
 		},
 		{
 			name: "pipeline init fails",
@@ -276,7 +275,7 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 			schedulingDomain:      v1alpha1.SchedulingDomainNova,
 			expectReady:           true,
 			expectInMap:           true,
-			expectAllStepsIndexed: testlib.Ptr(false),
+			expectAllStepsIndexed: new(false),
 			unknownFilters:        []string{"unknown-filter"},
 		},
 		{
@@ -300,7 +299,7 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 			schedulingDomain:      v1alpha1.SchedulingDomainNova,
 			expectReady:           true,
 			expectInMap:           true,
-			expectAllStepsIndexed: testlib.Ptr(false),
+			expectAllStepsIndexed: new(false),
 			unknownWeighers:       []string{"unknown-weigher"},
 		},
 		{
@@ -323,7 +322,7 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 			schedulingDomain:      v1alpha1.SchedulingDomainNova,
 			expectReady:           true,
 			expectInMap:           true,
-			expectAllStepsIndexed: testlib.Ptr(false),
+			expectAllStepsIndexed: new(false),
 			unknownDetectors:      []string{"unknown-detector"},
 		},
 		{
@@ -354,7 +353,7 @@ func TestBasePipelineController_handlePipelineChange(t *testing.T) {
 			schedulingDomain:      v1alpha1.SchedulingDomainNova,
 			expectReady:           true,
 			expectInMap:           true,
-			expectAllStepsIndexed: testlib.Ptr(false),
+			expectAllStepsIndexed: new(false),
 			unknownFilters:        []string{"unknown-filter-1", "unknown-filter-2"},
 			unknownWeighers:       []string{"unknown-weigher-1"},
 		},

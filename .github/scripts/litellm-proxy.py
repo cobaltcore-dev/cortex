@@ -27,8 +27,8 @@ logger = logging.getLogger("litellm-proxy")
 
 app = FastAPI()
 
-# The LiteLLM model to route requests to (e.g., "sap/anthropic--claude-4.6-sonnet")
-LITELLM_MODEL = os.environ.get("LITELLM_MODEL", "sap/anthropic--claude-4.6-sonnet")
+# The LiteLLM model to route requests to (e.g., "sap/anthropic--claude-4.6-opus")
+LITELLM_MODEL = os.environ.get("LITELLM_MODEL", "sap/anthropic--claude-4.6-opus")
 
 
 @app.get("/health/readiness")

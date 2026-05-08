@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.1
+    controller-gen.kubebuilder.io/version: v0.21.0
   name: committedresources.cortex.cloud
 spec:
   group: cortex.cloud
@@ -30,11 +30,13 @@ spec:
     - jsonPath: .spec.amount
       name: Amount
       type: string
-    - jsonPath: .status.acceptedAmount
-      name: AcceptedAmount
+    - jsonPath: .status.usedResources.memory
+      name: UsedMemory
+      priority: 1
       type: string
-    - jsonPath: .status.usedAmount
-      name: UsedAmount
+    - jsonPath: .status.usedResources.cpu
+      name: UsedCPU
+      priority: 1
       type: string
     - jsonPath: .spec.state
       name: State
@@ -166,24 +168,110 @@ spec:
           status:
             description: CommittedResourceStatus defines the observed state of CommittedResource.
             properties:
-              acceptedAmount:
-                anyOf:
-                - type: integer
-                - type: string
-                description: |-
-                  AcceptedAmount is the quantity the controller last successfully provisioned as Reservation slots.
-                  Nil if the spec has never been successfully reconciled.
-                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                x-kubernetes-int-or-string: true
               acceptedAt:
                 description: AcceptedAt is when the controller last successfully reconciled
                   the spec into Reservation slots.
                 format: date-time
                 type: string
-              assignedVMs:
+              acceptedSpec:
                 description: |-
-                  AssignedVMs holds the UUIDs of VMs deterministically assigned to this committed resource.
-                  Populated by the usage reconciler; used to compute UsedAmount and drive the quota controller.
+                  AcceptedSpec is a snapshot of Spec from the last successful reconcile.
+                  Used by rollbackToAccepted to restore the exact previously-accepted placement (AZ, amount,
+                  project, domain, flavor group) even when the current spec has already been mutated to a new value.
+                properties:
+                  allowRejection:
+                    description: |-
+                      AllowRejection controls what the CommittedResource controller does when placement fails
+                      for a guaranteed or confirmed commitment.
+                      true  — controller may reject: on failure, child Reservations are rolled back and the CR
+                              is marked Rejected. Use this when the caller is making a first-time placement
+                              decision and a "no" answer is acceptable (e.g. the change-commitments API).
+                      false — controller must retry: on failure, existing child Reservations are kept and the
+                              CR is set to Reserving so the controller retries later. Use this when the caller
+                              is restoring already-committed state that Cortex must honour (e.g. the syncer).
+                      Only meaningful for state=guaranteed or state=confirmed; ignored for all other states.
+                    type: boolean
+                  amount:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      Amount is the total committed quantity.
+                      memory: MiB expressed in K8s binary SI notation (e.g. "1280Gi", "640Mi").
+                      cores: integer core count (e.g. "40").
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  availabilityZone:
+                    description: AvailabilityZone specifies the availability zone
+                      for this commitment.
+                    type: string
+                  commitmentUUID:
+                    description: UUID of the commitment this resource corresponds
+                      to.
+                    type: string
+                  confirmedAt:
+                    description: ConfirmedAt is when the commitment was confirmed.
+                    format: date-time
+                    type: string
+                  domainID:
+                    description: DomainID of the OpenStack domain this commitment
+                      belongs to.
+                    type: string
+                  endTime:
+                    description: EndTime is when Reservation slots expire. Nil for
+                      unbounded commitments with no expiry.
+                    format: date-time
+                    type: string
+                  flavorGroupName:
+                    description: FlavorGroupName identifies the flavor group this
+                      commitment targets, e.g. "kvm_v2_hana_s".
+                    type: string
+                  projectID:
+                    description: ProjectID of the OpenStack project this commitment
+                      belongs to.
+                    type: string
+                  resourceType:
+                    description: 'ResourceType identifies the kind of resource committed:
+                      memory drives Reservation slots; cores uses an arithmetic check
+                      only.'
+                    enum:
+                    - memory
+                    - cores
+                    type: string
+                  schedulingDomain:
+                    description: SchedulingDomain specifies the scheduling domain
+                      for this committed resource (e.g., "nova", "ironcore").
+                    type: string
+                  startTime:
+                    description: |-
+                      StartTime is the activation time for Reservation slots.
+                      Nil for guaranteed commitments (slots are active from creation); set to ConfirmedAt for confirmed ones.
+                    format: date-time
+                    type: string
+                  state:
+                    description: State is the lifecycle state of the commitment.
+                    enum:
+                    - planned
+                    - pending
+                    - guaranteed
+                    - confirmed
+                    - superseded
+                    - expired
+                    type: string
+                required:
+                - amount
+                - availabilityZone
+                - commitmentUUID
+                - domainID
+                - flavorGroupName
+                - projectID
+                - resourceType
+                - state
+                type: object
+              assignedInstances:
+                description: |-
+                  AssignedInstances holds the UUIDs of VM instances deterministically assigned to this committed resource.
+                  Populated by the usage reconciler; used to compute UsedResources and drive the quota controller.
                 items:
                   type: string
                 type: array
@@ -244,12 +332,6 @@ spec:
                   - type
                   type: object
                 type: array
-              lastChanged:
-                description: |-
-                  LastChanged is when the spec was last written by the syncer.
-                  When AcceptedAt is older than LastChanged, the controller has pending work.
-                format: date-time
-                type: string
               lastReconcileAt:
                 description: LastReconcileAt is when the controller last ran its reconcile
                   loop for this resource.
@@ -257,18 +339,29 @@ spec:
                 type: string
               lastUsageReconcileAt:
                 description: LastUsageReconcileAt is when the usage reconciler last
-                  updated AssignedVMs and UsedAmount.
+                  updated AssignedInstances and UsedResources.
                 format: date-time
                 type: string
-              usedAmount:
-                anyOf:
-                - type: integer
-                - type: string
+              usageObservedGeneration:
                 description: |-
-                  UsedAmount is the sum of assigned VM resources expressed in the same units as Spec.Amount.
-                  Populated by the usage reconciler.
-                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                x-kubernetes-int-or-string: true
+                  UsageObservedGeneration is the CR generation that the usage reconciler last processed.
+                  Follows the Kubernetes observedGeneration pattern: when this differs from
+                  metadata.generation the cooldown is bypassed so spec changes (e.g. shrink) are reflected
+                  immediately rather than waiting for the next cooldown interval.
+                format: int64
+                minimum: 0
+                type: integer
+              usedResources:
+                additionalProperties:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
+                description: |-
+                  UsedResources is the total resource consumption of assigned VM instances, keyed by resource type
+                  (e.g. "memory" in MiB binary SI, "cpu" as core count). Populated by the usage reconciler.
+                type: object
             type: object
         required:
         - spec

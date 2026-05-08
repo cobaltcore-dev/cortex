@@ -538,6 +538,66 @@ func TestNovaAPI_GetAllHypervisors_DeduplicatesHypervisors(t *testing.T) {
 	}
 }
 
+func TestDeriveOSType(t *testing.T) {
+	tests := []struct {
+		name       string
+		properties map[string]any
+		tags       []string
+		want       string
+	}{
+		{
+			name:       "vmware_ostype property wins",
+			properties: map[string]any{"vmware_ostype": "windows8Server64Guest"},
+			tags:       []string{"ostype:linux"},
+			want:       "windows8Server64Guest",
+		},
+		{
+			name:       "vmware_ostype empty string falls through to tags",
+			properties: map[string]any{"vmware_ostype": ""},
+			tags:       []string{"ostype:debian"},
+			want:       "debian",
+		},
+		{
+			name:       "vmware_ostype not a string falls through",
+			properties: map[string]any{"vmware_ostype": 42},
+			tags:       []string{"ostype:centos"},
+			want:       "centos",
+		},
+		{
+			name:       "single ostype tag",
+			properties: map[string]any{},
+			tags:       []string{"ostype:ubuntu", "env:prod"},
+			want:       "ubuntu",
+		},
+		{
+			name:       "multiple ostype tags: ambiguous, returns unknown",
+			properties: map[string]any{},
+			tags:       []string{"ostype:ubuntu", "ostype:debian"},
+			want:       "unknown",
+		},
+		{
+			name:       "no properties, no tags",
+			properties: map[string]any{},
+			tags:       nil,
+			want:       "unknown",
+		},
+		{
+			name:       "tags without ostype prefix",
+			properties: map[string]any{},
+			tags:       []string{"env:prod", "region:eu"},
+			want:       "unknown",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := deriveOSType(tt.properties, tt.tags); got != tt.want {
+				t.Errorf("deriveOSType() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestNovaAPI_GetAllMigrations_DeduplicatesMigrations(t *testing.T) {
 	tests := []struct {
 		name          string

@@ -1068,6 +1068,21 @@ func (s *MockVMSource) GetVM(_ context.Context, vmUUID string) (*VM, error) {
 	return nil, nil
 }
 
+// IsServerActive returns true if the server is found in the mock VMs.
+func (s *MockVMSource) IsServerActive(_ context.Context, vmUUID string) (bool, error) {
+	for i := range s.VMs {
+		if s.VMs[i].UUID == vmUUID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// GetDeletedVMInfo returns nil, nil (no deleted VMs in mock).
+func (s *MockVMSource) GetDeletedVMInfo(_ context.Context, _ string) (*DeletedVMInfo, error) {
+	return nil, nil
+}
+
 // newIntegrationTestEnv creates a complete test environment with HTTP server and VMSource.
 func newIntegrationTestEnv(t *testing.T, vms []VM, hypervisors []*hv1.Hypervisor, reservations []*v1alpha1.Reservation) *IntegrationTestEnv {
 	t.Helper()

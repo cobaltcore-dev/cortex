@@ -22,9 +22,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
-	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
+	. "go.xyrillian.de/gg/option"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -129,6 +129,14 @@ func TestHandleChangeCommitments(t *testing.T) {
 			),
 			ExpectedAPIResponse: newAPIResponse("uuid-b: not sufficient capacity"),
 			ExpectedDeletedCRs:  []string{"commitment-uuid-a", "commitment-uuid-b"},
+		},
+		// --- AZ validation ---
+		{
+			Name:    "Empty AZ: rejected with 400",
+			Flavors: []*TestFlavor{m1Small},
+			CommitmentRequest: newCommitmentRequest("", false, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-noaz", "confirmed", 2)),
+			ExpectedAPIResponse: APIResponseExpectation{StatusCode: http.StatusBadRequest},
 		},
 		// --- Timeout ---
 		{
@@ -457,6 +465,10 @@ type TestCR struct {
 	AmountMiB      int64
 	ProjectID      string
 	AZ             string
+	// ReadyCondition pre-sets Ready=True (Generation=1, ObservedGeneration=1) on the CR to simulate
+	// a CR that was previously accepted. Use together with NoCondition to test that the polling loop
+	// does not treat this stale condition as a valid outcome for a subsequent spec update.
+	ReadyCondition bool
 }
 
 type CommitmentChangeRequest struct {
@@ -591,6 +603,9 @@ type fakeControllerClient struct {
 }
 
 func (c *fakeControllerClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	if cr, ok := obj.(*v1alpha1.CommittedResource); ok {
+		cr.Generation = 1 // k8s sets generation=1 on first creation
+	}
 	if err := c.Client.Create(ctx, obj, opts...); err != nil {
 		return err
 	}
@@ -601,6 +616,14 @@ func (c *fakeControllerClient) Create(ctx context.Context, obj client.Object, op
 }
 
 func (c *fakeControllerClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if cr, ok := obj.(*v1alpha1.CommittedResource); ok {
+		// k8s increments generation on each spec change; simulate that here so the
+		// polling loop can detect stale conditions from a prior generation.
+		existing := &v1alpha1.CommittedResource{}
+		if err := c.Get(ctx, client.ObjectKeyFromObject(cr), existing); err == nil {
+			cr.Generation = existing.Generation + 1
+		}
+	}
 	if err := c.Client.Update(ctx, obj, opts...); err != nil {
 		return err
 	}
@@ -620,36 +643,40 @@ func (c *fakeControllerClient) setConditionFor(ctx context.Context, crName strin
 		return
 	}
 
+	cr := &v1alpha1.CommittedResource{}
+	if err := c.Get(ctx, client.ObjectKey{Name: crName}, cr); err != nil {
+		return
+	}
+
 	var cond metav1.Condition
 	switch {
 	case !hasOutcome || outcome == "":
 		// Default: controller accepts.
 		cond = metav1.Condition{
-			Type:    v1alpha1.CommittedResourceConditionReady,
-			Status:  metav1.ConditionTrue,
-			Reason:  v1alpha1.CommittedResourceReasonAccepted,
-			Message: "accepted",
+			Type:               v1alpha1.CommittedResourceConditionReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             v1alpha1.CommittedResourceReasonAccepted,
+			Message:            "accepted",
+			ObservedGeneration: cr.Generation,
 		}
 	case outcome == v1alpha1.CommittedResourceReasonPlanned:
 		cond = metav1.Condition{
-			Type:    v1alpha1.CommittedResourceConditionReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  v1alpha1.CommittedResourceReasonPlanned,
-			Message: "commitment is not yet active",
+			Type:               v1alpha1.CommittedResourceConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             v1alpha1.CommittedResourceReasonPlanned,
+			Message:            "commitment is not yet active",
+			ObservedGeneration: cr.Generation,
 		}
 	default:
 		cond = metav1.Condition{
-			Type:    v1alpha1.CommittedResourceConditionReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  v1alpha1.CommittedResourceReasonRejected,
-			Message: outcome,
+			Type:               v1alpha1.CommittedResourceConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             v1alpha1.CommittedResourceReasonRejected,
+			Message:            outcome,
+			ObservedGeneration: cr.Generation,
 		}
 	}
 
-	cr := &v1alpha1.CommittedResource{}
-	if err := c.Get(ctx, client.ObjectKey{Name: crName}, cr); err != nil {
-		return
-	}
 	meta.SetStatusCondition(&cr.Status.Conditions, cond)
 	if err := c.Client.Status().Update(ctx, cr); err != nil {
 		return // best-effort: if the update races with another write, the polling loop retries
@@ -695,6 +722,13 @@ func newCRTestEnv(t *testing.T, tc CommitmentChangeTestCase) *CRTestEnv {
 		WithScheme(scheme).
 		WithObjects(objects...).
 		WithStatusSubresource(&v1alpha1.CommittedResource{}, &v1alpha1.Knowledge{}).
+		WithIndex(&v1alpha1.Reservation{}, "spec.committedResourceReservation.commitmentUUID", func(obj client.Object) []string {
+			res, ok := obj.(*v1alpha1.Reservation)
+			if !ok || res.Spec.CommittedResourceReservation == nil {
+				return nil
+			}
+			return []string{res.Spec.CommittedResourceReservation.CommitmentUUID}
+		}).
 		Build()
 
 	noCondition := make(map[string]struct{})
@@ -830,7 +864,7 @@ func (env *CRTestEnv) VerifyCRAmountBytes(crName string, wantBytes int64) {
 
 func (tc *TestCR) toCommittedResource() *v1alpha1.CommittedResource {
 	amount := resource.NewQuantity(tc.AmountMiB*1024*1024, resource.BinarySI)
-	return &v1alpha1.CommittedResource{
+	cr := &v1alpha1.CommittedResource{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "commitment-" + tc.CommitmentUUID,
 		},
@@ -844,6 +878,18 @@ func (tc *TestCR) toCommittedResource() *v1alpha1.CommittedResource {
 			State:            tc.State,
 		},
 	}
+	if tc.ReadyCondition {
+		cr.Generation = 1
+		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+			Type:               v1alpha1.CommittedResourceConditionReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             v1alpha1.CommittedResourceReasonAccepted,
+			Message:            "accepted",
+			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: 1,
+		})
+	}
+	return cr
 }
 
 // ============================================================================

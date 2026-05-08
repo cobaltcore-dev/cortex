@@ -10,7 +10,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	testlib "github.com/cobaltcore-dev/cortex/pkg/testing"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -29,7 +28,7 @@ func TestAvoidHighStealPctStep_Init(t *testing.T) {
 	}
 
 	params := []v1alpha1.Parameter{
-		{Key: "maxStealPctOverObservedTimeSpan", FloatValue: testlib.Ptr(80.0)},
+		{Key: "maxStealPctOverObservedTimeSpan", FloatValue: new(80.0)},
 	}
 
 	tests := []struct {
@@ -391,28 +390,28 @@ func TestAvoidHighStealPctStep_Validate(t *testing.T) {
 		{
 			name: "valid params",
 			params: []v1alpha1.Parameter{
-				{Key: "maxStealPctOverObservedTimeSpan", FloatValue: testlib.Ptr(80.0)},
+				{Key: "maxStealPctOverObservedTimeSpan", FloatValue: new(80.0)},
 			},
 			expectError: false,
 		},
 		{
 			name: "valid params with zero threshold",
 			params: []v1alpha1.Parameter{
-				{Key: "maxStealPctOverObservedTimeSpan", FloatValue: testlib.Ptr(0.0)},
+				{Key: "maxStealPctOverObservedTimeSpan", FloatValue: new(0.0)},
 			},
 			expectError: false,
 		},
 		{
 			name: "invalid params with negative threshold",
 			params: []v1alpha1.Parameter{
-				{Key: "maxStealPctOverObservedTimeSpan", FloatValue: testlib.Ptr(-5.0)},
+				{Key: "maxStealPctOverObservedTimeSpan", FloatValue: new(-5.0)},
 			},
 			expectError: true,
 		},
 		{
 			name: "invalid JSON",
 			params: []v1alpha1.Parameter{
-				{Key: "invalidJSON", StringValue: testlib.Ptr("{invalid json}")},
+				{Key: "invalidJSON", StringValue: new("{invalid json}")},
 			},
 			expectError: true,
 		},

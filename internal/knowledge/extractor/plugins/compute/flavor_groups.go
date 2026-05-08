@@ -35,7 +35,7 @@ type FlavorGroupFeature struct {
 	// The largest flavor in the group (used for reservation slot sizing)
 	LargestFlavor FlavorInGroup `json:"largestFlavor"`
 
-	// The smallest flavor in the group (used for CR size quantification)
+	// The smallest flavor in the group
 	SmallestFlavor FlavorInGroup `json:"smallestFlavor"`
 
 	// RAM-to-core ratio in MiB per vCPU (MemoryMB / VCPUs).

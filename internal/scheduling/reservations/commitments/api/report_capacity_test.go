@@ -29,6 +29,18 @@ func TestHandleReportCapacity(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// testCapacityConfig enables capacity reporting for all groups via "*" catch-all.
+	testCapacityConfig := commitments.APIConfig{
+		EnableReportCapacity: true,
+		FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
+			"*": {
+				RAM:       commitments.ResourceTypeConfig{HasCapacity: true},
+				Cores:     commitments.ResourceTypeConfig{HasCapacity: true},
+				Instances: commitments.ResourceTypeConfig{HasCapacity: true},
+			},
+		},
+	}
+
 	// Create empty flavor groups knowledge so capacity calculation doesn't fail
 	emptyKnowledge := createEmptyFlavorGroupKnowledge()
 
@@ -37,7 +49,7 @@ func TestHandleReportCapacity(t *testing.T) {
 		WithObjects(emptyKnowledge).
 		Build()
 
-	api := NewAPI(fakeClient)
+	api := NewAPIWithConfig(fakeClient, testCapacityConfig, nil)
 
 	tests := []struct {
 		name           string
@@ -131,12 +143,22 @@ func TestCapacityCalculator(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	testCapacityConfig := commitments.APIConfig{
+		FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
+			"*": {
+				RAM:       commitments.ResourceTypeConfig{HasCapacity: true},
+				Cores:     commitments.ResourceTypeConfig{HasCapacity: true},
+				Instances: commitments.ResourceTypeConfig{HasCapacity: true},
+			},
+		},
+	}
+
 	t.Run("CalculateCapacity returns error when no flavor groups knowledge exists", func(t *testing.T) {
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
 			Build()
 
-		calculator := commitments.NewCapacityCalculator(fakeClient)
+		calculator := commitments.NewCapacityCalculator(fakeClient, testCapacityConfig)
 		req := liquid.ServiceCapacityRequest{
 			AllAZs: []liquid.AvailabilityZone{"az-one", "az-two"},
 		}
@@ -158,7 +180,7 @@ func TestCapacityCalculator(t *testing.T) {
 			WithObjects(emptyKnowledge).
 			Build()
 
-		calculator := commitments.NewCapacityCalculator(fakeClient)
+		calculator := commitments.NewCapacityCalculator(fakeClient, testCapacityConfig)
 		req := liquid.ServiceCapacityRequest{
 			AllAZs: []liquid.AvailabilityZone{"az-one", "az-two"},
 		}
@@ -177,13 +199,13 @@ func TestCapacityCalculator(t *testing.T) {
 	})
 
 	t.Run("CalculateCapacity returns perAZ entries for all AZs from request", func(t *testing.T) {
-		flavorGroupKnowledge := createTestFlavorGroupKnowledge(t, "test-group")
+		flavorGroupKnowledge := createTestFlavorGroupKnowledge(t)
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
 			WithObjects(flavorGroupKnowledge).
 			Build()
 
-		calculator := commitments.NewCapacityCalculator(fakeClient)
+		calculator := commitments.NewCapacityCalculator(fakeClient, testCapacityConfig)
 		req := liquid.ServiceCapacityRequest{
 			AllAZs: []liquid.AvailabilityZone{"qa-de-1a", "qa-de-1b", "qa-de-1d"},
 		}
@@ -203,13 +225,13 @@ func TestCapacityCalculator(t *testing.T) {
 	})
 
 	t.Run("CalculateCapacity with empty AllAZs returns empty perAZ maps", func(t *testing.T) {
-		flavorGroupKnowledge := createTestFlavorGroupKnowledge(t, "test-group")
+		flavorGroupKnowledge := createTestFlavorGroupKnowledge(t)
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
 			WithObjects(flavorGroupKnowledge).
 			Build()
 
-		calculator := commitments.NewCapacityCalculator(fakeClient)
+		calculator := commitments.NewCapacityCalculator(fakeClient, testCapacityConfig)
 		req := liquid.ServiceCapacityRequest{AllAZs: []liquid.AvailabilityZone{}}
 		report, err := calculator.CalculateCapacity(context.Background(), req)
 		if err != nil {
@@ -228,13 +250,13 @@ func TestCapacityCalculator(t *testing.T) {
 	})
 
 	t.Run("CalculateCapacity responds to different AZ sets correctly", func(t *testing.T) {
-		flavorGroupKnowledge := createTestFlavorGroupKnowledge(t, "test-group")
+		flavorGroupKnowledge := createTestFlavorGroupKnowledge(t)
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
 			WithObjects(flavorGroupKnowledge).
 			Build()
 
-		calculator := commitments.NewCapacityCalculator(fakeClient)
+		calculator := commitments.NewCapacityCalculator(fakeClient, testCapacityConfig)
 
 		req1 := liquid.ServiceCapacityRequest{
 			AllAZs: []liquid.AvailabilityZone{"eu-de-1a", "eu-de-1b"},
@@ -258,6 +280,106 @@ func TestCapacityCalculator(t *testing.T) {
 		}
 		for _, res := range report2.Resources {
 			verifyPerAZMatchesRequest(t, res, req2.AllAZs)
+		}
+	})
+
+	t.Run("CalculateCapacity reads capacity and usage from Ready CRD", func(t *testing.T) {
+		knowledge := createTestFlavorGroupKnowledge(t)
+		crd := createTestFlavorGroupCapacity("test-group", "az-one", "test_c8_m32", 1000, 800, true)
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(knowledge, crd).
+			WithStatusSubresource(crd).
+			Build()
+
+		calculator := commitments.NewCapacityCalculator(fakeClient, testCapacityConfig)
+		req := liquid.ServiceCapacityRequest{AllAZs: []liquid.AvailabilityZone{"az-one"}}
+		report, err := calculator.CalculateCapacity(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		ramRes := report.Resources["hw_version_test-group_ram"]
+		if ramRes == nil {
+			t.Fatal("expected hw_version_test-group_ram resource")
+		}
+		azReport := ramRes.PerAZ["az-one"]
+		if azReport == nil {
+			t.Fatal("expected az-one entry")
+		}
+		if azReport.Capacity != 32000 {
+			t.Errorf("expected capacity=32000, got %d", azReport.Capacity)
+		}
+		if !azReport.Usage.IsSome() {
+			t.Fatal("expected usage to be set for Ready CRD")
+		}
+		// usage = (capacity - placeable) * 32 GiB/slot = (1000 - 800) * 32 = 6400
+		if usage := azReport.Usage.UnwrapOr(0); usage != 6400 {
+			t.Errorf("expected usage=6400 (200*32), got %d", usage)
+		}
+	})
+
+	t.Run("CalculateCapacity returns zero capacity for missing CRD", func(t *testing.T) {
+		knowledge := createTestFlavorGroupKnowledge(t)
+		// CRD exists only for az-one; az-two has no CRD
+		crd := createTestFlavorGroupCapacity("test-group", "az-one", "test_c8_m32", 500, 400, true)
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(knowledge, crd).
+			WithStatusSubresource(crd).
+			Build()
+
+		calculator := commitments.NewCapacityCalculator(fakeClient, testCapacityConfig)
+		req := liquid.ServiceCapacityRequest{AllAZs: []liquid.AvailabilityZone{"az-one", "az-two"}}
+		report, err := calculator.CalculateCapacity(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		ramRes := report.Resources["hw_version_test-group_ram"]
+		if ramRes == nil {
+			t.Fatal("expected hw_version_test-group_ram resource")
+		}
+		azTwo := ramRes.PerAZ["az-two"]
+		if azTwo == nil {
+			t.Fatal("expected az-two entry even without CRD")
+		}
+		if azTwo.Capacity != 0 {
+			t.Errorf("expected capacity=0 for missing CRD, got %d", azTwo.Capacity)
+		}
+	})
+
+	t.Run("CalculateCapacity omits usage for stale CRD (Ready=False)", func(t *testing.T) {
+		knowledge := createTestFlavorGroupKnowledge(t)
+		crd := createTestFlavorGroupCapacity("test-group", "az-one", "test_c8_m32", 1000, 800, false)
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(knowledge, crd).
+			WithStatusSubresource(crd).
+			Build()
+
+		calculator := commitments.NewCapacityCalculator(fakeClient, testCapacityConfig)
+		req := liquid.ServiceCapacityRequest{AllAZs: []liquid.AvailabilityZone{"az-one"}}
+		report, err := calculator.CalculateCapacity(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		ramRes := report.Resources["hw_version_test-group_ram"]
+		if ramRes == nil {
+			t.Fatal("expected hw_version_test-group_ram resource")
+		}
+		azReport := ramRes.PerAZ["az-one"]
+		if azReport == nil {
+			t.Fatal("expected az-one entry")
+		}
+		// Stale CRD: last-known capacity is still reported (1000 slots * 32 GiB/slot)
+		if azReport.Capacity != 32000 {
+			t.Errorf("expected last-known capacity=32000 for stale CRD, got %d", azReport.Capacity)
+		}
+		// Stale CRD: usage must be absent (None)
+		if azReport.Usage.IsSome() {
+			t.Error("expected usage to be absent (None) for stale CRD")
 		}
 	})
 }
@@ -318,32 +440,65 @@ func createEmptyFlavorGroupKnowledge() *v1alpha1.Knowledge {
 	}
 }
 
-// createTestFlavorGroupKnowledge creates a test Knowledge CRD with flavor group data
+// createTestFlavorGroupCapacity creates a FlavorGroupCapacity CRD for testing.
+// totalSlots and placeableSlots are for the named smallest flavor entry.
+// ready controls whether the Ready condition is True or False.
+func createTestFlavorGroupCapacity(group, az, smallestFlavorName string, totalSlots, placeableSlots int64, ready bool) *v1alpha1.FlavorGroupCapacity {
+	conditionStatus := v1.ConditionTrue
+	if !ready {
+		conditionStatus = v1.ConditionFalse
+	}
+	return &v1alpha1.FlavorGroupCapacity{
+		ObjectMeta: v1.ObjectMeta{
+			Name: group + "-" + az,
+		},
+		Spec: v1alpha1.FlavorGroupCapacitySpec{
+			FlavorGroup:      group,
+			AvailabilityZone: az,
+		},
+		Status: v1alpha1.FlavorGroupCapacityStatus{
+			Flavors: []v1alpha1.FlavorCapacityStatus{
+				{
+					FlavorName:           smallestFlavorName,
+					TotalCapacityVMSlots: totalSlots,
+					PlaceableVMs:         placeableSlots,
+				},
+			},
+			Conditions: []v1.Condition{
+				{
+					Type:   v1alpha1.FlavorGroupCapacityConditionReady,
+					Status: conditionStatus,
+				},
+			},
+		},
+	}
+}
+
 // that accepts commitments (has fixed RAM/core ratio)
-func createTestFlavorGroupKnowledge(t *testing.T, groupName string) *v1alpha1.Knowledge {
+func createTestFlavorGroupKnowledge(t *testing.T) *v1alpha1.Knowledge {
 	t.Helper()
 
 	features := []map[string]interface{}{
 		{
-			"name": groupName,
+			"name": "test-group",
 			"flavors": []map[string]interface{}{
 				{
 					"name":     "test_c8_m32",
 					"vcpus":    8,
-					"memoryMB": 32768,
+					"memoryMB": 32752,
 					"diskGB":   50,
 				},
 			},
 			"largestFlavor": map[string]interface{}{
 				"name":     "test_c8_m32",
 				"vcpus":    8,
-				"memoryMB": 32768,
+				"memoryMB": 32752,
 				"diskGB":   50,
 			},
 			"smallestFlavor": map[string]interface{}{
 				"name":     "test_c8_m32",
 				"vcpus":    8,
-				"memoryMB": 32768,
+				"memoryMB": 32752,
 				"diskGB":   50,
 			},
 			// Fixed RAM/core ratio (4096 MiB per vCPU) - required for group to accept commitments

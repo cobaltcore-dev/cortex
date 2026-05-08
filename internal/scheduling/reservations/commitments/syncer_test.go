@@ -412,8 +412,8 @@ func TestSyncer_SyncReservations_UnitMismatch(t *testing.T) {
 		WithObjects(flavorGroupsKnowledge).
 		Build()
 
-	// Create mock commitment with a unit that doesn't match Cortex's understanding
-	// Limes says "2048 MiB" but Cortex's smallest flavor is 1024 MB
+	// Create mock commitment with a unit that doesn't match Cortex's expected "GiB"
+	// Limes says "2048 MiB" but Cortex expects "GiB"
 	mockCommitments := []Commitment{
 		{
 			ID:               1,
@@ -422,7 +422,7 @@ func TestSyncer_SyncReservations_UnitMismatch(t *testing.T) {
 			ResourceName:     "hw_version_test_group_v1_ram",
 			AvailabilityZone: "az1",
 			Amount:           2,
-			Unit:             "2048 MiB", // Mismatched unit - should be "1024 MiB"
+			Unit:             "2048 MiB", // Mismatched unit - should be "GiB"
 			Status:           "confirmed",
 			ProjectID:        "test-project",
 			DomainID:         "test-domain",
@@ -502,7 +502,7 @@ func TestSyncer_SyncReservations_UnitMatch(t *testing.T) {
 			ResourceName:     "hw_version_test_group_v1_ram",
 			AvailabilityZone: "az1",
 			Amount:           2,
-			Unit:             "1024 MiB", // Correct unit matching smallest flavor
+			Unit:             "GiB", // Correct unit matching Cortex's expected GiB
 			Status:           "confirmed",
 			ProjectID:        "test-project",
 			DomainID:         "test-domain",

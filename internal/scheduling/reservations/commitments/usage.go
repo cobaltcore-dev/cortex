@@ -19,8 +19,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/external"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/go-logr/logr"
-	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
+	. "go.xyrillian.de/gg/option"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -30,7 +30,7 @@ type UsageDBClient interface {
 	ListProjectVMs(ctx context.Context, projectID string) ([]VMRow, error)
 }
 
-// VMRow is the result of a joined server+flavor query from Postgres.
+// VMRow is the result of a joined server+flavor+image query from Postgres.
 type VMRow struct {
 	ID           string
 	Name         string
@@ -43,6 +43,7 @@ type VMRow struct {
 	FlavorVCPUs  uint64
 	FlavorDisk   uint64
 	FlavorExtras string // JSON string of flavor extra_specs
+	OSType       string // pre-computed from Glance image properties; "unknown" when not found
 }
 
 // CommitmentStateWithUsage extends CommitmentState with usage tracking for billing calculations.
@@ -51,8 +52,10 @@ type CommitmentStateWithUsage struct {
 	CommitmentState
 	// RemainingMemoryBytes is the uncommitted capacity left for VM assignment
 	RemainingMemoryBytes int64
-	// AssignedVMs tracks which VMs have been assigned to this commitment
-	AssignedVMs []string
+	// AssignedInstances tracks which VM instances have been assigned to this commitment
+	AssignedInstances []string
+	// UsedVCPUs is the total vCPU count of assigned VM instances
+	UsedVCPUs int64
 }
 
 // NewCommitmentStateWithUsage creates a CommitmentStateWithUsage from a CommitmentState.
@@ -60,16 +63,17 @@ func NewCommitmentStateWithUsage(state *CommitmentState) *CommitmentStateWithUsa
 	return &CommitmentStateWithUsage{
 		CommitmentState:      *state,
 		RemainingMemoryBytes: state.TotalMemoryBytes,
-		AssignedVMs:          []string{},
+		AssignedInstances:    []string{},
 	}
 }
 
 // AssignVM attempts to assign a VM to this commitment if there's enough capacity.
 // Returns true if the VM was assigned, false if not enough capacity.
-func (c *CommitmentStateWithUsage) AssignVM(vmUUID string, vmMemoryBytes int64) bool {
+func (c *CommitmentStateWithUsage) AssignVM(vmUUID string, vmMemoryBytes, vCPUs int64) bool {
 	if c.RemainingMemoryBytes >= vmMemoryBytes {
 		c.RemainingMemoryBytes -= vmMemoryBytes
-		c.AssignedVMs = append(c.AssignedVMs, vmUUID)
+		c.UsedVCPUs += vCPUs
+		c.AssignedInstances = append(c.AssignedInstances, vmUUID)
 		return true
 	}
 	return false
@@ -92,10 +96,11 @@ type VMUsageInfo struct {
 	VCPUs         uint64
 	DiskGB        uint64
 	VideoRAMMiB   *uint64 // optional, from flavor extra_specs hw_video:ram_max_mb
+	OSType        string  // pre-computed from Glance image; "unknown" for volume-booted or unmapped images
 	AZ            string
 	Hypervisor    string
 	CreatedAt     time.Time
-	UsageMultiple uint64 // Memory in multiples of smallest flavor in the group
+	UsageMultiple uint64 // RAM in GiB
 }
 
 // UsageCalculator computes usage reports for Limes LIQUID API.
@@ -113,53 +118,78 @@ func NewUsageCalculator(client client.Client, usageDB UsageDBClient) *UsageCalcu
 }
 
 // CalculateUsage computes the usage report for a specific project.
+// VM-to-commitment assignment is read from CommittedResource CRD status (pre-computed by the
+// UsageReconciler). If a CR has no usage status yet, its VMs appear as PAYG until the first
+// reconcile completes (within one CooldownInterval).
 func (c *UsageCalculator) CalculateUsage(
 	ctx context.Context,
 	log logr.Logger,
 	projectID string,
 	allAZs []liquid.AvailabilityZone,
 ) (liquid.ServiceUsageReport, error) {
-	// Step 1: Get flavor groups from knowledge
+
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to get flavor groups: %w", err)
 	}
 
-	// Get info version from Knowledge CRD (used by Limes to detect metadata changes)
 	var infoVersion int64 = -1
 	if knowledgeCRD, err := knowledge.Get(ctx); err == nil && knowledgeCRD != nil && !knowledgeCRD.Status.LastContentChange.IsZero() {
 		infoVersion = knowledgeCRD.Status.LastContentChange.Unix()
 	}
 
-	// Step 2: Build commitment capacity map from K8s Reservation CRDs
-	commitmentsByAZFlavorGroup, err := c.buildCommitmentCapacityMap(ctx, log, projectID)
+	vmAssignments, err := c.BuildVMAssignmentsFromStatus(ctx, projectID)
 	if err != nil {
-		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to build commitment capacity map: %w", err)
+		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to read VM assignments from CRD status: %w", err)
 	}
 
-	// Step 3: Get and sort VMs for the project
-	vms, err := c.getProjectVMs(ctx, log, projectID, flavorGroups, allAZs)
+	// Fetch the ProjectQuota CRD for this project to read per-AZ quota values.
+	// May not exist if Limes has not pushed quota yet — in that case quota defaults to infinite.
+	var projectQuota *v1alpha1.ProjectQuota
+	var pqList v1alpha1.ProjectQuotaList
+	if err := c.client.List(ctx, &pqList, client.MatchingFields{idxProjectQuotaByProjectID: projectID}); err == nil && len(pqList.Items) > 0 {
+		projectQuota = &pqList.Items[0]
+	}
+
+	vms, err := getProjectVMs(ctx, c.usageDB, log, projectID, flavorGroups, allAZs)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to get project VMs: %w", err)
 	}
-	sortVMsForUsageCalculation(vms)
 
-	// Step 4: Assign VMs to commitments
-	vmAssignments, assignedToCommitments := c.assignVMsToCommitments(vms, commitmentsByAZFlavorGroup)
+	report := c.buildUsageResponse(vms, vmAssignments, flavorGroups, allAZs, infoVersion, projectQuota)
 
-	// Step 5: Build the response
-	report := c.buildUsageResponse(vms, vmAssignments, flavorGroups, allAZs, infoVersion)
-
+	assignedToCommitments := 0
+	for _, vm := range vms {
+		if vmAssignments[vm.UUID] != "" {
+			assignedToCommitments++
+		}
+	}
 	log.Info("completed usage report",
 		"projectID", projectID,
 		"vmCount", len(vms),
 		"assignedToCommitments", assignedToCommitments,
 		"payg", len(vms)-assignedToCommitments,
-		"commitments", countCommitmentStates(commitmentsByAZFlavorGroup),
 		"resources", len(report.Resources))
 
 	return report, nil
+}
+
+// BuildVMAssignmentsFromStatus reads pre-computed VM-to-commitment assignments from
+// CommittedResource CRD status. Returns a map of vmUUID → commitmentUUID (empty string = PAYG).
+// This is the read path that replaces the inline assignment algorithm in the usage API.
+func (c *UsageCalculator) BuildVMAssignmentsFromStatus(ctx context.Context, projectID string) (map[string]string, error) {
+	var crList v1alpha1.CommittedResourceList
+	if err := c.client.List(ctx, &crList, client.MatchingFields{idxCommittedResourceByProjectID: projectID}); err != nil {
+		return nil, fmt.Errorf("failed to list CommittedResources: %w", err)
+	}
+	assignments := make(map[string]string)
+	for _, cr := range crList.Items {
+		for _, vmUUID := range cr.Status.AssignedInstances {
+			assignments[vmUUID] = cr.Spec.CommitmentUUID
+		}
+	}
+	return assignments, nil
 }
 
 // azFlavorGroupKey creates a deterministic key for az:flavorGroup lookups.
@@ -167,42 +197,40 @@ func azFlavorGroupKey(az, flavorGroup string) string {
 	return az + ":" + flavorGroup
 }
 
-// buildCommitmentCapacityMap retrieves all CR reservations for a project and builds
-// a map of az:flavorGroup -> list of CommitmentStateWithUsage, sorted for deterministic assignment.
-func (c *UsageCalculator) buildCommitmentCapacityMap(
+// buildCommitmentCapacityMap builds a map of az:flavorGroup -> list of CommitmentStateWithUsage
+// from CommittedResource CRD status (AcceptedSpec). Using the accepted spec snapshot gives the
+// billing-perspective capacity — what was confirmed — rather than the potentially-mutated current spec.
+func buildCommitmentCapacityMap(
 	ctx context.Context,
+	k8sClient client.Client,
 	log logr.Logger,
 	projectID string,
 ) (map[string][]*CommitmentStateWithUsage, error) {
-	// List all committed resource reservations
-	var allReservations v1alpha1.ReservationList
-	if err := c.client.List(ctx, &allReservations, client.MatchingLabels{
-		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-	}); err != nil {
-		return nil, fmt.Errorf("failed to list reservations: %w", err)
+
+	var allCRs v1alpha1.CommittedResourceList
+	if err := k8sClient.List(ctx, &allCRs, client.MatchingFields{idxCommittedResourceByProjectID: projectID}); err != nil {
+		return nil, fmt.Errorf("failed to list CommittedResources: %w", err)
 	}
 
-	// Group reservations by commitment UUID, filtering by project
-	reservationsByCommitment := make(map[string][]v1alpha1.Reservation)
-	for _, res := range allReservations.Items {
-		if res.Spec.CommittedResourceReservation == nil {
-			continue
-		}
-		if res.Spec.CommittedResourceReservation.ProjectID != projectID {
-			continue
-		}
-		commitmentUUID := res.Spec.CommittedResourceReservation.CommitmentUUID
-		reservationsByCommitment[commitmentUUID] = append(reservationsByCommitment[commitmentUUID], res)
-	}
-
-	// Build CommitmentState for each commitment and group by az:flavorGroup
-	// Only include commitments that are currently active (started and not expired)
 	now := time.Now()
 	result := make(map[string][]*CommitmentStateWithUsage)
-	for _, reservations := range reservationsByCommitment {
-		state, err := FromReservations(reservations)
+	for _, cr := range allCRs.Items {
+		if cr.Status.AcceptedSpec == nil {
+			log.V(1).Info("skipping CR with no accepted spec", "cr", cr.Name)
+			continue
+		}
+		// Use AcceptedSpec.State so sibling CRs whose spec is mid-transition (e.g. syncer just
+		// wrote expired before the CR controller accepted it) don't lose capacity prematurely.
+		if cr.Status.AcceptedSpec.State != v1alpha1.CommitmentStatusConfirmed && cr.Status.AcceptedSpec.State != v1alpha1.CommitmentStatusGuaranteed {
+			continue
+		}
+
+		// Build state from the accepted spec snapshot so capacity always reflects
+		// what was confirmed, not the potentially-mutated current spec.
+		tempCR := v1alpha1.CommittedResource{Spec: *cr.Status.AcceptedSpec}
+		state, err := FromCommittedResource(tempCR)
 		if err != nil {
-			log.Error(err, "failed to build commitment state from reservations")
+			log.Error(err, "skipping CR with invalid accepted spec", "cr", cr.Name)
 			continue
 		}
 
@@ -236,35 +264,29 @@ func (c *UsageCalculator) buildCommitmentCapacityMap(
 }
 
 // getProjectVMs retrieves all VMs for a project from Postgres and enriches them with flavor group info.
-func (c *UsageCalculator) getProjectVMs(
+func getProjectVMs(
 	ctx context.Context,
+	usageDB UsageDBClient,
 	log logr.Logger,
 	projectID string,
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	allAZs []liquid.AvailabilityZone,
 ) ([]VMUsageInfo, error) {
 
-	if c.usageDB == nil {
+	if usageDB == nil {
 		return nil, errors.New("usage DB client not configured")
 	}
 
-	rows, err := c.usageDB.ListProjectVMs(ctx, projectID)
+	rows, err := usageDB.ListProjectVMs(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list VMs from Postgres: %w", err)
 	}
 
 	// Build flavor name -> flavor group lookup
 	flavorToGroup := make(map[string]string)
-	flavorToSmallestMemory := make(map[string]uint64) // for calculating usage multiples
 	for groupName, group := range flavorGroups {
 		for _, flavor := range group.Flavors {
 			flavorToGroup[flavor.Name] = groupName
-		}
-		// Smallest flavor in group determines the usage unit
-		if group.SmallestFlavor.Name != "" {
-			for _, flavor := range group.Flavors {
-				flavorToSmallestMemory[flavor.Name] = group.SmallestFlavor.MemoryMB
-			}
 		}
 	}
 
@@ -281,10 +303,12 @@ func (c *UsageCalculator) getProjectVMs(
 		// Determine flavor group
 		flavorGroup := flavorToGroup[row.FlavorName]
 
-		// Calculate usage multiple (memory in units of smallest flavor)
+		// Calculate usage in GiB (FlavorRAM is in MiB).
+		// Add 16 MiB before dividing: flavors reserve 16 MiB for video RAM (hw_video:ram_max_mb=16),
+		// so a nominal "2 GiB" flavor has 2032 MiB. Without the adjustment, integer division truncates.
 		var usageMultiple uint64
-		if smallestMem := flavorToSmallestMemory[row.FlavorName]; smallestMem > 0 {
-			usageMultiple = row.FlavorRAM / smallestMem
+		if row.FlavorRAM > 0 {
+			usageMultiple = (row.FlavorRAM + 16) / 1024
 		}
 
 		// Normalize AZ
@@ -313,6 +337,7 @@ func (c *UsageCalculator) getProjectVMs(
 			VCPUs:         row.FlavorVCPUs,
 			DiskGB:        row.FlavorDisk,
 			VideoRAMMiB:   videoRAMMiB,
+			OSType:        row.OSType,
 			AZ:            string(normalizedAZ),
 			Hypervisor:    row.Hypervisor,
 			CreatedAt:     createdAt,
@@ -373,38 +398,22 @@ func sortCommitmentsForAssignment(commitments []*CommitmentStateWithUsage) {
 }
 
 // assignVMsToCommitments assigns VMs to commitments based on az:flavorGroup matching.
-// Returns a map of vmUUID -> commitmentUUID (empty string for PAYG VMs) and count of assigned VMs.
-func (c *UsageCalculator) assignVMsToCommitments(
+// Mutates each CommitmentStateWithUsage in place: AssignedInstances and RemainingMemoryBytes are updated.
+// VMs that don't fit any commitment are left unassigned (PAYG).
+func assignVMsToCommitments(
 	vms []VMUsageInfo,
 	commitmentsByAZFlavorGroup map[string][]*CommitmentStateWithUsage,
-) (vmAssignments map[string]string, assignedCount int) {
-
-	vmAssignments = make(map[string]string, len(vms))
+) {
 
 	for _, vm := range vms {
 		key := azFlavorGroupKey(vm.AZ, vm.FlavorGroup)
-		commitments := commitmentsByAZFlavorGroup[key]
-
-		vmMemoryBytes := int64(vm.MemoryMB) * 1024 * 1024 //nolint:gosec // VM memory from Nova, realistically bounded
-		assigned := false
-
-		// Try to assign to first commitment with remaining capacity
-		for _, commitment := range commitments {
-			if commitment.AssignVM(vm.UUID, vmMemoryBytes) {
-				vmAssignments[vm.UUID] = commitment.CommitmentUUID
-				assigned = true
-				assignedCount++
+		for _, commitment := range commitmentsByAZFlavorGroup[key] {
+			vmMemoryBytes := int64(vm.MemoryMB) * 1024 * 1024                 //nolint:gosec // VM memory from Nova, realistically bounded
+			if commitment.AssignVM(vm.UUID, vmMemoryBytes, int64(vm.VCPUs)) { //nolint:gosec // VCPUs from Nova, realistically bounded
 				break
 			}
 		}
-
-		if !assigned {
-			// PAYG - no commitment assignment
-			vmAssignments[vm.UUID] = ""
-		}
 	}
-
-	return vmAssignments, assignedCount
 }
 
 // azUsageData aggregates usage data for a specific flavor group and AZ.
@@ -425,6 +434,7 @@ func (c *UsageCalculator) buildUsageResponse(
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	allAZs []liquid.AvailabilityZone,
 	infoVersion int64,
+	projectQuota *v1alpha1.ProjectQuota,
 ) liquid.ServiceUsageReport {
 	// Initialize resources map for all flavor groups
 	resources := make(map[liquid.ResourceName]*liquid.ResourceUsageReport)
@@ -457,6 +467,7 @@ func (c *UsageCalculator) buildUsageResponse(
 
 		subresource, err := liquid.SubresourceBuilder[map[string]any]{
 			ID:         vm.UUID,
+			Name:       vm.Name,
 			Attributes: attributes,
 		}.Finalize()
 		if err != nil {
@@ -471,25 +482,38 @@ func (c *UsageCalculator) buildUsageResponse(
 	}
 
 	// Build ResourceUsageReport for all flavor groups (not just those with fixed ratio)
-	for flavorGroupName := range flavorGroups {
+	for flavorGroupName, groupData := range flavorGroups {
 		// All flavor groups are included in usage reporting.
 
 		// === 1. RAM Resource ===
 		ramResourceName := liquid.ResourceName(ResourceNameRAM(flavorGroupName))
 		ramPerAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
+		// For AZSeparatedTopology resources (fixed-ratio groups), per-AZ Quota must be non-null.
+		ramHasAZQuota := groupData.HasFixedRamCoreRatio()
 		for _, az := range allAZs {
-			ramPerAZ[az] = &liquid.AZResourceUsageReport{
+			report := &liquid.AZResourceUsageReport{
 				Usage:        0,
 				Subresources: []liquid.Subresource{},
 			}
+			if ramHasAZQuota {
+				quota := int64(-1) // default: infinite
+				if projectQuota != nil {
+					if rq, ok := projectQuota.Spec.Quota[string(ramResourceName)]; ok {
+						if q, ok := rq.PerAZ[string(az)]; ok {
+							quota = q
+						}
+					}
+				}
+				report.Quota = Some(quota)
+			}
+			ramPerAZ[az] = report
 		}
 		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
 			for az, data := range azData {
 				if _, known := ramPerAZ[az]; !known {
-					ramPerAZ[az] = &liquid.AZResourceUsageReport{}
+					continue // skip VMs in AZs not in allAZs
 				}
 				ramPerAZ[az].Usage = data.ramUsage
-				ramPerAZ[az].PhysicalUsage = Some(data.ramUsage) // No overcommit for RAM
 				// Subresources are only on instances resource
 			}
 		}
@@ -509,10 +533,9 @@ func (c *UsageCalculator) buildUsageResponse(
 		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
 			for az, data := range azData {
 				if _, known := coresPerAZ[az]; !known {
-					coresPerAZ[az] = &liquid.AZResourceUsageReport{}
+					continue // skip VMs in AZs not in allAZs
 				}
 				coresPerAZ[az].Usage = data.coresUsage
-				coresPerAZ[az].PhysicalUsage = Some(data.coresUsage) // No overcommit for cores
 				// Subresources are only on instances resource
 			}
 		}
@@ -532,10 +555,9 @@ func (c *UsageCalculator) buildUsageResponse(
 		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
 			for az, data := range azData {
 				if _, known := instancesPerAZ[az]; !known {
-					instancesPerAZ[az] = &liquid.AZResourceUsageReport{}
+					continue // skip VMs in AZs not in allAZs
 				}
 				instancesPerAZ[az].Usage = data.instanceCount
-				instancesPerAZ[az].PhysicalUsage = Some(data.instanceCount)
 				instancesPerAZ[az].Subresources = data.subresources // VM details on instances resource
 			}
 		}
@@ -564,8 +586,9 @@ func buildVMAttributes(vm VMUsageInfo, commitmentID string) map[string]any {
 	}
 
 	result := map[string]any{
-		"status": vm.Status,
-		"flavor": flavor,
+		"status":  vm.Status,
+		"flavor":  flavor,
+		"os_type": vm.OSType,
 	}
 
 	// Add commitment_id - nil for PAYG, string for committed
@@ -614,7 +637,7 @@ func (c *dbUsageClient) getReader(ctx context.Context) (*external.PostgresReader
 	return reader, nil
 }
 
-// vmQueryRow is the scan target for the server+flavor JOIN query.
+// vmQueryRow is the scan target for the server+flavor+image JOIN query.
 type vmQueryRow struct {
 	ID           string `db:"id"`
 	Name         string `db:"name"`
@@ -627,6 +650,7 @@ type vmQueryRow struct {
 	FlavorVCPUs  uint64 `db:"flavor_vcpus"`
 	FlavorDisk   uint64 `db:"flavor_disk"`
 	FlavorExtras string `db:"flavor_extras"`
+	OSType       string `db:"os_type"`
 }
 
 // ListProjectVMs returns all VMs for a project joined with their flavor data from Postgres.
@@ -645,9 +669,11 @@ func (c *dbUsageClient) ListProjectVMs(ctx context.Context, projectID string) ([
 			COALESCE(f.ram, 0)          AS flavor_ram,
 			COALESCE(f.vcpus, 0)        AS flavor_vcpus,
 			COALESCE(f.disk, 0)         AS flavor_disk,
-			COALESCE(f.extra_specs, '') AS flavor_extras
+			COALESCE(f.extra_specs, '') AS flavor_extras,
+			COALESCE(NULLIF(i.os_type, ''), 'unknown') AS os_type
 		FROM ` + nova.Server{}.TableName() + ` s
 		LEFT JOIN ` + nova.Flavor{}.TableName() + ` f ON f.name = s.flavor_name
+		LEFT JOIN ` + nova.Image{}.TableName() + ` i ON i.id = s.image_ref
 		WHERE s.tenant_id = $1`
 
 	var rows []vmQueryRow

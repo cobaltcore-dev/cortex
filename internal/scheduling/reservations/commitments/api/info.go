@@ -6,7 +6,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -19,9 +18,6 @@ import (
 	"github.com/google/uuid"
 	liquid "github.com/sapcc/go-api-declarations/liquid"
 )
-
-// errInternalServiceInfo indicates an internal error while building service info (e.g., invalid unit configuration)
-var errInternalServiceInfo = errors.New("internal error building service info")
 
 // handles GET /commitments/v1/info requests from Limes:
 // See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/commitment.go
@@ -54,16 +50,9 @@ func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
 	// Build info response
 	info, err := api.buildServiceInfo(ctx, logger)
 	if err != nil {
-		if errors.Is(err, errInternalServiceInfo) {
-			logger.Error(err, "internal error building service info")
-			statusCode = http.StatusInternalServerError
-			http.Error(w, "Internal server error: "+err.Error(), statusCode)
-		} else {
-			// Use Info level for expected conditions like knowledge not being ready yet
-			logger.Info("service info not available yet", "error", err.Error())
-			statusCode = http.StatusServiceUnavailable
-			http.Error(w, "Service temporarily unavailable: "+err.Error(), statusCode)
-		}
+		logger.Info("service info not available yet", "error", err.Error())
+		statusCode = http.StatusServiceUnavailable
+		http.Error(w, "Service temporarily unavailable: "+err.Error(), statusCode)
 		api.recordInfoMetrics(statusCode, startTime)
 		return
 	}
@@ -133,28 +122,21 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 			attrsJSON = nil
 		}
 
-		// Validate memory is positive to avoid panic in MultiplyBy (which panics on factor=0)
-		if groupData.SmallestFlavor.MemoryMB == 0 {
-			return liquid.ServiceInfo{}, fmt.Errorf("%w: flavor group %q has invalid smallest flavor with memoryMB=0",
-				errInternalServiceInfo, groupName)
-		}
-
 		// === 1. RAM Resource ===
 		ramResourceName := liquid.ResourceName(commitments.ResourceNameRAM(groupName))
-		ramUnit, err := liquid.UnitMebibytes.MultiplyBy(groupData.SmallestFlavor.MemoryMB)
-		if err != nil {
-			// Note: This error only occurs on uint64 overflow, which is unrealistic for memory values
-			return liquid.ServiceInfo{}, fmt.Errorf("%w: failed to create unit for flavor group %q: %w",
-				errInternalServiceInfo, groupName, err)
+		// Determine topology: AZSeparatedTopology only for groups that accept commitments
+		// (AZSeparatedTopology means quota is also AZ-aware, required when HasQuota=true)
+		ramTopology := liquid.AZAwareTopology
+		if resCfg.RAM.HandlesCommitments {
+			ramTopology = liquid.AZSeparatedTopology
 		}
 		resources[ramResourceName] = liquid.ResourceInfo{
 			DisplayName: fmt.Sprintf(
-				"multiples of %d MiB (usable by: %s)",
-				groupData.SmallestFlavor.MemoryMB,
+				"GiB of RAM (usable by: %s)",
 				flavorListStr,
 			),
-			Unit:                ramUnit,
-			Topology:            liquid.AZAwareTopology,
+			Unit:                liquid.UnitGibibytes,
+			Topology:            ramTopology,
 			NeedsResourceDemand: false,
 			HasCapacity:         resCfg.RAM.HasCapacity,
 			HasQuota:            resCfg.RAM.HasQuota,
@@ -199,8 +181,6 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 			"ramResource", ramResourceName,
 			"coresResource", coresResourceName,
 			"instancesResource", instancesResourceName,
-			"smallestFlavor", groupData.SmallestFlavor.Name,
-			"smallestRamMB", groupData.SmallestFlavor.MemoryMB,
 			"ramCoreRatio", groupData.RamCoreRatio)
 	}
 

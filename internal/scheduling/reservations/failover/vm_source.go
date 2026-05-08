@@ -26,6 +26,9 @@ type VM struct {
 	// AvailabilityZone is the availability zone where the VM is located.
 	// This is used to ensure failover reservations are created in the same AZ.
 	AvailabilityZone string
+	// CreatedAt is the ISO 8601 timestamp when the VM was created in Nova.
+	// Used by the quota controller to distinguish new VMs from migrations.
+	CreatedAt string
 	// Resources contains the VM's resource allocations (e.g., "memory", "vcpus").
 	Resources map[string]resource.Quantity
 	// FlavorExtraSpecs contains the flavor's extra specifications (e.g., traits, capabilities).
@@ -46,6 +49,22 @@ type VMSource interface {
 	// GetVM returns a specific VM by UUID.
 	// Returns nil, nil if the VM is not found (not an error, just doesn't exist).
 	GetVM(ctx context.Context, vmUUID string) (*VM, error)
+	// IsServerActive returns true if the server exists in the servers table (still running somewhere).
+	// Returns false if not found. Used by quota controller to determine if a removed HV instance was deleted vs migrated.
+	IsServerActive(ctx context.Context, vmUUID string) (bool, error)
+	// GetDeletedVMInfo returns metadata about a deleted VM (from deleted_servers table),
+	// including resolved flavor resources. Returns nil, nil if not found.
+	// Used by quota controller for incremental usage decrements.
+	GetDeletedVMInfo(ctx context.Context, vmUUID string) (*DeletedVMInfo, error)
+}
+
+// DeletedVMInfo contains the metadata needed to compute resource decrements for a deleted VM.
+type DeletedVMInfo struct {
+	ProjectID        string
+	AvailabilityZone string
+	FlavorName       string
+	RAMMiB           uint64
+	VCPUs            uint64
 }
 
 // DBVMSource implements VMSource by reading directly from the database.
@@ -122,6 +141,7 @@ func (s *DBVMSource) ListVMs(ctx context.Context) ([]VM, error) {
 			ProjectID:         server.TenantID,
 			CurrentHypervisor: server.OSEXTSRVATTRHost,
 			AvailabilityZone:  server.OSEXTAvailabilityZone,
+			CreatedAt:         server.Created,
 			Resources:         resources,
 			FlavorExtraSpecs:  extraSpecs,
 		})
@@ -208,6 +228,7 @@ func (s *DBVMSource) GetVM(ctx context.Context, vmUUID string) (*VM, error) {
 		ProjectID:         server.TenantID,
 		CurrentHypervisor: server.OSEXTSRVATTRHost,
 		AvailabilityZone:  server.OSEXTAvailabilityZone,
+		CreatedAt:         server.Created,
 		Resources:         resources,
 		FlavorExtraSpecs:  extraSpecs,
 	}, nil
@@ -308,6 +329,7 @@ func buildVMsFromHypervisors(hypervisorList *hv1.HypervisorList, postgresVMs []V
 				ProjectID:         pgVM.ProjectID,
 				CurrentHypervisor: hv.Name, // Use hypervisor CRD location, not postgres
 				AvailabilityZone:  pgVM.AvailabilityZone,
+				CreatedAt:         pgVM.CreatedAt,
 				Resources:         pgVM.Resources,
 				FlavorExtraSpecs:  pgVM.FlavorExtraSpecs,
 			}
@@ -395,6 +417,50 @@ func filterVMsOnKnownHypervisors(vms []VM, hypervisorList *hv1.HypervisorList) [
 	}
 
 	return result
+}
+
+// IsServerActive returns true if the server exists in the servers table and is not DELETED.
+// VMs in any other status (ACTIVE, SHUTOFF, MIGRATING, ERROR, etc.) still consume resources
+// and should NOT be decremented from quota usage.
+// Used by the quota controller to distinguish deleted VMs from migrated/existing ones.
+func (s *DBVMSource) IsServerActive(ctx context.Context, vmUUID string) (bool, error) {
+	server, err := s.NovaReader.GetServerByID(ctx, vmUUID)
+	if err != nil {
+		return false, fmt.Errorf("failed to check server existence: %w", err)
+	}
+	if server == nil {
+		return false, nil
+	}
+	return server.Status != "DELETED", nil
+}
+
+// GetDeletedVMInfo returns metadata about a deleted VM from the deleted_servers table,
+// including resolved flavor resources. Returns nil, nil if the VM is not found in deleted_servers.
+func (s *DBVMSource) GetDeletedVMInfo(ctx context.Context, vmUUID string) (*DeletedVMInfo, error) {
+	deletedServer, err := s.NovaReader.GetDeletedServerByID(ctx, vmUUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get deleted server: %w", err)
+	}
+	if deletedServer == nil {
+		return nil, nil
+	}
+
+	// Resolve the flavor to get RAM/VCPUs
+	flavor, err := s.NovaReader.GetFlavorByName(ctx, deletedServer.FlavorName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get flavor for deleted server: %w", err)
+	}
+	if flavor == nil {
+		return nil, fmt.Errorf("flavor %q not found for deleted server %s", deletedServer.FlavorName, vmUUID)
+	}
+
+	return &DeletedVMInfo{
+		ProjectID:        deletedServer.TenantID,
+		AvailabilityZone: deletedServer.OSEXTAvailabilityZone,
+		FlavorName:       deletedServer.FlavorName,
+		RAMMiB:           flavor.RAM,
+		VCPUs:            flavor.VCPUs,
+	}, nil
 }
 
 // warnUnknownVMsOnHypervisors logs a warning for VMs that are on hypervisors but not in the ListVMs (i.e. nova) result.

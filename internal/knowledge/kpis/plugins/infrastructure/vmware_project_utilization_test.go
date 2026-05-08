@@ -33,18 +33,22 @@ func buildMetricKey(name string, labels map[string]string) string {
 	}
 }
 
-func instanceMetric(computeHost, az, projectID, projectName, flavorName string, value float64) collectedVMwareMetric {
+func instanceMetric(computeHost, az, projectID, projectName, domainID, domainName, flavorName string, value float64) collectedVMwareMetric {
 	labels := mockVMwareHostLabels(computeHost, az)
 	labels["project_id"] = projectID
 	labels["project_name"] = projectName
+	labels["domain_id"] = domainID
+	labels["domain_name"] = domainName
 	labels["flavor_name"] = flavorName
 	return collectedVMwareMetric{Name: "cortex_vmware_project_instances", Labels: labels, Value: value}
 }
 
-func capacityMetric(computeHost, az, projectID, projectName, resource string, value float64) collectedVMwareMetric {
+func capacityMetric(computeHost, az, projectID, projectName, domainID, domainName, resource string, value float64) collectedVMwareMetric {
 	labels := mockVMwareHostLabels(computeHost, az)
 	labels["project_id"] = projectID
 	labels["project_name"] = projectName
+	labels["domain_id"] = domainID
+	labels["domain_name"] = domainName
 	labels["resource"] = resource
 	return collectedVMwareMetric{Name: "cortex_vmware_project_capacity_usage", Labels: labels, Value: value}
 }
@@ -132,6 +136,7 @@ func TestVMwareProjectUtilizationKPI_queryProjectInstanceCount(t *testing.T) {
 		name           string
 		servers        []nova.Server
 		projects       []identity.Project
+		domains        []identity.Domain
 		expectedCounts map[string]vmwareProjectInstanceCount
 	}{
 		{
@@ -139,9 +144,10 @@ func TestVMwareProjectUtilizationKPI_queryProjectInstanceCount(t *testing.T) {
 			servers: []nova.Server{
 				{ID: "server-1", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-1", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
 			},
-			projects: []identity.Project{{ID: "project-1", Name: "Project One"}},
+			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
+			domains:  []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			expectedCounts: map[string]vmwareProjectInstanceCount{
-				"project-1|nova-compute-1|flavor-1|az1": {ProjectID: "project-1", ProjectName: "Project One", ComputeHost: "nova-compute-1", FlavorName: "flavor-1", AvailabilityZone: "az1", InstanceCount: 1},
+				"project-1|nova-compute-1|flavor-1|az1": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "domain-1", DomainName: "Domain One", ComputeHost: "nova-compute-1", FlavorName: "flavor-1", AvailabilityZone: "az1", InstanceCount: 1},
 			},
 		},
 		{
@@ -153,14 +159,15 @@ func TestVMwareProjectUtilizationKPI_queryProjectInstanceCount(t *testing.T) {
 				{ID: "server-4", TenantID: "project-2", OSEXTSRVATTRHost: "nova-compute-2", FlavorName: "flavor-2", Status: "ACTIVE", OSEXTAvailabilityZone: "az2"},
 			},
 			projects: []identity.Project{
-				{ID: "project-1", Name: "Project One"},
-				{ID: "project-2", Name: "Project Two"},
+				{ID: "project-1", Name: "Project One", DomainID: "domain-1"},
+				{ID: "project-2", Name: "Project Two", DomainID: "domain-1"},
 			},
+			domains: []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			expectedCounts: map[string]vmwareProjectInstanceCount{
-				"project-1|nova-compute-1|flavor-1|az1": {ProjectID: "project-1", ProjectName: "Project One", ComputeHost: "nova-compute-1", FlavorName: "flavor-1", AvailabilityZone: "az1", InstanceCount: 1},
-				"project-1|nova-compute-1|flavor-2|az1": {ProjectID: "project-1", ProjectName: "Project One", ComputeHost: "nova-compute-1", FlavorName: "flavor-2", AvailabilityZone: "az1", InstanceCount: 1},
-				"project-2|nova-compute-2|flavor-1|az2": {ProjectID: "project-2", ProjectName: "Project Two", ComputeHost: "nova-compute-2", FlavorName: "flavor-1", AvailabilityZone: "az2", InstanceCount: 1},
-				"project-2|nova-compute-2|flavor-2|az2": {ProjectID: "project-2", ProjectName: "Project Two", ComputeHost: "nova-compute-2", FlavorName: "flavor-2", AvailabilityZone: "az2", InstanceCount: 1},
+				"project-1|nova-compute-1|flavor-1|az1": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "domain-1", DomainName: "Domain One", ComputeHost: "nova-compute-1", FlavorName: "flavor-1", AvailabilityZone: "az1", InstanceCount: 1},
+				"project-1|nova-compute-1|flavor-2|az1": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "domain-1", DomainName: "Domain One", ComputeHost: "nova-compute-1", FlavorName: "flavor-2", AvailabilityZone: "az1", InstanceCount: 1},
+				"project-2|nova-compute-2|flavor-1|az2": {ProjectID: "project-2", ProjectName: "Project Two", DomainID: "domain-1", DomainName: "Domain One", ComputeHost: "nova-compute-2", FlavorName: "flavor-1", AvailabilityZone: "az2", InstanceCount: 1},
+				"project-2|nova-compute-2|flavor-2|az2": {ProjectID: "project-2", ProjectName: "Project Two", DomainID: "domain-1", DomainName: "Domain One", ComputeHost: "nova-compute-2", FlavorName: "flavor-2", AvailabilityZone: "az2", InstanceCount: 1},
 			},
 		},
 		{
@@ -170,9 +177,10 @@ func TestVMwareProjectUtilizationKPI_queryProjectInstanceCount(t *testing.T) {
 				{ID: "server-2", TenantID: "project-1", OSEXTSRVATTRHost: "node-3", FlavorName: "flavor-2", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
 				{ID: "server-3", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-ironic-1", FlavorName: "flavor-2", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
 			},
-			projects: []identity.Project{{ID: "project-1", Name: "Project One"}},
+			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
+			domains:  []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			expectedCounts: map[string]vmwareProjectInstanceCount{
-				"project-1|nova-compute-1|flavor-1|az1": {ProjectID: "project-1", ProjectName: "Project One", ComputeHost: "nova-compute-1", FlavorName: "flavor-1", AvailabilityZone: "az1", InstanceCount: 1},
+				"project-1|nova-compute-1|flavor-1|az1": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "domain-1", DomainName: "Domain One", ComputeHost: "nova-compute-1", FlavorName: "flavor-1", AvailabilityZone: "az1", InstanceCount: 1},
 			},
 		},
 		{
@@ -182,9 +190,10 @@ func TestVMwareProjectUtilizationKPI_queryProjectInstanceCount(t *testing.T) {
 				{ID: "server-2", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-1", FlavorName: "flavor-2", Status: "ERROR", OSEXTAvailabilityZone: "az1"},
 				{ID: "server-3", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-1", FlavorName: "flavor-3", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
 			},
-			projects: []identity.Project{{ID: "project-1", Name: "Project One"}},
+			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
+			domains:  []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			expectedCounts: map[string]vmwareProjectInstanceCount{
-				"project-1|nova-compute-1|flavor-3|az1": {ProjectID: "project-1", ProjectName: "Project One", ComputeHost: "nova-compute-1", FlavorName: "flavor-3", AvailabilityZone: "az1", InstanceCount: 1},
+				"project-1|nova-compute-1|flavor-3|az1": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "domain-1", DomainName: "Domain One", ComputeHost: "nova-compute-1", FlavorName: "flavor-3", AvailabilityZone: "az1", InstanceCount: 1},
 			},
 		},
 		{
@@ -195,26 +204,41 @@ func TestVMwareProjectUtilizationKPI_queryProjectInstanceCount(t *testing.T) {
 				{ID: "server-3", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-2", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az2"},
 				{ID: "server-4", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-2", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az2"},
 			},
-			projects: []identity.Project{{ID: "project-1", Name: "Project One"}},
+			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
+			domains:  []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			expectedCounts: map[string]vmwareProjectInstanceCount{
-				"project-1|nova-compute-1|flavor-1|az1": {ProjectID: "project-1", ProjectName: "Project One", ComputeHost: "nova-compute-1", FlavorName: "flavor-1", AvailabilityZone: "az1", InstanceCount: 2},
-				"project-1|nova-compute-2|flavor-1|az2": {ProjectID: "project-1", ProjectName: "Project One", ComputeHost: "nova-compute-2", FlavorName: "flavor-1", AvailabilityZone: "az2", InstanceCount: 2},
+				"project-1|nova-compute-1|flavor-1|az1": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "domain-1", DomainName: "Domain One", ComputeHost: "nova-compute-1", FlavorName: "flavor-1", AvailabilityZone: "az1", InstanceCount: 2},
+				"project-1|nova-compute-2|flavor-1|az2": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "domain-1", DomainName: "Domain One", ComputeHost: "nova-compute-2", FlavorName: "flavor-1", AvailabilityZone: "az2", InstanceCount: 2},
 			},
 		},
 		{
-			name: "missing project entry results in empty project_name",
+			name: "project references non-existent domain results in empty domain fields",
+			servers: []nova.Server{
+				{ID: "server-1", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-1", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
+			},
+			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-unknown"}},
+			domains:  []identity.Domain{},
+			expectedCounts: map[string]vmwareProjectInstanceCount{
+				// The domain_id is extracted from the project record, so it should be "domain-unknown" even though there is no matching domain entry
+				"project-1|nova-compute-1|flavor-1|az1": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "domain-unknown", DomainName: "", ComputeHost: "nova-compute-1", FlavorName: "flavor-1", AvailabilityZone: "az1", InstanceCount: 1},
+			},
+		},
+		{
+			name: "missing project entry results in empty project_name and domain",
 			servers: []nova.Server{
 				{ID: "server-1", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-1", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
 			},
 			projects: []identity.Project{},
+			domains:  []identity.Domain{},
 			expectedCounts: map[string]vmwareProjectInstanceCount{
-				"project-1|nova-compute-1|flavor-1|az1": {ProjectID: "project-1", ProjectName: "", ComputeHost: "nova-compute-1", FlavorName: "flavor-1", AvailabilityZone: "az1", InstanceCount: 1},
+				"project-1|nova-compute-1|flavor-1|az1": {ProjectID: "project-1", ProjectName: "", DomainID: "", DomainName: "", ComputeHost: "nova-compute-1", FlavorName: "flavor-1", AvailabilityZone: "az1", InstanceCount: 1},
 			},
 		},
 		{
 			name:           "no instances returns empty result",
 			servers:        []nova.Server{},
-			projects:       []identity.Project{{ID: "project-1", Name: "Project One"}},
+			projects:       []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
+			domains:        []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			expectedCounts: map[string]vmwareProjectInstanceCount{},
 		},
 	}
@@ -227,6 +251,7 @@ func TestVMwareProjectUtilizationKPI_queryProjectInstanceCount(t *testing.T) {
 			if err := testDB.CreateTable(
 				testDB.AddTable(nova.Server{}),
 				testDB.AddTable(identity.Project{}),
+				testDB.AddTable(identity.Domain{}),
 			); err != nil {
 				t.Fatalf("failed to create tables: %v", err)
 			}
@@ -237,6 +262,9 @@ func TestVMwareProjectUtilizationKPI_queryProjectInstanceCount(t *testing.T) {
 			}
 			for i := range tt.projects {
 				mockData = append(mockData, &tt.projects[i])
+			}
+			for i := range tt.domains {
+				mockData = append(mockData, &tt.domains[i])
 			}
 			if len(mockData) > 0 {
 				if err := testDB.Insert(mockData...); err != nil {
@@ -277,6 +305,7 @@ func TestVMwareProjectUtilizationKPI_queryProjectCapacityUsage(t *testing.T) {
 		name           string
 		servers        []nova.Server
 		projects       []identity.Project
+		domains        []identity.Domain
 		flavors        []nova.Flavor
 		expectedUsages map[string]vmwareProjectCapacityUsage
 	}{
@@ -285,10 +314,11 @@ func TestVMwareProjectUtilizationKPI_queryProjectCapacityUsage(t *testing.T) {
 			servers: []nova.Server{
 				{ID: "server-1", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-1", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
 			},
-			projects: []identity.Project{{ID: "project-1", Name: "Project One"}},
+			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
+			domains:  []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors:  []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
 			expectedUsages: map[string]vmwareProjectCapacityUsage{
-				"project-1|nova-compute-1|az1": {ProjectID: "project-1", ProjectName: "Project One", ComputeHost: "nova-compute-1", AvailabilityZone: "az1", TotalVCPUs: 2, TotalRAMMB: 4096, TotalDiskGB: 1},
+				"project-1|nova-compute-1|az1": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "domain-1", DomainName: "Domain One", ComputeHost: "nova-compute-1", AvailabilityZone: "az1", TotalVCPUs: 2, TotalRAMMB: 4096, TotalDiskGB: 1},
 			},
 		},
 		{
@@ -299,16 +329,17 @@ func TestVMwareProjectUtilizationKPI_queryProjectCapacityUsage(t *testing.T) {
 				{ID: "server-3", TenantID: "project-2", OSEXTSRVATTRHost: "nova-compute-2", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az2"},
 			},
 			projects: []identity.Project{
-				{ID: "project-1", Name: "Project One"},
-				{ID: "project-2", Name: "Project Two"},
+				{ID: "project-1", Name: "Project One", DomainID: "domain-1"},
+				{ID: "project-2", Name: "Project Two", DomainID: "domain-1"},
 			},
+			domains: []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1},
 				{ID: "f2", Name: "flavor-2", VCPUs: 4, RAM: 8192, Disk: 2},
 			},
 			expectedUsages: map[string]vmwareProjectCapacityUsage{
-				"project-1|nova-compute-1|az1": {ProjectID: "project-1", ProjectName: "Project One", ComputeHost: "nova-compute-1", AvailabilityZone: "az1", TotalVCPUs: 6, TotalRAMMB: 12288, TotalDiskGB: 3},
-				"project-2|nova-compute-2|az2": {ProjectID: "project-2", ProjectName: "Project Two", ComputeHost: "nova-compute-2", AvailabilityZone: "az2", TotalVCPUs: 2, TotalRAMMB: 4096, TotalDiskGB: 1},
+				"project-1|nova-compute-1|az1": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "domain-1", DomainName: "Domain One", ComputeHost: "nova-compute-1", AvailabilityZone: "az1", TotalVCPUs: 6, TotalRAMMB: 12288, TotalDiskGB: 3},
+				"project-2|nova-compute-2|az2": {ProjectID: "project-2", ProjectName: "Project Two", DomainID: "domain-1", DomainName: "Domain One", ComputeHost: "nova-compute-2", AvailabilityZone: "az2", TotalVCPUs: 2, TotalRAMMB: 4096, TotalDiskGB: 1},
 			},
 		},
 		{
@@ -316,10 +347,11 @@ func TestVMwareProjectUtilizationKPI_queryProjectCapacityUsage(t *testing.T) {
 			servers: []nova.Server{
 				{ID: "server-1", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-1", FlavorName: "flavor-missing", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
 			},
-			projects: []identity.Project{{ID: "project-1", Name: "Project One"}},
+			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
+			domains:  []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors:  []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
 			expectedUsages: map[string]vmwareProjectCapacityUsage{
-				"project-1|nova-compute-1|az1": {ProjectID: "project-1", ProjectName: "Project One", ComputeHost: "nova-compute-1", AvailabilityZone: "az1", TotalVCPUs: 0, TotalRAMMB: 0, TotalDiskGB: 0},
+				"project-1|nova-compute-1|az1": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "domain-1", DomainName: "Domain One", ComputeHost: "nova-compute-1", AvailabilityZone: "az1", TotalVCPUs: 0, TotalRAMMB: 0, TotalDiskGB: 0},
 			},
 		},
 		{
@@ -327,7 +359,8 @@ func TestVMwareProjectUtilizationKPI_queryProjectCapacityUsage(t *testing.T) {
 			servers: []nova.Server{
 				{ID: "server-1", TenantID: "project-1", OSEXTSRVATTRHost: "node-3", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
 			},
-			projects:       []identity.Project{{ID: "project-1", Name: "Project One"}},
+			projects:       []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
+			domains:        []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors:        []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
 			expectedUsages: map[string]vmwareProjectCapacityUsage{},
 		},
@@ -336,7 +369,8 @@ func TestVMwareProjectUtilizationKPI_queryProjectCapacityUsage(t *testing.T) {
 			servers: []nova.Server{
 				{ID: "server-1", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-1", FlavorName: "flavor-1", Status: "DELETED", OSEXTAvailabilityZone: "az1"},
 			},
-			projects:       []identity.Project{{ID: "project-1", Name: "Project One"}},
+			projects:       []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
+			domains:        []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors:        []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
 			expectedUsages: map[string]vmwareProjectCapacityUsage{},
 		},
@@ -344,8 +378,9 @@ func TestVMwareProjectUtilizationKPI_queryProjectCapacityUsage(t *testing.T) {
 			name:    "no instances returns empty capacity usage",
 			servers: []nova.Server{},
 			projects: []identity.Project{
-				{ID: "project-1", Name: "Project One"},
+				{ID: "project-1", Name: "Project One", DomainID: "domain-1"},
 			},
+			domains:        []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors:        []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
 			expectedUsages: map[string]vmwareProjectCapacityUsage{},
 		},
@@ -355,10 +390,11 @@ func TestVMwareProjectUtilizationKPI_queryProjectCapacityUsage(t *testing.T) {
 				{ID: "server-1", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-1", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
 				{ID: "server-2", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-1", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
 			},
-			projects: []identity.Project{{ID: "project-1", Name: "Project One"}},
+			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
+			domains:  []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors:  []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
 			expectedUsages: map[string]vmwareProjectCapacityUsage{
-				"project-1|nova-compute-1|az1": {ProjectID: "project-1", ProjectName: "Project One", ComputeHost: "nova-compute-1", AvailabilityZone: "az1", TotalVCPUs: 4, TotalRAMMB: 8192, TotalDiskGB: 2},
+				"project-1|nova-compute-1|az1": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "domain-1", DomainName: "Domain One", ComputeHost: "nova-compute-1", AvailabilityZone: "az1", TotalVCPUs: 4, TotalRAMMB: 8192, TotalDiskGB: 2},
 			},
 		},
 		{
@@ -366,19 +402,34 @@ func TestVMwareProjectUtilizationKPI_queryProjectCapacityUsage(t *testing.T) {
 			servers: []nova.Server{
 				{ID: "server-1", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-ironic-1", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
 			},
-			projects:       []identity.Project{{ID: "project-1", Name: "Project One"}},
+			projects:       []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
+			domains:        []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors:        []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
 			expectedUsages: map[string]vmwareProjectCapacityUsage{},
 		},
 		{
-			name: "missing project entry results in empty project_name",
+			name: "project references non-existent domain results in empty domain fields",
+			servers: []nova.Server{
+				{ID: "server-1", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-1", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
+			},
+			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-unknown"}},
+			domains:  []identity.Domain{},
+			flavors:  []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
+			expectedUsages: map[string]vmwareProjectCapacityUsage{
+				// The domain_id is extracted from the project record, so it should be "domain-unknown" even though there is no matching domain entry
+				"project-1|nova-compute-1|az1": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "domain-unknown", DomainName: "", ComputeHost: "nova-compute-1", AvailabilityZone: "az1", TotalVCPUs: 2, TotalRAMMB: 4096, TotalDiskGB: 1},
+			},
+		},
+		{
+			name: "missing project entry results in empty project_name and domain",
 			servers: []nova.Server{
 				{ID: "server-1", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-1", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
 			},
 			projects: []identity.Project{},
+			domains:  []identity.Domain{},
 			flavors:  []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
 			expectedUsages: map[string]vmwareProjectCapacityUsage{
-				"project-1|nova-compute-1|az1": {ProjectID: "project-1", ProjectName: "", ComputeHost: "nova-compute-1", AvailabilityZone: "az1", TotalVCPUs: 2, TotalRAMMB: 4096, TotalDiskGB: 1},
+				"project-1|nova-compute-1|az1": {ProjectID: "project-1", ProjectName: "", DomainID: "", DomainName: "", ComputeHost: "nova-compute-1", AvailabilityZone: "az1", TotalVCPUs: 2, TotalRAMMB: 4096, TotalDiskGB: 1},
 			},
 		},
 	}
@@ -392,6 +443,7 @@ func TestVMwareProjectUtilizationKPI_queryProjectCapacityUsage(t *testing.T) {
 			if err := testDB.CreateTable(
 				testDB.AddTable(nova.Server{}),
 				testDB.AddTable(identity.Project{}),
+				testDB.AddTable(identity.Domain{}),
 				testDB.AddTable(nova.Flavor{}),
 			); err != nil {
 				t.Fatalf("failed to create tables: %v", err)
@@ -403,6 +455,9 @@ func TestVMwareProjectUtilizationKPI_queryProjectCapacityUsage(t *testing.T) {
 			}
 			for i := range tt.projects {
 				mockData = append(mockData, &tt.projects[i])
+			}
+			for i := range tt.domains {
+				mockData = append(mockData, &tt.domains[i])
 			}
 			for i := range tt.flavors {
 				mockData = append(mockData, &tt.flavors[i])
@@ -446,6 +501,7 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 		name            string
 		servers         []nova.Server
 		projects        []identity.Project
+		domains         []identity.Domain
 		flavors         []nova.Flavor
 		hostDetails     []compute.HostDetails
 		expectedMetrics []collectedVMwareMetric
@@ -455,16 +511,17 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 			servers: []nova.Server{
 				{ID: "s1", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-1", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
 			},
-			projects: []identity.Project{{ID: "project-1", Name: "Project One"}},
+			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
+			domains:  []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors:  []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
 			hostDetails: []compute.HostDetails{
 				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
 			},
 			expectedMetrics: []collectedVMwareMetric{
-				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "flavor-1", 1),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "vcpu", 2),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "memory", 4096*1024*1024),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "disk", 1*1024*1024*1024),
+				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "flavor-1", 1),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "cpu", 2),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "ram", 4096*1024*1024),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "disk", 1*1024*1024*1024),
 			},
 		},
 		{
@@ -475,9 +532,10 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 				{ID: "s3", TenantID: "project-2", OSEXTSRVATTRHost: "nova-compute-2", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az2"},
 			},
 			projects: []identity.Project{
-				{ID: "project-1", Name: "Project One"},
-				{ID: "project-2", Name: "Project Two"},
+				{ID: "project-1", Name: "Project One", DomainID: "domain-1"},
+				{ID: "project-2", Name: "Project Two", DomainID: "domain-1"},
 			},
+			domains: []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1},
 				{ID: "f2", Name: "flavor-2", VCPUs: 4, RAM: 8192, Disk: 2},
@@ -487,17 +545,17 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 				{ComputeHost: "nova-compute-2", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az2"},
 			},
 			expectedMetrics: []collectedVMwareMetric{
-				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "flavor-1", 1),
-				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "flavor-2", 1),
-				instanceMetric("nova-compute-2", "az2", "project-2", "Project Two", "flavor-1", 1),
+				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "flavor-1", 1),
+				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "flavor-2", 1),
+				instanceMetric("nova-compute-2", "az2", "project-2", "Project Two", "domain-1", "Domain One", "flavor-1", 1),
 				// nova-compute-1/project-1: 1*flavor-1 + 1*flavor-2
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "vcpu", 6),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "memory", 12288*1024*1024),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "disk", 3*1024*1024*1024),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "cpu", 6),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "ram", 12288*1024*1024),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "disk", 3*1024*1024*1024),
 				// nova-compute-2/project-2: 1*flavor-1
-				capacityMetric("nova-compute-2", "az2", "project-2", "Project Two", "vcpu", 2),
-				capacityMetric("nova-compute-2", "az2", "project-2", "Project Two", "memory", 4096*1024*1024),
-				capacityMetric("nova-compute-2", "az2", "project-2", "Project Two", "disk", 1*1024*1024*1024),
+				capacityMetric("nova-compute-2", "az2", "project-2", "Project Two", "domain-1", "Domain One", "cpu", 2),
+				capacityMetric("nova-compute-2", "az2", "project-2", "Project Two", "domain-1", "Domain One", "ram", 4096*1024*1024),
+				capacityMetric("nova-compute-2", "az2", "project-2", "Project Two", "domain-1", "Domain One", "disk", 1*1024*1024*1024),
 			},
 		},
 		{
@@ -507,16 +565,17 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 				{ID: "s2", TenantID: "project-1", OSEXTSRVATTRHost: "node-3", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
 				{ID: "s3", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-ironic-1", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
 			},
-			projects: []identity.Project{{ID: "project-1", Name: "Project One"}},
+			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
+			domains:  []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors:  []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
 			hostDetails: []compute.HostDetails{
 				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
 			},
 			expectedMetrics: []collectedVMwareMetric{
-				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "flavor-1", 1),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "vcpu", 2),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "memory", 4096*1024*1024),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "disk", 1*1024*1024*1024),
+				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "flavor-1", 1),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "cpu", 2),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "ram", 4096*1024*1024),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "disk", 1*1024*1024*1024),
 			},
 		},
 		{
@@ -526,7 +585,8 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 				{ID: "s2", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-1", FlavorName: "flavor-2", Status: "ERROR", OSEXTAvailabilityZone: "az1"},
 				{ID: "s3", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-1", FlavorName: "flavor-3", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
 			},
-			projects: []identity.Project{{ID: "project-1", Name: "Project One"}},
+			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
+			domains:  []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1},
 				{ID: "f2", Name: "flavor-2", VCPUs: 4, RAM: 8192, Disk: 2},
@@ -536,10 +596,10 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
 			},
 			expectedMetrics: []collectedVMwareMetric{
-				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "flavor-3", 1),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "vcpu", 8),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "memory", 16384*1024*1024),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "disk", 4*1024*1024*1024),
+				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "flavor-3", 1),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "cpu", 8),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "ram", 16384*1024*1024),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "disk", 4*1024*1024*1024),
 			},
 		},
 		{
@@ -550,38 +610,59 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 				{ID: "s3", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-2", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az2"},
 				{ID: "s4", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-2", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az2"},
 			},
-			projects: []identity.Project{{ID: "project-1", Name: "Project One"}},
+			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
+			domains:  []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors:  []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
 			hostDetails: []compute.HostDetails{
 				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
 				{ComputeHost: "nova-compute-2", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az2"},
 			},
 			expectedMetrics: []collectedVMwareMetric{
-				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "flavor-1", 2),
-				instanceMetric("nova-compute-2", "az2", "project-1", "Project One", "flavor-1", 2),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "vcpu", 4),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "memory", 2*4096*1024*1024),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "disk", 2*1024*1024*1024),
-				capacityMetric("nova-compute-2", "az2", "project-1", "Project One", "vcpu", 4),
-				capacityMetric("nova-compute-2", "az2", "project-1", "Project One", "memory", 2*4096*1024*1024),
-				capacityMetric("nova-compute-2", "az2", "project-1", "Project One", "disk", 2*1024*1024*1024),
+				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "flavor-1", 2),
+				instanceMetric("nova-compute-2", "az2", "project-1", "Project One", "domain-1", "Domain One", "flavor-1", 2),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "cpu", 4),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "ram", 2*4096*1024*1024),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "disk", 2*1024*1024*1024),
+				capacityMetric("nova-compute-2", "az2", "project-1", "Project One", "domain-1", "Domain One", "cpu", 4),
+				capacityMetric("nova-compute-2", "az2", "project-1", "Project One", "domain-1", "Domain One", "ram", 2*4096*1024*1024),
+				capacityMetric("nova-compute-2", "az2", "project-1", "Project One", "domain-1", "Domain One", "disk", 2*1024*1024*1024),
 			},
 		},
 		{
-			name: "missing project entry results in empty project_name label",
+			name: "project references non-existent domain results in empty domain labels",
 			servers: []nova.Server{
 				{ID: "s1", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-1", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
 			},
-			projects: []identity.Project{},
+			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-unknown"}},
+			domains:  []identity.Domain{},
 			flavors:  []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
 			hostDetails: []compute.HostDetails{
 				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
 			},
 			expectedMetrics: []collectedVMwareMetric{
-				instanceMetric("nova-compute-1", "az1", "project-1", "", "flavor-1", 1),
-				capacityMetric("nova-compute-1", "az1", "project-1", "", "vcpu", 2),
-				capacityMetric("nova-compute-1", "az1", "project-1", "", "memory", 4096*1024*1024),
-				capacityMetric("nova-compute-1", "az1", "project-1", "", "disk", 1*1024*1024*1024),
+				// The domain_id is extracted from the project record, so it should be "domain-unknown" even though there is no matching domain entry
+				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-unknown", "", "flavor-1", 1),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-unknown", "", "cpu", 2),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-unknown", "", "ram", 4096*1024*1024),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-unknown", "", "disk", 1*1024*1024*1024),
+			},
+		},
+		{
+			name: "missing project entry results in empty project_name and domain labels",
+			servers: []nova.Server{
+				{ID: "s1", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-1", FlavorName: "flavor-1", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
+			},
+			projects: []identity.Project{},
+			domains:  []identity.Domain{},
+			flavors:  []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
+			hostDetails: []compute.HostDetails{
+				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
+			},
+			expectedMetrics: []collectedVMwareMetric{
+				instanceMetric("nova-compute-1", "az1", "project-1", "", "", "", "flavor-1", 1),
+				capacityMetric("nova-compute-1", "az1", "project-1", "", "", "", "cpu", 2),
+				capacityMetric("nova-compute-1", "az1", "project-1", "", "", "", "ram", 4096*1024*1024),
+				capacityMetric("nova-compute-1", "az1", "project-1", "", "", "", "disk", 1*1024*1024*1024),
 			},
 		},
 		{
@@ -589,24 +670,26 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 			servers: []nova.Server{
 				{ID: "s1", TenantID: "project-1", OSEXTSRVATTRHost: "nova-compute-1", FlavorName: "flavor-missing", Status: "ACTIVE", OSEXTAvailabilityZone: "az1"},
 			},
-			projects: []identity.Project{{ID: "project-1", Name: "Project One"}},
+			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
+			domains:  []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors:  []nova.Flavor{},
 			hostDetails: []compute.HostDetails{
 				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
 			},
 			expectedMetrics: []collectedVMwareMetric{
-				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "flavor-missing", 1),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "vcpu", 0),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "memory", 0),
-				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "disk", 0),
+				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "flavor-missing", 1),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "cpu", 0),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "ram", 0),
+				capacityMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "disk", 0),
 			},
 		},
 		{
 			name:    "no instances produces no metrics",
 			servers: []nova.Server{},
 			projects: []identity.Project{
-				{ID: "project-1", Name: "Project One"},
+				{ID: "project-1", Name: "Project One", DomainID: "domain-1"},
 			},
+			domains: []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1},
 			},
@@ -626,6 +709,7 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 			if err := testDB.CreateTable(
 				testDB.AddTable(nova.Server{}),
 				testDB.AddTable(identity.Project{}),
+				testDB.AddTable(identity.Domain{}),
 				testDB.AddTable(nova.Flavor{}),
 			); err != nil {
 				t.Fatalf("failed to create tables: %v", err)
@@ -637,6 +721,9 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 			}
 			for i := range tt.projects {
 				mockData = append(mockData, &tt.projects[i])
+			}
+			for i := range tt.domains {
+				mockData = append(mockData, &tt.domains[i])
 			}
 			for i := range tt.flavors {
 				mockData = append(mockData, &tt.flavors[i])

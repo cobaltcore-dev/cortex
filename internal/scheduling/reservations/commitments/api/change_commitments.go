@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -38,6 +39,13 @@ func sortedKeys[K ~string, V any](m map[K]V) []K {
 		return string(keys[i]) < string(keys[j])
 	})
 	return keys
+}
+
+// crWatch pairs a CRD name with the generation written by the API so the polling loop
+// can skip cache reads that have not yet reflected the write (stale-cache guard).
+type crWatch struct {
+	name       string
+	generation int64
 }
 
 // crSnapshot captures a CommittedResource CRD's prior state for batch rollback.
@@ -110,6 +118,13 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	if req.AZ == "" {
+		statusCode = http.StatusBadRequest
+		http.Error(w, "availability zone is required", statusCode)
+		api.recordMetrics(req, resp, statusCode, startTime)
+		return
+	}
+
 	if err := api.processCommitmentChanges(ctx, w, logger, req, &resp); err != nil {
 		if strings.Contains(err.Error(), "version mismatch") {
 			statusCode = http.StatusConflict
@@ -156,7 +171,7 @@ func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.Respons
 	allowRejection := req.RequiresConfirmation()
 
 	var (
-		toWatch      []string     // CRD names to poll for terminal conditions (upserts only)
+		toWatch      []crWatch    // CRD names + expected generations to poll for terminal conditions (upserts only)
 		snapshots    []crSnapshot // ordered list for deterministic rollback
 		failedReason string
 		rollback     bool
@@ -182,8 +197,7 @@ ProcessLoop:
 				break ProcessLoop
 			}
 
-			flavorGroup, ok := flavorGroups[flavorGroupName]
-			if !ok {
+			if _, ok := flavorGroups[flavorGroupName]; !ok {
 				failedReason = "flavor group not found: " + flavorGroupName
 				rollback = true
 				break ProcessLoop
@@ -199,7 +213,7 @@ ProcessLoop:
 				isDelete := commitment.NewStatus.IsNone()
 				crName := "commitment-" + string(commitment.UUID)
 
-				logger.V(1).Info("processing commitment",
+				logger.Info("processing commitment",
 					"commitmentUUID", commitment.UUID,
 					"oldStatus", commitment.OldStatus.UnwrapOr("none"),
 					"newStatus", commitment.NewStatus.UnwrapOr("none"),
@@ -223,34 +237,48 @@ ProcessLoop:
 				if isDelete {
 					// Limes is removing this commitment; delete the CRD if it exists.
 					snap.wasDeleted = true
+					snapshots = append(snapshots, snap)
 					if snap.prevSpec != nil {
 						if err := api.client.Delete(ctx, existing); err != nil && !apierrors.IsNotFound(err) {
 							failedReason = fmt.Sprintf("commitment %s: failed to delete CommittedResource CRD: %v", commitment.UUID, err)
 							rollback = true
 							break ProcessLoop
 						}
+						if err := commitments.DeleteChildReservations(ctx, api.client, existing); err != nil {
+							failedReason = fmt.Sprintf("commitment %s: failed to delete child reservations: %v", commitment.UUID, err)
+							rollback = true
+							break ProcessLoop
+						}
 						logger.V(1).Info("deleted CommittedResource CRD", "name", crName)
 					}
-					snapshots = append(snapshots, snap)
 					continue
 				}
 
 				stateDesired, err := commitments.FromChangeCommitmentTargetState(
-					commitment, string(projectID), domainID, flavorGroupName, flavorGroup, string(req.AZ))
+					commitment, string(projectID), domainID, flavorGroupName, string(req.AZ))
 				if err != nil {
 					failedReason = fmt.Sprintf("commitment %s: %s", commitment.UUID, err)
 					rollback = true
 					break ProcessLoop
 				}
 
-				cr := &v1alpha1.CommittedResource{}
-				cr.Name = crName
-				if _, err := controllerutil.CreateOrUpdate(ctx, api.client, cr, func() error {
-					applyCRSpec(cr, stateDesired, allowRejection)
-					if cr.Annotations == nil {
-						cr.Annotations = make(map[string]string)
+				// RetryOnConflict handles the race where the CommittedResource controller reconciles
+				// the CRD (bumping resourceVersion) between the Get and Update inside CreateOrUpdate.
+				var crGeneration int64
+				if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					cr := &v1alpha1.CommittedResource{}
+					cr.Name = crName
+					if _, err := controllerutil.CreateOrUpdate(ctx, api.client, cr, func() error {
+						applyCRSpec(cr, stateDesired, allowRejection)
+						if cr.Annotations == nil {
+							cr.Annotations = make(map[string]string)
+						}
+						cr.Annotations[v1alpha1.AnnotationCreatorRequestID] = reservations.GlobalRequestIDFromContext(ctx)
+						return nil
+					}); err != nil {
+						return err
 					}
-					cr.Annotations[v1alpha1.AnnotationCreatorRequestID] = reservations.GlobalRequestIDFromContext(ctx)
+					crGeneration = cr.Generation
 					return nil
 				}); err != nil {
 					failedReason = fmt.Sprintf("commitment %s: failed to write CommittedResource CRD: %v", commitment.UUID, err)
@@ -258,7 +286,7 @@ ProcessLoop:
 					break ProcessLoop
 				}
 
-				toWatch = append(toWatch, crName)
+				toWatch = append(toWatch, crWatch{name: crName, generation: crGeneration})
 				snapshots = append(snapshots, snap)
 				logger.V(1).Info("upserted CommittedResource CRD", "name", crName)
 			}
@@ -289,9 +317,9 @@ ProcessLoop:
 		case len(rejected) > 0:
 			var b strings.Builder
 			fmt.Fprintf(&b, "%d commitment(s) failed to apply:", len(rejected))
-			for _, crName := range toWatch { // iterate toWatch for deterministic order
-				if reason, ok := rejected[crName]; ok {
-					fmt.Fprintf(&b, "\n- commitment %s: %s", strings.TrimPrefix(crName, "commitment-"), reason)
+			for _, w := range toWatch { // iterate toWatch for deterministic order
+				if reason, ok := rejected[w.name]; ok {
+					fmt.Fprintf(&b, "\n- commitment %s: %s", strings.TrimPrefix(w.name, "commitment-"), reason)
 				}
 			}
 			failedReason = b.String()
@@ -326,26 +354,32 @@ ProcessLoop:
 //   - Ready=False, Reason=Planned — success; controller reserves capacity at activation time
 //   - Ready=False, Reason=Rejected — failure; reason reported to caller
 //
+// Each entry in watches carries the generation written by the API. The polling loop skips any
+// cache read whose generation is older than that value, preventing a stale Ready=True (or
+// Ready=False/Rejected) condition from a prior reconcile cycle from being mistaken for the
+// outcome of the current write.
+//
 // Returns a map of crName → rejection reason for failed CRDs, and any polling errors (e.g. timeout).
 func watchCRsUntilReady(
 	ctx context.Context,
 	logger logr.Logger,
 	k8sClient client.Client,
-	crNames []string,
+	watches []crWatch,
 	timeout time.Duration,
 	pollInterval time.Duration,
 ) (rejected map[string]string, errs []error) {
 
-	if len(crNames) == 0 {
+	if len(watches) == 0 {
 		return nil, nil
 	}
 
 	rejected = make(map[string]string)
 	deadline := time.Now().Add(timeout)
 
-	pending := make(map[string]struct{}, len(crNames))
-	for _, name := range crNames {
-		pending[name] = struct{}{}
+	// pending maps CR name → the minimum generation the cache must show before we trust conditions.
+	pending := make(map[string]int64, len(watches))
+	for _, w := range watches {
+		pending[w.name] = w.generation
 	}
 
 	for {
@@ -354,23 +388,49 @@ func watchCRsUntilReady(
 			return rejected, errs
 		}
 
-		for name := range pending {
+		for name, expectedGen := range pending {
 			cr := &v1alpha1.CommittedResource{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: name}, cr); err != nil {
 				continue // transient; keep waiting
+			}
+
+			// The informer cache may not have caught up with the spec write yet. Until the
+			// cache reflects at least the generation we wrote, any condition we read belongs
+			// to an older spec version and must not be treated as terminal.
+			if cr.Generation < expectedGen {
+				logger.V(1).Info("cache not yet reflecting write, skipping",
+					"name", name,
+					"cacheGeneration", cr.Generation,
+					"expectedGeneration", expectedGen,
+				)
+				continue
 			}
 
 			cond := meta.FindStatusCondition(cr.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
 			if cond == nil {
 				continue // controller hasn't reconciled yet
 			}
+			// Skip conditions stamped by a prior reconcile: ObservedGeneration < Generation means
+			// the condition reflects an older spec version and must not be treated as terminal.
+			if cond.ObservedGeneration < cr.Generation {
+				logger.V(1).Info("skipping stale condition on CommittedResource",
+					"name", name,
+					"generation", cr.Generation,
+					"conditionObservedGeneration", cond.ObservedGeneration,
+					"reason", cond.Reason,
+				)
+				continue
+			}
 
 			switch {
 			case cond.Status == metav1.ConditionTrue:
+				logger.Info("CommittedResource accepted", "name", name)
 				delete(pending, name)
 			case cond.Status == metav1.ConditionFalse && cond.Reason == v1alpha1.CommittedResourceReasonPlanned:
+				logger.Info("CommittedResource planned (will reserve at activation)", "name", name)
 				delete(pending, name) // planned = accepted; controller will reserve at activation
 			case cond.Status == metav1.ConditionFalse && cond.Reason == v1alpha1.CommittedResourceReasonRejected:
+				logger.Info("CommittedResource rejected", "name", name, "reason", cond.Message)
 				delete(pending, name)
 				rejected[name] = cond.Message
 				// Reason=Reserving: controller is placing slots; keep waiting.
@@ -418,15 +478,21 @@ func rollbackCR(ctx context.Context, logger logr.Logger, k8sClient client.Client
 		return
 	}
 
-	cr := &v1alpha1.CommittedResource{}
-	if err := k8sClient.Get(ctx, types.NamespacedName{Name: snap.crName}, cr); err != nil {
-		logger.Error(err, "failed to fetch CommittedResource CRD for rollback", "name", snap.crName)
+	// The controller may write status (bumping resourceVersion) between our Get and Update.
+	// RetryOnConflict retries with exponential backoff when that race occurs.
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		cr := &v1alpha1.CommittedResource{}
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: snap.crName}, cr); err != nil {
+			return err
+		}
+		cr.Spec = *snap.prevSpec
+		return k8sClient.Update(ctx, cr)
+	})
+	if err != nil {
+		logger.Error(err, "failed to restore CommittedResource CRD spec during rollback", "name", snap.crName)
 		return
 	}
-	cr.Spec = *snap.prevSpec
-	if err := k8sClient.Update(ctx, cr); err != nil {
-		logger.Error(err, "failed to restore CommittedResource CRD spec during rollback", "name", snap.crName)
-	}
+	logger.V(1).Info("restored CommittedResource CRD spec during rollback", "name", snap.crName)
 }
 
 // applyCRSpec writes CommitmentState fields into a CommittedResource CRD spec.

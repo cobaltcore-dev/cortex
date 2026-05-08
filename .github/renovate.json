@@ -11,7 +11,8 @@
   ],
   "commitMessageAction": "Renovate: Update",
   "constraints": {
-    "go": "1.26"
+    "go": "1.26",
+    "python": "3.13"
   },
   "dependencyDashboardOSVVulnerabilitySummary": "all",
   "osvVulnerabilityAlerts": true,
@@ -96,6 +97,15 @@
     {
       "matchFileNames": [
         "config/manager/kustomization.yaml"
+      ],
+      "enabled": false
+    },
+    {
+      "matchPackageNames": [
+        "python"
+      ],
+      "matchFileNames": [
+        ".github/actions/setup-claude-code-action/**"
       ],
       "enabled": false
     }

@@ -174,7 +174,7 @@ func (e *e2eEnv) driveReconciles(ctx context.Context) {
 }
 
 // reconcileAll drives one round of reconciles:
-//  1. CR pass 1  — adds finalizer and creates Reservation CRDs.
+//  1. CR pass 1  — creates Reservation CRDs based on current state.
 //  2. Reservation pass — calls the scheduler, sets TargetHost (first reconcile) then Ready=True (second).
 //  3. CR pass 2  — re-fetches each CR and picks up Reservation outcomes (placed or rejected).
 //
@@ -225,11 +225,9 @@ func (e *e2eEnv) reconcileAll(ctx context.Context) {
 
 // e2eIsTerminalCR returns true for states the API polling loop treats as final:
 // Accepted (Ready=True), Rejected, or Planned.
-// CRs with DeletionTimestamp are never terminal here: they need one more reconcile to remove
-// their finalizer (set by the controller on first reconcile) so the fake client can delete them.
 func e2eIsTerminalCR(cr v1alpha1.CommittedResource) bool {
 	if !cr.DeletionTimestamp.IsZero() {
-		return false
+		return true
 	}
 	cond := apimeta.FindStatusCondition(cr.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
 	if cond == nil {
@@ -243,7 +241,6 @@ func e2eIsTerminalCR(cr v1alpha1.CommittedResource) bool {
 }
 
 // waitForCRAbsent polls until the named CommittedResource no longer exists or the 1s deadline passes.
-// Used after rollback calls because the finalizer removal happens asynchronously in the background reconcile loop.
 func (e *e2eEnv) waitForCRAbsent(t *testing.T, crName string) {
 	t.Helper()
 	deadline := time.Now().Add(1 * time.Second)

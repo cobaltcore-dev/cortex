@@ -30,33 +30,6 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: host-running-vms
-spec:
-  schedulingDomain: nova
-  impl: host_running_vms_kpi
-  dependencies:
-    knowledges:
-      - name: host-details
-      - name: host-utilization
-  description: |
-    This KPI tracks the total number of running VMs on hosts.
----
-apiVersion: cortex.cloud/v1alpha1
-kind: KPI
-metadata:
-  name: flavors-running-vms
-spec:
-  schedulingDomain: nova
-  impl: flavor_running_vms_kpi
-  dependencies:
-    datasources:
-      - name: nova-servers
-  description: |
-    This KPI tracks the total number of running VMs per flavor and availability zone.
----
-apiVersion: cortex.cloud/v1alpha1
-kind: KPI
-metadata:
   name: vm-migration-statistics
 spec:
   schedulingDomain: nova
@@ -183,6 +156,7 @@ spec:
       - name: nova-servers
       - name: nova-flavors
       - name: identity-projects
+      - name: identity-domains
     knowledges:
       - name: host-details
   description: |
@@ -191,15 +165,17 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: vmware-resource-commitments
+  name: vmware-project-commitments
 spec:
   schedulingDomain: nova
-  impl: vmware_resource_commitments_kpi
+  impl: vmware_project_commitments_kpi
   dependencies:
     datasources:
       - name: nova-servers
       - name: nova-flavors
       - name: limes-project-commitments
+      - name: identity-domains
+      - name: identity-projects
   description: |
     This KPI tracks the resource commitments of projects running VMs on VMware hosts.
 ---

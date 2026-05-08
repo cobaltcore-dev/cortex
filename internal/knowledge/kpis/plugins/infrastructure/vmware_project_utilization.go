@@ -21,6 +21,8 @@ import (
 type vmwareProjectInstanceCount struct {
 	ProjectID        string  `db:"project_id"`
 	ProjectName      string  `db:"project_name"`
+	DomainID         string  `db:"domain_id"`
+	DomainName       string  `db:"domain_name"`
 	ComputeHost      string  `db:"compute_host"`
 	FlavorName       string  `db:"flavor_name"`
 	AvailabilityZone string  `db:"availability_zone"`
@@ -30,6 +32,8 @@ type vmwareProjectInstanceCount struct {
 type vmwareProjectCapacityUsage struct {
 	ProjectID        string  `db:"project_id"`
 	ProjectName      string  `db:"project_name"`
+	DomainID         string  `db:"domain_id"`
+	DomainName       string  `db:"domain_name"`
 	ComputeHost      string  `db:"compute_host"`
 	AvailabilityZone string  `db:"availability_zone"`
 	TotalVCPUs       float64 `db:"total_vcpus"`
@@ -60,12 +64,12 @@ func (k *VMwareProjectUtilizationKPI) Init(dbConn *db.DB, c client.Client, opts 
 	k.instanceCountPerProjectAndHostAndFlavor = prometheus.NewDesc(
 		"cortex_vmware_project_instances",
 		"Number of running instances per project, hypervisor, and flavor on VMware.",
-		append(vmwareHostLabels, "project_id", "project_name", "flavor_name"), nil,
+		append(vmwareHostLabels, "project_id", "project_name", "domain_id", "domain_name", "flavor_name"), nil,
 	)
 	k.capacityUsagePerProjectAndHost = prometheus.NewDesc(
 		"cortex_vmware_project_capacity_usage",
 		"Resource capacity used by a project per VMware hypervisor and flavor. CPU in vCPUs, memory and disk in bytes.",
-		append(vmwareHostLabels, "project_id", "project_name", "resource"), nil,
+		append(vmwareHostLabels, "project_id", "project_name", "domain_id", "domain_name", "resource"), nil,
 	)
 	return nil
 }
@@ -96,7 +100,7 @@ func (k *VMwareProjectUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			continue
 		}
 		hostLabels := host.getHostLabels()
-		hostLabels = append(hostLabels, projectInstanceCount.ProjectID, projectInstanceCount.ProjectName, projectInstanceCount.FlavorName)
+		hostLabels = append(hostLabels, projectInstanceCount.ProjectID, projectInstanceCount.ProjectName, projectInstanceCount.DomainID, projectInstanceCount.DomainName, projectInstanceCount.FlavorName)
 		ch <- prometheus.MustNewConstMetric(k.instanceCountPerProjectAndHostAndFlavor, prometheus.GaugeValue, projectInstanceCount.InstanceCount, hostLabels...)
 	}
 
@@ -113,22 +117,11 @@ func (k *VMwareProjectUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 			continue
 		}
 		hostLabels := host.getHostLabels()
-		hostLabels = append(hostLabels, projectCapacityUsage.ProjectID, projectCapacityUsage.ProjectName)
+		hostLabels = append(hostLabels, projectCapacityUsage.ProjectID, projectCapacityUsage.ProjectName, projectCapacityUsage.DomainID, projectCapacityUsage.DomainName)
 
-		memoryUsageBytes, err := bytesFromUnit(projectCapacityUsage.TotalRAMMB, "MB")
-		if err != nil {
-			slog.Error("vmware_project_utilization: failed to convert memory to bytes", "err", err)
-			continue
-		}
-		diskUsageBytes, err := bytesFromUnit(projectCapacityUsage.TotalDiskGB, "GB")
-		if err != nil {
-			slog.Error("vmware_project_utilization: failed to convert disk to bytes", "err", err)
-			continue
-		}
-
-		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerProjectAndHost, prometheus.GaugeValue, projectCapacityUsage.TotalVCPUs, append(hostLabels, "vcpu")...)
-		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerProjectAndHost, prometheus.GaugeValue, memoryUsageBytes, append(hostLabels, "memory")...)
-		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerProjectAndHost, prometheus.GaugeValue, diskUsageBytes, append(hostLabels, "disk")...)
+		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerProjectAndHost, prometheus.GaugeValue, projectCapacityUsage.TotalVCPUs, append(hostLabels, "cpu")...)
+		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerProjectAndHost, prometheus.GaugeValue, projectCapacityUsage.TotalRAMMB*1024*1024, append(hostLabels, "ram")...)
+		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerProjectAndHost, prometheus.GaugeValue, projectCapacityUsage.TotalDiskGB*1024*1024*1024, append(hostLabels, "disk")...)
 	}
 }
 
@@ -167,6 +160,8 @@ func (k *VMwareProjectUtilizationKPI) queryProjectCapacityUsage() ([]vmwareProje
 		SELECT
 			s.tenant_id AS project_id,
 			COALESCE(p.name, '') AS project_name,
+			COALESCE(p.domain_id, '') AS domain_id,
+			COALESCE(d.name, '') AS domain_name,
 			s.os_ext_srv_attr_host AS compute_host,
 			s.os_ext_az_availability_zone AS availability_zone,
 			COALESCE(SUM(f.vcpus), 0) AS total_vcpus,
@@ -175,10 +170,11 @@ func (k *VMwareProjectUtilizationKPI) queryProjectCapacityUsage() ([]vmwareProje
 		FROM ` + nova.Server{}.TableName() + ` s
 		LEFT JOIN ` + nova.Flavor{}.TableName() + ` f ON s.flavor_name = f.name
 		LEFT JOIN ` + identity.Project{}.TableName() + ` p ON p.id = s.tenant_id
+		LEFT JOIN ` + identity.Domain{}.TableName() + ` d ON d.id = p.domain_id
 		WHERE s.status NOT IN ('DELETED', 'ERROR')
 		  AND s.os_ext_srv_attr_host LIKE '` + vmwareComputeHostPattern + `'
 		  AND s.os_ext_srv_attr_host NOT LIKE '` + vmwareIronicComputeHostPattern + `'
-		GROUP BY s.tenant_id, p.name, s.os_ext_srv_attr_host, s.os_ext_az_availability_zone
+		GROUP BY s.tenant_id, p.name, p.domain_id, d.name, s.os_ext_srv_attr_host, s.os_ext_az_availability_zone
 	`
 	var usages []vmwareProjectCapacityUsage
 	if _, err := k.DB.Select(&usages, query); err != nil {
@@ -198,16 +194,19 @@ func (k *VMwareProjectUtilizationKPI) queryProjectInstanceCount() ([]vmwareProje
 		SELECT
 			s.tenant_id AS project_id,
 			COALESCE(p.name, '') AS project_name,
+			COALESCE(p.domain_id, '') AS domain_id,
+			COALESCE(d.name, '') AS domain_name,
 			s.os_ext_srv_attr_host AS compute_host,
 			s.os_ext_az_availability_zone AS availability_zone,
 			s.flavor_name,
 			COUNT(*) AS instance_count
 		FROM ` + nova.Server{}.TableName() + ` s
 		LEFT JOIN ` + identity.Project{}.TableName() + ` p ON p.id = s.tenant_id
+		LEFT JOIN ` + identity.Domain{}.TableName() + ` d ON d.id = p.domain_id
 		WHERE s.status NOT IN ('DELETED', 'ERROR')
 		  AND s.os_ext_srv_attr_host LIKE '` + vmwareComputeHostPattern + `'
 		  AND s.os_ext_srv_attr_host NOT LIKE '` + vmwareIronicComputeHostPattern + `'
-		GROUP BY s.tenant_id, p.name, s.os_ext_srv_attr_host, s.flavor_name, s.os_ext_az_availability_zone
+		GROUP BY s.tenant_id, p.name, p.domain_id, d.name, s.os_ext_srv_attr_host, s.flavor_name, s.os_ext_az_availability_zone
 	`
 	var usages []vmwareProjectInstanceCount
 	if _, err := k.DB.Select(&usages, query); err != nil {

@@ -5,6 +5,7 @@ package commitments
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/go-logr/logr"
+	"github.com/sapcc/go-api-declarations/liquid"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,6 +24,10 @@ import (
 var (
 	// CreatorValue identifies reservations created by this syncer.
 	CreatorValue = "commitments-syncer"
+
+	// errAZChanged is a sentinel returned from CreateOrUpdate mutateFns when the existing CR's
+	// AZ differs from the desired state. The caller logs an error and skips the CR.
+	errAZChanged = errors.New("availability zone changed")
 )
 
 type SyncerConfig struct {
@@ -30,7 +36,7 @@ type SyncerConfig struct {
 	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
 	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
 	// SyncInterval defines how often the syncer reconciles Limes commitments to Reservation CRDs.
-	SyncInterval time.Duration `json:"committedResourceSyncInterval"`
+	SyncInterval metav1.Duration `json:"committedResourceSyncInterval"`
 }
 
 type Syncer struct {
@@ -53,7 +59,7 @@ func NewSyncer(k8sClient client.Client, monitor *SyncerMonitor) *Syncer {
 }
 
 func (s *Syncer) Init(ctx context.Context, config SyncerConfig) error {
-	s.syncInterval = config.SyncInterval
+	s.syncInterval = config.SyncInterval.Duration
 	if err := s.CommitmentsClient.Init(ctx, s.Client, config); err != nil {
 		return err
 	}
@@ -135,9 +141,8 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 			continue
 		}
 
-		// Validate unit matches between Limes commitment and Cortex flavor group
-		// Expected format: "<memoryMB> MiB" e.g. "131072 MiB" for 128 GiB
-		expectedUnit := fmt.Sprintf("%d MiB", flavorGroup.SmallestFlavor.MemoryMB)
+		// Validate unit matches between Limes commitment and Cortex (1 GiB per unit)
+		expectedUnit := liquid.UnitGibibytes.String() // "GiB"
 		if commitment.Unit != "" && commitment.Unit != expectedUnit {
 			// Unit mismatch: Limes has not yet updated this commitment to the new unit.
 			// Skip this commitment - trust what Cortex already has stored in CRDs.
@@ -169,7 +174,7 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 		}
 
 		// Convert commitment to state using FromCommitment
-		state, err := FromCommitment(commitment, flavorGroup)
+		state, err := FromCommitment(commitment)
 		if err != nil {
 			log.Error(err, "failed to convert commitment to state",
 				"id", id,
@@ -291,8 +296,8 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 
 	// Count CommittedResource CRDs present locally but absent from Limes (do not delete — Limes
 	// responses may be transient and deleting active CRDs would drop Reservation slots).
-	// Also GC CRDs whose EndTime has passed: the commitment is over, the controller's finalizer
-	// will clean up child Reservations on deletion.
+	// Also GC CRDs whose EndTime has passed: the commitment is over, child Reservations will be
+	// cleaned up by the syncer's orphan GC on the next sync cycle.
 	var existingCRs v1alpha1.CommittedResourceList
 	if err := s.List(ctx, &existingCRs); err != nil {
 		logger.Error(err, "failed to list existing committed resource CRDs")
@@ -392,7 +397,8 @@ func (s *Syncer) applyCommittedResourceSpec(cr *v1alpha1.CommittedResource, stat
 	cr.Spec.ProjectID = state.ProjectID
 	cr.Spec.DomainID = state.DomainID
 	cr.Spec.State = state.State
-	cr.Spec.AllowRejection = false
+	// AllowRejection is not set here: the API path (applyCRSpec) sets it explicitly,
+	// and callers that go through CreateOrUpdate preserve the existing value.
 
 	if state.StartTime != nil {
 		t := metav1.NewTime(*state.StartTime)
@@ -413,9 +419,25 @@ func (s *Syncer) upsertCommittedResource(ctx context.Context, logger logr.Logger
 	cr.Name = "commitment-" + state.CommitmentUUID
 
 	op, err := controllerutil.CreateOrUpdate(ctx, s.Client, cr, func() error {
+		if cr.Spec.AvailabilityZone != "" && cr.Spec.AvailabilityZone != state.AvailabilityZone {
+			return errAZChanged
+		}
+		// AllowRejection is an API execution flag, not a Limes commitment property.
+		// Preserve the existing value so a syncer write never clobbers an in-flight
+		// change-commitments request. For new CRDs the zero value (false) is correct.
+		allowRejection := cr.Spec.AllowRejection
 		s.applyCommittedResourceSpec(cr, state)
+		cr.Spec.AllowRejection = allowRejection
 		return nil
 	})
+	if errors.Is(err, errAZChanged) {
+		logger.Error(nil, "availability zone mismatch on existing commitment — skipping sync",
+			"commitmentUUID", state.CommitmentUUID,
+			"currentAZ", cr.Spec.AvailabilityZone,
+			"requestedAZ", state.AvailabilityZone,
+		)
+		return controllerutil.OperationResultNone, nil
+	}
 	if err != nil {
 		return op, err
 	}
@@ -437,6 +459,14 @@ func (s *Syncer) updateCommittedResourceIfExists(ctx context.Context, logger log
 			return controllerutil.OperationResultNone, nil
 		}
 		return controllerutil.OperationResultNone, err
+	}
+	if cr.Spec.AvailabilityZone != "" && cr.Spec.AvailabilityZone != state.AvailabilityZone {
+		logger.Error(nil, "availability zone mismatch on existing commitment — skipping sync",
+			"commitmentUUID", state.CommitmentUUID,
+			"currentAZ", cr.Spec.AvailabilityZone,
+			"requestedAZ", state.AvailabilityZone,
+		)
+		return controllerutil.OperationResultNone, nil
 	}
 	s.applyCommittedResourceSpec(cr, state)
 	if err := s.Update(ctx, cr); err != nil {

@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -42,9 +44,9 @@ func TestReportUsageIntegration(t *testing.T) {
 	m1Large := &TestFlavor{Name: "m1.large", Group: "hana_1", MemoryMB: 4096, VCPUs: 16} // 4 units
 	m1XL := &TestFlavor{Name: "m1.xl", Group: "hana_1", MemoryMB: 8192, VCPUs: 32}       // 8 units
 
-	// gp_1 group: smallest = 512 MB, so 1 unit = 0.5 GB
-	gpSmall := &TestFlavor{Name: "gp.small", Group: "gp_1", MemoryMB: 512, VCPUs: 1}    // 1 unit
-	gpMedium := &TestFlavor{Name: "gp.medium", Group: "gp_1", MemoryMB: 2048, VCPUs: 4} // 4 units
+	// gp_1 group: smallest = 1024 MB = 1 GiB, so 1 unit = 1 GiB
+	gpSmall := &TestFlavor{Name: "gp.small", Group: "gp_1", MemoryMB: 1024, VCPUs: 1}   // 1 unit
+	gpMedium := &TestFlavor{Name: "gp.medium", Group: "gp_1", MemoryMB: 2048, VCPUs: 4} // 2 units
 
 	baseTime := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -288,7 +290,7 @@ func TestReportUsageIntegration(t *testing.T) {
 				"hw_version_gp_1_ram": {
 					PerAZ: map[string]ExpectedAZUsage{
 						"az-a": {
-							Usage: 4, // 2048 MB / 512 MB = 4 units
+							Usage: 2, // 2048 MB / 1024 MB = 2 units
 							VMs: []ExpectedVMUsage{
 								{UUID: "vm-gp", CommitmentID: "commit-gp", MemoryMB: 2048},
 							},
@@ -352,11 +354,11 @@ func TestReportUsageIntegration(t *testing.T) {
 			ExpectedStatusCode: http.StatusMethodNotAllowed,
 		},
 		{
-			Name:      "VM with empty AZ - normalized to unknown",
+			Name:      "VM with empty AZ - dropped from report",
 			ProjectID: "project-empty-az",
 			Flavors:   []*TestFlavor{m1Small, m1Large},
 			VMs: []*TestVMUsage{
-				// VM with empty AZ (e.g., ERROR or BUILDING state VM not yet scheduled)
+				// VM with empty AZ (e.g., ERROR or BUILDING state) — normalized to "unknown", excluded.
 				newTestVMUsageWithEmptyAZ("vm-error", m1Large, "project-empty-az", "host-1", baseTime),
 				// Normal VM with valid AZ
 				newTestVMUsage("vm-ok", m1Large, "project-empty-az", "az-a", "host-2", baseTime.Add(1*time.Hour)),
@@ -375,10 +377,98 @@ func TestReportUsageIntegration(t *testing.T) {
 								{UUID: "vm-ok", CommitmentID: "commit-1", MemoryMB: 4096},
 							},
 						},
-						"unknown": {
-							Usage: 4, // VM with empty AZ normalized to "unknown"
+						// "unknown" AZ is excluded — VMs without a valid AZ are dropped.
+					},
+				},
+			},
+		},
+		{
+			// hana_1 has a fixed RAM/core ratio (all flavors: 256 MiB/vCPU), so _ram
+			// is AZSeparatedTopology and carries per-AZ quota. This test verifies that
+			// the per-AZ quota value is read from the ProjectQuota CRD when present.
+			Name:      "Fixed-ratio group with ProjectQuota CRD - quota reported per AZ",
+			ProjectID: "project-quota",
+			Flavors:   []*TestFlavor{m1Small, m1Large},
+			VMs: []*TestVMUsage{
+				newTestVMUsage("vm-001", m1Large, "project-quota", "az-a", "host-1", baseTime),
+			},
+			Reservations: []*UsageTestReservation{
+				{CommitmentID: "commit-1", Flavor: m1Small, ProjectID: "project-quota", AZ: "az-a", Count: 4},
+			},
+			ProjectQuota: &v1alpha1.ProjectQuota{
+				ObjectMeta: metav1.ObjectMeta{Name: "quota-project-quota"},
+				Spec: v1alpha1.ProjectQuotaSpec{
+					ProjectID: "project-quota",
+					DomainID:  "test-domain",
+					Quota: map[string]v1alpha1.ResourceQuota{
+						"hw_version_hana_1_ram": {
+							Quota: 16,
+							PerAZ: map[string]int64{"az-a": 16},
+						},
+					},
+				},
+			},
+			AllAZs: []string{"az-a"},
+			Expected: map[string]ExpectedResourceUsage{
+				"hw_version_hana_1_ram": {
+					PerAZ: map[string]ExpectedAZUsage{
+						"az-a": {
+							Usage: 4,
+							Quota: func() *int64 { v := int64(16); return &v }(),
 							VMs: []ExpectedVMUsage{
-								{UUID: "vm-error", CommitmentID: "", MemoryMB: 4096}, // PAYG - no commitment in "unknown" AZ
+								{UUID: "vm-001", CommitmentID: "commit-1", MemoryMB: 4096},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			// When no ProjectQuota CRD exists for a project, quota defaults to -1 (infinite).
+			Name:      "Fixed-ratio group with no ProjectQuota CRD - infinite quota",
+			ProjectID: "project-no-quota",
+			Flavors:   []*TestFlavor{m1Small, m1Large},
+			VMs: []*TestVMUsage{
+				newTestVMUsage("vm-001", m1Large, "project-no-quota", "az-a", "host-1", baseTime),
+			},
+			Reservations: []*UsageTestReservation{
+				{CommitmentID: "commit-1", Flavor: m1Small, ProjectID: "project-no-quota", AZ: "az-a", Count: 4},
+			},
+			AllAZs: []string{"az-a"},
+			Expected: map[string]ExpectedResourceUsage{
+				"hw_version_hana_1_ram": {
+					PerAZ: map[string]ExpectedAZUsage{
+						"az-a": {
+							Usage: 4,
+							Quota: func() *int64 { v := int64(-1); return &v }(),
+							VMs: []ExpectedVMUsage{
+								{UUID: "vm-001", CommitmentID: "commit-1", MemoryMB: 4096},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			// gp_1 has a variable RAM/core ratio (gpSmall=1024 MiB/vCPU, gpMedium=512 MiB/vCPU),
+			// so _ram is NOT AZSeparatedTopology and must carry no quota field.
+			Name:      "Variable-ratio group - no quota field on _ram resource",
+			ProjectID: "project-variable",
+			Flavors:   []*TestFlavor{gpSmall, gpMedium},
+			VMs: []*TestVMUsage{
+				newTestVMUsage("vm-001", gpMedium, "project-variable", "az-a", "host-1", baseTime),
+			},
+			Reservations: []*UsageTestReservation{},
+			AllAZs:       []string{"az-a"},
+			Expected: map[string]ExpectedResourceUsage{
+				"hw_version_gp_1_ram": {
+					PerAZ: map[string]ExpectedAZUsage{
+						// AssertNoQuota: quota field must be absent for variable-ratio groups.
+						"az-a": {
+							Usage:         2,
+							AssertNoQuota: true,
+							VMs: []ExpectedVMUsage{
+								{UUID: "vm-001", CommitmentID: "", MemoryMB: 2048},
 							},
 						},
 					},
@@ -405,6 +495,7 @@ type UsageReportTestCase struct {
 	Flavors            []*TestFlavor
 	VMs                []*TestVMUsage
 	Reservations       []*UsageTestReservation
+	ProjectQuota       *v1alpha1.ProjectQuota // optional; nil means no quota CRD present
 	AllAZs             []string
 	Expected           map[string]ExpectedResourceUsage
 	ExpectedStatusCode int // 0 means expect 200 OK
@@ -427,6 +518,7 @@ type TestVMUsage struct {
 	AZ        string
 	Host      string
 	CreatedAt time.Time
+	OSType    string // pre-computed os_type, e.g. "windows8Server64Guest" or "unknown"
 }
 
 func newTestVMUsage(uuid string, flavor *TestFlavor, projectID, az, host string, createdAt time.Time) *TestVMUsage {
@@ -456,8 +548,10 @@ type ExpectedResourceUsage struct {
 }
 
 type ExpectedAZUsage struct {
-	Usage uint64 // Usage in multiples of smallest flavor
-	VMs   []ExpectedVMUsage
+	Usage         uint64 // Usage in multiples of smallest flavor
+	Quota         *int64 // non-nil: verify this exact value (-1 = infinite)
+	AssertNoQuota bool   // true: verify quota field is absent
+	VMs           []ExpectedVMUsage
 }
 
 type ExpectedVMUsage struct {
@@ -465,6 +559,7 @@ type ExpectedVMUsage struct {
 	CommitmentID string  // Empty string = PAYG
 	MemoryMB     uint64  // For verification
 	VideoRAMMiB  *uint64 // nil = expect field absent
+	OSType       string  // Empty string = skip check
 }
 
 // ============================================================================
@@ -497,6 +592,10 @@ func (m *mockUsageDBClient) addVM(vm *TestVMUsage) {
 		extraSpecs["hw_video:ram_max_mb"] = strconv.FormatUint(*vm.Flavor.VideoRAMMiB, 10)
 	}
 	extrasJSON, _ := json.Marshal(extraSpecs) //nolint:errcheck // test helper, always valid
+	osType := vm.OSType
+	if osType == "" {
+		osType = "unknown"
+	}
 	row := commitments.VMRow{
 		ID:           vm.UUID,
 		Name:         vm.UUID,
@@ -509,6 +608,7 @@ func (m *mockUsageDBClient) addVM(vm *TestVMUsage) {
 		FlavorVCPUs:  uint64(vm.Flavor.VCPUs),    //nolint:gosec
 		FlavorDisk:   vm.Flavor.DiskGB,
 		FlavorExtras: string(extrasJSON),
+		OSType:       osType,
 	}
 	m.rows[vm.ProjectID] = append(m.rows[vm.ProjectID], row)
 }
@@ -532,6 +632,7 @@ func newUsageTestEnv(
 	vms []*TestVMUsage,
 	reservations []*UsageTestReservation,
 	flavorGroups FlavorGroupsKnowledge,
+	projectQuota *v1alpha1.ProjectQuota,
 ) *UsageTestEnv {
 
 	t.Helper()
@@ -562,14 +663,54 @@ func newUsageTestEnv(
 	knowledgeCRD := createKnowledgeCRD(flavorGroups)
 	k8sReservations = append(k8sReservations, knowledgeCRD)
 
+	// Create CommittedResource CRDs (one per unique commitment).
+	// The usage reconciler writes assignment results into these; CalculateUsage reads them back.
+	seenCommitments := make(map[string]bool)
+	var crObjects []client.Object
+	for _, tr := range reservations {
+		if seenCommitments[tr.CommitmentID] {
+			continue
+		}
+		seenCommitments[tr.CommitmentID] = true
+		crObjects = append(crObjects, tr.toCommittedResourceCRD())
+	}
+
+	k8sReservations = append(k8sReservations, crObjects...)
+
+	builderObjs := k8sReservations
+	if projectQuota != nil {
+		builderObjs = append(builderObjs, projectQuota)
+	}
 	k8sClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(k8sReservations...).
+		WithObjects(builderObjs...).
 		WithStatusSubresource(&v1alpha1.Reservation{}).
 		WithStatusSubresource(&v1alpha1.Knowledge{}).
+		WithStatusSubresource(&v1alpha1.CommittedResource{}).
 		WithIndex(&v1alpha1.Reservation{}, "spec.type", func(obj client.Object) []string {
 			res := obj.(*v1alpha1.Reservation)
 			return []string{string(res.Spec.Type)}
+		}).
+		WithIndex(&v1alpha1.CommittedResource{}, "spec.commitmentUUID", func(obj client.Object) []string {
+			cr, ok := obj.(*v1alpha1.CommittedResource)
+			if !ok {
+				return nil
+			}
+			return []string{cr.Spec.CommitmentUUID}
+		}).
+		WithIndex(&v1alpha1.CommittedResource{}, "spec.projectID", func(obj client.Object) []string {
+			cr, ok := obj.(*v1alpha1.CommittedResource)
+			if !ok || cr.Spec.ProjectID == "" {
+				return nil
+			}
+			return []string{cr.Spec.ProjectID}
+		}).
+		WithIndex(&v1alpha1.ProjectQuota{}, "spec.projectID", func(obj client.Object) []string {
+			pq, ok := obj.(*v1alpha1.ProjectQuota)
+			if !ok || pq.Spec.ProjectID == "" {
+				return nil
+			}
+			return []string{pq.Spec.ProjectID}
 		}).
 		Build()
 
@@ -577,6 +718,25 @@ func newUsageTestEnv(
 	dbClient := newMockUsageDBClient()
 	for _, vm := range vms {
 		dbClient.addVM(vm)
+	}
+
+	// Run usage reconciler to populate CommittedResource.Status with VM assignments.
+	// CalculateUsage reads from this status, so the API returns the correct commitment assignments.
+	if len(crObjects) > 0 {
+		rec := &commitments.UsageReconciler{
+			Client:  k8sClient,
+			Conf:    commitments.UsageReconcilerConfig{CooldownInterval: metav1.Duration{Duration: 0}},
+			UsageDB: dbClient,
+			Monitor: commitments.NewUsageReconcilerMonitor(),
+		}
+		ctx := context.Background()
+		for _, obj := range crObjects {
+			cr := obj.(*v1alpha1.CommittedResource)
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: cr.Name}}
+			if _, err := rec.Reconcile(ctx, req); err != nil {
+				t.Fatalf("usage reconciler failed for %s: %v", cr.Name, err)
+			}
+		}
 	}
 
 	// Create API with mock DB client
@@ -670,7 +830,7 @@ func runUsageReportTest(t *testing.T, tc UsageReportTestCase) {
 	}.ToFlavorGroupsKnowledge()
 
 	// Create test environment
-	env := newUsageTestEnv(t, tc.VMs, tc.Reservations, flavorGroups)
+	env := newUsageTestEnv(t, tc.VMs, tc.Reservations, flavorGroups, tc.ProjectQuota)
 	defer env.Close()
 
 	// Call API
@@ -727,6 +887,25 @@ func verifyUsageReport(t *testing.T, tc UsageReportTestCase, actual liquid.Servi
 			if actualAZ.Usage != expectedAZ.Usage {
 				t.Errorf("Resource %s AZ %s: expected usage %d, got %d",
 					resourceName, azName, expectedAZ.Usage, actualAZ.Usage)
+			}
+
+			// Verify per-AZ quota when the test case specifies it.
+			if expectedAZ.Quota != nil {
+				actualQuota, hasQuota := actualAZ.Quota.Unpack()
+				if !hasQuota {
+					t.Errorf("Resource %s AZ %s: expected quota %d but quota field is absent",
+						resourceName, azName, *expectedAZ.Quota)
+				} else if actualQuota != *expectedAZ.Quota {
+					t.Errorf("Resource %s AZ %s: expected quota %d, got %d",
+						resourceName, azName, *expectedAZ.Quota, actualQuota)
+				}
+			}
+			if expectedAZ.AssertNoQuota {
+				if actualAZ.Quota.IsSome() {
+					v, _ := actualAZ.Quota.Unpack()
+					t.Errorf("Resource %s AZ %s: expected no quota field, got %d",
+						resourceName, azName, v)
+				}
 			}
 
 			// VM subresources are on the _instances resource, not _ram
@@ -806,6 +985,12 @@ func verifyUsageReport(t *testing.T, tc UsageReportTestCase, actual liquid.Servi
 					}
 				}
 
+				// Verify os_type when specified
+				if expectedVM.OSType != "" && actualVM.OSType != expectedVM.OSType {
+					t.Errorf("Resource %s AZ %s VM %s: expected os_type %q, got %q",
+						instancesResourceName, azName, expectedVM.UUID, expectedVM.OSType, actualVM.OSType)
+				}
+
 				// Assert HWVersion is absent from the serialized output (must not appear per LIQUID schema)
 				if rawFlavor, ok := actualRawVMs[expectedVM.UUID]; ok {
 					if flavorRaw, ok := rawFlavor["flavor"]; ok {
@@ -847,6 +1032,43 @@ type vmFlavorAttrs struct {
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+// toCommittedResourceCRD creates a minimal CommittedResource CRD for this commitment.
+// Used by the test setup to pre-populate the CR objects that the usage reconciler writes status into.
+func (tr *UsageTestReservation) toCommittedResourceCRD() *v1alpha1.CommittedResource {
+	amount := resource.MustParse(strconv.FormatInt(tr.Flavor.MemoryMB*int64(tr.Count), 10) + "Mi")
+	spec := v1alpha1.CommittedResourceSpec{
+		CommitmentUUID:   tr.CommitmentID,
+		ProjectID:        tr.ProjectID,
+		DomainID:         "test-domain",
+		AvailabilityZone: tr.AZ,
+		FlavorGroupName:  tr.Flavor.Group,
+		ResourceType:     v1alpha1.CommittedResourceTypeMemory,
+		State:            v1alpha1.CommitmentStatusConfirmed,
+		Amount:           amount,
+	}
+	if !tr.StartTime.IsZero() {
+		spec.StartTime = &metav1.Time{Time: tr.StartTime}
+	}
+	return &v1alpha1.CommittedResource{
+		ObjectMeta: metav1.ObjectMeta{Name: "cr-" + tr.CommitmentID},
+		Spec:       spec,
+		Status: v1alpha1.CommittedResourceStatus{
+			AcceptedSpec: &spec,
+			// Simulate the CR controller having accepted the current generation (0 for fake client).
+			// Without this, the usage reconciler's readiness gate blocks usage calculation.
+			Conditions: []metav1.Condition{
+				{
+					Type:               v1alpha1.CommittedResourceConditionReady,
+					Status:             metav1.ConditionTrue,
+					Reason:             v1alpha1.CommittedResourceReasonAccepted,
+					ObservedGeneration: 0,
+					LastTransitionTime: metav1.Now(),
+				},
+			},
+		},
+	}
+}
 
 // toK8sReservation converts a UsageTestReservation to a K8s Reservation.
 func (tr *UsageTestReservation) toK8sReservation(number int) *v1alpha1.Reservation {
