@@ -86,7 +86,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		}
 
 		// Subtract allocated resources (skip when ignoring allocations for empty-datacenter capacity queries).
-		if !s.Options.IgnoreAllocations {
+		if !s.Options.IgnoreAllocations && !opts.AssumeEmptyHosts {
 			for resourceName, allocated := range hv.Status.Allocation {
 				free, ok := freeResourcesByHost[hv.Name][resourceName]
 				if !ok {
@@ -197,7 +197,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			// When ignoring allocations (empty-datacenter scenario) VM resources are not
 			// deducted, so the confirmed-VM adjustment would under-block: always use the
 			// full slot instead.
-			!s.Options.IgnoreAllocations &&
+			!s.Options.IgnoreAllocations && !opts.AssumeEmptyHosts &&
 			// if the reservation is not being migrated, block only unused resources
 			reservation.Spec.TargetHost == reservation.Status.Host &&
 			reservation.Spec.CommittedResourceReservation != nil &&

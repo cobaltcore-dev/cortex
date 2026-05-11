@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	schedulerapi "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
@@ -429,7 +430,7 @@ func TestProbeScheduler_CapacityCalculation(t *testing.T) {
 	}
 	flavor := compute.FlavorInGroup{Name: "test-flavor", MemoryMB: memMB}
 
-	capacity, hosts, err := c.probeScheduler(context.Background(), flavor, "az-a", "test-pipeline", hvByName)
+	capacity, hosts, err := c.probeScheduler(context.Background(), flavor, "az-a", "test-pipeline", hvByName, scheduling.Options{SkipHistory: true})
 	if err != nil {
 		t.Fatalf("probeScheduler failed: %v", err)
 	}
