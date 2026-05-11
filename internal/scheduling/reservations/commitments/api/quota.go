@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/google/uuid"
 	"github.com/sapcc/go-api-declarations/liquid"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -94,10 +96,32 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build per-AZ quota maps from the liquid request.
+	// Fetch flavor groups to determine per-resource RAM unit.
+	// The ProjectQuota CRD stores RAM values in GiB; Limes sends in the declared unit
+	// (slots for fixed-ratio groups, GiB for variable-ratio). Convert on receipt.
+	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
+	flavorGroups, err := knowledge.GetAllFlavorGroups(r.Context(), nil)
+	if err != nil {
+		log.Info("flavor groups not available for quota unit conversion", "error", err.Error())
+		api.quotaError(w, http.StatusServiceUnavailable, "flavor groups not available: "+err.Error(), startTime)
+		return
+	}
+	// ramUnitMiBByResource maps RAM resource name → MiB per declared unit:
+	//   fixed-ratio groups:    SmallestFlavor.MemoryMB  (1 slot = that many MiB)
+	//   variable-ratio groups: 1024                     (1 declared unit = 1 GiB)
+	ramUnitMiBByResource := make(map[string]uint64, len(flavorGroups))
+	for groupName, groupData := range flavorGroups {
+		unitMiB := uint64(1024)
+		if groupData.RamCoreRatio != nil && groupData.SmallestFlavor.MemoryMB > 0 {
+			unitMiB = groupData.SmallestFlavor.MemoryMB
+		}
+		ramUnitMiBByResource[commitments.ResourceNameRAM(groupName)] = unitMiB
+	}
+
+	// Build per-AZ quota maps from the liquid request, converting RAM to GiB.
 	// liquid API uses uint64; our CRD uses int64 (K8s convention).
 	// Guard against overflow: uint64 values > MaxInt64 would wrap to negative.
-	// quotaByAZ[az][resourceName] = quota value for that AZ
+	// quotaByAZ[az][resourceName] = quota in GiB for that AZ
 	quotaByAZ := make(map[string]map[string]int64)
 	for resourceName, resQuota := range req.Resources {
 		for az, azQuota := range resQuota.PerAZ {
@@ -105,11 +129,17 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 				api.quotaError(w, http.StatusBadRequest, fmt.Sprintf("Quota value for resource %q in AZ %q exceeds int64 max", resourceName, az), startTime)
 				return
 			}
+			quotaValue := int64(azQuota.Quota)
+			// Convert from declared unit to GiB: quotaGiB = quotaUnits * unitMiB / 1024.
+			// For variable-ratio groups unitMiB=1024 so this is a no-op.
+			if unitMiB, ok := ramUnitMiBByResource[string(resourceName)]; ok {
+				quotaValue = quotaValue * int64(unitMiB) / 1024 //nolint:gosec
+			}
 			azStr := string(az)
 			if quotaByAZ[azStr] == nil {
 				quotaByAZ[azStr] = make(map[string]int64)
 			}
-			quotaByAZ[azStr][string(resourceName)] = int64(azQuota.Quota)
+			quotaByAZ[azStr][string(resourceName)] = quotaValue
 		}
 	}
 
