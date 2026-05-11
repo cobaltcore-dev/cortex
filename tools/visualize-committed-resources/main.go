@@ -54,6 +54,7 @@ const (
 	colYellow = "\033[33m"
 	colRed    = "\033[31m"
 	colCyan   = "\033[36m"
+	colBlue   = "\033[34m"
 	colGray   = "\033[90m"
 )
 
@@ -61,8 +62,20 @@ func green(s string) string  { return colGreen + s + colReset }
 func yellow(s string) string { return colYellow + s + colReset }
 func red(s string) string    { return colRed + s + colReset }
 func cyan(s string) string   { return colCyan + s + colReset }
+func blue(s string) string   { return colBlue + s + colReset }
 func gray(s string) string   { return colGray + s + colReset }
 func bold(s string) string   { return colBold + s + colReset }
+
+func resourceTypeBadge(rt v1alpha1.CommittedResourceType) string {
+	switch rt {
+	case v1alpha1.CommittedResourceTypeCores:
+		return yellow("[CPU]")
+	case v1alpha1.CommittedResourceTypeMemory:
+		return blue("[RAM]")
+	default:
+		return gray("[?]")
+	}
+}
 
 // ── Views ─────────────────────────────────────────────────────────────────────
 
@@ -305,31 +318,9 @@ func printCommitments(crs []v1alpha1.CommittedResource, showUsage bool) {
 	}
 
 	for _, cr := range crs {
-		fmt.Printf("\n  %s  %s\n",
-			bold(cyan(cr.Spec.CommitmentUUID)),
-			crReadyStatus(cr),
-		)
-		fmt.Printf("    project=%-36s  group=%-20s  az=%s\n",
-			cr.Spec.ProjectID, cr.Spec.FlavorGroupName, cr.Spec.AvailabilityZone)
-		fmt.Printf("    state=%-14s  amount=%-10s  accepted=%s\n",
-			stateColour(cr.Spec.State),
-			cr.Spec.Amount.String(),
-			func() string {
-				if cr.Status.AcceptedSpec == nil {
-					return gray("—")
-				}
-				return cr.Status.AcceptedSpec.Amount.String()
-			}(),
-		)
-
-		if mem, ok := cr.Status.UsedResources["memory"]; ok {
-			cpu := cr.Status.UsedResources["cpu"]
-			usageAgeStr := gray("—")
-			if cr.Status.LastUsageReconcileAt != nil {
-				usageAgeStr = age(cr.Status.LastUsageReconcileAt)
-			}
-			fmt.Printf("    used=%-12s  usedCPU=%-10s  instances=%-4d  usage-age=%s\n",
-				mem.String(), cpu.String(), len(cr.Status.AssignedInstances), usageAgeStr)
+		accepted := gray("—")
+		if cr.Status.AcceptedSpec != nil {
+			accepted = cr.Status.AcceptedSpec.Amount.String()
 		}
 
 		endStr := gray("no expiry")
@@ -338,10 +329,38 @@ func printCommitments(crs []v1alpha1.CommittedResource, showUsage bool) {
 			if remaining < 0 {
 				endStr = red(fmt.Sprintf("expired %s ago", age(cr.Spec.EndTime)))
 			} else {
-				endStr = fmt.Sprintf("expires in %s (at %s)", remaining, cr.Spec.EndTime.Format(time.RFC3339))
+				endStr = gray(fmt.Sprintf("exp in %s", remaining))
 			}
 		}
-		fmt.Printf("    age=%-8s  %s\n", age(&cr.CreationTimestamp), endStr)
+
+		// Line 1: identity + type + ready + state + group + az
+		fmt.Printf("\n  %s %s  %s  %s  group=%s  az=%s  age=%s\n",
+			bold(cyan(cr.Spec.CommitmentUUID)),
+			resourceTypeBadge(cr.Spec.ResourceType),
+			crReadyStatus(cr),
+			stateColour(cr.Spec.State),
+			cr.Spec.FlavorGroupName,
+			cr.Spec.AvailabilityZone,
+			age(&cr.CreationTimestamp),
+		)
+		// Line 2: project + amount + expiry
+		fmt.Printf("    project=%s  amount=%s  accepted=%s  %s\n",
+			cr.Spec.ProjectID,
+			cr.Spec.Amount.String(),
+			accepted,
+			endStr,
+		)
+
+		// Line 3 (optional): usage
+		if mem, ok := cr.Status.UsedResources["memory"]; ok {
+			cpu := cr.Status.UsedResources["cpu"]
+			usageAgeStr := gray("—")
+			if cr.Status.LastUsageReconcileAt != nil {
+				usageAgeStr = age(cr.Status.LastUsageReconcileAt)
+			}
+			fmt.Printf("    used=%s  cpu=%s  instances=%d  usage-age=%s\n",
+				mem.String(), cpu.String(), len(cr.Status.AssignedInstances), usageAgeStr)
+		}
 
 		if showUsage && len(cr.Status.AssignedInstances) > 0 {
 			fmt.Printf("    assigned instances (%d):\n", len(cr.Status.AssignedInstances))

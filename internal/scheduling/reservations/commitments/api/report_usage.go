@@ -73,7 +73,7 @@ func (api *HTTPAPI) HandleReportUsage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Use UsageCalculator to build usage report
-	calculator := commitments.NewUsageCalculator(api.client, api.usageDB)
+	calculator := commitments.NewUsageCalculator(api.client, api.usageDB, api.config)
 	report, err := calculator.CalculateUsage(r.Context(), log, projectID, req.AllAZs)
 	if err != nil {
 		log.Error(err, "failed to calculate usage report", "projectID", projectID)
