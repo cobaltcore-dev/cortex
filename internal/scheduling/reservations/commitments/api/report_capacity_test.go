@@ -307,15 +307,15 @@ func TestCapacityCalculator(t *testing.T) {
 		if azReport == nil {
 			t.Fatal("expected az-one entry")
 		}
-		if azReport.Capacity != 32000 {
-			t.Errorf("expected capacity=32000, got %d", azReport.Capacity)
+		if azReport.Capacity != 1000 {
+			t.Errorf("expected capacity=1000, got %d", azReport.Capacity)
 		}
 		if !azReport.Usage.IsSome() {
 			t.Fatal("expected usage to be set for Ready CRD")
 		}
-		// usage = (capacity - placeable) * 32 GiB/slot = (1000 - 800) * 32 = 6400
-		if usage := azReport.Usage.UnwrapOr(0); usage != 6400 {
-			t.Errorf("expected usage=6400 (200*32), got %d", usage)
+		// usage = (total - placeable) slots = (1000 - 800) = 200 slots
+		if usage := azReport.Usage.UnwrapOr(0); usage != 200 {
+			t.Errorf("expected usage=200 (200 slots), got %d", usage)
 		}
 	})
 
@@ -373,9 +373,9 @@ func TestCapacityCalculator(t *testing.T) {
 		if azReport == nil {
 			t.Fatal("expected az-one entry")
 		}
-		// Stale CRD: last-known capacity is still reported (1000 slots * 32 GiB/slot)
-		if azReport.Capacity != 32000 {
-			t.Errorf("expected last-known capacity=32000 for stale CRD, got %d", azReport.Capacity)
+		// Stale CRD: last-known capacity is still reported (1000 slots)
+		if azReport.Capacity != 1000 {
+			t.Errorf("expected last-known capacity=1000 for stale CRD, got %d", azReport.Capacity)
 		}
 		// Stale CRD: usage must be absent (None)
 		if azReport.Usage.IsSome() {

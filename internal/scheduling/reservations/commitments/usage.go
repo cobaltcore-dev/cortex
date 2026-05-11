@@ -100,7 +100,7 @@ type VMUsageInfo struct {
 	AZ            string
 	Hypervisor    string
 	CreatedAt     time.Time
-	UsageMultiple uint64 // RAM in GiB
+	UsageMultiple uint64 // RAM in the group's declared unit: slot count (fixed-ratio) or GiB (variable-ratio)
 }
 
 // UsageCalculator computes usage reports for Limes LIQUID API.
@@ -306,12 +306,16 @@ func getProjectVMs(
 		// Determine flavor group
 		flavorGroup := flavorToGroup[row.FlavorName]
 
-		// Calculate usage in GiB (FlavorRAM is in MiB).
-		// Add 16 MiB before dividing: flavors reserve 16 MiB for video RAM (hw_video:ram_max_mb=16),
-		// so a nominal "2 GiB" flavor has 2032 MiB. Without the adjustment, integer division truncates.
+		// Compute usage in the unit declared by the info endpoint for this group:
+		//   - fixed-ratio: slot count (FlavorRAM / smallest.MemoryMB); exact since flavors are integer multiples
+		//   - variable-ratio or unknown: GiB, with +16 MiB to round up video-RAM-adjusted values
 		var usageMultiple uint64
 		if row.FlavorRAM > 0 {
-			usageMultiple = (row.FlavorRAM + 16) / 1024
+			if fg, ok := flavorGroups[flavorGroup]; ok && fg.RamCoreRatio != nil && fg.SmallestFlavor.MemoryMB > 0 {
+				usageMultiple = row.FlavorRAM / fg.SmallestFlavor.MemoryMB
+			} else {
+				usageMultiple = (row.FlavorRAM + 16) / 1024
+			}
 		}
 
 		// Normalize AZ

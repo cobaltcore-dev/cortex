@@ -203,6 +203,14 @@ ProcessLoop:
 				break ProcessLoop
 			}
 
+			groupData := flavorGroups[flavorGroupName]
+			// For fixed-ratio groups, 1 external unit = 1 smallest-flavor slot (MemoryMB MiB).
+			// For variable-ratio groups, 1 external unit = 1 GiB = 1024 MiB.
+			ramUnitMiB := uint64(1024)
+			if groupData.RamCoreRatio != nil {
+				ramUnitMiB = groupData.SmallestFlavor.MemoryMB
+			}
+
 			groupResourceConf := api.config.ResourceConfigForGroup(flavorGroupName)
 			var handlesCommitments bool
 			switch resourceType {
@@ -263,7 +271,7 @@ ProcessLoop:
 				}
 
 				stateDesired, err := commitments.FromChangeCommitmentTargetState(
-					commitment, string(projectID), domainID, flavorGroupName, resourceType, string(req.AZ))
+					commitment, string(projectID), domainID, flavorGroupName, resourceType, string(req.AZ), ramUnitMiB)
 				if err != nil {
 					failedReason = fmt.Sprintf("commitment %s: %s", commitment.UUID, err)
 					rollback = true

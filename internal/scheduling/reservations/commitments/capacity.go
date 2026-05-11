@@ -78,6 +78,10 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 		memoryMBPerSlot := groupData.SmallestFlavor.MemoryMB + 16
 		vcpusPerSlot := groupData.SmallestFlavor.VCPUs
 
+		// Fixed-ratio groups expose RAM in slot units (1 unit = 1 smallest-flavor slot).
+		// Variable-ratio groups expose RAM in GiB.
+		isFixedRatio := groupData.RamCoreRatio != nil
+
 		ramAZCapacity := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(req.AllAZs))
 		coresAZCapacity := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(req.AllAZs))
 		instancesAZCapacity := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(req.AllAZs))
@@ -116,7 +120,13 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			}
 
 			totalSlots := uint64(smallest.TotalCapacityVMSlots) //nolint:gosec // slot count from CRD, realistically bounded
-			ramEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots * memoryMBPerSlot / 1024}
+			var ramCapacity uint64
+			if isFixedRatio {
+				ramCapacity = totalSlots
+			} else {
+				ramCapacity = totalSlots * memoryMBPerSlot / 1024
+			}
+			ramEntry := &liquid.AZResourceCapacityReport{Capacity: ramCapacity}
 			coresEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots * vcpusPerSlot}
 			instancesEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots}
 
@@ -128,7 +138,11 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 				if totalSlots > placeableSlots {
 					usedSlots = totalSlots - placeableSlots
 				}
-				ramEntry.Usage = Some[uint64](usedSlots * memoryMBPerSlot / 1024)
+				if isFixedRatio {
+					ramEntry.Usage = Some[uint64](usedSlots)
+				} else {
+					ramEntry.Usage = Some[uint64](usedSlots * memoryMBPerSlot / 1024)
+				}
 				coresEntry.Usage = Some[uint64](usedSlots * vcpusPerSlot)
 				instancesEntry.Usage = Some[uint64](usedSlots)
 			}

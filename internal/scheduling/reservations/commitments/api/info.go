@@ -143,12 +143,19 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 		if resCfg.RAM.HandlesCommitments {
 			ramTopology = liquid.AZSeparatedTopology
 		}
+		// Fixed-ratio groups: unit is 1 slot (= 1 smallest-flavor instance); variable-ratio: GiB.
+		var ramUnit liquid.Unit
+		var ramDisplayName string
+		if groupData.RamCoreRatio != nil {
+			ramUnit = liquid.UnitNone
+			ramDisplayName = fmt.Sprintf("multiples of %d MiB (usable by: %s)", groupData.SmallestFlavor.MemoryMB, flavorListStr)
+		} else {
+			ramUnit = liquid.UnitGibibytes
+			ramDisplayName = fmt.Sprintf("GiB of RAM (usable by: %s)", flavorListStr)
+		}
 		resources[ramResourceName] = liquid.ResourceInfo{
-			DisplayName: fmt.Sprintf(
-				"GiB of RAM (usable by: %s)",
-				flavorListStr,
-			),
-			Unit:                liquid.UnitGibibytes,
+			DisplayName:         ramDisplayName,
+			Unit:                ramUnit,
 			Topology:            ramTopology,
 			NeedsResourceDemand: false,
 			HasCapacity:         resCfg.RAM.HasCapacity,
