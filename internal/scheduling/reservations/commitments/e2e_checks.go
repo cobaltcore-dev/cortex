@@ -22,7 +22,7 @@ import (
 const (
 	// Default URL for the commitments API endpoint.
 	// This should match the service name in the helm chart.
-	defaultCommitmentsAPIURL = "http://cortex-nova-scheduler:8080"
+	defaultCommitmentsAPIURL = "http://localhost:8080"
 
 	// defaultE2EProjectUUID is a well-known fake project UUID used when no ProjectID is configured.
 	// It is intentionally not a real OpenStack project — commitments created under it self-expire.

@@ -435,6 +435,7 @@ func (c *QuotaController) accumulateAddedVM(
 
 	delta.addIncrement(commitments.ResourceNameRAM(groupName), vm.AvailabilityZone, ramUnits)
 	delta.addIncrement(commitments.ResourceNameCores(groupName), vm.AvailabilityZone, coresAmount)
+	delta.addIncrement(commitments.ResourceNameInstances(groupName), vm.AvailabilityZone, 1)
 }
 
 // isVMNewSinceLastReconcile checks if a VM was created after the last full reconcile.
@@ -536,6 +537,7 @@ func (c *QuotaController) accumulateRemovedVM(
 
 	delta.addDecrement(commitments.ResourceNameRAM(groupName), info.AvailabilityZone, ramUnits)
 	delta.addDecrement(commitments.ResourceNameCores(groupName), info.AvailabilityZone, coresAmount)
+	delta.addDecrement(commitments.ResourceNameInstances(groupName), info.AvailabilityZone, 1)
 }
 
 // applyDeltaAndUpdateStatus applies batched deltas to ALL per-AZ ProjectQuota CRDs for a project.
@@ -648,8 +650,12 @@ func (c *QuotaController) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // SetupHVWatcher sets up a separate controller to watch HV CRD changes
-// for incremental TotalUsage updates.
+// for incremental TotalUsage updates. Skipped if EnableHVDiff is false.
 func (c *QuotaController) SetupHVWatcher(mgr ctrl.Manager) error {
+	if !c.Config.IsHVDiffEnabled() {
+		log.Info("HV diff watcher disabled by config (enableHVDiff=false)")
+		return nil
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("quota-hv-watcher").
 		WatchesRawSource(source.Kind(
@@ -726,6 +732,7 @@ func (c *QuotaController) computeTotalUsage(
 
 		ramResourceName := commitments.ResourceNameRAM(groupName)
 		coresResourceName := commitments.ResourceNameCores(groupName)
+		instancesResourceName := commitments.ResourceNameInstances(groupName)
 
 		ramUnits, coresAmount := vmResourceUnits(vm.Resources)
 
@@ -748,6 +755,14 @@ func (c *QuotaController) computeTotalUsage(
 		}
 		coresUsage[vm.AvailabilityZone] += coresAmount
 		result[vm.ProjectID][coresResourceName] = coresUsage
+
+		// Accumulate instances usage for this project + AZ (1 per VM)
+		instancesUsage := result[vm.ProjectID][instancesResourceName]
+		if instancesUsage == nil {
+			instancesUsage = make(map[string]int64)
+		}
+		instancesUsage[vm.AvailabilityZone]++
+		result[vm.ProjectID][instancesResourceName] = instancesUsage
 	}
 
 	return result
