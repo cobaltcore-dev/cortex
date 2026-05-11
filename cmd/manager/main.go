@@ -907,15 +907,17 @@ func main() {
 		}
 	}
 
+	signalCtx := ctrl.SetupSignalHandler()
+
 	errchan := make(chan error)
 	go func() {
-		if !mgr.GetCache().WaitForCacheSync(ctx) {
-			setupLog.Error(nil, "cache sync failed, not starting api server")
+		if !mgr.GetCache().WaitForCacheSync(signalCtx) {
+			setupLog.Error(nil, "cache sync failed, exiting before starting api server")
 			os.Exit(1)
 		}
 		errchan <- func() error {
 			setupLog.Info("starting api server", "address", ":8080")
-			return httpext.ListenAndServeContext(ctx, ":8080", mux)
+			return httpext.ListenAndServeContext(signalCtx, ":8080", mux)
 		}()
 	}()
 	go func() {
@@ -926,7 +928,7 @@ func main() {
 	}()
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(signalCtx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
