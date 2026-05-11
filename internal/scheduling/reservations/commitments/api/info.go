@@ -146,7 +146,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 		// Fixed-ratio groups: unit is 1 slot (= 1 smallest-flavor instance); variable-ratio: GiB.
 		var ramUnit liquid.Unit
 		var ramDisplayName string
-		if groupData.RamCoreRatio != nil {
+		if groupData.HasFixedRamCoreRatio() {
 			ramUnit = liquid.UnitNone
 			ramDisplayName = fmt.Sprintf("multiples of %d MiB (usable by: %s)", groupData.SmallestFlavor.MemoryMB, flavorListStr)
 		} else {

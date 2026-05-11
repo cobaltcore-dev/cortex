@@ -106,16 +106,10 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 		api.quotaError(w, http.StatusServiceUnavailable, "flavor groups not available: "+err.Error(), startTime)
 		return
 	}
-	// ramUnitMiBByResource maps RAM resource name → MiB per declared unit:
-	//   fixed-ratio groups:    SmallestFlavor.MemoryMB  (1 slot = that many MiB)
-	//   variable-ratio groups: 1024                     (1 declared unit = 1 GiB)
-	ramUnitMiBByResource := make(map[string]uint64, len(flavorGroups))
-	for groupName, groupData := range flavorGroups {
-		unitMiB := uint64(1024)
-		if groupData.RamCoreRatio != nil && groupData.SmallestFlavor.MemoryMB > 0 {
-			unitMiB = groupData.SmallestFlavor.MemoryMB
-		}
-		ramUnitMiBByResource[commitments.ResourceNameRAM(groupName)] = unitMiB
+	// ramResourceToGroup maps RAM resource name → group name for unit conversion.
+	ramResourceToGroup := make(map[string]string, len(flavorGroups))
+	for groupName := range flavorGroups {
+		ramResourceToGroup[commitments.ResourceNameRAM(groupName)] = groupName
 	}
 
 	// Build per-AZ quota maps from the liquid request, converting RAM to GiB.
@@ -130,10 +124,9 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			quotaValue := int64(azQuota.Quota)
-			// Convert from declared unit to GiB: quotaGiB = quotaUnits * unitMiB / 1024.
-			// For variable-ratio groups unitMiB=1024 so this is a no-op.
-			if unitMiB, ok := ramUnitMiBByResource[string(resourceName)]; ok {
-				quotaValue = quotaValue * int64(unitMiB) / 1024 //nolint:gosec
+			if groupName, ok := ramResourceToGroup[string(resourceName)]; ok {
+				fg := flavorGroups[groupName]
+				quotaValue = fg.DeclaredUnitsToGiB(quotaValue)
 			}
 			azStr := string(az)
 			if quotaByAZ[azStr] == nil {

@@ -204,12 +204,7 @@ ProcessLoop:
 			}
 
 			groupData := flavorGroups[flavorGroupName]
-			// For fixed-ratio groups, 1 external unit = 1 smallest-flavor slot (MemoryMB MiB).
-			// For variable-ratio groups, 1 external unit = 1 GiB = 1024 MiB.
-			ramUnitMiB := uint64(1024)
-			if groupData.RamCoreRatio != nil {
-				ramUnitMiB = groupData.SmallestFlavor.MemoryMB
-			}
+			ramUnitMiB := groupData.RAMUnitMiB()
 
 			groupResourceConf := api.config.ResourceConfigForGroup(flavorGroupName)
 			var handlesCommitments bool

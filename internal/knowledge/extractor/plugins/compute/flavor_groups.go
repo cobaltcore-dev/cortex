@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
@@ -46,9 +47,55 @@ type FlavorGroupFeature struct {
 	RamCoreRatioMax *uint64 `json:"ramCoreRatioMax,omitempty"`
 }
 
-// HasFixedRamCoreRatio returns true if all flavors in this group have the same RAM/core ratio.
 func (f *FlavorGroupFeature) HasFixedRamCoreRatio() bool {
-	return f.RamCoreRatio != nil
+	if f.RamCoreRatio == nil {
+		return false
+	}
+	if f.RamCoreRatioMin == nil && f.RamCoreRatioMax == nil {
+		return true
+	}
+	return f.RamCoreRatioMin != nil && f.RamCoreRatioMax != nil &&
+		*f.RamCoreRatio == *f.RamCoreRatioMin && *f.RamCoreRatio == *f.RamCoreRatioMax
+}
+
+func (f *FlavorGroupFeature) Validate() error {
+	hasRatio := f.RamCoreRatio != nil
+	hasMin := f.RamCoreRatioMin != nil
+	hasMax := f.RamCoreRatioMax != nil
+
+	allThreeSame := hasRatio && hasMin && hasMax &&
+		*f.RamCoreRatio == *f.RamCoreRatioMin && *f.RamCoreRatio == *f.RamCoreRatioMax
+	isFixed := (hasRatio && !hasMin && !hasMax) || allThreeSame
+	isVariable := !hasRatio && hasMin && hasMax
+	isNone := !hasRatio && !hasMin && !hasMax
+
+	if !isFixed && !isVariable && !isNone {
+		return fmt.Errorf("flavor group %q has inconsistent ratio fields", f.Name)
+	}
+	if isVariable && *f.RamCoreRatioMin >= *f.RamCoreRatioMax {
+		return fmt.Errorf("flavor group %q: RamCoreRatioMin (%d) must be less than RamCoreRatioMax (%d)", f.Name, *f.RamCoreRatioMin, *f.RamCoreRatioMax)
+	}
+	if (isFixed || isVariable) && f.SmallestFlavor.MemoryMB == 0 {
+		return fmt.Errorf("flavor group %q: SmallestFlavor.MemoryMB must be non-zero", f.Name)
+	}
+	return nil
+}
+
+// RAMUnitMiB returns MiB per one declared LIQUID RAM unit:
+// fixed-ratio groups use slots (SmallestFlavor.MemoryMB MiB each); variable-ratio use GiB (1024 MiB).
+func (f *FlavorGroupFeature) RAMUnitMiB() uint64 {
+	if f.HasFixedRamCoreRatio() && f.SmallestFlavor.MemoryMB > 0 {
+		return f.SmallestFlavor.MemoryMB
+	}
+	return 1024
+}
+
+func (f *FlavorGroupFeature) DeclaredUnitsToGiB(units int64) int64 {
+	return units * int64(f.RAMUnitMiB()) / 1024 //nolint:gosec
+}
+
+func (f *FlavorGroupFeature) GiBToDeclaredUnits(gib int64) int64 {
+	return gib * 1024 / int64(f.RAMUnitMiB()) //nolint:gosec
 }
 
 // flavorRow represents a row from the SQL query.
@@ -177,7 +224,7 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 			"ramCoreRatioMin", ramCoreRatioMin,
 			"ramCoreRatioMax", ramCoreRatioMax)
 
-		features = append(features, FlavorGroupFeature{
+		fg := FlavorGroupFeature{
 			Name:            groupName,
 			Flavors:         flavors,
 			LargestFlavor:   largest,
@@ -185,7 +232,12 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 			RamCoreRatio:    ramCoreRatio,
 			RamCoreRatioMin: ramCoreRatioMin,
 			RamCoreRatioMax: ramCoreRatioMax,
-		})
+		}
+		if err := fg.Validate(); err != nil {
+			flavorGroupLog.Error(err, "skipping flavor group with invalid data", "groupName", groupName)
+			continue
+		}
+		features = append(features, fg)
 	}
 
 	// Sort features by group name for consistent ordering

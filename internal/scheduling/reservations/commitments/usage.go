@@ -311,7 +311,7 @@ func getProjectVMs(
 		//   - variable-ratio or unknown: GiB, with +16 MiB to round up video-RAM-adjusted values
 		var usageMultiple uint64
 		if row.FlavorRAM > 0 {
-			if fg, ok := flavorGroups[flavorGroup]; ok && fg.RamCoreRatio != nil && fg.SmallestFlavor.MemoryMB > 0 {
+			if fg, ok := flavorGroups[flavorGroup]; ok && fg.HasFixedRamCoreRatio() {
 				usageMultiple = row.FlavorRAM / fg.SmallestFlavor.MemoryMB
 			} else {
 				usageMultiple = (row.FlavorRAM + 16) / 1024
@@ -526,14 +526,8 @@ func (c *UsageCalculator) buildUsageResponse(
 					if azMap, ok := quotaByResourceAZ[string(ramResourceName)]; ok {
 						if q, ok := azMap[string(az)]; ok {
 							// CRD stores quota in GiB; convert to declared unit for Limes.
-							// Fixed-ratio: 1 slot = SmallestFlavor.MemoryMB MiB → slots = GiB*1024/MemoryMB.
-							// Variable-ratio: declared unit is GiB; no conversion.
 							fg := flavorGroups[flavorGroupName]
-							if fg.RamCoreRatio != nil && fg.SmallestFlavor.MemoryMB > 0 {
-								quota = q * 1024 / int64(fg.SmallestFlavor.MemoryMB) //nolint:gosec
-							} else {
-								quota = q
-							}
+							quota = fg.GiBToDeclaredUnits(q)
 						}
 					}
 				}
