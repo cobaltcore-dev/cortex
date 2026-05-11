@@ -401,15 +401,13 @@ func TestReportUsageIntegration(t *testing.T) {
 				{CommitmentID: "commit-1", Flavor: m1Small, ProjectID: "project-quota", AZ: "az-a", Count: 4},
 			},
 			ProjectQuota: &v1alpha1.ProjectQuota{
-				ObjectMeta: metav1.ObjectMeta{Name: "quota-project-quota"},
+				ObjectMeta: metav1.ObjectMeta{Name: "quota-project-quota-az-a"},
 				Spec: v1alpha1.ProjectQuotaSpec{
-					ProjectID: "project-quota",
-					DomainID:  "test-domain",
-					Quota: map[string]v1alpha1.ResourceQuota{
-						"hw_version_hana_1_ram": {
-							Quota: 16,
-							PerAZ: map[string]int64{"az-a": 16},
-						},
+					ProjectID:        "project-quota",
+					DomainID:         "test-domain",
+					AvailabilityZone: "az-a",
+					Quota: map[string]int64{
+						"hw_version_hana_1_ram": 16,
 					},
 				},
 			},

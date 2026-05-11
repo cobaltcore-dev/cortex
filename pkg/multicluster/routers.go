@@ -20,6 +20,7 @@ var DefaultResourceRouters = map[schema.GroupVersionKind]ResourceRouter{
 	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}:         ReservationsResourceRouter{},
 	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}:             HistoryResourceRouter{},
 	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}:   CommittedResourceRouter{},
+	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "ProjectQuota"}:        ProjectQuotaResourceRouter{},
 	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "FlavorGroupCapacity"}: FlavorGroupCapacityResourceRouter{},
 }
 
@@ -164,4 +165,31 @@ func (h HistoryResourceRouter) Match(obj any, labels map[string]string) (bool, e
 		return false, errors.New("history does not have availability zone in spec")
 	}
 	return *hist.Spec.AvailabilityZone == availabilityZone, nil
+}
+
+// ProjectQuotaResourceRouter routes project quotas to clusters based on availability zone.
+type ProjectQuotaResourceRouter struct{}
+
+func (p ProjectQuotaResourceRouter) Match(obj any, labels map[string]string) (bool, error) {
+	var pq v1alpha1.ProjectQuota
+
+	switch v := obj.(type) {
+	case *v1alpha1.ProjectQuota:
+		if v == nil {
+			return false, errors.New("object is nil")
+		}
+		pq = *v
+	case v1alpha1.ProjectQuota:
+		pq = v
+	default:
+		return false, errors.New("object is not a ProjectQuota")
+	}
+	availabilityZone, ok := labels["availabilityZone"]
+	if !ok {
+		return false, errors.New("cluster does not have availabilityZone label")
+	}
+	if pq.Spec.AvailabilityZone == "" {
+		return false, errors.New("project quota does not have availability zone in spec")
+	}
+	return pq.Spec.AvailabilityZone == availabilityZone, nil
 }
