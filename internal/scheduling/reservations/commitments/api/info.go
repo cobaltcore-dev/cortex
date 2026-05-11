@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -75,10 +76,20 @@ func (api *HTTPAPI) recordInfoMetrics(statusCode int, startTime time.Time) {
 }
 
 // resourceAttributes holds the custom attributes for a resource in the info API response.
+// Ratio values are in GiB per vCPU, matching the RAM resource unit (UnitGibibytes).
 type resourceAttributes struct {
 	RamCoreRatio    *uint64 `json:"ramCoreRatio,omitempty"`
 	RamCoreRatioMin *uint64 `json:"ramCoreRatioMin,omitempty"`
 	RamCoreRatioMax *uint64 `json:"ramCoreRatioMax,omitempty"`
+}
+
+// mibToGiB converts a MiB pointer value to GiB, rounded to the nearest integer. Returns nil if v is nil.
+func mibToGiB(v *uint64) *uint64 {
+	if v == nil {
+		return nil
+	}
+	gib := uint64(math.Round(float64(*v) / 1024))
+	return &gib
 }
 
 // buildServiceInfo constructs the ServiceInfo response with metadata for all flavor groups.
@@ -110,11 +121,13 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 		}
 		flavorListStr := strings.Join(flavorNames, ", ")
 
-		// Build attributes JSON with ratio info (shared across all resource types)
+		// Build attributes JSON with ratio info (shared across all resource types).
+		// Ratios are stored in MiB/vCPU in the knowledge CRD; convert to GiB/vCPU here
+		// so the values match the GiB unit used by the RAM resource.
 		attrs := resourceAttributes{
-			RamCoreRatio:    groupData.RamCoreRatio,
-			RamCoreRatioMin: groupData.RamCoreRatioMin,
-			RamCoreRatioMax: groupData.RamCoreRatioMax,
+			RamCoreRatio:    mibToGiB(groupData.RamCoreRatio),
+			RamCoreRatioMin: mibToGiB(groupData.RamCoreRatioMin),
+			RamCoreRatioMax: mibToGiB(groupData.RamCoreRatioMax),
 		}
 		attrsJSON, err := json.Marshal(attrs)
 		if err != nil {
@@ -146,13 +159,17 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 
 		// === 2. Cores Resource ===
 		coresResourceName := liquid.ResourceName(commitments.ResourceNameCores(groupName))
+		coresTopology := liquid.AZAwareTopology
+		if resCfg.Cores.HandlesCommitments {
+			coresTopology = liquid.AZSeparatedTopology
+		}
 		resources[coresResourceName] = liquid.ResourceInfo{
 			DisplayName: fmt.Sprintf(
 				"CPU cores (usable by: %s)",
 				flavorListStr,
 			),
 			Unit:                liquid.UnitNone,
-			Topology:            liquid.AZAwareTopology,
+			Topology:            coresTopology,
 			NeedsResourceDemand: false,
 			HasCapacity:         resCfg.Cores.HasCapacity,
 			HasQuota:            resCfg.Cores.HasQuota,
@@ -162,13 +179,17 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 
 		// === 3. Instances Resource ===
 		instancesResourceName := liquid.ResourceName(commitments.ResourceNameInstances(groupName))
+		instancesTopology := liquid.AZAwareTopology
+		if resCfg.Instances.HandlesCommitments {
+			instancesTopology = liquid.AZSeparatedTopology
+		}
 		resources[instancesResourceName] = liquid.ResourceInfo{
 			DisplayName: fmt.Sprintf(
 				"instances (usable by: %s)",
 				flavorListStr,
 			),
 			Unit:                liquid.UnitNone,
-			Topology:            liquid.AZAwareTopology,
+			Topology:            instancesTopology,
 			NeedsResourceDemand: false,
 			HasCapacity:         resCfg.Instances.HasCapacity,
 			HasQuota:            resCfg.Instances.HasQuota,
