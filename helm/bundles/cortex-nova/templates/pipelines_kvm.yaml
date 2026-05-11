@@ -70,14 +70,8 @@ spec:
     - name: filter_has_enough_capacity
       description: |
         This step will filter out hosts that do not have enough available capacity
-        to host the requested flavor. If enabled, this step will subtract the
-        current reservations residing on this host from the available capacity.
-      params:
-        # If reserved space should be locked even for matching requests.
-        # For the reservations pipeline, we don't want to unlock
-        # reserved space, to avoid reservations for the same project
-        # and flavor to overlap.
-        - {key: lockReserved, boolValue: false}
+        to host the requested flavor. Reservation unlocking behavior is controlled
+        by the call-time Options.LockReservations flag, not by a step param.
     - name: filter_allowed_projects
       description: |
         This step filters hosts based on allowed projects defined in the
@@ -208,14 +202,8 @@ spec:
     - name: filter_has_enough_capacity
       description: |
         This step will filter out hosts that do not have enough available capacity
-        to host the requested flavor. If enabled, this step will subtract the
-        current reservations residing on this host from the available capacity.
-      params:
-        # If reserved space should be locked even for matching requests.
-        # For the reservations pipeline, we don't want to unlock
-        # reserved space, to avoid reservations for the same project
-        # and flavor to overlap.
-        - {key: lockReserved, boolValue: false}
+        to host the requested flavor. Reservation unlocking behavior is controlled
+        by the call-time Options.LockReservations flag, not by a step param.
     - name: filter_allowed_projects
       description: |
         This step filters hosts based on allowed projects defined in the
@@ -379,10 +367,9 @@ spec:
     - name: filter_has_enough_capacity
       description: |
         This step will filter out hosts that do not have enough available capacity
-        to host the requested flavor. Reservations are considered to ensure we
-        don't double-book capacity.
-      params:
-        - {key: lockReserved, boolValue: true}
+        to host the requested flavor. Reservations are locked via the call-time
+        Options.LockReservations flag (set by the ack caller) to prevent false-positive
+        unlocking of CR slots during evacuation validation.
     - name: filter_has_requested_traits
       description: |
         This step filters hosts that do not have the requested traits given by the
@@ -453,10 +440,8 @@ spec:
     - name: filter_has_enough_capacity
       description: |
         Filters hosts that cannot fit the flavor based on raw hardware capacity.
-        VM allocations and all reservation types are ignored to represent an
-        empty datacenter scenario.
-      params:
-        - {key: ignoredReservationTypes, stringListValue: ["CommittedResourceReservation", "FailoverReservation"]}
+        VM allocations and all reservation types are ignored via call-time Options
+        (AssumeEmptyHosts + IgnoredReservationTypes set by the capacity controller).
     - name: filter_has_requested_traits
       description: |
         Ensures hosts have the hardware traits required by the flavor.

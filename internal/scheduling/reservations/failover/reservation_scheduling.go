@@ -224,7 +224,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		"vmCurrentHost", vm.CurrentHypervisor,
 		"pipeline", PipelineAcknowledgeFailoverReservation)
 
-	resp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq, scheduling.Options{ReadOnly: true, SkipHistory: true})
+	resp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq, scheduling.Options{ReadOnly: true, LockReservations: true, SkipHistory: true})
 	if err != nil {
 		logger.Error(err, "failed to validate VM for reservation host", "vmUUID", vm.UUID, "reservationHost", reservationHost)
 		return false, fmt.Errorf("failed to validate VM for reservation host: %w", err)

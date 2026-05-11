@@ -148,7 +148,11 @@ func (c *Controller) reconcileOne(
 		cur := existingByName[flavor.Name]
 		cur.FlavorName = flavor.Name
 
-		totalVMSlots, totalHosts, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName, scheduling.Options{SkipHistory: true, AssumeEmptyHosts: true})
+		totalVMSlots, totalHosts, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName, scheduling.Options{
+			SkipHistory:             true,
+			AssumeEmptyHosts:        true,
+			IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
+		})
 		placeableVMs, placeableHosts, placeableErr := c.probeScheduler(ctx, flavor, az, c.config.PlaceablePipeline, hvByName, scheduling.Options{SkipHistory: true})
 
 		if totalErr != nil {

@@ -93,6 +93,10 @@ type ScheduleReservationResponse struct {
 func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleReservationRequest, opts scheduling.Options) (*ScheduleReservationResponse, error) {
 	logger := loggerFromContext(ctx)
 
+	if err := opts.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid scheduling options: %w", err)
+	}
+
 	// Build weights map (all zero for reservations)
 	weights := make(map[string]float64, len(req.EligibleHosts))
 	for _, host := range req.EligibleHosts {
