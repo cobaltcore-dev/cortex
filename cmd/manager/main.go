@@ -909,6 +909,10 @@ func main() {
 
 	errchan := make(chan error)
 	go func() {
+		if !mgr.GetCache().WaitForCacheSync(ctx) {
+			setupLog.Error(nil, "cache sync failed, not starting api server")
+			os.Exit(1)
+		}
 		errchan <- func() error {
 			setupLog.Info("starting api server", "address", ":8080")
 			return httpext.ListenAndServeContext(ctx, ":8080", mux)
