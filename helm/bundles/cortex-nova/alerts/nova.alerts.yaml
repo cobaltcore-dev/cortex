@@ -494,8 +494,8 @@ groups:
         the failure to users.
 
   - alert: CortexNovaCommittedResourceTimeoutsTooHigh
-    expr: increase(cortex_committed_resource_change_api_timeouts_total{service="cortex-nova-metrics"}[30m]) > 3
-    for: 5m
+    expr: increase(cortex_committed_resource_change_api_timeouts_total{service="cortex-nova-metrics"}[10m]) > 0
+    for: 1m
     labels:
       context: committed-resource-api
       dashboard: cortex-status-dashboard/cortex-status-dashboard
@@ -503,12 +503,11 @@ groups:
       severity: warning
       support_group: workload-management
     annotations:
-      summary: "Committed Resource change API repeated timeouts"
+      summary: "Committed Resource change API timeout detected"
       description: >
-        More than 3 commitment change requests timed out in the last 30 minutes.
-        Timeouts occur when the scheduling pipeline cannot place reservations within
-        the deadline. Affected changes are rolled back. Investigate scheduler
-        performance or reservation backlog.
+        A commitment change request timed out after the 15-second deadline.
+        Timeouts indicate the scheduling pipeline could not place reservations in time.
+        Affected changes are rolled back. Investigate scheduler performance or reservation backlog.
 
   - alert: CortexNovaCommittedResourceChangeLatencyTooHigh
     expr: |
