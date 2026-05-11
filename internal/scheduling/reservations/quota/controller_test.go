@@ -93,8 +93,8 @@ func TestComputeTotalUsage(t *testing.T) {
 
 	result := ctrl.computeTotalUsage(vms, flavorToGroup, flavorGroups)
 
-	// project-a: hana_v2 in az-1: (32768+65536)/1024 = 96 GiB RAM, 8+16=24 cores
-	// project-a: hana_v2 in az-2: 32768/1024 = 32 GiB RAM, 8 cores
+	// project-a: hana_v2 in az-1: (32768+65536)/1024 = 96 GiB RAM, 8+16=24 cores, 2 instances
+	// project-a: hana_v2 in az-2: 32768/1024 = 32 GiB RAM, 8 cores, 1 instance
 	projectA := result["project-a"]
 	if projectA == nil {
 		t.Fatal("expected project-a in results")
@@ -116,7 +116,15 @@ func TestComputeTotalUsage(t *testing.T) {
 		t.Errorf("expected project-a az-2 hana_v2_cores = 8, got %d", coresUsage["az-2"])
 	}
 
-	// project-b: general in az-1: 4096/1024 = 4 GiB RAM, 2 cores
+	instancesUsage := projectA["hw_version_hana_v2_instances"]
+	if instancesUsage["az-1"] != 2 {
+		t.Errorf("expected project-a az-1 hana_v2_instances = 2, got %d", instancesUsage["az-1"])
+	}
+	if instancesUsage["az-2"] != 1 {
+		t.Errorf("expected project-a az-2 hana_v2_instances = 1, got %d", instancesUsage["az-2"])
+	}
+
+	// project-b: general in az-1: 4096/1024 = 4 GiB RAM, 2 cores, 1 instance
 	projectB := result["project-b"]
 	if projectB == nil {
 		t.Fatal("expected project-b in results")
@@ -126,6 +134,9 @@ func TestComputeTotalUsage(t *testing.T) {
 	}
 	if projectB["hw_version_general_cores"]["az-1"] != 2 {
 		t.Errorf("expected project-b az-1 general_cores = 2, got %d", projectB["hw_version_general_cores"]["az-1"])
+	}
+	if projectB["hw_version_general_instances"]["az-1"] != 1 {
+		t.Errorf("expected project-b az-1 general_instances = 1, got %d", projectB["hw_version_general_instances"]["az-1"])
 	}
 
 	// project-c: unknown flavor → not in results
@@ -559,6 +570,9 @@ func TestAccumulateAddedVM_KnownFlavor(t *testing.T) {
 	}
 	if delta.increments["hw_version_hana_v2_cores"]["az-1"] != 8 {
 		t.Errorf("expected cores increment = 8, got %d", delta.increments["hw_version_hana_v2_cores"]["az-1"])
+	}
+	if delta.increments["hw_version_hana_v2_instances"]["az-1"] != 1 {
+		t.Errorf("expected instances increment = 1, got %d", delta.increments["hw_version_hana_v2_instances"]["az-1"])
 	}
 }
 
