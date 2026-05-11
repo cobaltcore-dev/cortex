@@ -94,7 +94,6 @@ spec:
               quota:
                 additionalProperties:
                   format: int64
-                  minimum: 0
                   type: integer
                 description: |-
                   Quota maps LIQUID resource names to their quota value for THIS availability zone.
@@ -192,7 +191,6 @@ spec:
               paygUsage:
                 additionalProperties:
                   format: int64
-                  minimum: 0
                   type: integer
                 description: |-
                   PaygUsage tracks per-resource pay-as-you-go usage in this AZ.
@@ -202,7 +200,6 @@ spec:
               totalUsage:
                 additionalProperties:
                   format: int64
-                  minimum: 0
                   type: integer
                 description: |-
                   TotalUsage tracks per-resource total resource consumption in this AZ (all VMs in this project+AZ).
