@@ -8,7 +8,6 @@ spec:
   description: |
     This pipeline is used to schedule pods onto nodes.
   type: filter-weigher
-  createHistory: false
   filters:
     - name: noop
       description: |

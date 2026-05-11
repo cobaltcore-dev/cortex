@@ -14,7 +14,6 @@ spec:
 
     Specifically, this pipeline is used for general purpose workloads.
   type: filter-weigher
-  createHistory: false
   filters: []
   weighers:
     - name: vmware_binpack
@@ -73,7 +72,6 @@ spec:
 
     Specifically, this pipeline is used for HANA workloads.
   type: filter-weigher
-  createHistory: false
   filters: []
   weighers:
     - name: vmware_binpack
