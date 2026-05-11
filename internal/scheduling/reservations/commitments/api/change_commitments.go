@@ -190,7 +190,7 @@ ProcessLoop:
 		for _, resourceName := range sortedKeys(projectChanges.ByResource) {
 			resourceChanges := projectChanges.ByResource[resourceName]
 
-			flavorGroupName, err := commitments.GetFlavorGroupNameFromResource(string(resourceName))
+			flavorGroupName, resourceType, err := commitments.GetFlavorGroupAndTypeFromResource(string(resourceName))
 			if err != nil {
 				failedReason = fmt.Sprintf("project with unknown resource name %s: %v", projectID, err)
 				rollback = true
@@ -203,8 +203,16 @@ ProcessLoop:
 				break ProcessLoop
 			}
 
-			if !api.config.ResourceConfigForGroup(flavorGroupName).RAM.HandlesCommitments {
-				failedReason = fmt.Sprintf("flavor group %q is not configured to handle commitments", flavorGroupName)
+			groupResourceConf := api.config.ResourceConfigForGroup(flavorGroupName)
+			var handlesCommitments bool
+			switch resourceType {
+			case v1alpha1.CommittedResourceTypeCores:
+				handlesCommitments = groupResourceConf.Cores.HandlesCommitments
+			default:
+				handlesCommitments = groupResourceConf.RAM.HandlesCommitments
+			}
+			if !handlesCommitments {
+				failedReason = fmt.Sprintf("flavor group %q is not configured to handle %s commitments", flavorGroupName, resourceType)
 				rollback = true
 				break ProcessLoop
 			}
@@ -255,7 +263,7 @@ ProcessLoop:
 				}
 
 				stateDesired, err := commitments.FromChangeCommitmentTargetState(
-					commitment, string(projectID), domainID, flavorGroupName, string(req.AZ))
+					commitment, string(projectID), domainID, flavorGroupName, resourceType, string(req.AZ))
 				if err != nil {
 					failedReason = fmt.Sprintf("commitment %s: %s", commitment.UUID, err)
 					rollback = true
@@ -502,8 +510,13 @@ func applyCRSpec(cr *v1alpha1.CommittedResource, state *commitments.CommitmentSt
 	cr.Spec.CommitmentUUID = state.CommitmentUUID
 	cr.Spec.SchedulingDomain = v1alpha1.SchedulingDomainNova
 	cr.Spec.FlavorGroupName = state.FlavorGroupName
-	cr.Spec.ResourceType = v1alpha1.CommittedResourceTypeMemory
-	cr.Spec.Amount = *resource.NewQuantity(state.TotalMemoryBytes, resource.BinarySI)
+	cr.Spec.ResourceType = state.ResourceType
+	switch state.ResourceType {
+	case v1alpha1.CommittedResourceTypeCores:
+		cr.Spec.Amount = *resource.NewQuantity(state.TotalCores, resource.DecimalSI)
+	default:
+		cr.Spec.Amount = *resource.NewQuantity(state.TotalMemoryBytes, resource.BinarySI)
+	}
 	cr.Spec.AvailabilityZone = state.AvailabilityZone
 	cr.Spec.ProjectID = state.ProjectID
 	cr.Spec.DomainID = state.DomainID
