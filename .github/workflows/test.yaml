@@ -25,8 +25,6 @@ jobs:
         run: go test -v ./...
 
   test-with-docker:
-    # We don't need to run this longer test if the previous one already failed.
-    needs: test-without-docker
     runs-on: ubuntu-latest
     services:
       dind:
