@@ -432,3 +432,171 @@ groups:
         This may indicate issues with the webhook logic, connectivity problems, or
         external factors causing failures. Check the webhook server logs for error
         details and investigate the affected resources.
+
+  # Committed Resource Info API
+  - alert: CortexNovaCommittedResourceInfoUnavailable
+    expr: |
+      rate(cortex_committed_resource_info_api_requests_total{service="cortex-nova-metrics", status_code="503"}[5m]) > 0
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource info API is unavailable"
+      description: >
+        The committed resource info API (Limes LIQUID integration) has been returning
+        503 Service Unavailable for more than 5 minutes. This typically means the
+        flavor group knowledge CRD is not ready or missing. Limes cannot discover
+        available committed resources until the issue is resolved.
+
+  # Committed Resource Change API
+  - alert: CortexNovaCommittedResourceChangeErrors
+    expr: |
+      rate(cortex_committed_resource_change_api_requests_total{service="cortex-nova-metrics", status_code=~"5.."}[5m]) > 0
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource change API HTTP 5xx errors"
+      description: >
+        The committed resource change API (Limes LIQUID integration) is returning
+        HTTP 5xx errors. This is not expected and indicates an internal problem
+        processing commitment changes. Limes will retry, but new commitments may
+        not be fulfilled until the issue is resolved.
+
+  - alert: CortexNovaCommittedResourceRejectionRateTooHigh
+    expr: |
+      (
+        sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected"}[15m]))
+        / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[15m]))
+      ) > 0.3
+      and on() sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[15m])) > 0
+    for: 15m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource rejection rate too high ({{ $value | humanizePercentage }})"
+      description: >
+        More than 30% of commitment changes have been rejected over the last 15 minutes.
+        This may indicate insufficient capacity to fulfill new commitments. Rejected
+        commitments are rolled back; Limes will see them as failed and may report
+        the failure to users.
+
+  - alert: CortexNovaCommittedResourceTimeoutsTooHigh
+    expr: increase(cortex_committed_resource_change_api_timeouts_total{service="cortex-nova-metrics"}[30m]) > 3
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource change API repeated timeouts"
+      description: >
+        More than 3 commitment change requests timed out in the last 30 minutes.
+        Timeouts occur when the scheduling pipeline cannot place reservations within
+        the deadline. Affected changes are rolled back. Investigate scheduler
+        performance or reservation backlog.
+
+  - alert: CortexNovaCommittedResourceChangeLatencyTooHigh
+    expr: |
+      histogram_quantile(0.95, sum(rate(cortex_committed_resource_change_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) >= 10
+      and on() sum(rate(cortex_committed_resource_change_api_requests_total{service="cortex-nova-metrics"}[5m])) > 0
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource change API p95 latency >= 10s"
+      description: >
+        The committed resource change API p95 latency has reached or exceeded 10 seconds,
+        approaching the 15-second watch timeout. Requests close to the timeout are at risk
+        of being rolled back. Investigate scheduler performance or reservation backlog.
+
+  # Committed Resource Capacity API
+  - alert: CortexNovaCommittedResourceCapacityErrors
+    expr: |
+      rate(cortex_committed_resource_capacity_api_requests_total{service="cortex-nova-metrics", status_code=~"5.."}[5m]) > 0
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource capacity API HTTP 5xx errors"
+      description: >
+        The committed resource capacity API (Limes LIQUID integration) is returning
+        HTTP 5xx errors. This indicates internal problems calculating cluster capacity.
+        Limes may receive stale or incomplete capacity data.
+
+  - alert: CortexNovaCommittedResourceCapacityDroppedToZero
+    expr: |
+      (cortex_committed_resource_reported_capacity_gib{service="cortex-nova-metrics"} == 0)
+      and on(resource, az) (cortex_committed_resource_reported_capacity_gib{service="cortex-nova-metrics"} offset 30m > 0)
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource capacity for {{ $labels.resource }} in {{ $labels.az }} dropped to zero"
+      description: >
+        The reported capacity for committed resource {{ $labels.resource }} in
+        availability zone {{ $labels.az }} has dropped from a positive value to zero.
+        This may mean hypervisors in that AZ are fully utilized for the corresponding
+        flavor group and no further committed resources can be placed there.
+
+  # Committed Resource Usage API
+  - alert: CortexNovaCommittedResourceUsageErrors
+    expr: |
+      rate(cortex_committed_resource_usage_api_requests_total{service="cortex-nova-metrics", status_code=~"5.."}[5m]) > 0
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource usage API HTTP 5xx errors"
+      description: >
+        The committed resource usage API (Limes LIQUID integration) is returning
+        HTTP 5xx errors. This indicates internal problems fetching reservation or
+        Nova server data. Limes may receive stale or incomplete usage data.
+
+  # Committed Resource Quota API
+  - alert: CortexNovaCommittedResourceQuotaErrors
+    expr: |
+      rate(cortex_committed_resource_quota_api_requests_total{service="cortex-nova-metrics", status_code=~"5.."}[5m]) > 0
+    for: 5m
+    labels:
+      context: committed-resource-api
+      dashboard: cortex-status-dashboard/cortex-status-dashboard
+      service: cortex
+      severity: warning
+      support_group: workload-management
+    annotations:
+      summary: "Committed Resource quota API HTTP 5xx errors"
+      description: >
+        The committed resource quota API (Limes LIQUID integration) is returning
+        HTTP 5xx errors. This indicates internal problems computing or applying
+        quota. Limes may not be able to enforce committed resource quotas.

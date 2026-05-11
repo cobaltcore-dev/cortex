@@ -25,30 +25,26 @@ func NewChangeCommitmentsAPIMonitor() ChangeCommitmentsAPIMonitor {
 			Help: "Total number of committed resource change API requests by HTTP status code",
 		}, []string{"status_code"}),
 		requestDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name: "cortex_committed_resource_change_api_request_duration_seconds",
-			Help: "Duration of committed resource change API requests in seconds by HTTP status code",
+			Name:    "cortex_committed_resource_change_api_request_duration_seconds",
+			Help:    "Duration of committed resource change API requests in seconds by HTTP status code",
+			Buckets: []float64{0.5, 1, 2.5, 5, 7.5, 10, 12.5, 15, 20, 30},
 		}, []string{"status_code"}),
 		commitmentChanges: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "cortex_committed_resource_change_api_commitment_changes_total",
-			Help: "Total number of commitment changes processed by result",
-		}, []string{"result"}),
+			Help: "Total number of commitment changes processed by result and availability zone",
+		}, []string{"result", "az"}),
 		timeouts: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "cortex_committed_resource_change_api_timeouts_total",
 			Help: "Total number of commitment change requests that timed out while waiting for reservations to become ready",
 		}),
 	}
 
-	// Pre-initialize metrics with zero values for common HTTP status codes.
+	// Pre-initialize request metrics with zero values for common HTTP status codes.
 	// This ensures metrics exist in Prometheus before the first request,
 	// preventing "metric missing" warnings in alerting rules.
 	for _, statusCode := range []string{"200", "400", "409", "500", "503"} {
 		m.requestCounter.WithLabelValues(statusCode)
 		m.requestDuration.WithLabelValues(statusCode)
-	}
-
-	// Pre-initialize commitment change result labels
-	for _, result := range []string{"accepted", "rejected"} {
-		m.commitmentChanges.WithLabelValues(result)
 	}
 
 	return m

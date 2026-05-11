@@ -23,7 +23,7 @@ func TestChangeCommitmentsAPIMonitor_MetricsRegistration(t *testing.T) {
 	// Observe metrics before gathering (Prometheus metrics with labels only appear after being used)
 	monitor.requestCounter.WithLabelValues("200").Inc()
 	monitor.requestDuration.WithLabelValues("200").Observe(0.1)
-	monitor.commitmentChanges.WithLabelValues("success").Inc()
+	monitor.commitmentChanges.WithLabelValues("success", "az-1").Inc()
 	monitor.timeouts.Inc()
 
 	// Verify metrics can be gathered
@@ -90,8 +90,8 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 	monitor.requestCounter.WithLabelValues("409").Inc()
 	monitor.requestCounter.WithLabelValues("503").Inc()
 	monitor.requestDuration.WithLabelValues("200").Observe(1.5)
-	monitor.commitmentChanges.WithLabelValues("success").Add(5)
-	monitor.commitmentChanges.WithLabelValues("rejected").Add(2)
+	monitor.commitmentChanges.WithLabelValues("success", "az-1").Add(5)
+	monitor.commitmentChanges.WithLabelValues("rejected", "az-1").Add(2)
 
 	// Gather metrics
 	families, err := registry.Gather()
@@ -142,13 +142,12 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 		}
 
 		if *family.Name == "cortex_committed_resource_change_api_commitment_changes_total" {
-			// At minimum we expect the 2 labels we added (success, rejected)
-			// Plus pre-initialized labels (accepted) - so >= 2 total
+			// 2 label combinations: (success,az-1) and (rejected,az-1)
 			if len(family.Metric) < 2 {
 				t.Errorf("Expected at least 2 commitment changes metrics, got %d", len(family.Metric))
 			}
 
-			// Check all metrics have the result label
+			// Check all metrics have both result and az labels
 			for _, metric := range family.Metric {
 				labelNames := make(map[string]bool)
 				for _, label := range metric.Label {
@@ -157,6 +156,9 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 
 				if !labelNames["result"] {
 					t.Error("Missing 'result' label in commitment changes counter")
+				}
+				if !labelNames["az"] {
+					t.Error("Missing 'az' label in commitment changes counter")
 				}
 			}
 		}
