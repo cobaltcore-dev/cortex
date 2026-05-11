@@ -47,27 +47,33 @@ func TestIntegration(t *testing.T) {
 					// project-b: general az-1: 4096/1024 = 4 GiB, 2 cores
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 						"project-b": {
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 					// No CRs -> PaygUsage == TotalUsage
 					ExpectedPaygUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 						"project-b": {
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -94,10 +100,12 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 					// PaygUsage = TotalUsage - CRUsage
@@ -106,10 +114,12 @@ func TestIntegration(t *testing.T) {
 					// general: no CRs so PaygUsage == TotalUsage
 					ExpectedPaygUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 94, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 14, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 94, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 14, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -129,10 +139,12 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -163,10 +175,12 @@ func TestIntegration(t *testing.T) {
 					// +32 GiB RAM (32768/1024), +8 cores
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 128, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 32, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 128, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 32, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 3, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -186,10 +200,12 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -203,10 +219,12 @@ func TestIntegration(t *testing.T) {
 					// Should NOT increment -- vm-1 CreatedAt is 2025-12-01 which is before reconcile time
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -239,10 +257,12 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -263,10 +283,12 @@ func TestIntegration(t *testing.T) {
 					// Decrement: -32 GiB RAM, -8 cores in az-1
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 64, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 16, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 64, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 16, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 1, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -288,10 +310,12 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -309,10 +333,12 @@ func TestIntegration(t *testing.T) {
 					// vm-1: IsServerActive=true, so NOT decremented
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -336,10 +362,12 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedPaygUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 95, "az-2": 32}, // 96-1=95
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 95, "az-2": 32}, // 96-1=95
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -350,10 +378,12 @@ func TestIntegration(t *testing.T) {
 					UsedAmount: 3,
 					ExpectedPaygUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 93, "az-2": 32}, // 96-3=93
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 93, "az-2": 32}, // 96-3=93
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -402,14 +432,17 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 						"project-b": {
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -418,14 +451,17 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 						"project-b": {
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -450,10 +486,12 @@ func TestIntegration(t *testing.T) {
 					// PaygUsage == TotalUsage because pending CRs are excluded
 					ExpectedPaygUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -473,10 +511,12 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -508,10 +548,12 @@ func TestIntegration(t *testing.T) {
 					// TotalUsage now has phantom's contribution (drift)
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 128, "az-2": 32}, // 96+32 drift
-							"hw_version_hana_v2_cores": {"az-1": 32, "az-2": 8},   // 24+8 drift
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 128, "az-2": 32}, // 96+32 drift
+							"hw_version_hana_v2_cores":     {"az-1": 32, "az-2": 8},   // 24+8 drift
+							"hw_version_hana_v2_instances": {"az-1": 3, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -522,10 +564,12 @@ func TestIntegration(t *testing.T) {
 					OverrideVMs: baseVMsPtr(),
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96, "az-2": 32}, // corrected
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},  // corrected
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96, "az-2": 32}, // corrected
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},  // corrected
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -561,14 +605,17 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 						"project-b": {
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -598,10 +645,12 @@ func TestIntegration(t *testing.T) {
 					),
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 128, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 32, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 128, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 32, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 3, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -629,8 +678,9 @@ func TestIntegration(t *testing.T) {
 					),
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-b": {
-							"hw_version_general_ram":   {"az-1": 8}, // 4+4 drift
-							"hw_version_general_cores": {"az-1": 4}, // 2+2 drift
+							"hw_version_general_ram":       {"az-1": 8}, // 4+4 drift
+							"hw_version_general_cores":     {"az-1": 4}, // 2+2 drift
+							"hw_version_general_instances": {"az-1": 2}, // 1+1 drift
 						},
 					},
 				},
@@ -663,10 +713,12 @@ func TestIntegration(t *testing.T) {
 					),
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96, "az-2": 32}, // 128-32=96
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},  // 32-8=24
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96, "az-2": 32}, // 128-32=96
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},  // 32-8=24
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -692,14 +744,17 @@ func TestIntegration(t *testing.T) {
 					},
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 128, "az-2": 32}, // corrected up
-							"hw_version_hana_v2_cores": {"az-1": 32, "az-2": 8},   // corrected up
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 128, "az-2": 32}, // corrected up
+							"hw_version_hana_v2_cores":     {"az-1": 32, "az-2": 8},   // corrected up
+							"hw_version_hana_v2_instances": {"az-1": 3, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 						"project-b": {
-							"hw_version_general_ram":   {"az-1": 4}, // corrected down
-							"hw_version_general_cores": {"az-1": 2}, // corrected down
+							"hw_version_general_ram":       {"az-1": 4}, // corrected down
+							"hw_version_general_cores":     {"az-1": 2}, // corrected down
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -730,10 +785,12 @@ func TestIntegration(t *testing.T) {
 					// vm-1 migrated, NOT decremented -- totals unchanged
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 128, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 32, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 128, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 32, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 3, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -743,14 +800,17 @@ func TestIntegration(t *testing.T) {
 					Type: "full_reconcile",
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 128, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 32, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 128, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 32, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 3, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 						"project-b": {
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -770,18 +830,22 @@ func TestIntegration(t *testing.T) {
 					// Only az-1 data should be written (az-2 CRD doesn't exist)
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96},
-							"hw_version_hana_v2_cores": {"az-1": 24},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96},
+							"hw_version_hana_v2_cores":     {"az-1": 24},
+							"hw_version_hana_v2_instances": {"az-1": 2},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 					ExpectedPaygUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96},
-							"hw_version_hana_v2_cores": {"az-1": 24},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96},
+							"hw_version_hana_v2_cores":     {"az-1": 24},
+							"hw_version_hana_v2_instances": {"az-1": 2},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
@@ -812,14 +876,17 @@ func TestIntegration(t *testing.T) {
 					// Verify TotalUsage is correctly computed from VMs
 					ExpectedTotalUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 96, "az-2": 32},
-							"hw_version_hana_v2_cores": {"az-1": 24, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 96, "az-2": 32},
+							"hw_version_hana_v2_cores":     {"az-1": 24, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 						"project-b": {
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 					// Verify PaygUsage = TotalUsage - CRUsage per AZ
@@ -827,14 +894,17 @@ func TestIntegration(t *testing.T) {
 					// az-2: hana_v2_ram: 32-3=29, hana_v2_cores: 8-0=8
 					ExpectedPaygUsage: map[string]map[string]map[string]int64{
 						"project-a": {
-							"hw_version_hana_v2_ram":   {"az-1": 91, "az-2": 29},
-							"hw_version_hana_v2_cores": {"az-1": 20, "az-2": 8},
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_hana_v2_ram":       {"az-1": 91, "az-2": 29},
+							"hw_version_hana_v2_cores":     {"az-1": 20, "az-2": 8},
+							"hw_version_hana_v2_instances": {"az-1": 2, "az-2": 1},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 						"project-b": {
-							"hw_version_general_ram":   {"az-1": 4},
-							"hw_version_general_cores": {"az-1": 2},
+							"hw_version_general_ram":       {"az-1": 4},
+							"hw_version_general_cores":     {"az-1": 2},
+							"hw_version_general_instances": {"az-1": 1},
 						},
 					},
 				},
