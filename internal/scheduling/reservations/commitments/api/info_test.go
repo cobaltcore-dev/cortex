@@ -153,7 +153,9 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 			},
 			"largestFlavor":  map[string]interface{}{"name": "hana_c8_m32", "vcpus": 8, "memoryMB": 32768, "diskGB": 100},
 			"smallestFlavor": map[string]interface{}{"name": "hana_c4_m16", "vcpus": 4, "memoryMB": 16384, "diskGB": 50},
-			"ramCoreRatio":   4096,
+			// 4094 MiB/vCPU simulates real flavor RAM (4096 MiB nominal − 2 MiB video RAM).
+			// Truncating division gives 3; rounding gives 4.
+			"ramCoreRatio": 4094,
 		},
 		{
 			"name": "v2_variable",

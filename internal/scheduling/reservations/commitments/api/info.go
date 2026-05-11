@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -82,12 +83,12 @@ type resourceAttributes struct {
 	RamCoreRatioMax *uint64 `json:"ramCoreRatioMax,omitempty"`
 }
 
-// mibToGiB converts a MiB pointer value to GiB. Returns nil if v is nil.
+// mibToGiB converts a MiB pointer value to GiB, rounded to the nearest integer. Returns nil if v is nil.
 func mibToGiB(v *uint64) *uint64 {
 	if v == nil {
 		return nil
 	}
-	gib := *v / 1024
+	gib := uint64(math.Round(float64(*v) / 1024))
 	return &gib
 }
 
