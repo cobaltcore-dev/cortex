@@ -35,6 +35,7 @@ type ProjectQuotaSpec struct {
 	// AvailabilityZone is the AZ this quota CRD covers (e.g. "qa-de-1a").
 	// In a multi-cluster setup, this determines which cluster the CRD is routed to.
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	AvailabilityZone string `json:"availabilityZone"`
 
 	// Quota maps LIQUID resource names to their quota value for THIS availability zone.

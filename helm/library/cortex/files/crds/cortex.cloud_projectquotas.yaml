@@ -69,6 +69,7 @@ spec:
                 description: |-
                   AvailabilityZone is the AZ this quota CRD covers (e.g. "qa-de-1a").
                   In a multi-cluster setup, this determines which cluster the CRD is routed to.
+                minLength: 1
                 type: string
               domainID:
                 description: |-
@@ -93,6 +94,7 @@ spec:
               quota:
                 additionalProperties:
                   format: int64
+                  minimum: 0
                   type: integer
                 description: |-
                   Quota maps LIQUID resource names to their quota value for THIS availability zone.
@@ -190,6 +192,7 @@ spec:
               paygUsage:
                 additionalProperties:
                   format: int64
+                  minimum: 0
                   type: integer
                 description: |-
                   PaygUsage tracks per-resource pay-as-you-go usage in this AZ.
@@ -199,6 +202,7 @@ spec:
               totalUsage:
                 additionalProperties:
                   format: int64
+                  minimum: 0
                   type: integer
                 description: |-
                   TotalUsage tracks per-resource total resource consumption in this AZ (all VMs in this project+AZ).
