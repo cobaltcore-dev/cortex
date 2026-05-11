@@ -389,6 +389,11 @@ func TestReportUsageIntegration(t *testing.T) {
 			Name:      "Fixed-ratio group with ProjectQuota CRD - quota reported per AZ",
 			ProjectID: "project-quota",
 			Flavors:   []*TestFlavor{m1Small, m1Large},
+			Config: &commitments.APIConfig{
+				FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
+					"hana_1": {RAM: commitments.ResourceTypeConfig{HandlesCommitments: true, HasQuota: true}},
+				},
+			},
 			VMs: []*TestVMUsage{
 				newTestVMUsage("vm-001", m1Large, "project-quota", "az-a", "host-1", baseTime),
 			},
@@ -426,6 +431,11 @@ func TestReportUsageIntegration(t *testing.T) {
 			Name:      "Fixed-ratio group with no ProjectQuota CRD - infinite quota",
 			ProjectID: "project-no-quota",
 			Flavors:   []*TestFlavor{m1Small, m1Large},
+			Config: &commitments.APIConfig{
+				FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
+					"hana_1": {RAM: commitments.ResourceTypeConfig{HandlesCommitments: true, HasQuota: true}},
+				},
+			},
 			VMs: []*TestVMUsage{
 				newTestVMUsage("vm-001", m1Large, "project-no-quota", "az-a", "host-1", baseTime),
 			},
@@ -494,6 +504,7 @@ type UsageReportTestCase struct {
 	VMs                []*TestVMUsage
 	Reservations       []*UsageTestReservation
 	ProjectQuota       *v1alpha1.ProjectQuota // optional; nil means no quota CRD present
+	Config             *commitments.APIConfig // optional; nil means DefaultAPIConfig
 	AllAZs             []string
 	Expected           map[string]ExpectedResourceUsage
 	ExpectedStatusCode int // 0 means expect 200 OK
@@ -631,6 +642,7 @@ func newUsageTestEnv(
 	reservations []*UsageTestReservation,
 	flavorGroups FlavorGroupsKnowledge,
 	projectQuota *v1alpha1.ProjectQuota,
+	config *commitments.APIConfig,
 ) *UsageTestEnv {
 
 	t.Helper()
@@ -738,7 +750,11 @@ func newUsageTestEnv(
 	}
 
 	// Create API with mock DB client
-	api := NewAPIWithConfig(k8sClient, commitments.DefaultAPIConfig(), dbClient)
+	apiConfig := commitments.DefaultAPIConfig()
+	if config != nil && config.FlavorGroupResourceConfig != nil {
+		apiConfig.FlavorGroupResourceConfig = config.FlavorGroupResourceConfig
+	}
+	api := NewAPIWithConfig(k8sClient, apiConfig, dbClient)
 	mux := http.NewServeMux()
 	registry := prometheus.NewRegistry()
 	api.Init(mux, registry, log.Log)
@@ -828,7 +844,7 @@ func runUsageReportTest(t *testing.T, tc UsageReportTestCase) {
 	}.ToFlavorGroupsKnowledge()
 
 	// Create test environment
-	env := newUsageTestEnv(t, tc.VMs, tc.Reservations, flavorGroups, tc.ProjectQuota)
+	env := newUsageTestEnv(t, tc.VMs, tc.Reservations, flavorGroups, tc.ProjectQuota, tc.Config)
 	defer env.Close()
 
 	// Call API

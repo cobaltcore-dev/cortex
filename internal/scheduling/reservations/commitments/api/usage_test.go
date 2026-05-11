@@ -31,6 +31,16 @@ import (
 // Unit Tests for UsageCalculator
 // ============================================================================
 
+// testUsageConfig is shared across UsageCalculator tests.
+// Uses "*" catch-all so all flavor groups (hana_1, etc.) have HandlesCommitments=true for RAM.
+var testUsageConfig = commitments.APIConfig{
+	FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
+		"*": {
+			RAM: commitments.ResourceTypeConfig{HandlesCommitments: true, HasQuota: true},
+		},
+	},
+}
+
 func TestUsageCalculator_CalculateUsage(t *testing.T) {
 	log.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
 	ctx := context.Background()
@@ -138,7 +148,7 @@ func TestUsageCalculator_CalculateUsage(t *testing.T) {
 			}
 
 			// Create calculator and run
-			calc := commitments.NewUsageCalculator(k8sClient, dbClient)
+			calc := commitments.NewUsageCalculator(k8sClient, dbClient, testUsageConfig)
 			logger := log.FromContext(ctx)
 			report, err := calc.CalculateUsage(ctx, logger, tt.projectID, tt.allAZs)
 			if err != nil {
@@ -392,7 +402,7 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 				}
 			}
 
-			calc := commitments.NewUsageCalculator(k8sClient, dbClient)
+			calc := commitments.NewUsageCalculator(k8sClient, dbClient, testUsageConfig)
 			logger := log.FromContext(ctx)
 			report, err := calc.CalculateUsage(ctx, logger, tt.projectID, tt.allAZs)
 			if err != nil {
@@ -560,7 +570,7 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 				},
 			}
 
-			calc := commitments.NewUsageCalculator(k8sClient, dbClient)
+			calc := commitments.NewUsageCalculator(k8sClient, dbClient, testUsageConfig)
 			logger := log.FromContext(ctx)
 			report, err := calc.CalculateUsage(ctx, logger, "project-A", []liquid.AvailabilityZone{"az-a"})
 			if err != nil {

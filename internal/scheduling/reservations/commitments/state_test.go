@@ -271,3 +271,71 @@ func TestResourceNameRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestGetFlavorGroupAndTypeFromResource_RAM(t *testing.T) {
+	group, rtype, err := GetFlavorGroupAndTypeFromResource("hw_version_hana_medium_v2_ram")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if group != "hana_medium_v2" {
+		t.Errorf("expected hana_medium_v2, got %s", group)
+	}
+	if rtype != v1alpha1.CommittedResourceTypeMemory {
+		t.Errorf("expected CommittedResourceTypeMemory, got %s", rtype)
+	}
+}
+
+func TestGetFlavorGroupAndTypeFromResource_Cores(t *testing.T) {
+	group, rtype, err := GetFlavorGroupAndTypeFromResource("hw_version_2101_cores")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if group != "2101" {
+		t.Errorf("expected 2101, got %s", group)
+	}
+	if rtype != v1alpha1.CommittedResourceTypeCores {
+		t.Errorf("expected CommittedResourceTypeCores, got %s", rtype)
+	}
+}
+
+func TestGetFlavorGroupAndTypeFromResource_Invalid(t *testing.T) {
+	invalidCases := []string{
+		"invalid",                   // no prefix
+		"hw_version__ram",           // empty group
+		"hw_version__cores",         // empty group
+		"hw_version_2101_instances", // unsupported suffix
+		"hw_version_2101",           // no suffix
+	}
+	for _, input := range invalidCases {
+		if _, _, err := GetFlavorGroupAndTypeFromResource(input); err == nil {
+			t.Errorf("expected error for %q, got nil", input)
+		}
+	}
+}
+
+func TestFromCommittedResource_Cores(t *testing.T) {
+	cr := v1alpha1.CommittedResource{
+		Spec: v1alpha1.CommittedResourceSpec{
+			CommitmentUUID:   "test-uuid-1234",
+			ProjectID:        "project-1",
+			DomainID:         "domain-1",
+			FlavorGroupName:  "2101",
+			ResourceType:     v1alpha1.CommittedResourceTypeCores,
+			Amount:           *resource.NewQuantity(8, resource.DecimalSI),
+			AvailabilityZone: "test-az",
+		},
+	}
+	state, err := FromCommittedResource(cr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if state.ResourceType != v1alpha1.CommittedResourceTypeCores {
+		t.Errorf("expected ResourceType cores, got %s", state.ResourceType)
+	}
+	if state.TotalCores != 8 {
+		t.Errorf("expected TotalCores 8, got %d", state.TotalCores)
+	}
+	if state.TotalMemoryBytes != 0 {
+		t.Errorf("expected TotalMemoryBytes 0 for cores CR, got %d", state.TotalMemoryBytes)
+	}
+}

@@ -107,13 +107,15 @@ type VMUsageInfo struct {
 type UsageCalculator struct {
 	client  client.Client
 	usageDB UsageDBClient
+	config  APIConfig
 }
 
 // NewUsageCalculator creates a new UsageCalculator instance.
-func NewUsageCalculator(client client.Client, usageDB UsageDBClient) *UsageCalculator {
+func NewUsageCalculator(client client.Client, usageDB UsageDBClient, config APIConfig) *UsageCalculator {
 	return &UsageCalculator{
 		client:  client,
 		usageDB: usageDB,
+		config:  config,
 	}
 }
 
@@ -158,7 +160,7 @@ func (c *UsageCalculator) CalculateUsage(
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to get project VMs: %w", err)
 	}
 
-	report := c.buildUsageResponse(vms, vmAssignments, flavorGroups, allAZs, infoVersion, quotaByResourceAZ)
+	report := c.buildUsageResponse(vms, vmAssignments, flavorGroups, allAZs, infoVersion, quotaByResourceAZ, c.config)
 
 	assignedToCommitments := 0
 	for _, vm := range vms {
@@ -453,6 +455,7 @@ func (c *UsageCalculator) buildUsageResponse(
 	allAZs []liquid.AvailabilityZone,
 	infoVersion int64,
 	quotaByResourceAZ map[string]map[string]int64,
+	config APIConfig,
 ) liquid.ServiceUsageReport {
 	// Initialize resources map for all flavor groups
 	resources := make(map[liquid.ResourceName]*liquid.ResourceUsageReport)
@@ -500,14 +503,14 @@ func (c *UsageCalculator) buildUsageResponse(
 	}
 
 	// Build ResourceUsageReport for all flavor groups (not just those with fixed ratio)
-	for flavorGroupName, groupData := range flavorGroups {
+	for flavorGroupName := range flavorGroups {
 		// All flavor groups are included in usage reporting.
 
 		// === 1. RAM Resource ===
 		ramResourceName := liquid.ResourceName(ResourceNameRAM(flavorGroupName))
 		ramPerAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
-		// For AZSeparatedTopology resources (fixed-ratio groups), per-AZ Quota must be non-null.
-		ramHasAZQuota := groupData.HasFixedRamCoreRatio()
+		// Include per-AZ quota for AZSeparatedTopology resources — same condition as info.go.
+		ramHasAZQuota := config.ResourceConfigForGroup(flavorGroupName).RAM.HandlesCommitments
 		for _, az := range allAZs {
 			report := &liquid.AZResourceUsageReport{
 				Usage:        0,

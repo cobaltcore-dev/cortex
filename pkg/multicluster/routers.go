@@ -16,11 +16,12 @@ import (
 // for the multicluster client that cortex supports by default. This is used to
 // route resources to the correct cluster in a multicluster setup.
 var DefaultResourceRouters = map[schema.GroupVersionKind]ResourceRouter{
-	{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}:             HypervisorResourceRouter{},
-	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}:       ReservationsResourceRouter{},
-	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}:           HistoryResourceRouter{},
-	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}: CommittedResourceRouter{},
-	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "ProjectQuota"}:      ProjectQuotaResourceRouter{},
+	{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}:               HypervisorResourceRouter{},
+	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}:         ReservationsResourceRouter{},
+	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}:             HistoryResourceRouter{},
+	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}:   CommittedResourceRouter{},
+	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "ProjectQuota"}:        ProjectQuotaResourceRouter{},
+	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "FlavorGroupCapacity"}: FlavorGroupCapacityResourceRouter{},
 }
 
 // ResourceRouter determines which remote cluster a resource should be written to
@@ -110,6 +111,33 @@ func (c CommittedResourceRouter) Match(obj any, labels map[string]string) (bool,
 		return false, errors.New("committed resource does not have availability zone in spec")
 	}
 	return cr.Spec.AvailabilityZone == availabilityZone, nil
+}
+
+// FlavorGroupCapacityResourceRouter routes flavor group capacity CRDs to clusters based on availability zone.
+type FlavorGroupCapacityResourceRouter struct{}
+
+func (f FlavorGroupCapacityResourceRouter) Match(obj any, labels map[string]string) (bool, error) {
+	var fgc v1alpha1.FlavorGroupCapacity
+
+	switch v := obj.(type) {
+	case *v1alpha1.FlavorGroupCapacity:
+		if v == nil {
+			return false, errors.New("object is nil")
+		}
+		fgc = *v
+	case v1alpha1.FlavorGroupCapacity:
+		fgc = v
+	default:
+		return false, errors.New("object is not a FlavorGroupCapacity")
+	}
+	availabilityZone, ok := labels["availabilityZone"]
+	if !ok {
+		return false, errors.New("cluster does not have availabilityZone label")
+	}
+	if fgc.Spec.AvailabilityZone == "" {
+		return false, errors.New("flavor group capacity does not have availability zone in spec")
+	}
+	return fgc.Spec.AvailabilityZone == availabilityZone, nil
 }
 
 // HistoryResourceRouter routes histories to clusters based on availability zone.

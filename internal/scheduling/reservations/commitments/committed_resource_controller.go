@@ -91,6 +91,9 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 		"amount", cr.Spec.Amount.String(),
 		"allowRejection", cr.Spec.AllowRejection,
 	)
+	if cr.Spec.ResourceType == v1alpha1.CommittedResourceTypeCores {
+		return r.reconcileCoresHeadroom(ctx, logger, cr)
+	}
 	// If this spec generation was already rejected, don't re-apply.
 	// Without this guard the controller oscillates: apply bad spec → delete reservations →
 	// Reservation watch re-enqueues → apply bad spec again → loop.
@@ -144,6 +147,9 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		"amount", cr.Spec.Amount.String(),
 		"allowRejection", cr.Spec.AllowRejection,
 	)
+	if cr.Spec.ResourceType == v1alpha1.CommittedResourceTypeCores {
+		return r.reconcileCoresHeadroom(ctx, logger, cr)
+	}
 	// If this spec generation was already rejected, maintain rollback state without re-applying.
 	// Without this guard the controller oscillates: apply bad spec → rollback →
 	// Reservation watch re-enqueues → apply bad spec again → loop.
@@ -192,6 +198,95 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		return ctrl.Result{}, r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", true)
 	}
 	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
+	return ctrl.Result{}, r.setAccepted(ctx, cr)
+}
+
+// reconcileCoresHeadroom handles acceptance of CPU core commitments.
+// No Reservation CRDs are created; instead it reads the flavor group's total CPU capacity
+// from the FlavorGroupCapacity CRD and sums already-accepted CPU CRs for the same
+// (flavorGroup, AZ) to check whether sufficient headroom exists.
+func (r *CommittedResourceController) reconcileCoresHeadroom(ctx context.Context, logger logr.Logger, cr *v1alpha1.CommittedResource) (ctrl.Result, error) {
+	if isRejectedForGeneration(cr) {
+		logger.V(1).Info("spec already rejected for current generation", "generation", cr.Generation)
+		return ctrl.Result{}, nil
+	}
+
+	// Find the FlavorGroupCapacity CRD for this (flavorGroup, AZ).
+	var capacityList v1alpha1.FlavorGroupCapacityList
+	if err := r.List(ctx, &capacityList); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list FlavorGroupCapacity CRDs: %w", err)
+	}
+	var fgCap *v1alpha1.FlavorGroupCapacity
+	for i := range capacityList.Items {
+		c := &capacityList.Items[i]
+		if c.Spec.FlavorGroup == cr.Spec.FlavorGroupName && c.Spec.AvailabilityZone == cr.Spec.AvailabilityZone {
+			fgCap = c
+			break
+		}
+	}
+	if fgCap == nil {
+		// Capacity controller hasn't run yet for this group/AZ — retry.
+		delay := r.retryDelay(cr)
+		logger.Info("FlavorGroupCapacity CRD not found, will retry", "requeueAfter", delay)
+		return ctrl.Result{RequeueAfter: delay}, r.setNotReadyRetry(ctx, cr, "waiting for capacity data")
+	}
+
+	totalCoresQty, ok := fgCap.Status.TotalCapacity[string(v1alpha1.CommittedResourceTypeCores)]
+	if !ok {
+		// Key absent means the capacity controller hasn't successfully probed yet.
+		delay := r.retryDelay(cr)
+		logger.Info("CPU capacity not yet populated in FlavorGroupCapacity CRD, will retry", "requeueAfter", delay)
+		return ctrl.Result{RequeueAfter: delay}, r.setNotReadyRetry(ctx, cr, "waiting for CPU capacity data")
+	}
+	// Key present (even if zero): the capacity controller has run and this is the actual capacity.
+	totalCores := totalCoresQty.Value()
+
+	// Sum cores already accepted for this (flavorGroup, AZ), excluding this CR.
+	var alreadyCommitted int64
+	var crList v1alpha1.CommittedResourceList
+	if err := r.List(ctx, &crList); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list CommittedResources: %w", err)
+	}
+	for _, other := range crList.Items {
+		if other.Spec.CommitmentUUID == cr.Spec.CommitmentUUID {
+			continue
+		}
+		if other.Spec.ResourceType != v1alpha1.CommittedResourceTypeCores {
+			continue
+		}
+		if other.Spec.FlavorGroupName != cr.Spec.FlavorGroupName || other.Spec.AvailabilityZone != cr.Spec.AvailabilityZone {
+			continue
+		}
+		if other.Spec.State != v1alpha1.CommitmentStatusGuaranteed && other.Spec.State != v1alpha1.CommitmentStatusConfirmed {
+			continue
+		}
+		if other.Status.AcceptedSpec == nil {
+			continue
+		}
+		alreadyCommitted += other.Status.AcceptedSpec.Amount.Value()
+	}
+
+	requestedCores := cr.Spec.Amount.Value()
+	headroom := totalCores - alreadyCommitted
+	logger.Info("cores headroom check",
+		"total", totalCores,
+		"committed", alreadyCommitted,
+		"requested", requestedCores,
+		"headroom", headroom,
+	)
+
+	if headroom < requestedCores {
+		reason := fmt.Sprintf("insufficient CPU cores: %d available, %d requested", headroom, requestedCores)
+		if cr.Spec.AllowRejection {
+			logger.Info("cores commitment rejected", "reason", reason)
+			return ctrl.Result{}, r.setNotReady(ctx, cr, v1alpha1.CommittedResourceReasonRejected, reason)
+		}
+		delay := r.retryDelay(cr)
+		logger.Info("cores headroom insufficient, will retry", "reason", reason, "requeueAfter", delay)
+		return ctrl.Result{RequeueAfter: delay}, r.setNotReadyRetry(ctx, cr, reason)
+	}
+
+	logger.Info("cores commitment accepted", "generation", cr.Generation, "cores", requestedCores)
 	return ctrl.Result{}, r.setAccepted(ctx, cr)
 }
 

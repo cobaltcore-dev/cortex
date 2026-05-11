@@ -150,14 +150,14 @@ func TestHandleQuota_CreateAndUpdate(t *testing.T) {
 	tests := []struct {
 		name string
 		// existing is a set of pre-existing per-AZ CRDs to seed (nil = create, non-nil = update)
-		existing    []*v1alpha1.ProjectQuota
-		projectID   string
-		resources   map[liquid.ResourceName]liquid.ResourceQuotaRequest
-		metadata    *liquid.ProjectMetadata
-		expectPerAZ    map[string]map[string]int64 // az → resource name → expected quota
-		expectName     string
-		expectDom      string
-		expectDomName  string
+		existing      []*v1alpha1.ProjectQuota
+		projectID     string
+		resources     map[liquid.ResourceName]liquid.ResourceQuotaRequest
+		metadata      *liquid.ProjectMetadata
+		expectPerAZ   map[string]map[string]int64 // az → resource name → expected quota
+		expectName    string
+		expectDom     string
+		expectDomName string
 	}{
 		{
 			name:      "Create_WithPerAZ",

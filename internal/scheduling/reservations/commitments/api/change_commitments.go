@@ -118,6 +118,13 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	if req.AZ == "" {
+		statusCode = http.StatusBadRequest
+		http.Error(w, "availability zone is required", statusCode)
+		api.recordMetrics(req, resp, statusCode, startTime)
+		return
+	}
+
 	if err := api.processCommitmentChanges(ctx, w, logger, req, &resp); err != nil {
 		if strings.Contains(err.Error(), "version mismatch") {
 			statusCode = http.StatusConflict
@@ -183,7 +190,7 @@ ProcessLoop:
 		for _, resourceName := range sortedKeys(projectChanges.ByResource) {
 			resourceChanges := projectChanges.ByResource[resourceName]
 
-			flavorGroupName, err := commitments.GetFlavorGroupNameFromResource(string(resourceName))
+			flavorGroupName, resourceType, err := commitments.GetFlavorGroupAndTypeFromResource(string(resourceName))
 			if err != nil {
 				failedReason = fmt.Sprintf("project with unknown resource name %s: %v", projectID, err)
 				rollback = true
@@ -196,8 +203,16 @@ ProcessLoop:
 				break ProcessLoop
 			}
 
-			if !api.config.ResourceConfigForGroup(flavorGroupName).RAM.HandlesCommitments {
-				failedReason = fmt.Sprintf("flavor group %q is not configured to handle commitments", flavorGroupName)
+			groupResourceConf := api.config.ResourceConfigForGroup(flavorGroupName)
+			var handlesCommitments bool
+			switch resourceType {
+			case v1alpha1.CommittedResourceTypeCores:
+				handlesCommitments = groupResourceConf.Cores.HandlesCommitments
+			default:
+				handlesCommitments = groupResourceConf.RAM.HandlesCommitments
+			}
+			if !handlesCommitments {
+				failedReason = fmt.Sprintf("flavor group %q is not configured to handle %s commitments", flavorGroupName, resourceType)
 				rollback = true
 				break ProcessLoop
 			}
@@ -248,25 +263,30 @@ ProcessLoop:
 				}
 
 				stateDesired, err := commitments.FromChangeCommitmentTargetState(
-					commitment, string(projectID), domainID, flavorGroupName, string(req.AZ))
+					commitment, string(projectID), domainID, flavorGroupName, resourceType, string(req.AZ))
 				if err != nil {
 					failedReason = fmt.Sprintf("commitment %s: %s", commitment.UUID, err)
 					rollback = true
 					break ProcessLoop
 				}
 
-				cr := &v1alpha1.CommittedResource{}
-				cr.Name = crName
-				if _, err := controllerutil.CreateOrUpdate(ctx, api.client, cr, func() error {
-					if cr.Spec.AvailabilityZone != "" && cr.Spec.AvailabilityZone != stateDesired.AvailabilityZone {
-						return fmt.Errorf("cannot change availability zone of commitment %s: current=%q requested=%q",
-							commitment.UUID, cr.Spec.AvailabilityZone, stateDesired.AvailabilityZone)
+				// RetryOnConflict handles the race where the CommittedResource controller reconciles
+				// the CRD (bumping resourceVersion) between the Get and Update inside CreateOrUpdate.
+				var crGeneration int64
+				if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					cr := &v1alpha1.CommittedResource{}
+					cr.Name = crName
+					if _, err := controllerutil.CreateOrUpdate(ctx, api.client, cr, func() error {
+						applyCRSpec(cr, stateDesired, allowRejection)
+						if cr.Annotations == nil {
+							cr.Annotations = make(map[string]string)
+						}
+						cr.Annotations[v1alpha1.AnnotationCreatorRequestID] = reservations.GlobalRequestIDFromContext(ctx)
+						return nil
+					}); err != nil {
+						return err
 					}
-					applyCRSpec(cr, stateDesired, allowRejection)
-					if cr.Annotations == nil {
-						cr.Annotations = make(map[string]string)
-					}
-					cr.Annotations[v1alpha1.AnnotationCreatorRequestID] = reservations.GlobalRequestIDFromContext(ctx)
+					crGeneration = cr.Generation
 					return nil
 				}); err != nil {
 					failedReason = fmt.Sprintf("commitment %s: failed to write CommittedResource CRD: %v", commitment.UUID, err)
@@ -274,7 +294,7 @@ ProcessLoop:
 					break ProcessLoop
 				}
 
-				toWatch = append(toWatch, crWatch{name: crName, generation: cr.Generation})
+				toWatch = append(toWatch, crWatch{name: crName, generation: crGeneration})
 				snapshots = append(snapshots, snap)
 				logger.V(1).Info("upserted CommittedResource CRD", "name", crName)
 			}
@@ -490,8 +510,13 @@ func applyCRSpec(cr *v1alpha1.CommittedResource, state *commitments.CommitmentSt
 	cr.Spec.CommitmentUUID = state.CommitmentUUID
 	cr.Spec.SchedulingDomain = v1alpha1.SchedulingDomainNova
 	cr.Spec.FlavorGroupName = state.FlavorGroupName
-	cr.Spec.ResourceType = v1alpha1.CommittedResourceTypeMemory
-	cr.Spec.Amount = *resource.NewQuantity(state.TotalMemoryBytes, resource.BinarySI)
+	cr.Spec.ResourceType = state.ResourceType
+	switch state.ResourceType {
+	case v1alpha1.CommittedResourceTypeCores:
+		cr.Spec.Amount = *resource.NewQuantity(state.TotalCores, resource.DecimalSI)
+	default:
+		cr.Spec.Amount = *resource.NewQuantity(state.TotalMemoryBytes, resource.BinarySI)
+	}
 	cr.Spec.AvailabilityZone = state.AvailabilityZone
 	cr.Spec.ProjectID = state.ProjectID
 	cr.Spec.DomainID = state.DomainID
