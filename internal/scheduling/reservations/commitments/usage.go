@@ -19,8 +19,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/external"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/go-logr/logr"
-	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-api-declarations/liquid"
+	. "go.xyrillian.de/gg/option"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -100,20 +100,22 @@ type VMUsageInfo struct {
 	AZ            string
 	Hypervisor    string
 	CreatedAt     time.Time
-	UsageMultiple uint64 // Memory in multiples of smallest flavor in the group
+	UsageMultiple uint64 // RAM in GiB
 }
 
 // UsageCalculator computes usage reports for Limes LIQUID API.
 type UsageCalculator struct {
 	client  client.Client
 	usageDB UsageDBClient
+	config  APIConfig
 }
 
 // NewUsageCalculator creates a new UsageCalculator instance.
-func NewUsageCalculator(client client.Client, usageDB UsageDBClient) *UsageCalculator {
+func NewUsageCalculator(client client.Client, usageDB UsageDBClient, config APIConfig) *UsageCalculator {
 	return &UsageCalculator{
 		client:  client,
 		usageDB: usageDB,
+		config:  config,
 	}
 }
 
@@ -144,12 +146,21 @@ func (c *UsageCalculator) CalculateUsage(
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to read VM assignments from CRD status: %w", err)
 	}
 
+	// Fetch all per-AZ ProjectQuota CRDs for this project to read quota values.
+	// May be empty if Limes has not pushed quota yet — in that case quota defaults to infinite.
+	// Each CRD holds quota for one AZ; we build a combined map[resourceName][az] = quota.
+	var pqList v1alpha1.ProjectQuotaList
+	var quotaByResourceAZ map[string]map[string]int64
+	if err := c.client.List(ctx, &pqList, client.MatchingFields{idxProjectQuotaByProjectID: projectID}); err == nil && len(pqList.Items) > 0 {
+		quotaByResourceAZ = buildCombinedQuotaMap(pqList.Items)
+	}
+
 	vms, err := getProjectVMs(ctx, c.usageDB, log, projectID, flavorGroups, allAZs)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to get project VMs: %w", err)
 	}
 
-	report := c.buildUsageResponse(vms, vmAssignments, flavorGroups, allAZs, infoVersion)
+	report := c.buildUsageResponse(vms, vmAssignments, flavorGroups, allAZs, infoVersion, quotaByResourceAZ, c.config)
 
 	assignedToCommitments := 0
 	for _, vm := range vms {
@@ -276,16 +287,9 @@ func getProjectVMs(
 
 	// Build flavor name -> flavor group lookup
 	flavorToGroup := make(map[string]string)
-	flavorToSmallestMemory := make(map[string]uint64) // for calculating usage multiples
 	for groupName, group := range flavorGroups {
 		for _, flavor := range group.Flavors {
 			flavorToGroup[flavor.Name] = groupName
-		}
-		// Smallest flavor in group determines the usage unit
-		if group.SmallestFlavor.Name != "" {
-			for _, flavor := range group.Flavors {
-				flavorToSmallestMemory[flavor.Name] = group.SmallestFlavor.MemoryMB
-			}
 		}
 	}
 
@@ -302,10 +306,12 @@ func getProjectVMs(
 		// Determine flavor group
 		flavorGroup := flavorToGroup[row.FlavorName]
 
-		// Calculate usage multiple (memory in units of smallest flavor)
+		// Calculate usage in GiB (FlavorRAM is in MiB).
+		// Add 16 MiB before dividing: flavors reserve 16 MiB for video RAM (hw_video:ram_max_mb=16),
+		// so a nominal "2 GiB" flavor has 2032 MiB. Without the adjustment, integer division truncates.
 		var usageMultiple uint64
-		if smallestMem := flavorToSmallestMemory[row.FlavorName]; smallestMem > 0 {
-			usageMultiple = row.FlavorRAM / smallestMem
+		if row.FlavorRAM > 0 {
+			usageMultiple = (row.FlavorRAM + 16) / 1024
 		}
 
 		// Normalize AZ
@@ -421,16 +427,35 @@ type azUsageData struct {
 	subresources  []liquid.Subresource // VM details for subresource reporting
 }
 
+// buildCombinedQuotaMap aggregates per-AZ ProjectQuota CRDs into a combined lookup map.
+// Returns quotaByResourceAZ[resourceName][az] = quota value.
+func buildCombinedQuotaMap(pqs []v1alpha1.ProjectQuota) map[string]map[string]int64 {
+	result := make(map[string]map[string]int64)
+	for _, pq := range pqs {
+		az := pq.Spec.AvailabilityZone
+		for resourceName, quota := range pq.Spec.Quota {
+			if result[resourceName] == nil {
+				result[resourceName] = make(map[string]int64)
+			}
+			result[resourceName][az] = quota
+		}
+	}
+	return result
+}
+
 // buildUsageResponse constructs the Liquid API ServiceUsageReport.
 // All flavor groups are included in the report; commitment assignment only applies
 // to groups with fixed RAM/core ratio (those that accept commitments).
 // For each flavor group, three resources are reported: _ram, _cores, _instances.
+// quotaByResourceAZ is a combined map[resourceName][az] = quota from all per-AZ ProjectQuota CRDs.
 func (c *UsageCalculator) buildUsageResponse(
 	vms []VMUsageInfo,
 	vmAssignments map[string]string,
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	allAZs []liquid.AvailabilityZone,
 	infoVersion int64,
+	quotaByResourceAZ map[string]map[string]int64,
+	config APIConfig,
 ) liquid.ServiceUsageReport {
 	// Initialize resources map for all flavor groups
 	resources := make(map[liquid.ResourceName]*liquid.ResourceUsageReport)
@@ -478,36 +503,38 @@ func (c *UsageCalculator) buildUsageResponse(
 	}
 
 	// Build ResourceUsageReport for all flavor groups (not just those with fixed ratio)
-	for flavorGroupName, groupData := range flavorGroups {
+	for flavorGroupName := range flavorGroups {
 		// All flavor groups are included in usage reporting.
 
 		// === 1. RAM Resource ===
 		ramResourceName := liquid.ResourceName(ResourceNameRAM(flavorGroupName))
 		ramPerAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
-		// For AZSeparatedTopology resources (fixed-ratio groups), per-AZ Quota must be non-null.
-		// Use -1 ("infinite quota") as default until actual quota is read from ProjectQuota CRD.
-		ramHasAZQuota := groupData.HasFixedRamCoreRatio()
+		// Include per-AZ quota for AZSeparatedTopology resources — same condition as info.go.
+		ramHasAZQuota := config.ResourceConfigForGroup(flavorGroupName).RAM.HandlesCommitments
 		for _, az := range allAZs {
 			report := &liquid.AZResourceUsageReport{
 				Usage:        0,
 				Subresources: []liquid.Subresource{},
 			}
 			if ramHasAZQuota {
-				report.Quota = Some(int64(-1)) // infinite — will be overridden by ProjectQuota CRD
+				quota := int64(-1) // default: infinite
+				if quotaByResourceAZ != nil {
+					if azMap, ok := quotaByResourceAZ[string(ramResourceName)]; ok {
+						if q, ok := azMap[string(az)]; ok {
+							quota = q
+						}
+					}
+				}
+				report.Quota = Some(quota)
 			}
 			ramPerAZ[az] = report
 		}
 		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
 			for az, data := range azData {
 				if _, known := ramPerAZ[az]; !known {
-					report := &liquid.AZResourceUsageReport{}
-					if ramHasAZQuota {
-						report.Quota = Some(int64(-1))
-					}
-					ramPerAZ[az] = report
+					continue // skip VMs in AZs not in allAZs
 				}
 				ramPerAZ[az].Usage = data.ramUsage
-				ramPerAZ[az].PhysicalUsage = Some(data.ramUsage) // No overcommit for RAM
 				// Subresources are only on instances resource
 			}
 		}
@@ -527,10 +554,9 @@ func (c *UsageCalculator) buildUsageResponse(
 		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
 			for az, data := range azData {
 				if _, known := coresPerAZ[az]; !known {
-					coresPerAZ[az] = &liquid.AZResourceUsageReport{}
+					continue // skip VMs in AZs not in allAZs
 				}
 				coresPerAZ[az].Usage = data.coresUsage
-				coresPerAZ[az].PhysicalUsage = Some(data.coresUsage) // No overcommit for cores
 				// Subresources are only on instances resource
 			}
 		}
@@ -550,10 +576,9 @@ func (c *UsageCalculator) buildUsageResponse(
 		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
 			for az, data := range azData {
 				if _, known := instancesPerAZ[az]; !known {
-					instancesPerAZ[az] = &liquid.AZResourceUsageReport{}
+					continue // skip VMs in AZs not in allAZs
 				}
 				instancesPerAZ[az].Usage = data.instanceCount
-				instancesPerAZ[az].PhysicalUsage = Some(data.instanceCount)
 				instancesPerAZ[az].Subresources = data.subresources // VM details on instances resource
 			}
 		}

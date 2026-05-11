@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	. "github.com/majewsky/gg/option"
 	liquid "github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/must"
+	. "go.xyrillian.de/gg/option"
 )
 
 const (
@@ -189,7 +189,7 @@ func e2eRoundTripResource(
 		// Only capacity rejections (no hosts available) are expected in production clusters.
 		// Any other reason (flavor group ineligible, config error, timeout) indicates a
 		// regression and should surface as a failure.
-		if !strings.Contains(rejectionReason, "no hosts found") {
+		if !strings.Contains(rejectionReason, "no hosts found") && !strings.Contains(rejectionReason, "insufficient CPU cores") {
 			panic(fmt.Sprintf("round-trip check: commitment rejected with unexpected reason for resource %s: %s", resourceName, rejectionReason))
 		}
 		slog.Info("round-trip check: commitment rejected — no capacity, continuing",
@@ -391,7 +391,7 @@ func e2eBatchFlavorGroupResource(
 		"project", projectID, "az", az)
 
 	if reason := e2eSendChangeCommitments(ctx, baseURL, req2); reason != "" {
-		if !strings.Contains(reason, "no hosts found") {
+		if !strings.Contains(reason, "no hosts found") && !strings.Contains(reason, "insufficient CPU cores") {
 			panic(fmt.Sprintf("batch check: unexpected rejection for batch of %s: %s", resourceName, reason))
 		}
 		slog.Info("batch check: batch rejected — no capacity for full amount, cleanup will remove pending",

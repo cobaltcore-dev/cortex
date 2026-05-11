@@ -5,7 +5,7 @@ inputs:
   litellm_model:
     description: "LiteLLM model identifier"
     required: false
-    default: "sap/anthropic--claude-4.6-sonnet"
+    default: "sap/anthropic--claude-4.6-opus"
 
 runs:
   using: composite

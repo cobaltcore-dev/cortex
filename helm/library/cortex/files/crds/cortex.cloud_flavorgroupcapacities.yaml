@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.1
+    controller-gen.kubebuilder.io/version: v0.21.0
   name: flavorgroupcapacities.cortex.cloud
 spec:
   group: cortex.cloud
@@ -174,6 +174,16 @@ spec:
                   reconcile.
                 format: date-time
                 type: string
+              totalCapacity:
+                additionalProperties:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
+                description: TotalCapacity is the total capacity of all eligible hosts
+                  in an empty-datacenter scenario.
+                type: object
               totalInstances:
                 description: |-
                   TotalInstances is the total number of VM instances running on hypervisors in this AZ,

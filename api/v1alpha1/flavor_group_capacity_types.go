@@ -4,6 +4,7 @@
 package v1alpha1
 
 import (
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -55,6 +56,10 @@ type FlavorGroupCapacityStatus struct {
 	// expressed in multiples of the smallest flavor's memory.
 	// +kubebuilder:validation:Optional
 	CommittedCapacity int64 `json:"committedCapacity,omitempty"`
+
+	// TotalCapacity is the total capacity of all eligible hosts in an empty-datacenter scenario.
+	// +kubebuilder:validation:Optional
+	TotalCapacity map[string]resource.Quantity `json:"totalCapacity,omitempty"`
 
 	// TotalInstances is the total number of VM instances running on hypervisors in this AZ,
 	// derived from Hypervisor CRD Status.Instances (not filtered by flavor group).

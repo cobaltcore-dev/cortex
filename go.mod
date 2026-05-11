@@ -3,14 +3,14 @@ module github.com/cobaltcore-dev/cortex
 go 1.26.0
 
 require (
-	github.com/cobaltcore-dev/openstack-hypervisor-operator v1.2.0
+	github.com/cobaltcore-dev/openstack-hypervisor-operator v1.2.2
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.12.0
 	github.com/ironcore-dev/ironcore v0.3.0
-	github.com/majewsky/gg v1.6.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
-	github.com/sapcc/go-bits v0.0.0-20260423021225-fb5e4523b6c5
+	github.com/sapcc/go-bits v0.0.0-20260507090738-58bd3afe1717
+	go.xyrillian.de/gg v1.7.0
 	k8s.io/api v0.36.0
 	k8s.io/apimachinery v0.36.0
 	k8s.io/client-go v0.36.0
@@ -87,7 +87,7 @@ require (
 	github.com/poy/onpar v0.3.5 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.19.2 // indirect
-	github.com/sapcc/go-api-declarations v1.21.0
+	github.com/sapcc/go-api-declarations v1.22.0
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect

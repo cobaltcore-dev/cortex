@@ -16,21 +16,26 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// projectQuotaCRDName returns the CRD object name for a given project UUID.
-// Convention: "quota-<project-uuid>"
-func projectQuotaCRDName(projectID string) string {
-	return "quota-" + projectID
+// idxProjectQuotaByProjectID is the field index key used to look up ProjectQuota CRDs by project ID.
+// Must match the index registered in field_index.go.
+const idxProjectQuotaByProjectID = "spec.projectID"
+
+// projectQuotaCRDName returns the CRD object name for a given project UUID and AZ.
+// Convention: "quota-<project-uuid>-<az>"
+func projectQuotaCRDName(projectID, az string) string {
+	return "quota-" + projectID + "-" + az
 }
 
 // HandleQuota implements PUT /commitments/v1/projects/:project_id/quota from Limes LIQUID API.
 // See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid
 //
 // This endpoint receives quota requests from Limes and persists them as ProjectQuota CRDs.
-// One CRD per project, named "quota-<project-uuid>".
+// One CRD per project per availability zone, named "quota-<project-uuid>-<az>".
 func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 
@@ -89,88 +94,108 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build the spec quota map from the liquid request.
+	// Build per-AZ quota maps from the liquid request.
 	// liquid API uses uint64; our CRD uses int64 (K8s convention).
 	// Guard against overflow: uint64 values > MaxInt64 would wrap to negative.
-	specQuota := make(map[string]v1alpha1.ResourceQuota, len(req.Resources))
+	// quotaByAZ[az][resourceName] = quota value for that AZ
+	quotaByAZ := make(map[string]map[string]int64)
 	for resourceName, resQuota := range req.Resources {
-		if resQuota.Quota > math.MaxInt64 {
-			api.quotaError(w, http.StatusBadRequest, fmt.Sprintf("Quota value for resource %q exceeds int64 max", resourceName), startTime)
-			return
-		}
-		rq := v1alpha1.ResourceQuota{
-			Quota: int64(resQuota.Quota),
-		}
-		if len(resQuota.PerAZ) > 0 {
-			rq.PerAZ = make(map[string]int64, len(resQuota.PerAZ))
-			for az, azQuota := range resQuota.PerAZ {
-				if azQuota.Quota > math.MaxInt64 {
-					api.quotaError(w, http.StatusBadRequest, fmt.Sprintf("Quota value for resource %q in AZ %q exceeds int64 max", resourceName, az), startTime)
-					return
-				}
-				rq.PerAZ[string(az)] = int64(azQuota.Quota)
+		for az, azQuota := range resQuota.PerAZ {
+			if azQuota.Quota > math.MaxInt64 {
+				api.quotaError(w, http.StatusBadRequest, fmt.Sprintf("Quota value for resource %q in AZ %q exceeds int64 max", resourceName, az), startTime)
+				return
 			}
+			azStr := string(az)
+			if quotaByAZ[azStr] == nil {
+				quotaByAZ[azStr] = make(map[string]int64)
+			}
+			quotaByAZ[azStr][string(resourceName)] = int64(azQuota.Quota)
 		}
-		specQuota[string(resourceName)] = rq
 	}
 
-	// Create or update ProjectQuota CRD with retry-on-conflict to handle
-	// concurrent status updates from the quota controller.
-	crdName := projectQuotaCRDName(projectID)
 	ctx := r.Context()
 
-	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		var existing v1alpha1.ProjectQuota
-		getErr := api.client.Get(ctx, client.ObjectKey{Name: crdName}, &existing)
-		if getErr != nil {
-			if !apierrors.IsNotFound(getErr) {
-				return getErr
-			}
-			// Not found -- create new
-			pq := &v1alpha1.ProjectQuota{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: crdName,
-				},
-				Spec: v1alpha1.ProjectQuotaSpec{
-					ProjectID:   projectID,
-					ProjectName: projectName,
-					DomainID:    domainID,
-					DomainName:  domainName,
-					Quota:       specQuota,
-				},
-			}
-			if createErr := api.client.Create(ctx, pq); createErr != nil {
-				// If another request just created it, retry will fetch and update
-				if apierrors.IsAlreadyExists(createErr) {
+	// Create or update one ProjectQuota CRD per AZ with retry-on-conflict to handle
+	// concurrent status updates from the quota controller.
+	activeAZs := make(map[string]bool, len(quotaByAZ))
+	for az, azQuota := range quotaByAZ {
+		activeAZs[az] = true
+		crdName := projectQuotaCRDName(projectID, az)
+
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			var existing v1alpha1.ProjectQuota
+			getErr := api.client.Get(ctx, client.ObjectKey{Name: crdName}, &existing)
+			if getErr != nil {
+				if !apierrors.IsNotFound(getErr) {
+					return getErr
+				}
+				// Not found -- create new
+				pq := &v1alpha1.ProjectQuota{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: crdName,
+					},
+					Spec: v1alpha1.ProjectQuotaSpec{
+						ProjectID:        projectID,
+						ProjectName:      projectName,
+						DomainID:         domainID,
+						DomainName:       domainName,
+						AvailabilityZone: az,
+						Quota:            azQuota,
+					},
+				}
+				if createErr := api.client.Create(ctx, pq); createErr != nil {
+					// If another request just created it, surface as a conflict so
+					// RetryOnConflict re-runs the closure and falls into the update branch.
+					if apierrors.IsAlreadyExists(createErr) {
+						return apierrors.NewConflict(
+							schema.GroupResource{Group: "cortex.cloud", Resource: "projectquotas"},
+							crdName, createErr,
+						)
+					}
 					return createErr
 				}
-				return createErr
+				log.V(1).Info("created ProjectQuota", "name", crdName, "projectID", projectID, "az", az, "resources", len(azQuota))
+				return nil
 			}
-			log.V(1).Info("created ProjectQuota", "name", crdName, "projectID", projectID, "resources", len(specQuota))
-			return nil
-		}
 
-		// Update existing (re-fetched on each retry to get fresh resourceVersion)
-		existing.Spec.Quota = specQuota
-		if projectName != "" {
-			existing.Spec.ProjectName = projectName
+			// Update existing (re-fetched on each retry to get fresh resourceVersion)
+			existing.Spec.Quota = azQuota
+			if projectName != "" {
+				existing.Spec.ProjectName = projectName
+			}
+			if domainID != "" {
+				existing.Spec.DomainID = domainID
+			}
+			if domainName != "" {
+				existing.Spec.DomainName = domainName
+			}
+			if updateErr := api.client.Update(ctx, &existing); updateErr != nil {
+				return updateErr
+			}
+			log.V(1).Info("updated ProjectQuota", "name", crdName, "projectID", projectID, "az", az, "resources", len(azQuota))
+			return nil
+		})
+		if err != nil {
+			log.Error(err, "failed to create/update ProjectQuota", "name", crdName, "az", az)
+			api.quotaError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to persist quota for AZ %s: %v", az, err), startTime)
+			return
 		}
-		if domainID != "" {
-			existing.Spec.DomainID = domainID
+	}
+
+	// Delete orphan CRDs for AZs no longer present in the quota push.
+	var pqList v1alpha1.ProjectQuotaList
+	if err := api.client.List(ctx, &pqList, client.MatchingFields{idxProjectQuotaByProjectID: projectID}); err == nil {
+		for i := range pqList.Items {
+			pq := &pqList.Items[i]
+			if !activeAZs[pq.Spec.AvailabilityZone] {
+				if delErr := api.client.Delete(ctx, pq); delErr != nil && !apierrors.IsNotFound(delErr) {
+					log.Error(delErr, "failed to delete orphan ProjectQuota", "name", pq.Name, "az", pq.Spec.AvailabilityZone)
+					// Non-fatal: orphan will be cleaned up on next push
+				} else {
+					log.V(1).Info("deleted orphan ProjectQuota", "name", pq.Name, "az", pq.Spec.AvailabilityZone)
+				}
+			}
 		}
-		if domainName != "" {
-			existing.Spec.DomainName = domainName
-		}
-		if updateErr := api.client.Update(ctx, &existing); updateErr != nil {
-			return updateErr
-		}
-		log.V(1).Info("updated ProjectQuota", "name", crdName, "projectID", projectID, "resources", len(specQuota))
-		return nil
-	})
-	if err != nil {
-		log.Error(err, "failed to create/update ProjectQuota", "name", crdName)
-		api.quotaError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to persist quota: %v", err), startTime)
-		return
 	}
 
 	// Return 204 No Content as expected by the LIQUID API

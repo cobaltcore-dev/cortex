@@ -183,7 +183,7 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// Determine if this is a spec change (new CRD or quota update) vs. a CR UsedAmount change
 	specChanged := pq.Generation > pq.Status.ObservedGeneration
 
-	var totalUsage map[string]v1alpha1.ResourceQuotaUsage
+	var totalUsage map[string]map[string]int64
 	if specChanged {
 		// Spec changed (new CRD or quota update) — recompute TotalUsage from Postgres
 		logger.Info("spec changed, recomputing TotalUsage from Postgres",
@@ -195,9 +195,12 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			return ctrl.Result{}, err
 		}
 	} else {
-		// CR UsedAmount changed — read persisted TotalUsage, only recompute PaygUsage
-		totalUsage = pq.Status.TotalUsage
-		if totalUsage == nil {
+		// CR UsedAmount changed — read persisted TotalUsage, only recompute PaygUsage.
+		// Status stores flat map[string]int64 (for this AZ only), but internal functions
+		// operate on map[string]map[string]int64. Reconstruct the multi-AZ view.
+		if pq.Status.TotalUsage != nil {
+			totalUsage = expandAZSlice(pq.Status.TotalUsage, pq.Spec.AvailabilityZone)
+		} else {
 			// Safety fallback: TotalUsage should always be set after first spec reconcile
 			logger.Info("no TotalUsage persisted, computing as fallback")
 			var err error
@@ -247,7 +250,7 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 // computeTotalUsageForProject computes TotalUsage for a single project by reading
 // all VMs from Postgres and filtering to the target project. Used as bootstrap when
 // a ProjectQuota is first created and has no persisted TotalUsage yet.
-func (c *QuotaController) computeTotalUsageForProject(ctx context.Context, projectID string) (map[string]v1alpha1.ResourceQuotaUsage, error) {
+func (c *QuotaController) computeTotalUsageForProject(ctx context.Context, projectID string) (map[string]map[string]int64, error) {
 	// Fetch flavor groups from Knowledge CRD
 	flavorGroupClient := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
 	flavorGroups, err := flavorGroupClient.GetAllFlavorGroups(ctx, nil)
@@ -418,17 +421,11 @@ func (c *QuotaController) accumulateAddedVM(
 	if !ok {
 		return // Flavor not in any group
 	}
-	fg, ok := flavorGroups[groupName]
-	if !ok {
+	if _, ok := flavorGroups[groupName]; !ok {
 		return
 	}
 
-	unitSizeMiB := int64(fg.SmallestFlavor.MemoryMB) //nolint:gosec // MemoryMB is always within int64 range
-	if unitSizeMiB == 0 {
-		return
-	}
-
-	ramUnits, coresAmount := vmResourceUnits(vm.Resources, unitSizeMiB)
+	ramUnits, coresAmount := vmResourceUnits(vm.Resources)
 
 	delta := projectDeltas[vm.ProjectID]
 	if delta == nil {
@@ -458,7 +455,7 @@ func (c *QuotaController) isVMNewSinceLastReconcile(ctx context.Context, vm *fai
 	}
 
 	// Look up the ProjectQuota for this VM's project
-	crdName := "quota-" + vm.ProjectID
+	crdName := "quota-" + vm.ProjectID + "-" + vm.AvailabilityZone
 	var pq v1alpha1.ProjectQuota
 	if err := c.Get(ctx, client.ObjectKey{Name: crdName}, &pq); err != nil {
 		// If we can't find the ProjectQuota, skip (full reconcile will handle it)
@@ -523,19 +520,13 @@ func (c *QuotaController) accumulateRemovedVM(
 	if !ok {
 		return // Flavor not in any group
 	}
-	fg, ok := flavorGroups[groupName]
-	if !ok {
+	if _, ok := flavorGroups[groupName]; !ok {
 		return
 	}
 
 	// Compute commitment units from the resolved flavor resources
-	unitSizeMiB := int64(fg.SmallestFlavor.MemoryMB) //nolint:gosec // MemoryMB is always within int64 range
-	if unitSizeMiB == 0 {
-		return
-	}
-
-	ramUnits := int64(info.RAMMiB) / unitSizeMiB //nolint:gosec // safe
-	coresAmount := int64(info.VCPUs)             //nolint:gosec // safe
+	ramUnits := int64(info.RAMMiB) / 1024 //nolint:gosec // safe
+	coresAmount := int64(info.VCPUs)      //nolint:gosec // safe
 
 	delta := projectDeltas[info.ProjectID]
 	if delta == nil {
@@ -547,8 +538,8 @@ func (c *QuotaController) accumulateRemovedVM(
 	delta.addDecrement(commitments.ResourceNameCores(groupName), info.AvailabilityZone, coresAmount)
 }
 
-// applyDeltaAndUpdateStatus fetches the ProjectQuota, applies the batched delta to TotalUsage,
-// recomputes PaygUsage, and persists with conflict retry.
+// applyDeltaAndUpdateStatus applies batched deltas to ALL per-AZ ProjectQuota CRDs for a project.
+// It lists all per-AZ CRDs, applies relevant deltas to each, recomputes PaygUsage, and persists.
 func (c *QuotaController) applyDeltaAndUpdateStatus(
 	ctx context.Context,
 	projectID string,
@@ -557,51 +548,80 @@ func (c *QuotaController) applyDeltaAndUpdateStatus(
 	flavorGroups map[string]compute.FlavorGroupFeature,
 ) error {
 
-	crdName := "quota-" + projectID
+	// Collect all AZs affected by this delta
+	affectedAZs := make(map[string]bool)
+	for _, azAmounts := range delta.increments {
+		for az := range azAmounts {
+			affectedAZs[az] = true
+		}
+	}
+	for _, azAmounts := range delta.decrements {
+		for az := range azAmounts {
+			affectedAZs[az] = true
+		}
+	}
 
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		// Re-fetch fresh copy on each retry
-		var pq v1alpha1.ProjectQuota
-		if err := c.Get(ctx, client.ObjectKey{Name: crdName}, &pq); err != nil {
-			if client.IgnoreNotFound(err) == nil {
-				return nil // PQ deleted, nothing to do
+	crUsage := c.computeCRUsage(projectCRs, flavorGroups)
+
+	for az := range affectedAZs {
+		crdName := "quota-" + projectID + "-" + az
+
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			var pq v1alpha1.ProjectQuota
+			if err := c.Get(ctx, client.ObjectKey{Name: crdName}, &pq); err != nil {
+				if client.IgnoreNotFound(err) == nil {
+					return nil // PQ for this AZ doesn't exist, skip
+				}
+				return err
 			}
+
+			if pq.Status.TotalUsage == nil {
+				pq.Status.TotalUsage = make(map[string]int64)
+			}
+
+			// Apply increments for this AZ
+			for resourceName, azAmounts := range delta.increments {
+				if amount, ok := azAmounts[az]; ok {
+					pq.Status.TotalUsage[resourceName] += amount
+				}
+			}
+
+			// Apply decrements for this AZ
+			for resourceName, azAmounts := range delta.decrements {
+				if amount, ok := azAmounts[az]; ok {
+					pq.Status.TotalUsage[resourceName] -= amount
+					if pq.Status.TotalUsage[resourceName] < 0 {
+						pq.Status.TotalUsage[resourceName] = 0
+					}
+				}
+			}
+
+			// Derive PaygUsage for this AZ: totalUsage[resource] - crUsage[resource][az]
+			pq.Status.PaygUsage = make(map[string]int64)
+			for resourceName, totalAmount := range pq.Status.TotalUsage {
+				crAmount := int64(0)
+				if cr, ok := crUsage[resourceName]; ok {
+					if azAmount, ok := cr[az]; ok {
+						crAmount = azAmount
+					}
+				}
+				paygAmount := totalAmount - crAmount
+				if paygAmount < 0 {
+					paygAmount = 0
+				}
+				pq.Status.PaygUsage[resourceName] = paygAmount
+			}
+
+			now := metav1.Now()
+			pq.Status.LastReconcileAt = &now
+			return c.Status().Update(ctx, &pq)
+		})
+		if err != nil {
 			return err
 		}
+	}
 
-		if pq.Status.TotalUsage == nil {
-			pq.Status.TotalUsage = make(map[string]v1alpha1.ResourceQuotaUsage)
-		}
-
-		// Apply increments
-		for resourceName, azAmounts := range delta.increments {
-			for az, amount := range azAmounts {
-				incrementUsage(pq.Status.TotalUsage, resourceName, az, amount)
-			}
-		}
-
-		// Apply decrements
-		for resourceName, azAmounts := range delta.decrements {
-			for az, amount := range azAmounts {
-				decrementUsage(pq.Status.TotalUsage, resourceName, az, amount)
-			}
-		}
-
-		// Recompute PaygUsage
-		crUsage := c.computeCRUsage(projectCRs, flavorGroups)
-		paygUsage := derivePaygUsage(pq.Status.TotalUsage, crUsage)
-
-		pq.Status.PaygUsage = paygUsage
-		now := metav1.Now()
-		pq.Status.LastReconcileAt = &now
-
-		if err := c.Status().Update(ctx, &pq); err != nil {
-			return err
-		}
-
-		c.recordUsageMetrics(projectID, pq.Status.TotalUsage, paygUsage, crUsage)
-		return nil
-	})
+	return nil
 }
 
 // ============================================================================
@@ -691,47 +711,42 @@ func (c *QuotaController) computeTotalUsage(
 	vms []failover.VM,
 	flavorToGroup map[string]string,
 	flavorGroups map[string]compute.FlavorGroupFeature,
-) map[string]map[string]v1alpha1.ResourceQuotaUsage {
+) map[string]map[string]map[string]int64 {
 	// result[projectID][resourceName] = ResourceQuotaUsage{PerAZ: {az: amount}}
-	result := make(map[string]map[string]v1alpha1.ResourceQuotaUsage)
+	result := make(map[string]map[string]map[string]int64)
 
 	for _, vm := range vms {
 		groupName, ok := flavorToGroup[vm.FlavorName]
 		if !ok {
 			continue // Flavor not in any tracked group
 		}
-		fg, ok := flavorGroups[groupName]
-		if !ok {
+		if _, ok := flavorGroups[groupName]; !ok {
 			continue
-		}
-		if fg.SmallestFlavor.MemoryMB == 0 {
-			continue // Invalid group config
 		}
 
 		ramResourceName := commitments.ResourceNameRAM(groupName)
 		coresResourceName := commitments.ResourceNameCores(groupName)
 
-		unitSizeMiB := int64(fg.SmallestFlavor.MemoryMB) //nolint:gosec // safe
-		ramUnits, coresAmount := vmResourceUnits(vm.Resources, unitSizeMiB)
+		ramUnits, coresAmount := vmResourceUnits(vm.Resources)
 
 		if _, ok := result[vm.ProjectID]; !ok {
-			result[vm.ProjectID] = make(map[string]v1alpha1.ResourceQuotaUsage)
+			result[vm.ProjectID] = make(map[string]map[string]int64)
 		}
 
 		// Accumulate RAM usage for this project + AZ
 		ramUsage := result[vm.ProjectID][ramResourceName]
-		if ramUsage.PerAZ == nil {
-			ramUsage.PerAZ = make(map[string]int64)
+		if ramUsage == nil {
+			ramUsage = make(map[string]int64)
 		}
-		ramUsage.PerAZ[vm.AvailabilityZone] += ramUnits
+		ramUsage[vm.AvailabilityZone] += ramUnits
 		result[vm.ProjectID][ramResourceName] = ramUsage
 
 		// Accumulate cores usage for this project + AZ
 		coresUsage := result[vm.ProjectID][coresResourceName]
-		if coresUsage.PerAZ == nil {
-			coresUsage.PerAZ = make(map[string]int64)
+		if coresUsage == nil {
+			coresUsage = make(map[string]int64)
 		}
-		coresUsage.PerAZ[vm.AvailabilityZone] += coresAmount
+		coresUsage[vm.AvailabilityZone] += coresAmount
 		result[vm.ProjectID][coresResourceName] = coresUsage
 	}
 
@@ -750,8 +765,8 @@ func groupCRsByProject(crs []v1alpha1.CommittedResource) map[string][]v1alpha1.C
 
 // computeCRUsage computes the committed resource usage from a pre-filtered slice of CRs for one project.
 // It reads UsedResources from each CR's status and converts to commitment units (multiples for RAM, raw for cores).
-func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavorGroups map[string]compute.FlavorGroupFeature) map[string]v1alpha1.ResourceQuotaUsage {
-	result := make(map[string]v1alpha1.ResourceQuotaUsage)
+func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavorGroups map[string]compute.FlavorGroupFeature) map[string]map[string]int64 {
+	result := make(map[string]map[string]int64)
 
 	for i := range crs {
 		cr := &crs[i]
@@ -783,14 +798,12 @@ func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavo
 			if !ok {
 				continue
 			}
-			// Convert bytes to commitment units (multiples of smallest flavor)
+			// Convert bytes to GiB (1 GiB per commitment unit)
 			usedBytes := memQty.Value()
-			fg, ok := flavorGroups[spec.FlavorGroupName]
-			if !ok || fg.SmallestFlavor.MemoryMB == 0 {
+			if _, ok := flavorGroups[spec.FlavorGroupName]; !ok {
 				continue
 			}
-			unitSizeBytes := int64(fg.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec // safe
-			usedAmount = usedBytes / unitSizeBytes
+			usedAmount = usedBytes / (1024 * 1024 * 1024)
 		case v1alpha1.CommittedResourceTypeCores:
 			resourceName = commitments.ResourceNameCores(spec.FlavorGroupName)
 			cpuQty, ok := cr.Status.UsedResources["cpu"]
@@ -808,10 +821,10 @@ func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavo
 
 		// Accumulate per AZ
 		usage := result[resourceName]
-		if usage.PerAZ == nil {
-			usage.PerAZ = make(map[string]int64)
+		if usage == nil {
+			usage = make(map[string]int64)
 		}
-		usage.PerAZ[spec.AvailabilityZone] += usedAmount
+		usage[spec.AvailabilityZone] += usedAmount
 		result[resourceName] = usage
 	}
 
@@ -830,20 +843,18 @@ func (c *QuotaController) isCRStateIncluded(state v1alpha1.CommitmentStatus) boo
 
 // derivePaygUsage computes PaygUsage = TotalUsage - CRUsage (clamped >= 0).
 func derivePaygUsage(
-	totalUsage map[string]v1alpha1.ResourceQuotaUsage,
-	crUsage map[string]v1alpha1.ResourceQuotaUsage,
-) map[string]v1alpha1.ResourceQuotaUsage {
+	totalUsage map[string]map[string]int64,
+	crUsage map[string]map[string]int64,
+) map[string]map[string]int64 {
 
-	result := make(map[string]v1alpha1.ResourceQuotaUsage)
+	result := make(map[string]map[string]int64)
 
 	for resourceName, total := range totalUsage {
-		payg := v1alpha1.ResourceQuotaUsage{
-			PerAZ: make(map[string]int64),
-		}
-		for az, totalAmount := range total.PerAZ {
+		payg := make(map[string]int64)
+		for az, totalAmount := range total {
 			crAmount := int64(0)
 			if cr, ok := crUsage[resourceName]; ok {
-				if azAmount, ok := cr.PerAZ[az]; ok {
+				if azAmount, ok := cr[az]; ok {
 					crAmount = azAmount
 				}
 			}
@@ -851,7 +862,7 @@ func derivePaygUsage(
 			if paygAmount < 0 {
 				paygAmount = 0 // Clamp >= 0
 			}
-			payg.PerAZ[az] = paygAmount
+			payg[az] = paygAmount
 		}
 		result[resourceName] = payg
 	}
@@ -859,14 +870,38 @@ func derivePaygUsage(
 	return result
 }
 
+// extractAZSlice extracts the data for a single AZ from a multi-AZ usage map.
+// Returns map[resourceName] = value for that AZ only.
+func extractAZSlice(usage map[string]map[string]int64, az string) map[string]int64 {
+	result := make(map[string]int64)
+	for resourceName, azMap := range usage {
+		if val, ok := azMap[az]; ok {
+			result[resourceName] = val
+		}
+	}
+	return result
+}
+
+// expandAZSlice reconstructs a multi-AZ map from a flat per-AZ map.
+// Used when reading persisted status (flat) back into the controller's internal format.
+func expandAZSlice(flat map[string]int64, az string) map[string]map[string]int64 {
+	result := make(map[string]map[string]int64)
+	for resourceName, val := range flat {
+		result[resourceName] = map[string]int64{az: val}
+	}
+	return result
+}
+
 // updateProjectQuotaStatusWithRetry writes TotalUsage + PaygUsage + LastReconcileAt
 // with retry-on-conflict to handle concurrent updates.
+// totalUsage and paygUsage are multi-AZ maps; this function extracts the relevant AZ
+// slice based on the CRD's Spec.AvailabilityZone.
 // If fullReconcile is true, also updates LastFullReconcileAt and ObservedGeneration.
 func (c *QuotaController) updateProjectQuotaStatusWithRetry(
 	ctx context.Context,
 	pqName string,
-	totalUsage map[string]v1alpha1.ResourceQuotaUsage,
-	paygUsage map[string]v1alpha1.ResourceQuotaUsage,
+	totalUsage map[string]map[string]int64,
+	paygUsage map[string]map[string]int64,
 	fullReconcile bool,
 ) error {
 
@@ -877,8 +912,10 @@ func (c *QuotaController) updateProjectQuotaStatusWithRetry(
 			return err
 		}
 
-		pq.Status.TotalUsage = totalUsage
-		pq.Status.PaygUsage = paygUsage
+		// Extract only this AZ's data from the multi-AZ maps
+		az := pq.Spec.AvailabilityZone
+		pq.Status.TotalUsage = extractAZSlice(totalUsage, az)
+		pq.Status.PaygUsage = extractAZSlice(paygUsage, az)
 		pq.Status.ObservedGeneration = pq.Generation
 		now := metav1.Now()
 		pq.Status.LastReconcileAt = &now
@@ -889,16 +926,14 @@ func (c *QuotaController) updateProjectQuotaStatusWithRetry(
 	})
 }
 
-// vmResourceUnits computes RAM commitment units and cores from a VM's resources.
-// RAM is converted from bytes (resource.Quantity) to MiB, then divided by unitSizeMiB
-// (the smallest flavor's memory in MiB for the flavor group) to get commitment units.
-func vmResourceUnits(resources map[string]resource.Quantity, unitSizeMiB int64) (ramUnits, cores int64) {
+// vmResourceUnits computes RAM commitment units (GiB) and cores from a VM's resources.
+func vmResourceUnits(resources map[string]resource.Quantity) (ramGiB, cores int64) {
 	memQty := resources["memory"]
 	serverRAMMiB := memQty.Value() / (1024 * 1024) // bytes to MiB
-	ramUnits = serverRAMMiB / unitSizeMiB          // commitment units
+	ramGiB = serverRAMMiB / 1024                   // MiB to GiB (1 GiB per unit)
 	vcpuQty := resources["vcpus"]
 	cores = vcpuQty.Value()
-	return ramUnits, cores
+	return ramGiB, cores
 }
 
 // buildFlavorToGroupMap builds a flavorName → flavorGroupName lookup from flavor groups.
@@ -913,24 +948,24 @@ func buildFlavorToGroupMap(flavorGroups map[string]compute.FlavorGroupFeature) m
 }
 
 // incrementUsage increments a usage value in the map.
-func incrementUsage(usage map[string]v1alpha1.ResourceQuotaUsage, resourceName, az string, amount int64) {
+func incrementUsage(usage map[string]map[string]int64, resourceName, az string, amount int64) {
 	u := usage[resourceName]
-	if u.PerAZ == nil {
-		u.PerAZ = make(map[string]int64)
+	if u == nil {
+		u = make(map[string]int64)
 	}
-	u.PerAZ[az] += amount
+	u[az] += amount
 	usage[resourceName] = u
 }
 
 // decrementUsage decrements a usage value in the map (clamp >= 0).
-func decrementUsage(usage map[string]v1alpha1.ResourceQuotaUsage, resourceName, az string, amount int64) {
+func decrementUsage(usage map[string]map[string]int64, resourceName, az string, amount int64) {
 	u := usage[resourceName]
-	if u.PerAZ == nil {
+	if u == nil {
 		return
 	}
-	u.PerAZ[az] -= amount
-	if u.PerAZ[az] < 0 {
-		u.PerAZ[az] = 0
+	u[az] -= amount
+	if u[az] < 0 {
+		u[az] = 0
 	}
 	usage[resourceName] = u
 }
@@ -938,20 +973,20 @@ func decrementUsage(usage map[string]v1alpha1.ResourceQuotaUsage, resourceName, 
 // recordUsageMetrics emits Prometheus metrics for all resources in a project.
 func (c *QuotaController) recordUsageMetrics(
 	projectID string,
-	totalUsage map[string]v1alpha1.ResourceQuotaUsage,
-	paygUsage map[string]v1alpha1.ResourceQuotaUsage,
-	crUsage map[string]v1alpha1.ResourceQuotaUsage,
+	totalUsage map[string]map[string]int64,
+	paygUsage map[string]map[string]int64,
+	crUsage map[string]map[string]int64,
 ) {
 
 	for resourceName, total := range totalUsage {
-		for az, totalAmount := range total.PerAZ {
+		for az, totalAmount := range total {
 			paygAmount := int64(0)
 			if payg, ok := paygUsage[resourceName]; ok {
-				paygAmount = payg.PerAZ[az]
+				paygAmount = payg[az]
 			}
 			crAmount := int64(0)
 			if cr, ok := crUsage[resourceName]; ok {
-				crAmount = cr.PerAZ[az]
+				crAmount = cr[az]
 			}
 			c.Metrics.RecordUsage(projectID, az, resourceName, totalAmount, paygAmount, crAmount)
 		}
@@ -968,17 +1003,17 @@ func (c *QuotaController) mapCRToProjectQuota(_ context.Context, obj client.Obje
 	if !ok {
 		return nil
 	}
-	// Map to the ProjectQuota for this project
-	crdName := "quota-" + cr.Spec.ProjectID
+	// Map to the per-AZ ProjectQuota for this project + AZ
+	crdName := "quota-" + cr.Spec.ProjectID + "-" + cr.Spec.AvailabilityZone
 	return []reconcile.Request{
 		{NamespacedName: client.ObjectKey{Name: crdName}},
 	}
 }
 
-// crUsedResourcesChangePredicate triggers only when Status.UsedResources changes on a CommittedResource.
+// crUsedResourcesChangePredicate triggers on create, delete, and UsedResources changes of a CommittedResource.
 func crUsedAmountChangePredicate() predicate.Predicate {
 	return predicate.Funcs{
-		CreateFunc: func(_ event.CreateEvent) bool { return false },
+		CreateFunc: func(_ event.CreateEvent) bool { return true },
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			oldCR, ok1 := e.ObjectOld.(*v1alpha1.CommittedResource)
 			newCR, ok2 := e.ObjectNew.(*v1alpha1.CommittedResource)

@@ -46,7 +46,7 @@ jobs:
           go-version-file: 'go.mod'
       - name: Generate GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.CORTEX_AI_AGENTS_APP_ID }}
           private-key: ${{ secrets.CORTEX_AI_AGENTS_CLIENT_PKEY }}
@@ -63,13 +63,14 @@ jobs:
           claude_args: |
             --max-turns 1000
             --permission-mode auto
-            --effort-level max
             --allowedTools "Read,Write,Edit,Bash(*),WebSearch,WebFetch"
           trigger_phrase: "@claude"
           include_comments_by_actor: "auhlig,umswmayj,juliusclausnitzer,mblos,PhilippMatthes,Varsius,henrichter,SoWieMarkus,*[bot]"
           use_litellm: "true"
           litellm_model: "sap/anthropic--claude-4.6-opus"
           github_token: ${{ steps.app-token.outputs.token }}
+          bot_id: "279748396"
+          bot_name: "cortex-ai-agents[bot]"
           show_full_output: "true"
       - uses: ./.github/actions/stop-litellm-proxy
         if: always()

@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.1
+    controller-gen.kubebuilder.io/version: v0.21.0
   name: projectquotas.cortex.cloud
 spec:
   group: cortex.cloud
@@ -17,6 +17,9 @@ spec:
   - additionalPrinterColumns:
     - jsonPath: .spec.projectID
       name: Project
+      type: string
+    - jsonPath: .spec.availabilityZone
+      name: AZ
       type: string
     - jsonPath: .spec.domainID
       name: Domain
@@ -34,6 +37,8 @@ spec:
           ProjectQuota is the Schema for the projectquotas API.
           It persists quota values pushed by Limes via the LIQUID quota endpoint
           (PUT /v1/projects/:uuid/quota → liquid.ServiceQuotaRequest).
+          Each CRD stores quota for one project in one availability zone.
+          In a multi-cluster setup, it is routed to the cluster serving that AZ.
           See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#ServiceQuotaRequest
         properties:
           apiVersion:
@@ -57,8 +62,15 @@ spec:
             description: |-
               ProjectQuotaSpec defines the desired state of ProjectQuota.
               Populated from PUT /v1/projects/:uuid/quota payloads (liquid.ServiceQuotaRequest).
+              Each ProjectQuota CRD represents quota for ONE project in ONE availability zone.
               See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#ServiceQuotaRequest
             properties:
+              availabilityZone:
+                description: |-
+                  AvailabilityZone is the AZ this quota CRD covers (e.g. "qa-de-1a").
+                  In a multi-cluster setup, this determines which cluster the CRD is routed to.
+                minLength: 1
+                type: string
               domainID:
                 description: |-
                   DomainID of the OpenStack domain this project belongs to.
@@ -81,38 +93,16 @@ spec:
                 type: string
               quota:
                 additionalProperties:
-                  description: |-
-                    ResourceQuota holds the quota for a single resource with per-AZ breakdown.
-                    Maps to liquid.ResourceQuotaRequest from the LIQUID API.
-                    See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#ResourceQuotaRequest
-                  properties:
-                    perAZ:
-                      additionalProperties:
-                        format: int64
-                        type: integer
-                      description: |-
-                        PerAZ holds the per-availability-zone quota breakdown.
-                        Key: availability zone name, Value: quota for that AZ.
-                        Only populated for AZSeparatedTopology resources.
-                        Corresponds to liquid.ResourceQuotaRequest.PerAZ[az].Quota.
-                        See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#AZResourceQuotaRequest
-                      type: object
-                    quota:
-                      description: |-
-                        Quota is the total quota across all AZs (for compatibility).
-                        Corresponds to liquid.ResourceQuotaRequest.Quota.
-                      format: int64
-                      type: integer
-                  required:
-                  - quota
-                  type: object
+                  format: int64
+                  type: integer
                 description: |-
-                  Quota maps LIQUID resource names to their per-AZ quota.
+                  Quota maps LIQUID resource names to their quota value for THIS availability zone.
                   Key: liquid.ResourceName (e.g. "hw_version_hana_v2_ram")
-                  Mirrors liquid.ServiceQuotaRequest.Resources with AZSeparatedTopology.
-                  See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#ServiceQuotaRequest
+                  Value: per-AZ quota from liquid.AZResourceQuotaRequest.Quota
+                  See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid#AZResourceQuotaRequest
                 type: object
             required:
+            - availabilityZone
             - domainID
             - projectID
             type: object
@@ -200,39 +190,19 @@ spec:
                 type: integer
               paygUsage:
                 additionalProperties:
-                  description: ResourceQuotaUsage holds per-AZ PAYG usage for a single
-                    resource.
-                  properties:
-                    perAZ:
-                      additionalProperties:
-                        format: int64
-                        type: integer
-                      description: |-
-                        PerAZ holds per-availability-zone PAYG usage values.
-                        Key: availability zone name, Value: PAYG usage in that AZ.
-                      type: object
-                  type: object
+                  format: int64
+                  type: integer
                 description: |-
-                  PaygUsage tracks per-resource per-AZ pay-as-you-go usage.
+                  PaygUsage tracks per-resource pay-as-you-go usage in this AZ.
                   Derived as TotalUsage - CRUsage (clamped >= 0).
                   Key: liquid.ResourceName
                 type: object
               totalUsage:
                 additionalProperties:
-                  description: ResourceQuotaUsage holds per-AZ PAYG usage for a single
-                    resource.
-                  properties:
-                    perAZ:
-                      additionalProperties:
-                        format: int64
-                        type: integer
-                      description: |-
-                        PerAZ holds per-availability-zone PAYG usage values.
-                        Key: availability zone name, Value: PAYG usage in that AZ.
-                      type: object
-                  type: object
+                  format: int64
+                  type: integer
                 description: |-
-                  TotalUsage tracks per-resource per-AZ total resource consumption (all VMs in this project).
+                  TotalUsage tracks per-resource total resource consumption in this AZ (all VMs in this project+AZ).
                   Persisted by the quota controller; updated by full reconcile and HV instance diffs.
                   Key: liquid.ResourceName
                 type: object

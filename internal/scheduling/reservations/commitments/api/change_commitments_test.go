@@ -22,9 +22,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
-	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
+	. "go.xyrillian.de/gg/option"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -130,22 +130,13 @@ func TestHandleChangeCommitments(t *testing.T) {
 			ExpectedAPIResponse: newAPIResponse("uuid-b: not sufficient capacity"),
 			ExpectedDeletedCRs:  []string{"commitment-uuid-a", "commitment-uuid-b"},
 		},
-		// --- AZ immutability ---
+		// --- AZ validation ---
 		{
-			// AZ is immutable once set on a CommittedResource. Attempting to change it via
-			// change-commitments must be rejected immediately, before any polling or controller
-			// interaction, and the CR must remain at its original spec.
-			Name:    "AZ change on existing CR: must be rejected",
+			Name:    "Empty AZ: rejected with 400",
 			Flavors: []*TestFlavor{m1Small},
-			ExistingCRs: []*TestCR{
-				{CommitmentUUID: "uuid-az-stale", State: v1alpha1.CommitmentStatusConfirmed,
-					AmountMiB: 1024, ProjectID: "project-A", AZ: "az-old", ReadyCondition: true},
-			},
-			CommitmentRequest: newCommitmentRequest("az-new", false, 1234,
-				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-az-stale", "confirmed", 2)),
-			ExpectedAPIResponse: newAPIResponse("cannot change availability zone"),
-			// CR spec must not have changed.
-			ExpectedCRSpecs: map[string]int64{"commitment-uuid-az-stale": 1024 * 1024 * 1024},
+			CommitmentRequest: newCommitmentRequest("", false, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-noaz", "confirmed", 2)),
+			ExpectedAPIResponse: APIResponseExpectation{StatusCode: http.StatusBadRequest},
 		},
 		// --- Timeout ---
 		{
