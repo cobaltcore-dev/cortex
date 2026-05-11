@@ -138,8 +138,6 @@ func TestHandleInfo_InvalidFlavorMemory(t *testing.T) {
 }
 
 func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
-	// Test that resource flags (HandlesCommitments, HasCapacity, HasQuota) are read from config,
-	// not derived from flavor group metadata. Both groups get resources regardless of ratio.
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add scheme: %v", err)
@@ -247,7 +245,7 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 		t.Error("hw_version_hana_fixed_ram: expected HasQuota=true (fixed ratio groups accept quotas)")
 	}
 
-	// Test Cores resource: hw_version_hana_fixed_cores (always AZAwareTopology, no quota)
+	// Test Cores resource: hw_version_hana_fixed_cores (HandlesCommitments=false → AZAwareTopology)
 	coresResource, ok := serviceInfo.Resources["hw_version_hana_fixed_cores"]
 	if !ok {
 		t.Fatal("expected hw_version_hana_fixed_cores resource to exist")
@@ -265,7 +263,7 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 		t.Error("hw_version_hana_fixed_cores: expected HasQuota=false")
 	}
 
-	// Test Instances resource: hw_version_hana_fixed_instances (always AZAwareTopology, no quota)
+	// Test Instances resource: hw_version_hana_fixed_instances (HandlesCommitments=false → AZAwareTopology)
 	instancesResource, ok := serviceInfo.Resources["hw_version_hana_fixed_instances"]
 	if !ok {
 		t.Fatal("expected hw_version_hana_fixed_instances resource to exist")
@@ -333,5 +331,123 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 	}
 	if v2InstancesResource.HasQuota {
 		t.Error("hw_version_v2_variable_instances: expected HasQuota=false")
+	}
+
+	// Verify ratio attributes are converted from MiB to GiB.
+	// hana_fixed has ramCoreRatio=4096 MiB/vCPU → expect 4 GiB/vCPU.
+	checkAttrsRatio(t, "hw_version_hana_fixed_ram", ramResource.Attributes, 4, nil, nil)
+	// v2_variable has ramCoreRatioMin=2048 MiB/vCPU, ramCoreRatioMax=16384 MiB/vCPU → expect 2, 16 GiB/vCPU.
+	checkAttrsRatio(t, "hw_version_v2_variable_ram", v2RamResource.Attributes, 0, ptr(uint64(2)), ptr(uint64(16)))
+}
+
+func TestHandleInfo_TopologyFollowsHandlesCommitments(t *testing.T) {
+	// Verifies that any resource with HandlesCommitments=true gets AZSeparatedTopology,
+	// regardless of whether it's RAM, Cores, or Instances.
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	features := []map[string]interface{}{
+		{
+			"name":           "fg",
+			"flavors":        []map[string]interface{}{{"name": "fg_c4_m16", "vcpus": 4, "memoryMB": 16384, "diskGB": 50}},
+			"largestFlavor":  map[string]interface{}{"name": "fg_c4_m16", "vcpus": 4, "memoryMB": 16384, "diskGB": 50},
+			"smallestFlavor": map[string]interface{}{"name": "fg_c4_m16", "vcpus": 4, "memoryMB": 16384, "diskGB": 50},
+			"ramCoreRatio":   4096,
+		},
+	}
+	raw, err := v1alpha1.BoxFeatureList(features)
+	if err != nil {
+		t.Fatalf("failed to box features: %v", err)
+	}
+	knowledge := &v1alpha1.Knowledge{
+		ObjectMeta: v1.ObjectMeta{Name: "flavor-groups"},
+		Spec: v1alpha1.KnowledgeSpec{
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			Extractor:        v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
+		},
+		Status: v1alpha1.KnowledgeStatus{
+			Conditions:        []v1.Condition{{Type: v1alpha1.KnowledgeConditionReady, Status: "True"}},
+			Raw:               raw,
+			LastContentChange: v1.Now(),
+		},
+	}
+
+	// All three resource types handle commitments.
+	cfg := commitments.DefaultAPIConfig()
+	cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
+		"fg": {
+			RAM:       commitments.ResourceTypeConfig{HandlesCommitments: true, HasCapacity: true, HasQuota: true},
+			Cores:     commitments.ResourceTypeConfig{HandlesCommitments: true, HasCapacity: true, HasQuota: true},
+			Instances: commitments.ResourceTypeConfig{HandlesCommitments: true, HasCapacity: true, HasQuota: true},
+		},
+	}
+
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(knowledge).Build()
+	api := NewAPIWithConfig(k8sClient, cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/commitments/v1/info", http.NoBody)
+	w := httptest.NewRecorder()
+	api.HandleInfo(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var serviceInfo liquid.ServiceInfo
+	if err := json.NewDecoder(resp.Body).Decode(&serviceInfo); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+
+	for _, resName := range []string{"hw_version_fg_ram", "hw_version_fg_cores", "hw_version_fg_instances"} {
+		res, ok := serviceInfo.Resources[liquid.ResourceName(resName)]
+		if !ok {
+			t.Fatalf("expected resource %s", resName)
+		}
+		if res.Topology != liquid.AZSeparatedTopology {
+			t.Errorf("%s: expected Topology=%q (HandlesCommitments=true), got %q", resName, liquid.AZSeparatedTopology, res.Topology)
+		}
+	}
+}
+
+// ptr returns a pointer to v, for use in test assertions.
+func ptr[T any](v T) *T { return &v }
+
+// checkAttrsRatio decodes the Attributes JSON of a resource and verifies the ratio fields
+// are in GiB/vCPU. Pass ratioGiB=0 to skip the fixed-ratio check; pass nil min/max to skip range checks.
+func checkAttrsRatio(t *testing.T, resName string, raw json.RawMessage, ratioGiB uint64, minGiB, maxGiB *uint64) {
+	t.Helper()
+	var attrs struct {
+		RamCoreRatio    *uint64 `json:"ramCoreRatio"`
+		RamCoreRatioMin *uint64 `json:"ramCoreRatioMin"`
+		RamCoreRatioMax *uint64 `json:"ramCoreRatioMax"`
+	}
+	if err := json.Unmarshal(raw, &attrs); err != nil {
+		t.Fatalf("%s: failed to decode attributes: %v", resName, err)
+	}
+	if ratioGiB != 0 {
+		if attrs.RamCoreRatio == nil {
+			t.Errorf("%s: expected ramCoreRatio=%d GiB/vCPU, got nil", resName, ratioGiB)
+		} else if *attrs.RamCoreRatio != ratioGiB {
+			t.Errorf("%s: expected ramCoreRatio=%d GiB/vCPU, got %d", resName, ratioGiB, *attrs.RamCoreRatio)
+		}
+	}
+	if minGiB != nil {
+		if attrs.RamCoreRatioMin == nil {
+			t.Errorf("%s: expected ramCoreRatioMin=%d GiB/vCPU, got nil", resName, *minGiB)
+		} else if *attrs.RamCoreRatioMin != *minGiB {
+			t.Errorf("%s: expected ramCoreRatioMin=%d GiB/vCPU, got %d", resName, *minGiB, *attrs.RamCoreRatioMin)
+		}
+	}
+	if maxGiB != nil {
+		if attrs.RamCoreRatioMax == nil {
+			t.Errorf("%s: expected ramCoreRatioMax=%d GiB/vCPU, got nil", resName, *maxGiB)
+		} else if *attrs.RamCoreRatioMax != *maxGiB {
+			t.Errorf("%s: expected ramCoreRatioMax=%d GiB/vCPU, got %d", resName, *maxGiB, *attrs.RamCoreRatioMax)
+		}
 	}
 }
