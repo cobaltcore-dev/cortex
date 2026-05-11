@@ -75,42 +75,4 @@ spec:
   type: filter-weigher
   createHistory: false
   filters: []
-  weighers:
-    - name: vmware_binpack
-      params:
-        - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
-      description: |
-        This step implements a binpacking weigher for workloads on vmware hypervisors.
-        It pulls the requested vm into the smallest gaps possible, to ensure
-        other hosts with less allocation stay free for bigger vms.
-        In this pipeline, the binpacking will focus on hana virtual machines.
-    - name: vmware_avoid_long_term_contended_hosts
-      description: |
-        This step avoids placing vms on vmware hosts with a high CPU contention over
-        a longer period of time, based on vrops contention metrics. In particular,
-        this step looks at a longer time window of 4 weeks to identify hosts that
-        are consistently contended.
-      params:
-        - {key: avgCPUContentionLowerBound, floatValue: 0} # pct
-        - {key: avgCPUContentionUpperBound, floatValue: 10} # pct
-        - {key: avgCPUContentionActivationLowerBound, floatValue: 0.0}
-        - {key: avgCPUContentionActivationUpperBound, floatValue: -0.75}
-        - {key: maxCPUContentionLowerBound, floatValue: 0} # pct
-        - {key: maxCPUContentionUpperBound, floatValue: 10} # pct
-        - {key: maxCPUContentionActivationLowerBound, floatValue: 0.0}
-        - {key: maxCPUContentionActivationUpperBound, floatValue: -0.25}
-    - name: vmware_avoid_short_term_contended_hosts
-      description: |
-        This step avoids placing vms on vmware hosts with a high CPU contention over
-        a shorter period of time, based on vrops contention metrics. In particular,
-        this step looks at a shorter time window of 20 minutes to identify hosts that
-        are currently contended.
-      params:
-        - {key: avgCPUContentionLowerBound, floatValue: 0} # pct
-        - {key: avgCPUContentionUpperBound, floatValue: 10} # pct
-        - {key: avgCPUContentionActivationLowerBound, floatValue: 0.0}
-        - {key: avgCPUContentionActivationUpperBound, floatValue: -0.75}
-        - {key: maxCPUContentionLowerBound, floatValue: 0} # pct
-        - {key: maxCPUContentionUpperBound, floatValue: 10} # pct
-        - {key: maxCPUContentionActivationLowerBound, floatValue: 0.0}
-        - {key: maxCPUContentionActivationUpperBound, floatValue: -0.25}
+  weighers: []
