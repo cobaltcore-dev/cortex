@@ -76,7 +76,7 @@ func (api *HTTPAPI) recordInfoMetrics(statusCode int, startTime time.Time) {
 }
 
 // resourceAttributes holds the custom attributes for a resource in the info API response.
-// Ratio values are in GiB per vCPU, matching the RAM resource unit (UnitGibibytes).
+// Ratio values are in GiB per vCPU.
 type resourceAttributes struct {
 	RamCoreRatio    *uint64 `json:"ramCoreRatio,omitempty"`
 	RamCoreRatioMin *uint64 `json:"ramCoreRatioMin,omitempty"`
@@ -143,14 +143,16 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 		if resCfg.RAM.HandlesCommitments {
 			ramTopology = liquid.AZSeparatedTopology
 		}
-		// Fixed-ratio groups: unit is 1 slot (= 1 smallest-flavor instance); variable-ratio: GiB.
-		var ramUnit liquid.Unit
+		// Fixed-ratio groups: unit = smallest flavor's RAM in MiB (e.g. "480 GiB" for hana);
+		// variable-ratio groups: unit = 1 GiB.  RAMUnitMiB() encodes both cases.
+		ramUnit, err := liquid.UnitMebibytes.MultiplyBy(groupData.RAMUnitMiB())
+		if err != nil {
+			return liquid.ServiceInfo{}, fmt.Errorf("failed to create RAM unit for flavor group %q: %w", groupName, err)
+		}
 		var ramDisplayName string
-		if groupData.HasFixedRamCoreRatio() {
-			ramUnit = liquid.UnitNone
+		if groupData.HasFixedRamCoreRatio() && groupData.SmallestFlavor.MemoryMB > 0 {
 			ramDisplayName = fmt.Sprintf("multiples of %d MiB (usable by: %s)", groupData.SmallestFlavor.MemoryMB, flavorListStr)
 		} else {
-			ramUnit = liquid.UnitGibibytes
 			ramDisplayName = fmt.Sprintf("GiB of RAM (usable by: %s)", flavorListStr)
 		}
 		resources[ramResourceName] = liquid.ResourceInfo{
