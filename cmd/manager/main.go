@@ -397,8 +397,10 @@ func main() {
 	if slices.Contains(mainConfig.EnabledControllers, "nova-pipeline-controllers") {
 		// Filter-weigher pipeline controller setup.
 		filterWeigherController := &nova.FilterWeigherPipelineController{
-			Monitor: filterWeigherPipelineMonitor,
+			Monitor:            filterWeigherPipelineMonitor,
+			NoHostFoundCounter: nova.NewNoHostFoundCounter(),
 		}
+		metrics.Registry.MustRegister(filterWeigherController.NoHostFoundCounter)
 		// Inferred through the base controller.
 		filterWeigherController.Client = multiclusterClient
 		if err := filterWeigherController.SetupWithManager(mgr, multiclusterClient); err != nil {

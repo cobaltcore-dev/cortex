@@ -13,15 +13,13 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/util/retry"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/weighers"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -48,6 +46,9 @@ type FilterWeigherPipelineController struct {
 	Monitor lib.FilterWeigherPipelineMonitor
 	// Candidate gatherer to get all placement candidates if needed.
 	gatherer CandidateGatherer
+
+	// NoHostFoundCounter counts no-host-found results by CR coverage case (A/B/C/D).
+	NoHostFoundCounter *prometheus.CounterVec
 }
 
 // The type of pipeline this controller manages.
@@ -126,163 +127,6 @@ func isUserVMPlacement(intent v1alpha1.SchedulingIntent) bool {
 	default:
 		return true
 	}
-}
-
-// recordCRAllocation writes the placed VM UUID into the matching Reservation
-// Spec.CommittedResourceReservation.Allocations after a successful Nova placement.
-// Best-effort: any failure is logged but never propagated to the caller.
-func (c *FilterWeigherPipelineController) recordCRAllocation(ctx context.Context, decision *v1alpha1.Decision, request api.ExternalSchedulerRequest) {
-	log := ctrl.LoggerFrom(ctx)
-
-	instanceUUID := request.Spec.Data.InstanceUUID
-	projectID := request.Context.ProjectID
-	flavorName := request.Spec.Data.Flavor.Data.Name
-	selectedHost := *decision.Status.Result.TargetHost
-
-	// Resolve flavor → flavor group. Flavors not in any group are PAYG — nothing to do.
-	fgClient := reservations.FlavorGroupKnowledgeClient{Client: c.Client}
-	flavorGroups, err := fgClient.GetAllFlavorGroups(ctx, nil)
-	if err != nil {
-		log.Error(err, "CR allocation: failed to get flavor groups", "instanceUUID", instanceUUID)
-		return
-	}
-	flavorGroupName, flavorInGroup, err := reservations.FindFlavorInGroups(flavorName, flavorGroups)
-	if err != nil {
-		log.V(1).Info("CR allocation: flavor not in any group, PAYG placement", "flavor", flavorName)
-		return
-	}
-
-	// List all CR reservations and filter to candidates matching this placement.
-	var reservationList v1alpha1.ReservationList
-	if err := c.List(ctx, &reservationList,
-		client.MatchingLabels{v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource},
-	); err != nil {
-		log.Error(err, "CR allocation: failed to list reservations", "instanceUUID", instanceUUID)
-		return
-	}
-
-	var candidates []v1alpha1.Reservation
-	for _, res := range reservationList.Items {
-		cr := res.Spec.CommittedResourceReservation
-		if cr == nil {
-			continue
-		}
-		if res.Spec.TargetHost != selectedHost || cr.ProjectID != projectID || cr.ResourceGroup != flavorGroupName {
-			continue
-		}
-		// Idempotency: if this VM UUID is already recorded, the work is done.
-		if _, exists := cr.Allocations[instanceUUID]; exists {
-			log.Info("CR allocation: VM UUID already in reservation, skipping",
-				"instanceUUID", instanceUUID, "reservation", res.Name)
-			return
-		}
-		candidates = append(candidates, res)
-	}
-
-	if len(candidates) == 0 {
-		log.V(1).Info("CR allocation: no matching reservation slot, PAYG placement",
-			"instanceUUID", instanceUUID, "host", selectedHost,
-			"projectID", projectID, "flavorGroup", flavorGroupName)
-		return
-	}
-
-	vmMemoryBytes := int64(flavorInGroup.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory bounded by specs
-	vmCPUs := int64(flavorInGroup.VCPUs)                         //nolint:gosec // VCPUs bounded by specs
-
-	slotName := pickReservationSlot(candidates, vmMemoryBytes)
-	if slotName == "" {
-		log.Error(nil, "CR allocation: no reservation slot has sufficient remaining capacity",
-			"instanceUUID", instanceUUID, "vmMemoryBytes", vmMemoryBytes,
-			"host", selectedHost, "candidates", len(candidates))
-		return
-	}
-
-	log.Info("CR allocation: writing VM UUID into reservation",
-		"instanceUUID", instanceUUID, "reservation", slotName,
-		"projectID", projectID, "flavorGroup", flavorGroupName, "host", selectedHost)
-
-	vmResources := map[hv1.ResourceName]resource.Quantity{
-		hv1.ResourceMemory: *resource.NewQuantity(vmMemoryBytes, resource.BinarySI),
-		hv1.ResourceCPU:    *resource.NewQuantity(vmCPUs, resource.DecimalSI),
-	}
-	if retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		latest := &v1alpha1.Reservation{}
-		if err := c.Get(ctx, client.ObjectKey{Name: slotName}, latest); err != nil {
-			return err
-		}
-		if latest.Spec.CommittedResourceReservation.Allocations == nil {
-			latest.Spec.CommittedResourceReservation.Allocations = make(map[string]v1alpha1.CommittedResourceAllocation)
-		}
-		latest.Spec.CommittedResourceReservation.Allocations[instanceUUID] = v1alpha1.CommittedResourceAllocation{
-			CreationTimestamp: metav1.Now(),
-			Resources:         vmResources,
-		}
-		return c.Update(ctx, latest)
-	}); retryErr != nil {
-		log.Error(retryErr, "CR allocation: failed to patch reservation",
-			"reservation", slotName, "instanceUUID", instanceUUID)
-		return
-	}
-
-	log.Info("CR allocation: done", "instanceUUID", instanceUUID, "reservation", slotName)
-}
-
-// pickReservationSlot selects the reservation slot with the least remaining
-// memory that can still fully fit vmMemoryBytes.
-// Tiebreaks: least remaining CPU, then reservation name (lexicographic).
-// Returns the slot name, or "" if no slot fits.
-func pickReservationSlot(candidates []v1alpha1.Reservation, vmMemoryBytes int64) string {
-	bestName := ""
-	var bestRemMem, bestRemCPU int64
-
-	for _, res := range candidates {
-		cr := res.Spec.CommittedResourceReservation
-
-		totalMemQ := res.Spec.Resources[hv1.ResourceMemory]
-		totalCPUQ := res.Spec.Resources[hv1.ResourceCPU]
-		totalMem := totalMemQ.Value()
-		totalCPU := totalCPUQ.Value()
-
-		var usedMem, usedCPU int64
-		for _, alloc := range cr.Allocations {
-			memQ := alloc.Resources[hv1.ResourceMemory]
-			cpuQ := alloc.Resources[hv1.ResourceCPU]
-			usedMem += memQ.Value()
-			usedCPU += cpuQ.Value()
-		}
-
-		remMem := max(totalMem-usedMem, 0)
-		remCPU := max(totalCPU-usedCPU, 0)
-
-		if remMem < vmMemoryBytes {
-			continue // Slot doesn't have enough remaining capacity.
-		}
-
-		if bestName == "" ||
-			remMem < bestRemMem ||
-			(remMem == bestRemMem && remCPU < bestRemCPU) ||
-			(remMem == bestRemMem && remCPU == bestRemCPU && res.Name < bestName) {
-			bestName = res.Name
-			bestRemMem = remMem
-			bestRemCPU = remCPU
-		}
-	}
-
-	return bestName
-}
-
-// logNoHostFound logs the context needed to classify no-host-found failures
-// by CR coverage (cases A/B/C/D from ticket #345).
-// TODO(#345): replace with CommittedResource CRD lookup and metric emission.
-func (c *FilterWeigherPipelineController) logNoHostFound(ctx context.Context, decision *v1alpha1.Decision, request api.ExternalSchedulerRequest) {
-	log := ctrl.LoggerFrom(ctx)
-	log.Info("no-host-found for nova scheduling request",
-		"instanceUUID", request.Spec.Data.InstanceUUID,
-		"projectID", request.Context.ProjectID,
-		"flavor", request.Spec.Data.Flavor.Data.Name,
-		"intent", decision.Spec.Intent,
-		"pipeline", decision.Spec.PipelineRef.Name,
-	)
 }
 
 func (c *FilterWeigherPipelineController) upsertHistory(ctx context.Context, decision *v1alpha1.Decision, request *api.ExternalSchedulerRequest, pipelineErr error) {
