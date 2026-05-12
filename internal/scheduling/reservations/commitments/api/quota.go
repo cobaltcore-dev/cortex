@@ -92,11 +92,6 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 		domainName = meta.Domain.Name
 	}
 
-	if domainID == "" {
-		api.quotaError(w, http.StatusBadRequest, "missing domain UUID in project metadata", startTime)
-		return
-	}
-
 	// Fetch flavor groups to determine per-resource RAM unit.
 	// The ProjectQuota CRD stores RAM values in GiB; Limes sends in the declared unit
 	// (slots for fixed-ratio groups, GiB for variable-ratio). Convert on receipt.
