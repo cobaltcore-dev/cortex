@@ -146,15 +146,26 @@ func TestHandleQuota_ErrorCases(t *testing.T) {
 	}
 }
 
+// quotaTestKnowledge1GiB creates a Knowledge CRD for the hana_1 flavor group where
+// SmallestFlavor.MemoryMB = 1024 MiB (1 GiB exactly). With this flavor the slot→GiB
+// conversion is a no-op (1 slot = 1 GiB), so existing expected quota values are unchanged.
+func quotaTestKnowledge1GiB(t *testing.T) *v1alpha1.Knowledge {
+	t.Helper()
+	return createKnowledgeCRD(buildFlavorGroupsKnowledge(
+		[]*TestFlavor{{Name: "hana_c4_m1", Group: "hana_1", MemoryMB: 1024, VCPUs: 4}}, 1,
+	))
+}
+
 func TestHandleQuota_CreateAndUpdate(t *testing.T) {
 	tests := []struct {
 		name string
 		// existing is a set of pre-existing per-AZ CRDs to seed (nil = create, non-nil = update)
 		existing      []*v1alpha1.ProjectQuota
+		knowledge     *v1alpha1.Knowledge // nil = use quotaTestKnowledge1GiB
 		projectID     string
 		resources     map[liquid.ResourceName]liquid.ResourceQuotaRequest
 		metadata      *liquid.ProjectMetadata
-		expectPerAZ   map[string]map[string]int64 // az → resource name → expected quota
+		expectPerAZ   map[string]map[string]int64 // az → resource name → expected GiB quota in CRD
 		expectName    string
 		expectDom     string
 		expectDomName string
@@ -330,7 +341,11 @@ func TestHandleQuota_CreateAndUpdate(t *testing.T) {
 				}
 				builder = builder.WithObjects(objs...)
 			}
-			k8sClient := builder.Build()
+			knowledge := tc.knowledge
+			if knowledge == nil {
+				knowledge = quotaTestKnowledge1GiB(t)
+			}
+			k8sClient := builder.WithObjects(knowledge).Build()
 			httpAPI := NewAPI(k8sClient)
 
 			quotaReq := liquid.ServiceQuotaRequest{
@@ -398,4 +413,81 @@ func TestHandleQuota_CreateAndUpdate(t *testing.T) {
 
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+// TestHandleQuota_KnowledgeNotReady verifies that the quota endpoint returns 503 when
+// the flavor-group Knowledge CRD is absent (needed for unit conversion).
+func TestHandleQuota_KnowledgeNotReady(t *testing.T) {
+	scheme := newTestScheme(t)
+	// No Knowledge CRD — simulates startup before the extractor has run.
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	httpAPI := NewAPI(k8sClient)
+
+	quotaReq := liquid.ServiceQuotaRequest{
+		Resources: map[liquid.ResourceName]liquid.ResourceQuotaRequest{
+			"hw_version_hana_1_ram": {
+				PerAZ: map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest{
+					"az-a": {Quota: 10},
+				},
+			},
+		},
+	}
+	quotaReq.ProjectMetadata = option.Some(liquid.ProjectMetadata{
+		UUID:   "project-test",
+		Domain: liquid.DomainMetadata{UUID: "domain-1"},
+	})
+	body := marshalQuotaReq(t, quotaReq)
+
+	req := httptest.NewRequest(http.MethodPut, "/commitments/v1/projects/project-test/quota", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	httpAPI.HandleQuota(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected 503, got %d", w.Code)
+	}
+}
+
+// TestHandleQuota_UnitConversion verifies that the quota handler converts incoming declared-unit
+// values (slots for fixed-ratio groups) to GiB before writing to the ProjectQuota CRD.
+func TestHandleQuota_UnitConversion(t *testing.T) {
+	scheme := newTestScheme(t)
+
+	// hana_1 group: SmallestFlavor.MemoryMB = 2048 MiB (2 GiB per slot).
+	// Sending 5 slots → expect 5 * 2048 / 1024 = 10 GiB stored.
+	knowledge := createKnowledgeCRD(buildFlavorGroupsKnowledge(
+		[]*TestFlavor{{Name: "hana_c4_m2", Group: "hana_1", MemoryMB: 2048, VCPUs: 4}}, 1,
+	))
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(knowledge).Build()
+	httpAPI := NewAPI(k8sClient)
+
+	quotaReq := liquid.ServiceQuotaRequest{
+		Resources: map[liquid.ResourceName]liquid.ResourceQuotaRequest{
+			"hw_version_hana_1_ram": {
+				PerAZ: map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest{
+					"az-a": {Quota: 5}, // 5 slots × 2 GiB/slot = 10 GiB
+				},
+			},
+		},
+	}
+	quotaReq.ProjectMetadata = option.Some(liquid.ProjectMetadata{
+		UUID:   "project-conv",
+		Domain: liquid.DomainMetadata{UUID: "domain-1"},
+	})
+	body := marshalQuotaReq(t, quotaReq)
+
+	req := httptest.NewRequest(http.MethodPut, "/commitments/v1/projects/project-conv/quota", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	httpAPI.HandleQuota(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var pq v1alpha1.ProjectQuota
+	if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: "quota-project-conv-az-a"}, &pq); err != nil {
+		t.Fatalf("failed to get ProjectQuota CRD: %v", err)
+	}
+	if got := pq.Spec.Quota["hw_version_hana_1_ram"]; got != 10 {
+		t.Errorf("expected stored quota=10 GiB, got %d", got)
+	}
 }
