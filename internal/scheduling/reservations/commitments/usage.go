@@ -509,29 +509,34 @@ func (c *UsageCalculator) buildUsageResponse(
 	// Build ResourceUsageReport for all flavor groups (not just those with fixed ratio)
 	for flavorGroupName := range flavorGroups {
 		// All flavor groups are included in usage reporting.
+		resCfg := config.ResourceConfigForGroup(flavorGroupName)
+
+		// helper: look up stored quota for a resource in a given AZ (stored in GiB).
+		// Returns -1 (infinite) if not found. Unit conversion is done by the caller.
+		lookupQuotaGiB := func(resourceName string, az liquid.AvailabilityZone) int64 {
+			if quotaByResourceAZ == nil {
+				return -1
+			}
+			if azMap, ok := quotaByResourceAZ[resourceName]; ok {
+				if q, ok := azMap[string(az)]; ok {
+					return q
+				}
+			}
+			return -1
+		}
 
 		// === 1. RAM Resource ===
 		ramResourceName := liquid.ResourceName(ResourceNameRAM(flavorGroupName))
 		ramPerAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
-		// Include per-AZ quota for AZSeparatedTopology resources — same condition as info.go.
-		ramHasAZQuota := config.ResourceConfigForGroup(flavorGroupName).RAM.HandlesCommitments
 		for _, az := range allAZs {
 			report := &liquid.AZResourceUsageReport{
 				Usage:        0,
 				Subresources: []liquid.Subresource{},
 			}
-			if ramHasAZQuota {
-				quota := int64(-1) // default: infinite
-				if quotaByResourceAZ != nil {
-					if azMap, ok := quotaByResourceAZ[string(ramResourceName)]; ok {
-						if q, ok := azMap[string(az)]; ok {
-							// CRD stores quota in GiB; convert to declared unit for Limes.
-							fg := flavorGroups[flavorGroupName]
-							quota = fg.GiBToDeclaredUnits(q)
-						}
-					}
-				}
-				report.Quota = Some(quota)
+			if resCfg.RAM.HasQuota {
+				// CRD stores quota in GiB; convert to declared unit for Limes.
+				fg := flavorGroups[flavorGroupName]
+				report.Quota = Some(fg.GiBToDeclaredUnits(lookupQuotaGiB(string(ramResourceName), az)))
 			}
 			ramPerAZ[az] = report
 		}
@@ -541,7 +546,6 @@ func (c *UsageCalculator) buildUsageResponse(
 					continue // skip VMs in AZs not in allAZs
 				}
 				ramPerAZ[az].Usage = data.ramUsage
-				// Subresources are only on instances resource
 			}
 		}
 		resources[ramResourceName] = &liquid.ResourceUsageReport{
@@ -552,10 +556,14 @@ func (c *UsageCalculator) buildUsageResponse(
 		coresResourceName := liquid.ResourceName(ResourceNameCores(flavorGroupName))
 		coresPerAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
 		for _, az := range allAZs {
-			coresPerAZ[az] = &liquid.AZResourceUsageReport{
+			report := &liquid.AZResourceUsageReport{
 				Usage:        0,
 				Subresources: []liquid.Subresource{},
 			}
+			if resCfg.Cores.HasQuota {
+				report.Quota = Some(lookupQuotaGiB(string(coresResourceName), az))
+			}
+			coresPerAZ[az] = report
 		}
 		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
 			for az, data := range azData {
@@ -563,7 +571,6 @@ func (c *UsageCalculator) buildUsageResponse(
 					continue // skip VMs in AZs not in allAZs
 				}
 				coresPerAZ[az].Usage = data.coresUsage
-				// Subresources are only on instances resource
 			}
 		}
 		resources[coresResourceName] = &liquid.ResourceUsageReport{
@@ -574,10 +581,14 @@ func (c *UsageCalculator) buildUsageResponse(
 		instancesResourceName := liquid.ResourceName(ResourceNameInstances(flavorGroupName))
 		instancesPerAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceUsageReport)
 		for _, az := range allAZs {
-			instancesPerAZ[az] = &liquid.AZResourceUsageReport{
+			report := &liquid.AZResourceUsageReport{
 				Usage:        0,
 				Subresources: []liquid.Subresource{},
 			}
+			if resCfg.Instances.HasQuota {
+				report.Quota = Some(lookupQuotaGiB(string(instancesResourceName), az))
+			}
+			instancesPerAZ[az] = report
 		}
 		if azData, exists := usageByFlavorGroupAZ[flavorGroupName]; exists {
 			for az, data := range azData {

@@ -247,7 +247,7 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 		t.Error("hw_version_hana_fixed_ram: expected HasQuota=true (fixed ratio groups accept quotas)")
 	}
 
-	// Test Cores resource: hw_version_hana_fixed_cores (HandlesCommitments=false → AZAwareTopology)
+	// Test Cores resource: hw_version_hana_fixed_cores
 	coresResource, ok := serviceInfo.Resources["hw_version_hana_fixed_cores"]
 	if !ok {
 		t.Fatal("expected hw_version_hana_fixed_cores resource to exist")
@@ -258,14 +258,14 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 	if coresResource.HandlesCommitments {
 		t.Error("hw_version_hana_fixed_cores: expected HandlesCommitments=false")
 	}
-	if coresResource.Topology != liquid.AZAwareTopology {
-		t.Errorf("hw_version_hana_fixed_cores: expected Topology=%q, got %q", liquid.AZAwareTopology, coresResource.Topology)
+	if coresResource.Topology != liquid.AZSeparatedTopology {
+		t.Errorf("hw_version_hana_fixed_cores: expected Topology=%q, got %q", liquid.AZSeparatedTopology, coresResource.Topology)
 	}
 	if coresResource.HasQuota {
 		t.Error("hw_version_hana_fixed_cores: expected HasQuota=false")
 	}
 
-	// Test Instances resource: hw_version_hana_fixed_instances (HandlesCommitments=false → AZAwareTopology)
+	// Test Instances resource: hw_version_hana_fixed_instances
 	instancesResource, ok := serviceInfo.Resources["hw_version_hana_fixed_instances"]
 	if !ok {
 		t.Fatal("expected hw_version_hana_fixed_instances resource to exist")
@@ -276,8 +276,8 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 	if instancesResource.HandlesCommitments {
 		t.Error("hw_version_hana_fixed_instances: expected HandlesCommitments=false")
 	}
-	if instancesResource.Topology != liquid.AZAwareTopology {
-		t.Errorf("hw_version_hana_fixed_instances: expected Topology=%q, got %q", liquid.AZAwareTopology, instancesResource.Topology)
+	if instancesResource.Topology != liquid.AZSeparatedTopology {
+		t.Errorf("hw_version_hana_fixed_instances: expected Topology=%q, got %q", liquid.AZSeparatedTopology, instancesResource.Topology)
 	}
 	if instancesResource.HasQuota {
 		t.Error("hw_version_hana_fixed_instances: expected HasQuota=false")
@@ -294,8 +294,8 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 	if v2RamResource.HandlesCommitments {
 		t.Error("hw_version_v2_variable_ram: expected HandlesCommitments=false (not in config)")
 	}
-	if v2RamResource.Topology != liquid.AZAwareTopology {
-		t.Errorf("hw_version_v2_variable_ram: expected Topology=%q, got %q", liquid.AZAwareTopology, v2RamResource.Topology)
+	if v2RamResource.Topology != liquid.AZSeparatedTopology {
+		t.Errorf("hw_version_v2_variable_ram: expected Topology=%q, got %q", liquid.AZSeparatedTopology, v2RamResource.Topology)
 	}
 	if v2RamResource.HasQuota {
 		t.Error("hw_version_v2_variable_ram: expected HasQuota=false (variable ratio)")
@@ -311,8 +311,8 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 	if v2CoresResource.HandlesCommitments {
 		t.Error("hw_version_v2_variable_cores: expected HandlesCommitments=false")
 	}
-	if v2CoresResource.Topology != liquid.AZAwareTopology {
-		t.Errorf("hw_version_v2_variable_cores: expected Topology=%q, got %q", liquid.AZAwareTopology, v2CoresResource.Topology)
+	if v2CoresResource.Topology != liquid.AZSeparatedTopology {
+		t.Errorf("hw_version_v2_variable_cores: expected Topology=%q, got %q", liquid.AZSeparatedTopology, v2CoresResource.Topology)
 	}
 	if v2CoresResource.HasQuota {
 		t.Error("hw_version_v2_variable_cores: expected HasQuota=false")
@@ -328,8 +328,8 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 	if v2InstancesResource.HandlesCommitments {
 		t.Error("hw_version_v2_variable_instances: expected HandlesCommitments=false")
 	}
-	if v2InstancesResource.Topology != liquid.AZAwareTopology {
-		t.Errorf("hw_version_v2_variable_instances: expected Topology=%q, got %q", liquid.AZAwareTopology, v2InstancesResource.Topology)
+	if v2InstancesResource.Topology != liquid.AZSeparatedTopology {
+		t.Errorf("hw_version_v2_variable_instances: expected Topology=%q, got %q", liquid.AZSeparatedTopology, v2InstancesResource.Topology)
 	}
 	if v2InstancesResource.HasQuota {
 		t.Error("hw_version_v2_variable_instances: expected HasQuota=false")
@@ -341,17 +341,22 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 	// v2_variable has ramCoreRatioMin=2048 MiB/vCPU, ramCoreRatioMax=16384 MiB/vCPU → expect 2, 16 GiB/vCPU.
 	checkAttrsRatio(t, "hw_version_v2_variable_ram", v2RamResource.Attributes, 0, ptr(uint64(2)), ptr(uint64(16)))
 
-	// Verify RAM units: fixed-ratio groups use UnitNone (slot-based), variable-ratio use UnitGibibytes.
-	if ramResource.Unit != liquid.UnitNone {
-		t.Errorf("hw_version_hana_fixed_ram: expected Unit=%q (slot-based), got %q", liquid.UnitNone, ramResource.Unit)
+	// Verify RAM units: fixed-ratio groups use smallest-flavor-based unit (e.g. "16 GiB"),
+	// variable-ratio groups use UnitGibibytes ("GiB").
+	expectedFixedUnit, err := liquid.UnitMebibytes.MultiplyBy(16384) // hana_fixed smallest flavor: 16384 MiB = 16 GiB
+	if err != nil {
+		t.Fatalf("failed to create expected fixed unit: %v", err)
+	}
+	if ramResource.Unit != expectedFixedUnit {
+		t.Errorf("hw_version_hana_fixed_ram: expected Unit=%q (slot-based), got %q", expectedFixedUnit, ramResource.Unit)
 	}
 	if v2RamResource.Unit != liquid.UnitGibibytes {
 		t.Errorf("hw_version_v2_variable_ram: expected Unit=%q, got %q", liquid.UnitGibibytes, v2RamResource.Unit)
 	}
 }
 
-func TestHandleInfo_TopologyFollowsHandlesCommitments(t *testing.T) {
-	// Verifies that any resource with HandlesCommitments=true gets AZSeparatedTopology,
+func TestHandleInfo_AllResourcesAZSeparated(t *testing.T) {
+	// Verifies that all resources always get AZSeparatedTopology.
 	// regardless of whether it's RAM, Cores, or Instances.
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {

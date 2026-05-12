@@ -29,7 +29,7 @@ func (api *HTTPAPI) recordMetrics(req liquid.CommitmentChangeRequest, resp liqui
 	}
 
 	// Record commitment changes counter
-	api.monitor.commitmentChanges.WithLabelValues(result).Add(float64(commitmentCount))
+	api.monitor.commitmentChanges.WithLabelValues(result, string(req.AZ)).Add(float64(commitmentCount))
 }
 
 // countCommitments counts the total number of commitments in a request.

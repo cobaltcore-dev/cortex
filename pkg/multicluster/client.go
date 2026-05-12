@@ -641,7 +641,13 @@ func (c *subResourceClient) Apply(ctx context.Context, obj runtime.ApplyConfigur
 // Index a field for a resource in all matching cluster caches.
 // Usually, you want to index the same field in both the object and list type,
 // as both would be mapped to individual clients based on their GVK.
+//
+// Per-cluster errors are logged and skipped — a temporarily-unreachable cluster
+// does not prevent index setup for the other clusters. This mirrors the List
+// error-handling pattern: the affected cluster's objects will be silently absent
+// from MatchingFields queries until the index is established (e.g. after restart).
 func (c *Client) IndexField(ctx context.Context, obj client.Object, list client.ObjectList, field string, extractValue client.IndexerFunc) error {
+	log := ctrl.LoggerFrom(ctx)
 	gvk, err := c.GVKFromHomeScheme(obj)
 	if err != nil {
 		return err
@@ -663,7 +669,8 @@ func (c *Client) IndexField(ctx context.Context, obj client.Object, list client.
 		}
 		indexed[ch] = true
 		if err := ch.IndexField(ctx, obj, field, extractValue); err != nil {
-			return err
+			log.Error(err, "failed to register field index for cluster — objects from this cluster will be absent from index queries; restart required to recover", "field", field)
+			continue
 		}
 	}
 	clustersList, err := c.ClustersForGVK(gvkList)
@@ -677,7 +684,8 @@ func (c *Client) IndexField(ctx context.Context, obj client.Object, list client.
 		}
 		indexed[ch] = true
 		if err := ch.IndexField(ctx, obj, field, extractValue); err != nil {
-			return err
+			log.Error(err, "failed to register field index for cluster — objects from this cluster will be absent from index queries; restart required to recover", "field", field)
+			continue
 		}
 	}
 	return nil

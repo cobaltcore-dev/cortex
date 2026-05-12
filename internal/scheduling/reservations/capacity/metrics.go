@@ -20,53 +20,47 @@ var (
 // Monitor provides Prometheus metrics for FlavorGroupCapacity CRDs.
 // It implements prometheus.Collector and reads CRD status on each Collect call.
 type Monitor struct {
-	client               client.Client
-	totalCapacityVMSlots *prometheus.GaugeVec
-	placeableVMs         *prometheus.GaugeVec
-	totalCapacityHosts   *prometheus.GaugeVec
-	placeableHosts       *prometheus.GaugeVec
-	totalInstances       *prometheus.GaugeVec
-	committedCapacity    *prometheus.GaugeVec
+	client            client.Client
+	vmSlotsEmpty      *prometheus.GaugeVec
+	vmSlotsPlaceable  *prometheus.GaugeVec
+	hostsEmpty        *prometheus.GaugeVec
+	hostsPlaceable    *prometheus.GaugeVec
+	committedCapacity *prometheus.GaugeVec
 }
 
 // NewMonitor creates a new Monitor that reads FlavorGroupCapacity CRDs.
 func NewMonitor(c client.Client) Monitor {
 	return Monitor{
 		client: c,
-		totalCapacityVMSlots: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "cortex_committed_resource_capacity_total",
-			Help: "Total schedulable slots in an empty-datacenter scenario per flavor.",
+		vmSlotsEmpty: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_committed_resource_capacity_vm_slots_empty_datacenter",
+			Help: "Schedulable VM slots per flavor assuming an empty datacenter (no existing VMs).",
 		}, capacityFlavorLabels),
-		placeableVMs: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "cortex_committed_resource_capacity_placeable",
-			Help: "Schedulable slots remaining given current VM allocations per flavor.",
+		vmSlotsPlaceable: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_committed_resource_capacity_vm_slots_placeable",
+			Help: "Schedulable VM slots remaining per flavor given current VM allocations.",
 		}, capacityFlavorLabels),
-		totalCapacityHosts: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "cortex_committed_resource_capacity_hosts_total",
-			Help: "Number of hosts eligible for this flavor in the empty-state probe.",
+		hostsEmpty: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_committed_resource_capacity_hosts_empty_datacenter",
+			Help: "Number of hosts eligible for this flavor assuming an empty datacenter.",
 		}, capacityFlavorLabels),
-		placeableHosts: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		hostsPlaceable: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "cortex_committed_resource_capacity_hosts_placeable",
 			Help: "Number of hosts still able to accept a new VM of this flavor.",
 		}, capacityFlavorLabels),
-		totalInstances: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "cortex_committed_resource_capacity_instances",
-			Help: "Total VM instances running on hypervisors in this AZ (not filtered by flavor group).",
-		}, capacityLabels),
 		committedCapacity: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "cortex_committed_resource_capacity_committed",
-			Help: "Sum of AcceptedAmount across Ready CommittedResource CRDs for this flavor group and AZ.",
+			Name: "cortex_committed_resource_committed_gib",
+			Help: "Sum of AcceptedAmount in GiB across Ready CommittedResource CRDs for this flavor group and AZ.",
 		}, capacityLabels),
 	}
 }
 
 // Describe implements prometheus.Collector.
 func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
-	m.totalCapacityVMSlots.Describe(ch)
-	m.placeableVMs.Describe(ch)
-	m.totalCapacityHosts.Describe(ch)
-	m.placeableHosts.Describe(ch)
-	m.totalInstances.Describe(ch)
+	m.vmSlotsEmpty.Describe(ch)
+	m.vmSlotsPlaceable.Describe(ch)
+	m.hostsEmpty.Describe(ch)
+	m.hostsPlaceable.Describe(ch)
 	m.committedCapacity.Describe(ch)
 }
 
@@ -81,11 +75,10 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	// Reset all gauges so deleted CRDs don't linger.
-	m.totalCapacityVMSlots.Reset()
-	m.placeableVMs.Reset()
-	m.totalCapacityHosts.Reset()
-	m.placeableHosts.Reset()
-	m.totalInstances.Reset()
+	m.vmSlotsEmpty.Reset()
+	m.vmSlotsPlaceable.Reset()
+	m.hostsEmpty.Reset()
+	m.hostsPlaceable.Reset()
 	m.committedCapacity.Reset()
 
 	for _, crd := range list.Items {
@@ -93,7 +86,6 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 			"flavor_group": crd.Spec.FlavorGroup,
 			"az":           crd.Spec.AvailabilityZone,
 		}
-		m.totalInstances.With(groupAZLabels).Set(float64(crd.Status.TotalInstances))
 		m.committedCapacity.With(groupAZLabels).Set(float64(crd.Status.CommittedCapacity))
 
 		for _, f := range crd.Status.Flavors {
@@ -102,17 +94,16 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 				"az":           crd.Spec.AvailabilityZone,
 				"flavor_name":  f.FlavorName,
 			}
-			m.totalCapacityVMSlots.With(flavorLabels).Set(float64(f.TotalCapacityVMSlots))
-			m.placeableVMs.With(flavorLabels).Set(float64(f.PlaceableVMs))
-			m.totalCapacityHosts.With(flavorLabels).Set(float64(f.TotalCapacityHosts))
-			m.placeableHosts.With(flavorLabels).Set(float64(f.PlaceableHosts))
+			m.vmSlotsEmpty.With(flavorLabels).Set(float64(f.TotalCapacityVMSlots))
+			m.vmSlotsPlaceable.With(flavorLabels).Set(float64(f.PlaceableVMs))
+			m.hostsEmpty.With(flavorLabels).Set(float64(f.TotalCapacityHosts))
+			m.hostsPlaceable.With(flavorLabels).Set(float64(f.PlaceableHosts))
 		}
 	}
 
-	m.totalCapacityVMSlots.Collect(ch)
-	m.placeableVMs.Collect(ch)
-	m.totalCapacityHosts.Collect(ch)
-	m.placeableHosts.Collect(ch)
-	m.totalInstances.Collect(ch)
+	m.vmSlotsEmpty.Collect(ch)
+	m.vmSlotsPlaceable.Collect(ch)
+	m.hostsEmpty.Collect(ch)
+	m.hostsPlaceable.Collect(ch)
 	m.committedCapacity.Collect(ch)
 }
