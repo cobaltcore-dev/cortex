@@ -27,8 +27,8 @@ type Options struct {
 
 	// SkipHistory skips recording the placement decision in placement history.
 	SkipHistory bool `json:"skip_history,omitempty"`
-	// CreateInflight creates pessimistic blocking reservations.
-	CreateInflight bool `json:"create_inflight,omitempty"`
+	// SkipInflight skips creating pessimistic blocking reservations for returned candidates.
+	SkipInflight bool `json:"skip_inflight,omitempty"`
 }
 
 // Validate checks for mutually exclusive or inconsistent option combinations.
@@ -36,7 +36,7 @@ func (o Options) Validate() error {
 	if o.ReadOnly && !o.SkipHistory {
 		return errors.New("read-only runs must not write scheduling history: set SkipHistory=true")
 	}
-	if o.ReadOnly && o.CreateInflight {
+	if o.ReadOnly && !o.SkipInflight {
 		return errors.New("read-only runs cannot create inflight reservations")
 	}
 	return nil

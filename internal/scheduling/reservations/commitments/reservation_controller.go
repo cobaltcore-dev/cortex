@@ -294,7 +294,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		IgnoredReservationTypes: nil,
 		MaxCandidates:           1,
 		SkipHistory:             true,
-		CreateInflight:          false, // not a VM placement; no pessimistic blocking needed
+		SkipInflight:            false, // TODO pessimistic blocking needed, will be addressed in follow up ticket
 	}
 
 	scheduleResp, err := r.SchedulerClient.ScheduleReservation(ctx, scheduleReq, scheduleOpts)

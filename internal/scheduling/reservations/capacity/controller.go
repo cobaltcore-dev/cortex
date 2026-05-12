@@ -150,10 +150,11 @@ func (c *Controller) reconcileOne(
 
 		totalVMSlots, totalHosts, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName, scheduling.Options{
 			SkipHistory:             true,
+			SkipInflight:            true,
 			AssumeEmptyHosts:        true,
 			IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
 		})
-		placeableVMs, placeableHosts, placeableErr := c.probeScheduler(ctx, flavor, az, c.config.PlaceablePipeline, hvByName, scheduling.Options{SkipHistory: true})
+		placeableVMs, placeableHosts, placeableErr := c.probeScheduler(ctx, flavor, az, c.config.PlaceablePipeline, hvByName, scheduling.Options{SkipHistory: true, SkipInflight: true})
 
 		if totalErr != nil {
 			allFresh = false

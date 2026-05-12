@@ -123,7 +123,7 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 
 	logger := LoggerFromContext(ctx)
 
-	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineReuseFailoverReservation, resSpec, scheduling.Options{ReadOnly: true, SkipHistory: true})
+	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineReuseFailoverReservation, resSpec, scheduling.Options{ReadOnly: true, SkipHistory: true, SkipInflight: true})
 	if err != nil {
 		logger.Error(err, "failed to get potential hypervisors for VM", "vmUUID", vm.UUID)
 		return nil
@@ -224,7 +224,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		"vmCurrentHost", vm.CurrentHypervisor,
 		"pipeline", PipelineAcknowledgeFailoverReservation)
 
-	resp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq, scheduling.Options{ReadOnly: true, LockReservations: true, SkipHistory: true})
+	resp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq, scheduling.Options{ReadOnly: true, LockReservations: true, SkipHistory: true, SkipInflight: true})
 	if err != nil {
 		logger.Error(err, "failed to validate VM for reservation host", "vmUUID", vm.UUID, "reservationHost", reservationHost)
 		return false, fmt.Errorf("failed to validate VM for reservation host: %w", err)
@@ -266,7 +266,7 @@ func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 
 	// Get potential hypervisors from scheduler using the reservation spec resources
 	// (which may be sized to the LargestFlavor from the flavor group)
-	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineNewFailoverReservation, resSpec, scheduling.Options{LockReservations: true, SkipHistory: true})
+	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineNewFailoverReservation, resSpec, scheduling.Options{LockReservations: true, SkipHistory: true, SkipInflight: true})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get potential hypervisors for VM: %w", err)
 	}

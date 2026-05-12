@@ -71,6 +71,8 @@ Pipelines bundle scheduling steps together. Filters are mandatory, while weigher
 
 The state of the pipeline is propagated automatically through the states of its steps. Check the pipeline state object to determine if the pipeline can currently be executed or not.
 
+Pipeline behavior has two configuration layers: static per-step params defined in the Pipeline CRD YAML (thresholds, weights, traits), and call-time `Options` set by the controller invoking the pipeline (e.g. whether to record history, lock reservations, or skip VM allocation accounting). See [Pipeline Scheduling Options](configurable-pipeline-concept.md) for details.
+
 ### Decisions
 
 ```bash
