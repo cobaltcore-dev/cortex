@@ -133,17 +133,15 @@ func TestIndexFields_RegistersAllIndexes(t *testing.T) {
 	}
 }
 
-func TestIndexFields_PropagatesError(t *testing.T) {
-	wantErr := errors.New("cache failure")
-	cc := &captureCache{err: wantErr}
+func TestIndexFields_ToleratesClusterError(t *testing.T) {
+	// A failing cluster cache should not prevent index setup for other clusters.
+	// The multicluster IndexField logs per-cluster errors and continues, so
+	// IndexFields must return nil even when every cache call fails.
+	cc := &captureCache{err: errors.New("cache failure")}
 	mcl := buildClient(t, cc)
 
-	err := IndexFields(context.Background(), mcl)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !errors.Is(err, wantErr) {
-		t.Errorf("got %v, want %v", err, wantErr)
+	if err := IndexFields(context.Background(), mcl); err != nil {
+		t.Fatalf("expected nil, got %v", err)
 	}
 }
 
