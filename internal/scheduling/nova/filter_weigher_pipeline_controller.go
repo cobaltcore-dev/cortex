@@ -14,11 +14,14 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/weighers"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -62,7 +65,7 @@ func (c *FilterWeigherPipelineController) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	old := decision.DeepCopy()
-	if err := c.process(ctx, decision); err != nil {
+	if _, err := c.process(ctx, decision); err != nil {
 		return ctrl.Result{}, err
 	}
 	patch := client.MergeFrom(old)
@@ -74,14 +77,16 @@ func (c *FilterWeigherPipelineController) Reconcile(ctx context.Context, req ctr
 
 // Process the decision from the API. Should create and return the updated decision.
 func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error {
-	c.processMu.Lock()
-	defer c.processMu.Unlock()
-
+	// Early check before acquiring the mutex — no need to hold the lock just to fail.
 	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
 	if !ok {
 		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
 	}
-	err := c.process(ctx, decision)
+
+	c.processMu.Lock()
+	defer c.processMu.Unlock()
+
+	request, err := c.process(ctx, decision)
 	if err != nil {
 		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.DecisionConditionReady,
@@ -98,25 +103,195 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 		})
 	}
 	if pipelineConf.Spec.CreateHistory {
-		c.upsertHistory(ctx, decision, err)
+		c.upsertHistory(ctx, decision, request, err)
+		if err == nil && decision.Status.Result != nil && request != nil {
+			if decision.Status.Result.TargetHost != nil && isUserVMPlacement(decision.Spec.Intent) {
+				c.recordCRAllocation(ctx, decision, *request)
+			}
+			if decision.Status.Result.TargetHost == nil {
+				c.logNoHostFound(ctx, decision, *request)
+			}
+		}
 	}
 	return err
 }
 
-func (c *FilterWeigherPipelineController) upsertHistory(ctx context.Context, decision *v1alpha1.Decision, pipelineErr error) {
+// isUserVMPlacement returns true for intents that represent actual VM
+// placements from Nova. Returns false for Cortex-internal synthetic requests
+// (failover and CR reservation scheduling), which must not update allocations.
+func isUserVMPlacement(intent v1alpha1.SchedulingIntent) bool {
+	switch intent {
+	case api.ReserveForCommittedResourceIntent, api.ReserveForFailoverIntent:
+		return false
+	default:
+		return true
+	}
+}
+
+// recordCRAllocation writes the placed VM UUID into the matching Reservation
+// Spec.CommittedResourceReservation.Allocations after a successful Nova placement.
+// Best-effort: any failure is logged but never propagated to the caller.
+func (c *FilterWeigherPipelineController) recordCRAllocation(ctx context.Context, decision *v1alpha1.Decision, request api.ExternalSchedulerRequest) {
+	log := ctrl.LoggerFrom(ctx)
+
+	instanceUUID := request.Spec.Data.InstanceUUID
+	projectID := request.Context.ProjectID
+	flavorName := request.Spec.Data.Flavor.Data.Name
+	selectedHost := *decision.Status.Result.TargetHost
+
+	// Resolve flavor → flavor group. Flavors not in any group are PAYG — nothing to do.
+	fgClient := reservations.FlavorGroupKnowledgeClient{Client: c.Client}
+	flavorGroups, err := fgClient.GetAllFlavorGroups(ctx, nil)
+	if err != nil {
+		log.Error(err, "CR allocation: failed to get flavor groups", "instanceUUID", instanceUUID)
+		return
+	}
+	flavorGroupName, flavorInGroup, err := reservations.FindFlavorInGroups(flavorName, flavorGroups)
+	if err != nil {
+		log.V(1).Info("CR allocation: flavor not in any group, PAYG placement", "flavor", flavorName)
+		return
+	}
+
+	// List all CR reservations and filter to candidates matching this placement.
+	var reservationList v1alpha1.ReservationList
+	if err := c.List(ctx, &reservationList,
+		client.MatchingLabels{v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource},
+	); err != nil {
+		log.Error(err, "CR allocation: failed to list reservations", "instanceUUID", instanceUUID)
+		return
+	}
+
+	var candidates []v1alpha1.Reservation
+	for _, res := range reservationList.Items {
+		cr := res.Spec.CommittedResourceReservation
+		if cr == nil {
+			continue
+		}
+		if res.Spec.TargetHost != selectedHost || cr.ProjectID != projectID || cr.ResourceGroup != flavorGroupName {
+			continue
+		}
+		// Idempotency: if this VM UUID is already recorded, the work is done.
+		if _, exists := cr.Allocations[instanceUUID]; exists {
+			log.Info("CR allocation: VM UUID already in reservation, skipping",
+				"instanceUUID", instanceUUID, "reservation", res.Name)
+			return
+		}
+		candidates = append(candidates, res)
+	}
+
+	if len(candidates) == 0 {
+		log.V(1).Info("CR allocation: no matching reservation slot, PAYG placement",
+			"instanceUUID", instanceUUID, "host", selectedHost,
+			"projectID", projectID, "flavorGroup", flavorGroupName)
+		return
+	}
+
+	vmMemoryBytes := int64(flavorInGroup.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory bounded by specs
+	vmCPUs := int64(flavorInGroup.VCPUs)                         //nolint:gosec // VCPUs bounded by specs
+
+	slotName := pickReservationSlot(candidates, vmMemoryBytes)
+	if slotName == "" {
+		log.Error(nil, "CR allocation: no reservation slot has sufficient remaining capacity",
+			"instanceUUID", instanceUUID, "vmMemoryBytes", vmMemoryBytes,
+			"host", selectedHost, "candidates", len(candidates))
+		return
+	}
+
+	log.Info("CR allocation: writing VM UUID into reservation",
+		"instanceUUID", instanceUUID, "reservation", slotName,
+		"projectID", projectID, "flavorGroup", flavorGroupName, "host", selectedHost)
+
+	vmResources := map[hv1.ResourceName]resource.Quantity{
+		hv1.ResourceMemory: *resource.NewQuantity(vmMemoryBytes, resource.BinarySI),
+		hv1.ResourceCPU:    *resource.NewQuantity(vmCPUs, resource.DecimalSI),
+	}
+	if retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &v1alpha1.Reservation{}
+		if err := c.Get(ctx, client.ObjectKey{Name: slotName}, latest); err != nil {
+			return err
+		}
+		if latest.Spec.CommittedResourceReservation.Allocations == nil {
+			latest.Spec.CommittedResourceReservation.Allocations = make(map[string]v1alpha1.CommittedResourceAllocation)
+		}
+		latest.Spec.CommittedResourceReservation.Allocations[instanceUUID] = v1alpha1.CommittedResourceAllocation{
+			CreationTimestamp: metav1.Now(),
+			Resources:         vmResources,
+		}
+		return c.Update(ctx, latest)
+	}); retryErr != nil {
+		log.Error(retryErr, "CR allocation: failed to patch reservation",
+			"reservation", slotName, "instanceUUID", instanceUUID)
+		return
+	}
+
+	log.Info("CR allocation: done", "instanceUUID", instanceUUID, "reservation", slotName)
+}
+
+// pickReservationSlot selects the reservation slot with the least remaining
+// memory that can still fully fit vmMemoryBytes.
+// Tiebreaks: least remaining CPU, then reservation name (lexicographic).
+// Returns the slot name, or "" if no slot fits.
+func pickReservationSlot(candidates []v1alpha1.Reservation, vmMemoryBytes int64) string {
+	bestName := ""
+	var bestRemMem, bestRemCPU int64
+
+	for _, res := range candidates {
+		cr := res.Spec.CommittedResourceReservation
+
+		totalMemQ := res.Spec.Resources[hv1.ResourceMemory]
+		totalCPUQ := res.Spec.Resources[hv1.ResourceCPU]
+		totalMem := totalMemQ.Value()
+		totalCPU := totalCPUQ.Value()
+
+		var usedMem, usedCPU int64
+		for _, alloc := range cr.Allocations {
+			memQ := alloc.Resources[hv1.ResourceMemory]
+			cpuQ := alloc.Resources[hv1.ResourceCPU]
+			usedMem += memQ.Value()
+			usedCPU += cpuQ.Value()
+		}
+
+		remMem := max(totalMem-usedMem, 0)
+		remCPU := max(totalCPU-usedCPU, 0)
+
+		if remMem < vmMemoryBytes {
+			continue // Slot doesn't have enough remaining capacity.
+		}
+
+		if bestName == "" ||
+			remMem < bestRemMem ||
+			(remMem == bestRemMem && remCPU < bestRemCPU) ||
+			(remMem == bestRemMem && remCPU == bestRemCPU && res.Name < bestName) {
+			bestName = res.Name
+			bestRemMem = remMem
+			bestRemCPU = remCPU
+		}
+	}
+
+	return bestName
+}
+
+// logNoHostFound logs the context needed to classify no-host-found failures
+// by CR coverage (cases A/B/C/D from ticket #345).
+// TODO(#345): replace with CommittedResource CRD lookup and metric emission.
+func (c *FilterWeigherPipelineController) logNoHostFound(ctx context.Context, decision *v1alpha1.Decision, request api.ExternalSchedulerRequest) {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("no-host-found for nova scheduling request",
+		"instanceUUID", request.Spec.Data.InstanceUUID,
+		"projectID", request.Context.ProjectID,
+		"flavor", request.Spec.Data.Flavor.Data.Name,
+		"intent", decision.Spec.Intent,
+		"pipeline", decision.Spec.PipelineRef.Name,
+	)
+}
+
+func (c *FilterWeigherPipelineController) upsertHistory(ctx context.Context, decision *v1alpha1.Decision, request *api.ExternalSchedulerRequest, pipelineErr error) {
 	log := ctrl.LoggerFrom(ctx)
 
 	var az *string
-
-	if decision.Spec.NovaRaw != nil {
-		var request api.ExternalSchedulerRequest
-		err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request)
-		if err != nil {
-			log.Error(err, "failed to unmarshal novaRaw for history, using defaults")
-		} else {
-			azStr := request.Spec.Data.AvailabilityZone
-			az = &azStr
-		}
+	if request != nil {
+		azStr := request.Spec.Data.AvailabilityZone
+		az = &azStr
 	}
 
 	if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, az, pipelineErr); upsertErr != nil {
@@ -124,23 +299,23 @@ func (c *FilterWeigherPipelineController) upsertHistory(ctx context.Context, dec
 	}
 }
 
-func (c *FilterWeigherPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
+func (c *FilterWeigherPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) (*api.ExternalSchedulerRequest, error) {
 	log := ctrl.LoggerFrom(ctx)
 	startedAt := time.Now() // So we can measure sync duration.
 
 	pipeline, ok := c.Pipelines[decision.Spec.PipelineRef.Name]
 	if !ok {
 		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
-		return errors.New("pipeline not found or not ready")
+		return nil, errors.New("pipeline not found or not ready")
 	}
 	if decision.Spec.NovaRaw == nil {
 		log.Error(nil, "skipping decision, no novaRaw spec defined")
-		return errors.New("no novaRaw spec defined")
+		return nil, errors.New("no novaRaw spec defined")
 	}
 	var request api.ExternalSchedulerRequest
 	if err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request); err != nil {
 		log.Error(err, "failed to unmarshal novaRaw spec")
-		return err
+		return nil, err
 	}
 
 	if intent, err := request.GetIntent(); err != nil {
@@ -155,13 +330,13 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
 	if !ok {
 		log.Error(nil, "pipeline config not found", "pipelineName", decision.Spec.PipelineRef.Name)
-		return errors.New("pipeline config not found")
+		return nil, errors.New("pipeline config not found")
 	}
 	if pipelineConf.Spec.IgnorePreselection {
 		log.Info("gathering all placement candidates before filtering")
 		if err := c.gatherer.MutateWithAllCandidates(ctx, &request); err != nil {
 			log.Error(err, "failed to gather all placement candidates")
-			return err
+			return nil, err
 		}
 		log.Info("gathered all placement candidates", "numHosts", len(request.Hosts))
 	}
@@ -169,7 +344,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	result, err := pipeline.Run(request)
 	if err != nil {
 		log.Error(err, "failed to run pipeline")
-		return err
+		return nil, err
 	}
 	decision.Status.Result = &result
 	meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
@@ -179,7 +354,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		Message: "pipeline run succeeded",
 	})
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
-	return nil
+	return &request, nil
 }
 
 // The base controller will delegate the pipeline creation down to this method.
