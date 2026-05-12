@@ -137,12 +137,6 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 
 		// === 1. RAM Resource ===
 		ramResourceName := liquid.ResourceName(commitments.ResourceNameRAM(groupName))
-		// Determine topology: AZSeparatedTopology only for groups that accept commitments
-		// (AZSeparatedTopology means quota is also AZ-aware, required when HasQuota=true)
-		ramTopology := liquid.AZAwareTopology
-		if resCfg.RAM.HandlesCommitments {
-			ramTopology = liquid.AZSeparatedTopology
-		}
 		// Fixed-ratio groups: unit = smallest flavor's RAM in MiB (e.g. "480 GiB" for hana);
 		// variable-ratio groups: unit = 1 GiB.  RAMUnitMiB() encodes both cases.
 		ramUnit, err := liquid.UnitMebibytes.MultiplyBy(groupData.RAMUnitMiB())
@@ -158,7 +152,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 		resources[ramResourceName] = liquid.ResourceInfo{
 			DisplayName:         ramDisplayName,
 			Unit:                ramUnit,
-			Topology:            ramTopology,
+			Topology:            liquid.AZSeparatedTopology,
 			NeedsResourceDemand: false,
 			HasCapacity:         resCfg.RAM.HasCapacity,
 			HasQuota:            resCfg.RAM.HasQuota,
@@ -168,17 +162,13 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 
 		// === 2. Cores Resource ===
 		coresResourceName := liquid.ResourceName(commitments.ResourceNameCores(groupName))
-		coresTopology := liquid.AZAwareTopology
-		if resCfg.Cores.HandlesCommitments {
-			coresTopology = liquid.AZSeparatedTopology
-		}
 		resources[coresResourceName] = liquid.ResourceInfo{
 			DisplayName: fmt.Sprintf(
 				"CPU cores (usable by: %s)",
 				flavorListStr,
 			),
 			Unit:                liquid.UnitNone,
-			Topology:            coresTopology,
+			Topology:            liquid.AZSeparatedTopology,
 			NeedsResourceDemand: false,
 			HasCapacity:         resCfg.Cores.HasCapacity,
 			HasQuota:            resCfg.Cores.HasQuota,
@@ -188,17 +178,13 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 
 		// === 3. Instances Resource ===
 		instancesResourceName := liquid.ResourceName(commitments.ResourceNameInstances(groupName))
-		instancesTopology := liquid.AZAwareTopology
-		if resCfg.Instances.HandlesCommitments {
-			instancesTopology = liquid.AZSeparatedTopology
-		}
 		resources[instancesResourceName] = liquid.ResourceInfo{
 			DisplayName: fmt.Sprintf(
 				"instances (usable by: %s)",
 				flavorListStr,
 			),
 			Unit:                liquid.UnitNone,
-			Topology:            instancesTopology,
+			Topology:            liquid.AZSeparatedTopology,
 			NeedsResourceDemand: false,
 			HasCapacity:         resCfg.Instances.HasCapacity,
 			HasQuota:            resCfg.Instances.HasQuota,
