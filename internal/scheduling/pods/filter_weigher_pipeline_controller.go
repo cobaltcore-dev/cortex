@@ -6,7 +6,6 @@ package pods
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -95,10 +94,6 @@ func (c *FilterWeigherPipelineController) ProcessNewPod(ctx context.Context, pod
 		},
 	}
 
-	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
-	if !ok {
-		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
-	}
 	err := c.process(ctx, decision)
 	if err != nil {
 		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
@@ -114,11 +109,6 @@ func (c *FilterWeigherPipelineController) ProcessNewPod(ctx context.Context, pod
 			Reason:  "PipelineRunSucceeded",
 			Message: "pipeline run succeeded",
 		})
-	}
-	if pipelineConf.Spec.CreateHistory {
-		if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, nil, err); upsertErr != nil {
-			ctrl.LoggerFrom(ctx).Error(upsertErr, "failed to create/update history")
-		}
 	}
 	return err
 }
@@ -156,9 +146,14 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		return errors.New("no nodes available for scheduling")
 	}
 
-	// Execute the scheduling pipeline.
+	// Execute the scheduling pipeline. Options not set: pod scheduling always records history.
 	request := pods.PodPipelineRequest{Nodes: nodes.Items, Pod: *pod}
 	result, err := pipeline.Run(request)
+	if !request.Options.SkipHistory {
+		if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, nil, err); upsertErr != nil {
+			log.Error(upsertErr, "failed to create/update history")
+		}
+	}
 	if err != nil {
 		log.V(1).Error(err, "failed to run scheduler pipeline")
 		return errors.New("failed to run scheduler pipeline")

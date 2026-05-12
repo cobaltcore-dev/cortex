@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/cinder"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
@@ -46,6 +47,7 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 		},
 		Weights:  map[string]float64{"cinder-volume-1": 1.0, "cinder-volume-2": 0.5},
 		Pipeline: "test-pipeline",
+		Options:  scheduling.Options{SkipHistory: true},
 	}
 
 	cinderRaw, err := json.Marshal(cinderRequest)
@@ -281,7 +283,6 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -315,7 +316,6 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					CreateHistory:    false,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -369,14 +369,13 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			createHistory:        true,
 			expectError:          true,
-			expectHistoryCreated: true,
+			expectHistoryCreated: false,
 			expectResult:         false,
 		},
 	}
@@ -411,6 +410,16 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					t.Fatalf("Failed to init pipeline: %v", initResult)
 				}
 				controller.Pipelines[tt.pipelineConfig.Name] = initResult.Pipeline
+			}
+
+			if tt.decision.Spec.CinderRaw != nil {
+				req := cinderRequest
+				req.Options = scheduling.Options{SkipHistory: !tt.createHistory}
+				raw, marshalErr := json.Marshal(req)
+				if marshalErr != nil {
+					t.Fatalf("Failed to marshal request with options: %v", marshalErr)
+				}
+				tt.decision.Spec.CinderRaw = &runtime.RawExtension{Raw: raw}
 			}
 
 			err := controller.ProcessNewDecisionFromAPI(context.Background(), tt.decision)

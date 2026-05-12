@@ -252,6 +252,7 @@ func NewIntegrationTestServer(t *testing.T, pipelineConfig PipelineConfig, objec
 			Client:          k8sClient,
 			Pipelines:       make(map[string]lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]),
 			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
+			HistoryManager:  lib.HistoryClient{Client: k8sClient},
 		},
 		Monitor: getSharedMonitor(),
 	}

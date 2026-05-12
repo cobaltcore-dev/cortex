@@ -30,6 +30,8 @@ type FilterWeigherPipelineStep[RequestType FilterWeigherPipelineRequest] interfa
 	//
 	// A traceLog is provided that contains the global request id and should
 	// be used to log the step's execution.
+	//
+	// Per-call options are available via request.GetOptions().
 	Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error)
 }
 

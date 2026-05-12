@@ -19,6 +19,7 @@ import (
 
 type FilterWeigherPipeline[RequestType FilterWeigherPipelineRequest] interface {
 	// Run the scheduling pipeline with the given request.
+	// Call-time options are read from request.GetOptions().
 	Run(request RequestType) (v1alpha1.DecisionResult, error)
 }
 
@@ -263,6 +264,10 @@ func (s *filterWeigherPipeline[RequestType]) sortHostsByWeights(weights map[stri
 
 // Evaluate the pipeline and return a list of hosts in order of preference.
 func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.DecisionResult, error) {
+	opts := request.GetOptions()
+	if err := opts.Validate(); err != nil {
+		return v1alpha1.DecisionResult{}, err
+	}
 	slogArgs := request.GetTraceLogArgs()
 	slogArgsAny := make([]any, 0, len(slogArgs))
 	for _, arg := range slogArgs {
@@ -296,6 +301,21 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 
 	hosts := p.sortHostsByWeights(outWeights)
 	traceLog.Info("scheduler: sorted hosts", "hosts", hosts)
+
+	if opts.MaxCandidates > 0 && len(hosts) > opts.MaxCandidates {
+		traceLog.Info("scheduler: trimming candidate list", "maxCandidates", opts.MaxCandidates, "before", len(hosts))
+		hosts = hosts[:opts.MaxCandidates]
+		// Drop trimmed hosts from outWeights so AggregatedOutWeights stays consistent.
+		kept := make(map[string]struct{}, len(hosts))
+		for _, h := range hosts {
+			kept[h] = struct{}{}
+		}
+		for host := range outWeights {
+			if _, ok := kept[host]; !ok {
+				delete(outWeights, host)
+			}
+		}
+	}
 
 	// Collect some metrics about the pipeline execution.
 	go p.monitor.observePipelineResult(request, hosts)

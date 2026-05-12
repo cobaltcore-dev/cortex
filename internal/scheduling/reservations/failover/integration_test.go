@@ -1119,10 +1119,10 @@ func newIntegrationTestEnv(t *testing.T, vms []VM, hypervisors []*hv1.Hypervisor
 			Client:          k8sClient,
 			Pipelines:       make(map[string]lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]),
 			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
+			HistoryManager:  lib.HistoryClient{Client: k8sClient},
 		},
 		Monitor: getSharedMonitor(),
 	}
-
 	// Register all pipelines needed for testing
 	pipelines := []v1alpha1.Pipeline{
 		{
@@ -1309,11 +1309,10 @@ func newIntegrationTestEnvWithTraitsFilter(t *testing.T, vms []VM, hypervisors [
 			Client:          k8sClient,
 			Pipelines:       make(map[string]lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]),
 			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
+			HistoryManager:  lib.HistoryClient{Client: k8sClient},
 		},
 		Monitor: getSharedMonitor(),
 	}
-
-	// Register all pipelines needed for testing (with traits filter enabled)
 	pipelines := []v1alpha1.Pipeline{
 		{
 			ObjectMeta: metav1.ObjectMeta{

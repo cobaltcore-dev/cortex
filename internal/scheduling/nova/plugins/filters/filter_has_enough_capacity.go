@@ -62,6 +62,7 @@ type FilterHasEnoughCapacity struct {
 //
 // Please also note that disk space is currently not considered by this filter.
 func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+	opts := request.GetOptions()
 	result := s.IncludeAllHostsFromRequest(request)
 
 	// This map holds the free resources per host.
@@ -85,7 +86,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		}
 
 		// Subtract allocated resources (skip when ignoring allocations for empty-datacenter capacity queries).
-		if !s.Options.IgnoreAllocations {
+		if !s.Options.IgnoreAllocations && !opts.AssumeEmptyHosts {
 			for resourceName, allocated := range hv.Status.Allocation {
 				free, ok := freeResourcesByHost[hv.Name][resourceName]
 				if !ok {
@@ -112,7 +113,8 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		}
 
 		// Check if this reservation type should be ignored
-		if slices.Contains(s.Options.IgnoredReservationTypes, reservation.Spec.Type) {
+		if slices.Contains(s.Options.IgnoredReservationTypes, reservation.Spec.Type) ||
+			slices.Contains(opts.IgnoredReservationTypes, reservation.Spec.Type) {
 			traceLog.Debug("ignoring reservation type", "type", reservation.Spec.Type, "reservation", reservation.Name)
 			continue
 		}
@@ -128,18 +130,14 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			// Check if this is a CR reservation scheduling request.
 			// If so, we should NOT unlock any CR reservations to prevent overbooking.
 			// CR capacity should only be unlocked for actual VM scheduling.
-			intent, err := request.GetIntent()
 			switch {
-			case err == nil && intent == api.ReserveForCommittedResourceIntent:
-				traceLog.Debug("keeping CR reservation locked for CR reservation scheduling",
+			case opts.LockReservations || s.Options.LockReserved:
+				traceLog.Debug("keeping CR reservation locked",
 					"reservation", reservation.Name,
-					"intent", intent)
+					"lockReservations", opts.LockReservations,
+					"lockReserved", s.Options.LockReserved)
 				// Don't continue - fall through to block the resources
-			case !s.Options.LockReserved &&
-				// For committed resource reservations: unlock resources only if:
-				// 1. Project ID matches
-				// 2. ResourceGroup matches the flavor's hw_version
-				reservation.Spec.CommittedResourceReservation.ProjectID == request.Spec.Data.ProjectID &&
+			case reservation.Spec.CommittedResourceReservation.ProjectID == request.Spec.Data.ProjectID &&
 				reservation.Spec.CommittedResourceReservation.ResourceGroup == request.Spec.Data.Flavor.Data.ExtraSpecs["hw_version"]:
 				traceLog.Info("unlocking resources reserved by matching committed resource reservation with allocation",
 					"reservation", reservation.Name,
@@ -199,7 +197,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			// When ignoring allocations (empty-datacenter scenario) VM resources are not
 			// deducted, so the confirmed-VM adjustment would under-block: always use the
 			// full slot instead.
-			!s.Options.IgnoreAllocations &&
+			!s.Options.IgnoreAllocations && !opts.AssumeEmptyHosts &&
 			// if the reservation is not being migrated, block only unused resources
 			reservation.Spec.TargetHost == reservation.Status.Host &&
 			reservation.Spec.CommittedResourceReservation != nil &&

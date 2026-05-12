@@ -6,7 +6,6 @@ package machines
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -95,10 +94,6 @@ func (c *FilterWeigherPipelineController) ProcessNewMachine(ctx context.Context,
 		},
 	}
 
-	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
-	if !ok {
-		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
-	}
 	err := c.process(ctx, decision)
 	if err != nil {
 		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
@@ -114,11 +109,6 @@ func (c *FilterWeigherPipelineController) ProcessNewMachine(ctx context.Context,
 			Reason:  "PipelineRunSucceeded",
 			Message: "pipeline run succeeded",
 		})
-	}
-	if pipelineConf.Spec.CreateHistory {
-		if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, nil, err); upsertErr != nil {
-			ctrl.LoggerFrom(ctx).Error(upsertErr, "failed to create/update history")
-		}
 	}
 	return err
 }
@@ -142,9 +132,14 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		return errors.New("no machine pools available for scheduling")
 	}
 
-	// Execute the scheduling pipeline.
+	// Execute the scheduling pipeline. Options not set: machine scheduling always records history.
 	request := ironcore.MachinePipelineRequest{Pools: pools.Items}
 	result, err := pipeline.Run(request)
+	if !request.Options.SkipHistory {
+		if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, nil, err); upsertErr != nil {
+			log.Error(upsertErr, "failed to create/update history")
+		}
+	}
 	if err != nil {
 		log.V(1).Error(err, "failed to run scheduler pipeline")
 		return errors.New("failed to run scheduler pipeline")

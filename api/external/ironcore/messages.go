@@ -7,14 +7,18 @@ import (
 	"log/slog"
 
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/api/external/ironcore/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
 type MachinePipelineRequest struct {
 	// The available machine pools.
 	Pools []ironcorev1alpha1.MachinePool `json:"pools"`
+	// Options configure the pipeline behavior for this scheduling call.
+	Options scheduling.Options `json:"options,omitempty"`
 }
 
+func (r MachinePipelineRequest) GetOptions() scheduling.Options { return r.Options }
 func (r MachinePipelineRequest) GetHosts() []string {
 	hosts := make([]string, len(r.Pools))
 	for i, host := range r.Pools {

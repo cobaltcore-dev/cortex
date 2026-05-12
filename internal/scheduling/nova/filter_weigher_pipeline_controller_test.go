@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
@@ -77,6 +78,7 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 		},
 		Weights:  map[string]float64{"compute-1": 1.0, "compute-2": 0.5},
 		Pipeline: "test-pipeline",
+		Options:  scheduling.Options{SkipHistory: true},
 	}
 
 	novaRaw, err := json.Marshal(novaRequest)
@@ -431,7 +433,6 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -443,7 +444,6 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -480,7 +480,6 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateHistory:    false,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -492,7 +491,6 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateHistory:    false,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -528,7 +526,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 			expectResult:         false,
 			expectHistoryCreated: false,
 			expectUpdatedStatus:  false,
-			errorContains:        "pipeline nonexistent-pipeline not configured",
+			errorContains:        "pipeline not found or not ready",
 		},
 		{
 			name: "decision without novaRaw spec",
@@ -552,7 +550,6 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -564,7 +561,6 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -573,7 +569,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 			createHistory:        true,
 			expectError:          true,
 			expectResult:         false,
-			expectHistoryCreated: true,
+			expectHistoryCreated: false,
 			expectUpdatedStatus:  false,
 			errorContains:        "no novaRaw spec defined",
 		},
@@ -602,7 +598,6 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -611,7 +606,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 			createHistory:        true,
 			expectError:          true,
 			expectResult:         false,
-			expectHistoryCreated: true,
+			expectHistoryCreated: false,
 			expectUpdatedStatus:  false,
 			errorContains:        "pipeline not found or not ready",
 		},
@@ -640,7 +635,6 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -649,7 +643,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 			createHistory:        true,
 			expectError:          true,
 			expectResult:         false,
-			expectHistoryCreated: true,
+			expectHistoryCreated: false,
 			expectUpdatedStatus:  false,
 			errorContains:        "pipeline not found or not ready",
 		},
@@ -695,6 +689,16 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					t.Fatalf("Failed to initialize pipeline: filter errors: %v, weigher errors: %v", initResult.FilterErrors, initResult.WeigherErrors)
 				}
 				controller.Pipelines[tt.pipeline.Name] = initResult.Pipeline
+			}
+
+			if tt.decision.Spec.NovaRaw != nil {
+				req := novaRequest
+				req.Options = scheduling.Options{SkipHistory: !tt.createHistory}
+				raw, marshalErr := json.Marshal(req)
+				if marshalErr != nil {
+					t.Fatalf("Failed to marshal request with options: %v", marshalErr)
+				}
+				tt.decision.Spec.NovaRaw = &runtime.RawExtension{Raw: raw}
 			}
 
 			// Call the method under test
@@ -779,6 +783,7 @@ func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
 		},
 		Weights:  map[string]float64{"original-host-1": 1.0, "original-host-2": 0.5},
 		Pipeline: "test-pipeline",
+		Options:  scheduling.Options{SkipHistory: true},
 	}
 
 	novaRaw, err := json.Marshal(novaRequest)
@@ -864,7 +869,6 @@ func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
 				Spec: v1alpha1.PipelineSpec{
 					Type:               v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain:   v1alpha1.SchedulingDomainNova,
-					CreateHistory:      false,
 					IgnorePreselection: tt.ignorePreselection,
 					Filters:            []v1alpha1.FilterSpec{},
 					Weighers:           []v1alpha1.WeigherSpec{},
@@ -928,3 +932,74 @@ func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
 
 // Error variable for testing
 var errGathererFailed = errors.New("gatherer failed")
+
+func TestFilterWeigherPipelineController_PeekReadOnly(t *testing.T) {
+	makeRaw := func(readOnly bool) []byte {
+		r := api.ExternalSchedulerRequest{
+			Spec:    api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{NumInstances: 1}},
+			Options: scheduling.Options{ReadOnly: readOnly},
+		}
+		raw, err := json.Marshal(r)
+		if err != nil {
+			panic(err)
+		}
+		return raw
+	}
+
+	c := &FilterWeigherPipelineController{}
+
+	tests := []struct {
+		name     string
+		decision *v1alpha1.Decision
+		want     bool
+	}{
+		{
+			name: "nil NovaRaw defaults to exclusive lock",
+			decision: &v1alpha1.Decision{
+				Spec: v1alpha1.DecisionSpec{
+					PipelineRef: corev1.ObjectReference{Name: "test-pipeline"},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "invalid JSON defaults to exclusive lock",
+			decision: &v1alpha1.Decision{
+				Spec: v1alpha1.DecisionSpec{
+					PipelineRef: corev1.ObjectReference{Name: "test-pipeline"},
+					NovaRaw:     &runtime.RawExtension{Raw: []byte("not-json")},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "ReadOnly=false uses exclusive lock",
+			decision: &v1alpha1.Decision{
+				Spec: v1alpha1.DecisionSpec{
+					PipelineRef: corev1.ObjectReference{Name: "test-pipeline"},
+					NovaRaw:     &runtime.RawExtension{Raw: makeRaw(false)},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "ReadOnly=true uses read lock",
+			decision: &v1alpha1.Decision{
+				Spec: v1alpha1.DecisionSpec{
+					PipelineRef: corev1.ObjectReference{Name: "test-pipeline"},
+					NovaRaw:     &runtime.RawExtension{Raw: makeRaw(true)},
+				},
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := c.peekReadOnly(tt.decision)
+			if got != tt.want {
+				t.Errorf("expected peekReadOnly = %v, got %v", tt.want, got)
+			}
+		})
+	}
+}

@@ -3,7 +3,11 @@
 
 package lib
 
-import "log/slog"
+import (
+	"log/slog"
+
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
+)
 
 type FilterWeigherPipelineRequest interface {
 	// Get the hosts that went in the pipeline.
@@ -21,4 +25,6 @@ type FilterWeigherPipelineRequest interface {
 	// Get logging args to be used in the step's trace log.
 	// Usually, this will be the request context including the request ID.
 	GetTraceLogArgs() []slog.Attr
+	// Get the call-time options for this pipeline run.
+	GetOptions() scheduling.Options
 }

@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	schedulerapi "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
@@ -147,8 +148,13 @@ func (c *Controller) reconcileOne(
 		cur := existingByName[flavor.Name]
 		cur.FlavorName = flavor.Name
 
-		totalVMSlots, totalHosts, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName)
-		placeableVMs, placeableHosts, placeableErr := c.probeScheduler(ctx, flavor, az, c.config.PlaceablePipeline, hvByName)
+		totalVMSlots, totalHosts, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName, scheduling.Options{
+			SkipHistory:             true,
+			SkipInflight:            true,
+			AssumeEmptyHosts:        true,
+			IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
+		})
+		placeableVMs, placeableHosts, placeableErr := c.probeScheduler(ctx, flavor, az, c.config.PlaceablePipeline, hvByName, scheduling.Options{SkipHistory: true, SkipInflight: true})
 
 		if totalErr != nil {
 			allFresh = false
@@ -246,6 +252,7 @@ func (c *Controller) probeScheduler(
 	flavor compute.FlavorInGroup,
 	az, pipeline string,
 	hvByName map[string]hv1.Hypervisor,
+	opts scheduling.Options,
 ) (capacity, hosts int64, err error) {
 
 	flavorBytes := int64(flavor.MemoryMB) * 1024 * 1024 //nolint:gosec
@@ -271,7 +278,7 @@ func (c *Controller) probeScheduler(
 		AvailabilityZone: az,
 		Pipeline:         pipeline,
 		EligibleHosts:    eligibleHosts,
-	})
+	}, opts)
 	if err != nil {
 		return 0, 0, fmt.Errorf("scheduler call failed (pipeline=%s): %w", pipeline, err)
 	}
