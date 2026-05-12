@@ -177,7 +177,7 @@ cortex-scheduling-controllers:
       maxRequeueInterval: "30m"
     committedResourceAPI:
       # Timeout for watching CommittedResource CRDs before rolling back
-      watchTimeout: "10s"
+      watchTimeout: "15s"
       # How often to poll CommittedResource CRD conditions during watch
       watchPollInterval: "500ms"
       # When false, the endpoint returns HTTP 503; the info endpoint remains available.
