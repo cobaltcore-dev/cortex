@@ -332,7 +332,7 @@ func checkNovaSchedulerReturnsValidHosts(
 	req api.ExternalSchedulerRequest,
 ) []string {
 
-	apiURL := "http://cortex-nova-scheduler:8080/scheduler/nova/external"
+	apiURL := "http://localhost:8080/scheduler/nova/external"
 	slog.Info("sending request to external scheduler", "apiURL", apiURL)
 
 	requestBody := must.Return(json.Marshal(req))

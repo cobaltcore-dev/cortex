@@ -20,10 +20,14 @@ graph LR;
     decision(Decision CRD)
     reservation(Reservation CRD)
     committedresource(CommittedResource CRD)
+    projectquota(ProjectQuota CRD)
+    flavorgroupcapacity(FlavorGroupCapacity CRD)
     pipeline --> descheduling
     pipeline --> decision
     pipeline --> reservation
     committedresource --> reservation
+    committedresource --> projectquota
+    flavorgroupcapacity --> committedresource
     end
 
     prometheus(Prometheus)
@@ -115,6 +119,22 @@ Key fields include `commitmentUUID`, `flavorGroupName`, `resourceType` (memory o
 The status tracks the accepted amount, usage information (assigned VMs and used amount), and standard Kubernetes conditions for observability.
 
 For more details on how committed resources interact with reservations, see [committed resource reservations](reservations/committed-resource-reservations.md).
+
+### FlavorGroupCapacity
+
+```bash
+kubectl get flavorgroupcapacities
+```
+
+FlavorGroupCapacity caches pre-computed capacity data for one flavor group in one availability zone. One CRD exists per (flavor group × AZ) pair, maintained by the capacity controller on a fixed interval. The spec identifies the flavor group and AZ; the status holds per-flavor slot counts (`PlaceableVMs`, `PlaceableHosts`, `TotalCapacityVMSlots`, `TotalCapacityHosts`), aggregate fields (`CommittedCapacity`, `TotalCapacity`, `TotalInstances`), and a `LastReconcileAt` timestamp. The capacity API reads these CRDs instead of probing the scheduler on each request.
+
+### ProjectQuota
+
+```bash
+kubectl get projectquotas
+```
+
+ProjectQuota stores quota allocations and computed usage for one project in one availability zone. One CRD exists per (project × AZ) pair, named `quota-{projectID}-{az}`. The spec holds the project identity, availability zone, and a flat `Quota map[string]int64` mapping LIQUID resource names to their per-AZ quota value. The status holds `TotalUsage` and `PaygUsage` as flat `map[string]int64` fields tracking per-resource consumption in that AZ, maintained by the quota controller through periodic full reconciles, incremental Hypervisor diffs, and PaygUsage-only recomputes triggered by CommittedResource status changes.
 
 ### Deschedulings
 

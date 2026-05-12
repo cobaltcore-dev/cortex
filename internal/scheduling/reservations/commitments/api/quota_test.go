@@ -15,6 +15,7 @@ import (
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"go.xyrillian.de/gg/option"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -148,15 +149,14 @@ func TestHandleQuota_ErrorCases(t *testing.T) {
 func TestHandleQuota_CreateAndUpdate(t *testing.T) {
 	tests := []struct {
 		name string
-		// existing is a pre-existing CRD to seed (nil = create, non-nil = update)
-		existing      *v1alpha1.ProjectQuota
+		// existing is a set of pre-existing per-AZ CRDs to seed (nil = create, non-nil = update)
+		existing      []*v1alpha1.ProjectQuota
 		projectID     string
 		resources     map[liquid.ResourceName]liquid.ResourceQuotaRequest
 		metadata      *liquid.ProjectMetadata
-		expectQuota   map[string]int64            // resource name → expected total quota
-		expectPerAZ   map[string]map[string]int64 // resource name → az → expected quota
+		expectPerAZ   map[string]map[string]int64 // az → resource name → expected quota
 		expectName    string
-		expectDomain  string
+		expectDom     string
 		expectDomName string
 	}{
 		{
@@ -164,7 +164,6 @@ func TestHandleQuota_CreateAndUpdate(t *testing.T) {
 			projectID: "project-abc-123",
 			resources: map[liquid.ResourceName]liquid.ResourceQuotaRequest{
 				"hw_version_hana_1_ram": {
-					Quota: 100,
 					PerAZ: map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest{
 						"az-a": {Quota: 60},
 						"az-b": {Quota: 40},
@@ -175,28 +174,21 @@ func TestHandleQuota_CreateAndUpdate(t *testing.T) {
 				UUID:   "project-abc-123",
 				Domain: liquid.DomainMetadata{UUID: "domain-1"},
 			},
-			expectQuota: map[string]int64{"hw_version_hana_1_ram": 100},
 			expectPerAZ: map[string]map[string]int64{
-				"hw_version_hana_1_ram": {"az-a": 60, "az-b": 40},
+				"az-a": {"hw_version_hana_1_ram": 60},
+				"az-b": {"hw_version_hana_1_ram": 40},
 			},
-			expectDomain: "domain-1",
-		},
-		{
-			name:      "Create_EmptyResources",
-			projectID: "project-empty",
-			resources: map[liquid.ResourceName]liquid.ResourceQuotaRequest{},
-			metadata: &liquid.ProjectMetadata{
-				UUID:   "project-empty",
-				Domain: liquid.DomainMetadata{UUID: "domain-1"},
-			},
-			expectQuota:  map[string]int64{},
-			expectDomain: "domain-1",
+			expectDom: "domain-1",
 		},
 		{
 			name:      "Create_WithMetadata",
 			projectID: "project-meta-test",
 			resources: map[liquid.ResourceName]liquid.ResourceQuotaRequest{
-				"hw_version_hana_1_ram": {Quota: 50},
+				"hw_version_hana_1_ram": {
+					PerAZ: map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest{
+						"az-a": {Quota: 50},
+					},
+				},
 			},
 			metadata: &liquid.ProjectMetadata{
 				UUID: "project-meta-test",
@@ -206,21 +198,97 @@ func TestHandleQuota_CreateAndUpdate(t *testing.T) {
 					Name: "my-domain-name",
 				},
 			},
-			expectQuota:   map[string]int64{"hw_version_hana_1_ram": 50},
+			expectPerAZ: map[string]map[string]int64{
+				"az-a": {"hw_version_hana_1_ram": 50},
+			},
 			expectName:    "my-project-name",
-			expectDomain:  "domain-uuid-456",
+			expectDom:     "domain-uuid-456",
 			expectDomName: "my-domain-name",
 		},
 		{
+			name:      "Create_EmptyResources",
+			projectID: "project-empty",
+			resources: map[liquid.ResourceName]liquid.ResourceQuotaRequest{},
+			metadata: &liquid.ProjectMetadata{
+				UUID:   "project-empty",
+				Domain: liquid.DomainMetadata{UUID: "domain-1"},
+			},
+			// No AZs in request means no per-AZ CRDs are created.
+			// expectPerAZ is empty — we just verify no error and 204 response.
+			expectPerAZ: map[string]map[string]int64{},
+			expectDom:   "domain-1",
+		},
+		{
+			name: "Update_WithNewMetadata",
+			existing: []*v1alpha1.ProjectQuota{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "quota-project-update-meta-az-a"},
+					Spec: v1alpha1.ProjectQuotaSpec{
+						ProjectID:        "project-update-meta",
+						DomainID:         "old-domain",
+						DomainName:       "old-domain-name",
+						ProjectName:      "old-project-name",
+						AvailabilityZone: "az-a",
+						Quota:            map[string]int64{"hw_version_hana_1_ram": 10},
+					},
+				},
+			},
+			projectID: "project-update-meta",
+			resources: map[liquid.ResourceName]liquid.ResourceQuotaRequest{
+				"hw_version_hana_1_ram": {
+					PerAZ: map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest{
+						"az-a": {Quota: 99},
+					},
+				},
+			},
+			metadata: &liquid.ProjectMetadata{
+				UUID: "project-update-meta",
+				Name: "new-project-name",
+				Domain: liquid.DomainMetadata{
+					UUID: "new-domain",
+					Name: "new-domain-name",
+				},
+			},
+			expectPerAZ: map[string]map[string]int64{
+				"az-a": {"hw_version_hana_1_ram": 99},
+			},
+			expectName:    "new-project-name",
+			expectDom:     "new-domain",
+			expectDomName: "new-domain-name",
+		},
+		{
+			name:      "Create_PartialAZ_OnlyOneAZ",
+			projectID: "project-partial",
+			resources: map[liquid.ResourceName]liquid.ResourceQuotaRequest{
+				"hw_version_hana_1_ram": {
+					PerAZ: map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest{
+						"az-a": {Quota: 100},
+						// az-b intentionally missing
+					},
+				},
+			},
+			metadata: &liquid.ProjectMetadata{
+				UUID:   "project-partial",
+				Domain: liquid.DomainMetadata{UUID: "domain-1"},
+			},
+			// Only az-a should get a CRD
+			expectPerAZ: map[string]map[string]int64{
+				"az-a": {"hw_version_hana_1_ram": 100},
+			},
+			expectDom: "domain-1",
+		},
+		{
 			name: "Update_QuotaValues",
-			existing: &v1alpha1.ProjectQuota{
-				Spec: v1alpha1.ProjectQuotaSpec{
-					ProjectID:   "project-xyz",
-					DomainID:    "original-domain",
-					DomainName:  "original-domain-name",
-					ProjectName: "original-project-name",
-					Quota: map[string]v1alpha1.ResourceQuota{
-						"hw_version_hana_1_ram": {Quota: 50, PerAZ: map[string]int64{"az-a": 50}},
+			existing: []*v1alpha1.ProjectQuota{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "quota-project-xyz-az-a"},
+					Spec: v1alpha1.ProjectQuotaSpec{
+						ProjectID:        "project-xyz",
+						DomainID:         "original-domain",
+						DomainName:       "original-domain-name",
+						ProjectName:      "original-project-name",
+						AvailabilityZone: "az-a",
+						Quota:            map[string]int64{"hw_version_hana_1_ram": 50},
 					},
 				},
 			},
@@ -235,51 +303,18 @@ func TestHandleQuota_CreateAndUpdate(t *testing.T) {
 			},
 			resources: map[liquid.ResourceName]liquid.ResourceQuotaRequest{
 				"hw_version_hana_1_ram": {
-					Quota: 200,
 					PerAZ: map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest{
 						"az-a": {Quota: 120},
 						"az-b": {Quota: 80},
 					},
 				},
 			},
-			expectQuota: map[string]int64{"hw_version_hana_1_ram": 200},
 			expectPerAZ: map[string]map[string]int64{
-				"hw_version_hana_1_ram": {"az-a": 120, "az-b": 80},
+				"az-a": {"hw_version_hana_1_ram": 120},
+				"az-b": {"hw_version_hana_1_ram": 80},
 			},
-			// Metadata should be preserved when not provided in update
-			expectDomain:  "original-domain",
-			expectDomName: "original-domain-name",
-			expectName:    "original-project-name",
-		},
-		{
-			name: "Update_WithNewMetadata",
-			existing: &v1alpha1.ProjectQuota{
-				Spec: v1alpha1.ProjectQuotaSpec{
-					ProjectID:   "project-update-meta",
-					DomainID:    "old-domain",
-					DomainName:  "old-domain-name",
-					ProjectName: "old-project-name",
-					Quota: map[string]v1alpha1.ResourceQuota{
-						"hw_version_hana_1_ram": {Quota: 10},
-					},
-				},
-			},
-			projectID: "project-update-meta",
-			resources: map[liquid.ResourceName]liquid.ResourceQuotaRequest{
-				"hw_version_hana_1_ram": {Quota: 99},
-			},
-			metadata: &liquid.ProjectMetadata{
-				UUID: "project-update-meta",
-				Name: "new-project-name",
-				Domain: liquid.DomainMetadata{
-					UUID: "new-domain",
-					Name: "new-domain-name",
-				},
-			},
-			expectQuota:   map[string]int64{"hw_version_hana_1_ram": 99},
-			expectName:    "new-project-name",
-			expectDomain:  "new-domain",
-			expectDomName: "new-domain-name",
+			expectDom:  "original-domain",
+			expectName: "original-project-name",
 		},
 	}
 
@@ -289,8 +324,11 @@ func TestHandleQuota_CreateAndUpdate(t *testing.T) {
 			builder := fake.NewClientBuilder().WithScheme(scheme)
 
 			if tc.existing != nil {
-				tc.existing.Name = projectQuotaCRDName(tc.projectID)
-				builder = builder.WithObjects(tc.existing)
+				objs := make([]client.Object, len(tc.existing))
+				for i := range tc.existing {
+					objs[i] = tc.existing[i]
+				}
+				builder = builder.WithObjects(objs...)
 			}
 			k8sClient := builder.Build()
 			httpAPI := NewAPI(k8sClient)
@@ -316,52 +354,43 @@ func TestHandleQuota_CreateAndUpdate(t *testing.T) {
 				t.Fatalf("expected status %d (No Content), got %d", http.StatusNoContent, resp.StatusCode)
 			}
 
-			// Verify the ProjectQuota CRD
-			var pq v1alpha1.ProjectQuota
-			crdName := projectQuotaCRDName(tc.projectID)
-			if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: crdName}, &pq); err != nil {
-				t.Fatalf("failed to get ProjectQuota CRD %q: %v", crdName, err)
-			}
-
-			if pq.Spec.ProjectID != tc.projectID {
-				t.Errorf("expected ProjectID %q, got %q", tc.projectID, pq.Spec.ProjectID)
-			}
-
-			// Verify quota totals
-			for resName, expectedTotal := range tc.expectQuota {
-				actual, ok := pq.Spec.Quota[resName]
-				if !ok {
-					t.Errorf("expected resource %q in quota spec", resName)
-					continue
+			// Verify per-AZ ProjectQuota CRDs were created/updated
+			for az, expectedQuota := range tc.expectPerAZ {
+				crdName := projectQuotaCRDName(tc.projectID, az)
+				var pq v1alpha1.ProjectQuota
+				if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: crdName}, &pq); err != nil {
+					t.Fatalf("failed to get ProjectQuota CRD %q: %v", crdName, err)
 				}
-				if actual.Quota != expectedTotal {
-					t.Errorf("resource %q: expected quota %d, got %d", resName, expectedTotal, actual.Quota)
-				}
-			}
 
-			// Verify per-AZ quotas
-			for resName, azMap := range tc.expectPerAZ {
-				actual, ok := pq.Spec.Quota[resName]
-				if !ok {
-					t.Errorf("expected resource %q in quota spec for per-AZ check", resName)
-					continue
+				if pq.Spec.ProjectID != tc.projectID {
+					t.Errorf("CRD %q: expected ProjectID %q, got %q", crdName, tc.projectID, pq.Spec.ProjectID)
 				}
-				for az, expectedAZ := range azMap {
-					if actual.PerAZ[az] != expectedAZ {
-						t.Errorf("resource %q AZ %q: expected %d, got %d", resName, az, expectedAZ, actual.PerAZ[az])
+				if pq.Spec.AvailabilityZone != az {
+					t.Errorf("CRD %q: expected AZ %q, got %q", crdName, az, pq.Spec.AvailabilityZone)
+				}
+
+				// Verify quota values
+				for resName, expectedVal := range expectedQuota {
+					actual, ok := pq.Spec.Quota[resName]
+					if !ok {
+						t.Errorf("CRD %q: expected resource %q in quota spec", crdName, resName)
+						continue
+					}
+					if actual != expectedVal {
+						t.Errorf("CRD %q resource %q: expected %d, got %d", crdName, resName, expectedVal, actual)
 					}
 				}
-			}
 
-			// Verify metadata
-			if tc.expectName != "" && pq.Spec.ProjectName != tc.expectName {
-				t.Errorf("expected ProjectName %q, got %q", tc.expectName, pq.Spec.ProjectName)
-			}
-			if tc.expectDomain != "" && pq.Spec.DomainID != tc.expectDomain {
-				t.Errorf("expected DomainID %q, got %q", tc.expectDomain, pq.Spec.DomainID)
-			}
-			if tc.expectDomName != "" && pq.Spec.DomainName != tc.expectDomName {
-				t.Errorf("expected DomainName %q, got %q", tc.expectDomName, pq.Spec.DomainName)
+				// Verify metadata
+				if tc.expectName != "" && pq.Spec.ProjectName != tc.expectName {
+					t.Errorf("CRD %q: expected ProjectName %q, got %q", crdName, tc.expectName, pq.Spec.ProjectName)
+				}
+				if tc.expectDom != "" && pq.Spec.DomainID != tc.expectDom {
+					t.Errorf("CRD %q: expected DomainID %q, got %q", crdName, tc.expectDom, pq.Spec.DomainID)
+				}
+				if tc.expectDomName != "" && pq.Spec.DomainName != tc.expectDomName {
+					t.Errorf("CRD %q: expected DomainName %q, got %q", crdName, tc.expectDomName, pq.Spec.DomainName)
+				}
 			}
 		})
 	}

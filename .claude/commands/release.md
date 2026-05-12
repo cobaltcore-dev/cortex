@@ -1,184 +1,113 @@
 ---
-allowed-tools: Read, Write, Edit, Bash(*), WebSearch, WebFetch, Agent
+allowed-tools: Read, Bash(*), Agent
 description: Release orchestrator — builds a digest of what changed in a release PR, opens a changelog PR, and references the bump PR. Usage: /release PR_NUMBER
 ---
 
 # Release Orchestrator
 
-Your job is to orchestrate the release process for a given PR. This involves analyzing the PR's commits and changed files to build a structured digest of what changed, determining if there are any breaking changes, preparing a changelog, opening a PR to bump chart versions if needed, and updating the original PR description with the changelog and references to the new PRs.
+You orchestrate the release process for a given PR. You MUST complete all three deliverables in order:
+1. A bump PR for helm chart versions
+2. A changelog PR with the release notes (using the bumped versions)
+3. The release PR description updated with the changelog and references to both PRs
+
+You achieve this by dispatching focused subagents **sequentially**. Each step depends on the output of the previous one. Do NOT try to do the detailed work yourself — you are a dispatcher.
 
 ---
 
-## Phase 1: Collect — Build the release digest
+## Phase 1: Collect the release digest
 
-1. Fetch PR metadata:
-   ```
-   gh pr view $ARGUMENTS --json number,title,body,commits,files
-   ```
+Dispatch the **release-digest** agent.
 
-2. For each commit SHA in the PR, inspect the changed files:
-   ```
-   git show --name-only --format="%H %s" <sha>
-   ```
+Prompt: `Produce a release digest for PR #<PR_NUMBER>.`
 
-3. Classify each commit to a component:
-   - Cortex shim: code touching the shim layer (internal/shim and cmd/shim)
-   - Cortex postgres: code touching the postgres docker image, or its helm chart
-   - Cortex core: core code touching anything else: the manager or external scheduler logic of cortex
-   - General: CI, tooling, docs, or other non-code changes
-
-4. Finally, read through the cortex helm charts in the helm/ folder, and check which ones have updated appVersions, indicating a new Docker image is available and that the chart should be included in the release notes.
-
-Produce a structured digest in this exact format — the subagents depend on it:
-
-```
-## Release Digest — PR #NNN "{title}"
-
-### Changed Charts
-- cortex v1.2.3 (sha-xxxxxxxx)
-- cortex-postgres v1.2.3 (sha-xxxxxxxx)
-- cortex-nova v1.2.3 — includes cortex v1.2.3, cortex-postgres v1.2.3
-
-### Commits by Component
-
-#### cortex core
-- <sha> <subject>
-
-#### cortex postgres
-- <sha> <subject>
-
-#### cortex shim
-- <sha> <subject>
-
-#### General
-- <sha> <subject>
-```
-
-**Important**: Do NOT skip or shallow this phase. Read actual file diffs. The subagents depend entirely on the quality of this digest.
+Wait for it to return. Save its full output as the **digest**.
 
 ---
 
-## Phase 2: Determine Breaking Changes and Prepare a Changelog
+## Phase 2: Bump chart versions
 
-Reason for each change by looking at the commit's diff, if it is a breaking change that requires special attention.
+Dispatch the **release-bump-charts** agent. Pass it the PR number and the full digest.
 
-**Important**: Do NOT skip or shallow this phase. Read actual file diffs. The PR reviewers depend entirely on the quality of this analysis to know what to focus on in their review.
+Prompt:
+```
+Release PR number: <PR_NUMBER>
 
-### When is a change "breaking"?
+<paste the full digest here>
 
-A change should be classified as "breaking" if it meets any of the following criteria:
-
-- It changes or removes the public API of any component (e.g., CRD schemas, CLI flags, or REST API endpoints). Note: additions to the public API are not breaking.
-- It requires a config format change (e.g., renaming or removing a values.yaml key, changing the expected format of a value, etc)
-
-Once the digest is complete, read each agent file, then dispatch all three **in parallel** using the Agent tool in a single message. Each subagent operates independently — do not wait for one before starting the others.
-
-### Prepare the changelog
-
-Generate a changelog following this template:
-
-```markdown
-# Changelog
-
-## YYYY-MM-DD — [#NNN](<PR URL>)
-
-### <chart-name> v<version> (<appVersion>)
-
-Breaking changes:
-- <bullet per meaningful change>
-
-Non-breaking changes:
-- <bullet per meaningful change>
-
-... repeat for each changed chart ...
-
-### General
-
-Breaking changes:
-- <bullet per meaningful change>
-
-Non-breaking changes:
-- <bullet per meaningful change>
+Bump the helm chart versions and open/update a bump PR.
 ```
 
-One `###` section per changed chart only. For bundle sections, list which library versions they include, then any bundle-specific changes (values.yaml keys, template/CRD changes). Omit `### General` if empty. No commit SHAs, one line per bullet.
+Wait for it to return. From its report, extract:
+- The bump PR number and URL
+- The list of bumped chart versions (e.g. `cortex: 0.0.47 → 0.0.48`)
 
-Example:
-```markdown
-# Changelog
+---
 
-## 2026-04-24 — [#123](https://github.com/cobaltcore-dev/cortex/pull/123)
+## Phase 3: Create the changelog PR
 
-### cortex v0.0.43 (sha-xxxxxxxx)
+Dispatch the **release-changelog** agent. Pass it the PR number, the full digest, and the bumped versions from Phase 2.
 
-Breaking changes:
-- Check hypervisor resources against reservations
+Prompt:
+```
+Release PR number: <PR_NUMBER>
 
-Non-breaking changes:
-- Commitments usage API uses postgres database instead of calling nova
+Bumped chart versions:
+<paste the bumped versions list from the bump agent's report>
 
-### cortex-postgres v0.5.14 (sha-xxxxxxxx)
+Release digest:
+<paste the full digest here>
 
-Non-breaking changes:
-- Add commitments table migration
-
-### cortex-nova v0.0.56 (sha-xxxxxxxx)
-
-Includes updated charts cortex v0.0.43 and cortex-postgres v0.5.14.
-
-Non-breaking changes:
-- values.yaml: added `reservations.enabled` (default: false)
-
-### General
-
-Non-breaking changes:
-- Update golangci-lint to v2.1.0
+Generate the changelog entry using the NEW bumped versions, prepend it to CHANGELOG.md, and open/update a changelog PR.
 ```
 
-## Phase 3: Bump Chart Versions
+Wait for it to return. From its report, extract:
+- The changelog PR number and URL
+- The full changelog entry text
 
-Prepare chart version bumps so GitHub pushes bumped charts to the registry immediately after the release PR is merged.
+---
 
-For each changed library chart, patch-bump its `version` in `helm/library/<name>/Chart.yaml` (e.g. `0.0.43` → `0.1.0`), if there was no breaking change, otherwise minor-bump it. Do not touch `appVersion`. Then update the matching `dependencies[].version` entry in every `helm/bundles/*/Chart.yaml` that references it.
+## Phase 4: Update the release PR description
 
-### Check for existing bump PR
+Dispatch the **release-update-description** agent. Pass it the PR number, changelog entry, bump PR reference, and changelog PR reference.
 
-Before creating a new PR, check if one already exists for this release:
-
+Prompt:
 ```
-gh pr list --head release/bump-charts-<NNN> --state open --json number,url
-```
+Release PR number: <PR_NUMBER>
 
-- **If a PR already exists**: check out the existing `release/bump-charts-<NNN>` branch, reset it to `main` (`git reset --hard origin/main`), apply the version bumps on top, force-push the branch. Then update the existing PR title and body with `gh pr edit` to reflect the latest changes.
-- **If no PR exists**: create branch `release/bump-charts-<NNN>` from `main`, apply the bumps, and open a new PR noting in the body that it should be merged before the release PR. Use the pull-request-creator agent for this subtask, and include the chart changes in the motivation so they are included in the PR description.
+Changelog entry:
+<paste the changelog entry text from the changelog agent's report>
 
-## Phase 4: Update the PR Description
+Bump PR: #<bump_pr_number> (<bump_pr_url>)
+Changelog PR: #<changelog_pr_number> (<changelog_pr_url>)
 
-Use `gh pr edit` with `--body` to update the PR description with the changelog. It is fine for release pull request descriptions to utilize markdown formatting. Reference the opened bump PR in the description as well as a dependency.
-
-## Phase 5: Create a Changelog PR
-
-If the CHANGELOG.md does not exist, create it with a `# Changelog` header. Then prepend the new changelog entry below the header.
-
-### Check for existing changelog PR
-
-Before creating a new PR, check if one already exists for this release:
-
-```
-gh pr list --head release/changelog-<NNN> --state open --json number,url
+Update the release PR description with the changelog and references to both PRs.
 ```
 
-- **If a PR already exists**: check out the existing `release/changelog-<NNN>` branch, reset it to `main` (`git reset --hard origin/main`), apply the changelog update on top, force-push the branch. Then update the existing PR title and body with `gh pr edit` to reflect the latest changes.
-- **If no PR exists**: create branch `release/changelog-<NNN>` from `main`, apply the changelog, and open a new PR to `main` with title `Update changelog for release PR #<NNN>` and a body noting it should be merged after the release PR. Use the pull-request-creator agent for this subtask.
+Wait for it to return.
 
-## Phase 6: Summarize — Report what happened
+---
 
-After all subagents return, produce a short summary:
+## Phase 5: Summarize
+
+After all agents have completed, produce a short summary:
 
 ```
 ## Release #NNN Post-Open Summary
 
-- PR description updated with changelog and bump PR reference
-- Bump PR #XXX opened/updated to update chart versions
-- Changelog PR #YYY opened/updated to update CHANGELOG.md
+- Bump PR: #XXX opened/updated
+- Changelog PR: #YYY opened/updated
+- PR #NNN description: updated with changelog and PR references
 ```
+
+If any agent reports a failure, include that in the summary and suggest next steps.
+
+---
+
+## Critical rules
+
+- Execute phases 1 → 2 → 3 → 4 **strictly in order**. Each depends on the previous.
+- You MUST complete ALL FOUR phases. Never skip one.
+- Do NOT read code yourself — the release-digest agent handles that.
+- Do NOT generate changelog text yourself — the release-changelog agent handles that.
+- Keep your own context minimal — you are a dispatcher, not an analyst.
+- Pass data between phases by extracting the relevant pieces from each agent's report and including them verbatim in the next agent's prompt.

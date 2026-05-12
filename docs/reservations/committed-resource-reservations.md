@@ -80,11 +80,11 @@ flowchart LR
 
 ### State (CRDs)
 
-**`CommittedResource` CRD** — primary source of truth for a commitment accepted by Cortex. One CRD per commitment UUID. Spec holds the commitment identity (project, flavor group, resource type, amount, ...). Status holds the acceptance outcome (`Ready` condition with reason `Planned`/`Reserving`/`Rejected`/`Accepted`) and the accepted amount.
+**`CommittedResource` CRD** — primary source of truth for a commitment accepted by Cortex. One CRD per commitment UUID. Spec holds the commitment identity (project, flavor group, resource type, amount, ...). Status holds the acceptance outcome (`Ready` condition with reason `Planned`/`Reserving`/`Rejected`/`Accepted`), the accepted amount, and usage fields populated by the usage reconciler: `AssignedInstances` (VM UUIDs deterministically assigned to this CR), `UsedResources` (total resource consumption of assigned VMs), `LastUsageReconcileAt`, and `UsageObservedGeneration`.
 
 **`Reservation` CRD** — a single reservation slot on a hypervisor, owned by a `CommittedResource`. One `CommittedResource` may drive multiple `Reservation` CRDs (one per flavor-sized slot). Only memory commitments create Reservation CRDs; cores commitments do not. See [./failover-reservations.md](./failover-reservations.md) for the failover reservation type.
 
-**`ProjectQuota` CRD** — per-project quota store. Written by the Quota API when Limes pushes quota; read by the Report-Usage endpoint to include per-AZ quota in usage responses. One CRD per project.
+**`ProjectQuota` CRD** — per-project, per-AZ quota store. One CRD exists per (project × availability zone) pair, named `quota-{projectID}-{az}`. Written by the Quota API when Limes pushes quota (one CRD is created for each AZ in the request). The quota controller reconciles usage into the status: `TotalUsage` and `PaygUsage` are flat `map[string]int64` fields tracking per-resource consumption in that AZ. The controller watches CommittedResource and Hypervisor CRDs to maintain these values via periodic full reconciles, incremental HV diffs, and PaygUsage-only recomputes triggered by CommittedResource status changes.
 
 **`FlavorGroupCapacity` CRD** — per-flavor-group, per-AZ capacity snapshot maintained by the capacity controller (outside this subsystem). The Report-Capacity endpoint reads these to compute available capacity.
 
@@ -296,7 +296,7 @@ The `CommittedResource` controller handles all downstream work. `AllowRejection=
 
 ### Quota API
 
-`PUT /commitments/v1/projects/:project_id/quota` — receives the project's quota allocation from Limes and persists it as a `ProjectQuota` CRD (one per project). For flavor groups with `HandlesCommitments=true`, Limes sends per-AZ quota breakdowns; these are stored in the CRD and read back by the Report-Usage endpoint to include per-AZ quota in usage reports. Writes are idempotent; concurrent writes are resolved with retry-on-conflict.
+`PUT /commitments/v1/projects/:project_id/quota` — receives the project's quota allocation from Limes and persists it as `ProjectQuota` CRDs, one per (project × availability zone) combination, named `quota-{projectID}-{az}`. For flavor groups with `HandlesCommitments=true`, Limes sends per-AZ quota breakdowns; each AZ gets its own CRD with a flat `Quota map[string]int64` holding per-resource quota values for that zone. The quota controller then reconciles usage into each CRD's status (`TotalUsage`, `PaygUsage`). Writes are idempotent; concurrent writes are resolved with retry-on-conflict.
 
 ### Report-Usage API
 
@@ -307,7 +307,9 @@ For each flavor group `X` that accepts commitments, Cortex exposes three resourc
 - `hw_version_X_cores` — CPU cores (`HandlesCommitments=false`; derived from RAM via fixed ratio where applicable)
 - `hw_version_X_instances` — instance count (`HandlesCommitments=false`)
 
-For flavor groups with `HandlesCommitments=true`, the response includes per-AZ quota from the `ProjectQuota` CRD (written by the Quota API).
+For flavor groups with `HandlesCommitments=true`, the response includes per-AZ quota from the `ProjectQuota` CRDs (written by the Quota API).
+
+VM-to-commitment assignment is read from pre-computed `CommittedResource.Status` fields rather than being calculated inline at request time. A dedicated **usage reconciler** (in `internal/scheduling/reservations/commitments/usage_reconciler.go`) watches `CommittedResource` and `Hypervisor` CRDs and periodically runs the deterministic assignment algorithm, writing `AssignedInstances`, `UsedResources`, `LastUsageReconcileAt`, and `UsageObservedGeneration` into each CommittedResource's status. The Report-Usage endpoint reads these status fields to determine which VMs belong to which commitment. If a CR has not yet been reconciled, its VMs appear as PAYG until the first usage reconcile completes.
 
 For each VM, the API reports whether it accounts to a specific commitment or PAYG. This assignment is deterministic and may differ from the actual Cortex internal assignment used for scheduling.
 
