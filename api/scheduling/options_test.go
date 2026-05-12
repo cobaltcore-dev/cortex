@@ -12,12 +12,10 @@ func TestOptions_Validate(t *testing.T) {
 		wantErr bool
 	}{
 		{"zero value is valid", Options{}, false},
-		{"write run, history recorded by default", Options{}, false},
 		{"write run with inflight", Options{CreateInflight: true}, false},
 		{"read-only run, skipping history", Options{ReadOnly: true, SkipHistory: true}, false},
 		{"ReadOnly without SkipHistory is invalid", Options{ReadOnly: true}, true},
-		{"ReadOnly + CreateInflight is invalid", Options{ReadOnly: true, CreateInflight: true}, true},
-		{"ReadOnly + both invalid", Options{ReadOnly: true, CreateInflight: true}, true},
+		{"ReadOnly + CreateInflight is invalid", Options{ReadOnly: true, SkipHistory: true, CreateInflight: true}, true},
 	}
 
 	for _, tt := range tests {

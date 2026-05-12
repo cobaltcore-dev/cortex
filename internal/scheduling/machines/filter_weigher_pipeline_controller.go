@@ -132,7 +132,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		return errors.New("no machine pools available for scheduling")
 	}
 
-	// Execute the scheduling pipeline.
+	// Execute the scheduling pipeline. Options not set: machine scheduling always records history.
 	request := ironcore.MachinePipelineRequest{Pools: pools.Items}
 	result, err := pipeline.Run(request)
 	if !request.Options.SkipHistory {

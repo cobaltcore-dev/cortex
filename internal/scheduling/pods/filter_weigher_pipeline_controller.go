@@ -146,7 +146,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		return errors.New("no nodes available for scheduling")
 	}
 
-	// Execute the scheduling pipeline.
+	// Execute the scheduling pipeline. Options not set: pod scheduling always records history.
 	request := pods.PodPipelineRequest{Nodes: nodes.Items, Pod: *pod}
 	result, err := pipeline.Run(request)
 	if !request.Options.SkipHistory {
