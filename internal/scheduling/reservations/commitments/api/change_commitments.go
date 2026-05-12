@@ -203,6 +203,9 @@ ProcessLoop:
 				break ProcessLoop
 			}
 
+			groupData := flavorGroups[flavorGroupName]
+			ramUnitMiB := groupData.RAMUnitMiB()
+
 			groupResourceConf := api.config.ResourceConfigForGroup(flavorGroupName)
 			var handlesCommitments bool
 			switch resourceType {
@@ -263,7 +266,7 @@ ProcessLoop:
 				}
 
 				stateDesired, err := commitments.FromChangeCommitmentTargetState(
-					commitment, string(projectID), domainID, flavorGroupName, resourceType, string(req.AZ))
+					commitment, string(projectID), domainID, flavorGroupName, resourceType, string(req.AZ), ramUnitMiB)
 				if err != nil {
 					failedReason = fmt.Sprintf("commitment %s: %s", commitment.UUID, err)
 					rollback = true
