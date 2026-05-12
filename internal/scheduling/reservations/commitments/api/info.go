@@ -76,7 +76,7 @@ func (api *HTTPAPI) recordInfoMetrics(statusCode int, startTime time.Time) {
 }
 
 // resourceAttributes holds the custom attributes for a resource in the info API response.
-// Ratio values are in GiB per vCPU, matching the RAM resource unit (UnitGibibytes).
+// Ratio values are in GiB per vCPU.
 type resourceAttributes struct {
 	RamCoreRatio    *uint64 `json:"ramCoreRatio,omitempty"`
 	RamCoreRatioMin *uint64 `json:"ramCoreRatioMin,omitempty"`
@@ -137,26 +137,22 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 
 		// === 1. RAM Resource ===
 		ramResourceName := liquid.ResourceName(commitments.ResourceNameRAM(groupName))
-		// Determine topology: AZSeparatedTopology only for groups that accept commitments
-		// (AZSeparatedTopology means quota is also AZ-aware, required when HasQuota=true)
-		ramTopology := liquid.AZAwareTopology
-		if resCfg.RAM.HandlesCommitments {
-			ramTopology = liquid.AZSeparatedTopology
+		// Fixed-ratio groups: unit = smallest flavor's RAM in MiB (e.g. "480 GiB" for hana);
+		// variable-ratio groups: unit = 1 GiB.  RAMUnitMiB() encodes both cases.
+		ramUnit, err := liquid.UnitMebibytes.MultiplyBy(groupData.RAMUnitMiB())
+		if err != nil {
+			return liquid.ServiceInfo{}, fmt.Errorf("failed to create RAM unit for flavor group %q: %w", groupName, err)
 		}
-		// Fixed-ratio groups: unit is 1 slot (= 1 smallest-flavor instance); variable-ratio: GiB.
-		var ramUnit liquid.Unit
 		var ramDisplayName string
-		if groupData.HasFixedRamCoreRatio() {
-			ramUnit = liquid.UnitNone
+		if groupData.HasFixedRamCoreRatio() && groupData.SmallestFlavor.MemoryMB > 0 {
 			ramDisplayName = fmt.Sprintf("multiples of %d MiB (usable by: %s)", groupData.SmallestFlavor.MemoryMB, flavorListStr)
 		} else {
-			ramUnit = liquid.UnitGibibytes
 			ramDisplayName = fmt.Sprintf("GiB of RAM (usable by: %s)", flavorListStr)
 		}
 		resources[ramResourceName] = liquid.ResourceInfo{
 			DisplayName:         ramDisplayName,
 			Unit:                ramUnit,
-			Topology:            ramTopology,
+			Topology:            liquid.AZSeparatedTopology,
 			NeedsResourceDemand: false,
 			HasCapacity:         resCfg.RAM.HasCapacity,
 			HasQuota:            resCfg.RAM.HasQuota,
@@ -166,17 +162,13 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 
 		// === 2. Cores Resource ===
 		coresResourceName := liquid.ResourceName(commitments.ResourceNameCores(groupName))
-		coresTopology := liquid.AZAwareTopology
-		if resCfg.Cores.HandlesCommitments {
-			coresTopology = liquid.AZSeparatedTopology
-		}
 		resources[coresResourceName] = liquid.ResourceInfo{
 			DisplayName: fmt.Sprintf(
 				"CPU cores (usable by: %s)",
 				flavorListStr,
 			),
 			Unit:                liquid.UnitNone,
-			Topology:            coresTopology,
+			Topology:            liquid.AZSeparatedTopology,
 			NeedsResourceDemand: false,
 			HasCapacity:         resCfg.Cores.HasCapacity,
 			HasQuota:            resCfg.Cores.HasQuota,
@@ -186,17 +178,13 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 
 		// === 3. Instances Resource ===
 		instancesResourceName := liquid.ResourceName(commitments.ResourceNameInstances(groupName))
-		instancesTopology := liquid.AZAwareTopology
-		if resCfg.Instances.HandlesCommitments {
-			instancesTopology = liquid.AZSeparatedTopology
-		}
 		resources[instancesResourceName] = liquid.ResourceInfo{
 			DisplayName: fmt.Sprintf(
 				"instances (usable by: %s)",
 				flavorListStr,
 			),
 			Unit:                liquid.UnitNone,
-			Topology:            instancesTopology,
+			Topology:            liquid.AZSeparatedTopology,
 			NeedsResourceDemand: false,
 			HasCapacity:         resCfg.Instances.HasCapacity,
 			HasQuota:            resCfg.Instances.HasQuota,
