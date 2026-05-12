@@ -184,6 +184,9 @@ func FromCommitment(
 }
 
 // FromChangeCommitmentTargetState converts LIQUID API request to CommitmentState.
+// ramUnitMiB is the size of one external RAM unit in MiB:
+//   - fixed-ratio flavor groups: SmallestFlavor.MemoryMB (1 unit = 1 smallest-flavor slot)
+//   - variable-ratio flavor groups: 1024 (1 unit = 1 GiB)
 func FromChangeCommitmentTargetState(
 	commitment liquid.Commitment,
 	projectID string,
@@ -191,6 +194,7 @@ func FromChangeCommitmentTargetState(
 	flavorGroupName string,
 	resourceType v1alpha1.CommittedResourceType,
 	az string,
+	ramUnitMiB uint64,
 ) (*CommitmentState, error) {
 	// Validate commitment UUID format
 	commitmentUUID := string(commitment.UUID)
@@ -246,9 +250,8 @@ func FromChangeCommitmentTargetState(
 	case v1alpha1.CommittedResourceTypeCores:
 		state.TotalCores = int64(amountMultiple)
 	default:
-		// Amount represents GiB of RAM (1 GiB per unit)
-		const gibInBytes = int64(1) << 30
-		state.TotalMemoryBytes = int64(amountMultiple) * gibInBytes
+		// Convert external unit to bytes: 1 unit = ramUnitMiB MiB
+		state.TotalMemoryBytes = int64(amountMultiple) * int64(ramUnitMiB) * (1 << 20) //nolint:gosec // bounded by quota limits
 	}
 
 	return state, nil

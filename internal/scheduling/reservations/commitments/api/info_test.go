@@ -340,6 +340,14 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 	checkAttrsRatio(t, "hw_version_hana_fixed_ram", ramResource.Attributes, 4, nil, nil)
 	// v2_variable has ramCoreRatioMin=2048 MiB/vCPU, ramCoreRatioMax=16384 MiB/vCPU → expect 2, 16 GiB/vCPU.
 	checkAttrsRatio(t, "hw_version_v2_variable_ram", v2RamResource.Attributes, 0, ptr(uint64(2)), ptr(uint64(16)))
+
+	// Verify RAM units: fixed-ratio groups use UnitNone (slot-based), variable-ratio use UnitGibibytes.
+	if ramResource.Unit != liquid.UnitNone {
+		t.Errorf("hw_version_hana_fixed_ram: expected Unit=%q (slot-based), got %q", liquid.UnitNone, ramResource.Unit)
+	}
+	if v2RamResource.Unit != liquid.UnitGibibytes {
+		t.Errorf("hw_version_v2_variable_ram: expected Unit=%q, got %q", liquid.UnitGibibytes, v2RamResource.Unit)
+	}
 }
 
 func TestHandleInfo_TopologyFollowsHandlesCommitments(t *testing.T) {
