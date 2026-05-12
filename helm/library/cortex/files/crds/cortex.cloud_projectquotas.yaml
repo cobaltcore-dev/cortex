@@ -30,6 +30,14 @@ spec:
     - jsonPath: .status.conditions[?(@.type=='Ready')].status
       name: Ready
       type: string
+    - jsonPath: .status.totalUsageSummary
+      name: TotalUsage
+      priority: 1
+      type: string
+    - jsonPath: .status.paygUsageSummary
+      name: PaygUsage
+      priority: 1
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -197,6 +205,12 @@ spec:
                   Derived as TotalUsage - CRUsage (clamped >= 0).
                   Key: liquid.ResourceName
                 type: object
+              paygUsageSummary:
+                description: |-
+                  PaygUsageSummary is a human-readable compact summary of PaygUsage for kubectl wide output.
+                  Format: "2101: c=14 i=5 r=13; 2152: c=4 i=2 r=8"
+                  Computed by the quota controller on each status write. Grouped by flavor group.
+                type: string
               totalUsage:
                 additionalProperties:
                   format: int64
@@ -206,6 +220,12 @@ spec:
                   Persisted by the quota controller; updated by full reconcile and HV instance diffs.
                   Key: liquid.ResourceName
                 type: object
+              totalUsageSummary:
+                description: |-
+                  TotalUsageSummary is a human-readable compact summary of TotalUsage for kubectl wide output.
+                  Format: "2101: c=18 i=7 r=21; 2152: c=4 i=2 r=8"
+                  Computed by the quota controller on each status write. Grouped by flavor group.
+                type: string
             type: object
         required:
         - spec

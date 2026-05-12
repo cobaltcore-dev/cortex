@@ -6,6 +6,8 @@ package quota
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -29,7 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = ctrl.Log.WithName("quota-controller").WithValues("module", "quota")
+var log = ctrl.Log.WithName("quota-controller").WithValues("module", "quota-handling")
 
 // QuotaController manages quota usage tracking for projects.
 // It provides three reconciliation modes:
@@ -614,6 +616,10 @@ func (c *QuotaController) applyDeltaAndUpdateStatus(
 				pq.Status.PaygUsage[resourceName] = paygAmount
 			}
 
+			// Update human-readable summaries for wide kubectl output
+			pq.Status.TotalUsageSummary = buildUsageSummary(pq.Status.TotalUsage)
+			pq.Status.PaygUsageSummary = buildUsageSummary(pq.Status.PaygUsage)
+
 			now := metav1.Now()
 			pq.Status.LastReconcileAt = &now
 			return c.Status().Update(ctx, &pq)
@@ -813,7 +819,11 @@ func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavo
 			if !ok {
 				continue
 			}
-			// Convert bytes to GiB (1 GiB per commitment unit)
+			// Convert bytes to GiB (1 GiB per commitment unit) using integer truncation.
+			// NOTE: This truncates fractional GiB. For example, 8160 MiB (7.97 GiB) → 7 GiB.
+			// This means PaygUsage = TotalUsage - CRUsage may appear higher than expected
+			// when VMs have non-GiB-aligned RAM. This is intentional: we only deduct
+			// whole GiB units that are fully consumed by committed VMs.
 			usedBytes := memQty.Value()
 			if _, ok := flavorGroups[spec.FlavorGroupName]; !ok {
 				continue
@@ -931,6 +941,8 @@ func (c *QuotaController) updateProjectQuotaStatusWithRetry(
 		az := pq.Spec.AvailabilityZone
 		pq.Status.TotalUsage = extractAZSlice(totalUsage, az)
 		pq.Status.PaygUsage = extractAZSlice(paygUsage, az)
+		pq.Status.TotalUsageSummary = buildUsageSummary(pq.Status.TotalUsage)
+		pq.Status.PaygUsageSummary = buildUsageSummary(pq.Status.PaygUsage)
 		pq.Status.ObservedGeneration = pq.Generation
 		now := metav1.Now()
 		pq.Status.LastReconcileAt = &now
@@ -939,6 +951,89 @@ func (c *QuotaController) updateProjectQuotaStatusWithRetry(
 		}
 		return c.Status().Update(ctx, &pq)
 	})
+}
+
+// buildUsageSummary converts a flat usage map (resourceName → value) into a compact
+// human-readable string grouped by flavor group.
+// Input keys follow the pattern: "hw_version_<group>_cores", "hw_version_<group>_instances", "hw_version_<group>_ram"
+// Output format: "2101: c=18 i=7 r=21; 2152: c=4 i=2 r=8"
+// Groups are sorted alphabetically for stable output.
+func buildUsageSummary(usage map[string]int64) string {
+	if len(usage) == 0 {
+		return ""
+	}
+
+	const prefix = "hw_version_"
+	const suffixRAM = "_ram"
+	const suffixCores = "_cores"
+	const suffixInstances = "_instances"
+
+	// Parse into per-group values
+	type groupValues struct {
+		cores     int64
+		instances int64
+		ram       int64
+	}
+	groups := make(map[string]*groupValues)
+
+	for key, val := range usage {
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		name := strings.TrimPrefix(key, prefix)
+		switch {
+		case strings.HasSuffix(name, suffixRAM):
+			group := strings.TrimSuffix(name, suffixRAM)
+			if groups[group] == nil {
+				groups[group] = &groupValues{}
+			}
+			groups[group].ram = val
+		case strings.HasSuffix(name, suffixCores):
+			group := strings.TrimSuffix(name, suffixCores)
+			if groups[group] == nil {
+				groups[group] = &groupValues{}
+			}
+			groups[group].cores = val
+		case strings.HasSuffix(name, suffixInstances):
+			group := strings.TrimSuffix(name, suffixInstances)
+			if groups[group] == nil {
+				groups[group] = &groupValues{}
+			}
+			groups[group].instances = val
+		}
+	}
+
+	if len(groups) == 0 {
+		return ""
+	}
+
+	// Sort group names for stable output
+	groupNames := make([]string, 0, len(groups))
+	for name := range groups {
+		groupNames = append(groupNames, name)
+	}
+	sort.Strings(groupNames)
+
+	// Build compact summary — only include resource types with non-zero values
+	var parts []string
+	for _, name := range groupNames {
+		gv := groups[name]
+		var vals []string
+		if gv.cores != 0 {
+			vals = append(vals, fmt.Sprintf("c=%d", gv.cores))
+		}
+		if gv.instances != 0 {
+			vals = append(vals, fmt.Sprintf("i=%d", gv.instances))
+		}
+		if gv.ram != 0 {
+			vals = append(vals, fmt.Sprintf("r=%d", gv.ram))
+		}
+		if len(vals) == 0 {
+			continue // skip groups with all zeros
+		}
+		parts = append(parts, name+": "+strings.Join(vals, " "))
+	}
+	return strings.Join(parts, "; ")
 }
 
 // vmResourceUnits computes RAM commitment units (GiB) and cores from a VM's resources.

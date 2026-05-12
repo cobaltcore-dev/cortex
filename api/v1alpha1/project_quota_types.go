@@ -68,6 +68,18 @@ type ProjectQuotaStatus struct {
 	// +kubebuilder:validation:Optional
 	PaygUsage map[string]int64 `json:"paygUsage,omitempty"`
 
+	// TotalUsageSummary is a human-readable compact summary of TotalUsage for kubectl wide output.
+	// Format: "2101: c=18 i=7 r=21; 2152: c=4 i=2 r=8"
+	// Computed by the quota controller on each status write. Grouped by flavor group.
+	// +kubebuilder:validation:Optional
+	TotalUsageSummary string `json:"totalUsageSummary,omitempty"`
+
+	// PaygUsageSummary is a human-readable compact summary of PaygUsage for kubectl wide output.
+	// Format: "2101: c=14 i=5 r=13; 2152: c=4 i=2 r=8"
+	// Computed by the quota controller on each status write. Grouped by flavor group.
+	// +kubebuilder:validation:Optional
+	PaygUsageSummary string `json:"paygUsageSummary,omitempty"`
+
 	// LastReconcileAt is when the controller last reconciled this project's quota (any path).
 	// +kubebuilder:validation:Optional
 	LastReconcileAt *metav1.Time `json:"lastReconcileAt,omitempty"`
@@ -91,6 +103,8 @@ type ProjectQuotaStatus struct {
 // +kubebuilder:printcolumn:name="Domain",type="string",JSONPath=".spec.domainID"
 // +kubebuilder:printcolumn:name="LastReconcile",type="date",JSONPath=".status.lastReconcileAt"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
+// +kubebuilder:printcolumn:name="TotalUsage",type="string",JSONPath=".status.totalUsageSummary",priority=1
+// +kubebuilder:printcolumn:name="PaygUsage",type="string",JSONPath=".status.paygUsageSummary",priority=1
 
 // ProjectQuota is the Schema for the projectquotas API.
 // It persists quota values pushed by Limes via the LIQUID quota endpoint

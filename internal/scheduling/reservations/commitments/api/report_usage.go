@@ -33,7 +33,8 @@ func (api *HTTPAPI) HandleReportUsage(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("X-Request-ID", requestID)
 
-	log := apiLog.WithValues("requestID", requestID, "endpoint", "report-usage")
+	log := apiLog.WithValues("requestID", requestID, "endpoint", "report-usage", "module", "quota-handling")
+	log.Info("received report-usage request", "method", r.Method, "path", r.URL.Path)
 
 	// Check if API is enabled
 	if !api.config.EnableReportUsage {
@@ -82,6 +83,8 @@ func (api *HTTPAPI) HandleReportUsage(w http.ResponseWriter, r *http.Request) {
 		api.recordUsageMetrics(statusCode, startTime)
 		return
 	}
+
+	log.Info("report-usage request completed", "projectID", projectID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)

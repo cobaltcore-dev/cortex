@@ -48,7 +48,8 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("X-Request-ID", requestID)
 
-	log := apiLog.WithValues("requestID", requestID, "endpoint", "quota")
+	log := apiLog.WithValues("requestID", requestID, "endpoint", "quota", "module", "quota-handling")
+	log.Info("received quota request", "method", r.Method, "path", r.URL.Path)
 
 	if r.Method != http.MethodPut {
 		api.quotaError(w, http.StatusMethodNotAllowed, "Method not allowed", startTime)
@@ -220,6 +221,13 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	// Collect AZ names for the success log
+	azNames := make([]string, 0, len(activeAZs))
+	for az := range activeAZs {
+		azNames = append(azNames, az)
+	}
+	log.Info("quota request completed", "projectID", projectID, "azs", azNames)
 
 	// Return 204 No Content as expected by the LIQUID API
 	w.WriteHeader(http.StatusNoContent)
