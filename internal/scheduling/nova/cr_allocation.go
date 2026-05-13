@@ -31,6 +31,7 @@ func (c *FilterWeigherPipelineController) recordCRAllocation(ctx context.Context
 	projectID := request.Context.ProjectID
 	flavorName := request.Spec.Data.Flavor.Data.Name
 	selectedHost := *decision.Status.Result.TargetHost
+	intent := string(decision.Spec.Intent)
 
 	flavorGroupName, flavorInGroup, err := c.resolveFlavorGroup(ctx, flavorName)
 	if err != nil {
@@ -39,52 +40,69 @@ func (c *FilterWeigherPipelineController) recordCRAllocation(ctx context.Context
 		} else {
 			log.Error(err, "CR allocation: failed to resolve flavor group",
 				"flavor", flavorName, "instanceUUID", instanceUUID)
+			if c.PlacementCounter != nil {
+				c.PlacementCounter.WithLabelValues("unknown", intent, "error").Inc()
+			}
 		}
 		return
 	}
 
-	// List all CR reservations and filter to candidates matching this placement.
-	var reservationList v1alpha1.ReservationList
-	if err := c.List(ctx, &reservationList,
-		client.MatchingLabels{v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource},
-	); err != nil {
-		log.Error(err, "CR allocation: failed to list reservations", "instanceUUID", instanceUUID)
+	evaluator, err := BuildCRSlotEvaluator(ctx, c.Client)
+	if err != nil {
+		log.Error(err, "CR allocation: failed to build CR slot evaluator", "instanceUUID", instanceUUID)
 		return
 	}
 
-	var candidates []v1alpha1.Reservation
-	for _, res := range reservationList.Items {
-		cr := res.Spec.CommittedResourceReservation
-		if cr == nil {
+	var crList v1alpha1.CommittedResourceList
+	if err := c.List(ctx, &crList); err != nil {
+		log.Error(err, "CR allocation: failed to list committed resources", "instanceUUID", instanceUUID)
+		return
+	}
+	var activeCRs []v1alpha1.CommittedResource
+	for _, cr := range crList.Items {
+		if !cr.MatchesGroup(projectID, flavorGroupName) || !cr.IsActive() {
 			continue
 		}
-		if res.Spec.TargetHost != selectedHost || cr.ProjectID != projectID || cr.ResourceGroup != flavorGroupName {
-			continue
-		}
-		// Idempotency: if this VM UUID is already recorded, the work is done.
-		if _, exists := cr.Allocations[instanceUUID]; exists {
+		activeCRs = append(activeCRs, cr)
+	}
+
+	candidateHosts := decision.Status.Result.OrderedHosts
+	crOutcome := classifyCRPlacement(evaluator, activeCRs, candidateHosts, projectID, flavorGroupName)
+
+	log.V(1).Info("CR allocation: placement classified",
+		"cr_outcome", crOutcome,
+		"instanceUUID", instanceUUID,
+		"host", selectedHost,
+		"projectID", projectID,
+		"flavorGroup", flavorGroupName,
+	)
+	if c.PlacementCounter != nil {
+		c.PlacementCounter.WithLabelValues(flavorGroupName, intent, crOutcome).Inc()
+	}
+
+	if crOutcome != "slot_used" {
+		return
+	}
+
+	// slot_used: allocate into a slot on the selected host.
+	slotsOnTarget := evaluator.SlotsForHost(selectedHost, projectID, flavorGroupName)
+
+	// Idempotency: if this VM UUID is already recorded in any slot, the work is done.
+	for _, slot := range slotsOnTarget {
+		if _, exists := slot.Spec.CommittedResourceReservation.Allocations[instanceUUID]; exists {
 			log.Info("CR allocation: VM UUID already in reservation, skipping",
-				"instanceUUID", instanceUUID, "reservation", res.Name)
+				"instanceUUID", instanceUUID, "reservation", slot.Name)
 			return
 		}
-		candidates = append(candidates, res)
-	}
-
-	if len(candidates) == 0 {
-		log.V(1).Info("CR allocation: no matching reservation slot, PAYG placement",
-			"instanceUUID", instanceUUID, "host", selectedHost,
-			"projectID", projectID, "flavorGroup", flavorGroupName)
-		return
 	}
 
 	vmMemoryBytes := int64(flavorInGroup.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory bounded by specs
 	vmCPUs := int64(flavorInGroup.VCPUs)                         //nolint:gosec // VCPUs bounded by specs
 
-	slotName := pickReservationSlot(candidates, vmMemoryBytes, vmCPUs)
+	slotName := pickReservationSlot(slotsOnTarget, vmMemoryBytes)
 	if slotName == "" {
-		log.Error(nil, "CR allocation: no reservation slot has sufficient remaining capacity",
-			"instanceUUID", instanceUUID, "vmMemoryBytes", vmMemoryBytes,
-			"host", selectedHost, "candidates", len(candidates))
+		log.V(1).Info("CR allocation: slot_used but target host has no slot with remaining capacity",
+			"instanceUUID", instanceUUID, "host", selectedHost)
 		return
 	}
 
@@ -122,40 +140,66 @@ func (c *FilterWeigherPipelineController) recordCRAllocation(ctx context.Context
 	log.Info("CR allocation: done", "instanceUUID", instanceUUID, "reservation", slotName)
 }
 
-// pickReservationSlot selects the reservation slot with the least remaining
-// memory that can still fully fit vmMemoryBytes and vmCPUs.
-// Tiebreaks: least remaining CPU, then reservation name (lexicographic).
-// Returns the slot name, or "" if no slot fits.
-func pickReservationSlot(candidates []v1alpha1.Reservation, vmMemoryBytes, vmCPUs int64) string {
+// classifyCRPlacement determines the CR slot outcome for a successful placement:
+//   - no_cr: no active CR or CR capacity fully exhausted (H1)
+//   - slot_missed: CR has remaining capacity but no candidate host has a slot with remaining > 0 (H2)
+//   - slot_used: CR has remaining capacity and at least one candidate host has a slot with remaining > 0 (H3)
+func classifyCRPlacement(
+	evaluator *CRSlotEvaluator,
+	activeCRs []v1alpha1.CommittedResource,
+	candidateHosts []string,
+	projectID, flavorGroupName string,
+) string {
+
+	if len(activeCRs) == 0 {
+		return "no_cr"
+	}
+	totalCapacity := resource.Quantity{}
+	totalUsed := resource.Quantity{}
+	for _, cr := range activeCRs {
+		totalCapacity.Add(cr.Spec.Amount)
+		if used, ok := cr.Status.UsedResources["memory"]; ok {
+			totalUsed.Add(used)
+		}
+	}
+	if totalUsed.Cmp(totalCapacity) >= 0 {
+		return "no_cr"
+	}
+	for _, host := range candidateHosts {
+		for _, slot := range evaluator.SlotsForHost(host, projectID, flavorGroupName) {
+			if reservationRemainingMemory(slot) > 0 {
+				return "slot_used"
+			}
+		}
+	}
+	return "slot_missed"
+}
+
+// pickReservationSlot selects the best reservation slot for a new VM.
+// A slot is usable if it has any remaining memory (overfill is allowed: the VM
+// may exceed the slot's remaining capacity, with the overflow covered by the
+// host's free capacity which the pipeline already verified).
+// Selection: maximise coverage (min(remMem, vmMemoryBytes)), tiebreak by
+// smallest remaining memory (tightest fit), then reservation name.
+// Returns the slot name, or "" if no slot has any remaining memory.
+func pickReservationSlot(candidates []v1alpha1.Reservation, vmMemoryBytes int64) string {
 	bestName := ""
-	var bestRemMem, bestRemCPU int64
+	var bestCoverage, bestRemMem int64
 
 	for _, res := range candidates {
-		cr := res.Spec.CommittedResourceReservation
-
-		totalCPUQ := res.Spec.Resources[hv1.ResourceCPU]
-		totalCPU := totalCPUQ.Value()
-
-		var usedCPU int64
-		for _, alloc := range cr.Allocations {
-			cpuQ := alloc.Resources[hv1.ResourceCPU]
-			usedCPU += cpuQ.Value()
-		}
-
 		remMem := reservationRemainingMemory(res)
-		remCPU := max(totalCPU-usedCPU, 0)
-
-		if remMem < vmMemoryBytes || remCPU < vmCPUs {
-			continue // Slot doesn't have enough remaining capacity.
+		if remMem <= 0 {
+			continue
 		}
+		coverage := min(remMem, vmMemoryBytes)
 
 		if bestName == "" ||
-			remMem < bestRemMem ||
-			(remMem == bestRemMem && remCPU < bestRemCPU) ||
-			(remMem == bestRemMem && remCPU == bestRemCPU && res.Name < bestName) {
+			coverage > bestCoverage ||
+			(coverage == bestCoverage && remMem < bestRemMem) ||
+			(coverage == bestCoverage && remMem == bestRemMem && res.Name < bestName) {
 			bestName = res.Name
+			bestCoverage = coverage
 			bestRemMem = remMem
-			bestRemCPU = remCPU
 		}
 	}
 

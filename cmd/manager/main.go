@@ -401,8 +401,10 @@ func main() {
 			Monitor:            filterWeigherPipelineMonitor,
 			FeatureGates:       featureGates,
 			NoHostFoundCounter: nova.NewNoHostFoundCounter(),
+			PlacementCounter:   nova.NewPlacementCounter(),
 		}
 		metrics.Registry.MustRegister(filterWeigherController.NoHostFoundCounter)
+		metrics.Registry.MustRegister(filterWeigherController.PlacementCounter)
 		// Inferred through the base controller.
 		filterWeigherController.Client = multiclusterClient
 		if err := filterWeigherController.SetupWithManager(mgr, multiclusterClient); err != nil {

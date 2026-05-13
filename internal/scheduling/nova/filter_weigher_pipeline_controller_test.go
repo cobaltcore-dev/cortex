@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -950,11 +952,8 @@ func TestIsUserVMPlacement(t *testing.T) {
 }
 
 func TestPickReservationSlot(t *testing.T) {
-	// vmMemBytes and vmCPUs for a 4096 MiB / 2 vCPU flavor.
-	const (
-		vmMemBytes = int64(4096) * 1024 * 1024
-		vmCPUs     = int64(2)
-	)
+	// vmMemBytes for a 4096 MiB flavor.
+	const vmMemBytes = int64(4096) * 1024 * 1024
 
 	makeSlot := func(name string, totalMemMiB, totalCPU, usedMemMiB, usedCPU int64) v1alpha1.Reservation {
 		var allocs map[string]v1alpha1.CommittedResourceAllocation
@@ -993,33 +992,25 @@ func TestPickReservationSlot(t *testing.T) {
 			want:       "",
 		},
 		{
-			name:       "single slot fits",
+			name:       "single slot fits fully",
 			candidates: []v1alpha1.Reservation{makeSlot("a", 8192, 8, 0, 0)},
 			want:       "a",
 		},
 		{
-			name:       "single slot too small after allocations",
-			candidates: []v1alpha1.Reservation{makeSlot("a", 8192, 8, 8192, 8)}, // fully consumed
+			name:       "slot with zero remaining memory excluded",
+			candidates: []v1alpha1.Reservation{makeSlot("a", 8192, 8, 8192, 0)},
 			want:       "",
 		},
 		{
-			name: "picks slot with least remaining memory",
+			name: "picks slot with least remaining memory when both cover fully",
 			candidates: []v1alpha1.Reservation{
 				makeSlot("large", 8192, 8, 0, 0), // 8192 MiB remaining
-				makeSlot("small", 6144, 8, 0, 0), // 6144 MiB remaining, still fits
+				makeSlot("small", 6144, 8, 0, 0), // 6144 MiB remaining
 			},
 			want: "small",
 		},
 		{
-			name: "CPU tiebreak on equal remaining memory",
-			candidates: []v1alpha1.Reservation{
-				makeSlot("more-cpu", 6144, 8, 0, 0), // remCPU = 8
-				makeSlot("less-cpu", 6144, 4, 0, 0), // remCPU = 4
-			},
-			want: "less-cpu",
-		},
-		{
-			name: "name tiebreak on equal remaining memory and CPU",
+			name: "name tiebreak when coverage and remaining memory are equal",
 			candidates: []v1alpha1.Reservation{
 				makeSlot("slot-b", 6144, 4, 0, 0),
 				makeSlot("slot-a", 6144, 4, 0, 0),
@@ -1039,28 +1030,49 @@ func TestPickReservationSlot(t *testing.T) {
 			want: "",
 		},
 		{
-			name:       "partially used slot still fits",
+			name:       "partially used slot still usable",
 			candidates: []v1alpha1.Reservation{makeSlot("partial", 8192, 8, 2048, 2)}, // 6144 MiB remaining
 			want:       "partial",
 		},
 		{
-			name:       "CPU exhausted: slot excluded as hard constraint",
-			candidates: []v1alpha1.Reservation{makeSlot("cpu-full", 8192, 2, 0, 2)}, // remCPU = 0
-			want:       "",
+			name:       "overfill: slot smaller than VM is usable",
+			candidates: []v1alpha1.Reservation{makeSlot("a", 4096, 8, 2048, 0)}, // 2048 MiB remaining < vmMemBytes
+			want:       "a",
 		},
 		{
-			name: "CPU exhausted slot skipped, other slot chosen",
+			name: "overfill: full coverage preferred over partial",
 			candidates: []v1alpha1.Reservation{
-				makeSlot("cpu-full", 8192, 2, 0, 2), // remCPU = 0, excluded
-				makeSlot("cpu-ok", 8192, 4, 0, 0),   // remCPU = 4, fits
+				makeSlot("partial", 4096, 8, 2048, 0), // 2048 MiB remaining, coverage=2048
+				makeSlot("full", 6144, 8, 0, 0),       // 6144 MiB remaining, coverage=4096 (full)
 			},
-			want: "cpu-ok",
+			want: "full",
+		},
+		{
+			name: "overfill: highest partial coverage preferred",
+			candidates: []v1alpha1.Reservation{
+				makeSlot("low", 4096, 8, 2048, 0),  // 2048 MiB remaining, coverage=2048
+				makeSlot("high", 4096, 8, 1024, 0), // 3072 MiB remaining, coverage=3072
+			},
+			want: "high",
+		},
+		{
+			name:       "CPU exhausted slot is still usable (overfill applies to CPU too)",
+			candidates: []v1alpha1.Reservation{makeSlot("cpu-full", 8192, 2, 0, 2)}, // remCPU=0 but remMem>0
+			want:       "cpu-full",
+		},
+		{
+			name: "name tiebreak when memory equal (CPU no longer a tiebreak criterion)",
+			candidates: []v1alpha1.Reservation{
+				makeSlot("more-cpu", 6144, 8, 0, 0),
+				makeSlot("less-cpu", 6144, 4, 0, 0),
+			},
+			want: "less-cpu", // wins by name, not by CPU
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := pickReservationSlot(tt.candidates, vmMemBytes, vmCPUs)
+			got := pickReservationSlot(tt.candidates, vmMemBytes)
 			if got != tt.want {
 				t.Errorf("pickReservationSlot() = %q, want %q", got, tt.want)
 			}
@@ -1071,7 +1083,10 @@ func TestPickReservationSlot(t *testing.T) {
 func TestRecordCRAllocation(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("AddToScheme: %v", err)
+		t.Fatalf("AddToScheme v1alpha1: %v", err)
+	}
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("AddToScheme hv1: %v", err)
 	}
 
 	const (
@@ -1148,13 +1163,40 @@ func TestRecordCRAllocation(t *testing.T) {
 		}
 	}
 
-	makeDecision := func(host string) *v1alpha1.Decision {
+	makeDecision := func(host string, candidates ...string) *v1alpha1.Decision {
 		h := host
 		return &v1alpha1.Decision{
 			Status: v1alpha1.DecisionStatus{
-				Result: &v1alpha1.DecisionResult{TargetHost: &h},
+				Result: &v1alpha1.DecisionResult{
+					TargetHost:   &h,
+					OrderedHosts: candidates,
+				},
 			},
 		}
+	}
+
+	// makeCRObject creates a CommittedResource for the test project+flavorGroup with remaining capacity.
+	makeCRObject := func() *v1alpha1.CommittedResource {
+		return &v1alpha1.CommittedResource{
+			ObjectMeta: metav1.ObjectMeta{Name: "cr-1"},
+			Spec: v1alpha1.CommittedResourceSpec{
+				ProjectID:       projectID,
+				FlavorGroupName: flavorGroup,
+				State:           v1alpha1.CommitmentStatusConfirmed,
+				Amount:          *resource.NewQuantity(int64(8192)*1024*1024, resource.BinarySI),
+			},
+		}
+	}
+
+	// setReady marks a reservation as Ready so BuildCRSlotEvaluator indexes it.
+	setReady := func(res *v1alpha1.Reservation) *v1alpha1.Reservation {
+		res.Status.Conditions = []metav1.Condition{{
+			Type:               v1alpha1.ReservationConditionReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "Ready",
+			LastTransitionTime: metav1.Now(),
+		}}
+		return res
 	}
 
 	vmAlloc := func() map[string]v1alpha1.CommittedResourceAllocation {
@@ -1176,15 +1218,17 @@ func TestRecordCRAllocation(t *testing.T) {
 		decision         *v1alpha1.Decision
 		checkSlot        string
 		expectAllocation bool
+		expectedCRSlot   string // if non-empty, asserts PlacementCounter cr_slot label
 	}{
 		{
 			name: "writes allocation into matching reservation",
 			objects: []client.Object{
 				flavorKnowledge(),
-				makeReservation("slot-1", 8192, 8, projectID, flavorGroup, selectedHost, nil),
+				makeCRObject(),
+				setReady(makeReservation("slot-1", 8192, 8, projectID, flavorGroup, selectedHost, nil)),
 			},
 			request:          makeRequest(instanceUUID, projectID, flavorName),
-			decision:         makeDecision(selectedHost),
+			decision:         makeDecision(selectedHost, selectedHost),
 			checkSlot:        "slot-1",
 			expectAllocation: true,
 		},
@@ -1192,10 +1236,11 @@ func TestRecordCRAllocation(t *testing.T) {
 			name: "idempotent: UUID already in allocations",
 			objects: []client.Object{
 				flavorKnowledge(),
-				makeReservation("slot-1", 8192, 8, projectID, flavorGroup, selectedHost, vmAlloc()),
+				makeCRObject(),
+				setReady(makeReservation("slot-1", 8192, 8, projectID, flavorGroup, selectedHost, vmAlloc())),
 			},
 			request:          makeRequest(instanceUUID, projectID, flavorName),
-			decision:         makeDecision(selectedHost),
+			decision:         makeDecision(selectedHost, selectedHost),
 			checkSlot:        "slot-1",
 			expectAllocation: true,
 		},
@@ -1203,10 +1248,10 @@ func TestRecordCRAllocation(t *testing.T) {
 			name: "PAYG: flavor not in any group",
 			objects: []client.Object{
 				flavorKnowledge(),
-				makeReservation("slot-1", 8192, 8, projectID, flavorGroup, selectedHost, nil),
+				setReady(makeReservation("slot-1", 8192, 8, projectID, flavorGroup, selectedHost, nil)),
 			},
 			request:          makeRequest(instanceUUID, projectID, "unknown-flavor"),
-			decision:         makeDecision(selectedHost),
+			decision:         makeDecision(selectedHost, selectedHost),
 			checkSlot:        "slot-1",
 			expectAllocation: false,
 		},
@@ -1214,10 +1259,11 @@ func TestRecordCRAllocation(t *testing.T) {
 			name: "no matching reservation: host mismatch",
 			objects: []client.Object{
 				flavorKnowledge(),
-				makeReservation("slot-1", 8192, 8, projectID, flavorGroup, "other-host", nil),
+				makeCRObject(),
+				setReady(makeReservation("slot-1", 8192, 8, projectID, flavorGroup, "other-host", nil)),
 			},
 			request:          makeRequest(instanceUUID, projectID, flavorName),
-			decision:         makeDecision(selectedHost),
+			decision:         makeDecision(selectedHost, selectedHost),
 			checkSlot:        "slot-1",
 			expectAllocation: false,
 		},
@@ -1225,7 +1271,8 @@ func TestRecordCRAllocation(t *testing.T) {
 			name: "no slot fits: all capacity used",
 			objects: []client.Object{
 				flavorKnowledge(),
-				makeReservation("slot-full", 4096, 2, projectID, flavorGroup, selectedHost,
+				makeCRObject(),
+				setReady(makeReservation("slot-full", 4096, 2, projectID, flavorGroup, selectedHost,
 					map[string]v1alpha1.CommittedResourceAllocation{
 						"other-vm": {
 							Resources: map[hv1.ResourceName]resource.Quantity{
@@ -1233,11 +1280,27 @@ func TestRecordCRAllocation(t *testing.T) {
 								hv1.ResourceCPU:    *resource.NewQuantity(2, resource.DecimalSI),
 							},
 						},
-					}),
+					})),
 			},
 			request:          makeRequest(instanceUUID, projectID, flavorName),
-			decision:         makeDecision(selectedHost),
+			decision:         makeDecision(selectedHost, selectedHost),
 			checkSlot:        "slot-full",
+			expectAllocation: false,
+		},
+		{
+			name: "inactive CR (pending state) is filtered by IsActive(): no allocation",
+			objects: []client.Object{
+				flavorKnowledge(),
+				func() *v1alpha1.CommittedResource {
+					cr := makeCRObject()
+					cr.Spec.State = v1alpha1.CommitmentStatusPending
+					return cr
+				}(),
+				setReady(makeReservation("slot-1", 8192, 8, projectID, flavorGroup, selectedHost, nil)),
+			},
+			request:          makeRequest(instanceUUID, projectID, flavorName),
+			decision:         makeDecision(selectedHost, selectedHost),
+			checkSlot:        "slot-1",
 			expectAllocation: false,
 		},
 		{
@@ -1246,9 +1309,10 @@ func TestRecordCRAllocation(t *testing.T) {
 				makeReservation("slot-1", 8192, 8, projectID, flavorGroup, selectedHost, nil),
 			},
 			request:          makeRequest(instanceUUID, projectID, flavorName),
-			decision:         makeDecision(selectedHost),
+			decision:         makeDecision(selectedHost, selectedHost),
 			checkSlot:        "slot-1",
 			expectAllocation: false,
+			expectedCRSlot:   "error",
 		},
 	}
 
@@ -1259,10 +1323,15 @@ func TestRecordCRAllocation(t *testing.T) {
 				WithObjects(tt.objects...).
 				Build()
 
+			counter := NewPlacementCounter()
+			reg := prometheus.NewRegistry()
+			reg.MustRegister(counter)
+
 			controller := &FilterWeigherPipelineController{
 				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
 					Client: fakeClient,
 				},
+				PlacementCounter: counter,
 			}
 
 			controller.recordCRAllocation(context.Background(), tt.decision, tt.request)
@@ -1277,6 +1346,14 @@ func TestRecordCRAllocation(t *testing.T) {
 			}
 			if !tt.expectAllocation && hasAlloc {
 				t.Errorf("expected no allocation for UUID %q but one was written", instanceUUID)
+			}
+			if tt.expectedCRSlot != "" {
+				intent := string(tt.decision.Spec.Intent)
+				got := testutil.ToFloat64(counter.WithLabelValues("unknown", intent, tt.expectedCRSlot))
+				if got != 1 {
+					t.Errorf("PlacementCounter[flavor_group=unknown, intent=%q, cr_slot=%q] = %.0f, want 1",
+						intent, tt.expectedCRSlot, got)
+				}
 			}
 		})
 	}

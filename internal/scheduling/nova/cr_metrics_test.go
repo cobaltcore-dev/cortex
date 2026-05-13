@@ -73,98 +73,132 @@ func TestClassifyNoHostFound(t *testing.T) {
 		proj  = "project-1"
 		group = "kvm_v2_hana_s"
 	)
+	const MiB = int64(1024 * 1024)
+
+	// emptyEval has no hosts or slots.
+	emptyEval := &CRSlotEvaluator{
+		hvFreeMemory:       map[string]int64{},
+		reservationsByHost: map[string][]v1alpha1.Reservation{},
+	}
+
+	// evalWithSlot builds an evaluator with a single slot on "host-1".
+	evalWithSlot := func(totalMiB, allocMiB int64) *CRSlotEvaluator {
+		slot := makeSlot(proj, group, totalMiB, allocMiB)
+		return &CRSlotEvaluator{
+			hvFreeMemory: map[string]int64{"host-1": 16384 * MiB},
+			reservationsByHost: map[string][]v1alpha1.Reservation{
+				"host-1": {slot},
+			},
+		}
+	}
 
 	tests := []struct {
 		name         string
 		activeCRs    []v1alpha1.CommittedResource
-		reservations []v1alpha1.Reservation
+		eval         *CRSlotEvaluator
+		inputHosts   []string
+		vmMemBytes   int64
 		expectedCase string
 	}{
 		{
-			name:         "D: no active CRs for project+flavor group",
+			name:         "no_cr: no active CRs for project+flavor group",
 			activeCRs:    nil,
-			reservations: nil,
-			expectedCase: "D",
+			eval:         emptyEval,
+			inputHosts:   nil,
+			vmMemBytes:   4096 * MiB,
+			expectedCase: "no_cr",
 		},
 		{
-			name: "A: CRs fully occupied (used == capacity)",
+			name: "cr_exhausted: CRs fully occupied (used == capacity)",
 			activeCRs: []v1alpha1.CommittedResource{
 				makeCR(v1alpha1.CommitmentStatusConfirmed, 8192, 8192),
 			},
-			reservations: nil,
-			expectedCase: "A",
+			eval:         emptyEval,
+			inputHosts:   []string{"host-1"},
+			vmMemBytes:   4096 * MiB,
+			expectedCase: "cr_exhausted",
 		},
 		{
-			name: "A: CRs fully occupied (used > capacity)",
+			name: "cr_exhausted: CRs fully occupied (used > capacity)",
 			activeCRs: []v1alpha1.CommittedResource{
 				makeCR(v1alpha1.CommitmentStatusConfirmed, 8192, 10000),
 			},
-			reservations: nil,
-			expectedCase: "A",
+			eval:         emptyEval,
+			inputHosts:   []string{"host-1"},
+			vmMemBytes:   4096 * MiB,
+			expectedCase: "cr_exhausted",
 		},
 		{
-			name: "A: multiple CRs, total used >= total capacity",
+			name: "cr_exhausted: multiple CRs, total used >= total capacity",
 			activeCRs: []v1alpha1.CommittedResource{
 				makeCR(v1alpha1.CommitmentStatusConfirmed, 4096, 4096),
 				makeCR(v1alpha1.CommitmentStatusGuaranteed, 4096, 4096),
 			},
-			reservations: nil,
-			expectedCase: "A",
+			eval:         emptyEval,
+			inputHosts:   []string{"host-1"},
+			vmMemBytes:   4096 * MiB,
+			expectedCase: "cr_exhausted",
 		},
 		{
-			name: "B: CRs have capacity but no free reservation slot",
+			name: "slot_exhausted: CRs have capacity but slot fully allocated",
 			activeCRs: []v1alpha1.CommittedResource{
 				makeCR(v1alpha1.CommitmentStatusConfirmed, 8192, 4096),
 			},
-			reservations: []v1alpha1.Reservation{
-				makeSlot(proj, group, 8192, 8192), // slot fully allocated
-			},
-			expectedCase: "B",
+			eval:         evalWithSlot(8192, 8192), // slotRemaining=0 → skipped
+			inputHosts:   []string{"host-1"},
+			vmMemBytes:   4096 * MiB,
+			expectedCase: "slot_exhausted",
 		},
 		{
-			name: "B: CRs have capacity, no slots at all",
+			name: "slot_exhausted: CRs have capacity, no slots at all",
 			activeCRs: []v1alpha1.CommittedResource{
 				makeCR(v1alpha1.CommitmentStatusConfirmed, 8192, 0),
 			},
-			reservations: nil,
-			expectedCase: "B",
+			eval:         emptyEval,
+			inputHosts:   []string{"host-1"},
+			vmMemBytes:   4096 * MiB,
+			expectedCase: "slot_exhausted",
 		},
 		{
-			name: "C: free slot exists",
+			name: "slot_blocked: free slot exists on input host",
 			activeCRs: []v1alpha1.CommittedResource{
 				makeCR(v1alpha1.CommitmentStatusConfirmed, 8192, 4096),
 			},
-			reservations: []v1alpha1.Reservation{
-				makeSlot(proj, group, 8192, 4096), // slot has 4096 MiB free
-			},
-			expectedCase: "C",
+			eval:         evalWithSlot(8192, 4096), // 4096 MiB remaining; 16384-8192+4096=12288 >= 4096
+			inputHosts:   []string{"host-1"},
+			vmMemBytes:   4096 * MiB,
+			expectedCase: "slot_blocked",
 		},
 		{
-			name: "C: one slot full, one slot free",
+			name: "slot_blocked: overfill — slot smaller than VM is still usable",
 			activeCRs: []v1alpha1.CommittedResource{
-				makeCR(v1alpha1.CommitmentStatusConfirmed, 16384, 4096),
+				makeCR(v1alpha1.CommitmentStatusConfirmed, 8192, 4096),
 			},
-			reservations: []v1alpha1.Reservation{
-				makeSlot(proj, group, 8192, 8192), // full
-				makeSlot(proj, group, 8192, 0),    // free
-			},
-			expectedCase: "C",
+			eval:         evalWithSlot(8192, 6144), // 2048 MiB remaining; 16384-8192+2048=10240 >= 4096
+			inputHosts:   []string{"host-1"},
+			vmMemBytes:   4096 * MiB,
+			expectedCase: "slot_blocked",
 		},
 		{
-			name: "slots for other project are ignored",
+			name: "slot_exhausted: slots for other project ignored",
 			activeCRs: []v1alpha1.CommittedResource{
 				makeCR(v1alpha1.CommitmentStatusConfirmed, 8192, 0),
 			},
-			reservations: []v1alpha1.Reservation{
-				makeSlot("other-project", group, 8192, 0), // different project
+			eval: &CRSlotEvaluator{
+				hvFreeMemory: map[string]int64{"host-1": 16384 * MiB},
+				reservationsByHost: map[string][]v1alpha1.Reservation{
+					"host-1": {makeSlot("other-project", group, 8192, 0)},
+				},
 			},
-			expectedCase: "B",
+			inputHosts:   []string{"host-1"},
+			vmMemBytes:   4096 * MiB,
+			expectedCase: "slot_exhausted",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := classifyNoHostFound(tt.activeCRs, tt.reservations, proj, group)
+			got := classifyNoHostFound(tt.activeCRs, tt.eval, tt.inputHosts, proj, group, tt.vmMemBytes)
 			if got != tt.expectedCase {
 				t.Errorf("classifyNoHostFound() = %q, want %q", got, tt.expectedCase)
 			}
@@ -199,7 +233,10 @@ func TestReservationRemainingMemory(t *testing.T) {
 func TestLogNoHostFound(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("AddToScheme: %v", err)
+		t.Fatalf("AddToScheme v1alpha1: %v", err)
+	}
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("AddToScheme hv1: %v", err)
 	}
 
 	const (
@@ -285,42 +322,94 @@ func TestLogNoHostFound(t *testing.T) {
 		return res
 	}
 
+	makeReadyReservationSlot := func(name, targetHost string, totalMemMiB, allocatedMemMiB int64) *v1alpha1.Reservation {
+		res := makeReservationSlot(name, totalMemMiB, allocatedMemMiB)
+		res.Spec.TargetHost = targetHost
+		res.Status.Conditions = []metav1.Condition{{
+			Type:               v1alpha1.ReservationConditionReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "Ready",
+			LastTransitionTime: metav1.Now(),
+		}}
+		return res
+	}
+
+	makeHV := func(name string, capacityMiB int64) *hv1.Hypervisor {
+		return &hv1.Hypervisor{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Status: hv1.HypervisorStatus{
+				EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: *resource.NewQuantity(capacityMiB*1024*1024, resource.BinarySI),
+				},
+				Allocation: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: *resource.NewQuantity(0, resource.BinarySI),
+				},
+			},
+		}
+	}
+
 	tests := []struct {
-		name         string
-		objects      []client.Object
-		payg         bool
-		expectedCase string // "" means no counter increment expected
+		name                string
+		objects             []client.Object
+		requestHosts        []api.ExternalSchedulerHost
+		payg                bool
+		expectedCase        string // "" means no counter increment expected
+		expectedFlavorGroup string // defaults to flavorGroup if empty
 	}{
 		{
-			name:         "D: no active CRs",
+			name:         "no_cr: no active CRs",
 			objects:      []client.Object{flavorKnowledge()},
-			expectedCase: "D",
+			expectedCase: "no_cr",
 		},
 		{
-			name: "A: CRs fully occupied",
+			name: "cr_exhausted: CRs fully occupied",
 			objects: []client.Object{
 				flavorKnowledge(),
 				makeCRObject(v1alpha1.CommitmentStatusConfirmed, 8192, 8192),
 			},
-			expectedCase: "A",
+			expectedCase: "cr_exhausted",
 		},
 		{
-			name: "B: capacity exists but no free slot",
+			name: "slot_exhausted: slot exists but fully allocated",
 			objects: []client.Object{
 				flavorKnowledge(),
 				makeCRObject(v1alpha1.CommitmentStatusConfirmed, 8192, 4096),
-				makeReservationSlot("slot-full", 8192, 8192),
+				makeHV("host-1", 16384),
+				makeReadyReservationSlot("slot-full", "host-1", 8192, 8192),
 			},
-			expectedCase: "B",
+			requestHosts: []api.ExternalSchedulerHost{{ComputeHost: "host-1"}},
+			expectedCase: "slot_exhausted",
 		},
 		{
-			name: "C: free slot exists",
+			name: "slot_blocked: free slot on candidate host",
 			objects: []client.Object{
 				flavorKnowledge(),
 				makeCRObject(v1alpha1.CommitmentStatusConfirmed, 8192, 4096),
-				makeReservationSlot("slot-free", 8192, 0),
+				makeHV("host-1", 16384),
+				makeReadyReservationSlot("slot-free", "host-1", 8192, 4096),
 			},
-			expectedCase: "C",
+			requestHosts: []api.ExternalSchedulerHost{{ComputeHost: "host-1"}},
+			expectedCase: "slot_blocked",
+		},
+		{
+			name: "no_cr: inactive CR (pending state) is filtered by IsActive()",
+			objects: []client.Object{
+				flavorKnowledge(),
+				makeCRObject(v1alpha1.CommitmentStatusPending, 8192, 0),
+			},
+			expectedCase: "no_cr",
+		},
+		{
+			name: "no_cr: CR for wrong project is filtered by MatchesGroup()",
+			objects: []client.Object{
+				flavorKnowledge(),
+				func() *v1alpha1.CommittedResource {
+					cr := makeCRObject(v1alpha1.CommitmentStatusConfirmed, 8192, 0)
+					cr.Spec.ProjectID = "other-project"
+					return cr
+				}(),
+			},
+			expectedCase: "no_cr",
 		},
 		{
 			name:         "PAYG: flavor not in any group",
@@ -329,11 +418,12 @@ func TestLogNoHostFound(t *testing.T) {
 			expectedCase: "",
 		},
 		{
-			name: "no knowledge CRD: no counter increment",
+			name: "error: knowledge CRD unavailable",
 			objects: []client.Object{
 				makeCRObject(v1alpha1.CommitmentStatusConfirmed, 8192, 0),
 			},
-			expectedCase: "",
+			expectedCase:        "error",
+			expectedFlavorGroup: "unknown",
 		},
 	}
 
@@ -369,6 +459,7 @@ func TestLogNoHostFound(t *testing.T) {
 					},
 				},
 				Context: api.NovaRequestContext{ProjectID: projectID},
+				Hosts:   tt.requestHosts,
 			}
 			decision := &v1alpha1.Decision{
 				Spec: v1alpha1.DecisionSpec{Intent: api.CreateIntent},
@@ -377,18 +468,23 @@ func TestLogNoHostFound(t *testing.T) {
 			controller.logNoHostFound(context.Background(), decision, request)
 
 			if tt.expectedCase == "" {
-				total := testutil.ToFloat64(counter.WithLabelValues("A", flavorGroup, string(api.CreateIntent))) +
-					testutil.ToFloat64(counter.WithLabelValues("B", flavorGroup, string(api.CreateIntent))) +
-					testutil.ToFloat64(counter.WithLabelValues("C", flavorGroup, string(api.CreateIntent))) +
-					testutil.ToFloat64(counter.WithLabelValues("D", flavorGroup, string(api.CreateIntent)))
+				total := testutil.ToFloat64(counter.WithLabelValues("no_cr", flavorGroup, string(api.CreateIntent))) +
+					testutil.ToFloat64(counter.WithLabelValues("cr_exhausted", flavorGroup, string(api.CreateIntent))) +
+					testutil.ToFloat64(counter.WithLabelValues("slot_exhausted", flavorGroup, string(api.CreateIntent))) +
+					testutil.ToFloat64(counter.WithLabelValues("slot_blocked", flavorGroup, string(api.CreateIntent))) +
+					testutil.ToFloat64(counter.WithLabelValues("error", "unknown", string(api.CreateIntent)))
 				if total != 0 {
 					t.Errorf("expected no counter increment, got total %.0f", total)
 				}
 			} else {
-				got := testutil.ToFloat64(counter.WithLabelValues(tt.expectedCase, flavorGroup, string(api.CreateIntent)))
+				expectedFG := tt.expectedFlavorGroup
+				if expectedFG == "" {
+					expectedFG = flavorGroup
+				}
+				got := testutil.ToFloat64(counter.WithLabelValues(tt.expectedCase, expectedFG, string(api.CreateIntent)))
 				if got != 1 {
 					t.Errorf("counter[case=%q, flavorGroup=%q, intent=%q] = %.0f, want 1",
-						tt.expectedCase, flavorGroup, string(api.CreateIntent), got)
+						tt.expectedCase, expectedFG, string(api.CreateIntent), got)
 				}
 			}
 		})
@@ -404,9 +500,11 @@ func TestFeatureGate_CommittedResourceTracking(t *testing.T) {
 
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("AddToScheme: %v", err)
+		t.Fatalf("AddToScheme v1alpha1: %v", err)
 	}
-
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("AddToScheme hv1: %v", err)
+	}
 	ratio := uint64(2048)
 	fg := compute.FlavorGroupFeature{
 		Name:           flavorGroup,

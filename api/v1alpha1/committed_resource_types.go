@@ -188,6 +188,23 @@ type CommittedResource struct {
 	Status CommittedResourceStatus `json:"status,omitempty,omitzero"`
 }
 
+// IsActive reports whether the commitment spec has active Reservation slots
+// (state is confirmed or guaranteed).
+func (s *CommittedResourceSpec) IsActive() bool {
+	return s.State == CommitmentStatusConfirmed || s.State == CommitmentStatusGuaranteed
+}
+
+// IsActive reports whether the commitment has active Reservation slots
+// (state is confirmed or guaranteed).
+func (c *CommittedResource) IsActive() bool {
+	return c.Spec.IsActive()
+}
+
+// MatchesGroup reports whether the commitment targets the given project and flavor group.
+func (c *CommittedResource) MatchesGroup(projectID, flavorGroup string) bool {
+	return c.Spec.ProjectID == projectID && c.Spec.FlavorGroupName == flavorGroup
+}
+
 // +kubebuilder:object:root=true
 
 // CommittedResourceList contains a list of CommittedResource

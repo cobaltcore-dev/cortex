@@ -49,7 +49,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	log := ctrl.LoggerFrom(ctx).WithValues("component", "usage-reconciler", "committedResource", req.Name)
 
 	// Only active commitments have assigned VMs. Clear stale usage status if present.
-	if cr.Spec.State != v1alpha1.CommitmentStatusConfirmed && cr.Spec.State != v1alpha1.CommitmentStatusGuaranteed {
+	if !cr.IsActive() {
 		log.Info("skipping: commitment state is not active", "state", cr.Spec.State)
 		if len(cr.Status.AssignedInstances) > 0 || len(cr.Status.UsedResources) > 0 {
 			old := cr.DeepCopy()

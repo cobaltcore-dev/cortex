@@ -257,7 +257,7 @@ func (r *CommittedResourceController) reconcileCoresHeadroom(ctx context.Context
 		if other.Spec.FlavorGroupName != cr.Spec.FlavorGroupName || other.Spec.AvailabilityZone != cr.Spec.AvailabilityZone {
 			continue
 		}
-		if other.Spec.State != v1alpha1.CommitmentStatusGuaranteed && other.Spec.State != v1alpha1.CommitmentStatusConfirmed {
+		if !other.IsActive() {
 			continue
 		}
 		if other.Status.AcceptedSpec == nil {

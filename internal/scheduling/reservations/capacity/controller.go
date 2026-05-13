@@ -320,7 +320,7 @@ func (c *Controller) sumCommittedCapacity(ctx context.Context, groupName, az str
 		if cr.Spec.ResourceType != v1alpha1.CommittedResourceTypeMemory {
 			continue
 		}
-		if cr.Spec.State != v1alpha1.CommitmentStatusGuaranteed && cr.Spec.State != v1alpha1.CommitmentStatusConfirmed {
+		if !cr.IsActive() {
 			continue
 		}
 		amount := cr.Spec.Amount

@@ -224,7 +224,7 @@ func buildCommitmentCapacityMap(
 		}
 		// Use AcceptedSpec.State so sibling CRs whose spec is mid-transition (e.g. syncer just
 		// wrote expired before the CR controller accepted it) don't lose capacity prematurely.
-		if cr.Status.AcceptedSpec.State != v1alpha1.CommitmentStatusConfirmed && cr.Status.AcceptedSpec.State != v1alpha1.CommitmentStatusGuaranteed {
+		if !cr.Status.AcceptedSpec.IsActive() {
 			continue
 		}
 
