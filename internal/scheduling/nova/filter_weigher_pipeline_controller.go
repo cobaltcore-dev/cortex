@@ -270,6 +270,11 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	if err != nil {
 		return err
 	}
+	// Watch committed resource changes so the no-host-found classifier can read them.
+	bldr, err = bldr.WatchesMulticluster(&v1alpha1.CommittedResource{}, handler.Funcs{})
+	if err != nil {
+		return err
+	}
 	// Watch decision changes across all clusters.
 	bldr, err = bldr.WatchesMulticluster(
 		&v1alpha1.Decision{},

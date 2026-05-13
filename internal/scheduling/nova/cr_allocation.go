@@ -104,6 +104,7 @@ func (c *FilterWeigherPipelineController) recordCRAllocation(ctx context.Context
 		if latest.Spec.CommittedResourceReservation == nil {
 			return fmt.Errorf("reservation %s lost CommittedResourceReservation spec", slotName)
 		}
+		base := latest.DeepCopy()
 		if latest.Spec.CommittedResourceReservation.Allocations == nil {
 			latest.Spec.CommittedResourceReservation.Allocations = make(map[string]v1alpha1.CommittedResourceAllocation)
 		}
@@ -111,7 +112,7 @@ func (c *FilterWeigherPipelineController) recordCRAllocation(ctx context.Context
 			CreationTimestamp: metav1.Now(),
 			Resources:         vmResources,
 		}
-		return c.Update(ctx, latest)
+		return c.Patch(ctx, latest, client.MergeFrom(base))
 	}); retryErr != nil {
 		log.Error(retryErr, "CR allocation: failed to patch reservation",
 			"reservation", slotName, "instanceUUID", instanceUUID)
