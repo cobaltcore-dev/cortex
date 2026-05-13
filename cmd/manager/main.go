@@ -395,10 +395,14 @@ func main() {
 	commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
 
 	if slices.Contains(mainConfig.EnabledControllers, "nova-pipeline-controllers") {
+		featureGates := conf.GetConfigOrDie[conf.FeatureGates]()
 		// Filter-weigher pipeline controller setup.
 		filterWeigherController := &nova.FilterWeigherPipelineController{
-			Monitor: filterWeigherPipelineMonitor,
+			Monitor:            filterWeigherPipelineMonitor,
+			FeatureGates:       featureGates,
+			NoHostFoundCounter: nova.NewNoHostFoundCounter(),
 		}
+		metrics.Registry.MustRegister(filterWeigherController.NoHostFoundCounter)
 		// Inferred through the base controller.
 		filterWeigherController.Client = multiclusterClient
 		if err := filterWeigherController.SetupWithManager(mgr, multiclusterClient); err != nil {

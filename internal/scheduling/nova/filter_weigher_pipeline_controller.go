@@ -13,12 +13,14 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/weighers"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -41,10 +43,15 @@ type FilterWeigherPipelineController struct {
 	// Mutex to only allow one process at a time
 	processMu sync.Mutex
 
+	// FeatureGates holds feature flags for this controller.
+	FeatureGates conf.FeatureGates
 	// Monitor to pass down to all pipelines.
 	Monitor lib.FilterWeigherPipelineMonitor
 	// Candidate gatherer to get all placement candidates if needed.
 	gatherer CandidateGatherer
+
+	// NoHostFoundCounter counts no-host-found results by CR coverage case (A/B/C/D).
+	NoHostFoundCounter *prometheus.CounterVec
 }
 
 // The type of pipeline this controller manages.
@@ -62,7 +69,7 @@ func (c *FilterWeigherPipelineController) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	old := decision.DeepCopy()
-	if err := c.process(ctx, decision); err != nil {
+	if _, err := c.process(ctx, decision); err != nil {
 		return ctrl.Result{}, err
 	}
 	patch := client.MergeFrom(old)
@@ -81,7 +88,8 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 	if !ok {
 		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
 	}
-	err := c.process(ctx, decision)
+
+	request, err := c.process(ctx, decision)
 	if err != nil {
 		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.DecisionConditionReady,
@@ -98,25 +106,38 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 		})
 	}
 	if pipelineConf.Spec.CreateHistory {
-		c.upsertHistory(ctx, decision, err)
+		c.upsertHistory(ctx, decision, request, err)
+		if err == nil && decision.Status.Result != nil && request != nil && c.FeatureGates.CommittedResourceTracking {
+			if decision.Status.Result.TargetHost != nil && isUserVMPlacement(decision.Spec.Intent) {
+				c.recordCRAllocation(ctx, decision, *request)
+			}
+			if decision.Status.Result.TargetHost == nil {
+				c.logNoHostFound(ctx, decision, *request)
+			}
+		}
 	}
 	return err
 }
 
-func (c *FilterWeigherPipelineController) upsertHistory(ctx context.Context, decision *v1alpha1.Decision, pipelineErr error) {
+// isUserVMPlacement returns true for intents that represent actual VM
+// placements from Nova. Returns false for Cortex-internal synthetic requests
+// (failover and CR reservation scheduling), which must not update allocations.
+func isUserVMPlacement(intent v1alpha1.SchedulingIntent) bool {
+	switch intent {
+	case api.ReserveForCommittedResourceIntent, api.ReserveForFailoverIntent:
+		return false
+	default:
+		return true
+	}
+}
+
+func (c *FilterWeigherPipelineController) upsertHistory(ctx context.Context, decision *v1alpha1.Decision, request *api.ExternalSchedulerRequest, pipelineErr error) {
 	log := ctrl.LoggerFrom(ctx)
 
 	var az *string
-
-	if decision.Spec.NovaRaw != nil {
-		var request api.ExternalSchedulerRequest
-		err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request)
-		if err != nil {
-			log.Error(err, "failed to unmarshal novaRaw for history, using defaults")
-		} else {
-			azStr := request.Spec.Data.AvailabilityZone
-			az = &azStr
-		}
+	if request != nil {
+		azStr := request.Spec.Data.AvailabilityZone
+		az = &azStr
 	}
 
 	if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, az, pipelineErr); upsertErr != nil {
@@ -124,23 +145,23 @@ func (c *FilterWeigherPipelineController) upsertHistory(ctx context.Context, dec
 	}
 }
 
-func (c *FilterWeigherPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
+func (c *FilterWeigherPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) (*api.ExternalSchedulerRequest, error) {
 	log := ctrl.LoggerFrom(ctx)
 	startedAt := time.Now() // So we can measure sync duration.
 
 	pipeline, ok := c.Pipelines[decision.Spec.PipelineRef.Name]
 	if !ok {
 		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
-		return errors.New("pipeline not found or not ready")
+		return nil, errors.New("pipeline not found or not ready")
 	}
 	if decision.Spec.NovaRaw == nil {
 		log.Error(nil, "skipping decision, no novaRaw spec defined")
-		return errors.New("no novaRaw spec defined")
+		return nil, errors.New("no novaRaw spec defined")
 	}
 	var request api.ExternalSchedulerRequest
 	if err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request); err != nil {
 		log.Error(err, "failed to unmarshal novaRaw spec")
-		return err
+		return nil, err
 	}
 
 	if intent, err := request.GetIntent(); err != nil {
@@ -155,13 +176,13 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
 	if !ok {
 		log.Error(nil, "pipeline config not found", "pipelineName", decision.Spec.PipelineRef.Name)
-		return errors.New("pipeline config not found")
+		return nil, errors.New("pipeline config not found")
 	}
 	if pipelineConf.Spec.IgnorePreselection {
 		log.Info("gathering all placement candidates before filtering")
 		if err := c.gatherer.MutateWithAllCandidates(ctx, &request); err != nil {
 			log.Error(err, "failed to gather all placement candidates")
-			return err
+			return nil, err
 		}
 		log.Info("gathered all placement candidates", "numHosts", len(request.Hosts))
 	}
@@ -169,7 +190,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	result, err := pipeline.Run(request)
 	if err != nil {
 		log.Error(err, "failed to run pipeline")
-		return err
+		return nil, err
 	}
 	decision.Status.Result = &result
 	meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
@@ -179,7 +200,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		Message: "pipeline run succeeded",
 	})
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
-	return nil
+	return &request, nil
 }
 
 // The base controller will delegate the pipeline creation down to this method.
@@ -249,6 +270,11 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	}
 	// Watch reservation changes so the cache gets updated.
 	bldr, err = bldr.WatchesMulticluster(&v1alpha1.Reservation{}, handler.Funcs{})
+	if err != nil {
+		return err
+	}
+	// Watch committed resource changes so the no-host-found classifier can read them.
+	bldr, err = bldr.WatchesMulticluster(&v1alpha1.CommittedResource{}, handler.Funcs{})
 	if err != nil {
 		return err
 	}

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -21,8 +22,9 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 // mockCandidateGatherer implements CandidateGatherer for testing
@@ -921,6 +923,360 @@ func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
 			// Verify result is set when no error
 			if !tt.expectError && decision.Status.Result == nil {
 				t.Error("Expected result to be set but was nil")
+			}
+		})
+	}
+}
+
+func TestIsUserVMPlacement(t *testing.T) {
+	tests := []struct {
+		intent   v1alpha1.SchedulingIntent
+		expected bool
+	}{
+		{api.CreateIntent, true},
+		{api.LiveMigrationIntent, true},
+		{api.EvacuateIntent, true},
+		{api.RebuildIntent, true},
+		{api.ResizeIntent, true},
+		{api.ReserveForCommittedResourceIntent, false},
+		{api.ReserveForFailoverIntent, false},
+		{v1alpha1.SchedulingIntentUnknown, true},
+	}
+	for _, tt := range tests {
+		if got := isUserVMPlacement(tt.intent); got != tt.expected {
+			t.Errorf("isUserVMPlacement(%q) = %v, want %v", tt.intent, got, tt.expected)
+		}
+	}
+}
+
+func TestPickReservationSlot(t *testing.T) {
+	// vmMemBytes and vmCPUs for a 4096 MiB / 2 vCPU flavor.
+	const (
+		vmMemBytes = int64(4096) * 1024 * 1024
+		vmCPUs     = int64(2)
+	)
+
+	makeSlot := func(name string, totalMemMiB, totalCPU, usedMemMiB, usedCPU int64) v1alpha1.Reservation {
+		var allocs map[string]v1alpha1.CommittedResourceAllocation
+		if usedMemMiB > 0 || usedCPU > 0 {
+			allocs = map[string]v1alpha1.CommittedResourceAllocation{
+				"vm-existing": {
+					Resources: map[hv1.ResourceName]resource.Quantity{
+						hv1.ResourceMemory: *resource.NewQuantity(usedMemMiB*1024*1024, resource.BinarySI),
+						hv1.ResourceCPU:    *resource.NewQuantity(usedCPU, resource.DecimalSI),
+					},
+				},
+			}
+		}
+		return v1alpha1.Reservation{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Spec: v1alpha1.ReservationSpec{
+				Resources: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: *resource.NewQuantity(totalMemMiB*1024*1024, resource.BinarySI),
+					hv1.ResourceCPU:    *resource.NewQuantity(totalCPU, resource.DecimalSI),
+				},
+				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+					Allocations: allocs,
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name       string
+		candidates []v1alpha1.Reservation
+		want       string
+	}{
+		{
+			name:       "no candidates",
+			candidates: nil,
+			want:       "",
+		},
+		{
+			name:       "single slot fits",
+			candidates: []v1alpha1.Reservation{makeSlot("a", 8192, 8, 0, 0)},
+			want:       "a",
+		},
+		{
+			name:       "single slot too small after allocations",
+			candidates: []v1alpha1.Reservation{makeSlot("a", 8192, 8, 8192, 8)}, // fully consumed
+			want:       "",
+		},
+		{
+			name: "picks slot with least remaining memory",
+			candidates: []v1alpha1.Reservation{
+				makeSlot("large", 8192, 8, 0, 0), // 8192 MiB remaining
+				makeSlot("small", 6144, 8, 0, 0), // 6144 MiB remaining, still fits
+			},
+			want: "small",
+		},
+		{
+			name: "CPU tiebreak on equal remaining memory",
+			candidates: []v1alpha1.Reservation{
+				makeSlot("more-cpu", 6144, 8, 0, 0), // remCPU = 8
+				makeSlot("less-cpu", 6144, 4, 0, 0), // remCPU = 4
+			},
+			want: "less-cpu",
+		},
+		{
+			name: "name tiebreak on equal remaining memory and CPU",
+			candidates: []v1alpha1.Reservation{
+				makeSlot("slot-b", 6144, 4, 0, 0),
+				makeSlot("slot-a", 6144, 4, 0, 0),
+			},
+			want: "slot-a",
+		},
+		{
+			name: "missing resource keys treated as zero remaining",
+			candidates: []v1alpha1.Reservation{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "empty-res"},
+					Spec: v1alpha1.ReservationSpec{
+						CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name:       "partially used slot still fits",
+			candidates: []v1alpha1.Reservation{makeSlot("partial", 8192, 8, 2048, 2)}, // 6144 MiB remaining
+			want:       "partial",
+		},
+		{
+			name:       "CPU exhausted: slot excluded as hard constraint",
+			candidates: []v1alpha1.Reservation{makeSlot("cpu-full", 8192, 2, 0, 2)}, // remCPU = 0
+			want:       "",
+		},
+		{
+			name: "CPU exhausted slot skipped, other slot chosen",
+			candidates: []v1alpha1.Reservation{
+				makeSlot("cpu-full", 8192, 2, 0, 2), // remCPU = 0, excluded
+				makeSlot("cpu-ok", 8192, 4, 0, 0),   // remCPU = 4, fits
+			},
+			want: "cpu-ok",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := pickReservationSlot(tt.candidates, vmMemBytes, vmCPUs)
+			if got != tt.want {
+				t.Errorf("pickReservationSlot() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRecordCRAllocation(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("AddToScheme: %v", err)
+	}
+
+	const (
+		instanceUUID = "vm-uuid-1"
+		projectID    = "project-1"
+		flavorName   = "m1.large"
+		flavorGroup  = "m1"
+		selectedHost = "compute-1"
+	)
+
+	ratio := uint64(2048)
+	fg := compute.FlavorGroupFeature{
+		Name:           flavorGroup,
+		Flavors:        []compute.FlavorInGroup{{Name: flavorName, VCPUs: 2, MemoryMB: 4096}},
+		LargestFlavor:  compute.FlavorInGroup{Name: flavorName, VCPUs: 2, MemoryMB: 4096},
+		SmallestFlavor: compute.FlavorInGroup{Name: flavorName, VCPUs: 2, MemoryMB: 4096},
+		RamCoreRatio:   &ratio,
+	}
+
+	flavorKnowledge := func() *v1alpha1.Knowledge {
+		raw, err := v1alpha1.BoxFeatureList([]compute.FlavorGroupFeature{fg})
+		if err != nil {
+			t.Fatalf("BoxFeatureList: %v", err)
+		}
+		return &v1alpha1.Knowledge{
+			ObjectMeta: metav1.ObjectMeta{Name: "flavor-groups"},
+			Status: v1alpha1.KnowledgeStatus{
+				Raw: raw,
+				Conditions: []metav1.Condition{{
+					Type:               v1alpha1.KnowledgeConditionReady,
+					Status:             metav1.ConditionTrue,
+					Reason:             "Ready",
+					LastTransitionTime: metav1.Now(),
+				}},
+			},
+		}
+	}
+
+	makeReservation := func(name string, memMiB, cpus int64, proj, group, host string, allocs map[string]v1alpha1.CommittedResourceAllocation) *v1alpha1.Reservation {
+		return &v1alpha1.Reservation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+				Labels: map[string]string{
+					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+				},
+			},
+			Spec: v1alpha1.ReservationSpec{
+				Type:       v1alpha1.ReservationTypeCommittedResource,
+				TargetHost: host,
+				Resources: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: *resource.NewQuantity(memMiB*1024*1024, resource.BinarySI),
+					hv1.ResourceCPU:    *resource.NewQuantity(cpus, resource.DecimalSI),
+				},
+				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+					ProjectID:     proj,
+					ResourceGroup: group,
+					Allocations:   allocs,
+				},
+			},
+		}
+	}
+
+	makeRequest := func(uuid, proj, flavor string) api.ExternalSchedulerRequest {
+		return api.ExternalSchedulerRequest{
+			Spec: api.NovaObject[api.NovaSpec]{
+				Data: api.NovaSpec{
+					InstanceUUID: uuid,
+					Flavor: api.NovaObject[api.NovaFlavor]{
+						Data: api.NovaFlavor{Name: flavor, MemoryMB: 4096, VCPUs: 2},
+					},
+				},
+			},
+			Context: api.NovaRequestContext{ProjectID: proj},
+		}
+	}
+
+	makeDecision := func(host string) *v1alpha1.Decision {
+		h := host
+		return &v1alpha1.Decision{
+			Status: v1alpha1.DecisionStatus{
+				Result: &v1alpha1.DecisionResult{TargetHost: &h},
+			},
+		}
+	}
+
+	vmAlloc := func() map[string]v1alpha1.CommittedResourceAllocation {
+		return map[string]v1alpha1.CommittedResourceAllocation{
+			instanceUUID: {
+				CreationTimestamp: metav1.Now(),
+				Resources: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: *resource.NewQuantity(int64(4096)*1024*1024, resource.BinarySI),
+					hv1.ResourceCPU:    *resource.NewQuantity(2, resource.DecimalSI),
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name             string
+		objects          []client.Object
+		request          api.ExternalSchedulerRequest
+		decision         *v1alpha1.Decision
+		checkSlot        string
+		expectAllocation bool
+	}{
+		{
+			name: "writes allocation into matching reservation",
+			objects: []client.Object{
+				flavorKnowledge(),
+				makeReservation("slot-1", 8192, 8, projectID, flavorGroup, selectedHost, nil),
+			},
+			request:          makeRequest(instanceUUID, projectID, flavorName),
+			decision:         makeDecision(selectedHost),
+			checkSlot:        "slot-1",
+			expectAllocation: true,
+		},
+		{
+			name: "idempotent: UUID already in allocations",
+			objects: []client.Object{
+				flavorKnowledge(),
+				makeReservation("slot-1", 8192, 8, projectID, flavorGroup, selectedHost, vmAlloc()),
+			},
+			request:          makeRequest(instanceUUID, projectID, flavorName),
+			decision:         makeDecision(selectedHost),
+			checkSlot:        "slot-1",
+			expectAllocation: true,
+		},
+		{
+			name: "PAYG: flavor not in any group",
+			objects: []client.Object{
+				flavorKnowledge(),
+				makeReservation("slot-1", 8192, 8, projectID, flavorGroup, selectedHost, nil),
+			},
+			request:          makeRequest(instanceUUID, projectID, "unknown-flavor"),
+			decision:         makeDecision(selectedHost),
+			checkSlot:        "slot-1",
+			expectAllocation: false,
+		},
+		{
+			name: "no matching reservation: host mismatch",
+			objects: []client.Object{
+				flavorKnowledge(),
+				makeReservation("slot-1", 8192, 8, projectID, flavorGroup, "other-host", nil),
+			},
+			request:          makeRequest(instanceUUID, projectID, flavorName),
+			decision:         makeDecision(selectedHost),
+			checkSlot:        "slot-1",
+			expectAllocation: false,
+		},
+		{
+			name: "no slot fits: all capacity used",
+			objects: []client.Object{
+				flavorKnowledge(),
+				makeReservation("slot-full", 4096, 2, projectID, flavorGroup, selectedHost,
+					map[string]v1alpha1.CommittedResourceAllocation{
+						"other-vm": {
+							Resources: map[hv1.ResourceName]resource.Quantity{
+								hv1.ResourceMemory: *resource.NewQuantity(int64(4096)*1024*1024, resource.BinarySI),
+								hv1.ResourceCPU:    *resource.NewQuantity(2, resource.DecimalSI),
+							},
+						},
+					}),
+			},
+			request:          makeRequest(instanceUUID, projectID, flavorName),
+			decision:         makeDecision(selectedHost),
+			checkSlot:        "slot-full",
+			expectAllocation: false,
+		},
+		{
+			name: "no knowledge CRD: logs error, no allocation",
+			objects: []client.Object{
+				makeReservation("slot-1", 8192, 8, projectID, flavorGroup, selectedHost, nil),
+			},
+			request:          makeRequest(instanceUUID, projectID, flavorName),
+			decision:         makeDecision(selectedHost),
+			checkSlot:        "slot-1",
+			expectAllocation: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tt.objects...).
+				Build()
+
+			controller := &FilterWeigherPipelineController{
+				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
+					Client: fakeClient,
+				},
+			}
+
+			controller.recordCRAllocation(context.Background(), tt.decision, tt.request)
+
+			var res v1alpha1.Reservation
+			if err := fakeClient.Get(context.Background(), client.ObjectKey{Name: tt.checkSlot}, &res); err != nil {
+				t.Fatalf("Get reservation %q: %v", tt.checkSlot, err)
+			}
+			_, hasAlloc := res.Spec.CommittedResourceReservation.Allocations[instanceUUID]
+			if tt.expectAllocation && !hasAlloc {
+				t.Errorf("expected allocation for UUID %q but none found", instanceUUID)
+			}
+			if !tt.expectAllocation && hasAlloc {
+				t.Errorf("expected no allocation for UUID %q but one was written", instanceUUID)
 			}
 		})
 	}
