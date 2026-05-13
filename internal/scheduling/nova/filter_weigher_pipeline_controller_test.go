@@ -950,8 +950,11 @@ func TestIsUserVMPlacement(t *testing.T) {
 }
 
 func TestPickReservationSlot(t *testing.T) {
-	// vmMemBytes for a 4096 MiB flavor.
-	const vmMemBytes = int64(4096) * 1024 * 1024
+	// vmMemBytes and vmCPUs for a 4096 MiB / 2 vCPU flavor.
+	const (
+		vmMemBytes = int64(4096) * 1024 * 1024
+		vmCPUs     = int64(2)
+	)
 
 	makeSlot := func(name string, totalMemMiB, totalCPU, usedMemMiB, usedCPU int64) v1alpha1.Reservation {
 		var allocs map[string]v1alpha1.CommittedResourceAllocation
@@ -1040,11 +1043,24 @@ func TestPickReservationSlot(t *testing.T) {
 			candidates: []v1alpha1.Reservation{makeSlot("partial", 8192, 8, 2048, 2)}, // 6144 MiB remaining
 			want:       "partial",
 		},
+		{
+			name:       "CPU exhausted: slot excluded as hard constraint",
+			candidates: []v1alpha1.Reservation{makeSlot("cpu-full", 8192, 2, 0, 2)}, // remCPU = 0
+			want:       "",
+		},
+		{
+			name: "CPU exhausted slot skipped, other slot chosen",
+			candidates: []v1alpha1.Reservation{
+				makeSlot("cpu-full", 8192, 2, 0, 2), // remCPU = 0, excluded
+				makeSlot("cpu-ok", 8192, 4, 0, 0),   // remCPU = 4, fits
+			},
+			want: "cpu-ok",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := pickReservationSlot(tt.candidates, vmMemBytes)
+			got := pickReservationSlot(tt.candidates, vmMemBytes, vmCPUs)
 			if got != tt.want {
 				t.Errorf("pickReservationSlot() = %q, want %q", got, tt.want)
 			}

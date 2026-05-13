@@ -78,14 +78,13 @@ func (c *FilterWeigherPipelineController) Reconcile(ctx context.Context, req ctr
 
 // Process the decision from the API. Should create and return the updated decision.
 func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error {
-	// Early check before acquiring the mutex — no need to hold the lock just to fail.
+	c.processMu.Lock()
+	defer c.processMu.Unlock()
+
 	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
 	if !ok {
 		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
 	}
-
-	c.processMu.Lock()
-	defer c.processMu.Unlock()
 
 	request, err := c.process(ctx, decision)
 	if err != nil {

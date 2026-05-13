@@ -5,6 +5,7 @@ package nova
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -33,7 +34,12 @@ func (c *FilterWeigherPipelineController) recordCRAllocation(ctx context.Context
 
 	flavorGroupName, flavorInGroup, err := c.resolveFlavorGroup(ctx, flavorName)
 	if err != nil {
-		log.V(1).Info("CR allocation: flavor not in any group, PAYG placement", "flavor", flavorName)
+		if errors.Is(err, errFlavorNotInGroup) {
+			log.V(1).Info("CR allocation: flavor not in any group, PAYG placement", "flavor", flavorName)
+		} else {
+			log.Error(err, "CR allocation: failed to resolve flavor group",
+				"flavor", flavorName, "instanceUUID", instanceUUID)
+		}
 		return
 	}
 
@@ -74,7 +80,7 @@ func (c *FilterWeigherPipelineController) recordCRAllocation(ctx context.Context
 	vmMemoryBytes := int64(flavorInGroup.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory bounded by specs
 	vmCPUs := int64(flavorInGroup.VCPUs)                         //nolint:gosec // VCPUs bounded by specs
 
-	slotName := pickReservationSlot(candidates, vmMemoryBytes)
+	slotName := pickReservationSlot(candidates, vmMemoryBytes, vmCPUs)
 	if slotName == "" {
 		log.Error(nil, "CR allocation: no reservation slot has sufficient remaining capacity",
 			"instanceUUID", instanceUUID, "vmMemoryBytes", vmMemoryBytes,
@@ -116,10 +122,10 @@ func (c *FilterWeigherPipelineController) recordCRAllocation(ctx context.Context
 }
 
 // pickReservationSlot selects the reservation slot with the least remaining
-// memory that can still fully fit vmMemoryBytes.
+// memory that can still fully fit vmMemoryBytes and vmCPUs.
 // Tiebreaks: least remaining CPU, then reservation name (lexicographic).
 // Returns the slot name, or "" if no slot fits.
-func pickReservationSlot(candidates []v1alpha1.Reservation, vmMemoryBytes int64) string {
+func pickReservationSlot(candidates []v1alpha1.Reservation, vmMemoryBytes, vmCPUs int64) string {
 	bestName := ""
 	var bestRemMem, bestRemCPU int64
 
@@ -138,7 +144,7 @@ func pickReservationSlot(candidates []v1alpha1.Reservation, vmMemoryBytes int64)
 		remMem := reservationRemainingMemory(res)
 		remCPU := max(totalCPU-usedCPU, 0)
 
-		if remMem < vmMemoryBytes {
+		if remMem < vmMemoryBytes || remCPU < vmCPUs {
 			continue // Slot doesn't have enough remaining capacity.
 		}
 
@@ -171,8 +177,14 @@ func reservationRemainingMemory(res v1alpha1.Reservation) int64 {
 	return max(totalMemQ.Value()-usedMem, 0)
 }
 
+// errFlavorNotInGroup is returned by resolveFlavorGroup when the flavor is not
+// part of any configured flavor group (PAYG placement). Callers should
+// distinguish this from real lookup errors.
+var errFlavorNotInGroup = errors.New("flavor not in any group")
+
 // resolveFlavorGroup looks up which flavor group the given flavor belongs to.
-// Returns an error if the flavor is not in any group (PAYG).
+// Returns errFlavorNotInGroup (PAYG) if the flavor is not in any group.
+// Returns a different error for transient failures (Knowledge CRD unavailable, etc).
 func (c *FilterWeigherPipelineController) resolveFlavorGroup(ctx context.Context, flavorName string) (string, *compute.FlavorInGroup, error) {
 	fgClient := reservations.FlavorGroupKnowledgeClient{Client: c.Client}
 	flavorGroups, err := fgClient.GetAllFlavorGroups(ctx, nil)
@@ -181,7 +193,7 @@ func (c *FilterWeigherPipelineController) resolveFlavorGroup(ctx context.Context
 	}
 	groupName, flavor, err := reservations.FindFlavorInGroups(flavorName, flavorGroups)
 	if err != nil {
-		return "", nil, err
+		return "", nil, errFlavorNotInGroup
 	}
 	return groupName, flavor, nil
 }

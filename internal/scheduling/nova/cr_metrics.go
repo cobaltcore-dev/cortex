@@ -5,6 +5,7 @@ package nova
 
 import (
 	"context"
+	"errors"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -76,8 +77,13 @@ func (c *FilterWeigherPipelineController) logNoHostFound(ctx context.Context, de
 
 	flavorGroupName, _, err := c.resolveFlavorGroup(ctx, flavorName)
 	if err != nil {
-		log.V(1).Info("no-host-found: PAYG flavor, not CR-relevant",
-			"instanceUUID", instanceUUID, "flavor", flavorName, "intent", intent)
+		if errors.Is(err, errFlavorNotInGroup) {
+			log.V(1).Info("no-host-found: PAYG flavor, not CR-relevant",
+				"instanceUUID", instanceUUID, "flavor", flavorName, "intent", intent)
+		} else {
+			log.Error(err, "no-host-found: failed to resolve flavor group",
+				"instanceUUID", instanceUUID, "flavor", flavorName)
+		}
 		return
 	}
 
