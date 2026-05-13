@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-05-11 — [#830](https://github.com/cobaltcore-dev/cortex/pull/830)
+
+### cortex v0.0.47 (sha-86af7a6e)
+
+Non-breaking changes:
+- Add CPU core committed resources — cores commitments use arithmetic headroom checks against `FlavorGroupCapacity.Status.TotalCapacity` instead of creating Reservation CRDs ([#826](https://github.com/cobaltcore-dev/cortex/pull/826))
+- Split `ProjectQuota` CRD into per-AZ CRDs (one CRD per project+AZ), add `AvailabilityZone` field to spec, and flatten status fields to per-AZ `map[string]int64` ([#827](https://github.com/cobaltcore-dev/cortex/pull/827))
+- Add `ProjectQuotaResourceRouter` for multicluster routing of `ProjectQuota` CRDs by availability zone ([#827](https://github.com/cobaltcore-dev/cortex/pull/827))
+- Add `FlavorGroupCapacityResourceRouter` for multicluster routing of `FlavorGroupCapacity` CRDs by availability zone ([#824](https://github.com/cobaltcore-dev/cortex/pull/824))
+- Register `FlavorGroupCapacity` router in manager's multicluster client ([#828](https://github.com/cobaltcore-dev/cortex/pull/828))
+- Add `TotalCapacity` field to `FlavorGroupCapacityStatus` for tracking total capacity of eligible hosts in an empty-datacenter scenario ([#826](https://github.com/cobaltcore-dev/cortex/pull/826))
+- Report capacity per resource type (RAM, cores, instances) in `report-capacity` endpoint instead of flat slot count ([#826](https://github.com/cobaltcore-dev/cortex/pull/826))
+- Switch LIQUID API commitment unit from multiples of the smallest flavor's RAM to a fixed 1 GiB per unit ([#822](https://github.com/cobaltcore-dev/cortex/pull/822))
+- Rename resource types in project capacity metrics: `vcpu` → `cpu`, `memory` → `ram` to align with host capacity metrics ([#823](https://github.com/cobaltcore-dev/cortex/pull/823))
+- Rename metrics for unused VMware commitments to clarify they represent the unused portion, not total ([#820](https://github.com/cobaltcore-dev/cortex/pull/820))
+- Disable weighers in `vmware-hana-bin-packing` pipeline (filters-only mode) ([#816](https://github.com/cobaltcore-dev/cortex/pull/816))
+- Fix concurrency issue in CommittedResource CRD updates ([#825](https://github.com/cobaltcore-dev/cortex/pull/825))
+- Update `go.xyrillian.de/gg` v1.7.0 (renamed from `github.com/majewsky/gg`), `sapcc/go-api-declarations` v1.22.0, `sapcc/go-bits`, `openstack-hypervisor-operator` v1.2.2 ([#817](https://github.com/cobaltcore-dev/cortex/pull/817), [#818](https://github.com/cobaltcore-dev/cortex/pull/818))
+- Update `controller-gen` to v0.21.0 (CRD annotation bump)
+- Update `actions/create-github-app-token` to v3 ([#819](https://github.com/cobaltcore-dev/cortex/pull/819))
+- Use beefy runner for CodeQL workflow
+
+### cortex-nova v0.0.60 (sha-86af7a6e)
+
+Includes updated chart cortex v0.0.47.
+
+Non-breaking changes:
+- Remove all weighers from `vmware-hana-bin-packing` pipeline template ([#816](https://github.com/cobaltcore-dev/cortex/pull/816))
+
 ## 2026-05-07 — [#814](https://github.com/cobaltcore-dev/cortex/pull/814)
 
 ### cortex v0.0.47 (sha-b8cecd0c)
