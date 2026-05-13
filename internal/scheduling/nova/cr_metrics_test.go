@@ -5,10 +5,13 @@ package nova
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -19,6 +22,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
@@ -386,6 +390,124 @@ func TestLogNoHostFound(t *testing.T) {
 					t.Errorf("counter[case=%q, flavorGroup=%q, intent=%q] = %.0f, want 1",
 						tt.expectedCase, flavorGroup, string(api.CreateIntent), got)
 				}
+			}
+		})
+	}
+}
+
+func TestFeatureGate_CommittedResourceTracking(t *testing.T) {
+	const (
+		projectID   = "project-1"
+		flavorName  = "m1.large"
+		flavorGroup = "m1"
+	)
+
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("AddToScheme: %v", err)
+	}
+
+	ratio := uint64(2048)
+	fg := compute.FlavorGroupFeature{
+		Name:           flavorGroup,
+		Flavors:        []compute.FlavorInGroup{{Name: flavorName, VCPUs: 2, MemoryMB: 4096}},
+		LargestFlavor:  compute.FlavorInGroup{Name: flavorName, VCPUs: 2, MemoryMB: 4096},
+		SmallestFlavor: compute.FlavorInGroup{Name: flavorName, VCPUs: 2, MemoryMB: 4096},
+		RamCoreRatio:   &ratio,
+	}
+	raw, err := v1alpha1.BoxFeatureList([]compute.FlavorGroupFeature{fg})
+	if err != nil {
+		t.Fatalf("BoxFeatureList: %v", err)
+	}
+	flavorKnowledge := &v1alpha1.Knowledge{
+		ObjectMeta: metav1.ObjectMeta{Name: "flavor-groups"},
+		Status: v1alpha1.KnowledgeStatus{
+			Raw: raw,
+			Conditions: []metav1.Condition{{
+				Type:               v1alpha1.KnowledgeConditionReady,
+				Status:             metav1.ConditionTrue,
+				Reason:             "Ready",
+				LastTransitionTime: metav1.Now(),
+			}},
+		},
+	}
+
+	// Zero hosts → pipeline returns no TargetHost → triggers logNoHostFound path.
+	novaRequest := api.ExternalSchedulerRequest{
+		Spec: api.NovaObject[api.NovaSpec]{
+			Data: api.NovaSpec{
+				InstanceUUID: "test-instance",
+				Flavor:       api.NovaObject[api.NovaFlavor]{Data: api.NovaFlavor{Name: flavorName}},
+			},
+		},
+		Context:  api.NovaRequestContext{ProjectID: projectID},
+		Hosts:    []api.ExternalSchedulerHost{},
+		Pipeline: "test-pipeline",
+	}
+	novaRaw, err := json.Marshal(novaRequest)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+
+	pipelineConf := v1alpha1.Pipeline{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pipeline"},
+		Spec: v1alpha1.PipelineSpec{
+			Type:             v1alpha1.PipelineTypeFilterWeigher,
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			CreateHistory:    true,
+			Filters:          []v1alpha1.FilterSpec{},
+			Weighers:         []v1alpha1.WeigherSpec{},
+		},
+	}
+
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("CommittedResourceTracking=%v", enabled), func(t *testing.T) {
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(flavorKnowledge).
+				WithStatusSubresource(&v1alpha1.Decision{}, &v1alpha1.History{}).
+				Build()
+
+			counter := NewNoHostFoundCounter()
+			reg := prometheus.NewRegistry()
+			reg.MustRegister(counter)
+
+			controller := &FilterWeigherPipelineController{
+				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
+					Client:          fakeClient,
+					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
+					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
+					HistoryManager:  lib.HistoryClient{Client: fakeClient},
+				},
+				FeatureGates:       conf.FeatureGates{CommittedResourceTracking: enabled},
+				NoHostFoundCounter: counter,
+			}
+			controller.PipelineConfigs["test-pipeline"] = pipelineConf
+			initResult := controller.InitPipeline(context.Background(), pipelineConf)
+			if len(initResult.FilterErrors) > 0 || len(initResult.WeigherErrors) > 0 {
+				t.Fatalf("pipeline init errors: filters=%v weighers=%v", initResult.FilterErrors, initResult.WeigherErrors)
+			}
+			controller.Pipelines["test-pipeline"] = initResult.Pipeline
+
+			decision := &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-decision", Namespace: "default"},
+				Spec: v1alpha1.DecisionSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					PipelineRef:      corev1.ObjectReference{Name: "test-pipeline"},
+					NovaRaw:          &runtime.RawExtension{Raw: novaRaw},
+				},
+			}
+
+			if err := controller.ProcessNewDecisionFromAPI(context.Background(), decision); err != nil {
+				t.Fatalf("ProcessNewDecisionFromAPI: %v", err)
+			}
+
+			count := testutil.CollectAndCount(counter)
+			if enabled && count == 0 {
+				t.Error("expected counter increment with CommittedResourceTracking=true, got 0")
+			}
+			if !enabled && count != 0 {
+				t.Errorf("expected no counter increment with CommittedResourceTracking=false, got %d", count)
 			}
 		})
 	}

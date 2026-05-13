@@ -12,4 +12,8 @@ type FeatureGates struct {
 	// results by committed resource coverage. Enable only on deployments that
 	// use committed resources.
 	CommittedResourceTracking bool `json:"committedResourceTracking,omitempty"`
+	// PessimisticBlocking enables blocking all candidate hosts at scheduling time
+	// to prevent concurrent placements from violating capacity constraints. Enable
+	// only on deployments that support pessimistic blocking.
+	PessimisticBlocking bool `json:"pessimisticBlocking,omitempty"`
 }
