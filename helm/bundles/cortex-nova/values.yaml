@@ -136,15 +136,25 @@ cortex-scheduling-controllers:
       - failover-reservations-controller
       - quota-controller
       - capacity-controller
+    enabledTasks:
+      - nova-history-cleanup-task
+      - commitments-sync-task  # required for committed resources
+    # Feature gates control optional capabilities within running components.
+    # To enable committed resources, all three must be set:
+    #   enabledControllers must include committed-resource-reservations-controller (above)
+    #   enabledTasks must include commitments-sync-task (above)
+    #   featureGates.committedResourceTracking must be true (below)
+    featureGates:
+      # Enables VM allocation write-back into Reservation slots and no-host-found
+      # classification by committed resource coverage. Enable only on deployments
+      # that use committed resources.
+      committedResourceTracking: true
     # Pipeline used for the empty-state capacity probe (ignores allocations and reservations).
     capacityTotalPipeline: "kvm-report-capacity"
     # Pipeline used for the current-state capacity probe (considers current VM allocations).
     capacityPlaceablePipeline: "kvm-general-purpose-load-balancing"
     # How often the capacity controller re-runs its scheduler probes.
     capacityReconcileInterval: 5m
-    enabledTasks:
-      - nova-history-cleanup-task
-      - commitments-sync-task
     # If true, the external scheduler API will limit the list of hosts in its
     # response to those included in the scheduling request.
     novaLimitHostsToRequest: true
