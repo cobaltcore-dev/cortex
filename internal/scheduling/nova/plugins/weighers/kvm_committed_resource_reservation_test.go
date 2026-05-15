@@ -53,7 +53,7 @@ func newCRReservation(name, host, projectID, resourceGroup, az, totalMemory stri
 	}
 }
 
-func newCRRequest(flavorMemoryMB uint64, hosts []string) api.ExternalSchedulerRequest {
+func newCRRequest(hosts []string) api.ExternalSchedulerRequest {
 	hostList := make([]api.ExternalSchedulerHost, len(hosts))
 	for i, h := range hosts {
 		hostList[i] = api.ExternalSchedulerHost{ComputeHost: h}
@@ -66,7 +66,7 @@ func newCRRequest(flavorMemoryMB uint64, hosts []string) api.ExternalSchedulerRe
 		AvailabilityZone: "qa-de-1a",
 		SchedulerHints:   hints,
 		Flavor: api.NovaObject[api.NovaFlavor]{
-			Data: api.NovaFlavor{MemoryMB: flavorMemoryMB},
+			Data: api.NovaFlavor{MemoryMB: 8 * 1024},
 		},
 	}
 	weights := make(map[string]float64, len(hosts))
@@ -97,7 +97,7 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newCRReservation("res-1", "host1", "project-A", "group-2101", "qa-de-1a", "16Gi"),
 			},
-			request:         newCRRequest(8*1024, []string{"host1", "host2"}),
+			request:         newCRRequest([]string{"host1", "host2"}),
 			opts:            KVMCommittedResourceReservationOpts{ReservationHostWeight: floatPtr(1.0), DefaultHostWeight: floatPtr(0.1)},
 			expectedWeights: map[string]float64{"host1": 1.0, "host2": 0.1},
 		},
@@ -106,7 +106,7 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newCRReservation("res-1", "host1", "project-A", "group-2101", "qa-de-1a", "8Gi", "8Gi"),
 			},
-			request:         newCRRequest(8*1024, []string{"host1", "host2"}),
+			request:         newCRRequest([]string{"host1", "host2"}),
 			opts:            KVMCommittedResourceReservationOpts{ReservationHostWeight: floatPtr(1.0), DefaultHostWeight: floatPtr(0.1)},
 			expectedWeights: map[string]float64{"host1": 0.1, "host2": 0.1},
 		},
@@ -115,7 +115,7 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newCRReservation("res-1", "host1", "project-A", "group-2101", "qa-de-1a", "16Gi", "4Gi"),
 			},
-			request:         newCRRequest(8*1024, []string{"host1", "host2"}),
+			request:         newCRRequest([]string{"host1", "host2"}),
 			opts:            KVMCommittedResourceReservationOpts{ReservationHostWeight: floatPtr(1.0), DefaultHostWeight: floatPtr(0.1)},
 			expectedWeights: map[string]float64{"host1": 1.0, "host2": 0.1},
 		},
@@ -124,7 +124,7 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newCRReservation("res-1", "host1", "project-B", "group-2101", "qa-de-1a", "16Gi"),
 			},
-			request:         newCRRequest(8*1024, []string{"host1", "host2"}),
+			request:         newCRRequest([]string{"host1", "host2"}),
 			opts:            KVMCommittedResourceReservationOpts{ReservationHostWeight: floatPtr(1.0), DefaultHostWeight: floatPtr(0.1)},
 			expectedWeights: map[string]float64{"host1": 0.1, "host2": 0.1},
 		},
@@ -133,7 +133,7 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newCRReservation("res-1", "host1", "project-A", "group-9999", "qa-de-1a", "16Gi"),
 			},
-			request:         newCRRequest(8*1024, []string{"host1", "host2"}),
+			request:         newCRRequest([]string{"host1", "host2"}),
 			opts:            KVMCommittedResourceReservationOpts{ReservationHostWeight: floatPtr(1.0), DefaultHostWeight: floatPtr(0.1)},
 			expectedWeights: map[string]float64{"host1": 0.1, "host2": 0.1},
 		},
@@ -142,7 +142,7 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newCRReservation("res-1", "host1", "project-A", "group-2101", "qa-de-1b", "16Gi"),
 			},
-			request:         newCRRequest(8*1024, []string{"host1", "host2"}),
+			request:         newCRRequest([]string{"host1", "host2"}),
 			opts:            KVMCommittedResourceReservationOpts{ReservationHostWeight: floatPtr(1.0), DefaultHostWeight: floatPtr(0.1)},
 			expectedWeights: map[string]float64{"host1": 0.1, "host2": 0.1},
 		},
@@ -155,7 +155,7 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 					return r
 				}(),
 			},
-			request:         newCRRequest(8*1024, []string{"host1", "host2"}),
+			request:         newCRRequest([]string{"host1", "host2"}),
 			opts:            KVMCommittedResourceReservationOpts{ReservationHostWeight: floatPtr(1.0), DefaultHostWeight: floatPtr(0.1)},
 			expectedWeights: map[string]float64{"host1": 0.1, "host2": 0.1},
 		},
@@ -164,7 +164,7 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newFailoverReservation("res-1", "host1", false, nil),
 			},
-			request:         newCRRequest(8*1024, []string{"host1", "host2"}),
+			request:         newCRRequest([]string{"host1", "host2"}),
 			opts:            KVMCommittedResourceReservationOpts{ReservationHostWeight: floatPtr(1.0), DefaultHostWeight: floatPtr(0.1)},
 			expectedWeights: map[string]float64{"host1": 0.1, "host2": 0.1},
 		},
@@ -172,7 +172,7 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 			name:         "no resource group hint skips weigher",
 			reservations: []*v1alpha1.Reservation{newCRReservation("res-1", "host1", "project-A", "group-2101", "qa-de-1a", "16Gi")},
 			request: func() api.ExternalSchedulerRequest {
-				r := newCRRequest(8*1024, []string{"host1", "host2"})
+				r := newCRRequest([]string{"host1", "host2"})
 				r.Spec.Data.SchedulerHints = nil
 				return r
 			}(),
@@ -184,14 +184,14 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newCRReservation("res-1", "host1", "project-A", "group-2101", "qa-de-1a", "16Gi"),
 			},
-			request:         newCRRequest(8*1024, []string{"host1", "host2"}),
+			request:         newCRRequest([]string{"host1", "host2"}),
 			opts:            KVMCommittedResourceReservationOpts{},
 			expectedWeights: map[string]float64{"host1": 1.0, "host2": 0.1},
 		},
 		{
 			name:            "no reservations - all hosts get default weight",
 			reservations:    []*v1alpha1.Reservation{},
-			request:         newCRRequest(8*1024, []string{"host1", "host2"}),
+			request:         newCRRequest([]string{"host1", "host2"}),
 			opts:            KVMCommittedResourceReservationOpts{ReservationHostWeight: floatPtr(1.0), DefaultHostWeight: floatPtr(0.1)},
 			expectedWeights: map[string]float64{"host1": 0.1, "host2": 0.1},
 		},
@@ -201,7 +201,7 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 				newCRReservation("res-1", "host1", "project-A", "group-2101", "qa-de-1a", "16Gi"),
 				newCRReservation("res-2", "host2", "project-A", "group-2101", "qa-de-1a", "16Gi"),
 			},
-			request:         newCRRequest(8*1024, []string{"host1", "host2", "host3"}),
+			request:         newCRRequest([]string{"host1", "host2", "host3"}),
 			opts:            KVMCommittedResourceReservationOpts{ReservationHostWeight: floatPtr(1.0), DefaultHostWeight: floatPtr(0.1)},
 			expectedWeights: map[string]float64{"host1": 1.0, "host2": 1.0, "host3": 0.1},
 		},
