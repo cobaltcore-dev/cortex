@@ -138,6 +138,12 @@ spec:
         VM is allocated get a higher weight, encouraging placement on
         pre-reserved failover capacity. For non-evacuation requests, this
         weigher has no effect.
+    - name: kvm_committed_resource_reservation
+      description: |
+        This weigher boosts hosts that have a ready CommittedResourceReservation
+        matching the request's project, resource group, and availability zone,
+        with enough free memory capacity for the requested VM. Hosts without a
+        matching reservation or without enough free capacity receive a lower weight.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -274,6 +280,12 @@ spec:
         VM is allocated get a higher weight, encouraging placement on
         pre-reserved failover capacity. For non-evacuation requests, this
         weigher has no effect.
+    - name: kvm_committed_resource_reservation
+      description: |
+        This weigher boosts hosts that have a ready CommittedResourceReservation
+        matching the request's project, resource group, and availability zone,
+        with enough free memory capacity for the requested VM. Hosts without a
+        matching reservation or without enough free capacity receive a lower weight.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
