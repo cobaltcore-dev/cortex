@@ -535,8 +535,7 @@ func (c *UsageCalculator) buildUsageResponse(
 			}
 			if resCfg.RAM.HasQuota {
 				// CRD stores quota in GiB; convert to declared unit for Limes.
-				fg := flavorGroups[flavorGroupName]
-				report.Quota = Some(fg.GiBToDeclaredUnits(lookupQuotaGiB(string(ramResourceName), az)))
+				report.Quota = Some(resCfg.RAM.GiBToDeclaredUnits(lookupQuotaGiB(string(ramResourceName), az)))
 			}
 			ramPerAZ[az] = report
 		}

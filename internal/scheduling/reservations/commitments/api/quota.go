@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -122,8 +123,7 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 			}
 			quotaValue := int64(azQuota.Quota)
 			if groupName, ok := ramResourceToGroup[string(resourceName)]; ok {
-				fg := flavorGroups[groupName]
-				quotaValue = fg.DeclaredUnitsToGiB(quotaValue)
+				quotaValue = api.config.ResourceConfigForGroup(groupName).RAM.DeclaredUnitsToGiB(quotaValue)
 			}
 			azStr := string(az)
 			if quotaByAZ[azStr] == nil {
@@ -241,12 +241,29 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Collect AZ names for the success log
-	azNames := make([]string, 0, len(activeAZs))
-	for az := range activeAZs {
-		azNames = append(azNames, az)
+	// Collect AZ names and resource group names for the success log
+	var storedAZs, skippedAZs []string
+	for az, isActive := range activeAZs {
+		if isActive {
+			storedAZs = append(storedAZs, az)
+		} else {
+			skippedAZs = append(skippedAZs, az)
+		}
 	}
-	log.Info("quota request completed", "projectID", projectID, "azs", azNames)
+	sort.Strings(storedAZs)
+	sort.Strings(skippedAZs)
+	groups := make([]string, 0, len(req.Resources))
+	seen := make(map[string]bool, len(req.Resources))
+	for resourceName := range req.Resources {
+		name := string(resourceName)
+		if !seen[name] {
+			seen[name] = true
+			groups = append(groups, name)
+		}
+	}
+	sort.Strings(groups)
+	log.Info("quota request completed", "projectID", projectID, "storedAZs", storedAZs,
+		"skippedAZs", skippedAZs, "resources", len(req.Resources), "resourceNames", groups)
 
 	// Return 204 No Content as expected by the LIQUID API
 	w.WriteHeader(http.StatusNoContent)

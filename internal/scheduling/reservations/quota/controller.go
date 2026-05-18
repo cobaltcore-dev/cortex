@@ -16,6 +16,7 @@ import (
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/retry"
@@ -85,6 +86,9 @@ func (c *QuotaController) ReconcilePeriodic(ctx context.Context) error {
 
 	// Build flavorName → flavorGroup lookup
 	flavorToGroup := buildFlavorToGroupMap(flavorGroups)
+	logger.Info("flavor group knowledge loaded",
+		"flavorGroups", len(flavorGroups),
+		"totalFlavorsInMap", len(flavorToGroup))
 
 	// Fetch all VMs using VMSource (reads from Postgres via DBVMSource)
 	vms, err := c.VMSource.ListVMs(ctx)
@@ -96,6 +100,17 @@ func (c *QuotaController) ReconcilePeriodic(ctx context.Context) error {
 
 	// Compute totalUsage per project/AZ/resource
 	totalUsageByProject := c.computeTotalUsage(vms, flavorToGroup, flavorGroups)
+
+	// Diagnostic: count how many VMs were actually mapped to a flavor group
+	mappedVMs := 0
+	for _, vm := range vms {
+		if _, ok := flavorToGroup[vm.FlavorName]; ok {
+			mappedVMs++
+		}
+	}
+	logger.Info("VM flavor mapping complete",
+		"totalVMs", len(vms), "mappedVMs", mappedVMs, "unmappedVMs", len(vms)-mappedVMs,
+		"projectsWithUsage", len(totalUsageByProject))
 
 	// List all existing ProjectQuota CRDs
 	var pqList v1alpha1.ProjectQuotaList
@@ -130,7 +145,7 @@ func (c *QuotaController) ReconcilePeriodic(ctx context.Context) error {
 		paygUsage := derivePaygUsage(projectTotalUsage, crUsage)
 
 		// Write status with conflict retry (full reconcile sets LastFullReconcileAt)
-		if err := c.updateProjectQuotaStatusWithRetry(ctx, pq.Name, projectTotalUsage, paygUsage, true, flavorGroups); err != nil {
+		if err := c.updateProjectQuotaStatusWithRetry(ctx, pq.Name, projectTotalUsage, paygUsage, true); err != nil {
 			logger.Error(err, "failed to update ProjectQuota status", "project", projectID)
 			skipped++
 			continue
@@ -237,7 +252,7 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	paygUsage := derivePaygUsage(totalUsage, crUsage)
 
 	// Write updated status with conflict retry
-	if err := c.updateProjectQuotaStatusWithRetry(ctx, pq.Name, totalUsage, paygUsage, specChanged, flavorGroups); err != nil {
+	if err := c.updateProjectQuotaStatusWithRetry(ctx, pq.Name, totalUsage, paygUsage, specChanged); err != nil {
 		logger.Error(err, "failed to update ProjectQuota status")
 		return ctrl.Result{}, err
 	}
@@ -619,8 +634,8 @@ func (c *QuotaController) applyDeltaAndUpdateStatus(
 			// Update human-readable summaries for wide kubectl output
 			pq.Status.TotalUsageSummary = buildUsageSummary(pq.Status.TotalUsage)
 			pq.Status.PaygUsageSummary = buildUsageSummary(pq.Status.PaygUsage)
-			pq.Status.LimesUsageSummary = buildLimesSummary(pq.Status.TotalUsage, flavorGroups)
-			pq.Status.LimesQuotaSummary = buildLimesSummary(pq.Spec.Quota, flavorGroups)
+			pq.Status.LimesUsageSummary = buildLimesSummary(pq.Status.TotalUsage, c.Config.FlavorGroupResourceConfig)
+			pq.Status.LimesQuotaSummary = buildLimesSummary(pq.Spec.Quota, c.Config.FlavorGroupResourceConfig)
 
 			now := metav1.Now()
 			pq.Status.LastReconcileAt = &now
@@ -931,7 +946,6 @@ func (c *QuotaController) updateProjectQuotaStatusWithRetry(
 	totalUsage map[string]map[string]int64,
 	paygUsage map[string]map[string]int64,
 	fullReconcile bool,
-	flavorGroups map[string]compute.FlavorGroupFeature,
 ) error {
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -945,17 +959,35 @@ func (c *QuotaController) updateProjectQuotaStatusWithRetry(
 		az := pq.Spec.AvailabilityZone
 		pq.Status.TotalUsage = extractAZSlice(totalUsage, az)
 		pq.Status.PaygUsage = extractAZSlice(paygUsage, az)
+		// Seed zero values for all resource keys defined in spec.quota so the status
+		// always shows which groups are tracked (even when no VMs exist for this project).
+		for key := range pq.Spec.Quota {
+			if _, ok := pq.Status.TotalUsage[key]; !ok {
+				pq.Status.TotalUsage[key] = 0
+			}
+			if _, ok := pq.Status.PaygUsage[key]; !ok {
+				pq.Status.PaygUsage[key] = 0
+			}
+		}
 		pq.Status.TotalUsageSummary = buildUsageSummary(pq.Status.TotalUsage)
 		pq.Status.PaygUsageSummary = buildUsageSummary(pq.Status.PaygUsage)
 		// Limes unit summaries for debugging (converted from internal GiB to declared units)
-		pq.Status.LimesUsageSummary = buildLimesSummary(pq.Status.TotalUsage, flavorGroups)
-		pq.Status.LimesQuotaSummary = buildLimesSummary(pq.Spec.Quota, flavorGroups)
+		pq.Status.LimesUsageSummary = buildLimesSummary(pq.Status.TotalUsage, c.Config.FlavorGroupResourceConfig)
+		pq.Status.LimesQuotaSummary = buildLimesSummary(pq.Spec.Quota, c.Config.FlavorGroupResourceConfig)
 		pq.Status.ObservedGeneration = pq.Generation
 		now := metav1.Now()
 		pq.Status.LastReconcileAt = &now
 		if fullReconcile {
 			pq.Status.LastFullReconcileAt = &now
 		}
+		// Set Ready condition to indicate successful reconciliation
+		meta.SetStatusCondition(&pq.Status.Conditions, metav1.Condition{
+			Type:               v1alpha1.ProjectQuotaConditionReady,
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: pq.Generation,
+			Reason:             "Reconciled",
+			Message:            "Quota usage successfully computed",
+		})
 		return c.Status().Update(ctx, &pq)
 	})
 }
@@ -1021,24 +1053,11 @@ func buildUsageSummary(usage map[string]int64) string {
 	}
 	sort.Strings(groupNames)
 
-	// Build compact summary — only include resource types with non-zero values
+	// Build compact summary — include all resource types for each group (even zeros)
 	var parts []string
 	for _, name := range groupNames {
 		gv := groups[name]
-		var vals []string
-		if gv.cores != 0 {
-			vals = append(vals, fmt.Sprintf("c=%d", gv.cores))
-		}
-		if gv.instances != 0 {
-			vals = append(vals, fmt.Sprintf("i=%d", gv.instances))
-		}
-		if gv.ram != 0 {
-			vals = append(vals, fmt.Sprintf("r=%d", gv.ram))
-		}
-		if len(vals) == 0 {
-			continue // skip groups with all zeros
-		}
-		parts = append(parts, name+": "+strings.Join(vals, " "))
+		parts = append(parts, fmt.Sprintf("%s: c=%d i=%d r=%d", name, gv.cores, gv.instances, gv.ram))
 	}
 	return strings.Join(parts, "; ")
 }
@@ -1047,7 +1066,7 @@ func buildUsageSummary(usage map[string]int64) string {
 // For RAM resources in fixed-ratio groups: value * 1024 / SmallestFlavor.MemoryMB (GiB→slots).
 // For RAM resources in variable-ratio groups: value is already in GiB = declared units (1:1).
 // For cores and instances: value is 1:1 (no conversion).
-func buildLimesSummary(values map[string]int64, flavorGroups map[string]compute.FlavorGroupFeature) string {
+func buildLimesSummary(values map[string]int64, cfg map[string]commitments.FlavorGroupResourcesConfig) string {
 	if len(values) == 0 {
 		return ""
 	}
@@ -1055,14 +1074,9 @@ func buildLimesSummary(values map[string]int64, flavorGroups map[string]compute.
 	converted := make(map[string]int64, len(values))
 	for key, val := range values {
 		if strings.HasPrefix(key, "hw_version_") && strings.HasSuffix(key, "_ram") {
-			// Extract group name: "hw_version_<group>_ram" → "<group>"
 			name := strings.TrimPrefix(key, "hw_version_")
 			groupName := strings.TrimSuffix(name, "_ram")
-			if fg, ok := flavorGroups[groupName]; ok {
-				converted[key] = (&fg).GiBToDeclaredUnits(val)
-			} else {
-				converted[key] = val
-			}
+			converted[key] = commitments.ResourceConfigForGroup(cfg, groupName).RAM.GiBToDeclaredUnits(val)
 		} else {
 			converted[key] = val
 		}

@@ -121,10 +121,10 @@ func newE2EEnv(t *testing.T, flavors []*TestFlavor, infoVersion int64, scheduler
 
 	// HTTPAPI wired directly to the real k8s client (no fakeControllerClient wrapper).
 	cfg := commitments.DefaultAPIConfig()
-	cfg.WatchTimeout = metav1.Duration{Duration: 5 * time.Second}
+	cfg.WatchTimeout = metav1.Duration{Duration: 20 * time.Second}
 	cfg.WatchPollInterval = metav1.Duration{Duration: 100 * time.Millisecond}
 	cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
-		"*": {RAM: commitments.ResourceTypeConfig{HandlesCommitments: true, HasCapacity: true}},
+		"*": {RAM: commitments.RAMResourceTypeConfig{HandlesCommitments: true, HasCapacity: true}},
 	}
 	api := NewAPIWithConfig(k8sClient, cfg, nil)
 	mux := http.NewServeMux()
