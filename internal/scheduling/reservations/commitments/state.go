@@ -136,7 +136,7 @@ type CommitmentState struct {
 }
 
 // FromCommitment converts Limes commitment to CommitmentState.
-// ramUnitMiB is the size of one external RAM unit in MiB, as returned by FlavorGroupFeature.RAMUnitMiB():
+// ramUnitMiB is the size of one external RAM unit in MiB, as returned by RAMResourceTypeConfig.RAMUnitMiB():
 //   - fixed-ratio flavor groups: SmallestFlavor.MemoryMB (1 unit = 1 smallest-flavor slot)
 //   - variable-ratio flavor groups: 1024 (1 unit = 1 GiB)
 func FromCommitment(

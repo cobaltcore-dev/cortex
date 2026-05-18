@@ -197,7 +197,7 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 	cfg := commitments.DefaultAPIConfig()
 	cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
 		"hana_fixed": {
-			RAM:       commitments.RAMResourceTypeConfig{HandlesCommitments: true, HasCapacity: true, HasQuota: true},
+			RAM:       commitments.RAMResourceTypeConfig{HandlesCommitments: true, HasCapacity: true, HasQuota: true, RAMUnitGiB: 16},
 			Cores:     commitments.ResourceTypeConfig{HasCapacity: true},
 			Instances: commitments.ResourceTypeConfig{HasCapacity: true},
 		},

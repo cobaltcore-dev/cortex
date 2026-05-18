@@ -70,6 +70,7 @@ func NewSyncer(k8sClient client.Client, monitor *SyncerMonitor) *Syncer {
 func (s *Syncer) Init(ctx context.Context, config SyncerConfig) error {
 	s.syncInterval = config.SyncInterval.Duration
 	s.resourceConfig = config
+	LogFlavorGroupResourceConfig(baseLog, config.FlavorGroupResourceConfig)
 	if err := s.CommitmentsClient.Init(ctx, s.Client, config); err != nil {
 		return err
 	}

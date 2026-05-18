@@ -4,8 +4,10 @@
 package commitments
 
 import (
+	"sort"
 	"time"
 
+	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -139,6 +141,30 @@ type FlavorGroupResourcesConfig struct {
 	RAM       RAMResourceTypeConfig `json:"ram"`
 	Cores     ResourceTypeConfig    `json:"cores"`
 	Instances ResourceTypeConfig    `json:"instances"`
+}
+
+// LogFlavorGroupResourceConfig logs the effective RAM unit for each configured flavor group.
+// It warns when RAMUnitGiB is 0, which silently defaults to 1 GiB.
+func LogFlavorGroupResourceConfig(log logr.Logger, cfg map[string]FlavorGroupResourcesConfig) {
+	if len(cfg) == 0 {
+		log.Info("WARNING: no flavorGroupResourceConfig set; all flavor groups will use default RAM unit of 1 GiB")
+		return
+	}
+	groups := make([]string, 0, len(cfg))
+	for g := range cfg {
+		groups = append(groups, g)
+	}
+	sort.Strings(groups)
+	for _, groupName := range groups {
+		resCfg := cfg[groupName]
+		if resCfg.RAM.RAMUnitGiB == 0 {
+			log.Info("WARNING: ramUnitGiB not configured for flavor group, defaulting to 1 GiB",
+				"flavorGroup", groupName)
+		} else {
+			log.Info("flavor group RAM unit",
+				"flavorGroup", groupName, "ramUnitGiB", resCfg.RAM.RAMUnitGiB)
+		}
+	}
 }
 
 // ResourceConfigForGroup returns the resource config for the given flavor group name,
