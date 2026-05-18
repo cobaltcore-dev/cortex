@@ -17,6 +17,7 @@ import (
 	liquid "github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/must"
 	. "go.xyrillian.de/gg/option"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -40,11 +41,21 @@ type E2EChecksConfig struct {
 	// If empty, falls back to RoundTripCheck.TestProjectID, then defaultE2EProjectUUID.
 	ProjectID string `json:"projectID,omitempty"`
 	// AZs is the list of availability zones to test. If empty, falls back to
-	// RoundTripCheck.AZ, then uses "" (any AZ).
+	// RoundTripCheck.AZ, then uses "qa-de-1b".
 	AZs []string `json:"azs,omitempty"`
+	// RequestTimeout is the per-request HTTP timeout for change-commitments calls.
+	// Defaults to 30s if unset.
+	RequestTimeout metav1.Duration `json:"requestTimeout,omitempty"`
 	// RoundTripCheck holds optional overrides for backward compatibility.
 	// Prefer the top-level ProjectID and AZs fields for new configurations.
 	RoundTripCheck *E2ERoundTripConfig `json:"roundTripCheck,omitempty"`
+}
+
+func (c E2EChecksConfig) e2eRequestTimeout() time.Duration {
+	if c.RequestTimeout.Duration > 0 {
+		return c.RequestTimeout.Duration
+	}
+	return 30 * time.Second
 }
 
 // E2ERoundTripConfig holds optional overrides for the create→delete round-trip e2e check.
@@ -70,7 +81,7 @@ func e2eProjectID(config E2EChecksConfig) liquid.ProjectUUID {
 }
 
 // e2eAZs returns the effective AZ list for e2e tests.
-// Falls back to RoundTripCheck.AZ (single AZ), then to [""] (any AZ).
+// Falls back to RoundTripCheck.AZ (single AZ), then to ["qa-de-1b"].
 func e2eAZs(config E2EChecksConfig) []liquid.AvailabilityZone {
 	if len(config.AZs) > 0 {
 		azs := make([]liquid.AvailabilityZone, len(config.AZs))
@@ -82,7 +93,7 @@ func e2eAZs(config E2EChecksConfig) []liquid.AvailabilityZone {
 	if rt := config.RoundTripCheck; rt != nil && rt.AZ != "" {
 		return []liquid.AvailabilityZone{liquid.AvailabilityZone(rt.AZ)}
 	}
-	return []liquid.AvailabilityZone{""}
+	return []liquid.AvailabilityZone{"qa-de-1b"}
 }
 
 // CheckCommitmentsInfoEndpoint verifies that GET /commitments/v1/info returns 200 with a valid ServiceInfo.
@@ -136,7 +147,7 @@ func CheckCommitmentsRoundTrip(ctx context.Context, config E2EChecksConfig) {
 			if !resInfo.HandlesCommitments {
 				continue
 			}
-			e2eRoundTripResource(ctx, baseURL, serviceInfo.Version, az, projectID, resourceName, config.NoCleanup)
+			e2eRoundTripResource(ctx, baseURL, serviceInfo.Version, az, projectID, resourceName, config.NoCleanup, config.e2eRequestTimeout())
 			checked++
 		}
 	}
@@ -155,6 +166,7 @@ func e2eRoundTripResource(
 	projectID liquid.ProjectUUID,
 	resourceName liquid.ResourceName,
 	noCleanup bool,
+	requestTimeout time.Duration,
 ) {
 
 	testUUID := liquid.CommitmentUUID(fmt.Sprintf("e2e-%d", time.Now().UnixMilli()))
@@ -184,7 +196,7 @@ func e2eRoundTripResource(
 	slog.Info("round-trip check: creating test commitment",
 		"resource", resourceName, "uuid", testUUID, "project", projectID, "az", az)
 
-	rejectionReason := e2eSendChangeCommitments(ctx, baseURL, createReq)
+	rejectionReason := e2eSendChangeCommitments(ctx, baseURL, createReq, requestTimeout)
 	if rejectionReason != "" {
 		// Only capacity rejections (no hosts available) are expected in production clusters.
 		// Any other reason (flavor group ineligible, config error, timeout) indicates a
@@ -226,7 +238,7 @@ func e2eRoundTripResource(
 			},
 		}
 		slog.Info("round-trip check: deleting test commitment", "resource", resourceName, "uuid", testUUID)
-		if reason := e2eSendChangeCommitments(ctx, baseURL, deleteReq); reason != "" {
+		if reason := e2eSendChangeCommitments(ctx, baseURL, deleteReq, requestTimeout); reason != "" {
 			panic(fmt.Sprintf("round-trip check: delete of test commitment %s was rejected: %s", testUUID, reason))
 		}
 		slog.Info("round-trip check: commitment deleted", "resource", resourceName, "uuid", testUUID)
@@ -258,7 +270,7 @@ func CheckCommitmentsMultiFlavorGroupBatch(ctx context.Context, config E2EChecks
 			if !resInfo.HandlesCommitments {
 				continue
 			}
-			e2eBatchFlavorGroupResource(ctx, baseURL, serviceInfo.Version, az, projectID, resourceName, config.NoCleanup)
+			e2eBatchFlavorGroupResource(ctx, baseURL, serviceInfo.Version, az, projectID, resourceName, config.NoCleanup, config.e2eRequestTimeout())
 			checked++
 		}
 	}
@@ -277,6 +289,7 @@ func e2eBatchFlavorGroupResource(
 	projectID liquid.ProjectUUID,
 	resourceName liquid.ResourceName,
 	noCleanup bool,
+	requestTimeout time.Duration,
 ) {
 
 	now := time.Now()
@@ -313,7 +326,7 @@ func e2eBatchFlavorGroupResource(
 
 	slog.Info("batch check: creating pending commitment",
 		"resource", resourceName, "uuid", uuidA, "project", projectID, "az", az)
-	if reason := e2eSendChangeCommitments(ctx, baseURL, req1); reason != "" {
+	if reason := e2eSendChangeCommitments(ctx, baseURL, req1, requestTimeout); reason != "" {
 		panic(fmt.Sprintf("batch check: unexpected rejection for pending creation of %s: %s", resourceName, reason))
 	}
 	slog.Info("batch check: pending commitment accepted", "resource", resourceName, "uuid", uuidA)
@@ -346,7 +359,7 @@ func e2eBatchFlavorGroupResource(
 			},
 		}
 		slog.Info("batch check: deleting pending commitment", "resource", resourceName, "uuid", uuidA)
-		if reason := e2eSendChangeCommitments(ctx, baseURL, req); reason != "" {
+		if reason := e2eSendChangeCommitments(ctx, baseURL, req, requestTimeout); reason != "" {
 			panic(fmt.Sprintf("batch check: delete of pending commitment %s rejected: %s", uuidA, reason))
 		}
 		slog.Info("batch check: pending commitment deleted", "resource", resourceName, "uuid", uuidA)
@@ -390,7 +403,7 @@ func e2eBatchFlavorGroupResource(
 		"totalConfirmed", confirmedAmountA+confirmedAmountB,
 		"project", projectID, "az", az)
 
-	if reason := e2eSendChangeCommitments(ctx, baseURL, req2); reason != "" {
+	if reason := e2eSendChangeCommitments(ctx, baseURL, req2, requestTimeout); reason != "" {
 		if !strings.Contains(reason, "no hosts found") && !strings.Contains(reason, "insufficient CPU cores") {
 			panic(fmt.Sprintf("batch check: unexpected rejection for batch of %s: %s", resourceName, reason))
 		}
@@ -443,7 +456,7 @@ func e2eBatchFlavorGroupResource(
 			},
 		}
 		slog.Info("batch check: deleting confirmed commitments", "resource", resourceName, "uuidA", uuidA, "uuidB", uuidB)
-		if reason := e2eSendChangeCommitments(ctx, baseURL, req); reason != "" {
+		if reason := e2eSendChangeCommitments(ctx, baseURL, req, requestTimeout); reason != "" {
 			panic(fmt.Sprintf("batch check: cleanup of confirmed commitments %s/%s rejected: %s", uuidA, uuidB, reason))
 		}
 		slog.Info("batch check: confirmed commitments deleted", "resource", resourceName, "uuidA", uuidA, "uuidB", uuidB)
@@ -512,7 +525,9 @@ func e2eLogUsageReport(report liquid.ServiceUsageReport, az liquid.AvailabilityZ
 // Panics on HTTP non-200 (infrastructure error).
 // Returns the rejection reason on 200+rejection (expected for capacity-constrained clusters).
 // Returns "" on success.
-func e2eSendChangeCommitments(ctx context.Context, baseURL string, req liquid.CommitmentChangeRequest) string {
+func e2eSendChangeCommitments(ctx context.Context, baseURL string, req liquid.CommitmentChangeRequest, requestTimeout time.Duration) string {
+	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
 	body := must.Return(json.Marshal(req))
 	httpReq := must.Return(http.NewRequestWithContext(ctx, http.MethodPost,
 		baseURL+"/commitments/v1/change-commitments", bytes.NewReader(body)))
