@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 
@@ -279,11 +280,17 @@ func (c *Client) ConfiguredRouteLabels(gvk schema.GroupVersionKind) []map[string
 	if len(remotes) == 0 {
 		return nil
 	}
-	labels := make([]map[string]string, 0, len(remotes))
+	result := make([]map[string]string, 0, len(remotes))
 	for _, r := range remotes {
-		labels = append(labels, r.labels)
+		if r.labels == nil {
+			result = append(result, nil)
+			continue
+		}
+		cp := make(map[string]string, len(r.labels))
+		maps.Copy(cp, r.labels)
+		result = append(result, cp)
 	}
-	return labels
+	return result
 }
 
 // ServedAZs returns the set of availability zones that have a configured
