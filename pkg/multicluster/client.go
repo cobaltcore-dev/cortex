@@ -232,7 +232,7 @@ func (c *Client) clusterForWrite(gvk schema.GroupVersionKind, obj any) (cluster.
 	if c.homeGVKs[gvk] {
 		return c.HomeCluster, nil
 	}
-	return nil, fmt.Errorf("no cluster matched for GVK %s", gvk)
+	return nil, &NoClusterMatchedError{GVK: gvk}
 }
 
 type duplicateError struct{ msg string }
@@ -246,6 +246,65 @@ func (e *duplicateError) Error() string { return e.msg }
 func IsDuplicateError(err error) bool {
 	var de *duplicateError
 	return errors.As(err, &de)
+}
+
+// NoClusterMatchedError is returned when a write operation cannot find a
+// matching remote cluster for the given GVK and resource. This typically
+// happens in multi-AZ setups where the resource targets an AZ that has no
+// configured cluster.
+type NoClusterMatchedError struct {
+	GVK schema.GroupVersionKind
+}
+
+func (e *NoClusterMatchedError) Error() string {
+	return fmt.Sprintf("no cluster matched for GVK %s", e.GVK)
+}
+
+// IsNoClusterMatchedError returns true if the error indicates that no
+// configured cluster matched the resource for a write operation. Callers
+// can use this to skip resources targeting unavailable AZs gracefully.
+func IsNoClusterMatchedError(err error) bool {
+	var nce *NoClusterMatchedError
+	return errors.As(err, &nce)
+}
+
+// ConfiguredRouteLabels returns the routing label sets of all configured
+// remote clusters for the given GVK. This can be used to determine which
+// availability zones (or other routing dimensions) are served.
+// Returns nil if the GVK is only configured for the home cluster.
+func (c *Client) ConfiguredRouteLabels(gvk schema.GroupVersionKind) []map[string]string {
+	c.remoteClustersMu.RLock()
+	defer c.remoteClustersMu.RUnlock()
+	remotes := c.remoteClusters[gvk]
+	if len(remotes) == 0 {
+		return nil
+	}
+	labels := make([]map[string]string, 0, len(remotes))
+	for _, r := range remotes {
+		labels = append(labels, r.labels)
+	}
+	return labels
+}
+
+// ServedAZs returns the set of availability zones that have a configured
+// remote cluster for the given GVK. It extracts the "availabilityZone" key
+// from each remote cluster's routing labels. Returns nil if no remote clusters
+// are configured or none have an "availabilityZone" label.
+func (c *Client) ServedAZs(gvk schema.GroupVersionKind) map[string]bool {
+	labelSets := c.ConfiguredRouteLabels(gvk)
+	if len(labelSets) == 0 {
+		return nil
+	}
+	served := make(map[string]bool, len(labelSets))
+	for _, labels := range labelSets {
+		if az, ok := labels["availabilityZone"]; ok {
+			served[az] = true
+		}
+	}
+	if len(served) == 0 {
+		return nil
+	}
+	return served
 }
 
 // Get iterates over all clusters with the GVK and returns the result.
