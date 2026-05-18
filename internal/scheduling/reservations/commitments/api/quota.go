@@ -123,8 +123,7 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 			}
 			quotaValue := int64(azQuota.Quota)
 			if groupName, ok := ramResourceToGroup[string(resourceName)]; ok {
-				fg := flavorGroups[groupName]
-				quotaValue = fg.DeclaredUnitsToGiB(quotaValue)
+				quotaValue = api.config.ResourceConfigForGroup(groupName).RAM.DeclaredUnitsToGiB(quotaValue)
 			}
 			azStr := string(az)
 			if quotaByAZ[azStr] == nil {

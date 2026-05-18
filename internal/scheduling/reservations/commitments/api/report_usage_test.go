@@ -391,7 +391,7 @@ func TestReportUsageIntegration(t *testing.T) {
 			Flavors:   []*TestFlavor{m1Small, m1Large},
 			Config: &commitments.APIConfig{
 				FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
-					"hana_1": {RAM: commitments.ResourceTypeConfig{HandlesCommitments: true, HasQuota: true}},
+					"hana_1": {RAM: commitments.RAMResourceTypeConfig{HandlesCommitments: true, HasQuota: true}},
 				},
 			},
 			VMs: []*TestVMUsage{
@@ -433,7 +433,7 @@ func TestReportUsageIntegration(t *testing.T) {
 			Flavors:   []*TestFlavor{m1Small, m1Large},
 			Config: &commitments.APIConfig{
 				FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
-					"hana_1": {RAM: commitments.ResourceTypeConfig{HandlesCommitments: true, HasQuota: true}},
+					"hana_1": {RAM: commitments.RAMResourceTypeConfig{HandlesCommitments: true, HasQuota: true}},
 				},
 			},
 			VMs: []*TestVMUsage{

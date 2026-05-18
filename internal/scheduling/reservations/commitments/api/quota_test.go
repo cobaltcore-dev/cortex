@@ -593,7 +593,11 @@ func TestHandleQuota_UnitConversion(t *testing.T) {
 		[]*TestFlavor{{Name: "hana_c4_m2", Group: "hana_1", MemoryMB: 2048, VCPUs: 4}}, 1,
 	))
 	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(knowledge).Build()
-	httpAPI := NewAPI(k8sClient)
+	cfg := commitments.DefaultAPIConfig()
+	cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
+		"hana_1": {RAM: commitments.RAMResourceTypeConfig{RAMUnitGiB: 2}},
+	}
+	httpAPI := NewAPIWithConfig(k8sClient, cfg, nil)
 
 	quotaReq := liquid.ServiceQuotaRequest{
 		Resources: map[liquid.ResourceName]liquid.ResourceQuotaRequest{
