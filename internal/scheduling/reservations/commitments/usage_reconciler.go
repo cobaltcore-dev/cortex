@@ -279,7 +279,7 @@ func (r *UsageReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.C
 		return fmt.Errorf("failed to set up committed resource project index: %w", err)
 	}
 	if err := indexProjectQuotaByProjectID(context.Background(), mcl); err != nil {
-		return fmt.Errorf("failed to set up project quota project index: %w", err)
+		log.Info("ProjectQuota index unavailable — quota data will not be included in usage reports", "error", err)
 	}
 
 	bldr := multicluster.BuildController(mcl, mgr)
