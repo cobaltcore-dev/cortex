@@ -139,15 +139,17 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	// Pre-filter: skip AZs that have no configured cluster. In multi-AZ setups
-	// Limes sends quota for all AZs but cortex only manages a subset (KVM AZs).
-	if mc, ok := api.client.(*multicluster.Client); ok {
-		if servedAZs := mc.ServedAZs(projectQuotaGVK); servedAZs != nil {
-			for az := range quotaByAZ {
-				if !servedAZs[az] {
-					log.V(1).Info("skipping quota for unserved AZ (no cluster configured)", "az", az, "projectID", projectID)
-					delete(quotaByAZ, az)
-				}
+	// Pre-filter: if served AZs are explicitly configured, skip AZs not in the list.
+	// In multi-AZ setups Limes sends quota for all AZs but cortex only manages a subset.
+	if len(api.config.QuotaServedAvailabilityZones) > 0 {
+		served := make(map[string]bool, len(api.config.QuotaServedAvailabilityZones))
+		for _, az := range api.config.QuotaServedAvailabilityZones {
+			served[az] = true
+		}
+		for az := range quotaByAZ {
+			if !served[az] {
+				log.V(1).Info("skipping quota for unconfigured AZ", "az", az, "projectID", projectID)
+				delete(quotaByAZ, az)
 			}
 		}
 	}
@@ -261,6 +263,3 @@ func (api *HTTPAPI) recordQuotaMetrics(statusCode int, startTime time.Time) {
 	api.quotaMonitor.requestCounter.WithLabelValues(statusCodeStr).Inc()
 	api.quotaMonitor.requestDuration.WithLabelValues(statusCodeStr).Observe(duration)
 }
-
-// projectQuotaGVK is the GVK used by the multicluster client for ProjectQuota routing.
-var projectQuotaGVK = schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "ProjectQuota"}

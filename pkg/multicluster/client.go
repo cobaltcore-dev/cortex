@@ -293,27 +293,6 @@ func (c *Client) ConfiguredRouteLabels(gvk schema.GroupVersionKind) []map[string
 	return result
 }
 
-// ServedAZs returns the set of availability zones that have a configured
-// remote cluster for the given GVK. It extracts the "availabilityZone" key
-// from each remote cluster's routing labels. Returns nil if no remote clusters
-// are configured or none have an "availabilityZone" label.
-func (c *Client) ServedAZs(gvk schema.GroupVersionKind) map[string]bool {
-	labelSets := c.ConfiguredRouteLabels(gvk)
-	if len(labelSets) == 0 {
-		return nil
-	}
-	served := make(map[string]bool, len(labelSets))
-	for _, labels := range labelSets {
-		if az, ok := labels["availabilityZone"]; ok {
-			served[az] = true
-		}
-	}
-	if len(served) == 0 {
-		return nil
-	}
-	return served
-}
-
 // Get iterates over all clusters with the GVK and returns the result.
 //
 // If the requested resource is encountered in multiple clusters, this function
