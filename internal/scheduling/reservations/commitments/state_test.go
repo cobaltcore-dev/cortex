@@ -36,10 +36,11 @@ func TestFromCommitment_CalculatesMemoryCorrectly(t *testing.T) {
 		UUID:         "test-uuid",
 		ProjectID:    "project-1",
 		ResourceName: "hw_version_test-group_ram",
-		Amount:       5, // 5 multiples of smallest flavor
+		Amount:       5,
 	}
 
-	state, err := FromCommitment(commitment)
+	// Variable-ratio group: RAMUnitMiB = 1024 (1 GiB per unit)
+	state, err := FromCommitment(commitment, 1024)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -55,10 +56,21 @@ func TestFromCommitment_CalculatesMemoryCorrectly(t *testing.T) {
 		t.Errorf("expected FlavorGroupName test-group, got %s", state.FlavorGroupName)
 	}
 
-	// Verify memory calculation: 5 GiB = 5 * 1<<30 bytes
+	// 5 units × 1024 MiB = 5 GiB
 	expectedMemory := int64(5) * (1 << 30)
 	if state.TotalMemoryBytes != expectedMemory {
 		t.Errorf("expected memory %d, got %d", expectedMemory, state.TotalMemoryBytes)
+	}
+
+	// Fixed-ratio group: RAMUnitMiB = 8192 (8 GiB per unit, e.g. SmallestFlavor.MemoryMB = 8192)
+	stateFixed, err := FromCommitment(commitment, 8192)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// 5 units × 8192 MiB = 40 GiB
+	expectedFixed := int64(5) * 8192 * (1 << 20)
+	if stateFixed.TotalMemoryBytes != expectedFixed {
+		t.Errorf("fixed-ratio: expected memory %d, got %d", expectedFixed, stateFixed.TotalMemoryBytes)
 	}
 }
 
@@ -70,7 +82,7 @@ func TestFromCommitment_InvalidResourceName(t *testing.T) {
 		Amount:       1,
 	}
 
-	_, err := FromCommitment(commitment)
+	_, err := FromCommitment(commitment, 1024)
 	if err == nil {
 		t.Fatal("expected error for invalid resource name, got nil")
 	}
