@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -242,20 +243,28 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Collect AZ names and resource group names for the success log
-	azNames := make([]string, 0, len(activeAZs))
-	for az := range activeAZs {
-		azNames = append(azNames, az)
+	var storedAZs, skippedAZs []string
+	for az, isActive := range activeAZs {
+		if isActive {
+			storedAZs = append(storedAZs, az)
+		} else {
+			skippedAZs = append(skippedAZs, az)
+		}
 	}
-	groupNames := make(map[string]bool)
+	sort.Strings(storedAZs)
+	sort.Strings(skippedAZs)
+	groups := make([]string, 0, len(req.Resources))
+	seen := make(map[string]bool, len(req.Resources))
 	for resourceName := range req.Resources {
-		groupNames[string(resourceName)] = true
+		name := string(resourceName)
+		if !seen[name] {
+			seen[name] = true
+			groups = append(groups, name)
+		}
 	}
-	groups := make([]string, 0, len(groupNames))
-	for g := range groupNames {
-		groups = append(groups, g)
-	}
-	log.Info("quota request completed", "projectID", projectID, "azs", azNames,
-		"resources", len(req.Resources), "resourceNames", groups)
+	sort.Strings(groups)
+	log.Info("quota request completed", "projectID", projectID, "storedAZs", storedAZs,
+		"skippedAZs", skippedAZs, "resources", len(req.Resources), "resourceNames", groups)
 
 	// Return 204 No Content as expected by the LIQUID API
 	w.WriteHeader(http.StatusNoContent)
