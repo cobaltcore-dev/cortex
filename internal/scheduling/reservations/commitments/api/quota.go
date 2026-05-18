@@ -241,12 +241,21 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Collect AZ names for the success log
+	// Collect AZ names and resource group names for the success log
 	azNames := make([]string, 0, len(activeAZs))
 	for az := range activeAZs {
 		azNames = append(azNames, az)
 	}
-	log.Info("quota request completed", "projectID", projectID, "azs", azNames)
+	groupNames := make(map[string]bool)
+	for resourceName := range req.Resources {
+		groupNames[string(resourceName)] = true
+	}
+	groups := make([]string, 0, len(groupNames))
+	for g := range groupNames {
+		groups = append(groups, g)
+	}
+	log.Info("quota request completed", "projectID", projectID, "azs", azNames,
+		"resources", len(req.Resources), "resourceNames", groups)
 
 	// Return 204 No Content as expected by the LIQUID API
 	w.WriteHeader(http.StatusNoContent)

@@ -49,21 +49,21 @@ func TestBuildUsageSummary(t *testing.T) {
 			usage: map[string]int64{
 				"hw_version_222_ram": 22,
 			},
-			expected: "222: r=22",
+			expected: "222: c=0 i=0 r=22",
 		},
 		{
 			name: "only cores set",
 			usage: map[string]int64{
 				"hw_version_3000_cores": 10,
 			},
-			expected: "3000: c=10",
+			expected: "3000: c=10 i=0 r=0",
 		},
 		{
 			name: "only instances set",
 			usage: map[string]int64{
 				"hw_version_abc_instances": 5,
 			},
-			expected: "abc: i=5",
+			expected: "abc: c=0 i=5 r=0",
 		},
 		{
 			name: "partial resources across multiple groups",
@@ -72,7 +72,7 @@ func TestBuildUsageSummary(t *testing.T) {
 				"hw_version_2152_cores":     6,
 				"hw_version_2152_instances": 3,
 			},
-			expected: "2101: r=14; 2152: c=6 i=3",
+			expected: "2101: c=0 i=0 r=14; 2152: c=6 i=3 r=0",
 		},
 		{
 			name: "unknown suffix is ignored",
@@ -82,7 +82,7 @@ func TestBuildUsageSummary(t *testing.T) {
 				"hw_version_2101_disks":   99,
 				"hw_version_2101_network": 42,
 			},
-			expected: "2101: c=18 r=21",
+			expected: "2101: c=18 i=0 r=21",
 		},
 		{
 			name: "unknown prefix is ignored",
@@ -91,7 +91,7 @@ func TestBuildUsageSummary(t *testing.T) {
 				"other_prefix_cores":  50,
 				"hw_version_2101_ram": 21,
 			},
-			expected: "2101: r=21",
+			expected: "2101: c=0 i=0 r=21",
 		},
 		{
 			name: "no hw_version_ prefix at all returns empty",
@@ -115,13 +115,13 @@ func TestBuildUsageSummary(t *testing.T) {
 			expected: "2101: c=18 i=7 r=21",
 		},
 		{
-			name: "all zero values produce empty output",
+			name: "all zero values still show tracked groups",
 			usage: map[string]int64{
 				"hw_version_2101_cores":     0,
 				"hw_version_2101_instances": 0,
 				"hw_version_2101_ram":       0,
 			},
-			expected: "",
+			expected: "2101: c=0 i=0 r=0",
 		},
 		{
 			name: "group name with underscores",
