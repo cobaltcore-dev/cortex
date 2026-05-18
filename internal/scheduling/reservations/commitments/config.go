@@ -131,6 +131,10 @@ type APIConfig struct {
 	WatchPollInterval metav1.Duration `json:"watchPollInterval"`
 	// FlavorGroupResourceConfig maps flavor group IDs to resource flag configs; "*" acts as catch-all.
 	FlavorGroupResourceConfig map[string]FlavorGroupResourcesConfig `json:"flavorGroupResourceConfig,omitempty"`
+	// QuotaServedAvailabilityZones restricts quota handling to these AZs.
+	// Quota received for AZs not in this list is silently skipped.
+	// If empty/nil, no pre-filtering is applied (relies on error-based fallback).
+	QuotaServedAvailabilityZones []string `json:"quotaServedAvailabilityZones,omitempty"`
 }
 
 // ResourceConfigForGroup returns the resource config for the given flavor group ID,

@@ -12,21 +12,7 @@ on:
       - '*'
 
 jobs:
-  test-without-docker:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: 'go.mod'
-      - name: Test quickly without Docker
-        run: go test -v ./...
-
-  test-with-docker:
-    # We don't need to run this longer test if the previous one already failed.
-    needs: test-without-docker
+  test:
     runs-on: ubuntu-latest
     services:
       dind:
@@ -40,7 +26,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
-      - name: Run tests with Docker and calculate coverage
+      - name: Run tests and calculate coverage
         run: |
           export GITHUB_ACTIONS=1
           export POSTGRES_CONTAINER=1
@@ -48,7 +34,7 @@ jobs:
           echo "Running tests..."
           go test -v \
             -coverpkg=./internal/... \
-            -coverprofile=profile.cov ./internal/...
+            -coverprofile=profile.cov ./...
 
           # Exclude e2e files from the coverage profile so they don't
           # count against the coverage percentage.
