@@ -36,7 +36,7 @@ import (
 var testUsageConfig = commitments.APIConfig{
 	FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
 		"*": {
-			RAM: commitments.ResourceTypeConfig{HandlesCommitments: true, HasQuota: true},
+			RAM: commitments.RAMResourceTypeConfig{HandlesCommitments: true, HasQuota: true},
 		},
 	},
 }

@@ -34,7 +34,7 @@ func TestHandleReportCapacity(t *testing.T) {
 		EnableReportCapacity: true,
 		FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
 			"*": {
-				RAM:       commitments.ResourceTypeConfig{HasCapacity: true},
+				RAM:       commitments.RAMResourceTypeConfig{HasCapacity: true},
 				Cores:     commitments.ResourceTypeConfig{HasCapacity: true},
 				Instances: commitments.ResourceTypeConfig{HasCapacity: true},
 			},
@@ -146,7 +146,7 @@ func TestCapacityCalculator(t *testing.T) {
 	testCapacityConfig := commitments.APIConfig{
 		FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
 			"*": {
-				RAM:       commitments.ResourceTypeConfig{HasCapacity: true},
+				RAM:       commitments.RAMResourceTypeConfig{HasCapacity: true},
 				Cores:     commitments.ResourceTypeConfig{HasCapacity: true},
 				Instances: commitments.ResourceTypeConfig{HasCapacity: true},
 			},
@@ -396,7 +396,7 @@ func TestCapacityCalculator(t *testing.T) {
 		cfgNoInstances := commitments.APIConfig{
 			FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
 				"*": {
-					RAM:       commitments.ResourceTypeConfig{HasCapacity: true},
+					RAM:       commitments.RAMResourceTypeConfig{HasCapacity: true},
 					Cores:     commitments.ResourceTypeConfig{HasCapacity: true},
 					Instances: commitments.ResourceTypeConfig{HasCapacity: false},
 				},

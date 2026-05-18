@@ -37,6 +37,13 @@ type SyncerConfig struct {
 	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
 	// SyncInterval defines how often the syncer reconciles Limes commitments to Reservation CRDs.
 	SyncInterval metav1.Duration `json:"committedResourceSyncInterval"`
+	// FlavorGroupResourceConfig maps flavor group names to resource configs; "*" acts as catch-all.
+	FlavorGroupResourceConfig map[string]FlavorGroupResourcesConfig `json:"flavorGroupResourceConfig,omitempty"`
+}
+
+// ResourceConfigForGroup returns the resource config for the given flavor group name.
+func (c SyncerConfig) ResourceConfigForGroup(groupName string) FlavorGroupResourcesConfig {
+	return ResourceConfigForGroup(c.FlavorGroupResourceConfig, groupName)
 }
 
 type Syncer struct {
@@ -48,6 +55,8 @@ type Syncer struct {
 	monitor *SyncerMonitor
 	// SyncInterval is stored for logging purposes (actual interval managed by task.Runner)
 	syncInterval time.Duration
+	// resourceConfig is the flavor group resource config used for unit conversion.
+	resourceConfig SyncerConfig
 }
 
 func NewSyncer(k8sClient client.Client, monitor *SyncerMonitor) *Syncer {
@@ -60,6 +69,7 @@ func NewSyncer(k8sClient client.Client, monitor *SyncerMonitor) *Syncer {
 
 func (s *Syncer) Init(ctx context.Context, config SyncerConfig) error {
 	s.syncInterval = config.SyncInterval.Duration
+	s.resourceConfig = config
 	if err := s.CommitmentsClient.Init(ctx, s.Client, config); err != nil {
 		return err
 	}
@@ -130,7 +140,7 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 		}
 
 		// Validate flavor group exists in Knowledge
-		flavorGroup, exists := flavorGroups[flavorGroupName]
+		_, exists := flavorGroups[flavorGroupName]
 		if !exists {
 			log.Info("skipping commitment with unknown flavor group",
 				"id", id,
@@ -143,7 +153,7 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 
 		// Validate unit matches the unit declared in the LIQUID ServiceInfo for this flavor group.
 		// Variable-ratio groups declare "GiB"; fixed-ratio groups declare "N GiB" (SmallestFlavor.MemoryMB MiB).
-		ramUnitMiB := flavorGroup.RAMUnitMiB()
+		ramUnitMiB := s.resourceConfig.ResourceConfigForGroup(flavorGroupName).RAM.RAMUnitMiB()
 		expectedLiquidUnit, err := liquid.UnitMebibytes.MultiplyBy(ramUnitMiB)
 		if err != nil {
 			log.Error(err, "failed to compute expected RAM unit for flavor group",

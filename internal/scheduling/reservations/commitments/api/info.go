@@ -137,15 +137,13 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 
 		// === 1. RAM Resource ===
 		ramResourceName := liquid.ResourceName(commitments.ResourceNameRAM(groupName))
-		// Fixed-ratio groups: unit = smallest flavor's RAM in MiB (e.g. "480 GiB" for hana);
-		// variable-ratio groups: unit = 1 GiB.  RAMUnitMiB() encodes both cases.
-		ramUnit, err := liquid.UnitMebibytes.MultiplyBy(groupData.RAMUnitMiB())
+		ramUnit, err := liquid.UnitMebibytes.MultiplyBy(resCfg.RAM.RAMUnitMiB())
 		if err != nil {
 			return liquid.ServiceInfo{}, fmt.Errorf("failed to create RAM unit for flavor group %q: %w", groupName, err)
 		}
 		var ramDisplayName string
-		if groupData.HasFixedRamCoreRatio() && groupData.SmallestFlavor.MemoryMB > 0 {
-			ramDisplayName = fmt.Sprintf("multiples of %d MiB (usable by: %s)", groupData.SmallestFlavor.MemoryMB, flavorListStr)
+		if resCfg.RAM.RAMUnitGiB > 1 {
+			ramDisplayName = fmt.Sprintf("multiples of %d GiB (usable by: %s)", resCfg.RAM.RAMUnitGiB, flavorListStr)
 		} else {
 			ramDisplayName = fmt.Sprintf("GiB of RAM (usable by: %s)", flavorListStr)
 		}

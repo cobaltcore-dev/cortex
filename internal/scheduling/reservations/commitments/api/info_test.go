@@ -197,12 +197,12 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 	cfg := commitments.DefaultAPIConfig()
 	cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
 		"hana_fixed": {
-			RAM:       commitments.ResourceTypeConfig{HandlesCommitments: true, HasCapacity: true, HasQuota: true},
+			RAM:       commitments.RAMResourceTypeConfig{HandlesCommitments: true, HasCapacity: true, HasQuota: true},
 			Cores:     commitments.ResourceTypeConfig{HasCapacity: true},
 			Instances: commitments.ResourceTypeConfig{HasCapacity: true},
 		},
 		"*": {
-			RAM:       commitments.ResourceTypeConfig{HasCapacity: true},
+			RAM:       commitments.RAMResourceTypeConfig{HasCapacity: true},
 			Cores:     commitments.ResourceTypeConfig{HasCapacity: true},
 			Instances: commitments.ResourceTypeConfig{HasCapacity: true},
 		},
@@ -393,7 +393,7 @@ func TestHandleInfo_AllResourcesAZSeparated(t *testing.T) {
 	cfg := commitments.DefaultAPIConfig()
 	cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
 		"fg": {
-			RAM:       commitments.ResourceTypeConfig{HandlesCommitments: true, HasCapacity: true, HasQuota: true},
+			RAM:       commitments.RAMResourceTypeConfig{HandlesCommitments: true, HasCapacity: true, HasQuota: true},
 			Cores:     commitments.ResourceTypeConfig{HandlesCommitments: true, HasCapacity: true, HasQuota: true},
 			Instances: commitments.ResourceTypeConfig{HandlesCommitments: true, HasCapacity: true, HasQuota: true},
 		},
