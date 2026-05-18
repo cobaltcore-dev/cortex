@@ -141,18 +141,23 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 			continue
 		}
 
-		// Validate unit matches between Limes commitment and Cortex (1 GiB per unit)
-		expectedUnit := liquid.UnitGibibytes.String() // "GiB"
+		// Validate unit matches the unit declared in the LIQUID ServiceInfo for this flavor group.
+		// Variable-ratio groups declare "GiB"; fixed-ratio groups declare "N GiB" (SmallestFlavor.MemoryMB MiB).
+		ramUnitMiB := flavorGroup.RAMUnitMiB()
+		expectedLiquidUnit, err := liquid.UnitMebibytes.MultiplyBy(ramUnitMiB)
+		if err != nil {
+			log.Error(err, "failed to compute expected RAM unit for flavor group",
+				"flavorGroup", flavorGroupName,
+				"ramUnitMiB", ramUnitMiB)
+			continue
+		}
+		expectedUnit := expectedLiquidUnit.String()
 		if commitment.Unit != "" && commitment.Unit != expectedUnit {
-			// Unit mismatch: Limes has not yet updated this commitment to the new unit.
-			// Skip this commitment - trust what Cortex already has stored in CRDs.
-			// On the next sync cycle after Limes updates, this will be processed.
-			log.V(0).Info("WARNING: skipping commitment due to unit mismatch - Limes unit differs from Cortex flavor group, waiting for Limes to update",
+			log.V(0).Info("WARNING: skipping commitment with unexpected unit",
 				"commitmentUUID", commitment.UUID,
 				"flavorGroup", flavorGroupName,
 				"limesUnit", commitment.Unit,
-				"expectedUnit", expectedUnit,
-				"smallestFlavorMemoryMB", flavorGroup.SmallestFlavor.MemoryMB)
+				"expectedUnit", expectedUnit)
 			if s.monitor != nil {
 				s.monitor.RecordCommitmentSkipped(SkipReasonUnitMismatch)
 			}
@@ -174,7 +179,7 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 		}
 
 		// Convert commitment to state using FromCommitment
-		state, err := FromCommitment(commitment)
+		state, err := FromCommitment(commitment, ramUnitMiB)
 		if err != nil {
 			log.Error(err, "failed to convert commitment to state",
 				"id", id,
