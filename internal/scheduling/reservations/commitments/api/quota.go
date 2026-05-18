@@ -14,6 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/google/uuid"
 	"github.com/sapcc/go-api-declarations/liquid"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -138,6 +139,21 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
+	// Pre-filter: if served AZs are explicitly configured, skip AZs not in the list.
+	// In multi-AZ setups Limes sends quota for all AZs but cortex only manages a subset.
+	if len(api.config.QuotaServedAvailabilityZones) > 0 {
+		served := make(map[string]bool, len(api.config.QuotaServedAvailabilityZones))
+		for _, az := range api.config.QuotaServedAvailabilityZones {
+			served[az] = true
+		}
+		for az := range quotaByAZ {
+			if !served[az] {
+				log.V(1).Info("skipping quota for unconfigured AZ", "az", az, "projectID", projectID)
+				delete(quotaByAZ, az)
+			}
+		}
+	}
+
 	// Create or update one ProjectQuota CRD per AZ with retry-on-conflict to handle
 	// concurrent status updates from the quota controller.
 	activeAZs := make(map[string]bool, len(quotaByAZ))
@@ -199,6 +215,14 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 			return nil
 		})
 		if err != nil {
+			// If no cluster is configured for this AZ, skip it gracefully.
+			// This happens in multi-AZ setups where quota info is received for
+			// AZs that cortex does not manage (e.g. no KVM in that AZ).
+			if multicluster.IsNoClusterMatchedError(err) {
+				log.V(1).Info("skipping ProjectQuota for unserved AZ", "name", crdName, "az", az)
+				activeAZs[az] = false
+				continue
+			}
 			log.Error(err, "failed to create/update ProjectQuota", "name", crdName, "az", az)
 			api.quotaError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to persist quota for AZ %s: %v", az, err), startTime)
 			return
