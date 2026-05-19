@@ -177,6 +177,95 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 	}
 }
 
+func TestComputeNetUnitDeltas(t *testing.T) {
+	testCases := []struct {
+		name     string
+		request  CommitmentChangeRequest
+		expected map[string]int64 // resourceName → expected net delta
+	}{
+		{
+			name: "single project increase",
+			request: newCommitmentRequest("az-a", true, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-1", "confirmed", 5)),
+			expected: map[string]int64{"hw_version_hana_1_ram": 5},
+		},
+		{
+			name: "single project decrease",
+			request: newCommitmentRequest("az-a", true, 1234,
+				deleteCommitment("hw_version_hana_1_ram", "project-A", "uuid-1", "confirmed", 5)),
+			expected: map[string]int64{"hw_version_hana_1_ram": -5},
+		},
+		{
+			name: "two projects same resource: +5 and -5 cancel to zero",
+			request: newCommitmentRequest("az-a", true, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-a", "confirmed", 5),
+				deleteCommitment("hw_version_hana_1_ram", "project-B", "uuid-b", "confirmed", 5)),
+			expected: map[string]int64{"hw_version_hana_1_ram": 0},
+		},
+		{
+			name: "two projects same resource: +5 and -3 leaves net +2",
+			request: newCommitmentRequest("az-a", true, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-a", "confirmed", 5),
+				deleteCommitment("hw_version_hana_1_ram", "project-B", "uuid-b", "confirmed", 3)),
+			expected: map[string]int64{"hw_version_hana_1_ram": 2},
+		},
+		{
+			name: "two projects same resource: +3 and -5 leaves net -2",
+			request: newCommitmentRequest("az-a", true, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-a", "confirmed", 3),
+				deleteCommitment("hw_version_hana_1_ram", "project-B", "uuid-b", "confirmed", 5)),
+			expected: map[string]int64{"hw_version_hana_1_ram": -2},
+		},
+		{
+			name: "two resources tracked independently",
+			request: newCommitmentRequest("az-a", true, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-1", "confirmed", 4),
+				createCommitment("hw_version_hana_2_ram", "project-A", "uuid-2", "confirmed", 2)),
+			expected: map[string]int64{
+				"hw_version_hana_1_ram": 4,
+				"hw_version_hana_2_ram": 2,
+			},
+		},
+		{
+			name: "two resources: one net positive, one net zero",
+			request: newCommitmentRequest("az-a", true, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-a1", "confirmed", 5),
+				deleteCommitment("hw_version_hana_1_ram", "project-B", "uuid-b1", "confirmed", 5),
+				createCommitment("hw_version_hana_2_ram", "project-A", "uuid-a2", "confirmed", 3)),
+			expected: map[string]int64{
+				"hw_version_hana_1_ram": 0,
+				"hw_version_hana_2_ram": 3,
+			},
+		},
+		{
+			name:     "empty request",
+			request:  newCommitmentRequest("az-a", true, 1234),
+			expected: map[string]int64{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			reqJSON := buildRequestJSON(tc.request)
+			var req liquid.CommitmentChangeRequest
+			if err := json.Unmarshal([]byte(reqJSON), &req); err != nil {
+				t.Fatalf("parse request: %v", err)
+			}
+
+			got := computeNetUnitDeltas(req)
+
+			if len(got) != len(tc.expected) {
+				t.Fatalf("expected %d resource entries, got %d: %v", len(tc.expected), len(got), got)
+			}
+			for name, want := range tc.expected {
+				if got[liquid.ResourceName(name)] != want {
+					t.Errorf("resource %q: want delta %d, got %d", name, want, got[liquid.ResourceName(name)])
+				}
+			}
+		})
+	}
+}
+
 func TestCountCommitments(t *testing.T) {
 	testCases := []struct {
 		name     string

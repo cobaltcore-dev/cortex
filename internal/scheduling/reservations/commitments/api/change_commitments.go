@@ -522,14 +522,7 @@ func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req l
 
 	// Pass 1: aggregate raw unit deltas per resource name across all projects.
 	// A decrease in one project may cancel an increase in another, so we sum signed deltas.
-	netUnitDeltas := make(map[liquid.ResourceName]int64)
-	for _, projectChanges := range req.ByProject {
-		for resourceName, rc := range projectChanges.ByResource {
-			totalBefore := rc.TotalConfirmedBefore + rc.TotalGuaranteedBefore
-			totalAfter := rc.TotalConfirmedAfter + rc.TotalGuaranteedAfter
-			netUnitDeltas[resourceName] += int64(totalAfter) - int64(totalBefore) //nolint:gosec
-		}
-	}
+	netUnitDeltas := computeNetUnitDeltas(req)
 
 	// Pass 2: for each resource with a net increase, resolve config and convert to probe size.
 	// probeKey uniquely identifies a probe CR (one per resource with a net increase).

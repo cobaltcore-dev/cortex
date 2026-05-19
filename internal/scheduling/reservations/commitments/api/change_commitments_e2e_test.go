@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -289,9 +290,36 @@ func e2eRejectScheduler(t *testing.T) http.HandlerFunc {
 	}
 }
 
-// ============================================================================
-// E2E test cases
-// ============================================================================
+// assertNoDryRunProbes verifies that all probe CommittedResource CRDs and their child
+// Reservations have been cleaned up. It only checks objects associated with dry-run probes
+// (name prefix "commitment-dryrun-") rather than asserting zero total objects, so the
+// assertion stays valid when other CRs or Reservations exist in the same environment.
+func (e *e2eEnv) assertNoDryRunProbes(t *testing.T) {
+	t.Helper()
+
+	var crList v1alpha1.CommittedResourceList
+	if err := e.k8sClient.List(context.Background(), &crList); err != nil {
+		t.Fatalf("list CRs: %v", err)
+	}
+	for _, cr := range crList.Items {
+		if strings.HasPrefix(cr.Name, "commitment-dryrun-") {
+			t.Errorf("probe CommittedResource %q still exists after dry run cleanup", cr.Name)
+		}
+	}
+
+	var resList v1alpha1.ReservationList
+	if err := e.k8sClient.List(context.Background(), &resList, client.MatchingLabels{
+		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+	}); err != nil {
+		t.Fatalf("list reservations: %v", err)
+	}
+	for _, res := range resList.Items {
+		if res.Spec.CommittedResourceReservation != nil &&
+			strings.HasPrefix(res.Spec.CommittedResourceReservation.CommitmentUUID, "dryrun-") {
+			t.Errorf("probe Reservation %q still exists after dry run cleanup", res.Name)
+		}
+	}
+}
 
 const e2eInfoVersion = int64(1234)
 
@@ -369,22 +397,7 @@ func TestE2EChangeCommitments(t *testing.T) {
 			WantResp: newAPIResponse(),
 			Verify: func(t *testing.T, env *e2eEnv) {
 				t.Helper()
-				var crList v1alpha1.CommittedResourceList
-				if err := env.k8sClient.List(context.Background(), &crList); err != nil {
-					t.Fatalf("list CRs: %v", err)
-				}
-				if len(crList.Items) != 0 {
-					t.Errorf("expected no CommittedResource CRDs after dry run, got %d", len(crList.Items))
-				}
-				var resList v1alpha1.ReservationList
-				if err := env.k8sClient.List(context.Background(), &resList, client.MatchingLabels{
-					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-				}); err != nil {
-					t.Fatalf("list reservations: %v", err)
-				}
-				if len(resList.Items) != 0 {
-					t.Errorf("expected no Reservation CRDs after dry run cleanup, got %d", len(resList.Items))
-				}
+				env.assertNoDryRunProbes(t)
 			},
 		},
 		{
@@ -395,22 +408,7 @@ func TestE2EChangeCommitments(t *testing.T) {
 			WantResp: newAPIResponse("no hosts found"),
 			Verify: func(t *testing.T, env *e2eEnv) {
 				t.Helper()
-				var crList v1alpha1.CommittedResourceList
-				if err := env.k8sClient.List(context.Background(), &crList); err != nil {
-					t.Fatalf("list CRs: %v", err)
-				}
-				if len(crList.Items) != 0 {
-					t.Errorf("expected no CommittedResource CRDs after dry run, got %d", len(crList.Items))
-				}
-				var resList v1alpha1.ReservationList
-				if err := env.k8sClient.List(context.Background(), &resList, client.MatchingLabels{
-					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-				}); err != nil {
-					t.Fatalf("list reservations: %v", err)
-				}
-				if len(resList.Items) != 0 {
-					t.Errorf("expected no Reservation CRDs after dry run cleanup, got %d", len(resList.Items))
-				}
+				env.assertNoDryRunProbes(t)
 			},
 		},
 		{

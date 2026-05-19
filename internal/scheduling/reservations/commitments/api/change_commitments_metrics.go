@@ -41,3 +41,17 @@ func countCommitments(req liquid.CommitmentChangeRequest) int {
 	}
 	return count
 }
+
+// computeNetUnitDeltas returns the signed net unit change per resource name summed across all projects.
+// A positive value means more capacity is requested; negative means capacity is being released.
+func computeNetUnitDeltas(req liquid.CommitmentChangeRequest) map[liquid.ResourceName]int64 {
+	deltas := make(map[liquid.ResourceName]int64)
+	for _, projectChanges := range req.ByProject {
+		for resourceName, rc := range projectChanges.ByResource {
+			totalBefore := rc.TotalConfirmedBefore + rc.TotalGuaranteedBefore
+			totalAfter := rc.TotalConfirmedAfter + rc.TotalGuaranteedAfter
+			deltas[resourceName] += int64(totalAfter) - int64(totalBefore) //nolint:gosec
+		}
+	}
+	return deltas
+}
