@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -24,6 +25,10 @@ type QuotaControllerConfig struct {
 	// When false, only periodic full reconciles update TotalUsage (safer but slower convergence).
 	// Default: true.
 	EnableHVDiff *bool `json:"enableHVDiff,omitempty"`
+
+	// FlavorGroupResourceConfig maps flavor group names to resource configs; "*" acts as catch-all.
+	// Used for unit conversion when building Limes-unit summaries.
+	FlavorGroupResourceConfig map[string]commitments.FlavorGroupResourcesConfig `json:"flavorGroupResourceConfig,omitempty"`
 }
 
 // ApplyDefaults fills in any unset values with defaults.

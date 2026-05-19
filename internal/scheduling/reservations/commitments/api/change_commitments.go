@@ -203,10 +203,9 @@ ProcessLoop:
 				break ProcessLoop
 			}
 
-			groupData := flavorGroups[flavorGroupName]
-			ramUnitMiB := groupData.RAMUnitMiB()
-
 			groupResourceConf := api.config.ResourceConfigForGroup(flavorGroupName)
+			ramUnitMiB := groupResourceConf.RAM.RAMUnitMiB()
+
 			var handlesCommitments bool
 			switch resourceType {
 			case v1alpha1.CommittedResourceTypeCores:

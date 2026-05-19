@@ -211,6 +211,7 @@ cortex-scheduling-controllers:
             handlesCommitments: false
             hasCapacity: true
             hasQuota: false
+            ramUnitGiB: 1
           cores:
             handlesCommitments: false
             hasCapacity: true

@@ -68,6 +68,31 @@ type ProjectQuotaStatus struct {
 	// +kubebuilder:validation:Optional
 	PaygUsage map[string]int64 `json:"paygUsage,omitempty"`
 
+	// TotalUsageSummary is a human-readable compact summary of TotalUsage for kubectl wide output.
+	// Format: "2101: c=18 i=7 r=21; 2152: c=4 i=2 r=8"
+	// Computed by the quota controller on each status write. Grouped by flavor group.
+	// +kubebuilder:validation:Optional
+	TotalUsageSummary string `json:"totalUsageSummary,omitempty"`
+
+	// PaygUsageSummary is a human-readable compact summary of PaygUsage for kubectl wide output.
+	// Format: "2101: c=14 i=5 r=13; 2152: c=4 i=2 r=8"
+	// Computed by the quota controller on each status write. Grouped by flavor group.
+	// +kubebuilder:validation:Optional
+	PaygUsageSummary string `json:"paygUsageSummary,omitempty"`
+
+	// LimesUsageSummary shows TotalUsage converted to Limes declared units for debugging.
+	// RAM for fixed-ratio groups is converted from GiB to slots (GiB*1024/SmallestFlavor.MemoryMB).
+	// RAM for variable-ratio groups remains in GiB (1:1). Cores and instances are 1:1.
+	// Format: "2101: c=25 i=8 r=70; 2152: c=4 i=2 r=8"
+	// +kubebuilder:validation:Optional
+	LimesUsageSummary string `json:"limesUsageSummary,omitempty"`
+
+	// LimesQuotaSummary shows Spec.Quota converted to Limes declared units for debugging.
+	// Same conversion as LimesUsageSummary: fixed-ratio RAM is GiB→slots, rest 1:1.
+	// Format: "2101: c=9999 i=9999 r=5039; 2152: c=9999 i=9999 r=20"
+	// +kubebuilder:validation:Optional
+	LimesQuotaSummary string `json:"limesQuotaSummary,omitempty"`
+
 	// LastReconcileAt is when the controller last reconciled this project's quota (any path).
 	// +kubebuilder:validation:Optional
 	LastReconcileAt *metav1.Time `json:"lastReconcileAt,omitempty"`
@@ -83,6 +108,11 @@ type ProjectQuotaStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
+const (
+	// ProjectQuotaConditionReady indicates whether the quota usage has been successfully computed.
+	ProjectQuotaConditionReady = "Ready"
+)
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
@@ -91,6 +121,10 @@ type ProjectQuotaStatus struct {
 // +kubebuilder:printcolumn:name="Domain",type="string",JSONPath=".spec.domainID"
 // +kubebuilder:printcolumn:name="LastReconcile",type="date",JSONPath=".status.lastReconcileAt"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
+// +kubebuilder:printcolumn:name="TotalUsage",type="string",JSONPath=".status.totalUsageSummary",priority=1
+// +kubebuilder:printcolumn:name="PaygUsage",type="string",JSONPath=".status.paygUsageSummary",priority=1
+// +kubebuilder:printcolumn:name="LimesUsage",type="string",JSONPath=".status.limesUsageSummary",priority=1
+// +kubebuilder:printcolumn:name="LimesQuota",type="string",JSONPath=".status.limesQuotaSummary",priority=1
 
 // ProjectQuota is the Schema for the projectquotas API.
 // It persists quota values pushed by Limes via the LIQUID quota endpoint

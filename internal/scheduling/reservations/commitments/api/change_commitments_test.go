@@ -153,7 +153,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 				cfg.WatchTimeout = metav1.Duration{}
 				cfg.WatchPollInterval = metav1.Duration{Duration: 100 * time.Millisecond}
 				cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
-					"*": {RAM: commitments.ResourceTypeConfig{HandlesCommitments: true, HasCapacity: true}},
+					"*": {RAM: commitments.RAMResourceTypeConfig{HandlesCommitments: true, HasCapacity: true}},
 				}
 				return &cfg
 			}(),
@@ -750,7 +750,7 @@ func newCRTestEnv(t *testing.T, tc CommitmentChangeTestCase) *CRTestEnv {
 		cfg := commitments.DefaultAPIConfig()
 		cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
 			"*": {
-				RAM:       commitments.ResourceTypeConfig{HandlesCommitments: true, HasCapacity: true},
+				RAM:       commitments.RAMResourceTypeConfig{HandlesCommitments: true, HasCapacity: true},
 				Cores:     commitments.ResourceTypeConfig{HasCapacity: true},
 				Instances: commitments.ResourceTypeConfig{HasCapacity: true},
 			},
