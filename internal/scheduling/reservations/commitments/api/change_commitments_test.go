@@ -206,11 +206,40 @@ func TestHandleChangeCommitments(t *testing.T) {
 			ExpectedAPIResponse: APIResponseExpectation{StatusCode: 503},
 		},
 		{
-			Name:    "Dry run: not supported yet",
+			Name:    "Dry run: controller accepts probe → API returns accepted",
 			Flavors: []*TestFlavor{m1Small},
 			CommitmentRequest: newCommitmentRequest("az-a", true, 1234,
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-dry", "confirmed", 2)),
-			ExpectedAPIResponse: newAPIResponse("Dry run not supported"),
+			ExpectedAPIResponse: newAPIResponse(), // no rejection reason = success
+		},
+		{
+			Name:    "Dry run: version mismatch → 409 Conflict",
+			Flavors: []*TestFlavor{m1Small},
+			CommitmentRequest: newCommitmentRequest("az-a", true, 9999,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-dry-vm", "confirmed", 2)),
+			EnvInfoVersion:      1234, // env is at 1234, request claims 9999 → mismatch
+			ExpectedAPIResponse: APIResponseExpectation{StatusCode: 409},
+		},
+		{
+			Name:    "Dry run: HandlesDryRun=false → resource skipped, trivially accepted",
+			Flavors: []*TestFlavor{m1Small},
+			CommitmentRequest: newCommitmentRequest("az-a", true, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-dry-dis", "confirmed", 2)),
+			CustomConfig: func() *commitments.APIConfig {
+				cfg := commitments.DefaultAPIConfig()
+				cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
+					"*": {RAM: commitments.RAMResourceTypeConfig{HandlesCommitments: true, HandlesDryRun: false}},
+				}
+				return &cfg
+			}(),
+			ExpectedAPIResponse: newAPIResponse(),
+		},
+		{
+			Name:    "Dry run: no net capacity increase (deletion only) → trivially accepted",
+			Flavors: []*TestFlavor{m1Small},
+			CommitmentRequest: newCommitmentRequest("az-a", true, 1234,
+				deleteCommitment("hw_version_hana_1_ram", "project-A", "uuid-dry-del", "confirmed", 2)),
+			ExpectedAPIResponse: newAPIResponse(),
 		},
 		{
 			Name:                "Empty request: no CRDs created",
@@ -750,7 +779,7 @@ func newCRTestEnv(t *testing.T, tc CommitmentChangeTestCase) *CRTestEnv {
 		cfg := commitments.DefaultAPIConfig()
 		cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
 			"*": {
-				RAM:       commitments.RAMResourceTypeConfig{HandlesCommitments: true, HasCapacity: true},
+				RAM:       commitments.RAMResourceTypeConfig{HandlesCommitments: true, HandlesDryRun: true, HasCapacity: true},
 				Cores:     commitments.ResourceTypeConfig{HasCapacity: true},
 				Instances: commitments.ResourceTypeConfig{HasCapacity: true},
 			},

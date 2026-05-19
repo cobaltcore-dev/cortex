@@ -21,9 +21,9 @@ func TestChangeCommitmentsAPIMonitor_MetricsRegistration(t *testing.T) {
 	}
 
 	// Observe metrics before gathering (Prometheus metrics with labels only appear after being used)
-	monitor.requestCounter.WithLabelValues("200").Inc()
-	monitor.requestDuration.WithLabelValues("200").Observe(0.1)
-	monitor.commitmentChanges.WithLabelValues("success", "az-1").Inc()
+	monitor.requestCounter.WithLabelValues("200", "false", "accepted").Inc()
+	monitor.requestDuration.WithLabelValues("200", "false").Observe(0.1)
+	monitor.commitmentChanges.WithLabelValues("accepted", "az-1", "false").Inc()
 	monitor.timeouts.Inc()
 
 	// Verify metrics can be gathered
@@ -86,12 +86,12 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 	}
 
 	// Record some test metrics
-	monitor.requestCounter.WithLabelValues("200").Inc()
-	monitor.requestCounter.WithLabelValues("409").Inc()
-	monitor.requestCounter.WithLabelValues("503").Inc()
-	monitor.requestDuration.WithLabelValues("200").Observe(1.5)
-	monitor.commitmentChanges.WithLabelValues("success", "az-1").Add(5)
-	monitor.commitmentChanges.WithLabelValues("rejected", "az-1").Add(2)
+	monitor.requestCounter.WithLabelValues("200", "false", "accepted").Inc()
+	monitor.requestCounter.WithLabelValues("409", "false", "error").Inc()
+	monitor.requestCounter.WithLabelValues("503", "false", "error").Inc()
+	monitor.requestDuration.WithLabelValues("200", "false").Observe(1.5)
+	monitor.commitmentChanges.WithLabelValues("accepted", "az-1", "false").Add(5)
+	monitor.commitmentChanges.WithLabelValues("rejected", "az-1", "false").Add(2)
 
 	// Gather metrics
 	families, err := registry.Gather()
@@ -108,7 +108,7 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 				t.Errorf("Expected at least 3 request counter metrics, got %d", len(family.Metric))
 			}
 
-			// Check all metrics have the status_code label
+			// Check all metrics have the status_code, dry_run, and result labels
 			for _, metric := range family.Metric {
 				labelNames := make(map[string]bool)
 				for _, label := range metric.Label {
@@ -117,6 +117,12 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 
 				if !labelNames["status_code"] {
 					t.Error("Missing 'status_code' label in request counter")
+				}
+				if !labelNames["dry_run"] {
+					t.Error("Missing 'dry_run' label in request counter")
+				}
+				if !labelNames["result"] {
+					t.Error("Missing 'result' label in request counter")
 				}
 			}
 		}
@@ -128,7 +134,7 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 				t.Errorf("Expected at least 1 histogram metric, got %d", len(family.Metric))
 			}
 
-			// Check all metrics have the status_code label
+			// Check all metrics have the status_code and dry_run labels
 			for _, metric := range family.Metric {
 				labelNames := make(map[string]bool)
 				for _, label := range metric.Label {
@@ -138,16 +144,19 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 				if !labelNames["status_code"] {
 					t.Error("Missing 'status_code' label in histogram")
 				}
+				if !labelNames["dry_run"] {
+					t.Error("Missing 'dry_run' label in histogram")
+				}
 			}
 		}
 
 		if *family.Name == "cortex_committed_resource_change_api_commitment_changes_total" {
-			// 2 label combinations: (success,az-1) and (rejected,az-1)
+			// 2 label combinations: (accepted,az-1,false) and (rejected,az-1,false)
 			if len(family.Metric) < 2 {
 				t.Errorf("Expected at least 2 commitment changes metrics, got %d", len(family.Metric))
 			}
 
-			// Check all metrics have both result and az labels
+			// Check all metrics have result, az, and dry_run labels
 			for _, metric := range family.Metric {
 				labelNames := make(map[string]bool)
 				for _, label := range metric.Label {
@@ -159,6 +168,9 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 				}
 				if !labelNames["az"] {
 					t.Error("Missing 'az' label in commitment changes counter")
+				}
+				if !labelNames["dry_run"] {
+					t.Error("Missing 'dry_run' label in commitment changes counter")
 				}
 			}
 		}

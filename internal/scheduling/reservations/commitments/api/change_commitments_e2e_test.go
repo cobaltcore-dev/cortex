@@ -124,7 +124,7 @@ func newE2EEnv(t *testing.T, flavors []*TestFlavor, infoVersion int64, scheduler
 	cfg.WatchTimeout = metav1.Duration{Duration: 20 * time.Second}
 	cfg.WatchPollInterval = metav1.Duration{Duration: 100 * time.Millisecond}
 	cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
-		"*": {RAM: commitments.RAMResourceTypeConfig{HandlesCommitments: true, HasCapacity: true}},
+		"*": {RAM: commitments.RAMResourceTypeConfig{HandlesCommitments: true, HandlesDryRun: true, HasCapacity: true}},
 	}
 	api := NewAPIWithConfig(k8sClient, cfg, nil)
 	mux := http.NewServeMux()
@@ -360,6 +360,58 @@ func TestE2EChangeCommitments(t *testing.T) {
 			)),
 			WantResp:   newAPIResponse("no hosts found"),
 			WantAbsent: []string{"commitment-uuid-e2e-batch-a", "commitment-uuid-e2e-batch-b"},
+		},
+		{
+			Name:      "dry run: scheduler accepts → API accepted, probe CR and Reservations cleaned up",
+			Scheduler: e2eAcceptScheduler,
+			ReqJSON: buildRequestJSON(newCommitmentRequest("az-a", true, e2eInfoVersion,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-e2e-dry-ok", "confirmed", 1))),
+			WantResp: newAPIResponse(),
+			Verify: func(t *testing.T, env *e2eEnv) {
+				t.Helper()
+				var crList v1alpha1.CommittedResourceList
+				if err := env.k8sClient.List(context.Background(), &crList); err != nil {
+					t.Fatalf("list CRs: %v", err)
+				}
+				if len(crList.Items) != 0 {
+					t.Errorf("expected no CommittedResource CRDs after dry run, got %d", len(crList.Items))
+				}
+				var resList v1alpha1.ReservationList
+				if err := env.k8sClient.List(context.Background(), &resList, client.MatchingLabels{
+					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+				}); err != nil {
+					t.Fatalf("list reservations: %v", err)
+				}
+				if len(resList.Items) != 0 {
+					t.Errorf("expected no Reservation CRDs after dry run cleanup, got %d", len(resList.Items))
+				}
+			},
+		},
+		{
+			Name:      "dry run: scheduler rejects → API returns rejection, probe CR and Reservations cleaned up",
+			Scheduler: e2eRejectScheduler,
+			ReqJSON: buildRequestJSON(newCommitmentRequest("az-a", true, e2eInfoVersion,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-e2e-dry-rej", "confirmed", 1))),
+			WantResp: newAPIResponse("no hosts found"),
+			Verify: func(t *testing.T, env *e2eEnv) {
+				t.Helper()
+				var crList v1alpha1.CommittedResourceList
+				if err := env.k8sClient.List(context.Background(), &crList); err != nil {
+					t.Fatalf("list CRs: %v", err)
+				}
+				if len(crList.Items) != 0 {
+					t.Errorf("expected no CommittedResource CRDs after dry run, got %d", len(crList.Items))
+				}
+				var resList v1alpha1.ReservationList
+				if err := env.k8sClient.List(context.Background(), &resList, client.MatchingLabels{
+					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+				}); err != nil {
+					t.Fatalf("list reservations: %v", err)
+				}
+				if len(resList.Items) != 0 {
+					t.Errorf("expected no Reservation CRDs after dry run cleanup, got %d", len(resList.Items))
+				}
+			},
 		},
 		{
 			Name:      "lifecycle: create then delete, CR and child Reservations cleaned up",
