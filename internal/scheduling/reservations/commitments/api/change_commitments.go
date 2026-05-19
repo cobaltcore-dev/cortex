@@ -670,6 +670,7 @@ func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req l
 		for i, e := range watchErrs {
 			msgs[i] = e.Error()
 		}
+		api.monitor.timeouts.Inc()
 		resp.RejectionReason = "dry run: timeout: " + strings.Join(msgs, "; ")
 	default:
 		logger.Info("dry run: capacity available", "probes", len(probeWatches))

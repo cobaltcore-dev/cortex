@@ -463,7 +463,84 @@ func e2eBatchFlavorGroupResource(
 	}
 }
 
-// e2eFetchUsageReport calls POST /commitments/v1/projects/:id/report-usage, decodes the response,
+// CheckCommitmentsDryRun verifies that the dry-run path of change-commitments works end-to-end
+// for each (AZ, HandlesCommitments resource) pair. A dry-run request is sent with amount=2;
+// both accepted and capacity-rejected responses are valid outcomes. No cleanup is needed
+// because dry-run does not persist any state.
+func CheckCommitmentsDryRun(ctx context.Context, config E2EChecksConfig) {
+	baseURL := e2eBaseURL(config)
+	projectID := e2eProjectID(config)
+	azs := e2eAZs(config)
+
+	serviceInfo := e2eFetchServiceInfo(ctx, baseURL)
+
+	checked := 0
+	for _, az := range azs {
+		for resourceName, resInfo := range serviceInfo.Resources {
+			if !resInfo.HandlesCommitments {
+				continue
+			}
+			e2eDryRunResource(ctx, baseURL, serviceInfo.Version, az, projectID, resourceName, config.e2eRequestTimeout())
+			checked++
+		}
+	}
+
+	if checked == 0 {
+		slog.Warn("dry-run check: no HandlesCommitments resources found in /info — nothing checked")
+	}
+}
+
+// e2eDryRunResource sends a single dry-run change-commitments request for one (AZ, resource) pair.
+func e2eDryRunResource(
+	ctx context.Context,
+	baseURL string,
+	infoVersion int64,
+	az liquid.AvailabilityZone,
+	projectID liquid.ProjectUUID,
+	resourceName liquid.ResourceName,
+	requestTimeout time.Duration,
+) {
+
+	testUUID := liquid.CommitmentUUID(fmt.Sprintf("e2e-dry-%d", time.Now().UnixMilli()))
+	expiresAt := time.Now().Add(5 * time.Minute)
+	const amount = uint64(2)
+
+	req := liquid.CommitmentChangeRequest{
+		InfoVersion: infoVersion,
+		AZ:          az,
+		DryRun:      true,
+		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+			projectID: {
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					resourceName: {
+						TotalConfirmedAfter: amount,
+						Commitments: []liquid.Commitment{{
+							UUID:      testUUID,
+							Amount:    amount,
+							NewStatus: Some(liquid.CommitmentStatusConfirmed),
+							ExpiresAt: expiresAt,
+						}},
+					},
+				},
+			},
+		},
+	}
+
+	slog.Info("dry-run check: sending dry-run request",
+		"resource", resourceName, "uuid", testUUID, "project", projectID, "az", az)
+
+	rejectionReason := e2eSendChangeCommitments(ctx, baseURL, req, requestTimeout)
+	switch {
+	case rejectionReason == "":
+		slog.Info("dry-run check: accepted", "resource", resourceName, "az", az)
+	case strings.Contains(rejectionReason, "no hosts found") || strings.Contains(rejectionReason, "insufficient CPU cores"):
+		slog.Info("dry-run check: capacity rejection (expected in constrained clusters)",
+			"resource", resourceName, "az", az, "reason", rejectionReason)
+	default:
+		panic(fmt.Sprintf("dry-run check: unexpected rejection for resource %s in %s: %s", resourceName, az, rejectionReason))
+	}
+}
+
 // and returns it. Panics on HTTP errors or decode failures.
 func e2eFetchUsageReport(ctx context.Context, baseURL string, az liquid.AvailabilityZone, projectID liquid.ProjectUUID) liquid.ServiceUsageReport {
 	usageReq := liquid.ServiceUsageRequest{AllAZs: []liquid.AvailabilityZone{az}}
@@ -578,6 +655,7 @@ func e2eBaseURL(config E2EChecksConfig) string {
 func RunCommitmentsE2EChecks(ctx context.Context, config E2EChecksConfig) {
 	slog.Info("running commitments e2e checks")
 	CheckCommitmentsInfoEndpoint(ctx, config)
+	CheckCommitmentsDryRun(ctx, config)
 	CheckCommitmentsRoundTrip(ctx, config)
 	CheckCommitmentsMultiFlavorGroupBatch(ctx, config)
 	slog.Info("all commitments e2e checks passed")
