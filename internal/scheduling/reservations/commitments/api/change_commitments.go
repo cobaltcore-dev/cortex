@@ -520,6 +520,18 @@ func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req l
 		return
 	}
 
+	// Pass 1: aggregate raw unit deltas per resource name across all projects.
+	// A decrease in one project may cancel an increase in another, so we sum signed deltas.
+	netUnitDeltas := make(map[liquid.ResourceName]int64)
+	for _, projectChanges := range req.ByProject {
+		for resourceName, rc := range projectChanges.ByResource {
+			totalBefore := rc.TotalConfirmedBefore + rc.TotalGuaranteedBefore
+			totalAfter := rc.TotalConfirmedAfter + rc.TotalGuaranteedAfter
+			netUnitDeltas[resourceName] += int64(totalAfter) - int64(totalBefore) //nolint:gosec
+		}
+	}
+
+	// Pass 2: for each resource with a net increase, resolve config and convert to probe size.
 	// probeKey uniquely identifies a probe CR (one per resource with a net increase).
 	type probeKey struct {
 		flavorGroup  string
@@ -527,51 +539,44 @@ func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req l
 	}
 	deltas := make(map[probeKey]int64) // bytes (memory) or core count (cores)
 
-	for _, projectID := range sortedKeys(req.ByProject) {
-		projectChanges := req.ByProject[projectID]
-		for _, resourceName := range sortedKeys(projectChanges.ByResource) {
-			rc := projectChanges.ByResource[resourceName]
-
-			totalBefore := rc.TotalConfirmedBefore + rc.TotalGuaranteedBefore
-			totalAfter := rc.TotalConfirmedAfter + rc.TotalGuaranteedAfter
-			if totalAfter <= totalBefore {
-				continue // no net increase for this resource
-			}
-			deltaUnits := totalAfter - totalBefore
-
-			flavorGroupName, resourceType, err := commitments.GetFlavorGroupAndTypeFromResource(string(resourceName))
-			if err != nil {
-				resp.RejectionReason = fmt.Sprintf("dry run: %v", err)
-				return
-			}
-			if _, ok := flavorGroups[flavorGroupName]; !ok {
-				resp.RejectionReason = "dry run: flavor group not found: " + flavorGroupName
-				return
-			}
-
-			groupResourceConf := api.config.ResourceConfigForGroup(flavorGroupName)
-			var handlesDryRun bool
-			switch resourceType {
-			case v1alpha1.CommittedResourceTypeCores:
-				handlesDryRun = groupResourceConf.Cores.HandlesCommitments && groupResourceConf.Cores.HandlesDryRun
-			default:
-				handlesDryRun = groupResourceConf.RAM.HandlesCommitments && groupResourceConf.RAM.HandlesDryRun
-			}
-			if !handlesDryRun {
-				continue
-			}
-
-			var deltaAmount int64
-			switch resourceType {
-			case v1alpha1.CommittedResourceTypeCores:
-				deltaAmount = int64(deltaUnits) //nolint:gosec
-			default:
-				deltaAmount = int64(deltaUnits) * int64(groupResourceConf.RAM.RAMUnitMiB()) * (1 << 20) //nolint:gosec
-			}
-
-			k := probeKey{flavorGroup: flavorGroupName, resourceType: resourceType}
-			deltas[k] += deltaAmount
+	for _, resourceName := range sortedKeys(netUnitDeltas) {
+		deltaUnits := netUnitDeltas[resourceName]
+		if deltaUnits <= 0 {
+			continue
 		}
+
+		flavorGroupName, resourceType, err := commitments.GetFlavorGroupAndTypeFromResource(string(resourceName))
+		if err != nil {
+			resp.RejectionReason = fmt.Sprintf("dry run: %v", err)
+			return
+		}
+		if _, ok := flavorGroups[flavorGroupName]; !ok {
+			resp.RejectionReason = "dry run: flavor group not found: " + flavorGroupName
+			return
+		}
+
+		groupResourceConf := api.config.ResourceConfigForGroup(flavorGroupName)
+		var handlesDryRun bool
+		switch resourceType {
+		case v1alpha1.CommittedResourceTypeCores:
+			handlesDryRun = groupResourceConf.Cores.HandlesCommitments && groupResourceConf.Cores.HandlesDryRun
+		default:
+			handlesDryRun = groupResourceConf.RAM.HandlesCommitments && groupResourceConf.RAM.HandlesDryRun
+		}
+		if !handlesDryRun {
+			continue
+		}
+
+		var deltaAmount int64
+		switch resourceType {
+		case v1alpha1.CommittedResourceTypeCores:
+			deltaAmount = deltaUnits
+		default:
+			deltaAmount = deltaUnits * int64(groupResourceConf.RAM.RAMUnitMiB()) * (1 << 20) //nolint:gosec
+		}
+
+		k := probeKey{flavorGroup: flavorGroupName, resourceType: resourceType}
+		deltas[k] += deltaAmount
 	}
 
 	if len(deltas) == 0 {

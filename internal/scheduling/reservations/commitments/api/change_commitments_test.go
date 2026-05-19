@@ -242,6 +242,15 @@ func TestHandleChangeCommitments(t *testing.T) {
 			ExpectedAPIResponse: newAPIResponse(),
 		},
 		{
+			Name:    "Dry run: increase in one project cancelled by decrease in another → net zero, trivially accepted",
+			Flavors: []*TestFlavor{m1Small},
+			CommitmentRequest: newCommitmentRequest("az-a", true, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-dry-net-a", "confirmed", 2),
+				deleteCommitment("hw_version_hana_1_ram", "project-B", "uuid-dry-net-b", "confirmed", 2)),
+			// Net delta = 0 → no probe CRDs, trivially accepted even with a rejecting scheduler.
+			ExpectedAPIResponse: newAPIResponse(),
+		},
+		{
 			Name:                "Empty request: no CRDs created",
 			Flavors:             []*TestFlavor{m1Small},
 			CommitmentRequest:   newCommitmentRequest("az-a", false, 1234),
