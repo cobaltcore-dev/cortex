@@ -178,13 +178,13 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
 	if !ok {
 		log.Error(nil, "pipeline config not found", "pipelineName", decision.Spec.PipelineRef.Name)
-		return nil, errors.New("pipeline config not found")
+		return &request, errors.New("pipeline config not found")
 	}
 	if pipelineConf.Spec.IgnorePreselection {
 		log.Info("gathering all placement candidates before filtering")
 		if err := c.gatherer.MutateWithAllCandidates(ctx, &request); err != nil {
 			log.Error(err, "failed to gather all placement candidates")
-			return nil, err
+			return &request, err
 		}
 		log.Info("gathered all placement candidates", "numHosts", len(request.Hosts))
 	}
@@ -192,7 +192,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	result, err := pipeline.Run(request)
 	if err != nil {
 		log.Error(err, "failed to run pipeline")
-		return nil, err
+		return &request, err
 	}
 	decision.Status.Result = &result
 	meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
