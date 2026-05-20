@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/google/uuid"
 	"github.com/sapcc/go-api-declarations/liquid"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -48,7 +50,8 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("X-Request-ID", requestID)
 
-	log := apiLog.WithValues("requestID", requestID, "endpoint", "quota")
+	log := apiLog.WithValues("requestID", requestID, "endpoint", "quota", "module", "quota-handling")
+	log.Info("received quota request", "method", r.Method, "path", r.URL.Path)
 
 	if r.Method != http.MethodPut {
 		api.quotaError(w, http.StatusMethodNotAllowed, "Method not allowed", startTime)
@@ -91,11 +94,6 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 		domainName = meta.Domain.Name
 	}
 
-	if domainID == "" {
-		api.quotaError(w, http.StatusBadRequest, "missing domain UUID in project metadata", startTime)
-		return
-	}
-
 	// Fetch flavor groups to determine per-resource RAM unit.
 	// The ProjectQuota CRD stores RAM values in GiB; Limes sends in the declared unit
 	// (slots for fixed-ratio groups, GiB for variable-ratio). Convert on receipt.
@@ -125,8 +123,7 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 			}
 			quotaValue := int64(azQuota.Quota)
 			if groupName, ok := ramResourceToGroup[string(resourceName)]; ok {
-				fg := flavorGroups[groupName]
-				quotaValue = fg.DeclaredUnitsToGiB(quotaValue)
+				quotaValue = api.config.ResourceConfigForGroup(groupName).RAM.DeclaredUnitsToGiB(quotaValue)
 			}
 			azStr := string(az)
 			if quotaByAZ[azStr] == nil {
@@ -137,6 +134,21 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+
+	// Pre-filter: if served AZs are explicitly configured, skip AZs not in the list.
+	// In multi-AZ setups Limes sends quota for all AZs but cortex only manages a subset.
+	if len(api.config.QuotaServedAvailabilityZones) > 0 {
+		served := make(map[string]bool, len(api.config.QuotaServedAvailabilityZones))
+		for _, az := range api.config.QuotaServedAvailabilityZones {
+			served[az] = true
+		}
+		for az := range quotaByAZ {
+			if !served[az] {
+				log.V(1).Info("skipping quota for unconfigured AZ", "az", az, "projectID", projectID)
+				delete(quotaByAZ, az)
+			}
+		}
+	}
 
 	// Create or update one ProjectQuota CRD per AZ with retry-on-conflict to handle
 	// concurrent status updates from the quota controller.
@@ -199,6 +211,14 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 			return nil
 		})
 		if err != nil {
+			// If no cluster is configured for this AZ, skip it gracefully.
+			// This happens in multi-AZ setups where quota info is received for
+			// AZs that cortex does not manage (e.g. no KVM in that AZ).
+			if multicluster.IsNoClusterMatchedError(err) {
+				log.V(1).Info("skipping ProjectQuota for unserved AZ", "name", crdName, "az", az)
+				activeAZs[az] = false
+				continue
+			}
 			log.Error(err, "failed to create/update ProjectQuota", "name", crdName, "az", az)
 			api.quotaError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to persist quota for AZ %s: %v", az, err), startTime)
 			return
@@ -220,6 +240,30 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	// Collect AZ names and resource group names for the success log
+	var storedAZs, skippedAZs []string
+	for az, isActive := range activeAZs {
+		if isActive {
+			storedAZs = append(storedAZs, az)
+		} else {
+			skippedAZs = append(skippedAZs, az)
+		}
+	}
+	sort.Strings(storedAZs)
+	sort.Strings(skippedAZs)
+	groups := make([]string, 0, len(req.Resources))
+	seen := make(map[string]bool, len(req.Resources))
+	for resourceName := range req.Resources {
+		name := string(resourceName)
+		if !seen[name] {
+			seen[name] = true
+			groups = append(groups, name)
+		}
+	}
+	sort.Strings(groups)
+	log.Info("quota request completed", "projectID", projectID, "storedAZs", storedAZs,
+		"skippedAZs", skippedAZs, "resources", len(req.Resources), "resourceNames", groups)
 
 	// Return 204 No Content as expected by the LIQUID API
 	w.WriteHeader(http.StatusNoContent)

@@ -30,6 +30,22 @@ spec:
     - jsonPath: .status.conditions[?(@.type=='Ready')].status
       name: Ready
       type: string
+    - jsonPath: .status.totalUsageSummary
+      name: TotalUsage
+      priority: 1
+      type: string
+    - jsonPath: .status.paygUsageSummary
+      name: PaygUsage
+      priority: 1
+      type: string
+    - jsonPath: .status.limesUsageSummary
+      name: LimesUsage
+      priority: 1
+      type: string
+    - jsonPath: .status.limesQuotaSummary
+      name: LimesQuota
+      priority: 1
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -181,6 +197,19 @@ spec:
                   this project's quota (any path).
                 format: date-time
                 type: string
+              limesQuotaSummary:
+                description: |-
+                  LimesQuotaSummary shows Spec.Quota converted to Limes declared units for debugging.
+                  Same conversion as LimesUsageSummary: fixed-ratio RAM is GiB→slots, rest 1:1.
+                  Format: "2101: c=9999 i=9999 r=5039; 2152: c=9999 i=9999 r=20"
+                type: string
+              limesUsageSummary:
+                description: |-
+                  LimesUsageSummary shows TotalUsage converted to Limes declared units for debugging.
+                  RAM for fixed-ratio groups is converted from GiB to slots (GiB*1024/SmallestFlavor.MemoryMB).
+                  RAM for variable-ratio groups remains in GiB (1:1). Cores and instances are 1:1.
+                  Format: "2101: c=25 i=8 r=70; 2152: c=4 i=2 r=8"
+                type: string
               observedGeneration:
                 description: |-
                   ObservedGeneration is the most recent spec generation that the controller has processed.
@@ -197,6 +226,12 @@ spec:
                   Derived as TotalUsage - CRUsage (clamped >= 0).
                   Key: liquid.ResourceName
                 type: object
+              paygUsageSummary:
+                description: |-
+                  PaygUsageSummary is a human-readable compact summary of PaygUsage for kubectl wide output.
+                  Format: "2101: c=14 i=5 r=13; 2152: c=4 i=2 r=8"
+                  Computed by the quota controller on each status write. Grouped by flavor group.
+                type: string
               totalUsage:
                 additionalProperties:
                   format: int64
@@ -206,6 +241,12 @@ spec:
                   Persisted by the quota controller; updated by full reconcile and HV instance diffs.
                   Key: liquid.ResourceName
                 type: object
+              totalUsageSummary:
+                description: |-
+                  TotalUsageSummary is a human-readable compact summary of TotalUsage for kubectl wide output.
+                  Format: "2101: c=18 i=7 r=21; 2152: c=4 i=2 r=8"
+                  Computed by the quota controller on each status write. Grouped by flavor group.
+                type: string
             type: object
         required:
         - spec

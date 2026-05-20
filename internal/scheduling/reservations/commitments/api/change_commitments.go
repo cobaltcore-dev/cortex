@@ -106,10 +106,37 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 
 	logger.Info("received change commitments request", "affectedProjects", len(req.ByProject), "dryRun", req.DryRun, "availabilityZone", req.AZ)
 
-	if req.DryRun {
-		resp.RejectionReason = "Dry run not supported yet"
+	if req.AZ == "" {
+		statusCode = http.StatusBadRequest
+		http.Error(w, "availability zone is required", statusCode)
 		api.recordMetrics(req, resp, statusCode, startTime)
-		logger.Info("rejecting dry run request")
+		return
+	}
+
+	{
+		knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
+		if knowledgeCRD, err := knowledge.Get(ctx); err == nil && knowledgeCRD != nil {
+			var currentVersion int64 = -1
+			if !knowledgeCRD.Status.LastContentChange.IsZero() {
+				currentVersion = knowledgeCRD.Status.LastContentChange.Unix()
+			}
+			if req.InfoVersion != currentVersion {
+				logger.Info("version mismatch in commitment change request",
+					"requestVersion", req.InfoVersion,
+					"currentVersion", currentVersion)
+				statusCode = http.StatusConflict
+				http.Error(w, fmt.Sprintf("Version mismatch: request version %d, current version %d. Please refresh and retry.",
+					req.InfoVersion, currentVersion), statusCode)
+				api.recordMetrics(req, resp, statusCode, startTime)
+				return
+			}
+		}
+	}
+
+	if req.DryRun {
+		api.performDryRun(ctx, logger, req, &resp)
+		api.recordMetrics(req, resp, statusCode, startTime)
+		logger.Info("dry run complete", "rejected", resp.RejectionReason != "")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
@@ -118,17 +145,8 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if req.AZ == "" {
-		statusCode = http.StatusBadRequest
-		http.Error(w, "availability zone is required", statusCode)
-		api.recordMetrics(req, resp, statusCode, startTime)
-		return
-	}
-
 	if err := api.processCommitmentChanges(ctx, w, logger, req, &resp); err != nil {
-		if strings.Contains(err.Error(), "version mismatch") {
-			statusCode = http.StatusConflict
-		} else if strings.Contains(err.Error(), "caches not ready") {
+		if strings.Contains(err.Error(), "caches not ready") {
 			statusCode = http.StatusServiceUnavailable
 		}
 		api.recordMetrics(req, resp, statusCode, startTime)
@@ -150,19 +168,6 @@ func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.Respons
 		logger.Info("failed to get flavor groups from knowledge extractor", "error", err)
 		http.Error(w, "caches not ready, please retry later", http.StatusServiceUnavailable)
 		return errors.New("caches not ready")
-	}
-
-	var currentVersion int64 = -1
-	if knowledgeCRD, err := knowledge.Get(ctx); err == nil && knowledgeCRD != nil && !knowledgeCRD.Status.LastContentChange.IsZero() {
-		currentVersion = knowledgeCRD.Status.LastContentChange.Unix()
-	}
-	if req.InfoVersion != currentVersion {
-		logger.Info("version mismatch in commitment change request",
-			"requestVersion", req.InfoVersion,
-			"currentVersion", currentVersion)
-		http.Error(w, fmt.Sprintf("Version mismatch: request version %d, current version %d. Please refresh and retry.",
-			req.InfoVersion, currentVersion), http.StatusConflict)
-		return errors.New("version mismatch")
 	}
 
 	// If Limes does not require confirmation for this batch (e.g. deletions, status-only transitions),
@@ -203,10 +208,9 @@ ProcessLoop:
 				break ProcessLoop
 			}
 
-			groupData := flavorGroups[flavorGroupName]
-			ramUnitMiB := groupData.RAMUnitMiB()
-
 			groupResourceConf := api.config.ResourceConfigForGroup(flavorGroupName)
+			ramUnitMiB := groupResourceConf.RAM.RAMUnitMiB()
+
 			var handlesCommitments bool
 			switch resourceType {
 			case v1alpha1.CommittedResourceTypeCores:
@@ -504,6 +508,208 @@ func rollbackCR(ctx context.Context, logger logr.Logger, k8sClient client.Client
 		return
 	}
 	logger.V(1).Info("restored CommittedResource CRD spec during rollback", "name", snap.crName)
+}
+
+// performDryRun checks whether the net capacity delta in req can be placed by running
+// temporary probe CommittedResource CRDs through the controller, then always cleaning them up.
+func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req liquid.CommitmentChangeRequest, resp *liquid.CommitmentChangeResponse) {
+	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
+	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
+	if err != nil {
+		resp.RejectionReason = "dry run: caches not ready, please retry later"
+		return
+	}
+
+	// Pass 1: aggregate raw unit deltas per resource name across all projects.
+	// A decrease in one project may cancel an increase in another, so we sum signed deltas.
+	netUnitDeltas := computeNetUnitDeltas(req)
+
+	// Pass 2: for each resource with a net increase, resolve config and convert to probe size.
+	// probeKey uniquely identifies a probe CR (one per resource with a net increase).
+	type probeKey struct {
+		flavorGroup  string
+		resourceType v1alpha1.CommittedResourceType
+	}
+	deltas := make(map[probeKey]int64) // bytes (memory) or core count (cores)
+
+	for _, resourceName := range sortedKeys(netUnitDeltas) {
+		deltaUnits := netUnitDeltas[resourceName]
+		if deltaUnits <= 0 {
+			continue
+		}
+
+		flavorGroupName, resourceType, err := commitments.GetFlavorGroupAndTypeFromResource(string(resourceName))
+		if err != nil {
+			resp.RejectionReason = fmt.Sprintf("dry run: %v", err)
+			return
+		}
+		if _, ok := flavorGroups[flavorGroupName]; !ok {
+			resp.RejectionReason = "dry run: flavor group not found: " + flavorGroupName
+			return
+		}
+
+		groupResourceConf := api.config.ResourceConfigForGroup(flavorGroupName)
+		var handlesDryRun bool
+		switch resourceType {
+		case v1alpha1.CommittedResourceTypeCores:
+			handlesDryRun = groupResourceConf.Cores.HandlesCommitments && groupResourceConf.Cores.HandlesDryRun
+		default:
+			handlesDryRun = groupResourceConf.RAM.HandlesCommitments && groupResourceConf.RAM.HandlesDryRun
+		}
+		if !handlesDryRun {
+			continue
+		}
+
+		var deltaAmount int64
+		switch resourceType {
+		case v1alpha1.CommittedResourceTypeCores:
+			deltaAmount = deltaUnits
+		default:
+			deltaAmount = deltaUnits * int64(groupResourceConf.RAM.RAMUnitMiB()) * (1 << 20) //nolint:gosec
+		}
+
+		k := probeKey{flavorGroup: flavorGroupName, resourceType: resourceType}
+		deltas[k] += deltaAmount
+	}
+
+	if len(deltas) == 0 {
+		logger.Info("dry run: no net capacity increase, trivially accepted")
+		return
+	}
+
+	// Build a sorted list for deterministic probe naming.
+	type keyAmount struct {
+		key    probeKey
+		amount int64
+	}
+	probeList := make([]keyAmount, 0, len(deltas))
+	for k, v := range deltas {
+		probeList = append(probeList, keyAmount{key: k, amount: v})
+	}
+	sort.Slice(probeList, func(i, j int) bool {
+		if probeList[i].key.flavorGroup != probeList[j].key.flavorGroup {
+			return probeList[i].key.flavorGroup < probeList[j].key.flavorGroup
+		}
+		return string(probeList[i].key.resourceType) < string(probeList[j].key.resourceType)
+	})
+
+	// Use the first project's ID and domain so same-project reservation logic works correctly.
+	firstProjectID := string(sortedKeys(req.ByProject)[0])
+	firstProjectMeta := req.ByProject[liquid.ProjectUUID(firstProjectID)].ProjectMetadata.UnwrapOr(liquid.ProjectMetadata{})
+	probeDomainID := firstProjectMeta.Domain.UUID
+
+	// Probe ID is derived from the HTTP request ID for log traceability.
+	ctxRequestID := strings.TrimPrefix(reservations.GlobalRequestIDFromContext(ctx), "committed-resource-")
+	if len(ctxRequestID) > 8 {
+		ctxRequestID = ctxRequestID[:8]
+	}
+	probeBase := "dryrun-" + ctxRequestID
+	now := metav1.NewTime(time.Now())
+	endTime := metav1.NewTime(time.Now().Add(time.Minute))
+
+	var probeWatches []crWatch
+	defer func() { api.cleanupDryRunProbes(ctx, logger, probeWatches) }()
+
+	for i, entry := range probeList {
+		probeUUID := fmt.Sprintf("%s-%d", probeBase, i)
+		probeName := "commitment-" + probeUUID
+
+		var qty resource.Quantity
+		switch entry.key.resourceType {
+		case v1alpha1.CommittedResourceTypeCores:
+			qty = *resource.NewQuantity(entry.amount, resource.DecimalSI)
+		default:
+			qty = *resource.NewQuantity(entry.amount, resource.BinarySI)
+		}
+
+		probe := &v1alpha1.CommittedResource{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: probeName,
+				Annotations: map[string]string{
+					v1alpha1.AnnotationCreatorRequestID: reservations.GlobalRequestIDFromContext(ctx),
+				},
+			},
+			Spec: v1alpha1.CommittedResourceSpec{
+				CommitmentUUID:   probeUUID,
+				SchedulingDomain: v1alpha1.SchedulingDomainNova,
+				FlavorGroupName:  entry.key.flavorGroup,
+				ResourceType:     entry.key.resourceType,
+				Amount:           qty,
+				AvailabilityZone: string(req.AZ),
+				ProjectID:        firstProjectID,
+				DomainID:         probeDomainID,
+				State:            v1alpha1.CommitmentStatusPending,
+				AllowRejection:   true,
+				StartTime:        &now,
+				EndTime:          &endTime,
+			},
+		}
+		if createErr := api.client.Create(ctx, probe); createErr != nil {
+			resp.RejectionReason = "dry run: failed to create probe: " + createErr.Error()
+			return
+		}
+		probeWatches = append(probeWatches, crWatch{name: probeName, generation: probe.Generation})
+	}
+
+	logger.Info("dry run: probes created, polling for controller outcome", "count", len(probeWatches))
+	rejected, watchErrs := watchCRsUntilReady(ctx, logger, api.client, probeWatches,
+		api.config.WatchTimeout.Duration, api.config.WatchPollInterval.Duration)
+
+	switch {
+	case len(rejected) > 0:
+		var b strings.Builder
+		fmt.Fprintf(&b, "dry run: %d probe(s) rejected:", len(rejected))
+		for _, w := range probeWatches {
+			if reason, ok := rejected[w.name]; ok {
+				fmt.Fprintf(&b, "\n- %s: %s", strings.TrimPrefix(w.name, "commitment-"), reason)
+			}
+		}
+		resp.RejectionReason = b.String()
+	case len(watchErrs) > 0:
+		msgs := make([]string, len(watchErrs))
+		for i, e := range watchErrs {
+			msgs[i] = e.Error()
+		}
+		api.monitor.timeouts.Inc()
+		resp.RejectionReason = "dry run: timeout: " + strings.Join(msgs, "; ")
+	default:
+		logger.Info("dry run: capacity available", "probes", len(probeWatches))
+	}
+}
+
+// cleanupDryRunProbes deletes probe CommittedResource CRDs and their child Reservation CRDs.
+// CR is deleted first so the controller cannot create new slots while we enumerate existing ones.
+// Reservations are listed by label (not field index) to avoid cache-lag false-negatives.
+func (api *HTTPAPI) cleanupDryRunProbes(ctx context.Context, logger logr.Logger, watches []crWatch) {
+	for _, w := range watches {
+		cr := &v1alpha1.CommittedResource{}
+		if err := api.client.Get(ctx, types.NamespacedName{Name: w.name}, cr); err != nil {
+			continue
+		}
+		commitmentUUID := cr.Spec.CommitmentUUID
+
+		if err := api.client.Delete(ctx, cr); client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "dry run: failed to delete probe", "probe", w.name)
+		}
+
+		var resList v1alpha1.ReservationList
+		if err := api.client.List(ctx, &resList, client.MatchingLabels{
+			v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+		}); err != nil {
+			logger.Error(err, "dry run: failed to list probe reservations", "probe", w.name)
+			continue
+		}
+		for i := range resList.Items {
+			res := &resList.Items[i]
+			if res.Spec.CommittedResourceReservation == nil ||
+				res.Spec.CommittedResourceReservation.CommitmentUUID != commitmentUUID {
+				continue
+			}
+			if err := api.client.Delete(ctx, res); client.IgnoreNotFound(err) != nil {
+				logger.Error(err, "dry run: failed to delete probe reservation", "reservation", res.Name)
+			}
+		}
+	}
 }
 
 // applyCRSpec writes CommitmentState fields into a CommittedResource CRD spec.

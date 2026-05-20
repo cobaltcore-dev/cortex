@@ -197,8 +197,11 @@ cortex-scheduling-controllers:
             handlesCommitments: false
             hasCapacity: true
             hasQuota: false
+            handlesDryRun: true
+            ramUnitGiB: 1
           cores:
             handlesCommitments: false
+            handlesDryRun: true
             hasCapacity: true
             hasQuota: false
           instances:

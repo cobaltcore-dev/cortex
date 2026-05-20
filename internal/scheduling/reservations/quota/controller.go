@@ -6,6 +6,8 @@ package quota
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -14,6 +16,7 @@ import (
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/retry"
@@ -29,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = ctrl.Log.WithName("quota-controller").WithValues("module", "quota")
+var log = ctrl.Log.WithName("quota-controller").WithValues("module", "quota-handling")
 
 // QuotaController manages quota usage tracking for projects.
 // It provides three reconciliation modes:
@@ -83,6 +86,9 @@ func (c *QuotaController) ReconcilePeriodic(ctx context.Context) error {
 
 	// Build flavorName → flavorGroup lookup
 	flavorToGroup := buildFlavorToGroupMap(flavorGroups)
+	logger.Info("flavor group knowledge loaded",
+		"flavorGroups", len(flavorGroups),
+		"totalFlavorsInMap", len(flavorToGroup))
 
 	// Fetch all VMs using VMSource (reads from Postgres via DBVMSource)
 	vms, err := c.VMSource.ListVMs(ctx)
@@ -94,6 +100,17 @@ func (c *QuotaController) ReconcilePeriodic(ctx context.Context) error {
 
 	// Compute totalUsage per project/AZ/resource
 	totalUsageByProject := c.computeTotalUsage(vms, flavorToGroup, flavorGroups)
+
+	// Diagnostic: count how many VMs were actually mapped to a flavor group
+	mappedVMs := 0
+	for _, vm := range vms {
+		if _, ok := flavorToGroup[vm.FlavorName]; ok {
+			mappedVMs++
+		}
+	}
+	logger.Info("VM flavor mapping complete",
+		"totalVMs", len(vms), "mappedVMs", mappedVMs, "unmappedVMs", len(vms)-mappedVMs,
+		"projectsWithUsage", len(totalUsageByProject))
 
 	// List all existing ProjectQuota CRDs
 	var pqList v1alpha1.ProjectQuotaList
@@ -614,6 +631,12 @@ func (c *QuotaController) applyDeltaAndUpdateStatus(
 				pq.Status.PaygUsage[resourceName] = paygAmount
 			}
 
+			// Update human-readable summaries for wide kubectl output
+			pq.Status.TotalUsageSummary = buildUsageSummary(pq.Status.TotalUsage)
+			pq.Status.PaygUsageSummary = buildUsageSummary(pq.Status.PaygUsage)
+			pq.Status.LimesUsageSummary = buildLimesSummary(pq.Status.TotalUsage, c.Config.FlavorGroupResourceConfig)
+			pq.Status.LimesQuotaSummary = buildLimesSummary(pq.Spec.Quota, c.Config.FlavorGroupResourceConfig)
+
 			now := metav1.Now()
 			pq.Status.LastReconcileAt = &now
 			return c.Status().Update(ctx, &pq)
@@ -813,7 +836,11 @@ func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavo
 			if !ok {
 				continue
 			}
-			// Convert bytes to GiB (1 GiB per commitment unit)
+			// Convert bytes to GiB (1 GiB per commitment unit) using integer truncation.
+			// NOTE: This truncates fractional GiB. For example, 8160 MiB (7.97 GiB) → 7 GiB.
+			// This means PaygUsage = TotalUsage - CRUsage may appear higher than expected
+			// when VMs have non-GiB-aligned RAM. This is intentional: we only deduct
+			// whole GiB units that are fully consumed by committed VMs.
 			usedBytes := memQty.Value()
 			if _, ok := flavorGroups[spec.FlavorGroupName]; !ok {
 				continue
@@ -912,6 +939,7 @@ func expandAZSlice(flat map[string]int64, az string) map[string]map[string]int64
 // totalUsage and paygUsage are multi-AZ maps; this function extracts the relevant AZ
 // slice based on the CRD's Spec.AvailabilityZone.
 // If fullReconcile is true, also updates LastFullReconcileAt and ObservedGeneration.
+// flavorGroups is used to compute Limes unit summaries (may be nil to skip).
 func (c *QuotaController) updateProjectQuotaStatusWithRetry(
 	ctx context.Context,
 	pqName string,
@@ -931,14 +959,129 @@ func (c *QuotaController) updateProjectQuotaStatusWithRetry(
 		az := pq.Spec.AvailabilityZone
 		pq.Status.TotalUsage = extractAZSlice(totalUsage, az)
 		pq.Status.PaygUsage = extractAZSlice(paygUsage, az)
+		// Seed zero values for all resource keys defined in spec.quota so the status
+		// always shows which groups are tracked (even when no VMs exist for this project).
+		for key := range pq.Spec.Quota {
+			if _, ok := pq.Status.TotalUsage[key]; !ok {
+				pq.Status.TotalUsage[key] = 0
+			}
+			if _, ok := pq.Status.PaygUsage[key]; !ok {
+				pq.Status.PaygUsage[key] = 0
+			}
+		}
+		pq.Status.TotalUsageSummary = buildUsageSummary(pq.Status.TotalUsage)
+		pq.Status.PaygUsageSummary = buildUsageSummary(pq.Status.PaygUsage)
+		// Limes unit summaries for debugging (converted from internal GiB to declared units)
+		pq.Status.LimesUsageSummary = buildLimesSummary(pq.Status.TotalUsage, c.Config.FlavorGroupResourceConfig)
+		pq.Status.LimesQuotaSummary = buildLimesSummary(pq.Spec.Quota, c.Config.FlavorGroupResourceConfig)
 		pq.Status.ObservedGeneration = pq.Generation
 		now := metav1.Now()
 		pq.Status.LastReconcileAt = &now
 		if fullReconcile {
 			pq.Status.LastFullReconcileAt = &now
 		}
+		// Set Ready condition to indicate successful reconciliation
+		meta.SetStatusCondition(&pq.Status.Conditions, metav1.Condition{
+			Type:               v1alpha1.ProjectQuotaConditionReady,
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: pq.Generation,
+			Reason:             "Reconciled",
+			Message:            "Quota usage successfully computed",
+		})
 		return c.Status().Update(ctx, &pq)
 	})
+}
+
+// buildUsageSummary converts a flat usage map (resourceName → value) into a compact
+// human-readable string grouped by flavor group.
+// Input keys follow the pattern: "hw_version_<group>_cores", "hw_version_<group>_instances", "hw_version_<group>_ram"
+// Output format: "2101: c=18 i=7 r=21; 2152: c=4 i=2 r=8"
+// Groups are sorted alphabetically for stable output.
+func buildUsageSummary(usage map[string]int64) string {
+	if len(usage) == 0 {
+		return ""
+	}
+
+	const prefix = "hw_version_"
+	const suffixRAM = "_ram"
+	const suffixCores = "_cores"
+	const suffixInstances = "_instances"
+
+	// Parse into per-group values
+	type groupValues struct {
+		cores     int64
+		instances int64
+		ram       int64
+	}
+	groups := make(map[string]*groupValues)
+
+	for key, val := range usage {
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		name := strings.TrimPrefix(key, prefix)
+		switch {
+		case strings.HasSuffix(name, suffixRAM):
+			group := strings.TrimSuffix(name, suffixRAM)
+			if groups[group] == nil {
+				groups[group] = &groupValues{}
+			}
+			groups[group].ram = val
+		case strings.HasSuffix(name, suffixCores):
+			group := strings.TrimSuffix(name, suffixCores)
+			if groups[group] == nil {
+				groups[group] = &groupValues{}
+			}
+			groups[group].cores = val
+		case strings.HasSuffix(name, suffixInstances):
+			group := strings.TrimSuffix(name, suffixInstances)
+			if groups[group] == nil {
+				groups[group] = &groupValues{}
+			}
+			groups[group].instances = val
+		}
+	}
+
+	if len(groups) == 0 {
+		return ""
+	}
+
+	// Sort group names for stable output
+	groupNames := make([]string, 0, len(groups))
+	for name := range groups {
+		groupNames = append(groupNames, name)
+	}
+	sort.Strings(groupNames)
+
+	// Build compact summary — include all resource types for each group (even zeros)
+	var parts []string
+	for _, name := range groupNames {
+		gv := groups[name]
+		parts = append(parts, fmt.Sprintf("%s: c=%d i=%d r=%d", name, gv.cores, gv.instances, gv.ram))
+	}
+	return strings.Join(parts, "; ")
+}
+
+// buildLimesSummary converts a flat usage or quota map into a summary string using Limes declared units.
+// For RAM resources in fixed-ratio groups: value * 1024 / SmallestFlavor.MemoryMB (GiB→slots).
+// For RAM resources in variable-ratio groups: value is already in GiB = declared units (1:1).
+// For cores and instances: value is 1:1 (no conversion).
+func buildLimesSummary(values map[string]int64, cfg map[string]commitments.FlavorGroupResourcesConfig) string {
+	if len(values) == 0 {
+		return ""
+	}
+	// Convert RAM values from GiB to Limes declared units where applicable
+	converted := make(map[string]int64, len(values))
+	for key, val := range values {
+		if strings.HasPrefix(key, "hw_version_") && strings.HasSuffix(key, "_ram") {
+			name := strings.TrimPrefix(key, "hw_version_")
+			groupName := strings.TrimSuffix(name, "_ram")
+			converted[key] = commitments.ResourceConfigForGroup(cfg, groupName).RAM.GiBToDeclaredUnits(val)
+		} else {
+			converted[key] = val
+		}
+	}
+	return buildUsageSummary(converted)
 }
 
 // vmResourceUnits computes RAM commitment units (GiB) and cores from a VM's resources.

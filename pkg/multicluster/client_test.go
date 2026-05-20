@@ -491,6 +491,9 @@ func TestClient_clusterForWrite_NoMatch(t *testing.T) {
 	if err == nil {
 		t.Error("expected error when no remote cluster matches")
 	}
+	if !IsNoClusterMatchedError(err) {
+		t.Errorf("expected IsNoClusterMatchedError to return true, got false for error: %v", err)
+	}
 }
 
 func TestClient_clusterForWrite_NoRouterMultipleClusters(t *testing.T) {
@@ -1623,4 +1626,95 @@ func TestClient_InitFromConf_GVKFormatting(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestIsNoClusterMatchedError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "nil error",
+			err:      nil,
+			expected: false,
+		},
+		{
+			name:     "no cluster matched error",
+			err:      &NoClusterMatchedError{GVK: configMapGVK},
+			expected: true,
+		},
+		{
+			name:     "unrelated error",
+			err:      errors.New("something went wrong"),
+			expected: false,
+		},
+		{
+			name:     "not found error",
+			err:      apierrors.NewNotFound(schema.GroupResource{Group: "", Resource: "ConfigMap"}, "foo"),
+			expected: false,
+		},
+		{
+			name:     "duplicate error",
+			err:      &duplicateError{msg: "duplicate"},
+			expected: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsNoClusterMatchedError(tt.err); got != tt.expected {
+				t.Errorf("IsNoClusterMatchedError(%v) = %v, want %v", tt.err, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestClient_ConfiguredRouteLabels(t *testing.T) {
+	scheme := newTestScheme(t)
+
+	t.Run("returns nil for home-only GVK", func(t *testing.T) {
+		c := &Client{
+			HomeCluster: newFakeCluster(scheme),
+			HomeScheme:  scheme,
+			homeGVKs:    map[schema.GroupVersionKind]bool{configMapGVK: true},
+		}
+		labels := c.ConfiguredRouteLabels(configMapGVK)
+		if labels != nil {
+			t.Errorf("expected nil, got %v", labels)
+		}
+	})
+
+	t.Run("returns nil for unknown GVK", func(t *testing.T) {
+		c := &Client{
+			HomeCluster: newFakeCluster(scheme),
+			HomeScheme:  scheme,
+		}
+		labels := c.ConfiguredRouteLabels(configMapGVK)
+		if labels != nil {
+			t.Errorf("expected nil, got %v", labels)
+		}
+	})
+
+	t.Run("returns labels for remote clusters", func(t *testing.T) {
+		c := &Client{
+			HomeCluster: newFakeCluster(scheme),
+			HomeScheme:  scheme,
+			remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+				configMapGVK: {
+					{cluster: newFakeCluster(scheme), labels: map[string]string{"availabilityZone": "az-1"}},
+					{cluster: newFakeCluster(scheme), labels: map[string]string{"availabilityZone": "az-2"}},
+				},
+			},
+		}
+		labels := c.ConfiguredRouteLabels(configMapGVK)
+		if len(labels) != 2 {
+			t.Fatalf("expected 2 label sets, got %d", len(labels))
+		}
+		if labels[0]["availabilityZone"] != "az-1" {
+			t.Errorf("expected az-1, got %s", labels[0]["availabilityZone"])
+		}
+		if labels[1]["availabilityZone"] != "az-2" {
+			t.Errorf("expected az-2, got %s", labels[1]["availabilityZone"])
+		}
+	})
 }

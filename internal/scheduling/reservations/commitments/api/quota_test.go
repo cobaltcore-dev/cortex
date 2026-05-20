@@ -9,10 +9,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"go.xyrillian.de/gg/option"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -415,6 +417,139 @@ func boolPtr(b bool) *bool {
 	return &b
 }
 
+// TestHandleQuota_QuotaServedAvailabilityZones verifies that the config-based AZ
+// pre-filter skips AZs not listed in QuotaServedAvailabilityZones.
+func TestHandleQuota_QuotaServedAvailabilityZones(t *testing.T) {
+	scheme := newTestScheme(t)
+	knowledge := quotaTestKnowledge1GiB(t)
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(knowledge).Build()
+
+	config := commitments.DefaultAPIConfig()
+	config.QuotaServedAvailabilityZones = []string{"az-a"} // only az-a is served
+	httpAPI := NewAPIWithConfig(k8sClient, config, nil)
+
+	quotaReq := liquid.ServiceQuotaRequest{
+		Resources: map[liquid.ResourceName]liquid.ResourceQuotaRequest{
+			"hw_version_hana_1_ram": {
+				PerAZ: map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest{
+					"az-a": {Quota: 50},
+					"az-b": {Quota: 30}, // should be skipped
+					"az-c": {Quota: 20}, // should be skipped
+				},
+			},
+		},
+	}
+	quotaReq.ProjectMetadata = option.Some(liquid.ProjectMetadata{
+		UUID:   "project-filter",
+		Domain: liquid.DomainMetadata{UUID: "domain-1"},
+	})
+	body := marshalQuotaReq(t, quotaReq)
+
+	req := httptest.NewRequest(http.MethodPut, "/commitments/v1/projects/project-filter/quota", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	httpAPI.HandleQuota(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// az-a should have a CRD
+	var pq v1alpha1.ProjectQuota
+	if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: "quota-project-filter-az-a"}, &pq); err != nil {
+		t.Fatalf("expected ProjectQuota for az-a: %v", err)
+	}
+	if pq.Spec.Quota["hw_version_hana_1_ram"] != 50 {
+		t.Errorf("az-a: expected quota 50, got %d", pq.Spec.Quota["hw_version_hana_1_ram"])
+	}
+
+	// az-b and az-c should NOT have CRDs
+	err := k8sClient.Get(context.Background(), client.ObjectKey{Name: "quota-project-filter-az-b"}, &pq)
+	if err == nil {
+		t.Error("expected no ProjectQuota for az-b (should be filtered)")
+	}
+	err = k8sClient.Get(context.Background(), client.ObjectKey{Name: "quota-project-filter-az-c"}, &pq)
+	if err == nil {
+		t.Error("expected no ProjectQuota for az-c (should be filtered)")
+	}
+}
+
+// noClusterClient wraps a client and returns NoClusterMatchedError on Create
+// for objects whose name contains a specific AZ suffix.
+type noClusterClient struct {
+	client.Client
+	unservedAZs []string
+}
+
+func (c *noClusterClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	for _, az := range c.unservedAZs {
+		if strings.HasSuffix(obj.GetName(), "-"+az) {
+			return &multicluster.NoClusterMatchedError{}
+		}
+	}
+	return c.Client.Create(ctx, obj, opts...)
+}
+
+func (c *noClusterClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	for _, az := range c.unservedAZs {
+		if strings.HasSuffix(obj.GetName(), "-"+az) {
+			return &multicluster.NoClusterMatchedError{}
+		}
+	}
+	return c.Client.Update(ctx, obj, opts...)
+}
+
+// TestHandleQuota_NoClusterMatchedError verifies that when a Create returns
+// NoClusterMatchedError for a specific AZ, the handler skips it gracefully
+// and still succeeds for the remaining AZs.
+func TestHandleQuota_NoClusterMatchedError(t *testing.T) {
+	scheme := newTestScheme(t)
+	knowledge := quotaTestKnowledge1GiB(t)
+	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(knowledge).Build()
+
+	// Wrap client so az-b returns NoClusterMatchedError on Create.
+	wrapped := &noClusterClient{Client: baseClient, unservedAZs: []string{"az-b"}}
+	httpAPI := NewAPI(wrapped)
+
+	quotaReq := liquid.ServiceQuotaRequest{
+		Resources: map[liquid.ResourceName]liquid.ResourceQuotaRequest{
+			"hw_version_hana_1_ram": {
+				PerAZ: map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest{
+					"az-a": {Quota: 70},
+					"az-b": {Quota: 30}, // will hit NoClusterMatchedError
+				},
+			},
+		},
+	}
+	quotaReq.ProjectMetadata = option.Some(liquid.ProjectMetadata{
+		UUID:   "project-nocluster",
+		Domain: liquid.DomainMetadata{UUID: "domain-1"},
+	})
+	body := marshalQuotaReq(t, quotaReq)
+
+	req := httptest.NewRequest(http.MethodPut, "/commitments/v1/projects/project-nocluster/quota", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	httpAPI.HandleQuota(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// az-a should have a CRD
+	var pq v1alpha1.ProjectQuota
+	if err := baseClient.Get(context.Background(), client.ObjectKey{Name: "quota-project-nocluster-az-a"}, &pq); err != nil {
+		t.Fatalf("expected ProjectQuota for az-a: %v", err)
+	}
+	if pq.Spec.Quota["hw_version_hana_1_ram"] != 70 {
+		t.Errorf("az-a: expected quota 70, got %d", pq.Spec.Quota["hw_version_hana_1_ram"])
+	}
+
+	// az-b should NOT have a CRD (gracefully skipped)
+	err := baseClient.Get(context.Background(), client.ObjectKey{Name: "quota-project-nocluster-az-b"}, &pq)
+	if err == nil {
+		t.Error("expected no ProjectQuota for az-b (NoClusterMatchedError should skip it)")
+	}
+}
+
 // TestHandleQuota_KnowledgeNotReady verifies that the quota endpoint returns 503 when
 // the flavor-group Knowledge CRD is absent (needed for unit conversion).
 func TestHandleQuota_KnowledgeNotReady(t *testing.T) {
@@ -458,7 +593,11 @@ func TestHandleQuota_UnitConversion(t *testing.T) {
 		[]*TestFlavor{{Name: "hana_c4_m2", Group: "hana_1", MemoryMB: 2048, VCPUs: 4}}, 1,
 	))
 	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(knowledge).Build()
-	httpAPI := NewAPI(k8sClient)
+	cfg := commitments.DefaultAPIConfig()
+	cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
+		"hana_1": {RAM: commitments.RAMResourceTypeConfig{RAMUnitGiB: 2}},
+	}
+	httpAPI := NewAPIWithConfig(k8sClient, cfg, nil)
 
 	quotaReq := liquid.ServiceQuotaRequest{
 		Resources: map[liquid.ResourceName]liquid.ResourceQuotaRequest{

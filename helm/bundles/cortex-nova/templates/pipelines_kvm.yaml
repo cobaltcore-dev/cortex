@@ -102,6 +102,13 @@ spec:
         from the nova scheduler request spec. It supports filtering by host and
         by aggregates. Aggregates use AND logic between list elements, with
         comma-separated UUIDs within an element using OR logic.
+    - name: filter_quota_enforcement
+      description: |
+        This step enforces project quota by checking whether the request has
+        headroom under the project's committed resources or pay-as-you-go quota.
+        If a matching CommittedResource has unused capacity, the request is accepted.
+        Otherwise, PAYG headroom is checked for ram, cores, and instances.
+        Rejects all hosts if neither tier has headroom.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -247,6 +254,13 @@ spec:
         from the nova scheduler request spec. It supports filtering by host and
         by aggregates. Aggregates use AND logic between list elements, with
         comma-separated UUIDs within an element using OR logic.
+    - name: filter_quota_enforcement
+      description: |
+        This step enforces project quota by checking whether the request has
+        headroom under the project's committed resources or pay-as-you-go quota.
+        If a matching CommittedResource has unused capacity, the request is accepted.
+        Otherwise, PAYG headroom is checked for ram, cores, and instances.
+        Rejects all hosts if neither tier has headroom.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:

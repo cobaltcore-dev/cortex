@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -121,10 +122,10 @@ func newE2EEnv(t *testing.T, flavors []*TestFlavor, infoVersion int64, scheduler
 
 	// HTTPAPI wired directly to the real k8s client (no fakeControllerClient wrapper).
 	cfg := commitments.DefaultAPIConfig()
-	cfg.WatchTimeout = metav1.Duration{Duration: 5 * time.Second}
+	cfg.WatchTimeout = metav1.Duration{Duration: 20 * time.Second}
 	cfg.WatchPollInterval = metav1.Duration{Duration: 100 * time.Millisecond}
 	cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
-		"*": {RAM: commitments.ResourceTypeConfig{HandlesCommitments: true, HasCapacity: true}},
+		"*": {RAM: commitments.RAMResourceTypeConfig{HandlesCommitments: true, HandlesDryRun: true, HasCapacity: true}},
 	}
 	api := NewAPIWithConfig(k8sClient, cfg, nil)
 	mux := http.NewServeMux()
@@ -289,9 +290,36 @@ func e2eRejectScheduler(t *testing.T) http.HandlerFunc {
 	}
 }
 
-// ============================================================================
-// E2E test cases
-// ============================================================================
+// assertNoDryRunProbes verifies that all probe CommittedResource CRDs and their child
+// Reservations have been cleaned up. It only checks objects associated with dry-run probes
+// (name prefix "commitment-dryrun-") rather than asserting zero total objects, so the
+// assertion stays valid when other CRs or Reservations exist in the same environment.
+func (e *e2eEnv) assertNoDryRunProbes(t *testing.T) {
+	t.Helper()
+
+	var crList v1alpha1.CommittedResourceList
+	if err := e.k8sClient.List(context.Background(), &crList); err != nil {
+		t.Fatalf("list CRs: %v", err)
+	}
+	for _, cr := range crList.Items {
+		if strings.HasPrefix(cr.Name, "commitment-dryrun-") {
+			t.Errorf("probe CommittedResource %q still exists after dry run cleanup", cr.Name)
+		}
+	}
+
+	var resList v1alpha1.ReservationList
+	if err := e.k8sClient.List(context.Background(), &resList, client.MatchingLabels{
+		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+	}); err != nil {
+		t.Fatalf("list reservations: %v", err)
+	}
+	for _, res := range resList.Items {
+		if res.Spec.CommittedResourceReservation != nil &&
+			strings.HasPrefix(res.Spec.CommittedResourceReservation.CommitmentUUID, "dryrun-") {
+			t.Errorf("probe Reservation %q still exists after dry run cleanup", res.Name)
+		}
+	}
+}
 
 const e2eInfoVersion = int64(1234)
 
@@ -360,6 +388,28 @@ func TestE2EChangeCommitments(t *testing.T) {
 			)),
 			WantResp:   newAPIResponse("no hosts found"),
 			WantAbsent: []string{"commitment-uuid-e2e-batch-a", "commitment-uuid-e2e-batch-b"},
+		},
+		{
+			Name:      "dry run: scheduler accepts → API accepted, probe CR and Reservations cleaned up",
+			Scheduler: e2eAcceptScheduler,
+			ReqJSON: buildRequestJSON(newCommitmentRequest("az-a", true, e2eInfoVersion,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-e2e-dry-ok", "confirmed", 1))),
+			WantResp: newAPIResponse(),
+			Verify: func(t *testing.T, env *e2eEnv) {
+				t.Helper()
+				env.assertNoDryRunProbes(t)
+			},
+		},
+		{
+			Name:      "dry run: scheduler rejects → API returns rejection, probe CR and Reservations cleaned up",
+			Scheduler: e2eRejectScheduler,
+			ReqJSON: buildRequestJSON(newCommitmentRequest("az-a", true, e2eInfoVersion,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-e2e-dry-rej", "confirmed", 1))),
+			WantResp: newAPIResponse("no hosts found"),
+			Verify: func(t *testing.T, env *e2eEnv) {
+				t.Helper()
+				env.assertNoDryRunProbes(t)
+			},
 		},
 		{
 			Name:      "lifecycle: create then delete, CR and child Reservations cleaned up",
