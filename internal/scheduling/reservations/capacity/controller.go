@@ -55,8 +55,9 @@ func (c *Controller) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-timer.C:
-			if err := c.reconcileAll(ctx); err != nil {
-				log.Error(err, "reconcile cycle failed")
+			cycleCtx := WithNewGlobalRequestID(ctx)
+			if err := c.reconcileAll(cycleCtx); err != nil {
+				LoggerFromContext(cycleCtx).Error(err, "reconcile cycle failed")
 			}
 			timer.Reset(c.config.ReconcileInterval.Duration)
 		}
@@ -65,6 +66,9 @@ func (c *Controller) Start(ctx context.Context) error {
 
 // reconcileAll iterates all flavor groups × AZs and upserts FlavorGroupCapacity CRDs.
 func (c *Controller) reconcileAll(ctx context.Context) error {
+	logger := LoggerFromContext(ctx)
+	startTime := time.Now()
+
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
@@ -83,15 +87,27 @@ func (c *Controller) reconcileAll(ctx context.Context) error {
 
 	azs := availabilityZones(hvList.Items)
 
+	var succeeded, failed int
 	for groupName, groupData := range flavorGroups {
 		for _, az := range azs {
 			if err := c.reconcileOne(ctx, groupName, groupData, az, hvByName, hvList.Items); err != nil {
-				log.Error(err, "failed to reconcile flavor group capacity",
+				logger.Error(err, "failed to reconcile flavor group capacity",
 					"flavorGroup", groupName, "az", az)
+				failed++
 				// Continue with other pairs rather than aborting the whole cycle.
+				continue
 			}
+			succeeded++
 		}
 	}
+
+	logger.Info("capacity reconcile cycle completed",
+		"flavorGroups", len(flavorGroups),
+		"availabilityZones", len(azs),
+		"hypervisors", len(hvList.Items),
+		"succeeded", succeeded,
+		"failed", failed,
+		"duration", time.Since(startTime).String())
 	return nil
 }
 
@@ -169,7 +185,8 @@ func (c *Controller) reconcileOne(
 	totalInstances := countInstancesInAZ(allHVs, az)
 	committedCapacity, committedErr := c.sumCommittedCapacity(ctx, groupName, az, smallestFlavorBytes)
 	if committedErr != nil {
-		log.Error(committedErr, "failed to sum committed capacity", "flavorGroup", groupName, "az", az)
+		LoggerFromContext(ctx).Error(committedErr, "failed to sum committed capacity",
+			"flavorGroup", groupName, "az", az)
 		committedCapacity = 0
 	}
 

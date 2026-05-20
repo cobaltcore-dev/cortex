@@ -308,7 +308,7 @@ func getProjectVMs(
 
 		// Compute usage in the unit declared by the info endpoint for this group:
 		//   - fixed-ratio: slot count (FlavorRAM / smallest.MemoryMB); exact since flavors are integer multiples
-		//   - variable-ratio or unknown: GiB, with +16 MiB to round up video-RAM-adjusted values
+		//   - variable-ratio or unknown: GiB, +16 MiB before dividing to handle flavors that reserve 16 MiB for video RAM
 		var usageMultiple uint64
 		if row.FlavorRAM > 0 {
 			if fg, ok := flavorGroups[flavorGroup]; ok && fg.HasFixedRamCoreRatio() {
