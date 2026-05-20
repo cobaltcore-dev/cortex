@@ -7,15 +7,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// InfoAPIMonitor provides metrics for the CR info API.
 type InfoAPIMonitor struct {
 	requestCounter  *prometheus.CounterVec
 	requestDuration *prometheus.HistogramVec
 }
 
-// NewInfoAPIMonitor creates a new monitor with Prometheus metrics.
-// Metrics are pre-initialized with zero values for common HTTP status codes
-// to ensure they appear in Prometheus before the first request.
 func NewInfoAPIMonitor() InfoAPIMonitor {
 	m := InfoAPIMonitor{
 		requestCounter: prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -29,9 +25,6 @@ func NewInfoAPIMonitor() InfoAPIMonitor {
 		}, []string{"status_code"}),
 	}
 
-	// Pre-initialize metrics with zero values for common HTTP status codes.
-	// This ensures metrics exist in Prometheus before the first request,
-	// preventing "metric missing" warnings in alerting rules.
 	for _, statusCode := range []string{"200", "405", "500", "503"} {
 		m.requestCounter.WithLabelValues(statusCode)
 		m.requestDuration.WithLabelValues(statusCode)
@@ -40,13 +33,11 @@ func NewInfoAPIMonitor() InfoAPIMonitor {
 	return m
 }
 
-// Describe implements prometheus.Collector.
 func (m *InfoAPIMonitor) Describe(ch chan<- *prometheus.Desc) {
 	m.requestCounter.Describe(ch)
 	m.requestDuration.Describe(ch)
 }
 
-// Collect implements prometheus.Collector.
 func (m *InfoAPIMonitor) Collect(ch chan<- prometheus.Metric) {
 	m.requestCounter.Collect(ch)
 	m.requestDuration.Collect(ch)
