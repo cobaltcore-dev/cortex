@@ -377,6 +377,7 @@ func (r *CommittedResourceController) setAccepted(ctx context.Context, cr *v1alp
 		LastTransitionTime: now,
 		ObservedGeneration: cr.Generation,
 	})
+	cr.Status.StatusSummary = v1alpha1.ComputeStatusSummary(cr.Spec, cr.Status, now.Time)
 	if err := r.Status().Patch(ctx, cr, client.MergeFrom(old)); err != nil {
 		return client.IgnoreNotFound(err)
 	}
@@ -504,6 +505,7 @@ func (r *CommittedResourceController) setNotReadyRetry(ctx context.Context, cr *
 func (r *CommittedResourceController) patchNotReady(ctx context.Context, cr *v1alpha1.CommittedResource, reason, message string, resetTimer bool) error {
 	old := cr.DeepCopy()
 	setReadyConditionFalse(&cr.Status.Conditions, reason, message, cr.Generation, resetTimer)
+	cr.Status.StatusSummary = v1alpha1.ComputeStatusSummary(cr.Spec, cr.Status, time.Now())
 	if err := r.Status().Patch(ctx, cr, client.MergeFrom(old)); err != nil {
 		return client.IgnoreNotFound(err)
 	}

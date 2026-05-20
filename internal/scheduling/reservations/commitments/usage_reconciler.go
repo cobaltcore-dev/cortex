@@ -57,6 +57,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			cr.Status.UsedResources = nil
 			cr.Status.LastUsageReconcileAt = nil
 			cr.Status.UsageObservedGeneration = nil
+			cr.Status.StatusSummary = v1alpha1.ComputeStatusSummary(cr.Spec, cr.Status, start)
 			if err := r.Status().Patch(ctx, &cr, client.MergeFrom(old)); err != nil {
 				return ctrl.Result{}, client.IgnoreNotFound(err)
 			}
@@ -75,6 +76,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			cr.Status.UsedResources = nil
 			cr.Status.LastUsageReconcileAt = nil
 			cr.Status.UsageObservedGeneration = nil
+			cr.Status.StatusSummary = v1alpha1.ComputeStatusSummary(cr.Spec, cr.Status, start)
 			if err := r.Status().Patch(ctx, &cr, client.MergeFrom(old)); err != nil {
 				return ctrl.Result{}, client.IgnoreNotFound(err)
 			}
@@ -222,6 +224,7 @@ func (r *UsageReconciler) writeUsageStatus(ctx context.Context, state *Commitmen
 	}
 	target.Status.LastUsageReconcileAt = &now
 	target.Status.UsageObservedGeneration = &target.Generation
+	target.Status.StatusSummary = v1alpha1.ComputeStatusSummary(target.Spec, target.Status, now.Time)
 
 	return r.Status().Patch(ctx, target, client.MergeFrom(old))
 }

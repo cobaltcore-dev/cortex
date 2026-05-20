@@ -145,6 +145,11 @@ type CommittedResourceStatus struct {
 	// Conditions holds the current status conditions.
 	// +kubebuilder:validation:Optional
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+
+	// StatusSummary is a compact human-readable summary for kubectl wide view.
+	// Written by the CR controller and refreshed by the usage reconciler.
+	// +kubebuilder:validation:Optional
+	StatusSummary string `json:"statusSummary,omitempty"`
 }
 
 const (
@@ -172,7 +177,7 @@ const (
 // +kubebuilder:printcolumn:name="State",type="string",JSONPath=".spec.state"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:printcolumn:name="StartTime",type="date",JSONPath=".spec.startTime",priority=1
-// +kubebuilder:printcolumn:name="EndTime",type="date",JSONPath=".spec.endTime",priority=1
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.statusSummary",priority=1
 
 // CommittedResource is the Schema for the committedresources API
 type CommittedResource struct {

@@ -144,3 +144,28 @@ func TestWeigherValidator_Run_HostNumberMismatch(t *testing.T) {
 		t.Errorf("Run() error = %v, want %v", err.Error(), expectedError)
 	}
 }
+
+func TestWeigherValidator_Run_NoHosts_Skips(t *testing.T) {
+	called := false
+	mockStep := &mockWeigher[mockFilterWeigherPipelineRequest]{
+		RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+			called = true
+			return &FilterWeigherPipelineStepResult{Activations: map[string]float64{}}, nil
+		},
+	}
+
+	request := mockFilterWeigherPipelineRequest{Hosts: []string{}}
+
+	validator := WeigherValidator[mockFilterWeigherPipelineRequest]{Weigher: mockStep}
+
+	result, err := validator.Run(slog.Default(), request)
+	if !errors.Is(err, ErrStepSkipped) {
+		t.Errorf("Run() error = %v, want ErrStepSkipped", err)
+	}
+	if result != nil {
+		t.Errorf("Run() result = %v, want nil", result)
+	}
+	if called {
+		t.Error("expected wrapped weigher not to be called when there are no hosts")
+	}
+}

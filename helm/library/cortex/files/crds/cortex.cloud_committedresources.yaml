@@ -48,10 +48,10 @@ spec:
       name: StartTime
       priority: 1
       type: date
-    - jsonPath: .spec.endTime
-      name: EndTime
+    - jsonPath: .status.statusSummary
+      name: Status
       priority: 1
-      type: date
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -341,6 +341,11 @@ spec:
                 description: LastUsageReconcileAt is when the usage reconciler last
                   updated AssignedInstances and UsedResources.
                 format: date-time
+                type: string
+              statusSummary:
+                description: |-
+                  StatusSummary is a compact human-readable summary for kubectl wide view.
+                  Written by the CR controller and refreshed by the usage reconciler.
                 type: string
               usageObservedGeneration:
                 description: |-
