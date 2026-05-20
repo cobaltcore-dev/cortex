@@ -12,7 +12,7 @@ type ChangeCommitmentsAPIMonitor struct {
 	requestCounter    *prometheus.CounterVec
 	requestDuration   *prometheus.HistogramVec
 	commitmentChanges *prometheus.CounterVec
-	timeouts          prometheus.Counter
+	timeouts          *prometheus.CounterVec
 }
 
 // NewChangeCommitmentsAPIMonitor creates a new monitor with Prometheus metrics.
@@ -33,10 +33,10 @@ func NewChangeCommitmentsAPIMonitor() ChangeCommitmentsAPIMonitor {
 			Name: "cortex_committed_resource_change_api_commitment_changes_total",
 			Help: "Total number of commitment changes processed by result and availability zone",
 		}, []string{"result", "az", "dry_run"}),
-		timeouts: prometheus.NewCounter(prometheus.CounterOpts{
+		timeouts: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "cortex_committed_resource_change_api_timeouts_total",
 			Help: "Total number of commitment change requests that timed out while waiting for reservations to become ready",
-		}),
+		}, []string{"dry_run"}),
 	}
 
 	// Pre-initialize request metrics with zero values for common HTTP status codes.
@@ -49,6 +49,7 @@ func NewChangeCommitmentsAPIMonitor() ChangeCommitmentsAPIMonitor {
 			}
 			m.requestDuration.WithLabelValues(statusCode, dryRun)
 		}
+		m.timeouts.WithLabelValues(dryRun)
 	}
 
 	return m

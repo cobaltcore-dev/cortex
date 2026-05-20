@@ -474,10 +474,10 @@ groups:
   - alert: CortexNovaCommittedResourceRejectionRateTooHigh
     expr: |
       (
-        sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected"}[15m]))
-        / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[15m]))
+        sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected", dry_run="false"}[15m]))
+        / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", dry_run="false"}[15m]))
       ) > 0.3
-      and on() sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[15m])) > 0
+      and on() sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", dry_run="false"}[15m])) > 0
     for: 15m
     labels:
       context: committed-resource-api
@@ -494,7 +494,7 @@ groups:
         the failure to users.
 
   - alert: CortexNovaCommittedResourceTimeoutsTooHigh
-    expr: increase(cortex_committed_resource_change_api_timeouts_total{service="cortex-nova-metrics"}[10m]) > 0
+    expr: increase(cortex_committed_resource_change_api_timeouts_total{service="cortex-nova-metrics", dry_run="false"}[10m]) > 0
     for: 1m
     labels:
       context: committed-resource-api
@@ -511,8 +511,8 @@ groups:
 
   - alert: CortexNovaCommittedResourceChangeLatencyTooHigh
     expr: |
-      histogram_quantile(0.95, sum(rate(cortex_committed_resource_change_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) >= 10
-      and on() sum(rate(cortex_committed_resource_change_api_requests_total{service="cortex-nova-metrics"}[5m])) > 0
+      histogram_quantile(0.95, sum(rate(cortex_committed_resource_change_api_request_duration_seconds_bucket{service="cortex-nova-metrics", dry_run="false"}[5m])) by (le)) >= 10
+      and on() sum(rate(cortex_committed_resource_change_api_requests_total{service="cortex-nova-metrics", dry_run="false"}[5m])) > 0
     for: 5m
     labels:
       context: committed-resource-api

@@ -24,7 +24,7 @@ func TestChangeCommitmentsAPIMonitor_MetricsRegistration(t *testing.T) {
 	monitor.requestCounter.WithLabelValues("200", "false", "accepted").Inc()
 	monitor.requestDuration.WithLabelValues("200", "false").Observe(0.1)
 	monitor.commitmentChanges.WithLabelValues("accepted", "az-1", "false").Inc()
-	monitor.timeouts.Inc()
+	monitor.timeouts.WithLabelValues("false").Inc()
 
 	// Verify metrics can be gathered
 	families, err := registry.Gather()
