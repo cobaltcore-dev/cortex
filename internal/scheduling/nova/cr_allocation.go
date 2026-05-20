@@ -84,7 +84,6 @@ func (c *FilterWeigherPipelineController) recordCRAllocation(ctx context.Context
 		return
 	}
 
-	// slot_used: allocate into a slot on the selected host.
 	slotsOnTarget := evaluator.SlotsForHost(selectedHost, projectID, flavorGroupName)
 
 	// Idempotency: if this VM UUID is already recorded in any slot, the work is done.

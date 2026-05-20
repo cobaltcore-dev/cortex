@@ -140,19 +140,11 @@ cortex-scheduling-controllers:
       - nova-history-cleanup-task
       - commitments-sync-task  # required for committed resources
     # Feature gates control optional capabilities within running components.
-    # To enable committed resources, all three must be set:
-    #   enabledControllers must include committed-resource-reservations-controller (above)
-    #   enabledTasks must include commitments-sync-task (above)
-    #   featureGates.committedResourceTracking must be true (below)
     featureGates:
       # Enables VM allocation write-back into Reservation slots and no-host-found
       # classification by committed resource coverage. Enable only on deployments
-      # that use committed resources.
+      # that use committed resources. Requires also enabling of CR controllers and tasks
       committedResourceTracking: false
-      # Enables pessimistic blocking: all candidate hosts are blocked at scheduling
-      # time to prevent concurrent placements from violating capacity constraints.
-      # Enable only on deployments that support pessimistic blocking.
-      pessimisticBlocking: false
     # Pipeline used for the empty-state capacity probe (ignores allocations and reservations).
     capacityTotalPipeline: "kvm-report-capacity"
     # Pipeline used for the current-state capacity probe (considers current VM allocations).
