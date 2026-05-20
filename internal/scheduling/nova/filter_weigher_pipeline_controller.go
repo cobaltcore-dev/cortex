@@ -50,7 +50,7 @@ type FilterWeigherPipelineController struct {
 	// Candidate gatherer to get all placement candidates if needed.
 	gatherer CandidateGatherer
 
-	// NoHostFoundCounter counts no-host-found results by CR coverage case (A/B/C/D/payg).
+	// NoHostFoundCounter counts no-host-found results by CR slot outcome (no_cr/cr_exhausted/slot_exhausted/slot_blocked/error).
 	NoHostFoundCounter *prometheus.CounterVec
 	// PlacementCounter counts successful placements by CR slot outcome.
 	PlacementCounter *prometheus.CounterVec

@@ -21,7 +21,7 @@ func NewNoHostFoundCounter() *prometheus.CounterVec {
 	return prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "cortex_nova_no_host_found_total",
 		Help: "Nova no-host-found results classified by committed resource coverage (no_cr/cr_exhausted/slot_exhausted/slot_blocked/error).",
-	}, []string{"case", "flavor_group", "intent"})
+	}, []string{"cr_slot", "flavor_group", "intent"})
 }
 
 // NewPlacementCounter creates the Prometheus counter for successful Nova placements.
@@ -121,7 +121,7 @@ func (c *FilterWeigherPipelineController) logNoHostFound(ctx context.Context, de
 	noHostFoundCase := classifyNoHostFound(activeCRs, evaluator, request.GetHosts(), projectID, flavorGroupName, vmMemBytes)
 
 	log.Info("no-host-found classified",
-		"case", noHostFoundCase,
+		"cr_slot", noHostFoundCase,
 		"instanceUUID", instanceUUID,
 		"projectID", projectID,
 		"flavorGroup", flavorGroupName,
