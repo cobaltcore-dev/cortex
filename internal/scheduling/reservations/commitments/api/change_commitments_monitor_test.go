@@ -92,6 +92,7 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 	monitor.requestDuration.WithLabelValues("200", "false").Observe(1.5)
 	monitor.commitmentChanges.WithLabelValues("accepted", "az-1", "false").Add(5)
 	monitor.commitmentChanges.WithLabelValues("rejected", "az-1", "false").Add(2)
+	monitor.timeouts.WithLabelValues("false").Inc()
 
 	// Gather metrics
 	families, err := registry.Gather()
@@ -171,6 +172,18 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 				}
 				if !labelNames["dry_run"] {
 					t.Error("Missing 'dry_run' label in commitment changes counter")
+				}
+			}
+		}
+
+		if *family.Name == "cortex_committed_resource_change_api_timeouts_total" {
+			for _, metric := range family.Metric {
+				labelNames := make(map[string]bool)
+				for _, label := range metric.Label {
+					labelNames[*label.Name] = true
+				}
+				if !labelNames["dry_run"] {
+					t.Error("Missing 'dry_run' label in timeouts counter")
 				}
 			}
 		}
