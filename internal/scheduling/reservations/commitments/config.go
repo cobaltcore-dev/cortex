@@ -102,6 +102,7 @@ func (c *CommittedResourceControllerConfig) ApplyDefaults() {
 // ResourceTypeConfig holds per-resource flags for a single resource type within a flavor group.
 type ResourceTypeConfig struct {
 	HandlesCommitments bool `json:"handlesCommitments"`
+	HandlesDryRun      bool `json:"handlesDryRun"`
 	HasCapacity        bool `json:"hasCapacity"`
 	HasQuota           bool `json:"hasQuota"`
 }
@@ -109,6 +110,7 @@ type ResourceTypeConfig struct {
 // RAMResourceTypeConfig extends ResourceTypeConfig with RAM-specific unit configuration.
 type RAMResourceTypeConfig struct {
 	HandlesCommitments bool `json:"handlesCommitments"`
+	HandlesDryRun      bool `json:"handlesDryRun"`
 	HasCapacity        bool `json:"hasCapacity"`
 	HasQuota           bool `json:"hasQuota"`
 	// RAMUnitGiB is the size of one declared LIQUID RAM unit in GiB.
