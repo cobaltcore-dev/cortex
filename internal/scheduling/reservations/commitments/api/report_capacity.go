@@ -39,7 +39,7 @@ func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request)
 	}
 
 	ctx := reservations.WithGlobalRequestID(r.Context(), "committed-resource-"+requestID)
-	logger := commitments.LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/report-capacity")
+	logger := commitments.LoggerFromContext(ctx).WithValues("endpoint", "/commitments/v1/report-capacity")
 
 	// Only accept POST method
 	if r.Method != http.MethodPost {

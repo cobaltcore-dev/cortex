@@ -149,7 +149,7 @@ type FlavorGroupResourcesConfig struct {
 // It warns when RAMUnitGiB is 0, which silently defaults to 1 GiB.
 func LogFlavorGroupResourceConfig(log logr.Logger, cfg map[string]FlavorGroupResourcesConfig) {
 	if len(cfg) == 0 {
-		log.Info("WARNING: no flavorGroupResourceConfig set; all flavor groups will use default RAM unit of 1 GiB")
+		log.Info("flavorGroupResourceConfig not set; all flavor groups will use default RAM unit of 1 GiB")
 		return
 	}
 	groups := make([]string, 0, len(cfg))

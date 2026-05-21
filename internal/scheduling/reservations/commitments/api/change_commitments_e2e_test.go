@@ -376,7 +376,7 @@ func TestE2EChangeCommitments(t *testing.T) {
 			Scheduler: e2eRejectScheduler,
 			ReqJSON: buildRequestJSON(newCommitmentRequest("az-a", false, e2eInfoVersion,
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-e2e-rej", "confirmed", 2))),
-			WantResp:   newAPIResponse("no hosts found"),
+			WantResp:   newAPIResponse("insufficient capacity"),
 			WantAbsent: []string{"commitment-uuid-e2e-rej"},
 		},
 		{
@@ -386,7 +386,7 @@ func TestE2EChangeCommitments(t *testing.T) {
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-e2e-batch-a", "confirmed", 2),
 				createCommitment("hw_version_hana_1_ram", "project-B", "uuid-e2e-batch-b", "confirmed", 2),
 			)),
-			WantResp:   newAPIResponse("no hosts found"),
+			WantResp:   newAPIResponse("insufficient capacity"),
 			WantAbsent: []string{"commitment-uuid-e2e-batch-a", "commitment-uuid-e2e-batch-b"},
 		},
 		{
@@ -405,7 +405,7 @@ func TestE2EChangeCommitments(t *testing.T) {
 			Scheduler: e2eRejectScheduler,
 			ReqJSON: buildRequestJSON(newCommitmentRequest("az-a", true, e2eInfoVersion,
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-e2e-dry-rej", "confirmed", 1))),
-			WantResp: newAPIResponse("no hosts found"),
+			WantResp: newAPIResponse("insufficient capacity"),
 			Verify: func(t *testing.T, env *e2eEnv) {
 				t.Helper()
 				env.assertNoDryRunProbes(t)

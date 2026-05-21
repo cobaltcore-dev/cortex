@@ -7,16 +7,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// ReportCapacityAPIMonitor provides metrics for the CR report-capacity API.
 type ReportCapacityAPIMonitor struct {
 	requestCounter   *prometheus.CounterVec
 	requestDuration  *prometheus.HistogramVec
 	reportedCapacity *prometheus.GaugeVec
 }
 
-// NewReportCapacityAPIMonitor creates a new monitor with Prometheus metrics.
-// Metrics are pre-initialized with zero values for common HTTP status codes
-// to ensure they appear in Prometheus before the first request.
 func NewReportCapacityAPIMonitor() ReportCapacityAPIMonitor {
 	m := ReportCapacityAPIMonitor{
 		requestCounter: prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -34,25 +30,22 @@ func NewReportCapacityAPIMonitor() ReportCapacityAPIMonitor {
 		}, []string{"resource", "az"}),
 	}
 
-	// Pre-initialize metrics with zero values for common HTTP status codes.
-	// This ensures metrics exist in Prometheus before the first request,
-	// preventing "metric missing" warnings in alerting rules.
 	for _, statusCode := range []string{"200", "500", "503"} {
 		m.requestCounter.WithLabelValues(statusCode)
 		m.requestDuration.WithLabelValues(statusCode)
 	}
+	// resource/az are dynamic; sentinel ensures the metric family exists for alert validation.
+	m.reportedCapacity.WithLabelValues("", "")
 
 	return m
 }
 
-// Describe implements prometheus.Collector.
 func (m *ReportCapacityAPIMonitor) Describe(ch chan<- *prometheus.Desc) {
 	m.requestCounter.Describe(ch)
 	m.requestDuration.Describe(ch)
 	m.reportedCapacity.Describe(ch)
 }
 
-// Collect implements prometheus.Collector.
 func (m *ReportCapacityAPIMonitor) Collect(ch chan<- prometheus.Metric) {
 	m.requestCounter.Collect(ch)
 	m.requestDuration.Collect(ch)

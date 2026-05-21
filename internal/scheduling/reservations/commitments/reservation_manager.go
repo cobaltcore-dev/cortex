@@ -70,7 +70,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 
 	result := &ApplyResult{}
 
-	log = log.WithName("ReservationManager")
+	log = log.WithName("reservation-manager")
 
 	// Phase 1: List and filter existing reservations for this commitment
 	var allReservations v1alpha1.ReservationList

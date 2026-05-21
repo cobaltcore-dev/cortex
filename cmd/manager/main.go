@@ -391,8 +391,10 @@ func main() {
 	if commitmentsConfig.DatasourceName != "" {
 		commitmentsUsageDB = commitments.NewDBUsageClient(multiclusterClient, commitmentsConfig.DatasourceName)
 	}
-	commitmentsAPI := commitmentsapi.NewAPIWithConfig(multiclusterClient, commitmentsConfig.API, commitmentsUsageDB)
-	commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
+	if slices.Contains(mainConfig.EnabledControllers, "committed-resource-reservations-controller") {
+		commitmentsAPI := commitmentsapi.NewAPIWithConfig(multiclusterClient, commitmentsConfig.API, commitmentsUsageDB)
+		commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
+	}
 
 	if slices.Contains(mainConfig.EnabledControllers, "nova-pipeline-controllers") {
 		// Filter-weigher pipeline controller setup.
@@ -561,7 +563,6 @@ func main() {
 		setupLog.Info("enabling controller", "controller", "committed-resource-reservations-controller")
 		monitor := reservations.NewMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&monitor)
-		commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
 
 		if err := (&commitments.CommitmentReservationController{
 			Client: multiclusterClient,
@@ -582,6 +583,9 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "CommittedResource")
 			os.Exit(1)
 		}
+
+		crControllerMonitor := commitments.NewCRControllerMonitor(multiclusterClient)
+		metrics.Registry.MustRegister(&crControllerMonitor)
 
 		usageReconcilerMonitor := commitments.NewUsageReconcilerMonitor()
 		metrics.Registry.MustRegister(&usageReconcilerMonitor)
@@ -850,6 +854,7 @@ func main() {
 		must.Succeed(metrics.Registry.Register(syncerMonitor))
 		syncer := commitments.NewSyncer(multiclusterClient, syncerMonitor)
 		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
+		syncerConfig.FlavorGroupResourceConfig = commitmentsConfig.API.FlavorGroupResourceConfig
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: syncerConfig.SyncInterval.Duration,

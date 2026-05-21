@@ -45,7 +45,7 @@ func NewCommitmentsClient() CommitmentsClient {
 }
 
 func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf SyncerConfig) error {
-	logger := LoggerFromContext(ctx).WithValues("component", "client")
+	logger := LoggerFromContext(ctx)
 
 	var authenticatedHTTP = http.DefaultClient
 	if conf.SSOSecretRef != nil {
@@ -104,7 +104,7 @@ func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf
 }
 
 func (c *commitmentsClient) ListProjects(ctx context.Context) ([]Project, error) {
-	logger := LoggerFromContext(ctx).WithValues("component", "client")
+	logger := LoggerFromContext(ctx)
 
 	logger.V(1).Info("fetching projects from keystone")
 	allPages, err := projects.List(c.keystone, nil).AllPages(ctx)
@@ -123,7 +123,7 @@ func (c *commitmentsClient) ListProjects(ctx context.Context) ([]Project, error)
 
 // ListCommitmentsByID fetches commitments for all projects in parallel.
 func (c *commitmentsClient) ListCommitmentsByID(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
-	logger := LoggerFromContext(ctx).WithValues("component", "client")
+	logger := LoggerFromContext(ctx)
 
 	logger.V(1).Info("fetching commitments from limes", "projects", len(projects))
 	commitmentsMutex := gosync.Mutex{}

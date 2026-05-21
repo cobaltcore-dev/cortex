@@ -444,6 +444,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/committed-resource-api-errors
     annotations:
       summary: "Committed Resource info API is unavailable"
       description: >
@@ -463,6 +464,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/committed-resource-api-errors
     annotations:
       summary: "Committed Resource change API HTTP 5xx errors"
       description: >
@@ -474,10 +476,10 @@ groups:
   - alert: CortexNovaCommittedResourceRejectionRateTooHigh
     expr: |
       (
-        sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected"}[15m]))
-        / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[15m]))
+        sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected", dry_run="false"}[15m]))
+        / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", dry_run="false"}[15m]))
       ) > 0.3
-      and on() sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics"}[15m])) > 0
+      and on() sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", dry_run="false"}[15m])) > 0
     for: 15m
     labels:
       context: committed-resource-api
@@ -485,16 +487,16 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/committed-resource-performance
     annotations:
       summary: "Committed Resource rejection rate too high ({{ $value | humanizePercentage }})"
       description: >
         More than 30% of commitment changes have been rejected over the last 15 minutes.
         This may indicate insufficient capacity to fulfill new commitments. Rejected
-        commitments are rolled back; Limes will see them as failed and may report
-        the failure to users.
+        commitments are rolled back.
 
   - alert: CortexNovaCommittedResourceTimeoutsTooHigh
-    expr: increase(cortex_committed_resource_change_api_timeouts_total{service="cortex-nova-metrics"}[10m]) > 0
+    expr: increase(cortex_committed_resource_change_api_timeouts_total{service="cortex-nova-metrics", dry_run="false"}[10m]) > 0
     for: 1m
     labels:
       context: committed-resource-api
@@ -502,17 +504,18 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/committed-resource-performance
     annotations:
       summary: "Committed Resource change API timeout detected"
       description: >
-        A commitment change request timed out after the 15-second deadline.
+        A commitment change request timed out after the configured deadline.
         Timeouts indicate the scheduling pipeline could not place reservations in time.
         Affected changes are rolled back. Investigate scheduler performance or reservation backlog.
 
   - alert: CortexNovaCommittedResourceChangeLatencyTooHigh
     expr: |
-      histogram_quantile(0.95, sum(rate(cortex_committed_resource_change_api_request_duration_seconds_bucket{service="cortex-nova-metrics"}[5m])) by (le)) >= 10
-      and on() sum(rate(cortex_committed_resource_change_api_requests_total{service="cortex-nova-metrics"}[5m])) > 0
+      histogram_quantile(0.95, sum(rate(cortex_committed_resource_change_api_request_duration_seconds_bucket{service="cortex-nova-metrics", dry_run="false"}[5m])) by (le)) >= 10
+      and on() sum(rate(cortex_committed_resource_change_api_requests_total{service="cortex-nova-metrics", dry_run="false"}[5m])) > 0
     for: 5m
     labels:
       context: committed-resource-api
@@ -520,11 +523,12 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/committed-resource-performance
     annotations:
       summary: "Committed Resource change API p95 latency >= 10s"
       description: >
         The committed resource change API p95 latency has reached or exceeded 10 seconds,
-        approaching the 15-second watch timeout. Requests close to the timeout are at risk
+        approaching the configured watch timeout. Requests close to the timeout are at risk
         of being rolled back. Investigate scheduler performance or reservation backlog.
 
   # Committed Resource Capacity API
@@ -538,6 +542,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/committed-resource-capacity
     annotations:
       summary: "Committed Resource capacity API HTTP 5xx errors"
       description: >
@@ -556,6 +561,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/committed-resource-capacity
     annotations:
       summary: "Committed Resource capacity for {{ $labels.resource }} in {{ $labels.az }} dropped to zero"
       description: >
@@ -575,6 +581,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/committed-resource-api-errors
     annotations:
       summary: "Committed Resource usage API HTTP 5xx errors"
       description: >
@@ -593,6 +600,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/committed-resource-api-errors
     annotations:
       summary: "Committed Resource quota API HTTP 5xx errors"
       description: >
