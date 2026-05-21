@@ -664,7 +664,7 @@ func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req l
 				fmt.Fprintf(&b, "\n- %s: %s", strings.TrimPrefix(w.name, "commitment-"), reason)
 			}
 		}
-		logger.Info("dry run: capacity not available", "rejected", len(rejected), "total", len(probeWatches))
+		logger.Info("dry run: capacity not available", "accepted", len(probeWatches)-len(rejected), "rejected", len(rejected), "total", len(probeWatches))
 		resp.RejectionReason = b.String()
 	case len(watchErrs) > 0:
 		msgs := make([]string, len(watchErrs))

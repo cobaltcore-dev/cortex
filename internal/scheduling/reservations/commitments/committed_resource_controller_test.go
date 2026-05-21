@@ -6,6 +6,7 @@ package commitments
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 
@@ -1024,14 +1025,15 @@ func TestCommittedResourceController_BadSpec(t *testing.T) {
 // distinguishes a stale Ready=False (previous generation) from a current failure.
 func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 	tests := []struct {
-		name           string
-		obsGen         int64
-		condStatus     metav1.ConditionStatus // "" = no condition set
-		condMessage    string
-		wantAllReady   bool
-		wantAnyFailed  bool
-		wantReadySlots int
-		wantReason     string
+		name            string
+		obsGen          int64
+		condStatus      metav1.ConditionStatus // "" = no condition set
+		condMessage     string
+		wantAllReady    bool
+		wantAnyFailed   bool
+		wantReadySlots  int
+		wantReason      string
+		wantFailedSlots []string
 	}{
 		{
 			name:           "Ready=False at stale generation: treated as pending",
@@ -1043,14 +1045,15 @@ func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 			wantReadySlots: 0,
 		},
 		{
-			name:           "Ready=False at current generation: is a current failure",
-			obsGen:         2,
-			condStatus:     metav1.ConditionFalse,
-			condMessage:    "no hosts available",
-			wantAllReady:   false,
-			wantAnyFailed:  true,
-			wantReadySlots: 0,
-			wantReason:     "no hosts available",
+			name:            "Ready=False at current generation: is a current failure",
+			obsGen:          2,
+			condStatus:      metav1.ConditionFalse,
+			condMessage:     "no hosts available",
+			wantAllReady:    false,
+			wantAnyFailed:   true,
+			wantReadySlots:  0,
+			wantReason:      "insufficient capacity: 0/1 reservation slots could be placed",
+			wantFailedSlots: []string{"test-cr-0"},
 		},
 		{
 			name:           "Ready=True at current generation: allReady",
@@ -1109,7 +1112,7 @@ func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 			}
 
 			controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme}
-			allReady, anyFailed, readySlots, reason, err := controller.checkChildReservationStatus(context.Background(), cr, 1)
+			allReady, anyFailed, readySlots, reason, failedSlots, err := controller.checkChildReservationStatus(context.Background(), cr, 1)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -1124,6 +1127,9 @@ func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 			}
 			if reason != tt.wantReason {
 				t.Errorf("reason: want %q, got %q", tt.wantReason, reason)
+			}
+			if !slices.Equal(failedSlots, tt.wantFailedSlots) {
+				t.Errorf("failedSlots: want %v, got %v", tt.wantFailedSlots, failedSlots)
 			}
 		})
 	}

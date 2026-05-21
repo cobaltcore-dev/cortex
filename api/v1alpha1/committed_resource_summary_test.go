@@ -30,6 +30,12 @@ func makeSpec(amount, fg, az string, endTime *time.Time) CommittedResourceSpec {
 	return s
 }
 
+func makeStatusWithMessage(reason, message string, accepted *CommittedResourceSpec) CommittedResourceStatus {
+	status := makeStatus(reason, accepted, nil)
+	status.Conditions[0].Message = message
+	return status
+}
+
 func makeStatus(reason string, accepted *CommittedResourceSpec, instances []string) CommittedResourceStatus {
 	status := CommittedResourceStatus{
 		AssignedInstances: instances,
@@ -115,10 +121,34 @@ func TestComputeStatusSummary(t *testing.T) {
 			want:   "Reserving (amount 2Gi→5Gi) · exp in 1h 3m",
 		},
 		{
-			name:   "Rejected",
+			name:   "Rejected with message",
+			spec:   makeSpec("2Gi", "fg1", "az1", in(4*time.Hour)),
+			status: makeStatusWithMessage(CommittedResourceReasonRejected, "no hosts found for reservation (4/4 slots failed)", ptr(makeSpec("2Gi", "fg1", "az1", in(4*time.Hour)))),
+			want:   "Rejected · no hosts found for reservation (4/4 slots failed)",
+		},
+		{
+			name:   "Rejected without message (unchanged)",
 			spec:   makeSpec("2Gi", "fg1", "az1", in(4*time.Hour)),
 			status: makeStatus(CommittedResourceReasonRejected, ptr(makeSpec("2Gi", "fg1", "az1", in(4*time.Hour))), nil),
 			want:   "Rejected",
+		},
+		{
+			name:   "Reserving with failure message shows it",
+			spec:   makeSpec("2Gi", "fg1", "az1", in(time.Hour)),
+			status: makeStatusWithMessage(CommittedResourceReasonReserving, "no hosts found for reservation (2/4 slots failed)", ptr(makeSpec("2Gi", "fg1", "az1", in(time.Hour)))),
+			want:   "Reserving · no hosts found for reservation (2/4 slots failed) · exp in 1h 0m",
+		},
+		{
+			name:   "Reserving with waiting message skips it",
+			spec:   makeSpec("2Gi", "fg1", "az1", in(time.Hour)),
+			status: makeStatusWithMessage(CommittedResourceReasonReserving, "waiting for reservation placement", ptr(makeSpec("2Gi", "fg1", "az1", in(time.Hour)))),
+			want:   "Reserving · exp in 1h 0m",
+		},
+		{
+			name:   "Rejected with long message truncated",
+			spec:   makeSpec("2Gi", "fg1", "az1", in(4*time.Hour)),
+			status: makeStatusWithMessage(CommittedResourceReasonRejected, "no hosts found for reservation because all hypervisors in this flavor group and availability zone are fully committed and no further capacity exists", ptr(makeSpec("2Gi", "fg1", "az1", in(4*time.Hour)))),
+			want:   "Rejected · no hosts found for reservation because all hypervisors in this flavor group a...",
 		},
 		{
 			name:   "Planned with expiry in days",
