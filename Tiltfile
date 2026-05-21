@@ -151,8 +151,8 @@ for (bundle_chart_path, bundle_chart_name) in bundle_charts:
         print('--- Syncing dependency ' + dep_chart_name + ' into bundle ' + bundle_chart_name)
         watch_file(dep_chart_path)
         local('sh helm/sync.sh ' + dep_chart_path)
-        local('helm package ' + dep_chart_path)
-        gen_tgz = str(local('ls ' + dep_chart_name + '-*.tgz')).strip()
+        pkg_out = str(local('helm package ' + dep_chart_path)).strip()
+        gen_tgz = pkg_out.split('/')[-1]
         # If the file isn't there yet, copy it over.
         if not os.path.exists(bundle_chart_path + '/charts/' + gen_tgz):
             print('Adding ' + dep_chart_name + ' to ' + bundle_chart_name)
