@@ -179,11 +179,16 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 		if *family.Name == "cortex_committed_resource_change_api_timeouts_total" {
 			for _, metric := range family.Metric {
 				labelNames := make(map[string]bool)
+				labelValues := make(map[string]string)
 				for _, label := range metric.Label {
 					labelNames[*label.Name] = true
+					labelValues[*label.Name] = *label.Value
 				}
 				if !labelNames["dry_run"] {
 					t.Error("Missing 'dry_run' label in timeouts counter")
+				}
+				if v := labelValues["dry_run"]; v != "true" && v != "false" {
+					t.Errorf("Unexpected 'dry_run' label value %q in timeouts counter; want 'true' or 'false'", v)
 				}
 			}
 		}

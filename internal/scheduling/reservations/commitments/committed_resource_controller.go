@@ -332,10 +332,6 @@ func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Co
 		return false, false, 0, "", "", nil, nil
 	}
 
-	if len(list.Items) == 0 {
-		return true, false, 0, "", "", nil, nil
-	}
-
 	// Single pass: count ready slots and detect failures for the current generation.
 	// A Ready=False condition from a previous generation means the reservation controller
 	// hasn't reprocessed this slot yet; treat it as still-pending, not as a current failure.

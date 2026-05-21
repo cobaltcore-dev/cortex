@@ -32,6 +32,9 @@ func makeSpec(amount, fg, az string, endTime *time.Time) CommittedResourceSpec {
 
 func makeStatusWithMessage(reason, message string, accepted *CommittedResourceSpec) CommittedResourceStatus {
 	status := makeStatus(reason, accepted, nil)
+	if len(status.Conditions) == 0 {
+		panic("makeStatus returned no conditions")
+	}
 	status.Conditions[0].Message = message
 	return status
 }

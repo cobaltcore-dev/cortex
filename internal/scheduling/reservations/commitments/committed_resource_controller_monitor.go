@@ -16,12 +16,12 @@ import (
 
 var crControllerMonitorLog = ctrl.Log.WithName("committed-resource-controller-monitor").WithValues("module", "committed-resources")
 
-// CRControllerMonitor reports the number of CommittedResource CRDs that the controller
-// is currently unable to fully satisfy with reservation slots.
+// CRControllerMonitor reports the number of CommittedResource CRDs that are
+// actively awaiting reservation placement (Reason=Reserving, AllowRejection=false).
 //
-// Only CRs on the AllowRejection=false retry path are counted — those created by the
-// syncer for existing Limes commitments. API-originated rejections (AllowRejection=true)
-// and dry-run probes never enter this state.
+// This includes both CRs on their first placement attempt and those being retried
+// after a failure. API-originated dry-run probes (AllowRejection=true) are excluded.
+// The metric is absent for a given label set when no CRs match — absence means zero.
 type CRControllerMonitor struct {
 	client      client.Client
 	unfulfilled *prometheus.Desc
