@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -973,24 +974,27 @@ func TestNewQuotaEnforcementMetrics(t *testing.T) {
 }
 
 func TestQuotaEnforcementMetrics_RecordDecision_NilWarns(t *testing.T) {
-	// Capture slog output to confirm the nil-receiver path warns. The sync.Once
-	// makes the warning fire at most once per process; if some earlier test
-	// already triggered it, we still must not panic. So this test focuses on
-	// "doesn't panic" + "best-effort warn presence".
+	// Capture slog output to confirm the nil-receiver path warns exactly once,
+	// even when called many times. We freshly arm the package-level sync.Once
+	// so this test deterministically covers the warn path regardless of test
+	// ordering.
+	origOnce := recordDecisionNilOnce
+	recordDecisionNilOnce = &sync.Once{}
+	t.Cleanup(func() { recordDecisionNilOnce = origOnce })
+
 	var buf bytes.Buffer
 	origDefault := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(origDefault) })
 
 	var nilMetrics *QuotaEnforcementMetrics
-	// Must not panic.
+	// Must not panic, and must warn exactly once across multiple calls.
 	nilMetrics.RecordDecision("enforce", "reject", "ram", "az-1", "hana_v2")
 	nilMetrics.RecordDecision("enforce", "reject", "ram", "az-1", "hana_v2")
 
-	// If the once already fired earlier in the process, buf is empty; that's
-	// acceptable (warning is documented as at-most-once). When it fires here,
-	// verify the message looks right.
-	if out := buf.String(); out != "" && !strings.Contains(out, "QuotaEnforcementMetrics is nil") {
-		t.Errorf("unexpected warn output: %q", out)
+	const msg = "QuotaEnforcementMetrics is nil"
+	if got := strings.Count(buf.String(), msg); got != 1 {
+		t.Errorf("expected warn message %q to appear exactly once, got %d; output: %q",
+			msg, got, buf.String())
 	}
 }

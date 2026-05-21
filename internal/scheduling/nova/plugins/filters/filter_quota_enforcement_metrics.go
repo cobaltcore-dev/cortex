@@ -51,8 +51,9 @@ func NewQuotaEnforcementMetrics(reg prometheus.Registerer) *QuotaEnforcementMetr
 
 // recordDecisionNilOnce ensures the "metrics not initialized" warning is
 // emitted at most once per process to keep logs clean while still surfacing
-// misconfigurations.
-var recordDecisionNilOnce sync.Once
+// misconfigurations. A pointer is used so tests can swap in a freshly armed
+// once without copying a sync.Once value (which is forbidden after first use).
+var recordDecisionNilOnce = &sync.Once{}
 
 // RecordDecision is a small helper that nil-guards the singleton and increments
 // the decisions counter. Filter Run() uses it directly. If the receiver is nil
@@ -61,7 +62,7 @@ var recordDecisionNilOnce sync.Once
 // so the misconfiguration is observable both in logs and via
 // cortex_log_messages_total{level="warn"}.
 func (m *QuotaEnforcementMetrics) RecordDecision(mode, decision, resource, az, flavorGroup string) {
-	if m == nil {
+	if m == nil || m.Decisions == nil {
 		recordDecisionNilOnce.Do(func() {
 			slog.Warn("QuotaEnforcementMetrics is nil; decision metric not recorded "+
 				"(is QuotaEnforcementMetricsSingleton initialized in cmd/manager?)",
