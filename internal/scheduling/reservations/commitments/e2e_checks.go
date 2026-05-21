@@ -201,7 +201,7 @@ func e2eRoundTripResource(
 		// Only capacity rejections (no hosts available) are expected in production clusters.
 		// Any other reason (flavor group ineligible, config error, timeout) indicates a
 		// regression and should surface as a failure.
-		if !strings.Contains(rejectionReason, "no hosts found") && !strings.Contains(rejectionReason, "insufficient CPU cores") {
+		if !strings.Contains(rejectionReason, "insufficient capacity") && !strings.Contains(rejectionReason, "insufficient CPU cores") {
 			panic(fmt.Sprintf("round-trip check: commitment rejected with unexpected reason for resource %s: %s", resourceName, rejectionReason))
 		}
 		slog.Info("round-trip check: commitment rejected — no capacity, continuing",
@@ -533,7 +533,7 @@ func e2eDryRunResource(
 	switch {
 	case rejectionReason == "":
 		slog.Info("dry-run check: accepted", "resource", resourceName, "az", az)
-	case strings.Contains(rejectionReason, "no hosts found") || strings.Contains(rejectionReason, "insufficient CPU cores"):
+	case strings.Contains(rejectionReason, "insufficient capacity") || strings.Contains(rejectionReason, "insufficient CPU cores"):
 		slog.Info("dry-run check: capacity rejection (expected in constrained clusters)",
 			"resource", resourceName, "az", az, "reason", rejectionReason)
 	default:
