@@ -444,6 +444,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/committed-resource-api-errors
     annotations:
       summary: "Committed Resource info API is unavailable"
       description: >
@@ -463,6 +464,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/committed-resource-api-errors
     annotations:
       summary: "Committed Resource change API HTTP 5xx errors"
       description: >
@@ -485,6 +487,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/committed-resource-performance
     annotations:
       summary: "Committed Resource rejection rate too high ({{ $value | humanizePercentage }})"
       description: >
@@ -501,6 +504,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/committed-resource-performance
     annotations:
       summary: "Committed Resource change API timeout detected"
       description: >
@@ -519,6 +523,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/committed-resource-performance
     annotations:
       summary: "Committed Resource change API p95 latency >= 10s"
       description: >
@@ -537,6 +542,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/committed-resource-capacity
     annotations:
       summary: "Committed Resource capacity API HTTP 5xx errors"
       description: >
@@ -555,6 +561,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/committed-resource-capacity
     annotations:
       summary: "Committed Resource capacity for {{ $labels.resource }} in {{ $labels.az }} dropped to zero"
       description: >
@@ -574,6 +581,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/committed-resource-api-errors
     annotations:
       summary: "Committed Resource usage API HTTP 5xx errors"
       description: >
@@ -592,6 +600,7 @@ groups:
       service: cortex
       severity: warning
       support_group: workload-management
+      playbook: docs/support/playbook/cortex/alerts/committed-resource-api-errors
     annotations:
       summary: "Committed Resource quota API HTTP 5xx errors"
       description: >

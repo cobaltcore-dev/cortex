@@ -583,6 +583,9 @@ func main() {
 			os.Exit(1)
 		}
 
+		crControllerMonitor := commitments.NewCRControllerMonitor(multiclusterClient)
+		metrics.Registry.MustRegister(&crControllerMonitor)
+
 		usageReconcilerMonitor := commitments.NewUsageReconcilerMonitor()
 		metrics.Registry.MustRegister(&usageReconcilerMonitor)
 		if commitmentsUsageDB == nil {
