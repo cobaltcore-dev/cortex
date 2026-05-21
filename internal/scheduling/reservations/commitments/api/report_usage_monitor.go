@@ -25,7 +25,7 @@ func NewReportUsageAPIMonitor() ReportUsageAPIMonitor {
 		}, []string{"status_code"}),
 	}
 
-	for _, statusCode := range []string{"200", "400", "404", "500", "503"} {
+	for _, statusCode := range []string{"200", "400", "405", "500", "503"} {
 		m.requestCounter.WithLabelValues(statusCode)
 		m.requestDuration.WithLabelValues(statusCode)
 	}

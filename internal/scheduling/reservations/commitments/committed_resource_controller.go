@@ -225,7 +225,12 @@ func (r *CommittedResourceController) reconcileCoresHeadroom(ctx context.Context
 	}
 	if fgCap == nil {
 		// Capacity controller hasn't run yet for this group/AZ — retry.
+		// For API-originated CRs (AllowRejection=true) the caller is polling synchronously, so
+		// use a short delay to stay within WatchTimeout. For the syncer path use exponential backoff.
 		delay := r.retryDelay(cr)
+		if cr.Spec.AllowRejection {
+			delay = 1 * time.Second
+		}
 		logger.Info("FlavorGroupCapacity CRD not found, will retry", "requeueAfter", delay)
 		return ctrl.Result{RequeueAfter: delay}, r.setNotReadyRetry(ctx, cr, "waiting for capacity data")
 	}
@@ -233,7 +238,11 @@ func (r *CommittedResourceController) reconcileCoresHeadroom(ctx context.Context
 	totalCoresQty, ok := fgCap.Status.TotalCapacity[string(v1alpha1.CommittedResourceTypeCores)]
 	if !ok {
 		// Key absent means the capacity controller hasn't successfully probed yet.
+		// Same short/long delay split as above.
 		delay := r.retryDelay(cr)
+		if cr.Spec.AllowRejection {
+			delay = 1 * time.Second
+		}
 		logger.Info("CPU capacity not yet populated in FlavorGroupCapacity CRD, will retry", "requeueAfter", delay)
 		return ctrl.Result{RequeueAfter: delay}, r.setNotReadyRetry(ctx, cr, "waiting for CPU capacity data")
 	}
