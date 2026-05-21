@@ -664,6 +664,7 @@ func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req l
 				fmt.Fprintf(&b, "\n- %s: %s", strings.TrimPrefix(w.name, "commitment-"), reason)
 			}
 		}
+		logger.Info("dry run: capacity not available", "rejected", len(rejected), "total", len(probeWatches))
 		resp.RejectionReason = b.String()
 	case len(watchErrs) > 0:
 		msgs := make([]string, len(watchErrs))
@@ -671,6 +672,7 @@ func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req l
 			msgs[i] = e.Error()
 		}
 		api.monitor.timeouts.WithLabelValues("true").Inc()
+		logger.Info("dry run: timed out waiting for controller outcome", "probes", len(probeWatches), "errors", strings.Join(msgs, "; "))
 		resp.RejectionReason = "dry run: timeout: " + strings.Join(msgs, "; ")
 	default:
 		logger.Info("dry run: capacity available", "probes", len(probeWatches))

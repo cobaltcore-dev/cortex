@@ -113,20 +113,20 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 		logger.Error(applyErr, "pending commitment placement failed, will retry", "requeueAfter", delay)
 		return ctrl.Result{RequeueAfter: delay}, r.setNotReadyRetry(ctx, cr, applyErr.Error())
 	}
-	allReady, anyFailed, failReason, err := r.checkChildReservationStatus(ctx, cr, result.TotalSlots)
+	allReady, anyFailed, readySlots, failReason, err := r.checkChildReservationStatus(ctx, cr, result.TotalSlots)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	if anyFailed {
 		if cr.Spec.AllowRejection {
-			logger.Info("pending commitment rejected: reservation placement failed", "reason", failReason)
+			logger.Info("pending commitment rejected: reservation placement failed", "reason", failReason, "slotsReady", readySlots, "slotsTotal", result.TotalSlots)
 			if rollbackErr := r.deleteChildReservations(ctx, cr); rollbackErr != nil {
 				return ctrl.Result{}, rollbackErr
 			}
 			return ctrl.Result{}, r.setNotReady(ctx, cr, v1alpha1.CommittedResourceReasonRejected, failReason)
 		}
 		delay := r.retryDelay(cr)
-		logger.Info("pending commitment placement failed, will retry", "reason", failReason, "requeueAfter", delay)
+		logger.Info("pending commitment placement failed, will retry", "reason", failReason, "slotsReady", readySlots, "slotsTotal", result.TotalSlots, "requeueAfter", delay)
 		return ctrl.Result{RequeueAfter: delay}, r.setNotReadyRetry(ctx, cr, failReason)
 	}
 	if !allReady {
@@ -174,20 +174,20 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		logger.Error(applyErr, "committed placement incomplete, will retry", "requeueAfter", delay)
 		return ctrl.Result{RequeueAfter: delay}, r.setNotReadyRetry(ctx, cr, applyErr.Error())
 	}
-	allReady, anyFailed, failReason, err := r.checkChildReservationStatus(ctx, cr, result.TotalSlots)
+	allReady, anyFailed, readySlots, failReason, err := r.checkChildReservationStatus(ctx, cr, result.TotalSlots)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	if anyFailed {
 		if cr.Spec.AllowRejection {
-			logger.Info("committed placement failed, rolling back to accepted spec", "reason", failReason)
+			logger.Info("committed placement failed, rolling back to accepted spec", "reason", failReason, "slotsReady", readySlots, "slotsTotal", result.TotalSlots)
 			if rollbackErr := r.rollbackToAccepted(ctx, logger, cr); rollbackErr != nil {
 				return ctrl.Result{}, rollbackErr
 			}
 			return ctrl.Result{}, r.setNotReady(ctx, cr, v1alpha1.CommittedResourceReasonRejected, failReason)
 		}
 		delay := r.retryDelay(cr)
-		logger.Info("committed placement failed, will retry", "reason", failReason, "requeueAfter", delay)
+		logger.Info("committed placement failed, will retry", "reason", failReason, "slotsReady", readySlots, "slotsTotal", result.TotalSlots, "requeueAfter", delay)
 		return ctrl.Result{RequeueAfter: delay}, r.setNotReadyRetry(ctx, cr, failReason)
 	}
 	if !allReady {
@@ -316,50 +316,55 @@ func (r *CommittedResourceController) applyReservationState(ctx context.Context,
 // Returns allReady=true when every child has Ready=True.
 // Returns anyFailed=true (and the first failure message) when any child has Ready=False.
 // Returns allReady=false, anyFailed=false when some children have no condition yet (placement pending).
-func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Context, cr *v1alpha1.CommittedResource, expectedSlots int) (allReady, anyFailed bool, failReason string, err error) {
+func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Context, cr *v1alpha1.CommittedResource, expectedSlots int) (allReady, anyFailed bool, readySlots int, failReason string, err error) {
 	var list v1alpha1.ReservationList
 	if err := r.List(ctx, &list,
 		client.MatchingLabels{v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource},
 		client.MatchingFields{idxReservationByCommitmentUUID: cr.Spec.CommitmentUUID},
 	); err != nil {
-		return false, false, "", fmt.Errorf("failed to list reservations: %w", err)
+		return false, false, 0, "", fmt.Errorf("failed to list reservations: %w", err)
 	}
 
 	// Cache hasn't caught up yet; Reservation watch will re-enqueue.
 	if len(list.Items) < expectedSlots {
-		return false, false, "", nil
+		return false, false, 0, "", nil
 	}
 
 	if len(list.Items) == 0 {
-		return true, false, "", nil
+		return true, false, 0, "", nil
 	}
 
-	// First pass: failures take priority over pending — but only for the current generation.
+	// Single pass: count ready slots and detect failures for the current generation.
 	// A Ready=False condition from a previous generation means the reservation controller
 	// hasn't reprocessed this slot yet; treat it as still-pending, not as a current failure.
+	// Failures take priority over pending: if anyFailed is true we return that even if
+	// other slots are still pending.
+	allReady = true
 	for _, res := range list.Items {
 		if res.Status.CommittedResourceReservation == nil ||
 			res.Status.CommittedResourceReservation.ObservedParentGeneration != cr.Generation {
+			allReady = false
 			continue
 		}
 		cond := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ReservationConditionReady)
-		if cond != nil && cond.Status == metav1.ConditionFalse {
-			return false, true, cond.Message, nil
+		if cond == nil || cond.Status == metav1.ConditionUnknown {
+			allReady = false
+			continue
+		}
+		if cond.Status == metav1.ConditionFalse {
+			if failReason == "" {
+				failReason = cond.Message
+			}
+			anyFailed = true
+			allReady = false
+		} else {
+			readySlots++
 		}
 	}
-	// Second pass: check generation and readiness for all slots.
-	for _, res := range list.Items {
-		// ObservedParentGeneration must match cr.Generation before we trust the Ready condition.
-		if res.Status.CommittedResourceReservation == nil ||
-			res.Status.CommittedResourceReservation.ObservedParentGeneration != cr.Generation {
-			return false, false, "", nil
-		}
-		cond := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ReservationConditionReady)
-		if cond == nil || cond.Status != metav1.ConditionTrue {
-			return false, false, "", nil
-		}
+	if anyFailed {
+		return false, true, readySlots, failReason, nil
 	}
-	return true, false, "", nil
+	return allReady, false, readySlots, "", nil
 }
 
 func (r *CommittedResourceController) setAccepted(ctx context.Context, cr *v1alpha1.CommittedResource) error {
