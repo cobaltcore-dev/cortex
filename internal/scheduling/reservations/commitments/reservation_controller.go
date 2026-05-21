@@ -476,6 +476,19 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		res.Status.CommittedResourceReservation.Allocations = newStatusAllocations
 	}
 
+	// Proactively remove this VM UUID from all other candidate reservations that still
+	// carry it in their Spec.Allocations. Only do this for VMs that are newly confirmed
+	// in this reconcile cycle (present in newStatusAllocations but absent in the snapshot
+	// taken before any patch) to avoid redundant work on subsequent reconciles.
+	for vmUUID := range newStatusAllocations {
+		if _, wasAlreadyConfirmed := existingStatusAllocations[vmUUID]; wasAlreadyConfirmed {
+			continue
+		}
+		if err := r.cleanupCandidateReservations(ctx, res.Name, vmUUID); err != nil {
+			return nil, fmt.Errorf("failed to cleanup candidate reservations for vm %s: %w", vmUUID, err)
+		}
+	}
+
 	// Patch Status
 	patch := client.MergeFrom(old)
 	if err := r.Status().Patch(ctx, res, patch); err != nil {
@@ -490,19 +503,6 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		"statusAllocations", len(newStatusAllocations),
 		"removedAllocations", len(allocationsToRemove),
 		"hasAllocationsInGracePeriod", result.HasAllocationsInGracePeriod)
-
-	// Proactively remove this VM UUID from all other candidate reservations that still
-	// carry it in their Spec.Allocations. Only do this for VMs that are newly confirmed
-	// in this reconcile cycle (present in newStatusAllocations but absent in the snapshot
-	// taken before the patch) to avoid redundant work on subsequent reconciles.
-	for vmUUID := range newStatusAllocations {
-		if _, wasAlreadyConfirmed := existingStatusAllocations[vmUUID]; wasAlreadyConfirmed {
-			continue
-		}
-		if err := r.cleanupCandidateReservations(ctx, res.Name, vmUUID); err != nil {
-			return nil, fmt.Errorf("failed to cleanup candidate reservations for vm %s: %w", vmUUID, err)
-		}
-	}
 
 	return result, nil
 }
