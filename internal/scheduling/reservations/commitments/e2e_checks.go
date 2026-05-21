@@ -404,7 +404,7 @@ func e2eBatchFlavorGroupResource(
 		"project", projectID, "az", az)
 
 	if reason := e2eSendChangeCommitments(ctx, baseURL, req2, requestTimeout); reason != "" {
-		if !strings.Contains(reason, "no hosts found") && !strings.Contains(reason, "insufficient CPU cores") {
+		if !strings.Contains(reason, "insufficient capacity") && !strings.Contains(reason, "insufficient CPU cores") {
 			panic(fmt.Sprintf("batch check: unexpected rejection for batch of %s: %s", resourceName, reason))
 		}
 		slog.Info("batch check: batch rejected — no capacity for full amount, cleanup will remove pending",
