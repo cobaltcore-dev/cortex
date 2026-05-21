@@ -38,7 +38,8 @@ type SyncerConfig struct {
 	// SyncInterval defines how often the syncer reconciles Limes commitments to Reservation CRDs.
 	SyncInterval metav1.Duration `json:"committedResourceSyncInterval"`
 	// FlavorGroupResourceConfig maps flavor group names to resource configs; "*" acts as catch-all.
-	FlavorGroupResourceConfig map[string]FlavorGroupResourcesConfig `json:"flavorGroupResourceConfig,omitempty"`
+	// Not read from JSON — populated by the caller from the shared APIConfig.
+	FlavorGroupResourceConfig map[string]FlavorGroupResourcesConfig
 }
 
 // ResourceConfigForGroup returns the resource config for the given flavor group name.
@@ -70,7 +71,6 @@ func NewSyncer(k8sClient client.Client, monitor *SyncerMonitor) *Syncer {
 func (s *Syncer) Init(ctx context.Context, config SyncerConfig) error {
 	s.syncInterval = config.SyncInterval.Duration
 	s.resourceConfig = config
-	LogFlavorGroupResourceConfig(baseLog, config.FlavorGroupResourceConfig)
 	if err := s.CommitmentsClient.Init(ctx, s.Client, config); err != nil {
 		return err
 	}

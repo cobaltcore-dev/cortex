@@ -853,6 +853,7 @@ func main() {
 		must.Succeed(metrics.Registry.Register(syncerMonitor))
 		syncer := commitments.NewSyncer(multiclusterClient, syncerMonitor)
 		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
+		syncerConfig.FlavorGroupResourceConfig = commitmentsConfig.API.FlavorGroupResourceConfig
 		if err := (&task.Runner{
 			Client:   multiclusterClient,
 			Interval: syncerConfig.SyncInterval.Duration,
