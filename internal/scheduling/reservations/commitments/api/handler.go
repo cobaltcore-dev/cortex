@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var apiLog = ctrl.Log.WithName("committed-resource")
+var apiLog = ctrl.Log.WithName("committed-resource-api").WithValues("module", "committed-resources")
 
 // HTTPAPI implements Limes LIQUID commitment validation endpoints.
 type HTTPAPI struct {

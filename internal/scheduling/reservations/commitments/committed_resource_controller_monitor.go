@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var crControllerMonitorLog = ctrl.Log.WithName("committed-resource-controller-monitor")
+var crControllerMonitorLog = ctrl.Log.WithName("committed-resource-controller-monitor").WithValues("module", "committed-resources")
 
 // CRControllerMonitor reports the number of CommittedResource CRDs that the controller
 // is currently unable to fully satisfy with reservation slots.
@@ -22,8 +22,8 @@ var crControllerMonitorLog = ctrl.Log.WithName("committed-resource-controller-mo
 // syncer for existing Limes commitments. API-originated rejections (AllowRejection=true)
 // and dry-run probes never enter this state.
 type CRControllerMonitor struct {
-	client       client.Client
-	unfulfilled  *prometheus.Desc
+	client      client.Client
+	unfulfilled *prometheus.Desc
 }
 
 func NewCRControllerMonitor(c client.Client) CRControllerMonitor {

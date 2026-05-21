@@ -50,7 +50,6 @@ func (r *CommittedResourceController) Reconcile(ctx context.Context, req ctrl.Re
 		ctx = WithNewGlobalRequestID(ctx)
 	}
 	logger := LoggerFromContext(ctx).WithValues(
-		"component", "committed-resource-controller",
 		"committedResource", req.Name,
 	)
 

@@ -217,7 +217,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	// Create context with request ID for this sync execution
 	runID := fmt.Sprintf("sync-%d", time.Now().Unix())
 	ctx = WithNewGlobalRequestID(ctx)
-	logger := LoggerFromContext(ctx).WithValues("component", "syncer", "runID", runID)
+	logger := LoggerFromContext(ctx).WithValues("runID", runID)
 
 	logger.Info("starting commitment sync")
 

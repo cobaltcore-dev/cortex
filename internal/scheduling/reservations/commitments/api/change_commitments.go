@@ -87,7 +87,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	defer api.changeMutex.Unlock()
 
 	ctx := reservations.WithGlobalRequestID(context.Background(), "committed-resource-"+requestID)
-	logger := commitments.LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/change-commitments")
+	logger := commitments.LoggerFromContext(ctx).WithValues("endpoint", "/commitments/v1/change-commitments")
 
 	if r.Method != http.MethodPost {
 		statusCode = http.StatusMethodNotAllowed

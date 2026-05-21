@@ -74,7 +74,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		ctx = WithNewGlobalRequestID(ctx)
 	}
 	ctx = reservations.WithRequestID(ctx, req.Name)
-	logger := LoggerFromContext(ctx).WithValues("component", "controller", "reservation", req.Name)
+	logger := LoggerFromContext(ctx).WithValues("reservation", req.Name)
 
 	// filter for CR reservations
 	resourceName := ""
@@ -353,7 +353,7 @@ type reconcileAllocationsResult struct {
 // For older allocations: we check the HV CRD; VMs not found are considered leaving and
 // removed from the reservation.
 func (r *CommitmentReservationController) reconcileAllocations(ctx context.Context, res *v1alpha1.Reservation) (*reconcileAllocationsResult, error) {
-	logger := LoggerFromContext(ctx).WithValues("component", "controller")
+	logger := LoggerFromContext(ctx)
 	result := &reconcileAllocationsResult{}
 	now := time.Now()
 
