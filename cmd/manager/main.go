@@ -391,8 +391,10 @@ func main() {
 	if commitmentsConfig.DatasourceName != "" {
 		commitmentsUsageDB = commitments.NewDBUsageClient(multiclusterClient, commitmentsConfig.DatasourceName)
 	}
-	commitmentsAPI := commitmentsapi.NewAPIWithConfig(multiclusterClient, commitmentsConfig.API, commitmentsUsageDB)
-	commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
+	if slices.Contains(mainConfig.EnabledControllers, "committed-resource-reservations-controller") {
+		commitmentsAPI := commitmentsapi.NewAPIWithConfig(multiclusterClient, commitmentsConfig.API, commitmentsUsageDB)
+		commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
+	}
 
 	if slices.Contains(mainConfig.EnabledControllers, "nova-pipeline-controllers") {
 		// Filter-weigher pipeline controller setup.
@@ -561,7 +563,6 @@ func main() {
 		setupLog.Info("enabling controller", "controller", "committed-resource-reservations-controller")
 		monitor := reservations.NewMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&monitor)
-		commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
 
 		if err := (&commitments.CommitmentReservationController{
 			Client: multiclusterClient,
