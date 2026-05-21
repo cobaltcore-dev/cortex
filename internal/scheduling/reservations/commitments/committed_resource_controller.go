@@ -342,7 +342,6 @@ func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Co
 	// Failures take priority over pending: if anyFailed is true we return that even if
 	// other slots are still pending.
 	allReady = true
-	var firstFailMessage string
 	for _, res := range list.Items {
 		if res.Status.CommittedResourceReservation == nil ||
 			res.Status.CommittedResourceReservation.ObservedParentGeneration != cr.Generation {
@@ -355,9 +354,6 @@ func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Co
 			continue
 		}
 		if cond.Status == metav1.ConditionFalse {
-			if firstFailMessage == "" {
-				firstFailMessage = cond.Message
-			}
 			failedSlots = append(failedSlots, res.Name)
 			anyFailed = true
 			allReady = false

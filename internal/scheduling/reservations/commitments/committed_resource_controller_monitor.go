@@ -5,6 +5,7 @@ package commitments
 
 import (
 	"context"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
@@ -44,10 +45,12 @@ func (m *CRControllerMonitor) Describe(ch chan<- *prometheus.Desc) {
 }
 
 // Collect implements prometheus.Collector. Lists all CommittedResource CRDs and counts
-// those with Ready=False/Reason=Reserving, grouped by flavor group, resource type, and AZ.
+// those with Ready=False/Reason=Reserving and AllowRejection=false, grouped by flavor group, resource type, and AZ.
 func (m *CRControllerMonitor) Collect(ch chan<- prometheus.Metric) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	var list v1alpha1.CommittedResourceList
-	if err := m.client.List(context.Background(), &list); err != nil {
+	if err := m.client.List(ctx, &list); err != nil {
 		crControllerMonitorLog.Error(err, "failed to list CommittedResources")
 		return
 	}
@@ -55,6 +58,9 @@ func (m *CRControllerMonitor) Collect(ch chan<- prometheus.Metric) {
 	type key struct{ flavorGroup, resourceType, az string }
 	counts := make(map[key]int)
 	for _, cr := range list.Items {
+		if cr.Spec.AllowRejection {
+			continue
+		}
 		cond := meta.FindStatusCondition(cr.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
 		if cond == nil || cond.Reason != v1alpha1.CommittedResourceReasonReserving {
 			continue
