@@ -1112,7 +1112,7 @@ func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 			}
 
 			controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme}
-			allReady, anyFailed, readySlots, reason, failedSlots, err := controller.checkChildReservationStatus(context.Background(), cr, 1)
+			allReady, anyFailed, readySlots, reason, _, failedSlots, err := controller.checkChildReservationStatus(context.Background(), cr, 1)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
