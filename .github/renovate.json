@@ -47,9 +47,9 @@
     {
       "customType": "regex",
       "fileMatch": ["^postgres/Dockerfile$"],
-      "matchStrings": ["FROM (?<depName>[^:\\n]+):(?<currentValue>[^@\\n]+)@sha256:(?<currentDigest>[a-f0-9]+)"],
+      "matchStrings": ["FROM (?<depName>[^:\\n]+):(?<currentValue>[^@\\n]+)@(?<currentDigest>sha256:[a-f0-9]+)"],
       "datasourceTemplate": "docker",
-      "autoReplaceStringTemplate": "FROM {{{depName}}}:{{{newValue}}}@sha256:{{{newDigest}}}"
+      "autoReplaceStringTemplate": "FROM {{{depName}}}:{{{newValue}}}@{{{newDigest}}}"
     },
     {
       "customType": "regex",
