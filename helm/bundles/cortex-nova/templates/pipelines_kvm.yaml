@@ -109,11 +109,13 @@ spec:
         If a matching CommittedResource has unused capacity, the request is accepted.
         Otherwise, PAYG headroom is checked for ram, cores, and instances.
         Rejects all hosts if neither tier has headroom.
-        When dryRun is true the filter runs in shadow mode: it logs and emits
-        the cortex_nova_filter_quota_enforcement_decisions_total metric for
-        would-be rejects but never actually removes hosts.
-      params:
-        - {key: dryRun, boolValue: true}
+
+        Runs in shadow mode by default: the filter logs and emits the
+        cortex_nova_filter_quota_enforcement_decisions_total metric for
+        would-be rejects but never actually removes hosts. To globally reject
+        requests without headroom, add `params: [{key: enforce, boolValue: true}]`
+        to this step. The shadow default is intentional so that newly-rolled-out
+        releases never silently start rejecting requests.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -266,11 +268,13 @@ spec:
         If a matching CommittedResource has unused capacity, the request is accepted.
         Otherwise, PAYG headroom is checked for ram, cores, and instances.
         Rejects all hosts if neither tier has headroom.
-        When dryRun is true the filter runs in shadow mode: it logs and emits
-        the cortex_nova_filter_quota_enforcement_decisions_total metric for
-        would-be rejects but never actually removes hosts.
-      params:
-        - {key: dryRun, boolValue: true}
+
+        Runs in shadow mode by default: the filter logs and emits the
+        cortex_nova_filter_quota_enforcement_decisions_total metric for
+        would-be rejects but never actually removes hosts. To globally reject
+        requests without headroom, add `params: [{key: enforce, boolValue: true}]`
+        to this step. The shadow default is intentional so that newly-rolled-out
+        releases never silently start rejecting requests.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -735,11 +739,13 @@ spec:
         If a matching CommittedResource has unused capacity, the request is accepted.
         Otherwise, PAYG headroom is checked for ram, cores, and instances.
         Rejects all hosts if neither tier has headroom.
-        When dryRun is true the filter runs in shadow mode: it logs and emits
-        the cortex_nova_filter_quota_enforcement_decisions_total metric for
-        would-be rejects but never actually removes hosts.
-      params:
-        - {key: dryRun, boolValue: true}
+
+        Runs in shadow mode by default: the filter logs and emits the
+        cortex_nova_filter_quota_enforcement_decisions_total metric for
+        would-be rejects but never actually removes hosts. To globally reject
+        requests without headroom, add `params: [{key: enforce, boolValue: true}]`
+        to this step. The shadow default is intentional so that newly-rolled-out
+        releases never silently start rejecting requests.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -885,11 +891,13 @@ spec:
         If a matching CommittedResource has unused capacity, the request is accepted.
         Otherwise, PAYG headroom is checked for ram, cores, and instances.
         Rejects all hosts if neither tier has headroom.
-        When dryRun is true the filter runs in shadow mode: it logs and emits
-        the cortex_nova_filter_quota_enforcement_decisions_total metric for
-        would-be rejects but never actually removes hosts.
-      params:
-        - {key: dryRun, boolValue: true}
+
+        Runs in shadow mode by default: the filter logs and emits the
+        cortex_nova_filter_quota_enforcement_decisions_total metric for
+        would-be rejects but never actually removes hosts. To globally reject
+        requests without headroom, add `params: [{key: enforce, boolValue: true}]`
+        to this step. The shadow default is intentional so that newly-rolled-out
+        releases never silently start rejecting requests.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
