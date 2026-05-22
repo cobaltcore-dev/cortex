@@ -107,67 +107,79 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		return nil, err
 	}
 	for _, reservation := range reservations.Items {
-		if !reservation.IsReady() {
-			continue // Only consider active reservations (Ready=True).
-		}
-
-		// Check if this reservation type should be ignored
+		// Check if this reservation type should be ignored — applies regardless of ready state.
 		if slices.Contains(s.Options.IgnoredReservationTypes, reservation.Spec.Type) {
 			traceLog.Debug("ignoring reservation type", "type", reservation.Spec.Type, "reservation", reservation.Name)
 			continue
 		}
 
-		// Handle reservation based on its type.
-		switch reservation.Spec.Type {
-		case v1alpha1.ReservationTypeCommittedResource, "": // Empty string for backward compatibility
-			// Skip if no CommittedResourceReservation spec or no resource group set.
-			if reservation.Spec.CommittedResourceReservation == nil || reservation.Spec.CommittedResourceReservation.ResourceGroup == "" {
-				continue // Not handled by us (no resource group set).
+		if !reservation.IsReady() {
+			if reservation.Spec.TargetHost == "" && reservation.Status.Host == "" {
+				continue // not placed yet, nothing to block
 			}
+			// TargetHost is set but Ready has not been synced yet: the reservation controller
+			// wrote the host in reconcile cycle 1 but hasn't completed cycle 2 (status sync).
+			// Block the full slot now to prevent a concurrent scheduling call from picking the
+			// same host. Unlock logic is intentionally skipped — an unconfirmed slot must not
+			// be unlocked for any VM or project.
+			traceLog.Warn("reservation has target host set but is not yet ready — blocking host to prevent double-booking",
+				"reservation", reservation.Name,
+				"targetHost", reservation.Spec.TargetHost,
+				"statusHost", reservation.Status.Host,
+			)
+		} else {
+			// Ready reservation: apply type-specific unlock logic.
+			switch reservation.Spec.Type {
+			case v1alpha1.ReservationTypeCommittedResource, "": // Empty string for backward compatibility
+				// Skip if no CommittedResourceReservation spec or no resource group set.
+				if reservation.Spec.CommittedResourceReservation == nil || reservation.Spec.CommittedResourceReservation.ResourceGroup == "" {
+					continue // Not handled by us (no resource group set).
+				}
 
-			// Check if this is a CR reservation scheduling request.
-			// If so, we should NOT unlock any CR reservations to prevent overbooking.
-			// CR capacity should only be unlocked for actual VM scheduling.
-			intent, err := request.GetIntent()
-			switch {
-			case err == nil && intent == api.ReserveForCommittedResourceIntent:
-				traceLog.Debug("keeping CR reservation locked for CR reservation scheduling",
-					"reservation", reservation.Name,
-					"intent", intent)
-				// Don't continue - fall through to block the resources
-			case !s.Options.LockReserved &&
-				// For committed resource reservations: unlock resources only if:
-				// 1. Project ID matches
-				// 2. ResourceGroup matches the flavor's hw_version
-				reservation.Spec.CommittedResourceReservation.ProjectID == request.Spec.Data.ProjectID &&
-				reservation.Spec.CommittedResourceReservation.ResourceGroup == request.Spec.Data.Flavor.Data.ExtraSpecs["hw_version"]:
-				traceLog.Info("unlocking resources reserved by matching committed resource reservation with allocation",
-					"reservation", reservation.Name,
-					"instanceUUID", request.Spec.Data.InstanceUUID,
-					"projectID", request.Spec.Data.ProjectID,
-					"resourceGroup", reservation.Spec.CommittedResourceReservation.ResourceGroup)
-				continue
-			}
+				// Check if this is a CR reservation scheduling request.
+				// If so, we should NOT unlock any CR reservations to prevent overbooking.
+				// CR capacity should only be unlocked for actual VM scheduling.
+				intent, err := request.GetIntent()
+				switch {
+				case err == nil && intent == api.ReserveForCommittedResourceIntent:
+					traceLog.Debug("keeping CR reservation locked for CR reservation scheduling",
+						"reservation", reservation.Name,
+						"intent", intent)
+					// Don't continue - fall through to block the resources
+				case !s.Options.LockReserved &&
+					// For committed resource reservations: unlock resources only if:
+					// 1. Project ID matches
+					// 2. ResourceGroup matches the flavor's hw_version
+					reservation.Spec.CommittedResourceReservation.ProjectID == request.Spec.Data.ProjectID &&
+					reservation.Spec.CommittedResourceReservation.ResourceGroup == request.Spec.Data.Flavor.Data.ExtraSpecs["hw_version"]:
+					traceLog.Info("unlocking resources reserved by matching committed resource reservation with allocation",
+						"reservation", reservation.Name,
+						"instanceUUID", request.Spec.Data.InstanceUUID,
+						"projectID", request.Spec.Data.ProjectID,
+						"resourceGroup", reservation.Spec.CommittedResourceReservation.ResourceGroup)
+					continue
+				}
 
-		case v1alpha1.ReservationTypeFailover:
-			// For failover reservations: if the requested VM is contained in the allocations map
-			// AND this is an evacuation request, unlock the resources.
-			// We only unlock during evacuations because:
-			// 1. Failover reservations are specifically for HA/evacuation scenarios.
-			// 2. During live migrations or other operations, we don't want to use failover capacity.
-			// Note: we cannot use failover reservations from other VMs, as that can invalidate our HA guarantees.
-			intent, err := request.GetIntent()
-			if err == nil && intent == api.EvacuateIntent {
-				if reservation.Status.FailoverReservation != nil {
-					if _, contained := reservation.Status.FailoverReservation.Allocations[request.Spec.Data.InstanceUUID]; contained {
-						traceLog.Info("unlocking resources reserved by failover reservation for VM in allocations (evacuation)",
-							"reservation", reservation.Name,
-							"instanceUUID", request.Spec.Data.InstanceUUID)
-						continue
+			case v1alpha1.ReservationTypeFailover:
+				// For failover reservations: if the requested VM is contained in the allocations map
+				// AND this is an evacuation request, unlock the resources.
+				// We only unlock during evacuations because:
+				// 1. Failover reservations are specifically for HA/evacuation scenarios.
+				// 2. During live migrations or other operations, we don't want to use failover capacity.
+				// Note: we cannot use failover reservations from other VMs, as that can invalidate our HA guarantees.
+				intent, err := request.GetIntent()
+				if err == nil && intent == api.EvacuateIntent {
+					if reservation.Status.FailoverReservation != nil {
+						if _, contained := reservation.Status.FailoverReservation.Allocations[request.Spec.Data.InstanceUUID]; contained {
+							traceLog.Info("unlocking resources reserved by failover reservation for VM in allocations (evacuation)",
+								"reservation", reservation.Name,
+								"instanceUUID", request.Spec.Data.InstanceUUID)
+							continue
+						}
 					}
 				}
+				traceLog.Debug("processing failover reservation", "reservation", reservation.Name)
 			}
-			traceLog.Debug("processing failover reservation", "reservation", reservation.Name)
 		}
 
 		// Block resources on BOTH Spec.TargetHost (desired) AND Status.Host (actual).
