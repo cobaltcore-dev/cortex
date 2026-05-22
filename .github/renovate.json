@@ -3,8 +3,7 @@
   "extends": [
     "config:recommended",
     "default:pinDigestsDisabled",
-    "mergeConfidence:all-badges",
-    "docker:disable"
+    "mergeConfidence:all-badges"
   ],
   "assignees": [
     "SoWieMarkus"
@@ -23,31 +22,37 @@
     "gomodTidy",
     "gomodUpdateImportPaths"
   ],
-  "regexManagers": [
+  "customManagers": [
     {
+      "customType": "regex",
       "fileMatch": ["^Makefile$"],
       "matchStrings": ["CONTROLLER_TOOLS_VERSION \\?= (?<currentValue>v[\\d.]+)"],
       "depNameTemplate": "sigs.k8s.io/controller-tools",
       "datasourceTemplate": "go"
     },
     {
+      "customType": "regex",
       "fileMatch": ["^Makefile$"],
       "matchStrings": ["GOLANGCI_LINT_VERSION \\?= (?<currentValue>v[\\d.]+)"],
       "depNameTemplate": "github.com/golangci/golangci-lint/v2",
       "datasourceTemplate": "go"
     },
     {
+      "customType": "regex",
       "fileMatch": ["^Makefile$"],
       "matchStrings": ["GOTESTSUM_VERSION \\?= (?<currentValue>v[\\d.]+)"],
       "depNameTemplate": "gotest.tools/gotestsum",
       "datasourceTemplate": "go"
     },
     {
+      "customType": "regex",
       "fileMatch": ["^postgres/Dockerfile$"],
-      "matchStrings": ["FROM (?<depName>[^:\\n]+):(?<currentValue>[^@\\n]+)@sha256:(?<currentDigest>[a-f0-9]+)"],
-      "datasourceTemplate": "docker"
+      "matchStrings": ["FROM (?<depName>[^:\\n]+):(?<currentValue>[^@\\n]+)@(?<currentDigest>sha256:[a-f0-9]+)"],
+      "datasourceTemplate": "docker",
+      "autoReplaceStringTemplate": "FROM {{{depName}}}:{{{newValue}}}@{{{newDigest}}}"
     },
     {
+      "customType": "regex",
       "fileMatch": ["^postgres/Dockerfile$"],
       "matchStrings": ["ENV PG_VERSION (?<currentValue>[\\d]+\\.[\\d]+)-[^\\n]+"],
       "depNameTemplate": "postgres",
@@ -70,9 +75,24 @@
       "matchFileNames": [
         "postgres/Dockerfile"
       ],
-      "allowedVersions": "17.x",
-      "automerge": true,
+      "allowedVersions": "18.x",
       "groupName": "postgres Dockerfile"
+    },
+    {
+      "matchFileNames": [
+        "postgres/Dockerfile"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchUpdateTypes": [
+        "digest",
+        "pinDigest"
+      ],
+      "groupName": "postgres Dockerfile base image",
+      "schedule": [
+        "at any time"
+      ]
     },
     {
       "matchPackageNames": [
@@ -111,8 +131,15 @@
     }
   ],
   "prHourlyLimit": 0,
+  "timezone": "Europe/Berlin",
   "schedule": [
-    "before 8am on Friday"
+    "after 6pm and before 8am every weekday",
+    "every weekend"
   ],
+  "vulnerabilityAlerts": {
+    "schedule": [
+      "at any time"
+    ]
+  },
   "semanticCommits": "disabled"
 }

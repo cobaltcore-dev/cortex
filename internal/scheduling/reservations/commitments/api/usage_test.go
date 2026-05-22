@@ -447,20 +447,17 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 }
 
 // TestUsageMultipleCalculation_FloorDivision tests that RAM usage is calculated
-// by adding the 16 MiB video RAM reservation before dividing, matching actual flavor sizing.
-// Nova flavors like "4 GiB" have 4080 MiB (4096 - 16 for hw_video:ram_max_mb=16).
-// Adding 16 MiB restores the exact GiB multiple before integer division.
+// correctly via integer division for variable-ratio flavor groups.
+// Nova flavor memory is a multiple of 1024 MiB, so FlavorRAM/1024 gives exact GiB.
 func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 	log.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
 	ctx := context.Background()
 	baseTime := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
-	// Realistic Nova flavor values with memory overhead (2032 MiB base, not 2048)
-	// These match real-world hw_version_2101 flavors
-	smallestFlavor := &TestFlavor{Name: "g_k_c1_m2_v2", Group: "hw_2101", MemoryMB: 2032, VCPUs: 1}
-	flavor2x := &TestFlavor{Name: "g_k_c2_m4_v2", Group: "hw_2101", MemoryMB: 4080, VCPUs: 2}      // ~2× smallest (4080/2032 = 2.007)
-	flavor8x := &TestFlavor{Name: "g_k_c4_m16_v2", Group: "hw_2101", MemoryMB: 16368, VCPUs: 4}    // ~8× smallest (16368/2032 = 8.06)
-	flavor16x := &TestFlavor{Name: "g_k_c16_m32_v2", Group: "hw_2101", MemoryMB: 32752, VCPUs: 16} // ~16× smallest (32752/2032 = 16.11)
+	smallestFlavor := &TestFlavor{Name: "g_k_c1_m2_v2", Group: "hw_2101", MemoryMB: 2048, VCPUs: 1}
+	flavor2x := &TestFlavor{Name: "g_k_c2_m4_v2", Group: "hw_2101", MemoryMB: 4096, VCPUs: 2}
+	flavor8x := &TestFlavor{Name: "g_k_c4_m16_v2", Group: "hw_2101", MemoryMB: 16384, VCPUs: 4}
+	flavor16x := &TestFlavor{Name: "g_k_c16_m32_v2", Group: "hw_2101", MemoryMB: 32768, VCPUs: 16}
 
 	tests := []struct {
 		name              string
@@ -476,7 +473,7 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
 					AZ:         "az-a",
 					Created:    baseTime.Format(time.RFC3339),
-					FlavorName: "g_k_c1_m2_v2", FlavorRAM: 2032, FlavorVCPUs: 1,
+					FlavorName: "g_k_c1_m2_v2", FlavorRAM: 2048, FlavorVCPUs: 1,
 				},
 			},
 			expectedRAM:       2,
@@ -484,16 +481,16 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 			expectedInstances: 1,
 		},
 		{
-			name: "2x flavor with overhead - (4080+16)/1024 = 4 GiB",
+			name: "2x flavor - 4096/1024 = 4 GiB",
 			vms: []commitments.VMRow{
 				{
 					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
 					AZ:         "az-a",
 					Created:    baseTime.Format(time.RFC3339),
-					FlavorName: "g_k_c2_m4_v2", FlavorRAM: 4080, FlavorVCPUs: 2,
+					FlavorName: "g_k_c2_m4_v2", FlavorRAM: 4096, FlavorVCPUs: 2,
 				},
 			},
-			expectedRAM:       4, // (4080+16)/1024 = 4
+			expectedRAM:       4, // 4096/1024 = 4
 			expectedCores:     2,
 			expectedInstances: 1,
 		},
@@ -504,29 +501,28 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
 					AZ:         "az-a",
 					Created:    baseTime.Format(time.RFC3339),
-					FlavorName: "g_k_c1_m2_v2", FlavorRAM: 2032, FlavorVCPUs: 1,
+					FlavorName: "g_k_c1_m2_v2", FlavorRAM: 2048, FlavorVCPUs: 1,
 				},
 				{
 					ID: "vm-002", Name: "vm-002", Status: "ACTIVE",
 					AZ:         "az-a",
 					Created:    baseTime.Add(time.Second).Format(time.RFC3339),
-					FlavorName: "g_k_c2_m4_v2", FlavorRAM: 4080, FlavorVCPUs: 2,
+					FlavorName: "g_k_c2_m4_v2", FlavorRAM: 4096, FlavorVCPUs: 2,
 				},
 				{
 					ID: "vm-003", Name: "vm-003", Status: "ACTIVE",
 					AZ:         "az-a",
 					Created:    baseTime.Add(2 * time.Second).Format(time.RFC3339),
-					FlavorName: "g_k_c4_m16_v2", FlavorRAM: 16368, FlavorVCPUs: 4,
+					FlavorName: "g_k_c4_m16_v2", FlavorRAM: 16384, FlavorVCPUs: 4,
 				},
 				{
 					ID: "vm-004", Name: "vm-004", Status: "ACTIVE",
 					AZ:         "az-a",
 					Created:    baseTime.Add(3 * time.Second).Format(time.RFC3339),
-					FlavorName: "g_k_c16_m32_v2", FlavorRAM: 32752, FlavorVCPUs: 16,
+					FlavorName: "g_k_c16_m32_v2", FlavorRAM: 32768, FlavorVCPUs: 16,
 				},
 			},
-			// (2032+16)/1024 + (4080+16)/1024 + (16368+16)/1024 + (32752+16)/1024
-			// = 2 + 4 + 16 + 32 = 54
+			// 2048/1024 + 4096/1024 + 16384/1024 + 32768/1024 = 2 + 4 + 16 + 32 = 54
 			// Cores: 1 + 2 + 4 + 16 = 23
 			expectedRAM:       54, // 2 + 4 + 16 + 32
 			expectedCores:     23, // 1 + 2 + 4 + 16

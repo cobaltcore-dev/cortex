@@ -12,7 +12,6 @@ import (
 	"time"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
-	"github.com/google/uuid"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -279,7 +278,7 @@ func (c *Controller) probeScheduler(
 	}
 
 	resp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
-		InstanceUUID:     uuid.New().String(),
+		InstanceUUID:     "capacity-" + flavor.Name,
 		ProjectID:        "cortex-capacity-probe",
 		FlavorName:       flavor.Name,
 		MemoryMB:         flavor.MemoryMB,

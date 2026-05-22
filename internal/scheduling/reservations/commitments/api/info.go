@@ -36,7 +36,7 @@ func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Request-ID", requestID)
 
 	ctx := reservations.WithGlobalRequestID(r.Context(), "committed-resource-"+requestID)
-	logger := commitments.LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/info")
+	logger := commitments.LoggerFromContext(ctx).WithValues("endpoint", "/commitments/v1/info")
 
 	// Only accept GET method
 	if r.Method != http.MethodGet {

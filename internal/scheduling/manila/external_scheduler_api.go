@@ -115,7 +115,12 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 		c.Respond(nil, http.StatusBadRequest, err, "failed to decode request body")
 		return
 	}
-	logger := slog.With(requestData.GetTraceLogArgs())
+	traceArgs := requestData.GetTraceLogArgs()
+	traceArgsAny := make([]any, len(traceArgs))
+	for i, a := range traceArgs {
+		traceArgsAny[i] = a
+	}
+	logger := slog.With(traceArgsAny...)
 	logger.Info("handling POST request", "url", "/scheduler/manila/external", "body", string(body))
 
 	if ok, reason := httpAPI.canRunScheduler(requestData); !ok {
