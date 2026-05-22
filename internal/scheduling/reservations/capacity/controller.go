@@ -278,7 +278,7 @@ func (c *Controller) probeScheduler(
 	}
 
 	resp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
-		InstanceUUID:     fmt.Sprintf("capacity-%s", flavor.Name),
+		InstanceUUID:     "capacity-" + flavor.Name,
 		ProjectID:        "cortex-capacity-probe",
 		FlavorName:       flavor.Name,
 		MemoryMB:         flavor.MemoryMB,
