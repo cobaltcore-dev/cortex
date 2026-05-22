@@ -86,7 +86,9 @@ func UnmarshalParams(p *v1alpha1.Parameters, into any) error {
 	reader := bytes.NewReader(paramBytes)
 	decoder := json.NewDecoder(reader)
 	// Disallow unknown fields to catch typos and invalid parameters.
-	decoder.DisallowUnknownFields()
+	// FIXME: we should consider allowing unknown fields and just ignoring them / warning the user, as this would allow for more flexible parameters without breaking existing configurations when new parameters are added.
+	// As long as all required fields are set
+	// decoder.DisallowUnknownFields()
 	if err := decoder.Decode(into); err != nil {
 		return fmt.Errorf("failed to decode parameters into struct: %w", err)
 	}
