@@ -23,8 +23,9 @@ var crControllerMonitorLog = ctrl.Log.WithName("committed-resource-controller-mo
 // after a failure. API-originated dry-run probes (AllowRejection=true) are excluded.
 // The metric is absent for a given label set when no CRs match — absence means zero.
 type CRControllerMonitor struct {
-	client      client.Client
-	unfulfilled *prometheus.Desc
+	client              client.Client
+	unfulfilled         *prometheus.Desc
+	slotLimitRejections *prometheus.CounterVec
 }
 
 func NewCRControllerMonitor(c client.Client) CRControllerMonitor {
@@ -36,12 +37,22 @@ func NewCRControllerMonitor(c client.Client) CRControllerMonitor {
 			[]string{"flavor_group", "resource_type", "availability_zone"},
 			nil,
 		),
+		slotLimitRejections: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "cortex_committed_resource_slot_limit_rejections_total",
+			Help: "Number of times a commitment was rejected because the requested slot count exceeded the configured limit.",
+		}, []string{"flavor_group", "availability_zone"}),
 	}
+}
+
+// RecordSlotLimitRejection increments the slot-limit rejection counter for the given flavor group and AZ.
+func (m *CRControllerMonitor) RecordSlotLimitRejection(flavorGroup, az string) {
+	m.slotLimitRejections.WithLabelValues(flavorGroup, az).Inc()
 }
 
 // Describe implements prometheus.Collector.
 func (m *CRControllerMonitor) Describe(ch chan<- *prometheus.Desc) {
 	ch <- m.unfulfilled
+	m.slotLimitRejections.Describe(ch)
 }
 
 // Collect implements prometheus.Collector. Lists all CommittedResource CRDs and counts
@@ -80,4 +91,5 @@ func (m *CRControllerMonitor) Collect(ch chan<- prometheus.Metric) {
 			k.flavorGroup, k.resourceType, k.az,
 		)
 	}
+	m.slotLimitRejections.Collect(ch)
 }

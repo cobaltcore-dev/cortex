@@ -5,6 +5,7 @@ package commitments
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -34,8 +35,9 @@ const (
 // CommittedResourceController reconciles CommittedResource CRDs and owns all child Reservation CRUD.
 type CommittedResourceController struct {
 	client.Client
-	Scheme *runtime.Scheme
-	Conf   CommittedResourceControllerConfig
+	Scheme  *runtime.Scheme
+	Conf    CommittedResourceControllerConfig
+	Monitor *CRControllerMonitor
 }
 
 func (r *CommittedResourceController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -320,6 +322,10 @@ func (r *CommittedResourceController) applyReservationState(ctx context.Context,
 	}
 	result, err := mgr.ApplyCommitmentState(ctx, logger, state, flavorGroups, "committed-resource-controller")
 	if err != nil {
+		var limitErr *SlotLimitExceededError
+		if errors.As(err, &limitErr) && r.Monitor != nil {
+			r.Monitor.RecordSlotLimitRejection(cr.Spec.FlavorGroupName, cr.Spec.AvailabilityZone)
+		}
 		return nil, err
 	}
 	logger.Info("commitment state applied", "created", result.Created, "deleted", result.Deleted, "repaired", result.Repaired)

@@ -35,6 +35,18 @@ type ApplyResult struct {
 	RemovedReservations []v1alpha1.Reservation
 }
 
+// SlotLimitExceededError is returned by ApplyCommitmentState when the number of new reservation
+// slots would exceed MaxSlots. It is a distinct type so callers can detect and metric it separately
+// from ordinary capacity failures.
+type SlotLimitExceededError struct {
+	NewSlots int
+	Limit    int
+}
+
+func (e *SlotLimitExceededError) Error() string {
+	return fmt.Sprintf("commitment would create %d new reservation slots, exceeds limit of %d", e.NewSlots, e.Limit)
+}
+
 // ReservationManager handles CRUD operations for Reservation CRDs.
 type ReservationManager struct {
 	client.Client
@@ -187,9 +199,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 	if deltaMemoryBytes > 0 {
 		newSlots := countNewSlots(deltaMemoryBytes, flavorGroup)
 		if m.MaxSlots > 0 && newSlots > m.MaxSlots {
-			return nil, fmt.Errorf(
-				"commitment would create %d new reservation slots, exceeds limit of %d",
-				newSlots, m.MaxSlots)
+			return nil, &SlotLimitExceededError{NewSlots: newSlots, Limit: m.MaxSlots}
 		}
 		log.Info("creating reservation slots",
 			"commitmentUUID", desiredState.CommitmentUUID,
