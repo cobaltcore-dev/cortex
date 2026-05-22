@@ -581,7 +581,6 @@ func main() {
 		}
 
 		crControllerConf := commitmentsConfig.CommittedResourceController
-		crControllerConf.ApplyDefaults()
 		if err := (&commitments.CommittedResourceController{
 			Client: multiclusterClient,
 			Scheme: mgr.GetScheme(),

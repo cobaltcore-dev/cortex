@@ -173,6 +173,10 @@ cortex-scheduling-controllers:
       requeueIntervalRetry: "1m"
       # Maximum back-off interval cap for the exponential retry delay
       maxRequeueInterval: "30m"
+      # Pause between consecutive Reservation CRD creates to spread scheduler load; 0 disables
+      slotCreationDelay: "20ms"
+      # Max Reservation CRDs per CommittedResource on the API path; 0 disables the limit
+      maxSlotsPerCommitment: 200
     committedResourceAPI:
       # Timeout for watching CommittedResource CRDs before rolling back
       watchTimeout: "15s"

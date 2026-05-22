@@ -6,6 +6,7 @@ package commitments
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
@@ -37,6 +38,13 @@ type ApplyResult struct {
 // ReservationManager handles CRUD operations for Reservation CRDs.
 type ReservationManager struct {
 	client.Client
+	// SlotCreationDelay adds a pause between consecutive Reservation CRD creates to spread
+	// scheduler load across time rather than bursting all creates at once.
+	SlotCreationDelay time.Duration
+	// MaxSlots caps the total number of Reservation CRDs for a single commitment.
+	// When non-zero, ApplyCommitmentState returns an error if the desired slot count would
+	// exceed this limit. Only set by the caller on the AllowRejection=true (API) path.
+	MaxSlots int
 }
 
 func NewReservationManager(k8sClient client.Client) *ReservationManager {
@@ -176,6 +184,19 @@ func (m *ReservationManager) ApplyCommitmentState(
 	}
 
 	// Phase 5 (CREATE): Create new reservations (capacity increased)
+	if deltaMemoryBytes > 0 {
+		newSlots := countNewSlots(deltaMemoryBytes, flavorGroup)
+		if m.MaxSlots > 0 && newSlots > m.MaxSlots {
+			return nil, fmt.Errorf(
+				"commitment would create %d new reservation slots, exceeds limit of %d",
+				newSlots, m.MaxSlots)
+		}
+		log.Info("creating reservation slots",
+			"commitmentUUID", desiredState.CommitmentUUID,
+			"slots", newSlots,
+			"slotCreationDelay", m.SlotCreationDelay,
+		)
+	}
 	for deltaMemoryBytes > 0 {
 		// Select the largest flavor that fits the remaining delta (flavors sorted descending by memory).
 		reservation := m.newReservation(desiredState, nextSlotIndex, deltaMemoryBytes, flavorGroup, creator)
@@ -196,6 +217,18 @@ func (m *ReservationManager) ApplyCommitmentState(
 		}
 
 		nextSlotIndex++
+
+		// Throttle: pause between consecutive creates to spread scheduler load.
+		// Skip after the last slot (deltaMemoryBytes <= 0) — no follow-up create to defer.
+		if m.SlotCreationDelay > 0 && deltaMemoryBytes > 0 {
+			timer := time.NewTimer(m.SlotCreationDelay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return result, ctx.Err()
+			case <-timer.C:
+			}
+		}
 	}
 
 	// Phase 6 (UPDATE): Sync metadata for remaining reservations
@@ -274,6 +307,35 @@ func (m *ReservationManager) syncReservationMetadata(
 	}
 }
 
+// selectFlavor picks the largest flavor whose memory fits within deltaMemoryBytes.
+// Returns the selected flavor and its memory in bytes. If no flavor fits, returns the
+// smallest flavor with memoryBytes = deltaMemoryBytes (consumes the full remainder).
+func selectFlavor(deltaMemoryBytes int64, flavorGroup compute.FlavorGroupFeature) (flavor compute.FlavorInGroup, memoryBytes int64) {
+	flavor = flavorGroup.Flavors[len(flavorGroup.Flavors)-1]
+	memoryBytes = deltaMemoryBytes
+	for _, f := range flavorGroup.Flavors {
+		flavorBytes := int64(f.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory from specs, realistically bounded
+		if flavorBytes <= deltaMemoryBytes {
+			flavor = f
+			memoryBytes = flavorBytes
+			break
+		}
+	}
+	return
+}
+
+// countNewSlots returns how many Reservation slots would be created to cover deltaMemoryBytes.
+// Used to pre-check MaxSlots before creating any slots, so a limit violation never leaves partial state.
+func countNewSlots(deltaMemoryBytes int64, flavorGroup compute.FlavorGroupFeature) int {
+	count := 0
+	for deltaMemoryBytes > 0 {
+		_, memoryBytes := selectFlavor(deltaMemoryBytes, flavorGroup)
+		deltaMemoryBytes -= memoryBytes
+		count++
+	}
+	return count
+}
+
 func (m *ReservationManager) newReservation(
 	state *CommitmentState,
 	slotIndex int,
@@ -290,19 +352,8 @@ func (m *ReservationManager) newReservation(
 
 	// Select largest flavor that fits remaining memory (flavors sorted descending by memory then vCPUs).
 	// This works for both fixed and varying CPU:RAM ratio groups.
-	flavorInGroup := flavorGroup.Flavors[len(flavorGroup.Flavors)-1] // default to smallest
-	memoryBytes := deltaMemoryBytes
+	flavorInGroup, memoryBytes := selectFlavor(deltaMemoryBytes, flavorGroup)
 	cpus := int64(flavorInGroup.VCPUs) //nolint:gosec // VCPUs from flavor specs, realistically bounded
-
-	for _, flavor := range flavorGroup.Flavors {
-		flavorMemoryBytes := int64(flavor.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory from specs, realistically bounded
-		if flavorMemoryBytes <= deltaMemoryBytes {
-			flavorInGroup = flavor
-			memoryBytes = flavorMemoryBytes
-			cpus = int64(flavorInGroup.VCPUs) //nolint:gosec // VCPUs from flavor specs, realistically bounded
-			break
-		}
-	}
 
 	spec := v1alpha1.ReservationSpec{
 		Type:             v1alpha1.ReservationTypeCommittedResource,

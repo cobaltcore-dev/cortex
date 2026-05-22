@@ -313,7 +313,12 @@ func (r *CommittedResourceController) applyReservationState(ctx context.Context,
 	state.CreatorRequestID = reservations.GlobalRequestIDFromContext(ctx)
 	state.ParentGeneration = cr.Generation
 
-	result, err := NewReservationManager(r.Client).ApplyCommitmentState(ctx, logger, state, flavorGroups, "committed-resource-controller")
+	mgr := NewReservationManager(r.Client)
+	mgr.SlotCreationDelay = r.Conf.SlotCreationDelay.Duration
+	if cr.Spec.AllowRejection {
+		mgr.MaxSlots = r.Conf.MaxSlotsPerCommitment
+	}
+	result, err := mgr.ApplyCommitmentState(ctx, logger, state, flavorGroups, "committed-resource-controller")
 	if err != nil {
 		return nil, err
 	}
