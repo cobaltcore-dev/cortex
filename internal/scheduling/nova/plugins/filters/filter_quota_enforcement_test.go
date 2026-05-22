@@ -1018,7 +1018,6 @@ func TestFilterQuotaEnforcement_DefaultIsShadow(t *testing.T) {
 	}
 }
 
-
 func TestQuantityToGiB(t *testing.T) {
 	tests := []struct {
 		name     string
