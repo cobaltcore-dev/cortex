@@ -71,7 +71,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 		name    string
 		objects []client.Object
 		request api.ExternalSchedulerRequest
-		dryRun  bool
+		enforce bool
 
 		expectAccept bool
 
@@ -105,6 +105,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   true,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "accept_cr",
 			expectResource: "ram",
@@ -131,6 +132,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   true,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "accept_cr",
 			expectResource: "ram",
@@ -172,6 +174,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   true,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "accept_payg",
 			expectResource: "",
@@ -209,6 +212,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   false,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "reject",
 			expectResource: "ram",
@@ -232,6 +236,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   false,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "reject",
 			expectResource: "ram",
@@ -243,6 +248,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			objects:        []client.Object{},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   true,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "accept_no_quota",
 			expectResource: "",
@@ -255,6 +261,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			request: makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1,
 				map[string]any{"_nova_check_type": "evacuate"}),
 			expectAccept:   true,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "accept_skipped",
 			expectResource: "",
@@ -267,6 +274,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			request: makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1,
 				map[string]any{"_nova_check_type": "live_migrate"}),
 			expectAccept:   true,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "accept_skipped",
 			expectResource: "",
@@ -279,6 +287,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			request: makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1,
 				map[string]any{"_nova_check_type": "reserve_for_failover"}),
 			expectAccept:   true,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "accept_skipped",
 			expectResource: "",
@@ -291,6 +300,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			request: makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1,
 				map[string]any{"_nova_check_type": "reserve_for_committed_resource"}),
 			expectAccept:   true,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "accept_skipped",
 			expectResource: "",
@@ -302,6 +312,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			objects:        []client.Object{},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "", 10240, 1, nil),
 			expectAccept:   true,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "accept_skipped",
 			expectResource: "",
@@ -313,6 +324,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			objects:        []client.Object{},
 			request:        makeQuotaEnforcementRequest("", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   true,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "accept_skipped",
 			expectResource: "",
@@ -324,6 +336,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			objects:        []client.Object{},
 			request:        makeQuotaEnforcementRequest("project-1", "", "hana_v2", 10240, 1, nil),
 			expectAccept:   true,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "accept_skipped",
 			expectResource: "",
@@ -365,6 +378,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   false,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "reject",
 			expectResource: "ram",
@@ -402,6 +416,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   false,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "reject",
 			expectResource: "ram",
@@ -436,6 +451,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   false,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "reject",
 			expectResource: "ram",
@@ -463,6 +479,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 3, nil),
 			expectAccept:   true,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "accept_payg",
 			expectResource: "",
@@ -486,6 +503,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 3, nil),
 			expectAccept:   false,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "reject",
 			expectResource: "ram",
@@ -510,6 +528,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			request: makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1,
 				map[string]any{"_nova_check_type": "resize"}),
 			expectAccept:   false,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "reject",
 			expectResource: "ram",
@@ -544,6 +563,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   false,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "reject",
 			expectResource: "ram",
@@ -571,6 +591,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "vmware_v2", 10240, 1, nil),
 			expectAccept:   true,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "accept_payg",
 			expectResource: "",
@@ -594,6 +615,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   true,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "accept_payg",
 			expectResource: "",
@@ -617,6 +639,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   false,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "reject",
 			expectResource: "ram",
@@ -640,6 +663,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   true,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "accept_payg",
 			expectResource: "",
@@ -663,6 +687,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   false,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "reject",
 			expectResource: "cores",
@@ -686,6 +711,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   true,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "accept_payg",
 			expectResource: "",
@@ -709,6 +735,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   false,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "reject",
 			expectResource: "instances",
@@ -746,6 +773,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   true,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "accept_cr",
 			expectResource: "ram",
@@ -769,6 +797,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 2048, 1, nil),
 			expectAccept:   false,
+			enforce:        true,
 			expectMode:     "enforce",
 			expectDecision: "reject",
 			expectResource: "ram",
@@ -777,7 +806,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 		},
 		// Shadow-mode cases.
 		{
-			name: "SHADOW: would reject RAM but dryRun preserves activations",
+			name: "SHADOW: would reject RAM but enforce=false preserves activations",
 			objects: []client.Object{
 				&v1alpha1.ProjectQuota{
 					ObjectMeta: metav1.ObjectMeta{Name: "quota-project-1-az-1"},
@@ -792,7 +821,6 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 				},
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
-			dryRun:         true,
 			expectAccept:   true,
 			expectMode:     "shadow",
 			expectDecision: "reject",
@@ -801,7 +829,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			expectFG:       "hana_v2",
 		},
 		{
-			name: "SHADOW: would reject cores but dryRun preserves activations",
+			name: "SHADOW: would reject cores but enforce=false preserves activations",
 			objects: []client.Object{
 				&v1alpha1.ProjectQuota{
 					ObjectMeta: metav1.ObjectMeta{Name: "quota-project-1-az-1"},
@@ -816,7 +844,6 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 				},
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
-			dryRun:         true,
 			expectAccept:   true,
 			expectMode:     "shadow",
 			expectDecision: "reject",
@@ -825,7 +852,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			expectFG:       "hana_v2",
 		},
 		{
-			name: "SHADOW: would reject instances but dryRun preserves activations",
+			name: "SHADOW: would reject instances but enforce=false preserves activations",
 			objects: []client.Object{
 				&v1alpha1.ProjectQuota{
 					ObjectMeta: metav1.ObjectMeta{Name: "quota-project-1-az-1"},
@@ -840,7 +867,6 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 				},
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
-			dryRun:         true,
 			expectAccept:   true,
 			expectMode:     "shadow",
 			expectDecision: "reject",
@@ -864,7 +890,6 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 				},
 			},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
-			dryRun:         true,
 			expectAccept:   true,
 			expectMode:     "shadow",
 			expectDecision: "accept_cr",
@@ -877,7 +902,6 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			objects: []client.Object{},
 			request: makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1,
 				map[string]any{"_nova_check_type": "live_migrate"}),
-			dryRun:         true,
 			expectAccept:   true,
 			expectMode:     "shadow",
 			expectDecision: "accept_skipped",
@@ -898,7 +922,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 
 			filter := &FilterQuotaEnforcement{}
 			filter.Client = fakeClient
-			filter.Options.DryRun = tt.dryRun
+			filter.Options.Enforce = tt.enforce
 
 			result, err := filter.Run(slog.Default(), tt.request)
 			if err != nil {
@@ -930,6 +954,67 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 				t.Errorf("expected exactly 1 metric series in vector, got %d", n)
 			}
 		})
+	}
+}
+
+// TestFilterQuotaEnforcement_DefaultIsShadow guards the operational invariant
+// that a freshly-constructed FilterQuotaEnforcement (zero-value Options) runs
+// in shadow mode. The pipeline yaml intentionally does not set the `enforce`
+// parameter so that newly-rolled-out releases never silently start rejecting
+// requests; this test fails if anyone flips the default back to enforce.
+func TestFilterQuotaEnforcement_DefaultIsShadow(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add v1alpha1 to scheme: %v", err)
+	}
+
+	// ProjectQuota that the request would exceed: 5 GiB quota, 0 used, request 10 GiB.
+	objects := []client.Object{
+		&v1alpha1.ProjectQuota{
+			ObjectMeta: metav1.ObjectMeta{Name: "quota-project-1-az-1"},
+			Spec: v1alpha1.ProjectQuotaSpec{
+				ProjectID:        "project-1",
+				AvailabilityZone: "az-1",
+				Quota:            map[string]int64{"hw_version_hana_v2_ram": 5},
+			},
+			Status: v1alpha1.ProjectQuotaStatus{
+				PaygUsage: map[string]int64{"hw_version_hana_v2_ram": 0},
+			},
+		},
+	}
+
+	m := installFreshMetrics(t)
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(objects...).
+		Build()
+
+	// Construct with zero-value Options — no Enforce set.
+	filter := &FilterQuotaEnforcement{}
+	filter.Client = fakeClient
+
+	if filter.Options.Enforce {
+		t.Fatalf("zero-value FilterQuotaEnforcementOpts.Enforce must be false (shadow), got true")
+	}
+
+	request := makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil)
+	result, err := filter.Run(slog.Default(), request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Shadow mode preserves all activations even though the request exceeds quota.
+	if len(result.Activations) != len(request.Hosts) {
+		t.Errorf("expected all %d hosts to remain activated in shadow mode, got %d",
+			len(request.Hosts), len(result.Activations))
+	}
+
+	// Decision metric must record mode=shadow with a reject decision.
+	if got := testutil.ToFloat64(m.Decisions.WithLabelValues(
+		"shadow", "reject", "ram", "az-1", "hana_v2",
+	)); got != 1 {
+		t.Errorf("expected exactly 1 increment on shadow-reject metric, got %v", got)
 	}
 }
 
