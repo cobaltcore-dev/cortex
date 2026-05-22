@@ -29,10 +29,13 @@ type QuotaEnforcementMetrics struct {
 	Decisions *prometheus.CounterVec
 }
 
-// NewQuotaEnforcementMetrics constructs the metrics struct and registers it
-// with the given registerer. Mirrors the pattern used by quota.NewQuotaMetrics.
-func NewQuotaEnforcementMetrics(reg prometheus.Registerer) *QuotaEnforcementMetrics {
-	m := &QuotaEnforcementMetrics{
+// NewQuotaEnforcementMetrics constructs the metrics struct. The returned
+// *QuotaEnforcementMetrics implements prometheus.Collector, so the caller is
+// expected to register it with a registry (typically metrics.Registry from
+// cmd/manager). This matches the Monitor pattern used elsewhere in cortex
+// (e.g. db.Monitor, LogMetricsMonitor, PipelineMonitor).
+func NewQuotaEnforcementMetrics() *QuotaEnforcementMetrics {
+	return &QuotaEnforcementMetrics{
 		Decisions: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "cortex_nova_filter_quota_enforcement_decisions_total",
@@ -43,10 +46,26 @@ func NewQuotaEnforcementMetrics(reg prometheus.Registerer) *QuotaEnforcementMetr
 			[]string{"mode", "decision", "resource", "availability_zone", "flavor_group"},
 		),
 	}
-	if reg != nil {
-		reg.MustRegister(m.Decisions)
+}
+
+// Describe implements prometheus.Collector by delegating to the underlying
+// counter vec. Nil-safe to mirror RecordDecision's defensive guard: a stray
+// MustRegister on an uninitialized struct must not crash the manager.
+func (m *QuotaEnforcementMetrics) Describe(ch chan<- *prometheus.Desc) {
+	if m == nil || m.Decisions == nil {
+		return
 	}
-	return m
+	m.Decisions.Describe(ch)
+}
+
+// Collect implements prometheus.Collector by delegating to the underlying
+// counter vec. Nil-safe — Collect runs on every Prometheus scrape, so a nil
+// receiver must not panic the metrics endpoint.
+func (m *QuotaEnforcementMetrics) Collect(ch chan<- prometheus.Metric) {
+	if m == nil || m.Decisions == nil {
+		return
+	}
+	m.Decisions.Collect(ch)
 }
 
 // recordDecisionNilOnce ensures the "metrics not initialized" warning is

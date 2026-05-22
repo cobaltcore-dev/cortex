@@ -389,7 +389,8 @@ func main() {
 	// Filter-specific metrics that don't fit the generic per-step monitor (e.g.
 	// custom labels). Register them globally so they're available wherever the
 	// filter runs.
-	novafilters.QuotaEnforcementMetricsSingleton = novafilters.NewQuotaEnforcementMetrics(metrics.Registry)
+	novafilters.QuotaEnforcementMetricsSingleton = novafilters.NewQuotaEnforcementMetrics()
+	metrics.Registry.MustRegister(novafilters.QuotaEnforcementMetricsSingleton)
 
 	// Initialize commitments API for LIQUID interface (Postgres-backed usage reporting).
 	commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()

@@ -55,7 +55,7 @@ func makeQuotaEnforcementRequest(projectID, az, hwVersion string, memoryMB, numI
 func installFreshMetrics(t *testing.T) *QuotaEnforcementMetrics {
 	t.Helper()
 	prev := QuotaEnforcementMetricsSingleton
-	m := NewQuotaEnforcementMetrics(prometheus.NewRegistry())
+	m := NewQuotaEnforcementMetrics()
 	QuotaEnforcementMetricsSingleton = m
 	t.Cleanup(func() { QuotaEnforcementMetricsSingleton = prev })
 	return m
@@ -956,19 +956,23 @@ func TestQuantityToGiB(t *testing.T) {
 }
 
 func TestNewQuotaEnforcementMetrics(t *testing.T) {
-	reg := prometheus.NewRegistry()
-	m := NewQuotaEnforcementMetrics(reg)
+	m := NewQuotaEnforcementMetrics()
 	if m == nil || m.Decisions == nil {
 		t.Fatal("expected non-nil metrics with non-nil Decisions vec")
 	}
+	// The constructor no longer registers, so the caller is responsible for
+	// registering with a registry. Verify *QuotaEnforcementMetrics implements
+	// prometheus.Collector by registering it.
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(m)
 	// Increment on a label set; verify it lands.
 	m.RecordDecision("shadow", "reject", "ram", "az-1", "hana_v2")
 	got := testutil.ToFloat64(m.Decisions.WithLabelValues("shadow", "reject", "ram", "az-1", "hana_v2"))
 	if got != 1 {
 		t.Errorf("expected 1 after RecordDecision, got %v", got)
 	}
-	// Re-registering the same metric must fail (proves it was registered).
-	if err := reg.Register(m.Decisions); err == nil {
+	// Re-registering the same collector must fail (proves it was registered).
+	if err := reg.Register(m); err == nil {
 		t.Error("expected error re-registering already-registered metric")
 	}
 }
