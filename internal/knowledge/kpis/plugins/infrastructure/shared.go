@@ -102,7 +102,7 @@ func (h kvmHost) getHostLabels() []string {
 		buildingBlock = parts[1]
 	}
 
-	osVersion := h.Spec.OperatingSystemVersion
+	osVersion := h.Status.OperatingSystem.Version
 	if osVersion == "" {
 		osVersion = "unknown"
 	}
