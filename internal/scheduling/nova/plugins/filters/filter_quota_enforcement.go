@@ -19,12 +19,15 @@ import (
 )
 
 type FilterQuotaEnforcementOpts struct {
-	// DryRun, when true, makes the filter run in shadow mode: it performs the
-	// full headroom analysis and logs/emits metrics for would-be rejects, but
-	// never actually removes hosts from the result. Use this for safe rollouts
-	// and to observe cortex_nova_filter_quota_enforcement_decisions_total in
-	// shadow mode before flipping to enforce.
-	DryRun bool `json:"dryRun,omitempty"`
+	// Enforce, when false (the default zero value), makes the filter run in
+	// shadow mode: it performs the full headroom analysis and logs/emits
+	// metrics for would-be rejects, but never actually removes hosts from the
+	// result. Set to true to globally reject requests without headroom. The
+	// shadow default is intentional so that operators can observe
+	// cortex_nova_filter_quota_enforcement_decisions_total before opting in to
+	// enforcement, and so that newly-rolled-out pipelines never silently start
+	// rejecting requests.
+	Enforce bool `json:"enforce,omitempty"`
 }
 
 func (FilterQuotaEnforcementOpts) Validate() error { return nil }
@@ -52,11 +55,13 @@ func (FilterQuotaEnforcementOpts) Validate() error { return nil }
 // which causes the pipeline to skip it (fail-open).
 //
 // Two modes:
-//   - DryRun=false (enforce, default zero value): on a no-headroom decision the filter
-//     clears all host activations to globally reject the request.
-//   - DryRun=true (shadow): the filter performs the same analysis, logs the would-be
-//     reject, and emits the same decision metric with mode="shadow" — but does NOT
-//     remove hosts. Use this to observe rejection volumes before enabling enforcement.
+//   - Enforce=false (shadow, default zero value): the filter performs the full
+//     headroom analysis, logs the would-be reject, and emits the same decision
+//     metric with mode="shadow" — but does NOT remove hosts. This is the
+//     default so that newly-rolled-out pipelines never silently start
+//     rejecting requests.
+//   - Enforce=true: on a no-headroom decision the filter clears all host
+//     activations to globally reject the request.
 //
 // Every accept/reject/skip outcome is recorded as a Prometheus counter:
 // cortex_nova_filter_quota_enforcement_decisions_total{mode,decision,resource,
@@ -70,9 +75,9 @@ type FilterQuotaEnforcement struct {
 func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
-	mode := "enforce"
-	if s.Options.DryRun {
-		mode = "shadow"
+	mode := "shadow"
+	if s.Options.Enforce {
+		mode = "enforce"
 	}
 
 	// Step 1: Skip intents that don't represent new resource consumption.
@@ -280,8 +285,8 @@ func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.External
 
 		if headroom < check.request {
 			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "reject", check.label, az, hwVersion)
-			if s.Options.DryRun {
-				traceLog.Info("quota enforcement SHADOW: would reject but dryRun=true",
+			if !s.Options.Enforce {
+				traceLog.Info("quota enforcement SHADOW: would reject but enforce=false",
 					"projectID", projectID,
 					"az", az,
 					"flavorGroup", hwVersion,
