@@ -1,0 +1,103 @@
+# Copyright SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+name: Rebuild Postgres on CVE
+on:
+  schedule:
+    # Run daily at 6:00 UTC (scheduled workflows always run on default branch)
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only scan and compare, skip PR creation"
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/${{ github.repository }}-postgres
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      rebuild_fixes_cves: ${{ steps.compare.outputs.rebuild_fixes_cves }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Scan published image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE }}:latest
+          scanners: vuln
+          ignore-unfixed: true
+          severity: "CRITICAL,HIGH,MEDIUM"
+          format: json
+          output: published-scan.json
+        continue-on-error: true
+
+      - name: Build fresh image
+        run: docker build -t cortex-postgres:rebuilt -f postgres/Dockerfile postgres/
+
+      - name: Scan rebuilt image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: cortex-postgres:rebuilt
+          scanners: vuln
+          ignore-unfixed: true
+          severity: "CRITICAL,HIGH,MEDIUM"
+          format: json
+          output: rebuilt-scan.json
+        continue-on-error: true
+
+      - name: Compare CVE counts
+        id: compare
+        run: |
+          published_cves=$(jq '[.Results[]?.Vulnerabilities // [] | length] | add // 0' published-scan.json)
+          rebuilt_cves=$(jq '[.Results[]?.Vulnerabilities // [] | length] | add // 0' rebuilt-scan.json)
+          echo "Published image CVEs: $published_cves"
+          echo "Rebuilt image CVEs:   $rebuilt_cves"
+          if [ "$published_cves" -gt 0 ] && [ "$rebuilt_cves" -lt "$published_cves" ]; then
+            echo "rebuild_fixes_cves=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "rebuild_fixes_cves=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  open-pr:
+    needs: check
+    if: needs.check.outputs.rebuild_fixes_cves == 'true' && !(inputs.dry_run || false)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Update rebuild trigger
+        run: |
+          echo "${{ github.run_id }}" > postgres/rebuild-trigger
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          base: main
+          commit-message: "fix(postgres): rebuild image to resolve CVEs"
+          title: "fix(postgres): rebuild image to resolve CVEs"
+          body: |
+            The daily CVE scan detected fixable vulnerabilities in the published
+            `cortex-postgres` image. A test rebuild confirms that rebuilding
+            reduces the CVE count (via `apt-get upgrade` picking up security patches).
+
+            Merging this PR triggers the image rebuild and publish pipeline.
+
+            This PR was created automatically by the `rebuild-postgres` workflow.
+          branch: fix/postgres-cve-rebuild
+          delete-branch: true
+          labels: security
