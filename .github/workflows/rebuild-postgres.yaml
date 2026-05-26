@@ -85,7 +85,7 @@ jobs:
         run: |
           echo "${{ github.run_id }}" > postgres/rebuild-trigger
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           base: main
           commit-message: "fix(postgres): rebuild image to resolve CVEs"
