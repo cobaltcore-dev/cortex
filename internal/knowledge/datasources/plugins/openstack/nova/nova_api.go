@@ -181,18 +181,31 @@ func (api *novaAPI) probeOSTypes(ctx context.Context, allServers []Server) {
 		slog.Info("os_type prober not initialized, skipping")
 		return
 	}
-	var probed, resolved int
+	var probed, resolved, unknown, rootdiskMissing int
 	for i := range allServers {
 		if isKVMFlavor(allServers[i].FlavorName) {
 			probed++
 			osType := api.probeOSType(ctx, allServers[i])
-			if osType != "" {
-				resolved++
+			switch osType {
+			case "unknown":
+				unknown++
+			case "rootdisk-missing":
+				rootdiskMissing++
+			default:
+				if osType != "" {
+					resolved++
+				}
 			}
 			allServers[i].OSType = osType
 		}
 	}
-	slog.Info("probed os_type for KVM servers", "total", len(allServers), "kvm", probed, "resolved", resolved)
+	slog.Info("probed os_type for KVM servers",
+		"total", len(allServers),
+		"kvm", probed,
+		"resolved", resolved,
+		"unknown", unknown,
+		"rootdiskMissing", rootdiskMissing,
+	)
 }
 
 // probeOSType determines the OS type for a single server.
