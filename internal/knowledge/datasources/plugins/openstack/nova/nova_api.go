@@ -20,15 +20,18 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	glanceimages "github.com/gophercloud/gophercloud/v2/openstack/image/v2/images"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-bits/liquidapi"
 )
 
 type NovaAPI interface {
 	// Init the nova API.
 	Init(ctx context.Context) error
 	// Get all nova servers that are NOT deleted. (Includes ERROR, SHUTOFF etc)
+	// For KVM flavors, os_type is probed concurrently using the OSTypeProber.
 	GetAllServers(ctx context.Context) ([]Server, error)
 	// Get all deleted nova servers since the timestamp.
 	GetDeletedServers(ctx context.Context, since time.Time) ([]DeletedServer, error)
@@ -56,6 +59,8 @@ type novaAPI struct {
 	sc *gophercloud.ServiceClient
 	// Authenticated Glance image service client (only used for NovaDatasourceTypeImages).
 	glance *gophercloud.ServiceClient
+	// OS type prober for determining VM operating system type (only for NovaDatasourceTypeServers).
+	osTypeProber *liquidapi.OSTypeProber
 }
 
 func NewNovaAPI(mon datasources.Monitor, k keystone.KeystoneClient, conf v1alpha1.NovaDatasource) NovaAPI {
@@ -94,6 +99,11 @@ func (api *novaAPI) Init(ctx context.Context) error {
 			return fmt.Errorf("failed to create Glance client: %w", err)
 		}
 		api.glance = glanceClient
+	}
+	// Initialize the OS type prober only for the servers datasource.
+	if api.conf.Type == v1alpha1.NovaDatasourceTypeServers {
+		eo := gophercloud.EndpointOpts{Availability: gophercloud.Availability(sameAsKeystone)}
+		api.osTypeProber = initOSTypeProber(provider, eo)
 	}
 	return nil
 }
@@ -157,8 +167,41 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 		}
 	}
 
+	// Probe OS type concurrently for KVM servers.
+	api.probeOSTypes(ctx, allServers)
+
 	slog.Info("fetched", "label", label, "count", len(allServers))
 	return allServers, nil
+}
+
+// probeOSTypes determines the OS type for all KVM servers sequentially.
+// The prober caches by image ID internally, so repeated images are instant.
+func (api *novaAPI) probeOSTypes(ctx context.Context, allServers []Server) {
+	if api.osTypeProber == nil {
+		slog.Info("os_type prober not initialized, skipping")
+		return
+	}
+	var probed, resolved int
+	for i := range allServers {
+		if isKVMFlavor(allServers[i].FlavorName) {
+			probed++
+			osType := api.probeOSType(ctx, allServers[i])
+			if osType != "" {
+				resolved++
+			}
+			allServers[i].OSType = osType
+		}
+	}
+	slog.Info("probed os_type for KVM servers", "total", len(allServers), "kvm", probed, "resolved", resolved)
+}
+
+// probeOSType determines the OS type for a single server.
+func (api *novaAPI) probeOSType(ctx context.Context, s Server) string {
+	var imageMap map[string]any
+	if s.ImageRef != "" {
+		imageMap = map[string]any{"id": s.ImageRef}
+	}
+	return api.osTypeProber.Get(ctx, servers.Server{ID: s.ID, Image: imageMap})
 }
 
 // Get all deleted Nova servers.
@@ -521,4 +564,20 @@ func deriveOSType(properties map[string]any, tags []string) string {
 		return osType
 	}
 	return "unknown"
+}
+
+// initOSTypeProber safely creates an OSTypeProber, returning nil on any error or panic.
+func initOSTypeProber(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (prober *liquidapi.OSTypeProber) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Warn("panic during OS type prober initialization - os_type will be empty", "panic", r)
+			prober = nil
+		}
+	}()
+	p, err := liquidapi.NewOSTypeProber(provider, eo)
+	if err != nil {
+		slog.Warn("failed to initialize OS type prober - os_type will be empty", "error", err)
+		return nil
+	}
+	return p
 }
