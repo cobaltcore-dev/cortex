@@ -116,6 +116,10 @@ type Server struct {
 	// Empty string for volume-booted servers.
 	ImageRef string `json:"-" db:"image_ref"`
 
+	// OSType is the operating system type determined by the OSTypeProber at sync time.
+	// Only populated for KVM servers (flavor name contains "_k_").
+	OSType string `json:"-" db:"os_type"`
+
 	// From nested server.fault JSON
 
 	// The error response code.
@@ -234,7 +238,7 @@ func (s *Server) MarshalJSON() ([]byte, error) {
 }
 
 // Table in which the openstack model is stored.
-func (Server) TableName() string { return "openstack_servers_v3" }
+func (Server) TableName() string { return "openstack_servers_v4" }
 
 // Index for the openstack model.
 func (Server) Indexes() map[string][]string { return nil }
