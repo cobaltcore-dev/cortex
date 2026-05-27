@@ -429,7 +429,7 @@ func TestProbeScheduler_CapacityCalculation(t *testing.T) {
 	}
 	flavor := compute.FlavorInGroup{Name: "test-flavor", MemoryMB: memMB}
 
-	capacity, hosts, err := c.probeScheduler(context.Background(), flavor, "az-a", "test-pipeline", hvByName)
+	capacity, hosts, err := c.probeScheduler(context.Background(), flavor, "az-a", "test-pipeline", hvByName, true)
 	if err != nil {
 		t.Fatalf("probeScheduler failed: %v", err)
 	}
@@ -439,6 +439,49 @@ func TestProbeScheduler_CapacityCalculation(t *testing.T) {
 	// host-1 = 1 slot (4GiB/4GiB), host-2 = 2 slots (8GiB/4GiB)
 	if capacity != 3 {
 		t.Errorf("capacity = %d, want 3", capacity)
+	}
+}
+
+// TestProbeScheduler_SubtractsAllocationsWhenNotIgnored verifies that placeable-probe slot
+// counting uses remaining capacity (effectiveCapacity − allocation) while the total-probe uses
+// raw capacity. This is the regression test for the bug where both probes used raw capacity,
+// making running VMs invisible in the usage = total − placeable calculation.
+func TestProbeScheduler_SubtractsAllocationsWhenNotIgnored(t *testing.T) {
+	const memMB = 4096
+	const memBytes = int64(memMB) * 1024 * 1024
+
+	scheme := newTestScheme(t)
+
+	// Host has 2-slot capacity (2 × flavor), with 1 slot already used by a running VM.
+	hv := newHypervisor("host-1", "az-a", memBytes*2)
+	hv.Status.Allocation = map[hv1.ResourceName]resource.Quantity{
+		hv1.ResourceMemory: *resource.NewQuantity(memBytes, resource.BinarySI),
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	srv := newMockSchedulerServer(t, []string{"host-1"})
+	defer srv.Close()
+
+	c := NewController(fakeClient, Config{SchedulerURL: srv.URL})
+	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
+	flavor := compute.FlavorInGroup{Name: "test-flavor", MemoryMB: memMB}
+
+	// Total probe (ignoreAllocations=true): raw capacity → 2 slots.
+	totalCap, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "total-pipeline", hvByName, true)
+	if err != nil {
+		t.Fatalf("probeScheduler (total) failed: %v", err)
+	}
+	if totalCap != 2 {
+		t.Errorf("total capacity = %d, want 2 (raw slots)", totalCap)
+	}
+
+	// Placeable probe (ignoreAllocations=false): capacity − allocation → 1 slot.
+	placeableCap, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "placeable-pipeline", hvByName, false)
+	if err != nil {
+		t.Fatalf("probeScheduler (placeable) failed: %v", err)
+	}
+	if placeableCap != 1 {
+		t.Errorf("placeable capacity = %d, want 1 (remaining slot after running VM)", placeableCap)
 	}
 }
 

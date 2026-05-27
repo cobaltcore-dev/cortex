@@ -162,8 +162,8 @@ func (c *Controller) reconcileOne(
 		cur := existingByName[flavor.Name]
 		cur.FlavorName = flavor.Name
 
-		totalVMSlots, totalHosts, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName)
-		placeableVMs, placeableHosts, placeableErr := c.probeScheduler(ctx, flavor, az, c.config.PlaceablePipeline, hvByName)
+		totalVMSlots, totalHosts, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName, true)
+		placeableVMs, placeableHosts, placeableErr := c.probeScheduler(ctx, flavor, az, c.config.PlaceablePipeline, hvByName, false)
 
 		if totalErr != nil {
 			allFresh = false
@@ -257,11 +257,15 @@ func (c *Controller) reconcileOne(
 
 // probeScheduler calls the scheduler with the given pipeline and returns VM slots + host count.
 // Capacity is computed as sum of floor(hostMemory / flavorMemory) across returned hosts.
+// When ignoreAllocations is true (total/empty-datacenter probe), raw effective capacity is used.
+// When false (placeable probe), hv.Status.Allocation is subtracted first so that slots reflect
+// remaining capacity after running VMs.
 func (c *Controller) probeScheduler(
 	ctx context.Context,
 	flavor compute.FlavorInGroup,
 	az, pipeline string,
 	hvByName map[string]hv1.Hypervisor,
+	ignoreAllocations bool,
 ) (capacity, hosts int64, err error) {
 
 	flavorBytes := int64(flavor.MemoryMB) * 1024 * 1024 //nolint:gosec
@@ -309,7 +313,16 @@ func (c *Controller) probeScheduler(
 		if !ok {
 			continue
 		}
-		if capBytes := memCap.Value(); capBytes > 0 {
+		capBytes := memCap.Value()
+		if !ignoreAllocations {
+			if alloc, ok := hv.Status.Allocation[hv1.ResourceMemory]; ok {
+				capBytes -= alloc.Value()
+			}
+			if capBytes < 0 {
+				capBytes = 0
+			}
+		}
+		if capBytes > 0 {
 			capacity += capBytes / flavorBytes
 		}
 	}
