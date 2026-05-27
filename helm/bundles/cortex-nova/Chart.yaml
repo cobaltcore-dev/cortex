@@ -5,23 +5,23 @@ apiVersion: v2
 name: cortex-nova
 description: A Helm chart deploying Cortex for Nova.
 type: application
-version: 0.0.71
+version: 0.0.72
 appVersion: 0.1.0
 dependencies:
   # from: file://../../library/cortex-postgres
   - name: cortex-postgres
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.6.3
+    version: 0.6.4
 
   # from: file://../../library/cortex
   - name: cortex
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.58
+    version: 0.0.59
     alias: cortex-knowledge-controllers
   # from: file://../../library/cortex
   - name: cortex
     repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.0.58
+    version: 0.0.59
     alias: cortex-scheduling-controllers
 
   # Owner info adds a configmap to the kubernetes cluster with information on
