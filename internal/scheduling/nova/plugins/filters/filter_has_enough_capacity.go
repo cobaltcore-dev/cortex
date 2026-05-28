@@ -12,7 +12,7 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	resv "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -103,11 +103,11 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 	}
 
 	// Subtract reserved resources by Reservations.
-	var resList v1alpha1.ReservationList
-	if err := s.Client.List(context.Background(), &resList); err != nil {
+	var reservations v1alpha1.ReservationList
+	if err := s.Client.List(context.Background(), &reservations); err != nil {
 		return nil, err
 	}
-	for _, reservation := range resList.Items {
+	for _, reservation := range reservations.Items {
 		// Check if this reservation type should be ignored — applies regardless of ready state.
 		if slices.Contains(s.Options.IgnoredReservationTypes, reservation.Spec.Type) {
 			traceLog.Debug("ignoring reservation type", "type", reservation.Spec.Type, "reservation", reservation.Name)
@@ -207,7 +207,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		//
 		// Clamping: if confirmed VMs exceed slot size (e.g. after resize), block = 0.
 		// Oversize spec-only: if a pending VM is larger than the remaining slot, block its full size.
-		resourcesToBlock := reservations.ResourcesToBlock(&reservation, s.Options.IgnoreAllocations)
+		resourcesToBlock := resv.ResourcesToBlock(&reservation, s.Options.IgnoreAllocations)
 
 		// Block the calculated resources on each host
 		for host := range hostsToBlock {
