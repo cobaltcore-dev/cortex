@@ -69,8 +69,7 @@ func UnusedReservationCapacity(res *v1alpha1.Reservation, ignoreAllocations bool
 		}
 		return result
 	} else {
-		// FailoverReservations: protected VMs run on their primary host, not the backup host,
-		// so they do not appear in hv.Status.Allocation on the backup — block the full slot.
+		// FailoverReservations are always fully blocked.
 		return res.Spec.Resources
 	}
 }
