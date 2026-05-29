@@ -12,7 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
 
-func TestResourcesToBlock(t *testing.T) {
+func TestUnusedReservationCapacity(t *testing.T) {
 	gib := func(n int64) resource.Quantity { return *resource.NewQuantity(n*1024*1024*1024, resource.BinarySI) }
 	memBytes := func(m map[hv1.ResourceName]resource.Quantity) int64 {
 		q, ok := m[hv1.ResourceMemory]
@@ -163,9 +163,9 @@ func TestResourcesToBlock(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := memBytes(ResourcesToBlock(tt.res, tt.ignoreAllocations))
+			got := memBytes(UnusedReservationCapacity(tt.res, tt.ignoreAllocations))
 			if got != tt.wantMemoryBytes {
-				t.Errorf("ResourcesToBlock() memory = %d, want %d", got, tt.wantMemoryBytes)
+				t.Errorf("UnusedReservationCapacity() memory = %d, want %d", got, tt.wantMemoryBytes)
 			}
 		})
 	}

@@ -10,7 +10,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
 
-// ResourcesToBlock returns the resources a Reservation should block on its host(s).
+// UnusedReservationCapacity returns the resources a Reservation should block on its host(s).
 // This is the single source of truth used by both the capacity controller and
 // filter_has_enough_capacity to ensure consistent accounting.
 //
@@ -20,7 +20,7 @@ import (
 // This adjustment is skipped when ignoreAllocations is true (empty-datacenter scenario,
 // no VM deduction from capacity) or when the reservation is mid-migration
 // (TargetHost != Status.Host) — in both cases the full slot is blocked on all hosts.
-func ResourcesToBlock(res *v1alpha1.Reservation, ignoreAllocations bool) map[hv1.ResourceName]resource.Quantity {
+func UnusedReservationCapacity(res *v1alpha1.Reservation, ignoreAllocations bool) map[hv1.ResourceName]resource.Quantity {
 	if res.Spec.Type == v1alpha1.ReservationTypeCommittedResource &&
 		!ignoreAllocations &&
 		res.Spec.TargetHost == res.Status.Host &&

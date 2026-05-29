@@ -207,7 +207,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		//
 		// Clamping: if confirmed VMs exceed slot size (e.g. after resize), block = 0.
 		// Oversize spec-only: if a pending VM is larger than the remaining slot, block its full size.
-		resourcesToBlock := resv.ResourcesToBlock(&reservation, s.Options.IgnoreAllocations)
+		resourcesToBlock := resv.UnusedReservationCapacity(&reservation, s.Options.IgnoreAllocations)
 
 		// Block the calculated resources on each host
 		for host := range hostsToBlock {

@@ -363,7 +363,7 @@ func (c *Controller) blockedMemoryByHost(ctx context.Context) (map[string]int64,
 			continue
 		}
 
-		resourcesToBlock := reservations.ResourcesToBlock(res, false)
+		resourcesToBlock := reservations.UnusedReservationCapacity(res, false)
 		memQty, ok := resourcesToBlock[hv1.ResourceMemory]
 		if !ok {
 			continue
