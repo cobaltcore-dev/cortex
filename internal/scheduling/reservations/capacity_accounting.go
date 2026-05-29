@@ -69,7 +69,7 @@ func UnusedReservationCapacity(res *v1alpha1.Reservation, ignoreAllocations bool
 		}
 		return result
 	} else {
-		// FailoverReservations are always fully blocked.
+		// FailoverReservations are always fully blocked and unused.
 		return res.Spec.Resources
 	}
 }
