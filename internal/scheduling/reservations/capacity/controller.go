@@ -86,10 +86,17 @@ func (c *Controller) reconcileAll(ctx context.Context) error {
 
 	azs := availabilityZones(hvList.Items)
 
+	// Compute reservation memory blocks once per cycle — shared across all (group × AZ) pairs.
+	blockedByReservations, err := c.blockedMemoryByHost(ctx)
+	if err != nil {
+		logger.Error(err, "failed to compute blocked memory by host, placeable slot counts may be overstated")
+		blockedByReservations = map[string]int64{}
+	}
+
 	var succeeded, failed int
 	for groupName, groupData := range flavorGroups {
 		for _, az := range azs {
-			if err := c.reconcileOne(ctx, groupName, groupData, az, hvByName, hvList.Items); err != nil {
+			if err := c.reconcileOne(ctx, groupName, groupData, az, hvByName, hvList.Items, blockedByReservations); err != nil {
 				logger.Error(err, "failed to reconcile flavor group capacity",
 					"flavorGroup", groupName, "az", az)
 				failed++
@@ -118,6 +125,7 @@ func (c *Controller) reconcileOne(
 	az string,
 	hvByName map[string]hv1.Hypervisor,
 	allHVs []hv1.Hypervisor,
+	blockedByReservations map[string]int64,
 ) error {
 
 	smallestFlavorBytes := int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec
@@ -162,8 +170,8 @@ func (c *Controller) reconcileOne(
 		cur := existingByName[flavor.Name]
 		cur.FlavorName = flavor.Name
 
-		totalVMSlots, totalHosts, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName, true)
-		placeableVMs, placeableHosts, placeableErr := c.probeScheduler(ctx, flavor, az, c.config.PlaceablePipeline, hvByName, false)
+		totalVMSlots, totalHosts, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName, true, nil)
+		placeableVMs, placeableHosts, placeableErr := c.probeScheduler(ctx, flavor, az, c.config.PlaceablePipeline, hvByName, false, blockedByReservations)
 
 		if totalErr != nil {
 			allFresh = false
@@ -258,14 +266,15 @@ func (c *Controller) reconcileOne(
 // probeScheduler calls the scheduler with the given pipeline and returns VM slots + host count.
 // Capacity is computed as sum of floor(hostMemory / flavorMemory) across returned hosts.
 // When ignoreAllocations is true (total/empty-datacenter probe), raw effective capacity is used.
-// When false (placeable probe), hv.Status.Allocation is subtracted first so that slots reflect
-// remaining capacity after running VMs.
+// When false (placeable probe), hv.Status.Allocation and blockedByReservations are subtracted so
+// that slots reflect remaining capacity after running VMs and active reservation blocks.
 func (c *Controller) probeScheduler(
 	ctx context.Context,
 	flavor compute.FlavorInGroup,
 	az, pipeline string,
 	hvByName map[string]hv1.Hypervisor,
 	ignoreAllocations bool,
+	blockedByReservations map[string]int64,
 ) (capacity, hosts int64, err error) {
 
 	flavorBytes := int64(flavor.MemoryMB) * 1024 * 1024 //nolint:gosec
@@ -318,6 +327,7 @@ func (c *Controller) probeScheduler(
 			if alloc, ok := hv.Status.Allocation[hv1.ResourceMemory]; ok {
 				capBytes -= alloc.Value()
 			}
+			capBytes -= blockedByReservations[hostName]
 			if capBytes < 0 {
 				capBytes = 0
 			}
@@ -327,6 +337,43 @@ func (c *Controller) probeScheduler(
 		}
 	}
 	return capacity, hosts, nil
+}
+
+// blockedMemoryByHost lists all Reservations and returns the total bytes blocked per host name.
+// Only placed reservations (TargetHost or Status.Host non-empty) are counted.
+// When a reservation is being migrated (TargetHost != Status.Host), both hosts are blocked.
+func (c *Controller) blockedMemoryByHost(ctx context.Context) (map[string]int64, error) {
+	var list v1alpha1.ReservationList
+	if err := c.client.List(ctx, &list); err != nil {
+		return nil, fmt.Errorf("failed to list reservations: %w", err)
+	}
+
+	blocked := make(map[string]int64)
+	for i := range list.Items {
+		res := &list.Items[i]
+
+		hostsToBlock := make(map[string]struct{})
+		if res.Spec.TargetHost != "" {
+			hostsToBlock[res.Spec.TargetHost] = struct{}{}
+		}
+		if res.Status.Host != "" {
+			hostsToBlock[res.Status.Host] = struct{}{}
+		}
+		if len(hostsToBlock) == 0 {
+			continue
+		}
+
+		resourcesToBlock := reservations.UnusedReservationCapacity(res, false)
+		memQty, ok := resourcesToBlock[hv1.ResourceMemory]
+		if !ok {
+			continue
+		}
+		memBytes := memQty.Value()
+		for host := range hostsToBlock {
+			blocked[host] += memBytes
+		}
+	}
+	return blocked, nil
 }
 
 // sumCommittedCapacity sums AcceptedSpec.Amount (or Spec.Amount as fallback) across all

@@ -12,6 +12,7 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	resv "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -198,7 +199,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			continue
 		}
 
-		// For CR reservations with allocations, compute the effective block:
+		// CommittedResourceReservations: compute the effective block:
 		//   confirmed = sum of resources for VMs present in both Spec and Status allocations
 		//   specOnly  = sum of resources for VMs present in Spec but not yet in Status
 		//   remaining = max(0, Spec.Resources - confirmed)  [clamped: never negative]
@@ -206,61 +207,9 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		//
 		// Clamping: if confirmed VMs exceed slot size (e.g. after resize), block = 0.
 		// Oversize spec-only: if a pending VM is larger than the remaining slot, block its full size.
-		var resourcesToBlock map[hv1.ResourceName]resource.Quantity
-		if reservation.Spec.Type == v1alpha1.ReservationTypeCommittedResource &&
-			// When ignoring allocations (empty-datacenter scenario) VM resources are not
-			// deducted, so the confirmed-VM adjustment would under-block: always use the
-			// full slot instead.
-			!s.Options.IgnoreAllocations &&
-			// if the reservation is not being migrated, block only unused resources
-			reservation.Spec.TargetHost == reservation.Status.Host &&
-			reservation.Spec.CommittedResourceReservation != nil &&
-			len(reservation.Spec.CommittedResourceReservation.Allocations) > 0 {
-			confirmedResources := make(map[hv1.ResourceName]resource.Quantity)
-			specOnlyResources := make(map[hv1.ResourceName]resource.Quantity)
-
-			statusAllocs := map[string]string{}
-			if reservation.Status.CommittedResourceReservation != nil {
-				statusAllocs = reservation.Status.CommittedResourceReservation.Allocations
-			}
-
-			for instanceUUID, allocation := range reservation.Spec.CommittedResourceReservation.Allocations {
-				_, isConfirmed := statusAllocs[instanceUUID]
-				for resourceName, quantity := range allocation.Resources {
-					if isConfirmed {
-						existing := confirmedResources[resourceName]
-						existing.Add(quantity)
-						confirmedResources[resourceName] = existing
-					} else {
-						existing := specOnlyResources[resourceName]
-						existing.Add(quantity)
-						specOnlyResources[resourceName] = existing
-					}
-				}
-			}
-
-			resourcesToBlock = make(map[hv1.ResourceName]resource.Quantity)
-			zero := resource.Quantity{}
-			for resourceName, slotSize := range reservation.Spec.Resources {
-				confirmed := confirmedResources[resourceName]
-				specOnly := specOnlyResources[resourceName]
-
-				remaining := slotSize.DeepCopy()
-				remaining.Sub(confirmed)
-				if remaining.Cmp(zero) < 0 {
-					remaining = zero.DeepCopy()
-				}
-
-				if specOnly.Cmp(remaining) > 0 {
-					resourcesToBlock[resourceName] = specOnly.DeepCopy()
-				} else {
-					resourcesToBlock[resourceName] = remaining
-				}
-			}
-		} else {
-			// For other reservation types or CR without allocations, block full resources
-			resourcesToBlock = reservation.Spec.Resources
-		}
+		//
+		// FailoverReservations: block = Spec.Resources (always fully blocked).
+		resourcesToBlock := resv.UnusedReservationCapacity(&reservation, s.Options.IgnoreAllocations)
 
 		// Block the calculated resources on each host
 		for host := range hostsToBlock {
