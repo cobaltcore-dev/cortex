@@ -226,7 +226,7 @@ func TestReconcileOne_CreatesCRD(t *testing.T) {
 	}
 	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
 
-	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, hvByName, []hv1.Hypervisor{*hv}); err != nil {
+	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, hvByName, []hv1.Hypervisor{*hv}, map[string]int64{}); err != nil {
 		t.Fatalf("reconcileOne failed: %v", err)
 	}
 
@@ -293,7 +293,7 @@ func TestReconcileOne_SetsReadyConditionFalseOnSchedulerError(t *testing.T) {
 	}
 
 	// reconcileOne returns no error itself (it continues on probe failure), but sets Ready=False
-	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, map[string]hv1.Hypervisor{}, []hv1.Hypervisor{}); err != nil {
+	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, map[string]hv1.Hypervisor{}, []hv1.Hypervisor{}, map[string]int64{}); err != nil {
 		t.Fatalf("reconcileOne failed: %v", err)
 	}
 
@@ -358,11 +358,11 @@ func TestReconcileOne_IdempotentUpdate(t *testing.T) {
 	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
 
 	// First call
-	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, hvByName, []hv1.Hypervisor{*hv}); err != nil {
+	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, hvByName, []hv1.Hypervisor{*hv}, map[string]int64{}); err != nil {
 		t.Fatalf("first reconcileOne failed: %v", err)
 	}
 	// Second call — should not error on the already-existing CRD
-	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, hvByName, []hv1.Hypervisor{*hv}); err != nil {
+	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, hvByName, []hv1.Hypervisor{*hv}, map[string]int64{}); err != nil {
 		t.Fatalf("second reconcileOne failed: %v", err)
 	}
 
@@ -429,7 +429,7 @@ func TestProbeScheduler_CapacityCalculation(t *testing.T) {
 	}
 	flavor := compute.FlavorInGroup{Name: "test-flavor", MemoryMB: memMB}
 
-	capacity, hosts, err := c.probeScheduler(context.Background(), flavor, "az-a", "test-pipeline", hvByName, true)
+	capacity, hosts, err := c.probeScheduler(context.Background(), flavor, "az-a", "test-pipeline", hvByName, true, nil)
 	if err != nil {
 		t.Fatalf("probeScheduler failed: %v", err)
 	}
@@ -467,7 +467,7 @@ func TestProbeScheduler_SubtractsAllocationsWhenNotIgnored(t *testing.T) {
 	flavor := compute.FlavorInGroup{Name: "test-flavor", MemoryMB: memMB}
 
 	// Total probe (ignoreAllocations=true): raw capacity → 2 slots.
-	totalCap, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "total-pipeline", hvByName, true)
+	totalCap, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "total-pipeline", hvByName, true, nil)
 	if err != nil {
 		t.Fatalf("probeScheduler (total) failed: %v", err)
 	}
@@ -476,7 +476,7 @@ func TestProbeScheduler_SubtractsAllocationsWhenNotIgnored(t *testing.T) {
 	}
 
 	// Placeable probe (ignoreAllocations=false): capacity − allocation → 1 slot.
-	placeableCap, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "placeable-pipeline", hvByName, false)
+	placeableCap, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "placeable-pipeline", hvByName, false, nil)
 	if err != nil {
 		t.Fatalf("probeScheduler (placeable) failed: %v", err)
 	}
@@ -576,7 +576,7 @@ func TestReconcileOne_ZeroMemoryFlavorReturnsError(t *testing.T) {
 	groupData := compute.FlavorGroupFeature{
 		SmallestFlavor: compute.FlavorInGroup{Name: "bad-flavor", MemoryMB: 0},
 	}
-	err := c.reconcileOne(context.Background(), "hana-v2", groupData, "az-a", nil, nil)
+	err := c.reconcileOne(context.Background(), "hana-v2", groupData, "az-a", nil, nil, nil)
 	if err == nil {
 		t.Error("expected error for zero-memory flavor")
 	}
@@ -646,5 +646,49 @@ func TestSumCommittedCapacity(t *testing.T) {
 	}
 	if got != 3 {
 		t.Errorf("sumCommittedCapacity = %d, want 3", got)
+	}
+}
+
+// TestProbeScheduler_SubtractsReservationBlocksWhenNotIgnored verifies that placeable-probe
+// slot counting subtracts per-host reservation blocks in addition to hv.Status.Allocation.
+func TestProbeScheduler_SubtractsReservationBlocksWhenNotIgnored(t *testing.T) {
+	const memMB = 4096
+	const memBytes = int64(memMB) * 1024 * 1024
+
+	scheme := newTestScheme(t)
+
+	// Host has 3-slot capacity (3 × flavor), 1 slot used by running VM, 1 slot blocked by reservation.
+	hv := newHypervisor("host-1", "az-a", memBytes*3)
+	hv.Status.Allocation = map[hv1.ResourceName]resource.Quantity{
+		hv1.ResourceMemory: *resource.NewQuantity(memBytes, resource.BinarySI),
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	srv := newMockSchedulerServer(t, []string{"host-1"})
+	defer srv.Close()
+
+	c := NewController(fakeClient, Config{SchedulerURL: srv.URL})
+	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
+	flavor := compute.FlavorInGroup{Name: "test-flavor", MemoryMB: memMB}
+
+	// Total probe: raw 3 slots, no subtraction.
+	totalCap, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "total-pipeline", hvByName, true, nil)
+	if err != nil {
+		t.Fatalf("probeScheduler (total) failed: %v", err)
+	}
+	if totalCap != 3 {
+		t.Errorf("total capacity = %d, want 3", totalCap)
+	}
+
+	// Placeable probe with 1 reservation block: 3 - 1 (alloc) - 1 (reservation) = 1 slot.
+	blockedByReservations := map[string]int64{
+		"host-1": memBytes, // 1 reservation blocking 1 slot's worth of memory
+	}
+	placeableCap, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "placeable-pipeline", hvByName, false, blockedByReservations)
+	if err != nil {
+		t.Fatalf("probeScheduler (placeable) failed: %v", err)
+	}
+	if placeableCap != 1 {
+		t.Errorf("placeable capacity = %d, want 1 (3 slots − 1 alloc − 1 reservation)", placeableCap)
 	}
 }
