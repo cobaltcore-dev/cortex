@@ -199,7 +199,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			continue
 		}
 
-		// For CR reservations with allocations, compute the effective block:
+		// CommittedResourceReservations: compute the effective block:
 		//   confirmed = sum of resources for VMs present in both Spec and Status allocations
 		//   specOnly  = sum of resources for VMs present in Spec but not yet in Status
 		//   remaining = max(0, Spec.Resources - confirmed)  [clamped: never negative]
@@ -207,6 +207,8 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		//
 		// Clamping: if confirmed VMs exceed slot size (e.g. after resize), block = 0.
 		// Oversize spec-only: if a pending VM is larger than the remaining slot, block its full size.
+		//
+		// FailoverReservations: block = Spec.Resources (always fully blocked).
 		resourcesToBlock := resv.UnusedReservationCapacity(&reservation, s.Options.IgnoreAllocations)
 
 		// Block the calculated resources on each host

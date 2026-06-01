@@ -14,12 +14,12 @@ import (
 // This is the single source of truth used by both the capacity controller and
 // filter_has_enough_capacity to ensure consistent accounting.
 //
-// For CommittedResourceReservations with allocations, confirmed VMs already appear in
-// hv.Status.Allocation, so blocking the full slot would double-count them.
-// The effective block is: max(slot − confirmedVMs, specOnlyVMs), clamped to zero.
-// This adjustment is skipped when ignoreAllocations is true (empty-datacenter scenario,
-// no VM deduction from capacity) or when the reservation is mid-migration
-// (TargetHost != Status.Host) — in both cases the full slot is blocked on all hosts.
+// CommittedResourceReservations: confirmed VMs already appear in hv.Status.Allocation,
+// so blocking the full slot would double-count them. The effective block is:
+// max(slot − confirmedVMs, specOnlyVMs), clamped to zero. Skipped (full slot used) when
+// ignoreAllocations is true or when mid-migration (TargetHost != Status.Host).
+//
+// FailoverReservations: always block the full Spec.Resources.
 func UnusedReservationCapacity(res *v1alpha1.Reservation, ignoreAllocations bool) map[hv1.ResourceName]resource.Quantity {
 	if res.Spec.Type == v1alpha1.ReservationTypeCommittedResource &&
 		!ignoreAllocations &&
