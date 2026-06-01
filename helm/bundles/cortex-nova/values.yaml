@@ -17,6 +17,11 @@ owner-info:
 alerts:
   enabled: true
   prometheus: openstack
+  thresholds:
+    # Memory threshold for CortexNovaHighMemoryUsage in MiB.
+    highMemoryMiB: 6000
+    # Reconcile-duration threshold for CortexNovaReconcileDurationHigher10Min in seconds.
+    reconcileDurationSeconds: 600
 
 serviceMonitor:
   extraLabels: {}
