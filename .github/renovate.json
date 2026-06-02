@@ -63,6 +63,10 @@
   ],
   "packageRules": [
     {
+      "matchManagers": ["tool-constraint"],
+      "enabled": false
+    },
+    {
       "matchPackageNames": [
         "golang"
       ],
