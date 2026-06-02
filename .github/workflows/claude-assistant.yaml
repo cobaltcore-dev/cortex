@@ -28,6 +28,7 @@ jobs:
           fi
 
   claude:
+    environment: claude
     needs: check-allowlist
     if: needs.check-allowlist.outputs.allowed == 'true'
     runs-on: ubuntu-latest
