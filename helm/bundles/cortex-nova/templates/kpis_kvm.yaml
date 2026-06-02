@@ -26,6 +26,7 @@ spec:
       - name: nova-servers
       - name: nova-flavors
       - name: identity-projects
+      - name: identity-domains
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
@@ -39,4 +40,5 @@ spec:
       - name: nova-servers
       - name: nova-flavors
       - name: identity-projects
+      - name: identity-domains
 {{- end }}
