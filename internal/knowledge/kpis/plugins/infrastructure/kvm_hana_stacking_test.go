@@ -267,13 +267,13 @@ func TestKVMHanaStackingKPI_Collect(t *testing.T) {
 				{ID: "s1", TenantID: "project-1", OSEXTSRVATTRHost: "node001-bb01", FlavorName: "hana_k_medium", Status: "ACTIVE"},
 			},
 			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-0"}},
-			domains:  []identity.Domain{{ID: "domain-0", Name: "Domain One"}},
+			domains:  []identity.Domain{{ID: "domain-0", Name: "Domain Zero"}},
 			flavors:  []nova.Flavor{{ID: "f1", Name: "hana_k_medium", RAM: 1638400}},
 			hypervisors: []hv1.Hypervisor{
 				{ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01", Labels: map[string]string{"topology.kubernetes.io/zone": "az1"}}},
 			},
 			expectedMetrics: []collectedKVMMetric{
-				hanaStackingMetric("node001-bb01", "az1", "project-1", "Project One", "domain-0", "Domain One", 1638400*1024*1024),
+				hanaStackingMetric("node001-bb01", "az1", "project-1", "Project One", "domain-0", "Domain Zero", 1638400*1024*1024),
 			},
 		},
 		{
