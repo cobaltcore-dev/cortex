@@ -46,7 +46,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	log := ctrl.LoggerFrom(ctx).WithValues("component", "usage-reconciler", "committedResource", req.Name)
+	log := ctrl.LoggerFrom(ctx).WithValues("committedResource", req.Name)
 
 	// Only active commitments have assigned VMs. Clear stale usage status if present.
 	if cr.Spec.State != v1alpha1.CommitmentStatusConfirmed && cr.Spec.State != v1alpha1.CommitmentStatusGuaranteed {
@@ -272,7 +272,7 @@ func (r *UsageReconciler) hypervisorToCommittedResources(ctx context.Context, ob
 
 // SetupWithManager registers the usage reconciler with the controller manager.
 func (r *UsageReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
-	log := ctrl.Log.WithName("committed-resource-usage")
+	log := ctrl.Log.WithName("committed-resource-usage").WithValues("module", "committed-resources")
 	log.Info("starting usage reconciler", "cooldownInterval", r.Conf.CooldownInterval.Duration)
 
 	if err := indexCommittedResourceByUUID(context.Background(), mcl); err != nil {

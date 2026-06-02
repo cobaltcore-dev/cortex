@@ -145,7 +145,7 @@ func (c *QuotaController) ReconcilePeriodic(ctx context.Context) error {
 		paygUsage := derivePaygUsage(projectTotalUsage, crUsage)
 
 		// Write status with conflict retry (full reconcile sets LastFullReconcileAt)
-		if err := c.updateProjectQuotaStatusWithRetry(ctx, pq.Name, projectTotalUsage, paygUsage, true); err != nil {
+		if err := c.updateProjectQuotaStatusWithRetry(ctx, pq.Name, projectTotalUsage, paygUsage, true, flavorGroups); err != nil {
 			logger.Error(err, "failed to update ProjectQuota status", "project", projectID)
 			skipped++
 			continue
@@ -252,7 +252,7 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	paygUsage := derivePaygUsage(totalUsage, crUsage)
 
 	// Write updated status with conflict retry
-	if err := c.updateProjectQuotaStatusWithRetry(ctx, pq.Name, totalUsage, paygUsage, specChanged); err != nil {
+	if err := c.updateProjectQuotaStatusWithRetry(ctx, pq.Name, totalUsage, paygUsage, specChanged, flavorGroups); err != nil {
 		logger.Error(err, "failed to update ProjectQuota status")
 		return ctrl.Result{}, err
 	}
@@ -634,8 +634,8 @@ func (c *QuotaController) applyDeltaAndUpdateStatus(
 			// Update human-readable summaries for wide kubectl output
 			pq.Status.TotalUsageSummary = buildUsageSummary(pq.Status.TotalUsage)
 			pq.Status.PaygUsageSummary = buildUsageSummary(pq.Status.PaygUsage)
-			pq.Status.LimesUsageSummary = buildLimesSummary(pq.Status.TotalUsage, c.Config.FlavorGroupResourceConfig)
-			pq.Status.LimesQuotaSummary = buildLimesSummary(pq.Spec.Quota, c.Config.FlavorGroupResourceConfig)
+			pq.Status.LimesUsageSummary = buildLimesSummary(pq.Status.TotalUsage, flavorGroups)
+			pq.Status.LimesQuotaSummary = buildLimesSummary(pq.Spec.Quota, flavorGroups)
 
 			now := metav1.Now()
 			pq.Status.LastReconcileAt = &now
@@ -939,13 +939,14 @@ func expandAZSlice(flat map[string]int64, az string) map[string]map[string]int64
 // totalUsage and paygUsage are multi-AZ maps; this function extracts the relevant AZ
 // slice based on the CRD's Spec.AvailabilityZone.
 // If fullReconcile is true, also updates LastFullReconcileAt and ObservedGeneration.
-// flavorGroups is used to compute Limes unit summaries (may be nil to skip).
+// flavorGroups is used to compute Limes unit summaries.
 func (c *QuotaController) updateProjectQuotaStatusWithRetry(
 	ctx context.Context,
 	pqName string,
 	totalUsage map[string]map[string]int64,
 	paygUsage map[string]map[string]int64,
 	fullReconcile bool,
+	flavorGroups map[string]compute.FlavorGroupFeature,
 ) error {
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -972,8 +973,8 @@ func (c *QuotaController) updateProjectQuotaStatusWithRetry(
 		pq.Status.TotalUsageSummary = buildUsageSummary(pq.Status.TotalUsage)
 		pq.Status.PaygUsageSummary = buildUsageSummary(pq.Status.PaygUsage)
 		// Limes unit summaries for debugging (converted from internal GiB to declared units)
-		pq.Status.LimesUsageSummary = buildLimesSummary(pq.Status.TotalUsage, c.Config.FlavorGroupResourceConfig)
-		pq.Status.LimesQuotaSummary = buildLimesSummary(pq.Spec.Quota, c.Config.FlavorGroupResourceConfig)
+		pq.Status.LimesUsageSummary = buildLimesSummary(pq.Status.TotalUsage, flavorGroups)
+		pq.Status.LimesQuotaSummary = buildLimesSummary(pq.Spec.Quota, flavorGroups)
 		pq.Status.ObservedGeneration = pq.Generation
 		now := metav1.Now()
 		pq.Status.LastReconcileAt = &now
@@ -1066,7 +1067,8 @@ func buildUsageSummary(usage map[string]int64) string {
 // For RAM resources in fixed-ratio groups: value * 1024 / SmallestFlavor.MemoryMB (GiB→slots).
 // For RAM resources in variable-ratio groups: value is already in GiB = declared units (1:1).
 // For cores and instances: value is 1:1 (no conversion).
-func buildLimesSummary(values map[string]int64, cfg map[string]commitments.FlavorGroupResourcesConfig) string {
+// Uses FlavorGroupFeature from the Knowledge CRD for RAM unit conversion (consistent with the usage API).
+func buildLimesSummary(values map[string]int64, flavorGroups map[string]compute.FlavorGroupFeature) string {
 	if len(values) == 0 {
 		return ""
 	}
@@ -1076,7 +1078,11 @@ func buildLimesSummary(values map[string]int64, cfg map[string]commitments.Flavo
 		if strings.HasPrefix(key, "hw_version_") && strings.HasSuffix(key, "_ram") {
 			name := strings.TrimPrefix(key, "hw_version_")
 			groupName := strings.TrimSuffix(name, "_ram")
-			converted[key] = commitments.ResourceConfigForGroup(cfg, groupName).RAM.GiBToDeclaredUnits(val)
+			if fg, ok := flavorGroups[groupName]; ok {
+				converted[key] = fg.GiBToDeclaredUnits(val)
+			} else {
+				converted[key] = val // no conversion if group unknown
+			}
 		} else {
 			converted[key] = val
 		}

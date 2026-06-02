@@ -31,6 +31,20 @@ func ComputeStatusSummary(spec CommittedResourceSpec, status CommittedResourceSt
 		parts = append(parts, reason)
 	}
 
+	// Include the condition message when it carries failure detail:
+	// - Always for Rejected (the terminal rejection reason).
+	// - For Reserving, only when it's a failure being retried — skip the
+	//   generic "waiting for reservation placement" which adds nothing beyond the reason.
+	msg := cond.Message
+	showMsg := msg != "" && msg != "waiting for reservation placement" &&
+		(reason == CommittedResourceReasonRejected || reason == CommittedResourceReasonReserving)
+	if showMsg {
+		if len(msg) > 80 {
+			msg = msg[:77] + "..."
+		}
+		parts = append(parts, msg)
+	}
+
 	// VM count — only meaningful once placement is accepted.
 	if reason == CommittedResourceReasonAccepted {
 		n := len(status.AssignedInstances)
