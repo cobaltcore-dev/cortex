@@ -26,4 +26,17 @@ spec:
       - name: nova-servers
       - name: nova-flavors
       - name: identity-projects
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
+  name: kvm-hana-stacking
+spec:
+  schedulingDomain: nova
+  impl: kvm_hana_stacking_kpi
+  dependencies:
+    datasources:
+      - name: nova-servers
+      - name: nova-flavors
+      - name: identity-projects
 {{- end }}
