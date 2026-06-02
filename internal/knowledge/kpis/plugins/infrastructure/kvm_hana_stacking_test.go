@@ -87,11 +87,11 @@ func TestKVMHanaStackingKPI_queryHanaStacking(t *testing.T) {
 			servers: []nova.Server{
 				{ID: "s1", TenantID: "project-1", OSEXTSRVATTRHost: "node001-bb01", FlavorName: "hana_k_medium", Status: "ACTIVE"},
 			},
-			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
-			domains:  []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
+			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-0"}},
+			domains:  []identity.Domain{{ID: "domain-0", Name: "Domain One"}},
 			flavors:  []nova.Flavor{{ID: "f1", Name: "hana_k_medium", RAM: 1638400}},
 			expected: map[string]kvmHanaStackingRow{
-				"project-1|node001-bb01": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "domain-1", DomainName: "Domain One", ComputeHost: "node001-bb01", TotalRAMMB: 1638400},
+				"project-1|node001-bb01": {ProjectID: "project-1", ProjectName: "Project One", DomainID: "domain-0", DomainName: "Domain One", ComputeHost: "node001-bb01", TotalRAMMB: 1638400},
 			},
 		},
 		{
