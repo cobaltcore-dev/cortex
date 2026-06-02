@@ -263,6 +263,7 @@ cortex-knowledge-controllers:
       labels:
         <<: *cortexMonitoringLabels
         component: nova-knowledge
+    openstackDatasourceControllerParallelReconciles: 3
     enabledControllers:
       - datasource-controllers
       - knowledge-controllers
