@@ -38,7 +38,7 @@ jobs:
           ls -la rendered/
 
       - name: Check rules with promtool
-        uses: peimanja/promtool-github-actions@v0.0.2
+        uses: peimanja/promtool-github-actions@741be6fd6b8ee6a1d777ea020076b70c6233b3a1 # v0.0.2
         with:
           promtool_actions_subcommand: 'rules'
           promtool_actions_files: 'rendered/*.yaml'
