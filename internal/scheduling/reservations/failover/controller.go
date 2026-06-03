@@ -268,6 +268,28 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 		allHypervisors = append(allHypervisors, hv.Name)
 	}
 
+	// Build a set of VM UUIDs currently active on any known hypervisor.
+	// This is used as a safeguard against removing failover allocations when the
+	// VM source (postgres) is missing data but the VM is still alive on a
+	// hypervisor (e.g. after a postgres data loss / restore). Without this
+	// cross-check a wiped postgres would cause every failover reservation to be
+	// emptied and then deleted.
+	vmsOnHypervisor := make(map[string]string)
+	for _, hv := range hypervisorList.Items {
+		for _, inst := range hv.Status.Instances {
+			if !inst.Active {
+				continue
+			}
+			if _, exists := vmsOnHypervisor[inst.ID]; exists {
+				// VM appears on multiple hypervisors (transient during live
+				// migration). Keep the first occurrence; the safeguard only
+				// needs to know it exists somewhere.
+				continue
+			}
+			vmsOnHypervisor[inst.ID] = hv.Name
+		}
+	}
+
 	// 2. Get all VMs that might need failover reservations
 	vms, err := c.VMSource.ListVMsOnHypervisors(ctx, &hypervisorList, c.Config.TrustHypervisorLocation)
 	if err != nil {
@@ -289,7 +311,7 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 	logger.V(1).Info("found failover reservations", "count", len(failoverReservations))
 
 	// 3. Remove VMs from reservations if they are no longer valid
-	failoverReservations, reservationsToUpdate := reconcileRemoveInvalidVMFromReservations(ctx, vms, failoverReservations)
+	failoverReservations, reservationsToUpdate := reconcileRemoveInvalidVMFromReservations(ctx, vms, vmsOnHypervisor, failoverReservations)
 
 	for _, res := range reservationsToUpdate {
 		if err := c.patchReservationStatus(ctx, res); err != nil {
@@ -381,9 +403,17 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 // - The VM has moved to a different host
 // Returns the updated list of reservations (with modifications applied in-memory).
 // The caller is responsible for persisting any changes to the cluster.
+//
+// vmsOnHypervisor maps VM UUID -> hypervisor name for every VM currently active
+// on any known hypervisor (sourced from hv1.HypervisorList.Status.Instances).
+// It is used as a safeguard: if a VM is missing from the postgres-derived vms
+// slice but is still present on a hypervisor, we keep the allocation. This
+// protects failover reservations from being wiped by transient/total postgres
+// data loss.
 func reconcileRemoveInvalidVMFromReservations(
 	ctx context.Context,
 	vms []VM,
+	vmsOnHypervisor map[string]string,
 	failoverReservations []v1alpha1.Reservation,
 ) (updatedReservations []v1alpha1.Reservation, reservationsToUpdate []*v1alpha1.Reservation) {
 
@@ -404,6 +434,18 @@ func reconcileRemoveInvalidVMFromReservations(
 		for vmUUID, allocatedHypervisor := range allocations {
 			vmCurrentHypervisor, vmExists := vmToHypervisor[vmUUID]
 			if !vmExists {
+				// Safeguard: if the VM is missing from the VM source (e.g.
+				// postgres) but is still reported active on a hypervisor by
+				// the hypervisor operator CRD, keep the allocation. This
+				// prevents a postgres data loss from cascading into a mass
+				// deletion of failover reservations.
+				if hv, stillOnHV := vmsOnHypervisor[vmUUID]; stillOnHV {
+					logger.Info("keeping VM allocation despite missing from VM source: still active on hypervisor",
+						"vmUUID", vmUUID, "reservation", res.Name,
+						"allocatedHypervisor", allocatedHypervisor, "hypervisor", hv)
+					updatedAllocations[vmUUID] = allocatedHypervisor
+					continue
+				}
 				logger.Info("removing VM from reservation allocations because VM no longer exists",
 					"vmUUID", vmUUID, "reservation", res.Name)
 				needsUpdate = true

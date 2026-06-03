@@ -577,6 +577,7 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 	tests := []struct {
 		name                      string
 		vms                       []VM
+		vmsOnHypervisor           map[string]string
 		reservations              []v1alpha1.Reservation
 		expectedUpdatedCount      int // number of reservations in updatedReservations
 		expectedToUpdateCount     int // number of reservations that need cluster update
@@ -604,7 +605,7 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 			name: "VM no longer exists - remove from allocations",
 			vms: []VM{
 				newTestVM("vm-1", "host1", "flavor1"),
-				// vm-2 no longer exists
+				// vm-2 no longer exists (and not on any hypervisor)
 			},
 			reservations: []v1alpha1.Reservation{
 				newTestReservation("res-1", "host3", map[string]string{
@@ -641,7 +642,7 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 			vms: []VM{
 				newTestVM("vm-1", "host1", "flavor1"),
 				newTestVM("vm-2", "host2", "flavor1"),
-				// vm-3 no longer exists
+				// vm-3 no longer exists (and not on any hypervisor)
 			},
 			reservations: []v1alpha1.Reservation{
 				newTestReservation("res-1", "host3", map[string]string{
@@ -662,7 +663,7 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 		{
 			name: "all VMs removed from reservation - empty allocations",
 			vms:  []VM{
-				// no VMs exist
+				// no VMs exist (and not on any hypervisor)
 			},
 			reservations: []v1alpha1.Reservation{
 				newTestReservation("res-1", "host3", map[string]string{
@@ -705,7 +706,7 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 			vms: []VM{
 				newTestVM("vm-1", "host1", "flavor1"), // valid
 				newTestVM("vm-2", "host5", "flavor1"), // moved from host2 to host5
-				// vm-3 deleted
+				// vm-3 deleted (and not on any hypervisor)
 				newTestVM("vm-4", "host4", "flavor1"), // valid
 			},
 			reservations: []v1alpha1.Reservation{
@@ -725,6 +726,105 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 				"res-2": {"vm-4": "host4"},
 			},
 		},
+		// ====================================================================
+		// Safeguard: VM missing from VM source but still on a hypervisor
+		// (e.g. postgres data loss). Allocations must be preserved.
+		// ====================================================================
+		{
+			name: "safeguard: VM missing from VM source but still on hypervisor - keep allocation",
+			vms: []VM{
+				newTestVM("vm-1", "host1", "flavor1"),
+				// vm-2 missing from VM source (postgres lost data)
+			},
+			vmsOnHypervisor: map[string]string{
+				"vm-1": "host1",
+				"vm-2": "host2", // still alive on hypervisor
+			},
+			reservations: []v1alpha1.Reservation{
+				newTestReservation("res-1", "host3", map[string]string{
+					"vm-1": "host1",
+					"vm-2": "host2",
+				}),
+			},
+			expectedUpdatedCount:  1,
+			expectedToUpdateCount: 0, // safeguard prevents the update
+			expectedAllocationsPerRes: map[string]map[string]string{
+				"res-1": {"vm-1": "host1", "vm-2": "host2"},
+			},
+		},
+		{
+			name: "safeguard: VM source completely empty but VMs still on hypervisors - keep all allocations",
+			vms:  []VM{
+				// VM source returns nothing (postgres wiped)
+			},
+			vmsOnHypervisor: map[string]string{
+				"vm-1": "host1",
+				"vm-2": "host2",
+				"vm-3": "host3",
+			},
+			reservations: []v1alpha1.Reservation{
+				newTestReservation("res-1", "host4", map[string]string{
+					"vm-1": "host1",
+					"vm-2": "host2",
+				}),
+				newTestReservation("res-2", "host5", map[string]string{
+					"vm-3": "host3",
+				}),
+			},
+			expectedUpdatedCount:  2,
+			expectedToUpdateCount: 0, // safeguard prevents both updates
+			expectedAllocationsPerRes: map[string]map[string]string{
+				"res-1": {"vm-1": "host1", "vm-2": "host2"},
+				"res-2": {"vm-3": "host3"},
+			},
+		},
+		{
+			name: "safeguard: only some missing VMs are still on hypervisor - remove only fully gone ones",
+			vms: []VM{
+				newTestVM("vm-1", "host1", "flavor1"),
+				// vm-2 missing from postgres but on hypervisor
+				// vm-3 missing from both
+			},
+			vmsOnHypervisor: map[string]string{
+				"vm-1": "host1",
+				"vm-2": "host2",
+				// vm-3 not on any hypervisor
+			},
+			reservations: []v1alpha1.Reservation{
+				newTestReservation("res-1", "host4", map[string]string{
+					"vm-1": "host1",
+					"vm-2": "host2", // safeguarded
+					"vm-3": "host3", // truly gone - remove
+				}),
+			},
+			expectedUpdatedCount:  1,
+			expectedToUpdateCount: 1,
+			expectedAllocationsPerRes: map[string]map[string]string{
+				"res-1": {"vm-1": "host1", "vm-2": "host2"},
+			},
+		},
+		{
+			name: "safeguard does not protect against hypervisor mismatch (VM is in postgres on different host)",
+			vms: []VM{
+				newTestVM("vm-1", "host1", "flavor1"),
+				newTestVM("vm-2", "host5", "flavor1"), // moved to host5 in postgres
+			},
+			vmsOnHypervisor: map[string]string{
+				"vm-1": "host1",
+				"vm-2": "host5",
+			},
+			reservations: []v1alpha1.Reservation{
+				newTestReservation("res-1", "host3", map[string]string{
+					"vm-1": "host1",
+					"vm-2": "host2", // host mismatch - should still be removed
+				}),
+			},
+			expectedUpdatedCount:  1,
+			expectedToUpdateCount: 1,
+			expectedAllocationsPerRes: map[string]map[string]string{
+				"res-1": {"vm-1": "host1"},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -733,6 +833,7 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 			updatedReservations, reservationsToUpdate := reconcileRemoveInvalidVMFromReservations(
 				ctx,
 				tt.vms,
+				tt.vmsOnHypervisor,
 				tt.reservations,
 			)
 
