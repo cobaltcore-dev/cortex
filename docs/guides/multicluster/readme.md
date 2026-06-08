@@ -121,6 +121,27 @@ $(cat /tmp/root-ca-remote-az-b.pem | sed 's/^/          /')
 EOF
 ```
 
+### Skipping TLS verification
+
+If a remote apiserver uses a CA certificate that rotates frequently and does not chain to a stable root, you can set `insecureSkipTLSVerify: true` instead of providing a `caCert`. When enabled, the `caCert` field is ignored and TLS certificate verification is skipped entirely for that remote.
+
+> [!WARNING]
+> Setting `insecureSkipTLSVerify` disables all TLS certificate verification for the connection to that remote apiserver. This makes the connection susceptible to man-in-the-middle attacks. Only use this option when you cannot maintain a stable CA certificate and the network path to the remote apiserver is otherwise secured.
+
+```yaml
+global:
+  conf:
+    apiservers:
+      remotes:
+      - host: https://my-remote-apiserver:6443
+        insecureSkipTLSVerify: true
+        gvks:
+        - kvm.cloud.sap/v1/Hypervisor
+        - kvm.cloud.sap/v1/HypervisorList
+        labels:
+          az: remote-az
+```
+
 Additionally, we will add some hypervisors cortex can reconcile on:
 ```bash
 kubectl --context kind-cortex-remote-az-a apply -f docs/guides/multicluster/hypervisors-az-a.yaml
