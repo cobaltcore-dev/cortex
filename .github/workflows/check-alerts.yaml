@@ -22,11 +22,9 @@ jobs:
           set -euo pipefail
           mkdir -p rendered
 
-          .github/scripts/helm-use-local-deps.sh \
-            helm/bundles/cortex-cinder \
-            helm/bundles/cortex-manila \
-            helm/bundles/cortex-nova \
-            helm/bundles/cortex-placement-shim
+          for bundle in helm/bundles/cortex-cinder helm/bundles/cortex-manila helm/bundles/cortex-nova helm/bundles/cortex-placement-shim; do
+            helm/replace-oci-refs.sh "$bundle" > "$bundle/Chart.yaml.tmp" && mv "$bundle/Chart.yaml.tmp" "$bundle/Chart.yaml"
+          done
 
           helm dep update helm/bundles/cortex-cinder
           helm dep update helm/bundles/cortex-manila
