@@ -220,6 +220,8 @@ stateDiagram-v2
     Confirmed --> [*] : not on HV CRD
 ```
 
+**Candidate reservation cleanup**: When a VM is newly confirmed on a reservation (transitions from Spec-only to Spec+Status for the first time), the controller immediately removes that VM's UUID from `Spec.Allocations` on all other candidate reservations that still carry it. This proactive cleanup frees phantom capacity blocks on non-selected hosts immediately rather than waiting for each candidate reservation's own grace period expiry or periodic requeue to detect that the VM landed elsewhere.
+
 **Note**: VM allocations may not consume all resources of a reservation slot. A reservation with 128 GB may have VMs totaling only 96 GB if that fits the project's needs. Allocations may exceed reservation capacity (e.g., after VM resize).
 
 #### Capacity Blocking
