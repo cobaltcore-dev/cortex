@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-06-08 — [#919](https://github.com/cobaltcore-dev/cortex/pull/919)
+
+### cortex v0.1.0 (sha-a0373875)
+
+Breaking changes:
+- `Client.AddRemote()` signature changed — added `insecureSkipTLSVerify bool` parameter between `caCert` and `labels`. Any external caller of `pkg/multicluster.Client.AddRemote` must update their call site. ([#911](https://github.com/cobaltcore-dev/cortex/pull/911))
+
+Non-breaking changes:
+- Cleanup candidate reservations when confirming VM ([#871](https://github.com/cobaltcore-dev/cortex/pull/871))
+- Add `InsecureSkipTLSVerify` option to multicluster `RemoteConfig` ([#911](https://github.com/cobaltcore-dev/cortex/pull/911))
+- Add KVM HANA stacking KPI ([#905](https://github.com/cobaltcore-dev/cortex/pull/905))
+- Preserve input weight ordering when no weighers are configured ([#918](https://github.com/cobaltcore-dev/cortex/pull/918))
+- Make nova alerts region- and value-aware ([#902](https://github.com/cobaltcore-dev/cortex/pull/902))
+- Update cpu steal time query ([#904](https://github.com/cobaltcore-dev/cortex/pull/904))
+- Bump datasource parallel reconciles to 3 to reduce queue lag ([#907](https://github.com/cobaltcore-dev/cortex/pull/907))
+- Move `prometheusDatasourceControllerParallelReconciles` value from secrets to bundle ([#912](https://github.com/cobaltcore-dev/cortex/pull/912))
+- Update `github.com/sapcc/go-bits` ([#903](https://github.com/cobaltcore-dev/cortex/pull/903), [#913](https://github.com/cobaltcore-dev/cortex/pull/913), [#915](https://github.com/cobaltcore-dev/cortex/pull/915))
+- Update External dependencies ([#908](https://github.com/cobaltcore-dev/cortex/pull/908), [#910](https://github.com/cobaltcore-dev/cortex/pull/910), [#914](https://github.com/cobaltcore-dev/cortex/pull/914))
+- Update kube-prometheus-stack Docker tag to v86 ([#895](https://github.com/cobaltcore-dev/cortex/pull/895))
+
+### cortex-crds v0.0.74
+
+Includes updated chart cortex v0.1.0.
+
+### cortex-nova v0.0.74
+
+Includes updated chart cortex v0.1.0.
+
+### cortex-cinder v0.0.74
+
+Includes updated chart cortex v0.1.0.
+
+### cortex-pods v0.0.74
+
+Includes updated chart cortex v0.1.0.
+
+### cortex-ironcore v0.0.74
+
+Includes updated chart cortex v0.1.0.
+
+### cortex-manila v0.0.74
+
+Includes updated chart cortex v0.1.0.
+
 ## 2026-06-01 — [#901](https://github.com/cobaltcore-dev/cortex/pull/901)
 
 ### cortex v0.0.60 (sha-12c6f24d)
