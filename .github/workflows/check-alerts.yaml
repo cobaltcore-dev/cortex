@@ -22,6 +22,14 @@ jobs:
           set -euo pipefail
           mkdir -p rendered
 
+          # Rewrite library chart dependencies to local file paths so helm dep
+          # update does not try to pull them from OCI (they are not published).
+          for bundle in helm/bundles/cortex-cinder helm/bundles/cortex-manila helm/bundles/cortex-nova helm/bundles/cortex-placement-shim; do
+            yq -i '(.dependencies[] | select(.name == "cortex") | .repository)         = "file://../../library/cortex"'         $bundle/Chart.yaml
+            yq -i '(.dependencies[] | select(.name == "cortex-postgres") | .repository) = "file://../../library/cortex-postgres"' $bundle/Chart.yaml
+            yq -i '(.dependencies[] | select(.name == "cortex-shim") | .repository)     = "file://../../library/cortex-shim"'     $bundle/Chart.yaml
+          done
+
           helm dep update helm/bundles/cortex-cinder
           helm dep update helm/bundles/cortex-manila
           helm dep update helm/bundles/cortex-nova
