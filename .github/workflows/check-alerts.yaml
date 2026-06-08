@@ -2,32 +2,45 @@ name: Check Alerts using Promtool
 on:
   pull_request:
     paths:
-      - '**/*.rules.yaml'
-      - '**/*.alerts.yaml'
+      - 'helm/bundles/*/templates/alerts.yaml'
+      - 'helm/bundles/*/values.yaml'
+      - 'helm/bundles/*/Chart.yaml'
+      - 'helm/library/**'
+      - '.github/workflows/check-alerts.yaml'
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    # Pinned to ubuntu-24.04 so the pre-installed helm and yq versions are
+    # stable. helm and yq come from the base runner image (no install step
+    # needed); promtool is installed by the peimanja action below.
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout PR
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
 
-      - name: Get changed rule and alert files
-        id: changed
-        uses: tj-actions/changed-files@v47
-        with:
-          files: |
-            **/*.rules.yaml
-            **/*.alerts.yaml
+      - name: Render bundles to rule files
+        run: |
+          set -euo pipefail
+          mkdir -p rendered
 
-      - name: Install Helm
-        uses: azure/setup-helm@v5
+          helm dep update helm/bundles/cortex-cinder
+          helm dep update helm/bundles/cortex-manila
+          helm dep update helm/bundles/cortex-nova
+          helm dep update helm/bundles/cortex-placement-shim
 
-      - name: Check changed rule and alert files via promtool
-        if: steps.changed.outputs.any_changed == 'true'
-        uses: peimanja/promtool-github-actions@v0.0.2
+          helm template cortex-cinder         helm/bundles/cortex-cinder         | yq 'select(.kind == "PrometheusRule") | .spec' > rendered/cortex-cinder.yaml
+          helm template cortex-manila         helm/bundles/cortex-manila         | yq 'select(.kind == "PrometheusRule") | .spec' > rendered/cortex-manila.yaml
+          helm template cortex-placement-shim helm/bundles/cortex-placement-shim | yq 'select(.kind == "PrometheusRule") | .spec' > rendered/cortex-placement-shim.yaml
+
+          # nova has KVM-gated rules; render both flavours.
+          helm template cortex-nova           helm/bundles/cortex-nova                        | yq 'select(.kind == "PrometheusRule") | .spec' > rendered/cortex-nova-default.yaml
+          helm template cortex-nova           helm/bundles/cortex-nova --set kvm.enabled=true | yq 'select(.kind == "PrometheusRule") | .spec' > rendered/cortex-nova-kvm.yaml
+
+          ls -la rendered/
+
+      - name: Check rules with promtool
+        uses: peimanja/promtool-github-actions@741be6fd6b8ee6a1d777ea020076b70c6233b3a1 # v0.0.2
         with:
           promtool_actions_subcommand: 'rules'
-          promtool_actions_files: ${{ steps.changed.outputs.all_changed_files }}
+          promtool_actions_files: 'rendered/*.yaml'
           promtool_actions_version: 'latest'
           promtool_actions_comment: 'false'
