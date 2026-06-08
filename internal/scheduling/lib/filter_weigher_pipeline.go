@@ -274,7 +274,16 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 	traceLog.Info("scheduler: starting pipeline", "hosts", hostsIn)
 
 	// Normalize the input weights so we can apply step weights meaningfully.
-	inWeights := p.normalizeInputWeights(request.GetWeights())
+	// Only do this if there are weighers to combine with: tanh saturates large
+	// inputs (e.g. Nova's 50/55/60) to ~1.0, which would destroy the original
+	// ordering. With no weighers configured, the normalized map flows straight
+	// to the sort, so we must keep the raw values to preserve that ordering.
+	var inWeights map[string]float64
+	if len(p.weighers) > 0 {
+		inWeights = p.normalizeInputWeights(request.GetWeights())
+	} else {
+		inWeights = maps.Clone(request.GetWeights())
+	}
 	traceLog.Info("scheduler: input weights", "weights", inWeights)
 
 	// Run filters first to reduce the number of hosts.
