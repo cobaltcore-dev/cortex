@@ -40,9 +40,9 @@ jobs:
           set -euo pipefail
           mkdir -p rendered
 
-          # When library charts change all bundles are affected; otherwise only
-          # process the bundles that have changed files.
-          if [[ "$LIBRARY_CHANGED" == "true" ]]; then
+          # When library charts change (or nothing bundle-specific was detected,
+          # e.g. only the workflow file changed) all bundles are affected.
+          if [[ "$LIBRARY_CHANGED" == "true" || -z "$CHANGED_BUNDLES" ]]; then
             bundles=$(find helm/bundles -maxdepth 1 -mindepth 1 -type d | sort)
           else
             bundles="$CHANGED_BUNDLES"
