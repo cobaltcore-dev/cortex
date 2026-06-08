@@ -35,7 +35,7 @@ The CR reservation implementation is located in `internal/scheduling/reservation
 - Scheduling pipeline selection per flavor group
 - Per-flavor-group resource flags (`handlesCommitments`, `hasCapacity`, `hasQuota`) controlling which resource types are active for each group
 
-**Metrics and Alerts**: Defined in `helm/bundles/cortex-nova/alerts/nova.alerts.yaml` with prefixes:
+**Metrics and Alerts**: Defined in `helm/bundles/cortex-nova/templates/alerts.yaml` with prefixes:
 - `cortex_committed_resource_change_api_*`
 - `cortex_committed_resource_usage_api_*`
 - `cortex_committed_resource_capacity_api_*`

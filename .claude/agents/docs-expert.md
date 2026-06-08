@@ -1,5 +1,5 @@
 ---
-allowed-tools: Read, Write, Edit, Bash(*), WebSearch, WebFetch
+allowed-tools: Read, Bash(*), WebSearch, WebFetch
 description: Subagent that maintains, grows, and evolves the project documentation — finding stale content, gaps for new features, and structural improvements, then reporting findings back to the orchestrator.
 ---
 
