@@ -312,8 +312,12 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 	traceLog.Info("scheduler: sorted hosts", "hosts", hosts)
 
 	if opts.MaxCandidates > 0 && len(hosts) > opts.MaxCandidates {
-		traceLog.Info("scheduler: trimming candidate list", "maxCandidates", opts.MaxCandidates, "before", len(hosts))
+		trimmed := hosts[opts.MaxCandidates:]
 		hosts = hosts[:opts.MaxCandidates]
+		traceLog.Info("scheduler: trimmed candidate list to max",
+			"maxCandidates", opts.MaxCandidates,
+			"kept", hosts,
+			"trimmed", trimmed)
 		// Drop trimmed hosts from outWeights so AggregatedOutWeights stays consistent.
 		kept := make(map[string]struct{}, len(hosts))
 		for _, h := range hosts {

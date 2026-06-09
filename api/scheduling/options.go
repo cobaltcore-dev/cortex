@@ -14,15 +14,17 @@ import (
 // which are static and set when the pipeline is initialized.
 type Options struct {
 	// ReadOnly means the pipeline run does not modify shared scheduling state (reservations,
-	// history, inflight records). Concurrent read-only runs are safe under a shared read lock.
+	// history, ...). Cortex may run read-only runs concurrently.
 	ReadOnly bool `json:"read_only,omitempty"`
-	// LockReservations prevents reservation unlocking, i.e. considering those as unavailable resources.
-	LockReservations bool `json:"lock_reservations,omitempty"`
+
 	// AssumeEmptyHosts ignores running instances on hosts, considering them as empty.
 	AssumeEmptyHosts bool `json:"assume_empty_hosts,omitempty"`
-	// IgnoredReservationTypes lists reservation types whose reserved capacity the capacity filter does not block.
+	// LockReservations prevents reservation unlocking, i.e. considering those as unavailable resources.
+	LockReservations bool `json:"lock_reservations,omitempty"`
+	// IgnoredReservationTypes lists reservation types which get completely ignored by filters/weighers.
 	IgnoredReservationTypes []v1alpha1.ReservationType `json:"ignored_reservation_types,omitempty"`
-	// MaxCandidates limits the number of hosts returned after weighing. 0 means no limit.
+
+	// MaxCandidates limits the number of candidates (hosts) returned after weighing. 0 means no limit.
 	MaxCandidates int `json:"max_candidates,omitempty"`
 
 	// SkipHistory skips recording the placement decision in placement history.

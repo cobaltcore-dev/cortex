@@ -428,11 +428,12 @@ func TestPipeline_MaxCandidates(t *testing.T) {
 		maxCandidates int
 		wantLen       int
 		wantFirst     string
+		wantHosts     []string // nil means don't check exact set
 	}{
-		{"no limit", 0, 4, "host1"},
-		{"limit to 2", 2, 2, "host1"},
-		{"limit to 1", 1, 1, "host1"},
-		{"limit larger than hosts", 10, 4, "host1"},
+		{"no limit", 0, 4, "host1", nil},
+		{"limit to 2", 2, 2, "host1", []string{"host1", "host2"}},
+		{"limit to 1", 1, 1, "host1", []string{"host1"}},
+		{"limit larger than hosts", 10, 4, "host1", nil},
 	}
 
 	for _, tt := range tests {
@@ -448,6 +449,11 @@ func TestPipeline_MaxCandidates(t *testing.T) {
 			}
 			if len(result.OrderedHosts) > 0 && result.OrderedHosts[0] != tt.wantFirst {
 				t.Errorf("expected first host %s, got %s", tt.wantFirst, result.OrderedHosts[0])
+			}
+			if tt.wantHosts != nil {
+				if !slices.Equal(result.OrderedHosts, tt.wantHosts) {
+					t.Errorf("expected hosts %v (highest ranked kept, lowest trimmed), got %v", tt.wantHosts, result.OrderedHosts)
+				}
 			}
 			if tt.maxCandidates > 0 && len(result.OrderedHosts) <= tt.maxCandidates {
 				// AggregatedOutWeights must only contain returned hosts.
