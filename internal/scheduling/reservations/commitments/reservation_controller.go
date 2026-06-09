@@ -411,9 +411,12 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		allocationAge := now.Sub(allocation.CreationTimestamp.Time)
 		isInGracePeriod := allocationAge < r.Conf.AllocationGracePeriod.Duration
 
-		if isInGracePeriod {
-			// New allocation: VM may not yet appear in the HV CRD (still spawning).
-			// Signal to requeue with the short grace-period interval; skip verification.
+		// Confirmed VMs (already in Status.Allocations) bypass the grace period:
+		// their departure from the HV CRD is authoritative and must be acted on immediately.
+		// Unconfirmed VMs still within the grace period may not yet appear in the HV CRD
+		// (still spawning), so defer verification and requeue with a short interval.
+		isConfirmed := existingStatusAllocations[vmUUID] != ""
+		if !isConfirmed && isInGracePeriod {
 			result.HasAllocationsInGracePeriod = true
 			logger.V(1).Info("allocation in grace period, deferring verification",
 				"vm", vmUUID,
@@ -421,7 +424,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 			continue
 		}
 
-		// Post-grace-period: use HV CRD as authoritative source.
+		// Post-grace-period or confirmed VM: use HV CRD as authoritative source.
 		if hvInstanceSet[vmUUID] {
 			newStatusAllocations[vmUUID] = expectedHost
 			logger.V(1).Info("verified VM allocation via Hypervisor CRD",
