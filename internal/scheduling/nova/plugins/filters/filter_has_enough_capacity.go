@@ -63,7 +63,6 @@ type FilterHasEnoughCapacity struct {
 //
 // Please also note that disk space is currently not considered by this filter.
 func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
-	opts := request.GetOptions()
 	result := s.IncludeAllHostsFromRequest(request)
 
 	// This map holds the free resources per host.
@@ -87,7 +86,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		}
 
 		// Subtract allocated resources (skip when ignoring allocations for empty-datacenter capacity queries).
-		if !s.Options.IgnoreAllocations && !opts.AssumeEmptyHosts {
+		if !s.Options.IgnoreAllocations {
 			for resourceName, allocated := range hv.Status.Allocation {
 				free, ok := freeResourcesByHost[hv.Name][resourceName]
 				if !ok {

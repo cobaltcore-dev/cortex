@@ -4,7 +4,6 @@
 package filters
 
 import (
-	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"log/slog"
 	"testing"
 
@@ -935,7 +934,6 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 		reservations  []*v1alpha1.Reservation
 		request       api.ExternalSchedulerRequest
 		opts          FilterHasEnoughCapacityOpts
-		pipelineOpts  scheduling.Options
 		expectedHosts []string
 		filteredHosts []string
 	}{
@@ -949,10 +947,10 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 				// Existing CR reservation on host1 for same project+flavor group
 				newCommittedReservation("existing-cr", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil, nil),
 			},
-			// Request with reserve_for_committed_resource intent (scheduling a new CR reservation)
+			// Request with reserve_for_committed_resource intent (scheduling a new CR reservation).
+			// The intent causes the filter to keep CR reservations locked (prevents overbooking).
 			request:       newNovaRequestWithIntent("new-reservation-uuid", "project-A", "m1.large", "gp-1", 4, "8Gi", "reserve_for_committed_resource", false, []string{"host1", "host2"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
-			pipelineOpts:  scheduling.Options{LockReservations: true},
 			expectedHosts: []string{"host2"}, // host1 blocked because existing-cr stays locked
 			filteredHosts: []string{"host1"},
 		},
@@ -985,7 +983,6 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 			// Request with reserve_for_committed_resource intent
 			request:       newNovaRequestWithIntent("new-reservation-uuid", "project-A", "m1.large", "gp-1", 4, "8Gi", "reserve_for_committed_resource", false, []string{"host1", "host2"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
-			pipelineOpts:  scheduling.Options{LockReservations: true},
 			expectedHosts: []string{"host2"},
 			filteredHosts: []string{"host1"}, // host1 blocked by other project's reservation (would be blocked anyway)
 		},
@@ -1004,9 +1001,8 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 			// After blocking all 3 reservations (24 CPU), only 8 CPU free -> should fail
 			request:       newNovaRequestWithIntent("new-reservation-uuid", "project-A", "m1.large", "gp-1", 10, "20Gi", "reserve_for_committed_resource", false, []string{"host1"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
-			pipelineOpts:  scheduling.Options{LockReservations: true},
 			expectedHosts: []string{},
-			filteredHosts: []string{"host1"}, // All reservations stay locked, not enough capacity
+			filteredHosts: []string{"host1"}, // All reservations stay locked (intent prevents unlock), not enough capacity
 		},
 		{
 			name: "Normal VM scheduling: multiple reservations - all unlocked for same project+flavor",
@@ -1035,15 +1031,13 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 				// Existing CR reservation on host1 blocks all 8 free CPU
 				newCommittedReservation("existing-cr", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil, nil),
 			},
-			// Request with reserve_for_committed_resource intent
-			// IgnoredReservationTypes is a safety flag that overrides everything, including LockReservations
+			// Request with reserve_for_committed_resource intent.
+			// IgnoredReservationTypes is a YAML-level safety override that bypasses the intent check.
 			request: newNovaRequestWithIntent("new-reservation-uuid", "project-A", "m1.large", "gp-1", 4, "8Gi", "reserve_for_committed_resource", false, []string{"host1"}),
 			opts: FilterHasEnoughCapacityOpts{
-				LockReserved: false,
-				// IgnoredReservationTypes is a safety override - ignores CR even for CR scheduling
+				LockReserved:            false,
 				IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
 			},
-			pipelineOpts:  scheduling.Options{LockReservations: true},
 			expectedHosts: []string{"host1"}, // CR reservation is ignored via IgnoredReservationTypes (safety override)
 			filteredHosts: []string{},
 		},
@@ -1081,7 +1075,6 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 			step := &FilterHasEnoughCapacity{}
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			step.Options = tt.opts
-			tt.request.Options = tt.pipelineOpts
 
 			result, err := step.Run(slog.Default(), tt.request)
 			if err != nil {
