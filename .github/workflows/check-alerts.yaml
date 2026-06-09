@@ -17,31 +17,49 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Get changed bundles
+        id: changed_bundles
+        uses: tj-actions/changed-files@v47
+        with:
+          dir_names: "true"
+          dir_names_max_depth: "2"
+          files: |
+            helm/bundles/**
+
+      - name: Get changed library files
+        id: changed_library
+        uses: tj-actions/changed-files@v47
+        with:
+          files: helm/library/**
+
       - name: Render bundles to rule files
+        env:
+          CHANGED_BUNDLES: ${{ steps.changed_bundles.outputs.all_changed_files }}
+          LIBRARY_CHANGED: ${{ steps.changed_library.outputs.any_changed }}
         run: |
           set -euo pipefail
           mkdir -p rendered
 
-          # Rewrite library chart dependencies to local file paths so helm dep
-          # update does not try to pull them from OCI (they are not published).
-          for bundle in helm/bundles/cortex-cinder helm/bundles/cortex-manila helm/bundles/cortex-nova helm/bundles/cortex-placement-shim; do
-            yq -i '(.dependencies[] | select(.name == "cortex") | .repository)         = "file://../../library/cortex"'         $bundle/Chart.yaml
-            yq -i '(.dependencies[] | select(.name == "cortex-postgres") | .repository) = "file://../../library/cortex-postgres"' $bundle/Chart.yaml
-            yq -i '(.dependencies[] | select(.name == "cortex-shim") | .repository)     = "file://../../library/cortex-shim"'     $bundle/Chart.yaml
+          # When library charts change (or nothing bundle-specific was detected,
+          # e.g. only the workflow file changed) all bundles are affected.
+          if [[ "$LIBRARY_CHANGED" == "true" || -z "$CHANGED_BUNDLES" ]]; then
+            bundles=$(find helm/bundles -maxdepth 1 -mindepth 1 -type d | sort)
+          else
+            bundles="$CHANGED_BUNDLES"
+          fi
+
+          for bundle in $bundles; do
+            name=$(basename "$bundle")
+            helm/replace-oci-refs.sh "$bundle" > "$bundle/Chart.yaml.tmp" && mv "$bundle/Chart.yaml.tmp" "$bundle/Chart.yaml"
+            helm dep update "$bundle"
+            if [[ "$name" == "cortex-nova" ]]; then
+              # nova has KVM-gated rules; render both flavours.
+              helm template "$name" "$bundle"                         | yq 'select(.kind == "PrometheusRule") | .spec' > "rendered/${name}-default.yaml"
+              helm template "$name" "$bundle" --set kvm.enabled=true  | yq 'select(.kind == "PrometheusRule") | .spec' > "rendered/${name}-kvm.yaml"
+            else
+              helm template "$name" "$bundle" | yq 'select(.kind == "PrometheusRule") | .spec' > "rendered/${name}.yaml"
+            fi
           done
-
-          helm dep update helm/bundles/cortex-cinder
-          helm dep update helm/bundles/cortex-manila
-          helm dep update helm/bundles/cortex-nova
-          helm dep update helm/bundles/cortex-placement-shim
-
-          helm template cortex-cinder         helm/bundles/cortex-cinder         | yq 'select(.kind == "PrometheusRule") | .spec' > rendered/cortex-cinder.yaml
-          helm template cortex-manila         helm/bundles/cortex-manila         | yq 'select(.kind == "PrometheusRule") | .spec' > rendered/cortex-manila.yaml
-          helm template cortex-placement-shim helm/bundles/cortex-placement-shim | yq 'select(.kind == "PrometheusRule") | .spec' > rendered/cortex-placement-shim.yaml
-
-          # nova has KVM-gated rules; render both flavours.
-          helm template cortex-nova           helm/bundles/cortex-nova                        | yq 'select(.kind == "PrometheusRule") | .spec' > rendered/cortex-nova-default.yaml
-          helm template cortex-nova           helm/bundles/cortex-nova --set kvm.enabled=true | yq 'select(.kind == "PrometheusRule") | .spec' > rendered/cortex-nova-kvm.yaml
 
           ls -la rendered/
 
