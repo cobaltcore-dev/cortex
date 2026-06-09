@@ -7,54 +7,52 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// ChangeCommitmentsAPIMonitor provides metrics for the CR change API.
 type ChangeCommitmentsAPIMonitor struct {
 	requestCounter    *prometheus.CounterVec
 	requestDuration   *prometheus.HistogramVec
 	commitmentChanges *prometheus.CounterVec
-	timeouts          prometheus.Counter
+	timeouts          *prometheus.CounterVec
 }
 
-// NewChangeCommitmentsAPIMonitor creates a new monitor with Prometheus metrics.
-// Metrics are pre-initialized with zero values for common HTTP status codes
-// to ensure they appear in Prometheus before the first request.
 func NewChangeCommitmentsAPIMonitor() ChangeCommitmentsAPIMonitor {
 	m := ChangeCommitmentsAPIMonitor{
 		requestCounter: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "cortex_committed_resource_change_api_requests_total",
 			Help: "Total number of committed resource change API requests by HTTP status code",
-		}, []string{"status_code"}),
+		}, []string{"status_code", "dry_run", "result"}),
 		requestDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name: "cortex_committed_resource_change_api_request_duration_seconds",
-			Help: "Duration of committed resource change API requests in seconds by HTTP status code",
-		}, []string{"status_code"}),
+			Name:    "cortex_committed_resource_change_api_request_duration_seconds",
+			Help:    "Duration of committed resource change API requests in seconds by HTTP status code",
+			Buckets: []float64{0.5, 1, 2.5, 5, 7.5, 10, 12.5, 15, 20, 30},
+		}, []string{"status_code", "dry_run"}),
 		commitmentChanges: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "cortex_committed_resource_change_api_commitment_changes_total",
-			Help: "Total number of commitment changes processed by result",
-		}, []string{"result"}),
-		timeouts: prometheus.NewCounter(prometheus.CounterOpts{
+			Help: "Total number of commitment changes processed by result and availability zone",
+		}, []string{"result", "az", "dry_run"}),
+		timeouts: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "cortex_committed_resource_change_api_timeouts_total",
 			Help: "Total number of commitment change requests that timed out while waiting for reservations to become ready",
-		}),
+		}, []string{"dry_run"}),
 	}
 
-	// Pre-initialize metrics with zero values for common HTTP status codes.
-	// This ensures metrics exist in Prometheus before the first request,
-	// preventing "metric missing" warnings in alerting rules.
-	for _, statusCode := range []string{"200", "400", "409", "500", "503"} {
-		m.requestCounter.WithLabelValues(statusCode)
-		m.requestDuration.WithLabelValues(statusCode)
-	}
-
-	// Pre-initialize commitment change result labels
-	for _, result := range []string{"accepted", "rejected"} {
-		m.commitmentChanges.WithLabelValues(result)
+	// Pre-initialize so metrics exist before the first request, preventing "metric missing" alert warnings.
+	// commitmentChanges uses az="" sentinel: az values are dynamic, and sums in alerts aggregate across all az values.
+	for _, dryRun := range []string{"true", "false"} {
+		for _, statusCode := range []string{"200", "400", "405", "409", "500", "503"} {
+			for _, result := range []string{"accepted", "rejected", "error"} {
+				m.requestCounter.WithLabelValues(statusCode, dryRun, result)
+			}
+			m.requestDuration.WithLabelValues(statusCode, dryRun)
+		}
+		m.timeouts.WithLabelValues(dryRun)
+		for _, result := range []string{"accepted", "rejected", "error"} {
+			m.commitmentChanges.WithLabelValues(result, "", dryRun)
+		}
 	}
 
 	return m
 }
 
-// Describe implements prometheus.Collector.
 func (m *ChangeCommitmentsAPIMonitor) Describe(ch chan<- *prometheus.Desc) {
 	m.requestCounter.Describe(ch)
 	m.requestDuration.Describe(ch)
@@ -62,7 +60,6 @@ func (m *ChangeCommitmentsAPIMonitor) Describe(ch chan<- *prometheus.Desc) {
 	m.timeouts.Describe(ch)
 }
 
-// Collect implements prometheus.Collector.
 func (m *ChangeCommitmentsAPIMonitor) Collect(ch chan<- prometheus.Metric) {
 	m.requestCounter.Collect(ch)
 	m.requestDuration.Collect(ch)

@@ -389,3 +389,214 @@ func TestFlavorGroupExtractor_RamCoreRatio_FixedRatio(t *testing.T) {
 		t.Errorf("expected RamCoreRatioMax=nil for fixed ratio, got %d", *fg.RamCoreRatioMax)
 	}
 }
+
+func TestFlavorGroupFeature_Validate(t *testing.T) {
+	ratio := uint64(4096)
+	lo, hi := uint64(2048), uint64(8192)
+	tests := []struct {
+		name    string
+		fg      FlavorGroupFeature
+		wantErr bool
+	}{
+		{
+			name:    "valid: all nil (no ratio info)",
+			fg:      FlavorGroupFeature{Name: "none"},
+			wantErr: false,
+		},
+		{
+			name: "valid: fixed — only RamCoreRatio set",
+			fg: FlavorGroupFeature{
+				Name:           "fixed",
+				RamCoreRatio:   &ratio,
+				SmallestFlavor: FlavorInGroup{MemoryMB: 8192},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid: fixed — all three set to same value",
+			fg: FlavorGroupFeature{
+				Name:            "fixed-all-same",
+				RamCoreRatio:    &ratio,
+				RamCoreRatioMin: &ratio,
+				RamCoreRatioMax: &ratio,
+				SmallestFlavor:  FlavorInGroup{MemoryMB: 8192},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid: variable — Min < Max, SmallestFlavor set",
+			fg: FlavorGroupFeature{
+				Name:            "variable",
+				RamCoreRatioMin: &lo,
+				RamCoreRatioMax: &hi,
+				SmallestFlavor:  FlavorInGroup{MemoryMB: 8192},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid: RamCoreRatio + Min/Max set with different values",
+			fg: FlavorGroupFeature{
+				Name:            "inconsistent",
+				RamCoreRatio:    &ratio,
+				RamCoreRatioMin: &lo,
+				RamCoreRatioMax: &hi,
+				SmallestFlavor:  FlavorInGroup{MemoryMB: 8192},
+			},
+			wantErr: true,
+		},
+		{
+			name:    "invalid: only RamCoreRatioMin set",
+			fg:      FlavorGroupFeature{Name: "partial", RamCoreRatioMin: &ratio},
+			wantErr: true,
+		},
+		{
+			name:    "invalid: only RamCoreRatioMax set",
+			fg:      FlavorGroupFeature{Name: "partial", RamCoreRatioMax: &ratio},
+			wantErr: true,
+		},
+		{
+			name: "invalid: variable with Min > Max",
+			fg: FlavorGroupFeature{
+				Name:            "inverted",
+				RamCoreRatioMin: &hi,
+				RamCoreRatioMax: &lo,
+				SmallestFlavor:  FlavorInGroup{MemoryMB: 8192},
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid: variable with Min == Max (should be fixed)",
+			fg: FlavorGroupFeature{
+				Name:            "equal-range",
+				RamCoreRatioMin: &ratio,
+				RamCoreRatioMax: &ratio,
+				SmallestFlavor:  FlavorInGroup{MemoryMB: 8192},
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid: fixed with SmallestFlavor.MemoryMB == 0",
+			fg: FlavorGroupFeature{
+				Name:         "fixed-no-smallest",
+				RamCoreRatio: &ratio,
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid: variable with SmallestFlavor.MemoryMB == 0",
+			fg: FlavorGroupFeature{
+				Name:            "variable-no-smallest",
+				RamCoreRatioMin: &lo,
+				RamCoreRatioMax: &hi,
+			},
+			wantErr: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.fg.Validate()
+			if (err != nil) != tc.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestFlavorGroupFeature_RAMUnitMiB(t *testing.T) {
+	ratio := uint64(4096)
+	tests := []struct {
+		name string
+		fg   FlavorGroupFeature
+		want uint64
+	}{
+		{
+			name: "fixed-ratio returns SmallestFlavor.MemoryMB",
+			fg: FlavorGroupFeature{
+				RamCoreRatio:   &ratio,
+				SmallestFlavor: FlavorInGroup{MemoryMB: 2048},
+			},
+			want: 2048,
+		},
+		{
+			name: "variable-ratio returns 1024",
+			fg: FlavorGroupFeature{
+				RamCoreRatio: nil,
+			},
+			want: 1024,
+		},
+		{
+			name: "fixed-ratio (all three same) returns SmallestFlavor.MemoryMB",
+			fg: FlavorGroupFeature{
+				RamCoreRatio:    &ratio,
+				RamCoreRatioMin: &ratio,
+				RamCoreRatioMax: &ratio,
+				SmallestFlavor:  FlavorInGroup{MemoryMB: 2048},
+			},
+			want: 2048,
+		},
+		{
+			name: "RamCoreRatio set but MemoryMB zero falls back to 1024 (invalid data, safe fallback)",
+			fg: FlavorGroupFeature{
+				RamCoreRatio:   &ratio,
+				SmallestFlavor: FlavorInGroup{MemoryMB: 0},
+			},
+			want: 1024,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.fg.RAMUnitMiB(); got != tc.want {
+				t.Errorf("RAMUnitMiB() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFlavorGroupFeature_UnitConversions(t *testing.T) {
+	ratio := uint64(4096)
+	tests := []struct {
+		name          string
+		fg            FlavorGroupFeature
+		units         int64
+		expectedGiB   int64
+		giB           int64
+		expectedUnits int64
+	}{
+		{
+			name: "fixed-ratio 2 GiB/slot: 5 slots → 10 GiB, 10 GiB → 5 slots",
+			fg: FlavorGroupFeature{
+				RamCoreRatio:   &ratio,
+				SmallestFlavor: FlavorInGroup{MemoryMB: 2048},
+			},
+			units: 5, expectedGiB: 10,
+			giB: 10, expectedUnits: 5,
+		},
+		{
+			name: "variable-ratio (1 GiB/unit): 50 units → 50 GiB, 50 GiB → 50 units",
+			fg: FlavorGroupFeature{
+				RamCoreRatio: nil,
+			},
+			units: 50, expectedGiB: 50,
+			giB: 50, expectedUnits: 50,
+		},
+		{
+			name: "fixed-ratio 1 GiB/slot (1024 MiB): conversion is a no-op",
+			fg: FlavorGroupFeature{
+				RamCoreRatio:   &ratio,
+				SmallestFlavor: FlavorInGroup{MemoryMB: 1024},
+			},
+			units: 100, expectedGiB: 100,
+			giB: 100, expectedUnits: 100,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.fg.DeclaredUnitsToGiB(tc.units); got != tc.expectedGiB {
+				t.Errorf("DeclaredUnitsToGiB(%d) = %d, want %d", tc.units, got, tc.expectedGiB)
+			}
+			if got := tc.fg.GiBToDeclaredUnits(tc.giB); got != tc.expectedUnits {
+				t.Errorf("GiBToDeclaredUnits(%d) = %d, want %d", tc.giB, got, tc.expectedUnits)
+			}
+		})
+	}
+}

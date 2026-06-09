@@ -95,6 +95,32 @@ func newHypervisorWithBothCapacities(name, cpuCap, cpuEffCap, memCap, memEffCap 
 	}
 }
 
+// newUnconfirmedReservation creates a CR reservation in the "cycle-1-done, cycle-2-pending" state:
+// Spec.TargetHost is set but Status.Host is empty and Ready condition is not yet written.
+// This models the window between the reservation controller writing the target host and
+// completing the status patch in the next reconcile cycle.
+func newUnconfirmedReservation(name, targetHost, projectID, flavorGroup, cpu, memory string) *v1alpha1.Reservation {
+	return &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: v1alpha1.ReservationSpec{
+			Type:       v1alpha1.ReservationTypeCommittedResource,
+			TargetHost: targetHost,
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceCPU:    resource.MustParse(cpu),
+				hv1.ResourceMemory: resource.MustParse(memory),
+			},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				ProjectID:     projectID,
+				ResourceGroup: flavorGroup,
+			},
+		},
+		// No Status.Conditions, no Status.Host — Ready=false, cycle 2 not yet run.
+		Status: v1alpha1.ReservationStatus{},
+	}
+}
+
 // newCommittedReservation creates a reservation where TargetHost and Status.Host are the same.
 func newCommittedReservation(
 	name, host, projectID, flavorName, flavorGroup, cpu, memory string,
@@ -568,6 +594,57 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 			expectedHosts: []string{"host1", "host2", "host3"},
 			filteredHosts: []string{"host4"},
 		},
+		{
+			// Regression test: unconfirmed reservation (TargetHost set, Ready=false, Status.Host="")
+			// models the window between reconcile cycle 1 (TargetHost written) and cycle 2 (Ready synced).
+			// The filter must block the target host even though IsReady() returns false.
+			name: "Unconfirmed reservation (TargetHost set, not ready) blocks target host",
+			reservations: []*v1alpha1.Reservation{
+				newUnconfirmedReservation("unconfirmed-res", "host1", "project-X", "gp-1", "8", "16Gi"),
+			},
+			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
+			expectedHosts: []string{"host2", "host3"},
+			filteredHosts: []string{"host1", "host4"},
+		},
+		{
+			// Regression test: multiple unconfirmed reservations (cycle 1 done, not yet ready) targeting
+			// different hosts must each block their respective target host.
+			name: "Multiple unconfirmed reservations each block their target host",
+			reservations: []*v1alpha1.Reservation{
+				newUnconfirmedReservation("unconfirmed-1", "host1", "project-X", "gp-1", "8", "16Gi"),
+				newUnconfirmedReservation("unconfirmed-2", "host2", "project-X", "gp-1", "4", "8Gi"),
+			},
+			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
+			expectedHosts: []string{"host3"},
+			filteredHosts: []string{"host1", "host2", "host4"},
+		},
+		{
+			// Regression test: unconfirmed failover reservation (TargetHost set, Ready=false)
+			// must block the target host just like unconfirmed CR reservations.
+			name: "Unconfirmed failover reservation (TargetHost set, not ready) blocks target host",
+			reservations: []*v1alpha1.Reservation{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "failover-unconfirmed"},
+					Spec: v1alpha1.ReservationSpec{
+						Type:       v1alpha1.ReservationTypeFailover,
+						TargetHost: "host1",
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("8"),
+							hv1.ResourceMemory: resource.MustParse("16Gi"),
+						},
+						FailoverReservation: &v1alpha1.FailoverReservationSpec{ResourceGroup: "gp-1"},
+					},
+					// No Status.Conditions, no Status.Host — Ready=false.
+					Status: v1alpha1.ReservationStatus{},
+				},
+			},
+			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
+			expectedHosts: []string{"host2", "host3"},
+			filteredHosts: []string{"host1", "host4"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -833,12 +910,12 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes_CallTime(t *testing.T) 
 
 	step := &FilterHasEnoughCapacity{}
 	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
-	step.Options = FilterHasEnoughCapacityOpts{LockReserved: true} // no YAML-level ignores
-
-	// Call-time: ignore CR reservations → host1 passes, host2 still blocked by failover.
-	request.Options = scheduling.Options{
+	// Ignore CR reservations via pipeline-level opts (call-time opts.IgnoredReservationTypes removed in favour of YAML params).
+	step.Options = FilterHasEnoughCapacityOpts{
+		LockReserved:            true,
 		IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
 	}
+
 	result, err := step.Run(slog.Default(), request)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

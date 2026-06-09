@@ -12,8 +12,11 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+var flavorGroupsLog = ctrl.Log.WithName("flavor_groups")
 
 // FindFlavorInGroups searches all flavor groups for a flavor by name.
 // Returns the flavor group name and flavor details, or an error if the flavor
@@ -78,9 +81,13 @@ func (c *FlavorGroupKnowledgeClient) GetAllFlavorGroups(ctx context.Context, kno
 		return nil, fmt.Errorf("failed to unbox flavor group features: %w", err)
 	}
 
-	// Build map for efficient lookups
+	// Build map for efficient lookups, skipping any groups that fail validation.
 	flavorGroupMap := make(map[string]compute.FlavorGroupFeature, len(features))
 	for _, feature := range features {
+		if err := feature.Validate(); err != nil {
+			flavorGroupsLog.Error(err, "skipping invalid flavor group from Knowledge CRD")
+			continue
+		}
 		flavorGroupMap[feature.Name] = feature
 	}
 

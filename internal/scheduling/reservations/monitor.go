@@ -33,12 +33,12 @@ func NewMonitor(k8sClient client.Client) Monitor {
 	return Monitor{
 		Client: k8sClient,
 		numberOfReservations: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "cortex_reservations_number",
-			Help: "Number of reservations.",
+			Name: "cortex_reservations",
+			Help: "Number of reservations by readiness and error status.",
 		}, []string{"status_ready", "status_error"}),
 		reservedResources: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "cortex_reservations_resources",
-			Help: "Resources reserved by reservations.",
+			Name: "cortex_reservations_allocated_resources",
+			Help: "Resource units allocated across active reservations, by host and resource type.",
 		}, []string{"status_ready", "status_error", "host", "resource"}),
 	}
 }

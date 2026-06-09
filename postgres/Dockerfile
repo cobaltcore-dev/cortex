@@ -1,4 +1,4 @@
-FROM debian:trixie-slim@sha256:109e2c65005bf160609e4ba6acf7783752f8502ad218e298253428690b9eaa4b
+FROM debian:trixie-slim@sha256:b6e2a152f22a40ff69d92cb397223c906017e1391a73c952b588e51af8883bf8
 
 # explicitly set user/group IDs
 RUN set -eux; \
@@ -8,6 +8,12 @@ RUN set -eux; \
 # also create the postgres user's home directory with appropriate permissions
 # see https://github.com/docker-library/postgres/issues/274
 	install --verbose --directory --owner postgres --group postgres --mode 1777 /var/lib/postgresql
+
+# upgrade pre-installed packages from the base image to pick up security fixes
+RUN set -ex; \
+	apt-get update; \
+	apt-get upgrade -y; \
+	rm -rf /var/lib/apt/lists/*
 
 RUN set -ex; \
 	apt-get update; \
@@ -67,7 +73,7 @@ RUN set -ex; \
 ENV PG_MAJOR 18
 ENV PATH $PATH:/usr/lib/postgresql/$PG_MAJOR/bin
 
-ENV PG_VERSION 18.3-1.pgdg13+1
+ENV PG_VERSION 18.4-1.pgdg13+1
 
 RUN set -ex; \
 	\

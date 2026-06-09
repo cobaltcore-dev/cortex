@@ -4,8 +4,10 @@
 package commitments
 
 import (
+	"sort"
 	"time"
 
+	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -77,38 +79,102 @@ type CommittedResourceControllerConfig struct {
 	// MaxRequeueInterval caps the exponential backoff delay.
 	// Once this ceiling is reached, every subsequent retry fires after exactly this interval.
 	MaxRequeueInterval metav1.Duration `json:"maxRequeueInterval"`
-}
 
-func DefaultCommittedResourceControllerConfig() CommittedResourceControllerConfig {
-	return CommittedResourceControllerConfig{
-		RequeueIntervalRetry: metav1.Duration{Duration: 30 * time.Second},
-		MaxRequeueInterval:   metav1.Duration{Duration: 30 * time.Minute},
-	}
-}
+	// SlotCreationDelay is the pause inserted between consecutive Reservation CRD creates.
+	// Spreads scheduler calls over time instead of bursting them all at once.
+	// 0 disables the delay.
+	SlotCreationDelay metav1.Duration `json:"slotCreationDelay"`
 
-// ApplyDefaults fills in zero-value fields from the defaults, leaving explicitly configured values intact.
-func (c *CommittedResourceControllerConfig) ApplyDefaults() {
-	d := DefaultCommittedResourceControllerConfig()
-	if c.RequeueIntervalRetry.Duration == 0 {
-		c.RequeueIntervalRetry = d.RequeueIntervalRetry
-	}
-	if c.MaxRequeueInterval.Duration == 0 {
-		c.MaxRequeueInterval = d.MaxRequeueInterval
-	}
+	// MaxSlotsPerCommitment caps the number of Reservation CRDs that may be created for a single
+	// CommittedResource on the AllowRejection=true (API) path. Requests that would exceed this
+	// limit are rejected immediately before any slots are created.
+	// Has no effect on the AllowRejection=false (syncer) path.
+	// 0 disables the cap.
+	MaxSlotsPerCommitment int `json:"maxSlotsPerCommitment"`
 }
 
 // ResourceTypeConfig holds per-resource flags for a single resource type within a flavor group.
 type ResourceTypeConfig struct {
 	HandlesCommitments bool `json:"handlesCommitments"`
+	HandlesDryRun      bool `json:"handlesDryRun"`
 	HasCapacity        bool `json:"hasCapacity"`
 	HasQuota           bool `json:"hasQuota"`
 }
 
+// RAMResourceTypeConfig extends ResourceTypeConfig with RAM-specific unit configuration.
+type RAMResourceTypeConfig struct {
+	HandlesCommitments bool `json:"handlesCommitments"`
+	HandlesDryRun      bool `json:"handlesDryRun"`
+	HasCapacity        bool `json:"hasCapacity"`
+	HasQuota           bool `json:"hasQuota"`
+	// RAMUnitGiB is the size of one declared LIQUID RAM unit in GiB.
+	// Fixed-ratio groups set this to the smallest flavor's RAM (e.g. 480 for a 480 GiB HANA slot).
+	// Variable-ratio groups set this to 1 (1 unit = 1 GiB).
+	// Defaults to 1 if unset.
+	RAMUnitGiB uint64 `json:"ramUnitGiB,omitempty"`
+}
+
+// RAMUnitMiB returns the RAM unit in MiB (RAMUnitGiB × 1024), defaulting to 1024 if unset.
+func (c RAMResourceTypeConfig) RAMUnitMiB() uint64 {
+	if c.RAMUnitGiB > 0 {
+		return c.RAMUnitGiB * 1024
+	}
+	return 1024
+}
+
+// DeclaredUnitsToGiB converts a value in declared LIQUID units to GiB.
+func (c RAMResourceTypeConfig) DeclaredUnitsToGiB(units int64) int64 {
+	return units * int64(c.RAMUnitMiB()) / 1024 //nolint:gosec
+}
+
+// GiBToDeclaredUnits converts a GiB value to declared LIQUID units.
+func (c RAMResourceTypeConfig) GiBToDeclaredUnits(gib int64) int64 {
+	return gib * 1024 / int64(c.RAMUnitMiB()) //nolint:gosec
+}
+
 // FlavorGroupResourcesConfig groups resource type configs for the three resources of a flavor group.
 type FlavorGroupResourcesConfig struct {
-	RAM       ResourceTypeConfig `json:"ram"`
-	Cores     ResourceTypeConfig `json:"cores"`
-	Instances ResourceTypeConfig `json:"instances"`
+	RAM       RAMResourceTypeConfig `json:"ram"`
+	Cores     ResourceTypeConfig    `json:"cores"`
+	Instances ResourceTypeConfig    `json:"instances"`
+}
+
+// LogFlavorGroupResourceConfig logs the effective RAM unit for each configured flavor group.
+// It warns when RAMUnitGiB is 0, which silently defaults to 1 GiB.
+func LogFlavorGroupResourceConfig(log logr.Logger, cfg map[string]FlavorGroupResourcesConfig) {
+	if len(cfg) == 0 {
+		log.Info("flavorGroupResourceConfig not set; all flavor groups will use default RAM unit of 1 GiB")
+		return
+	}
+	groups := make([]string, 0, len(cfg))
+	for g := range cfg {
+		groups = append(groups, g)
+	}
+	sort.Strings(groups)
+	for _, groupName := range groups {
+		resCfg := cfg[groupName]
+		if resCfg.RAM.RAMUnitGiB == 0 {
+			log.Info("WARNING: ramUnitGiB not configured for flavor group, defaulting to 1 GiB",
+				"flavorGroup", groupName)
+		} else {
+			log.Info("flavor group RAM unit",
+				"flavorGroup", groupName, "ramUnitGiB", resCfg.RAM.RAMUnitGiB)
+		}
+	}
+}
+
+// ResourceConfigForGroup returns the resource config for the given flavor group name,
+// falling back to the "*" catch-all if no exact match exists.
+func ResourceConfigForGroup(cfg map[string]FlavorGroupResourcesConfig, groupName string) FlavorGroupResourcesConfig {
+	if cfg != nil {
+		if c, ok := cfg[groupName]; ok {
+			return c
+		}
+		if c, ok := cfg["*"]; ok {
+			return c
+		}
+	}
+	return FlavorGroupResourcesConfig{}
 }
 
 // APIConfig holds configuration for the LIQUID commitment HTTP endpoints.
@@ -131,20 +197,16 @@ type APIConfig struct {
 	WatchPollInterval metav1.Duration `json:"watchPollInterval"`
 	// FlavorGroupResourceConfig maps flavor group IDs to resource flag configs; "*" acts as catch-all.
 	FlavorGroupResourceConfig map[string]FlavorGroupResourcesConfig `json:"flavorGroupResourceConfig,omitempty"`
+	// QuotaServedAvailabilityZones restricts quota handling to these AZs.
+	// Quota received for AZs not in this list is silently skipped.
+	// If empty/nil, no pre-filtering is applied (relies on error-based fallback).
+	QuotaServedAvailabilityZones []string `json:"quotaServedAvailabilityZones,omitempty"`
 }
 
-// ResourceConfigForGroup returns the resource config for the given flavor group ID,
+// ResourceConfigForGroup returns the resource config for the given flavor group name,
 // falling back to the "*" catch-all if no exact match exists.
-func (c APIConfig) ResourceConfigForGroup(groupID string) FlavorGroupResourcesConfig {
-	if c.FlavorGroupResourceConfig != nil {
-		if cfg, ok := c.FlavorGroupResourceConfig[groupID]; ok {
-			return cfg
-		}
-		if cfg, ok := c.FlavorGroupResourceConfig["*"]; ok {
-			return cfg
-		}
-	}
-	return FlavorGroupResourcesConfig{}
+func (c APIConfig) ResourceConfigForGroup(groupName string) FlavorGroupResourcesConfig {
+	return ResourceConfigForGroup(c.FlavorGroupResourceConfig, groupName)
 }
 
 func DefaultAPIConfig() APIConfig {

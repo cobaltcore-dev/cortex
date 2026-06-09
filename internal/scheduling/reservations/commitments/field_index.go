@@ -18,15 +18,17 @@ const idxCommittedResourceByUUID = "spec.commitmentUUID"
 const idxCommittedResourceByProjectID = "spec.projectID"
 const idxReservationByCommitmentUUID = "spec.committedResourceReservation.commitmentUUID"
 const idxProjectQuotaByProjectID = "spec.projectID"
+const idxReservationByAllocationVMUUID = "spec.committedResourceReservation.allocations"
 
 // once guards ensure each field index is registered exactly once.
 // Both CommittedResourceController and UsageReconciler call indexCommittedResourceByUUID;
 // the underlying cache returns "indexer conflict" on double registration.
 var (
-	onceIndexCRByUUID          sync.Once
-	onceIndexCRByProjectID     sync.Once
-	onceIndexReservationByUUID sync.Once
-	onceIndexPQByProjectID     sync.Once
+	onceIndexCRByUUID                    sync.Once
+	onceIndexCRByProjectID               sync.Once
+	onceIndexReservationByUUID           sync.Once
+	onceIndexPQByProjectID               sync.Once
+	onceIndexReservationByAllocationVMID sync.Once
 )
 
 // indexCommittedResourceByUUID registers the index used by UsageReconciler to look up
@@ -123,6 +125,37 @@ func indexProjectQuotaByProjectID(ctx context.Context, mcl *multicluster.Client)
 					return nil
 				}
 				return []string{pq.Spec.ProjectID}
+			},
+		)
+	})
+	return err
+}
+
+// indexReservationByAllocationVMUUID registers an index over all VM UUIDs present in
+// Spec.CommittedResourceReservation.Allocations. This allows the reservation controller
+// to efficiently find all other Reservation CRDs carrying a specific VM UUID without
+// scanning every reservation in the cluster.
+func indexReservationByAllocationVMUUID(ctx context.Context, mcl *multicluster.Client) (err error) {
+	onceIndexReservationByAllocationVMID.Do(func() {
+		log := logf.FromContext(ctx)
+		err = mcl.IndexField(ctx,
+			&v1alpha1.Reservation{},
+			&v1alpha1.ReservationList{},
+			idxReservationByAllocationVMUUID,
+			func(obj client.Object) []string {
+				res, ok := obj.(*v1alpha1.Reservation)
+				if !ok {
+					log.Error(errors.New("unexpected type"), "expected Reservation", "object", obj)
+					return nil
+				}
+				if res.Spec.CommittedResourceReservation == nil {
+					return nil
+				}
+				uuids := make([]string, 0, len(res.Spec.CommittedResourceReservation.Allocations))
+				for vmUUID := range res.Spec.CommittedResourceReservation.Allocations {
+					uuids = append(uuids, vmUUID)
+				}
+				return uuids
 			},
 		)
 	})

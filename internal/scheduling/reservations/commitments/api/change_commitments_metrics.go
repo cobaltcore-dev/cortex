@@ -4,6 +4,7 @@
 package api
 
 import (
+	"net/http"
 	"strconv"
 	"time"
 
@@ -14,22 +15,20 @@ import (
 func (api *HTTPAPI) recordMetrics(req liquid.CommitmentChangeRequest, resp liquid.CommitmentChangeResponse, statusCode int, startTime time.Time) {
 	duration := time.Since(startTime).Seconds()
 	statusCodeStr := strconv.Itoa(statusCode)
+	dryRunStr := strconv.FormatBool(req.DryRun)
 
-	// Record request counter and duration
-	api.monitor.requestCounter.WithLabelValues(statusCodeStr).Inc()
-	api.monitor.requestDuration.WithLabelValues(statusCodeStr).Observe(duration)
-
-	// Count total commitment changes in the request
-	commitmentCount := countCommitments(req)
-
-	// Determine result based on response
 	result := "accepted"
-	if resp.RejectionReason != "" {
+	if statusCode != http.StatusOK {
+		result = "error"
+	} else if resp.RejectionReason != "" {
 		result = "rejected"
 	}
 
-	// Record commitment changes counter
-	api.monitor.commitmentChanges.WithLabelValues(result).Add(float64(commitmentCount))
+	api.monitor.requestCounter.WithLabelValues(statusCodeStr, dryRunStr, result).Inc()
+	api.monitor.requestDuration.WithLabelValues(statusCodeStr, dryRunStr).Observe(duration)
+
+	commitmentCount := countCommitments(req)
+	api.monitor.commitmentChanges.WithLabelValues(result, string(req.AZ), dryRunStr).Add(float64(commitmentCount))
 }
 
 // countCommitments counts the total number of commitments in a request.
@@ -41,4 +40,18 @@ func countCommitments(req liquid.CommitmentChangeRequest) int {
 		}
 	}
 	return count
+}
+
+// computeNetUnitDeltas returns the signed net unit change per resource name summed across all projects.
+// A positive value means more capacity is requested; negative means capacity is being released.
+func computeNetUnitDeltas(req liquid.CommitmentChangeRequest) map[liquid.ResourceName]int64 {
+	deltas := make(map[liquid.ResourceName]int64)
+	for _, projectChanges := range req.ByProject {
+		for resourceName, rc := range projectChanges.ByResource {
+			totalBefore := rc.TotalConfirmedBefore + rc.TotalGuaranteedBefore
+			totalAfter := rc.TotalConfirmedAfter + rc.TotalGuaranteedAfter
+			deltas[resourceName] += int64(totalAfter) - int64(totalBefore) //nolint:gosec
+		}
+	}
+	return deltas
 }

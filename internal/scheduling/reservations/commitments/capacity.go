@@ -73,9 +73,9 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 		}
 
 		smallestFlavorName := groupData.SmallestFlavor.Name
-		// Add 16 MiB before dividing: flavors reserve 16 MiB for video RAM (hw_video:ram_max_mb=16),
-		// so a nominal "2 GiB" flavor has 2032 MiB.
-		memoryMBPerSlot := groupData.SmallestFlavor.MemoryMB + 16
+		// Add 16 MiB before dividing: flavors may reserve 16 MiB for video RAM (hw_video:ram_max_mb=16),
+		// so a nominal "2 GiB" flavor may report 2032 MiB. Adding 16 restores the intended GiB boundary.
+		memoryGiBPerSlot := (groupData.SmallestFlavor.MemoryMB + 16) / 1024
 		vcpusPerSlot := groupData.SmallestFlavor.VCPUs
 
 		ramAZCapacity := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(req.AllAZs))
@@ -116,7 +116,13 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			}
 
 			totalSlots := uint64(smallest.TotalCapacityVMSlots) //nolint:gosec // slot count from CRD, realistically bounded
-			ramEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots * memoryMBPerSlot / 1024}
+			var ramCapacity uint64
+			if groupData.HasFixedRamCoreRatio() {
+				ramCapacity = totalSlots
+			} else {
+				ramCapacity = totalSlots * memoryGiBPerSlot
+			}
+			ramEntry := &liquid.AZResourceCapacityReport{Capacity: ramCapacity}
 			coresEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots * vcpusPerSlot}
 			instancesEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots}
 
@@ -128,7 +134,11 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 				if totalSlots > placeableSlots {
 					usedSlots = totalSlots - placeableSlots
 				}
-				ramEntry.Usage = Some[uint64](usedSlots * memoryMBPerSlot / 1024)
+				if groupData.HasFixedRamCoreRatio() {
+					ramEntry.Usage = Some[uint64](usedSlots)
+				} else {
+					ramEntry.Usage = Some[uint64](usedSlots * memoryGiBPerSlot)
+				}
 				coresEntry.Usage = Some[uint64](usedSlots * vcpusPerSlot)
 				instancesEntry.Usage = Some[uint64](usedSlots)
 			}

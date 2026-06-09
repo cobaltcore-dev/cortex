@@ -17,6 +17,11 @@ owner-info:
 alerts:
   enabled: true
   prometheus: openstack
+  thresholds:
+    # Memory threshold for CortexNovaHighMemoryUsage in MiB.
+    highMemoryMiB: 6000
+    # Reconcile-duration threshold for CortexNovaReconcileDurationHigher10Min in seconds.
+    reconcileDurationSeconds: 600
 
 serviceMonitor:
   extraLabels: {}
@@ -139,7 +144,7 @@ cortex-scheduling-controllers:
     # Pipeline used for the empty-state capacity probe (ignores allocations and reservations).
     capacityTotalPipeline: "kvm-report-capacity"
     # Pipeline used for the current-state capacity probe (considers current VM allocations).
-    capacityPlaceablePipeline: "kvm-general-purpose-load-balancing"
+    capacityPlaceablePipeline: "kvm-general-purpose-load-balancing-no-history"
     # How often the capacity controller re-runs its scheduler probes.
     capacityReconcileInterval: 5m
     enabledTasks:
@@ -154,11 +159,9 @@ cortex-scheduling-controllers:
     committedResourceReservationController:
       # Maps flavor group IDs to pipeline names; "*" acts as catch-all fallback
       flavorGroupPipelines:
-        "2152": "kvm-hana-bin-packing"  # HANA flavor group
-        "2101": "kvm-general-purpose-load-balancing"  # General Purpose flavor group
-        "*": "kvm-general-purpose-load-balancing"  # Catch-all fallback
+        "*": "kvm-general-purpose-load-balancing-no-history"  # Catch-all fallback
       # Fallback pipeline when no flavorGroupPipelines entry matches
-      pipelineDefault: "kvm-general-purpose-load-balancing"
+      pipelineDefault: "kvm-general-purpose-load-balancing-no-history"
       # How often to re-verify active Reservation CRDs (healthy state)
       requeueIntervalActive: "5m"
       # Back-off interval when knowledge is unavailable
@@ -175,9 +178,13 @@ cortex-scheduling-controllers:
       requeueIntervalRetry: "1m"
       # Maximum back-off interval cap for the exponential retry delay
       maxRequeueInterval: "30m"
+      # Pause between consecutive Reservation CRD creates to spread scheduler load; 0 disables
+      slotCreationDelay: "0ms"
+      # Max Reservation CRDs per CommittedResource on the API path; 0 disables the limit
+      maxSlotsPerCommitment: 0
     committedResourceAPI:
       # Timeout for watching CommittedResource CRDs before rolling back
-      watchTimeout: "10s"
+      watchTimeout: "15s"
       # How often to poll CommittedResource CRD conditions during watch
       watchPollInterval: "500ms"
       # When false, the endpoint returns HTTP 503; the info endpoint remains available.
@@ -197,8 +204,11 @@ cortex-scheduling-controllers:
             handlesCommitments: false
             hasCapacity: true
             hasQuota: false
+            handlesDryRun: true
+            ramUnitGiB: 1
           cores:
             handlesCommitments: false
+            handlesDryRun: true
             hasCapacity: true
             hasQuota: false
           instances:
@@ -258,6 +268,8 @@ cortex-knowledge-controllers:
       labels:
         <<: *cortexMonitoringLabels
         component: nova-knowledge
+    openstackDatasourceControllerParallelReconciles: 3
+    prometheusDatasourceControllerParallelReconciles: 2
     enabledControllers:
       - datasource-controllers
       - knowledge-controllers

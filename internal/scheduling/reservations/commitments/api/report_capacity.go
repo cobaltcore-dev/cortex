@@ -39,7 +39,7 @@ func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request)
 	}
 
 	ctx := reservations.WithGlobalRequestID(r.Context(), "committed-resource-"+requestID)
-	logger := commitments.LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/report-capacity")
+	logger := commitments.LoggerFromContext(ctx).WithValues("endpoint", "/commitments/v1/report-capacity")
 
 	// Only accept POST method
 	if r.Method != http.MethodPost {
@@ -70,6 +70,13 @@ func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request)
 	}
 
 	logger.Info("calculated capacity report", "resourceCount", len(report.Resources))
+
+	// Update capacity gauge for each resource/AZ combination.
+	for resName, resReport := range report.Resources {
+		for az, azReport := range resReport.PerAZ {
+			api.capacityMonitor.reportedCapacity.WithLabelValues(string(resName), string(az)).Set(float64(azReport.Capacity))
+		}
+	}
 
 	// Return response
 	w.Header().Set("Content-Type", "application/json")

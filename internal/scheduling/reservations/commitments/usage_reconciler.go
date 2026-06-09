@@ -46,7 +46,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	log := ctrl.LoggerFrom(ctx).WithValues("component", "usage-reconciler", "committedResource", req.Name)
+	log := ctrl.LoggerFrom(ctx).WithValues("committedResource", req.Name)
 
 	// Only active commitments have assigned VMs. Clear stale usage status if present.
 	if cr.Spec.State != v1alpha1.CommitmentStatusConfirmed && cr.Spec.State != v1alpha1.CommitmentStatusGuaranteed {
@@ -57,6 +57,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			cr.Status.UsedResources = nil
 			cr.Status.LastUsageReconcileAt = nil
 			cr.Status.UsageObservedGeneration = nil
+			cr.Status.StatusSummary = v1alpha1.ComputeStatusSummary(cr.Spec, cr.Status, start)
 			if err := r.Status().Patch(ctx, &cr, client.MergeFrom(old)); err != nil {
 				return ctrl.Result{}, client.IgnoreNotFound(err)
 			}
@@ -75,6 +76,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			cr.Status.UsedResources = nil
 			cr.Status.LastUsageReconcileAt = nil
 			cr.Status.UsageObservedGeneration = nil
+			cr.Status.StatusSummary = v1alpha1.ComputeStatusSummary(cr.Spec, cr.Status, start)
 			if err := r.Status().Patch(ctx, &cr, client.MergeFrom(old)); err != nil {
 				return ctrl.Result{}, client.IgnoreNotFound(err)
 			}
@@ -222,6 +224,7 @@ func (r *UsageReconciler) writeUsageStatus(ctx context.Context, state *Commitmen
 	}
 	target.Status.LastUsageReconcileAt = &now
 	target.Status.UsageObservedGeneration = &target.Generation
+	target.Status.StatusSummary = v1alpha1.ComputeStatusSummary(target.Spec, target.Status, now.Time)
 
 	return r.Status().Patch(ctx, target, client.MergeFrom(old))
 }
@@ -269,7 +272,7 @@ func (r *UsageReconciler) hypervisorToCommittedResources(ctx context.Context, ob
 
 // SetupWithManager registers the usage reconciler with the controller manager.
 func (r *UsageReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
-	log := ctrl.Log.WithName("committed-resource-usage")
+	log := ctrl.Log.WithName("committed-resource-usage").WithValues("module", "committed-resources")
 	log.Info("starting usage reconciler", "cooldownInterval", r.Conf.CooldownInterval.Duration)
 
 	if err := indexCommittedResourceByUUID(context.Background(), mcl); err != nil {
@@ -279,7 +282,7 @@ func (r *UsageReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.C
 		return fmt.Errorf("failed to set up committed resource project index: %w", err)
 	}
 	if err := indexProjectQuotaByProjectID(context.Background(), mcl); err != nil {
-		return fmt.Errorf("failed to set up project quota project index: %w", err)
+		log.Info("ProjectQuota index unavailable — quota data will not be included in usage reports", "error", err)
 	}
 
 	bldr := multicluster.BuildController(mcl, mgr)

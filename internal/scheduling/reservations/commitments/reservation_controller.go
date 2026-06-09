@@ -75,7 +75,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		ctx = WithNewGlobalRequestID(ctx)
 	}
 	ctx = reservations.WithRequestID(ctx, req.Name)
-	logger := LoggerFromContext(ctx).WithValues("component", "controller", "reservation", req.Name)
+	logger := LoggerFromContext(ctx).WithValues("reservation", req.Name)
 
 	// filter for CR reservations
 	resourceName := ""
@@ -363,7 +363,7 @@ type reconcileAllocationsResult struct {
 // For older allocations: we check the HV CRD; VMs not found are considered leaving and
 // removed from the reservation.
 func (r *CommitmentReservationController) reconcileAllocations(ctx context.Context, res *v1alpha1.Reservation) (*reconcileAllocationsResult, error) {
-	logger := LoggerFromContext(ctx).WithValues("component", "controller")
+	logger := LoggerFromContext(ctx)
 	result := &reconcileAllocationsResult{}
 	now := time.Now()
 
@@ -403,6 +403,13 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 	// Initialize status
 	if res.Status.CommittedResourceReservation == nil {
 		res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{}
+	}
+
+	// Snapshot existing Status.Allocations before we overwrite it so we can detect
+	// which VM UUIDs are newly confirmed after the patch.
+	existingStatusAllocations := make(map[string]string, len(res.Status.CommittedResourceReservation.Allocations))
+	for k, v := range res.Status.CommittedResourceReservation.Allocations {
+		existingStatusAllocations[k] = v
 	}
 
 	// Build new Status.Allocations map based on HV CRD state.
@@ -479,6 +486,19 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		res.Status.CommittedResourceReservation.Allocations = newStatusAllocations
 	}
 
+	// Proactively remove this VM UUID from all other candidate reservations that still
+	// carry it in their Spec.Allocations. Only do this for VMs that are newly confirmed
+	// in this reconcile cycle (present in newStatusAllocations but absent in the snapshot
+	// taken before any patch) to avoid redundant work on subsequent reconciles.
+	for vmUUID := range newStatusAllocations {
+		if _, wasAlreadyConfirmed := existingStatusAllocations[vmUUID]; wasAlreadyConfirmed {
+			continue
+		}
+		if err := r.cleanupCandidateReservations(ctx, res.Name, vmUUID); err != nil {
+			return nil, fmt.Errorf("failed to cleanup candidate reservations for vm %s: %w", vmUUID, err)
+		}
+	}
+
 	// Patch Status
 	patch := client.MergeFrom(old)
 	if err := r.Status().Patch(ctx, res, patch); err != nil {
@@ -495,6 +515,41 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		"hasAllocationsInGracePeriod", result.HasAllocationsInGracePeriod)
 
 	return result, nil
+}
+
+// cleanupCandidateReservations removes vmUUID from Spec.Allocations of all Reservation CRDs
+// other than the one that just confirmed the VM. This is called once per newly confirmed VM
+// so that candidate slots on non-selected hosts are freed immediately rather than waiting
+// for those reservations' own grace period or periodic requeue.
+func (r *CommitmentReservationController) cleanupCandidateReservations(ctx context.Context, confirmedReservationName, vmUUID string) error {
+	logger := LoggerFromContext(ctx).WithValues("component", "controller", "vm", vmUUID)
+
+	var candidates v1alpha1.ReservationList
+	if err := r.List(ctx, &candidates, client.MatchingFields{idxReservationByAllocationVMUUID: vmUUID}); err != nil {
+		return fmt.Errorf("failed to list candidate reservations: %w", err)
+	}
+
+	for i := range candidates.Items {
+		candidate := &candidates.Items[i]
+		if candidate.Name == confirmedReservationName {
+			continue
+		}
+		if candidate.Spec.CommittedResourceReservation == nil {
+			continue
+		}
+		if _, ok := candidate.Spec.CommittedResourceReservation.Allocations[vmUUID]; !ok {
+			continue
+		}
+		old := candidate.DeepCopy()
+		delete(candidate.Spec.CommittedResourceReservation.Allocations, vmUUID)
+		if err := r.Patch(ctx, candidate, client.MergeFrom(old)); err != nil {
+			if client.IgnoreNotFound(err) != nil {
+				return fmt.Errorf("failed to patch candidate reservation %s: %w", candidate.Name, err)
+			}
+		}
+		logger.Info("removed vm from candidate reservation", "reservation", candidate.Name, "host", candidate.Status.Host)
+	}
+	return nil
 }
 
 // getPipelineForFlavorGroup returns the pipeline name for a given flavor group.
@@ -589,6 +644,10 @@ func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl
 		return nil
 	})); err != nil {
 		return err
+	}
+
+	if err := indexReservationByAllocationVMUUID(context.Background(), mcl); err != nil {
+		return fmt.Errorf("failed to set up reservation allocation VM UUID index: %w", err)
 	}
 
 	// Use WatchesMulticluster to watch Reservations across all configured clusters

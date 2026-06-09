@@ -12,7 +12,6 @@ import (
 	"time"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
-	"github.com/google/uuid"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -56,8 +55,9 @@ func (c *Controller) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-timer.C:
-			if err := c.reconcileAll(ctx); err != nil {
-				log.Error(err, "reconcile cycle failed")
+			cycleCtx := WithNewGlobalRequestID(ctx)
+			if err := c.reconcileAll(cycleCtx); err != nil {
+				LoggerFromContext(cycleCtx).Error(err, "reconcile cycle failed")
 			}
 			timer.Reset(c.config.ReconcileInterval.Duration)
 		}
@@ -66,6 +66,9 @@ func (c *Controller) Start(ctx context.Context) error {
 
 // reconcileAll iterates all flavor groups × AZs and upserts FlavorGroupCapacity CRDs.
 func (c *Controller) reconcileAll(ctx context.Context) error {
+	logger := LoggerFromContext(ctx)
+	startTime := time.Now()
+
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
@@ -84,15 +87,34 @@ func (c *Controller) reconcileAll(ctx context.Context) error {
 
 	azs := availabilityZones(hvList.Items)
 
+	// Compute reservation memory blocks once per cycle — shared across all (group × AZ) pairs.
+	blockedByReservations, err := c.blockedMemoryByHost(ctx)
+	if err != nil {
+		logger.Error(err, "failed to compute blocked memory by host, placeable slot counts may be overstated")
+		blockedByReservations = map[string]int64{}
+	}
+
+	var succeeded, failed int
 	for groupName, groupData := range flavorGroups {
 		for _, az := range azs {
-			if err := c.reconcileOne(ctx, groupName, groupData, az, hvByName, hvList.Items); err != nil {
-				log.Error(err, "failed to reconcile flavor group capacity",
+			if err := c.reconcileOne(ctx, groupName, groupData, az, hvByName, hvList.Items, blockedByReservations); err != nil {
+				logger.Error(err, "failed to reconcile flavor group capacity",
 					"flavorGroup", groupName, "az", az)
+				failed++
 				// Continue with other pairs rather than aborting the whole cycle.
+				continue
 			}
+			succeeded++
 		}
 	}
+
+	logger.Info("capacity reconcile cycle completed",
+		"flavorGroups", len(flavorGroups),
+		"availabilityZones", len(azs),
+		"hypervisors", len(hvList.Items),
+		"succeeded", succeeded,
+		"failed", failed,
+		"duration", time.Since(startTime).String())
 	return nil
 }
 
@@ -104,6 +126,7 @@ func (c *Controller) reconcileOne(
 	az string,
 	hvByName map[string]hv1.Hypervisor,
 	allHVs []hv1.Hypervisor,
+	blockedByReservations map[string]int64,
 ) error {
 
 	smallestFlavorBytes := int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec
@@ -148,13 +171,8 @@ func (c *Controller) reconcileOne(
 		cur := existingByName[flavor.Name]
 		cur.FlavorName = flavor.Name
 
-		totalVMSlots, totalHosts, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName, scheduling.Options{
-			SkipHistory:             true,
-			SkipInflight:            true,
-			AssumeEmptyHosts:        true,
-			IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
-		})
-		placeableVMs, placeableHosts, placeableErr := c.probeScheduler(ctx, flavor, az, c.config.PlaceablePipeline, hvByName, scheduling.Options{SkipHistory: true, SkipInflight: true})
+		totalVMSlots, totalHosts, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName, true, nil)
+		placeableVMs, placeableHosts, placeableErr := c.probeScheduler(ctx, flavor, az, c.config.PlaceablePipeline, hvByName, false, blockedByReservations)
 
 		if totalErr != nil {
 			allFresh = false
@@ -175,7 +193,8 @@ func (c *Controller) reconcileOne(
 	totalInstances := countInstancesInAZ(allHVs, az)
 	committedCapacity, committedErr := c.sumCommittedCapacity(ctx, groupName, az, smallestFlavorBytes)
 	if committedErr != nil {
-		log.Error(committedErr, "failed to sum committed capacity", "flavorGroup", groupName, "az", az)
+		LoggerFromContext(ctx).Error(committedErr, "failed to sum committed capacity",
+			"flavorGroup", groupName, "az", az)
 		committedCapacity = 0
 	}
 
@@ -247,12 +266,16 @@ func (c *Controller) reconcileOne(
 
 // probeScheduler calls the scheduler with the given pipeline and returns VM slots + host count.
 // Capacity is computed as sum of floor(hostMemory / flavorMemory) across returned hosts.
+// When ignoreAllocations is true (total/empty-datacenter probe), raw effective capacity is used.
+// When false (placeable probe), hv.Status.Allocation and blockedByReservations are subtracted so
+// that slots reflect remaining capacity after running VMs and active reservation blocks.
 func (c *Controller) probeScheduler(
 	ctx context.Context,
 	flavor compute.FlavorInGroup,
 	az, pipeline string,
 	hvByName map[string]hv1.Hypervisor,
-	opts scheduling.Options,
+	ignoreAllocations bool,
+	blockedByReservations map[string]int64,
 ) (capacity, hosts int64, err error) {
 
 	flavorBytes := int64(flavor.MemoryMB) * 1024 * 1024 //nolint:gosec
@@ -269,7 +292,7 @@ func (c *Controller) probeScheduler(
 	}
 
 	resp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
-		InstanceUUID:     uuid.New().String(),
+		InstanceUUID:     "capacity-" + flavor.Name,
 		ProjectID:        "cortex-capacity-probe",
 		FlavorName:       flavor.Name,
 		MemoryMB:         flavor.MemoryMB,
@@ -278,7 +301,7 @@ func (c *Controller) probeScheduler(
 		AvailabilityZone: az,
 		Pipeline:         pipeline,
 		EligibleHosts:    eligibleHosts,
-	}, opts)
+	}, scheduling.Options{SkipHistory: true, SkipInflight: true})
 	if err != nil {
 		return 0, 0, fmt.Errorf("scheduler call failed (pipeline=%s): %w", pipeline, err)
 	}
@@ -300,11 +323,58 @@ func (c *Controller) probeScheduler(
 		if !ok {
 			continue
 		}
-		if capBytes := memCap.Value(); capBytes > 0 {
+		capBytes := memCap.Value()
+		if !ignoreAllocations {
+			if alloc, ok := hv.Status.Allocation[hv1.ResourceMemory]; ok {
+				capBytes -= alloc.Value()
+			}
+			capBytes -= blockedByReservations[hostName]
+			if capBytes < 0 {
+				capBytes = 0
+			}
+		}
+		if capBytes > 0 {
 			capacity += capBytes / flavorBytes
 		}
 	}
 	return capacity, hosts, nil
+}
+
+// blockedMemoryByHost lists all Reservations and returns the total bytes blocked per host name.
+// Only placed reservations (TargetHost or Status.Host non-empty) are counted.
+// When a reservation is being migrated (TargetHost != Status.Host), both hosts are blocked.
+func (c *Controller) blockedMemoryByHost(ctx context.Context) (map[string]int64, error) {
+	var list v1alpha1.ReservationList
+	if err := c.client.List(ctx, &list); err != nil {
+		return nil, fmt.Errorf("failed to list reservations: %w", err)
+	}
+
+	blocked := make(map[string]int64)
+	for i := range list.Items {
+		res := &list.Items[i]
+
+		hostsToBlock := make(map[string]struct{})
+		if res.Spec.TargetHost != "" {
+			hostsToBlock[res.Spec.TargetHost] = struct{}{}
+		}
+		if res.Status.Host != "" {
+			hostsToBlock[res.Status.Host] = struct{}{}
+		}
+		if len(hostsToBlock) == 0 {
+			continue
+		}
+
+		resourcesToBlock := reservations.UnusedReservationCapacity(res, false)
+		memQty, ok := resourcesToBlock[hv1.ResourceMemory]
+		if !ok {
+			continue
+		}
+		memBytes := memQty.Value()
+		for host := range hostsToBlock {
+			blocked[host] += memBytes
+		}
+	}
+	return blocked, nil
 }
 
 // sumCommittedCapacity sums AcceptedSpec.Amount (or Spec.Amount as fallback) across all

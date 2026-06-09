@@ -206,7 +206,7 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 			name: "os version set",
 			host: kvmHost{hv1.Hypervisor{
 				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
-				Spec:       hv1.HypervisorSpec{OperatingSystemVersion: "1.1.1"},
+				Status:     hv1.HypervisorStatus{OperatingSystem: hv1.OperatingSystemStatus{Version: "1.1.1"}},
 			}},
 			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false", "1.1.1"},
 		},

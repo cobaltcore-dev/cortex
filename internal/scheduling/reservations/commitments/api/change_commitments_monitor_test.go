@@ -21,10 +21,10 @@ func TestChangeCommitmentsAPIMonitor_MetricsRegistration(t *testing.T) {
 	}
 
 	// Observe metrics before gathering (Prometheus metrics with labels only appear after being used)
-	monitor.requestCounter.WithLabelValues("200").Inc()
-	monitor.requestDuration.WithLabelValues("200").Observe(0.1)
-	monitor.commitmentChanges.WithLabelValues("success").Inc()
-	monitor.timeouts.Inc()
+	monitor.requestCounter.WithLabelValues("200", "false", "accepted").Inc()
+	monitor.requestDuration.WithLabelValues("200", "false").Observe(0.1)
+	monitor.commitmentChanges.WithLabelValues("accepted", "az-1", "false").Inc()
+	monitor.timeouts.WithLabelValues("false").Inc()
 
 	// Verify metrics can be gathered
 	families, err := registry.Gather()
@@ -86,12 +86,13 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 	}
 
 	// Record some test metrics
-	monitor.requestCounter.WithLabelValues("200").Inc()
-	monitor.requestCounter.WithLabelValues("409").Inc()
-	monitor.requestCounter.WithLabelValues("503").Inc()
-	monitor.requestDuration.WithLabelValues("200").Observe(1.5)
-	monitor.commitmentChanges.WithLabelValues("success").Add(5)
-	monitor.commitmentChanges.WithLabelValues("rejected").Add(2)
+	monitor.requestCounter.WithLabelValues("200", "false", "accepted").Inc()
+	monitor.requestCounter.WithLabelValues("409", "false", "error").Inc()
+	monitor.requestCounter.WithLabelValues("503", "false", "error").Inc()
+	monitor.requestDuration.WithLabelValues("200", "false").Observe(1.5)
+	monitor.commitmentChanges.WithLabelValues("accepted", "az-1", "false").Add(5)
+	monitor.commitmentChanges.WithLabelValues("rejected", "az-1", "false").Add(2)
+	monitor.timeouts.WithLabelValues("false").Inc()
 
 	// Gather metrics
 	families, err := registry.Gather()
@@ -108,7 +109,7 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 				t.Errorf("Expected at least 3 request counter metrics, got %d", len(family.Metric))
 			}
 
-			// Check all metrics have the status_code label
+			// Check all metrics have the status_code, dry_run, and result labels
 			for _, metric := range family.Metric {
 				labelNames := make(map[string]bool)
 				for _, label := range metric.Label {
@@ -117,6 +118,12 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 
 				if !labelNames["status_code"] {
 					t.Error("Missing 'status_code' label in request counter")
+				}
+				if !labelNames["dry_run"] {
+					t.Error("Missing 'dry_run' label in request counter")
+				}
+				if !labelNames["result"] {
+					t.Error("Missing 'result' label in request counter")
 				}
 			}
 		}
@@ -128,7 +135,7 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 				t.Errorf("Expected at least 1 histogram metric, got %d", len(family.Metric))
 			}
 
-			// Check all metrics have the status_code label
+			// Check all metrics have the status_code and dry_run labels
 			for _, metric := range family.Metric {
 				labelNames := make(map[string]bool)
 				for _, label := range metric.Label {
@@ -138,17 +145,19 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 				if !labelNames["status_code"] {
 					t.Error("Missing 'status_code' label in histogram")
 				}
+				if !labelNames["dry_run"] {
+					t.Error("Missing 'dry_run' label in histogram")
+				}
 			}
 		}
 
 		if *family.Name == "cortex_committed_resource_change_api_commitment_changes_total" {
-			// At minimum we expect the 2 labels we added (success, rejected)
-			// Plus pre-initialized labels (accepted) - so >= 2 total
+			// 2 label combinations: (accepted,az-1,false) and (rejected,az-1,false)
 			if len(family.Metric) < 2 {
 				t.Errorf("Expected at least 2 commitment changes metrics, got %d", len(family.Metric))
 			}
 
-			// Check all metrics have the result label
+			// Check all metrics have result, az, and dry_run labels
 			for _, metric := range family.Metric {
 				labelNames := make(map[string]bool)
 				for _, label := range metric.Label {
@@ -158,8 +167,120 @@ func TestChangeCommitmentsAPIMonitor_MetricLabels(t *testing.T) {
 				if !labelNames["result"] {
 					t.Error("Missing 'result' label in commitment changes counter")
 				}
+				if !labelNames["az"] {
+					t.Error("Missing 'az' label in commitment changes counter")
+				}
+				if !labelNames["dry_run"] {
+					t.Error("Missing 'dry_run' label in commitment changes counter")
+				}
 			}
 		}
+
+		if *family.Name == "cortex_committed_resource_change_api_timeouts_total" {
+			for _, metric := range family.Metric {
+				labelNames := make(map[string]bool)
+				labelValues := make(map[string]string)
+				for _, label := range metric.Label {
+					labelNames[*label.Name] = true
+					labelValues[*label.Name] = *label.Value
+				}
+				if !labelNames["dry_run"] {
+					t.Error("Missing 'dry_run' label in timeouts counter")
+				}
+				if v := labelValues["dry_run"]; v != "true" && v != "false" {
+					t.Errorf("Unexpected 'dry_run' label value %q in timeouts counter; want 'true' or 'false'", v)
+				}
+			}
+		}
+	}
+}
+
+func TestComputeNetUnitDeltas(t *testing.T) {
+	testCases := []struct {
+		name     string
+		request  CommitmentChangeRequest
+		expected map[string]int64 // resourceName → expected net delta
+	}{
+		{
+			name: "single project increase",
+			request: newCommitmentRequest("az-a", true, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-1", "confirmed", 5)),
+			expected: map[string]int64{"hw_version_hana_1_ram": 5},
+		},
+		{
+			name: "single project decrease",
+			request: newCommitmentRequest("az-a", true, 1234,
+				deleteCommitment("hw_version_hana_1_ram", "project-A", "uuid-1", "confirmed", 5)),
+			expected: map[string]int64{"hw_version_hana_1_ram": -5},
+		},
+		{
+			name: "two projects same resource: +5 and -5 cancel to zero",
+			request: newCommitmentRequest("az-a", true, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-a", "confirmed", 5),
+				deleteCommitment("hw_version_hana_1_ram", "project-B", "uuid-b", "confirmed", 5)),
+			expected: map[string]int64{"hw_version_hana_1_ram": 0},
+		},
+		{
+			name: "two projects same resource: +5 and -3 leaves net +2",
+			request: newCommitmentRequest("az-a", true, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-a", "confirmed", 5),
+				deleteCommitment("hw_version_hana_1_ram", "project-B", "uuid-b", "confirmed", 3)),
+			expected: map[string]int64{"hw_version_hana_1_ram": 2},
+		},
+		{
+			name: "two projects same resource: +3 and -5 leaves net -2",
+			request: newCommitmentRequest("az-a", true, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-a", "confirmed", 3),
+				deleteCommitment("hw_version_hana_1_ram", "project-B", "uuid-b", "confirmed", 5)),
+			expected: map[string]int64{"hw_version_hana_1_ram": -2},
+		},
+		{
+			name: "two resources tracked independently",
+			request: newCommitmentRequest("az-a", true, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-1", "confirmed", 4),
+				createCommitment("hw_version_hana_2_ram", "project-A", "uuid-2", "confirmed", 2)),
+			expected: map[string]int64{
+				"hw_version_hana_1_ram": 4,
+				"hw_version_hana_2_ram": 2,
+			},
+		},
+		{
+			name: "two resources: one net positive, one net zero",
+			request: newCommitmentRequest("az-a", true, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-a1", "confirmed", 5),
+				deleteCommitment("hw_version_hana_1_ram", "project-B", "uuid-b1", "confirmed", 5),
+				createCommitment("hw_version_hana_2_ram", "project-A", "uuid-a2", "confirmed", 3)),
+			expected: map[string]int64{
+				"hw_version_hana_1_ram": 0,
+				"hw_version_hana_2_ram": 3,
+			},
+		},
+		{
+			name:     "empty request",
+			request:  newCommitmentRequest("az-a", true, 1234),
+			expected: map[string]int64{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			reqJSON := buildRequestJSON(tc.request)
+			var req liquid.CommitmentChangeRequest
+			if err := json.Unmarshal([]byte(reqJSON), &req); err != nil {
+				t.Fatalf("parse request: %v", err)
+			}
+
+			got := computeNetUnitDeltas(req)
+
+			if len(got) != len(tc.expected) {
+				t.Fatalf("expected %d resource entries, got %d: %v", len(tc.expected), len(got), got)
+			}
+			for name, want := range tc.expected {
+				if got[liquid.ResourceName(name)] != want {
+					t.Errorf("resource %q: want delta %d, got %d", name, want, got[liquid.ResourceName(name)])
+				}
+			}
+		})
 	}
 }
 

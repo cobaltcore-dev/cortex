@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 
@@ -77,7 +78,13 @@ type RemoteConfig struct {
 	// The remote kubernetes apiserver url, e.g. "https://my-apiserver:6443".
 	Host string `json:"host"`
 	// The root CA certificate to verify the remote apiserver.
+	// Ignored if InsecureSkipTLSVerify is true.
 	CACert string `json:"caCert,omitempty"`
+	// InsecureSkipTLSVerify disables verification of the remote apiserver's
+	// TLS certificate. Use this for apiservers whose CA certificate rotates
+	// frequently and does not chain to a stable root. Mutually exclusive
+	// with CACert: when true, CACert is ignored.
+	InsecureSkipTLSVerify bool `json:"insecureSkipTLSVerify,omitempty"`
 	// The resource GVKs this apiserver serves, formatted as "<group>/<version>/<Kind>".
 	GVKs []string `json:"gvks"`
 	// Labels used by ResourceRouters to match resources to this cluster
@@ -120,7 +127,7 @@ func (c *Client) InitFromConf(ctx context.Context, mgr ctrl.Manager, conf Client
 			}
 			resolvedGVKs = append(resolvedGVKs, gvk)
 		}
-		cl, err := c.AddRemote(ctx, remote.Host, remote.CACert, remote.Labels, resolvedGVKs...)
+		cl, err := c.AddRemote(ctx, remote.Host, remote.CACert, remote.InsecureSkipTLSVerify, remote.Labels, resolvedGVKs...)
 		if err != nil {
 			return err
 		}
@@ -134,15 +141,26 @@ func (c *Client) InitFromConf(ctx context.Context, mgr ctrl.Manager, conf Client
 // Add a remote cluster which uses the same REST config as the home cluster,
 // but a different host, for the given resource gvks.
 //
+// If insecureSkipTLSVerify is true, the remote apiserver's TLS certificate
+// is not verified and caCert is ignored. This is useful for apiservers whose
+// CA certificate rotates frequently and does not chain to a stable root.
+//
 // This can be used when the remote cluster accepts the home cluster's service
 // account tokens. See the kubernetes documentation on structured auth to
 // learn more about jwt-based authentication across clusters.
-func (c *Client) AddRemote(ctx context.Context, host, caCert string, labels map[string]string, gvks ...schema.GroupVersionKind) (cluster.Cluster, error) {
+func (c *Client) AddRemote(ctx context.Context, host, caCert string, insecureSkipTLSVerify bool, labels map[string]string, gvks ...schema.GroupVersionKind) (cluster.Cluster, error) {
 	log := ctrl.LoggerFrom(ctx)
 	homeRestConfig := *c.HomeRestConfig
 	restConfigCopy := homeRestConfig
 	restConfigCopy.Host = host
-	restConfigCopy.CAData = []byte(caCert)
+	if insecureSkipTLSVerify {
+		// Insecure and CAData are mutually exclusive in client-go's TLS validation.
+		restConfigCopy.CAData = nil
+		restConfigCopy.CAFile = ""
+		restConfigCopy.Insecure = true
+	} else {
+		restConfigCopy.CAData = []byte(caCert)
+	}
 	cl, err := cluster.New(&restConfigCopy, func(o *cluster.Options) {
 		o.Scheme = c.HomeScheme
 	})
@@ -155,7 +173,7 @@ func (c *Client) AddRemote(ctx context.Context, host, caCert string, labels map[
 		c.remoteClusters = make(map[schema.GroupVersionKind][]remoteCluster)
 	}
 	for _, gvk := range gvks {
-		log.Info("adding remote cluster for resource", "gvk", gvk, "host", host, "labels", labels)
+		log.Info("adding remote cluster for resource", "gvk", gvk, "host", host, "labels", labels, "insecureSkipTLSVerify", insecureSkipTLSVerify)
 		c.remoteClusters[gvk] = append(c.remoteClusters[gvk], remoteCluster{
 			cluster: cl,
 			labels:  labels,
@@ -232,7 +250,7 @@ func (c *Client) clusterForWrite(gvk schema.GroupVersionKind, obj any) (cluster.
 	if c.homeGVKs[gvk] {
 		return c.HomeCluster, nil
 	}
-	return nil, fmt.Errorf("no cluster matched for GVK %s", gvk)
+	return nil, &NoClusterMatchedError{GVK: gvk}
 }
 
 type duplicateError struct{ msg string }
@@ -246,6 +264,50 @@ func (e *duplicateError) Error() string { return e.msg }
 func IsDuplicateError(err error) bool {
 	var de *duplicateError
 	return errors.As(err, &de)
+}
+
+// NoClusterMatchedError is returned when a write operation cannot find a
+// matching remote cluster for the given GVK and resource. This typically
+// happens in multi-AZ setups where the resource targets an AZ that has no
+// configured cluster.
+type NoClusterMatchedError struct {
+	GVK schema.GroupVersionKind
+}
+
+func (e *NoClusterMatchedError) Error() string {
+	return fmt.Sprintf("no cluster matched for GVK %s", e.GVK)
+}
+
+// IsNoClusterMatchedError returns true if the error indicates that no
+// configured cluster matched the resource for a write operation. Callers
+// can use this to skip resources targeting unavailable AZs gracefully.
+func IsNoClusterMatchedError(err error) bool {
+	var nce *NoClusterMatchedError
+	return errors.As(err, &nce)
+}
+
+// ConfiguredRouteLabels returns the routing label sets of all configured
+// remote clusters for the given GVK. This can be used to determine which
+// availability zones (or other routing dimensions) are served.
+// Returns nil if the GVK is only configured for the home cluster.
+func (c *Client) ConfiguredRouteLabels(gvk schema.GroupVersionKind) []map[string]string {
+	c.remoteClustersMu.RLock()
+	defer c.remoteClustersMu.RUnlock()
+	remotes := c.remoteClusters[gvk]
+	if len(remotes) == 0 {
+		return nil
+	}
+	result := make([]map[string]string, 0, len(remotes))
+	for _, r := range remotes {
+		if r.labels == nil {
+			result = append(result, nil)
+			continue
+		}
+		cp := make(map[string]string, len(r.labels))
+		maps.Copy(cp, r.labels)
+		result = append(result, cp)
+	}
+	return result
 }
 
 // Get iterates over all clusters with the GVK and returns the result.
@@ -641,7 +703,13 @@ func (c *subResourceClient) Apply(ctx context.Context, obj runtime.ApplyConfigur
 // Index a field for a resource in all matching cluster caches.
 // Usually, you want to index the same field in both the object and list type,
 // as both would be mapped to individual clients based on their GVK.
+//
+// Per-cluster errors are logged and skipped — a temporarily-unreachable cluster
+// does not prevent index setup for the other clusters. This mirrors the List
+// error-handling pattern: the affected cluster's objects will be silently absent
+// from MatchingFields queries until the index is established (e.g. after restart).
 func (c *Client) IndexField(ctx context.Context, obj client.Object, list client.ObjectList, field string, extractValue client.IndexerFunc) error {
+	log := ctrl.LoggerFrom(ctx)
 	gvk, err := c.GVKFromHomeScheme(obj)
 	if err != nil {
 		return err
@@ -663,7 +731,8 @@ func (c *Client) IndexField(ctx context.Context, obj client.Object, list client.
 		}
 		indexed[ch] = true
 		if err := ch.IndexField(ctx, obj, field, extractValue); err != nil {
-			return err
+			log.Error(err, "failed to register field index for cluster — objects from this cluster will be absent from index queries; restart required to recover", "field", field)
+			continue
 		}
 	}
 	clustersList, err := c.ClustersForGVK(gvkList)
@@ -677,7 +746,8 @@ func (c *Client) IndexField(ctx context.Context, obj client.Object, list client.
 		}
 		indexed[ch] = true
 		if err := ch.IndexField(ctx, obj, field, extractValue); err != nil {
-			return err
+			log.Error(err, "failed to register field index for cluster — objects from this cluster will be absent from index queries; restart required to recover", "field", field)
+			continue
 		}
 	}
 	return nil

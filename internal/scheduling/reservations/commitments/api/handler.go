@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var apiLog = ctrl.Log.WithName("committed-resource")
+var apiLog = ctrl.Log.WithName("committed-resource-api").WithValues("module", "committed-resources")
 
 // HTTPAPI implements Limes LIQUID commitment validation endpoints.
 type HTTPAPI struct {
@@ -64,6 +64,7 @@ func (api *HTTPAPI) Init(mux *http.ServeMux, registry prometheus.Registerer, log
 		"changeCommitmentsEnabled", api.config.EnableChangeCommitments,
 		"reportUsageEnabled", api.config.EnableReportUsage,
 		"reportCapacityEnabled", api.config.EnableReportCapacity)
+	commitments.LogFlavorGroupResourceConfig(log, api.config.FlavorGroupResourceConfig)
 }
 
 // handleProjectEndpoint routes /commitments/v1/projects/:project_id/... requests to the appropriate handler.
