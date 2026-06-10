@@ -46,13 +46,13 @@ func TestReconcileRemoveNoneligibleVMFromReservations(t *testing.T) {
 			},
 		},
 		{
-			name: "reservations.VM on same host as reservation - remove",
+			name: "VM on same host as reservation - remove",
 			vms: []reservations.VM{
-				newTestVMWithResources("vm-1", "host3"), // reservations.VM moved to host3 (same as reservation)
+				newTestVMWithResources("vm-1", "host3"), // VM moved to host3 (same as reservation)
 			},
 			reservations: []v1alpha1.Reservation{
 				newTestReservationWithResources("res-1", "host3", map[string]string{
-					"vm-1": "host1", // allocation says host1, but reservations.VM is now on host3
+					"vm-1": "host1", // allocation says host1, but VM is now on host3
 				}),
 			},
 			expectedUpdatedCount:  1,
@@ -83,7 +83,7 @@ func TestReconcileRemoveNoneligibleVMFromReservations(t *testing.T) {
 			},
 		},
 		{
-			name: "reservations.VM not in list - keep in allocations",
+			name: "VM not in list - keep in allocations",
 			vms: []reservations.VM{
 				newTestVMWithResources("vm-1", "host1"),
 				// vm-2 not in list
@@ -138,12 +138,12 @@ func TestReconcileRemoveNoneligibleVMFromReservations(t *testing.T) {
 				for vmUUID, expectedHost := range expectedAllocs {
 					actualHost, exists := actualAllocs[vmUUID]
 					if !exists {
-						t.Errorf("reservation %s: expected reservations.VM %s in allocations, but not found",
+						t.Errorf("reservation %s: expected VM %s in allocations, but not found",
 							res.Name, vmUUID)
 						continue
 					}
 					if actualHost != expectedHost {
-						t.Errorf("reservation %s: reservations.VM %s expected host %s, got %s",
+						t.Errorf("reservation %s: VM %s expected host %s, got %s",
 							res.Name, vmUUID, expectedHost, actualHost)
 					}
 				}
@@ -237,7 +237,7 @@ func TestCountReservationsForVM(t *testing.T) {
 			expectedCount: 0,
 		},
 		{
-			name: "reservations.VM in one reservation",
+			name: "VM in one reservation",
 			reservations: []v1alpha1.Reservation{
 				newTestReservation("res-1", "host1", map[string]string{"vm-1": "host2"}),
 				newTestReservation("res-2", "host3", map[string]string{"vm-2": "host4"}),
@@ -246,7 +246,7 @@ func TestCountReservationsForVM(t *testing.T) {
 			expectedCount: 1,
 		},
 		{
-			name: "reservations.VM in multiple reservations",
+			name: "VM in multiple reservations",
 			reservations: []v1alpha1.Reservation{
 				newTestReservation("res-1", "host1", map[string]string{"vm-1": "host2"}),
 				newTestReservation("res-2", "host3", map[string]string{"vm-1": "host2", "vm-2": "host4"}),
@@ -256,7 +256,7 @@ func TestCountReservationsForVM(t *testing.T) {
 			expectedCount: 3,
 		},
 		{
-			name: "reservations.VM not in any reservation",
+			name: "VM not in any reservation",
 			reservations: []v1alpha1.Reservation{
 				newTestReservation("res-1", "host1", map[string]string{"vm-2": "host2"}),
 				newTestReservation("res-2", "host3", map[string]string{"vm-3": "host4"}),
@@ -441,7 +441,7 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 			},
 		},
 		{
-			name: "reservations.VM no longer exists - remove from allocations",
+			name: "VM no longer exists - remove from allocations",
 			vms: []reservations.VM{
 				newTestVM("vm-1", "host1"),
 				// vm-2 no longer exists
@@ -459,7 +459,7 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 			},
 		},
 		{
-			name: "reservations.VM moved to different host - remove from allocations",
+			name: "VM moved to different host - remove from allocations",
 			vms: []reservations.VM{
 				newTestVM("vm-1", "host1"),
 				newTestVM("vm-2", "host4"), // moved from host2 to host4
@@ -606,12 +606,12 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 				for vmUUID, expectedHost := range expectedAllocs {
 					actualHost, exists := actualAllocs[vmUUID]
 					if !exists {
-						t.Errorf("reservation %s: expected reservations.VM %s in allocations, but not found",
+						t.Errorf("reservation %s: expected VM %s in allocations, but not found",
 							res.Name, vmUUID)
 						continue
 					}
 					if actualHost != expectedHost {
-						t.Errorf("reservation %s: reservations.VM %s expected host %s, got %s",
+						t.Errorf("reservation %s: VM %s expected host %s, got %s",
 							res.Name, vmUUID, expectedHost, actualHost)
 					}
 				}
@@ -733,7 +733,7 @@ func TestSelectVMsToProcess(t *testing.T) {
 		}
 		// Without rotation, should start at offset 0 (vm-a has most memory)
 		if selected[0].VM.UUID != "vm-a" {
-			t.Errorf("expected first reservations.VM to be vm-a, got %s", selected[0].VM.UUID)
+			t.Errorf("expected first VM to be vm-a, got %s", selected[0].VM.UUID)
 		}
 	})
 
@@ -763,7 +763,7 @@ func TestSelectVMsToProcess(t *testing.T) {
 		}
 		for _, s := range selected {
 			if !vmSet[s.VM.UUID] {
-				t.Errorf("selected reservations.VM %s not in original list", s.VM.UUID)
+				t.Errorf("selected VM %s not in original list", s.VM.UUID)
 			}
 		}
 	})
@@ -785,7 +785,7 @@ func TestSelectVMsToProcess(t *testing.T) {
 		}
 		// With rotation disabled, should always start at offset 0
 		if selected[0].VM.UUID != "vm-a" {
-			t.Errorf("expected first reservations.VM to be vm-a, got %s", selected[0].VM.UUID)
+			t.Errorf("expected first VM to be vm-a, got %s", selected[0].VM.UUID)
 		}
 	})
 
@@ -874,7 +874,7 @@ func TestSelectVMsToProcess(t *testing.T) {
 			}
 			for _, s := range selected {
 				if !vmSet[s.VM.UUID] {
-					t.Errorf("iteration %d: selected reservations.VM %s not in original list", i, s.VM.UUID)
+					t.Errorf("iteration %d: selected VM %s not in original list", i, s.VM.UUID)
 				}
 			}
 		}

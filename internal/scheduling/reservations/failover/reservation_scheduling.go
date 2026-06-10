@@ -16,7 +16,7 @@ import (
 
 // Pipeline names for failover reservation scheduling
 const (
-	// PipelineReuseFailoverReservation is used to check if a reservations.VM can reuse an existing reservation.
+	// PipelineReuseFailoverReservation is used to check if a VM can reuse an existing reservation.
 	// It validates host compatibility without checking capacity (since reservation already has capacity).
 	PipelineReuseFailoverReservation = "kvm-valid-host-reuse-failover-reservation"
 
@@ -26,18 +26,18 @@ const (
 
 	// PipelineAcknowledgeFailoverReservation is used to validate that a failover reservation
 	// is still valid for all its allocated VMs. It sends an evacuation-style scheduling request
-	// for each reservations.VM with only the reservation's host as the eligible target.
+	// for each VM with only the reservation's host as the eligible target.
 	PipelineAcknowledgeFailoverReservation = "kvm-acknowledge-failover-reservation"
 )
 
 func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm reservations.VM, allHypervisors []string, pipeline string, resSpec resolvedReservationSpec) ([]string, error) {
 	logger := LoggerFromContext(ctx)
 
-	// Build list of eligible hypervisors (excluding reservations.VM's current hypervisor)
+	// Build list of eligible hypervisors (excluding VM's current hypervisor)
 	eligibleHypervisors := make([]api.ExternalSchedulerHost, 0, len(allHypervisors))
 	for _, hypervisor := range allHypervisors {
 		if hypervisor == vm.CurrentHypervisor {
-			continue // reservations.VM's current hypervisor
+			continue // VM's current hypervisor
 		}
 		eligibleHypervisors = append(eligibleHypervisors, api.ExternalSchedulerHost{
 			ComputeHost: hypervisor,
@@ -47,13 +47,13 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 	if len(eligibleHypervisors) == 0 {
 		logger.Info("no eligible hypervisors for failover reservation",
 			"vmCurrentHypervisor", vm.CurrentHypervisor)
-		return nil, fmt.Errorf("no eligible hypervisors for failover reservation (reservations.VM is on %s)", vm.CurrentHypervisor)
+		return nil, fmt.Errorf("no eligible hypervisors for failover reservation (VM is on %s)", vm.CurrentHypervisor)
 	}
 
 	ignoreHypervisors := []string{vm.CurrentHypervisor}
 
-	// Build flavor extra specs from reservations.VM's extra specs
-	// Start with the reservations.VM's actual extra specs, then ensure required defaults are set
+	// Build flavor extra specs from VM's extra specs
+	// Start with the VM's actual extra specs, then ensure required defaults are set
 	flavorExtraSpecs := make(map[string]string)
 	for k, v := range vm.FlavorExtraSpecs {
 		flavorExtraSpecs[k] = v
@@ -65,7 +65,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 
 	// Schedule the reservation using the SchedulerClient.
 	// Note: We pass all hypervisors (from all AZs) in EligibleHosts. The scheduler pipeline's
-	// filter_correct_az filter will exclude hosts that are not in the reservations.VM's availability zone.
+	// filter_correct_az filter will exclude hosts that are not in the VM's availability zone.
 	// Use resSpec.FlavorName and reservation spec resources so the scheduler checks capacity for the
 	// correct flavor size (which may be the LargestFlavor from the flavor group).
 	scheduleReq := reservations.ScheduleReservationRequest{
@@ -107,8 +107,8 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 	return scheduleResp.Hosts, nil
 }
 
-// tryReuseExistingReservation finds an existing reservation that can be reused for a reservations.VM.
-// It returns a copy of the reservation with the reservations.VM added to its allocations (in-memory only, not persisted).
+// tryReuseExistingReservation finds an existing reservation that can be reused for a VM.
+// It returns a copy of the reservation with the VM added to its allocations (in-memory only, not persisted).
 // The original reservation in the input slice is NOT modified.
 // The caller is responsible for persisting the changes to the cluster.
 func (c *FailoverReservationController) tryReuseExistingReservation(
@@ -123,17 +123,17 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 
 	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineReuseFailoverReservation, resSpec)
 	if err != nil {
-		logger.Error(err, "failed to get potential hypervisors for reservations.VM", "vmUUID", vm.UUID)
+		logger.Error(err, "failed to get potential hypervisors for VM", "vmUUID", vm.UUID)
 		return nil
 	}
 	if len(validHypervisors) == 0 {
-		logger.Info("no potential hypervisors returned by scheduler for reservations.VM", "vmUUID", vm.UUID)
+		logger.Info("no potential hypervisors returned by scheduler for VM", "vmUUID", vm.UUID)
 		return nil
 	}
 
 	eligibleReservations := FindEligibleReservations(vm, failoverReservations)
 	if len(eligibleReservations) == 0 {
-		logger.Info("no eligible reservations found for reservations.VM", "vmUUID", vm.UUID)
+		logger.Info("no eligible reservations found for VM", "vmUUID", vm.UUID)
 		return nil
 	}
 
@@ -150,9 +150,9 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 			"reservationName", reservation.Name,
 			"reservationHypervisor", reservation.Status.Host)
 		if slices.Contains(validHypervisors, reservation.Status.Host) {
-			// Create a copy of the reservation with the reservations.VM added
+			// Create a copy of the reservation with the VM added
 			updatedRes := addVMToReservation(reservation, vm)
-			logger.V(1).Info("found reusable reservation for reservations.VM",
+			logger.V(1).Info("found reusable reservation for VM",
 				"vmUUID", vm.UUID,
 				"reservationName", updatedRes.Name,
 				"hypervisor", updatedRes.Status.Host)
@@ -160,7 +160,7 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 		}
 	}
 
-	logger.V(1).Info("no reusable reservation found for reservations.VM",
+	logger.V(1).Info("no reusable reservation found for VM",
 		"vmUUID", vm.UUID,
 		"eligibleReservationsCount", len(eligibleReservations),
 		"validHypervisorsCount", len(validHypervisors))
@@ -168,7 +168,7 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 }
 
 // validateVMViaSchedulerEvacuation sends an evacuation-style scheduling request to validate
-// that a reservations.VM can use the reservation host.
+// that a VM can use the reservation host.
 // TODO this is a bit of a hack. Ideally we have a special kind of request for that which would also verify that we equally are using the reservation
 func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 	ctx context.Context,
@@ -178,7 +178,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 
 	logger := LoggerFromContext(ctx)
 
-	// Get memory and vcpus from reservations.VM resources
+	// Get memory and vcpus from VM resources
 	var memoryMB uint64
 	var vcpus uint64
 	if memory, ok := vm.Resources["memory"]; ok {
@@ -188,7 +188,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		vcpus = uint64(vcpusRes.Value()) //nolint:gosec // vcpus values won't overflow
 	}
 
-	// Build flavor extra specs from reservations.VM's extra specs
+	// Build flavor extra specs from VM's extra specs
 	flavorExtraSpecs := make(map[string]string)
 	for k, v := range vm.FlavorExtraSpecs {
 		flavorExtraSpecs[k] = v
@@ -197,11 +197,11 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		flavorExtraSpecs["capabilities:hypervisor_type"] = "qemu"
 	}
 
-	// Build a single-host request to validate the reservations.VM can use the reservation host
+	// Build a single-host request to validate the VM can use the reservation host
 	// Use vm.CurrentHypervisor directly instead of a separate parameter to avoid stale data
 	// Set _nova_check_type to "evacuate" so that filter_has_enough_capacity unlocks
-	// the failover reservation's resources for this reservations.VM (avoiding self-blocking).
-	// Use the actual reservations.VM UUID (not prefixed) so the filter can match it in the reservation's allocations.
+	// the failover reservation's resources for this VM (avoiding self-blocking).
+	// Use the actual VM UUID (not prefixed) so the filter can match it in the reservation's allocations.
 	scheduleReq := reservations.ScheduleReservationRequest{
 		InstanceUUID:     vm.UUID,
 		ProjectID:        vm.ProjectID,
@@ -216,7 +216,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		SchedulerHints:   map[string]any{"_nova_check_type": string(api.EvacuateIntent)},
 	}
 
-	logger.V(1).Info("validating reservations.VM via scheduler evacuation",
+	logger.V(1).Info("validating VM via scheduler evacuation",
 		"vmUUID", vm.UUID,
 		"reservationHost", reservationHost,
 		"vmCurrentHost", vm.CurrentHypervisor,
@@ -224,13 +224,13 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 
 	resp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq)
 	if err != nil {
-		logger.Error(err, "failed to validate reservations.VM for reservation host", "vmUUID", vm.UUID, "reservationHost", reservationHost)
-		return false, fmt.Errorf("failed to validate reservations.VM for reservation host: %w", err)
+		logger.Error(err, "failed to validate VM for reservation host", "vmUUID", vm.UUID, "reservationHost", reservationHost)
+		return false, fmt.Errorf("failed to validate VM for reservation host: %w", err)
 	}
 
 	// Handle empty response - no hosts returned
 	if len(resp.Hosts) < 1 {
-		logger.V(1).Info("scheduler returned no hosts for reservations.VM validation", "vmUUID", vm.UUID, "reservationHost", reservationHost)
+		logger.V(1).Info("scheduler returned no hosts for VM validation", "vmUUID", vm.UUID, "reservationHost", reservationHost)
 		return false, nil
 	}
 
@@ -242,11 +242,11 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 			"returnedHosts", resp.Hosts)
 	}
 
-	// If the reservation host is returned, the reservations.VM can use it
+	// If the reservation host is returned, the VM can use it
 	return resp.Hosts[0] == reservationHost, nil
 }
 
-// scheduleAndBuildNewFailoverReservation schedules a failover reservation for a reservations.VM.
+// scheduleAndBuildNewFailoverReservation schedules a failover reservation for a VM.
 // Returns the built reservation (in-memory only, not persisted).
 // The caller is responsible for persisting the reservation to the cluster.
 // excludeHypervisors is a set of hypervisors to exclude from consideration (e.g., hypervisors
@@ -266,7 +266,7 @@ func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 	// (which may be sized to the LargestFlavor from the flavor group)
 	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineNewFailoverReservation, resSpec)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get potential hypervisors for reservations.VM: %w", err)
+		return nil, fmt.Errorf("failed to get potential hypervisors for VM: %w", err)
 	}
 
 	// Iterate through scheduler-returned hypervisors to find one that passes eligibility constraints
@@ -278,7 +278,7 @@ func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 				"vmUUID", vm.UUID, "hypervisor", candidateHypervisor)
 			continue
 		}
-		// Check if the reservations.VM can create a new reservation on this hypervisor
+		// Check if the VM can create a new reservation on this hypervisor
 		hypotheticalRes := v1alpha1.Reservation{
 			Status: v1alpha1.ReservationStatus{
 				Host: candidateHypervisor,
@@ -288,7 +288,7 @@ func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 		// todo we should update the API to not create a partial reservation object here
 		if IsVMEligibleForReservation(vm, hypotheticalRes, failoverReservations) {
 			selectedHypervisor = candidateHypervisor
-			logger.V(1).Info("reservations.VM can create new reservation on hypervisor", "vmUUID", vm.UUID, "hypervisor", candidateHypervisor)
+			logger.V(1).Info("VM can create new reservation on hypervisor", "vmUUID", vm.UUID, "hypervisor", candidateHypervisor)
 			break
 		}
 	}

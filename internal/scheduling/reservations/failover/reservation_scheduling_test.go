@@ -29,7 +29,7 @@ func TestBuildReservationWithVM(t *testing.T) {
 		wantOriginalUnmodified bool
 	}{
 		{
-			name:                   "adds reservations.VM to empty reservation",
+			name:                   "adds VM to empty reservation",
 			reservation:            buildSchedulingTestReservation("res-1", "host2", nil),
 			vm:                     buildSchedulingTestVM("vm-1", "host1"),
 			wantVMInAllocations:    true,
@@ -37,7 +37,7 @@ func TestBuildReservationWithVM(t *testing.T) {
 			wantOriginalUnmodified: true,
 		},
 		{
-			name:                   "adds reservations.VM to reservation with existing allocations",
+			name:                   "adds VM to reservation with existing allocations",
 			reservation:            buildSchedulingTestReservation("res-1", "host2", map[string]string{"vm-2": "host3"}),
 			vm:                     buildSchedulingTestVM("vm-1", "host1"),
 			wantVMInAllocations:    true,
@@ -45,7 +45,7 @@ func TestBuildReservationWithVM(t *testing.T) {
 			wantOriginalUnmodified: true,
 		},
 		{
-			name:                   "adds reservations.VM to reservation with nil FailoverReservation status",
+			name:                   "adds VM to reservation with nil FailoverReservation status",
 			reservation:            buildSchedulingTestReservationNoStatus("res-1", "host2"),
 			vm:                     buildSchedulingTestVM("vm-1", "host1"),
 			wantVMInAllocations:    true,
@@ -69,13 +69,13 @@ func TestBuildReservationWithVM(t *testing.T) {
 				t.Fatal("result has no FailoverReservation status")
 			}
 
-			// Verify reservations.VM is in allocations
+			// Verify VM is in allocations
 			allocatedHost, exists := result.Status.FailoverReservation.Allocations[tt.vm.UUID]
 			if exists != tt.wantVMInAllocations {
-				t.Errorf("reservations.VM in allocations = %v, want %v", exists, tt.wantVMInAllocations)
+				t.Errorf("VM in allocations = %v, want %v", exists, tt.wantVMInAllocations)
 			}
 
-			// Verify allocated host matches reservations.VM's current hypervisor
+			// Verify allocated host matches VM's current hypervisor
 			if exists && allocatedHost != tt.vm.CurrentHypervisor {
 				t.Errorf("allocated host = %v, want %v", allocatedHost, tt.vm.CurrentHypervisor)
 			}
@@ -116,7 +116,7 @@ func TestBuildNewFailoverReservation(t *testing.T) {
 		wantType       v1alpha1.ReservationType
 	}{
 		{
-			name:           "creates reservation with correct host and reservations.VM",
+			name:           "creates reservation with correct host and VM",
 			vm:             buildSchedulingTestVM("vm-1", "host1"),
 			hypervisor:     "host2",
 			wantHost:       "host2",
@@ -125,7 +125,7 @@ func TestBuildNewFailoverReservation(t *testing.T) {
 			wantType:       v1alpha1.ReservationTypeFailover,
 		},
 		{
-			name:           "creates reservation with reservations.VM resources",
+			name:           "creates reservation with VM resources",
 			vm:             buildSchedulingTestVMWithResources("vm-2", "host3", 8192, 4),
 			hypervisor:     "host4",
 			wantHost:       "host4",
@@ -140,7 +140,7 @@ func TestBuildNewFailoverReservation(t *testing.T) {
 			ctx := context.Background()
 			creator := "test-creator"
 
-			// Resolve using reservations.VM's own resources (no flavor groups)
+			// Resolve using VM's own resources (no flavor groups)
 			resolved := resolveVMSpecForScheduling(ctx, tt.vm, false, nil)
 			result := newFailoverReservation(ctx, tt.vm, tt.hypervisor, creator, resolved)
 
@@ -159,20 +159,20 @@ func TestBuildNewFailoverReservation(t *testing.T) {
 				t.Errorf("Spec.Type = %v, want %v", result.Spec.Type, tt.wantType)
 			}
 
-			// Verify reservations.VM is in allocations
+			// Verify VM is in allocations
 			if result.Status.FailoverReservation == nil {
 				t.Fatal("result has no FailoverReservation status")
 			}
 			allocatedHost, exists := result.Status.FailoverReservation.Allocations[tt.vm.UUID]
 			if exists != tt.wantVMInAlloc {
-				t.Errorf("reservations.VM in allocations = %v, want %v", exists, tt.wantVMInAlloc)
+				t.Errorf("VM in allocations = %v, want %v", exists, tt.wantVMInAlloc)
 			}
 			if exists && allocatedHost != tt.vm.CurrentHypervisor {
 				t.Errorf("allocated host = %v, want %v", allocatedHost, tt.vm.CurrentHypervisor)
 			}
 
-			// Verify resources are derived from reservations.VM
-			// Note: reservations.VM uses "vcpus" but reservation uses "cpu" as the canonical key.
+			// Verify resources are derived from VM
+			// Note: VM uses "vcpus" but reservation uses "cpu" as the canonical key.
 			// Memory uses binary MiB (bytes / 1024*1024 → MiB → MiB * 1024*1024), matching
 			// commitments/state.go and vm_source.go conventions.
 			if tt.vm.Resources != nil {
@@ -184,7 +184,7 @@ func TestBuildNewFailoverReservation(t *testing.T) {
 					}
 				}
 				if vcpus, ok := tt.vm.Resources["vcpus"]; ok {
-					// reservations.VM uses "vcpus" but reservation should use "cpu"
+					// VM uses "vcpus" but reservation should use "cpu"
 					if resCPU, ok := result.Spec.Resources[hv1.ResourceCPU]; !ok {
 						t.Error("reservation missing cpu resource")
 					} else if !vcpus.Equal(resCPU) {
@@ -232,7 +232,7 @@ func TestBuildNewFailoverReservation(t *testing.T) {
 // ============================================================================
 
 func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
-	// Build a flavor group where the reservations.VM's flavor is "hana_c60_m960" (small)
+	// Build a flavor group where the VM's flavor is "hana_c60_m960" (small)
 	// but the LargestFlavor is "hana_c120_m1920" (large).
 	// When UseFlavorGroupResources is true, the resolved resources should use
 	// the LargestFlavor's name and size. The reservation should then be sized accordingly.
@@ -281,7 +281,7 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 			wantVCPUs:               120,               // LargestFlavor vcpus
 		},
 		{
-			name: "falls back to reservations.VM resources when disabled",
+			name: "falls back to VM resources when disabled",
 			vm: reservations.VM{
 				UUID:              "vm-2",
 				CurrentHypervisor: "host1",
@@ -294,14 +294,14 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 			},
 			useFlavorGroupResources: false,
 			flavorGroups:            flavorGroups,
-			wantFlavorName:          "hana_c60_m960", // reservations.VM's own flavor name
+			wantFlavorName:          "hana_c60_m960", // VM's own flavor name
 			wantFlavorGroupName:     "",              // no flavor group (disabled)
 			wantResourceGroup:       "hana_c60_m960", // ResourceGroup = fallback to flavor name
-			wantMemoryMB:            983040,          // reservations.VM's own memory (MiB, binary)
-			wantVCPUs:               60,              // reservations.VM's own vcpus
+			wantMemoryMB:            983040,          // VM's own memory (MiB, binary)
+			wantVCPUs:               60,              // VM's own vcpus
 		},
 		{
-			name: "falls back to reservations.VM resources when flavor not in any group",
+			name: "falls back to VM resources when flavor not in any group",
 			vm: reservations.VM{
 				UUID:              "vm-3",
 				CurrentHypervisor: "host1",
@@ -314,14 +314,14 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 			},
 			useFlavorGroupResources: true,
 			flavorGroups:            flavorGroups,
-			wantFlavorName:          "unknown_flavor", // reservations.VM's own flavor name (fallback)
+			wantFlavorName:          "unknown_flavor", // VM's own flavor name (fallback)
 			wantFlavorGroupName:     "",               // no flavor group (not found)
 			wantResourceGroup:       "unknown_flavor", // ResourceGroup = fallback to flavor name
-			wantMemoryMB:            16384,            // reservations.VM's own memory (MiB, binary)
-			wantVCPUs:               8,                // reservations.VM's own vcpus (fallback)
+			wantMemoryMB:            16384,            // VM's own memory (MiB, binary)
+			wantVCPUs:               8,                // VM's own vcpus (fallback)
 		},
 		{
-			name: "falls back to reservations.VM resources when flavorGroups is nil",
+			name: "falls back to VM resources when flavorGroups is nil",
 			vm: reservations.VM{
 				UUID:              "vm-4",
 				CurrentHypervisor: "host1",
@@ -334,11 +334,11 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 			},
 			useFlavorGroupResources: true,
 			flavorGroups:            nil,             // nil flavor groups
-			wantFlavorName:          "hana_c60_m960", // reservations.VM's own flavor name (fallback)
+			wantFlavorName:          "hana_c60_m960", // VM's own flavor name (fallback)
 			wantFlavorGroupName:     "",              // no flavor group (nil groups)
 			wantResourceGroup:       "hana_c60_m960", // ResourceGroup = fallback to flavor name
-			wantMemoryMB:            983040,          // reservations.VM's own memory (MiB, binary)
-			wantVCPUs:               60,              // reservations.VM's own vcpus (fallback)
+			wantMemoryMB:            983040,          // VM's own memory (MiB, binary)
+			wantVCPUs:               60,              // VM's own vcpus (fallback)
 		},
 	}
 
