@@ -245,7 +245,7 @@ func getProjectVMs(
 ) ([]VMUsageInfo, error) {
 
 	if vmSource == nil {
-		return nil, errors.New("VM source not configured")
+		return nil, errors.New("vm source not configured")
 	}
 
 	projectVMs, err := vmSource.ListVMsByProject(ctx, projectID)
