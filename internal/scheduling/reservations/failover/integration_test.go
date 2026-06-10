@@ -1046,6 +1046,17 @@ func NewMockVMSource(vms []VM) *MockVMSource {
 	return &MockVMSource{VMs: vms}
 }
 
+// ListVMsByProject returns VMs filtered by project ID.
+func (s *MockVMSource) ListVMsByProject(_ context.Context, projectID string) ([]VM, error) {
+	var result []VM
+	for _, vm := range s.VMs {
+		if vm.ProjectID == projectID {
+			result = append(result, vm)
+		}
+	}
+	return result, nil
+}
+
 // ListVMs returns the configured VMs.
 func (s *MockVMSource) ListVMs(_ context.Context) ([]VM, error) {
 	return s.VMs, nil

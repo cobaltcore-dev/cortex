@@ -19,6 +19,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -572,54 +573,60 @@ type ExpectedVMUsage struct {
 }
 
 // ============================================================================
-// Mock UsageDBClient
+// Mock VMSource
 // ============================================================================
 
-type mockUsageDBClient struct {
-	rows map[string][]commitments.VMRow // projectID -> rows
-	err  error
+type mockVMSource struct {
+	vms map[string][]reservations.VM // projectID -> VMs
+	err error
 }
 
-func newMockUsageDBClient() *mockUsageDBClient {
-	return &mockUsageDBClient{
-		rows: make(map[string][]commitments.VMRow),
-	}
+func newMockVMSource() *mockVMSource {
+	return &mockVMSource{vms: make(map[string][]reservations.VM)}
 }
 
-func (m *mockUsageDBClient) ListProjectVMs(_ context.Context, projectID string) ([]commitments.VMRow, error) {
+func (m *mockVMSource) ListVMsByProject(_ context.Context, projectID string) ([]reservations.VM, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	return m.rows[projectID], nil
+	return m.vms[projectID], nil
 }
 
-func (m *mockUsageDBClient) addVM(vm *TestVMUsage) {
+func (m *mockVMSource) ListVMs(_ context.Context) ([]reservations.VM, error)                                                           { return nil, nil }
+func (m *mockVMSource) ListVMsOnHypervisors(_ context.Context, _ *hv1.HypervisorList, _ bool) ([]reservations.VM, error)               { return nil, nil }
+func (m *mockVMSource) GetVM(_ context.Context, _ string) (*reservations.VM, error)                                                    { return nil, nil }
+func (m *mockVMSource) IsServerActive(_ context.Context, _ string) (bool, error)                                                       { return false, nil }
+func (m *mockVMSource) GetDeletedVMInfo(_ context.Context, _ string) (*reservations.DeletedVMInfo, error)                              { return nil, nil }
+
+func (m *mockVMSource) addVM(vm *TestVMUsage) {
 	extraSpecs := map[string]string{
 		"quota:hw_version": vm.Flavor.Group,
 	}
 	if vm.Flavor.VideoRAMMiB != nil {
 		extraSpecs["hw_video:ram_max_mb"] = strconv.FormatUint(*vm.Flavor.VideoRAMMiB, 10)
 	}
-	extrasJSON, _ := json.Marshal(extraSpecs) //nolint:errcheck // test helper, always valid
 	osType := vm.OSType
 	if osType == "" {
 		osType = "unknown"
 	}
-	row := commitments.VMRow{
-		ID:           vm.UUID,
-		Name:         vm.UUID,
-		Status:       "ACTIVE",
-		Created:      vm.CreatedAt.Format(time.RFC3339),
-		AZ:           vm.AZ,
-		Hypervisor:   vm.Host,
-		FlavorName:   vm.Flavor.Name,
-		FlavorRAM:    uint64(vm.Flavor.MemoryMB), //nolint:gosec
-		FlavorVCPUs:  uint64(vm.Flavor.VCPUs),    //nolint:gosec
-		FlavorDisk:   vm.Flavor.DiskGB,
-		FlavorExtras: string(extrasJSON),
-		OSType:       osType,
+	v := reservations.VM{
+		UUID:              vm.UUID,
+		Name:              vm.UUID,
+		Status:            "ACTIVE",
+		CreatedAt:         vm.CreatedAt.Format(time.RFC3339),
+		AvailabilityZone:  vm.AZ,
+		CurrentHypervisor: vm.Host,
+		FlavorName:        vm.Flavor.Name,
+		FlavorExtraSpecs:  extraSpecs,
+		DiskGB:            vm.Flavor.DiskGB,
+		OSType:            osType,
+		ProjectID:         vm.ProjectID,
+		Resources: map[string]resource.Quantity{
+			"memory": *resource.NewQuantity(int64(vm.Flavor.MemoryMB)*1024*1024, resource.BinarySI), //nolint:gosec
+			"vcpus":  *resource.NewQuantity(int64(vm.Flavor.VCPUs), resource.DecimalSI),            //nolint:gosec
+		},
 	}
-	m.rows[vm.ProjectID] = append(m.rows[vm.ProjectID], row)
+	m.vms[vm.ProjectID] = append(m.vms[vm.ProjectID], v)
 }
 
 // ============================================================================
@@ -630,7 +637,7 @@ type UsageTestEnv struct {
 	T            *testing.T
 	Scheme       *runtime.Scheme
 	K8sClient    client.Client
-	DBClient     *mockUsageDBClient
+	DBClient     *mockVMSource
 	FlavorGroups FlavorGroupsKnowledge
 	HTTPServer   *httptest.Server
 	API          *HTTPAPI
@@ -725,7 +732,7 @@ func newUsageTestEnv(
 		Build()
 
 	// Create mock DB client with VMs
-	dbClient := newMockUsageDBClient()
+	dbClient := newMockVMSource()
 	for _, vm := range vms {
 		dbClient.addVM(vm)
 	}
@@ -734,10 +741,10 @@ func newUsageTestEnv(
 	// CalculateUsage reads from this status, so the API returns the correct commitment assignments.
 	if len(crObjects) > 0 {
 		rec := &commitments.UsageReconciler{
-			Client:  k8sClient,
-			Conf:    commitments.UsageReconcilerConfig{CooldownInterval: metav1.Duration{Duration: 0}},
-			UsageDB: dbClient,
-			Monitor: commitments.NewUsageReconcilerMonitor(),
+			Client:   k8sClient,
+			Conf:     commitments.UsageReconcilerConfig{CooldownInterval: metav1.Duration{Duration: 0}},
+			VMSource: dbClient,
+			Monitor:  commitments.NewUsageReconcilerMonitor(),
 		}
 		ctx := context.Background()
 		for _, obj := range crObjects {

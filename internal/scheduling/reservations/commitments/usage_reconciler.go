@@ -34,7 +34,7 @@ import (
 type UsageReconciler struct {
 	client.Client
 	Conf    UsageReconcilerConfig
-	UsageDB UsageDBClient
+	VMSource reservations.VMSource
 	Monitor UsageReconcilerMonitor
 }
 
@@ -155,7 +155,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		}
 	}
 
-	vms, err := getProjectVMs(ctx, r.UsageDB, logger, cr.Spec.ProjectID, flavorGroups, allAZs)
+	vms, err := getProjectVMs(ctx, r.VMSource, logger, cr.Spec.ProjectID, flavorGroups, allAZs)
 	if err != nil {
 		r.Monitor.reconcileDuration.WithLabelValues("error").Observe(time.Since(start).Seconds())
 		return ctrl.Result{}, err

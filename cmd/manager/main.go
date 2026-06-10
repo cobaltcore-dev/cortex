@@ -394,12 +394,17 @@ func main() {
 
 	// Initialize commitments API for LIQUID interface (Postgres-backed usage reporting).
 	commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
-	var commitmentsUsageDB commitments.UsageDBClient
+	var commitmentsVMSource reservations.VMSource
 	if commitmentsConfig.DatasourceName != "" {
-		commitmentsUsageDB = commitments.NewDBUsageClient(multiclusterClient, commitmentsConfig.DatasourceName)
+		postgresReader, err := external.NewPostgresReader(ctx, multiclusterClient, commitmentsConfig.DatasourceName)
+		if err != nil {
+			setupLog.Error(err, "failed to connect to commitments datasource", "datasourceName", commitmentsConfig.DatasourceName)
+			os.Exit(1)
+		}
+		commitmentsVMSource = reservations.NewDBVMSource(external.NewNovaReader(postgresReader))
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "committed-resource-reservations-controller") {
-		commitmentsAPI := commitmentsapi.NewAPIWithConfig(multiclusterClient, commitmentsConfig.API, commitmentsUsageDB)
+		commitmentsAPI := commitmentsapi.NewAPIWithConfig(multiclusterClient, commitmentsConfig.API, commitmentsVMSource)
 		commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
 	}
 
@@ -597,16 +602,16 @@ func main() {
 
 		usageReconcilerMonitor := commitments.NewUsageReconcilerMonitor()
 		metrics.Registry.MustRegister(&usageReconcilerMonitor)
-		if commitmentsUsageDB == nil {
+		if commitmentsVMSource == nil {
 			setupLog.Error(nil, "UsageReconciler requires a datasource but commitments.datasourceName is not configured — skipping")
 		} else {
 			usageReconcilerConf := commitmentsConfig.UsageReconciler
 			usageReconcilerConf.ApplyDefaults()
 			if err := (&commitments.UsageReconciler{
-				Client:  multiclusterClient,
-				Conf:    usageReconcilerConf,
-				UsageDB: commitmentsUsageDB,
-				Monitor: usageReconcilerMonitor,
+				Client:   multiclusterClient,
+				Conf:     usageReconcilerConf,
+				VMSource: commitmentsVMSource,
+				Monitor:  usageReconcilerMonitor,
 			}).SetupWithManager(mgr, multiclusterClient); err != nil {
 				setupLog.Error(err, "unable to create controller", "controller", "CommittedResourceUsage")
 				os.Exit(1)

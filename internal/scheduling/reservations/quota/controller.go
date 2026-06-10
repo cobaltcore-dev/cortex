@@ -14,13 +14,11 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/retry"
-	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,7 +39,7 @@ var log = ctrl.Log.WithName("quota-controller").WithValues("module", "quota-hand
 // - PaygUsage-only recompute: triggered by CR or ProjectQuota spec changes
 type QuotaController struct {
 	client.Client
-	VMSource failover.VMSource
+	VMSource reservations.VMSource
 	Config   QuotaControllerConfig
 	Metrics  *QuotaMetrics
 }
@@ -49,7 +47,7 @@ type QuotaController struct {
 // NewQuotaController creates a new QuotaController.
 func NewQuotaController(
 	c client.Client,
-	vmSource failover.VMSource,
+	vmSource reservations.VMSource,
 	config QuotaControllerConfig,
 	metrics *QuotaMetrics,
 ) *QuotaController {
@@ -465,7 +463,7 @@ func (c *QuotaController) accumulateAddedVM(
 // missed it. In that case we would also skip the increment here (CreatedAt <= LastReconcileAt)
 // and the VM would only be counted on the NEXT full reconcile cycle. This is acceptable for
 // now and will be resolved when we move to a CRD-based VM source with real-time events.
-func (c *QuotaController) isVMNewSinceLastReconcile(ctx context.Context, vm *failover.VM) bool {
+func (c *QuotaController) isVMNewSinceLastReconcile(ctx context.Context, vm *reservations.VM) bool {
 	if vm.CreatedAt == "" {
 		// No creation time available -- be conservative, skip increment.
 		// The next full reconcile will pick it up.
@@ -684,7 +682,11 @@ func (c *QuotaController) SetupHVWatcher(mgr ctrl.Manager) error {
 		WatchesRawSource(source.Kind(
 			mgr.GetCache(),
 			&hv1.Hypervisor{},
-			&hvInstanceDiffHandler{controller: c},
+			&reservations.HypervisorDiffHandler{
+				OnUpdate: func(ctx context.Context, oldHV, newHV *hv1.Hypervisor) error {
+					return c.ReconcileHVDiff(ctx, oldHV, newHV)
+				},
+			},
 			hvInstanceChangePredicate(),
 		)).
 		WithOptions(controller.Options{
@@ -737,7 +739,7 @@ func (c *QuotaController) Start(ctx context.Context) error {
 // This matches the unit system used by LIQUID for commitment tracking.
 // The per-AZ breakdown allows Limes to enforce AZ-level quota limits.
 func (c *QuotaController) computeTotalUsage(
-	vms []failover.VM,
+	vms []reservations.VM,
 	flavorToGroup map[string]string,
 	flavorGroups map[string]compute.FlavorGroupFeature,
 ) map[string]map[string]map[string]int64 {
@@ -1222,25 +1224,3 @@ func hvInstanceChangePredicate() predicate.TypedPredicate[*hv1.Hypervisor] {
 	}
 }
 
-// hvInstanceDiffHandler handles HV instance diff events by calling ReconcileHVDiff.
-type hvInstanceDiffHandler struct {
-	controller *QuotaController
-}
-
-func (h *hvInstanceDiffHandler) Create(_ context.Context, _ event.TypedCreateEvent[*hv1.Hypervisor], _ workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-	// On create, no diff needed (full reconcile will catch up)
-}
-
-func (h *hvInstanceDiffHandler) Update(ctx context.Context, e event.TypedUpdateEvent[*hv1.Hypervisor], _ workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-	if err := h.controller.ReconcileHVDiff(ctx, e.ObjectOld, e.ObjectNew); err != nil {
-		log.Error(err, "failed to process HV instance diff", "hypervisor", e.ObjectNew.Name)
-	}
-}
-
-func (h *hvInstanceDiffHandler) Delete(_ context.Context, _ event.TypedDeleteEvent[*hv1.Hypervisor], _ workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-	// On delete, full reconcile will correct
-}
-
-func (h *hvInstanceDiffHandler) Generic(_ context.Context, _ event.TypedGenericEvent[*hv1.Hypervisor], _ workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-	// No-op
-}

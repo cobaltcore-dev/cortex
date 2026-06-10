@@ -584,6 +584,10 @@ type mockVMSource struct {
 	getDeletedVM   func(ctx context.Context, vmUUID string) (*failover.DeletedVMInfo, error)
 }
 
+func (m *mockVMSource) ListVMsByProject(_ context.Context, _ string) ([]failover.VM, error) {
+	return nil, nil
+}
+
 func (m *mockVMSource) ListVMs(ctx context.Context) ([]failover.VM, error) {
 	if m.listVMs != nil {
 		return m.listVMs(ctx)

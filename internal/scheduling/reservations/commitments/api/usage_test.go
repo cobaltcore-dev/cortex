@@ -14,6 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -41,27 +42,42 @@ var testUsageConfig = commitments.APIConfig{
 	},
 }
 
+func mkVM(id, az, flavorName string, ramMiB, vcpus int64, createdAt time.Time, projectID string) reservations.VM {
+	return reservations.VM{
+		UUID:             id,
+		Name:             id,
+		Status:           "ACTIVE",
+		CreatedAt:        createdAt.Format(time.RFC3339),
+		AvailabilityZone: az,
+		FlavorName:       flavorName,
+		ProjectID:        projectID,
+		Resources: map[string]resource.Quantity{
+			"memory": *resource.NewQuantity(ramMiB*1024*1024, resource.BinarySI), //nolint:gosec
+			"vcpus":  *resource.NewQuantity(vcpus, resource.DecimalSI),           //nolint:gosec
+		},
+	}
+}
+
 func TestUsageCalculator_CalculateUsage(t *testing.T) {
 	log.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
 	ctx := context.Background()
 	baseTime := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
-	// Reuse TestFlavor from api_change_commitments_test.go
 	m1Small := &TestFlavor{Name: "m1.small", Group: "hana_1", MemoryMB: 1024, VCPUs: 4}
 	m1Large := &TestFlavor{Name: "m1.large", Group: "hana_1", MemoryMB: 4096, VCPUs: 16}
 
 	tests := []struct {
 		name          string
 		projectID     string
-		vms           []commitments.VMRow
+		vms           []reservations.VM
 		reservations  []*v1alpha1.Reservation
 		allAZs        []liquid.AvailabilityZone
-		expectedUsage map[string]uint64 // resourceName -> usage
+		expectedUsage map[string]uint64
 	}{
 		{
 			name:         "empty project",
 			projectID:    "project-empty",
-			vms:          []commitments.VMRow{},
+			vms:          []reservations.VM{},
 			reservations: []*v1alpha1.Reservation{},
 			allAZs:       []liquid.AvailabilityZone{"az-a"},
 			expectedUsage: map[string]uint64{
@@ -71,14 +87,7 @@ func TestUsageCalculator_CalculateUsage(t *testing.T) {
 		{
 			name:      "single VM with commitment",
 			projectID: "project-A",
-			vms: []commitments.VMRow{
-				{
-					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
-					AZ:         "az-a",
-					Created:    baseTime.Format(time.RFC3339),
-					FlavorName: "m1.large", FlavorRAM: 4096, FlavorVCPUs: 16,
-				},
-			},
+			vms:       []reservations.VM{mkVM("vm-001", "az-a", "m1.large", 4096, 16, baseTime, "project-A")},
 			reservations: []*v1alpha1.Reservation{
 				makeUsageTestReservation("commit-1", "project-A", "hana_1", "az-a", 1024*1024*1024, 0),
 				makeUsageTestReservation("commit-1", "project-A", "hana_1", "az-a", 1024*1024*1024, 1),
@@ -91,17 +100,10 @@ func TestUsageCalculator_CalculateUsage(t *testing.T) {
 			},
 		},
 		{
-			name:      "VM without matching commitment - PAYG",
-			projectID: "project-B",
-			vms: []commitments.VMRow{
-				{
-					ID: "vm-002", Name: "vm-002", Status: "ACTIVE",
-					AZ:         "az-a",
-					Created:    baseTime.Format(time.RFC3339),
-					FlavorName: "m1.large", FlavorRAM: 4096, FlavorVCPUs: 16,
-				},
-			},
-			reservations: []*v1alpha1.Reservation{}, // No commitments
+			name:         "VM without matching commitment - PAYG",
+			projectID:    "project-B",
+			vms:          []reservations.VM{mkVM("vm-002", "az-a", "m1.large", 4096, 16, baseTime, "project-B")},
+			reservations: []*v1alpha1.Reservation{},
 			allAZs:       []liquid.AvailabilityZone{"az-a"},
 			expectedUsage: map[string]uint64{
 				"hw_version_hana_1_ram": 4,
@@ -111,7 +113,6 @@ func TestUsageCalculator_CalculateUsage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Setup K8s client
 			scheme := runtime.NewScheme()
 			_ = v1alpha1.AddToScheme(scheme)
 			_ = hv1.AddToScheme(scheme)
@@ -121,7 +122,6 @@ func TestUsageCalculator_CalculateUsage(t *testing.T) {
 				objects = append(objects, r)
 			}
 
-			// Build flavor groups using existing test helpers
 			flavorGroups := TestFlavorGroup{
 				infoVersion: 1234,
 				flavors:     []compute.FlavorInGroup{m1Small.ToFlavorInGroup(), m1Large.ToFlavorInGroup()},
@@ -140,35 +140,25 @@ func TestUsageCalculator_CalculateUsage(t *testing.T) {
 				}).
 				Build()
 
-			// Setup mock Nova client
-			dbClient := &mockUsageDBClient{
-				rows: map[string][]commitments.VMRow{
-					tt.projectID: tt.vms,
-				},
-			}
+			vmSrc := &mockVMSource{vms: map[string][]reservations.VM{tt.projectID: tt.vms}}
 
-			// Create calculator and run
-			calc := commitments.NewUsageCalculator(k8sClient, dbClient, testUsageConfig)
+			calc := commitments.NewUsageCalculator(k8sClient, vmSrc, testUsageConfig)
 			logger := log.FromContext(ctx)
 			report, err := calc.CalculateUsage(ctx, logger, tt.projectID, tt.allAZs)
 			if err != nil {
 				t.Fatalf("CalculateUsage failed: %v", err)
 			}
 
-			// Verify resource count
 			if len(report.Resources) == 0 {
 				t.Error("Expected at least one resource in report")
 			}
 
-			// Verify usage per resource
 			for resourceName, expectedUsage := range tt.expectedUsage {
 				res, ok := report.Resources[liquid.ResourceName(resourceName)]
 				if !ok {
 					t.Errorf("Resource %s not found", resourceName)
 					continue
 				}
-
-				// Sum usage across all AZs
 				var totalUsage uint64
 				for _, azReport := range res.PerAZ {
 					totalUsage += azReport.Usage
@@ -193,22 +183,15 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 	tests := []struct {
 		name                     string
 		projectID                string
-		vms                      []commitments.VMRow
+		vms                      []reservations.VM
 		reservations             []*v1alpha1.Reservation
 		allAZs                   []liquid.AvailabilityZone
-		expectedActiveCommitment string // non-empty if VM should be assigned to a commitment
+		expectedActiveCommitment string
 	}{
 		{
 			name:      "active commitment - within time range",
 			projectID: "project-A",
-			vms: []commitments.VMRow{
-				{
-					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
-					AZ:         "az-a",
-					Created:    baseTime.Format(time.RFC3339),
-					FlavorName: "m1.large", FlavorRAM: 4096, FlavorVCPUs: 16,
-				},
-			},
+			vms:       []reservations.VM{mkVM("vm-001", "az-a", "m1.large", 4096, 16, baseTime, "project-A")},
 			reservations: func() []*v1alpha1.Reservation {
 				past := now.Add(-1 * time.Hour)
 				future := now.Add(1 * time.Hour)
@@ -225,67 +208,42 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 		{
 			name:      "expired commitment - should be ignored (VM goes to PAYG)",
 			projectID: "project-A",
-			vms: []commitments.VMRow{
-				{
-					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
-					AZ:         "az-a",
-					Created:    baseTime.Format(time.RFC3339),
-					FlavorName: "m1.large", FlavorRAM: 4096, FlavorVCPUs: 16,
-				},
-			},
+			vms:       []reservations.VM{mkVM("vm-001", "az-a", "m1.large", 4096, 16, baseTime, "project-A")},
 			reservations: func() []*v1alpha1.Reservation {
 				past := now.Add(-2 * time.Hour)
-				expired := now.Add(-1 * time.Hour) // Already expired
+				expired := now.Add(-1 * time.Hour)
 				return []*v1alpha1.Reservation{
 					makeUsageTestReservationWithTimes("commit-expired", "project-A", "hana_1", "az-a", 4*1024*1024*1024, 0, &past, &expired),
 				}
 			}(),
 			allAZs:                   []liquid.AvailabilityZone{"az-a"},
-			expectedActiveCommitment: "", // PAYG - expired commitment ignored
+			expectedActiveCommitment: "",
 		},
 		{
 			name:      "future commitment - should be ignored (VM goes to PAYG)",
 			projectID: "project-A",
-			vms: []commitments.VMRow{
-				{
-					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
-					AZ:         "az-a",
-					Created:    baseTime.Format(time.RFC3339),
-					FlavorName: "m1.large", FlavorRAM: 4096, FlavorVCPUs: 16,
-				},
-			},
+			vms:       []reservations.VM{mkVM("vm-001", "az-a", "m1.large", 4096, 16, baseTime, "project-A")},
 			reservations: func() []*v1alpha1.Reservation {
-				futureStart := now.Add(1 * time.Hour) // Hasn't started yet
+				futureStart := now.Add(1 * time.Hour)
 				futureEnd := now.Add(24 * time.Hour)
 				return []*v1alpha1.Reservation{
 					makeUsageTestReservationWithTimes("commit-future", "project-A", "hana_1", "az-a", 4*1024*1024*1024, 0, &futureStart, &futureEnd),
 				}
 			}(),
 			allAZs:                   []liquid.AvailabilityZone{"az-a"},
-			expectedActiveCommitment: "", // PAYG - future commitment ignored
+			expectedActiveCommitment: "",
 		},
 		{
 			name:      "mixed - only active commitment is used",
 			projectID: "project-A",
-			vms: []commitments.VMRow{
-				{
-					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
-					AZ:         "az-a",
-					Created:    baseTime.Format(time.RFC3339),
-					FlavorName: "m1.large", FlavorRAM: 4096, FlavorVCPUs: 16,
-				},
-			},
+			vms:       []reservations.VM{mkVM("vm-001", "az-a", "m1.large", 4096, 16, baseTime, "project-A")},
 			reservations: func() []*v1alpha1.Reservation {
-				// Expired commitment
 				expiredStart := now.Add(-48 * time.Hour)
 				expiredEnd := now.Add(-24 * time.Hour)
-				// Active commitment
 				activeStart := now.Add(-1 * time.Hour)
 				activeEnd := now.Add(24 * time.Hour)
-				// Future commitment
 				futureStart := now.Add(24 * time.Hour)
 				futureEnd := now.Add(48 * time.Hour)
-
 				return []*v1alpha1.Reservation{
 					makeUsageTestReservationWithTimes("commit-expired", "project-A", "hana_1", "az-a", 4*1024*1024*1024, 0, &expiredStart, &expiredEnd),
 					makeUsageTestReservationWithTimes("commit-active", "project-A", "hana_1", "az-a", 4*1024*1024*1024, 0, &activeStart, &activeEnd),
@@ -296,7 +254,7 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 				}
 			}(),
 			allAZs:                   []liquid.AvailabilityZone{"az-a"},
-			expectedActiveCommitment: "commit-active", // Only active commitment is used
+			expectedActiveCommitment: "commit-active",
 		},
 	}
 
@@ -337,14 +295,8 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 				}).
 				Build()
 
-			dbClient := &mockUsageDBClient{
-				rows: map[string][]commitments.VMRow{
-					tt.projectID: tt.vms,
-				},
-			}
+			vmSrc := &mockVMSource{vms: map[string][]reservations.VM{tt.projectID: tt.vms}}
 
-			// Create CommittedResource CRDs and run the usage reconciler so that
-			// CalculateUsage can read pre-computed assignments from CRD status.
 			seen := make(map[string]bool)
 			for _, r := range tt.reservations {
 				if r.Spec.CommittedResourceReservation == nil {
@@ -391,10 +343,10 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 					t.Fatalf("failed to update CommittedResource status %s: %v", uuid, err)
 				}
 				rec := &commitments.UsageReconciler{
-					Client:  k8sClient,
-					Conf:    commitments.UsageReconcilerConfig{CooldownInterval: metav1.Duration{Duration: 0}},
-					UsageDB: dbClient,
-					Monitor: commitments.NewUsageReconcilerMonitor(),
+					Client:   k8sClient,
+					Conf:     commitments.UsageReconcilerConfig{CooldownInterval: metav1.Duration{Duration: 0}},
+					VMSource: vmSrc,
+					Monitor:  commitments.NewUsageReconcilerMonitor(),
 				}
 				req := ctrl.Request{NamespacedName: types.NamespacedName{Name: cr.Name}}
 				if _, err := rec.Reconcile(ctx, req); err != nil {
@@ -402,15 +354,13 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 				}
 			}
 
-			calc := commitments.NewUsageCalculator(k8sClient, dbClient, testUsageConfig)
+			calc := commitments.NewUsageCalculator(k8sClient, vmSrc, testUsageConfig)
 			logger := log.FromContext(ctx)
 			report, err := calc.CalculateUsage(ctx, logger, tt.projectID, tt.allAZs)
 			if err != nil {
 				t.Fatalf("CalculateUsage failed: %v", err)
 			}
 
-			// Find the VM in subresources and check its commitment assignment
-			// Subresources are now on the instances resource, not RAM
 			res, ok := report.Resources["hw_version_hana_1_instances"]
 			if !ok {
 				t.Fatal("Resource hw_version_hana_1_instances not found")
@@ -422,7 +372,6 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 					if sub.Attributes == nil {
 						continue
 					}
-					// Parse JSON attributes
 					var attrMap map[string]any
 					if err := json.Unmarshal(sub.Attributes, &attrMap); err != nil {
 						continue
@@ -432,12 +381,10 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 			}
 
 			if tt.expectedActiveCommitment == "" {
-				// Expect PAYG (nil commitment_id)
 				if foundCommitment != nil {
 					t.Errorf("Expected PAYG (nil commitment_id), got %v", foundCommitment)
 				}
 			} else {
-				// Expect specific commitment
 				if foundCommitment != tt.expectedActiveCommitment {
 					t.Errorf("Expected commitment %s, got %v", tt.expectedActiveCommitment, foundCommitment)
 				}
@@ -446,9 +393,6 @@ func TestUsageCalculator_ExpiredAndFutureCommitments(t *testing.T) {
 	}
 }
 
-// TestUsageMultipleCalculation_FloorDivision tests that RAM usage is calculated
-// correctly via integer division for variable-ratio flavor groups.
-// Nova flavor memory is a multiple of 1024 MiB, so FlavorRAM/1024 gives exact GiB.
 func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 	log.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
 	ctx := context.Background()
@@ -461,69 +405,33 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 
 	tests := []struct {
 		name              string
-		vms               []commitments.VMRow
-		expectedRAM       uint64 // Expected RAM usage in units
-		expectedCores     uint64 // Expected cores usage
+		vms               []reservations.VM
+		expectedRAM       uint64
+		expectedCores     uint64
 		expectedInstances uint64
 	}{
 		{
-			name: "single smallest flavor - 2 units",
-			vms: []commitments.VMRow{
-				{
-					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
-					AZ:         "az-a",
-					Created:    baseTime.Format(time.RFC3339),
-					FlavorName: "g_k_c1_m2_v2", FlavorRAM: 2048, FlavorVCPUs: 1,
-				},
-			},
+			name:              "single smallest flavor - 2 units",
+			vms:               []reservations.VM{mkVM("vm-001", "az-a", "g_k_c1_m2_v2", 2048, 1, baseTime, "project-A")},
 			expectedRAM:       2,
 			expectedCores:     1,
 			expectedInstances: 1,
 		},
 		{
-			name: "2x flavor - 4096/1024 = 4 GiB",
-			vms: []commitments.VMRow{
-				{
-					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
-					AZ:         "az-a",
-					Created:    baseTime.Format(time.RFC3339),
-					FlavorName: "g_k_c2_m4_v2", FlavorRAM: 4096, FlavorVCPUs: 2,
-				},
-			},
-			expectedRAM:       4, // 4096/1024 = 4
+			name:              "2x flavor - 4096/1024 = 4 GiB",
+			vms:               []reservations.VM{mkVM("vm-001", "az-a", "g_k_c2_m4_v2", 4096, 2, baseTime, "project-A")},
+			expectedRAM:       4,
 			expectedCores:     2,
 			expectedInstances: 1,
 		},
 		{
 			name: "multiple VMs - RAM units should match cores for fixed ratio",
-			vms: []commitments.VMRow{
-				{
-					ID: "vm-001", Name: "vm-001", Status: "ACTIVE",
-					AZ:         "az-a",
-					Created:    baseTime.Format(time.RFC3339),
-					FlavorName: "g_k_c1_m2_v2", FlavorRAM: 2048, FlavorVCPUs: 1,
-				},
-				{
-					ID: "vm-002", Name: "vm-002", Status: "ACTIVE",
-					AZ:         "az-a",
-					Created:    baseTime.Add(time.Second).Format(time.RFC3339),
-					FlavorName: "g_k_c2_m4_v2", FlavorRAM: 4096, FlavorVCPUs: 2,
-				},
-				{
-					ID: "vm-003", Name: "vm-003", Status: "ACTIVE",
-					AZ:         "az-a",
-					Created:    baseTime.Add(2 * time.Second).Format(time.RFC3339),
-					FlavorName: "g_k_c4_m16_v2", FlavorRAM: 16384, FlavorVCPUs: 4,
-				},
-				{
-					ID: "vm-004", Name: "vm-004", Status: "ACTIVE",
-					AZ:         "az-a",
-					Created:    baseTime.Add(3 * time.Second).Format(time.RFC3339),
-					FlavorName: "g_k_c16_m32_v2", FlavorRAM: 32768, FlavorVCPUs: 16,
-				},
+			vms: []reservations.VM{
+				mkVM("vm-001", "az-a", "g_k_c1_m2_v2", 2048, 1, baseTime, "project-A"),
+				mkVM("vm-002", "az-a", "g_k_c2_m4_v2", 4096, 2, baseTime.Add(time.Second), "project-A"),
+				mkVM("vm-003", "az-a", "g_k_c4_m16_v2", 16384, 4, baseTime.Add(2*time.Second), "project-A"),
+				mkVM("vm-004", "az-a", "g_k_c16_m32_v2", 32768, 16, baseTime.Add(3*time.Second), "project-A"),
 			},
-			// 2048/1024 + 4096/1024 + 16384/1024 + 32768/1024 = 2 + 4 + 16 + 32 = 54
-			// Cores: 1 + 2 + 4 + 16 = 23
 			expectedRAM:       54, // 2 + 4 + 16 + 32
 			expectedCores:     23, // 1 + 2 + 4 + 16
 			expectedInstances: 4,
@@ -536,7 +444,6 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 			_ = v1alpha1.AddToScheme(scheme)
 			_ = hv1.AddToScheme(scheme)
 
-			// Build flavor groups with realistic values
 			flavorGroups := TestFlavorGroup{
 				infoVersion: 1234,
 				flavors: []compute.FlavorInGroup{
@@ -560,20 +467,15 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 				}).
 				Build()
 
-			dbClient := &mockUsageDBClient{
-				rows: map[string][]commitments.VMRow{
-					"project-A": tt.vms,
-				},
-			}
+			vmSrc := &mockVMSource{vms: map[string][]reservations.VM{"project-A": tt.vms}}
 
-			calc := commitments.NewUsageCalculator(k8sClient, dbClient, testUsageConfig)
+			calc := commitments.NewUsageCalculator(k8sClient, vmSrc, testUsageConfig)
 			logger := log.FromContext(ctx)
 			report, err := calc.CalculateUsage(ctx, logger, "project-A", []liquid.AvailabilityZone{"az-a"})
 			if err != nil {
 				t.Fatalf("CalculateUsage failed: %v", err)
 			}
 
-			// Check RAM usage
 			ramResource := report.Resources[liquid.ResourceName("hw_version_hw_2101_ram")]
 			if ramResource == nil {
 				t.Fatal("hw_version_hw_2101_ram resource not found")
@@ -586,7 +488,6 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 				t.Errorf("RAM usage = %d, expected %d", totalRAM, tt.expectedRAM)
 			}
 
-			// Check cores usage
 			coresResource := report.Resources[liquid.ResourceName("hw_version_hw_2101_cores")]
 			if coresResource == nil {
 				t.Fatal("hw_version_hw_2101_cores resource not found")
@@ -599,7 +500,6 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 				t.Errorf("Cores usage = %d, expected %d", totalCores, tt.expectedCores)
 			}
 
-			// Check instances usage
 			instancesResource := report.Resources[liquid.ResourceName("hw_version_hw_2101_instances")]
 			if instancesResource == nil {
 				t.Fatal("hw_version_hw_2101_instances resource not found")
@@ -620,7 +520,7 @@ func makeUsageTestReservation(commitmentUUID, projectID, flavorGroup, az string,
 }
 
 func makeUsageTestReservationWithTimes(commitmentUUID, projectID, flavorGroup, az string, memoryBytes int64, slot int, startTime, endTime *time.Time) *v1alpha1.Reservation {
-	name := "commitment-" + commitmentUUID + "-" + string(rune('0'+slot)) //nolint:gosec // slot is a small test index, no overflow risk
+	name := "commitment-" + commitmentUUID + "-" + string(rune('0'+slot)) //nolint:gosec
 
 	res := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{

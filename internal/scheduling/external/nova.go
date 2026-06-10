@@ -17,6 +17,8 @@ type NovaReaderInterface interface {
 	GetAllFlavors(ctx context.Context) ([]nova.Flavor, error)
 	GetServerByID(ctx context.Context, serverID string) (*nova.Server, error)
 	GetFlavorByName(ctx context.Context, flavorName string) (*nova.Flavor, error)
+	// GetServersByProject returns all servers belonging to a specific project.
+	GetServersByProject(ctx context.Context, projectID string) ([]nova.Server, error)
 	// GetDeletedServerByID returns a deleted server by its ID from the deleted_servers table.
 	// Returns nil, nil if the server is not found in the deleted_servers table.
 	GetDeletedServerByID(ctx context.Context, serverID string) (*nova.DeletedServer, error)
@@ -81,6 +83,16 @@ func (r *NovaReader) GetAllAggregates(ctx context.Context) ([]nova.Aggregate, er
 		return nil, fmt.Errorf("failed to query aggregates: %w", err)
 	}
 	return aggregates, nil
+}
+
+// GetServersByProject returns all Nova servers belonging to a specific project.
+func (r *NovaReader) GetServersByProject(ctx context.Context, projectID string) ([]nova.Server, error) {
+	var servers []nova.Server
+	query := "SELECT * FROM " + nova.Server{}.TableName() + " WHERE tenant_id = $1"
+	if err := r.Select(ctx, &servers, query, projectID); err != nil {
+		return nil, fmt.Errorf("failed to query servers by project: %w", err)
+	}
+	return servers, nil
 }
 
 // GetServerByID returns a Nova server by its ID.
