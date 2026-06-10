@@ -12,8 +12,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/external"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var vmSourceLog = logf.Log.WithName("vm-source")
