@@ -131,6 +131,10 @@
     {
       "matchFileNames": [".github/actions/setup-claude-code-action/action.yml"],
       "automerge": false
+    },
+    {
+      "matchFileNames": [".github/renovate.json"],
+      "automerge": false
     }
   ],
   "prHourlyLimit": 0,
