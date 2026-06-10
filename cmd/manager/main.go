@@ -701,7 +701,7 @@ func main() {
 
 			// Create NovaReader and DBVMSource
 			novaReader := external.NewNovaReader(postgresReader)
-			vmSource := failover.NewDBVMSource(novaReader)
+			vmSource := reservations.NewDBVMSource(novaReader)
 
 			// Create the unified failover controller
 			// It handles both:
@@ -794,7 +794,7 @@ func main() {
 
 			// Create NovaReader and DBVMSource
 			novaReader := external.NewNovaReader(postgresReader)
-			vmSource := failover.NewDBVMSource(novaReader)
+			vmSource := reservations.NewDBVMSource(novaReader)
 
 			// Create the quota controller
 			quotaController := quota.NewQuotaController(

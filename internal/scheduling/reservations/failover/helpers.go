@@ -16,8 +16,8 @@ import (
 )
 
 // resolvedReservationSpec holds the resolved resource spec for scheduling and reservation sizing.
-// When UseFlavorGroupResources is enabled and the VM's flavor is found in a group,
-// resources are sized to the LargestFlavor. Otherwise, they come from the VM directly.
+// When UseFlavorGroupResources is enabled and the reservations.VM's flavor is found in a group,
+// resources are sized to the LargestFlavor. Otherwise, they come from the reservations.VM directly.
 type resolvedReservationSpec struct {
 	FlavorName      string // may be overridden to LargestFlavor.Name
 	FlavorGroupName string // flavor group name if found, empty otherwise
@@ -43,12 +43,12 @@ func (r resolvedReservationSpec) HypervisorResources() map[hv1.ResourceName]reso
 	}
 }
 
-// resolveVMSpecForScheduling resolves the VM's resources for scheduling.
+// resolveVMSpecForScheduling resolves the reservations.VM's resources for scheduling.
 // When useFlavorGroupResources is true and the flavor is found in a group,
-// returns the LargestFlavor's name and size. Otherwise falls back to VM resources.
+// returns the LargestFlavor's name and size. Otherwise falls back to reservations.VM resources.
 func resolveVMSpecForScheduling(
 	ctx context.Context,
-	vm VM,
+	vm reservations.VM,
 	useFlavorGroupResources bool,
 	flavorGroups map[string]compute.FlavorGroupFeature,
 ) resolvedReservationSpec {
@@ -60,7 +60,7 @@ func resolveVMSpecForScheduling(
 		if err == nil {
 			fg := flavorGroups[groupName]
 			largest := fg.LargestFlavor
-			logger.V(1).Info("resolved VM resources from flavor group LargestFlavor",
+			logger.V(1).Info("resolved reservations.VM resources from flavor group LargestFlavor",
 				"vmFlavor", vm.FlavorName,
 				"flavorGroup", groupName,
 				"largestFlavor", largest.Name,
@@ -73,12 +73,12 @@ func resolveVMSpecForScheduling(
 				VCPUs:           largest.VCPUs,
 			}
 		}
-		logger.V(1).Info("flavor group lookup failed, falling back to VM resources",
+		logger.V(1).Info("flavor group lookup failed, falling back to reservations.VM resources",
 			"vmFlavor", vm.FlavorName,
 			"error", err)
 	}
 
-	// Fallback: use VM's own resources
+	// Fallback: use reservations.VM's own resources
 	var memoryMB, vcpus uint64
 	if memory, ok := vm.Resources["memory"]; ok {
 		memoryMB = uint64(memory.Value() / (1024 * 1024)) //nolint:gosec // memory values won't overflow; binary MiB matches commitments/state.go and vm_source.go
@@ -113,7 +113,7 @@ func filterFailoverReservations(resList []v1alpha1.Reservation) []v1alpha1.Reser
 	return result
 }
 
-// countReservationsForVM counts how many reservations a VM is in.
+// countReservationsForVM counts how many reservations a reservations.VM is in.
 func countReservationsForVM(resList []v1alpha1.Reservation, vmUUID string) int {
 	count := 0
 	for _, res := range resList {
@@ -125,9 +125,9 @@ func countReservationsForVM(resList []v1alpha1.Reservation, vmUUID string) int {
 	return count
 }
 
-// addVMToReservation creates a copy of a reservation with the VM added to its allocations.
+// addVMToReservation creates a copy of a reservation with the reservations.VM added to its allocations.
 // The original reservation is NOT modified.
-func addVMToReservation(reservation v1alpha1.Reservation, vm VM) *v1alpha1.Reservation {
+func addVMToReservation(reservation v1alpha1.Reservation, vm reservations.VM) *v1alpha1.Reservation {
 	// Deep copy the reservation
 	updatedRes := reservation.DeepCopy()
 
@@ -139,7 +139,7 @@ func addVMToReservation(reservation v1alpha1.Reservation, vm VM) *v1alpha1.Reser
 	if updatedRes.Status.FailoverReservation.Allocations == nil {
 		updatedRes.Status.FailoverReservation.Allocations = make(map[string]string)
 	}
-	// Add the VM to the allocations
+	// Add the reservations.VM to the allocations
 	updatedRes.Status.FailoverReservation.Allocations[vm.UUID] = vm.CurrentHypervisor
 
 	// Mark the reservation as changed and not yet acknowledged
@@ -167,16 +167,16 @@ func ValidateFailoverReservationResources(res *v1alpha1.Reservation) error {
 	return nil
 }
 
-// newFailoverReservation creates a new failover reservation for a VM on a specific hypervisor.
+// newFailoverReservation creates a new failover reservation for a reservations.VM on a specific hypervisor.
 // This does NOT persist the reservation to the cluster - it only creates the in-memory object.
 // The caller is responsible for persisting the reservation.
 //
 // The resolved parameter contains the pre-computed resources (from resolveVMForScheduling),
-// which may come from the VM's flavor group LargestFlavor or from the VM's own resources.
+// which may come from the reservations.VM's flavor group LargestFlavor or from the reservations.VM's own resources.
 // This ensures the same sizing is used for both the scheduler query and the reservation CRD.
 func newFailoverReservation(
 	ctx context.Context,
-	vm VM,
+	vm reservations.VM,
 	hypervisor, creator string,
 	resSpec resolvedReservationSpec,
 ) *v1alpha1.Reservation {

@@ -41,14 +41,14 @@ type IntegrationTestCase struct {
 	Name               string
 	Hypervisors        []*hv1.Hypervisor
 	Reservations       []*v1alpha1.Reservation
-	VMs                []VM
+	VMs                []reservations.VM
 	FlavorRequirements map[string]int
 
 	// Verification options
 	ExpectedMinRes      int                          // Minimum expected reservations after reconcile
 	ExpectedMaxRes      int                          // Maximum expected reservations after reconcile (0 = no max check)
-	VerifyVMReservation []string                     // VM UUIDs to verify have reservations
-	VMsToRemove         map[string]map[string]string // reservationName -> vmUUID -> expectedHost (verify VM removed from reservation)
+	VerifyVMReservation []string                     // reservations.VM UUIDs to verify have reservations
+	VMsToRemove         map[string]map[string]string // reservationName -> vmUUID -> expectedHost (verify reservations.VM removed from reservation)
 
 	// Test behavior options
 	ReconcileCount        int  // Number of reconciles to run (default: 1)
@@ -69,7 +69,7 @@ func TestIntegration(t *testing.T) {
 				newHypervisor("host3", 8, 16, 0, 0, nil, nil),
 				newHypervisor("host4", 8, 16, 0, 0, nil, nil),
 			},
-			VMs: []VM{
+			VMs: []reservations.VM{
 				newVM("vm-1", "m1.large", "project-A", "host1", 8192, 4),
 				newVM("vm-2", "m1.large", "project-A", "host2", 8192, 4),
 			},
@@ -79,7 +79,7 @@ func TestIntegration(t *testing.T) {
 			VerifyVMReservation: []string{"vm-1", "vm-2"},
 		},
 		{
-			Name: "1 VM already has reservation, create 1 new",
+			Name: "1 reservations.VM already has reservation, create 1 new",
 			Hypervisors: []*hv1.Hypervisor{
 				newHypervisor("host1", 8, 16, 4, 8, []hv1.Instance{{ID: "vm-1", Name: "vm-1", Active: true}}, nil),
 				newHypervisor("host2", 8, 16, 4, 8, []hv1.Instance{{ID: "vm-2", Name: "vm-2", Active: true}}, nil),
@@ -89,7 +89,7 @@ func TestIntegration(t *testing.T) {
 			Reservations: []*v1alpha1.Reservation{
 				newReservation("existing-res-1", "host2", 8192, 4, map[string]string{"vm-1": "host1"}),
 			},
-			VMs: []VM{
+			VMs: []reservations.VM{
 				newVM("vm-1", "m1.large", "project-A", "host1", 8192, 4),
 				newVM("vm-2", "m1.large", "project-A", "host2", 8192, 4),
 			},
@@ -98,13 +98,13 @@ func TestIntegration(t *testing.T) {
 			ExpectedMaxRes:     2,
 		},
 		{
-			Name: "VM with non-matching flavor, no reservations created",
+			Name: "reservations.VM with non-matching flavor, no reservations created",
 			Hypervisors: []*hv1.Hypervisor{
 				newHypervisor("host1", 8, 16, 2, 4, []hv1.Instance{{ID: "vm-1", Name: "vm-1", Active: true}}, nil),
 				newHypervisor("host2", 8, 16, 0, 0, nil, nil),
 				newHypervisor("host3", 8, 16, 0, 0, nil, nil),
 			},
-			VMs: []VM{
+			VMs: []reservations.VM{
 				newVM("vm-1", "m1.small", "project-A", "host1", 4096, 2),
 			},
 			FlavorRequirements: map[string]int{"m1.large": 1}, // m1.small not in requirements
@@ -123,7 +123,7 @@ func TestIntegration(t *testing.T) {
 			Reservations: []*v1alpha1.Reservation{
 				newReservation("existing-res-1", "host2", 8192, 4, map[string]string{"vm-1": "host1"}),
 			},
-			VMs: []VM{
+			VMs: []reservations.VM{
 				newVM("vm-1", "m1.large", "project-A", "host1", 8192, 4),
 				newVM("vm-2", "m1.large", "project-A", "host2", 8192, 4),
 				newVM("vm-3", "m1.large", "project-A", "host3", 8192, 4),
@@ -146,25 +146,25 @@ func TestIntegration(t *testing.T) {
 				newHypervisorWithAZ("host-b1", 16, 32, 4, 8, []hv1.Instance{{ID: "vm-b1", Name: "vm-b1", Active: true}}, nil, "az-b"),
 				newHypervisorWithAZ("host-b2", 16, 32, 0, 0, nil, nil, "az-b"), // Empty host for failover in AZ-B
 			},
-			VMs: []VM{
+			VMs: []reservations.VM{
 				newVMWithAZ("vm-a1", "m1.large", "project-A", "host-a1", 8192, 4, "az-a"),
 				newVMWithAZ("vm-b1", "m1.large", "project-A", "host-b1", 8192, 4, "az-b"),
 			},
 			FlavorRequirements:  map[string]int{"m1.large": 1},
-			ExpectedMinRes:      2, // Each VM gets a reservation in its own AZ
+			ExpectedMinRes:      2, // Each reservations.VM gets a reservation in its own AZ
 			ExpectedMaxRes:      2,
 			VerifyVMReservation: []string{"vm-a1", "vm-b1"},
 		},
 		{
-			Name: "VM in AZ-A cannot get reservation on AZ-B host (only AZ-B hosts available)",
+			Name: "reservations.VM in AZ-A cannot get reservation on AZ-B host (only AZ-B hosts available)",
 			Hypervisors: []*hv1.Hypervisor{
-				// AZ-A hosts - only one host with VM, no empty hosts for failover
+				// AZ-A hosts - only one host with reservations.VM, no empty hosts for failover
 				newHypervisorWithAZ("host-a1", 16, 32, 4, 8, []hv1.Instance{{ID: "vm-a1", Name: "vm-a1", Active: true}}, nil, "az-a"),
 				// AZ-B hosts - empty hosts available but wrong AZ for vm-a1
 				newHypervisorWithAZ("host-b1", 16, 32, 0, 0, nil, nil, "az-b"),
 				newHypervisorWithAZ("host-b2", 16, 32, 0, 0, nil, nil, "az-b"),
 			},
-			VMs: []VM{
+			VMs: []reservations.VM{
 				newVMWithAZ("vm-a1", "m1.large", "project-A", "host-a1", 8192, 4, "az-a"),
 			},
 			FlavorRequirements:    map[string]int{}, // Empty - don't require failover for this test
@@ -183,13 +183,13 @@ func TestIntegration(t *testing.T) {
 				newHypervisorWithAZ("host-b1", 16, 32, 4, 8, []hv1.Instance{{ID: "vm-b1", Name: "vm-b1", Active: true}}, nil, "az-b"),
 				newHypervisorWithAZ("host-b2", 16, 32, 0, 0, nil, nil, "az-b"), // Empty host for failover
 			},
-			VMs: []VM{
+			VMs: []reservations.VM{
 				newVMWithAZ("vm-a1", "m1.large", "project-A", "host-a1", 8192, 4, "az-a"),
 				newVMWithAZ("vm-a2", "m1.large", "project-A", "host-a2", 8192, 4, "az-a"),
 				newVMWithAZ("vm-b1", "m1.large", "project-A", "host-b1", 8192, 4, "az-b"),
 			},
 			FlavorRequirements:  map[string]int{"m1.large": 1},
-			ExpectedMinRes:      2, // VMs in AZ-A can share, VM in AZ-B gets its own
+			ExpectedMinRes:      2, // VMs in AZ-A can share, reservations.VM in AZ-B gets its own
 			ExpectedMaxRes:      3,
 			VerifyVMReservation: []string{"vm-a1", "vm-a2", "vm-b1"},
 		},
@@ -209,7 +209,7 @@ func TestIntegration(t *testing.T) {
 				newHypervisor("host7", 32, 64, 0, 0, nil, nil),
 				newHypervisor("host8", 32, 64, 0, 0, nil, nil),
 			},
-			VMs: []VM{
+			VMs: []reservations.VM{
 				newVM("vm-1", "m1.large", "project-A", "host1", 8192, 4),
 				newVM("vm-2", "m1.large", "project-A", "host2", 8192, 4),
 				newVM("vm-3", "m1.large", "project-A", "host3", 8192, 4),
@@ -232,7 +232,7 @@ func TestIntegration(t *testing.T) {
 				newHypervisor("host8", 32, 64, 0, 0, nil, nil),
 				newHypervisor("host9", 32, 64, 0, 0, nil, nil),
 			},
-			VMs: []VM{
+			VMs: []reservations.VM{
 				newVM("vm-1", "m1.large", "project-A", "host1", 8192, 4),
 				newVM("vm-2", "m1.large", "project-A", "host2", 8192, 4),
 				newVM("vm-3", "m1.large", "project-A", "host3", 8192, 4),
@@ -257,7 +257,7 @@ func TestIntegration(t *testing.T) {
 				newReservation("existing-res-1", "host4", 8192, 4, map[string]string{"vm-1": "host1"}),
 				newReservation("existing-res-2", "host5", 8192, 4, map[string]string{"vm-2": "host2"}),
 			},
-			VMs: []VM{
+			VMs: []reservations.VM{
 				newVM("vm-1", "m1.large", "project-A", "host1", 8192, 4),
 				newVM("vm-2", "m1.large", "project-A", "host2", 8192, 4),
 				newVM("vm-3", "m1.large", "project-A", "host3", 8192, 4),
@@ -271,7 +271,7 @@ func TestIntegration(t *testing.T) {
 		// Incorrect Reservation Cleanup Tests
 		// =====================================================================
 		{
-			Name: "VM deleted - remove from reservation allocations",
+			Name: "reservations.VM deleted - remove from reservation allocations",
 			Hypervisors: []*hv1.Hypervisor{
 				newHypervisor("host1", 16, 32, 4, 8, []hv1.Instance{{ID: "vm-1", Name: "vm-1", Active: true}}, nil),
 				newHypervisor("host2", 16, 32, 0, 0, nil, nil),
@@ -280,10 +280,10 @@ func TestIntegration(t *testing.T) {
 			Reservations: []*v1alpha1.Reservation{
 				newReservation("res-1", "host2", 8192, 4, map[string]string{
 					"vm-1":       "host1",
-					"vm-deleted": "host3", // This VM no longer exists
+					"vm-deleted": "host3", // This reservations.VM no longer exists
 				}),
 			},
-			VMs: []VM{
+			VMs: []reservations.VM{
 				newVM("vm-1", "m1.large", "project-A", "host1", 8192, 4),
 			},
 			FlavorRequirements: map[string]int{"m1.large": 1},
@@ -294,7 +294,7 @@ func TestIntegration(t *testing.T) {
 			SkipFailureSimulation: false,
 		},
 		{
-			Name: "VM moved to different hypervisor - remove from reservation allocations",
+			Name: "reservations.VM moved to different hypervisor - remove from reservation allocations",
 			Hypervisors: []*hv1.Hypervisor{
 				newHypervisor("host1", 16, 32, 0, 0, nil, nil),
 				newHypervisor("host2", 16, 32, 4, 8, []hv1.Instance{{ID: "vm-1", Name: "vm-1", Active: true}}, nil),
@@ -307,7 +307,7 @@ func TestIntegration(t *testing.T) {
 					"vm-2": "host3",
 				}),
 			},
-			VMs: []VM{
+			VMs: []reservations.VM{
 				newVM("vm-1", "m1.large", "project-A", "host2", 8192, 4), // Moved from host1 to host2
 				newVM("vm-2", "m1.large", "project-A", "host3", 8192, 4),
 			},
@@ -319,7 +319,7 @@ func TestIntegration(t *testing.T) {
 			SkipFailureSimulation: false,
 		},
 		{
-			Name: "VM on same host as reservation - remove due to eligibility",
+			Name: "reservations.VM on same host as reservation - remove due to eligibility",
 			Hypervisors: []*hv1.Hypervisor{
 				newHypervisor("host1", 16, 32, 0, 0, nil, nil),
 				newHypervisor("host2", 16, 32, 4, 8, []hv1.Instance{{ID: "vm-2", Name: "vm-2", Active: true}}, nil),
@@ -332,7 +332,7 @@ func TestIntegration(t *testing.T) {
 					"vm-2": "host2",
 				}),
 			},
-			VMs: []VM{
+			VMs: []reservations.VM{
 				newVM("vm-1", "m1.large", "project-A", "host3", 8192, 4), // Same as reservation!
 				newVM("vm-2", "m1.large", "project-A", "host2", 8192, 4),
 			},
@@ -344,7 +344,7 @@ func TestIntegration(t *testing.T) {
 			SkipFailureSimulation: false,
 		},
 		{
-			Name: "Mixed scenario - deleted VM, moved VM, and valid VM",
+			Name: "Mixed scenario - deleted reservations.VM, moved reservations.VM, and valid reservations.VM",
 			Hypervisors: []*hv1.Hypervisor{
 				newHypervisor("host1", 16, 32, 4, 8, []hv1.Instance{{ID: "vm-1", Name: "vm-1", Active: true}}, nil),
 				newHypervisor("host2", 16, 32, 4, 8, []hv1.Instance{{ID: "vm-2", Name: "vm-2", Active: true}}, nil),
@@ -358,7 +358,7 @@ func TestIntegration(t *testing.T) {
 					"vm-deleted": "host4", // Deleted
 				}),
 			},
-			VMs: []VM{
+			VMs: []reservations.VM{
 				newVM("vm-1", "m1.large", "project-A", "host1", 8192, 4),
 				newVM("vm-2", "m1.large", "project-A", "host2", 8192, 4), // Moved from host3 to host2
 			},
@@ -374,14 +374,14 @@ func TestIntegration(t *testing.T) {
 		// Traits Filter Tests
 		// =====================================================================
 		{
-			Name: "HANA VM gets reservation on HANA host, regular VM on any host",
+			Name: "HANA reservations.VM gets reservation on HANA host, regular reservations.VM on any host",
 			Hypervisors: []*hv1.Hypervisor{
 				newHypervisor("host1", 16, 32, 4, 8, []hv1.Instance{{ID: "vm-hana-1", Name: "vm-hana-1", Active: true}}, []string{"CUSTOM_HANA"}),
 				newHypervisor("host2", 16, 32, 0, 0, nil, []string{"CUSTOM_HANA"}),
 				newHypervisor("host3", 16, 32, 4, 8, []hv1.Instance{{ID: "vm-regular-1", Name: "vm-regular-1", Active: true}}, nil),
 				newHypervisor("host4", 16, 32, 0, 0, nil, nil),
 			},
-			VMs: []VM{
+			VMs: []reservations.VM{
 				newVMWithExtraSpecs("vm-hana-1", "m1.hana", "project-A", "host1", 8192, 4, map[string]string{"trait:CUSTOM_HANA": "required"}),
 				newVMWithExtraSpecs("vm-regular-1", "m1.large", "project-A", "host3", 8192, 4, nil),
 			},
@@ -390,13 +390,13 @@ func TestIntegration(t *testing.T) {
 			UseTraitsFilter:    true,
 		},
 		{
-			Name: "VM with forbidden trait cannot use host with that trait",
+			Name: "reservations.VM with forbidden trait cannot use host with that trait",
 			Hypervisors: []*hv1.Hypervisor{
 				newHypervisor("host1", 16, 32, 4, 8, []hv1.Instance{{ID: "vm-no-hana-1", Name: "vm-no-hana-1", Active: true}}, nil),
 				newHypervisor("host2", 16, 32, 0, 0, nil, []string{"CUSTOM_HANA"}), // Has HANA trait
 				newHypervisor("host3", 16, 32, 0, 0, nil, nil),                     // No HANA trait
 			},
-			VMs: []VM{
+			VMs: []reservations.VM{
 				newVMWithExtraSpecs("vm-no-hana-1", "m1.no-hana", "project-A", "host1", 8192, 4, map[string]string{"trait:CUSTOM_HANA": "forbidden"}),
 			},
 			FlavorRequirements: map[string]int{"m1.no-hana": 1},
@@ -411,12 +411,12 @@ func TestIntegration(t *testing.T) {
 				newHypervisor("host3", 16, 32, 0, 0, nil, []string{"CUSTOM_HANA"}), // HANA host for failover
 				newHypervisor("host4", 16, 32, 0, 0, nil, nil),                     // Non-HANA host for failover
 			},
-			VMs: []VM{
+			VMs: []reservations.VM{
 				newVMWithExtraSpecs("vm-hana-1", "m1.hana", "project-A", "host1", 8192, 4, map[string]string{"trait:CUSTOM_HANA": "required"}),
 				newVMWithExtraSpecs("vm-no-hana-1", "m1.no-hana", "project-A", "host2", 8192, 4, map[string]string{"trait:CUSTOM_HANA": "forbidden"}),
 			},
 			FlavorRequirements: map[string]int{"m1.hana": 1, "m1.no-hana": 1},
-			ExpectedMinRes:     2, // Each VM needs its own reservation on compatible host
+			ExpectedMinRes:     2, // Each reservations.VM needs its own reservation on compatible host
 			UseTraitsFilter:    true,
 		},
 		{
@@ -427,7 +427,7 @@ func TestIntegration(t *testing.T) {
 				newHypervisor("host3", 16, 32, 0, 0, nil, []string{"CUSTOM_HANA"}), // Empty HANA host for failover
 				newHypervisor("host4", 16, 32, 0, 0, nil, nil),                     // Non-HANA host (not usable for HANA VMs)
 			},
-			VMs: []VM{
+			VMs: []reservations.VM{
 				newVMWithExtraSpecs("vm-hana-1", "m1.hana", "project-A", "host1", 8192, 4, map[string]string{"trait:CUSTOM_HANA": "required"}),
 				newVMWithExtraSpecs("vm-hana-2", "m1.hana", "project-A", "host2", 8192, 4, map[string]string{"trait:CUSTOM_HANA": "required"}),
 			},
@@ -529,7 +529,7 @@ type IntegrationTestEnv struct {
 	K8sClient        client.Client
 	Server           *httptest.Server
 	NovaController   *nova.FilterWeigherPipelineController
-	VMSource         VMSource
+	VMSource         reservations.VMSource
 	SchedulerBaseURL string
 }
 
@@ -568,8 +568,8 @@ func (env *IntegrationTestEnv) SendPlacementRequest(req novaapi.ExternalSchedule
 	return response
 }
 
-// ListVMs returns all VMs from the VMSource.
-func (env *IntegrationTestEnv) ListVMs() []VM {
+// ListVMs returns all VMs from the reservations.VMSource.
+func (env *IntegrationTestEnv) ListVMs() []reservations.VM {
 	vms, err := env.VMSource.ListVMs(context.Background())
 	if err != nil {
 		env.T.Fatalf("Failed to list VMs: %v", err)
@@ -603,7 +603,7 @@ func (env *IntegrationTestEnv) LogStateSummary() {
 	vms := env.ListVMs()
 	reservationsList := env.ListReservations()
 
-	vmsByHypervisor := make(map[string][]VM)
+	vmsByHypervisor := make(map[string][]reservations.VM)
 	for _, vm := range vms {
 		vmsByHypervisor[vm.CurrentHypervisor] = append(vmsByHypervisor[vm.CurrentHypervisor], vm)
 	}
@@ -716,15 +716,15 @@ func (env *IntegrationTestEnv) VerifyReservationCountInRange(minCount, maxCount 
 	}
 }
 
-// VerifyVMHasFailoverReservation checks that a VM has a failover reservation on a different hypervisor
-// and that the reservation host is in the same availability zone as the VM.
+// VerifyVMHasFailoverReservation checks that a reservations.VM has a failover reservation on a different hypervisor
+// and that the reservation host is in the same availability zone as the reservations.VM.
 func (env *IntegrationTestEnv) VerifyVMHasFailoverReservation(vmUUID, vmCurrentHypervisor string) {
 	env.T.Helper()
 	reservationsList := env.ListReservations()
 	hypervisors := env.ListHypervisors()
 	vms := env.ListVMs()
 
-	// Find the VM to get its AZ
+	// Find the reservations.VM to get its AZ
 	var vmAZ string
 	for _, vm := range vms {
 		if vm.UUID == vmUUID {
@@ -748,29 +748,29 @@ func (env *IntegrationTestEnv) VerifyVMHasFailoverReservation(vmUUID, vmCurrentH
 		if res.Status.FailoverReservation != nil {
 			if _, exists := res.Status.FailoverReservation.Allocations[vmUUID]; exists {
 				if res.Status.Host == vmCurrentHypervisor {
-					env.T.Errorf("Failover reservation for VM %s is on the same hypervisor %s", vmUUID, vmCurrentHypervisor)
+					env.T.Errorf("Failover reservation for reservations.VM %s is on the same hypervisor %s", vmUUID, vmCurrentHypervisor)
 				}
 
-				// Verify the reservation host is in the same AZ as the VM
+				// Verify the reservation host is in the same AZ as the reservations.VM
 				resHostAZ := hypervisorAZ[res.Status.Host]
 				if vmAZ != resHostAZ {
-					env.T.Errorf("Failover reservation for VM %s (AZ: %s) is on hypervisor %s which is in wrong AZ: %s",
+					env.T.Errorf("Failover reservation for reservations.VM %s (AZ: %s) is on hypervisor %s which is in wrong AZ: %s",
 						vmUUID, vmAZ, res.Status.Host, resHostAZ)
 				}
 
-				env.T.Logf("VM %s (AZ: %s) has failover reservation %s on hypervisor %s (AZ: %s)",
+				env.T.Logf("reservations.VM %s (AZ: %s) has failover reservation %s on hypervisor %s (AZ: %s)",
 					vmUUID, vmAZ, res.Name, res.Status.Host, resHostAZ)
 				return
 			}
 		}
 	}
-	env.T.Errorf("No failover reservation found for VM %s", vmUUID)
+	env.T.Errorf("No failover reservation found for reservations.VM %s", vmUUID)
 }
 
-// VerifyVMRemovedFromReservation checks that a specific VM with a specific host allocation
+// VerifyVMRemovedFromReservation checks that a specific reservations.VM with a specific host allocation
 // is not in a specific reservation's allocations. The expectedHost parameter allows
-// verifying that a VM was removed from a reservation where it was allocated with a specific host,
-// while allowing the VM to be re-added with a different host.
+// verifying that a reservations.VM was removed from a reservation where it was allocated with a specific host,
+// while allowing the reservations.VM to be re-added with a different host.
 func (env *IntegrationTestEnv) VerifyVMRemovedFromReservation(reservationName, vmUUID, expectedHost string) {
 	env.T.Helper()
 	reservationsList := env.ListReservations()
@@ -780,24 +780,24 @@ func (env *IntegrationTestEnv) VerifyVMRemovedFromReservation(reservationName, v
 			continue
 		}
 		if res.Status.FailoverReservation == nil {
-			env.T.Logf("VM %s correctly removed from reservation %s (no allocations)", vmUUID, reservationName)
+			env.T.Logf("reservations.VM %s correctly removed from reservation %s (no allocations)", vmUUID, reservationName)
 			return
 		}
 		if allocatedHost, exists := res.Status.FailoverReservation.Allocations[vmUUID]; exists {
 			if allocatedHost == expectedHost {
-				env.T.Errorf("VM %s should have been removed from reservation %s (was allocated with host %s) but is still present with same host", vmUUID, reservationName, expectedHost)
+				env.T.Errorf("reservations.VM %s should have been removed from reservation %s (was allocated with host %s) but is still present with same host", vmUUID, reservationName, expectedHost)
 			} else {
-				env.T.Logf("VM %s was re-added to reservation %s with different host (old: %s, new: %s) - this is allowed", vmUUID, reservationName, expectedHost, allocatedHost)
+				env.T.Logf("reservations.VM %s was re-added to reservation %s with different host (old: %s, new: %s) - this is allowed", vmUUID, reservationName, expectedHost, allocatedHost)
 			}
 		} else {
-			env.T.Logf("VM %s correctly removed from reservation %s", vmUUID, reservationName)
+			env.T.Logf("reservations.VM %s correctly removed from reservation %s", vmUUID, reservationName)
 		}
 		return
 	}
 	env.T.Logf("Reservation %s not found (may have been deleted)", reservationName)
 }
 
-// VerifyVMsHaveRequiredReservations checks that each VM has the required number of failover reservations.
+// VerifyVMsHaveRequiredReservations checks that each reservations.VM has the required number of failover reservations.
 func (env *IntegrationTestEnv) VerifyVMsHaveRequiredReservations(flavorRequirements map[string]int) bool {
 	env.T.Helper()
 
@@ -817,7 +817,7 @@ func (env *IntegrationTestEnv) VerifyVMsHaveRequiredReservations(flavorRequireme
 	}
 
 	env.T.Log("╔══════════════════════════════════════════════════════════════════╗")
-	env.T.Log("║ SANITY CHECK: Verifying each VM has required reservations        ║")
+	env.T.Log("║ SANITY CHECK: Verifying each reservations.VM has required reservations        ║")
 	env.T.Log("╠══════════════════════════════════════════════════════════════════╣")
 
 	allPassed := true
@@ -833,7 +833,7 @@ func (env *IntegrationTestEnv) VerifyVMsHaveRequiredReservations(flavorRequireme
 			env.T.Logf("║   ✅ %s: has %d/%d reservations on hosts %v", vm.UUID, actualCount, requiredCount, vmReservationHosts[vm.UUID])
 		} else {
 			env.T.Logf("║   ❌ %s: has %d/%d reservations (MISSING %d)", vm.UUID, actualCount, requiredCount, requiredCount-actualCount)
-			env.T.Errorf("VM %s has %d reservations but needs %d", vm.UUID, actualCount, requiredCount)
+			env.T.Errorf("reservations.VM %s has %d reservations but needs %d", vm.UUID, actualCount, requiredCount)
 			allPassed = false
 		}
 	}
@@ -907,7 +907,7 @@ func (env *IntegrationTestEnv) simulateHostFailure(failedHosts, allHosts []strin
 		}
 	}
 
-	affectedVMs := make([]VM, 0)
+	affectedVMs := make([]reservations.VM, 0)
 	for _, vm := range vms {
 		if failedHostSet[vm.CurrentHypervisor] {
 			affectedVMs = append(affectedVMs, vm)
@@ -939,7 +939,7 @@ func (env *IntegrationTestEnv) simulateHostFailure(failedHosts, allHosts []strin
 			weights[h] = 1.0
 		}
 
-		// Build extra specs including VM's flavor extra specs (for traits)
+		// Build extra specs including reservations.VM's flavor extra specs (for traits)
 		extraSpecs := map[string]string{
 			"capabilities:hypervisor_type": "qemu",
 		}
@@ -972,7 +972,7 @@ func (env *IntegrationTestEnv) simulateHostFailure(failedHosts, allHosts []strin
 
 		if len(response.Hosts) == 0 {
 			env.T.Logf("║   ❌ %s: %s → NO HOSTS AVAILABLE", vm.UUID, vm.CurrentHypervisor)
-			env.T.Errorf("No hypervisors available for evacuating VM %s from failed hypervisor %s", vm.UUID, vm.CurrentHypervisor)
+			env.T.Errorf("No hypervisors available for evacuating reservations.VM %s from failed hypervisor %s", vm.UUID, vm.CurrentHypervisor)
 			failed++
 			continue
 		}
@@ -1004,7 +1004,7 @@ func (env *IntegrationTestEnv) simulateHostFailure(failedHosts, allHosts []strin
 
 		if selectedHost == "" {
 			env.T.Logf("║   ❌ %s: %s → NO RESERVATION HOST FOUND", vm.UUID, vm.CurrentHypervisor)
-			env.T.Errorf("VM %s has no reservation hypervisor available for evacuation from %s", vm.UUID, vm.CurrentHypervisor)
+			env.T.Errorf("reservations.VM %s has no reservation hypervisor available for evacuation from %s", vm.UUID, vm.CurrentHypervisor)
 			failed++
 			continue
 		}
@@ -1036,19 +1036,19 @@ func getSharedMonitor() lib.FilterWeigherPipelineMonitor {
 	return sharedMonitor
 }
 
-// MockVMSource implements VMSource for testing without requiring a database.
+// MockVMSource implements reservations.VMSource for testing without requiring a database.
 type MockVMSource struct {
-	VMs []VM
+	VMs []reservations.VM
 }
 
 // NewMockVMSource creates a new MockVMSource with the given VMs.
-func NewMockVMSource(vms []VM) *MockVMSource {
+func NewMockVMSource(vms []reservations.VM) *MockVMSource {
 	return &MockVMSource{VMs: vms}
 }
 
 // ListVMsByProject returns VMs filtered by project ID.
-func (s *MockVMSource) ListVMsByProject(_ context.Context, projectID string) ([]VM, error) {
-	var result []VM
+func (s *MockVMSource) ListVMsByProject(_ context.Context, projectID string) ([]reservations.VM, error) {
+	var result []reservations.VM
 	for _, vm := range s.VMs {
 		if vm.ProjectID == projectID {
 			result = append(result, vm)
@@ -1058,19 +1058,19 @@ func (s *MockVMSource) ListVMsByProject(_ context.Context, projectID string) ([]
 }
 
 // ListVMs returns the configured VMs.
-func (s *MockVMSource) ListVMs(_ context.Context) ([]VM, error) {
+func (s *MockVMSource) ListVMs(_ context.Context) ([]reservations.VM, error) {
 	return s.VMs, nil
 }
 
 // ListVMsOnHypervisors returns VMs that are on the given hypervisors.
 // For the mock, this simply returns all VMs (filtering is not needed for tests).
-func (s *MockVMSource) ListVMsOnHypervisors(_ context.Context, _ *hv1.HypervisorList, _ bool) ([]VM, error) {
+func (s *MockVMSource) ListVMsOnHypervisors(_ context.Context, _ *hv1.HypervisorList, _ bool) ([]reservations.VM, error) {
 	return s.VMs, nil
 }
 
-// GetVM returns a specific VM by UUID.
-// Returns nil, nil if the VM is not found.
-func (s *MockVMSource) GetVM(_ context.Context, vmUUID string) (*VM, error) {
+// GetVM returns a specific reservations.VM by UUID.
+// Returns nil, nil if the reservations.VM is not found.
+func (s *MockVMSource) GetVM(_ context.Context, vmUUID string) (*reservations.VM, error) {
 	for i := range s.VMs {
 		if s.VMs[i].UUID == vmUUID {
 			return &s.VMs[i], nil
@@ -1090,12 +1090,12 @@ func (s *MockVMSource) IsServerActive(_ context.Context, vmUUID string) (bool, e
 }
 
 // GetDeletedVMInfo returns nil, nil (no deleted VMs in mock).
-func (s *MockVMSource) GetDeletedVMInfo(_ context.Context, _ string) (*DeletedVMInfo, error) {
+func (s *MockVMSource) GetDeletedVMInfo(_ context.Context, _ string) (*reservations.DeletedVMInfo, error) {
 	return nil, nil
 }
 
-// newIntegrationTestEnv creates a complete test environment with HTTP server and VMSource.
-func newIntegrationTestEnv(t *testing.T, vms []VM, hypervisors []*hv1.Hypervisor, reservations []*v1alpha1.Reservation) *IntegrationTestEnv {
+// newIntegrationTestEnv creates a complete test environment with HTTP server and reservations.VMSource.
+func newIntegrationTestEnv(t *testing.T, vms []reservations.VM, hypervisors []*hv1.Hypervisor, reservations []*v1alpha1.Reservation) *IntegrationTestEnv {
 	t.Helper()
 
 	// Combine hypervisors and reservations into a single objects slice
@@ -1285,7 +1285,7 @@ func (api *testHTTPAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 }
 
 // newIntegrationTestEnvWithTraitsFilter creates a test environment with the filter_has_requested_traits filter enabled.
-func newIntegrationTestEnvWithTraitsFilter(t *testing.T, vms []VM, hypervisors []*hv1.Hypervisor, reservations []*v1alpha1.Reservation) *IntegrationTestEnv {
+func newIntegrationTestEnvWithTraitsFilter(t *testing.T, vms []reservations.VM, hypervisors []*hv1.Hypervisor, reservations []*v1alpha1.Reservation) *IntegrationTestEnv {
 	t.Helper()
 
 	// Combine hypervisors and reservations into a single objects slice
@@ -1486,15 +1486,15 @@ func newReservation(name, host string, memoryMB, vcpus uint64, allocations map[s
 	}
 }
 
-// newVM creates a VM with the given parameters.
+// newVM creates a reservations.VM with the given parameters.
 // Uses defaultTestAZ as the availability zone.
-func newVM(uuid, flavorName, projectID, host string, memoryMB, vcpus uint64) VM { //nolint:unparam
+func newVM(uuid, flavorName, projectID, host string, memoryMB, vcpus uint64) reservations.VM { //nolint:unparam
 	return newVMWithAZ(uuid, flavorName, projectID, host, memoryMB, vcpus, defaultTestAZ)
 }
 
-// newVMWithAZ creates a VM with the given parameters including availability zone.
-func newVMWithAZ(uuid, flavorName, projectID, host string, memoryMB, vcpus uint64, az string) VM {
-	return VM{
+// newVMWithAZ creates a reservations.VM with the given parameters including availability zone.
+func newVMWithAZ(uuid, flavorName, projectID, host string, memoryMB, vcpus uint64, az string) reservations.VM {
+	return reservations.VM{
 		UUID:              uuid,
 		FlavorName:        flavorName,
 		ProjectID:         projectID,
@@ -1508,14 +1508,14 @@ func newVMWithAZ(uuid, flavorName, projectID, host string, memoryMB, vcpus uint6
 	}
 }
 
-// newVMWithExtraSpecs creates a VM with the given parameters including extra specs.
+// newVMWithExtraSpecs creates a reservations.VM with the given parameters including extra specs.
 // Uses defaultTestAZ as the availability zone.
-func newVMWithExtraSpecs(uuid, flavorName, projectID, host string, memoryMB, vcpus uint64, extraSpecs map[string]string) VM { //nolint:unparam
+func newVMWithExtraSpecs(uuid, flavorName, projectID, host string, memoryMB, vcpus uint64, extraSpecs map[string]string) reservations.VM { //nolint:unparam
 	return newVMWithExtraSpecsAndAZ(uuid, flavorName, projectID, host, memoryMB, vcpus, extraSpecs, defaultTestAZ)
 }
 
-// newVMWithExtraSpecsAndAZ creates a VM with the given parameters including extra specs and availability zone.
-func newVMWithExtraSpecsAndAZ(uuid, flavorName, projectID, host string, memoryMB, vcpus uint64, extraSpecs map[string]string, az string) VM {
+// newVMWithExtraSpecsAndAZ creates a reservations.VM with the given parameters including extra specs and availability zone.
+func newVMWithExtraSpecsAndAZ(uuid, flavorName, projectID, host string, memoryMB, vcpus uint64, extraSpecs map[string]string, az string) reservations.VM {
 	vm := newVMWithAZ(uuid, flavorName, projectID, host, memoryMB, vcpus, az)
 	if extraSpecs != nil {
 		vm.FlavorExtraSpecs = extraSpecs

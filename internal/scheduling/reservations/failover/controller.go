@@ -39,7 +39,7 @@ var log = ctrl.Log.WithName("failover-reservation-controller").WithValues("modul
 // 2. Watch-based per-reservation reconciliation (Reconcile) - handles acknowledgment and validation of individual reservations
 type FailoverReservationController struct {
 	client.Client
-	VMSource        VMSource
+	VMSource        reservations.VMSource
 	Config          FailoverConfig
 	SchedulerClient *reservations.SchedulerClient
 	Recorder        events.EventRecorder // Event recorder for emitting Kubernetes events
@@ -47,7 +47,7 @@ type FailoverReservationController struct {
 	reconcileCount  int64 // Track reconciliation count for rotating VM selection
 }
 
-func NewFailoverReservationController(c client.Client, vmSource VMSource, config FailoverConfig, schedulerClient *reservations.SchedulerClient, monitor *FailoverMonitor) *FailoverReservationController {
+func NewFailoverReservationController(c client.Client, vmSource reservations.VMSource, config FailoverConfig, schedulerClient *reservations.SchedulerClient, monitor *FailoverMonitor) *FailoverReservationController {
 	return &FailoverReservationController{
 		Client:          c,
 		VMSource:        vmSource,
@@ -58,7 +58,7 @@ func NewFailoverReservationController(c client.Client, vmSource VMSource, config
 }
 
 type vmFailoverNeed struct {
-	VM    VM
+	VM    reservations.VM
 	Count int // Number of failover reservations needed
 }
 
@@ -178,7 +178,7 @@ func (c *FailoverReservationController) reconcileValidateAndAcknowledge(ctx cont
 // validateReservation validates that a reservation is still valid for all its allocated VMs.
 // Returns:
 //   - (true, nil) if all VMs pass validation
-//   - (false, nil) if any VM definitively fails validation (reservation should be deleted)
+//   - (false, nil) if any reservations.VM definitively fails validation (reservation should be deleted)
 //   - (false, error) if a transient error occurred (reservation should be requeued, not deleted)
 func (c *FailoverReservationController) validateReservation(ctx context.Context, res *v1alpha1.Reservation) (bool, error) {
 	logger := LoggerFromContext(ctx).WithValues("reservationName", res.Name)
@@ -201,26 +201,26 @@ func (c *FailoverReservationController) validateReservation(ctx context.Context,
 
 		vm, err := c.VMSource.GetVM(vmCtx, vmUUID)
 		if err != nil {
-			vmLogger.Error(err, "transient error getting VM for validation")
-			return false, fmt.Errorf("failed to get VM %s: %w", vmUUID, err)
+			vmLogger.Error(err, "transient error getting reservations.VM for validation")
+			return false, fmt.Errorf("failed to get reservations.VM %s: %w", vmUUID, err)
 		}
 		if vm == nil {
-			vmLogger.V(1).Info("VM not found during validation, skipping")
+			vmLogger.V(1).Info("reservations.VM not found during validation, skipping")
 			continue
 		}
 
 		valid, err := c.validateVMViaSchedulerEvacuation(vmCtx, *vm, reservationHost)
 		if err != nil {
-			vmLogger.Error(err, "transient error validating VM for reservation host", "reservationHost", reservationHost)
-			return false, fmt.Errorf("failed to validate VM %s: %w", vmUUID, err)
+			vmLogger.Error(err, "transient error validating reservations.VM for reservation host", "reservationHost", reservationHost)
+			return false, fmt.Errorf("failed to validate reservations.VM %s: %w", vmUUID, err)
 		}
 
 		if !valid {
-			vmLogger.Info("VM failed validation for reservation host", "vmCurrentHost", vmCurrentHost, "reservationHost", reservationHost)
+			vmLogger.Info("reservations.VM failed validation for reservation host", "vmCurrentHost", vmCurrentHost, "reservationHost", reservationHost)
 			return false, nil
 		}
 
-		vmLogger.V(1).Info("VM passed validation for reservation host", "reservationHost", reservationHost)
+		vmLogger.V(1).Info("reservations.VM passed validation for reservation host", "reservationHost", reservationHost)
 	}
 
 	return true, nil
@@ -326,9 +326,9 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 		knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
 		fg, err := knowledge.GetAllFlavorGroups(ctx, nil)
 		if err != nil {
-			logger.Info("flavor group knowledge not available, will fall back to VM resources for sizing",
+			logger.Info("flavor group knowledge not available, will fall back to reservations.VM resources for sizing",
 				"error", err)
-			// flavorGroups remains nil — newFailoverReservation will fall back to VM resources
+			// flavorGroups remains nil — newFailoverReservation will fall back to reservations.VM resources
 		} else {
 			flavorGroups = fg
 		}
@@ -377,13 +377,13 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 }
 
 // reconcileRemoveInvalidVMFromReservations removes VMs from reservation allocations if:
-// - The VM no longer exists
-// - The VM has moved to a different host
+// - The reservations.VM no longer exists
+// - The reservations.VM has moved to a different host
 // Returns the updated list of reservations (with modifications applied in-memory).
 // The caller is responsible for persisting any changes to the cluster.
 func reconcileRemoveInvalidVMFromReservations(
 	ctx context.Context,
-	vms []VM,
+	vms []reservations.VM,
 	failoverReservations []v1alpha1.Reservation,
 ) (updatedReservations []v1alpha1.Reservation, reservationsToUpdate []*v1alpha1.Reservation) {
 
@@ -404,13 +404,13 @@ func reconcileRemoveInvalidVMFromReservations(
 		for vmUUID, allocatedHypervisor := range allocations {
 			vmCurrentHypervisor, vmExists := vmToHypervisor[vmUUID]
 			if !vmExists {
-				logger.Info("removing VM from reservation allocations because VM no longer exists",
+				logger.Info("removing reservations.VM from reservation allocations because reservations.VM no longer exists",
 					"vmUUID", vmUUID, "reservation", res.Name)
 				needsUpdate = true
 				continue
 			}
 			if vmCurrentHypervisor != allocatedHypervisor {
-				logger.Info("removing VM from reservation allocations because hypervisor has changed",
+				logger.Info("removing reservations.VM from reservation allocations because hypervisor has changed",
 					"vmUUID", vmUUID, "reservation", res.Name,
 					"allocatedHypervisor", allocatedHypervisor, "currentHypervisor", vmCurrentHypervisor)
 				needsUpdate = true
@@ -442,13 +442,13 @@ func reconcileRemoveInvalidVMFromReservations(
 // they no longer meet eligibility criteria.
 func reconcileRemoveNoneligibleVMFromReservations(
 	ctx context.Context,
-	vms []VM,
+	vms []reservations.VM,
 	failoverReservations []v1alpha1.Reservation,
 ) (updatedReservations []v1alpha1.Reservation, reservationsToUpdate []*v1alpha1.Reservation) {
 
 	logger := LoggerFromContext(ctx)
 
-	vmByUUID := make(map[string]VM)
+	vmByUUID := make(map[string]reservations.VM)
 	for _, vm := range vms {
 		vmByUUID[vm.UUID] = vm
 	}
@@ -545,8 +545,8 @@ func (c *FailoverReservationController) selectVMsToProcess(
 	offset := 0
 	rotationInterval := *c.Config.VMSelectionRotationInterval
 	if rotationInterval > 0 && c.reconcileCount%int64(rotationInterval) == 0 {
-		offset = rand.IntN(len(vmsMissingFailover)) //nolint:gosec // non-cryptographic randomness is fine for VM selection rotation
-		logger.Info("applying random rotation offset for VM selection",
+		offset = rand.IntN(len(vmsMissingFailover)) //nolint:gosec // non-cryptographic randomness is fine for reservations.VM selection rotation
+		logger.Info("applying random rotation offset for reservations.VM selection",
 			"offset", offset,
 			"totalVMs", len(vmsMissingFailover),
 			"rotationInterval", rotationInterval)
@@ -584,10 +584,10 @@ func sortVMsByMemory(vms []vmFailoverNeed) {
 // reconcileCreateAndAssignReservations creates and assigns failover reservations for VMs that need them.
 func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 	ctx context.Context,
-	vms []VM,
+	vms []reservations.VM,
 	failoverReservations []v1alpha1.Reservation,
 	allHypervisors []string,
-	flavorGroups map[string]compute.FlavorGroupFeature, // passed to resolveVMForScheduling per-VM
+	flavorGroups map[string]compute.FlavorGroupFeature, // passed to resolveVMForScheduling per-reservations.VM
 ) (reconcileSummary, bool) {
 
 	logger := LoggerFromContext(ctx)
@@ -618,9 +618,9 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 		reqID := uuid.New().String()
 		vmCtx := reservations.WithRequestID(ctx, reqID)
 		vmLogger := LoggerFromContext(vmCtx).WithValues("vmUUID", need.VM.UUID)
-		vmLogger.Info("processing VM for failover reservation")
+		vmLogger.Info("processing reservations.VM for failover reservation")
 
-		// Resolve VM resources once per VM (may use LargestFlavor from flavor group)
+		// Resolve reservations.VM resources once per reservations.VM (may use LargestFlavor from flavor group)
 		resSpec := resolveVMSpecForScheduling(vmCtx, need.VM, c.Config.UseFlavorGroupResources, flavorGroups)
 
 		for i := range need.Count {
@@ -678,7 +678,7 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 			excludeHypervisors[newRes.Status.Host] = true
 		}
 
-		vmLogger.Info("processed VM failover reservations",
+		vmLogger.Info("processed reservations.VM failover reservations",
 			"flavorName", need.VM.FlavorName,
 			"needed", need.Count,
 			"reused", vmReused,
@@ -703,7 +703,7 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 // calculateVMsMissingFailover calculates which VMs need failover reservations and how many.
 func (c *FailoverReservationController) calculateVMsMissingFailover(
 	ctx context.Context,
-	vms []VM,
+	vms []reservations.VM,
 	failoverReservations []v1alpha1.Reservation,
 ) []vmFailoverNeed {
 
@@ -727,7 +727,7 @@ func (c *FailoverReservationController) calculateVMsMissingFailover(
 		needed := requiredCount - currentCount
 		totalReservationsNeeded += needed
 
-		logger.V(1).Info("VM needs more failover reservations",
+		logger.V(1).Info("reservations.VM needs more failover reservations",
 			"vmUUID", vm.UUID,
 			"flavorName", vm.FlavorName,
 			"currentCount", currentCount,

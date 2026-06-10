@@ -10,7 +10,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,7 +38,7 @@ func TestComputeTotalUsage(t *testing.T) {
 	}
 	flavorToGroup := buildFlavorToGroupMap(flavorGroups)
 
-	vms := []failover.VM{
+	vms := []reservations.VM{
 		{
 			UUID:             "vm-1",
 			FlavorName:       "m1.hana_v2.small",
@@ -479,8 +479,8 @@ func TestAccumulateAddedVM_UnknownFlavor(t *testing.T) {
 
 	// Use a mock VMSource that returns a VM with unknown flavor
 	ctrl.VMSource = &mockVMSource{
-		getVM: func(_ context.Context, vmUUID string) (*failover.VM, error) {
-			return &failover.VM{
+		getVM: func(_ context.Context, vmUUID string) (*reservations.VM, error) {
+			return &reservations.VM{
 				UUID:             vmUUID,
 				FlavorName:       "unknown-flavor",
 				ProjectID:        "project-a",
@@ -542,8 +542,8 @@ func TestAccumulateAddedVM_KnownFlavor(t *testing.T) {
 	projectDeltas := make(map[string]*usageDelta)
 
 	qc.VMSource = &mockVMSource{
-		getVM: func(_ context.Context, vmUUID string) (*failover.VM, error) {
-			return &failover.VM{
+		getVM: func(_ context.Context, vmUUID string) (*reservations.VM, error) {
+			return &reservations.VM{
 				UUID:             vmUUID,
 				FlavorName:       "m1.hana_v2.small",
 				ProjectID:        "project-a",
@@ -578,31 +578,31 @@ func TestAccumulateAddedVM_KnownFlavor(t *testing.T) {
 
 // mockVMSource is a test helper for VMSource.
 type mockVMSource struct {
-	listVMs        func(ctx context.Context) ([]failover.VM, error)
-	getVM          func(ctx context.Context, vmUUID string) (*failover.VM, error)
+	listVMs        func(ctx context.Context) ([]reservations.VM, error)
+	getVM          func(ctx context.Context, vmUUID string) (*reservations.VM, error)
 	isServerActive func(ctx context.Context, vmUUID string) (bool, error)
-	getDeletedVM   func(ctx context.Context, vmUUID string) (*failover.DeletedVMInfo, error)
+	getDeletedVM   func(ctx context.Context, vmUUID string) (*reservations.DeletedVMInfo, error)
 }
 
-func (m *mockVMSource) ListVMsByProject(_ context.Context, _ string) ([]failover.VM, error) {
+func (m *mockVMSource) ListVMsByProject(_ context.Context, _ string) ([]reservations.VM, error) {
 	return nil, nil
 }
 
-func (m *mockVMSource) ListVMs(ctx context.Context) ([]failover.VM, error) {
+func (m *mockVMSource) ListVMs(ctx context.Context) ([]reservations.VM, error) {
 	if m.listVMs != nil {
 		return m.listVMs(ctx)
 	}
 	return nil, nil
 }
 
-func (m *mockVMSource) GetVM(ctx context.Context, vmUUID string) (*failover.VM, error) {
+func (m *mockVMSource) GetVM(ctx context.Context, vmUUID string) (*reservations.VM, error) {
 	if m.getVM != nil {
 		return m.getVM(ctx, vmUUID)
 	}
 	return nil, nil
 }
 
-func (m *mockVMSource) ListVMsOnHypervisors(_ context.Context, _ *hv1.HypervisorList, _ bool) ([]failover.VM, error) {
+func (m *mockVMSource) ListVMsOnHypervisors(_ context.Context, _ *hv1.HypervisorList, _ bool) ([]reservations.VM, error) {
 	return nil, nil
 }
 
@@ -613,7 +613,7 @@ func (m *mockVMSource) IsServerActive(ctx context.Context, vmUUID string) (bool,
 	return false, nil
 }
 
-func (m *mockVMSource) GetDeletedVMInfo(ctx context.Context, vmUUID string) (*failover.DeletedVMInfo, error) {
+func (m *mockVMSource) GetDeletedVMInfo(ctx context.Context, vmUUID string) (*reservations.DeletedVMInfo, error) {
 	if m.getDeletedVM != nil {
 		return m.getDeletedVM(ctx, vmUUID)
 	}

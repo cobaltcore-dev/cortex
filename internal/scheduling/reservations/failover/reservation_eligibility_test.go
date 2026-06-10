@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,29 +61,29 @@ func makeReservationWithResources(name, host string, usedBy map[string]string, r
 	}
 }
 
-// makeVM creates a test VM with the given parameters.
-func makeVM(uuid, hypervisor string) VM {
-	return VM{
+// makeVM creates a test reservations.VM with the given parameters.
+func makeVM(uuid, hypervisor string) reservations.VM {
+	return reservations.VM{
 		UUID:              uuid,
 		CurrentHypervisor: hypervisor,
 		Resources:         defaultVMResources,
 	}
 }
 
-// makeVMWithResources creates a test VM with custom resources.
-func makeVMWithResources(uuid, hypervisor string, resources map[string]resource.Quantity) VM { //nolint:unparam // uuid is always "vm-1" in tests but kept for clarity
-	return VM{
+// makeVMWithResources creates a test reservations.VM with custom resources.
+func makeVMWithResources(uuid, hypervisor string, resources map[string]resource.Quantity) reservations.VM { //nolint:unparam // uuid is always "vm-1" in tests but kept for clarity
+	return reservations.VM{
 		UUID:              uuid,
 		CurrentHypervisor: hypervisor,
 		Resources:         resources,
 	}
 }
 
-// buildVMHypervisorsMap builds a map of VM UUID to their hypervisors from failover reservations.
-// It also includes the VM we are checking (vm) with its current hypervisor,
+// buildVMHypervisorsMap builds a map of reservations.VM UUID to their hypervisors from failover reservations.
+// It also includes the reservations.VM we are checking (vm) with its current hypervisor,
 // and the candidate reservation (which may have VMs not in allFailoverReservations).
 // This is a test helper function used to verify data structure consistency.
-func buildVMHypervisorsMap(vm VM, candidateReservation v1alpha1.Reservation, allFailoverReservations []v1alpha1.Reservation) map[string]map[string]bool {
+func buildVMHypervisorsMap(vm reservations.VM, candidateReservation v1alpha1.Reservation, allFailoverReservations []v1alpha1.Reservation) map[string]map[string]bool {
 	vmHypervisorsMap := make(map[string]map[string]bool)
 
 	vmHypervisorsMap[vm.UUID] = make(map[string]bool)
@@ -115,7 +116,7 @@ func buildVMHypervisorsMap(vm VM, candidateReservation v1alpha1.Reservation, all
 func TestIsVMEligibleForReservation(t *testing.T) {
 	testCases := []struct {
 		name            string
-		vm              VM
+		vm              reservations.VM
 		reservation     v1alpha1.Reservation
 		vmHostMap       map[string]string
 		allReservations []v1alpha1.Reservation
@@ -158,7 +159,7 @@ func TestIsVMEligibleForReservation(t *testing.T) {
 			expected:        true,
 		},
 		{
-			name:        "ineligible: VM already uses this reservation",
+			name:        "ineligible: reservations.VM already uses this reservation",
 			vm:          makeVM("vm-1", "host1"),
 			reservation: makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
 			vmHostMap: map[string]string{
@@ -168,10 +169,10 @@ func TestIsVMEligibleForReservation(t *testing.T) {
 			expected:        false,
 		},
 		// ============================================================================
-		// Constraint 1: VM cannot reserve on its own host
+		// Constraint 1: reservations.VM cannot reserve on its own host
 		// ============================================================================
 		{
-			name:        "C1: ineligible - reservation on VM's own host",
+			name:        "C1: ineligible - reservation on reservations.VM's own host",
 			vm:          makeVM("vm-1", "host1"),
 			reservation: makeReservation("res-1", "host1", map[string]string{}),
 			vmHostMap: map[string]string{
@@ -181,7 +182,7 @@ func TestIsVMEligibleForReservation(t *testing.T) {
 			expected:        false,
 		},
 		{
-			name:        "C1: ineligible - reservation on VM's own host with other VMs",
+			name:        "C1: ineligible - reservation on reservations.VM's own host with other VMs",
 			vm:          makeVM("vm-1", "host1"),
 			reservation: makeReservation("res-1", "host1", map[string]string{"vm-2": "host2"}),
 			vmHostMap: map[string]string{
@@ -192,10 +193,10 @@ func TestIsVMEligibleForReservation(t *testing.T) {
 			expected:        false,
 		},
 		// ============================================================================
-		// Constraint 2: VM's reservations must be on distinct hosts
+		// Constraint 2: reservations.VM's reservations must be on distinct hosts
 		// ============================================================================
 		{
-			name:        "C2: ineligible - VM already has reservation on same host",
+			name:        "C2: ineligible - reservations.VM already has reservation on same host",
 			vm:          makeVM("vm-1", "host1"),
 			reservation: makeReservation("res-2", "host3", map[string]string{}),
 			vmHostMap: map[string]string{
@@ -207,7 +208,7 @@ func TestIsVMEligibleForReservation(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:        "C2: eligible - VM has reservations on different hosts",
+			name:        "C2: eligible - reservations.VM has reservations on different hosts",
 			vm:          makeVM("vm-1", "host1"),
 			reservation: makeReservation("res-2", "host4", map[string]string{}),
 			vmHostMap: map[string]string{
@@ -219,7 +220,7 @@ func TestIsVMEligibleForReservation(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:        "C2: ineligible - VM has 2 reservations, third would be on duplicate host",
+			name:        "C2: ineligible - reservations.VM has 2 reservations, third would be on duplicate host",
 			vm:          makeVM("vm-1", "host1"),
 			reservation: makeReservation("res-3", "host3", map[string]string{}),
 			vmHostMap: map[string]string{
@@ -232,7 +233,7 @@ func TestIsVMEligibleForReservation(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:        "C2: eligible - VM has 2 reservations on different hosts, third on new host",
+			name:        "C2: eligible - reservations.VM has 2 reservations on different hosts, third on new host",
 			vm:          makeVM("vm-1", "host1"),
 			reservation: makeReservation("res-3", "host5", map[string]string{}),
 			vmHostMap: map[string]string{
@@ -245,7 +246,7 @@ func TestIsVMEligibleForReservation(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:        "C3: eligible - VM can share reservation with VM on different host",
+			name:        "C3: eligible - reservations.VM can share reservation with reservations.VM on different host",
 			vm:          makeVM("vm-3", "host3"),
 			reservation: makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
 			vmHostMap: map[string]string{
@@ -262,7 +263,7 @@ func TestIsVMEligibleForReservation(t *testing.T) {
 		// Constraint 3 extended: VMs cannot share if one has reservation on other's host
 		// ============================================================================
 		{
-			name:        "C3ext: ineligible - VM has reservation on other VM's host",
+			name:        "C3ext: ineligible - reservations.VM has reservation on other reservations.VM's host",
 			vm:          makeVM("vm-3", "host3"),
 			reservation: makeReservation("res-2", "host5", map[string]string{"vm-1": "host1"}),
 			vmHostMap: map[string]string{
@@ -278,10 +279,10 @@ func TestIsVMEligibleForReservation(t *testing.T) {
 			expected: false,
 		},
 		// ============================================================================
-		// Constraint 4: VMs using shared reservation cannot run on VM's reservation hosts
+		// Constraint 4: VMs using shared reservation cannot run on reservations.VM's reservation hosts
 		// ============================================================================
 		{
-			name:        "C4: ineligible - reservation user runs on VM's reservation host",
+			name:        "C4: ineligible - reservation user runs on reservations.VM's reservation host",
 			vm:          makeVM("vm-1", "host1"),
 			reservation: makeReservation("res-2", "host3", map[string]string{"vm-2": "host2"}),
 			vmHostMap: map[string]string{
@@ -310,9 +311,9 @@ func TestIsVMEligibleForReservation(t *testing.T) {
 		},
 		// ============================================================================
 		// Constraint 5: No two VMs (other than v) using v's slots can have same host
-		// For VM v with slots R = {r1..rn}, there exist no vm_j, vm_k (vm_j != v and vm_k != v)
+		// For reservations.VM v with slots R = {r1..rn}, there exist no vm_j, vm_k (vm_j != v and vm_k != v)
 		// with vm_j uses r_j and vm_k uses r_k and host(vm_j) = host(vm_k).
-		// Note: vm_j and vm_k CAN be the same VM (same VM using multiple slots violates this)
+		// Note: vm_j and vm_k CAN be the same reservations.VM (same reservations.VM using multiple slots violates this)
 		// ============================================================================
 		{
 			name:        "C5: ineligible - two different VMs using v's slots on same host",
@@ -449,7 +450,7 @@ func TestIsVMEligibleForReservation(t *testing.T) {
 		// Constraint 3: VMs sharing a reservation cannot be on the same host
 		// ============================================================================
 		{
-			name:        "C3: ineligible - another VM on same host uses reservation",
+			name:        "C3: ineligible - another reservations.VM on same host uses reservation",
 			vm:          makeVM("vm-1", "host1"),
 			reservation: makeReservation("res-1", "host3", map[string]string{"vm-2": "host1"}),
 			vmHostMap: map[string]string{
@@ -599,8 +600,8 @@ func TestIsVMEligibleForReservation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// The new API builds VMHostsMap from the VM and allReservations
-			// No need to add temp reservations - the VM's host is included automatically
+			// The new API builds VMHostsMap from the reservations.VM and allReservations
+			// No need to add temp reservations - the reservations.VM's host is included automatically
 			result := IsVMEligibleForReservation(tc.vm, tc.reservation, tc.allReservations)
 
 			if result != tc.expected {
@@ -614,12 +615,12 @@ func TestIsVMEligibleForReservation(t *testing.T) {
 func TestDoesVMFitInReservation(t *testing.T) {
 	testCases := []struct {
 		name        string
-		vm          VM
+		vm          reservations.VM
 		reservation v1alpha1.Reservation
 		expected    bool
 	}{
 		{
-			name: "fits: VM fits exactly in reservation",
+			name: "fits: reservations.VM fits exactly in reservation",
 			vm: makeVMWithResources("vm-1", "host1", map[string]resource.Quantity{
 				"memory": resource.MustParse("4Gi"),
 				"vcpus":  resource.MustParse("2"),
@@ -631,7 +632,7 @@ func TestDoesVMFitInReservation(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "fits: VM is smaller than reservation",
+			name: "fits: reservations.VM is smaller than reservation",
 			vm: makeVMWithResources("vm-1", "host1", map[string]resource.Quantity{
 				"memory": resource.MustParse("2Gi"),
 				"vcpus":  resource.MustParse("1"),
@@ -643,7 +644,7 @@ func TestDoesVMFitInReservation(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "exceeds: VM memory exceeds reservation",
+			name: "exceeds: reservations.VM memory exceeds reservation",
 			vm: makeVMWithResources("vm-1", "host1", map[string]resource.Quantity{
 				"memory": resource.MustParse("8Gi"),
 				"vcpus":  resource.MustParse("2"),
@@ -655,7 +656,7 @@ func TestDoesVMFitInReservation(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "exceeds: VM vcpus exceeds reservation cpu",
+			name: "exceeds: reservations.VM vcpus exceeds reservation cpu",
 			vm: makeVMWithResources("vm-1", "host1", map[string]resource.Quantity{
 				"memory": resource.MustParse("4Gi"),
 				"vcpus":  resource.MustParse("4"),
@@ -667,7 +668,7 @@ func TestDoesVMFitInReservation(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "fits: VM has no resources defined",
+			name: "fits: reservations.VM has no resources defined",
 			vm:   makeVMWithResources("vm-1", "host1", map[string]resource.Quantity{}),
 			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[hv1.ResourceName]resource.Quantity{
 				"memory": resource.MustParse("4Gi"),
@@ -727,7 +728,7 @@ func updateReservationInList(reservations []v1alpha1.Reservation, updated v1alph
 // all existing VMs in that reservation remain eligible.
 // Returns (allEligible, failedVMUUID, reason).
 func checkAllExistingVMsRemainEligible(
-	newVM VM,
+	newVM reservations.VM,
 	reservation v1alpha1.Reservation,
 	allReservations []v1alpha1.Reservation,
 ) (allEligible bool, failedVMUUID, reason string) {
@@ -750,42 +751,42 @@ func checkAllExistingVMsRemainEligible(
 	// Update allReservations with the modified reservation
 	updatedAllRes := updateReservationInList(allReservations, *updatedRes)
 
-	// Check each existing VM in the reservation
+	// Check each existing reservations.VM in the reservation
 	for vmUUID, vmHost := range existingAllocations {
-		existingVM := VM{UUID: vmUUID, CurrentHypervisor: vmHost, Resources: defaultVMResources}
+		existingVM := reservations.VM{UUID: vmUUID, CurrentHypervisor: vmHost, Resources: defaultVMResources}
 
-		// Temporarily remove the VM to check if it can be "re-added"
+		// Temporarily remove the reservations.VM to check if it can be "re-added"
 		// This mimics what reconcileRemoveNoneligibleVMFromReservations does
 		tempRes := updatedRes.DeepCopy()
 		delete(tempRes.Status.FailoverReservation.Allocations, vmUUID)
 		tempAllRes := updateReservationInList(updatedAllRes, *tempRes)
 
 		if !IsVMEligibleForReservation(existingVM, *tempRes, tempAllRes) {
-			return false, vmUUID, "VM became ineligible after adding " + newVM.UUID
+			return false, vmUUID, "reservations.VM became ineligible after adding " + newVM.UUID
 		}
 	}
 	return true, "", ""
 }
 
-// TestAddingVMDoesNotMakeOthersIneligible tests that when a VM is eligible to be added
+// TestAddingVMDoesNotMakeOthersIneligible tests that when a reservations.VM is eligible to be added
 // to a reservation, adding it does not make existing VMs in that reservation ineligible.
 // This is a critical invariant - if violated, the system will oscillate between adding
 // and removing VMs from reservations.
 func TestAddingVMDoesNotMakeOthersIneligible(t *testing.T) {
 	testCases := []struct {
 		name                    string
-		vm                      VM
+		vm                      reservations.VM
 		reservation             v1alpha1.Reservation
 		allReservations         []v1alpha1.Reservation
 		vmIsEligible            bool   // Expected result of IsVMEligibleForReservation
 		existingVMsStayEligible bool   // Expected: all existing VMs should stay eligible
-		failingVM               string // If existingVMsStayEligible is false, which VM fails
+		failingVM               string // If existingVMsStayEligible is false, which reservations.VM fails
 	}{
 		// ============================================================================
-		// Cases where VM is eligible and existing VMs should stay eligible
+		// Cases where reservations.VM is eligible and existing VMs should stay eligible
 		// ============================================================================
 		{
-			name:        "simple: add VM to empty reservation",
+			name:        "simple: add reservations.VM to empty reservation",
 			vm:          makeVM("vm-2", "host2"),
 			reservation: makeReservation("res-1", "host3", map[string]string{}),
 			allReservations: []v1alpha1.Reservation{
@@ -795,7 +796,7 @@ func TestAddingVMDoesNotMakeOthersIneligible(t *testing.T) {
 			existingVMsStayEligible: true,
 		},
 		{
-			name:        "simple: add VM to reservation with one VM on different host",
+			name:        "simple: add reservations.VM to reservation with one reservations.VM on different host",
 			vm:          makeVM("vm-2", "host2"),
 			reservation: makeReservation("res-1", "host3", map[string]string{"vm-1": "host1"}),
 			allReservations: []v1alpha1.Reservation{
@@ -805,7 +806,7 @@ func TestAddingVMDoesNotMakeOthersIneligible(t *testing.T) {
 			existingVMsStayEligible: true,
 		},
 		// ============================================================================
-		// Cases where VM would make existing VMs ineligible if added
+		// Cases where reservations.VM would make existing VMs ineligible if added
 		// ============================================================================
 		{
 			// Scenario: vm-3 is eligible to join res-A, but vm-3 also uses res-B.
@@ -826,7 +827,7 @@ func TestAddingVMDoesNotMakeOthersIneligible(t *testing.T) {
 			existingVMsStayEligible: true,  // N/A since vm-3 can't join
 		},
 		{
-			// Scenario with n=2: Each VM needs 2 reservations
+			// Scenario with n=2: Each reservations.VM needs 2 reservations
 			// vm-1 on host1 has res-A (host3) and res-B (host4)
 			// vm-2 on host2 has res-A (host3) and res-C (host5)
 			// vm-3 on host2 wants to join res-B
@@ -875,7 +876,7 @@ func TestAddingVMDoesNotMakeOthersIneligible(t *testing.T) {
 			// Constraint 1 violation scenario:
 			// vm-1 on host1 has res-A (host3)
 			// vm-2 on host3 (same as res-A's host!) wants to join res-A
-			// Constraint 1 says VM cannot reserve on its own host
+			// Constraint 1 says reservations.VM cannot reserve on its own host
 			// vm-2 is on host3, res-A is on host3 -> vm-2 is NOT eligible!
 			name: "ineligible: vm-2 on reservation host cannot join res-A (constraint 1)",
 			vm:   makeVM("vm-2", "host3"), // Same as res-A's host!
@@ -885,7 +886,7 @@ func TestAddingVMDoesNotMakeOthersIneligible(t *testing.T) {
 			allReservations: []v1alpha1.Reservation{
 				makeReservation("res-A", "host3", map[string]string{"vm-1": "host1"}),
 			},
-			// Constraint 1: VM cannot reserve on its own host
+			// Constraint 1: reservations.VM cannot reserve on its own host
 			// vm-2 is on host3, res-A is on host3 -> vm-2 is NOT eligible
 			vmIsEligible:            false, // Constraint 1 catches this
 			existingVMsStayEligible: true,  // N/A since vm-2 can't join
@@ -912,7 +913,7 @@ func TestAddingVMDoesNotMakeOthersIneligible(t *testing.T) {
 			existingVMsStayEligible: true,  // If vm-2 can't join, existing VMs stay eligible
 		},
 		// ============================================================================
-		// Edge case: VM in OTHER reservations (not candidate) becomes ineligible
+		// Edge case: reservations.VM in OTHER reservations (not candidate) becomes ineligible
 		// Must check VMs in allFailoverReservations, not just candidate reservation
 		// ============================================================================
 		{
@@ -942,7 +943,7 @@ func TestAddingVMDoesNotMakeOthersIneligible(t *testing.T) {
 			existingVMsStayEligible: true,  // If vm-3 can't join, existing VMs stay eligible
 		},
 		// ============================================================================
-		// Complex scenarios with n=3 (3 reservations per VM)
+		// Complex scenarios with n=3 (3 reservations per reservations.VM)
 		// ============================================================================
 		{
 			// Scenario with n=3:
@@ -1017,7 +1018,7 @@ func TestAddingVMDoesNotMakeOthersIneligible(t *testing.T) {
 			existingVMsStayEligible: true,
 		},
 		// ============================================================================
-		// Edge case: VM NOT in candidate reservation is affected
+		// Edge case: reservations.VM NOT in candidate reservation is affected
 		// This tests if the fix correctly handles VMs that share slots with VMs in the candidate
 		// ============================================================================
 		{
@@ -1104,19 +1105,19 @@ func TestAddingVMDoesNotMakeOthersIneligible(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// First, verify the VM's eligibility matches expectation
+			// First, verify the reservations.VM's eligibility matches expectation
 			isEligible := IsVMEligibleForReservation(tc.vm, tc.reservation, tc.allReservations)
 			if isEligible != tc.vmIsEligible {
 				t.Errorf("IsVMEligibleForReservation() = %v, expected %v", isEligible, tc.vmIsEligible)
 				return
 			}
 
-			// If VM is not eligible, skip the "existing VMs stay eligible" check
+			// If reservations.VM is not eligible, skip the "existing VMs stay eligible" check
 			if !isEligible {
 				return
 			}
 
-			// Check that all existing VMs remain eligible after adding the new VM
+			// Check that all existing VMs remain eligible after adding the new reservations.VM
 			allStayEligible, failedVM, reason := checkAllExistingVMsRemainEligible(
 				tc.vm, tc.reservation, tc.allReservations,
 			)
@@ -1125,12 +1126,12 @@ func TestAddingVMDoesNotMakeOthersIneligible(t *testing.T) {
 				if tc.existingVMsStayEligible {
 					t.Errorf("Expected all existing VMs to stay eligible, but %s failed: %s", failedVM, reason)
 				} else {
-					t.Errorf("Expected VM %s to become ineligible, but all VMs stayed eligible", tc.failingVM)
+					t.Errorf("Expected reservations.VM %s to become ineligible, but all VMs stayed eligible", tc.failingVM)
 				}
 			}
 
 			if !allStayEligible && tc.failingVM != "" && failedVM != tc.failingVM {
-				t.Errorf("Expected VM %s to become ineligible, but VM %s failed instead", tc.failingVM, failedVM)
+				t.Errorf("Expected reservations.VM %s to become ineligible, but reservations.VM %s failed instead", tc.failingVM, failedVM)
 			}
 		})
 	}
@@ -1142,8 +1143,8 @@ func TestAddingVMDoesNotMakeOthersIneligible(t *testing.T) {
 func TestSymmetryOfEligibility(t *testing.T) {
 	testCases := []struct {
 		name string
-		vm1  VM
-		vm2  VM
+		vm1  reservations.VM
+		vm2  reservations.VM
 		// vm1Reservation is the reservation to check for vm1's eligibility
 		vm1Reservation v1alpha1.Reservation
 		// vm2Reservation is the reservation to check for vm2's eligibility
@@ -1254,7 +1255,7 @@ func TestDataStructureConsistency(t *testing.T) {
 
 	testCases := []struct {
 		name            string
-		vm              VM
+		vm              reservations.VM
 		reservation     v1alpha1.Reservation
 		allReservations []v1alpha1.Reservation
 	}{
@@ -1286,18 +1287,18 @@ func TestDataStructureConsistency(t *testing.T) {
 			// Verify helper functions produce consistent data
 			vmHypervisorsMap := buildVMHypervisorsMap(tc.vm, tc.reservation, tc.allReservations)
 
-			// Verify the VM is in the map
+			// Verify the reservations.VM is in the map
 			if _, exists := vmHypervisorsMap[tc.vm.UUID]; !exists {
-				t.Errorf("VM %s not found in vmHypervisorsMap", tc.vm.UUID)
+				t.Errorf("reservations.VM %s not found in vmHypervisorsMap", tc.vm.UUID)
 			}
 
-			// Verify the VM's current hypervisor is in the map
+			// Verify the reservations.VM's current hypervisor is in the map
 			if !vmHypervisorsMap[tc.vm.UUID][tc.vm.CurrentHypervisor] {
-				t.Errorf("VM %s's current hypervisor %s not in vmHypervisorsMap", tc.vm.UUID, tc.vm.CurrentHypervisor)
+				t.Errorf("reservations.VM %s's current hypervisor %s not in vmHypervisorsMap", tc.vm.UUID, tc.vm.CurrentHypervisor)
 			}
 
 			// Log the result for debugging
-			t.Logf("VM %s eligibility for %s: %v", tc.vm.UUID, tc.reservation.Name, result)
+			t.Logf("reservations.VM %s eligibility for %s: %v", tc.vm.UUID, tc.reservation.Name, result)
 		})
 	}
 }
@@ -1334,7 +1335,7 @@ func TestNewBaseDependencyGraph(t *testing.T) {
 			expectedVMHypervisor: map[string]string{},
 		},
 		{
-			name: "single reservation with one VM",
+			name: "single reservation with one reservations.VM",
 			reservations: []v1alpha1.Reservation{
 				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
 			},
@@ -1368,7 +1369,7 @@ func TestNewBaseDependencyGraph(t *testing.T) {
 			expectedVMHypervisor: map[string]string{"vm-1": "host1", "vm-2": "host2"},
 		},
 		{
-			name: "VM in multiple reservations tracks all hosts",
+			name: "reservations.VM in multiple reservations tracks all hosts",
 			reservations: []v1alpha1.Reservation{
 				makeReservation("res-1", "host3", map[string]string{"vm-1": "host1"}),
 				makeReservation("res-2", "host4", map[string]string{"vm-1": "host1"}),
@@ -1408,11 +1409,11 @@ func TestNewBaseDependencyGraph(t *testing.T) {
 			},
 		},
 		{
-			// This tests the case where a VM has different host allocations across reservations.
-			// This can happen when a VM migrates - the old allocation in one reservation might
+			// This tests the case where a reservations.VM has different host allocations across reservations.
+			// This can happen when a reservations.VM migrates - the old allocation in one reservation might
 			// have a stale host while another reservation has the current host.
-			// The graph uses the LAST seen hypervisor for each VM (order depends on map iteration).
-			name: "VM with different host allocations across reservations (stale data)",
+			// The graph uses the LAST seen hypervisor for each reservations.VM (order depends on map iteration).
+			name: "reservations.VM with different host allocations across reservations (stale data)",
 			reservations: []v1alpha1.Reservation{
 				makeReservation("res-1", "host5", map[string]string{"vm-1": "host1-old"}),
 				makeReservation("res-2", "host6", map[string]string{"vm-1": "host1-new", "vm-2": "host2"}),
@@ -1428,7 +1429,7 @@ func TestNewBaseDependencyGraph(t *testing.T) {
 				"/res-2": {"vm-1", "vm-2"},
 			},
 			// Note: The hypervisor stored depends on iteration order, but both reservations
-			// track the VM.
+			// track the reservations.VM.
 			expectedVMHypervisor: map[string]string{
 				// We can't predict which one wins due to map iteration order,
 				// so we skip this check for vm-1 in this test case
@@ -1441,7 +1442,7 @@ func TestNewBaseDependencyGraph(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			graph := newBaseDependencyGraph(tc.reservations)
 
-			// Check VM count
+			// Check reservations.VM count
 			if len(graph.vmToReservations) != tc.expectedVMCount {
 				t.Errorf("vmToReservations has %d VMs, expected %d", len(graph.vmToReservations), tc.expectedVMCount)
 			}
@@ -1451,15 +1452,15 @@ func TestNewBaseDependencyGraph(t *testing.T) {
 				t.Errorf("reservationToVMs has %d reservations, expected %d", len(graph.reservationToVMs), tc.expectedResCount)
 			}
 
-			// Check VM to reservations mapping
+			// Check reservations.VM to reservations mapping
 			for vmUUID, expectedResKeys := range tc.expectedVMToRes {
 				actualResKeys := graph.vmToReservations[vmUUID]
 				if len(actualResKeys) != len(expectedResKeys) {
-					t.Errorf("VM %s has %d reservations, expected %d", vmUUID, len(actualResKeys), len(expectedResKeys))
+					t.Errorf("reservations.VM %s has %d reservations, expected %d", vmUUID, len(actualResKeys), len(expectedResKeys))
 				}
 				for _, resKey := range expectedResKeys {
 					if !actualResKeys[resKey] {
-						t.Errorf("VM %s missing reservation %s", vmUUID, resKey)
+						t.Errorf("reservations.VM %s missing reservation %s", vmUUID, resKey)
 					}
 				}
 			}
@@ -1472,16 +1473,16 @@ func TestNewBaseDependencyGraph(t *testing.T) {
 				}
 				for _, vmUUID := range expectedVMs {
 					if !actualVMs[vmUUID] {
-						t.Errorf("Reservation %s missing VM %s", resKey, vmUUID)
+						t.Errorf("Reservation %s missing reservations.VM %s", resKey, vmUUID)
 					}
 				}
 			}
 
-			// Check VM hypervisors
+			// Check reservations.VM hypervisors
 			for vmUUID, expectedHypervisor := range tc.expectedVMHypervisor {
 				actualHypervisor := graph.vmToCurrentHypervisor[vmUUID]
 				if actualHypervisor != expectedHypervisor {
-					t.Errorf("VM %s has hypervisor %s, expected %s", vmUUID, actualHypervisor, expectedHypervisor)
+					t.Errorf("reservations.VM %s has hypervisor %s, expected %s", vmUUID, actualHypervisor, expectedHypervisor)
 				}
 			}
 		})
@@ -1568,7 +1569,7 @@ func graphsEqual(t *testing.T, actual, expected *DependencyGraph) {
 		}
 		for vmUUID := range expectedVMs {
 			if !actualVMs[vmUUID] {
-				t.Errorf("reservationToVMs[%s]: missing VM %s", resKey, vmUUID)
+				t.Errorf("reservationToVMs[%s]: missing reservations.VM %s", resKey, vmUUID)
 			}
 		}
 	}
@@ -1578,13 +1579,13 @@ func graphsEqual(t *testing.T, actual, expected *DependencyGraph) {
 func TestNewDependencyGraph(t *testing.T) {
 	testCases := []struct {
 		name            string
-		vm              VM
+		vm              reservations.VM
 		candidateRes    v1alpha1.Reservation
 		allReservations []v1alpha1.Reservation
 		expectGraph     *DependencyGraph
 	}{
 		{
-			name:         "VM added to empty reservation with no other reservations",
+			name:         "reservations.VM added to empty reservation with no other reservations",
 			vm:           makeVM("vm-1", "host1"),
 			candidateRes: makeReservation("res-1", "host2", map[string]string{}),
 			allReservations: []v1alpha1.Reservation{
@@ -1595,7 +1596,7 @@ func TestNewDependencyGraph(t *testing.T) {
 			}),
 		},
 		{
-			name:         "VM added to reservation with existing VM",
+			name:         "reservations.VM added to reservation with existing reservations.VM",
 			vm:           makeVM("vm-2", "host2"),
 			candidateRes: makeReservation("res-1", "host3", map[string]string{"vm-1": "host1"}),
 			allReservations: []v1alpha1.Reservation{
@@ -1606,7 +1607,7 @@ func TestNewDependencyGraph(t *testing.T) {
 			}),
 		},
 		{
-			name:         "VM added to one of multiple reservations",
+			name:         "reservations.VM added to one of multiple reservations",
 			vm:           makeVM("vm-3", "host3"),
 			candidateRes: makeReservation("res-2", "host5", map[string]string{}),
 			allReservations: []v1alpha1.Reservation{
@@ -1619,7 +1620,7 @@ func TestNewDependencyGraph(t *testing.T) {
 			}),
 		},
 		{
-			name:         "VM already in other reservations, added to new one",
+			name:         "reservations.VM already in other reservations, added to new one",
 			vm:           makeVM("vm-1", "host1"),
 			candidateRes: makeReservation("res-2", "host5", map[string]string{}),
 			allReservations: []v1alpha1.Reservation{
@@ -1668,7 +1669,7 @@ func TestAddVMToReservation(t *testing.T) {
 		expectGraph  *DependencyGraph
 	}{
 		{
-			name:         "add VM to empty graph",
+			name:         "add reservations.VM to empty graph",
 			initGraph:    makeGraph(nil),
 			vmUUID:       "vm-1",
 			vmHypervisor: "host1",
@@ -1679,7 +1680,7 @@ func TestAddVMToReservation(t *testing.T) {
 			}),
 		},
 		{
-			name: "add VM to existing reservation with one VM",
+			name: "add reservations.VM to existing reservation with one reservations.VM",
 			initGraph: makeGraph([]v1alpha1.Reservation{
 				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
 			}),
@@ -1692,7 +1693,7 @@ func TestAddVMToReservation(t *testing.T) {
 			}),
 		},
 		{
-			name: "add existing VM to second reservation",
+			name: "add existing reservations.VM to second reservation",
 			initGraph: makeGraph([]v1alpha1.Reservation{
 				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
 			}),
@@ -1706,7 +1707,7 @@ func TestAddVMToReservation(t *testing.T) {
 			}),
 		},
 		{
-			name: "add VM to complex graph with 3 reservations and 4 VMs",
+			name: "add reservations.VM to complex graph with 3 reservations and 4 VMs",
 			initGraph: makeGraph([]v1alpha1.Reservation{
 				makeReservation("res-1", "host5", map[string]string{"vm-1": "host1"}),
 				makeReservation("res-2", "host6", map[string]string{"vm-1": "host1", "vm-2": "host2"}),
@@ -1743,7 +1744,7 @@ func TestRemoveVMFromReservation(t *testing.T) {
 		expectGraph *DependencyGraph
 	}{
 		{
-			name: "remove VM from single reservation",
+			name: "remove reservations.VM from single reservation",
 			initGraph: makeGraph([]v1alpha1.Reservation{
 				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
 			}),
@@ -1755,7 +1756,7 @@ func TestRemoveVMFromReservation(t *testing.T) {
 			}),
 		},
 		{
-			name: "remove VM from one of two reservations",
+			name: "remove reservations.VM from one of two reservations",
 			initGraph: makeGraph([]v1alpha1.Reservation{
 				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
 				makeReservation("res-2", "host3", map[string]string{"vm-1": "host1"}),
@@ -1769,7 +1770,7 @@ func TestRemoveVMFromReservation(t *testing.T) {
 			}),
 		},
 		{
-			name: "remove one VM from reservation with multiple VMs",
+			name: "remove one reservations.VM from reservation with multiple VMs",
 			initGraph: makeGraph([]v1alpha1.Reservation{
 				makeReservation("res-1", "host3", map[string]string{"vm-1": "host1", "vm-2": "host2"}),
 			}),
@@ -1781,7 +1782,7 @@ func TestRemoveVMFromReservation(t *testing.T) {
 			}),
 		},
 		{
-			name: "remove VM from complex graph with 3 reservations and 4 VMs",
+			name: "remove reservations.VM from complex graph with 3 reservations and 4 VMs",
 			initGraph: makeGraph([]v1alpha1.Reservation{
 				makeReservation("res-1", "host5", map[string]string{"vm-1": "host1"}),
 				makeReservation("res-2", "host6", map[string]string{"vm-1": "host1", "vm-2": "host2"}),
@@ -1806,7 +1807,7 @@ func TestRemoveVMFromReservation(t *testing.T) {
 	}
 }
 
-// TestAddRemoveVMRoundTrip tests that adding and removing a VM leaves the graph unchanged.
+// TestAddRemoveVMRoundTrip tests that adding and removing a reservations.VM leaves the graph unchanged.
 func TestAddRemoveVMRoundTrip(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -1817,7 +1818,7 @@ func TestAddRemoveVMRoundTrip(t *testing.T) {
 		resHost      string
 	}{
 		{
-			name: "add and remove VM from existing reservation",
+			name: "add and remove reservations.VM from existing reservation",
 			initialRes: []v1alpha1.Reservation{
 				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
 			},
@@ -1827,7 +1828,7 @@ func TestAddRemoveVMRoundTrip(t *testing.T) {
 			resHost:      "host2",
 		},
 		{
-			name:         "add and remove VM from empty graph",
+			name:         "add and remove reservations.VM from empty graph",
 			initialRes:   []v1alpha1.Reservation{},
 			vmUUID:       "vm-1",
 			vmHypervisor: "host1",
@@ -1835,7 +1836,7 @@ func TestAddRemoveVMRoundTrip(t *testing.T) {
 			resHost:      "host2",
 		},
 		{
-			name: "add and remove VM from complex graph with 3 reservations and 4 VMs",
+			name: "add and remove reservations.VM from complex graph with 3 reservations and 4 VMs",
 			initialRes: []v1alpha1.Reservation{
 				makeReservation("res-1", "host5", map[string]string{"vm-1": "host1"}),
 				makeReservation("res-2", "host6", map[string]string{"vm-1": "host1", "vm-2": "host2"}),
@@ -1856,31 +1857,31 @@ func TestAddRemoveVMRoundTrip(t *testing.T) {
 			initialVMCount := len(graph.vmToReservations)
 			initialResVMCount := len(graph.reservationToVMs[tc.resKey])
 
-			// Add VM
+			// Add reservations.VM
 			graph.addVMToReservation(tc.vmUUID, tc.vmHypervisor, tc.resKey, tc.resHost)
 
-			// Verify VM was added
+			// Verify reservations.VM was added
 			if !graph.vmToReservations[tc.vmUUID][tc.resKey] {
-				t.Errorf("VM %s not added to reservation %s", tc.vmUUID, tc.resKey)
+				t.Errorf("reservations.VM %s not added to reservation %s", tc.vmUUID, tc.resKey)
 			}
 
-			// Remove VM
+			// Remove reservations.VM
 			graph.removeVMFromReservation(tc.vmUUID, tc.resKey, tc.resHost)
 
-			// Verify VM was removed from reservation
+			// Verify reservations.VM was removed from reservation
 			if graph.vmToReservations[tc.vmUUID][tc.resKey] {
-				t.Errorf("VM %s still in reservation %s after removal", tc.vmUUID, tc.resKey)
+				t.Errorf("reservations.VM %s still in reservation %s after removal", tc.vmUUID, tc.resKey)
 			}
 
-			// Verify reservation VM count is back to initial (for existing reservations)
+			// Verify reservation reservations.VM count is back to initial (for existing reservations)
 			if len(tc.initialRes) > 0 {
 				if len(graph.reservationToVMs[tc.resKey]) != initialResVMCount {
 					t.Errorf("Reservation %s has %d VMs, expected %d", tc.resKey, len(graph.reservationToVMs[tc.resKey]), initialResVMCount)
 				}
 			}
 
-			// Note: VM entry may still exist in vmToReservations with empty map
-			// This is expected behavior - we don't clean up empty VM entries
+			// Note: reservations.VM entry may still exist in vmToReservations with empty map
+			// This is expected behavior - we don't clean up empty reservations.VM entries
 			_ = initialVMCount
 		})
 	}
@@ -1890,7 +1891,7 @@ func TestAddRemoveVMRoundTrip(t *testing.T) {
 func TestFindEligibleReservations(t *testing.T) {
 	testCases := []struct {
 		name                 string
-		vm                   VM
+		vm                   reservations.VM
 		failoverReservations []v1alpha1.Reservation
 		vmHostMap            map[string]string
 		expectedCount        int
@@ -1935,7 +1936,7 @@ func TestFindEligibleReservations(t *testing.T) {
 			expectedHosts: []string{"host1", "host2"},
 		},
 		{
-			name: "none: all reservations on VM's host",
+			name: "none: all reservations on reservations.VM's host",
 			vm:   makeVM("vm-1", "host1"),
 			failoverReservations: []v1alpha1.Reservation{
 				makeReservation("res-1", "host1", map[string]string{}),
@@ -1947,7 +1948,7 @@ func TestFindEligibleReservations(t *testing.T) {
 			expectedHosts: nil,
 		},
 		{
-			name: "none: VM already uses the reservation",
+			name: "none: reservations.VM already uses the reservation",
 			vm:   makeVM("vm-1", "host1"),
 			failoverReservations: []v1alpha1.Reservation{
 				makeReservation("res-1", "host2", map[string]string{"vm-1": "host1"}),
@@ -1977,8 +1978,8 @@ func TestFindEligibleReservations(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// The new API builds VMHostsMap from the VM and failoverReservations
-			// No need to add temp reservations - the VM's host is included automatically
+			// The new API builds VMHostsMap from the reservations.VM and failoverReservations
+			// No need to add temp reservations - the reservations.VM's host is included automatically
 			result := FindEligibleReservations(tc.vm, tc.failoverReservations)
 
 			if len(result) != tc.expectedCount {
