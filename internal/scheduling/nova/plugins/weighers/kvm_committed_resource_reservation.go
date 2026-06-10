@@ -55,6 +55,13 @@ type KVMCommittedResourceReservationStep struct {
 func (s *KVMCommittedResourceReservationStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
+	// Skip for failover reservation scheduling — CR reservations should not influence
+	// where failover capacity is placed.
+	if intent, err := request.GetIntent(); err == nil && intent == api.ReserveForFailoverIntent {
+		traceLog.Info("skipping committed resource reservation weigher for failover reservation intent")
+		return result, nil
+	}
+
 	projectID := request.Spec.Data.ProjectID
 	az := request.Spec.Data.AvailabilityZone
 	resourceGroup, err := request.Spec.Data.GetSchedulerHintStr(api.HintKeyResourceGroup)
