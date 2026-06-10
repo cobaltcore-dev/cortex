@@ -119,9 +119,6 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 			Message: "pipeline run succeeded",
 		})
 	}
-	if !request.Options.SkipHistory {
-		c.upsertHistory(ctx, decision, err)
-	}
 	if err == nil && decision.Status.Result != nil && request != nil && c.FeatureGates.CommittedResourceTracking {
 		if decision.Status.Result.TargetHost != nil && isUserVMPlacement(decision.Spec.Intent) {
 			c.recordCRAllocation(ctx, decision, *request)
