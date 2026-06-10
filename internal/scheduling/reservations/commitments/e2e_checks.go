@@ -614,14 +614,16 @@ func e2eSendChangeCommitments(ctx context.Context, baseURL string, req liquid.Co
 	resp := must.Return(http.DefaultClient.Do(httpReq))
 	defer resp.Body.Close()
 	respBody := must.Return(io.ReadAll(resp.Body))
+	requestID := resp.Header.Get("X-Request-ID")
 
 	if resp.StatusCode != http.StatusOK {
-		panic(fmt.Sprintf("change-commitments returned %d: %s", resp.StatusCode, respBody))
+		panic(fmt.Sprintf("change-commitments returned %d (requestID=%s): %s", resp.StatusCode, requestID, respBody))
 	}
 	var result liquid.CommitmentChangeResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		panic(fmt.Sprintf("failed to decode change-commitments response: %v", err))
+		panic(fmt.Sprintf("failed to decode change-commitments response (requestID=%s): %v", requestID, err))
 	}
+	slog.Info("change-commitments response", "requestID", requestID, "rejected", result.RejectionReason != "")
 	return result.RejectionReason
 }
 
