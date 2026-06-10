@@ -7,11 +7,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/external"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var vmSourceLog = logf.Log.WithName("vm-source")
@@ -510,4 +512,83 @@ func warnUnknownVMsOnHypervisors(hypervisors *hv1.HypervisorList, vms []VM) {
 			"count", vmsInListVMsNotOnHypervisors,
 			"hint", "This may indicate a data sync issue between nova servers and hypervisor operator")
 	}
+}
+
+// lazyDBVMSource is a VMSource that defers Postgres connection until first use.
+// Postgres connection requires the manager cache to be ready (Datasource CRD lookup),
+// so this type is safe to construct during setup before the manager starts.
+type lazyDBVMSource struct {
+	k8sClient      client.Client
+	datasourceName string
+	mu             sync.Mutex
+	inner          *DBVMSource
+}
+
+// NewPostgresVMSource creates a VMSource backed by the named Datasource CRD.
+// The Postgres connection is established on first use, so this is safe to call
+// before the manager cache is ready.
+func NewPostgresVMSource(k8sClient client.Client, datasourceName string) VMSource {
+	return &lazyDBVMSource{k8sClient: k8sClient, datasourceName: datasourceName}
+}
+
+func (s *lazyDBVMSource) get(ctx context.Context) (*DBVMSource, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.inner != nil {
+		return s.inner, nil
+	}
+	postgresReader, err := external.NewPostgresReader(ctx, s.k8sClient, s.datasourceName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to datasource %s: %w", s.datasourceName, err)
+	}
+	s.inner = NewDBVMSource(external.NewNovaReader(postgresReader))
+	return s.inner, nil
+}
+
+func (s *lazyDBVMSource) ListVMs(ctx context.Context) ([]VM, error) {
+	inner, err := s.get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return inner.ListVMs(ctx)
+}
+
+func (s *lazyDBVMSource) ListVMsByProject(ctx context.Context, projectID string) ([]VM, error) {
+	inner, err := s.get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return inner.ListVMsByProject(ctx, projectID)
+}
+
+func (s *lazyDBVMSource) ListVMsOnHypervisors(ctx context.Context, hypervisorList *hv1.HypervisorList, trustHypervisorLocation bool) ([]VM, error) {
+	inner, err := s.get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return inner.ListVMsOnHypervisors(ctx, hypervisorList, trustHypervisorLocation)
+}
+
+func (s *lazyDBVMSource) GetVM(ctx context.Context, vmUUID string) (*VM, error) {
+	inner, err := s.get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return inner.GetVM(ctx, vmUUID)
+}
+
+func (s *lazyDBVMSource) IsServerActive(ctx context.Context, vmUUID string) (bool, error) {
+	inner, err := s.get(ctx)
+	if err != nil {
+		return false, err
+	}
+	return inner.IsServerActive(ctx, vmUUID)
+}
+
+func (s *lazyDBVMSource) GetDeletedVMInfo(ctx context.Context, vmUUID string) (*DeletedVMInfo, error) {
+	inner, err := s.get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return inner.GetDeletedVMInfo(ctx, vmUUID)
 }

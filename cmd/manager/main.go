@@ -396,12 +396,7 @@ func main() {
 	commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
 	var commitmentsVMSource reservations.VMSource
 	if commitmentsConfig.DatasourceName != "" {
-		postgresReader, err := external.NewPostgresReader(ctx, multiclusterClient, commitmentsConfig.DatasourceName)
-		if err != nil {
-			setupLog.Error(err, "failed to connect to commitments datasource", "datasourceName", commitmentsConfig.DatasourceName)
-			os.Exit(1)
-		}
-		commitmentsVMSource = reservations.NewDBVMSource(external.NewNovaReader(postgresReader))
+		commitmentsVMSource = reservations.NewPostgresVMSource(multiclusterClient, commitmentsConfig.DatasourceName)
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "committed-resource-reservations-controller") {
 		commitmentsAPI := commitmentsapi.NewAPIWithConfig(multiclusterClient, commitmentsConfig.API, commitmentsVMSource)
