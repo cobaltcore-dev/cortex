@@ -455,3 +455,7 @@ func (m *mockNovaReader) GetFlavorByName(ctx context.Context, flavorName string)
 func (m *mockNovaReader) GetDeletedServerByID(_ context.Context, _ string) (*nova.DeletedServer, error) {
 	return nil, nil
 }
+
+func (m *mockNovaReader) GetServersByProject(_ context.Context, _ string) ([]nova.Server, error) {
+	return nil, nil
+}
