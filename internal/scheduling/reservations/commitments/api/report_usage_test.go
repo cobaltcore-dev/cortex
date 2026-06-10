@@ -626,8 +626,8 @@ func (m *mockVMSource) addVM(vm *TestVMUsage) {
 		OSType:            osType,
 		ProjectID:         vm.ProjectID,
 		Resources: map[string]resource.Quantity{
-			"memory": *resource.NewQuantity(int64(vm.Flavor.MemoryMB)*1024*1024, resource.BinarySI),
-			"vcpus":  *resource.NewQuantity(int64(vm.Flavor.VCPUs), resource.DecimalSI),
+			"memory": *resource.NewQuantity(vm.Flavor.MemoryMB*1024*1024, resource.BinarySI), //nolint:gosec
+			"vcpus":  *resource.NewQuantity(vm.Flavor.VCPUs, resource.DecimalSI),             //nolint:gosec
 		},
 	}
 	m.vms[vm.ProjectID] = append(m.vms[vm.ProjectID], v)
