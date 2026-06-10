@@ -934,27 +934,6 @@ func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
 	}
 }
 
-func TestIsUserVMPlacement(t *testing.T) {
-	tests := []struct {
-		intent   v1alpha1.SchedulingIntent
-		expected bool
-	}{
-		{api.CreateIntent, true},
-		{api.LiveMigrationIntent, true},
-		{api.EvacuateIntent, true},
-		{api.RebuildIntent, true},
-		{api.ResizeIntent, true},
-		{api.ReserveForCommittedResourceIntent, false},
-		{api.ReserveForFailoverIntent, false},
-		{v1alpha1.SchedulingIntentUnknown, true},
-	}
-	for _, tt := range tests {
-		if got := isUserVMPlacement(tt.intent); got != tt.expected {
-			t.Errorf("isUserVMPlacement(%q) = %v, want %v", tt.intent, got, tt.expected)
-		}
-	}
-}
-
 func TestPickReservationSlot(t *testing.T) {
 	// vmMemBytes for a 4096 MiB flavor.
 	const vmMemBytes = int64(4096) * 1024 * 1024

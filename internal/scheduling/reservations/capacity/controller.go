@@ -301,7 +301,7 @@ func (c *Controller) probeScheduler(
 		AvailabilityZone: az,
 		Pipeline:         pipeline,
 		EligibleHosts:    eligibleHosts,
-	}, scheduling.Options{SkipHistory: true, SkipInflight: true})
+	}, scheduling.Options{SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true})
 	if err != nil {
 		return 0, 0, fmt.Errorf("scheduler call failed (pipeline=%s): %w", pipeline, err)
 	}

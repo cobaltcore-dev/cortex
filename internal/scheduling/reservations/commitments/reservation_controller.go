@@ -288,13 +288,14 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		},
 	}
 	scheduleOpts := scheduling.Options{
-		ReadOnly:                false, // mutates state (reservation placement)
-		LockReservations:        true,  // don't unlock CR reservations; finding a slot, not placing a VM
-		AssumeEmptyHosts:        false,
-		IgnoredReservationTypes: nil,
-		MaxCandidates:           1,
-		SkipHistory:             true,
-		SkipInflight:            false, // TODO pessimistic blocking needed, will be addressed in follow up ticket
+		ReadOnly:                      false, // mutates state (reservation placement)
+		LockReservations:              true,  // don't unlock CR reservations; finding a slot, not placing a VM
+		AssumeEmptyHosts:              false,
+		IgnoredReservationTypes:       nil,
+		MaxCandidates:                 1,
+		SkipHistory:                   true,
+		SkipInflight:                  false, // TODO pessimistic blocking needed, will be addressed in follow up ticket
+		SkipCommittedResourceTracking: true,  // CR slot scheduling, not a VM placement
 	}
 
 	scheduleResp, err := r.SchedulerClient.ScheduleReservation(ctx, scheduleReq, scheduleOpts)

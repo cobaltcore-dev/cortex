@@ -120,26 +120,22 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 		})
 	}
 	if err == nil && decision.Status.Result != nil && request != nil && c.FeatureGates.CommittedResourceTracking {
-		if decision.Status.Result.TargetHost != nil && isUserVMPlacement(decision.Spec.Intent) {
-			c.recordCRAllocation(ctx, decision, *request)
+		if decision.Status.Result.TargetHost != nil {
+			if request.Options.SkipCommittedResourceTracking {
+				ctrl.LoggerFrom(ctx).V(1).Info("CR allocation tracking skipped (SkipCommittedResourceTracking=true)",
+					"instanceUUID", request.Spec.Data.InstanceUUID,
+					"targetHost", *decision.Status.Result.TargetHost,
+					"intent", decision.Spec.Intent,
+				)
+			} else {
+				c.recordCRAllocation(ctx, decision, *request)
+			}
 		}
 		if decision.Status.Result.TargetHost == nil {
 			c.logNoHostFound(ctx, decision, *request)
 		}
 	}
 	return err
-}
-
-// isUserVMPlacement returns true for intents that represent actual VM
-// placements from Nova. Returns false for Cortex-internal synthetic requests
-// (failover and CR reservation scheduling), which must not update allocations.
-func isUserVMPlacement(intent v1alpha1.SchedulingIntent) bool {
-	switch intent {
-	case api.ReserveForCommittedResourceIntent, api.ReserveForFailoverIntent:
-		return false
-	default:
-		return true
-	}
 }
 
 func (c *FilterWeigherPipelineController) upsertHistory(ctx context.Context, decision *v1alpha1.Decision, pipelineErr error) {

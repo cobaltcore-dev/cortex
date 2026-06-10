@@ -31,6 +31,10 @@ type Options struct {
 	SkipHistory bool `json:"skip_history,omitempty"`
 	// SkipInflight skips creating pessimistic blocking reservations for returned candidates.
 	SkipInflight bool `json:"skip_inflight,omitempty"`
+	// SkipCommittedResourceTracking skips writing the placed VM UUID into the matching
+	// committed resource reservation slot. Set for non-VM-placement runs (capacity checks,
+	// failover scheduling, CR slot scheduling) that must not modify reservation allocations.
+	SkipCommittedResourceTracking bool `json:"skip_committed_resource_tracking,omitempty"`
 }
 
 // Validate checks for mutually exclusive or inconsistent option combinations.
@@ -40,6 +44,9 @@ func (o Options) Validate() error {
 	}
 	if o.ReadOnly && !o.SkipInflight {
 		return errors.New("read-only runs cannot create inflight reservations")
+	}
+	if o.ReadOnly && !o.SkipCommittedResourceTracking {
+		return errors.New("read-only runs must not write CR reservation allocations: set SkipCommittedResourceTracking=true")
 	}
 	return nil
 }
