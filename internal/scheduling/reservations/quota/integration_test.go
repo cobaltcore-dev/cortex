@@ -1045,7 +1045,7 @@ type IntegrationTestCase struct {
 	// Initial state seeded into the fake client and mock VMSource
 	VMs        []reservations.VM
 	DeletedVMs map[string]*reservations.DeletedVMInfo // UUID -> deleted VM info
-	ActiveVMs  map[string]bool                    // UUID -> IsServerActive response
+	ActiveVMs  map[string]bool                        // UUID -> IsServerActive response
 
 	FlavorGroups       map[string]compute.FlavorGroupFeature
 	ProjectQuotas      []*v1alpha1.ProjectQuota
