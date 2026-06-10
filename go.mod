@@ -9,7 +9,7 @@ require (
 	github.com/ironcore-dev/ironcore v0.3.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
-	github.com/sapcc/go-bits v0.0.0-20260605140732-260f8544709d
+	github.com/sapcc/go-bits v0.0.0-20260609114743-3bf4546d2a8d
 	go.xyrillian.de/gg v1.9.0
 	k8s.io/api v0.36.1
 	k8s.io/apimachinery v0.36.1
@@ -111,9 +111,9 @@ require (
 	golang.org/x/exp v0.0.0-20251219203646-944ab1f22d93 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sync v0.20.0
-	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/term v0.43.0
+	golang.org/x/sync v0.21.0
+	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/term v0.44.0
 	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
