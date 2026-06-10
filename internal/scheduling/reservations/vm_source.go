@@ -33,12 +33,15 @@ type VM struct {
 	// CurrentHypervisor is the hypervisor where the VM is currently running.
 	CurrentHypervisor string
 	// AvailabilityZone is the availability zone where the VM is located.
+	// This is used to ensure failover reservations are created in the same AZ.
 	AvailabilityZone string
 	// CreatedAt is the ISO 8601 timestamp when the VM was created in Nova.
+	// Used by the quota controller to distinguish new VMs from migrations.
 	CreatedAt string
 	// Resources contains the VM's resource allocations (e.g., "memory", "vcpus").
 	Resources map[string]resource.Quantity
-	// FlavorExtraSpecs contains the flavor's extra specifications.
+	// FlavorExtraSpecs contains the flavor's extra specifications (e.g., traits, capabilities).
+	// This is used by filters like filter_has_requested_traits and filter_capabilities.
 	FlavorExtraSpecs map[string]string
 	// DiskGB is the flavor's root disk size in GiB.
 	DiskGB uint64
@@ -62,9 +65,10 @@ type VMSource interface {
 	// Returns nil, nil if the VM is not found.
 	GetVM(ctx context.Context, vmUUID string) (*VM, error)
 	// IsServerActive returns true if the server exists in the servers table and is not DELETED.
+	// Returns false if not found. Used by quota controller to determine if a removed HV instance was deleted vs migrated.
 	IsServerActive(ctx context.Context, vmUUID string) (bool, error)
-	// GetDeletedVMInfo returns metadata about a deleted VM (from deleted_servers table).
-	// Returns nil, nil if not found.
+	// GetDeletedVMInfo returns metadata about a deleted VM (from deleted_servers table),
+	// including resolved flavor resources. Returns nil, nil if not found.
 	GetDeletedVMInfo(ctx context.Context, vmUUID string) (*DeletedVMInfo, error)
 }
 
@@ -78,6 +82,7 @@ type DeletedVMInfo struct {
 }
 
 // DBVMSource implements VMSource by reading directly from the database.
+// This is the preferred implementation as it avoids the size limitations of Knowledge CRDs.
 type DBVMSource struct {
 	NovaReader external.NovaReaderInterface
 }
