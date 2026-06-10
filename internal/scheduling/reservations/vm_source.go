@@ -254,6 +254,7 @@ func (s *DBVMSource) ListVMsOnHypervisors(
 	hypervisorList *hv1.HypervisorList,
 	trustHypervisorLocation bool,
 ) ([]VM, error) {
+
 	vms, err := s.ListVMs(ctx)
 	if err != nil {
 		return nil, err
@@ -510,4 +511,3 @@ func warnUnknownVMsOnHypervisors(hypervisors *hv1.HypervisorList, vms []VM) {
 			"hint", "This may indicate a data sync issue between nova servers and hypervisor operator")
 	}
 }
-

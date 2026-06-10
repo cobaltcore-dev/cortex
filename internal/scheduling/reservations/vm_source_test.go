@@ -379,8 +379,8 @@ func TestFilterVMsOnKnownHypervisors(t *testing.T) {
 			expectedCount: 0,
 		},
 		{
-			name: "nil hypervisor items does not panic",
-			vms:  []VM{{UUID: "vm-1", CurrentHypervisor: "host1"}},
+			name:           "nil hypervisor items does not panic",
+			vms:            []VM{{UUID: "vm-1", CurrentHypervisor: "host1"}},
 			hypervisorList: &hv1.HypervisorList{Items: nil},
 			expectedCount:  0,
 		},
@@ -418,8 +418,8 @@ func TestFilterVMsOnKnownHypervisors(t *testing.T) {
 
 // mockNovaReader implements NovaReaderInterface for testing.
 type mockNovaReader struct {
-	getAllServersFunc    func(ctx context.Context) ([]nova.Server, error)
-	getAllFlavorsFunc    func(ctx context.Context) ([]nova.Flavor, error)
+	getAllServersFunc   func(ctx context.Context) ([]nova.Server, error)
+	getAllFlavorsFunc   func(ctx context.Context) ([]nova.Flavor, error)
 	getServerByIDFunc   func(ctx context.Context, serverID string) (*nova.Server, error)
 	getFlavorByNameFunc func(ctx context.Context, flavorName string) (*nova.Flavor, error)
 }

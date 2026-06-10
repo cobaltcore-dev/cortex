@@ -13,8 +13,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -52,8 +52,8 @@ func mkVM(id, az, flavorName string, ramMiB, vcpus int64, createdAt time.Time, p
 		FlavorName:       flavorName,
 		ProjectID:        projectID,
 		Resources: map[string]resource.Quantity{
-			"memory": *resource.NewQuantity(ramMiB*1024*1024, resource.BinarySI), //nolint:gosec
-			"vcpus":  *resource.NewQuantity(vcpus, resource.DecimalSI),           //nolint:gosec
+			"memory": *resource.NewQuantity(ramMiB*1024*1024, resource.BinarySI),
+			"vcpus":  *resource.NewQuantity(vcpus, resource.DecimalSI),
 		},
 	}
 }

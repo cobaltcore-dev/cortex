@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	ctrl "sigs.k8s.io/controller-runtime"

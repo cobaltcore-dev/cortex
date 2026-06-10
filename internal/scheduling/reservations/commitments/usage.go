@@ -611,4 +611,3 @@ func countCommitmentStates(m map[string][]*CommitmentStateWithUsage) int {
 	}
 	return count
 }
-

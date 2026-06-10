@@ -33,9 +33,9 @@ import (
 // relevant change events.
 type UsageReconciler struct {
 	client.Client
-	Conf    UsageReconcilerConfig
+	Conf     UsageReconcilerConfig
 	VMSource reservations.VMSource
-	Monitor UsageReconcilerMonitor
+	Monitor  UsageReconcilerMonitor
 }
 
 func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

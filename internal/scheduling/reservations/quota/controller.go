@@ -1223,4 +1223,3 @@ func hvInstanceChangePredicate() predicate.TypedPredicate[*hv1.Hypervisor] {
 		GenericFunc: func(_ event.TypedGenericEvent[*hv1.Hypervisor]) bool { return false },
 	}
 }
-

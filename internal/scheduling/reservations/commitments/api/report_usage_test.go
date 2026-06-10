@@ -18,8 +18,8 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -592,11 +592,15 @@ func (m *mockVMSource) ListVMsByProject(_ context.Context, projectID string) ([]
 	return m.vms[projectID], nil
 }
 
-func (m *mockVMSource) ListVMs(_ context.Context) ([]reservations.VM, error)                                                           { return nil, nil }
-func (m *mockVMSource) ListVMsOnHypervisors(_ context.Context, _ *hv1.HypervisorList, _ bool) ([]reservations.VM, error)               { return nil, nil }
-func (m *mockVMSource) GetVM(_ context.Context, _ string) (*reservations.VM, error)                                                    { return nil, nil }
-func (m *mockVMSource) IsServerActive(_ context.Context, _ string) (bool, error)                                                       { return false, nil }
-func (m *mockVMSource) GetDeletedVMInfo(_ context.Context, _ string) (*reservations.DeletedVMInfo, error)                              { return nil, nil }
+func (m *mockVMSource) ListVMs(_ context.Context) ([]reservations.VM, error) { return nil, nil }
+func (m *mockVMSource) ListVMsOnHypervisors(_ context.Context, _ *hv1.HypervisorList, _ bool) ([]reservations.VM, error) {
+	return nil, nil
+}
+func (m *mockVMSource) GetVM(_ context.Context, _ string) (*reservations.VM, error) { return nil, nil }
+func (m *mockVMSource) IsServerActive(_ context.Context, _ string) (bool, error)    { return false, nil }
+func (m *mockVMSource) GetDeletedVMInfo(_ context.Context, _ string) (*reservations.DeletedVMInfo, error) {
+	return nil, nil
+}
 
 func (m *mockVMSource) addVM(vm *TestVMUsage) {
 	extraSpecs := map[string]string{
@@ -622,8 +626,8 @@ func (m *mockVMSource) addVM(vm *TestVMUsage) {
 		OSType:            osType,
 		ProjectID:         vm.ProjectID,
 		Resources: map[string]resource.Quantity{
-			"memory": *resource.NewQuantity(int64(vm.Flavor.MemoryMB)*1024*1024, resource.BinarySI), //nolint:gosec
-			"vcpus":  *resource.NewQuantity(int64(vm.Flavor.VCPUs), resource.DecimalSI),            //nolint:gosec
+			"memory": *resource.NewQuantity(int64(vm.Flavor.MemoryMB)*1024*1024, resource.BinarySI),
+			"vcpus":  *resource.NewQuantity(int64(vm.Flavor.VCPUs), resource.DecimalSI),
 		},
 	}
 	m.vms[vm.ProjectID] = append(m.vms[vm.ProjectID], v)
