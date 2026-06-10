@@ -14,7 +14,7 @@ import (
 
 // baseLog is the base logger for all committed-resource operations.
 // Use LoggerFromContext to get a logger with request tracking values.
-var baseLog = ctrl.Log.WithName("committed-resource")
+var baseLog = ctrl.Log.WithName("committed-resource").WithValues("module", "committed-resources")
 
 // WithNewGlobalRequestID creates a new context with a committed-resource-prefixed global request ID.
 func WithNewGlobalRequestID(ctx context.Context) context.Context {

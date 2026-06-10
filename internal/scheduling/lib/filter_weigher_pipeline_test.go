@@ -88,6 +88,41 @@ func TestPipeline_Run(t *testing.T) {
 	}
 }
 
+func TestPipeline_Run_NoWeighers_PreservesInputOrdering(t *testing.T) {
+	// With no weighers configured, the tanh normalization would saturate
+	// large input weights to ~1.0 and destroy the requester's ordering. The
+	// pipeline must skip normalization in that case so the original ordering
+	// flows through to the sort.
+	pipeline := &filterWeigherPipeline[mockFilterWeigherPipelineRequest]{}
+
+	request := mockFilterWeigherPipelineRequest{
+		Hosts: []string{"host1", "host2", "host3"},
+		Weights: map[string]float64{
+			"host1": 50.0,
+			"host2": 55.0,
+			"host3": 60.0,
+		},
+	}
+
+	// Run many times to surface any non-determinism from map iteration order.
+	expected := []string{"host3", "host2", "host1"}
+	for i := range 50 {
+		result, err := pipeline.Run(request)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if len(result.OrderedHosts) != len(expected) {
+			t.Fatalf("expected %d results, got %d", len(expected), len(result.OrderedHosts))
+		}
+		for j, host := range expected {
+			if result.OrderedHosts[j] != host {
+				t.Fatalf("iter %d: expected host %s at position %d, got %s (order=%v)",
+					i, host, j, result.OrderedHosts[j], result.OrderedHosts)
+			}
+		}
+	}
+}
+
 func TestPipeline_NormalizeNovaWeights(t *testing.T) {
 	p := &filterWeigherPipeline[mockFilterWeigherPipelineRequest]{}
 

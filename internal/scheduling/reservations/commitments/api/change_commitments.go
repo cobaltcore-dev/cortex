@@ -87,7 +87,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	defer api.changeMutex.Unlock()
 
 	ctx := reservations.WithGlobalRequestID(context.Background(), "committed-resource-"+requestID)
-	logger := commitments.LoggerFromContext(ctx).WithValues("component", "api", "endpoint", "/commitments/v1/change-commitments")
+	logger := commitments.LoggerFromContext(ctx).WithValues("endpoint", "/commitments/v1/change-commitments")
 
 	if r.Method != http.MethodPost {
 		statusCode = http.StatusMethodNotAllowed
@@ -345,7 +345,7 @@ ProcessLoop:
 				msgs[i] = e.Error()
 			}
 			failedReason = "timeout reached while processing commitment changes: " + strings.Join(msgs, "; ")
-			api.monitor.timeouts.Inc()
+			api.monitor.timeouts.WithLabelValues("false").Inc()
 			rollback = true
 		}
 	}
@@ -664,13 +664,15 @@ func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req l
 				fmt.Fprintf(&b, "\n- %s: %s", strings.TrimPrefix(w.name, "commitment-"), reason)
 			}
 		}
+		logger.Info("dry run: capacity not available", "accepted", len(probeWatches)-len(rejected), "rejected", len(rejected), "total", len(probeWatches))
 		resp.RejectionReason = b.String()
 	case len(watchErrs) > 0:
 		msgs := make([]string, len(watchErrs))
 		for i, e := range watchErrs {
 			msgs[i] = e.Error()
 		}
-		api.monitor.timeouts.Inc()
+		api.monitor.timeouts.WithLabelValues("true").Inc()
+		logger.Info("dry run: timed out waiting for controller outcome", "probes", len(probeWatches), "errors", strings.Join(msgs, "; "))
 		resp.RejectionReason = "dry run: timeout: " + strings.Join(msgs, "; ")
 	default:
 		logger.Info("dry run: capacity available", "probes", len(probeWatches))

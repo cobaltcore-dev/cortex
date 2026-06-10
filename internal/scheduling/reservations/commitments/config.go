@@ -79,24 +79,18 @@ type CommittedResourceControllerConfig struct {
 	// MaxRequeueInterval caps the exponential backoff delay.
 	// Once this ceiling is reached, every subsequent retry fires after exactly this interval.
 	MaxRequeueInterval metav1.Duration `json:"maxRequeueInterval"`
-}
 
-func DefaultCommittedResourceControllerConfig() CommittedResourceControllerConfig {
-	return CommittedResourceControllerConfig{
-		RequeueIntervalRetry: metav1.Duration{Duration: 30 * time.Second},
-		MaxRequeueInterval:   metav1.Duration{Duration: 30 * time.Minute},
-	}
-}
+	// SlotCreationDelay is the pause inserted between consecutive Reservation CRD creates.
+	// Spreads scheduler calls over time instead of bursting them all at once.
+	// 0 disables the delay.
+	SlotCreationDelay metav1.Duration `json:"slotCreationDelay"`
 
-// ApplyDefaults fills in zero-value fields from the defaults, leaving explicitly configured values intact.
-func (c *CommittedResourceControllerConfig) ApplyDefaults() {
-	d := DefaultCommittedResourceControllerConfig()
-	if c.RequeueIntervalRetry.Duration == 0 {
-		c.RequeueIntervalRetry = d.RequeueIntervalRetry
-	}
-	if c.MaxRequeueInterval.Duration == 0 {
-		c.MaxRequeueInterval = d.MaxRequeueInterval
-	}
+	// MaxSlotsPerCommitment caps the number of Reservation CRDs that may be created for a single
+	// CommittedResource on the AllowRejection=true (API) path. Requests that would exceed this
+	// limit are rejected immediately before any slots are created.
+	// Has no effect on the AllowRejection=false (syncer) path.
+	// 0 disables the cap.
+	MaxSlotsPerCommitment int `json:"maxSlotsPerCommitment"`
 }
 
 // ResourceTypeConfig holds per-resource flags for a single resource type within a flavor group.
@@ -149,7 +143,7 @@ type FlavorGroupResourcesConfig struct {
 // It warns when RAMUnitGiB is 0, which silently defaults to 1 GiB.
 func LogFlavorGroupResourceConfig(log logr.Logger, cfg map[string]FlavorGroupResourcesConfig) {
 	if len(cfg) == 0 {
-		log.Info("WARNING: no flavorGroupResourceConfig set; all flavor groups will use default RAM unit of 1 GiB")
+		log.Info("flavorGroupResourceConfig not set; all flavor groups will use default RAM unit of 1 GiB")
 		return
 	}
 	groups := make([]string, 0, len(cfg))

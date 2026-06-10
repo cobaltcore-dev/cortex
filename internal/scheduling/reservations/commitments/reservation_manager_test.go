@@ -76,6 +76,7 @@ func TestApplyCommitmentState(t *testing.T) {
 		desiredAZ           string
 		desiredDomainID     string
 		flavorGroupOverride map[string]compute.FlavorGroupFeature // nil = testFlavorGroups()
+		maxSlots            int                                   // 0 = no limit
 		wantError           bool
 		wantRemovedCount    int // exact count; -1 = at least one
 		validateRemoved     func(t *testing.T, removed []v1alpha1.Reservation)
@@ -317,6 +318,45 @@ func TestApplyCommitmentState(t *testing.T) {
 				}
 			},
 		},
+		// ----------------------------------------------------------------
+		// MaxSlots limit
+		// ----------------------------------------------------------------
+		{
+			name:             "max slots: rejects when new slots exceed limit",
+			desiredMemoryGiB: 56, // 32+16+8 = 3 slots with testFlavorGroup
+			maxSlots:         2,
+			wantError:        true,
+		},
+		{
+			name:             "max slots: allows when new slots are within limit",
+			desiredMemoryGiB: 56, // 32+16+8 = 3 slots
+			maxSlots:         3,
+			validateTouched: func(t *testing.T, touched []v1alpha1.Reservation) {
+				if len(touched) != 3 {
+					t.Errorf("expected 3 slots created, got %d", len(touched))
+				}
+			},
+		},
+		{
+			name: "max slots: only new slots counted, existing do not contribute",
+			existingSlots: []v1alpha1.Reservation{
+				newTestCRSlot("commitment-abc123-0", 8, "", "test-group", nil),
+				newTestCRSlot("commitment-abc123-1", 8, "", "test-group", nil),
+			},
+			desiredMemoryGiB: 56, // existing=16GiB, delta=40GiB → 32+8 = 2 new slots; maxSlots=2 allows it
+			maxSlots:         2,
+			validateTouched: func(t *testing.T, touched []v1alpha1.Reservation) {
+				created := 0
+				for _, r := range touched {
+					if r.Name == "commitment-abc123-2" || r.Name == "commitment-abc123-3" {
+						created++
+					}
+				}
+				if created != 2 {
+					t.Errorf("expected 2 new slots created, got %d touched: %v", created, touched)
+				}
+			},
+		},
 	}
 
 	scheme := newCRTestScheme(t)
@@ -329,6 +369,7 @@ func TestApplyCommitmentState(t *testing.T) {
 			}
 			k8sClient := newCRTestClient(scheme, objects...)
 			manager := NewReservationManager(k8sClient)
+			manager.MaxSlots = tt.maxSlots
 
 			flavorGroups := testFlavorGroups()
 			if tt.flavorGroupOverride != nil {
@@ -530,6 +571,60 @@ func TestNewReservation_VariableRatioGroup_SelectsLargestByMemory(t *testing.T) 
 			cpuQty := res.Spec.Resources[hv1.ResourceCPU]
 			if got := cpuQty.Value(); got != tt.wantCores {
 				t.Errorf("cores: want %d, got %d", tt.wantCores, got)
+			}
+		})
+	}
+}
+
+// ============================================================================
+// Tests: selectFlavor
+// ============================================================================
+
+func TestSelectFlavor(t *testing.T) {
+	fg := testFlavorGroup() // small=8GiB/4c, medium=16GiB/8c, large=32GiB/16c
+
+	tests := []struct {
+		name          string
+		deltaGiB      int64
+		wantFlavor    string
+		wantMemoryGiB int64
+	}{
+		{
+			name:          "exact fit: picks that flavor",
+			deltaGiB:      8,
+			wantFlavor:    "small",
+			wantMemoryGiB: 8,
+		},
+		{
+			name:          "delta between small and medium: picks small",
+			deltaGiB:      12,
+			wantFlavor:    "small",
+			wantMemoryGiB: 8,
+		},
+		{
+			name:          "delta larger than all flavors: picks largest, memory = largest flavor size",
+			deltaGiB:      100,
+			wantFlavor:    "large",
+			wantMemoryGiB: 32,
+		},
+		{
+			name:          "delta smaller than smallest flavor: falls back, memory = full delta",
+			deltaGiB:      3,
+			wantFlavor:    "small", // smallest flavor returned as fallback
+			wantMemoryGiB: 3,       // but memory = full delta (remainder consumed)
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			deltaBytes := tt.deltaGiB * 1024 * 1024 * 1024
+			flavor, memoryBytes := selectFlavor(deltaBytes, fg)
+			if flavor.Name != tt.wantFlavor {
+				t.Errorf("flavor: want %s, got %s", tt.wantFlavor, flavor.Name)
+			}
+			wantBytes := tt.wantMemoryGiB * 1024 * 1024 * 1024
+			if memoryBytes != wantBytes {
+				t.Errorf("memoryBytes: want %d, got %d", wantBytes, memoryBytes)
 			}
 		})
 	}

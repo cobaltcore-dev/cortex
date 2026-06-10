@@ -58,7 +58,7 @@ Before dispatching subagents, gather all currently open pull requests so finding
 
 ## Phase 4: Dispatch — Hand off to subagents in parallel
 
-Dispatch all subagents **in parallel** using the Agent tool. The bug detective and docs expert investigate and report findings — they do NOT open pull requests. The postgres bumper is self-contained and opens its own PR if an update is needed.
+Dispatch all subagents **in parallel** using the Agent tool. The bug detective and docs expert investigate and report findings — they do NOT open pull requests.
 
 ### Subagent 1: Bug Detective
 
@@ -75,16 +75,6 @@ Use `subagent_type: "general-purpose"`.
 Read the instructions from `.claude/agents/docs-expert.md`. Send the agent a prompt that includes:
 1. The full digest from Phase 2
 2. The full instructions from the docs-expert agent file
-
-### Subagent 3: Postgres Bumper
-
-Use `subagent_type: "general-purpose"`.
-
-Read the instructions from `.claude/agents/postgres-bumper.md`. Send the agent a prompt that includes:
-1. The full instructions from the postgres-bumper agent file
-
-This agent does NOT need the weekly digest — it checks upstream independently and opens its own PR if an update is available.
-
 ---
 
 ## Phase 5: Deduplicate and filter findings
@@ -102,26 +92,31 @@ After both subagents return their findings:
 
 ## Phase 6: Create pull requests for approved findings
 
-For each finding that passed deduplication and is recommended for a PR, implement the fix and open a pull request. Use a separate subagent (type: `"general-purpose"`) for each PR to keep changes isolated.
+Dispatch one **`finding-fix-shipper`** subagent per approved finding, **in parallel**, each with `isolation: "worktree"`. Each subagent gets its own working directory, so concurrent fixes never collide on the file tree, on `make`, or on `git`. You stay focused on dispatch and result-collection — the per-finding `Edit`/`Write`/`make`/PR work happens entirely in the subagent's context and never enters yours.
 
-### Instructions for each PR subagent
+For each approved finding, dispatch a subagent with:
 
-Include the following instructions in the prompt for each PR subagent:
+- `subagent_type`: `"general-purpose"` (so it picks up the `finding-fix-shipper` instructions you pass)
+- `isolation`: `"worktree"`
+- Prompt:
+  ```
+  Read the instructions from .claude/agents/finding-fix-shipper.md and follow them.
 
-1. Read the `AGENTS.md` file in the repository root first. Follow all conventions described there.
-2. Create a new branch from main with a descriptive name (e.g., `claude/fix-null-check-in-placement-handler` or `claude/docs-update-scheduling-algorithm`).
-3. Implement the fix or documentation change. Keep changes minimal and focused — one issue per PR.
-4. Run `make` to verify the build passes. If it fails, fix the issues. If the fix is not straightforward, abandon the attempt: delete the branch (`git checkout main && git branch -D <branch-name>`) and report the abandoned finding back to the orchestrator with a short explanation of what went wrong.
-5. Use clear, concise commit messages.
-6. Open a pull request targeting main using `gh pr create`:
-   - The PR title must start with an uppercase letter. Conventional commits prefixes are not required.
-   - The PR body must be directly usable as a concise commit message: no artificial linebreaks, no markdown formatting, no bullet lists. Write it as plain flowing text that describes what changed and why.
-7. After opening the PR, determine who should review it:
-   - Run `git log --format="%an" -- <affected files> | sort | uniq -c | sort -rn | head -5` to find the most frequent contributors to the affected files.
-   - Filter out bot accounts (e.g., names containing "bot", "ci", "automation").
-   - Assign the top 1-2 human contributors as reviewers using `gh pr edit <number> --add-assignee <username>`. If git log names don't map cleanly to GitHub usernames, use `gh api repos/{owner}/{repo}/commits?path=<file>&per_page=5 --jq '.[].author.login'` to extract GitHub usernames from recent commits to that file. You can get `{owner}` and `{repo}` from `gh repo view --json owner,name`.
-   - The goal is to notify the people most familiar with the code, not to assign everyone.
-8. After opening the PR, switch back to main (`git checkout main`) before returning.
+  Finding:
+  - Title: <title>
+  - Description: <description>
+  - Suggested fix: <suggested_fix>
+  - File(s): <comma-separated paths>
+  - Branch slug: claude/<short-slug>
+  ```
+
+Wait for all subagents to complete. Each returns one of three reports:
+
+- `## Finding Fix — shipped` — capture `<pr_number>` and `<pr_url>` for the summary.
+- `## Finding Fix — abandoned` — capture the reason for the summary's "abandoned" list.
+- `## Finding Fix — pr-creator aborted` — capture which PR-creator step failed and the reason.
+
+Do not retry abandoned or aborted findings automatically — surface them in the Phase 7 summary so the human can decide.
 
 ---
 
@@ -139,14 +134,13 @@ After all work is done, produce a short summary:
 - Findings: N issues found
 - Skipped (already covered by open PRs): N
 - PRs opened: list PR numbers/titles, or "none"
+- Abandoned: list titles + one-line reason (build broke, pr-creator aborted, etc.), or "none"
 
 ### Docs Expert
 - Findings: N gaps found
 - Skipped (already covered by open PRs): N
 - PRs opened: list PR numbers/titles, or "none"
-
-### Postgres Bumper
-- Result: <"no update needed" / "patch update PR #NNN" / "major upgrade PR #NNN" / "skipped — existing PR found">
+- Abandoned: list titles + reason, or "none"
 
 ### Backlog (for future runs)
 - <title> — <one-line description>

@@ -18,7 +18,17 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-type FilterQuotaEnforcementOpts struct{}
+type FilterQuotaEnforcementOpts struct {
+	// Enforce, when false (the default zero value), makes the filter run in
+	// shadow mode: it performs the full headroom analysis and logs/emits
+	// metrics for would-be rejects, but never actually removes hosts from the
+	// result. Set to true to globally reject requests without headroom. The
+	// shadow default is intentional so that operators can observe
+	// cortex_nova_filter_quota_enforcement_decisions_total before opting in to
+	// enforcement, and so that newly-rolled-out pipelines never silently start
+	// rejecting requests.
+	Enforce bool `json:"enforce,omitempty"`
+}
 
 func (FilterQuotaEnforcementOpts) Validate() error { return nil }
 
@@ -44,6 +54,19 @@ func (FilterQuotaEnforcementOpts) Validate() error { return nil }
 // On infrastructure errors (e.g. API server unreachable), the filter returns an error
 // which causes the pipeline to skip it (fail-open).
 //
+// Two modes:
+//   - Enforce=false (shadow, default zero value): the filter performs the full
+//     headroom analysis, logs the would-be reject, and emits the same decision
+//     metric with mode="shadow" — but does NOT remove hosts. This is the
+//     default so that newly-rolled-out pipelines never silently start
+//     rejecting requests.
+//   - Enforce=true: on a no-headroom decision the filter clears all host
+//     activations to globally reject the request.
+//
+// Every accept/reject/skip outcome is recorded as a Prometheus counter:
+// cortex_nova_filter_quota_enforcement_decisions_total{mode,decision,resource,
+// availability_zone,flavor_group}.
+//
 // Disabled by default; activated by adding "filter_quota_enforcement" to the pipeline config.
 type FilterQuotaEnforcement struct {
 	lib.BaseFilter[api.ExternalSchedulerRequest, FilterQuotaEnforcementOpts]
@@ -52,19 +75,27 @@ type FilterQuotaEnforcement struct {
 func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
+	mode := "shadow"
+	if s.Options.Enforce {
+		mode = "enforce"
+	}
+
 	// Step 1: Skip intents that don't represent new resource consumption.
 	intent, err := request.GetIntent()
 	if err == nil {
 		switch intent {
 		case api.EvacuateIntent, api.LiveMigrationIntent:
 			traceLog.Info("skipping quota enforcement for non-consuming intent", "intent", intent)
+			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", "", "")
 			return result, nil
 		case api.ReserveForFailoverIntent:
 			traceLog.Info("skipping quota enforcement for failover reservation intent")
+			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", "", "")
 			return result, nil
 		case api.ReserveForCommittedResourceIntent:
 			// TODO: revisit whether committed resource reservation scheduling should also be quota-checked
 			traceLog.Info("skipping quota enforcement for committed resource reservation intent")
+			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", "", "")
 			return result, nil
 		}
 	}
@@ -76,14 +107,17 @@ func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.External
 
 	if projectID == "" {
 		traceLog.Warn("no project ID in request, skipping quota enforcement")
+		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", az, hwVersion)
 		return result, nil
 	}
 	if az == "" {
 		traceLog.Warn("no availability zone in request, skipping quota enforcement")
+		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", "", hwVersion)
 		return result, nil
 	}
 	if hwVersion == "" {
 		traceLog.Warn("no hw_version in flavor extra specs, skipping quota enforcement")
+		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", az, "")
 		return result, nil
 	}
 
@@ -188,6 +222,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.External
 
 	if crHasHeadroom {
 		traceLog.Info("quota enforcement ACCEPT: CR headroom available")
+		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_cr", "ram", az, hwVersion)
 		return result, nil
 	}
 
@@ -200,6 +235,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.External
 		if apierrors.IsNotFound(err) {
 			traceLog.Info("no ProjectQuota CRD found for project+AZ, skipping enforcement",
 				"projectID", projectID, "az", az)
+			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_no_quota", "", az, hwVersion)
 			return result, nil
 		}
 		traceLog.Error("failed to get ProjectQuota", "name", pqName, "error", err)
@@ -211,14 +247,15 @@ func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.External
 	// For RAM: paygHeadroom = Quota - sum(CR amounts) - PaygUsage (CRs reserve RAM capacity)
 	// For cores/instances: paygHeadroom = Quota - PaygUsage (no CR deduction)
 	type resourceCheck struct {
-		name     string
+		name     string // liquid resource name, e.g. hw_version_<v>_ram
+		label    string // metric label value: "ram" / "cores" / "instances"
 		request  int64
 		crDeduct int64
 	}
 	checks := []resourceCheck{
-		{name: resourceRAM, request: requestRAM, crDeduct: matchingCRAmountGiB},
-		{name: resourceCores, request: requestCores, crDeduct: 0},
-		{name: resourceInstances, request: requestInstances, crDeduct: 0},
+		{name: resourceRAM, label: "ram", request: requestRAM, crDeduct: matchingCRAmountGiB},
+		{name: resourceCores, label: "cores", request: requestCores, crDeduct: 0},
+		{name: resourceInstances, label: "instances", request: requestInstances, crDeduct: 0},
 	}
 
 	for _, check := range checks {
@@ -247,9 +284,22 @@ func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.External
 		)
 
 		if headroom < check.request {
+			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "reject", check.label, az, hwVersion)
+			if !s.Options.Enforce {
+				traceLog.Info("quota enforcement SHADOW: would reject but enforce=false",
+					"projectID", projectID,
+					"az", az,
+					"flavorGroup", hwVersion,
+					"resource", check.name,
+					"request", check.request,
+					"headroom", headroom,
+				)
+				return result, nil
+			}
 			traceLog.Info("quota enforcement REJECT: no PAYG headroom",
 				"projectID", projectID,
 				"az", az,
+				"flavorGroup", hwVersion,
 				"resource", check.name,
 				"request", check.request,
 				"headroom", headroom,
@@ -262,6 +312,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.External
 	}
 
 	traceLog.Info("quota enforcement ACCEPT: PAYG headroom available")
+	QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_payg", "", az, hwVersion)
 	return result, nil
 }
 

@@ -78,7 +78,13 @@ type RemoteConfig struct {
 	// The remote kubernetes apiserver url, e.g. "https://my-apiserver:6443".
 	Host string `json:"host"`
 	// The root CA certificate to verify the remote apiserver.
+	// Ignored if InsecureSkipTLSVerify is true.
 	CACert string `json:"caCert,omitempty"`
+	// InsecureSkipTLSVerify disables verification of the remote apiserver's
+	// TLS certificate. Use this for apiservers whose CA certificate rotates
+	// frequently and does not chain to a stable root. Mutually exclusive
+	// with CACert: when true, CACert is ignored.
+	InsecureSkipTLSVerify bool `json:"insecureSkipTLSVerify,omitempty"`
 	// The resource GVKs this apiserver serves, formatted as "<group>/<version>/<Kind>".
 	GVKs []string `json:"gvks"`
 	// Labels used by ResourceRouters to match resources to this cluster
@@ -121,7 +127,7 @@ func (c *Client) InitFromConf(ctx context.Context, mgr ctrl.Manager, conf Client
 			}
 			resolvedGVKs = append(resolvedGVKs, gvk)
 		}
-		cl, err := c.AddRemote(ctx, remote.Host, remote.CACert, remote.Labels, resolvedGVKs...)
+		cl, err := c.AddRemote(ctx, remote.Host, remote.CACert, remote.InsecureSkipTLSVerify, remote.Labels, resolvedGVKs...)
 		if err != nil {
 			return err
 		}
@@ -135,15 +141,26 @@ func (c *Client) InitFromConf(ctx context.Context, mgr ctrl.Manager, conf Client
 // Add a remote cluster which uses the same REST config as the home cluster,
 // but a different host, for the given resource gvks.
 //
+// If insecureSkipTLSVerify is true, the remote apiserver's TLS certificate
+// is not verified and caCert is ignored. This is useful for apiservers whose
+// CA certificate rotates frequently and does not chain to a stable root.
+//
 // This can be used when the remote cluster accepts the home cluster's service
 // account tokens. See the kubernetes documentation on structured auth to
 // learn more about jwt-based authentication across clusters.
-func (c *Client) AddRemote(ctx context.Context, host, caCert string, labels map[string]string, gvks ...schema.GroupVersionKind) (cluster.Cluster, error) {
+func (c *Client) AddRemote(ctx context.Context, host, caCert string, insecureSkipTLSVerify bool, labels map[string]string, gvks ...schema.GroupVersionKind) (cluster.Cluster, error) {
 	log := ctrl.LoggerFrom(ctx)
 	homeRestConfig := *c.HomeRestConfig
 	restConfigCopy := homeRestConfig
 	restConfigCopy.Host = host
-	restConfigCopy.CAData = []byte(caCert)
+	if insecureSkipTLSVerify {
+		// Insecure and CAData are mutually exclusive in client-go's TLS validation.
+		restConfigCopy.CAData = nil
+		restConfigCopy.CAFile = ""
+		restConfigCopy.Insecure = true
+	} else {
+		restConfigCopy.CAData = []byte(caCert)
+	}
 	cl, err := cluster.New(&restConfigCopy, func(o *cluster.Options) {
 		o.Scheme = c.HomeScheme
 	})
@@ -156,7 +173,7 @@ func (c *Client) AddRemote(ctx context.Context, host, caCert string, labels map[
 		c.remoteClusters = make(map[schema.GroupVersionKind][]remoteCluster)
 	}
 	for _, gvk := range gvks {
-		log.Info("adding remote cluster for resource", "gvk", gvk, "host", host, "labels", labels)
+		log.Info("adding remote cluster for resource", "gvk", gvk, "host", host, "labels", labels, "insecureSkipTLSVerify", insecureSkipTLSVerify)
 		c.remoteClusters[gvk] = append(c.remoteClusters[gvk], remoteCluster{
 			cluster: cl,
 			labels:  labels,

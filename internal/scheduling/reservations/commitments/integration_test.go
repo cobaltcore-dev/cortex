@@ -359,6 +359,17 @@ func newIntgEnv(t *testing.T, initialObjects []client.Object, schedulerFn http.H
 			}
 			return []string{cr.Spec.CommitmentUUID}
 		}).
+		WithIndex(&v1alpha1.Reservation{}, idxReservationByAllocationVMUUID, func(obj client.Object) []string {
+			res, ok := obj.(*v1alpha1.Reservation)
+			if !ok || res.Spec.CommittedResourceReservation == nil {
+				return nil
+			}
+			uuids := make([]string, 0, len(res.Spec.CommittedResourceReservation.Allocations))
+			for vmUUID := range res.Spec.CommittedResourceReservation.Allocations {
+				uuids = append(uuids, vmUUID)
+			}
+			return uuids
+		}).
 		Build()
 
 	schedulerSrv := httptest.NewServer(schedulerFn)

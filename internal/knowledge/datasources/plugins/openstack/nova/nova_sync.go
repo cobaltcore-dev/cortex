@@ -5,6 +5,7 @@ package nova
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -73,6 +74,11 @@ func (s *NovaSyncer) Sync(ctx context.Context) (int64, error) {
 		nResults, err = s.SyncAllImages(ctx)
 	}
 	return nResults, err
+}
+
+// isKVMFlavor returns true if the flavor name indicates a KVM-based VM.
+func isKVMFlavor(flavorName string) bool {
+	return strings.Contains(flavorName, "_k_")
 }
 
 // Sync all the active OpenStack servers into the database. (Includes ERROR, SHUTOFF, etc. state)

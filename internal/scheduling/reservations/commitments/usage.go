@@ -707,10 +707,9 @@ func (c *dbUsageClient) ListProjectVMs(ctx context.Context, projectID string) ([
 			COALESCE(f.vcpus, 0)        AS flavor_vcpus,
 			COALESCE(f.disk, 0)         AS flavor_disk,
 			COALESCE(f.extra_specs, '') AS flavor_extras,
-			COALESCE(NULLIF(i.os_type, ''), 'unknown') AS os_type
+			COALESCE(NULLIF(s.os_type, ''), 'unknown') AS os_type
 		FROM ` + nova.Server{}.TableName() + ` s
 		LEFT JOIN ` + nova.Flavor{}.TableName() + ` f ON f.name = s.flavor_name
-		LEFT JOIN ` + nova.Image{}.TableName() + ` i ON i.id = s.image_ref
 		WHERE s.tenant_id = $1`
 
 	var rows []vmQueryRow
