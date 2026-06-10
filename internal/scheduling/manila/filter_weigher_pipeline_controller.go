@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -74,10 +73,6 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 	c.processMu.Lock()
 	defer c.processMu.Unlock()
 
-	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
-	if !ok {
-		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
-	}
 	err := c.process(ctx, decision)
 	if err != nil {
 		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
@@ -93,11 +88,6 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 			Reason:  "PipelineRunSucceeded",
 			Message: "pipeline run succeeded",
 		})
-	}
-	if pipelineConf.Spec.CreateHistory {
-		if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, nil, err); upsertErr != nil {
-			ctrl.LoggerFrom(ctx).Error(upsertErr, "failed to create/update history")
-		}
 	}
 	return err
 }
@@ -122,6 +112,11 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	}
 
 	result, err := pipeline.Run(request)
+	if !request.Options.SkipHistory {
+		if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, nil, err); upsertErr != nil {
+			log.Error(upsertErr, "failed to create/update history")
+		}
+	}
 	if err != nil {
 		log.Error(err, "failed to run pipeline")
 		return err

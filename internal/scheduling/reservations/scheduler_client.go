@@ -12,6 +12,7 @@ import (
 	"time"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/go-logr/logr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -89,8 +90,12 @@ type ScheduleReservationResponse struct {
 
 // ScheduleReservation calls the external scheduler API to find a host for a reservation.
 // The context should contain GlobalRequestID and RequestID for logging (use WithGlobalRequestID/WithRequestID).
-func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleReservationRequest) (*ScheduleReservationResponse, error) {
+func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleReservationRequest, opts scheduling.Options) (*ScheduleReservationResponse, error) {
 	logger := loggerFromContext(ctx)
+
+	if err := opts.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid scheduling options: %w", err)
+	}
 
 	// Build weights map (all zero for reservations)
 	weights := make(map[string]float64, len(req.EligibleHosts))
@@ -115,6 +120,7 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 		Pipeline: req.Pipeline,
 		Hosts:    req.EligibleHosts,
 		Weights:  weights,
+		Options:  opts,
 		Context: api.NovaRequestContext{
 			RequestID:       RequestIDFromContext(ctx),
 			GlobalRequestID: globalReqID,

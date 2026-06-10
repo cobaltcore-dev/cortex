@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -669,6 +670,82 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 	}
 }
 
+// TestFilterHasEnoughCapacity_LockReservations verifies that both the YAML-level LockReserved
+// step param and the call-time Options.LockReservations independently prevent CR reservation
+// unlocking. Either flag set to true is sufficient to lock.
+func TestFilterHasEnoughCapacity_LockReservations(t *testing.T) {
+	scheme := buildTestScheme(t)
+	hypervisors := []*hv1.Hypervisor{
+		newHypervisor("host1", "16", "8", "32Gi", "16Gi"), // 8 CPU free after alloc
+		newHypervisor("host2", "16", "0", "32Gi", "0"),    // fully free
+	}
+	// CR reservation on host1 for the same project+flavor — would normally be unlocked.
+	reservations := []*v1alpha1.Reservation{
+		newCommittedReservation("cr-res", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil, nil),
+	}
+
+	objects := make([]client.Object, 0, len(hypervisors)+len(reservations))
+	for _, h := range hypervisors {
+		objects = append(objects, h.DeepCopy())
+	}
+	for _, r := range reservations {
+		objects = append(objects, r.DeepCopy())
+	}
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+
+	tests := []struct {
+		name             string
+		yamlLockReserved bool
+		optsLockReserved bool
+		expectedHosts    []string
+		filteredHosts    []string
+	}{
+		{
+			name:             "both false: reservation unlocked, host1 passes",
+			yamlLockReserved: false,
+			optsLockReserved: false,
+			expectedHosts:    []string{"host1", "host2"},
+			filteredHosts:    []string{},
+		},
+		{
+			name:             "yaml true, opts false: reservation locked, host1 filtered",
+			yamlLockReserved: true,
+			optsLockReserved: false,
+			expectedHosts:    []string{"host2"},
+			filteredHosts:    []string{"host1"},
+		},
+		{
+			name:             "yaml false, opts true: reservation locked, host1 filtered",
+			yamlLockReserved: false,
+			optsLockReserved: true,
+			expectedHosts:    []string{"host2"},
+			filteredHosts:    []string{"host1"},
+		},
+		{
+			name:             "both true: reservation locked, host1 filtered",
+			yamlLockReserved: true,
+			optsLockReserved: true,
+			expectedHosts:    []string{"host2"},
+			filteredHosts:    []string{"host1"},
+		},
+	}
+
+	request := newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 4, "8Gi", false, []string{"host1", "host2"})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			step := &FilterHasEnoughCapacity{}
+			step.Client = fakeClient
+			step.Options = FilterHasEnoughCapacityOpts{LockReserved: tt.yamlLockReserved}
+			request.Options = scheduling.Options{LockReservations: tt.optsLockReserved}
+			result, err := step.Run(slog.Default(), request)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			assertActivations(t, result.Activations, tt.expectedHosts, tt.filteredHosts)
+		})
+	}
+}
+
 func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 	scheme := buildTestScheme(t)
 
@@ -884,6 +961,44 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 	}
 }
 
+func TestFilterHasEnoughCapacity_IgnoredReservationTypes_CallTime(t *testing.T) {
+	scheme := buildTestScheme(t)
+
+	// Same two-host setup as the YAML-path test: CR on host1, Failover on host2.
+	// Each blocks 4 CPU, leaving 4 free; request needs 8 CPU so both hosts fail without ignoring.
+	hypervisors := []*hv1.Hypervisor{
+		newHypervisor("host1", "16", "8", "32Gi", "16Gi"),
+		newHypervisor("host2", "16", "8", "32Gi", "16Gi"),
+	}
+	reservations := []*v1alpha1.Reservation{
+		newCommittedReservation("cr-res", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
+		newFailoverReservation("failover-res", "host2", "4", "8Gi", map[string]string{"other-vm": "host3"}),
+	}
+	request := newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"})
+
+	objects := make([]client.Object, 0, len(hypervisors)+len(reservations))
+	for _, h := range hypervisors {
+		objects = append(objects, h.DeepCopy())
+	}
+	for _, r := range reservations {
+		objects = append(objects, r.DeepCopy())
+	}
+
+	step := &FilterHasEnoughCapacity{}
+	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+	// Ignore CR reservations via pipeline-level opts (call-time opts.IgnoredReservationTypes removed in favour of YAML params).
+	step.Options = FilterHasEnoughCapacityOpts{
+		LockReserved:            true,
+		IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
+	}
+
+	result, err := step.Run(slog.Default(), request)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	assertActivations(t, result.Activations, []string{"host1"}, []string{"host2"})
+}
+
 func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T) {
 	scheme := buildTestScheme(t)
 
@@ -909,10 +1024,11 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 				// Existing CR reservation on host1 for same project+flavor group
 				newCommittedReservation("existing-cr", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil, nil),
 			},
-			// Request with reserve_for_committed_resource intent (scheduling a new CR reservation)
+			// Request with reserve_for_committed_resource intent (scheduling a new CR reservation).
+			// The intent causes the filter to keep CR reservations locked (prevents overbooking).
 			request:       newNovaRequestWithIntent("new-reservation-uuid", "project-A", "m1.large", "gp-1", 4, "8Gi", "reserve_for_committed_resource", false, []string{"host1", "host2"}),
-			opts:          FilterHasEnoughCapacityOpts{LockReserved: false}, // Note: LockReserved is false, but intent overrides
-			expectedHosts: []string{"host2"},                                // host1 blocked because existing-cr stays locked
+			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
+			expectedHosts: []string{"host2"}, // host1 blocked because existing-cr stays locked
 			filteredHosts: []string{"host1"},
 		},
 		{
@@ -963,7 +1079,7 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 			request:       newNovaRequestWithIntent("new-reservation-uuid", "project-A", "m1.large", "gp-1", 10, "20Gi", "reserve_for_committed_resource", false, []string{"host1"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{},
-			filteredHosts: []string{"host1"}, // All reservations stay locked, not enough capacity
+			filteredHosts: []string{"host1"}, // All reservations stay locked (intent prevents unlock), not enough capacity
 		},
 		{
 			name: "Normal VM scheduling: multiple reservations - all unlocked for same project+flavor",
@@ -992,12 +1108,11 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 				// Existing CR reservation on host1 blocks all 8 free CPU
 				newCommittedReservation("existing-cr", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil, nil),
 			},
-			// Request with reserve_for_committed_resource intent
-			// IgnoredReservationTypes is a safety flag that overrides everything, including intent
+			// Request with reserve_for_committed_resource intent.
+			// IgnoredReservationTypes is a YAML-level safety override that bypasses the intent check.
 			request: newNovaRequestWithIntent("new-reservation-uuid", "project-A", "m1.large", "gp-1", 4, "8Gi", "reserve_for_committed_resource", false, []string{"host1"}),
 			opts: FilterHasEnoughCapacityOpts{
-				LockReserved: false,
-				// IgnoredReservationTypes is a safety override - ignores CR even for CR scheduling
+				LockReserved:            false,
 				IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
 			},
 			expectedHosts: []string{"host1"}, // CR reservation is ignored via IgnoredReservationTypes (safety override)

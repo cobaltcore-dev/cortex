@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -40,8 +39,9 @@ type FilterWeigherPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
 	lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]
 
-	// Mutex to only allow one process at a time
-	processMu sync.Mutex
+	// Mutex to only allow one process at a time.
+	// Read-only runs (opts.ReadOnly == true) acquire a read lock; write runs acquire the full lock.
+	processMu sync.RWMutex
 
 	// FeatureGates holds feature flags for this controller.
 	FeatureGates conf.FeatureGates
@@ -63,12 +63,22 @@ func (c *FilterWeigherPipelineController) PipelineType() v1alpha1.PipelineType {
 
 // Callback executed when kubernetes asks to reconcile a decision resource.
 func (c *FilterWeigherPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	c.processMu.Lock()
-	defer c.processMu.Unlock()
-
+	// Peek at the decision before acquiring the lock so we can choose the right lock type.
+	// Read-only runs can proceed concurrently; write runs need the exclusive lock.
 	decision := &v1alpha1.Decision{}
 	if err := c.Get(ctx, req.NamespacedName, decision); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+	if c.peekReadOnly(decision) {
+		c.processMu.RLock()
+		defer c.processMu.RUnlock()
+	} else {
+		c.processMu.Lock()
+		defer c.processMu.Unlock()
+		// Re-fetch after acquiring the exclusive lock to see consistent state.
+		if err := c.Get(ctx, req.NamespacedName, decision); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
 	}
 	old := decision.DeepCopy()
 	if _, err := c.process(ctx, decision); err != nil {
@@ -83,12 +93,14 @@ func (c *FilterWeigherPipelineController) Reconcile(ctx context.Context, req ctr
 
 // Process the decision from the API. Should create and return the updated decision.
 func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error {
-	c.processMu.Lock()
-	defer c.processMu.Unlock()
-
-	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
-	if !ok {
-		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
+	// Read-only runs share the cached decision state; no re-fetch needed because they
+	// don't observe writes from concurrent exclusive-lock runs.
+	if c.peekReadOnly(decision) {
+		c.processMu.RLock()
+		defer c.processMu.RUnlock()
+	} else {
+		c.processMu.Lock()
+		defer c.processMu.Unlock()
 	}
 
 	request, err := c.process(ctx, decision)
@@ -107,15 +119,15 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 			Message: "pipeline run succeeded",
 		})
 	}
-	if pipelineConf.Spec.CreateHistory {
-		c.upsertHistory(ctx, decision, request, err)
-		if err == nil && decision.Status.Result != nil && request != nil && c.FeatureGates.CommittedResourceTracking {
-			if decision.Status.Result.TargetHost != nil && isUserVMPlacement(decision.Spec.Intent) {
-				c.recordCRAllocation(ctx, decision, *request)
-			}
-			if decision.Status.Result.TargetHost == nil {
-				c.logNoHostFound(ctx, decision, *request)
-			}
+	if !request.Options.SkipHistory {
+		c.upsertHistory(ctx, decision, err)
+	}
+	if err == nil && decision.Status.Result != nil && request != nil && c.FeatureGates.CommittedResourceTracking {
+		if decision.Status.Result.TargetHost != nil && isUserVMPlacement(decision.Spec.Intent) {
+			c.recordCRAllocation(ctx, decision, *request)
+		}
+		if decision.Status.Result.TargetHost == nil {
+			c.logNoHostFound(ctx, decision, *request)
 		}
 	}
 	return err
@@ -133,13 +145,20 @@ func isUserVMPlacement(intent v1alpha1.SchedulingIntent) bool {
 	}
 }
 
-func (c *FilterWeigherPipelineController) upsertHistory(ctx context.Context, decision *v1alpha1.Decision, request *api.ExternalSchedulerRequest, pipelineErr error) {
+func (c *FilterWeigherPipelineController) upsertHistory(ctx context.Context, decision *v1alpha1.Decision, pipelineErr error) {
 	log := ctrl.LoggerFrom(ctx)
 
 	var az *string
-	if request != nil {
-		azStr := request.Spec.Data.AvailabilityZone
-		az = &azStr
+
+	if decision.Spec.NovaRaw != nil {
+		var request api.ExternalSchedulerRequest
+		err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request)
+		if err != nil {
+			log.Error(err, "failed to unmarshal novaRaw for history, using defaults")
+		} else {
+			azStr := request.Spec.Data.AvailabilityZone
+			az = &azStr
+		}
 	}
 
 	if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, az, pipelineErr); upsertErr != nil {
@@ -190,6 +209,9 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	}
 
 	result, err := pipeline.Run(request)
+	if !request.Options.SkipHistory {
+		c.upsertHistory(ctx, decision, err)
+	}
 	if err != nil {
 		log.Error(err, "failed to run pipeline")
 		return &request, err
@@ -205,7 +227,19 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	return &request, nil
 }
 
-// The base controller will delegate the pipeline creation down to this method.
+// peekReadOnly determines whether a decision should use a read lock instead of
+// the exclusive write lock. Defaults to false (exclusive) on any parse error.
+func (c *FilterWeigherPipelineController) peekReadOnly(decision *v1alpha1.Decision) bool {
+	if decision.Spec.NovaRaw == nil {
+		return false
+	}
+	var request api.ExternalSchedulerRequest
+	if err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request); err != nil {
+		return false
+	}
+	return request.Options.ReadOnly
+}
+
 func (c *FilterWeigherPipelineController) InitPipeline(
 	ctx context.Context,
 	p v1alpha1.Pipeline,

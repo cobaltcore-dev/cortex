@@ -10,6 +10,7 @@ import (
 	"sort"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 )
@@ -22,7 +23,8 @@ const (
 
 	// PipelineNewFailoverReservation is used to find a host for creating a new reservation.
 	// It validates host compatibility AND checks capacity.
-	PipelineNewFailoverReservation = "kvm-new-failover-reservation"
+	// Uses the general-purpose pipeline; LockReservations and SkipHistory are set via Options.
+	PipelineNewFailoverReservation = "kvm-general-purpose-load-balancing"
 
 	// PipelineAcknowledgeFailoverReservation is used to validate that a failover reservation
 	// is still valid for all its allocated VMs. It sends an evacuation-style scheduling request
@@ -30,7 +32,7 @@ const (
 	PipelineAcknowledgeFailoverReservation = "kvm-acknowledge-failover-reservation"
 )
 
-func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm VM, allHypervisors []string, pipeline string, resSpec resolvedReservationSpec) ([]string, error) {
+func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm VM, allHypervisors []string, pipeline string, resSpec resolvedReservationSpec, opts scheduling.Options) ([]string, error) {
 	logger := LoggerFromContext(ctx)
 
 	// Build list of eligible hypervisors (excluding VM's current hypervisor)
@@ -91,7 +93,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		"eligibleHypervisors", len(eligibleHypervisors),
 		"ignoreHypervisors", ignoreHypervisors)
 
-	scheduleResp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq)
+	scheduleResp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq, opts)
 	if err != nil {
 		logger.Error(err, "failed to schedule failover reservation", "vmUUID", vm.UUID, "pipeline", pipeline)
 		return nil, fmt.Errorf("failed to schedule failover reservation: %w", err)
@@ -121,7 +123,7 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 
 	logger := LoggerFromContext(ctx)
 
-	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineReuseFailoverReservation, resSpec)
+	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineReuseFailoverReservation, resSpec, scheduling.Options{ReadOnly: true, SkipHistory: true, SkipInflight: true})
 	if err != nil {
 		logger.Error(err, "failed to get potential hypervisors for VM", "vmUUID", vm.UUID)
 		return nil
@@ -222,7 +224,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		"vmCurrentHost", vm.CurrentHypervisor,
 		"pipeline", PipelineAcknowledgeFailoverReservation)
 
-	resp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq)
+	resp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq, scheduling.Options{ReadOnly: true, LockReservations: true, SkipHistory: true, SkipInflight: true})
 	if err != nil {
 		logger.Error(err, "failed to validate VM for reservation host", "vmUUID", vm.UUID, "reservationHost", reservationHost)
 		return false, fmt.Errorf("failed to validate VM for reservation host: %w", err)
@@ -264,7 +266,7 @@ func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 
 	// Get potential hypervisors from scheduler using the reservation spec resources
 	// (which may be sized to the LargestFlavor from the flavor group)
-	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineNewFailoverReservation, resSpec)
+	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineNewFailoverReservation, resSpec, scheduling.Options{LockReservations: true, SkipHistory: true, SkipInflight: true})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get potential hypervisors for VM: %w", err)
 	}
