@@ -424,8 +424,8 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 		{
 			name: "no changes needed - all VMs valid",
 			vms: []VM{
-				newTestVM("vm-1", "host1", "flavor1"),
-				newTestVM("vm-2", "host2", "flavor1"),
+				newTestVM("vm-1", "host1"),
+				newTestVM("vm-2", "host2"),
 			},
 			reservations: []v1alpha1.Reservation{
 				newTestReservation("res-1", "host3", map[string]string{
@@ -442,7 +442,7 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 		{
 			name: "VM no longer exists - remove from allocations",
 			vms: []VM{
-				newTestVM("vm-1", "host1", "flavor1"),
+				newTestVM("vm-1", "host1"),
 				// vm-2 no longer exists
 			},
 			reservations: []v1alpha1.Reservation{
@@ -460,8 +460,8 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 		{
 			name: "VM moved to different host - remove from allocations",
 			vms: []VM{
-				newTestVM("vm-1", "host1", "flavor1"),
-				newTestVM("vm-2", "host4", "flavor1"), // moved from host2 to host4
+				newTestVM("vm-1", "host1"),
+				newTestVM("vm-2", "host4"), // moved from host2 to host4
 			},
 			reservations: []v1alpha1.Reservation{
 				newTestReservation("res-1", "host3", map[string]string{
@@ -478,8 +478,8 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 		{
 			name: "multiple reservations - only affected ones updated",
 			vms: []VM{
-				newTestVM("vm-1", "host1", "flavor1"),
-				newTestVM("vm-2", "host2", "flavor1"),
+				newTestVM("vm-1", "host1"),
+				newTestVM("vm-2", "host2"),
 				// vm-3 no longer exists
 			},
 			reservations: []v1alpha1.Reservation{
@@ -518,7 +518,7 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 		{
 			name: "empty reservations list",
 			vms: []VM{
-				newTestVM("vm-1", "host1", "flavor1"),
+				newTestVM("vm-1", "host1"),
 			},
 			reservations:              []v1alpha1.Reservation{},
 			expectedUpdatedCount:      0,
@@ -528,7 +528,7 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 		{
 			name: "reservation with no allocations - no changes",
 			vms: []VM{
-				newTestVM("vm-1", "host1", "flavor1"),
+				newTestVM("vm-1", "host1"),
 			},
 			reservations: []v1alpha1.Reservation{
 				newTestReservation("res-1", "host3", map[string]string{}),
@@ -542,10 +542,10 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 		{
 			name: "mixed scenario - some VMs valid, some deleted, some moved",
 			vms: []VM{
-				newTestVM("vm-1", "host1", "flavor1"), // valid
-				newTestVM("vm-2", "host5", "flavor1"), // moved from host2 to host5
+				newTestVM("vm-1", "host1"), // valid
+				newTestVM("vm-2", "host5"), // moved from host2 to host5
 				// vm-3 deleted
-				newTestVM("vm-4", "host4", "flavor1"), // valid
+				newTestVM("vm-4", "host4"), // valid
 			},
 			reservations: []v1alpha1.Reservation{
 				newTestReservation("res-1", "host6", map[string]string{
@@ -621,11 +621,11 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 
 // Test helper functions - local to this test file
 
-func newTestVM(uuid, currentHypervisor, flavorName string) VM {
+func newTestVM(uuid, currentHypervisor string) VM {
 	return VM{
 		UUID:              uuid,
 		CurrentHypervisor: currentHypervisor,
-		FlavorName:        flavorName,
+		FlavorName:        "flavor1",
 		ProjectID:         "test-project",
 	}
 }
