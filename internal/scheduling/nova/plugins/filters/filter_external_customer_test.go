@@ -349,6 +349,49 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			expectedHosts: []string{"host1", "host3"},
 			filteredHosts: []string{},
 		},
+		{
+			name: "ReserveForFailoverIntent - skips filter, all hosts pass even for external customer domain",
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"ext-"},
+			},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						SchedulerHints: map[string]any{
+							"_nova_check_type": string(api.ReserveForFailoverIntent),
+							"domain_name":      "ext-customer1",
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host3"},
+				},
+			},
+			expectedHosts: []string{"host1", "host3"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "ReserveForCommittedResourceIntent - domain filter applies (no domain_name hint → all hosts pass)",
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"ext-"},
+			},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						SchedulerHints: map[string]any{
+							"_nova_check_type": string(api.ReserveForCommittedResourceIntent),
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host3"},
+				},
+			},
+			expectedHosts: []string{"host1", "host3"},
+			filteredHosts: []string{},
+		},
 	}
 
 	for _, tt := range tests {

@@ -63,6 +63,7 @@ type FilterHasEnoughCapacity struct {
 //
 // Please also note that disk space is currently not considered by this filter.
 func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+	opts := request.GetOptions()
 	result := s.IncludeAllHostsFromRequest(request)
 
 	// This map holds the free resources per host.
@@ -147,7 +148,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 						"reservation", reservation.Name,
 						"intent", intent)
 					// Don't continue - fall through to block the resources
-				case !s.Options.LockReserved &&
+				case !s.Options.LockReserved && !opts.LockReservations &&
 					// For committed resource reservations: unlock resources only if:
 					// 1. Project ID matches
 					// 2. ResourceGroup matches the flavor's hw_version

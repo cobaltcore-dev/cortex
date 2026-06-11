@@ -19,6 +19,7 @@ import (
 
 type FilterWeigherPipeline[RequestType FilterWeigherPipelineRequest] interface {
 	// Run the scheduling pipeline with the given request.
+	// Call-time options are read from request.GetOptions().
 	Run(request RequestType) (v1alpha1.DecisionResult, error)
 }
 
@@ -263,6 +264,10 @@ func (s *filterWeigherPipeline[RequestType]) sortHostsByWeights(weights map[stri
 
 // Evaluate the pipeline and return a list of hosts in order of preference.
 func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.DecisionResult, error) {
+	opts := request.GetOptions()
+	if err := opts.Validate(); err != nil {
+		return v1alpha1.DecisionResult{}, err
+	}
 	slogArgs := request.GetTraceLogArgs()
 	slogArgsAny := make([]any, 0, len(slogArgs))
 	for _, arg := range slogArgs {
@@ -274,7 +279,16 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 	traceLog.Info("scheduler: starting pipeline", "hosts", hostsIn)
 
 	// Normalize the input weights so we can apply step weights meaningfully.
-	inWeights := p.normalizeInputWeights(request.GetWeights())
+	// Only do this if there are weighers to combine with: tanh saturates large
+	// inputs (e.g. Nova's 50/55/60) to ~1.0, which would destroy the original
+	// ordering. With no weighers configured, the normalized map flows straight
+	// to the sort, so we must keep the raw values to preserve that ordering.
+	var inWeights map[string]float64
+	if len(p.weighers) > 0 {
+		inWeights = p.normalizeInputWeights(request.GetWeights())
+	} else {
+		inWeights = maps.Clone(request.GetWeights())
+	}
 	traceLog.Info("scheduler: input weights", "weights", inWeights)
 
 	// Run filters first to reduce the number of hosts.
@@ -296,6 +310,25 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 
 	hosts := p.sortHostsByWeights(outWeights)
 	traceLog.Info("scheduler: sorted hosts", "hosts", hosts)
+
+	if opts.MaxCandidates > 0 && len(hosts) > opts.MaxCandidates {
+		trimmed := hosts[opts.MaxCandidates:]
+		hosts = hosts[:opts.MaxCandidates]
+		traceLog.Info("scheduler: trimmed candidate list to max",
+			"maxCandidates", opts.MaxCandidates,
+			"kept", hosts,
+			"trimmed", trimmed)
+		// Drop trimmed hosts from outWeights so AggregatedOutWeights stays consistent.
+		kept := make(map[string]struct{}, len(hosts))
+		for _, h := range hosts {
+			kept[h] = struct{}{}
+		}
+		for host := range outWeights {
+			if _, ok := kept[host]; !ok {
+				delete(outWeights, host)
+			}
+		}
+	}
 
 	// Collect some metrics about the pipeline execution.
 	go p.monitor.observePipelineResult(request, hosts)

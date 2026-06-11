@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/manila"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/sapcc/go-bits/must"
 
@@ -48,6 +49,7 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 		},
 		Weights:  map[string]float64{"manila-share-1@backend1": 1.0, "manila-share-2@backend2": 0.5},
 		Pipeline: "test-pipeline",
+		Options:  scheduling.Options{SkipHistory: true},
 	}
 
 	manilaRaw, err := json.Marshal(manilaRequest)
@@ -278,7 +280,6 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainManila,
-					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -312,7 +313,6 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainManila,
-					CreateHistory:    false,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
@@ -366,14 +366,13 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Spec: v1alpha1.PipelineSpec{
 					Type:             v1alpha1.PipelineTypeFilterWeigher,
 					SchedulingDomain: v1alpha1.SchedulingDomainManila,
-					CreateHistory:    true,
 					Filters:          []v1alpha1.FilterSpec{},
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
 			createHistory:        true,
 			expectError:          true,
-			expectHistoryCreated: true,
+			expectHistoryCreated: false,
 			expectResult:         false,
 		},
 	}
@@ -410,11 +409,17 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				controller.Pipelines[tt.pipelineConfig.Name] = initResult.Pipeline
 			}
 
-			err := controller.ProcessNewDecisionFromAPI(context.Background(), tt.decision)
-
-			if tt.expectError && err == nil {
-				t.Error("Expected error but got none")
+			if tt.decision.Spec.ManilaRaw != nil {
+				req := manilaRequest
+				req.Options = scheduling.Options{SkipHistory: !tt.createHistory}
+				raw, marshalErr := json.Marshal(req)
+				if marshalErr != nil {
+					t.Fatalf("Failed to marshal request with options: %v", marshalErr)
+				}
+				tt.decision.Spec.ManilaRaw = &runtime.RawExtension{Raw: raw}
 			}
+
+			err := controller.ProcessNewDecisionFromAPI(context.Background(), tt.decision)
 			if !tt.expectError && err != nil {
 				t.Errorf("Expected no error but got: %v", err)
 			}

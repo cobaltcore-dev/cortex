@@ -17,6 +17,11 @@ owner-info:
 alerts:
   enabled: true
   prometheus: openstack
+  thresholds:
+    # Memory threshold for CortexNovaHighMemoryUsage in MiB.
+    highMemoryMiB: 6000
+    # Reconcile-duration threshold for CortexNovaReconcileDurationHigher10Min in seconds.
+    reconcileDurationSeconds: 600
 
 serviceMonitor:
   extraLabels: {}
@@ -264,6 +269,7 @@ cortex-knowledge-controllers:
         <<: *cortexMonitoringLabels
         component: nova-knowledge
     openstackDatasourceControllerParallelReconciles: 3
+    prometheusDatasourceControllerParallelReconciles: 2
     enabledControllers:
       - datasource-controllers
       - knowledge-controllers

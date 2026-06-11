@@ -84,7 +84,7 @@ func (api *HTTPAPI) HandleReportUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Info("report-usage request completed", "projectID", projectID)
+	log.Info("report-usage request completed", "projectID", projectID, "duration", time.Since(startTime).String())
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)

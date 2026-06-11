@@ -1,5 +1,5 @@
 ---
-allowed-tools: Read, Write, Edit, Bash(*), WebSearch, WebFetch
+allowed-tools: Read, Bash(*), WebSearch, WebFetch
 description: Subagent that reviews recent code changes for potential bugs and reports findings.
 ---
 
