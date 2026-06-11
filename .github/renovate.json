@@ -129,6 +129,11 @@
       "allowedVersions": "3.13.x"
     },
     {
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["actions/setup-python"],
+      "allowedVersions": "3.13.x"
+    },
+    {
       "matchFileNames": [".github/actions/setup-claude-code-action/action.yml"],
       "automerge": false
     },
