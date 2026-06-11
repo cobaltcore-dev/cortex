@@ -19,7 +19,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/weighers"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -44,7 +43,7 @@ type FilterWeigherPipelineController struct {
 	processMu sync.RWMutex
 
 	// FeatureGates holds feature flags for this controller.
-	FeatureGates conf.FeatureGates
+	FeatureGates FeatureGates
 	// Monitor to pass down to all pipelines.
 	Monitor lib.FilterWeigherPipelineMonitor
 	// Candidate gatherer to get all placement candidates if needed.

@@ -22,7 +22,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
@@ -576,7 +575,7 @@ func TestFeatureGate_CommittedResourceTracking(t *testing.T) {
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 					HistoryManager:  lib.HistoryClient{Client: fakeClient},
 				},
-				FeatureGates:       conf.FeatureGates{CommittedResourceTracking: enabled},
+				FeatureGates:       FeatureGates{CommittedResourceTracking: enabled},
 				NoHostFoundCounter: counter,
 			}
 			controller.PipelineConfigs["test-pipeline"] = pipelineConf

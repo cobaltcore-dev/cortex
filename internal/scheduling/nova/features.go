@@ -1,10 +1,10 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package conf
+package nova
 
-// FeatureGates holds boolean toggles for features that are in active rollout
-// or that are only relevant for certain deployment types. Set via conf.json
+// FeatureGates holds boolean toggles for Nova scheduling features that are in
+// active rollout or only relevant for certain deployment types. Set via conf.json
 // under the "featureGates" key. All flags default to false (disabled) when omitted.
 type FeatureGates struct {
 	// CommittedResourceTracking enables committed resource integration: writing
@@ -12,8 +12,4 @@ type FeatureGates struct {
 	// results by committed resource coverage. Enable only on deployments that
 	// use committed resources.
 	CommittedResourceTracking bool `json:"committedResourceTracking,omitempty"`
-	// PessimisticBlocking enables blocking all candidate hosts at scheduling time
-	// to prevent concurrent placements from violating capacity constraints. Enable
-	// only on deployments that support pessimistic blocking.
-	PessimisticBlocking bool `json:"pessimisticBlocking,omitempty"`
 }

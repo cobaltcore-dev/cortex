@@ -404,7 +404,7 @@ func main() {
 	}
 
 	if slices.Contains(mainConfig.EnabledControllers, "nova-pipeline-controllers") {
-		featureGates := conf.GetConfigOrDie[conf.FeatureGates]()
+		featureGates := conf.GetConfigOrDie[nova.FeatureGates]()
 		// Filter-weigher pipeline controller setup.
 		filterWeigherController := &nova.FilterWeigherPipelineController{
 			Monitor:            filterWeigherPipelineMonitor,
