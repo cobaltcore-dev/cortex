@@ -135,13 +135,10 @@
       "enabled": false
     },
     {
-      "matchPackageNames": ["python"],
-      "allowedVersions": "3.13.x"
-    },
-    {
       "matchManagers": ["github-actions"],
-      "matchPackageNames": ["actions/setup-python"],
-      "allowedVersions": "3.13.x"
+      "matchDepNames": ["python"],
+      "separateMultipleMinor": true,
+      "dependencyDashboardApproval": true
     },
     {
       "matchFileNames": [".github/actions/setup-claude-code-action/action.yml"],
