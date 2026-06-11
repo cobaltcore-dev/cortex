@@ -23,7 +23,6 @@ import (
 
 // recordCRAllocation writes the placed VM UUID into the matching Reservation
 // Spec.CommittedResourceReservation.Allocations after a successful Nova placement.
-// Best-effort: any failure is logged but never propagated to the caller.
 func (c *FilterWeigherPipelineController) recordCRAllocation(ctx context.Context, decision *v1alpha1.Decision, request api.ExternalSchedulerRequest) {
 	log := ctrl.LoggerFrom(ctx)
 
@@ -86,7 +85,6 @@ func (c *FilterWeigherPipelineController) recordCRAllocation(ctx context.Context
 
 	slotsOnTarget := evaluator.SlotsForHost(selectedHost, projectID, flavorGroupName)
 
-	// Idempotency: if this VM UUID is already recorded in any slot, the work is done.
 	for _, slot := range slotsOnTarget {
 		if _, exists := slot.Spec.CommittedResourceReservation.Allocations[instanceUUID]; exists {
 			log.Info("CR allocation: VM UUID already in reservation, skipping",
