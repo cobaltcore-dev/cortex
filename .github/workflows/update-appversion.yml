@@ -5,53 +5,79 @@ on:
     workflows: ["Build and Push Docker Images"]
     types:
       - completed
+    branches:
+      - main
+  schedule:
+    # Safety net: catches anything missed by workflow_run (e.g. failed runs that
+    # later succeed via re-run, or charts whose images were promoted out-of-band).
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: read
+
+# Serialize runs across all triggers so concurrent invocations don't race on
+# the shared PR branch.
+concurrency:
+  group: update-appversion
+  cancel-in-progress: false
 
 jobs:
   update-appversion:
-    if: >-
-      ${{ github.event.workflow_run.conclusion == 'success' && !contains(github.event.workflow_run.head_commit.message, '[skip ci]') }}
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    # Serialize runs so concurrent merges don't race on git push.
-    # Example: PR A changes shim, PR B changes cortex — both trigger this
-    # workflow. Without serialization, one push fails and that chart bump is
-    # lost permanently (no future run will retry it).
-    concurrency:
-      group: update-appversion
-      cancel-in-progress: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: main
 
-      - name: Get short commit SHA
-        id: vars
-        run: echo "sha=sha-$(git rev-parse --short=8 HEAD)" >> $GITHUB_OUTPUT
+      - name: Bump chart appVersions to match GHCR latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          {
+            .github/scripts/bump-chart.sh helm/library/cortex          cortex
+            .github/scripts/bump-chart.sh helm/library/cortex-shim     cortex-shim
+            .github/scripts/bump-chart.sh helm/library/cortex-postgres cortex-postgres
+          } | tee /tmp/bump.log
 
-      - name: Get all changed postgres/ files
-        id: changed_postgres_files
-        uses: tj-actions/changed-files@v47
+      - name: Summarize bump
+        id: summary
+        run: |
+          set -euo pipefail
+          if grep -q '^bumped' /tmp/bump.log; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+          {
+            echo "log<<EOF"
+            cat /tmp/bump.log
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create or update Pull Request
+        if: steps.summary.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v8
         with:
-          files: |
-            postgres/**
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: main
+          branch: ci/bump-chart-appversions
+          delete-branch: true
+          add-paths: helm/library/*/Chart.yaml
+          commit-message: |
+            bump app version [skip ci]
 
-      - name: Get all changed shim files
-        id: changed_shim_files
-        uses: tj-actions/changed-files@v47
-        with:
-          files: |
-            internal/shim/**
-            cmd/shim/**
+            ${{ steps.summary.outputs.log }}
+          title: bump app version [skip ci]
+          body: |
+            bump app version [skip ci]
 
-      - name: Bump and push cortex-postgres appVersion
-        if: steps.changed_postgres_files.outputs.all_changed_files != ''
-        run: bash .github/scripts/bump-chart.sh helm/library/cortex-postgres/Chart.yaml "${{ steps.vars.outputs.sha }}" "${{ github.event.workflow_run.head_sha }}" postgres/
-
-      - name: Bump and push cortex-shim appVersion
-        if: steps.changed_shim_files.outputs.all_changed_files != ''
-        run: bash .github/scripts/bump-chart.sh helm/library/cortex-shim/Chart.yaml "${{ steps.vars.outputs.sha }}" "${{ github.event.workflow_run.head_sha }}" internal/shim/ cmd/shim/
-
-      - name: Bump and push cortex appVersion
-        run: bash .github/scripts/bump-chart.sh helm/library/cortex/Chart.yaml "${{ steps.vars.outputs.sha }}" "${{ github.event.workflow_run.head_sha }}"
+            ```
+            ${{ steps.summary.outputs.log }}
+            ```
