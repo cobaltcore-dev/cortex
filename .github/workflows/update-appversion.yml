@@ -41,9 +41,9 @@ jobs:
         run: |
           set -euo pipefail
           {
-            .github/scripts/bump-chart.sh helm/library/cortex          cortex
-            .github/scripts/bump-chart.sh helm/library/cortex-shim     cortex-shim
-            .github/scripts/bump-chart.sh helm/library/cortex-postgres cortex-postgres
+            bash .github/scripts/bump-chart.sh helm/library/cortex          cortex
+            bash .github/scripts/bump-chart.sh helm/library/cortex-shim     cortex-shim
+            bash .github/scripts/bump-chart.sh helm/library/cortex-postgres cortex-postgres
           } | tee /tmp/bump.log
 
       - name: Summarize bump
