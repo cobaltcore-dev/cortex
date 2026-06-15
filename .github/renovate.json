@@ -69,6 +69,36 @@
       "datasourceTemplate": "docker",
       "versioningTemplate": "semver-coerced",
       "autoReplaceStringTemplate": "ENV PG_VERSION {{{newValue}}}-1.pgdg13+1"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^helm/library/cortex/Chart\\.yaml$/"
+      ],
+      "matchStrings": ["appVersion:\\s*\"(?<currentValue>sha-[a-f0-9]+)\""],
+      "depNameTemplate": "ghcr.io/cobaltcore-dev/cortex",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "loose"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^helm/library/cortex-shim/Chart\\.yaml$/"
+      ],
+      "matchStrings": ["appVersion:\\s*\"(?<currentValue>sha-[a-f0-9]+)\""],
+      "depNameTemplate": "ghcr.io/cobaltcore-dev/cortex-shim",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "loose"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^helm/library/cortex-postgres/Chart\\.yaml$/"
+      ],
+      "matchStrings": ["appVersion:\\s*\"(?<currentValue>sha-[a-f0-9]+)\""],
+      "depNameTemplate": "ghcr.io/cobaltcore-dev/cortex-postgres",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "loose"
     }
   ],
   "packageRules": [
@@ -147,6 +177,18 @@
     {
       "matchFileNames": [".github/renovate.json"],
       "automerge": false
+    },
+    {
+      "matchPackageNames": [
+        "ghcr.io/cobaltcore-dev/cortex",
+        "ghcr.io/cobaltcore-dev/cortex-shim",
+        "ghcr.io/cobaltcore-dev/cortex-postgres"
+      ],
+      "matchManagers": ["custom.regex"],
+      "automerge": false,
+      "schedule": ["at any time"],
+      "commitMessageAction": "Bump",
+      "commitMessageTopic": "{{depName}} chart appVersion"
     }
   ],
   "prHourlyLimit": 0,
