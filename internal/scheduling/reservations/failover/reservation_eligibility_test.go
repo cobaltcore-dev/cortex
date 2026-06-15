@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -61,8 +62,8 @@ func makeReservationWithResources(name, host string, usedBy map[string]string, r
 }
 
 // makeVM creates a test VM with the given parameters.
-func makeVM(uuid, hypervisor string) VM {
-	return VM{
+func makeVM(uuid, hypervisor string) reservations.VM {
+	return reservations.VM{
 		UUID:              uuid,
 		CurrentHypervisor: hypervisor,
 		Resources:         defaultVMResources,
@@ -70,8 +71,8 @@ func makeVM(uuid, hypervisor string) VM {
 }
 
 // makeVMWithResources creates a test VM with custom resources.
-func makeVMWithResources(uuid, hypervisor string, resources map[string]resource.Quantity) VM { //nolint:unparam // uuid is always "vm-1" in tests but kept for clarity
-	return VM{
+func makeVMWithResources(uuid, hypervisor string, resources map[string]resource.Quantity) reservations.VM { //nolint:unparam // uuid is always "vm-1" in tests but kept for clarity
+	return reservations.VM{
 		UUID:              uuid,
 		CurrentHypervisor: hypervisor,
 		Resources:         resources,
@@ -82,7 +83,7 @@ func makeVMWithResources(uuid, hypervisor string, resources map[string]resource.
 // It also includes the VM we are checking (vm) with its current hypervisor,
 // and the candidate reservation (which may have VMs not in allFailoverReservations).
 // This is a test helper function used to verify data structure consistency.
-func buildVMHypervisorsMap(vm VM, candidateReservation v1alpha1.Reservation, allFailoverReservations []v1alpha1.Reservation) map[string]map[string]bool {
+func buildVMHypervisorsMap(vm reservations.VM, candidateReservation v1alpha1.Reservation, allFailoverReservations []v1alpha1.Reservation) map[string]map[string]bool {
 	vmHypervisorsMap := make(map[string]map[string]bool)
 
 	vmHypervisorsMap[vm.UUID] = make(map[string]bool)
@@ -115,7 +116,7 @@ func buildVMHypervisorsMap(vm VM, candidateReservation v1alpha1.Reservation, all
 func TestIsVMEligibleForReservation(t *testing.T) {
 	testCases := []struct {
 		name            string
-		vm              VM
+		vm              reservations.VM
 		reservation     v1alpha1.Reservation
 		vmHostMap       map[string]string
 		allReservations []v1alpha1.Reservation
@@ -614,7 +615,7 @@ func TestIsVMEligibleForReservation(t *testing.T) {
 func TestDoesVMFitInReservation(t *testing.T) {
 	testCases := []struct {
 		name        string
-		vm          VM
+		vm          reservations.VM
 		reservation v1alpha1.Reservation
 		expected    bool
 	}{
@@ -727,7 +728,7 @@ func updateReservationInList(reservations []v1alpha1.Reservation, updated v1alph
 // all existing VMs in that reservation remain eligible.
 // Returns (allEligible, failedVMUUID, reason).
 func checkAllExistingVMsRemainEligible(
-	newVM VM,
+	newVM reservations.VM,
 	reservation v1alpha1.Reservation,
 	allReservations []v1alpha1.Reservation,
 ) (allEligible bool, failedVMUUID, reason string) {
@@ -752,7 +753,7 @@ func checkAllExistingVMsRemainEligible(
 
 	// Check each existing VM in the reservation
 	for vmUUID, vmHost := range existingAllocations {
-		existingVM := VM{UUID: vmUUID, CurrentHypervisor: vmHost, Resources: defaultVMResources}
+		existingVM := reservations.VM{UUID: vmUUID, CurrentHypervisor: vmHost, Resources: defaultVMResources}
 
 		// Temporarily remove the VM to check if it can be "re-added"
 		// This mimics what reconcileRemoveNoneligibleVMFromReservations does
@@ -774,7 +775,7 @@ func checkAllExistingVMsRemainEligible(
 func TestAddingVMDoesNotMakeOthersIneligible(t *testing.T) {
 	testCases := []struct {
 		name                    string
-		vm                      VM
+		vm                      reservations.VM
 		reservation             v1alpha1.Reservation
 		allReservations         []v1alpha1.Reservation
 		vmIsEligible            bool   // Expected result of IsVMEligibleForReservation
@@ -1142,8 +1143,8 @@ func TestAddingVMDoesNotMakeOthersIneligible(t *testing.T) {
 func TestSymmetryOfEligibility(t *testing.T) {
 	testCases := []struct {
 		name string
-		vm1  VM
-		vm2  VM
+		vm1  reservations.VM
+		vm2  reservations.VM
 		// vm1Reservation is the reservation to check for vm1's eligibility
 		vm1Reservation v1alpha1.Reservation
 		// vm2Reservation is the reservation to check for vm2's eligibility
@@ -1254,7 +1255,7 @@ func TestDataStructureConsistency(t *testing.T) {
 
 	testCases := []struct {
 		name            string
-		vm              VM
+		vm              reservations.VM
 		reservation     v1alpha1.Reservation
 		allReservations []v1alpha1.Reservation
 	}{
@@ -1578,7 +1579,7 @@ func graphsEqual(t *testing.T, actual, expected *DependencyGraph) {
 func TestNewDependencyGraph(t *testing.T) {
 	testCases := []struct {
 		name            string
-		vm              VM
+		vm              reservations.VM
 		candidateRes    v1alpha1.Reservation
 		allReservations []v1alpha1.Reservation
 		expectGraph     *DependencyGraph
@@ -1890,7 +1891,7 @@ func TestAddRemoveVMRoundTrip(t *testing.T) {
 func TestFindEligibleReservations(t *testing.T) {
 	testCases := []struct {
 		name                 string
-		vm                   VM
+		vm                   reservations.VM
 		failoverReservations []v1alpha1.Reservation
 		vmHostMap            map[string]string
 		expectedCount        int

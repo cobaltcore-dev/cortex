@@ -32,7 +32,7 @@ const (
 	PipelineAcknowledgeFailoverReservation = "kvm-acknowledge-failover-reservation"
 )
 
-func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm VM, allHypervisors []string, pipeline string, resSpec resolvedReservationSpec, opts scheduling.Options) ([]string, error) {
+func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm reservations.VM, allHypervisors []string, pipeline string, resSpec resolvedReservationSpec, opts scheduling.Options) ([]string, error) {
 	logger := LoggerFromContext(ctx)
 
 	// Build list of eligible hypervisors (excluding VM's current hypervisor)
@@ -115,7 +115,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 // The caller is responsible for persisting the changes to the cluster.
 func (c *FailoverReservationController) tryReuseExistingReservation(
 	ctx context.Context,
-	vm VM,
+	vm reservations.VM,
 	failoverReservations []v1alpha1.Reservation,
 	allHypervisors []string,
 	resSpec resolvedReservationSpec,
@@ -174,7 +174,7 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 // TODO this is a bit of a hack. Ideally we have a special kind of request for that which would also verify that we equally are using the reservation
 func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 	ctx context.Context,
-	vm VM,
+	vm reservations.VM,
 	reservationHost string,
 ) (bool, error) {
 
@@ -255,7 +255,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 // that already had a new reservation created in this reconcile cycle).
 func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 	ctx context.Context,
-	vm VM,
+	vm reservations.VM,
 	allHypervisors []string,
 	failoverReservations []v1alpha1.Reservation,
 	excludeHypervisors map[string]bool,
