@@ -40,6 +40,8 @@ The CR reservation implementation is located in `internal/scheduling/reservation
 - `cortex_committed_resource_usage_api_*`
 - `cortex_committed_resource_capacity_api_*`
 
+**FlavorGroupCapacity readiness**: The `cortex_committed_resource_capacity_ready{flavor_group, az}` gauge is `1` when the CRD's `Ready` condition is `True` (all scheduler probes succeeded) and `0` when `False` (one or more probes failed, stale data is being served). The `CortexNovaCommittedResourceCapacityNotReady` alert fires after 10 minutes of `0`. When the alert fires, the capacity API is serving stale total capacity without usage data for that (flavor group × AZ) pair — Limes receives capacity but no usage. Check the capacity controller logs for probe errors and verify the scheduler is reachable.
+
 ## Lifecycle Management
 
 The system is organized around two CRD types and two controllers. `CommittedResource` CRDs represent customer commitments; `Reservation` CRDs represent individual hypervisor capacity slots. Each has its own controller with a well-defined responsibility boundary.

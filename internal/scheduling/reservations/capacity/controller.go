@@ -97,7 +97,7 @@ func (c *Controller) reconcileAll(ctx context.Context) error {
 	var succeeded, failed int
 	for groupName, groupData := range flavorGroups {
 		for _, az := range azs {
-			if err := c.reconcileOne(ctx, groupName, groupData, az, hvByName, hvList.Items, blockedByReservations); err != nil {
+			if err := c.reconcileOne(ctx, groupName, groupData, az, hvByName, blockedByReservations); err != nil {
 				logger.Error(err, "failed to reconcile flavor group capacity",
 					"flavorGroup", groupName, "az", az)
 				failed++
@@ -125,7 +125,6 @@ func (c *Controller) reconcileOne(
 	groupData compute.FlavorGroupFeature,
 	az string,
 	hvByName map[string]hv1.Hypervisor,
-	allHVs []hv1.Hypervisor,
 	blockedByReservations map[string]int64,
 ) error {
 
@@ -189,8 +188,7 @@ func (c *Controller) reconcileOne(
 		newFlavors = append(newFlavors, cur)
 	}
 
-	// Count total instances and committed capacity (always available regardless of probe results).
-	totalInstances := countInstancesInAZ(allHVs, az)
+	// Count committed capacity (always available regardless of probe results).
 	committedCapacity, committedErr := c.sumCommittedCapacity(ctx, groupName, az, smallestFlavorBytes)
 	if committedErr != nil {
 		LoggerFromContext(ctx).Error(committedErr, "failed to sum committed capacity",
@@ -238,7 +236,6 @@ func (c *Controller) reconcileOne(
 
 	patch := client.MergeFrom(existing.DeepCopy())
 	existing.Status.Flavors = newFlavors
-	existing.Status.TotalInstances = totalInstances
 	existing.Status.CommittedCapacity = committedCapacity
 	existing.Status.TotalCapacity = totalCapacity
 	existing.Status.LastReconcileAt = metav1.Now()
@@ -425,18 +422,6 @@ func availabilityZones(hvs []hv1.Hypervisor) []string {
 	}
 	sort.Strings(azs)
 	return azs
-}
-
-// countInstancesInAZ counts total VM instances across all hypervisors in the given AZ.
-func countInstancesInAZ(hvs []hv1.Hypervisor, az string) int64 {
-	var total int64
-	for _, hv := range hvs {
-		if hv.Labels["topology.kubernetes.io/zone"] != az {
-			continue
-		}
-		total += int64(len(hv.Status.Instances))
-	}
-	return total
 }
 
 // crdNameFor produces a collision-safe DNS label for a (flavorGroup, az) pair.

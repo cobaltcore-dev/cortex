@@ -21,14 +21,19 @@ spec:
     - jsonPath: .spec.availabilityZone
       name: AZ
       type: string
-    - jsonPath: .status.totalInstances
-      name: TotalInstances
-      type: integer
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
     - jsonPath: .status.lastReconcileAt
       name: LastReconcile
       type: date
-    - jsonPath: .status.conditions[?(@.type=='Ready')].status
-      name: Ready
+    - jsonPath: .status.committedCapacity
+      name: Committed
+      priority: 1
+      type: integer
+    - jsonPath: .status.totalCapacity.memory
+      name: TotalMem
+      priority: 1
       type: string
     name: v1alpha1
     schema:
@@ -184,12 +189,6 @@ spec:
                 description: TotalCapacity is the total capacity of all eligible hosts
                   in an empty-datacenter scenario.
                 type: object
-              totalInstances:
-                description: |-
-                  TotalInstances is the total number of VM instances running on hypervisors in this AZ,
-                  derived from Hypervisor CRD Status.Instances (not filtered by flavor group).
-                format: int64
-                type: integer
             type: object
         required:
         - spec

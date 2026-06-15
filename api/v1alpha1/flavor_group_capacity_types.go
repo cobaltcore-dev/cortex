@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+
 const (
 	// FlavorGroupCapacityConditionReady indicates the status data is up-to-date.
 	FlavorGroupCapacityConditionReady = "Ready"
@@ -61,11 +62,6 @@ type FlavorGroupCapacityStatus struct {
 	// +kubebuilder:validation:Optional
 	TotalCapacity map[string]resource.Quantity `json:"totalCapacity,omitempty"`
 
-	// TotalInstances is the total number of VM instances running on hypervisors in this AZ,
-	// derived from Hypervisor CRD Status.Instances (not filtered by flavor group).
-	// +kubebuilder:validation:Optional
-	TotalInstances int64 `json:"totalInstances,omitempty"`
-
 	// LastReconcileAt is the timestamp of the last successful reconcile.
 	// +kubebuilder:validation:Optional
 	LastReconcileAt metav1.Time `json:"lastReconcileAt,omitempty"`
@@ -80,9 +76,10 @@ type FlavorGroupCapacityStatus struct {
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="FlavorGroup",type="string",JSONPath=".spec.flavorGroup"
 // +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
-// +kubebuilder:printcolumn:name="TotalInstances",type="integer",JSONPath=".status.totalInstances"
-// +kubebuilder:printcolumn:name="LastReconcile",type="date",JSONPath=".status.lastReconcileAt"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
+// +kubebuilder:printcolumn:name="LastReconcile",type="date",JSONPath=".status.lastReconcileAt"
+// +kubebuilder:printcolumn:name="Committed",type="integer",JSONPath=".status.committedCapacity",priority=1
+// +kubebuilder:printcolumn:name="TotalMem",type="string",JSONPath=".status.totalCapacity.memory",priority=1
 
 // FlavorGroupCapacity caches pre-computed capacity data for one flavor group in one AZ.
 // One CRD exists per (flavor group × AZ) pair, updated by the capacity controller on a fixed interval.

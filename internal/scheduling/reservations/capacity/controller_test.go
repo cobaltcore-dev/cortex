@@ -79,7 +79,7 @@ func newFlavorGroupKnowledge(t *testing.T, groupName string, smallestMemoryMB ui
 }
 
 // newHypervisor creates a Hypervisor CRD with a topology AZ label and effective capacity.
-func newHypervisor(name, az string, memoryBytes int64, instanceIDs ...string) *hv1.Hypervisor {
+func newHypervisor(name, az string, memoryBytes int64) *hv1.Hypervisor {
 	hv := &hv1.Hypervisor{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   name,
@@ -91,9 +91,6 @@ func newHypervisor(name, az string, memoryBytes int64, instanceIDs ...string) *h
 		hv.Status.EffectiveCapacity = map[hv1.ResourceName]resource.Quantity{
 			hv1.ResourceMemory: *qty,
 		}
-	}
-	for _, id := range instanceIDs {
-		hv.Status.Instances = append(hv.Status.Instances, hv1.Instance{ID: id})
 	}
 	return hv
 }
@@ -173,20 +170,8 @@ func TestAvailabilityZones(t *testing.T) {
 }
 
 func TestCountInstancesInAZ(t *testing.T) {
-	hvs := []hv1.Hypervisor{
-		*newHypervisor("h1", "az-a", 0, "vm1", "vm2"),
-		*newHypervisor("h2", "az-a", 0, "vm3"),
-		*newHypervisor("h3", "az-b", 0, "vm4"),
-	}
-	if got := countInstancesInAZ(hvs, "az-a"); got != 3 {
-		t.Errorf("countInstancesInAZ(az-a) = %d, want 3", got)
-	}
-	if got := countInstancesInAZ(hvs, "az-b"); got != 1 {
-		t.Errorf("countInstancesInAZ(az-b) = %d, want 1", got)
-	}
-	if got := countInstancesInAZ(hvs, "az-c"); got != 0 {
-		t.Errorf("countInstancesInAZ(az-c) = %d, want 0", got)
-	}
+	// TestCountInstancesInAZ has been removed — countInstancesInAZ was deleted
+	// because hv1.Instance has no flavor name, making per-flavor-group filtering impossible.
 }
 
 // --- integration-style tests for reconcileOne ---
@@ -200,7 +185,7 @@ func TestReconcileOne_CreatesCRD(t *testing.T) {
 	)
 
 	scheme := newTestScheme(t)
-	hv := newHypervisor("host-1", az, memBytes, "vm1")
+	hv := newHypervisor("host-1", az, memBytes)
 	knowledge := newFlavorGroupKnowledge(t, groupName, memMB)
 
 	fakeClient := fake.NewClientBuilder().
@@ -226,7 +211,7 @@ func TestReconcileOne_CreatesCRD(t *testing.T) {
 	}
 	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
 
-	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, hvByName, []hv1.Hypervisor{*hv}, map[string]int64{}); err != nil {
+	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, hvByName, map[string]int64{}); err != nil {
 		t.Fatalf("reconcileOne failed: %v", err)
 	}
 
@@ -252,9 +237,6 @@ func TestReconcileOne_CreatesCRD(t *testing.T) {
 	}
 	if f.PlaceableHosts != 1 {
 		t.Errorf("PlaceableHosts = %d, want 1", f.PlaceableHosts)
-	}
-	if crd.Status.TotalInstances != 1 {
-		t.Errorf("TotalInstances = %d, want 1", crd.Status.TotalInstances)
 	}
 }
 
@@ -293,7 +275,7 @@ func TestReconcileOne_SetsReadyConditionFalseOnSchedulerError(t *testing.T) {
 	}
 
 	// reconcileOne returns no error itself (it continues on probe failure), but sets Ready=False
-	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, map[string]hv1.Hypervisor{}, []hv1.Hypervisor{}, map[string]int64{}); err != nil {
+	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, map[string]hv1.Hypervisor{}, map[string]int64{}); err != nil {
 		t.Fatalf("reconcileOne failed: %v", err)
 	}
 
@@ -358,11 +340,11 @@ func TestReconcileOne_IdempotentUpdate(t *testing.T) {
 	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
 
 	// First call
-	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, hvByName, []hv1.Hypervisor{*hv}, map[string]int64{}); err != nil {
+	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, hvByName, map[string]int64{}); err != nil {
 		t.Fatalf("first reconcileOne failed: %v", err)
 	}
 	// Second call — should not error on the already-existing CRD
-	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, hvByName, []hv1.Hypervisor{*hv}, map[string]int64{}); err != nil {
+	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, hvByName, map[string]int64{}); err != nil {
 		t.Fatalf("second reconcileOne failed: %v", err)
 	}
 
@@ -576,7 +558,7 @@ func TestReconcileOne_ZeroMemoryFlavorReturnsError(t *testing.T) {
 	groupData := compute.FlavorGroupFeature{
 		SmallestFlavor: compute.FlavorInGroup{Name: "bad-flavor", MemoryMB: 0},
 	}
-	err := c.reconcileOne(context.Background(), "hana-v2", groupData, "az-a", nil, nil, nil)
+	err := c.reconcileOne(context.Background(), "hana-v2", groupData, "az-a", nil, nil)
 	if err == nil {
 		t.Error("expected error for zero-memory flavor")
 	}
