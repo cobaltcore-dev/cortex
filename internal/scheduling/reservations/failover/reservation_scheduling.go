@@ -32,8 +32,7 @@ const (
 	PipelineAcknowledgeFailoverReservation = "kvm-acknowledge-failover-reservation"
 )
 
-func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm reservations.VM, allHypervisors []string, pipeline string, resSpec resolvedReservationSpec) ([]string, error) {
-func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm VM, allHypervisors []string, pipeline string, resSpec resolvedReservationSpec, opts scheduling.Options) ([]string, error) {
+func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm reservations.VM, allHypervisors []string, pipeline string, resSpec resolvedReservationSpec, opts scheduling.Options) ([]string, error) {
 	logger := LoggerFromContext(ctx)
 
 	// Build list of eligible hypervisors (excluding VM's current hypervisor)
