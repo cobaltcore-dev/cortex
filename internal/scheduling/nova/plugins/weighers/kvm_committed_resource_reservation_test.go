@@ -205,6 +205,28 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 			opts:            KVMCommittedResourceReservationOpts{ReservationHostWeight: floatPtr(1.0), DefaultHostWeight: floatPtr(0.1)},
 			expectedWeights: map[string]float64{"host1": 1.0, "host2": 1.0, "host3": 0.1},
 		},
+		{
+			name: "ReserveForFailoverIntent - weigher skipped, all hosts get zero weight",
+			reservations: []*v1alpha1.Reservation{
+				newCRReservation("res-1", "host1", "project-A", "group-2101", "qa-de-1a", "16Gi"),
+			},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID:        "project-A",
+						AvailabilityZone: "qa-de-1a",
+						Flavor:           api.NovaObject[api.NovaFlavor]{Data: api.NovaFlavor{MemoryMB: 4096}},
+						SchedulerHints: map[string]any{
+							"_nova_check_type":       string(api.ReserveForFailoverIntent),
+							api.HintKeyResourceGroup: "group-2101",
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
+			},
+			opts:            KVMCommittedResourceReservationOpts{ReservationHostWeight: floatPtr(1.0), DefaultHostWeight: floatPtr(0.1)},
+			expectedWeights: map[string]float64{"host1": 0.0, "host2": 0.0},
+		},
 	}
 
 	for _, tt := range tests {

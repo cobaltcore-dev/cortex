@@ -25,40 +25,80 @@
   "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": ["^Makefile$"],
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
       "matchStrings": ["CONTROLLER_TOOLS_VERSION \\?= (?<currentValue>v[\\d.]+)"],
       "depNameTemplate": "sigs.k8s.io/controller-tools",
       "datasourceTemplate": "go"
     },
     {
       "customType": "regex",
-      "fileMatch": ["^Makefile$"],
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
       "matchStrings": ["GOLANGCI_LINT_VERSION \\?= (?<currentValue>v[\\d.]+)"],
       "depNameTemplate": "github.com/golangci/golangci-lint/v2",
       "datasourceTemplate": "go"
     },
     {
       "customType": "regex",
-      "fileMatch": ["^Makefile$"],
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
       "matchStrings": ["GOTESTSUM_VERSION \\?= (?<currentValue>v[\\d.]+)"],
       "depNameTemplate": "gotest.tools/gotestsum",
       "datasourceTemplate": "go"
     },
     {
       "customType": "regex",
-      "fileMatch": ["^postgres/Dockerfile$"],
+      "managerFilePatterns": [
+        "/^postgres/Dockerfile$/"
+      ],
       "matchStrings": ["FROM (?<depName>[^:\\n]+):(?<currentValue>[^@\\n]+)@(?<currentDigest>sha256:[a-f0-9]+)"],
       "datasourceTemplate": "docker",
       "autoReplaceStringTemplate": "FROM {{{depName}}}:{{{newValue}}}@{{{newDigest}}}"
     },
     {
       "customType": "regex",
-      "fileMatch": ["^postgres/Dockerfile$"],
+      "managerFilePatterns": [
+        "/^postgres/Dockerfile$/"
+      ],
       "matchStrings": ["ENV PG_VERSION (?<currentValue>[\\d]+\\.[\\d]+)-[^\\n]+"],
       "depNameTemplate": "postgres",
       "datasourceTemplate": "docker",
       "versioningTemplate": "semver-coerced",
       "autoReplaceStringTemplate": "ENV PG_VERSION {{{newValue}}}-1.pgdg13+1"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^helm/library/cortex/Chart\\.yaml$/"
+      ],
+      "matchStrings": ["appVersion:\\s*\"(?<currentValue>sha-[a-f0-9]+)\""],
+      "depNameTemplate": "ghcr.io/cobaltcore-dev/cortex",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "loose"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^helm/library/cortex-shim/Chart\\.yaml$/"
+      ],
+      "matchStrings": ["appVersion:\\s*\"(?<currentValue>sha-[a-f0-9]+)\""],
+      "depNameTemplate": "ghcr.io/cobaltcore-dev/cortex-shim",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "loose"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^helm/library/cortex-postgres/Chart\\.yaml$/"
+      ],
+      "matchStrings": ["appVersion:\\s*\"(?<currentValue>sha-[a-f0-9]+)\""],
+      "depNameTemplate": "ghcr.io/cobaltcore-dev/cortex-postgres",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "loose"
     }
   ],
   "packageRules": [
@@ -125,8 +165,10 @@
       "enabled": false
     },
     {
-      "matchPackageNames": ["python"],
-      "allowedVersions": "3.13.x"
+      "matchManagers": ["github-actions"],
+      "matchDepNames": ["python"],
+      "separateMultipleMinor": true,
+      "dependencyDashboardApproval": true
     },
     {
       "matchFileNames": [".github/actions/setup-claude-code-action/action.yml"],
@@ -135,13 +177,26 @@
     {
       "matchFileNames": [".github/renovate.json"],
       "automerge": false
+    },
+    {
+      "matchPackageNames": [
+        "ghcr.io/cobaltcore-dev/cortex",
+        "ghcr.io/cobaltcore-dev/cortex-shim",
+        "ghcr.io/cobaltcore-dev/cortex-postgres"
+      ],
+      "matchManagers": ["custom.regex"],
+      "automerge": false,
+      "schedule": ["at any time"],
+      "commitMessageAction": "Bump",
+      "commitMessageTopic": "{{depName}} chart appVersion"
     }
   ],
   "prHourlyLimit": 0,
   "timezone": "Europe/Berlin",
   "schedule": [
-    "after 6pm and before 8am every weekday",
-    "every weekend"
+    "after 6pm every weekday",
+    "every weekend",
+    "before 8am every weekday"
   ],
   "vulnerabilityAlerts": {
     "schedule": [
