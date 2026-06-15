@@ -8,7 +8,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-
 const (
 	// FlavorGroupCapacityConditionReady indicates the status data is up-to-date.
 	FlavorGroupCapacityConditionReady = "Ready"
