@@ -55,6 +55,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/machines"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 	novafilters "github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
@@ -405,17 +406,22 @@ func main() {
 
 	if slices.Contains(mainConfig.EnabledControllers, "nova-pipeline-controllers") {
 		featureGates := conf.GetConfigOrDie[nova.FeatureGates]()
+		noHostFoundCounter := crs.NewNoHostFoundCounter()
+		placementCounter := crs.NewPlacementCounter()
 		// Filter-weigher pipeline controller setup.
 		filterWeigherController := &nova.FilterWeigherPipelineController{
-			Monitor:            filterWeigherPipelineMonitor,
-			FeatureGates:       featureGates,
-			NoHostFoundCounter: nova.NewNoHostFoundCounter(),
-			PlacementCounter:   nova.NewPlacementCounter(),
+			Monitor:      filterWeigherPipelineMonitor,
+			FeatureGates: featureGates,
+			CRRecorder: crs.Recorder{
+				NoHostFoundCounter: noHostFoundCounter,
+				PlacementCounter:   placementCounter,
+			},
 		}
-		metrics.Registry.MustRegister(filterWeigherController.NoHostFoundCounter)
-		metrics.Registry.MustRegister(filterWeigherController.PlacementCounter)
+		metrics.Registry.MustRegister(noHostFoundCounter)
+		metrics.Registry.MustRegister(placementCounter)
 		// Inferred through the base controller.
 		filterWeigherController.Client = multiclusterClient
+		filterWeigherController.CRRecorder.Client = multiclusterClient
 		if err := filterWeigherController.SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "nova FilterWeigherPipelineController")
 			os.Exit(1)

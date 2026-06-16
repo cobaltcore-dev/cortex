@@ -12,11 +12,11 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/weighers"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
@@ -49,10 +49,8 @@ type FilterWeigherPipelineController struct {
 	// Candidate gatherer to get all placement candidates if needed.
 	gatherer CandidateGatherer
 
-	// NoHostFoundCounter counts no-host-found results by CR slot outcome (no_cr/cr_exhausted/slot_exhausted/slot_blocked/error).
-	NoHostFoundCounter *prometheus.CounterVec
-	// PlacementCounter counts successful placements by CR slot outcome.
-	PlacementCounter *prometheus.CounterVec
+	// CRRecorder receives scheduling events and updates CR reservations and metrics.
+	CRRecorder crs.Recorder
 }
 
 // The type of pipeline this controller manages.
@@ -127,11 +125,11 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 					"intent", decision.Spec.Intent,
 				)
 			} else {
-				c.recordCRAllocation(ctx, decision, *request)
+				c.CRRecorder.RecordPlacement(ctx, decision, *request)
 			}
 		}
 		if decision.Status.Result.TargetHost == nil {
-			c.logNoHostFound(ctx, decision, *request)
+			c.CRRecorder.RecordNoHostFound(ctx, decision, *request)
 		}
 	}
 	return err

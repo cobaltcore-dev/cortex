@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package nova
+package crs
 
 import (
 	"context"
@@ -12,19 +12,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// CRSlotEvaluator provides post-pipeline evaluation of CR reservation slots.
+// SlotEvaluator provides post-pipeline evaluation of CR reservation slots.
 // Build once per request from HV and Reservation CRDs; query without further reads.
-type CRSlotEvaluator struct {
+type SlotEvaluator struct {
 	// hvFreeMemory is (EffectiveCapacity - Allocation).memory per host, before reservation blocks.
 	hvFreeMemory map[string]int64
 	// reservationsByHost maps host name to its ready CR reservation slots.
 	reservationsByHost map[string][]v1alpha1.Reservation
 }
 
-// BuildCRSlotEvaluator lists HV CRDs and CR Reservation CRDs once and returns an evaluator
+// BuildSlotEvaluator lists HV CRDs and CR Reservation CRDs once and returns an evaluator
 // that can answer slot-usability queries without further K8s reads.
-func BuildCRSlotEvaluator(ctx context.Context, c client.Client) (*CRSlotEvaluator, error) {
-	eval := &CRSlotEvaluator{
+func BuildSlotEvaluator(ctx context.Context, c client.Client) (*SlotEvaluator, error) {
+	eval := &SlotEvaluator{
 		hvFreeMemory:       make(map[string]int64),
 		reservationsByHost: make(map[string][]v1alpha1.Reservation),
 	}
@@ -42,9 +42,7 @@ func BuildCRSlotEvaluator(ctx context.Context, c client.Client) (*CRSlotEvaluato
 		}
 		effectiveMemQ := capacityMap[hv1.ResourceMemory]
 		allocMemQ := hv.Status.Allocation[hv1.ResourceMemory]
-		effectiveMem := effectiveMemQ.Value()
-		allocMem := allocMemQ.Value()
-		eval.hvFreeMemory[hv.Name] = max(effectiveMem-allocMem, 0)
+		eval.hvFreeMemory[hv.Name] = max(effectiveMemQ.Value()-allocMemQ.Value(), 0)
 	}
 
 	var resList v1alpha1.ReservationList
@@ -60,19 +58,17 @@ func BuildCRSlotEvaluator(ctx context.Context, c client.Client) (*CRSlotEvaluato
 		if res.Spec.CommittedResourceReservation == nil {
 			continue
 		}
-		host := res.Spec.TargetHost
-		eval.reservationsByHost[host] = append(eval.reservationsByHost[host], res)
+		eval.reservationsByHost[res.Spec.TargetHost] = append(eval.reservationsByHost[res.Spec.TargetHost], res)
 	}
 
 	return eval, nil
 }
 
 // SlotsForHost returns all CR reservation slots on hostName matching projectID + flavorGroup.
-func (e *CRSlotEvaluator) SlotsForHost(hostName, projectID, flavorGroup string) []v1alpha1.Reservation {
+func (e *SlotEvaluator) SlotsForHost(hostName, projectID, flavorGroup string) []v1alpha1.Reservation {
 	var result []v1alpha1.Reservation
 	for _, res := range e.reservationsByHost[hostName] {
-		cr := res.Spec.CommittedResourceReservation
-		if cr.MatchesGroup(projectID, flavorGroup) {
+		if res.Spec.CommittedResourceReservation.MatchesGroup(projectID, flavorGroup) {
 			result = append(result, res)
 		}
 	}
@@ -87,7 +83,7 @@ func (e *CRSlotEvaluator) SlotsForHost(hostName, projectID, flavorGroup string) 
 // where host.base_free = hvFreeMemory[host] - sum(all reservation blocks on host).
 // On happy-path candidates the pipeline already guarantees host capacity, so this
 // simplifies to slot.remaining > 0 — but the full formula is evaluated regardless.
-func (e *CRSlotEvaluator) HasUsableSlot(hostName, projectID, flavorGroup string, vmMemBytes int64) bool {
+func (e *SlotEvaluator) HasUsableSlot(hostName, projectID, flavorGroup string, vmMemBytes int64) bool {
 	var allBlocks int64
 	for _, res := range e.reservationsByHost[hostName] {
 		blockQ := res.Spec.Resources[hv1.ResourceMemory]
@@ -96,7 +92,7 @@ func (e *CRSlotEvaluator) HasUsableSlot(hostName, projectID, flavorGroup string,
 	hvFree := e.hvFreeMemory[hostName]
 
 	for _, slot := range e.SlotsForHost(hostName, projectID, flavorGroup) {
-		slotRemaining := reservationRemainingMemory(slot)
+		slotRemaining := ReservationRemainingMemory(slot)
 		if slotRemaining <= 0 {
 			continue
 		}
@@ -106,4 +102,51 @@ func (e *CRSlotEvaluator) HasUsableSlot(hostName, projectID, flavorGroup string,
 		}
 	}
 	return false
+}
+
+// ReservationRemainingMemory returns how many bytes of memory remain
+// unallocated in a reservation slot. Returns 0 if the slot is full or nil.
+func ReservationRemainingMemory(res v1alpha1.Reservation) int64 {
+	cr := res.Spec.CommittedResourceReservation
+	if cr == nil {
+		return 0
+	}
+	totalMemQ := res.Spec.Resources[hv1.ResourceMemory]
+	var usedMem int64
+	for _, alloc := range cr.Allocations {
+		allocMem := alloc.Resources[hv1.ResourceMemory]
+		usedMem += allocMem.Value()
+	}
+	return max(totalMemQ.Value()-usedMem, 0)
+}
+
+// PickSlot selects the best reservation slot for a new VM.
+// A slot is usable if it has any remaining memory (overfill is allowed: the VM
+// may exceed the slot's remaining capacity, with the overflow covered by the
+// host's free capacity which the pipeline already verified).
+// Selection: maximise coverage (min(remMem, vmMemoryBytes)), tiebreak by
+// smallest remaining memory (tightest fit), then reservation name.
+// Returns the slot name, or "" if no slot has any remaining memory.
+func PickSlot(candidates []v1alpha1.Reservation, vmMemoryBytes int64) string {
+	bestName := ""
+	var bestCoverage, bestRemMem int64
+
+	for _, res := range candidates {
+		remMem := ReservationRemainingMemory(res)
+		if remMem <= 0 {
+			continue
+		}
+		coverage := min(remMem, vmMemoryBytes)
+
+		if bestName == "" ||
+			coverage > bestCoverage ||
+			(coverage == bestCoverage && remMem < bestRemMem) ||
+			(coverage == bestCoverage && remMem == bestRemMem && res.Name < bestName) {
+			bestName = res.Name
+			bestCoverage = coverage
+			bestRemMem = remMem
+		}
+	}
+
+	return bestName
 }

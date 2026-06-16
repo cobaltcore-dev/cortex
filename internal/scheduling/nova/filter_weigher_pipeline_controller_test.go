@@ -27,6 +27,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
@@ -1055,9 +1056,9 @@ func TestPickReservationSlot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := pickReservationSlot(tt.candidates, vmMemBytes)
+			got := crs.PickSlot(tt.candidates, vmMemBytes)
 			if got != tt.want {
-				t.Errorf("pickReservationSlot() = %q, want %q", got, tt.want)
+				t.Errorf("crs.PickSlot() = %q, want %q", got, tt.want)
 			}
 		})
 	}
@@ -1306,7 +1307,7 @@ func TestRecordCRAllocation(t *testing.T) {
 				WithObjects(tt.objects...).
 				Build()
 
-			counter := NewPlacementCounter()
+			counter := crs.NewPlacementCounter()
 			reg := prometheus.NewRegistry()
 			reg.MustRegister(counter)
 
@@ -1314,10 +1315,13 @@ func TestRecordCRAllocation(t *testing.T) {
 				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
 					Client: fakeClient,
 				},
-				PlacementCounter: counter,
+				CRRecorder: crs.Recorder{
+					Client:           fakeClient,
+					PlacementCounter: counter,
+				},
 			}
 
-			controller.recordCRAllocation(context.Background(), tt.decision, tt.request)
+			controller.CRRecorder.RecordPlacement(context.Background(), tt.decision, tt.request)
 
 			var res v1alpha1.Reservation
 			if err := fakeClient.Get(context.Background(), client.ObjectKey{Name: tt.checkSlot}, &res); err != nil {

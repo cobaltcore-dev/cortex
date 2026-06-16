@@ -22,212 +22,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
-
-// makeCR builds a CommittedResource for testing.
-func makeCR(state v1alpha1.CommitmentStatus, amountMiB, usedMiB int64) v1alpha1.CommittedResource {
-	cr := v1alpha1.CommittedResource{
-		Spec: v1alpha1.CommittedResourceSpec{
-			State:  state,
-			Amount: *resource.NewQuantity(amountMiB*1024*1024, resource.BinarySI),
-		},
-	}
-	if usedMiB > 0 {
-		cr.Status.UsedResources = map[string]resource.Quantity{
-			"memory": *resource.NewQuantity(usedMiB*1024*1024, resource.BinarySI),
-		}
-	}
-	return cr
-}
-
-// makeSlot builds a Reservation slot for testing.
-func makeSlot(projectID, flavorGroup string, totalMemMiB, allocatedMemMiB int64) v1alpha1.Reservation {
-	res := v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: "slot-" + flavorGroup},
-		Spec: v1alpha1.ReservationSpec{
-			Resources: map[hv1.ResourceName]resource.Quantity{
-				hv1.ResourceMemory: *resource.NewQuantity(totalMemMiB*1024*1024, resource.BinarySI),
-			},
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				ProjectID:     projectID,
-				ResourceGroup: flavorGroup,
-			},
-		},
-	}
-	if allocatedMemMiB > 0 {
-		res.Spec.CommittedResourceReservation.Allocations = map[string]v1alpha1.CommittedResourceAllocation{
-			"some-vm": {
-				Resources: map[hv1.ResourceName]resource.Quantity{
-					hv1.ResourceMemory: *resource.NewQuantity(allocatedMemMiB*1024*1024, resource.BinarySI),
-				},
-			},
-		}
-	}
-	return res
-}
-
-func TestClassifyNoHostFound(t *testing.T) {
-	const (
-		proj  = "project-1"
-		group = "kvm_v2_hana_s"
-	)
-	const MiB = int64(1024 * 1024)
-
-	// emptyEval has no hosts or slots.
-	emptyEval := &CRSlotEvaluator{
-		hvFreeMemory:       map[string]int64{},
-		reservationsByHost: map[string][]v1alpha1.Reservation{},
-	}
-
-	// evalWithSlot builds an evaluator with a single slot on "host-1".
-	evalWithSlot := func(totalMiB, allocMiB int64) *CRSlotEvaluator {
-		slot := makeSlot(proj, group, totalMiB, allocMiB)
-		return &CRSlotEvaluator{
-			hvFreeMemory: map[string]int64{"host-1": 16384 * MiB},
-			reservationsByHost: map[string][]v1alpha1.Reservation{
-				"host-1": {slot},
-			},
-		}
-	}
-
-	tests := []struct {
-		name         string
-		activeCRs    []v1alpha1.CommittedResource
-		eval         *CRSlotEvaluator
-		inputHosts   []string
-		vmMemBytes   int64
-		expectedCase string
-	}{
-		{
-			name:         "no_cr: no active CRs for project+flavor group",
-			activeCRs:    nil,
-			eval:         emptyEval,
-			inputHosts:   nil,
-			vmMemBytes:   4096 * MiB,
-			expectedCase: "no_cr",
-		},
-		{
-			name: "cr_exhausted: CRs fully occupied (used == capacity)",
-			activeCRs: []v1alpha1.CommittedResource{
-				makeCR(v1alpha1.CommitmentStatusConfirmed, 8192, 8192),
-			},
-			eval:         emptyEval,
-			inputHosts:   []string{"host-1"},
-			vmMemBytes:   4096 * MiB,
-			expectedCase: "cr_exhausted",
-		},
-		{
-			name: "cr_exhausted: CRs fully occupied (used > capacity)",
-			activeCRs: []v1alpha1.CommittedResource{
-				makeCR(v1alpha1.CommitmentStatusConfirmed, 8192, 10000),
-			},
-			eval:         emptyEval,
-			inputHosts:   []string{"host-1"},
-			vmMemBytes:   4096 * MiB,
-			expectedCase: "cr_exhausted",
-		},
-		{
-			name: "cr_exhausted: multiple CRs, total used >= total capacity",
-			activeCRs: []v1alpha1.CommittedResource{
-				makeCR(v1alpha1.CommitmentStatusConfirmed, 4096, 4096),
-				makeCR(v1alpha1.CommitmentStatusGuaranteed, 4096, 4096),
-			},
-			eval:         emptyEval,
-			inputHosts:   []string{"host-1"},
-			vmMemBytes:   4096 * MiB,
-			expectedCase: "cr_exhausted",
-		},
-		{
-			name: "slot_exhausted: CRs have capacity but slot fully allocated",
-			activeCRs: []v1alpha1.CommittedResource{
-				makeCR(v1alpha1.CommitmentStatusConfirmed, 8192, 4096),
-			},
-			eval:         evalWithSlot(8192, 8192), // slotRemaining=0 → skipped
-			inputHosts:   []string{"host-1"},
-			vmMemBytes:   4096 * MiB,
-			expectedCase: "slot_exhausted",
-		},
-		{
-			name: "slot_exhausted: CRs have capacity, no slots at all",
-			activeCRs: []v1alpha1.CommittedResource{
-				makeCR(v1alpha1.CommitmentStatusConfirmed, 8192, 0),
-			},
-			eval:         emptyEval,
-			inputHosts:   []string{"host-1"},
-			vmMemBytes:   4096 * MiB,
-			expectedCase: "slot_exhausted",
-		},
-		{
-			name: "slot_blocked: free slot exists on input host",
-			activeCRs: []v1alpha1.CommittedResource{
-				makeCR(v1alpha1.CommitmentStatusConfirmed, 8192, 4096),
-			},
-			eval:         evalWithSlot(8192, 4096), // 4096 MiB remaining; 16384-8192+4096=12288 >= 4096
-			inputHosts:   []string{"host-1"},
-			vmMemBytes:   4096 * MiB,
-			expectedCase: "slot_blocked",
-		},
-		{
-			name: "slot_blocked: overfill — slot smaller than VM is still usable",
-			activeCRs: []v1alpha1.CommittedResource{
-				makeCR(v1alpha1.CommitmentStatusConfirmed, 8192, 4096),
-			},
-			eval:         evalWithSlot(8192, 6144), // 2048 MiB remaining; 16384-8192+2048=10240 >= 4096
-			inputHosts:   []string{"host-1"},
-			vmMemBytes:   4096 * MiB,
-			expectedCase: "slot_blocked",
-		},
-		{
-			name: "slot_exhausted: slots for other project ignored",
-			activeCRs: []v1alpha1.CommittedResource{
-				makeCR(v1alpha1.CommitmentStatusConfirmed, 8192, 0),
-			},
-			eval: &CRSlotEvaluator{
-				hvFreeMemory: map[string]int64{"host-1": 16384 * MiB},
-				reservationsByHost: map[string][]v1alpha1.Reservation{
-					"host-1": {makeSlot("other-project", group, 8192, 0)},
-				},
-			},
-			inputHosts:   []string{"host-1"},
-			vmMemBytes:   4096 * MiB,
-			expectedCase: "slot_exhausted",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := classifyNoHostFound(tt.activeCRs, tt.eval, tt.inputHosts, proj, group, tt.vmMemBytes)
-			if got != tt.expectedCase {
-				t.Errorf("classifyNoHostFound() = %q, want %q", got, tt.expectedCase)
-			}
-		})
-	}
-}
-
-func TestReservationRemainingMemory(t *testing.T) {
-	tests := []struct {
-		name        string
-		totalMemMiB int64
-		usedMemMiB  int64
-		wantBytes   int64
-	}{
-		{"empty slot", 8192, 0, 8192 * 1024 * 1024},
-		{"partially used", 8192, 4096, 4096 * 1024 * 1024},
-		{"fully used", 8192, 8192, 0},
-		{"over-allocated (clamped to zero)", 4096, 8192, 0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			res := makeSlot("proj", "group", tt.totalMemMiB, tt.usedMemMiB)
-			got := reservationRemainingMemory(res)
-			if got != tt.wantBytes {
-				t.Errorf("reservationRemainingMemory() = %d, want %d", got, tt.wantBytes)
-			}
-		})
-	}
-}
 
 func TestLogNoHostFound(t *testing.T) {
 	scheme := runtime.NewScheme()
@@ -433,7 +230,7 @@ func TestLogNoHostFound(t *testing.T) {
 				WithObjects(tt.objects...).
 				Build()
 
-			counter := NewNoHostFoundCounter()
+			counter := crs.NewNoHostFoundCounter()
 			reg := prometheus.NewRegistry()
 			reg.MustRegister(counter)
 
@@ -441,7 +238,10 @@ func TestLogNoHostFound(t *testing.T) {
 				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
 					Client: fakeClient,
 				},
-				NoHostFoundCounter: counter,
+				CRRecorder: crs.Recorder{
+					Client:             fakeClient,
+					NoHostFoundCounter: counter,
+				},
 			}
 
 			requestFlavorName := flavorName
@@ -464,7 +264,7 @@ func TestLogNoHostFound(t *testing.T) {
 				Spec: v1alpha1.DecisionSpec{Intent: api.CreateIntent},
 			}
 
-			controller.logNoHostFound(context.Background(), decision, request)
+			controller.CRRecorder.RecordNoHostFound(context.Background(), decision, request)
 
 			if tt.expectedCase == "" {
 				total := testutil.ToFloat64(counter.WithLabelValues("no_cr", flavorGroup, string(api.CreateIntent))) +
@@ -529,7 +329,7 @@ func TestFeatureGate_CommittedResourceTracking(t *testing.T) {
 		},
 	}
 
-	// Zero hosts → pipeline returns no TargetHost → triggers logNoHostFound path.
+	// Zero hosts → pipeline returns no TargetHost → triggers RecordNoHostFound path.
 	novaRequest := api.ExternalSchedulerRequest{
 		Spec: api.NovaObject[api.NovaSpec]{
 			Data: api.NovaSpec{
@@ -564,7 +364,7 @@ func TestFeatureGate_CommittedResourceTracking(t *testing.T) {
 				WithStatusSubresource(&v1alpha1.Decision{}, &v1alpha1.History{}).
 				Build()
 
-			counter := NewNoHostFoundCounter()
+			counter := crs.NewNoHostFoundCounter()
 			reg := prometheus.NewRegistry()
 			reg.MustRegister(counter)
 
@@ -575,8 +375,11 @@ func TestFeatureGate_CommittedResourceTracking(t *testing.T) {
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 					HistoryManager:  lib.HistoryClient{Client: fakeClient},
 				},
-				FeatureGates:       FeatureGates{CommittedResourceTracking: enabled},
-				NoHostFoundCounter: counter,
+				FeatureGates: FeatureGates{CommittedResourceTracking: enabled},
+				CRRecorder: crs.Recorder{
+					Client:             fakeClient,
+					NoHostFoundCounter: counter,
+				},
 			}
 			controller.PipelineConfigs["test-pipeline"] = pipelineConf
 			initResult := controller.InitPipeline(context.Background(), pipelineConf)
