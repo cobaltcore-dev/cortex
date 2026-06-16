@@ -22,7 +22,6 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 

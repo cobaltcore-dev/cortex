@@ -265,6 +265,11 @@ type ReservationList struct {
 	Items           []Reservation `json:"items"`
 }
 
+// MatchesGroup reports whether the reservation targets the given project and resource group.
+func (s *CommittedResourceReservationSpec) MatchesGroup(projectID, resourceGroup string) bool {
+	return s.ProjectID == projectID && s.ResourceGroup == resourceGroup
+}
+
 // IsReady returns true if the reservation has the Ready condition set to True.
 func (r *Reservation) IsReady() bool {
 	return meta.IsStatusConditionTrue(r.Status.Conditions, ReservationConditionReady)

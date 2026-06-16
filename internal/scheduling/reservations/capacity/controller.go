@@ -301,7 +301,7 @@ func (c *Controller) probeScheduler(
 		AvailabilityZone: az,
 		Pipeline:         pipeline,
 		EligibleHosts:    eligibleHosts,
-	}, scheduling.Options{SkipHistory: true, SkipInflight: true})
+	}, scheduling.Options{SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true})
 	if err != nil {
 		return 0, 0, fmt.Errorf("scheduler call failed (pipeline=%s): %w", pipeline, err)
 	}
@@ -397,7 +397,7 @@ func (c *Controller) sumCommittedCapacity(ctx context.Context, groupName, az str
 		if cr.Spec.ResourceType != v1alpha1.CommittedResourceTypeMemory {
 			continue
 		}
-		if cr.Spec.State != v1alpha1.CommitmentStatusGuaranteed && cr.Spec.State != v1alpha1.CommitmentStatusConfirmed {
+		if !cr.IsActive() {
 			continue
 		}
 		amount := cr.Spec.Amount

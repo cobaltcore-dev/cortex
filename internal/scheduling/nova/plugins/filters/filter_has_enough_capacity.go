@@ -152,8 +152,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 					// For committed resource reservations: unlock resources only if:
 					// 1. Project ID matches
 					// 2. ResourceGroup matches the flavor's hw_version
-					reservation.Spec.CommittedResourceReservation.ProjectID == request.Spec.Data.ProjectID &&
-					reservation.Spec.CommittedResourceReservation.ResourceGroup == request.Spec.Data.Flavor.Data.ExtraSpecs["hw_version"]:
+					reservation.Spec.CommittedResourceReservation.MatchesGroup(request.Spec.Data.ProjectID, request.Spec.Data.Flavor.Data.ExtraSpecs["hw_version"]):
 					traceLog.Info("unlocking resources reserved by matching committed resource reservation with allocation",
 						"reservation", reservation.Name,
 						"instanceUUID", request.Spec.Data.InstanceUUID,
