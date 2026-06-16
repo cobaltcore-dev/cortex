@@ -43,7 +43,7 @@ sharedSSOCert: &sharedSSOCert
   selfSigned: "false"
 
 postgres:
-  host: cortex-nova-postgresql-v18
+  host: cortex-nova-postgresql-v18-g0
   user: postgres
   password: secret
   database: postgres

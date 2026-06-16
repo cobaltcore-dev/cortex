@@ -77,6 +77,22 @@ The state of the pipeline is propagated automatically through the states of its 
 
 Pipeline behavior has two configuration layers: static per-step params defined in the Pipeline CRD YAML (thresholds, weights, traits), and call-time `Options` set by the controller invoking the pipeline (e.g. whether to record history, lock reservations, or skip VM allocation accounting).
 
+#### Call-time Options
+
+The `scheduling.Options` struct configures a single pipeline invocation. All fields default to their zero value (false / nil / 0), meaning all side-effects are enabled and no limits apply.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ReadOnly` | `bool` | Pipeline run does not modify shared scheduling state (reservations, history). Cortex may execute read-only runs concurrently. |
+| `AssumeEmptyHosts` | `bool` | Ignores running instances on hosts, treating them as empty. |
+| `LockReservations` | `bool` | Prevents reservation unlocking, considering reserved resources as unavailable. |
+| `IgnoredReservationTypes` | `[]ReservationType` | Reservation types completely ignored by filters and weighers. |
+| `MaxCandidates` | `int` | Maximum number of candidate hosts returned after weighing. 0 means no limit. |
+| `SkipHistory` | `bool` | Skips recording the placement decision in placement history. |
+| `SkipInflight` | `bool` | Skips creating pessimistic blocking reservations for returned candidates. |
+
+**Validation constraint:** A `ReadOnly` run must also set `SkipHistory=true` and `SkipInflight=true`. This is enforced by `Options.Validate()` — omitting either field causes validation to fail with an error before the pipeline executes.
+
 ### Decisions
 
 ```bash

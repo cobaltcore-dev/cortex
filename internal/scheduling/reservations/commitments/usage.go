@@ -5,18 +5,14 @@ package commitments
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/external"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/go-logr/logr"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -24,38 +20,28 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// UsageDBClient is the minimal interface for querying VM usage data from Postgres.
-type UsageDBClient interface {
-	// ListProjectVMs returns all VMs for a project with their flavor data.
-	ListProjectVMs(ctx context.Context, projectID string) ([]VMRow, error)
+// UsageCalculator computes usage reports for Limes LIQUID API.
+type UsageCalculator struct {
+	client   client.Client
+	vmSource reservations.VMSource
+	config   APIConfig
 }
 
-// VMRow is the result of a joined server+flavor+image query from Postgres.
-type VMRow struct {
-	ID           string
-	Name         string
-	Status       string
-	Created      string
-	AZ           string
-	Hypervisor   string
-	FlavorName   string
-	FlavorRAM    uint64
-	FlavorVCPUs  uint64
-	FlavorDisk   uint64
-	FlavorExtras string // JSON string of flavor extra_specs
-	OSType       string // pre-computed from Glance image properties; "unknown" when not found
+// NewUsageCalculator creates a new UsageCalculator instance.
+func NewUsageCalculator(client client.Client, vmSource reservations.VMSource, config APIConfig) *UsageCalculator {
+	return &UsageCalculator{
+		client:   client,
+		vmSource: vmSource,
+		config:   config,
+	}
 }
 
 // CommitmentStateWithUsage extends CommitmentState with usage tracking for billing calculations.
-// Used by the report-usage API to track remaining capacity during VM-to-commitment assignment.
 type CommitmentStateWithUsage struct {
 	CommitmentState
-	// RemainingMemoryBytes is the uncommitted capacity left for VM assignment
 	RemainingMemoryBytes int64
-	// AssignedInstances tracks which VM instances have been assigned to this commitment
-	AssignedInstances []string
-	// UsedVCPUs is the total vCPU count of assigned VM instances
-	UsedVCPUs int64
+	AssignedInstances    []string
+	UsedVCPUs            int64
 }
 
 // NewCommitmentStateWithUsage creates a CommitmentStateWithUsage from a CommitmentState.
@@ -68,7 +54,6 @@ func NewCommitmentStateWithUsage(state *CommitmentState) *CommitmentStateWithUsa
 }
 
 // AssignVM attempts to assign a VM to this commitment if there's enough capacity.
-// Returns true if the VM was assigned, false if not enough capacity.
 func (c *CommitmentStateWithUsage) AssignVM(vmUUID string, vmMemoryBytes, vCPUs int64) bool {
 	if c.RemainingMemoryBytes >= vmMemoryBytes {
 		c.RemainingMemoryBytes -= vmMemoryBytes
@@ -84,8 +69,7 @@ func (c *CommitmentStateWithUsage) HasRemainingCapacity() bool {
 	return c.RemainingMemoryBytes > 0
 }
 
-// VMUsageInfo contains VM information needed for usage calculation.
-// This is a local view of the VM enriched with flavor group information.
+// VMUsageInfo contains VM information needed for usage calculation, enriched with flavor group data.
 type VMUsageInfo struct {
 	UUID          string
 	Name          string
@@ -95,28 +79,12 @@ type VMUsageInfo struct {
 	MemoryMB      uint64
 	VCPUs         uint64
 	DiskGB        uint64
-	VideoRAMMiB   *uint64 // optional, from flavor extra_specs hw_video:ram_max_mb
-	OSType        string  // pre-computed from Glance image; "unknown" for volume-booted or unmapped images
+	VideoRAMMiB   *uint64
+	OSType        string
 	AZ            string
 	Hypervisor    string
 	CreatedAt     time.Time
-	UsageMultiple uint64 // RAM in the group's declared unit: slot count (fixed-ratio) or GiB (variable-ratio)
-}
-
-// UsageCalculator computes usage reports for Limes LIQUID API.
-type UsageCalculator struct {
-	client  client.Client
-	usageDB UsageDBClient
-	config  APIConfig
-}
-
-// NewUsageCalculator creates a new UsageCalculator instance.
-func NewUsageCalculator(client client.Client, usageDB UsageDBClient, config APIConfig) *UsageCalculator {
-	return &UsageCalculator{
-		client:  client,
-		usageDB: usageDB,
-		config:  config,
-	}
+	UsageMultiple uint64
 }
 
 // CalculateUsage computes the usage report for a specific project.
@@ -155,7 +123,7 @@ func (c *UsageCalculator) CalculateUsage(
 		quotaByResourceAZ = buildCombinedQuotaMap(pqList.Items)
 	}
 
-	vms, err := getProjectVMs(ctx, c.usageDB, log, projectID, flavorGroups, allAZs)
+	vms, err := getProjectVMs(ctx, c.vmSource, log, projectID, flavorGroups, allAZs)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to get project VMs: %w", err)
 	}
@@ -266,23 +234,23 @@ func buildCommitmentCapacityMap(
 	return result, nil
 }
 
-// getProjectVMs retrieves all VMs for a project from Postgres and enriches them with flavor group info.
+// getProjectVMs retrieves all VMs for a project via VMSource and enriches them with flavor group info.
 func getProjectVMs(
 	ctx context.Context,
-	usageDB UsageDBClient,
+	vmSource reservations.VMSource,
 	log logr.Logger,
 	projectID string,
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	allAZs []liquid.AvailabilityZone,
 ) ([]VMUsageInfo, error) {
 
-	if usageDB == nil {
-		return nil, errors.New("usage DB client not configured")
+	if vmSource == nil {
+		return nil, errors.New("vm source not configured")
 	}
 
-	rows, err := usageDB.ListProjectVMs(ctx, projectID)
+	projectVMs, err := vmSource.ListVMsByProject(ctx, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list VMs from Postgres: %w", err)
+		return nil, fmt.Errorf("failed to list VMs from source: %w", err)
 	}
 
 	// Build flavor name -> flavor group lookup
@@ -294,59 +262,56 @@ func getProjectVMs(
 	}
 
 	var vms []VMUsageInfo
-	for _, row := range rows {
-		// Parse creation time (Nova returns ISO 8601/RFC3339 format)
-		createdAt, err := time.Parse(time.RFC3339, row.Created)
+	for _, vm := range projectVMs {
+		createdAt, err := time.Parse(time.RFC3339, vm.CreatedAt)
 		if err != nil {
 			log.V(1).Info("failed to parse server creation time, using zero time",
-				"server", row.ID, "created", row.Created, "error", err.Error())
+				"server", vm.UUID, "created", vm.CreatedAt, "error", err.Error())
 			createdAt = time.Time{}
 		}
 
-		// Determine flavor group
-		flavorGroup := flavorToGroup[row.FlavorName]
+		flavorGroup := flavorToGroup[vm.FlavorName]
 
-		// Compute usage in the unit declared by the info endpoint for this group:
-		//   - fixed-ratio: slot count (FlavorRAM / smallest.MemoryMB); exact since flavors are integer multiples
-		//   - variable-ratio or unknown: GiB, +16 MiB before dividing to handle flavors that reserve 16 MiB for video RAM
+		memoryMB := uint64(0)
+		vcpus := uint64(0)
+		if qty, ok := vm.Resources["memory"]; ok {
+			memoryMB = uint64(qty.Value()) / (1024 * 1024) //nolint:gosec
+		}
+		if qty, ok := vm.Resources["vcpus"]; ok {
+			vcpus = uint64(qty.Value()) //nolint:gosec
+		}
+
 		var usageMultiple uint64
-		if row.FlavorRAM > 0 {
+		if memoryMB > 0 {
 			if fg, ok := flavorGroups[flavorGroup]; ok && fg.HasFixedRamCoreRatio() {
-				usageMultiple = row.FlavorRAM / fg.SmallestFlavor.MemoryMB
+				usageMultiple = memoryMB / fg.SmallestFlavor.MemoryMB
 			} else {
-				usageMultiple = (row.FlavorRAM + 16) / 1024
+				usageMultiple = (memoryMB + 16) / 1024
 			}
 		}
 
-		// Normalize AZ
-		normalizedAZ := liquid.NormalizeAZ(row.AZ, allAZs)
+		normalizedAZ := liquid.NormalizeAZ(vm.AvailabilityZone, allAZs)
 
-		// Parse video RAM from flavor extra_specs
 		var videoRAMMiB *uint64
-		if row.FlavorExtras != "" {
-			var extraSpecs map[string]string
-			if err := json.Unmarshal([]byte(row.FlavorExtras), &extraSpecs); err == nil {
-				if val, ok := extraSpecs["hw_video:ram_max_mb"]; ok {
-					if parsed, err := strconv.ParseUint(val, 10, 64); err == nil {
-						videoRAMMiB = &parsed
-					}
-				}
+		if val, ok := vm.FlavorExtraSpecs["hw_video:ram_max_mb"]; ok {
+			if parsed, err := strconv.ParseUint(val, 10, 64); err == nil {
+				videoRAMMiB = &parsed
 			}
 		}
 
 		vms = append(vms, VMUsageInfo{
-			UUID:          row.ID,
-			Name:          row.Name,
-			FlavorName:    row.FlavorName,
+			UUID:          vm.UUID,
+			Name:          vm.Name,
+			FlavorName:    vm.FlavorName,
 			FlavorGroup:   flavorGroup,
-			Status:        row.Status,
-			MemoryMB:      row.FlavorRAM,
-			VCPUs:         row.FlavorVCPUs,
-			DiskGB:        row.FlavorDisk,
+			Status:        vm.Status,
+			MemoryMB:      memoryMB,
+			VCPUs:         vcpus,
+			DiskGB:        vm.DiskGB,
 			VideoRAMMiB:   videoRAMMiB,
-			OSType:        row.OSType,
+			OSType:        vm.OSType,
 			AZ:            string(normalizedAZ),
-			Hypervisor:    row.Hypervisor,
+			Hypervisor:    vm.CurrentHypervisor,
 			CreatedAt:     createdAt,
 			UsageMultiple: usageMultiple,
 		})
@@ -645,81 +610,4 @@ func countCommitmentStates(m map[string][]*CommitmentStateWithUsage) int {
 		count += len(list)
 	}
 	return count
-}
-
-// dbUsageClient implements UsageDBClient using a lazy-connecting PostgresReader.
-type dbUsageClient struct {
-	k8sClient      client.Client
-	datasourceName string
-	mu             sync.Mutex
-	reader         *external.PostgresReader
-}
-
-// NewDBUsageClient creates a UsageDBClient that lazily connects to Postgres via the named Datasource CRD.
-func NewDBUsageClient(k8sClient client.Client, datasourceName string) UsageDBClient {
-	return &dbUsageClient{k8sClient: k8sClient, datasourceName: datasourceName}
-}
-
-func (c *dbUsageClient) getReader(ctx context.Context) (*external.PostgresReader, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.reader != nil {
-		return c.reader, nil
-	}
-	reader, err := external.NewPostgresReader(ctx, c.k8sClient, c.datasourceName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to datasource %s: %w", c.datasourceName, err)
-	}
-	c.reader = reader
-	return reader, nil
-}
-
-// vmQueryRow is the scan target for the server+flavor+image JOIN query.
-type vmQueryRow struct {
-	ID           string `db:"id"`
-	Name         string `db:"name"`
-	Status       string `db:"status"`
-	Created      string `db:"created"`
-	AZ           string `db:"az"`
-	Hypervisor   string `db:"hypervisor"`
-	FlavorName   string `db:"flavor_name"`
-	FlavorRAM    uint64 `db:"flavor_ram"`
-	FlavorVCPUs  uint64 `db:"flavor_vcpus"`
-	FlavorDisk   uint64 `db:"flavor_disk"`
-	FlavorExtras string `db:"flavor_extras"`
-	OSType       string `db:"os_type"`
-}
-
-// ListProjectVMs returns all VMs for a project joined with their flavor data from Postgres.
-func (c *dbUsageClient) ListProjectVMs(ctx context.Context, projectID string) ([]VMRow, error) {
-	reader, err := c.getReader(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	query := `
-		SELECT
-			s.id, s.name, s.status, s.created,
-			s.os_ext_az_availability_zone        AS az,
-			s.os_ext_srv_attr_hypervisor_hostname AS hypervisor,
-			s.flavor_name,
-			COALESCE(f.ram, 0)          AS flavor_ram,
-			COALESCE(f.vcpus, 0)        AS flavor_vcpus,
-			COALESCE(f.disk, 0)         AS flavor_disk,
-			COALESCE(f.extra_specs, '') AS flavor_extras,
-			COALESCE(NULLIF(s.os_type, ''), 'unknown') AS os_type
-		FROM ` + nova.Server{}.TableName() + ` s
-		LEFT JOIN ` + nova.Flavor{}.TableName() + ` f ON f.name = s.flavor_name
-		WHERE s.tenant_id = $1`
-
-	var rows []vmQueryRow
-	if err := reader.Select(ctx, &rows, query, projectID); err != nil {
-		return nil, fmt.Errorf("failed to query VMs for project %s: %w", projectID, err)
-	}
-
-	result := make([]VMRow, len(rows))
-	for i, r := range rows {
-		result[i] = VMRow(r)
-	}
-	return result, nil
 }

@@ -17,3 +17,4 @@ spec:
   selector:
     {{- include "cortex-postgres.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/pg-major: {{ .Values.major | quote }}
+    app.kubernetes.io/instance-suffix: {{ .Values.instanceSuffix | quote }}
