@@ -39,7 +39,7 @@ var log = ctrl.Log.WithName("failover-reservation-controller").WithValues("modul
 // 2. Watch-based per-reservation reconciliation (Reconcile) - handles acknowledgment and validation of individual reservations
 type FailoverReservationController struct {
 	client.Client
-	VMSource        VMSource
+	VMSource        reservations.VMSource
 	Config          FailoverConfig
 	SchedulerClient *reservations.SchedulerClient
 	Recorder        events.EventRecorder // Event recorder for emitting Kubernetes events
@@ -47,7 +47,7 @@ type FailoverReservationController struct {
 	reconcileCount  int64 // Track reconciliation count for rotating VM selection
 }
 
-func NewFailoverReservationController(c client.Client, vmSource VMSource, config FailoverConfig, schedulerClient *reservations.SchedulerClient, monitor *FailoverMonitor) *FailoverReservationController {
+func NewFailoverReservationController(c client.Client, vmSource reservations.VMSource, config FailoverConfig, schedulerClient *reservations.SchedulerClient, monitor *FailoverMonitor) *FailoverReservationController {
 	return &FailoverReservationController{
 		Client:          c,
 		VMSource:        vmSource,
@@ -58,7 +58,7 @@ func NewFailoverReservationController(c client.Client, vmSource VMSource, config
 }
 
 type vmFailoverNeed struct {
-	VM    VM
+	VM    reservations.VM
 	Count int // Number of failover reservations needed
 }
 
@@ -383,7 +383,7 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 // The caller is responsible for persisting any changes to the cluster.
 func reconcileRemoveInvalidVMFromReservations(
 	ctx context.Context,
-	vms []VM,
+	vms []reservations.VM,
 	failoverReservations []v1alpha1.Reservation,
 ) (updatedReservations []v1alpha1.Reservation, reservationsToUpdate []*v1alpha1.Reservation) {
 
@@ -442,13 +442,13 @@ func reconcileRemoveInvalidVMFromReservations(
 // they no longer meet eligibility criteria.
 func reconcileRemoveNoneligibleVMFromReservations(
 	ctx context.Context,
-	vms []VM,
+	vms []reservations.VM,
 	failoverReservations []v1alpha1.Reservation,
 ) (updatedReservations []v1alpha1.Reservation, reservationsToUpdate []*v1alpha1.Reservation) {
 
 	logger := LoggerFromContext(ctx)
 
-	vmByUUID := make(map[string]VM)
+	vmByUUID := make(map[string]reservations.VM)
 	for _, vm := range vms {
 		vmByUUID[vm.UUID] = vm
 	}
@@ -584,7 +584,7 @@ func sortVMsByMemory(vms []vmFailoverNeed) {
 // reconcileCreateAndAssignReservations creates and assigns failover reservations for VMs that need them.
 func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 	ctx context.Context,
-	vms []VM,
+	vms []reservations.VM,
 	failoverReservations []v1alpha1.Reservation,
 	allHypervisors []string,
 	flavorGroups map[string]compute.FlavorGroupFeature, // passed to resolveVMForScheduling per-VM
@@ -703,7 +703,7 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 // calculateVMsMissingFailover calculates which VMs need failover reservations and how many.
 func (c *FailoverReservationController) calculateVMsMissingFailover(
 	ctx context.Context,
-	vms []VM,
+	vms []reservations.VM,
 	failoverReservations []v1alpha1.Reservation,
 ) []vmFailoverNeed {
 
