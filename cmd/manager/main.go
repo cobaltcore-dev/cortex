@@ -55,6 +55,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/machines"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 	novafilters "github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
@@ -394,22 +395,33 @@ func main() {
 
 	// Initialize commitments API for LIQUID interface (Postgres-backed usage reporting).
 	commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
-	var commitmentsUsageDB commitments.UsageDBClient
+	var commitmentsVMSource reservations.VMSource
 	if commitmentsConfig.DatasourceName != "" {
-		commitmentsUsageDB = commitments.NewDBUsageClient(multiclusterClient, commitmentsConfig.DatasourceName)
+		commitmentsVMSource = reservations.NewPostgresVMSource(multiclusterClient, commitmentsConfig.DatasourceName)
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "committed-resource-reservations-controller") {
-		commitmentsAPI := commitmentsapi.NewAPIWithConfig(multiclusterClient, commitmentsConfig.API, commitmentsUsageDB)
+		commitmentsAPI := commitmentsapi.NewAPIWithConfig(multiclusterClient, commitmentsConfig.API, commitmentsVMSource)
 		commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
 	}
 
 	if slices.Contains(mainConfig.EnabledControllers, "nova-pipeline-controllers") {
+		featureGates := conf.GetConfigOrDie[nova.FeatureGates]()
+		noHostFoundCounter := crs.NewNoHostFoundCounter()
+		placementCounter := crs.NewPlacementCounter()
 		// Filter-weigher pipeline controller setup.
 		filterWeigherController := &nova.FilterWeigherPipelineController{
-			Monitor: filterWeigherPipelineMonitor,
+			Monitor:      filterWeigherPipelineMonitor,
+			FeatureGates: featureGates,
+			CRRecorder: crs.Recorder{
+				NoHostFoundCounter: noHostFoundCounter,
+				PlacementCounter:   placementCounter,
+			},
 		}
+		metrics.Registry.MustRegister(noHostFoundCounter)
+		metrics.Registry.MustRegister(placementCounter)
 		// Inferred through the base controller.
 		filterWeigherController.Client = multiclusterClient
+		filterWeigherController.CRRecorder.Client = multiclusterClient
 		if err := filterWeigherController.SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "nova FilterWeigherPipelineController")
 			os.Exit(1)
@@ -597,16 +609,16 @@ func main() {
 
 		usageReconcilerMonitor := commitments.NewUsageReconcilerMonitor()
 		metrics.Registry.MustRegister(&usageReconcilerMonitor)
-		if commitmentsUsageDB == nil {
+		if commitmentsVMSource == nil {
 			setupLog.Error(nil, "UsageReconciler requires a datasource but commitments.datasourceName is not configured — skipping")
 		} else {
 			usageReconcilerConf := commitmentsConfig.UsageReconciler
 			usageReconcilerConf.ApplyDefaults()
 			if err := (&commitments.UsageReconciler{
-				Client:  multiclusterClient,
-				Conf:    usageReconcilerConf,
-				UsageDB: commitmentsUsageDB,
-				Monitor: usageReconcilerMonitor,
+				Client:   multiclusterClient,
+				Conf:     usageReconcilerConf,
+				VMSource: commitmentsVMSource,
+				Monitor:  usageReconcilerMonitor,
 			}).SetupWithManager(mgr, multiclusterClient); err != nil {
 				setupLog.Error(err, "unable to create controller", "controller", "CommittedResourceUsage")
 				os.Exit(1)
@@ -701,7 +713,7 @@ func main() {
 
 			// Create NovaReader and DBVMSource
 			novaReader := external.NewNovaReader(postgresReader)
-			vmSource := failover.NewDBVMSource(novaReader)
+			vmSource := reservations.NewDBVMSource(novaReader)
 
 			// Create the unified failover controller
 			// It handles both:
@@ -794,7 +806,7 @@ func main() {
 
 			// Create NovaReader and DBVMSource
 			novaReader := external.NewNovaReader(postgresReader)
-			vmSource := failover.NewDBVMSource(novaReader)
+			vmSource := reservations.NewDBVMSource(novaReader)
 
 			// Create the quota controller
 			quotaController := quota.NewQuotaController(

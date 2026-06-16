@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/weighers"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
@@ -38,13 +38,19 @@ type FilterWeigherPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
 	lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]
 
-	// Mutex to only allow one process at a time
-	processMu sync.Mutex
+	// Mutex to only allow one process at a time.
+	// Read-only runs (opts.ReadOnly == true) acquire a read lock; write runs acquire the full lock.
+	processMu sync.RWMutex
 
+	// FeatureGates holds feature flags for this controller.
+	FeatureGates FeatureGates
 	// Monitor to pass down to all pipelines.
 	Monitor lib.FilterWeigherPipelineMonitor
 	// Candidate gatherer to get all placement candidates if needed.
 	gatherer CandidateGatherer
+
+	// CRRecorder receives scheduling events and updates CR reservations and metrics.
+	CRRecorder crs.Recorder
 }
 
 // The type of pipeline this controller manages.
@@ -54,15 +60,25 @@ func (c *FilterWeigherPipelineController) PipelineType() v1alpha1.PipelineType {
 
 // Callback executed when kubernetes asks to reconcile a decision resource.
 func (c *FilterWeigherPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	c.processMu.Lock()
-	defer c.processMu.Unlock()
-
+	// Peek at the decision before acquiring the lock so we can choose the right lock type.
+	// Read-only runs can proceed concurrently; write runs need the exclusive lock.
 	decision := &v1alpha1.Decision{}
 	if err := c.Get(ctx, req.NamespacedName, decision); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	if c.peekReadOnly(decision) {
+		c.processMu.RLock()
+		defer c.processMu.RUnlock()
+	} else {
+		c.processMu.Lock()
+		defer c.processMu.Unlock()
+		// Re-fetch after acquiring the exclusive lock to see consistent state.
+		if err := c.Get(ctx, req.NamespacedName, decision); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+	}
 	old := decision.DeepCopy()
-	if err := c.process(ctx, decision); err != nil {
+	if _, err := c.process(ctx, decision); err != nil {
 		return ctrl.Result{}, err
 	}
 	patch := client.MergeFrom(old)
@@ -74,14 +90,17 @@ func (c *FilterWeigherPipelineController) Reconcile(ctx context.Context, req ctr
 
 // Process the decision from the API. Should create and return the updated decision.
 func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error {
-	c.processMu.Lock()
-	defer c.processMu.Unlock()
-
-	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
-	if !ok {
-		return fmt.Errorf("pipeline %s not configured", decision.Spec.PipelineRef.Name)
+	// Read-only runs share the cached decision state; no re-fetch needed because they
+	// don't observe writes from concurrent exclusive-lock runs.
+	if c.peekReadOnly(decision) {
+		c.processMu.RLock()
+		defer c.processMu.RUnlock()
+	} else {
+		c.processMu.Lock()
+		defer c.processMu.Unlock()
 	}
-	err := c.process(ctx, decision)
+
+	request, err := c.process(ctx, decision)
 	if err != nil {
 		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.DecisionConditionReady,
@@ -97,8 +116,21 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 			Message: "pipeline run succeeded",
 		})
 	}
-	if pipelineConf.Spec.CreateHistory {
-		c.upsertHistory(ctx, decision, err)
+	if err == nil && decision.Status.Result != nil && request != nil && c.FeatureGates.CommittedResourceTracking {
+		if decision.Status.Result.TargetHost != nil {
+			if request.Options.SkipCommittedResourceTracking {
+				ctrl.LoggerFrom(ctx).V(1).Info("CR allocation tracking skipped (SkipCommittedResourceTracking=true)",
+					"instanceUUID", request.Spec.Data.InstanceUUID,
+					"targetHost", *decision.Status.Result.TargetHost,
+					"intent", decision.Spec.Intent,
+				)
+			} else {
+				c.CRRecorder.RecordPlacement(ctx, decision, *request)
+			}
+		}
+		if decision.Status.Result.TargetHost == nil {
+			c.CRRecorder.RecordNoHostFound(ctx, decision, *request)
+		}
 	}
 	return err
 }
@@ -124,23 +156,23 @@ func (c *FilterWeigherPipelineController) upsertHistory(ctx context.Context, dec
 	}
 }
 
-func (c *FilterWeigherPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
+func (c *FilterWeigherPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) (*api.ExternalSchedulerRequest, error) {
 	log := ctrl.LoggerFrom(ctx)
 	startedAt := time.Now() // So we can measure sync duration.
 
 	pipeline, ok := c.Pipelines[decision.Spec.PipelineRef.Name]
 	if !ok {
 		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
-		return errors.New("pipeline not found or not ready")
+		return nil, errors.New("pipeline not found or not ready")
 	}
 	if decision.Spec.NovaRaw == nil {
 		log.Error(nil, "skipping decision, no novaRaw spec defined")
-		return errors.New("no novaRaw spec defined")
+		return nil, errors.New("no novaRaw spec defined")
 	}
 	var request api.ExternalSchedulerRequest
 	if err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request); err != nil {
 		log.Error(err, "failed to unmarshal novaRaw spec")
-		return err
+		return nil, err
 	}
 
 	if intent, err := request.GetIntent(); err != nil {
@@ -155,21 +187,24 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
 	if !ok {
 		log.Error(nil, "pipeline config not found", "pipelineName", decision.Spec.PipelineRef.Name)
-		return errors.New("pipeline config not found")
+		return &request, errors.New("pipeline config not found")
 	}
 	if pipelineConf.Spec.IgnorePreselection {
 		log.Info("gathering all placement candidates before filtering")
 		if err := c.gatherer.MutateWithAllCandidates(ctx, &request); err != nil {
 			log.Error(err, "failed to gather all placement candidates")
-			return err
+			return &request, err
 		}
 		log.Info("gathered all placement candidates", "numHosts", len(request.Hosts))
 	}
 
 	result, err := pipeline.Run(request)
+	if !request.Options.SkipHistory {
+		c.upsertHistory(ctx, decision, err)
+	}
 	if err != nil {
 		log.Error(err, "failed to run pipeline")
-		return err
+		return &request, err
 	}
 	decision.Status.Result = &result
 	meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
@@ -179,10 +214,22 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		Message: "pipeline run succeeded",
 	})
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
-	return nil
+	return &request, nil
 }
 
-// The base controller will delegate the pipeline creation down to this method.
+// peekReadOnly determines whether a decision should use a read lock instead of
+// the exclusive write lock. Defaults to false (exclusive) on any parse error.
+func (c *FilterWeigherPipelineController) peekReadOnly(decision *v1alpha1.Decision) bool {
+	if decision.Spec.NovaRaw == nil {
+		return false
+	}
+	var request api.ExternalSchedulerRequest
+	if err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request); err != nil {
+		return false
+	}
+	return request.Options.ReadOnly
+}
+
 func (c *FilterWeigherPipelineController) InitPipeline(
 	ctx context.Context,
 	p v1alpha1.Pipeline,
@@ -249,6 +296,11 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	}
 	// Watch reservation changes so the cache gets updated.
 	bldr, err = bldr.WatchesMulticluster(&v1alpha1.Reservation{}, handler.Funcs{})
+	if err != nil {
+		return err
+	}
+	// Watch committed resource changes so the no-host-found classifier can read them.
+	bldr, err = bldr.WatchesMulticluster(&v1alpha1.CommittedResource{}, handler.Funcs{})
 	if err != nil {
 		return err
 	}
