@@ -11,7 +11,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -161,7 +161,7 @@ func TestIntegration(t *testing.T) {
 						activeInstance("vm-new"), // new instance
 					}),
 					OverrideVMs: withExtraVMs(
-						failover.VM{
+						reservations.VM{
 							UUID: "vm-new", FlavorName: "m1.hana_v2.small",
 							ProjectID: "project-a", AvailabilityZone: "az-1",
 							CreatedAt: "2099-01-01T00:00:00Z", // far future, always AFTER last reconcile
@@ -235,7 +235,7 @@ func TestIntegration(t *testing.T) {
 			FlavorGroups: testFlavorGroups,
 			VMs:          testVMs,
 			// vm-del is not in VMs (deleted), but has info in DeletedVMs
-			DeletedVMs: map[string]*failover.DeletedVMInfo{
+			DeletedVMs: map[string]*reservations.DeletedVMInfo{
 				"vm-del": {
 					ProjectID:        "project-a",
 					FlavorName:       "m1.hana_v2.small",
@@ -392,7 +392,7 @@ func TestIntegration(t *testing.T) {
 		{
 			Name:         "unknown flavor VMs are skipped",
 			FlavorGroups: testFlavorGroups,
-			VMs: []failover.VM{
+			VMs: []reservations.VM{
 				{
 					UUID: "vm-unknown", FlavorName: "nonexistent-flavor",
 					ProjectID: "project-x", AvailabilityZone: "az-1",
@@ -535,7 +535,7 @@ func TestIntegration(t *testing.T) {
 						activeInstance("vm-phantom"),
 					}),
 					OverrideVMs: withExtraVMs(
-						failover.VM{
+						reservations.VM{
 							UUID: "vm-phantom", FlavorName: "m1.hana_v2.small",
 							ProjectID: "project-a", AvailabilityZone: "az-1",
 							CreatedAt: "2099-01-01T00:00:00Z", // after last reconcile
@@ -579,7 +579,7 @@ func TestIntegration(t *testing.T) {
 			Name:         "complex multi-project scenario with adds, removes, and reconcile corrections",
 			FlavorGroups: testFlavorGroups,
 			VMs:          testVMs,
-			DeletedVMs: map[string]*failover.DeletedVMInfo{
+			DeletedVMs: map[string]*reservations.DeletedVMInfo{
 				"vm-del": {
 					ProjectID:        "project-a",
 					FlavorName:       "m1.hana_v2.small",
@@ -633,7 +633,7 @@ func TestIntegration(t *testing.T) {
 						activeInstance("vm-new-a"),
 					}),
 					OverrideVMs: withExtraVMs(
-						failover.VM{
+						reservations.VM{
 							UUID: "vm-new-a", FlavorName: "m1.hana_v2.small",
 							ProjectID: "project-a", AvailabilityZone: "az-1",
 							CreatedAt: "2099-01-01T00:00:00Z",
@@ -666,7 +666,7 @@ func TestIntegration(t *testing.T) {
 						activeInstance("vm-phantom-b"),
 					}),
 					OverrideVMs: withExtraVMs(
-						failover.VM{
+						reservations.VM{
 							UUID: "vm-phantom-b", FlavorName: "m1.general.small",
 							ProjectID: "project-b", AvailabilityZone: "az-1",
 							CreatedAt: "2099-01-01T00:00:00Z",
@@ -701,7 +701,7 @@ func TestIntegration(t *testing.T) {
 					}),
 
 					OverrideVMs: withExtraVMs(
-						failover.VM{
+						reservations.VM{
 							UUID: "vm-new-a", FlavorName: "m1.hana_v2.small",
 							ProjectID: "project-a", AvailabilityZone: "az-1",
 							CreatedAt: "2099-01-01T00:00:00Z",
@@ -729,7 +729,7 @@ func TestIntegration(t *testing.T) {
 				//   - project-b: FIXES drift -- truth is 1, delta said 2 (phantom gone)
 				{
 					Type: "full_reconcile",
-					OverrideVMs: &[]failover.VM{
+					OverrideVMs: &[]reservations.VM{
 						// testVMs + vm-new-a
 						testVMs[0], testVMs[1], testVMs[2], testVMs[3], testVMs[4],
 						{
@@ -772,7 +772,7 @@ func TestIntegration(t *testing.T) {
 						activeInstance("vm-new-a"),
 					}),
 					OverrideVMs: withExtraVMs(
-						failover.VM{
+						reservations.VM{
 							UUID: "vm-new-a", FlavorName: "m1.hana_v2.small",
 							ProjectID: "project-a", AvailabilityZone: "az-1",
 							CreatedAt: "2099-01-01T00:00:00Z",
@@ -953,7 +953,7 @@ var testFlavorGroups = map[string]compute.FlavorGroupFeature{
 // Standard VM set for most tests.
 // project-a has VMs in BOTH flavor groups (hana_v2 and general).
 // project-b has only general VMs.
-var testVMs = []failover.VM{
+var testVMs = []reservations.VM{
 	// vm-1: hana_v2, 32 GiB RAM (32768/1024), 8 cores
 	{
 		UUID: "vm-1", FlavorName: "m1.hana_v2.small",
@@ -1026,7 +1026,7 @@ type TestAction struct {
 	// THIS action and all subsequent actions. Use to simulate VMs appearing or
 	// disappearing between steps. To "undo" a temporary VM, set OverrideVMs
 	// again in a later action without that VM.
-	OverrideVMs *[]failover.VM
+	OverrideVMs *[]reservations.VM
 
 	// For cr_update actions:
 	CRName     string
@@ -1043,9 +1043,9 @@ type IntegrationTestCase struct {
 	Name string
 
 	// Initial state seeded into the fake client and mock VMSource
-	VMs        []failover.VM
-	DeletedVMs map[string]*failover.DeletedVMInfo // UUID -> deleted VM info
-	ActiveVMs  map[string]bool                    // UUID -> IsServerActive response
+	VMs        []reservations.VM
+	DeletedVMs map[string]*reservations.DeletedVMInfo // UUID -> deleted VM info
+	ActiveVMs  map[string]bool                        // UUID -> IsServerActive response
 
 	FlavorGroups       map[string]compute.FlavorGroupFeature
 	ProjectQuotas      []*v1alpha1.ProjectQuota
@@ -1103,10 +1103,10 @@ func newIntegrationTestEnv(t *testing.T, tc IntegrationTestCase) *integrationTes
 
 	// Build mock VMSource
 	vmSrc := &mockVMSource{
-		listVMs: func(_ context.Context) ([]failover.VM, error) {
+		listVMs: func(_ context.Context) ([]reservations.VM, error) {
 			return tc.VMs, nil
 		},
-		getVM: func(_ context.Context, vmUUID string) (*failover.VM, error) {
+		getVM: func(_ context.Context, vmUUID string) (*reservations.VM, error) {
 			for i := range tc.VMs {
 				if tc.VMs[i].UUID == vmUUID {
 					return &tc.VMs[i], nil
@@ -1122,7 +1122,7 @@ func newIntegrationTestEnv(t *testing.T, tc IntegrationTestCase) *integrationTes
 			}
 			return false, nil
 		},
-		getDeletedVM: func(_ context.Context, vmUUID string) (*failover.DeletedVMInfo, error) {
+		getDeletedVM: func(_ context.Context, vmUUID string) (*reservations.DeletedVMInfo, error) {
 			if tc.DeletedVMs != nil {
 				if info, ok := tc.DeletedVMs[vmUUID]; ok {
 					return info, nil
@@ -1275,10 +1275,10 @@ func (env *integrationTestEnv) executeAction(action TestAction) {
 	// Apply OverrideVMs if set (persists for all subsequent actions)
 	if action.OverrideVMs != nil {
 		vms := *action.OverrideVMs
-		env.vmSource.listVMs = func(_ context.Context) ([]failover.VM, error) {
+		env.vmSource.listVMs = func(_ context.Context) ([]reservations.VM, error) {
 			return vms, nil
 		}
-		env.vmSource.getVM = func(_ context.Context, vmUUID string) (*failover.VM, error) {
+		env.vmSource.getVM = func(_ context.Context, vmUUID string) (*reservations.VM, error) {
 			for i := range vms {
 				if vms[i].UUID == vmUUID {
 					return &vms[i], nil
@@ -1461,14 +1461,14 @@ func int64Ptr(v int64) *int64 { return &v }
 
 // withExtraVMs returns a pointer to testVMs + additional VMs.
 // Used with OverrideVMs to add VMs to the "world" for an action.
-func withExtraVMs(extra ...failover.VM) *[]failover.VM {
-	vms := append(append([]failover.VM{}, testVMs...), extra...)
+func withExtraVMs(extra ...reservations.VM) *[]reservations.VM {
+	vms := append(append([]reservations.VM{}, testVMs...), extra...)
 	return &vms
 }
 
 // baseVMsPtr returns a pointer to a copy of testVMs (resets to baseline).
-func baseVMsPtr() *[]failover.VM {
-	vms := append([]failover.VM{}, testVMs...)
+func baseVMsPtr() *[]reservations.VM {
+	vms := append([]reservations.VM{}, testVMs...)
 	return &vms
 }
 

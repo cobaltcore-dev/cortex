@@ -65,11 +65,13 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
-Versioned fully qualified app name (appends -v<major> to the fullname).
+Versioned fully qualified app name (appends -v<major>-<instanceSuffix> to the fullname).
+The instanceSuffix is a rotation token: bumping it forces a new StatefulSet and PVC
+to be provisioned, which re-runs initdb with the (rotated) POSTGRES_PASSWORD.
 Truncates the base name to leave room for the suffix within the 63-char DNS limit.
 */}}
 {{- define "cortex-postgres.versionedFullname" -}}
-{{- $suffix := printf "-v%s" .Values.major -}}
+{{- $suffix := printf "-v%s-%s" .Values.major .Values.instanceSuffix -}}
 {{- $base := include "cortex-postgres.fullname" . -}}
 {{- printf "%s%s" ($base | trunc (int (sub 63 (len $suffix)))) $suffix | trimSuffix "-" }}
 {{- end }}

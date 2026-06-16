@@ -33,9 +33,9 @@ import (
 // relevant change events.
 type UsageReconciler struct {
 	client.Client
-	Conf    UsageReconcilerConfig
-	UsageDB UsageDBClient
-	Monitor UsageReconcilerMonitor
+	Conf     UsageReconcilerConfig
+	VMSource reservations.VMSource
+	Monitor  UsageReconcilerMonitor
 }
 
 func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -49,7 +49,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	log := ctrl.LoggerFrom(ctx).WithValues("committedResource", req.Name)
 
 	// Only active commitments have assigned VMs. Clear stale usage status if present.
-	if cr.Spec.State != v1alpha1.CommitmentStatusConfirmed && cr.Spec.State != v1alpha1.CommitmentStatusGuaranteed {
+	if !cr.IsActive() {
 		log.Info("skipping: commitment state is not active", "state", cr.Spec.State)
 		if len(cr.Status.AssignedInstances) > 0 || len(cr.Status.UsedResources) > 0 {
 			old := cr.DeepCopy()
@@ -155,7 +155,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		}
 	}
 
-	vms, err := getProjectVMs(ctx, r.UsageDB, logger, cr.Spec.ProjectID, flavorGroups, allAZs)
+	vms, err := getProjectVMs(ctx, r.VMSource, logger, cr.Spec.ProjectID, flavorGroups, allAZs)
 	if err != nil {
 		r.Monitor.reconcileDuration.WithLabelValues("error").Observe(time.Since(start).Seconds())
 		return ctrl.Result{}, err

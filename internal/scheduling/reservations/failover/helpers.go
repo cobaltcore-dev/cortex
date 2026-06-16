@@ -48,7 +48,7 @@ func (r resolvedReservationSpec) HypervisorResources() map[hv1.ResourceName]reso
 // returns the LargestFlavor's name and size. Otherwise falls back to VM resources.
 func resolveVMSpecForScheduling(
 	ctx context.Context,
-	vm VM,
+	vm reservations.VM,
 	useFlavorGroupResources bool,
 	flavorGroups map[string]compute.FlavorGroupFeature,
 ) resolvedReservationSpec {
@@ -127,7 +127,7 @@ func countReservationsForVM(resList []v1alpha1.Reservation, vmUUID string) int {
 
 // addVMToReservation creates a copy of a reservation with the VM added to its allocations.
 // The original reservation is NOT modified.
-func addVMToReservation(reservation v1alpha1.Reservation, vm VM) *v1alpha1.Reservation {
+func addVMToReservation(reservation v1alpha1.Reservation, vm reservations.VM) *v1alpha1.Reservation {
 	// Deep copy the reservation
 	updatedRes := reservation.DeepCopy()
 
@@ -176,7 +176,7 @@ func ValidateFailoverReservationResources(res *v1alpha1.Reservation) error {
 // This ensures the same sizing is used for both the scheduler query and the reservation CRD.
 func newFailoverReservation(
 	ctx context.Context,
-	vm VM,
+	vm reservations.VM,
 	hypervisor, creator string,
 	resSpec resolvedReservationSpec,
 ) *v1alpha1.Reservation {

@@ -6,6 +6,7 @@ package pods
 import (
 	"log/slog"
 
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -15,8 +16,11 @@ type PodPipelineRequest struct {
 	Nodes []corev1.Node `json:"nodes"`
 	// The pod to be scheduled.
 	Pod corev1.Pod `json:"pod"`
+	// Options configure the pipeline behavior for this scheduling call.
+	Options scheduling.Options `json:"options,omitempty"`
 }
 
+func (r PodPipelineRequest) GetOptions() scheduling.Options { return r.Options }
 func (r PodPipelineRequest) GetHosts() []string {
 	hosts := make([]string, len(r.Nodes))
 	for i, host := range r.Nodes {
