@@ -305,6 +305,82 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 	}
 }
 
+// TestReconcileAllocations_ConfirmedVMDeparture verifies that a VM already confirmed in
+// Status.Allocations is removed immediately when it disappears from the HV CRD, without
+// waiting for the grace period to expire.
+func TestReconcileAllocations_ConfirmedVMDeparture(t *testing.T) {
+	scheme := newCRTestScheme(t)
+	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
+	now := time.Now()
+
+	// VM was written to Spec.Allocations very recently (within grace period) but was already
+	// confirmed (present in Status.Allocations). It has since disappeared from the HV CRD.
+	recentTime := metav1.NewTime(now.Add(-2 * time.Minute))
+
+	res := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-reservation"},
+		Spec: v1alpha1.ReservationSpec{
+			Type:       v1alpha1.ReservationTypeCommittedResource,
+			TargetHost: "host-1",
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				ProjectID:    "test-project",
+				ResourceName: "test-flavor",
+				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+					"vm-confirmed": {
+						CreationTimestamp: recentTime,
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							"memory": resource.MustParse("4Gi"),
+						},
+					},
+				},
+			},
+		},
+		Status: v1alpha1.ReservationStatus{
+			Host: "host-1",
+			Conditions: []metav1.Condition{
+				{Type: v1alpha1.ReservationConditionReady, Status: metav1.ConditionTrue, Reason: "ReservationActive"},
+			},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
+				// VM was previously confirmed — it is in Status.Allocations.
+				Allocations: map[string]string{"vm-confirmed": "host-1"},
+			},
+		},
+	}
+
+	// HV CRD exists but the VM is gone — simulates termination/evacuation.
+	hv := newTestHypervisorCRD("host-1", []hv1.Instance{})
+
+	k8sClient := newCRTestClient(scheme, res, hv)
+	controller := &CommitmentReservationController{Client: k8sClient, Scheme: scheme, Conf: config}
+
+	ctx := WithNewGlobalRequestID(context.Background())
+	result, err := controller.reconcileAllocations(ctx, res)
+	if err != nil {
+		t.Fatalf("reconcileAllocations() error = %v", err)
+	}
+
+	// Must not be treated as grace-period — departure of confirmed VM is immediate.
+	if result.HasAllocationsInGracePeriod {
+		t.Error("confirmed VM departure must not trigger grace period requeue")
+	}
+
+	var updated v1alpha1.Reservation
+	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(res), &updated); err != nil {
+		t.Fatalf("get updated reservation: %v", err)
+	}
+
+	// Spec.Allocations must be empty — VM removed.
+	if n := len(updated.Spec.CommittedResourceReservation.Allocations); n != 0 {
+		t.Errorf("expected 0 spec allocations after departure, got %d", n)
+	}
+	// Status.Allocations must also be empty — updated in the same reconcile pass.
+	if updated.Status.CommittedResourceReservation == nil ||
+		len(updated.Status.CommittedResourceReservation.Allocations) != 0 {
+		t.Errorf("expected 0 status allocations after departure, got %#v",
+			updated.Status.CommittedResourceReservation)
+	}
+}
+
 // newTestCRReservation creates a test CR reservation with allocations on "host-1".
 func newTestCRReservation(allocations map[string]metav1.Time) *v1alpha1.Reservation {
 	const host = "host-1"
