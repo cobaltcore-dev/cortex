@@ -376,8 +376,8 @@ func TestReconcileAllocations_ConfirmedVMDeparture(t *testing.T) {
 	// Status.Allocations must also be empty — updated in the same reconcile pass.
 	if updated.Status.CommittedResourceReservation == nil ||
 		len(updated.Status.CommittedResourceReservation.Allocations) != 0 {
-		t.Errorf("expected 0 status allocations after departure, got %v",
-			updated.Status.CommittedResourceReservation.Allocations)
+		t.Errorf("expected 0 status allocations after departure, got %#v",
+			updated.Status.CommittedResourceReservation)
 	}
 }
 
