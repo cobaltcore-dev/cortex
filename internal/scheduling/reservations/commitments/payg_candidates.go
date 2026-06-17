@@ -23,7 +23,10 @@ type PAYGCandidate struct {
 }
 
 // ScanAZForPaygCandidates returns unallocated PAYG VMs across all HVs in az, grouped by HV name.
-// Makes exactly one VMSource call regardless of the number of HVs in the AZ.
+// Makes exactly two cache/Postgres calls regardless of HV or VM count:
+//  1. List all CR Reservations → build allocated VM UUID set from Spec.Allocations
+//  2. VMSource.ListVMsByProject → enriched VM data for the project
+//
 // HVs are identified by the label "topology.kubernetes.io/zone".
 func ScanAZForPaygCandidates(
 	ctx context.Context,
@@ -49,6 +52,13 @@ func ScanAZForPaygCandidates(
 		return nil, nil
 	}
 
+	// One cache scan: build the set of VM UUIDs already claimed by any CR Reservation.
+	// Spec.Allocations is the scheduling perspective — exactly what we need here.
+	allocatedVMIDs, err := buildAllocatedVMSet(ctx, k8sClient, az)
+	if err != nil {
+		return nil, err
+	}
+
 	// One Postgres call for all VMs in the project.
 	projectVMs, err := vmSource.ListVMsByProject(ctx, projectID)
 	if err != nil {
@@ -65,10 +75,7 @@ func ScanAZForPaygCandidates(
 
 	result := make(map[string][]PAYGCandidate)
 	for hvName, hv := range azHVs {
-		candidates, err := filterPaygCandidates(ctx, k8sClient, hvName, hv, vmsByHV[hvName], flavorGroup)
-		if err != nil {
-			return nil, err
-		}
+		candidates := filterPaygCandidates(hvName, hv, vmsByHV[hvName], flavorGroup, allocatedVMIDs)
 		if len(candidates) > 0 {
 			result[hvName] = candidates
 		}
@@ -76,20 +83,45 @@ func ScanAZForPaygCandidates(
 	return result, nil
 }
 
+// buildAllocatedVMSet lists CR Reservations in az and returns the set of VM UUIDs present
+// in any Spec.Allocations. Filtering by AZ keeps the set small — only slots relevant
+// to the current scan are included. One cache scan shared across all HV filters.
+func buildAllocatedVMSet(ctx context.Context, k8sClient client.Client, az string) (map[string]struct{}, error) {
+	var resList v1alpha1.ReservationList
+	if err := k8sClient.List(ctx, &resList,
+		client.MatchingLabels{v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource},
+	); err != nil {
+		return nil, err
+	}
+	allocated := make(map[string]struct{})
+	for _, res := range resList.Items {
+		if res.Spec.AvailabilityZone != az {
+			continue
+		}
+		if res.Spec.CommittedResourceReservation == nil {
+			continue
+		}
+		for vmUUID := range res.Spec.CommittedResourceReservation.Allocations {
+			allocated[vmUUID] = struct{}{}
+		}
+	}
+	return allocated, nil
+}
+
 // filterPaygCandidates returns unallocated PAYG VMs from a pre-fetched list for one HV.
-// vms must already be filtered to hvName (by the caller). Used by reuse sites (ticket #410,
-// #372) where the caller already holds a pre-fetched VM list.
+// vms must already be filtered to hvName by the caller.
+// allocatedVMIDs is a pre-built set of UUIDs already claimed by any CR Reservation.Spec.Allocations.
+// Used by reuse sites (ticket #410, #372) where the caller already holds VM data and the allocated set.
 func filterPaygCandidates(
-	ctx context.Context,
-	k8sClient client.Client,
 	hvName string,
 	hv *hv1.Hypervisor,
 	vms []reservations.VM,
 	flavorGroup compute.FlavorGroupFeature,
-) ([]PAYGCandidate, error) {
+	allocatedVMIDs map[string]struct{},
+) []PAYGCandidate {
 
 	if len(vms) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	// Build set of active instance UUIDs from the HV CRD for physical-presence check.
@@ -115,18 +147,9 @@ func filterPaygCandidates(
 		if !activeOnHV[vm.UUID] {
 			continue
 		}
-
-		// Exclude VMs already claimed by any Reservation.Spec.Allocations.
-		var allocated v1alpha1.ReservationList
-		if err := k8sClient.List(ctx, &allocated,
-			client.MatchingFields{idxReservationByAllocationVMUUID: vm.UUID},
-		); err != nil {
-			return nil, err
-		}
-		if len(allocated.Items) > 0 {
+		if _, isAllocated := allocatedVMIDs[vm.UUID]; isAllocated {
 			continue
 		}
-
 		candidates = append(candidates, PAYGCandidate{
 			VMID:       vm.UUID,
 			HVName:     hvName,
@@ -136,7 +159,7 @@ func filterPaygCandidates(
 	}
 
 	sortCandidatesDesc(candidates)
-	return candidates, nil
+	return candidates
 }
 
 // sortCandidatesDesc sorts candidates descending by memory, with UUID as a stable tie-break.

@@ -136,8 +136,8 @@ func TestFilterPaygCandidates(t *testing.T) {
 		name      string
 		hv        *hv1.Hypervisor
 		vms       []reservations.VM
-		extraObjs []client.Object // additional k8s objects (e.g. reservations with allocs)
-		wantVMIDs []string        // expected candidate UUIDs (order independent)
+		extraObjs []*v1alpha1.Reservation // reservations with pre-existing allocations
+		wantVMIDs []string                // expected candidate UUIDs in order (largest-first)
 		wantCount int
 	}{
 		{
@@ -150,7 +150,7 @@ func TestFilterPaygCandidates(t *testing.T) {
 			name:      "VM already in Reservation.Spec.Allocations — excluded",
 			hv:        hvWithInstances("host-1", "az-1", activeInstance("vm-a")),
 			vms:       []reservations.VM{vmOnHV("vm-a", "host-1", "small", 8192)},
-			extraObjs: []client.Object{reservationWithAlloc("res-1", "vm-a")},
+			extraObjs: []*v1alpha1.Reservation{reservationWithAlloc("res-1", "vm-a")},
 			wantCount: 0,
 		},
 		{
@@ -191,21 +191,21 @@ func TestFilterPaygCandidates(t *testing.T) {
 				vmOnHV("vm-large", "host-1", "large", 32768),
 				vmOnHV("vm-allocated", "host-1", "small", 8192),
 			},
-			extraObjs: []client.Object{reservationWithAlloc("res-1", "vm-allocated")},
+			extraObjs: []*v1alpha1.Reservation{reservationWithAlloc("res-1", "vm-allocated")},
 			wantVMIDs: []string{"vm-large", "vm-medium", "vm-small"},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			objs := []client.Object{tc.hv}
-			objs = append(objs, tc.extraObjs...)
-			k8sClient := buildPaygClient(t, objs...)
-
-			candidates, err := filterPaygCandidates(context.Background(), k8sClient, tc.hv.Name, tc.hv, tc.vms, fg)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
+			allocatedVMIDs := make(map[string]struct{})
+			for _, res := range tc.extraObjs {
+				for vmUUID := range res.Spec.CommittedResourceReservation.Allocations {
+					allocatedVMIDs[vmUUID] = struct{}{}
+				}
 			}
+
+			candidates := filterPaygCandidates(tc.hv.Name, tc.hv, tc.vms, fg, allocatedVMIDs)
 
 			if tc.wantVMIDs != nil {
 				if len(candidates) != len(tc.wantVMIDs) {

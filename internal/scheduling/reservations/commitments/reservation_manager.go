@@ -383,9 +383,8 @@ func (m *ReservationManager) syncReservationMetadata(
 		}
 
 		return reservation, nil
-	} else {
-		return nil, nil // No changes needed
 	}
+	return nil, nil // No changes needed
 }
 
 // selectFlavor picks the largest flavor whose memory fits within deltaMemoryBytes.
