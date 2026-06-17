@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -402,5 +403,42 @@ func TestFilterAggregateMetadata_IndexRegistration(t *testing.T) {
 	filter := factory()
 	if _, ok := filter.(*FilterAggregateMetadata); !ok {
 		t.Errorf("expected factory to return *FilterAggregateMetadata, got %T", filter)
+	}
+}
+
+func TestFilterAggregateMetadata_SkipPlacementContextFilters(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add hv1 to scheme: %v", err)
+	}
+	// host1 is in an aggregate restricting to project-x; request is project-y → host1 would normally be filtered.
+	objects := []client.Object{
+		&hv1.Hypervisor{
+			ObjectMeta: metav1.ObjectMeta{Name: "host1"},
+			Status: hv1.HypervisorStatus{
+				Aggregates: []hv1.Aggregate{{
+					Name:     "restricted",
+					Metadata: map[string]string{"filter_tenant_id": "project-x"},
+				}},
+			},
+		},
+		&hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "host2"}},
+	}
+	request := api.ExternalSchedulerRequest{
+		Spec: api.NovaObject[api.NovaSpec]{
+			Data: api.NovaSpec{ProjectID: "project-y"},
+		},
+		Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
+	}
+	step := &FilterAggregateMetadata{}
+	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+
+	request.Options = scheduling.Options{SkipPlacementContextFilters: true}
+	result, err := step.Run(slog.Default(), request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Activations) != 2 {
+		t.Errorf("expected both hosts to pass, got %d", len(result.Activations))
 	}
 }

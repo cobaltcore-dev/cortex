@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -490,5 +491,40 @@ func TestFilterExternalCustomerStepOpts_Validate(t *testing.T) {
 				t.Errorf("expected no validation error but got: %v", err)
 			}
 		})
+	}
+}
+
+func TestFilterExternalCustomerStep_SkipPlacementContextFilters(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add hv1 to scheme: %v", err)
+	}
+	// Domain matches external prefix; host1 lacks the exclusive trait → host1 would normally be filtered.
+	objects := []client.Object{
+		&hv1.Hypervisor{ObjectMeta: v1.ObjectMeta{Name: "host1"}},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{Name: "host2"},
+			Status:     hv1.HypervisorStatus{Traits: []string{"CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE"}},
+		},
+	}
+	request := api.ExternalSchedulerRequest{
+		Spec: api.NovaObject[api.NovaSpec]{
+			Data: api.NovaSpec{
+				SchedulerHints: map[string]any{"domain_name": "iaas-customer"},
+			},
+		},
+		Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
+	}
+	step := &FilterExternalCustomerStep{}
+	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+	step.Options = FilterExternalCustomerStepOpts{CustomerDomainNamePrefixes: []string{"iaas-"}}
+
+	request.Options = scheduling.Options{SkipPlacementContextFilters: true}
+	result, err := step.Run(slog.Default(), request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Activations) != 2 {
+		t.Errorf("expected both hosts to pass, got %d", len(result.Activations))
 	}
 }

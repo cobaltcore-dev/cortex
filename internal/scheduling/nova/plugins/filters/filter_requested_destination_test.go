@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -780,5 +781,38 @@ func TestFilterRequestedDestinationStep_Run_ClientError(t *testing.T) {
 	_, err := step.Run(slog.Default(), request)
 	if err == nil {
 		t.Errorf("expected error when client fails, got none")
+	}
+}
+
+func TestFilterRequestedDestinationStep_SkipPlacementContextFilters(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add hv1 to scheme: %v", err)
+	}
+	// RequestedDestination forces host1 — host2 would normally be filtered.
+	objects := []client.Object{
+		&hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "host1"}},
+		&hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "host2"}},
+	}
+	request := api.ExternalSchedulerRequest{
+		Spec: api.NovaObject[api.NovaSpec]{
+			Data: api.NovaSpec{
+				RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
+					Data: api.NovaRequestedDestination{Host: "host1"},
+				},
+			},
+		},
+		Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
+	}
+	step := &FilterRequestedDestinationStep{}
+	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+
+	request.Options = scheduling.Options{SkipPlacementContextFilters: true}
+	result, err := step.Run(slog.Default(), request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Activations) != 2 {
+		t.Errorf("expected both hosts to pass, got %d", len(result.Activations))
 	}
 }
