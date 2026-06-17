@@ -38,6 +38,9 @@ type CommittedResourceController struct {
 	Scheme  *runtime.Scheme
 	Conf    CommittedResourceControllerConfig
 	Monitor *CRControllerMonitor
+	// VMSource enables PAYG pre-allocation when creating reservation slots. When nil the
+	// PAYG scan is skipped and all slots are created via blind scheduler probes.
+	VMSource reservations.VMSource
 }
 
 func (r *CommittedResourceController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -316,6 +319,7 @@ func (r *CommittedResourceController) applyReservationState(ctx context.Context,
 	state.ParentGeneration = cr.Generation
 
 	mgr := NewReservationManager(r.Client)
+	mgr.VMSource = r.VMSource
 	mgr.SlotCreationDelay = r.Conf.SlotCreationDelay.Duration
 	if cr.Spec.AllowRejection {
 		mgr.MaxSlots = r.Conf.MaxSlotsPerCommitment

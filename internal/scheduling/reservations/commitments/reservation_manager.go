@@ -10,6 +10,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -50,6 +51,9 @@ func (e *SlotLimitExceededError) Error() string {
 // ReservationManager handles CRUD operations for Reservation CRDs.
 type ReservationManager struct {
 	client.Client
+	// VMSource enables PAYG pre-allocation (Phase 4.5). When nil the PAYG scan is skipped
+	// and all slots are created via the blind scheduler path (Phase 5).
+	VMSource reservations.VMSource
 	// SlotCreationDelay adds a pause between consecutive Reservation CRD creates to spread
 	// scheduler load across time rather than bursting all creates at once.
 	SlotCreationDelay time.Duration
@@ -191,6 +195,74 @@ func (m *ReservationManager) ApplyCommitmentState(
 
 		if err := m.Delete(ctx, reservationToDelete); err != nil {
 			return result, fmt.Errorf("failed to delete reservation %s: %w", reservationToDelete.Name, err)
+		}
+	}
+
+	// Phase 4.5 (PAYG PRE-ALLOCATE): absorb existing PAYG VMs into pre-populated slots.
+	// Runs only when VMSource is configured. Makes one Postgres call for all HVs in the AZ,
+	// then creates one slot per PAYG VM (largest-first), consuming the delta.
+	// Any remaining delta falls through to Phase 5 (blind scheduler).
+	if m.VMSource != nil && deltaMemoryBytes > 0 && desiredState.AvailabilityZone != "" {
+		scanStart := time.Now()
+		candidatesByHV, scanErr := ScanAZForPaygCandidates(
+			ctx, m.Client, m.VMSource,
+			desiredState.AvailabilityZone, desiredState.ProjectID, flavorGroup,
+		)
+		if scanErr != nil {
+			log.Error(scanErr, "PAYG candidate scan failed, falling back to blind scheduling",
+				"durationMs", time.Since(scanStart).Milliseconds())
+		} else {
+			// Flatten all candidates across HVs and sort descending by memory, then stable by UUID.
+			var allCandidates []PAYGCandidate
+			for _, hvCandidates := range candidatesByHV {
+				allCandidates = append(allCandidates, hvCandidates...)
+			}
+			sortCandidatesDesc(allCandidates)
+
+			log.Info("PAYG candidate scan complete",
+				"candidates", len(allCandidates),
+				"durationMs", time.Since(scanStart).Milliseconds(),
+			)
+
+			for _, candidate := range allCandidates {
+				if deltaMemoryBytes <= 0 {
+					break
+				}
+				slotMemoryMB := candidate.MemoryMB
+				if int64(slotMemoryMB)*1024*1024 > deltaMemoryBytes { //nolint:gosec
+					slotMemoryMB = uint64(deltaMemoryBytes) / (1024 * 1024)
+				}
+				reservation := m.newPaygReservation(desiredState, nextSlotIndex, candidate, slotMemoryMB, flavorGroup, creator)
+				slotMemoryBytes := int64(slotMemoryMB) * 1024 * 1024 //nolint:gosec
+				deltaMemoryBytes -= slotMemoryBytes
+				result.Created++
+				result.TouchedReservations = append(result.TouchedReservations, *reservation)
+
+				if err := m.Create(ctx, reservation); err != nil {
+					if apierrors.IsAlreadyExists(err) {
+						return result, fmt.Errorf("reservation %s already exists (collision detected): %w", reservation.Name, err)
+					}
+					return result, fmt.Errorf("failed to create PAYG reservation slot %d: %w", nextSlotIndex, err)
+				}
+				log.Info("created PAYG pre-allocated reservation slot",
+					"slot", reservation.Name,
+					"host", candidate.HVName,
+					"vm", candidate.VMID,
+					"flavorName", candidate.FlavorName,
+					"slotMemoryMB", slotMemoryMB,
+				)
+				nextSlotIndex++
+
+				if m.SlotCreationDelay > 0 && deltaMemoryBytes > 0 {
+					timer := time.NewTimer(m.SlotCreationDelay)
+					select {
+					case <-ctx.Done():
+						timer.Stop()
+						return result, ctx.Err()
+					case <-timer.C:
+					}
+				}
+			}
 		}
 	}
 
@@ -395,6 +467,82 @@ func (m *ReservationManager) newReservation(
 	}
 
 	// Set validity times if specified
+	if state.StartTime != nil {
+		spec.StartTime = &metav1.Time{Time: *state.StartTime}
+	}
+	if state.EndTime != nil {
+		spec.EndTime = &metav1.Time{Time: *state.EndTime}
+	}
+
+	return &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			Labels: map[string]string{
+				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+			},
+			Annotations: map[string]string{
+				v1alpha1.AnnotationCreatorRequestID: state.CreatorRequestID,
+			},
+		},
+		Spec: spec,
+	}
+}
+
+// newPaygReservation creates a Reservation pre-populated with a PAYG VM.
+// The slot uses the candidate's exact flavor name and the given slotMemoryMB (which may be
+// less than candidate.MemoryMB when the remaining CR delta is smaller than the VM's memory).
+// VCPUs are taken from the flavor group to keep the slot spec consistent.
+func (m *ReservationManager) newPaygReservation(
+	state *CommitmentState,
+	slotIndex int,
+	candidate PAYGCandidate,
+	slotMemoryMB uint64,
+	flavorGroup compute.FlavorGroupFeature,
+	creator string,
+) *v1alpha1.Reservation {
+
+	namePrefix := state.NamePrefix
+	if namePrefix == "" {
+		namePrefix = fmt.Sprintf("commitment-%s-", state.CommitmentUUID)
+	}
+	name := fmt.Sprintf("%s%d", namePrefix, slotIndex)
+
+	// Look up VCPUs from the flavor group for the candidate flavor.
+	var cpus int64
+	for _, f := range flavorGroup.Flavors {
+		if f.Name == candidate.FlavorName {
+			cpus = int64(f.VCPUs) //nolint:gosec // VCPUs from flavor specs, realistically bounded
+			break
+		}
+	}
+
+	memoryBytes := int64(slotMemoryMB) * 1024 * 1024 //nolint:gosec // bounded by CR amount
+	spec := v1alpha1.ReservationSpec{
+		Type:             v1alpha1.ReservationTypeCommittedResource,
+		SchedulingDomain: v1alpha1.SchedulingDomainNova,
+		TargetHost:       candidate.HVName,
+		Resources: map[hv1.ResourceName]resource.Quantity{
+			hv1.ResourceMemory: *resource.NewQuantity(memoryBytes, resource.BinarySI),
+			hv1.ResourceCPU:    *resource.NewQuantity(cpus, resource.DecimalSI),
+		},
+		CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+			ProjectID:        state.ProjectID,
+			CommitmentUUID:   state.CommitmentUUID,
+			DomainID:         state.DomainID,
+			ResourceGroup:    state.FlavorGroupName,
+			ResourceName:     candidate.FlavorName,
+			Creator:          creator,
+			ParentGeneration: state.ParentGeneration,
+			Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+				candidate.VMID: {
+					CreationTimestamp: metav1.Now(),
+				},
+			},
+		},
+	}
+	if state.AvailabilityZone != "" {
+		spec.AvailabilityZone = state.AvailabilityZone
+	}
 	if state.StartTime != nil {
 		spec.StartTime = &metav1.Time{Time: *state.StartTime}
 	}
