@@ -36,7 +36,7 @@ func ScanAZForPaygCandidates(
 	projectID string,
 	flavorGroup compute.FlavorGroupFeature,
 ) (map[string][]PAYGCandidate, error) {
-	// List all HVs from cache; filter to the target AZ.
+
 	var hvList hv1.HypervisorList
 	if err := k8sClient.List(ctx, &hvList); err != nil {
 		return nil, err
@@ -59,13 +59,11 @@ func ScanAZForPaygCandidates(
 		return nil, err
 	}
 
-	// One Postgres call for all VMs in the project.
 	projectVMs, err := vmSource.ListVMsByProject(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Group project VMs by hypervisor for O(1) per-HV lookup.
 	vmsByHV := make(map[string][]reservations.VM, len(azHVs))
 	for _, vm := range projectVMs {
 		if _, inAZ := azHVs[vm.CurrentHypervisor]; inAZ {
