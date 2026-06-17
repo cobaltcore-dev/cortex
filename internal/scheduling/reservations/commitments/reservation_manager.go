@@ -63,6 +63,7 @@ type ReservationManager struct {
 	MaxSlots int
 }
 
+// NewReservationManager creates a ReservationManager using the given client.
 func NewReservationManager(k8sClient client.Client) *ReservationManager {
 	return &ReservationManager{
 		Client: k8sClient,

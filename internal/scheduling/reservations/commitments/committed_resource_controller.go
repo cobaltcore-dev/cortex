@@ -474,7 +474,9 @@ func (r *CommittedResourceController) rollbackToAccepted(ctx context.Context, lo
 	state.NamePrefix = cr.Name + "-"
 	state.CreatorRequestID = reservations.GlobalRequestIDFromContext(ctx)
 	state.ParentGeneration = cr.Generation
-	if _, err := NewReservationManager(r.Client).ApplyCommitmentState(ctx, logger, state, flavorGroups, "committed-resource-controller-rollback"); err != nil {
+	rollbackMgr := NewReservationManager(r.Client)
+	rollbackMgr.VMSource = r.VMSource
+	if _, err := rollbackMgr.ApplyCommitmentState(ctx, logger, state, flavorGroups, "committed-resource-controller-rollback"); err != nil {
 		return fmt.Errorf("rollback apply failed: %w", err)
 	}
 	return nil
