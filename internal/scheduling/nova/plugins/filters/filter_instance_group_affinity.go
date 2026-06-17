@@ -22,6 +22,9 @@ func (s *FilterInstanceGroupAffinityStep) Run(
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)
+	if request.GetOptions().SkipPlacementContextFilters {
+		return result, nil
+	}
 
 	ig := request.Spec.Data.InstanceGroup
 	if ig == nil {

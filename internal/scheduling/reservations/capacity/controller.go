@@ -291,9 +291,21 @@ func (c *Controller) probeScheduler(
 		eligibleHosts = append(eligibleHosts, schedulerapi.ExternalSchedulerHost{ComputeHost: name})
 	}
 
+	// Total probe ignores all reservation blocks (raw hardware capacity).
+	// Placeable probe counts reservations as capacity blocks.
+	var ignoredReservationTypes []v1alpha1.ReservationType
+	if ignoreAllocations {
+		ignoredReservationTypes = []v1alpha1.ReservationType{
+			v1alpha1.ReservationTypeCommittedResource,
+			v1alpha1.ReservationTypeFailover,
+		}
+	}
+
 	resp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
-		InstanceUUID:     "capacity-" + flavor.Name,
-		ProjectID:        "cortex-capacity-probe",
+		InstanceUUID: "capacity-" + flavor.Name,
+		// Empty project ID so filter_allowed_projects passes all hosts — the capacity probe
+		// must see the full host set regardless of per-project restrictions.
+		ProjectID:        "",
 		FlavorName:       flavor.Name,
 		MemoryMB:         flavor.MemoryMB,
 		VCPUs:            flavor.VCPUs,
@@ -301,7 +313,15 @@ func (c *Controller) probeScheduler(
 		AvailabilityZone: az,
 		Pipeline:         pipeline,
 		EligibleHosts:    eligibleHosts,
-	}, scheduling.Options{SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true})
+	}, scheduling.Options{
+		ReadOnly:                      true,
+		AssumeEmptyHosts:              ignoreAllocations,
+		IgnoredReservationTypes:       ignoredReservationTypes,
+		SkipPlacementContextFilters:   true,
+		SkipHistory:                   true,
+		SkipInflight:                  true,
+		SkipCommittedResourceTracking: true,
+	})
 	if err != nil {
 		return 0, 0, fmt.Errorf("scheduler call failed (pipeline=%s): %w", pipeline, err)
 	}

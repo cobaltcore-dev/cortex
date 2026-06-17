@@ -35,6 +35,13 @@ type Options struct {
 	// committed resource reservation slot. Set for non-VM-placement runs (capacity checks,
 	// failover scheduling, CR slot scheduling) that must not modify reservation allocations.
 	SkipCommittedResourceTracking bool `json:"skip_committed_resource_tracking,omitempty"`
+	// SkipPlacementContextFilters skips filters that are only meaningful for actual VM
+	// placement triggered by a user request: instance group affinity/anti-affinity,
+	// aggregate metadata, live-migration compatibility, requested destination,
+	// quota enforcement, allowed projects, and external customer restrictions.
+	// Set for internal calls (capacity probes, reservation scheduling) that carry no
+	// placement context and must see the full host set.
+	SkipPlacementContextFilters bool `json:"skip_placement_context_filters,omitempty"`
 }
 
 // Validate checks for mutually exclusive or inconsistent option combinations.

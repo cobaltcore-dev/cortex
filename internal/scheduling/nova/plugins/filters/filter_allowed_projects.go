@@ -21,6 +21,9 @@ type FilterAllowedProjectsStep struct {
 // Note that hosts without specified projects are still accessible.
 func (s *FilterAllowedProjectsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
+	if request.GetOptions().SkipPlacementContextFilters {
+		return result, nil
+	}
 	if request.Spec.Data.ProjectID == "" {
 		traceLog.Info("no project ID in request, skipping filter")
 		return result, nil

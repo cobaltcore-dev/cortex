@@ -21,6 +21,9 @@ type FilterAggregateMetadata struct {
 // the "filter_tenant_id" metadata key set.
 func (s *FilterAggregateMetadata) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
+	if request.GetOptions().SkipPlacementContextFilters {
+		return result, nil
+	}
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {

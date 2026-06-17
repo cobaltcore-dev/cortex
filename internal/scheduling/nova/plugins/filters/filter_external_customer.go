@@ -35,6 +35,9 @@ type FilterExternalCustomerStep struct {
 // that are not intended for external customers.
 func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
+	if request.GetOptions().SkipPlacementContextFilters {
+		return result, nil
+	}
 
 	// Skip for failover reservation scheduling — domain restrictions don't apply
 	// since failover reservations are not tied to a specific customer domain.

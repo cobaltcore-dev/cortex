@@ -74,6 +74,9 @@ type FilterQuotaEnforcement struct {
 
 func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
+	if request.GetOptions().SkipPlacementContextFilters {
+		return result, nil
+	}
 
 	mode := "shadow"
 	if s.Options.Enforce {

@@ -54,6 +54,9 @@ func (s *FilterLiveMigratableStep) Run(
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)
+	if request.GetOptions().SkipPlacementContextFilters {
+		return result, nil
+	}
 
 	intent, err := request.GetIntent()
 	if err != nil {
