@@ -17,20 +17,19 @@ import (
 
 // Pipeline names for failover reservation scheduling
 const (
-	// PipelineReuseFailoverReservation is used to check if a VM can reuse an existing reservation.
-	// It validates host compatibility without checking capacity (since reservation already has capacity).
-	PipelineReuseFailoverReservation = "kvm-valid-host-reuse-failover-reservation"
-
 	// PipelineNewFailoverReservation is used to find a host for creating a new reservation.
-	// It validates host compatibility AND checks capacity.
 	// Uses the general-purpose pipeline; LockReservations and SkipHistory are set via Options.
 	PipelineNewFailoverReservation = "kvm-general-purpose-load-balancing"
-
-	// PipelineAcknowledgeFailoverReservation is used to validate that a failover reservation
-	// is still valid for all its allocated VMs. It sends an evacuation-style scheduling request
-	// for each VM with only the reservation's host as the eligible target.
-	PipelineAcknowledgeFailoverReservation = "kvm-acknowledge-failover-reservation"
 )
+
+// inferFailoverPipeline returns the standard pipeline for a failover scheduling call based on
+// the VM's flavor extra specs — the same HANA vs general-purpose split used by Nova placement.
+func inferFailoverPipeline(extraSpecs map[string]string) string {
+	if extraSpecs["trait:CUSTOM_HANA_EXCLUSIVE_HOST"] == "required" {
+		return "kvm-hana-bin-packing"
+	}
+	return "kvm-general-purpose-load-balancing"
+}
 
 func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm reservations.VM, allHypervisors []string, pipeline string, resSpec resolvedReservationSpec, opts scheduling.Options) ([]string, error) {
 	logger := LoggerFromContext(ctx)
@@ -123,7 +122,7 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 
 	logger := LoggerFromContext(ctx)
 
-	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineReuseFailoverReservation, resSpec, scheduling.Options{ReadOnly: true, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true})
+	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, inferFailoverPipeline(vm.FlavorExtraSpecs), resSpec, scheduling.Options{ReadOnly: true, SkipPlacementContextFilters: true, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true})
 	if err != nil {
 		logger.Error(err, "failed to get potential hypervisors for VM", "vmUUID", vm.UUID)
 		return nil
@@ -213,7 +212,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		VCPUs:            vcpus,
 		EligibleHosts:    []api.ExternalSchedulerHost{{ComputeHost: reservationHost}},
 		IgnoreHosts:      []string{vm.CurrentHypervisor},
-		Pipeline:         PipelineAcknowledgeFailoverReservation,
+		Pipeline:         inferFailoverPipeline(flavorExtraSpecs),
 		AvailabilityZone: vm.AvailabilityZone,
 		SchedulerHints:   map[string]any{"_nova_check_type": string(api.EvacuateIntent)},
 	}
@@ -222,9 +221,9 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		"vmUUID", vm.UUID,
 		"reservationHost", reservationHost,
 		"vmCurrentHost", vm.CurrentHypervisor,
-		"pipeline", PipelineAcknowledgeFailoverReservation)
+		"pipeline", scheduleReq.Pipeline)
 
-	resp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq, scheduling.Options{ReadOnly: true, LockReservations: true, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true})
+	resp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq, scheduling.Options{ReadOnly: true, LockReservations: true, SkipPlacementContextFilters: true, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true})
 	if err != nil {
 		logger.Error(err, "failed to validate VM for reservation host", "vmUUID", vm.UUID, "reservationHost", reservationHost)
 		return false, fmt.Errorf("failed to validate VM for reservation host: %w", err)
