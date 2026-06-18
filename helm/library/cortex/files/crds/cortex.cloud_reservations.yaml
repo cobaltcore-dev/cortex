@@ -173,6 +173,31 @@ spec:
                       (e.g., "hana_medium_v2").
                     type: string
                 type: object
+              inFlightReservation:
+                description: |-
+                  InFlightReservation specifies which kind of virtual machine is expected
+                  to land on the reserved slot. Set when Type is InFlightReservation.
+                properties:
+                  intent:
+                    description: |-
+                      Intent defines which kind of virtual machine lifecycle operation
+                      triggered the placement of this in-flight reservation.
+                    type: string
+                  projectID:
+                    description: |-
+                      ProjectID is the identifier of the project/tenant that owns
+                      the virtual machine.
+                    type: string
+                  userID:
+                    description: UserID is the identifier of the user who owns the
+                      virtual machine.
+                    type: string
+                  vmID:
+                    description: |-
+                      VMID is the OpenStack server uuid from Nova assigned to the virtual
+                      machine expected to land on this reservation slot.
+                    type: string
+                type: object
               resources:
                 additionalProperties:
                   anyOf:
@@ -203,6 +228,7 @@ spec:
                 enum:
                 - CommittedResourceReservation
                 - FailoverReservation
+                - InFlightReservation
                 type: string
             required:
             - type
@@ -330,6 +356,11 @@ spec:
                   - For Nova: the hypervisor hostname
                   - For Pods: the node name
                 type: string
+              inFlightReservation:
+                description: |-
+                  InFlightReservation contains status fields specific to in-flight reservations.
+                  Only used when Type is InFlightReservation.
+                type: object
             type: object
         required:
         - spec
