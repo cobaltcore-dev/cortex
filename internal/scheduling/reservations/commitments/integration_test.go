@@ -1107,8 +1107,13 @@ func TestCRScheduling_DoesNotSetSkipPlacementContextFilters(t *testing.T) {
 	// (filter_allowed_projects, filter_aggregate_metadata, etc.). Verify SkipPlacementContextFilters
 	// is never set so those filters are not bypassed.
 	var capturedReq schedulerdelegationapi.ExternalSchedulerRequest
+	var schedulerCalled bool
 	captureScheduler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(&capturedReq) //nolint:errcheck
+		schedulerCalled = true
+		if err := json.NewDecoder(r.Body).Decode(&capturedReq); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		resp := &schedulerdelegationapi.ExternalSchedulerResponse{Hosts: []string{"host-1"}}
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck
 	})
@@ -1123,6 +1128,9 @@ func TestCRScheduling_DoesNotSetSkipPlacementContextFilters(t *testing.T) {
 	env.reconcileCR(t, cr.Name)
 	env.reconcileChildReservations(t, cr.Name)
 
+	if !schedulerCalled {
+		t.Fatal("scheduler was never called — test did not exercise the scheduling path")
+	}
 	if capturedReq.Options.SkipPlacementContextFilters {
 		t.Error("CR slot scheduling must not set SkipPlacementContextFilters — tenant-context filters must run")
 	}
