@@ -28,9 +28,11 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
+	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
 	"github.com/gophercloud/gophercloud/v2"
+	"net/http"
 )
 
 // CommitmentReservationController reconciles commitment Reservation objects
@@ -625,7 +627,15 @@ func (r *CommitmentReservationController) Init(ctx context.Context, conf Reserva
 	logf.FromContext(ctx).Info("scheduler client initialized for commitment reservation controller", "url", conf.SchedulerURL)
 
 	if conf.KeystoneSecretRef.Name != "" {
-		keystoneClient, err := keystone.Connector{Client: r.Client}.FromSecretRef(ctx, conf.KeystoneSecretRef)
+		var authenticatedHTTP *http.Client
+		if conf.SSOSecretRef != nil {
+			var err error
+			authenticatedHTTP, err = sso.Connector{Client: r.Client}.FromSecretRef(ctx, *conf.SSOSecretRef)
+			if err != nil {
+				return fmt.Errorf("failed to initialize SSO client for domain resolver: %w", err)
+			}
+		}
+		keystoneClient, err := keystone.Connector{Client: r.Client, HTTPClient: authenticatedHTTP}.FromSecretRef(ctx, conf.KeystoneSecretRef)
 		if err != nil {
 			return fmt.Errorf("failed to initialize keystone client for domain resolver: %w", err)
 		}

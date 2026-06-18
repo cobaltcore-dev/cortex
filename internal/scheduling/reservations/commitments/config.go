@@ -74,6 +74,10 @@ type ReservationControllerConfig struct {
 	// When empty, domain name resolution is skipped and filter_external_customer will
 	// not enforce domain restrictions for CR reservations.
 	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef,omitempty"`
+	// SSOSecretRef is an optional reference to a Secret holding SSO credentials.
+	// Required in environments that use SSO-based Keystone authentication.
+	// When nil, http.DefaultClient is used, which will fail in SSO-only environments.
+	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef,omitempty"`
 }
 
 // CommittedResourceControllerConfig holds tuning knobs for the CommittedResource CRD controller.
