@@ -185,9 +185,6 @@ cortex-scheduling-controllers:
       keystoneSecretRef:
         name: cortex-nova-openstack-keystone
         namespace: cortex-nova
-      # ssoSecretRef:
-      #   name: cortex-nova-openstack-sso
-      #   namespace: cortex-nova
     committedResourceController:
       # Back-off interval while CommittedResource placement is pending or failed (base for exponential backoff)
       requeueIntervalRetry: "1m"
