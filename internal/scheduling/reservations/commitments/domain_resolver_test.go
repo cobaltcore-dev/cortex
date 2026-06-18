@@ -36,7 +36,9 @@ func newDomainResolverTestServer(t *testing.T, domainsByID map[string]string) (*
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"domain": map[string]any{"id": id, "name": name}})
+		if err := json.NewEncoder(w).Encode(map[string]any{"domain": map[string]any{"id": id, "name": name}}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	}))
 	return server, &callCount
 }
@@ -118,7 +120,9 @@ func TestKeystoneDomainResolver_ErrorNotCached(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"domain": map[string]any{"id": "domain-flaky", "name": "recovered"}})
+		if err := json.NewEncoder(w).Encode(map[string]any{"domain": map[string]any{"id": "domain-flaky", "name": "recovered"}}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	}))
 	defer server.Close()
 	resolver := newKeystoneDomainResolver(newTestServiceClient(server.URL))
