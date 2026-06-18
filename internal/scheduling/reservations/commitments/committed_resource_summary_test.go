@@ -1,28 +1,29 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package v1alpha1
+package commitments
 
 import (
 	"testing"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func ptr[T any](v T) *T { return &v }
 
-func makeSpec(amount, fg, az string, endTime *time.Time) CommittedResourceSpec {
-	s := CommittedResourceSpec{
+func makeSpec(amount, fg, az string, endTime *time.Time) v1alpha1.CommittedResourceSpec {
+	s := v1alpha1.CommittedResourceSpec{
 		Amount:           resource.MustParse(amount),
 		FlavorGroupName:  fg,
 		AvailabilityZone: az,
-		ResourceType:     CommittedResourceTypeMemory,
+		ResourceType:     v1alpha1.CommittedResourceTypeMemory,
 		ProjectID:        "proj-1",
 		DomainID:         "dom-1",
 		CommitmentUUID:   "uuid-1",
-		State:            CommitmentStatusConfirmed,
+		State:            v1alpha1.CommitmentStatusConfirmed,
 	}
 	if endTime != nil {
 		s.EndTime = &metav1.Time{Time: *endTime}
@@ -30,7 +31,7 @@ func makeSpec(amount, fg, az string, endTime *time.Time) CommittedResourceSpec {
 	return s
 }
 
-func makeStatusWithMessage(reason, message string, accepted *CommittedResourceSpec) CommittedResourceStatus {
+func makeStatusWithMessage(reason, message string, accepted *v1alpha1.CommittedResourceSpec) v1alpha1.CommittedResourceStatus {
 	status := makeStatus(reason, accepted, nil)
 	if len(status.Conditions) == 0 {
 		panic("makeStatus returned no conditions")
@@ -39,19 +40,19 @@ func makeStatusWithMessage(reason, message string, accepted *CommittedResourceSp
 	return status
 }
 
-func makeStatus(reason string, accepted *CommittedResourceSpec, instances []string) CommittedResourceStatus {
-	status := CommittedResourceStatus{
+func makeStatus(reason string, accepted *v1alpha1.CommittedResourceSpec, instances []string) v1alpha1.CommittedResourceStatus {
+	status := v1alpha1.CommittedResourceStatus{
 		AssignedInstances: instances,
 	}
 	if accepted != nil {
 		status.AcceptedSpec = accepted.DeepCopy()
 	}
 	condStatus := metav1.ConditionTrue
-	if reason != CommittedResourceReasonAccepted {
+	if reason != v1alpha1.CommittedResourceReasonAccepted {
 		condStatus = metav1.ConditionFalse
 	}
 	status.Conditions = []metav1.Condition{{
-		Type:   CommittedResourceConditionReady,
+		Type:   v1alpha1.CommittedResourceConditionReady,
 		Status: condStatus,
 		Reason: reason,
 	}}
@@ -64,49 +65,49 @@ func TestComputeStatusSummary(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		spec   CommittedResourceSpec
-		status CommittedResourceStatus
+		spec   v1alpha1.CommittedResourceSpec
+		status v1alpha1.CommittedResourceStatus
 		want   string
 	}{
 		{
 			name:   "no Ready condition",
 			spec:   makeSpec("2Gi", "fg1", "az1", in(4*time.Hour)),
-			status: CommittedResourceStatus{},
+			status: v1alpha1.CommittedResourceStatus{},
 			want:   "",
 		},
 		{
 			name:   "Accepted, 3 VMs, exp in hours",
 			spec:   makeSpec("2Gi", "fg1", "az1", in(4*time.Hour+30*time.Minute)),
-			status: makeStatus(CommittedResourceReasonAccepted, ptr(makeSpec("2Gi", "fg1", "az1", in(4*time.Hour+30*time.Minute))), []string{"a", "b", "c"}),
+			status: makeStatus(v1alpha1.CommittedResourceReasonAccepted, ptr(makeSpec("2Gi", "fg1", "az1", in(4*time.Hour+30*time.Minute))), []string{"a", "b", "c"}),
 			want:   "Accepted · 3 VMs · exp in 4h 30m",
 		},
 		{
 			name:   "Accepted, 1 VM, singular",
 			spec:   makeSpec("2Gi", "fg1", "az1", in(25*time.Hour+2*time.Minute)),
-			status: makeStatus(CommittedResourceReasonAccepted, ptr(makeSpec("2Gi", "fg1", "az1", in(25*time.Hour+2*time.Minute))), []string{"a"}),
+			status: makeStatus(v1alpha1.CommittedResourceReasonAccepted, ptr(makeSpec("2Gi", "fg1", "az1", in(25*time.Hour+2*time.Minute))), []string{"a"}),
 			want:   "Accepted · 1 VM · exp in 1d 1h",
 		},
 		{
 			name:   "Accepted, 0 VMs, no expiry",
 			spec:   makeSpec("2Gi", "fg1", "az1", nil),
-			status: makeStatus(CommittedResourceReasonAccepted, ptr(makeSpec("2Gi", "fg1", "az1", nil)), nil),
+			status: makeStatus(v1alpha1.CommittedResourceReasonAccepted, ptr(makeSpec("2Gi", "fg1", "az1", nil)), nil),
 			want:   "Accepted · 0 VMs · no expiry",
 		},
 		{
 			name: "Accepted with amount diff",
 			spec: makeSpec("5Gi", "fg1", "az1", in(3*24*time.Hour+2*time.Hour)),
-			status: makeStatus(CommittedResourceReasonAccepted,
+			status: makeStatus(v1alpha1.CommittedResourceReasonAccepted,
 				ptr(makeSpec("2Gi", "fg1", "az1", in(3*24*time.Hour+2*time.Hour))),
 				[]string{"a", "b", "c"}),
 			want: "Accepted (amount 2Gi→5Gi) · 3 VMs · exp in 3d 2h",
 		},
 		{
 			name: "Accepted with az and fg diff",
-			spec: func() CommittedResourceSpec {
+			spec: func() v1alpha1.CommittedResourceSpec {
 				s := makeSpec("2Gi", "fg2", "az2", nil)
 				return s
 			}(),
-			status: makeStatus(CommittedResourceReasonAccepted,
+			status: makeStatus(v1alpha1.CommittedResourceReasonAccepted,
 				ptr(makeSpec("2Gi", "fg1", "az1", nil)),
 				[]string{"a"}),
 			want: "Accepted (fg fg1→fg2; az az1→az2) · 1 VM · no expiry",
@@ -114,80 +115,80 @@ func TestComputeStatusSummary(t *testing.T) {
 		{
 			name:   "Reserving with expiry",
 			spec:   makeSpec("2Gi", "fg1", "az1", in(3*24*time.Hour+2*time.Hour)),
-			status: makeStatus(CommittedResourceReasonReserving, ptr(makeSpec("2Gi", "fg1", "az1", in(3*24*time.Hour+2*time.Hour))), nil),
+			status: makeStatus(v1alpha1.CommittedResourceReasonReserving, ptr(makeSpec("2Gi", "fg1", "az1", in(3*24*time.Hour+2*time.Hour))), nil),
 			want:   "Reserving · exp in 3d 2h",
 		},
 		{
 			name:   "Reserving with amount diff",
 			spec:   makeSpec("5Gi", "fg1", "az1", in(time.Hour+3*time.Minute)),
-			status: makeStatus(CommittedResourceReasonReserving, ptr(makeSpec("2Gi", "fg1", "az1", in(time.Hour+3*time.Minute))), nil),
+			status: makeStatus(v1alpha1.CommittedResourceReasonReserving, ptr(makeSpec("2Gi", "fg1", "az1", in(time.Hour+3*time.Minute))), nil),
 			want:   "Reserving (amount 2Gi→5Gi) · exp in 1h 3m",
 		},
 		{
 			name:   "Rejected with message",
 			spec:   makeSpec("2Gi", "fg1", "az1", in(4*time.Hour)),
-			status: makeStatusWithMessage(CommittedResourceReasonRejected, "no hosts found for reservation (4/4 slots failed)", ptr(makeSpec("2Gi", "fg1", "az1", in(4*time.Hour)))),
+			status: makeStatusWithMessage(v1alpha1.CommittedResourceReasonRejected, "no hosts found for reservation (4/4 slots failed)", ptr(makeSpec("2Gi", "fg1", "az1", in(4*time.Hour)))),
 			want:   "Rejected · no hosts found for reservation (4/4 slots failed)",
 		},
 		{
 			name:   "Rejected without message (unchanged)",
 			spec:   makeSpec("2Gi", "fg1", "az1", in(4*time.Hour)),
-			status: makeStatus(CommittedResourceReasonRejected, ptr(makeSpec("2Gi", "fg1", "az1", in(4*time.Hour))), nil),
+			status: makeStatus(v1alpha1.CommittedResourceReasonRejected, ptr(makeSpec("2Gi", "fg1", "az1", in(4*time.Hour))), nil),
 			want:   "Rejected",
 		},
 		{
 			name:   "Reserving with failure message shows it",
 			spec:   makeSpec("2Gi", "fg1", "az1", in(time.Hour)),
-			status: makeStatusWithMessage(CommittedResourceReasonReserving, "no hosts found for reservation (2/4 slots failed)", ptr(makeSpec("2Gi", "fg1", "az1", in(time.Hour)))),
+			status: makeStatusWithMessage(v1alpha1.CommittedResourceReasonReserving, "no hosts found for reservation (2/4 slots failed)", ptr(makeSpec("2Gi", "fg1", "az1", in(time.Hour)))),
 			want:   "Reserving · no hosts found for reservation (2/4 slots failed) · exp in 1h 0m",
 		},
 		{
 			name:   "Reserving with waiting message skips it",
 			spec:   makeSpec("2Gi", "fg1", "az1", in(time.Hour)),
-			status: makeStatusWithMessage(CommittedResourceReasonReserving, "waiting for reservation placement", ptr(makeSpec("2Gi", "fg1", "az1", in(time.Hour)))),
+			status: makeStatusWithMessage(v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", ptr(makeSpec("2Gi", "fg1", "az1", in(time.Hour)))),
 			want:   "Reserving · exp in 1h 0m",
 		},
 		{
 			name:   "Rejected with long message truncated",
 			spec:   makeSpec("2Gi", "fg1", "az1", in(4*time.Hour)),
-			status: makeStatusWithMessage(CommittedResourceReasonRejected, "no hosts found for reservation because all hypervisors in this flavor group and availability zone are fully committed and no further capacity exists", ptr(makeSpec("2Gi", "fg1", "az1", in(4*time.Hour)))),
+			status: makeStatusWithMessage(v1alpha1.CommittedResourceReasonRejected, "no hosts found for reservation because all hypervisors in this flavor group and availability zone are fully committed and no further capacity exists", ptr(makeSpec("2Gi", "fg1", "az1", in(4*time.Hour)))),
 			want:   "Rejected · no hosts found for reservation because all hypervisors in this flavor group a...",
 		},
 		{
 			name:   "Planned with expiry in days",
 			spec:   makeSpec("2Gi", "fg1", "az1", in(3*24*time.Hour+2*time.Hour)),
-			status: makeStatus(CommittedResourceReasonPlanned, nil, nil),
+			status: makeStatus(v1alpha1.CommittedResourceReasonPlanned, nil, nil),
 			want:   "Planned · exp in 3d 2h",
 		},
 		{
 			name:   "Planned no expiry",
 			spec:   makeSpec("2Gi", "fg1", "az1", nil),
-			status: makeStatus(CommittedResourceReasonPlanned, nil, nil),
+			status: makeStatus(v1alpha1.CommittedResourceReasonPlanned, nil, nil),
 			want:   "Planned · no expiry",
 		},
 		{
 			name:   "expired EndTime shows expired",
 			spec:   makeSpec("2Gi", "fg1", "az1", in(-time.Hour)),
-			status: makeStatus(CommittedResourceReasonAccepted, ptr(makeSpec("2Gi", "fg1", "az1", in(-time.Hour))), []string{"a"}),
+			status: makeStatus(v1alpha1.CommittedResourceReasonAccepted, ptr(makeSpec("2Gi", "fg1", "az1", in(-time.Hour))), []string{"a"}),
 			want:   "Accepted · 1 VM · expired",
 		},
 		{
 			name:   "sub-minute expiry shows seconds",
 			spec:   makeSpec("2Gi", "fg1", "az1", in(18*time.Second)),
-			status: makeStatus(CommittedResourceReasonAccepted, ptr(makeSpec("2Gi", "fg1", "az1", in(18*time.Second))), nil),
+			status: makeStatus(v1alpha1.CommittedResourceReasonAccepted, ptr(makeSpec("2Gi", "fg1", "az1", in(18*time.Second))), nil),
 			want:   "Accepted · 0 VMs · exp in 18s",
 		},
 		{
 			name:   "sub-hour expiry shows minutes and seconds",
 			spec:   makeSpec("2Gi", "fg1", "az1", in(23*time.Minute+5*time.Second)),
-			status: makeStatus(CommittedResourceReasonAccepted, ptr(makeSpec("2Gi", "fg1", "az1", in(23*time.Minute+5*time.Second))), nil),
+			status: makeStatus(v1alpha1.CommittedResourceReasonAccepted, ptr(makeSpec("2Gi", "fg1", "az1", in(23*time.Minute+5*time.Second))), nil),
 			want:   "Accepted · 0 VMs · exp in 23m 5s",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := ComputeStatusSummary(tc.spec, tc.status, now)
+			got := computeStatusSummary(tc.spec, tc.status, now)
 			if got != tc.want {
 				t.Errorf("got %q, want %q", got, tc.want)
 			}
