@@ -921,11 +921,11 @@ func TestCommitmentReservationController_DomainNameHint_Present(t *testing.T) {
 	resolver := &mockDomainResolver{names: map[string]string{"domain-uuid-1": "monsoon3"}}
 	conf := ReservationControllerConfig{SchedulerURL: server.URL}
 	reconciler := &CommitmentReservationController{
-		Client:         k8sClient,
-		Scheme:         scheme,
-		Conf:           conf,
+		Client:          k8sClient,
+		Scheme:          scheme,
+		Conf:            conf,
 		SchedulerClient: reservations.NewSchedulerClient(server.URL),
-		DomainResolver: resolver,
+		DomainResolver:  resolver,
 	}
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: reservation.Name}}
