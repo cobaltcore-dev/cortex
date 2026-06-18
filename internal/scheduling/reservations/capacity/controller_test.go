@@ -692,3 +692,32 @@ func TestProbeScheduler_SubtractsReservationBlocksWhenNotIgnored(t *testing.T) {
 		t.Errorf("placeable capacity = %d, want 1 (3 slots − 1 alloc − 1 reservation)", placeableCap)
 	}
 }
+
+func TestProbeScheduler_SetsSkipPlacementContextFilters(t *testing.T) {
+	scheme := newTestScheme(t)
+	hv := newHypervisor("host-1", "az-a", 4096*1024*1024)
+
+	var capturedReq schedulerapi.ExternalSchedulerRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&capturedReq); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		json.NewEncoder(w).Encode(schedulerapi.ExternalSchedulerResponse{Hosts: []string{"host-1"}}) //nolint:errcheck
+	}))
+	defer srv.Close()
+
+	c := NewController(fake.NewClientBuilder().WithScheme(scheme).Build(), Config{SchedulerURL: srv.URL})
+	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
+	flavor := compute.FlavorInGroup{Name: "test-flavor", MemoryMB: 4096}
+
+	if _, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "test-pipeline", hvByName, true, nil); err != nil {
+		t.Fatalf("probeScheduler failed: %v", err)
+	}
+	if !capturedReq.Options.SkipPlacementContextFilters {
+		t.Error("capacity probe must set SkipPlacementContextFilters=true to see all hosts regardless of project restrictions")
+	}
+	if capturedReq.Spec.Data.ProjectID != "" {
+		t.Errorf("capacity probe must send empty ProjectID, got %q", capturedReq.Spec.Data.ProjectID)
+	}
+}

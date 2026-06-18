@@ -296,6 +296,9 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		SkipHistory:                   true,
 		SkipInflight:                  false, // TODO pessimistic blocking needed, will be addressed in follow up ticket
 		SkipCommittedResourceTracking: true,  // CR slot scheduling, not a VM placement
+		// CR slot scheduling has a real project ID and must respect per-project host
+		// restrictions (allowed projects, aggregate metadata, external customer, etc.).
+		SkipPlacementContextFilters: false,
 	}
 
 	scheduleResp, err := r.SchedulerClient.ScheduleReservation(ctx, scheduleReq, scheduleOpts)

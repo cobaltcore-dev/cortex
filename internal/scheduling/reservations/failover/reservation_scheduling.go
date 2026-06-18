@@ -265,7 +265,7 @@ func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 
 	// Get potential hypervisors from scheduler using the reservation spec resources
 	// (which may be sized to the LargestFlavor from the flavor group)
-	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineNewFailoverReservation, resSpec, scheduling.Options{LockReservations: true, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true})
+	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineNewFailoverReservation, resSpec, scheduling.Options{LockReservations: true, SkipPlacementContextFilters: false, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get potential hypervisors for VM: %w", err)
 	}

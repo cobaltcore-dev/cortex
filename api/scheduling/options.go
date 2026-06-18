@@ -36,11 +36,8 @@ type Options struct {
 	// failover scheduling, CR slot scheduling) that must not modify reservation allocations.
 	SkipCommittedResourceTracking bool `json:"skip_committed_resource_tracking,omitempty"`
 	// SkipPlacementContextFilters skips filters that are only meaningful for actual VM
-	// placement triggered by a user request: instance group affinity/anti-affinity,
-	// aggregate metadata, live-migration compatibility, requested destination,
-	// quota enforcement, allowed projects, and external customer restrictions.
-	// Set for internal calls (capacity probes, reservation scheduling) that carry no
-	// placement context and must see the full host set.
+	// placement triggered by a user request (e.g. instance group affinity). See the
+	// filters that check this option for the full list.
 	SkipPlacementContextFilters bool `json:"skip_placement_context_filters,omitempty"`
 }
 
