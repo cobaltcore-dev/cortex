@@ -871,9 +871,7 @@ func TestCommitmentReservationController_reconcileInstanceReservation_Success(t 
 // Test: domain_name scheduler hint
 // ============================================================================
 
-// newTestSchedulerServer creates an httptest server that captures the decoded
-// ExternalSchedulerRequest and returns a single host. The caller can inspect
-// the captured request after the Reconcile call.
+// newTestSchedulerServer captures the decoded request and returns a single host.
 func newTestSchedulerServer(t *testing.T, captured *schedulerdelegationapi.ExternalSchedulerRequest) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -889,172 +887,98 @@ func newTestSchedulerServer(t *testing.T, captured *schedulerdelegationapi.Exter
 	}))
 }
 
-// TestCommitmentReservationController_DomainNameHint_Present verifies that when
-// DomainResolver is configured and the reservation carries a DomainID, the
-// domain_name scheduler hint is forwarded to the scheduling pipeline so that
-// filter_external_customer can enforce domain-based host restrictions.
-func TestCommitmentReservationController_DomainNameHint_Present(t *testing.T) {
-	scheme := newCRTestScheme(t)
-
-	reservation := &v1alpha1.Reservation{
-		ObjectMeta: ctrl.ObjectMeta{Name: "test-reservation"},
-		Spec: v1alpha1.ReservationSpec{
-			Type: v1alpha1.ReservationTypeCommittedResource,
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				ProjectID:    "test-project",
-				DomainID:     "domain-uuid-1",
-				ResourceName: "test-flavor",
-			},
-			Resources: map[hv1.ResourceName]resource.Quantity{
-				hv1.ResourceMemory: resource.MustParse("4Gi"),
-				hv1.ResourceCPU:    resource.MustParse("2"),
-			},
+func TestCommitmentReservationController_DomainNameHint(t *testing.T) {
+	tests := []struct {
+		name             string
+		resolver         DomainResolver
+		wantDomainName   string // empty means hint must be absent
+		wantResolverCall string // expected domainID passed to resolver; empty means no call expected
+	}{
+		{
+			name:             "hint present when resolver succeeds",
+			resolver:         &mockDomainResolver{names: map[string]string{"domain-uuid-1": "monsoon3"}},
+			wantDomainName:   "monsoon3",
+			wantResolverCall: "domain-uuid-1",
+		},
+		{
+			name:           "hint absent when resolver fails, scheduling continues",
+			resolver:       &mockDomainResolver{err: errors.New("keystone unavailable")},
+			wantDomainName: "",
+		},
+		{
+			name:           "hint absent when resolver is nil (keystoneSecretRef not configured)",
+			resolver:       nil,
+			wantDomainName: "",
 		},
 	}
-	hypervisor := &hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "test-host-1"}}
-	k8sClient := newCRTestClient(scheme, reservation, newTestFlavorKnowledge(), hypervisor)
 
-	var captured schedulerdelegationapi.ExternalSchedulerRequest
-	server := newTestSchedulerServer(t, &captured)
-	defer server.Close()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := newCRTestScheme(t)
+			reservation := &v1alpha1.Reservation{
+				ObjectMeta: ctrl.ObjectMeta{Name: "test-reservation"},
+				Spec: v1alpha1.ReservationSpec{
+					Type: v1alpha1.ReservationTypeCommittedResource,
+					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+						ProjectID:    "test-project",
+						DomainID:     "domain-uuid-1",
+						ResourceName: "test-flavor",
+					},
+					Resources: map[hv1.ResourceName]resource.Quantity{
+						hv1.ResourceMemory: resource.MustParse("4Gi"),
+						hv1.ResourceCPU:    resource.MustParse("2"),
+					},
+				},
+			}
+			k8sClient := newCRTestClient(scheme, reservation, newTestFlavorKnowledge(),
+				&hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "test-host-1"}})
 
-	resolver := &mockDomainResolver{names: map[string]string{"domain-uuid-1": "monsoon3"}}
-	conf := ReservationControllerConfig{SchedulerURL: server.URL}
-	reconciler := &CommitmentReservationController{
-		Client:          k8sClient,
-		Scheme:          scheme,
-		Conf:            conf,
-		SchedulerClient: reservations.NewSchedulerClient(server.URL),
-		DomainResolver:  resolver,
-	}
+			var captured schedulerdelegationapi.ExternalSchedulerRequest
+			server := newTestSchedulerServer(t, &captured)
+			defer server.Close()
 
-	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: reservation.Name}}
-	if _, err := reconciler.Reconcile(context.Background(), req); err != nil {
-		t.Fatalf("Reconcile() error = %v", err)
-	}
+			reconciler := &CommitmentReservationController{
+				Client:          k8sClient,
+				Scheme:          scheme,
+				Conf:            ReservationControllerConfig{SchedulerURL: server.URL},
+				SchedulerClient: reservations.NewSchedulerClient(server.URL),
+				DomainResolver:  tt.resolver,
+			}
 
-	// Verify the resolver was called with the correct domain ID.
-	if len(resolver.calls) != 1 || resolver.calls[0] != "domain-uuid-1" {
-		t.Errorf("expected ResolveDomainName called with %q, got calls=%v", "domain-uuid-1", resolver.calls)
-	}
+			if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+				NamespacedName: types.NamespacedName{Name: reservation.Name},
+			}); err != nil {
+				t.Fatalf("Reconcile() error = %v", err)
+			}
 
-	// Verify domain_name hint was forwarded to the scheduler.
-	gotDomain, err := captured.Spec.Data.GetSchedulerHintStr("domain_name")
-	if err != nil {
-		t.Fatalf("domain_name scheduler hint missing: %v", err)
-	}
-	if gotDomain != "monsoon3" {
-		t.Errorf("expected domain_name hint %q, got %q", "monsoon3", gotDomain)
-	}
+			// Verify resolver was called correctly.
+			if tt.wantResolverCall != "" {
+				m := tt.resolver.(*mockDomainResolver)
+				if len(m.calls) != 1 || m.calls[0] != tt.wantResolverCall {
+					t.Errorf("expected resolver called with %q, got %v", tt.wantResolverCall, m.calls)
+				}
+			}
 
-	// Verify _nova_check_type hint is still present.
-	gotIntent, err := captured.Spec.Data.GetSchedulerHintStr("_nova_check_type")
-	if err != nil || gotIntent != string(schedulerdelegationapi.ReserveForCommittedResourceIntent) {
-		t.Errorf("expected _nova_check_type hint %q, got %q (err=%v)", schedulerdelegationapi.ReserveForCommittedResourceIntent, gotIntent, err)
-	}
-}
+			// Verify domain_name hint.
+			gotDomain, err := captured.Spec.Data.GetSchedulerHintStr("domain_name")
+			if tt.wantDomainName == "" {
+				if err == nil {
+					t.Errorf("expected domain_name hint absent, got %q", gotDomain)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("expected domain_name hint %q, got error: %v", tt.wantDomainName, err)
+				}
+				if gotDomain != tt.wantDomainName {
+					t.Errorf("expected domain_name hint %q, got %q", tt.wantDomainName, gotDomain)
+				}
+			}
 
-// TestCommitmentReservationController_DomainNameHint_ResolverError verifies that
-// when domain name resolution fails the controller does not return an error and
-// proceeds with scheduling — omitting only the domain_name hint. This ensures
-// that a transient Keystone outage never blocks CR reservation placement.
-func TestCommitmentReservationController_DomainNameHint_ResolverError(t *testing.T) {
-	scheme := newCRTestScheme(t)
-
-	reservation := &v1alpha1.Reservation{
-		ObjectMeta: ctrl.ObjectMeta{Name: "test-reservation"},
-		Spec: v1alpha1.ReservationSpec{
-			Type: v1alpha1.ReservationTypeCommittedResource,
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				ProjectID:    "test-project",
-				DomainID:     "domain-uuid-1",
-				ResourceName: "test-flavor",
-			},
-			Resources: map[hv1.ResourceName]resource.Quantity{
-				hv1.ResourceMemory: resource.MustParse("4Gi"),
-				hv1.ResourceCPU:    resource.MustParse("2"),
-			},
-		},
-	}
-	hypervisor := &hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "test-host-1"}}
-	k8sClient := newCRTestClient(scheme, reservation, newTestFlavorKnowledge(), hypervisor)
-
-	var captured schedulerdelegationapi.ExternalSchedulerRequest
-	server := newTestSchedulerServer(t, &captured)
-	defer server.Close()
-
-	resolver := &mockDomainResolver{err: errors.New("keystone unavailable")}
-	conf := ReservationControllerConfig{SchedulerURL: server.URL}
-	reconciler := &CommitmentReservationController{
-		Client:          k8sClient,
-		Scheme:          scheme,
-		Conf:            conf,
-		SchedulerClient: reservations.NewSchedulerClient(server.URL),
-		DomainResolver:  resolver,
-	}
-
-	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: reservation.Name}}
-	// Must not return an error — resolution failure is non-fatal.
-	if _, err := reconciler.Reconcile(context.Background(), req); err != nil {
-		t.Fatalf("Reconcile() must not fail on resolver error, got: %v", err)
-	}
-
-	// domain_name hint must be absent when resolution failed.
-	if _, err := captured.Spec.Data.GetSchedulerHintStr("domain_name"); err == nil {
-		t.Error("expected domain_name hint to be absent when resolver fails, but it was present")
-	}
-
-	// _nova_check_type must still be present — unrelated to domain resolution.
-	gotIntent, err := captured.Spec.Data.GetSchedulerHintStr("_nova_check_type")
-	if err != nil || gotIntent != string(schedulerdelegationapi.ReserveForCommittedResourceIntent) {
-		t.Errorf("expected _nova_check_type hint %q, got %q (err=%v)", schedulerdelegationapi.ReserveForCommittedResourceIntent, gotIntent, err)
-	}
-}
-
-// TestCommitmentReservationController_DomainNameHint_NilResolver verifies that
-// when no DomainResolver is configured (KeystoneSecretRef absent), the controller
-// schedules normally without setting the domain_name hint.
-func TestCommitmentReservationController_DomainNameHint_NilResolver(t *testing.T) {
-	scheme := newCRTestScheme(t)
-
-	reservation := &v1alpha1.Reservation{
-		ObjectMeta: ctrl.ObjectMeta{Name: "test-reservation"},
-		Spec: v1alpha1.ReservationSpec{
-			Type: v1alpha1.ReservationTypeCommittedResource,
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				ProjectID:    "test-project",
-				DomainID:     "domain-uuid-1",
-				ResourceName: "test-flavor",
-			},
-			Resources: map[hv1.ResourceName]resource.Quantity{
-				hv1.ResourceMemory: resource.MustParse("4Gi"),
-				hv1.ResourceCPU:    resource.MustParse("2"),
-			},
-		},
-	}
-	hypervisor := &hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "test-host-1"}}
-	k8sClient := newCRTestClient(scheme, reservation, newTestFlavorKnowledge(), hypervisor)
-
-	var captured schedulerdelegationapi.ExternalSchedulerRequest
-	server := newTestSchedulerServer(t, &captured)
-	defer server.Close()
-
-	conf := ReservationControllerConfig{SchedulerURL: server.URL}
-	reconciler := &CommitmentReservationController{
-		Client:          k8sClient,
-		Scheme:          scheme,
-		Conf:            conf,
-		SchedulerClient: reservations.NewSchedulerClient(server.URL),
-		DomainResolver:  nil, // not configured
-	}
-
-	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: reservation.Name}}
-	if _, err := reconciler.Reconcile(context.Background(), req); err != nil {
-		t.Fatalf("Reconcile() error = %v", err)
-	}
-
-	// domain_name hint must be absent.
-	if _, err := captured.Spec.Data.GetSchedulerHintStr("domain_name"); err == nil {
-		t.Error("expected domain_name hint to be absent when DomainResolver is nil, but it was present")
+			// _nova_check_type must always be present regardless of resolver outcome.
+			gotIntent, err := captured.Spec.Data.GetSchedulerHintStr("_nova_check_type")
+			if err != nil || gotIntent != string(schedulerdelegationapi.ReserveForCommittedResourceIntent) {
+				t.Errorf("expected _nova_check_type=%q, got %q (err=%v)", schedulerdelegationapi.ReserveForCommittedResourceIntent, gotIntent, err)
+			}
+		})
 	}
 }

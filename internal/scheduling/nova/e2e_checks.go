@@ -381,20 +381,11 @@ func checkNovaSchedulerReturnsValidHosts(
 	return resp.Hosts
 }
 
-// CheckDomainNameHintRouting verifies that CR reservation scheduling passes the
-// domain_name scheduler hint through to the pipeline and that filter_external_customer
-// acts on it correctly.
-//
-// It sends a synthetic ExternalSchedulerRequest with:
-//   - _nova_check_type = reserve_for_committed_resource  (CR intent, not failover)
-//   - domain_name = config.DomainName
-//
-// to the nova external scheduler and asserts the call succeeds (HTTP 200). The check
-// does not assert which specific hosts are returned — that depends on cluster state —
-// but a successful response confirms the full request/filter path is wired correctly.
-//
-// To observe actual filtering, include at least one host with
-// CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE and one without, then inspect the logs.
+// CheckDomainNameHintRouting sends a synthetic CR reservation scheduling request
+// with _nova_check_type=reserve_for_committed_resource and domain_name=config.DomainName
+// to the nova external scheduler and asserts HTTP 200. Confirms the hint flows through
+// the pipeline and filter_external_customer evaluates it. Inspect the manager logs to
+// see which hosts were kept or dropped.
 func CheckDomainNameHintRouting(ctx context.Context, config ChecksConfig) {
 	cfg := config.DomainNameHintCheck
 	if cfg == nil {
