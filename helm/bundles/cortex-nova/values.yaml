@@ -184,10 +184,10 @@ cortex-scheduling-controllers:
       # Must match the credentials used by the commitments syncer.
       keystoneSecretRef:
         name: cortex-nova-openstack-keystone
-        namespace: default
+        namespace: cortex-nova
       # ssoSecretRef:
       #   name: cortex-nova-openstack-sso
-      #   namespace: default
+      #   namespace: cortex-nova
     committedResourceController:
       # Back-off interval while CommittedResource placement is pending or failed (base for exponential backoff)
       requeueIntervalRetry: "1m"
