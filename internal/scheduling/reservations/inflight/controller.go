@@ -178,6 +178,9 @@ func (c *Controller) predicateReservations() predicate.Predicate {
 		if reservation.Spec.Type != v1alpha1.ReservationTypeInFlight {
 			return false // Not an in-flight reservation.
 		}
+		if reservation.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
+			return false // Not a Nova reservation.
+		}
 		return true // Reconcile.
 	})
 }
@@ -187,6 +190,7 @@ func (c *Controller) handleHypervisors() handler.EventHandler {
 	handler := handler.Funcs{}
 	enqueueCorrespondingReservations := func(ctx context.Context, hvName string,
 		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+
 		log := ctrl.LoggerFrom(ctx)
 		log.V(1).Info("Enqueuing reservations corresponding to hypervisor",
 			"hypervisor", hvName)
@@ -213,16 +217,19 @@ func (c *Controller) handleHypervisors() handler.EventHandler {
 	}
 	handler.CreateFunc = func(ctx context.Context, evt event.CreateEvent,
 		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+
 		hv := evt.Object.(*hv1.Hypervisor)
 		enqueueCorrespondingReservations(ctx, hv.Name, queue)
 	}
 	handler.UpdateFunc = func(ctx context.Context, evt event.UpdateEvent,
 		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+
 		hv := evt.ObjectNew.(*hv1.Hypervisor)
 		enqueueCorrespondingReservations(ctx, hv.Name, queue)
 	}
 	handler.DeleteFunc = func(ctx context.Context, evt event.DeleteEvent,
 		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+
 		hv := evt.Object.(*hv1.Hypervisor)
 		enqueueCorrespondingReservations(ctx, hv.Name, queue)
 	}
@@ -254,14 +261,19 @@ func (c *Controller) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (er
 		c.handleReservations(),
 		c.predicateReservations(),
 	)
+	if err != nil {
+		return err
+	}
 	// Index reservations by their target host so we can requeue reservations
 	// for which the list of instances on a hypervisor has changed.
-	mcl.IndexField(ctx,
+	if err := mcl.IndexField(ctx,
 		&v1alpha1.Reservation{},
 		&v1alpha1.ReservationList{},
 		idxReservationByTargetHost,
 		idxReservationByTargetHostFn,
-	)
+	); err != nil {
+		return err
+	}
 	// Watch hypervisor changes and requeue reservations targeting
 	// the changed hypervisor.
 	bldr, err = bldr.WatchesMulticluster(&hv1.Hypervisor{},
