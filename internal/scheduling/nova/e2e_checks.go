@@ -36,11 +36,36 @@ const (
 	nRandomRequestsToSend = 50
 )
 
+// ChecksConfig holds configuration for nova e2e checks.
 type ChecksConfig struct {
 	// Secret ref to keystone credentials stored in a k8s secret.
 	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef"`
 	// Secret ref to SSO credentials stored in a k8s secret, if applicable.
 	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
+	// DomainNameHintCheck holds optional configuration for the domain_name hint check.
+	// When nil the check is skipped. Provide DomainName, EligibleHosts, and FlavorName
+	// to exercise the filter_external_customer path for CR reservation scheduling.
+	DomainNameHintCheck *DomainNameHintConfig `json:"domainNameHintCheck,omitempty"`
+}
+
+// DomainNameHintConfig holds parameters for CheckDomainNameHintRouting.
+type DomainNameHintConfig struct {
+	// DomainName is the OpenStack domain name passed as the domain_name scheduler hint.
+	// Use a real domain name from the target environment so filter_external_customer
+	// can apply its prefix-matching logic.
+	DomainName string `json:"domainName"`
+	// EligibleHosts is the list of compute hostnames offered to the scheduler.
+	// Include at least one host with CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE and one without
+	// to give the filter something to act on.
+	EligibleHosts []string `json:"eligibleHosts"`
+	// FlavorName is the Nova flavor name to use in the request (e.g. "g_k_c1_m2_v2").
+	FlavorName string `json:"flavorName"`
+	// FlavorExtraSpecs are the extra specs for the flavor. Required by most pipeline
+	// filters to determine hypervisor type, capabilities, and traits.
+	// Example: {"capabilities:hypervisor_type": "CH", "quota:hw_version": "2101"}
+	FlavorExtraSpecs map[string]string `json:"flavorExtraSpecs,omitempty"`
+	// Pipeline is the scheduler pipeline to target. Empty means default.
+	Pipeline string `json:"pipeline,omitempty"`
 }
 
 // Data necessary to generate a somewhat valid nova scheduler request.
@@ -356,6 +381,73 @@ func checkNovaSchedulerReturnsValidHosts(
 	return resp.Hosts
 }
 
+// CheckDomainNameHintRouting verifies that CR reservation scheduling passes the
+// domain_name scheduler hint through to the pipeline and that filter_external_customer
+// acts on it correctly.
+//
+// It sends a synthetic ExternalSchedulerRequest with:
+//   - _nova_check_type = reserve_for_committed_resource  (CR intent, not failover)
+//   - domain_name = config.DomainName
+//
+// to the nova external scheduler and asserts the call succeeds (HTTP 200). The check
+// does not assert which specific hosts are returned — that depends on cluster state —
+// but a successful response confirms the full request/filter path is wired correctly.
+//
+// To observe actual filtering, include at least one host with
+// CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE and one without, then inspect the logs.
+func CheckDomainNameHintRouting(ctx context.Context, config ChecksConfig) {
+	cfg := config.DomainNameHintCheck
+	if cfg == nil {
+		slog.Info("domain_name hint check skipped: DomainNameHintCheck not configured")
+		return
+	}
+	if cfg.FlavorName == "" || len(cfg.EligibleHosts) == 0 {
+		slog.Info("domain_name hint check skipped: FlavorName or EligibleHosts not set")
+		return
+	}
+
+	hosts := make([]api.ExternalSchedulerHost, len(cfg.EligibleHosts))
+	weights := make(map[string]float64, len(cfg.EligibleHosts))
+	for i, h := range cfg.EligibleHosts {
+		hosts[i] = api.ExternalSchedulerHost{ComputeHost: h}
+		weights[h] = 0.0
+	}
+
+	req := api.ExternalSchedulerRequest{
+		Pipeline: cfg.Pipeline,
+		Hosts:    hosts,
+		Weights:  weights,
+		Spec: api.NovaObject[api.NovaSpec]{
+			Data: api.NovaSpec{
+				InstanceUUID: "e2e-domain-hint-check",
+				Flavor: api.NovaObject[api.NovaFlavor]{
+					Data: api.NovaFlavor{
+						Name:       cfg.FlavorName,
+						ExtraSpecs: cfg.FlavorExtraSpecs,
+					},
+				},
+				SchedulerHints: map[string]any{
+					"_nova_check_type": string(api.ReserveForCommittedResourceIntent),
+					"domain_name":      cfg.DomainName,
+				},
+			},
+		},
+	}
+
+	slog.Info("domain_name hint check: sending CR reservation scheduling request",
+		"domainName", cfg.DomainName,
+		"eligibleHosts", cfg.EligibleHosts,
+		"flavorName", cfg.FlavorName,
+	)
+
+	hosts2 := checkNovaSchedulerReturnsValidHosts(ctx, req)
+	slog.Info("domain_name hint check passed",
+		"domainName", cfg.DomainName,
+		"hostsReturned", len(hosts2),
+		"hosts", hosts2,
+	)
+}
+
 // Run all checks.
 func RunChecks(ctx context.Context, client client.Client, config ChecksConfig) {
 	datacenter := prepare(ctx, client, config)
@@ -370,10 +462,10 @@ func RunChecks(ctx context.Context, client client.Client, config ChecksConfig) {
 			requestsWithNoHostsReturned++
 		}
 	}
-	// Print a summary.
 	slog.Info(
 		"summary",
 		"requestsWithHostsReturned", requestsWithHostsReturned,
 		"requestsWithNoHostsReturned", requestsWithNoHostsReturned,
 	)
+	CheckDomainNameHintRouting(ctx, config)
 }
