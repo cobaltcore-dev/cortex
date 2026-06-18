@@ -63,6 +63,15 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 				Traits: []string{"CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE"},
 			},
 		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host-custom-trait",
+			},
+			Spec: hv1.HypervisorSpec{
+				CustomTraits: []string{"CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE"},
+			},
+			// Status.Traits intentionally empty — trait comes solely from Spec.CustomTraits.
+		},
 	}
 
 	tests := []struct {
@@ -391,6 +400,50 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			},
 			expectedHosts: []string{"host1", "host3"},
 			filteredHosts: []string{},
+		},
+		{
+			name: "ReserveForCommittedResourceIntent with external customer domain - filter applies",
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"ext-"},
+			},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						SchedulerHints: map[string]any{
+							"_nova_check_type": string(api.ReserveForCommittedResourceIntent),
+							"domain_name":      "ext-customer1",
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host3"},
+					{ComputeHost: "host4"},
+				},
+			},
+			expectedHosts: []string{"host1"},
+			filteredHosts: []string{"host3", "host4"},
+		},
+		{
+			name: "Trait from Spec.CustomTraits (not Status.Traits) grants host inclusion",
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"ext-"},
+			},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						SchedulerHints: map[string]any{
+							"domain_name": "ext-customer1",
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host-custom-trait"},
+					{ComputeHost: "host4"},
+				},
+			},
+			expectedHosts: []string{"host-custom-trait"},
+			filteredHosts: []string{"host4"},
 		},
 	}
 

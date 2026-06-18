@@ -179,6 +179,15 @@ cortex-scheduling-controllers:
       allocationGracePeriod: "15m"
       # URL of the nova external scheduler API for placement decisions
       schedulerURL: "http://localhost:8080/scheduler/nova/external"
+      # Keystone credentials used to resolve domain IDs to domain names for the
+      # domain_name scheduler hint consumed by filter_external_customer.
+      # Must match the credentials used by the commitments syncer.
+      keystoneSecretRef:
+        name: cortex-nova-openstack-keystone
+        namespace: default
+      # ssoSecretRef:
+      #   name: cortex-nova-openstack-sso
+      #   namespace: default
     committedResourceController:
       # Back-off interval while CommittedResource placement is pending or failed (base for exponential backoff)
       requeueIntervalRetry: "1m"
