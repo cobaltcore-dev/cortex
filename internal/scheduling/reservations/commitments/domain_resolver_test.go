@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -135,6 +136,80 @@ func TestKeystoneDomainResolver_NotFound(t *testing.T) {
 	_, err := resolver.ResolveDomainName(context.Background(), "nonexistent")
 	if err == nil {
 		t.Fatal("expected an error for unknown domain, got nil")
+	}
+}
+
+func TestKeystoneDomainResolver_ErrorNotCached(t *testing.T) {
+	// First request fails (5xx), second request succeeds.
+	// The resolver must NOT cache the error, so the second call retries Keystone
+	// and returns the correct name.
+	var callCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := callCount.Add(1)
+		if n == 1 {
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"domain": map[string]any{"id": "domain-flaky", "name": "recovered"},
+		})
+	}))
+	defer server.Close()
+
+	resolver := newKeystoneDomainResolver(newTestServiceClient(server.URL))
+
+	_, err := resolver.ResolveDomainName(context.Background(), "domain-flaky")
+	if err == nil {
+		t.Fatal("expected error on first (failing) call, got nil")
+	}
+
+	name, err := resolver.ResolveDomainName(context.Background(), "domain-flaky")
+	if err != nil {
+		t.Fatalf("expected success on second call after Keystone recovered, got: %v", err)
+	}
+	if name != "recovered" {
+		t.Errorf("expected %q, got %q", "recovered", name)
+	}
+	if callCount.Load() != 2 {
+		t.Errorf("expected 2 Keystone calls (error not cached), got %d", callCount.Load())
+	}
+}
+
+func TestKeystoneDomainResolver_ErrorWrapping(t *testing.T) {
+	server, _ := newDomainResolverTestServer(t, map[string]string{})
+	defer server.Close()
+
+	resolver := newKeystoneDomainResolver(newTestServiceClient(server.URL))
+
+	_, err := resolver.ResolveDomainName(context.Background(), "missing-domain")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	// The error message must include the domain ID so callers can diagnose which
+	// lookup failed without having to add their own context.
+	if !strings.Contains(err.Error(), "missing-domain") {
+		t.Errorf("expected error to contain domain ID %q, got: %v", "missing-domain", err)
+	}
+}
+
+func TestKeystoneDomainResolver_ContextCancelled(t *testing.T) {
+	// Server that blocks until the context is cancelled.
+	blocked := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-blocked // never unblocked; request hangs until client cancels
+	}))
+	defer server.Close()
+	defer close(blocked)
+
+	resolver := newKeystoneDomainResolver(newTestServiceClient(server.URL))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	_, err := resolver.ResolveDomainName(ctx, "domain-cancelled")
+	if err == nil {
+		t.Fatal("expected error when context is cancelled, got nil")
 	}
 }
 
