@@ -102,7 +102,6 @@ func (m *ReservationManager) ApplyCommitmentState(
 
 	log = log.WithName("reservation-manager")
 
-	// Phase 1: List and filter existing reservations for this commitment
 	var allReservations v1alpha1.ReservationList
 	if err := m.List(ctx, &allReservations, client.MatchingLabels{
 		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
@@ -110,7 +109,6 @@ func (m *ReservationManager) ApplyCommitmentState(
 		return nil, fmt.Errorf("failed to list reservations: %w", err)
 	}
 
-	// Filter by CommitmentUUID to find reservations for this commitment
 	var existing []v1alpha1.Reservation
 	for _, res := range allReservations.Items {
 		if res.Spec.CommittedResourceReservation != nil &&
@@ -119,7 +117,6 @@ func (m *ReservationManager) ApplyCommitmentState(
 		}
 	}
 
-	// Phase 2: Calculate memory delta (desired - current)
 	flavorGroup, exists := flavorGroups[desiredState.FlavorGroupName]
 
 	if !exists {
@@ -134,7 +131,6 @@ func (m *ReservationManager) ApplyCommitmentState(
 		deltaMemoryBytes -= memoryQuantity.Value()
 	}
 
-	// Log only if there's actual work to do (delta != 0)
 	hasChanges := deltaMemoryBytes != 0
 
 	nextSlotIndex := GetNextSlotIndex(existing)
@@ -205,8 +201,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 	}
 
 	// Phase 4.5 (PAYG PRE-ALLOCATE): absorb existing PAYG VMs into pre-populated slots.
-	// Runs only when VMSource is configured. Makes one VMSource call for all HVs in the AZ,
-	// then creates one slot per PAYG VM (largest-first), consuming the delta.
+	// Creates one slot per PAYG VM (largest-first), consuming the delta.
 	// Any remaining delta falls through to Phase 5 (blind scheduler).
 	if m.cfg.EnablePaygPreAllocation && m.cfg.VMSource != nil && deltaMemoryBytes > 0 && desiredState.AvailabilityZone != "" {
 		scanStart := time.Now()
@@ -266,7 +261,6 @@ func (m *ReservationManager) ApplyCommitmentState(
 		log.Info("PAYG remapping done", "slotsCreated", result.Created, "durationMs", time.Since(scanStart).Milliseconds())
 	}
 
-	// Phase 5 (CREATE): Create new reservations (capacity increased)
 	if deltaMemoryBytes > 0 {
 		newSlots := countNewSlots(deltaMemoryBytes, flavorGroup)
 		if m.cfg.MaxSlots > 0 && newSlots > m.cfg.MaxSlots {
@@ -324,7 +318,6 @@ func (m *ReservationManager) ApplyCommitmentState(
 		}
 	}
 
-	// Only log if there were actual changes
 	if hasChanges || result.Created > 0 || len(result.RemovedReservations) > 0 || result.Repaired > 0 {
 		log.Info("commitment state sync completed",
 			"commitmentUUID", desiredState.CommitmentUUID,
@@ -346,9 +339,6 @@ func (m *ReservationManager) syncReservationMetadata(
 	state *CommitmentState,
 ) (*v1alpha1.Reservation, error) {
 
-	// if any of CommitmentUUID, DomainID, StartTime, EndTime, ParentGeneration differ from desired state, need to patch.
-	// AvailabilityZone is intentionally excluded: an AZ mismatch is handled in Phase 3 (delete + recreate)
-	// because the reservation is pinned to a host and cannot simply be patched to a different AZ.
 	if (state.CommitmentUUID != "" && reservation.Spec.CommittedResourceReservation.CommitmentUUID != state.CommitmentUUID) ||
 		(state.DomainID != "" && reservation.Spec.CommittedResourceReservation.DomainID != state.DomainID) ||
 		(state.StartTime != nil && (reservation.Spec.StartTime == nil || !reservation.Spec.StartTime.Time.Equal(*state.StartTime))) ||
@@ -430,8 +420,6 @@ func (m *ReservationManager) newReservation(
 	}
 	name := fmt.Sprintf("%s%d", namePrefix, slotIndex)
 
-	// Select largest flavor that fits remaining memory (flavors sorted descending by memory then vCPUs).
-	// This works for both fixed and varying CPU:RAM ratio groups.
 	flavorInGroup, memoryBytes := selectFlavor(deltaMemoryBytes, flavorGroup)
 	cpus := int64(flavorInGroup.VCPUs) //nolint:gosec // VCPUs from flavor specs, realistically bounded
 
@@ -460,12 +448,10 @@ func (m *ReservationManager) newReservation(
 		},
 	}
 
-	// Set AvailabilityZone if specified
 	if state.AvailabilityZone != "" {
 		spec.AvailabilityZone = state.AvailabilityZone
 	}
 
-	// Set validity times if specified
 	if state.StartTime != nil {
 		spec.StartTime = &metav1.Time{Time: *state.StartTime}
 	}
@@ -506,7 +492,6 @@ func (m *ReservationManager) newPaygReservation(
 	}
 	name := fmt.Sprintf("%s%d", namePrefix, slotIndex)
 
-	// Look up VCPUs from the flavor group for the candidate flavor.
 	var cpus int64
 	for _, f := range flavorGroup.Flavors {
 		if f.Name == candidate.FlavorName {
