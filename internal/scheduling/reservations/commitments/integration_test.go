@@ -1210,7 +1210,7 @@ func TestCRScheduling_DoesNotSetSkipPlacementContextFilters(t *testing.T) {
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck
 	})
 
-	env := newIntgEnv(t, []client.Object{newTestFlavorKnowledge(), intgHypervisor("host-1")}, captureScheduler)
+	env := newIntgEnv(t, []client.Object{newTestFlavorKnowledge(), intgHypervisor("host-1")}, captureScheduler, nil)
 	defer env.close()
 
 	cr := intgCR("test-cr", "commit-uuid-1", v1alpha1.CommitmentStatusConfirmed)
