@@ -71,18 +71,28 @@ func TestCRLifecycle_PAYGRollback(t *testing.T) {
 	ctx := context.Background()
 	crReq := ctrl.Request{NamespacedName: types.NamespacedName{Name: cr.Name}}
 
-	env.crController.Reconcile(ctx, crReq) //nolint:errcheck
+	if _, err := env.crController.Reconcile(ctx, crReq); err != nil {
+		t.Fatalf("phase 2 CR reconcile: %v", err)
+	}
 	var resList v1alpha1.ReservationList
-	env.k8sClient.List(ctx, &resList, client.MatchingLabels{ //nolint:errcheck
+	if err := env.k8sClient.List(ctx, &resList, client.MatchingLabels{
 		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
-	})
+	}); err != nil {
+		t.Fatalf("list reservations: %v", err)
+	}
 	for _, res := range resList.Items {
 		resReq := ctrl.Request{NamespacedName: types.NamespacedName{Name: res.Name}}
-		env.resController.Reconcile(ctx, resReq) //nolint:errcheck
-		env.resController.Reconcile(ctx, resReq) //nolint:errcheck
+		if _, err := env.resController.Reconcile(ctx, resReq); err != nil {
+			t.Fatalf("reservation reconcile %s (pass 1): %v", res.Name, err)
+		}
+		if _, err := env.resController.Reconcile(ctx, resReq); err != nil {
+			t.Fatalf("reservation reconcile %s (pass 2): %v", res.Name, err)
+		}
 	}
 	// CR controller: 2nd slot Ready=False → rollbackToAccepted → Rejected.
-	env.crController.Reconcile(ctx, crReq) //nolint:errcheck
+	if _, err := env.crController.Reconcile(ctx, crReq); err != nil {
+		t.Fatalf("phase 2 final CR reconcile: %v", err)
+	}
 
 	// Rollback must preserve exactly the original pre-allocated slot.
 	var finalList v1alpha1.ReservationList
