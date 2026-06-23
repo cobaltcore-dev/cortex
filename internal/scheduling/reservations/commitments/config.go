@@ -102,6 +102,11 @@ type CommittedResourceControllerConfig struct {
 	// Has no effect on the AllowRejection=false (syncer) path.
 	// 0 disables the cap.
 	MaxSlotsPerCommitment int `json:"maxSlotsPerCommitment"`
+
+	// EnablePaygPreAllocation enables scanning the AZ for existing PAYG VMs before creating
+	// blind reservation slots. When true, the controller absorbs matching PAYG VMs into
+	// pre-populated slots, consuming CR delta before falling back to the blind scheduler path.
+	EnablePaygPreAllocation bool `json:"enablePaygPreAllocation,omitempty"`
 }
 
 // ResourceTypeConfig holds per-resource flags for a single resource type within a flavor group.

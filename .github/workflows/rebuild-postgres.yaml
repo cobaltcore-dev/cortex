@@ -25,7 +25,7 @@ jobs:
     outputs:
       rebuild_fixes_cves: ${{ steps.compare.outputs.rebuild_fixes_cves }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -77,7 +77,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: main
           persist-credentials: false
