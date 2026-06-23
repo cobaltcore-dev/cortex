@@ -173,14 +173,23 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 				// 2. During live migrations or other operations, we don't want to use failover capacity.
 				// Note: we cannot use failover reservations from other VMs, as that can invalidate our HA guarantees.
 				intent, err := request.GetIntent()
-				if err == nil && intent == api.EvacuateIntent {
-					if reservation.Status.FailoverReservation != nil {
-						if _, contained := reservation.Status.FailoverReservation.Allocations[request.Spec.Data.InstanceUUID]; contained {
-							traceLog.Info("unlocking resources reserved by failover reservation for VM in allocations (evacuation)",
-								"reservation", reservation.Name,
-								"instanceUUID", request.Spec.Data.InstanceUUID)
-							continue
+				if err == nil {
+					switch intent {
+					case api.EvacuateIntent:
+						if reservation.Status.FailoverReservation != nil {
+							if _, contained := reservation.Status.FailoverReservation.Allocations[request.Spec.Data.InstanceUUID]; contained {
+								traceLog.Info("unlocking resources reserved by failover reservation for VM in allocations (evacuation)",
+									"reservation", reservation.Name,
+									"instanceUUID", request.Spec.Data.InstanceUUID)
+								continue
+							}
 						}
+					case api.ReuseFailoverReservationIntent:
+						// Reuse check: the reservation already pre-blocks the right capacity for this VM.
+						// Don't subtract it from free capacity to avoid double-counting.
+						traceLog.Debug("skipping failover reservation block for reuse compatibility check",
+							"reservation", reservation.Name)
+						continue
 					}
 				}
 				traceLog.Debug("processing failover reservation", "reservation", reservation.Name)

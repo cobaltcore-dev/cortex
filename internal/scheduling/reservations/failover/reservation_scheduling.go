@@ -32,7 +32,7 @@ func inferFailoverPipeline(extraSpecs map[string]string) string {
 	return "kvm-general-purpose-load-balancing"
 }
 
-func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm reservations.VM, allHypervisors []string, pipeline string, resSpec resolvedReservationSpec, opts scheduling.Options) ([]string, error) {
+func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm reservations.VM, allHypervisors []string, pipeline string, resSpec resolvedReservationSpec, intent v1alpha1.SchedulingIntent, opts scheduling.Options) ([]string, error) {
 	logger := LoggerFromContext(ctx)
 
 	// Build list of eligible hypervisors (excluding VM's current hypervisor)
@@ -82,7 +82,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		Pipeline:         pipeline,
 		AvailabilityZone: vm.AvailabilityZone,
 		SchedulerHints: map[string]any{
-			"_nova_check_type":       string(api.ReserveForFailoverIntent),
+			"_nova_check_type":       string(intent),
 			api.HintKeyResourceGroup: resSpec.ResourceGroup(vm.FlavorName),
 		},
 	}
@@ -123,11 +123,8 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 
 	logger := LoggerFromContext(ctx)
 
-	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, inferFailoverPipeline(vm.FlavorExtraSpecs), resSpec, scheduling.Options{
-		ReadOnly: true,
-		// Failover reservations do not consume capacity for the reuse check — the reservation
-		// already pre-blocks exactly the right capacity for this VM.
-		IgnoredReservationTypes:       []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
+	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, inferFailoverPipeline(vm.FlavorExtraSpecs), resSpec, api.ReuseFailoverReservationIntent, scheduling.Options{
+		ReadOnly:                      true,
 		SkipPlacementContextFilters:   false,
 		SkipHistory:                   true,
 		SkipInflight:                  true,
@@ -275,7 +272,7 @@ func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 
 	// Get potential hypervisors from scheduler using the reservation spec resources
 	// (which may be sized to the LargestFlavor from the flavor group)
-	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineNewFailoverReservation, resSpec, scheduling.Options{LockReservations: true, SkipPlacementContextFilters: false, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true})
+	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineNewFailoverReservation, resSpec, api.ReserveForFailoverIntent, scheduling.Options{LockReservations: true, SkipPlacementContextFilters: false, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get potential hypervisors for VM: %w", err)
 	}
