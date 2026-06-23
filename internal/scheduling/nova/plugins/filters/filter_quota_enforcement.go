@@ -183,7 +183,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.External
 		if spec.ResourceType != v1alpha1.CommittedResourceTypeMemory {
 			continue
 		}
-		if spec.State != v1alpha1.CommitmentStatusConfirmed && spec.State != v1alpha1.CommitmentStatusGuaranteed {
+		if !spec.IsActive() {
 			continue
 		}
 		now := time.Now()

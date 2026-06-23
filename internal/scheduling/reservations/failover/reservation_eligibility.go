@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
@@ -36,7 +37,7 @@ type DependencyGraph struct {
 // (3) For any reservation r, no two VMs that use r may be on the same hypervisor.
 // (4) For VM v with slots R, any other VM that uses any slot must not run on v's host or slot hosts.
 // (5) For VM v with slots R, no two other VMs using v's slots can be on the same hypervisor.
-func IsVMEligibleForReservation(vm VM, reservation v1alpha1.Reservation, allFailoverReservations []v1alpha1.Reservation) bool {
+func IsVMEligibleForReservation(vm reservations.VM, reservation v1alpha1.Reservation, allFailoverReservations []v1alpha1.Reservation) bool {
 	// Check if VM is already using this reservation
 	resAllocations := getFailoverAllocations(&reservation)
 	if _, exists := resAllocations[vm.UUID]; exists {
@@ -62,7 +63,7 @@ func IsVMEligibleForReservation(vm VM, reservation v1alpha1.Reservation, allFail
 // CheckVMsStillEligible checks if VMs in reservations are still eligible.
 // Returns a map of reservation name -> list of VM UUIDs that are no longer eligible.
 func CheckVMsStillEligible(
-	vms map[string]VM,
+	vms map[string]reservations.VM,
 	failoverReservations []v1alpha1.Reservation,
 ) map[string][]string {
 
@@ -103,7 +104,7 @@ func CheckVMsStillEligible(
 
 // FindEligibleReservations finds all reservations that a VM is eligible to use.
 func FindEligibleReservations(
-	vm VM,
+	vm reservations.VM,
 	failoverReservations []v1alpha1.Reservation,
 ) []v1alpha1.Reservation {
 
@@ -172,7 +173,7 @@ func newBaseDependencyGraph(allFailoverReservations []v1alpha1.Reservation) *Dep
 
 // newDependencyGraph builds a DependencyGraph with the VM added to the candidate reservation.
 func newDependencyGraph(
-	vm VM,
+	vm reservations.VM,
 	candidateReservation v1alpha1.Reservation,
 	allFailoverReservations []v1alpha1.Reservation,
 ) *DependencyGraph {
@@ -289,7 +290,7 @@ func (g *DependencyGraph) isVMEligibleForReservation(candidateResName string) bo
 }
 
 // doesVMFitInReservation checks if a VM's resources fit within a reservation's resources.
-func doesVMFitInReservation(vm VM, reservation v1alpha1.Reservation) bool {
+func doesVMFitInReservation(vm reservations.VM, reservation v1alpha1.Reservation) bool {
 	if vmMemory, ok := vm.Resources["memory"]; ok {
 		if resMemory, ok := reservation.Spec.Resources[hv1.ResourceMemory]; ok {
 			if vmMemory.Cmp(resMemory) > 0 {

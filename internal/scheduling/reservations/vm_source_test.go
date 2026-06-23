@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package failover
+package reservations
 
 import (
 	"context"
@@ -156,7 +156,7 @@ func TestDBVMSource_GetVM(t *testing.T) {
 			vmID: "non-existent-vm",
 			mock: &mockNovaReader{
 				getServerByIDFunc: func(ctx context.Context, serverID string) (*nova.Server, error) {
-					return nil, nil // Server not found
+					return nil, nil
 				},
 			},
 			wantErr:   false,
@@ -320,30 +320,75 @@ func TestBuildVMsFromHypervisors(t *testing.T) {
 	}
 }
 
-func TestFilterVMsOnKnownHypervisors_NilInputs(t *testing.T) {
+func TestFilterVMsOnKnownHypervisors(t *testing.T) {
 	tests := []struct {
 		name           string
 		vms            []VM
 		hypervisorList *hv1.HypervisorList
-		wantCount      int
+		expectedCount  int
+		expectedUUIDs  []string
 	}{
 		{
-			name: "nil hypervisor items does not panic",
-			vms:  []VM{{UUID: "vm-1", CurrentHypervisor: "host1"}},
-			hypervisorList: &hv1.HypervisorList{
-				Items: nil,
-			},
-			wantCount: 0,
-		},
-		{
-			name: "nil VMs does not panic",
-			vms:  nil,
+			name: "empty VMs list",
+			vms:  []VM{},
 			hypervisorList: &hv1.HypervisorList{
 				Items: []hv1.Hypervisor{
 					{ObjectMeta: metav1.ObjectMeta{Name: "host1"}},
 				},
 			},
-			wantCount: 0,
+			expectedCount: 0,
+		},
+		{
+			name: "all VMs on known hypervisors and in instances",
+			vms: []VM{
+				{UUID: "vm-1", CurrentHypervisor: "host1"},
+				{UUID: "vm-2", CurrentHypervisor: "host2"},
+			},
+			hypervisorList: &hv1.HypervisorList{
+				Items: []hv1.Hypervisor{
+					{ObjectMeta: metav1.ObjectMeta{Name: "host1"}, Status: hv1.HypervisorStatus{Instances: []hv1.Instance{{ID: "vm-1", Active: true}}}},
+					{ObjectMeta: metav1.ObjectMeta{Name: "host2"}, Status: hv1.HypervisorStatus{Instances: []hv1.Instance{{ID: "vm-2", Active: true}}}},
+				},
+			},
+			expectedCount: 2,
+			expectedUUIDs: []string{"vm-1", "vm-2"},
+		},
+		{
+			name: "VM claims hypervisor but not in instances list",
+			vms: []VM{
+				{UUID: "vm-1", CurrentHypervisor: "host1"},
+				{UUID: "vm-2", CurrentHypervisor: "host2"},
+			},
+			hypervisorList: &hv1.HypervisorList{
+				Items: []hv1.Hypervisor{
+					{ObjectMeta: metav1.ObjectMeta{Name: "host1"}, Status: hv1.HypervisorStatus{Instances: []hv1.Instance{{ID: "vm-1", Active: true}}}},
+					{ObjectMeta: metav1.ObjectMeta{Name: "host2"}},
+				},
+			},
+			expectedCount: 1,
+			expectedUUIDs: []string{"vm-1"},
+		},
+		{
+			name: "inactive VM in instances",
+			vms:  []VM{{UUID: "vm-1", CurrentHypervisor: "host1"}},
+			hypervisorList: &hv1.HypervisorList{
+				Items: []hv1.Hypervisor{
+					{ObjectMeta: metav1.ObjectMeta{Name: "host1"}, Status: hv1.HypervisorStatus{Instances: []hv1.Instance{{ID: "vm-1", Active: false}}}},
+				},
+			},
+			expectedCount: 0,
+		},
+		{
+			name:           "nil hypervisor items does not panic",
+			vms:            []VM{{UUID: "vm-1", CurrentHypervisor: "host1"}},
+			hypervisorList: &hv1.HypervisorList{Items: nil},
+			expectedCount:  0,
+		},
+		{
+			name:           "nil VMs does not panic",
+			vms:            nil,
+			hypervisorList: &hv1.HypervisorList{Items: []hv1.Hypervisor{{ObjectMeta: metav1.ObjectMeta{Name: "host1"}}}},
+			expectedCount:  0,
 		},
 	}
 
@@ -354,17 +399,24 @@ func TestFilterVMsOnKnownHypervisors_NilInputs(t *testing.T) {
 					t.Errorf("filterVMsOnKnownHypervisors panicked: %v", r)
 				}
 			}()
-
 			result := filterVMsOnKnownHypervisors(tt.vms, tt.hypervisorList)
-
-			if len(result) != tt.wantCount {
-				t.Errorf("expected %d VMs, got %d", tt.wantCount, len(result))
+			if len(result) != tt.expectedCount {
+				t.Errorf("expected %d VMs, got %d", tt.expectedCount, len(result))
+			}
+			resultUUIDs := make(map[string]bool)
+			for _, vm := range result {
+				resultUUIDs[vm.UUID] = true
+			}
+			for _, uuid := range tt.expectedUUIDs {
+				if !resultUUIDs[uuid] {
+					t.Errorf("expected VM %s in result, but not found", uuid)
+				}
 			}
 		})
 	}
 }
 
-// mockNovaReader implements NovaReader for testing.
+// mockNovaReader implements NovaReaderInterface for testing.
 type mockNovaReader struct {
 	getAllServersFunc   func(ctx context.Context) ([]nova.Server, error)
 	getAllFlavorsFunc   func(ctx context.Context) ([]nova.Flavor, error)
@@ -401,5 +453,9 @@ func (m *mockNovaReader) GetFlavorByName(ctx context.Context, flavorName string)
 }
 
 func (m *mockNovaReader) GetDeletedServerByID(_ context.Context, _ string) (*nova.DeletedServer, error) {
+	return nil, nil
+}
+
+func (m *mockNovaReader) GetServersByProject(_ context.Context, _ string) ([]nova.Server, error) {
 	return nil, nil
 }

@@ -1,37 +1,63 @@
 #!/usr/bin/env bash
-# Bumps appVersion in a Helm Chart.yaml, skipping if a newer code commit already
-# covers this component.
+# Bumps appVersion in a Helm Chart.yaml to match the `latest` tag in GHCR.
 #
-# Usage: bump-chart.sh <chart-yaml> <short-sha> <trigger-sha> [path-filter ...]
+# Usage: bump-chart.sh <chart-dir> <ghcr-package-name>
 #
-# path-filter args scope the freshness check to specific paths (e.g. postgres/).
-# Omit them for an unconditional bump (the main cortex chart).
+# Source of truth:
+#   GHCR `latest` tag for the org `cobaltcore-dev`. We list package versions,
+#   find the one tagged `latest`, and read its companion `sha-XXXXXXXX` tag.
+#   That short SHA is what the image-build workflow tagged onto the most
+#   recently published image, so chart appVersion should track it verbatim.
+#
+# Behaviour:
+#   - If the on-disk appVersion already matches GHCR `latest`, the script is a
+#     no-op (prints `noop`, exits 0).
+#   - Otherwise it rewrites Chart.yaml in place via `yq` (prints `bumped`,
+#     exits 0). It does not stage, commit, or push.
+#   - Any error (missing GH_TOKEN, GHCR API failure, no `latest` tag, no
+#     `sha-*` companion) exits non-zero and aborts the caller.
+#
+# Required env: GH_TOKEN (token with read:packages on cobaltcore-dev).
 set -euo pipefail
 
-CHART=$1; SHORT_SHA=$2; TRIGGER_SHA=$3; shift 3
-PATHS=("$@")
+CHART_DIR=$1
+PKG=$2
+CHART="$CHART_DIR/Chart.yaml"
 
-git config user.name "github-actions[bot]"
-git config user.email "github-actions[bot]@users.noreply.github.com"
-git fetch origin main
-git reset --hard origin/main
-
-# Exclude bump commits ([skip ci]) so earlier steps in this same run don't
-# falsely count as "newer code". Only real code commits trigger a skip.
-if [ ${#PATHS[@]} -gt 0 ]; then
-    NEWER=$(git log --oneline --invert-grep --grep='\[skip ci\]' "$TRIGGER_SHA..HEAD" -- "${PATHS[@]}")
-else
-    NEWER=$(git log --oneline --invert-grep --grep='\[skip ci\]' "$TRIGGER_SHA..HEAD")
+if [ -z "${GH_TOKEN:-}" ]; then
+    echo "GH_TOKEN is required" >&2
+    exit 1
 fi
 
-if [ -n "$NEWER" ]; then
-    echo "Skipping $CHART: newer code commits exist on main for this component"
+if [ ! -f "$CHART" ]; then
+    echo "Chart.yaml not found at $CHART" >&2
+    exit 1
+fi
+
+resp=$(curl -fsSL \
+    -H "Authorization: Bearer $GH_TOKEN" \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "https://api.github.com/orgs/cobaltcore-dev/packages/container/$PKG/versions?per_page=100")
+
+TARGET=$(jq -r '
+    .[]
+    | select(.metadata.container.tags | index("latest"))
+    | .metadata.container.tags[]
+    | select(test("^sha-[0-9a-f]{8}$"))
+' <<<"$resp" | head -1)
+
+if [ -z "$TARGET" ]; then
+    echo "no sha-XXXXXXXX companion tag on the latest version of $PKG in GHCR" >&2
+    exit 1
+fi
+
+CURRENT=$(yq '.appVersion' "$CHART")
+
+if [ "$CURRENT" = "$TARGET" ]; then
+    echo "noop $PKG ($CURRENT)"
     exit 0
 fi
 
-CHART_NAME=$(basename "$(dirname "$CHART")")
-sed -i 's/^\([ ]*appVersion:[ ]*\).*/\1"'"$SHORT_SHA"'"/' "$CHART"
-git add "$CHART"
-git diff --cached --quiet && { echo "No changes to commit for $CHART_NAME"; exit 0; }
-git commit -m "Bump $CHART_NAME chart appVersions to $SHORT_SHA [skip ci]"
-git push origin HEAD:main
+yq -i ".appVersion = \"$TARGET\"" "$CHART"
+echo "bumped $PKG: $CURRENT -> $TARGET"

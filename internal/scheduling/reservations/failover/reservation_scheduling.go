@@ -32,7 +32,7 @@ const (
 	PipelineAcknowledgeFailoverReservation = "kvm-acknowledge-failover-reservation"
 )
 
-func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm VM, allHypervisors []string, pipeline string, resSpec resolvedReservationSpec, opts scheduling.Options) ([]string, error) {
+func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm reservations.VM, allHypervisors []string, pipeline string, resSpec resolvedReservationSpec, opts scheduling.Options) ([]string, error) {
 	logger := LoggerFromContext(ctx)
 
 	// Build list of eligible hypervisors (excluding VM's current hypervisor)
@@ -115,7 +115,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 // The caller is responsible for persisting the changes to the cluster.
 func (c *FailoverReservationController) tryReuseExistingReservation(
 	ctx context.Context,
-	vm VM,
+	vm reservations.VM,
 	failoverReservations []v1alpha1.Reservation,
 	allHypervisors []string,
 	resSpec resolvedReservationSpec,
@@ -123,7 +123,7 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 
 	logger := LoggerFromContext(ctx)
 
-	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineReuseFailoverReservation, resSpec, scheduling.Options{ReadOnly: true, SkipHistory: true, SkipInflight: true})
+	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineReuseFailoverReservation, resSpec, scheduling.Options{ReadOnly: true, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true})
 	if err != nil {
 		logger.Error(err, "failed to get potential hypervisors for VM", "vmUUID", vm.UUID)
 		return nil
@@ -174,7 +174,7 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 // TODO this is a bit of a hack. Ideally we have a special kind of request for that which would also verify that we equally are using the reservation
 func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 	ctx context.Context,
-	vm VM,
+	vm reservations.VM,
 	reservationHost string,
 ) (bool, error) {
 
@@ -224,7 +224,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		"vmCurrentHost", vm.CurrentHypervisor,
 		"pipeline", PipelineAcknowledgeFailoverReservation)
 
-	resp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq, scheduling.Options{ReadOnly: true, LockReservations: true, SkipHistory: true, SkipInflight: true})
+	resp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq, scheduling.Options{ReadOnly: true, LockReservations: true, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true})
 	if err != nil {
 		logger.Error(err, "failed to validate VM for reservation host", "vmUUID", vm.UUID, "reservationHost", reservationHost)
 		return false, fmt.Errorf("failed to validate VM for reservation host: %w", err)
@@ -255,7 +255,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 // that already had a new reservation created in this reconcile cycle).
 func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 	ctx context.Context,
-	vm VM,
+	vm reservations.VM,
 	allHypervisors []string,
 	failoverReservations []v1alpha1.Reservation,
 	excludeHypervisors map[string]bool,
@@ -266,7 +266,7 @@ func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 
 	// Get potential hypervisors from scheduler using the reservation spec resources
 	// (which may be sized to the LargestFlavor from the flavor group)
-	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineNewFailoverReservation, resSpec, scheduling.Options{LockReservations: true, SkipHistory: true, SkipInflight: true})
+	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineNewFailoverReservation, resSpec, scheduling.Options{LockReservations: true, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get potential hypervisors for VM: %w", err)
 	}

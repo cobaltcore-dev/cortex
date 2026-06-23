@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
@@ -21,7 +22,7 @@ var apiLog = ctrl.Log.WithName("committed-resource-api").WithValues("module", "c
 type HTTPAPI struct {
 	client          client.Client
 	config          commitments.APIConfig
-	usageDB         commitments.UsageDBClient
+	usageDB         reservations.VMSource
 	monitor         ChangeCommitmentsAPIMonitor
 	usageMonitor    ReportUsageAPIMonitor
 	capacityMonitor ReportCapacityAPIMonitor
@@ -36,11 +37,11 @@ func NewAPI(client client.Client) *HTTPAPI {
 }
 
 // NewAPIWithConfig creates an HTTPAPI with the given config and optional usageDB client.
-func NewAPIWithConfig(k8sClient client.Client, config commitments.APIConfig, usageDB commitments.UsageDBClient) *HTTPAPI {
+func NewAPIWithConfig(k8sClient client.Client, config commitments.APIConfig, vmSource reservations.VMSource) *HTTPAPI {
 	return &HTTPAPI{
 		client:          k8sClient,
 		config:          config,
-		usageDB:         usageDB,
+		usageDB:         vmSource,
 		monitor:         NewChangeCommitmentsAPIMonitor(),
 		usageMonitor:    NewReportUsageAPIMonitor(),
 		capacityMonitor: NewReportCapacityAPIMonitor(),

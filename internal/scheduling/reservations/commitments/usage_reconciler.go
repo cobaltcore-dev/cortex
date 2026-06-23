@@ -33,9 +33,9 @@ import (
 // relevant change events.
 type UsageReconciler struct {
 	client.Client
-	Conf    UsageReconcilerConfig
-	UsageDB UsageDBClient
-	Monitor UsageReconcilerMonitor
+	Conf     UsageReconcilerConfig
+	VMSource reservations.VMSource
+	Monitor  UsageReconcilerMonitor
 }
 
 func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -49,7 +49,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	log := ctrl.LoggerFrom(ctx).WithValues("committedResource", req.Name)
 
 	// Only active commitments have assigned VMs. Clear stale usage status if present.
-	if cr.Spec.State != v1alpha1.CommitmentStatusConfirmed && cr.Spec.State != v1alpha1.CommitmentStatusGuaranteed {
+	if !cr.IsActive() {
 		log.Info("skipping: commitment state is not active", "state", cr.Spec.State)
 		if len(cr.Status.AssignedInstances) > 0 || len(cr.Status.UsedResources) > 0 {
 			old := cr.DeepCopy()
@@ -57,7 +57,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			cr.Status.UsedResources = nil
 			cr.Status.LastUsageReconcileAt = nil
 			cr.Status.UsageObservedGeneration = nil
-			cr.Status.StatusSummary = v1alpha1.ComputeStatusSummary(cr.Spec, cr.Status, start)
+			cr.Status.StatusSummary = computeStatusSummary(cr.Spec, cr.Status, start)
 			if err := r.Status().Patch(ctx, &cr, client.MergeFrom(old)); err != nil {
 				return ctrl.Result{}, client.IgnoreNotFound(err)
 			}
@@ -76,7 +76,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			cr.Status.UsedResources = nil
 			cr.Status.LastUsageReconcileAt = nil
 			cr.Status.UsageObservedGeneration = nil
-			cr.Status.StatusSummary = v1alpha1.ComputeStatusSummary(cr.Spec, cr.Status, start)
+			cr.Status.StatusSummary = computeStatusSummary(cr.Spec, cr.Status, start)
 			if err := r.Status().Patch(ctx, &cr, client.MergeFrom(old)); err != nil {
 				return ctrl.Result{}, client.IgnoreNotFound(err)
 			}
@@ -155,7 +155,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		}
 	}
 
-	vms, err := getProjectVMs(ctx, r.UsageDB, logger, cr.Spec.ProjectID, flavorGroups, allAZs)
+	vms, err := getProjectVMs(ctx, r.VMSource, logger, cr.Spec.ProjectID, flavorGroups, allAZs)
 	if err != nil {
 		r.Monitor.reconcileDuration.WithLabelValues("error").Observe(time.Since(start).Seconds())
 		return ctrl.Result{}, err
@@ -224,7 +224,7 @@ func (r *UsageReconciler) writeUsageStatus(ctx context.Context, state *Commitmen
 	}
 	target.Status.LastUsageReconcileAt = &now
 	target.Status.UsageObservedGeneration = &target.Generation
-	target.Status.StatusSummary = v1alpha1.ComputeStatusSummary(target.Spec, target.Status, now.Time)
+	target.Status.StatusSummary = computeStatusSummary(target.Spec, target.Status, now.Time)
 
 	return r.Status().Patch(ctx, target, client.MergeFrom(old))
 }

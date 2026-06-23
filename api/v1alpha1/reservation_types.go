@@ -21,6 +21,9 @@ const (
 	ReservationTypeCommittedResource ReservationType = "CommittedResourceReservation"
 	// ReservationTypeFailover is a reservation for failover capacity.
 	ReservationTypeFailover ReservationType = "FailoverReservation"
+	// ReservationTypeInFlight is a reservation that blocks capacity for virtual
+	// machines that are currently being scheduled, to avoid double-booking.
+	ReservationTypeInFlight ReservationType = "InFlightReservation"
 )
 
 // Label keys for Reservation metadata.
@@ -35,6 +38,7 @@ const (
 	// Reservation type label values
 	ReservationTypeLabelCommittedResource = "committed-resource"
 	ReservationTypeLabelFailover          = "failover"
+	ReservationTypeLabelInFlight          = "in-flight"
 )
 
 // Annotation keys for Reservation metadata.
@@ -104,10 +108,30 @@ type FailoverReservationSpec struct {
 	ResourceGroup string `json:"resourceGroup,omitempty"`
 }
 
+// InFlightReservationSpec defines the nature and shape of the virtual machine
+// that is expected to land on the designated reservation slot. This spec
+// carries information needed for the scheduler to produce a valid placement
+// for new virtual machines for the duration the virtual machine is still
+// in buildup.
+type InFlightReservationSpec struct {
+	// VMID is the OpenStack server uuid from Nova assigned to the virtual
+	// machine expected to land on this reservation slot.
+	VMID string `json:"vmID,omitempty"`
+	// UserID is the identifier of the user who owns the virtual machine.
+	UserID string `json:"userID,omitempty"`
+	// ProjectID is the identifier of the project/tenant that owns
+	// the virtual machine.
+	ProjectID string `json:"projectID,omitempty"`
+	// Intent defines which kind of virtual machine lifecycle operation
+	// triggered the placement of this in-flight reservation.
+	// +kubebuilder:validation:Optional
+	Intent SchedulingIntent `json:"intent"`
+}
+
 // ReservationSpec defines the desired state of Reservation.
 type ReservationSpec struct {
 	// Type of reservation.
-	// +kubebuilder:validation:Enum=CommittedResourceReservation;FailoverReservation
+	// +kubebuilder:validation:Enum=CommittedResourceReservation;FailoverReservation;InFlightReservation
 	// +kubebuilder:validation:Required
 	Type ReservationType `json:"type"`
 
@@ -148,6 +172,10 @@ type ReservationSpec struct {
 	// Only used when Type is FailoverReservation.
 	// +kubebuilder:validation:Optional
 	FailoverReservation *FailoverReservationSpec `json:"failoverReservation,omitempty"`
+
+	// InFlightReservation specifies which kind of virtual machine is expected
+	// to land on the reserved slot. Set when Type is InFlightReservation.
+	InFlightReservation *InFlightReservationSpec `json:"inFlightReservation,omitempty"`
 }
 
 const (
@@ -189,6 +217,10 @@ type FailoverReservationStatus struct {
 	AcknowledgedAt *metav1.Time `json:"acknowledgedAt,omitempty"`
 }
 
+// InFlightReservationStatus defines the status fields specific to
+// in-flight reservations.
+type InFlightReservationStatus struct{} // No captured state for now.
+
 // ReservationStatus defines the observed state of Reservation.
 type ReservationStatus struct {
 	// The current status conditions of the reservation.
@@ -219,6 +251,11 @@ type ReservationStatus struct {
 	// Only used when Type is FailoverReservation.
 	// +kubebuilder:validation:Optional
 	FailoverReservation *FailoverReservationStatus `json:"failoverReservation,omitempty"`
+
+	// InFlightReservation contains status fields specific to in-flight reservations.
+	// Only used when Type is InFlightReservation.
+	// +kubebuilder:validation:Optional
+	InFlightReservation *InFlightReservationStatus `json:"inFlightReservation,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -263,6 +300,11 @@ type ReservationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Reservation `json:"items"`
+}
+
+// MatchesGroup reports whether the reservation targets the given project and resource group.
+func (s *CommittedResourceReservationSpec) MatchesGroup(projectID, resourceGroup string) bool {
+	return s.ProjectID == projectID && s.ResourceGroup == resourceGroup
 }
 
 // IsReady returns true if the reservation has the Ready condition set to True.

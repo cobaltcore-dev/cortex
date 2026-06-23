@@ -5,6 +5,13 @@ fullnameOverride: cortex-postgresql
 
 major: "18"
 
+# Rotation token (generation). Bump to g1, g2, ... to provision a fresh
+# StatefulSet + PVC, which causes initdb to run again and apply the (rotated)
+# POSTGRES_PASSWORD from vault. The "g" prefix keeps the suffix visually
+# distinct from the trailing StatefulSet pod ordinal (e.g. -g0-0 vs -0-0).
+# The Postgres major version is independent and lives in `major` above.
+instanceSuffix: "g0"
+
 image:
   repository: ghcr.io/cobaltcore-dev/cortex-postgres
   pullPolicy: IfNotPresent

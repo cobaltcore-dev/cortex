@@ -1,22 +1,31 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package failover
+package reservations
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/external"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// VM represents a virtual machine that may need failover reservations.
+var vmSourceLog = logf.Log.WithName("vm-source")
+
+// VM represents a virtual machine managed by the reservation system.
 type VM struct {
 	// UUID is the unique identifier of the VM.
 	UUID string
+	// Name is the display name of the VM in Nova.
+	Name string
+	// Status is the Nova status of the VM (e.g. ACTIVE, SHUTOFF).
+	Status string
 	// FlavorName is the name of the flavor used by the VM.
 	FlavorName string
 	// ProjectID is the OpenStack project ID that owns the VM.
@@ -34,27 +43,32 @@ type VM struct {
 	// FlavorExtraSpecs contains the flavor's extra specifications (e.g., traits, capabilities).
 	// This is used by filters like filter_has_requested_traits and filter_capabilities.
 	FlavorExtraSpecs map[string]string
+	// DiskGB is the flavor's root disk size in GiB.
+	DiskGB uint64
+	// OSType is the operating system type pre-computed from Glance image properties.
+	// "unknown" when not found or for volume-booted instances.
+	OSType string
 }
 
-// VMSource provides VMs that may need failover reservations.
+// VMSource provides VMs managed by the reservation system.
 // This interface allows swapping the implementation when a VM CRD arrives.
 type VMSource interface {
-	// ListVMs returns all VMs that might need failover reservations.
+	// ListVMs returns all VMs across all projects.
 	ListVMs(ctx context.Context) ([]VM, error)
+	// ListVMsByProject returns all VMs belonging to a specific project.
+	ListVMsByProject(ctx context.Context, projectID string) ([]VM, error)
 	// ListVMsOnHypervisors returns VMs that are on the given hypervisors.
 	// If trustHypervisorLocation is true, uses hypervisor CRD as source of truth for VM location.
 	// If trustHypervisorLocation is false, uses postgres as source of truth but filters to VMs on known hypervisors.
-	// Also logs warnings about data sync issues between postgres and hypervisor CRD.
 	ListVMsOnHypervisors(ctx context.Context, hypervisorList *hv1.HypervisorList, trustHypervisorLocation bool) ([]VM, error)
 	// GetVM returns a specific VM by UUID.
-	// Returns nil, nil if the VM is not found (not an error, just doesn't exist).
+	// Returns nil, nil if the VM is not found.
 	GetVM(ctx context.Context, vmUUID string) (*VM, error)
-	// IsServerActive returns true if the server exists in the servers table (still running somewhere).
+	// IsServerActive returns true if the server exists in the servers table and is not DELETED.
 	// Returns false if not found. Used by quota controller to determine if a removed HV instance was deleted vs migrated.
 	IsServerActive(ctx context.Context, vmUUID string) (bool, error)
 	// GetDeletedVMInfo returns metadata about a deleted VM (from deleted_servers table),
 	// including resolved flavor resources. Returns nil, nil if not found.
-	// Used by quota controller for incremental usage decrements.
 	GetDeletedVMInfo(ctx context.Context, vmUUID string) (*DeletedVMInfo, error)
 }
 
@@ -78,351 +92,199 @@ func NewDBVMSource(novaReader external.NovaReaderInterface) *DBVMSource {
 	return &DBVMSource{NovaReader: novaReader}
 }
 
-// ListVMs returns all VMs by joining server and flavor data from the database.
+// ListVMs returns all VMs across all projects by joining server and flavor data.
 func (s *DBVMSource) ListVMs(ctx context.Context) ([]VM, error) {
-	// Fetch all servers
 	servers, err := s.NovaReader.GetAllServers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get servers: %w", err)
 	}
 
-	// Fetch all flavors and build a lookup map
 	flavors, err := s.NovaReader.GetAllFlavors(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get flavors: %w", err)
 	}
-	flavorByName := make(map[string]struct {
+	type flavorData struct {
 		VCPUs      uint64
 		RAM        uint64
+		Disk       uint64
 		ExtraSpecs string
-	})
+	}
+	flavorByName := make(map[string]flavorData, len(flavors))
 	for _, f := range flavors {
-		flavorByName[f.Name] = struct {
-			VCPUs      uint64
-			RAM        uint64
-			ExtraSpecs string
-		}{VCPUs: f.VCPUs, RAM: f.RAM, ExtraSpecs: f.ExtraSpecs}
+		flavorByName[f.Name] = flavorData{VCPUs: f.VCPUs, RAM: f.RAM, Disk: f.Disk, ExtraSpecs: f.ExtraSpecs}
 	}
 
-	// Track filtering statistics
 	var skippedNoHost, skippedUnknownFlavor int
 	unknownFlavors := make(map[string]int)
 
-	// Convert servers to VMs
 	vms := make([]VM, 0, len(servers))
 	for _, server := range servers {
-		// Skip servers without a host (not yet scheduled)
 		if server.OSEXTSRVATTRHost == "" {
 			skippedNoHost++
 			continue
 		}
-
-		// Look up flavor resources
 		flavor, ok := flavorByName[server.FlavorName]
 		if !ok {
-			// Skip servers with unknown flavors
 			skippedUnknownFlavor++
 			unknownFlavors[server.FlavorName]++
 			continue
 		}
-
-		// Build resources map
 		resources := map[string]resource.Quantity{
-			"vcpus":  *resource.NewQuantity(int64(flavor.VCPUs), resource.DecimalSI),        //nolint:gosec // VCPUs won't overflow int64
-			"memory": *resource.NewQuantity(int64(flavor.RAM)*1024*1024, resource.BinarySI), //nolint:gosec // RAM in MB won't overflow int64
+			"vcpus":  *resource.NewQuantity(int64(flavor.VCPUs), resource.DecimalSI),        //nolint:gosec
+			"memory": *resource.NewQuantity(int64(flavor.RAM)*1024*1024, resource.BinarySI), //nolint:gosec
 		}
-
-		// Parse extra specs from JSON string
-		extraSpecs := parseExtraSpecs(flavor.ExtraSpecs)
-
 		vms = append(vms, VM{
 			UUID:              server.ID,
+			Name:              server.Name,
+			Status:            server.Status,
 			FlavorName:        server.FlavorName,
 			ProjectID:         server.TenantID,
 			CurrentHypervisor: server.OSEXTSRVATTRHost,
 			AvailabilityZone:  server.OSEXTAvailabilityZone,
 			CreatedAt:         server.Created,
 			Resources:         resources,
-			FlavorExtraSpecs:  extraSpecs,
+			FlavorExtraSpecs:  parseExtraSpecs(flavor.ExtraSpecs),
+			DiskGB:            flavor.Disk,
+			OSType:            normalizeOSType(server.OSType),
 		})
 	}
 
-	// Log filtering statistics at debug level (verbose)
-	log.V(1).Info("ListVMs filtering statistics",
+	vmSourceLog.V(1).Info("ListVMs filtering statistics",
 		"totalServersInDB", len(servers),
 		"skippedNoHost", skippedNoHost,
 		"skippedUnknownFlavor", skippedUnknownFlavor,
 		"totalFlavorsInDB", len(flavors),
 		"returnedVMs", len(vms))
 	if len(unknownFlavors) > 0 {
-		log.V(1).Info("ListVMs unknown flavors", "unknownFlavors", unknownFlavors)
+		vmSourceLog.V(1).Info("ListVMs unknown flavors", "unknownFlavors", unknownFlavors)
 	}
 
 	return vms, nil
 }
 
-// parseExtraSpecs parses a JSON string of extra specs into a map.
-// Returns an empty map if the string is empty or invalid.
-func parseExtraSpecs(extraSpecsJSON string) map[string]string {
-	if extraSpecsJSON == "" {
-		return make(map[string]string)
+// ListVMsByProject returns all VMs for a specific project, querying only that project's servers.
+func (s *DBVMSource) ListVMsByProject(ctx context.Context, projectID string) ([]VM, error) {
+	servers, err := s.NovaReader.GetServersByProject(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get servers for project: %w", err)
 	}
-	var extraSpecs map[string]string
-	if err := json.Unmarshal([]byte(extraSpecsJSON), &extraSpecs); err != nil {
-		// Log error but don't fail - return empty map
-		log.Error(err, "failed to parse flavor extra specs JSON",
-			"extraSpecsJSON", truncateString(extraSpecsJSON, 100))
-		return make(map[string]string)
-	}
-	return extraSpecs
-}
 
-// truncateString truncates a string to maxLen characters, adding "..." if truncated.
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
+	flavors, err := s.NovaReader.GetAllFlavors(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get flavors: %w", err)
 	}
-	return s[:maxLen] + "..."
+	type flavorData struct {
+		VCPUs      uint64
+		RAM        uint64
+		Disk       uint64
+		ExtraSpecs string
+	}
+	flavorByName := make(map[string]flavorData, len(flavors))
+	for _, f := range flavors {
+		flavorByName[f.Name] = flavorData{VCPUs: f.VCPUs, RAM: f.RAM, Disk: f.Disk, ExtraSpecs: f.ExtraSpecs}
+	}
+
+	vms := make([]VM, 0, len(servers))
+	for _, server := range servers {
+		if server.OSEXTSRVATTRHost == "" {
+			continue
+		}
+		flavor, ok := flavorByName[server.FlavorName]
+		if !ok {
+			continue
+		}
+		resources := map[string]resource.Quantity{
+			"vcpus":  *resource.NewQuantity(int64(flavor.VCPUs), resource.DecimalSI),        //nolint:gosec
+			"memory": *resource.NewQuantity(int64(flavor.RAM)*1024*1024, resource.BinarySI), //nolint:gosec
+		}
+		vms = append(vms, VM{
+			UUID:              server.ID,
+			Name:              server.Name,
+			Status:            server.Status,
+			FlavorName:        server.FlavorName,
+			ProjectID:         server.TenantID,
+			CurrentHypervisor: server.OSEXTSRVATTRHost,
+			AvailabilityZone:  server.OSEXTAvailabilityZone,
+			CreatedAt:         server.Created,
+			Resources:         resources,
+			FlavorExtraSpecs:  parseExtraSpecs(flavor.ExtraSpecs),
+			DiskGB:            flavor.Disk,
+			OSType:            normalizeOSType(server.OSType),
+		})
+	}
+	return vms, nil
 }
 
 // GetVM returns a specific VM by UUID.
-// Returns nil, nil if the VM is not found (not an error, just doesn't exist).
+// Returns nil, nil if the VM is not found.
 func (s *DBVMSource) GetVM(ctx context.Context, vmUUID string) (*VM, error) {
-	// Fetch the server by UUID
 	server, err := s.NovaReader.GetServerByID(ctx, vmUUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get server: %w", err)
 	}
-	if server == nil {
-		// Server not found
+	if server == nil || server.OSEXTSRVATTRHost == "" {
 		return nil, nil
 	}
 
-	// Skip servers without a host (not yet scheduled)
-	if server.OSEXTSRVATTRHost == "" {
-		return nil, nil
-	}
-
-	// Fetch the flavor for this server
 	flavor, err := s.NovaReader.GetFlavorByName(ctx, server.FlavorName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get flavor: %w", err)
 	}
 	if flavor == nil {
-		// Flavor not found
 		return nil, nil
 	}
 
-	// Build resources map
 	resources := map[string]resource.Quantity{
-		"vcpus":  *resource.NewQuantity(int64(flavor.VCPUs), resource.DecimalSI),        //nolint:gosec // VCPUs won't overflow int64
-		"memory": *resource.NewQuantity(int64(flavor.RAM)*1024*1024, resource.BinarySI), //nolint:gosec // RAM in MB won't overflow int64
+		"vcpus":  *resource.NewQuantity(int64(flavor.VCPUs), resource.DecimalSI),        //nolint:gosec
+		"memory": *resource.NewQuantity(int64(flavor.RAM)*1024*1024, resource.BinarySI), //nolint:gosec
 	}
-
-	// Parse extra specs from JSON string
-	extraSpecs := parseExtraSpecs(flavor.ExtraSpecs)
 
 	return &VM{
 		UUID:              server.ID,
+		Name:              server.Name,
+		Status:            server.Status,
 		FlavorName:        server.FlavorName,
 		ProjectID:         server.TenantID,
 		CurrentHypervisor: server.OSEXTSRVATTRHost,
 		AvailabilityZone:  server.OSEXTAvailabilityZone,
 		CreatedAt:         server.Created,
 		Resources:         resources,
-		FlavorExtraSpecs:  extraSpecs,
+		FlavorExtraSpecs:  parseExtraSpecs(flavor.ExtraSpecs),
+		DiskGB:            flavor.Disk,
+		OSType:            normalizeOSType(server.OSType),
 	}, nil
 }
 
 // ListVMsOnHypervisors returns VMs that are on the given hypervisors.
-// If trustHypervisorLocation is true, uses hypervisor CRD as source of truth for VM location.
-// If trustHypervisorLocation is false, uses postgres as source of truth but filters to VMs on known hypervisors.
-// Also logs warnings about data sync issues between postgres and hypervisor CRD.
 func (s *DBVMSource) ListVMsOnHypervisors(
 	ctx context.Context,
 	hypervisorList *hv1.HypervisorList,
 	trustHypervisorLocation bool,
 ) ([]VM, error) {
-	// Get VMs from postgres
+
 	vms, err := s.ListVMs(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// Warn about data sync issues
 	warnUnknownVMsOnHypervisors(hypervisorList, vms)
 
 	if trustHypervisorLocation {
-		// Use hypervisor CRD as source of truth for VM location
 		result := buildVMsFromHypervisors(hypervisorList, vms)
-		log.V(1).Info("built VMs from hypervisor instances (TrustHypervisorLocation=true)",
+		vmSourceLog.V(1).Info("built VMs from hypervisor instances (TrustHypervisorLocation=true)",
 			"count", len(result),
 			"knownHypervisors", len(hypervisorList.Items))
 		return result, nil
 	}
 
-	// Use postgres as source of truth, but filter to VMs on known hypervisors
 	result := filterVMsOnKnownHypervisors(vms, hypervisorList)
-	log.V(1).Info("filtered VMs to those on known hypervisors and in hypervisor instances",
+	vmSourceLog.V(1).Info("filtered VMs to those on known hypervisors and in hypervisor instances",
 		"count", len(result),
 		"knownHypervisors", len(hypervisorList.Items))
 	return result, nil
 }
 
-// ============================================================================
-// VM/Hypervisor Processing (internal helpers)
-// ============================================================================
-
-// buildVMsFromHypervisors builds VMs from hypervisor instances, using the hypervisor CRD
-// as the source of truth for VM location. It enriches VMs with data from postgres (flavor, size, extra specs, AZ).
-// This is used when TrustHypervisorLocation is true.
-//
-// The function:
-// 1. Iterates through all hypervisor instances to get VM UUIDs and their actual location
-// 2. Looks up each VM in the postgres-sourced vms list to get flavor/size/extra specs/AZ
-// 3. Returns VMs that exist in both hypervisor instances AND postgres (need postgres for scheduling data)
-// 4. Deduplicates VMs that appear on multiple hypervisors (transient state during live migration)
-func buildVMsFromHypervisors(hypervisorList *hv1.HypervisorList, postgresVMs []VM) []VM {
-	// Build a map of VM UUID -> VM data from postgres for quick lookup
-	vmDataByUUID := make(map[string]VM, len(postgresVMs))
-	for _, vm := range postgresVMs {
-		vmDataByUUID[vm.UUID] = vm
-	}
-
-	var result []VM
-	var enrichedCount, notInPostgresCount, duplicateCount int
-
-	// Track seen UUIDs to deduplicate VMs that appear on multiple hypervisors
-	// This can happen transiently during live migration
-	seen := make(map[string]string) // vmUUID -> first hypervisor seen
-
-	// Iterate through hypervisor instances
-	for _, hv := range hypervisorList.Items {
-		for _, inst := range hv.Status.Instances {
-			if !inst.Active {
-				continue
-			}
-
-			// Check for duplicate UUIDs (same VM on multiple hypervisors)
-			if firstHypervisor, alreadySeen := seen[inst.ID]; alreadySeen {
-				log.Info("duplicate VM UUID on multiple hypervisors, skipping",
-					"uuid", inst.ID,
-					"hypervisor", hv.Name,
-					"firstSeenOn", firstHypervisor)
-				duplicateCount++
-				continue
-			}
-			seen[inst.ID] = hv.Name
-
-			// Look up VM data from postgres
-			pgVM, existsInPostgres := vmDataByUUID[inst.ID]
-			if !existsInPostgres {
-				// VM is on hypervisor but not in postgres - skip (need postgres for flavor/size)
-				notInPostgresCount++
-				continue
-			}
-
-			// Build VM with hypervisor location but postgres data (including AZ)
-			vm := VM{
-				UUID:              inst.ID,
-				FlavorName:        pgVM.FlavorName,
-				ProjectID:         pgVM.ProjectID,
-				CurrentHypervisor: hv.Name, // Use hypervisor CRD location, not postgres
-				AvailabilityZone:  pgVM.AvailabilityZone,
-				CreatedAt:         pgVM.CreatedAt,
-				Resources:         pgVM.Resources,
-				FlavorExtraSpecs:  pgVM.FlavorExtraSpecs,
-			}
-			result = append(result, vm)
-			enrichedCount++
-		}
-	}
-
-	log.V(1).Info("buildVMsFromHypervisors statistics",
-		"totalHypervisorInstances", enrichedCount+notInPostgresCount+duplicateCount,
-		"enrichedWithPostgresData", enrichedCount,
-		"notInPostgres", notInPostgresCount,
-		"duplicatesSkipped", duplicateCount)
-
-	return result
-}
-
-// filterVMsOnKnownHypervisors filters VMs to only include those that:
-// 1. Are running on a known hypervisor
-// 2. Are actually listed in that hypervisor's Status.Instances
-// This removes VMs that are on hypervisors not managed by the hypervisor operator,
-// or VMs that claim to be on a hypervisor but aren't in its instances list (data sync issue).
-func filterVMsOnKnownHypervisors(vms []VM, hypervisorList *hv1.HypervisorList) []VM {
-	// Build a set of known hypervisors for O(1) lookup
-	hypervisorSet := make(map[string]bool, len(hypervisorList.Items))
-	for _, hv := range hypervisorList.Items {
-		hypervisorSet[hv.Name] = true
-	}
-
-	// Build a set of VM UUIDs that are actually in hypervisor instances
-	// Key: "vmUUID:hypervisorName" to ensure VM is on the correct hypervisor
-	vmOnHypervisor := make(map[string]bool)
-	// Also track all VMs on hypervisors (regardless of which hypervisor)
-	allVMsOnHypervisors := make(map[string]string) // vmUUID -> hypervisorName
-	totalVMsOnHypervisors := 0
-	for _, hv := range hypervisorList.Items {
-		for _, inst := range hv.Status.Instances {
-			if inst.Active {
-				key := inst.ID + ":" + hv.Name
-				vmOnHypervisor[key] = true
-				allVMsOnHypervisors[inst.ID] = hv.Name
-				totalVMsOnHypervisors++
-			}
-		}
-	}
-
-	var result []VM
-	var filteredUnknownHypervisor int
-	var filteredNotInInstances int
-	var filteredWrongHypervisor int
-	for _, vm := range vms {
-		// Check if hypervisor is known
-		if !hypervisorSet[vm.CurrentHypervisor] {
-			filteredUnknownHypervisor++
-			continue
-		}
-		// Check if VM is actually in the hypervisor's instances list
-		key := vm.UUID + ":" + vm.CurrentHypervisor
-		if !vmOnHypervisor[key] {
-			// Check if VM is on a different hypervisor
-			if actualHypervisor, exists := allVMsOnHypervisors[vm.UUID]; exists {
-				log.V(2).Info("VM claims to be on one hypervisor but is actually on another",
-					"vmUUID", vm.UUID,
-					"claimedHypervisor", vm.CurrentHypervisor,
-					"actualHypervisor", actualHypervisor)
-				filteredWrongHypervisor++
-			} else {
-				filteredNotInInstances++
-			}
-			continue
-		}
-		result = append(result, vm)
-	}
-
-	totalFiltered := filteredUnknownHypervisor + filteredNotInInstances + filteredWrongHypervisor
-	if totalFiltered > 0 {
-		log.Info("filterVMsOnKnownHypervisors statistics",
-			"inputVMs", len(vms),
-			"totalVMsOnHypervisors", totalVMsOnHypervisors,
-			"filteredUnknownHypervisor", filteredUnknownHypervisor,
-			"filteredNotInInstances", filteredNotInInstances,
-			"filteredWrongHypervisor", filteredWrongHypervisor,
-			"totalFiltered", totalFiltered,
-			"remainingCount", len(result))
-	}
-
-	return result
-}
-
 // IsServerActive returns true if the server exists in the servers table and is not DELETED.
-// VMs in any other status (ACTIVE, SHUTOFF, MIGRATING, ERROR, etc.) still consume resources
-// and should NOT be decremented from quota usage.
-// Used by the quota controller to distinguish deleted VMs from migrated/existing ones.
 func (s *DBVMSource) IsServerActive(ctx context.Context, vmUUID string) (bool, error) {
 	server, err := s.NovaReader.GetServerByID(ctx, vmUUID)
 	if err != nil {
@@ -434,8 +296,7 @@ func (s *DBVMSource) IsServerActive(ctx context.Context, vmUUID string) (bool, e
 	return server.Status != "DELETED", nil
 }
 
-// GetDeletedVMInfo returns metadata about a deleted VM from the deleted_servers table,
-// including resolved flavor resources. Returns nil, nil if the VM is not found in deleted_servers.
+// GetDeletedVMInfo returns metadata about a deleted VM from the deleted_servers table.
 func (s *DBVMSource) GetDeletedVMInfo(ctx context.Context, vmUUID string) (*DeletedVMInfo, error) {
 	deletedServer, err := s.NovaReader.GetDeletedServerByID(ctx, vmUUID)
 	if err != nil {
@@ -445,7 +306,6 @@ func (s *DBVMSource) GetDeletedVMInfo(ctx context.Context, vmUUID string) (*Dele
 		return nil, nil
 	}
 
-	// Resolve the flavor to get RAM/VCPUs
 	flavor, err := s.NovaReader.GetFlavorByName(ctx, deletedServer.FlavorName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get flavor for deleted server: %w", err)
@@ -463,16 +323,161 @@ func (s *DBVMSource) GetDeletedVMInfo(ctx context.Context, vmUUID string) (*Dele
 	}, nil
 }
 
-// warnUnknownVMsOnHypervisors logs a warning for VMs that are on hypervisors but not in the ListVMs (i.e. nova) result.
-// This can indicate a data sync issue between the hypervisor operator and the VM datasource.
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
+func parseExtraSpecs(extraSpecsJSON string) map[string]string {
+	if extraSpecsJSON == "" {
+		return make(map[string]string)
+	}
+	var extraSpecs map[string]string
+	if err := json.Unmarshal([]byte(extraSpecsJSON), &extraSpecs); err != nil {
+		vmSourceLog.Error(err, "failed to parse flavor extra specs JSON",
+			"extraSpecsJSON", truncateString(extraSpecsJSON, 100))
+		return make(map[string]string)
+	}
+	return extraSpecs
+}
+
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
+// normalizeOSType returns "unknown" for empty OS type strings.
+func normalizeOSType(osType string) string {
+	if osType == "" {
+		return "unknown"
+	}
+	return osType
+}
+
+func buildVMsFromHypervisors(hypervisorList *hv1.HypervisorList, postgresVMs []VM) []VM {
+	vmDataByUUID := make(map[string]VM, len(postgresVMs))
+	for _, vm := range postgresVMs {
+		vmDataByUUID[vm.UUID] = vm
+	}
+
+	var result []VM
+	var enrichedCount, notInPostgresCount, duplicateCount int
+	seen := make(map[string]string)
+
+	for _, hv := range hypervisorList.Items {
+		for _, inst := range hv.Status.Instances {
+			if !inst.Active {
+				continue
+			}
+			if firstHypervisor, alreadySeen := seen[inst.ID]; alreadySeen {
+				vmSourceLog.Info("duplicate VM UUID on multiple hypervisors, skipping",
+					"uuid", inst.ID,
+					"hypervisor", hv.Name,
+					"firstSeenOn", firstHypervisor)
+				duplicateCount++
+				continue
+			}
+			seen[inst.ID] = hv.Name
+
+			pgVM, existsInPostgres := vmDataByUUID[inst.ID]
+			if !existsInPostgres {
+				notInPostgresCount++
+				continue
+			}
+
+			vm := VM{
+				UUID:              inst.ID,
+				Name:              pgVM.Name,
+				Status:            pgVM.Status,
+				FlavorName:        pgVM.FlavorName,
+				ProjectID:         pgVM.ProjectID,
+				CurrentHypervisor: hv.Name,
+				AvailabilityZone:  pgVM.AvailabilityZone,
+				CreatedAt:         pgVM.CreatedAt,
+				Resources:         pgVM.Resources,
+				FlavorExtraSpecs:  pgVM.FlavorExtraSpecs,
+				DiskGB:            pgVM.DiskGB,
+				OSType:            pgVM.OSType,
+			}
+			result = append(result, vm)
+			enrichedCount++
+		}
+	}
+
+	vmSourceLog.V(1).Info("buildVMsFromHypervisors statistics",
+		"totalHypervisorInstances", enrichedCount+notInPostgresCount+duplicateCount,
+		"enrichedWithPostgresData", enrichedCount,
+		"notInPostgres", notInPostgresCount,
+		"duplicatesSkipped", duplicateCount)
+
+	return result
+}
+
+func filterVMsOnKnownHypervisors(vms []VM, hypervisorList *hv1.HypervisorList) []VM {
+	hypervisorSet := make(map[string]bool, len(hypervisorList.Items))
+	for _, hv := range hypervisorList.Items {
+		hypervisorSet[hv.Name] = true
+	}
+
+	vmOnHypervisor := make(map[string]bool)
+	allVMsOnHypervisors := make(map[string]string)
+	totalVMsOnHypervisors := 0
+	for _, hv := range hypervisorList.Items {
+		for _, inst := range hv.Status.Instances {
+			if inst.Active {
+				key := inst.ID + ":" + hv.Name
+				vmOnHypervisor[key] = true
+				allVMsOnHypervisors[inst.ID] = hv.Name
+				totalVMsOnHypervisors++
+			}
+		}
+	}
+
+	var result []VM
+	var filteredUnknownHypervisor, filteredNotInInstances, filteredWrongHypervisor int
+	for _, vm := range vms {
+		if !hypervisorSet[vm.CurrentHypervisor] {
+			filteredUnknownHypervisor++
+			continue
+		}
+		key := vm.UUID + ":" + vm.CurrentHypervisor
+		if !vmOnHypervisor[key] {
+			if actualHypervisor, exists := allVMsOnHypervisors[vm.UUID]; exists {
+				vmSourceLog.V(2).Info("VM claims to be on one hypervisor but is actually on another",
+					"vmUUID", vm.UUID,
+					"claimedHypervisor", vm.CurrentHypervisor,
+					"actualHypervisor", actualHypervisor)
+				filteredWrongHypervisor++
+			} else {
+				filteredNotInInstances++
+			}
+			continue
+		}
+		result = append(result, vm)
+	}
+
+	totalFiltered := filteredUnknownHypervisor + filteredNotInInstances + filteredWrongHypervisor
+	if totalFiltered > 0 {
+		vmSourceLog.Info("filterVMsOnKnownHypervisors statistics",
+			"inputVMs", len(vms),
+			"totalVMsOnHypervisors", totalVMsOnHypervisors,
+			"filteredUnknownHypervisor", filteredUnknownHypervisor,
+			"filteredNotInInstances", filteredNotInInstances,
+			"filteredWrongHypervisor", filteredWrongHypervisor,
+			"totalFiltered", totalFiltered,
+			"remainingCount", len(result))
+	}
+
+	return result
+}
+
 func warnUnknownVMsOnHypervisors(hypervisors *hv1.HypervisorList, vms []VM) {
-	// Build a set of VM UUIDs from ListVMs
 	vmUUIDs := make(map[string]bool, len(vms))
 	for _, vm := range vms {
 		vmUUIDs[vm.UUID] = true
 	}
 
-	// Build a set of VM UUIDs from hypervisors
 	hypervisorVMUUIDs := make(map[string]bool)
 	for _, hv := range hypervisors.Items {
 		for _, inst := range hv.Status.Instances {
@@ -482,12 +487,11 @@ func warnUnknownVMsOnHypervisors(hypervisors *hv1.HypervisorList, vms []VM) {
 		}
 	}
 
-	// Check each hypervisor's instances - VMs on hypervisors but not in ListVMs
 	vmsOnHypervisorsNotInListVMs := 0
 	for _, hv := range hypervisors.Items {
 		for _, inst := range hv.Status.Instances {
 			if inst.Active && !vmUUIDs[inst.ID] {
-				log.Info("WARNING: VM on hypervisor not found in ListVMs - possible data sync issue",
+				vmSourceLog.Info("WARNING: VM on hypervisor not found in ListVMs - possible data sync issue",
 					"vmUUID", inst.ID,
 					"vmName", inst.Name,
 					"hypervisor", hv.Name)
@@ -496,7 +500,6 @@ func warnUnknownVMsOnHypervisors(hypervisors *hv1.HypervisorList, vms []VM) {
 		}
 	}
 
-	// Check VMs in ListVMs but not on any hypervisor
 	vmsInListVMsNotOnHypervisors := 0
 	for _, vm := range vms {
 		if !hypervisorVMUUIDs[vm.UUID] {
@@ -505,14 +508,92 @@ func warnUnknownVMsOnHypervisors(hypervisors *hv1.HypervisorList, vms []VM) {
 	}
 
 	if vmsOnHypervisorsNotInListVMs > 0 {
-		log.V(1).Info("VMs on hypervisors not found in ListVMs",
+		vmSourceLog.V(1).Info("VMs on hypervisors not found in ListVMs",
 			"count", vmsOnHypervisorsNotInListVMs,
 			"hint", "This may indicate a data sync issue between hypervisor operator and nova servers")
 	}
-
 	if vmsInListVMsNotOnHypervisors > 0 {
-		log.V(1).Info("VMs in ListVMs not found on any hypervisor",
+		vmSourceLog.V(1).Info("VMs in ListVMs not found on any hypervisor",
 			"count", vmsInListVMsNotOnHypervisors,
 			"hint", "This may indicate a data sync issue between nova servers and hypervisor operator")
 	}
+}
+
+// lazyDBVMSource is a VMSource that defers Postgres connection until first use.
+// Postgres connection requires the manager cache to be ready (Datasource CRD lookup),
+// so this type is safe to construct during setup before the manager starts.
+type lazyDBVMSource struct {
+	k8sClient      client.Client
+	datasourceName string
+	mu             sync.Mutex
+	inner          *DBVMSource
+}
+
+// NewPostgresVMSource creates a VMSource backed by the named Datasource CRD.
+// The Postgres connection is established on first use, so this is safe to call
+// before the manager cache is ready.
+func NewPostgresVMSource(k8sClient client.Client, datasourceName string) VMSource {
+	return &lazyDBVMSource{k8sClient: k8sClient, datasourceName: datasourceName}
+}
+
+func (s *lazyDBVMSource) get(ctx context.Context) (*DBVMSource, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.inner != nil {
+		return s.inner, nil
+	}
+	postgresReader, err := external.NewPostgresReader(ctx, s.k8sClient, s.datasourceName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to datasource %s: %w", s.datasourceName, err)
+	}
+	s.inner = NewDBVMSource(external.NewNovaReader(postgresReader))
+	return s.inner, nil
+}
+
+func (s *lazyDBVMSource) ListVMs(ctx context.Context) ([]VM, error) {
+	inner, err := s.get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return inner.ListVMs(ctx)
+}
+
+func (s *lazyDBVMSource) ListVMsByProject(ctx context.Context, projectID string) ([]VM, error) {
+	inner, err := s.get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return inner.ListVMsByProject(ctx, projectID)
+}
+
+func (s *lazyDBVMSource) ListVMsOnHypervisors(ctx context.Context, hypervisorList *hv1.HypervisorList, trustHypervisorLocation bool) ([]VM, error) {
+	inner, err := s.get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return inner.ListVMsOnHypervisors(ctx, hypervisorList, trustHypervisorLocation)
+}
+
+func (s *lazyDBVMSource) GetVM(ctx context.Context, vmUUID string) (*VM, error) {
+	inner, err := s.get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return inner.GetVM(ctx, vmUUID)
+}
+
+func (s *lazyDBVMSource) IsServerActive(ctx context.Context, vmUUID string) (bool, error) {
+	inner, err := s.get(ctx)
+	if err != nil {
+		return false, err
+	}
+	return inner.IsServerActive(ctx, vmUUID)
+}
+
+func (s *lazyDBVMSource) GetDeletedVMInfo(ctx context.Context, vmUUID string) (*DeletedVMInfo, error) {
+	inner, err := s.get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return inner.GetDeletedVMInfo(ctx, vmUUID)
 }

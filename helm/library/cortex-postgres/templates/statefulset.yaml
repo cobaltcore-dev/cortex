@@ -13,6 +13,7 @@ spec:
     matchLabels:
       {{- include "cortex-postgres.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/pg-major: {{ .Values.major | quote }}
+      app.kubernetes.io/instance-suffix: {{ .Values.instanceSuffix | quote }}
   serviceName: {{ include "cortex-postgres.versionedFullname" . }}
   template:
     metadata:
@@ -20,6 +21,7 @@ spec:
         app: {{ include "cortex-postgres.versionedFullname" . }}
         {{- include "cortex-postgres.labels" . | nindent 8 }}
         app.kubernetes.io/pg-major: {{ .Values.major | quote }}
+        app.kubernetes.io/instance-suffix: {{ .Values.instanceSuffix | quote }}
     spec:
       terminationGracePeriodSeconds: 10
       containers:

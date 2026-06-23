@@ -135,8 +135,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 	// They will be recreated with correct metadata in subsequent phases.
 	var validReservations []v1alpha1.Reservation
 	for _, res := range existing {
-		if res.Spec.CommittedResourceReservation.ResourceGroup != desiredState.FlavorGroupName ||
-			res.Spec.CommittedResourceReservation.ProjectID != desiredState.ProjectID ||
+		if !res.Spec.CommittedResourceReservation.MatchesGroup(desiredState.ProjectID, desiredState.FlavorGroupName) ||
 			res.Spec.AvailabilityZone != desiredState.AvailabilityZone {
 			log.Info("Found a reservation with wrong flavor group, project, or AZ, delete and recreate afterward",
 				"commitmentUUID", desiredState.CommitmentUUID,

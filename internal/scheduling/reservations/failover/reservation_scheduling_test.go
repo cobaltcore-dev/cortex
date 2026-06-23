@@ -9,6 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,7 +23,7 @@ func TestBuildReservationWithVM(t *testing.T) {
 	tests := []struct {
 		name                   string
 		reservation            v1alpha1.Reservation
-		vm                     VM
+		vm                     reservations.VM
 		wantVMInAllocations    bool
 		wantAllocationsCount   int
 		wantOriginalUnmodified bool
@@ -107,7 +108,7 @@ func TestBuildReservationWithVM(t *testing.T) {
 func TestBuildNewFailoverReservation(t *testing.T) {
 	tests := []struct {
 		name           string
-		vm             VM
+		vm             reservations.VM
 		hypervisor     string
 		wantHost       string
 		wantTargetHost string
@@ -250,7 +251,7 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 
 	tests := []struct {
 		name                    string
-		vm                      VM
+		vm                      reservations.VM
 		useFlavorGroupResources bool
 		flavorGroups            map[string]compute.FlavorGroupFeature
 		wantFlavorName          string
@@ -261,7 +262,7 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 	}{
 		{
 			name: "uses LargestFlavor resources when enabled and flavor found",
-			vm: VM{
+			vm: reservations.VM{
 				UUID:              "vm-1",
 				CurrentHypervisor: "host1",
 				FlavorName:        "hana_c60_m960",
@@ -281,7 +282,7 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 		},
 		{
 			name: "falls back to VM resources when disabled",
-			vm: VM{
+			vm: reservations.VM{
 				UUID:              "vm-2",
 				CurrentHypervisor: "host1",
 				FlavorName:        "hana_c60_m960",
@@ -301,7 +302,7 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 		},
 		{
 			name: "falls back to VM resources when flavor not in any group",
-			vm: VM{
+			vm: reservations.VM{
 				UUID:              "vm-3",
 				CurrentHypervisor: "host1",
 				FlavorName:        "unknown_flavor",
@@ -321,7 +322,7 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 		},
 		{
 			name: "falls back to VM resources when flavorGroups is nil",
-			vm: VM{
+			vm: reservations.VM{
 				UUID:              "vm-4",
 				CurrentHypervisor: "host1",
 				FlavorName:        "hana_c60_m960",
@@ -440,8 +441,8 @@ func buildSchedulingTestReservationNoStatus(name, host string) v1alpha1.Reservat
 	}
 }
 
-func buildSchedulingTestVM(uuid, hypervisor string) VM { //nolint:unparam // uuid may vary in future tests
-	return VM{
+func buildSchedulingTestVM(uuid, hypervisor string) reservations.VM { //nolint:unparam // uuid may vary in future tests
+	return reservations.VM{
 		UUID:              uuid,
 		CurrentHypervisor: hypervisor,
 		FlavorName:        "m1.large",
@@ -453,8 +454,8 @@ func buildSchedulingTestVM(uuid, hypervisor string) VM { //nolint:unparam // uui
 	}
 }
 
-func buildSchedulingTestVMWithResources(uuid, hypervisor string, memoryMB, vcpus int64) VM {
-	return VM{
+func buildSchedulingTestVMWithResources(uuid, hypervisor string, memoryMB, vcpus int64) reservations.VM {
+	return reservations.VM{
 		UUID:              uuid,
 		CurrentHypervisor: hypervisor,
 		FlavorName:        "m1.large",
