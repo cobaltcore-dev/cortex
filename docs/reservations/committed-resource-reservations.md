@@ -12,6 +12,7 @@ Cortex reserves hypervisor capacity for customers who pre-commit resources (comm
     - [Reservation Lifecycle](#reservation-lifecycle)
       - [VM Lifecycle](#vm-lifecycle)
       - [Capacity Blocking](#capacity-blocking)
+      - [InFlightReservation](#inflightreservation)
       - [Reservation Controller](#reservation-controller)
     - [Info API](#info-api)
     - [Change-Commitments API](#change-commitments-api)
@@ -19,6 +20,7 @@ Cortex reserves hypervisor capacity for customers who pre-commit resources (comm
     - [Report-Usage API](#report-usage-api)
     - [Report-Capacity API](#report-capacity-api)
     - [Syncer Task](#syncer-task)
+    - [Placement Observability (CRS Evaluation)](#placement-observability-crs-evaluation)
 
 The CR reservation implementation is located in `internal/scheduling/reservations/commitments/`. Key components include:
 - `CommittedResource` controller — acceptance, rejection, child Reservation CRUD (memory) or arithmetic headroom check (cores)
@@ -247,7 +249,7 @@ block                = max(remaining, spec_only_unblocked)
 
 When a VM is in flight (Nova choosing between candidates), a pessimistic blocking reservation exists on each candidate host. For any SpecOnly VM that has such a reservation on the same host, the pessimistic blocking reservation is the authority — the CR reservation must not double-count it. The `spec_only_unblocked` term excludes those VMs.
 
-See the pessimistic blocking reservations documentation for the full interaction semantics.
+See the [InFlightReservation](#inflightreservation) section below for how these reservations are managed.
 
 **Migration state (`Spec.TargetHost != Status.Host`):**
 
@@ -261,11 +263,27 @@ When a reservation is being migrated to a new host, block the full `max(Spec.Res
 
 - **VM live migration within a reservation** (VM moves away from the reservation's host): handled implicitly by `hv.Status.Allocation`. Libvirt reports resource consumption on both source and target during live migration, so both hosts' `hv.Status.Allocation` already reflects the in-flight state. No special filter logic needed. The reservation controller will eventually remove the VM from the reservation once it's confirmed on the wrong host past the grace period.
 
+#### InFlightReservation
+
+An `InFlightReservation` is a short-lived Reservation CRD (type `InFlightReservation`) that pessimistically blocks capacity on each candidate host while a VM is being scheduled. It prevents double-booking when multiple scheduling decisions are in flight concurrently.
+
+**Lifecycle:**
+- **Created** by the scheduling pipeline at the end of a successful placement run, one per candidate host returned to Nova. Creation is skipped when the `SkipInflight` pipeline option is set (used by reservation scheduling, capacity checks, and failover — any non-VM-placement run).
+- **Deleted** once the VM has been confirmed on a host (the in-flight reservation is no longer needed) or after a timeout if the VM never lands.
+
+**Spec fields** (`InFlightReservationSpec`):
+- `VMID` — Nova server UUID of the VM being scheduled
+- `UserID` — owner of the VM
+- `ProjectID` — project/tenant of the VM
+- `Intent` — lifecycle operation that triggered the placement (e.g., create, migrate, resize)
+
+**Interaction with CR reservations:** When computing how much capacity a CR reservation must block, Spec-only VMs that already have an InFlightReservation on the same host are excluded from the CR reservation's block calculation (the `spec_only_unblocked` term). This avoids double-counting resources that are already blocked by the pessimistic InFlightReservation.
+
 #### Reservation Controller
 
 The `Reservation` controller watches `Reservation` CRDs and `Hypervisor` CRDs. `MaxConcurrentReconciles=1` prevents overbooking during concurrent placements.
 
-**Placement** — finds hosts for new reservations (calls scheduler API)
+**Placement** — finds hosts for new reservations (calls scheduler API). Placement requests include a `domain_name` scheduler hint resolved from the reservation's `DomainID` via Keystone. This allows the `filter_external_customer` pipeline filter to enforce host restrictions for external customer domains. Domain name resolution uses an in-process cache that stores names indefinitely (domain names are immutable in OpenStack). If the Keystone integration is not configured (`keystoneSecretRef` absent), the hint is omitted and domain-based host restrictions are not enforced.
 
 **Allocation Verification** — tracks VM lifecycle on reservations. The controller uses the Hypervisor CRD as the sole source of truth, with two triggers:
 - New VMs (within `committedResourceAllocationGracePeriod`, default: 15 min): verification deferred — VM may still be spawning; requeued every `committedResourceRequeueIntervalGracePeriod` (default: 1 min)
@@ -322,3 +340,37 @@ For each VM, the API reports whether it accounts to a specific commitment or PAY
 ### Syncer Task
 
 The syncer task runs periodically and syncs local `CommittedResource` CRD state to match Limes' view of commitments, correcting drift from missed API calls or restarts. It writes `CommittedResource` CRDs only — capacity management is the controller's responsibility.
+
+### Placement Observability (CRS Evaluation)
+
+The `internal/scheduling/nova/crs/` package provides post-placement classification and Prometheus metrics for committed resource slot utilization. It answers the question: "For each VM placement (or no-host-found failure), what was the CR slot situation?"
+
+**Prometheus metrics:**
+
+| Metric | Labels | Description |
+|--------|--------|-------------|
+| `cortex_nova_no_host_found_total` | `cr_slot`, `flavor_group`, `intent` | No-host-found results classified by CR coverage |
+| `cortex_nova_placement_total` | `flavor_group`, `intent`, `cr_slot` | Successful placements classified by CR slot outcome |
+
+PAYG placements (flavor not in any configured group) are not counted by either metric.
+
+**No-host-found classification (`cr_slot` label on `cortex_nova_no_host_found_total`):**
+
+| Category | Meaning |
+|----------|---------|
+| `no_cr` | Project has no active CommittedResources for the flavor group |
+| `cr_exhausted` | CommittedResources exist but are fully occupied (used >= capacity) |
+| `slot_exhausted` | CR has remaining capacity but no input host has a usable reservation slot |
+| `slot_blocked` | A usable slot exists on an input host but scheduling constraints excluded all such hosts |
+
+**Placement classification (`cr_slot` label on `cortex_nova_placement_total`):**
+
+| Category | Meaning |
+|----------|---------|
+| `no_cr` | No active CR or CR capacity fully exhausted |
+| `slot_missed` | CR has remaining capacity but no candidate host has a slot with remaining memory > 0 |
+| `slot_used` | CR has remaining capacity and at least one candidate host has a usable slot |
+
+**Slot evaluator:** The `SlotEvaluator` is built once per scheduling request from Hypervisor and Reservation CRDs (no further K8s reads during classification). It computes per-host free memory and indexes ready CR reservation slots by host. `HasUsableSlot` checks whether a host has a slot that can accommodate the VM under the overfill model: `slot.remaining + host.base_free >= vmMemBytes`.
+
+**Recorder:** The `Recorder` is called after each placement decision. On success (`slot_used`), it writes the VM UUID into the best-fit reservation slot (`PickSlot` selects the slot that maximises coverage with tightest-fit tiebreaking). On no-host-found, it classifies the failure and increments the counter.
