@@ -65,6 +65,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/quota"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/crdcache"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/cobaltcore-dev/cortex/pkg/task"
@@ -372,6 +373,35 @@ func main() {
 		os.Exit(1)
 	}
 
+	// In-process cache for Reservation CRDs. Controller-runtime's informer is eventually
+	// consistent; writes via this client are immediately visible to subsequent List/Get calls
+	// within the same pod. Entries are evicted when the informer sees the object or the TTL
+	// (2m) expires.
+	reservationCache := crdcache.New(crdcache.Options{
+		TTL: 2 * time.Minute,
+		ShouldCache: func(obj client.Object) bool {
+			_, ok := obj.(*v1alpha1.Reservation)
+			return ok
+		},
+	})
+	cachingClient := crdcache.NewCachingClient(multiclusterClient, reservationCache, crdcache.Options{})
+	// Register informer-based eviction handlers after cache sync.
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		clusters, err := multiclusterClient.ClustersForGVK(reservationGVK)
+		if err != nil {
+			return fmt.Errorf("get clusters for Reservation GVK: %w", err)
+		}
+		for _, cl := range clusters {
+			if err := reservationCache.RegisterEvictionHandler(ctx, cl.GetCache(), &v1alpha1.Reservation{}); err != nil {
+				return fmt.Errorf("register reservation cache eviction handler: %w", err)
+			}
+		}
+		return nil
+	})); err != nil {
+		setupLog.Error(err, "unable to register reservation cache eviction handlers")
+		os.Exit(1)
+	}
+
 	// Our custom monitoring registry can add prometheus labels to all metrics.
 	// This is useful to distinguish metrics from different deployments.
 	metricsConfig := conf.GetConfigOrDie[monitoring.Config]()
@@ -406,7 +436,7 @@ func main() {
 		commitmentsVMSource = reservations.NewPostgresVMSource(multiclusterClient, commitmentsConfig.DatasourceName)
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "committed-resource-reservations-controller") {
-		commitmentsAPI := commitmentsapi.NewAPIWithConfig(multiclusterClient, commitmentsConfig.API, commitmentsVMSource)
+		commitmentsAPI := commitmentsapi.NewAPIWithConfig(cachingClient, commitmentsConfig.API, commitmentsVMSource)
 		commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
 	}
 
@@ -426,8 +456,8 @@ func main() {
 		metrics.Registry.MustRegister(noHostFoundCounter)
 		metrics.Registry.MustRegister(placementCounter)
 		// Inferred through the base controller.
-		filterWeigherController.Client = multiclusterClient
-		filterWeigherController.CRRecorder.Client = multiclusterClient
+		filterWeigherController.Client = cachingClient
+		filterWeigherController.CRRecorder.Client = cachingClient
 		if err := filterWeigherController.SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "nova FilterWeigherPipelineController")
 			os.Exit(1)
