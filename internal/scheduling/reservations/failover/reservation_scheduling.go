@@ -123,7 +123,16 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 
 	logger := LoggerFromContext(ctx)
 
-	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, inferFailoverPipeline(vm.FlavorExtraSpecs), resSpec, scheduling.Options{ReadOnly: true, SkipPlacementContextFilters: true, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true})
+	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, inferFailoverPipeline(vm.FlavorExtraSpecs), resSpec, scheduling.Options{
+		ReadOnly: true,
+		// Failover reservations do not consume capacity for the reuse check — the reservation
+		// already pre-blocks exactly the right capacity for this VM.
+		IgnoredReservationTypes:       []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
+		SkipPlacementContextFilters:   false,
+		SkipHistory:                   true,
+		SkipInflight:                  true,
+		SkipCommittedResourceTracking: true,
+	})
 	if err != nil {
 		logger.Error(err, "failed to get potential hypervisors for VM", "vmUUID", vm.UUID)
 		return nil
