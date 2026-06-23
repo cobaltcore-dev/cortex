@@ -604,10 +604,11 @@ func main() {
 		metrics.Registry.MustRegister(&crControllerMonitor)
 
 		if err := (&commitments.CommittedResourceController{
-			Client:  multiclusterClient,
-			Scheme:  mgr.GetScheme(),
-			Conf:    crControllerConf,
-			Monitor: &crControllerMonitor,
+			Client:   multiclusterClient,
+			Scheme:   mgr.GetScheme(),
+			Conf:     crControllerConf,
+			Monitor:  &crControllerMonitor,
+			VMSource: commitmentsVMSource,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "CommittedResource")
 			os.Exit(1)

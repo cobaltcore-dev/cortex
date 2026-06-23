@@ -38,6 +38,9 @@ type CommittedResourceController struct {
 	Scheme  *runtime.Scheme
 	Conf    CommittedResourceControllerConfig
 	Monitor *CRControllerMonitor
+	// VMSource enables PAYG pre-allocation when creating reservation slots. When nil the
+	// PAYG scan is skipped and all slots are created via blind scheduler probes.
+	VMSource reservations.VMSource
 }
 
 func (r *CommittedResourceController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -315,11 +318,16 @@ func (r *CommittedResourceController) applyReservationState(ctx context.Context,
 	state.CreatorRequestID = reservations.GlobalRequestIDFromContext(ctx)
 	state.ParentGeneration = cr.Generation
 
-	mgr := NewReservationManager(r.Client)
-	mgr.SlotCreationDelay = r.Conf.SlotCreationDelay.Duration
+	maxSlots := 0
 	if cr.Spec.AllowRejection {
-		mgr.MaxSlots = r.Conf.MaxSlotsPerCommitment
+		maxSlots = r.Conf.MaxSlotsPerCommitment
 	}
+	mgr := NewReservationManager(r.Client, ReservationManagerConfig{
+		SlotCreationDelay:       r.Conf.SlotCreationDelay.Duration,
+		MaxSlots:                maxSlots,
+		EnablePaygPreAllocation: r.Conf.EnablePaygPreAllocation,
+		VMSource:                r.VMSource,
+	})
 	result, err := mgr.ApplyCommitmentState(ctx, logger, state, flavorGroups, "committed-resource-controller")
 	if err != nil {
 		var limitErr *SlotLimitExceededError
@@ -470,7 +478,11 @@ func (r *CommittedResourceController) rollbackToAccepted(ctx context.Context, lo
 	state.NamePrefix = cr.Name + "-"
 	state.CreatorRequestID = reservations.GlobalRequestIDFromContext(ctx)
 	state.ParentGeneration = cr.Generation
-	if _, err := NewReservationManager(r.Client).ApplyCommitmentState(ctx, logger, state, flavorGroups, "committed-resource-controller-rollback"); err != nil {
+	rollbackMgr := NewReservationManager(r.Client, ReservationManagerConfig{
+		EnablePaygPreAllocation: r.Conf.EnablePaygPreAllocation,
+		VMSource:                r.VMSource,
+	})
+	if _, err := rollbackMgr.ApplyCommitmentState(ctx, logger, state, flavorGroups, "committed-resource-controller-rollback"); err != nil {
 		return fmt.Errorf("rollback apply failed: %w", err)
 	}
 	return nil
