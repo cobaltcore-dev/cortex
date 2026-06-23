@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-06-23 — [#966](https://github.com/cobaltcore-dev/cortex/pull/966)
+
+### cortex v0.1.2 (sha-6daa5050)
+
+Non-breaking changes:
+- Pre-allocate PAYG VMs into CR reservation slots on CR creation/modification ([#951](https://github.com/cobaltcore-dev/cortex/pull/951))
+- Keep failover allocation if VM missing from postgres but present on hypervisor ([#909](https://github.com/cobaltcore-dev/cortex/pull/909))
+- All datasources are synced on restart ([#956](https://github.com/cobaltcore-dev/cortex/pull/956))
+- Honor domain restrictions for CR reservation scheduling ([#955](https://github.com/cobaltcore-dev/cortex/pull/955))
+- Create InFlightReservation as part of Reservation CRD ([#954](https://github.com/cobaltcore-dev/cortex/pull/954))
+- Move committed resource status summary business logic to internal ([#953](https://github.com/cobaltcore-dev/cortex/pull/953))
+- Bypass grace period for confirmed VM departure ([#925](https://github.com/cobaltcore-dev/cortex/pull/925))
+- Track VM placements in reservations and classify no-host-found ([#847](https://github.com/cobaltcore-dev/cortex/pull/847))
+- Refactor reservations: move VMSource to shared package, unify VM data layer ([#930](https://github.com/cobaltcore-dev/cortex/pull/930))
+- Add suffix gX to postgresql ([#939](https://github.com/cobaltcore-dev/cortex/pull/939))
+- Update External dependencies to v1.9.1 ([#952](https://github.com/cobaltcore-dev/cortex/pull/952)), v1.14.46 ([#959](https://github.com/cobaltcore-dev/cortex/pull/959))
+- Update `github.com/sapcc` ([#938](https://github.com/cobaltcore-dev/cortex/pull/938))
+
+### cortex-nova v0.0.76
+
+Includes updated chart cortex v0.1.2.
+
+- Add `keystoneSecretRef` and `ssoSecretRef` config keys for domain resolution in committed resource reservation scheduling ([#955](https://github.com/cobaltcore-dev/cortex/pull/955))
+
+### cortex-crds v0.0.76
+
+Includes updated chart cortex v0.1.2.
+
+### cortex-cinder v0.0.76
+
+Includes updated chart cortex v0.1.2.
+
+### cortex-pods v0.0.76
+
+Includes updated chart cortex v0.1.2.
+
+### cortex-ironcore v0.0.76
+
+Includes updated chart cortex v0.1.2.
+
+### cortex-manila v0.0.76
+
+Includes updated chart cortex v0.1.2.
+
 ## 2026-06-08 — [#919](https://github.com/cobaltcore-dev/cortex/pull/919)
 
 ### cortex v0.1.0 (sha-a0373875)

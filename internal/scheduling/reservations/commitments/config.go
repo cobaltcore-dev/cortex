@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -67,6 +68,16 @@ type ReservationControllerConfig struct {
 	PipelineDefault string `json:"pipelineDefault"`
 	// FlavorGroupPipelines maps flavor group IDs to pipeline names; "*" acts as catch-all.
 	FlavorGroupPipelines map[string]string `json:"flavorGroupPipelines,omitempty"`
+	// KeystoneSecretRef references a Kubernetes Secret that holds OpenStack credentials
+	// used to resolve domain IDs to domain names for the domain_name scheduler hint.
+	// The secret must contain the same keys as the syncer's keystoneSecretRef.
+	// When empty, domain name resolution is skipped and filter_external_customer will
+	// not enforce domain restrictions for CR reservations.
+	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef,omitempty"`
+	// SSOSecretRef is an optional reference to a Secret holding SSO credentials.
+	// Required in environments that use SSO-based Keystone authentication.
+	// When nil, http.DefaultClient is used, which will fail in SSO-only environments.
+	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef,omitempty"`
 }
 
 // CommittedResourceControllerConfig holds tuning knobs for the CommittedResource CRD controller.
@@ -91,6 +102,11 @@ type CommittedResourceControllerConfig struct {
 	// Has no effect on the AllowRejection=false (syncer) path.
 	// 0 disables the cap.
 	MaxSlotsPerCommitment int `json:"maxSlotsPerCommitment"`
+
+	// EnablePaygPreAllocation enables scanning the AZ for existing PAYG VMs before creating
+	// blind reservation slots. When true, the controller absorbs matching PAYG VMs into
+	// pre-populated slots, consuming CR delta before falling back to the blind scheduler path.
+	EnablePaygPreAllocation bool `json:"enablePaygPreAllocation,omitempty"`
 }
 
 // ResourceTypeConfig holds per-resource flags for a single resource type within a flavor group.

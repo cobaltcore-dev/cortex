@@ -115,6 +115,12 @@ func main() {
 		switch os.Args[1] {
 		case "e2e-nova":
 			novaChecksConfig := conf.GetConfigOrDie[nova.ChecksConfig]()
+			if len(os.Args) >= 3 {
+				if err := json.Unmarshal([]byte(os.Args[2]), &novaChecksConfig); err != nil {
+					slog.Error("invalid json override for e2e-nova", "err", err)
+					os.Exit(1)
+				}
+			}
 			nova.RunChecks(ctx, client, novaChecksConfig)
 			return
 		case "e2e-cinder":
@@ -598,10 +604,11 @@ func main() {
 		metrics.Registry.MustRegister(&crControllerMonitor)
 
 		if err := (&commitments.CommittedResourceController{
-			Client:  multiclusterClient,
-			Scheme:  mgr.GetScheme(),
-			Conf:    crControllerConf,
-			Monitor: &crControllerMonitor,
+			Client:   multiclusterClient,
+			Scheme:   mgr.GetScheme(),
+			Conf:     crControllerConf,
+			Monitor:  &crControllerMonitor,
+			VMSource: commitmentsVMSource,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "CommittedResource")
 			os.Exit(1)
