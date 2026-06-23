@@ -614,6 +614,89 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 				}
 			},
 		},
+		{
+			// delta=8GiB, candidates=[large=32GiB, small=8GiB]: best-fit picks small (exact fit),
+			// not large (which would produce an undersized 8GiB slot on a 32GiB VM).
+			name:             "best-fit: fitting candidate preferred over larger one",
+			hypervisors:      []*hv1.Hypervisor{hvWithAZ(hvName, "vm-large", "vm-small")},
+			paygVMs:          []reservations.VM{paygVM("vm-large", "large"), paygVM("vm-small", "small")},
+			enablePayg:       true,
+			desiredMemoryGiB: 8,
+			validateTouched: func(t *testing.T, touched []v1alpha1.Reservation) {
+				if len(touched) != 1 {
+					t.Fatalf("want 1 slot, got %d", len(touched))
+				}
+				if _, ok := touched[0].Spec.CommittedResourceReservation.Allocations["vm-small"]; !ok {
+					t.Errorf("expected vm-small (8GiB exact fit), got allocations: %v",
+						touched[0].Spec.CommittedResourceReservation.Allocations)
+				}
+			},
+		},
+		{
+			// delta=4GiB, candidates=[large=32GiB, small=8GiB]: no exact fit — picks smallest
+			// oversized (small=8GiB) to minimise waste on the undersized slot.
+			name:             "undersize fallback: smallest oversized candidate chosen",
+			hypervisors:      []*hv1.Hypervisor{hvWithAZ(hvName, "vm-large", "vm-small")},
+			paygVMs:          []reservations.VM{paygVM("vm-large", "large"), paygVM("vm-small", "small")},
+			enablePayg:       true,
+			desiredMemoryGiB: 4,
+			validateTouched: func(t *testing.T, touched []v1alpha1.Reservation) {
+				if len(touched) != 1 {
+					t.Fatalf("want 1 slot, got %d", len(touched))
+				}
+				if _, ok := touched[0].Spec.CommittedResourceReservation.Allocations["vm-small"]; !ok {
+					t.Errorf("expected smallest oversized vm-small, got allocations: %v",
+						touched[0].Spec.CommittedResourceReservation.Allocations)
+				}
+				wantMem := int64(4) * 1024 * 1024 * 1024
+				memQty := touched[0].Spec.Resources[hv1.ResourceMemory]
+				if got := memQty.Value(); got != wantMem {
+					t.Errorf("slot memory: want %d (delta), got %d", wantMem, got)
+				}
+			},
+		},
+		{
+			// delta=40GiB, candidates=[large=32GiB, medium=16GiB, small=8GiB]:
+			// round 1: largest fit = large (32GiB), delta remaining = 8GiB
+			// round 2: largest fit = small (8GiB), delta remaining = 0
+			// → 2 pre-allocated slots, large and small used; medium untouched.
+			name: "multi-round: best-fit applied each round from remaining candidates",
+			hypervisors: []*hv1.Hypervisor{
+				hvWithAZ(hvName, "vm-large", "vm-medium", "vm-small"),
+			},
+			paygVMs: []reservations.VM{
+				paygVM("vm-large", "large"),
+				paygVM("vm-medium", "medium"),
+				paygVM("vm-small", "small"),
+			},
+			enablePayg:       true,
+			desiredMemoryGiB: 40,
+			validateTouched: func(t *testing.T, touched []v1alpha1.Reservation) {
+				// 2 PAYG slots + 1 blind slot for remaining (40-32-8=0, so actually just 2)
+				var preAllocated int
+				usedVMs := make(map[string]bool)
+				for _, res := range touched {
+					if res.Spec.TargetHost != "" {
+						preAllocated++
+						for vm := range res.Spec.CommittedResourceReservation.Allocations {
+							usedVMs[vm] = true
+						}
+					}
+				}
+				if preAllocated != 2 {
+					t.Errorf("want 2 pre-allocated slots, got %d", preAllocated)
+				}
+				if !usedVMs["vm-large"] {
+					t.Error("expected vm-large (32GiB) to be used in round 1")
+				}
+				if !usedVMs["vm-small"] {
+					t.Error("expected vm-small (8GiB) to be used in round 2")
+				}
+				if usedVMs["vm-medium"] {
+					t.Error("expected vm-medium (16GiB) to be skipped (large+small = exact fit)")
+				}
+			},
+		},
 	}
 
 	scheme := newCRTestScheme(t)

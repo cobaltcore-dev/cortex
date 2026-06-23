@@ -218,16 +218,26 @@ func (m *ReservationManager) ApplyCommitmentState(
 			}
 			sortCandidatesDesc(allCandidates)
 
-			for _, candidate := range allCandidates {
-				if deltaMemoryBytes <= 0 {
-					break
+			for deltaMemoryBytes > 0 && len(allCandidates) > 0 {
+				// Largest candidate that fits the delta (candidates sorted descending).
+				// If none fit, pick the smallest to minimise waste on the undersized slot.
+				idx := len(allCandidates) - 1
+				for i, c := range allCandidates {
+					if int64(c.MemoryMB)*1024*1024 <= deltaMemoryBytes { //nolint:gosec // bounded by flavor specs
+						idx = i
+						break
+					}
 				}
-				slotMemoryMB := candidate.MemoryMB
-				if int64(slotMemoryMB)*1024*1024 > deltaMemoryBytes { //nolint:gosec
-					slotMemoryMB = uint64(deltaMemoryBytes) / (1024 * 1024)
+				candidate := allCandidates[idx]
+				allCandidates = append(allCandidates[:idx], allCandidates[idx+1:]...)
+
+				candidateMemBytes := int64(candidate.MemoryMB) * 1024 * 1024 //nolint:gosec // bounded by flavor specs
+				slotMemoryBytes := candidateMemBytes
+				if slotMemoryBytes > deltaMemoryBytes {
+					slotMemoryBytes = deltaMemoryBytes
 				}
+				slotMemoryMB := uint64(slotMemoryBytes) / (1024 * 1024)
 				reservation := m.newPaygReservation(desiredState, nextSlotIndex, candidate, slotMemoryMB, flavorGroup, creator)
-				slotMemoryBytes := int64(slotMemoryMB) * 1024 * 1024 //nolint:gosec
 				deltaMemoryBytes -= slotMemoryBytes
 				result.Created++
 				result.TouchedReservations = append(result.TouchedReservations, *reservation)
