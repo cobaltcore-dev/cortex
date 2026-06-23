@@ -2,9 +2,11 @@
 
 ## 2026-06-23 — [#966](https://github.com/cobaltcore-dev/cortex/pull/966)
 
-### cortex v0.1.2 (sha-0b499dbc)
+### cortex v0.1.2 (sha-6daa5050)
 
 Non-breaking changes:
+- Pre-allocate PAYG VMs into CR reservation slots on CR creation/modification ([#951](https://github.com/cobaltcore-dev/cortex/pull/951))
+- Keep failover allocation if VM missing from postgres but present on hypervisor ([#909](https://github.com/cobaltcore-dev/cortex/pull/909))
 - All datasources are synced on restart ([#956](https://github.com/cobaltcore-dev/cortex/pull/956))
 - Honor domain restrictions for CR reservation scheduling ([#955](https://github.com/cobaltcore-dev/cortex/pull/955))
 - Create InFlightReservation as part of Reservation CRD ([#954](https://github.com/cobaltcore-dev/cortex/pull/954))
@@ -13,7 +15,7 @@ Non-breaking changes:
 - Track VM placements in reservations and classify no-host-found ([#847](https://github.com/cobaltcore-dev/cortex/pull/847))
 - Refactor reservations: move VMSource to shared package, unify VM data layer ([#930](https://github.com/cobaltcore-dev/cortex/pull/930))
 - Add suffix gX to postgresql ([#939](https://github.com/cobaltcore-dev/cortex/pull/939))
-- Update External dependencies to v1.9.1 ([#952](https://github.com/cobaltcore-dev/cortex/pull/952))
+- Update External dependencies to v1.9.1 ([#952](https://github.com/cobaltcore-dev/cortex/pull/952)), v1.14.46 ([#959](https://github.com/cobaltcore-dev/cortex/pull/959))
 - Update `github.com/sapcc` ([#938](https://github.com/cobaltcore-dev/cortex/pull/938))
 
 ### cortex-nova v0.0.76
