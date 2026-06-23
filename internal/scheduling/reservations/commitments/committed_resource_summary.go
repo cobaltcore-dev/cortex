@@ -1,22 +1,23 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package v1alpha1
+package commitments
 
 import (
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/meta"
 )
 
-// ComputeStatusSummary produces a compact human-readable summary of the committed resource's
+// computeStatusSummary produces a compact human-readable summary of the committed resource's
 // current state for the kubectl wide view.
 //
 // Format: {reason}[( diff)] [· {N} VM[s]] [· exp in {duration}|no expiry]
-func ComputeStatusSummary(spec CommittedResourceSpec, status CommittedResourceStatus, now time.Time) string {
-	cond := meta.FindStatusCondition(status.Conditions, CommittedResourceConditionReady)
+func computeStatusSummary(spec v1alpha1.CommittedResourceSpec, status v1alpha1.CommittedResourceStatus, now time.Time) string {
+	cond := meta.FindStatusCondition(status.Conditions, v1alpha1.CommittedResourceConditionReady)
 	if cond == nil {
 		return ""
 	}
@@ -37,7 +38,7 @@ func ComputeStatusSummary(spec CommittedResourceSpec, status CommittedResourceSt
 	//   generic "waiting for reservation placement" which adds nothing beyond the reason.
 	msg := cond.Message
 	showMsg := msg != "" && msg != "waiting for reservation placement" &&
-		(reason == CommittedResourceReasonRejected || reason == CommittedResourceReasonReserving)
+		(reason == v1alpha1.CommittedResourceReasonRejected || reason == v1alpha1.CommittedResourceReasonReserving)
 	if showMsg {
 		if len(msg) > 80 {
 			msg = msg[:77] + "..."
@@ -46,7 +47,7 @@ func ComputeStatusSummary(spec CommittedResourceSpec, status CommittedResourceSt
 	}
 
 	// VM count — only meaningful once placement is accepted.
-	if reason == CommittedResourceReasonAccepted {
+	if reason == v1alpha1.CommittedResourceReasonAccepted {
 		n := len(status.AssignedInstances)
 		if n == 1 {
 			parts = append(parts, "1 VM")
@@ -56,7 +57,7 @@ func ComputeStatusSummary(spec CommittedResourceSpec, status CommittedResourceSt
 	}
 
 	// Expiry — omit for Rejected (CR is terminal, expiry irrelevant).
-	if reason != CommittedResourceReasonRejected {
+	if reason != v1alpha1.CommittedResourceReasonRejected {
 		if spec.EndTime == nil {
 			parts = append(parts, "no expiry")
 		} else if remaining := spec.EndTime.Sub(now); remaining <= 0 {
@@ -71,7 +72,7 @@ func ComputeStatusSummary(spec CommittedResourceSpec, status CommittedResourceSt
 
 // buildSpecDiff returns a semicolon-separated list of placement-relevant field changes
 // between spec and the last accepted spec.
-func buildSpecDiff(spec CommittedResourceSpec, accepted *CommittedResourceSpec) string {
+func buildSpecDiff(spec v1alpha1.CommittedResourceSpec, accepted *v1alpha1.CommittedResourceSpec) string {
 	if accepted == nil {
 		return ""
 	}
