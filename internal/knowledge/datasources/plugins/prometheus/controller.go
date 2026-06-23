@@ -6,6 +6,7 @@ package prometheus
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -50,6 +51,10 @@ type PrometheusDatasourceReconciler struct {
 	conf config
 	// Monitor for tracking the datasource syncs.
 	Monitor datasources.Monitor
+	// Tracks datasources that have completed at least one reconcile this process lifetime.
+	// On first reconcile the timestamp skip is bypassed, so a DB wipe + operator restart
+	// forces an immediate re-sync of all datasources.
+	reconciledOnce sync.Map
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -67,8 +72,11 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 	if datasource.Status.NextSyncTime.After(time.Now()) && datasource.Status.NumberOfObjects != 0 {
-		log.Info("skipping datasource sync, not yet time", "name", datasource.Name)
-		return ctrl.Result{RequeueAfter: time.Until(datasource.Status.NextSyncTime.Time)}, nil
+		if _, seen := r.reconciledOnce.Load(req.NamespacedName); seen {
+			log.Info("skipping datasource sync, not yet time", "name", datasource.Name)
+			return ctrl.Result{RequeueAfter: time.Until(datasource.Status.NextSyncTime.Time)}, nil
+		}
+		log.Info("first reconcile this process lifetime, forcing sync despite timestamp", "name", datasource.Name)
 	}
 
 	newSyncerFunc, ok := supportedMetricSyncers[datasource.Spec.Prometheus.Type]
@@ -201,6 +209,7 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// Calculate the next sync time based on the configured sync interval.
+	r.reconciledOnce.Store(req.NamespacedName, struct{}{})
 	return ctrl.Result{RequeueAfter: time.Until(nextSync)}, nil
 }
 

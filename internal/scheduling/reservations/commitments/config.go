@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -67,6 +68,16 @@ type ReservationControllerConfig struct {
 	PipelineDefault string `json:"pipelineDefault"`
 	// FlavorGroupPipelines maps flavor group IDs to pipeline names; "*" acts as catch-all.
 	FlavorGroupPipelines map[string]string `json:"flavorGroupPipelines,omitempty"`
+	// KeystoneSecretRef references a Kubernetes Secret that holds OpenStack credentials
+	// used to resolve domain IDs to domain names for the domain_name scheduler hint.
+	// The secret must contain the same keys as the syncer's keystoneSecretRef.
+	// When empty, domain name resolution is skipped and filter_external_customer will
+	// not enforce domain restrictions for CR reservations.
+	KeystoneSecretRef corev1.SecretReference `json:"keystoneSecretRef,omitempty"`
+	// SSOSecretRef is an optional reference to a Secret holding SSO credentials.
+	// Required in environments that use SSO-based Keystone authentication.
+	// When nil, http.DefaultClient is used, which will fail in SSO-only environments.
+	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef,omitempty"`
 }
 
 // CommittedResourceControllerConfig holds tuning knobs for the CommittedResource CRD controller.

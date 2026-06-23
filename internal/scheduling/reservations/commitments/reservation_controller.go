@@ -26,9 +26,13 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
+	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
+	"github.com/gophercloud/gophercloud/v2"
+	"net/http"
 )
 
 // CommitmentReservationController reconciles commitment Reservation objects
@@ -41,6 +45,10 @@ type CommitmentReservationController struct {
 	Conf ReservationControllerConfig
 	// SchedulerClient for making scheduler API calls.
 	SchedulerClient *reservations.SchedulerClient
+	// DomainResolver resolves OpenStack domain IDs to domain names so the
+	// domain_name scheduler hint can be populated for filter_external_customer.
+	// Nil when KeystoneSecretRef is not configured; hint is omitted in that case.
+	DomainResolver DomainResolver
 }
 
 // echoParentGeneration copies Spec.CommittedResourceReservation.ParentGeneration to
@@ -213,6 +221,25 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		availabilityZone = res.Spec.AvailabilityZone
 	}
 
+	// Resolve domain name for the domain_name scheduler hint consumed by
+	// filter_external_customer to enforce host restrictions for external customers.
+	// Resolution is best-effort: if the DomainResolver is not configured (no
+	// KeystoneSecretRef) or the lookup fails, we log and proceed without the hint.
+	// filter_external_customer already handles a missing hint by skipping the filter,
+	// so omitting it degrades gracefully rather than blocking scheduling.
+	schedulerHints := map[string]any{
+		"_nova_check_type": string(schedulerdelegationapi.ReserveForCommittedResourceIntent),
+	}
+	if r.DomainResolver != nil && res.Spec.CommittedResourceReservation != nil && res.Spec.CommittedResourceReservation.DomainID != "" {
+		domainName, err := r.DomainResolver.ResolveDomainName(ctx, res.Spec.CommittedResourceReservation.DomainID)
+		if err != nil {
+			logger.Error(err, "failed to resolve domain name for scheduler hint, proceeding without it",
+				"domainID", res.Spec.CommittedResourceReservation.DomainID)
+		} else {
+			schedulerHints["domain_name"] = domainName
+		}
+	}
+
 	// Get flavor details from flavor group knowledge CRD
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: r.Client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
@@ -281,11 +308,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		EligibleHosts:    eligibleHosts,
 		Pipeline:         pipelineName,
 		AvailabilityZone: availabilityZone,
-		// Set hint to indicate this is a CR reservation scheduling request.
-		// This prevents other CR reservations from being unlocked during capacity filtering.
-		SchedulerHints: map[string]any{
-			"_nova_check_type": string(schedulerdelegationapi.ReserveForCommittedResourceIntent),
-		},
+		SchedulerHints:   schedulerHints,
 	}
 	scheduleOpts := scheduling.Options{
 		ReadOnly:                      false, // mutates state (reservation placement)
@@ -422,9 +445,12 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		allocationAge := now.Sub(allocation.CreationTimestamp.Time)
 		isInGracePeriod := allocationAge < r.Conf.AllocationGracePeriod.Duration
 
-		if isInGracePeriod {
-			// New allocation: VM may not yet appear in the HV CRD (still spawning).
-			// Signal to requeue with the short grace-period interval; skip verification.
+		// Confirmed VMs (already in Status.Allocations) bypass the grace period:
+		// their departure from the HV CRD is authoritative and must be acted on immediately.
+		// Unconfirmed VMs still within the grace period may not yet appear in the HV CRD
+		// (still spawning), so defer verification and requeue with a short interval.
+		_, isConfirmed := existingStatusAllocations[vmUUID]
+		if !isConfirmed && isInGracePeriod {
 			result.HasAllocationsInGracePeriod = true
 			logger.V(1).Info("allocation in grace period, deferring verification",
 				"vm", vmUUID,
@@ -432,7 +458,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 			continue
 		}
 
-		// Post-grace-period: use HV CRD as authoritative source.
+		// Post-grace-period or confirmed VM: use HV CRD as authoritative source.
 		if hvInstanceSet[vmUUID] {
 			newStatusAllocations[vmUUID] = expectedHost
 			logger.V(1).Info("verified VM allocation via Hypervisor CRD",
@@ -599,6 +625,39 @@ func (r *CommitmentReservationController) hypervisorToReservations(ctx context.C
 func (r *CommitmentReservationController) Init(ctx context.Context, conf ReservationControllerConfig) error {
 	r.SchedulerClient = reservations.NewSchedulerClient(conf.SchedulerURL)
 	logf.FromContext(ctx).Info("scheduler client initialized for commitment reservation controller", "url", conf.SchedulerURL)
+
+	if conf.KeystoneSecretRef.Name != "" {
+		var authenticatedHTTP *http.Client
+		if conf.SSOSecretRef != nil {
+			var err error
+			authenticatedHTTP, err = sso.Connector{Client: r.Client}.FromSecretRef(ctx, *conf.SSOSecretRef)
+			if err != nil {
+				return fmt.Errorf("failed to initialize SSO client for domain resolver: %w", err)
+			}
+		}
+		keystoneClient, err := keystone.Connector{Client: r.Client, HTTPClient: authenticatedHTTP}.FromSecretRef(ctx, conf.KeystoneSecretRef)
+		if err != nil {
+			return fmt.Errorf("failed to initialize keystone client for domain resolver: %w", err)
+		}
+		provider := keystoneClient.Client()
+		identityURL, err := provider.EndpointLocator(gophercloud.EndpointOpts{
+			Type:         "identity",
+			Availability: gophercloud.Availability(keystoneClient.Availability()),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to locate keystone identity endpoint for domain resolver: %w", err)
+		}
+		sc := &gophercloud.ServiceClient{
+			ProviderClient: provider,
+			Endpoint:       identityURL,
+			Type:           "identity",
+		}
+		r.DomainResolver = newKeystoneDomainResolver(sc)
+		logf.FromContext(ctx).Info("domain resolver initialized for commitment reservation controller")
+	} else {
+		logf.FromContext(ctx).Info("keystoneSecretRef not configured — domain_name scheduler hint will not be set for CR reservations")
+	}
+
 	return nil
 }
 
