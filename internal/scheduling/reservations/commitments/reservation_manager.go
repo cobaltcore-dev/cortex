@@ -48,25 +48,30 @@ func (e *SlotLimitExceededError) Error() string {
 	return fmt.Sprintf("commitment would create %d new reservation slots, exceeds limit of %d", e.NewSlots, e.Limit)
 }
 
-// ReservationManager handles CRUD operations for Reservation CRDs.
-type ReservationManager struct {
-	client.Client
-	// VMSource enables PAYG pre-allocation (Phase 4.5). When nil the PAYG scan is skipped
-	// and all slots are created via the blind scheduler path (Phase 5).
-	VMSource reservations.VMSource
+// ReservationManagerConfig holds options for ReservationManager.
+type ReservationManagerConfig struct {
 	// SlotCreationDelay adds a pause between consecutive Reservation CRD creates to spread
 	// scheduler load across time rather than bursting all creates at once.
 	SlotCreationDelay time.Duration
 	// MaxSlots caps the total number of Reservation CRDs for a single commitment.
 	// When non-zero, ApplyCommitmentState returns an error if the desired slot count would
 	// exceed this limit. Only set by the caller on the AllowRejection=true (API) path.
-	MaxSlots int
+	MaxSlots                int
+	EnablePaygPreAllocation bool
+	VMSource                reservations.VMSource
 }
 
-// NewReservationManager creates a ReservationManager using the given client.
-func NewReservationManager(k8sClient client.Client) *ReservationManager {
+// ReservationManager handles CRUD operations for Reservation CRDs.
+type ReservationManager struct {
+	client.Client
+	cfg ReservationManagerConfig
+}
+
+// NewReservationManager creates a ReservationManager using the given client and config.
+func NewReservationManager(k8sClient client.Client, cfg ReservationManagerConfig) *ReservationManager {
 	return &ReservationManager{
 		Client: k8sClient,
+		cfg:    cfg,
 	}
 }
 
@@ -200,30 +205,23 @@ func (m *ReservationManager) ApplyCommitmentState(
 	}
 
 	// Phase 4.5 (PAYG PRE-ALLOCATE): absorb existing PAYG VMs into pre-populated slots.
-	// Runs only when VMSource is configured. Makes one Postgres call for all HVs in the AZ,
+	// Runs only when VMSource is configured. Makes one VMSource call for all HVs in the AZ,
 	// then creates one slot per PAYG VM (largest-first), consuming the delta.
 	// Any remaining delta falls through to Phase 5 (blind scheduler).
-	if m.VMSource != nil && deltaMemoryBytes > 0 && desiredState.AvailabilityZone != "" {
+	if m.cfg.EnablePaygPreAllocation && m.cfg.VMSource != nil && deltaMemoryBytes > 0 && desiredState.AvailabilityZone != "" {
 		scanStart := time.Now()
 		candidatesByHV, scanErr := ScanAZForPaygCandidates(
-			ctx, m.Client, m.VMSource,
+			ctx, m.Client, m.cfg.VMSource,
 			desiredState.AvailabilityZone, desiredState.ProjectID, flavorGroup,
 		)
 		if scanErr != nil {
-			log.Error(scanErr, "PAYG candidate scan failed, falling back to blind scheduling",
-				"durationMs", time.Since(scanStart).Milliseconds())
+			log.Error(scanErr, "PAYG candidate scan failed, falling back to blind scheduling")
 		} else {
-			// Flatten all candidates across HVs and sort descending by memory, then stable by UUID.
 			var allCandidates []PAYGCandidate
 			for _, hvCandidates := range candidatesByHV {
 				allCandidates = append(allCandidates, hvCandidates...)
 			}
 			sortCandidatesDesc(allCandidates)
-
-			log.Info("PAYG candidate scan complete",
-				"candidates", len(allCandidates),
-				"durationMs", time.Since(scanStart).Milliseconds(),
-			)
 
 			for _, candidate := range allCandidates {
 				if deltaMemoryBytes <= 0 {
@@ -254,8 +252,8 @@ func (m *ReservationManager) ApplyCommitmentState(
 				)
 				nextSlotIndex++
 
-				if m.SlotCreationDelay > 0 && deltaMemoryBytes > 0 {
-					timer := time.NewTimer(m.SlotCreationDelay)
+				if m.cfg.SlotCreationDelay > 0 && deltaMemoryBytes > 0 {
+					timer := time.NewTimer(m.cfg.SlotCreationDelay)
 					select {
 					case <-ctx.Done():
 						timer.Stop()
@@ -265,18 +263,19 @@ func (m *ReservationManager) ApplyCommitmentState(
 				}
 			}
 		}
+		log.Info("PAYG remapping done", "slotsCreated", result.Created, "durationMs", time.Since(scanStart).Milliseconds())
 	}
 
 	// Phase 5 (CREATE): Create new reservations (capacity increased)
 	if deltaMemoryBytes > 0 {
 		newSlots := countNewSlots(deltaMemoryBytes, flavorGroup)
-		if m.MaxSlots > 0 && newSlots > m.MaxSlots {
-			return nil, &SlotLimitExceededError{NewSlots: newSlots, Limit: m.MaxSlots}
+		if m.cfg.MaxSlots > 0 && newSlots > m.cfg.MaxSlots {
+			return nil, &SlotLimitExceededError{NewSlots: newSlots, Limit: m.cfg.MaxSlots}
 		}
 		log.Info("creating reservation slots",
 			"commitmentUUID", desiredState.CommitmentUUID,
 			"slots", newSlots,
-			"slotCreationDelay", m.SlotCreationDelay,
+			"slotCreationDelay", m.cfg.SlotCreationDelay,
 		)
 	}
 	for deltaMemoryBytes > 0 {
@@ -302,8 +301,8 @@ func (m *ReservationManager) ApplyCommitmentState(
 
 		// Throttle: pause between consecutive creates to spread scheduler load.
 		// Skip after the last slot (deltaMemoryBytes <= 0) — no follow-up create to defer.
-		if m.SlotCreationDelay > 0 && deltaMemoryBytes > 0 {
-			timer := time.NewTimer(m.SlotCreationDelay)
+		if m.cfg.SlotCreationDelay > 0 && deltaMemoryBytes > 0 {
+			timer := time.NewTimer(m.cfg.SlotCreationDelay)
 			select {
 			case <-ctx.Done():
 				timer.Stop()
@@ -536,6 +535,10 @@ func (m *ReservationManager) newPaygReservation(
 			Allocations: map[string]v1alpha1.CommittedResourceAllocation{
 				candidate.VMID: {
 					CreationTimestamp: metav1.Now(),
+					Resources: map[hv1.ResourceName]resource.Quantity{
+						hv1.ResourceMemory: *resource.NewQuantity(memoryBytes, resource.BinarySI),
+						hv1.ResourceCPU:    *resource.NewQuantity(cpus, resource.DecimalSI),
+					},
 				},
 			},
 		},

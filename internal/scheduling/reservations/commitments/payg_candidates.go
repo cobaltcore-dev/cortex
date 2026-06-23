@@ -23,7 +23,7 @@ type PAYGCandidate struct {
 }
 
 // ScanAZForPaygCandidates returns unallocated PAYG VMs across all HVs in az, grouped by HV name.
-// Makes exactly two cache/Postgres calls regardless of HV or VM count:
+// Makes exactly two calls regardless of HV or VM count:
 //  1. List all CR Reservations → build allocated VM UUID set from Spec.Allocations
 //  2. VMSource.ListVMsByProject → enriched VM data for the project
 //

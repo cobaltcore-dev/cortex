@@ -318,12 +318,16 @@ func (r *CommittedResourceController) applyReservationState(ctx context.Context,
 	state.CreatorRequestID = reservations.GlobalRequestIDFromContext(ctx)
 	state.ParentGeneration = cr.Generation
 
-	mgr := NewReservationManager(r.Client)
-	mgr.VMSource = r.VMSource
-	mgr.SlotCreationDelay = r.Conf.SlotCreationDelay.Duration
+	maxSlots := 0
 	if cr.Spec.AllowRejection {
-		mgr.MaxSlots = r.Conf.MaxSlotsPerCommitment
+		maxSlots = r.Conf.MaxSlotsPerCommitment
 	}
+	mgr := NewReservationManager(r.Client, ReservationManagerConfig{
+		SlotCreationDelay:       r.Conf.SlotCreationDelay.Duration,
+		MaxSlots:                maxSlots,
+		EnablePaygPreAllocation: r.Conf.EnablePaygPreAllocation,
+		VMSource:                r.VMSource,
+	})
 	result, err := mgr.ApplyCommitmentState(ctx, logger, state, flavorGroups, "committed-resource-controller")
 	if err != nil {
 		var limitErr *SlotLimitExceededError
@@ -474,8 +478,10 @@ func (r *CommittedResourceController) rollbackToAccepted(ctx context.Context, lo
 	state.NamePrefix = cr.Name + "-"
 	state.CreatorRequestID = reservations.GlobalRequestIDFromContext(ctx)
 	state.ParentGeneration = cr.Generation
-	rollbackMgr := NewReservationManager(r.Client)
-	rollbackMgr.VMSource = r.VMSource
+	rollbackMgr := NewReservationManager(r.Client, ReservationManagerConfig{
+		EnablePaygPreAllocation: r.Conf.EnablePaygPreAllocation,
+		VMSource:                r.VMSource,
+	})
 	if _, err := rollbackMgr.ApplyCommitmentState(ctx, logger, state, flavorGroups, "committed-resource-controller-rollback"); err != nil {
 		return fmt.Errorf("rollback apply failed: %w", err)
 	}

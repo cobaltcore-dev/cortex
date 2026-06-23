@@ -369,8 +369,7 @@ func TestApplyCommitmentState(t *testing.T) {
 				objects[i] = &tt.existingSlots[i]
 			}
 			k8sClient := newCRTestClient(scheme, objects...)
-			manager := NewReservationManager(k8sClient)
-			manager.MaxSlots = tt.maxSlots
+			manager := NewReservationManager(k8sClient, ReservationManagerConfig{MaxSlots: tt.maxSlots})
 
 			flavorGroups := testFlavorGroups()
 			if tt.flavorGroupOverride != nil {
@@ -474,12 +473,14 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 		paygVMs          []reservations.VM // returned by fake VMSource
 		existingSlots    []v1alpha1.Reservation
 		desiredMemoryGiB int64
+		enablePayg       bool // must be set true to activate PAYG; false = flag disabled (Phase 5 only)
 		validateTouched  func(t *testing.T, touched []v1alpha1.Reservation)
 	}{
 		{
 			name:             "PAYG VM found — slot created pre-allocated with TargetHost and Allocations",
 			hypervisors:      []*hv1.Hypervisor{hvWithAZ(hvName, vmUUID)},
 			paygVMs:          []reservations.VM{paygVM(vmUUID, "small")},
+   enablePayg:       true,
 			desiredMemoryGiB: 8,
 			validateTouched: func(t *testing.T, touched []v1alpha1.Reservation) {
 				if len(touched) != 1 {
@@ -504,6 +505,7 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 			name:             "no PAYG VMs — falls through to Phase 5 (no TargetHost set)",
 			hypervisors:      []*hv1.Hypervisor{hvWithAZ(hvName)}, // HV has no instances
 			paygVMs:          nil,
+   enablePayg:       true,
 			desiredMemoryGiB: 8,
 			validateTouched: func(t *testing.T, touched []v1alpha1.Reservation) {
 				if len(touched) != 1 {
@@ -521,6 +523,7 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 			name:        "PAYG VM already allocated — excluded, slot goes to Phase 5",
 			hypervisors: []*hv1.Hypervisor{hvWithAZ(hvName, vmUUID)},
 			paygVMs:     []reservations.VM{paygVM(vmUUID, "small")},
+   enablePayg:       true,
 			existingSlots: []v1alpha1.Reservation{
 				// Different commitment UUID so Phase 1 doesn't count it against our delta.
 				func() v1alpha1.Reservation {
@@ -544,6 +547,7 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 			name:        "PAYG VM larger than remaining delta — slot undersized, VM pre-allocated",
 			hypervisors: []*hv1.Hypervisor{hvWithAZ(hvName, vmUUID)},
 			paygVMs:     []reservations.VM{paygVM(vmUUID, "small")},
+   enablePayg:       true,
 			// delta = 4 GiB < VM 8 GiB — undersize path
 			desiredMemoryGiB: 4,
 			validateTouched: func(t *testing.T, touched []v1alpha1.Reservation) {
@@ -569,6 +573,7 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 			name:        "PAYG covers part of delta — remaining goes to Phase 5",
 			hypervisors: []*hv1.Hypervisor{hvWithAZ(hvName, vmUUID)},
 			paygVMs:     []reservations.VM{paygVM(vmUUID, "small")},
+   enablePayg:       true,
 			// delta = 16 GiB; PAYG covers 8, remaining 8 → Phase 5
 			desiredMemoryGiB: 16,
 			validateTouched: func(t *testing.T, touched []v1alpha1.Reservation) {
@@ -591,6 +596,24 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:             "EnablePaygPreAllocation=false — PAYG VM ignored, slot goes to Phase 5",
+			hypervisors:      []*hv1.Hypervisor{hvWithAZ(hvName, vmUUID)},
+			paygVMs:          []reservations.VM{paygVM(vmUUID, "small")},
+			enablePayg:       false,
+			desiredMemoryGiB: 8,
+			validateTouched: func(t *testing.T, touched []v1alpha1.Reservation) {
+				if len(touched) != 1 {
+					t.Fatalf("want 1 slot, got %d", len(touched))
+				}
+				if touched[0].Spec.TargetHost != "" {
+					t.Errorf("expected Phase 5 blind slot (no TargetHost), got %q", touched[0].Spec.TargetHost)
+				}
+				if len(touched[0].Spec.CommittedResourceReservation.Allocations) != 0 {
+					t.Error("expected no pre-allocations when flag is disabled")
+				}
+			},
+		},
 	}
 
 	scheme := newCRTestScheme(t)
@@ -606,8 +629,10 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 			}
 			k8sClient := newCRTestClient(scheme, objects...)
 
-			mgr := NewReservationManager(k8sClient)
-			mgr.VMSource = &fakeVMSource{vms: tt.paygVMs}
+			mgr := NewReservationManager(k8sClient, ReservationManagerConfig{
+				EnablePaygPreAllocation: tt.enablePayg,
+				VMSource:                &fakeVMSource{vms: tt.paygVMs},
+			})
 
 			desiredState := &CommitmentState{
 				CommitmentUUID:   "abc123",

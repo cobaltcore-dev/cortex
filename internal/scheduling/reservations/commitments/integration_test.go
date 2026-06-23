@@ -448,9 +448,12 @@ func newIntgEnv(t *testing.T, initialObjects []client.Object, schedulerFn http.H
 	schedulerSrv := httptest.NewServer(schedulerFn)
 
 	crCtrl := &CommittedResourceController{
-		Client:   k8sClient,
-		Scheme:   scheme,
-		Conf:     CommittedResourceControllerConfig{RequeueIntervalRetry: metav1.Duration{Duration: 5 * time.Minute}},
+		Client: k8sClient,
+		Scheme: scheme,
+		Conf: CommittedResourceControllerConfig{
+			RequeueIntervalRetry:    metav1.Duration{Duration: 5 * time.Minute},
+			EnablePaygPreAllocation: vmSource != nil,
+		},
 		VMSource: vmSource,
 	}
 	resCtrl := &CommitmentReservationController{
