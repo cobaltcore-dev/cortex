@@ -279,3 +279,47 @@ func TestFilterKVMCRMigrationSlot_WrongResourceGroupFiltered(t *testing.T) {
 		t.Errorf("expected fallback with 1 candidate, got %d", len(result.Activations))
 	}
 }
+
+func TestFilterCRMigrationSlot_ZeroSlotMemory_Passthrough(t *testing.T) {
+	// Source slot has no memory resource entry → filter must pass all candidates through.
+	instanceUUID := "vm-migrating"
+	projectID := "proj-1"
+
+	// Build a reservation with the VM confirmed but Spec.Resources deliberately empty.
+	srcSlot := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "slot-src",
+			Labels: map[string]string{
+				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+			},
+		},
+		Spec: v1alpha1.ReservationSpec{
+			Type:       v1alpha1.ReservationTypeCommittedResource,
+			TargetHost: "host-src",
+			// No Resources entry → memory quantity is zero.
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				ProjectID:     projectID,
+				ResourceGroup: "hana-v2",
+			},
+		},
+		Status: v1alpha1.ReservationStatus{
+			Host: "host-src",
+			Conditions: []metav1.Condition{
+				{Type: v1alpha1.ReservationConditionReady, Status: metav1.ConditionTrue, Reason: "ReservationActive"},
+			},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
+				Allocations: map[string]string{instanceUUID: "host-src"},
+			},
+		},
+	}
+
+	filter := newCRMigrationSlotFilter(t, srcSlot, hvWithFreeMemory("host-a", "32Gi"))
+	req := liveMigrateRequest(instanceUUID, projectID, "host-a")
+	result, err := filter.Run(slog.Default(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Activations) != 1 {
+		t.Errorf("expected passthrough with 1 candidate, got %d", len(result.Activations))
+	}
+}
