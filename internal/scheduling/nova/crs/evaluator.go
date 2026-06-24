@@ -24,6 +24,19 @@ type SlotEvaluator struct {
 // BuildSlotEvaluator lists HV CRDs and CR Reservation CRDs once and returns an evaluator
 // that can answer slot-usability queries without further K8s reads.
 func BuildSlotEvaluator(ctx context.Context, c client.Client) (*SlotEvaluator, error) {
+	var resList v1alpha1.ReservationList
+	if err := c.List(ctx, &resList,
+		client.MatchingLabels{v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource},
+	); err != nil {
+		return nil, err
+	}
+	return BuildSlotEvaluatorFromReservations(ctx, c, resList.Items)
+}
+
+// BuildSlotEvaluatorFromReservations builds a SlotEvaluator from an already-fetched
+// reservation slice. Use this when the caller has already listed reservations to avoid
+// a redundant K8s read.
+func BuildSlotEvaluatorFromReservations(ctx context.Context, c client.Client, reservations []v1alpha1.Reservation) (*SlotEvaluator, error) {
 	eval := &SlotEvaluator{
 		hvFreeMemory:       make(map[string]int64),
 		reservationsByHost: make(map[string][]v1alpha1.Reservation),
@@ -45,13 +58,7 @@ func BuildSlotEvaluator(ctx context.Context, c client.Client) (*SlotEvaluator, e
 		eval.hvFreeMemory[hv.Name] = max(effectiveMemQ.Value()-allocMemQ.Value(), 0)
 	}
 
-	var resList v1alpha1.ReservationList
-	if err := c.List(ctx, &resList,
-		client.MatchingLabels{v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource},
-	); err != nil {
-		return nil, err
-	}
-	for _, res := range resList.Items {
+	for _, res := range reservations {
 		if !res.IsReady() {
 			continue
 		}
@@ -98,6 +105,20 @@ func (e *SlotEvaluator) HasUsableSlot(hostName, projectID, flavorGroup string, v
 		}
 		// host.base_free + slot.remaining = hvFree - allBlocks + slotRemaining
 		if hvFree-allBlocks+slotRemaining >= vmMemBytes {
+			return true
+		}
+	}
+	return false
+}
+
+// HasSlotWithCapacity reports whether hostName has at least one ready CR slot
+// matching projectID + flavorGroup whose remaining memory is >= requiredBytes.
+// Unlike HasUsableSlot, this does not apply the overfill model — it is used
+// during migration slot filtering where the full slot size must fit within a
+// single reservation on the target host.
+func (e *SlotEvaluator) HasSlotWithCapacity(hostName, projectID, flavorGroup string, requiredBytes int64) bool {
+	for _, slot := range e.SlotsForHost(hostName, projectID, flavorGroup) {
+		if ReservationRemainingMemory(slot) >= requiredBytes {
 			return true
 		}
 	}
