@@ -109,6 +109,16 @@ spec:
         requests without headroom, add `params: [{key: enforce, boolValue: true}]`
         to this step. The shadow default is intentional so that newly-rolled-out
         releases never silently start rejecting requests.
+    - name: filter_cr_migration_slot
+      description: |
+        During live migrations of VMs that occupy a committed-resource reservation
+        slot, this filter restricts candidates to hosts that have a ready CR
+        reservation with sufficient remaining capacity for the full slot size (not
+        just the VM flavor size). This ensures the reservation slot is migrated
+        alongside the VM.
+        If no candidate has a matching slot, all candidates are returned unchanged
+        so the VM can still migrate using regular (non-slot) capacity.
+        Only activates for live_migrate requests. All other intents pass through.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -261,6 +271,16 @@ spec:
         requests without headroom, add `params: [{key: enforce, boolValue: true}]`
         to this step. The shadow default is intentional so that newly-rolled-out
         releases never silently start rejecting requests.
+    - name: filter_cr_migration_slot
+      description: |
+        During live migrations of VMs that occupy a committed-resource reservation
+        slot, this filter restricts candidates to hosts that have a ready CR
+        reservation with sufficient remaining capacity for the full slot size (not
+        just the VM flavor size). This ensures the reservation slot is migrated
+        alongside the VM.
+        If no candidate has a matching slot, all candidates are returned unchanged
+        so the VM can still migrate using regular (non-slot) capacity.
+        Only activates for live_migrate requests. All other intents pass through.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -714,6 +734,16 @@ spec:
         requests without headroom, add `params: [{key: enforce, boolValue: true}]`
         to this step. The shadow default is intentional so that newly-rolled-out
         releases never silently start rejecting requests.
+    - name: filter_cr_migration_slot
+      description: |
+        During live migrations of VMs that occupy a committed-resource reservation
+        slot, this filter restricts candidates to hosts that have a ready CR
+        reservation with sufficient remaining capacity for the full slot size (not
+        just the VM flavor size). This ensures the reservation slot is migrated
+        alongside the VM.
+        If no candidate has a matching slot, all candidates are returned unchanged
+        so the VM can still migrate using regular (non-slot) capacity.
+        Only activates for live_migrate requests. All other intents pass through.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -866,6 +896,16 @@ spec:
         requests without headroom, add `params: [{key: enforce, boolValue: true}]`
         to this step. The shadow default is intentional so that newly-rolled-out
         releases never silently start rejecting requests.
+    - name: filter_cr_migration_slot
+      description: |
+        During live migrations of VMs that occupy a committed-resource reservation
+        slot, this filter restricts candidates to hosts that have a ready CR
+        reservation with sufficient remaining capacity for the full slot size (not
+        just the VM flavor size). This ensures the reservation slot is migrated
+        alongside the VM.
+        If no candidate has a matching slot, all candidates are returned unchanged
+        so the VM can still migrate using regular (non-slot) capacity.
+        Only activates for live_migrate requests. All other intents pass through.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
