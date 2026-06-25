@@ -57,14 +57,33 @@ type FlavorGroupCapacityStatus struct {
 	// +kubebuilder:validation:Optional
 	CommittedCapacity int64 `json:"committedCapacity,omitempty"`
 
-	// TotalCapacity is the total capacity of all eligible hosts in an empty-datacenter scenario.
+	// TotalCapacity is the installed capacity across all eligible hosts in an empty-datacenter
+	// scenario, expressed as raw resource amounts (bytes for memory, count for cores).
 	// +kubebuilder:validation:Optional
 	TotalCapacity map[string]resource.Quantity `json:"totalCapacity,omitempty"`
 
-	// TotalInstances is the total number of VM instances running on hypervisors in this AZ,
-	// derived from Hypervisor CRD Status.Instances (not filtered by flavor group).
+	// FreeCapacity is the sum of remaining resources across all candidate hosts for this
+	// group given current allocations. Because groups can share hosts, the sum across groups
+	// may exceed actual installed capacity — this field reflects per-group availability
+	// before any cross-group fairness split.
 	// +kubebuilder:validation:Optional
-	TotalInstances int64 `json:"totalInstances,omitempty"`
+	FreeCapacity map[string]resource.Quantity `json:"freeCapacity,omitempty"`
+
+	// ExclusivelyFreeCapacity is the share of remaining resources fairly attributed to this
+	// group by the round-robin capacity split. The sum across all groups for an AZ never
+	// exceeds actual installed capacity.
+	// +kubebuilder:validation:Optional
+	ExclusivelyFreeCapacity map[string]resource.Quantity `json:"exclusivelyFreeCapacity,omitempty"`
+
+	// RunningInstances is the number of VMs running in this (flavor group × AZ) whose
+	// flavor belongs to this group.
+	// +kubebuilder:validation:Optional
+	RunningInstances int64 `json:"runningInstances,omitempty"`
+
+	// RunningResources is the total resource consumption of running VMs in this
+	// (flavor group × AZ), keyed by resource type (e.g. "memory", "cores").
+	// +kubebuilder:validation:Optional
+	RunningResources map[string]resource.Quantity `json:"runningResources,omitempty"`
 
 	// LastReconcileAt is the timestamp of the last successful reconcile.
 	// +kubebuilder:validation:Optional
@@ -80,7 +99,7 @@ type FlavorGroupCapacityStatus struct {
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="FlavorGroup",type="string",JSONPath=".spec.flavorGroup"
 // +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
-// +kubebuilder:printcolumn:name="TotalInstances",type="integer",JSONPath=".status.totalInstances"
+// +kubebuilder:printcolumn:name="Running",type="integer",JSONPath=".status.runningInstances"
 // +kubebuilder:printcolumn:name="LastReconcile",type="date",JSONPath=".status.lastReconcileAt"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 
