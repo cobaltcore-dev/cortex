@@ -29,6 +29,7 @@ type Monitor struct {
 	runningInstances           *prometheus.GaugeVec
 	freeCapacityGiB            *prometheus.GaugeVec
 	exclusivelyFreeCapacityGiB *prometheus.GaugeVec
+	exclusivelyFreeSlots       *prometheus.GaugeVec
 }
 
 // NewMonitor creates a new Monitor that reads FlavorGroupCapacity CRDs.
@@ -67,6 +68,10 @@ func NewMonitor(c client.Client) Monitor {
 			Name: "cortex_committed_resource_exclusively_free_capacity_gib",
 			Help: "Memory in GiB fairly attributed to this flavor group by the round-robin split. Sum across groups never exceeds installed capacity.",
 		}, capacityLabels),
+		exclusivelyFreeSlots: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_committed_resource_exclusively_free_slots",
+			Help: "Number of smallest-flavor VM slots available after the cross-group capacity split.",
+		}, capacityLabels),
 	}
 }
 
@@ -80,6 +85,7 @@ func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
 	m.runningInstances.Describe(ch)
 	m.freeCapacityGiB.Describe(ch)
 	m.exclusivelyFreeCapacityGiB.Describe(ch)
+	m.exclusivelyFreeSlots.Describe(ch)
 }
 
 // Collect implements prometheus.Collector — lists all FlavorGroupCapacity CRDs and exports gauges.
@@ -101,6 +107,7 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	m.runningInstances.Reset()
 	m.freeCapacityGiB.Reset()
 	m.exclusivelyFreeCapacityGiB.Reset()
+	m.exclusivelyFreeSlots.Reset()
 
 	for _, crd := range list.Items {
 		groupAZLabels := prometheus.Labels{
@@ -116,6 +123,7 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 		if qty, ok := crd.Status.ExclusivelyFreeCapacity[string(v1alpha1.CommittedResourceTypeMemory)]; ok {
 			m.exclusivelyFreeCapacityGiB.With(groupAZLabels).Set(float64(qty.Value()) / (1024 * 1024 * 1024))
 		}
+		m.exclusivelyFreeSlots.With(groupAZLabels).Set(float64(crd.Status.ExclusivelyFreeSlots))
 
 		for _, f := range crd.Status.Flavors {
 			flavorLabels := prometheus.Labels{
@@ -138,4 +146,5 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	m.runningInstances.Collect(ch)
 	m.freeCapacityGiB.Collect(ch)
 	m.exclusivelyFreeCapacityGiB.Collect(ch)
+	m.exclusivelyFreeSlots.Collect(ch)
 }

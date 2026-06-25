@@ -56,7 +56,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of FlavorGroupCapacity
+            description: FlavorGroupCapacitySpec defines the desired state of FlavorGroupCapacity.
             properties:
               availabilityZone:
                 description: AvailabilityZone is the OpenStack AZ this capacity data
@@ -70,7 +70,7 @@ spec:
             - flavorGroup
             type: object
           status:
-            description: status defines the observed state of FlavorGroupCapacity
+            description: FlavorGroupCapacityStatus defines the observed state of FlavorGroupCapacity.
             properties:
               committedCapacity:
                 description: |-
@@ -147,6 +147,11 @@ spec:
                   group by the round-robin capacity split. The sum across all groups for an AZ never
                   exceeds actual installed capacity.
                 type: object
+              exclusivelyFreeSlots:
+                description: ExclusivelyFreeSlots is the number of smallest-flavor
+                  VM slots available from ExclusivelyFreeCapacity.
+                format: int64
+                type: integer
               flavors:
                 description: Flavors holds per-flavor capacity data for all flavors
                   in the group.
@@ -216,9 +221,8 @@ spec:
                   - type: string
                   pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                   x-kubernetes-int-or-string: true
-                description: |-
-                  RunningResources is the total resource consumption of running VMs in this
-                  (flavor group × AZ), keyed by resource type (e.g. "memory", "cores").
+                description: RunningResources is the total resource consumption of
+                  running VMs, keyed by resource type.
                 type: object
               totalCapacity:
                 additionalProperties:

@@ -472,6 +472,9 @@ func (c *Controller) writeCRD(
 	}
 	existing.Status.FreeCapacity = resMapToQuantity(freeRes)
 	existing.Status.ExclusivelyFreeCapacity = resMapToQuantity(exclusiveRes)
+	if flavorMemBytes := int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024; flavorMemBytes > 0 { //nolint:gosec
+		existing.Status.ExclusivelyFreeSlots = exclusiveRes[ResourceMemory] / flavorMemBytes
+	}
 	existing.Status.LastReconcileAt = metav1.Now()
 
 	freshCondition := metav1.Condition{

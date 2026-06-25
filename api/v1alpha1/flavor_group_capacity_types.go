@@ -79,13 +79,16 @@ type FlavorGroupCapacityStatus struct {
 	// +kubebuilder:validation:Optional
 	ExclusivelyFreeCapacity map[string]resource.Quantity `json:"exclusivelyFreeCapacity,omitempty"`
 
+	// ExclusivelyFreeSlots is the number of smallest-flavor VM slots available from ExclusivelyFreeCapacity.
+	// +kubebuilder:validation:Optional
+	ExclusivelyFreeSlots int64 `json:"exclusivelyFreeSlots,omitempty"`
+
 	// RunningInstances is the number of VMs running in this (flavor group × AZ) whose
 	// flavor belongs to this group.
 	// +kubebuilder:validation:Optional
 	RunningInstances int64 `json:"runningInstances,omitempty"`
 
-	// RunningResources is the total resource consumption of running VMs in this
-	// (flavor group × AZ), keyed by resource type (e.g. "memory", "cores").
+	// RunningResources is the total resource consumption of running VMs, keyed by resource type.
 	// +kubebuilder:validation:Optional
 	RunningResources map[string]resource.Quantity `json:"runningResources,omitempty"`
 
@@ -112,16 +115,10 @@ type FlavorGroupCapacityStatus struct {
 // The capacity API reads these CRDs instead of probing the scheduler on each request.
 type FlavorGroupCapacity struct {
 	metav1.TypeMeta `json:",inline"`
-
-	// metadata is a standard object metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
-
-	// spec defines the desired state of FlavorGroupCapacity
 	// +required
 	Spec FlavorGroupCapacitySpec `json:"spec"`
-
-	// status defines the observed state of FlavorGroupCapacity
 	// +optional
 	Status FlavorGroupCapacityStatus `json:"status,omitempty,omitzero"`
 }
