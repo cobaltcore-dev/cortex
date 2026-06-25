@@ -24,7 +24,11 @@ type FlavorGroupCapacitySpec struct {
 	AvailabilityZone string `json:"availabilityZone"`
 }
 
-// FlavorCapacityStatus holds per-flavor capacity numbers for one (flavor group × AZ) pair.
+// FlavorCapacityStatus holds per-flavor scheduler probe results for one (flavor group × AZ) pair.
+// These values come directly from scheduler probes and are independent of the cross-group
+// capacity split (see FreeCapacity and ExclusivelyFreeCapacity on the parent status).
+// "Placeable" means: if all remaining capacity in this AZ were used solely by this flavor,
+// this is how many would fit. It does not account for competing flavor groups.
 type FlavorCapacityStatus struct {
 	// FlavorName is the OpenStack flavor name (e.g. "hana-v2-small").
 	FlavorName string `json:"flavorName"`
@@ -37,11 +41,11 @@ type FlavorCapacityStatus struct {
 	// +kubebuilder:validation:Optional
 	PlaceableVMs int64 `json:"placeableVms,omitempty"`
 
-	// TotalCapacityHosts is the number of eligible hosts in an empty-datacenter scenario.
+	// TotalCapacityHosts is the number of eligible hosts assuming an empty datacenter.
 	// +kubebuilder:validation:Optional
 	TotalCapacityHosts int64 `json:"totalCapacityHosts,omitempty"`
 
-	// TotalCapacityVMSlots is the maximum number of VM slots in an empty-datacenter scenario.
+	// TotalCapacityVMSlots is the maximum number of VM slots assuming an empty datacenter.
 	// +kubebuilder:validation:Optional
 	TotalCapacityVMSlots int64 `json:"totalCapacityVmSlots,omitempty"`
 }

@@ -20,12 +20,15 @@ var (
 // Monitor provides Prometheus metrics for FlavorGroupCapacity CRDs.
 // It implements prometheus.Collector and reads CRD status on each Collect call.
 type Monitor struct {
-	client            client.Client
-	vmSlotsEmpty      *prometheus.GaugeVec
-	vmSlotsPlaceable  *prometheus.GaugeVec
-	hostsEmpty        *prometheus.GaugeVec
-	hostsPlaceable    *prometheus.GaugeVec
-	committedCapacity *prometheus.GaugeVec
+	client                     client.Client
+	vmSlotsEmpty               *prometheus.GaugeVec
+	vmSlotsPlaceable           *prometheus.GaugeVec
+	hostsEmpty                 *prometheus.GaugeVec
+	hostsPlaceable             *prometheus.GaugeVec
+	committedCapacity          *prometheus.GaugeVec
+	runningInstances           *prometheus.GaugeVec
+	freeCapacityGiB            *prometheus.GaugeVec
+	exclusivelyFreeCapacityGiB *prometheus.GaugeVec
 }
 
 // NewMonitor creates a new Monitor that reads FlavorGroupCapacity CRDs.
@@ -52,6 +55,18 @@ func NewMonitor(c client.Client) Monitor {
 			Name: "cortex_committed_resource_committed_gib",
 			Help: "Sum of AcceptedAmount in GiB across Ready CommittedResource CRDs for this flavor group and AZ.",
 		}, capacityLabels),
+		runningInstances: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_committed_resource_running_instances",
+			Help: "Number of running VMs whose flavor belongs to this flavor group and AZ.",
+		}, capacityLabels),
+		freeCapacityGiB: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_committed_resource_free_capacity_gib",
+			Help: "Sum of remaining memory in GiB across all candidate hosts for this flavor group before the cross-group split. May overlap across groups sharing hosts.",
+		}, capacityLabels),
+		exclusivelyFreeCapacityGiB: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_committed_resource_exclusively_free_capacity_gib",
+			Help: "Memory in GiB fairly attributed to this flavor group by the round-robin split. Sum across groups never exceeds installed capacity.",
+		}, capacityLabels),
 	}
 }
 
@@ -62,6 +77,9 @@ func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
 	m.hostsEmpty.Describe(ch)
 	m.hostsPlaceable.Describe(ch)
 	m.committedCapacity.Describe(ch)
+	m.runningInstances.Describe(ch)
+	m.freeCapacityGiB.Describe(ch)
+	m.exclusivelyFreeCapacityGiB.Describe(ch)
 }
 
 // Collect implements prometheus.Collector — lists all FlavorGroupCapacity CRDs and exports gauges.
@@ -80,6 +98,9 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	m.hostsEmpty.Reset()
 	m.hostsPlaceable.Reset()
 	m.committedCapacity.Reset()
+	m.runningInstances.Reset()
+	m.freeCapacityGiB.Reset()
+	m.exclusivelyFreeCapacityGiB.Reset()
 
 	for _, crd := range list.Items {
 		groupAZLabels := prometheus.Labels{
@@ -87,6 +108,14 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 			"az":           crd.Spec.AvailabilityZone,
 		}
 		m.committedCapacity.With(groupAZLabels).Set(float64(crd.Status.CommittedCapacity))
+		m.runningInstances.With(groupAZLabels).Set(float64(crd.Status.RunningInstances))
+
+		if qty, ok := crd.Status.FreeCapacity[string(v1alpha1.CommittedResourceTypeMemory)]; ok {
+			m.freeCapacityGiB.With(groupAZLabels).Set(float64(qty.Value()) / (1024 * 1024 * 1024))
+		}
+		if qty, ok := crd.Status.ExclusivelyFreeCapacity[string(v1alpha1.CommittedResourceTypeMemory)]; ok {
+			m.exclusivelyFreeCapacityGiB.With(groupAZLabels).Set(float64(qty.Value()) / (1024 * 1024 * 1024))
+		}
 
 		for _, f := range crd.Status.Flavors {
 			flavorLabels := prometheus.Labels{
@@ -106,4 +135,7 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	m.hostsEmpty.Collect(ch)
 	m.hostsPlaceable.Collect(ch)
 	m.committedCapacity.Collect(ch)
+	m.runningInstances.Collect(ch)
+	m.freeCapacityGiB.Collect(ch)
+	m.exclusivelyFreeCapacityGiB.Collect(ch)
 }

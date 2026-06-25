@@ -151,8 +151,12 @@ spec:
                 description: Flavors holds per-flavor capacity data for all flavors
                   in the group.
                 items:
-                  description: FlavorCapacityStatus holds per-flavor capacity numbers
-                    for one (flavor group × AZ) pair.
+                  description: |-
+                    FlavorCapacityStatus holds per-flavor scheduler probe results for one (flavor group × AZ) pair.
+                    These values come directly from scheduler probes and are independent of the cross-group
+                    capacity split (see FreeCapacity and ExclusivelyFreeCapacity on the parent status).
+                    "Placeable" means: if all remaining capacity in this AZ were used solely by this flavor,
+                    this is how many would fit. It does not account for competing flavor groups.
                   properties:
                     flavorName:
                       description: FlavorName is the OpenStack flavor name (e.g. "hana-v2-small").
@@ -169,12 +173,12 @@ spec:
                       type: integer
                     totalCapacityHosts:
                       description: TotalCapacityHosts is the number of eligible hosts
-                        in an empty-datacenter scenario.
+                        assuming an empty datacenter.
                       format: int64
                       type: integer
                     totalCapacityVmSlots:
                       description: TotalCapacityVMSlots is the maximum number of VM
-                        slots in an empty-datacenter scenario.
+                        slots assuming an empty datacenter.
                       format: int64
                       type: integer
                   required:

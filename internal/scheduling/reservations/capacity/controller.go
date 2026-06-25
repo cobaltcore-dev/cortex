@@ -361,7 +361,11 @@ func (c *Controller) reconcileAZ(
 	freeResources, exclusiveResources, unassigned := SplitCapacity(groupInputs, hosts)
 	if unassigned[ResourceMemory] > 0 || unassigned[ResourceCores] > 0 {
 		logger.Info("fragmented capacity not assigned to any group",
-			"az", az, "unassignedMemoryBytes", unassigned[ResourceMemory], "unassignedCores", unassigned[ResourceCores])
+			"az", az,
+			"unassignedMemoryGiB", unassigned[ResourceMemory]/(1024*1024*1024),
+			"unassignedCores", unassigned[ResourceCores],
+			"candidateHosts", len(hosts),
+			"groups", len(groupInputs))
 	}
 
 	// Write one CRD per group. Skip groups with failed probes — their CRDs retain last good state.
