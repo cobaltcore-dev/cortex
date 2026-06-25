@@ -460,6 +460,7 @@ func (c *Controller) writeCRD(
 	patch := client.MergeFrom(existing.DeepCopy())
 	existing.Status.Flavors = newFlavors
 	existing.Status.CommittedCapacity = committedCapacity
+	existing.Status.CommittedCapacityBytes = committedCapacity * int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec
 	existing.Status.SmallestFlavorName = groupData.SmallestFlavor.Name
 	existing.Status.TotalCapacity = map[string]resource.Quantity{
 		string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(maxMemBytes, resource.BinarySI),
@@ -493,13 +494,8 @@ func (c *Controller) writeCRD(
 	return nil
 }
 
-// probeScheduler calls the scheduler with the given pipeline and returns:
-//   - aggregated slot count across all returned hosts
-//   - number of returned hosts
-//   - candidate host names: hosts with remaining capacity > 0
-//
-// When ignoreAllocations is true (total probe), raw effective capacity is used.
-// When false (placeable probe), hv.Status.Allocation and blockedByReservations are subtracted.
+// probeScheduler calls the scheduler and returns slot count, host count, and candidate host names.
+// ignoreAllocations=true (total probe) uses raw effective capacity; false (placeable probe) subtracts allocations.
 func (c *Controller) probeScheduler(
 	ctx context.Context,
 	flavor compute.FlavorInGroup,
@@ -577,9 +573,8 @@ func (c *Controller) probeScheduler(
 	return capacity, hosts, candidateHosts, nil
 }
 
-// blockedMemoryByHost lists all Reservations and returns the total bytes blocked per host name.
-// Only placed reservations (TargetHost or Status.Host non-empty) are counted.
-// When a reservation is being migrated (TargetHost != Status.Host), both hosts are blocked.
+// blockedMemoryByHost returns total reservation-blocked bytes per host.
+// Both TargetHost and Status.Host are blocked; migration blocks both simultaneously.
 func (c *Controller) blockedMemoryByHost(ctx context.Context) (map[string]int64, error) {
 	var list v1alpha1.ReservationList
 	if err := c.client.List(ctx, &list); err != nil {
@@ -614,9 +609,8 @@ func (c *Controller) blockedMemoryByHost(ctx context.Context) (map[string]int64,
 	return blocked, nil
 }
 
-// sumCommittedCapacity sums AcceptedSpec.Amount (or Spec.Amount as fallback) across all
-// CommittedResource CRDs for the given (flavorGroup, az) pair with an active state
-// (guaranteed or confirmed) and resource type memory. Returns the total in slots.
+// sumCommittedCapacity sums active CommittedResource amounts (memory type, guaranteed/confirmed)
+// for the given (flavorGroup, az) pair. Returns the total in smallest-flavor slots.
 func (c *Controller) sumCommittedCapacity(ctx context.Context, groupName, az string, smallestFlavorBytes int64) (int64, error) {
 	var list v1alpha1.CommittedResourceList
 	if err := c.client.List(ctx, &list); err != nil {
@@ -648,10 +642,9 @@ func (c *Controller) sumCommittedCapacity(ctx context.Context, groupName, az str
 	return total, nil
 }
 
-// resMapToQuantity converts a raw resource map to a map[string]resource.Quantity for CRD
-// status fields. Keys are passed through unchanged — ResourceMemory and ResourceCores
-// intentionally equal string(v1alpha1.CommittedResourceTypeMemory/Cores) respectively,
-// so CRD readers can use either constant to look up values.
+// resMapToQuantity converts a raw resource map to a map[string]resource.Quantity.
+// Keys are passed through unchanged — ResourceMemory == string(CommittedResourceTypeMemory)
+// and ResourceCores == string(CommittedResourceTypeCores) by design.
 func resMapToQuantity(res map[string]int64) map[string]resource.Quantity {
 	if len(res) == 0 {
 		return nil

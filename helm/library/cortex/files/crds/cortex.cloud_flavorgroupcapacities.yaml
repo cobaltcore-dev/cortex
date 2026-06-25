@@ -78,6 +78,11 @@ spec:
                   expressed in multiples of the smallest flavor's memory.
                 format: int64
                 type: integer
+              committedCapacityBytes:
+                description: CommittedCapacityBytes is CommittedCapacity converted
+                  to raw bytes.
+                format: int64
+                type: integer
               conditions:
                 description: The current status conditions of the FlavorGroupCapacity.
                 items:

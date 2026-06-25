@@ -61,6 +61,10 @@ type FlavorGroupCapacityStatus struct {
 	// +kubebuilder:validation:Optional
 	CommittedCapacity int64 `json:"committedCapacity,omitempty"`
 
+	// CommittedCapacityBytes is CommittedCapacity converted to raw bytes.
+	// +kubebuilder:validation:Optional
+	CommittedCapacityBytes int64 `json:"committedCapacityBytes,omitempty"`
+
 	// SmallestFlavorName is the name of the smallest flavor in this group, used as the
 	// slot unit for ExclusivelyFreeSlots and related capacity fields.
 	// +kubebuilder:validation:Optional

@@ -76,7 +76,6 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 		for _, az := range req.AllAZs {
 			crd, ok := crdByKey[groupAZKey{groupName, string(az)}]
 			if !ok {
-				// No CRD for this (group, AZ) pair — report zero.
 				zero := &liquid.AZResourceCapacityReport{Capacity: 0}
 				ramAZCapacity[az] = zero
 				coresAZCapacity[az] = &liquid.AZResourceCapacityReport{Capacity: 0}

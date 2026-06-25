@@ -25,7 +25,8 @@ type Monitor struct {
 	vmSlotsPlaceable           *prometheus.GaugeVec
 	hostsEmpty                 *prometheus.GaugeVec
 	hostsPlaceable             *prometheus.GaugeVec
-	committedCapacity          *prometheus.GaugeVec
+	committedCapacityGiB       *prometheus.GaugeVec
+	committedReservations      *prometheus.GaugeVec
 	runningInstances           *prometheus.GaugeVec
 	freeCapacityGiB            *prometheus.GaugeVec
 	exclusivelyFreeCapacityGiB *prometheus.GaugeVec
@@ -52,9 +53,13 @@ func NewMonitor(c client.Client) Monitor {
 			Name: "cortex_committed_resource_capacity_hosts_placeable",
 			Help: "Number of hosts still able to accept a new VM of this flavor.",
 		}, capacityFlavorLabels),
-		committedCapacity: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		committedCapacityGiB: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "cortex_committed_resource_committed_gib",
-			Help: "Sum of AcceptedAmount in GiB across Ready CommittedResource CRDs for this flavor group and AZ.",
+			Help: "Total committed memory in GiB for this flavor group and AZ.",
+		}, capacityLabels),
+		committedReservations: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_committed_resource_committed_reservations",
+			Help: "Number of committed reservation slots (smallest-flavor units) for this flavor group and AZ.",
 		}, capacityLabels),
 		runningInstances: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "cortex_committed_resource_running_instances",
@@ -81,7 +86,8 @@ func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
 	m.vmSlotsPlaceable.Describe(ch)
 	m.hostsEmpty.Describe(ch)
 	m.hostsPlaceable.Describe(ch)
-	m.committedCapacity.Describe(ch)
+	m.committedCapacityGiB.Describe(ch)
+	m.committedReservations.Describe(ch)
 	m.runningInstances.Describe(ch)
 	m.freeCapacityGiB.Describe(ch)
 	m.exclusivelyFreeCapacityGiB.Describe(ch)
@@ -103,7 +109,8 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	m.vmSlotsPlaceable.Reset()
 	m.hostsEmpty.Reset()
 	m.hostsPlaceable.Reset()
-	m.committedCapacity.Reset()
+	m.committedCapacityGiB.Reset()
+	m.committedReservations.Reset()
 	m.runningInstances.Reset()
 	m.freeCapacityGiB.Reset()
 	m.exclusivelyFreeCapacityGiB.Reset()
@@ -119,7 +126,8 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 			"az":           crd.Spec.AvailabilityZone,
 			"flavor_name":  crd.Status.SmallestFlavorName,
 		}
-		m.committedCapacity.With(groupAZLabels).Set(float64(crd.Status.CommittedCapacity))
+		m.committedCapacityGiB.With(groupAZLabels).Set(float64(crd.Status.CommittedCapacityBytes) / (1024 * 1024 * 1024))
+		m.committedReservations.With(groupAZLabels).Set(float64(crd.Status.CommittedCapacity))
 		m.runningInstances.With(groupAZFlavorLabels).Set(float64(crd.Status.RunningInstances))
 
 		if qty, ok := crd.Status.FreeCapacity[string(v1alpha1.CommittedResourceTypeMemory)]; ok {
@@ -147,7 +155,8 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	m.vmSlotsPlaceable.Collect(ch)
 	m.hostsEmpty.Collect(ch)
 	m.hostsPlaceable.Collect(ch)
-	m.committedCapacity.Collect(ch)
+	m.committedCapacityGiB.Collect(ch)
+	m.committedReservations.Collect(ch)
 	m.runningInstances.Collect(ch)
 	m.freeCapacityGiB.Collect(ch)
 	m.exclusivelyFreeCapacityGiB.Collect(ch)

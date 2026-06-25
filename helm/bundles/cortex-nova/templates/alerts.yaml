@@ -570,8 +570,8 @@ spec:
 
     - alert: CortexNovaCommittedResourceCapacityDroppedToZero
       expr: |
-        (cortex_committed_resource_reported_capacity_gib{service="cortex-nova-metrics"} == 0)
-        and on(resource, az) (cortex_committed_resource_reported_capacity_gib{service="cortex-nova-metrics"} offset 30m > 0)
+        (cortex_committed_resource_reported_capacity{service="cortex-nova-metrics"} == 0)
+        and on(resource, az) (cortex_committed_resource_reported_capacity{service="cortex-nova-metrics"} offset 30m > 0)
       for: 5m
       labels:
         context: committed-resource-api
