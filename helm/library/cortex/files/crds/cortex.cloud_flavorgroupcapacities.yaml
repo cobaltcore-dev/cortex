@@ -224,6 +224,11 @@ spec:
                 description: RunningResources is the total resource consumption of
                   running VMs, keyed by resource type.
                 type: object
+              smallestFlavorName:
+                description: |-
+                  SmallestFlavorName is the name of the smallest flavor in this group, used as the
+                  slot unit for ExclusivelyFreeSlots and related capacity fields.
+                type: string
               totalCapacity:
                 additionalProperties:
                   anyOf:

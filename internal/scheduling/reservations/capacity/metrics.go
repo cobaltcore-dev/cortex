@@ -59,19 +59,19 @@ func NewMonitor(c client.Client) Monitor {
 		runningInstances: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "cortex_committed_resource_running_instances",
 			Help: "Number of running VMs whose flavor belongs to this flavor group and AZ.",
-		}, capacityLabels),
+		}, capacityFlavorLabels),
 		freeCapacityGiB: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "cortex_committed_resource_free_capacity_gib",
 			Help: "Sum of remaining memory in GiB across all candidate hosts for this flavor group before the cross-group split. May overlap across groups sharing hosts.",
-		}, capacityLabels),
+		}, capacityFlavorLabels),
 		exclusivelyFreeCapacityGiB: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "cortex_committed_resource_exclusively_free_capacity_gib",
 			Help: "Memory in GiB fairly attributed to this flavor group by the round-robin split. Sum across groups never exceeds installed capacity.",
-		}, capacityLabels),
+		}, capacityFlavorLabels),
 		exclusivelyFreeSlots: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "cortex_committed_resource_exclusively_free_slots",
 			Help: "Number of smallest-flavor VM slots available after the cross-group capacity split.",
-		}, capacityLabels),
+		}, capacityFlavorLabels),
 	}
 }
 
@@ -114,16 +114,21 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 			"flavor_group": crd.Spec.FlavorGroup,
 			"az":           crd.Spec.AvailabilityZone,
 		}
+		groupAZFlavorLabels := prometheus.Labels{
+			"flavor_group": crd.Spec.FlavorGroup,
+			"az":           crd.Spec.AvailabilityZone,
+			"flavor_name":  crd.Status.SmallestFlavorName,
+		}
 		m.committedCapacity.With(groupAZLabels).Set(float64(crd.Status.CommittedCapacity))
-		m.runningInstances.With(groupAZLabels).Set(float64(crd.Status.RunningInstances))
+		m.runningInstances.With(groupAZFlavorLabels).Set(float64(crd.Status.RunningInstances))
 
 		if qty, ok := crd.Status.FreeCapacity[string(v1alpha1.CommittedResourceTypeMemory)]; ok {
-			m.freeCapacityGiB.With(groupAZLabels).Set(float64(qty.Value()) / (1024 * 1024 * 1024))
+			m.freeCapacityGiB.With(groupAZFlavorLabels).Set(float64(qty.Value()) / (1024 * 1024 * 1024))
 		}
 		if qty, ok := crd.Status.ExclusivelyFreeCapacity[string(v1alpha1.CommittedResourceTypeMemory)]; ok {
-			m.exclusivelyFreeCapacityGiB.With(groupAZLabels).Set(float64(qty.Value()) / (1024 * 1024 * 1024))
+			m.exclusivelyFreeCapacityGiB.With(groupAZFlavorLabels).Set(float64(qty.Value()) / (1024 * 1024 * 1024))
 		}
-		m.exclusivelyFreeSlots.With(groupAZLabels).Set(float64(crd.Status.ExclusivelyFreeSlots))
+		m.exclusivelyFreeSlots.With(groupAZFlavorLabels).Set(float64(crd.Status.ExclusivelyFreeSlots))
 
 		for _, f := range crd.Status.Flavors {
 			flavorLabels := prometheus.Labels{

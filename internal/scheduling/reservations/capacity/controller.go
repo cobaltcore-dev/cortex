@@ -355,7 +355,7 @@ func (c *Controller) reconcileAZ(
 					}
 					strandedMem := remaining[ResourceMemory] - usableSlots*flavorMemBytes
 					strandedCPU := remaining[ResourceCores] - usableSlots*flavorVCPUs
-					logger.Info("candidate host for capacity split",
+					logger.V(1).Info("candidate host for capacity split",
 						"az", az, "flavorGroup", r.groupName, "host", h,
 						"usableSlots", usableSlots,
 						"strandedMemoryGiB", strandedMem/(1024*1024*1024),
@@ -460,6 +460,7 @@ func (c *Controller) writeCRD(
 	patch := client.MergeFrom(existing.DeepCopy())
 	existing.Status.Flavors = newFlavors
 	existing.Status.CommittedCapacity = committedCapacity
+	existing.Status.SmallestFlavorName = groupData.SmallestFlavor.Name
 	existing.Status.TotalCapacity = map[string]resource.Quantity{
 		string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(maxMemBytes, resource.BinarySI),
 		string(v1alpha1.CommittedResourceTypeCores):  *resource.NewQuantity(maxCPUCores, resource.DecimalSI),

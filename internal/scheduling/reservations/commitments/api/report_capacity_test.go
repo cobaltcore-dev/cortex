@@ -420,9 +420,11 @@ func createTestFlavorGroupCapacity(runningInstances, exclusiveFreeMemBytes int64
 		Conditions:       []v1.Condition{{Type: v1alpha1.FlavorGroupCapacityConditionReady, Status: conditionStatus}},
 	}
 	if exclusiveFreeMemBytes > 0 {
+		const flavorMemBytes = 32752 * 1024 * 1024 // test flavor memory size
 		status.ExclusivelyFreeCapacity = map[string]resource.Quantity{
 			string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(exclusiveFreeMemBytes, resource.BinarySI),
 		}
+		status.ExclusivelyFreeSlots = exclusiveFreeMemBytes / flavorMemBytes
 	}
 	return &v1alpha1.FlavorGroupCapacity{
 		ObjectMeta: v1.ObjectMeta{Name: "test-group-az-one"},

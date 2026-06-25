@@ -61,6 +61,11 @@ type FlavorGroupCapacityStatus struct {
 	// +kubebuilder:validation:Optional
 	CommittedCapacity int64 `json:"committedCapacity,omitempty"`
 
+	// SmallestFlavorName is the name of the smallest flavor in this group, used as the
+	// slot unit for ExclusivelyFreeSlots and related capacity fields.
+	// +kubebuilder:validation:Optional
+	SmallestFlavorName string `json:"smallestFlavorName,omitempty"`
+
 	// TotalCapacity is the installed capacity across all eligible hosts in an empty-datacenter
 	// scenario, expressed as raw resource amounts (bytes for memory, count for cores).
 	// +kubebuilder:validation:Optional

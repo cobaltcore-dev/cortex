@@ -67,9 +67,7 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			continue
 		}
 
-		// flavorMemBytes converts ExclusivelyFreeCapacity[memory] bytes → instance slot count.
-		flavorMemBytes := int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec
-		ramUnitBytes := int64(resCfg.RAM.RAMUnitMiB()) * 1024 * 1024             //nolint:gosec
+		ramUnitBytes := int64(resCfg.RAM.RAMUnitMiB()) * 1024 * 1024 //nolint:gosec
 
 		ramAZCapacity := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(req.AllAZs))
 		coresAZCapacity := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(req.AllAZs))
@@ -91,13 +89,8 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 					"flavorGroup", groupName, "az", az)
 			}
 
-			// Exclusively free slots = ExclusivelyFreeCapacity[memory] / flavorMemBytes.
-			var exclusiveFreeSlots uint64
-			if flavorMemBytes > 0 {
-				if qty, ok := crd.Status.ExclusivelyFreeCapacity[string(v1alpha1.CommittedResourceTypeMemory)]; ok {
-					exclusiveFreeSlots = uint64(qty.Value()) / uint64(flavorMemBytes) //nolint:gosec
-				}
-			}
+			// ExclusivelyFreeSlots is pre-computed by the controller using min(memSlots, cpuSlots).
+			exclusiveFreeSlots := uint64(crd.Status.ExclusivelyFreeSlots) //nolint:gosec
 
 			// Capacity = running + exclusively free, all derived from CRD bytes.
 			runningInstances := uint64(crd.Status.RunningInstances) //nolint:gosec
