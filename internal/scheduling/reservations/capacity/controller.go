@@ -71,9 +71,11 @@ type vmUsageKey struct{ group, az string }
 
 // vmUsage aggregates resource totals for running VMs in one (group × AZ).
 // resources keys are ResourceMemory (bytes) and ResourceCores (count).
+// fresh is false when the VMSource call failed — running fields must not be overwritten.
 type vmUsage struct {
 	instances int64
 	resources map[string]int64
+	fresh     bool
 }
 
 // reconcileAll iterates all AZs, runs the round-robin split per AZ, then writes CRDs.
@@ -128,7 +130,7 @@ func (c *Controller) reconcileAll(ctx context.Context) error {
 }
 
 // computeVMUsage fetches running VMs and aggregates usage per (flavorGroup, az).
-// On error returns an empty map — capacity reporting continues with zero usage.
+// On error returns an empty map with fresh=false — callers must not overwrite running fields.
 func (c *Controller) computeVMUsage(
 	ctx context.Context,
 	logger interface{ Error(error, string, ...any) },
@@ -144,7 +146,7 @@ func (c *Controller) computeVMUsage(
 	hvList := &hv1.HypervisorList{Items: hvs}
 	vms, err := c.vmSource.ListVMsOnHypervisors(ctx, hvList, true)
 	if err != nil {
-		logger.Error(err, "failed to list VMs for usage computation, usage will be reported as zero")
+		logger.Error(err, "failed to list VMs for usage computation, running fields will retain last known values")
 		return result
 	}
 
@@ -172,6 +174,7 @@ func (c *Controller) computeVMUsage(
 		u.instances++
 		u.resources[ResourceMemory] += flavorMemBytes[vm.FlavorName]
 		u.resources[ResourceCores] += flavorVCPUs[vm.FlavorName]
+		u.fresh = true
 		result[key] = u
 	}
 	return result
@@ -344,6 +347,19 @@ func (c *Controller) reconcileAZ(
 				remaining := hvRemainingResources(hv, blockedByReservations[h])
 				if remaining != nil {
 					hosts[h] = HostState{Remaining: remaining}
+					memSlots := remaining[ResourceMemory] / flavorMemBytes
+					cpuSlots := remaining[ResourceCores] / flavorVCPUs
+					usableSlots := memSlots
+					if cpuSlots < usableSlots {
+						usableSlots = cpuSlots
+					}
+					strandedMem := remaining[ResourceMemory] - usableSlots*flavorMemBytes
+					strandedCPU := remaining[ResourceCores] - usableSlots*flavorVCPUs
+					logger.Info("candidate host for capacity split",
+						"az", az, "flavorGroup", r.groupName, "host", h,
+						"usableSlots", usableSlots,
+						"strandedMemoryGiB", strandedMem/(1024*1024*1024),
+						"strandedCores", strandedCPU)
 				}
 			}
 		}
@@ -448,8 +464,12 @@ func (c *Controller) writeCRD(
 		string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(maxMemBytes, resource.BinarySI),
 		string(v1alpha1.CommittedResourceTypeCores):  *resource.NewQuantity(maxCPUCores, resource.DecimalSI),
 	}
-	existing.Status.RunningInstances = usage.instances
-	existing.Status.RunningResources = resMapToQuantity(usage.resources)
+	// Only overwrite running fields when the VM data is fresh — a VMSource outage must not
+	// zero out the last-known values while the CRD is still marked ready.
+	if usage.fresh {
+		existing.Status.RunningInstances = usage.instances
+		existing.Status.RunningResources = resMapToQuantity(usage.resources)
+	}
 	existing.Status.FreeCapacity = resMapToQuantity(freeRes)
 	existing.Status.ExclusivelyFreeCapacity = resMapToQuantity(exclusiveRes)
 	existing.Status.LastReconcileAt = metav1.Now()
@@ -544,8 +564,8 @@ func (c *Controller) probeScheduler(
 				capBytes = 0
 			}
 		}
-		if capBytes > 0 {
-			capacity += capBytes / flavorBytes
+		if slots := capBytes / flavorBytes; slots > 0 {
+			capacity += slots
 			candidateHosts = append(candidateHosts, hostName)
 		}
 	}

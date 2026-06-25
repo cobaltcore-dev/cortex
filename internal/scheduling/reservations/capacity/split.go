@@ -124,23 +124,31 @@ func SplitCapacity(groups []GroupInput, hosts map[string]HostState) (freeResourc
 	}
 
 	// freeResources: usable capacity per group — floor(remaining/flavorSize)*flavorSize per host.
+	// Uses the minimum slot count across all resources so memory and CPU stay consistent.
 	freeResources = make(map[string]map[string]int64, len(groups))
 	for _, g := range groups {
 		res := make(map[string]int64)
-		flavorMem := g.FlavorResources[ResourceMemory]
-		flavorCPU := g.FlavorResources[ResourceCores]
 		for _, h := range g.CandidateHosts {
 			hs, ok := hosts[h]
 			if !ok {
 				continue
 			}
-			if flavorMem > 0 {
-				slots := hs.Remaining[ResourceMemory] / flavorMem
-				res[ResourceMemory] += slots * flavorMem
+			// Compute the binding slot count: min across all flavor resources.
+			slots := int64(-1)
+			for r, need := range g.FlavorResources {
+				if need <= 0 {
+					continue
+				}
+				s := hs.Remaining[r] / need
+				if slots < 0 || s < slots {
+					slots = s
+				}
 			}
-			if flavorCPU > 0 {
-				slots := hs.Remaining[ResourceCores] / flavorCPU
-				res[ResourceCores] += slots * flavorCPU
+			if slots <= 0 {
+				continue
+			}
+			for r, need := range g.FlavorResources {
+				res[r] += slots * need
 			}
 		}
 		freeResources[g.Name] = res
