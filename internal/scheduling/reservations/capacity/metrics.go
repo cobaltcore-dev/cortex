@@ -9,6 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -26,6 +27,7 @@ type Monitor struct {
 	hostsEmpty        *prometheus.GaugeVec
 	hostsPlaceable    *prometheus.GaugeVec
 	committedCapacity *prometheus.GaugeVec
+	readyGauge        *prometheus.GaugeVec
 }
 
 // NewMonitor creates a new Monitor that reads FlavorGroupCapacity CRDs.
@@ -52,6 +54,10 @@ func NewMonitor(c client.Client) Monitor {
 			Name: "cortex_committed_resource_committed_gib",
 			Help: "Sum of AcceptedAmount in GiB across Ready CommittedResource CRDs for this flavor group and AZ.",
 		}, capacityLabels),
+		readyGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_committed_resource_capacity_ready",
+			Help: "1 if the FlavorGroupCapacity CRD is Ready (all scheduler probes succeeded), 0 otherwise.",
+		}, capacityLabels),
 	}
 }
 
@@ -62,6 +68,7 @@ func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
 	m.hostsEmpty.Describe(ch)
 	m.hostsPlaceable.Describe(ch)
 	m.committedCapacity.Describe(ch)
+	m.readyGauge.Describe(ch)
 }
 
 // Collect implements prometheus.Collector — lists all FlavorGroupCapacity CRDs and exports gauges.
@@ -80,6 +87,7 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	m.hostsEmpty.Reset()
 	m.hostsPlaceable.Reset()
 	m.committedCapacity.Reset()
+	m.readyGauge.Reset()
 
 	for _, crd := range list.Items {
 		groupAZLabels := prometheus.Labels{
@@ -87,6 +95,15 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 			"az":           crd.Spec.AvailabilityZone,
 		}
 		m.committedCapacity.With(groupAZLabels).Set(float64(crd.Status.CommittedCapacity))
+
+		readyVal := 0.0
+		for _, cond := range crd.Status.Conditions {
+			if cond.Type == v1alpha1.FlavorGroupCapacityConditionReady && cond.Status == metav1.ConditionTrue {
+				readyVal = 1.0
+				break
+			}
+		}
+		m.readyGauge.With(groupAZLabels).Set(readyVal)
 
 		for _, f := range crd.Status.Flavors {
 			flavorLabels := prometheus.Labels{
@@ -106,4 +123,5 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	m.hostsEmpty.Collect(ch)
 	m.hostsPlaceable.Collect(ch)
 	m.committedCapacity.Collect(ch)
+	m.readyGauge.Collect(ch)
 }
