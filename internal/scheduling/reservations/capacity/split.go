@@ -92,23 +92,8 @@ func bestHost(remaining []string, hostRes map[string]map[string]int64, flavorRes
 	return best
 }
 
-// SplitCapacity runs the round-robin capacity assignment algorithm.
-//
-// For each AZ it assigns resources (in raw units — bytes for memory, count for cores)
-// to flavor groups in a fair, deterministic way such that no host is over-committed.
-// Groups sharing hypervisors are served round-robin so no group monopolises shared hosts.
-//
-// Returns:
-//   - freeResources[groupName][resource]: sum of remaining resources across all candidate
-//     hosts for each group before the split. May overlap across groups sharing hosts.
-//   - exclusiveResources[groupName][resource]: fairly attributed share after the split;
-//     sum across groups never exceeds actual installed capacity.
-//   - unassigned[resource]: resources on candidate hosts not claimed by any group due to
-//     fragmentation (for operator log visibility).
-//
-// The caller divides exclusiveResources[group][ResourceMemory] by the group's flavor memory
-// to obtain the slot count meaningful to that group.
-func SplitCapacity(groups []GroupInput, hosts map[string]HostState) (freeResources, exclusiveResources map[string]map[string]int64, unassigned map[string]int64) {
+// initGroupStates builds the initial per-group state: candidates filtered to hosts that fit the flavor.
+func initGroupStates(groups []GroupInput, hosts map[string]HostState) []groupState {
 	states := make([]groupState, len(groups))
 	for i, g := range groups {
 		remaining := make([]string, 0, len(g.CandidateHosts))
@@ -117,13 +102,16 @@ func SplitCapacity(groups []GroupInput, hosts map[string]HostState) (freeResourc
 				remaining = append(remaining, h)
 			}
 		}
-		sort.Strings(remaining) // stable initial order
+		sort.Strings(remaining)
 		states[i] = groupState{input: g, remaining: remaining}
 	}
+	return states
+}
 
-	// freeResources: usable capacity per group — floor(remaining/flavorSize)*flavorSize per host.
-	// Uses the minimum slot count across all resources so memory and CPU stay consistent.
-	freeResources = make(map[string]map[string]int64, len(groups))
+// computeFreeResources returns the usable capacity per group before any allocation.
+// Uses floor(remaining/flavorSize)*flavorSize per host — binding resource determines slot count.
+func computeFreeResources(groups []GroupInput, hosts map[string]HostState) map[string]map[string]int64 {
+	free := make(map[string]map[string]int64, len(groups))
 	for _, g := range groups {
 		res := make(map[string]int64)
 		for _, h := range g.CandidateHosts {
@@ -148,10 +136,13 @@ func SplitCapacity(groups []GroupInput, hosts map[string]HostState) (freeResourc
 				res[r] += slots * need
 			}
 		}
-		freeResources[g.Name] = res
+		free[g.Name] = res
 	}
+	return free
+}
 
-	// Copy host resources so the caller's map is not mutated.
+// copyHostResources returns a mutable copy of the host resource map.
+func copyHostResources(hosts map[string]HostState) map[string]map[string]int64 {
 	hostRes := make(map[string]map[string]int64, len(hosts))
 	for name, hs := range hosts {
 		res := make(map[string]int64, len(hs.Remaining))
@@ -160,13 +151,17 @@ func SplitCapacity(groups []GroupInput, hosts map[string]HostState) (freeResourc
 		}
 		hostRes[name] = res
 	}
+	return hostRes
+}
 
+// allocateRoundRobin performs the round-robin capacity assignment in-place on hostRes.
+// Each round assigns one flavor-sized allocation per group in priority order until no
+// group has eligible hosts.
+func allocateRoundRobin(states []groupState, hostRes map[string]map[string]int64) {
 	for {
-		// Each round: serve groups in priority order, one flavor-sized allocation each.
 		sortGroups(states)
 
 		progress := false
-		// Grant one allocation to each group that still has eligible candidates.
 		for i := range states {
 			g := &states[i]
 			if len(g.remaining) == 0 {
@@ -199,16 +194,18 @@ func SplitCapacity(groups []GroupInput, hosts map[string]HostState) (freeResourc
 			break
 		}
 	}
+}
 
-	// Unassigned: remaining resources on candidate hosts after the split.
-	// Non-candidate hosts are excluded — their leftover is not fragmentation.
+// computeUnassigned sums remaining resources on candidate hosts after allocation.
+// Non-candidate hosts are excluded — their leftover is not fragmentation.
+func computeUnassigned(groups []GroupInput, hostRes map[string]map[string]int64) map[string]int64 {
 	candidateSet := make(map[string]struct{})
 	for _, g := range groups {
 		for _, h := range g.CandidateHosts {
 			candidateSet[h] = struct{}{}
 		}
 	}
-	unassigned = make(map[string]int64)
+	unassigned := make(map[string]int64)
 	for h, res := range hostRes {
 		if _, isCandidate := candidateSet[h]; !isCandidate {
 			continue
@@ -219,14 +216,44 @@ func SplitCapacity(groups []GroupInput, hosts map[string]HostState) (freeResourc
 			}
 		}
 	}
+	return unassigned
+}
 
-	exclusiveResources = make(map[string]map[string]int64, len(states))
+// collectExclusiveResources builds the exclusive allocation map from group assigned counts.
+func collectExclusiveResources(states []groupState) map[string]map[string]int64 {
+	exclusive := make(map[string]map[string]int64, len(states))
 	for _, g := range states {
 		resources := make(map[string]int64, len(g.input.FlavorResources))
 		for r, amount := range g.input.FlavorResources {
 			resources[r] = g.assignedCount * amount
 		}
-		exclusiveResources[g.input.Name] = resources
+		exclusive[g.input.Name] = resources
 	}
+	return exclusive
+}
+
+// SplitCapacity runs the round-robin capacity assignment algorithm.
+//
+// For each AZ it assigns resources (in raw units — bytes for memory, count for cores)
+// to flavor groups in a fair, deterministic way such that no host is over-committed.
+// Groups sharing hypervisors are served round-robin so no group monopolises shared hosts.
+//
+// Returns:
+//   - freeResources[groupName][resource]: sum of remaining resources across all candidate
+//     hosts for each group before the split. May overlap across groups sharing hosts.
+//   - exclusiveResources[groupName][resource]: fairly attributed share after the split;
+//     sum across groups never exceeds actual installed capacity.
+//   - unassigned[resource]: resources on candidate hosts not claimed by any group due to
+//     fragmentation (for operator log visibility).
+//
+// The caller divides exclusiveResources[group][ResourceMemory] by the group's flavor memory
+// to obtain the slot count meaningful to that group.
+func SplitCapacity(groups []GroupInput, hosts map[string]HostState) (freeResources, exclusiveResources map[string]map[string]int64, unassigned map[string]int64) {
+	states := initGroupStates(groups, hosts)
+	freeResources = computeFreeResources(groups, hosts)
+	hostRes := copyHostResources(hosts)
+	allocateRoundRobin(states, hostRes)
+	unassigned = computeUnassigned(groups, hostRes)
+	exclusiveResources = collectExclusiveResources(states)
 	return freeResources, exclusiveResources, unassigned
 }

@@ -17,7 +17,282 @@ func host(memBytes, cores int64) HostState {
 	return HostState{Remaining: map[string]int64{ResourceMemory: memBytes, ResourceCores: cores}}
 }
 
-// TestSplitCapacity covers the round-robin assignment algorithm.
+func TestFits(t *testing.T) {
+	tests := []struct {
+		name      string
+		flavor    map[string]int64
+		remaining map[string]int64
+		want      bool
+	}{
+		{
+			name:      "all resources fit",
+			flavor:    flavor(4*GiB, 2),
+			remaining: map[string]int64{ResourceMemory: 8 * GiB, ResourceCores: 4},
+			want:      true,
+		},
+		{
+			name:      "memory too small",
+			flavor:    flavor(4*GiB, 2),
+			remaining: map[string]int64{ResourceMemory: 3 * GiB, ResourceCores: 4},
+			want:      false,
+		},
+		{
+			name:      "CPU too small",
+			flavor:    flavor(4*GiB, 2),
+			remaining: map[string]int64{ResourceMemory: 8 * GiB, ResourceCores: 1},
+			want:      false,
+		},
+		{
+			name:      "exact fit",
+			flavor:    flavor(4*GiB, 2),
+			remaining: map[string]int64{ResourceMemory: 4 * GiB, ResourceCores: 2},
+			want:      true,
+		},
+		{
+			name:      "zero CPU in flavor always fits on CPU",
+			flavor:    map[string]int64{ResourceMemory: 4 * GiB, ResourceCores: 0},
+			remaining: map[string]int64{ResourceMemory: 4 * GiB, ResourceCores: 0},
+			want:      true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := fits(tc.flavor, tc.remaining); got != tc.want {
+				t.Errorf("fits() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestInitGroupStates(t *testing.T) {
+	tests := []struct {
+		name          string
+		groups        []GroupInput
+		hosts         map[string]HostState
+		wantRemaining map[string][]string // group name → expected remaining hosts
+	}{
+		{
+			name: "eligible hosts included",
+			groups: []GroupInput{
+				{Name: "g1", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1", "h2"}},
+			},
+			hosts: map[string]HostState{
+				"h1": host(8*GiB, 4),
+				"h2": host(2*GiB, 4), // too small
+			},
+			wantRemaining: map[string][]string{"g1": {"h1"}},
+		},
+		{
+			name: "CPU exhausted host excluded",
+			groups: []GroupInput{
+				{Name: "g1", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1"}},
+			},
+			hosts: map[string]HostState{
+				"h1": host(8*GiB, 0), // zero CPU
+			},
+			wantRemaining: map[string][]string{"g1": {}},
+		},
+		{
+			name: "remaining hosts sorted for stable order",
+			groups: []GroupInput{
+				{Name: "g1", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"hb", "ha", "hc"}},
+			},
+			hosts: map[string]HostState{
+				"ha": host(8*GiB, 4),
+				"hb": host(8*GiB, 4),
+				"hc": host(8*GiB, 4),
+			},
+			wantRemaining: map[string][]string{"g1": {"ha", "hb", "hc"}},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			states := initGroupStates(tc.groups, tc.hosts)
+			for _, st := range states {
+				want := tc.wantRemaining[st.input.Name]
+				if len(st.remaining) != len(want) {
+					t.Errorf("group %s: remaining = %v, want %v", st.input.Name, st.remaining, want)
+					continue
+				}
+				for i := range want {
+					if st.remaining[i] != want[i] {
+						t.Errorf("group %s: remaining[%d] = %q, want %q", st.input.Name, i, st.remaining[i], want[i])
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestComputeFreeResources(t *testing.T) {
+	tests := []struct {
+		name        string
+		groups      []GroupInput
+		hosts       map[string]HostState
+		wantFreeMem map[string]int64 // group → expected free memory bytes
+	}{
+		{
+			name: "full slots counted",
+			groups: []GroupInput{
+				{Name: "g1", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1"}},
+			},
+			hosts:       map[string]HostState{"h1": host(8*GiB, 4)},
+			wantFreeMem: map[string]int64{"g1": 8 * GiB},
+		},
+		{
+			name: "sub-flavor remainder excluded",
+			// 6 GiB / 4 GiB = 1 slot → 4 GiB usable; 2 GiB stranded
+			groups: []GroupInput{
+				{Name: "g1", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1"}},
+			},
+			hosts:       map[string]HostState{"h1": host(6*GiB, 8)},
+			wantFreeMem: map[string]int64{"g1": 4 * GiB},
+		},
+		{
+			name: "CPU is binding constraint",
+			// Memory allows 4 slots, CPU allows 1 → 1 slot usable
+			groups: []GroupInput{
+				{Name: "g1", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1"}},
+			},
+			hosts:       map[string]HostState{"h1": host(16*GiB, 2)},
+			wantFreeMem: map[string]int64{"g1": 4 * GiB},
+		},
+		{
+			name: "host below flavor threshold contributes nothing",
+			groups: []GroupInput{
+				{Name: "g1", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1"}},
+			},
+			hosts:       map[string]HostState{"h1": host(3*GiB, 4)},
+			wantFreeMem: map[string]int64{"g1": 0},
+		},
+		{
+			name: "two candidate hosts summed",
+			groups: []GroupInput{
+				{Name: "g1", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1", "h2"}},
+			},
+			hosts: map[string]HostState{
+				"h1": host(8*GiB, 4),
+				"h2": host(4*GiB, 2),
+			},
+			wantFreeMem: map[string]int64{"g1": 12 * GiB},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			free := computeFreeResources(tc.groups, tc.hosts)
+			for group, wantMem := range tc.wantFreeMem {
+				if got := free[group][ResourceMemory]; got != wantMem {
+					t.Errorf("free[%s][memory] = %d, want %d", group, got, wantMem)
+				}
+			}
+		})
+	}
+}
+
+func TestComputeUnassigned(t *testing.T) {
+	tests := []struct {
+		name           string
+		groups         []GroupInput
+		hostRes        map[string]map[string]int64
+		wantUnassigned map[string]int64
+	}{
+		{
+			name: "candidate leftover counted",
+			groups: []GroupInput{
+				{Name: "g1", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1"}},
+			},
+			hostRes:        map[string]map[string]int64{"h1": {ResourceMemory: 2 * GiB, ResourceCores: 0}},
+			wantUnassigned: map[string]int64{ResourceMemory: 2 * GiB},
+		},
+		{
+			name: "non-candidate host excluded",
+			groups: []GroupInput{
+				{Name: "g1", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1"}},
+			},
+			hostRes: map[string]map[string]int64{
+				"h1": {ResourceMemory: 0},
+				"h2": {ResourceMemory: 8 * GiB}, // not a candidate
+			},
+			wantUnassigned: map[string]int64{ResourceMemory: 0},
+		},
+		{
+			name:           "nothing unassigned when fully used",
+			groups:         []GroupInput{{Name: "g1", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1"}}},
+			hostRes:        map[string]map[string]int64{"h1": {ResourceMemory: 0}},
+			wantUnassigned: map[string]int64{ResourceMemory: 0},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := computeUnassigned(tc.groups, tc.hostRes)
+			for r, want := range tc.wantUnassigned {
+				if got[r] != want {
+					t.Errorf("unassigned[%s] = %d, want %d", r, got[r], want)
+				}
+			}
+		})
+	}
+}
+
+func TestBestHost(t *testing.T) {
+	tests := []struct {
+		name      string
+		remaining []string
+		hostRes   map[string]map[string]int64
+		flavorRes map[string]int64
+		want      string
+	}{
+		{
+			name:      "lower modulo remainder preferred",
+			remaining: []string{"h1", "h2"},
+			hostRes: map[string]map[string]int64{
+				"h1": {ResourceMemory: 5 * GiB, ResourceCores: 8},
+				"h2": {ResourceMemory: 8 * GiB, ResourceCores: 4}, // 8%4=0 waste
+			},
+			flavorRes: flavor(4*GiB, 2),
+			want:      "h2",
+		},
+		{
+			name:      "equal waste: prefer less remaining memory",
+			remaining: []string{"h1", "h2"},
+			hostRes: map[string]map[string]int64{
+				"h1": {ResourceMemory: 8 * GiB, ResourceCores: 4},
+				"h2": {ResourceMemory: 4 * GiB, ResourceCores: 4}, // less remaining
+			},
+			flavorRes: flavor(4*GiB, 2),
+			want:      "h2",
+		},
+		{
+			name:      "equal memory: prefer less CPU",
+			remaining: []string{"h1", "h2"},
+			hostRes: map[string]map[string]int64{
+				"h1": {ResourceMemory: 4 * GiB, ResourceCores: 8},
+				"h2": {ResourceMemory: 4 * GiB, ResourceCores: 4}, // fewer cores
+			},
+			flavorRes: flavor(4*GiB, 2),
+			want:      "h2",
+		},
+		{
+			name:      "all equal: lexicographic tiebreaker",
+			remaining: []string{"hb", "ha"},
+			hostRes: map[string]map[string]int64{
+				"ha": {ResourceMemory: 4 * GiB, ResourceCores: 2},
+				"hb": {ResourceMemory: 4 * GiB, ResourceCores: 2},
+			},
+			flavorRes: flavor(4*GiB, 2),
+			want:      "ha",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := bestHost(tc.remaining, tc.hostRes, tc.flavorRes); got != tc.want {
+				t.Errorf("bestHost() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestSplitCapacity covers the full round-robin assignment algorithm end-to-end.
 func TestSplitCapacity(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -25,8 +300,7 @@ func TestSplitCapacity(t *testing.T) {
 		hosts             map[string]HostState
 		wantAssignedMem   map[string]int64
 		wantUnassignedMem int64
-		// wantFreeMem: optional check on FreeCapacity per group (only set in cases that exercise it).
-		wantFreeMem map[string]int64
+		wantFreeMem       map[string]int64 // optional, only set when testing free capacity
 	}{
 		{
 			name: "single group, two hosts",
@@ -68,7 +342,6 @@ func TestSplitCapacity(t *testing.T) {
 		},
 		{
 			// "constrained" has only one candidate host; fewer candidates → served first.
-			// It wins the shared slot; "free" falls back to its exclusive host.
 			name: "overlapping groups, constrained group served first",
 			groups: []GroupInput{
 				{Name: "constrained", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"shared"}},
@@ -94,7 +367,6 @@ func TestSplitCapacity(t *testing.T) {
 			wantUnassignedMem: 16 * GiB,
 		},
 		{
-			// Host has less memory than the flavor requires → nothing assigned, all memory is unassigned.
 			name: "host too small for flavor",
 			groups: []GroupInput{
 				{Name: "hana", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1"}},
@@ -119,8 +391,7 @@ func TestSplitCapacity(t *testing.T) {
 			wantUnassignedMem: 0,
 		},
 		{
-			// h1: 5 GiB → 5 % 4 = 1 GiB waste. h2: 8 GiB → 8 % 4 = 0 GiB waste.
-			// h2 chosen first (lower modulo remainder); 1 GiB strands on h1 after its one slot.
+			// h2 chosen first (0 waste); 1 GiB strands on h1 after its one slot.
 			name: "host selection prefers lower modulo remainder",
 			groups: []GroupInput{
 				{Name: "gp", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1", "h2"}},
@@ -133,34 +404,29 @@ func TestSplitCapacity(t *testing.T) {
 			wantUnassignedMem: 1 * GiB,
 		},
 		{
-			// freeResources counts floor(remaining/flavorSize)*flavorSize per host.
-			// h1 has 6 GiB: floor(6/4)*4 = 4 GiB usable. h2 has 3 GiB: below flavor → 0.
+			// h1: floor(6/4)*4 = 4 GiB usable; h2: below threshold → 0.
 			name: "free capacity excludes sub-flavor remainder",
 			groups: []GroupInput{
 				{Name: "gp", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1", "h2"}},
 			},
 			hosts: map[string]HostState{
-				"h1": host(6*GiB, 8), // 1 slot usable, 2 GiB wasted
-				"h2": host(3*GiB, 4), // below flavor threshold → 0 usable
+				"h1": host(6*GiB, 8),
+				"h2": host(3*GiB, 4),
 			},
 			wantAssignedMem:   map[string]int64{"gp": 4 * GiB},
-			wantUnassignedMem: 2*GiB + 3*GiB, // 2 GiB remainder on h1 + all of h2
+			wantUnassignedMem: 2*GiB + 3*GiB,
 			wantFreeMem:       map[string]int64{"gp": 4 * GiB},
 		},
 		{
-			name:   "no groups",
-			groups: nil,
-			hosts: map[string]HostState{
-				"h1": host(8*GiB, 16),
-			},
+			name:              "no groups",
+			groups:            nil,
+			hosts:             map[string]HostState{"h1": host(8*GiB, 16)},
 			wantAssignedMem:   map[string]int64{},
 			wantUnassignedMem: 0,
 		},
 		{
-			name: "no hosts",
-			groups: []GroupInput{
-				{Name: "hana", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1"}},
-			},
+			name:              "no hosts",
+			groups:            []GroupInput{{Name: "hana", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1"}}},
 			hosts:             map[string]HostState{},
 			wantAssignedMem:   map[string]int64{"hana": 0},
 			wantUnassignedMem: 0,
@@ -188,8 +454,8 @@ func TestSplitCapacity(t *testing.T) {
 	}
 }
 
-// TestSplitCapacity_SumNeverExceedsTotal is a property test: the total assigned memory
-// across all groups must never exceed the total available memory across all hosts.
+// TestSplitCapacity_SumNeverExceedsTotal is a property test: total assigned memory
+// must never exceed total available memory across all hosts.
 func TestSplitCapacity_SumNeverExceedsTotal(t *testing.T) {
 	groups := []GroupInput{
 		{Name: "g1", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1", "h2", "h3"}},
