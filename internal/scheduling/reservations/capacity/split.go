@@ -57,16 +57,14 @@ func sortGroups(states []groupState) {
 	})
 }
 
-// bestHost returns the index within remaining of the host to consume next.
+// bestHost returns the name of the host to consume next from remaining.
 // Sort order: least (remaining_mem % flavor_mem), then least remaining memory, then least CPU, then host name.
-func bestHost(remaining []string, hostRes map[string]map[string]int64, flavorRes map[string]int64) int {
+func bestHost(remaining []string, hostRes map[string]map[string]int64, flavorRes map[string]int64) string {
 	flavorMem := flavorRes[ResourceMemory]
-	best := 0
-	for i, h := range remaining[1:] {
-		idx := i + 1
-		bh := remaining[best]
+	best := remaining[0]
+	for _, h := range remaining[1:] {
+		bMem := hostRes[best][ResourceMemory]
 		hMem := hostRes[h][ResourceMemory]
-		bMem := hostRes[bh][ResourceMemory]
 
 		var hWaste, bWaste int64
 		if flavorMem > 0 {
@@ -75,20 +73,20 @@ func bestHost(remaining []string, hostRes map[string]map[string]int64, flavorRes
 		}
 		if hWaste != bWaste {
 			if hWaste < bWaste {
-				best = idx
+				best = h
 			}
 			continue
 		}
 		if hMem != bMem {
 			if hMem < bMem {
-				best = idx
+				best = h
 			}
 			continue
 		}
 		hCPU := hostRes[h][ResourceCores]
-		bCPU := hostRes[bh][ResourceCores]
-		if hCPU < bCPU || (hCPU == bCPU && h < bh) {
-			best = idx
+		bCPU := hostRes[best][ResourceCores]
+		if hCPU < bCPU || (hCPU == bCPU && h < best) {
+			best = h
 		}
 	}
 	return best
@@ -133,18 +131,17 @@ func SplitCapacity(groups []GroupInput, hosts map[string]HostState) (freeResourc
 			if !ok {
 				continue
 			}
-			// Compute the binding slot count: min across all flavor resources.
-			slots := int64(-1)
+			slots, initialized := int64(0), false
 			for r, need := range g.FlavorResources {
 				if need <= 0 {
 					continue
 				}
 				s := hs.Remaining[r] / need
-				if slots < 0 || s < slots {
-					slots = s
+				if !initialized || s < slots {
+					slots, initialized = s, true
 				}
 			}
-			if slots <= 0 {
+			if !initialized || slots == 0 {
 				continue
 			}
 			for r, need := range g.FlavorResources {
@@ -176,19 +173,21 @@ func SplitCapacity(groups []GroupInput, hosts map[string]HostState) (freeResourc
 				continue
 			}
 
-			chosen := g.remaining[bestHost(g.remaining, hostRes, g.input.FlavorResources)]
+			chosen := bestHost(g.remaining, hostRes, g.input.FlavorResources)
 			for r, amount := range g.input.FlavorResources {
 				hostRes[chosen][r] -= amount
 			}
 			g.assignedCount++
 			progress = true
 
-			// Drop hosts that can no longer fit their group's flavor after this allocation.
+			// Only `chosen` changed — drop it from any group that can no longer fit it.
 			for j := range states {
-				flavorRes := states[j].input.FlavorResources
+				if fits(states[j].input.FlavorResources, hostRes[chosen]) {
+					continue
+				}
 				filtered := make([]string, 0, len(states[j].remaining))
 				for _, h := range states[j].remaining {
-					if fits(flavorRes, hostRes[h]) {
+					if h != chosen {
 						filtered = append(filtered, h)
 					}
 				}

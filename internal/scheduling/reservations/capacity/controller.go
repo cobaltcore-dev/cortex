@@ -107,7 +107,7 @@ func (c *Controller) reconcileAll(ctx context.Context) error {
 		blockedByReservations = map[string]int64{}
 	}
 
-	usageByKey := c.computeVMUsage(ctx, logger, flavorGroups, hvList.Items)
+	usageByKey := c.computeVMUsage(ctx, flavorGroups, hvList.Items)
 
 	var succeeded, failed int
 	for _, az := range azs {
@@ -133,11 +133,11 @@ func (c *Controller) reconcileAll(ctx context.Context) error {
 // On error returns an empty map with fresh=false — callers must not overwrite running fields.
 func (c *Controller) computeVMUsage(
 	ctx context.Context,
-	logger interface{ Error(error, string, ...any) },
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	hvs []hv1.Hypervisor,
 ) map[vmUsageKey]vmUsage {
 
+	logger := LoggerFromContext(ctx)
 	result := make(map[vmUsageKey]vmUsage)
 	if c.vmSource == nil {
 		return result
@@ -301,9 +301,10 @@ func (c *Controller) reconcileAZ(
 			} else {
 				cur.PlaceableVMs = placeableVMs
 				cur.PlaceableHosts = placeableHosts
-				if flavor.Name == groupData.SmallestFlavor.Name {
-					smallestCandidates = candidates
-				}
+			}
+			// Capture candidates for the smallest flavor — used as split inputs.
+			if flavor.Name == groupData.SmallestFlavor.Name && placeableErr == nil {
+				smallestCandidates = candidates
 			}
 			newFlavors = append(newFlavors, cur)
 		}
@@ -543,26 +544,26 @@ func (c *Controller) probeScheduler(
 		if !ok {
 			continue
 		}
-		effectiveCap := hv.Status.EffectiveCapacity
-		if effectiveCap == nil {
-			effectiveCap = hv.Status.Capacity
-		}
-		if effectiveCap == nil {
-			continue
-		}
-		memCap, ok := effectiveCap[hv1.ResourceMemory]
-		if !ok {
-			continue
-		}
-		capBytes := memCap.Value()
-		if !ignoreAllocations {
-			if alloc, ok := hv.Status.Allocation[hv1.ResourceMemory]; ok {
-				capBytes -= alloc.Value()
+		var capBytes int64
+		if ignoreAllocations {
+			effCap := hv.Status.EffectiveCapacity
+			if effCap == nil {
+				effCap = hv.Status.Capacity
 			}
-			capBytes -= blockedByReservations[hostName]
-			if capBytes < 0 {
-				capBytes = 0
+			if effCap == nil {
+				continue
 			}
+			memCap, ok := effCap[hv1.ResourceMemory]
+			if !ok {
+				continue
+			}
+			capBytes = memCap.Value()
+		} else {
+			remaining := hvRemainingResources(hv, blockedByReservations[hostName])
+			if remaining == nil {
+				continue
+			}
+			capBytes = remaining[ResourceMemory]
 		}
 		if slots := capBytes / flavorBytes; slots > 0 {
 			capacity += slots
