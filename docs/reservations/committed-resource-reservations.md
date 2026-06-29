@@ -288,7 +288,8 @@ The `Reservation` controller watches `Reservation` CRDs and `Hypervisor` CRDs. `
 **Allocation Verification** — tracks VM lifecycle on reservations. The controller uses the Hypervisor CRD as the sole source of truth, with two triggers:
 - New VMs (within `committedResourceAllocationGracePeriod`, default: 15 min): verification deferred — VM may still be spawning; requeued every `committedResourceRequeueIntervalGracePeriod` (default: 1 min)
 - Established VMs: verified reactively when the Hypervisor CRD changes (VM appeared or disappeared in `Status.Instances`), with `committedResourceRequeueIntervalActive` (default: 5 min) as a safety-net fallback
-- Missing VMs: removed from `Spec.Allocations` when not found on the Hypervisor CRD after the grace period
+- Missing unconfirmed VMs (in `Spec.Allocations` only): removed from `Spec.Allocations` when not found on the Hypervisor CRD after the grace period
+- Missing confirmed VMs (already present in `Status.Allocations`): bypass the grace period entirely — their disappearance from the Hypervisor CRD is treated as authoritative and they are removed immediately
 
 **Reservation migration is not supported yet.**
 
