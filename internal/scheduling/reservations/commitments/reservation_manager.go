@@ -273,8 +273,9 @@ func (m *ReservationManager) ApplyCommitmentState(
 
 	if deltaMemoryBytes > 0 {
 		newSlots := countNewSlots(deltaMemoryBytes, flavorGroup)
-		if m.cfg.MaxSlots > 0 && newSlots > m.cfg.MaxSlots {
-			return nil, &SlotLimitExceededError{NewSlots: newSlots, Limit: m.cfg.MaxSlots}
+		totalSlots := len(existing) + result.Created + newSlots
+		if m.cfg.MaxSlots > 0 && totalSlots > m.cfg.MaxSlots {
+			return nil, &SlotLimitExceededError{NewSlots: totalSlots, Limit: m.cfg.MaxSlots}
 		}
 		log.Info("creating reservation slots",
 			"commitmentUUID", desiredState.CommitmentUUID,
