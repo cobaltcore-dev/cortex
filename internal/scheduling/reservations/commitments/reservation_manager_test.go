@@ -340,23 +340,13 @@ func TestApplyCommitmentState(t *testing.T) {
 			},
 		},
 		{
-			name: "max slots: existing slots count toward limit",
+			name: "max slots: only new blind-scheduler slots counted, existing slots excluded",
 			existingSlots: []v1alpha1.Reservation{
 				newTestCRSlot("commitment-abc123-0", 8, "", "test-group", nil),
 				newTestCRSlot("commitment-abc123-1", 8, "", "test-group", nil),
 			},
-			desiredMemoryGiB: 56, // existing=16GiB, delta=40GiB → 32+8 = 2 new slots; total=4 > maxSlots=2
+			desiredMemoryGiB: 56, // existing=16GiB, delta=40GiB → 32+8 = 2 new slots; maxSlots=2 allows it
 			maxSlots:         2,
-			wantError:        true,
-		},
-		{
-			name: "max slots: existing + new slots within limit passes",
-			existingSlots: []v1alpha1.Reservation{
-				newTestCRSlot("commitment-abc123-0", 8, "", "test-group", nil),
-				newTestCRSlot("commitment-abc123-1", 8, "", "test-group", nil),
-			},
-			desiredMemoryGiB: 56, // existing=16GiB, delta=40GiB → 32+8 = 2 new slots; total=4 ≤ maxSlots=4
-			maxSlots:         4,
 			validateTouched: func(t *testing.T, touched []v1alpha1.Reservation) {
 				created := 0
 				for _, r := range touched {
@@ -750,10 +740,10 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 }
 
 // ============================================================================
-// Tests: MaxSlots enforcement with PAYG pre-allocation
+// Tests: MaxSlots only limits blind-scheduler slots (PAYG remapping excluded)
 // ============================================================================
 
-func TestApplyCommitmentState_MaxSlotsWithPAYG(t *testing.T) {
+func TestApplyCommitmentState_MaxSlotsExcludesPAYG(t *testing.T) {
 	const (
 		az        = "test-az"
 		projectID = "project-1"
@@ -791,12 +781,11 @@ func TestApplyCommitmentState_MaxSlotsWithPAYG(t *testing.T) {
 		desiredMemoryGiB int64
 		maxSlots         int
 		wantError        bool
-		wantErrorType    string // "SlotLimitExceededError" if expected
 	}{
 		{
-			// Bug scenario: PAYG creates 4 slots, remaining delta needs 3 blind-scheduler slots.
-			// MaxSlots=5 should reject because total=4+3=7 > 5.
-			name: "PAYG slots included in MaxSlots check — rejects when total exceeds limit",
+			// PAYG creates 4 slots, remaining delta needs 3 blind-scheduler slots.
+			// MaxSlots=3 allows it because only blind-scheduler slots (3) are counted.
+			name: "PAYG slots excluded from MaxSlots — passes when blind slots within limit",
 			hypervisors: []*hv1.Hypervisor{
 				hvWithAZ(hvName, "vm-1", "vm-2", "vm-3", "vm-4"),
 			},
@@ -806,28 +795,27 @@ func TestApplyCommitmentState_MaxSlotsWithPAYG(t *testing.T) {
 				paygVM("vm-3", "small"), // 8 GiB
 				paygVM("vm-4", "small"), // 8 GiB → PAYG consumes 32 GiB, creates 4 slots
 			},
-			desiredMemoryGiB: 56, // delta=56GiB; PAYG=32GiB → remaining=24GiB → 3 blind slots; total=7
-			maxSlots:         5,
-			wantError:        true,
-			wantErrorType:    "SlotLimitExceededError",
-		},
-		{
-			// Same as above but with a high enough MaxSlots to pass.
-			name: "PAYG + blind slots within MaxSlots limit — passes",
-			hypervisors: []*hv1.Hypervisor{
-				hvWithAZ(hvName, "vm-1", "vm-2"),
-			},
-			paygVMs: []reservations.VM{
-				paygVM("vm-1", "small"), // 8 GiB
-				paygVM("vm-2", "small"), // 8 GiB → PAYG=16GiB, 2 slots
-			},
-			desiredMemoryGiB: 24, // delta=24GiB; PAYG=16GiB → remaining=8GiB → 1 blind slot; total=3
+			desiredMemoryGiB: 56, // delta=56GiB; PAYG=32GiB → remaining=24GiB → 3 blind slots
 			maxSlots:         3,
 			wantError:        false,
 		},
 		{
-			// Existing slots + PAYG slots + blind slots exceed MaxSlots.
-			name: "existing + PAYG + blind slots exceed MaxSlots — rejects",
+			// PAYG creates 1 slot, remaining delta needs 2 blind-scheduler slots.
+			// MaxSlots=1 rejects because blind-scheduler slots (2) > limit (1).
+			name: "blind-scheduler slots exceed MaxSlots — rejects regardless of PAYG",
+			hypervisors: []*hv1.Hypervisor{
+				hvWithAZ(hvName, "vm-1"),
+			},
+			paygVMs: []reservations.VM{
+				paygVM("vm-1", "small"), // 8 GiB → PAYG=8GiB, 1 slot
+			},
+			desiredMemoryGiB: 32, // delta=32GiB; PAYG=8GiB → remaining=24GiB → 16+8=2 blind slots
+			maxSlots:         1,
+			wantError:        true,
+		},
+		{
+			// Existing slots + PAYG slots present, but MaxSlots only limits blind-scheduler slots.
+			name: "existing + PAYG do not count — only blind slots checked against limit",
 			hypervisors: []*hv1.Hypervisor{
 				hvWithAZ(hvName, "vm-1", "vm-2"),
 			},
@@ -838,10 +826,9 @@ func TestApplyCommitmentState_MaxSlotsWithPAYG(t *testing.T) {
 			existingSlots: []v1alpha1.Reservation{
 				withAZ(newTestCRSlot("commitment-abc123-0", 8, hvName, "test-group", nil), az),
 			},
-			desiredMemoryGiB: 32, // existing=8GiB, delta=24GiB; PAYG=16GiB → remaining=8GiB → 1 blind; total=1+2+1=4
-			maxSlots:         3,
-			wantError:        true,
-			wantErrorType:    "SlotLimitExceededError",
+			desiredMemoryGiB: 32, // existing=8GiB, delta=24GiB; PAYG=16GiB → remaining=8GiB → 1 blind slot
+			maxSlots:         1,  // 1 blind slot ≤ 1: passes
+			wantError:        false,
 		},
 	}
 
@@ -880,11 +867,9 @@ func TestApplyCommitmentState_MaxSlotsWithPAYG(t *testing.T) {
 				if err == nil {
 					t.Fatal("expected error, got nil")
 				}
-				if tt.wantErrorType == "SlotLimitExceededError" {
-					var slotErr *SlotLimitExceededError
-					if !errors.As(err, &slotErr) {
-						t.Errorf("expected SlotLimitExceededError, got %T: %v", err, err)
-					}
+				var slotErr *SlotLimitExceededError
+				if !errors.As(err, &slotErr) {
+					t.Errorf("expected SlotLimitExceededError, got %T: %v", err, err)
 				}
 				return
 			}
