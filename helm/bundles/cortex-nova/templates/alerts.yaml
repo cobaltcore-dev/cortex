@@ -26,7 +26,7 @@ spec:
         context: liveness
         dashboard: cortex-status-dashboard/cortex-status-dashboard
         service: cortex
-        severity: {{ if .Values.kvm.enabled }}critical{{ else }}warning{{ end }}
+        severity: {{ if and .Values.kvm.enabled .Values.kvm.criticalAlerts }}critical{{ else }}warning{{ end }}
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/down
       annotations:
