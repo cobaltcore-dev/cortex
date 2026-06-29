@@ -25,17 +25,15 @@ func NewReportCapacityAPIMonitor() ReportCapacityAPIMonitor {
 			Buckets: []float64{0.1, 0.25, 0.5, 1, 2.5, 5, 10},
 		}, []string{"status_code"}),
 		reportedCapacity: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "cortex_committed_resource_reported_capacity_gib",
-			Help: "Last reported capacity in GiB per resource and availability zone as returned by the capacity API",
-		}, []string{"resource", "az"}),
+			Name: "cortex_committed_resource_reported_capacity",
+			Help: "Last reported capacity per resource and AZ as returned by the capacity API. unit_size indicates the GiB value of one declared unit (e.g. 480 for a HANA slot, 1 for variable-ratio RAM or cores).",
+		}, []string{"resource", "az", "unit_size"}),
 	}
 
 	for _, statusCode := range []string{"200", "500", "503"} {
 		m.requestCounter.WithLabelValues(statusCode)
 		m.requestDuration.WithLabelValues(statusCode)
 	}
-	// resource/az are dynamic; sentinel ensures the metric family exists for alert validation.
-	m.reportedCapacity.WithLabelValues("", "")
 
 	return m
 }

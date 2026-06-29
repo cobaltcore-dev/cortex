@@ -9,13 +9,27 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/google/uuid"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
-// handles POST /commitments/v1/report-capacity requests from Limes:
+// unitSizeForResource returns the GiB value of one declared unit for the given resource name.
+// For RAM resources it reads RAMUnitGiB from config (defaults to 1). Cores and instances are always 1.
+func (api *HTTPAPI) unitSizeForResource(resName liquid.ResourceName) string {
+	group, resType, err := commitments.GetFlavorGroupAndTypeFromResource(string(resName))
+	if err != nil || resType != v1alpha1.CommittedResourceTypeMemory {
+		return "1"
+	}
+	unitGiB := api.config.ResourceConfigForGroup(group).RAM.RAMUnitGiB
+	if unitGiB == 0 {
+		return "1"
+	}
+	return strconv.FormatUint(unitGiB, 10)
+}
+
 // See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/commitment.go
 // See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid
 // Reports available capacity across all flavor group resources. Note, unit is specified in the Info API response with multiple of the smallest memory resource unit within a flavor group.
@@ -73,8 +87,9 @@ func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request)
 
 	// Update capacity gauge for each resource/AZ combination.
 	for resName, resReport := range report.Resources {
+		unitSize := api.unitSizeForResource(resName)
 		for az, azReport := range resReport.PerAZ {
-			api.capacityMonitor.reportedCapacity.WithLabelValues(string(resName), string(az)).Set(float64(azReport.Capacity))
+			api.capacityMonitor.reportedCapacity.WithLabelValues(string(resName), string(az), unitSize).Set(float64(azReport.Capacity))
 		}
 	}
 
