@@ -5,13 +5,14 @@ The failover reservation system ensures VMs have pre-reserved capacity on altern
 ## File Structure
 
 ```text
-internal/scheduling/reservations/failover/
-├── config.go                    # Configuration struct (intervals, flavor requirements)
-├── controller.go                # Handles lifecycle of Reservation CRD of type failover
-├── vm_source.go                 # VM data source (reads from Nova DB via postgres)
-├── reservation_eligibility.go   # Checks if a VM can use a failover reservation from a HA perspective (independent of normal scheduling constraints)
-├── reservation_scheduling.go    # Scheduling (new and reusing) of failover reservations via our scheduling pipeline
-└── helpers.go                   # Utility functions for reservation manipulation
+internal/scheduling/reservations/
+├── vm_source.go                 # Shared VM data source interface (used by failover, commitments, and quota controllers)
+└── failover/
+    ├── config.go                    # Configuration struct (intervals, flavor requirements)
+    ├── controller.go                # Handles lifecycle of Reservation CRD of type failover
+    ├── reservation_eligibility.go   # Checks if a VM can use a failover reservation from a HA perspective (independent of normal scheduling constraints)
+    ├── reservation_scheduling.go    # Scheduling (new and reusing) of failover reservations via our scheduling pipeline
+    └── helpers.go                   # Utility functions for reservation manipulation
 ```
 
 ## Reconciliation Flow
@@ -114,7 +115,7 @@ The main orchestrator with dual reconciliation:
 
 ### 2. VM Source (`vm_source.go`)
 
-Interface `VMSource` with `DBVMSource` implementation:
+Shared interface `VMSource` (located at `internal/scheduling/reservations/vm_source.go`) used by failover, commitments, and quota controllers:
 - Reads VMs from Nova postgres database (servers + flavors join)
 - Can trust either postgres (`OSEXTSRVATTRHost`) or Hypervisor CRD for VM location
 - Returns `VM` structs with UUID, flavor, resources, extra specs, AZ
