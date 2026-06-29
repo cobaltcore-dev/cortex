@@ -68,7 +68,7 @@ All bundles except `cortex-placement-shim` get a **patch bump** to their top-lev
 
 ## Step 4: Output the plan
 
-Output exactly this format. No preamble, no closing remarks. Replace all `<old>` / `<new>` placeholders with actual version strings.
+Output exactly this format. No preamble, no closing remarks. Replace all `<old>` / `<new>` placeholders with actual version strings. Only include dependency entries that actually exist in that bundle's Chart.yaml; omit alias lines for bundles that don't use them.
 
 ```
 ### Library bumps
@@ -90,11 +90,7 @@ Output exactly this format. No preamble, no closing remarks. Replace all `<old>`
 - cortex-ironcore: cortex <old> → <new>
 - cortex-pods: cortex <old> → <new>
 - cortex-placement-shim: cortex-shim <old> → <new>
-```
 
-Only include entries that actually exist in that bundle's Chart.yaml. Omit alias lines for bundles that don't use them.
-
-```
 ### Bundle self-bumps
 - cortex-nova: <old> → <new>
 - cortex-cinder: <old> → <new>
