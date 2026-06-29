@@ -9,6 +9,7 @@ Cortex reserves hypervisor capacity for customers who pre-commit resources (comm
     - [CR Commitment Lifecycle](#cr-commitment-lifecycle)
       - [Resource types](#resource-types)
       - [CommittedResource Controller](#committedresource-controller)
+      - [PAYG Pre-Allocation](#payg-pre-allocation)
     - [Reservation Lifecycle](#reservation-lifecycle)
       - [VM Lifecycle](#vm-lifecycle)
       - [Capacity Blocking](#capacity-blocking)
@@ -169,6 +170,42 @@ stateDiagram-v2
     Rejected --> [*] : deleted
     Planned --> [*] : deleted
 ```
+
+#### PAYG Pre-Allocation
+
+When a `CommittedResource` is created or modified (memory type), the controller normally creates blind reservation slots and relies on the scheduler to place them on suitable hypervisors. PAYG pre-allocation is an optimization that runs before blind slot creation: the controller scans the availability zone for existing pay-as-you-go VMs that already reside on correct hypervisors and absorbs them into pre-populated reservation slots, avoiding unnecessary scheduler calls.
+
+**Configuration**: Controlled by the `enablePaygPreAllocation` feature gate in the `committedResourceController` Helm config section. Default: `false`.
+
+```yaml
+committedResourceController:
+  enablePaygPreAllocation: false
+```
+
+**When it activates**: The pre-allocation path runs only when all of the following are true:
+- `enablePaygPreAllocation` is `true`
+- A VM source is configured (provides project VM data)
+- There is a positive memory delta to fill (new slots needed)
+- The commitment specifies an availability zone
+
+**Algorithm overview**:
+
+1. **Scan**: `ScanAZForPaygCandidates` lists all Hypervisor CRDs in the target AZ (identified by the `topology.kubernetes.io/zone` label) and builds the set of VM UUIDs already allocated to any CR Reservation in that AZ (from `Spec.Allocations`).
+
+2. **Filter**: For each hypervisor, the function filters the project's VMs to find candidates that are:
+   - Running on a hypervisor in the target AZ (present and active in `hv.Status.Instances`)
+   - Using a flavor that belongs to the commitment's flavor group
+   - Not already allocated to any existing CR Reservation
+
+3. **Sort**: All candidates across hypervisors are sorted descending by memory (largest first), with VM UUID as a stable tie-breaker.
+
+4. **Consume**: Candidates are greedily consumed until the memory delta reaches zero. For each candidate, the controller picks the largest VM whose memory fits the remaining delta. If no candidate fits, it picks the smallest available to minimize waste. Each consumed candidate produces a reservation slot pre-populated with:
+   - `TargetHost` set to the candidate's hypervisor
+   - `Spec.Allocations` containing the VM UUID (the VM is already running there)
+
+5. **Fallback**: Any remaining delta after pre-allocation falls through to the standard blind scheduler path, which creates unplaced slots for the Reservation controller to schedule normally.
+
+**Why**: When a project already has PAYG VMs running on hypervisors in the correct AZ with matching flavors, those VMs are effectively already occupying the capacity that the commitment needs. Pre-allocating them into reservation slots avoids redundant scheduler placement calls and immediately confirms those slots, accelerating the transition from `Reserving` to `Accepted`.
 
 ### Reservation Lifecycle
 
