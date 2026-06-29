@@ -49,7 +49,7 @@ func TestHandleReportCapacity(t *testing.T) {
 	tests := []struct {
 		name           string
 		method         string
-		body           interface{}
+		body           any
 		expectedStatus int
 	}{
 		{name: "POST succeeds", method: http.MethodPost, body: liquid.ServiceCapacityRequest{}, expectedStatus: http.StatusOK},

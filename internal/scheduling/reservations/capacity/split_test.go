@@ -108,6 +108,9 @@ func TestInitGroupStates(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			states := initGroupStates(tc.groups, tc.hosts)
+			if len(states) != len(tc.groups) {
+				t.Fatalf("initGroupStates returned %d states, want %d (one per group)", len(states), len(tc.groups))
+			}
 			for _, st := range states {
 				want := tc.wantRemaining[st.input.Name]
 				if len(st.remaining) != len(want) {
@@ -126,22 +129,23 @@ func TestInitGroupStates(t *testing.T) {
 
 func TestComputeFreeResources(t *testing.T) {
 	tests := []struct {
-		name        string
-		groups      []GroupInput
-		hosts       map[string]HostState
-		wantFreeMem map[string]int64 // group → expected free memory bytes
+		name          string
+		groups        []GroupInput
+		hosts         map[string]HostState
+		wantFreeMem   map[string]int64
+		wantFreeCores map[string]int64 // optional; only set when exercising CPU binding
 	}{
 		{
 			name: "full slots counted",
 			groups: []GroupInput{
 				{Name: "g1", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1"}},
 			},
-			hosts:       map[string]HostState{"h1": host(8*GiB, 4)},
-			wantFreeMem: map[string]int64{"g1": 8 * GiB},
+			hosts:         map[string]HostState{"h1": host(8*GiB, 4)},
+			wantFreeMem:   map[string]int64{"g1": 8 * GiB},
+			wantFreeCores: map[string]int64{"g1": 4},
 		},
 		{
 			name: "sub-flavor remainder excluded",
-			// 6 GiB / 4 GiB = 1 slot → 4 GiB usable; 2 GiB stranded
 			groups: []GroupInput{
 				{Name: "g1", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1"}},
 			},
@@ -149,13 +153,14 @@ func TestComputeFreeResources(t *testing.T) {
 			wantFreeMem: map[string]int64{"g1": 4 * GiB},
 		},
 		{
+			// Memory allows 4 slots, CPU allows 1 → 1 slot usable for both resources.
 			name: "CPU is binding constraint",
-			// Memory allows 4 slots, CPU allows 1 → 1 slot usable
 			groups: []GroupInput{
 				{Name: "g1", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1"}},
 			},
-			hosts:       map[string]HostState{"h1": host(16*GiB, 2)},
-			wantFreeMem: map[string]int64{"g1": 4 * GiB},
+			hosts:         map[string]HostState{"h1": host(16*GiB, 2)},
+			wantFreeMem:   map[string]int64{"g1": 4 * GiB},
+			wantFreeCores: map[string]int64{"g1": 2},
 		},
 		{
 			name: "host below flavor threshold contributes nothing",
@@ -183,6 +188,11 @@ func TestComputeFreeResources(t *testing.T) {
 			for group, wantMem := range tc.wantFreeMem {
 				if got := free[group][ResourceMemory]; got != wantMem {
 					t.Errorf("free[%s][memory] = %d, want %d", group, got, wantMem)
+				}
+			}
+			for group, wantCores := range tc.wantFreeCores {
+				if got := free[group][ResourceCores]; got != wantCores {
+					t.Errorf("free[%s][cores] = %d, want %d", group, got, wantCores)
 				}
 			}
 		})
@@ -295,12 +305,14 @@ func TestBestHost(t *testing.T) {
 // TestSplitCapacity covers the full round-robin assignment algorithm end-to-end.
 func TestSplitCapacity(t *testing.T) {
 	tests := []struct {
-		name              string
-		groups            []GroupInput
-		hosts             map[string]HostState
-		wantAssignedMem   map[string]int64
-		wantUnassignedMem int64
-		wantFreeMem       map[string]int64 // optional, only set when testing free capacity
+		name                string
+		groups              []GroupInput
+		hosts               map[string]HostState
+		wantAssignedMem     map[string]int64
+		wantAssignedCores   map[string]int64 // optional
+		wantUnassignedMem   int64
+		wantUnassignedCores int64            // optional
+		wantFreeMem         map[string]int64 // optional
 	}{
 		{
 			name: "single group, two hosts",
@@ -312,6 +324,7 @@ func TestSplitCapacity(t *testing.T) {
 				"h2": host(4*GiB, 2), // 1 slot
 			},
 			wantAssignedMem:   map[string]int64{"hana": 3 * 4 * GiB},
+			wantAssignedCores: map[string]int64{"hana": 3 * 2},
 			wantUnassignedMem: 0,
 		},
 		{
@@ -363,8 +376,9 @@ func TestSplitCapacity(t *testing.T) {
 			hosts: map[string]HostState{
 				"cpu-full": host(16*GiB, 0),
 			},
-			wantAssignedMem:   map[string]int64{"gp": 0},
-			wantUnassignedMem: 16 * GiB,
+			wantAssignedMem:     map[string]int64{"gp": 0},
+			wantUnassignedMem:   16 * GiB,
+			wantUnassignedCores: 0, // CPU was zero, so nothing to strand on that axis
 		},
 		{
 			name: "host too small for flavor",
@@ -442,8 +456,18 @@ func TestSplitCapacity(t *testing.T) {
 					t.Errorf("assigned[%s][memory] = %d, want %d", groupName, got, wantMem)
 				}
 			}
+			for groupName, wantCores := range tc.wantAssignedCores {
+				if got := assigned[groupName][ResourceCores]; got != wantCores {
+					t.Errorf("assigned[%s][cores] = %d, want %d", groupName, got, wantCores)
+				}
+			}
 			if got := unassigned[ResourceMemory]; got != tc.wantUnassignedMem {
 				t.Errorf("unassigned[memory] = %d, want %d", got, tc.wantUnassignedMem)
+			}
+			if tc.wantUnassignedCores != 0 {
+				if got := unassigned[ResourceCores]; got != tc.wantUnassignedCores {
+					t.Errorf("unassigned[cores] = %d, want %d", got, tc.wantUnassignedCores)
+				}
 			}
 			for groupName, wantMem := range tc.wantFreeMem {
 				if got := free[groupName][ResourceMemory]; got != wantMem {
