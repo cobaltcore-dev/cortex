@@ -31,6 +31,7 @@ grep "^version:" helm/bundles/cortex-manila/Chart.yaml
 grep "^version:" helm/bundles/cortex-crds/Chart.yaml
 grep "^version:" helm/bundles/cortex-ironcore/Chart.yaml
 grep "^version:" helm/bundles/cortex-pods/Chart.yaml
+grep "^version:" helm/bundles/cortex-placement-shim/Chart.yaml
 ```
 
 Also read the dependency versions inside each bundle:
@@ -67,7 +68,7 @@ All bundles except `cortex-placement-shim` get a **patch bump** to their top-lev
 
 ## Step 4: Output the plan
 
-Output exactly this format. No preamble, no closing remarks.
+Output exactly this format. No preamble, no closing remarks. Replace all `<old>` / `<new>` placeholders with actual version strings.
 
 ```
 ### Library bumps
@@ -88,8 +89,12 @@ Output exactly this format. No preamble, no closing remarks.
 - cortex-crds: cortex <old> → <new>
 - cortex-ironcore: cortex <old> → <new>
 - cortex-pods: cortex <old> → <new>
-(only include dependency entries that actually exist in that bundle's Chart.yaml)
+- cortex-placement-shim: cortex-shim <old> → <new>
+```
 
+Only include entries that actually exist in that bundle's Chart.yaml. Omit alias lines for bundles that don't use them.
+
+```
 ### Bundle self-bumps
 - cortex-nova: <old> → <new>
 - cortex-cinder: <old> → <new>
@@ -97,13 +102,12 @@ Output exactly this format. No preamble, no closing remarks.
 - cortex-crds: <old> → <new>
 - cortex-ironcore: <old> → <new>
 - cortex-pods: <old> → <new>
-- cortex-placement-shim: <old> → <new>  (patch bump; independent counter from other bundles)
+- cortex-placement-shim: <old> → <new>
 
 ### Bumped Versions Summary
-cortex <old>→<new>, cortex-postgres <old>→<new>, cortex-shim <old>→<new>, bundles <old>→<new>
+cortex <old>→<new>, cortex-postgres <old>→<new>, cortex-shim <old>→<new>, bundles <old>→<new>, cortex-placement-shim <old>→<new>
 ```
 
 Notes:
-- Only include dependency entries that actually appear in a given bundle's Chart.yaml.
 - The `### Bumped Versions Summary` is a single line — the orchestrator forwards it verbatim to the changelog writer.
-- `cortex-placement-shim` gets its own patch bump (independent counter) because its `cortex-shim` dependency pin always changes.
+- The six standard bundles (`cortex-nova`, `cortex-cinder`, `cortex-manila`, `cortex-crds`, `cortex-ironcore`, `cortex-pods`) share the same new version in their self-bumps. `cortex-placement-shim` has its own independent counter and will be a different value.
