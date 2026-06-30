@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -545,5 +546,39 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 				t.Errorf("expected %d hosts, got %d", len(tt.expectedHosts), len(result.Activations))
 			}
 		})
+	}
+}
+
+func TestFilterInstanceGroupAntiAffinityStep_SkipPlacementContextFilters(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add hv1 to scheme: %v", err)
+	}
+	// host2 has the group member vm; max_server_per_host=1 → host2 would normally be filtered.
+	objects := []client.Object{
+		&hv1.Hypervisor{ObjectMeta: v1.ObjectMeta{Name: "host1"}},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{Name: "host2"},
+			Status:     hv1.HypervisorStatus{Instances: []hv1.Instance{{ID: "vm-existing"}}},
+		},
+	}
+	request := newNovaRequest("vm-new", "proj", "m1.small", "gp", 1, "1Gi", false, []string{"host1", "host2"})
+	request.Spec.Data.InstanceGroup = &api.NovaObject[api.NovaInstanceGroup]{
+		Data: api.NovaInstanceGroup{
+			Policy:  "anti-affinity",
+			Members: []string{"vm-existing"},
+			Rules:   map[string]any{"max_server_per_host": 1},
+		},
+	}
+	step := &FilterInstanceGroupAntiAffinityStep{}
+	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+
+	request.Options = scheduling.Options{SkipPlacementContextFilters: true}
+	result, err := step.Run(slog.Default(), request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Activations) != 2 {
+		t.Errorf("expected both hosts to pass, got %d", len(result.Activations))
 	}
 }

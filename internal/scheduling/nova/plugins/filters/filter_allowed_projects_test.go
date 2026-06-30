@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -321,5 +322,37 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 				t.Errorf("expected %d hosts, got %d", len(tt.expectedHosts), len(result.Activations))
 			}
 		})
+	}
+}
+
+func TestFilterAllowedProjectsStep_SkipPlacementContextFilters(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add hv1 to scheme: %v", err)
+	}
+	// host2 restricts to project-x; request is project-y → host2 would normally be filtered.
+	objects := []client.Object{
+		&hv1.Hypervisor{ObjectMeta: v1.ObjectMeta{Name: "host1"}},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{Name: "host2"},
+			Spec:       hv1.HypervisorSpec{AllowedProjects: []string{"project-x"}},
+		},
+	}
+	request := api.ExternalSchedulerRequest{
+		Spec: api.NovaObject[api.NovaSpec]{
+			Data: api.NovaSpec{ProjectID: "project-y"},
+		},
+		Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
+	}
+	step := &FilterAllowedProjectsStep{}
+	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+
+	request.Options = scheduling.Options{SkipPlacementContextFilters: true}
+	result, err := step.Run(slog.Default(), request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Activations) != 2 {
+		t.Errorf("expected both hosts to pass, got %d", len(result.Activations))
 	}
 }

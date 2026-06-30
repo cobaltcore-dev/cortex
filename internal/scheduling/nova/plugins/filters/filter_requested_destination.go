@@ -102,6 +102,9 @@ func (s *FilterRequestedDestinationStep) processRequestedHost(
 // host filtering.
 func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
+	if request.GetOptions().SkipPlacementContextFilters {
+		return result, nil
+	}
 	rd := request.Spec.Data.RequestedDestination
 	if rd == nil {
 		traceLog.Info("no requested_destination in request, skipping filter")

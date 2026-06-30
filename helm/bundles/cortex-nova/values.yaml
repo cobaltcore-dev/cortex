@@ -154,9 +154,9 @@ cortex-scheduling-controllers:
       # that use committed resources. Requires also enabling of CR controllers and tasks
       committedResourceTracking: false
     # Pipeline used for the empty-state capacity probe (ignores allocations and reservations).
-    capacityTotalPipeline: "kvm-report-capacity"
+    capacityTotalPipeline: "kvm-general-purpose-load-balancing"
     # Pipeline used for the current-state capacity probe (considers current VM allocations).
-    capacityPlaceablePipeline: "kvm-general-purpose-load-balancing-no-history"
+    capacityPlaceablePipeline: "kvm-general-purpose-load-balancing"
     # How often the capacity controller re-runs its scheduler probes.
     capacityReconcileInterval: 5m
     # If true, the external scheduler API will limit the list of hosts in its
@@ -166,11 +166,12 @@ cortex-scheduling-controllers:
     # Set to 0 or negative to disable shuffling.
     evacuationShuffleK: 3
     committedResourceReservationController:
-      # Maps flavor group IDs to pipeline names; "*" acts as catch-all fallback
+      # Pipeline selection for CR reservation scheduling. The catch-all default covers
+      # general-purpose flavors. For HANA flavor groups, add an explicit entry, e.g.:
+      #   "my-hana-group": "kvm-hana-bin-packing"
       flavorGroupPipelines:
-        "*": "kvm-general-purpose-load-balancing-no-history"  # Catch-all fallback
-      # Fallback pipeline when no flavorGroupPipelines entry matches
-      pipelineDefault: "kvm-general-purpose-load-balancing-no-history"
+        "*": "kvm-general-purpose-load-balancing"
+      pipelineDefault: "kvm-general-purpose-load-balancing"
       # How often to re-verify active Reservation CRDs (healthy state)
       requeueIntervalActive: "5m"
       # Back-off interval when knowledge is unavailable

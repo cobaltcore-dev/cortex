@@ -1193,3 +1193,37 @@ func TestCRLifecycle(t *testing.T) {
 		}
 	})
 }
+
+func TestCRScheduling_DoesNotSetSkipPlacementContextFilters(t *testing.T) {
+	// CR slot scheduling has a real project ID and must run tenant-context filters
+	// (filter_allowed_projects, filter_aggregate_metadata, etc.). Verify SkipPlacementContextFilters
+	// is never set so those filters are not bypassed.
+	var capturedReq schedulerdelegationapi.ExternalSchedulerRequest
+	var schedulerCalled bool
+	captureScheduler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		schedulerCalled = true
+		if err := json.NewDecoder(r.Body).Decode(&capturedReq); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		resp := &schedulerdelegationapi.ExternalSchedulerResponse{Hosts: []string{"host-1"}}
+		json.NewEncoder(w).Encode(resp) //nolint:errcheck
+	})
+
+	env := newIntgEnv(t, []client.Object{newTestFlavorKnowledge(), intgHypervisor("host-1")}, captureScheduler, nil)
+	defer env.close()
+
+	cr := intgCR("test-cr", "commit-uuid-1", v1alpha1.CommitmentStatusConfirmed)
+	if err := env.k8sClient.Create(context.Background(), cr); err != nil {
+		t.Fatalf("create CR: %v", err)
+	}
+	env.reconcileCR(t, cr.Name)
+	env.reconcileChildReservations(t, cr.Name)
+
+	if !schedulerCalled {
+		t.Fatal("scheduler was never called — test did not exercise the scheduling path")
+	}
+	if capturedReq.Options.SkipPlacementContextFilters {
+		t.Error("CR slot scheduling must not set SkipPlacementContextFilters — tenant-context filters must run")
+	}
+}

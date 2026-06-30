@@ -74,6 +74,9 @@ type FilterQuotaEnforcement struct {
 
 func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
+	if request.GetOptions().SkipPlacementContextFilters {
+		return result, nil
+	}
 
 	mode := "shadow"
 	if s.Options.Enforce {
@@ -88,7 +91,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.External
 			traceLog.Info("skipping quota enforcement for non-consuming intent", "intent", intent)
 			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", "", "")
 			return result, nil
-		case api.ReserveForFailoverIntent:
+		case api.ReserveForFailoverIntent, api.ReuseFailoverReservationIntent:
 			traceLog.Info("skipping quota enforcement for failover reservation intent")
 			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", "", "")
 			return result, nil

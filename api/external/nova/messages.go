@@ -154,8 +154,11 @@ const (
 	EvacuateIntent v1alpha1.SchedulingIntent = "evacuate"
 	// CreateIntent indicates that the request is intended for creating a new VM.
 	CreateIntent v1alpha1.SchedulingIntent = "create"
-	// ReserveForFailoverIntent indicates that the request is for failover reservation scheduling.
+	// ReserveForFailoverIntent indicates that the request is for creating a new failover reservation slot.
 	ReserveForFailoverIntent v1alpha1.SchedulingIntent = "reserve_for_failover"
+	// ReuseFailoverReservationIntent indicates that the request is checking whether an existing
+	// failover reservation slot can be reused by a VM (compatibility check, not a new slot).
+	ReuseFailoverReservationIntent v1alpha1.SchedulingIntent = "reuse_failover_reservation"
 	// ReserveForCommittedResourceIntent indicates that the request is for CR reservation scheduling.
 	ReserveForCommittedResourceIntent v1alpha1.SchedulingIntent = "reserve_for_committed_resource"
 
@@ -188,6 +191,9 @@ func (req ExternalSchedulerRequest) GetIntent() (v1alpha1.SchedulingIntent, erro
 	// Used by cortex failover reservation controller
 	case "reserve_for_failover":
 		return ReserveForFailoverIntent, nil
+	// Used by cortex failover reservation controller (reuse check)
+	case "reuse_failover_reservation":
+		return ReuseFailoverReservationIntent, nil
 	// Used by cortex committed resource reservation controller
 	case "reserve_for_committed_resource":
 		return ReserveForCommittedResourceIntent, nil

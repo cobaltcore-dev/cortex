@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 )
 
 func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
@@ -350,5 +351,23 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 				t.Errorf("expected %d hosts, got %d", len(tt.expectedHosts), len(result.Activations))
 			}
 		})
+	}
+}
+
+func TestFilterInstanceGroupAffinityStep_SkipPlacementContextFilters(t *testing.T) {
+	// Affinity group on host1 only — host2 would normally be filtered.
+	request := newNovaRequest("vm", "proj", "m1.small", "gp", 1, "1Gi", false, []string{"host1", "host2"})
+	request.Spec.Data.InstanceGroup = &api.NovaObject[api.NovaInstanceGroup]{
+		Data: api.NovaInstanceGroup{Policy: "affinity", Hosts: []string{"host1"}},
+	}
+	step := &FilterInstanceGroupAffinityStep{}
+
+	request.Options = scheduling.Options{SkipPlacementContextFilters: true}
+	result, err := step.Run(slog.Default(), request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Activations) != 2 {
+		t.Errorf("expected both hosts to pass, got %d", len(result.Activations))
 	}
 }

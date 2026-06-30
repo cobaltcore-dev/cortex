@@ -66,6 +66,10 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 	opts := request.GetOptions()
 	result := s.IncludeAllHostsFromRequest(request)
 
+	// Merge call-time options with static step config.
+	ignoreAllocations := s.Options.IgnoreAllocations || opts.AssumeEmptyHosts
+	ignoredReservationTypes := slices.Concat(s.Options.IgnoredReservationTypes, opts.IgnoredReservationTypes)
+
 	// This map holds the free resources per host.
 	freeResourcesByHost := make(map[string]map[hv1.ResourceName]resource.Quantity)
 
@@ -87,7 +91,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		}
 
 		// Subtract allocated resources (skip when ignoring allocations for empty-datacenter capacity queries).
-		if !s.Options.IgnoreAllocations {
+		if !ignoreAllocations {
 			for resourceName, allocated := range hv.Status.Allocation {
 				free, ok := freeResourcesByHost[hv.Name][resourceName]
 				if !ok {
@@ -110,7 +114,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 	}
 	for _, reservation := range reservations.Items {
 		// Check if this reservation type should be ignored — applies regardless of ready state.
-		if slices.Contains(s.Options.IgnoredReservationTypes, reservation.Spec.Type) {
+		if slices.Contains(ignoredReservationTypes, reservation.Spec.Type) {
 			traceLog.Debug("ignoring reservation type", "type", reservation.Spec.Type, "reservation", reservation.Name)
 			continue
 		}
@@ -169,14 +173,23 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 				// 2. During live migrations or other operations, we don't want to use failover capacity.
 				// Note: we cannot use failover reservations from other VMs, as that can invalidate our HA guarantees.
 				intent, err := request.GetIntent()
-				if err == nil && intent == api.EvacuateIntent {
-					if reservation.Status.FailoverReservation != nil {
-						if _, contained := reservation.Status.FailoverReservation.Allocations[request.Spec.Data.InstanceUUID]; contained {
-							traceLog.Info("unlocking resources reserved by failover reservation for VM in allocations (evacuation)",
-								"reservation", reservation.Name,
-								"instanceUUID", request.Spec.Data.InstanceUUID)
-							continue
+				if err == nil {
+					switch intent {
+					case api.EvacuateIntent:
+						if reservation.Status.FailoverReservation != nil {
+							if _, contained := reservation.Status.FailoverReservation.Allocations[request.Spec.Data.InstanceUUID]; contained {
+								traceLog.Info("unlocking resources reserved by failover reservation for VM in allocations (evacuation)",
+									"reservation", reservation.Name,
+									"instanceUUID", request.Spec.Data.InstanceUUID)
+								continue
+							}
 						}
+					case api.ReuseFailoverReservationIntent:
+						// Reuse check: the reservation already pre-blocks the right capacity for this VM.
+						// Don't subtract it from free capacity to avoid double-counting.
+						traceLog.Debug("skipping failover reservation block for reuse compatibility check",
+							"reservation", reservation.Name)
+						continue
 					}
 				}
 				traceLog.Debug("processing failover reservation", "reservation", reservation.Name)
@@ -209,7 +222,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		// Oversize spec-only: if a pending VM is larger than the remaining slot, block its full size.
 		//
 		// FailoverReservations: block = Spec.Resources (always fully blocked).
-		resourcesToBlock := resv.UnusedReservationCapacity(&reservation, s.Options.IgnoreAllocations)
+		resourcesToBlock := resv.UnusedReservationCapacity(&reservation, ignoreAllocations)
 
 		// Block the calculated resources on each host
 		for host := range hostsToBlock {
