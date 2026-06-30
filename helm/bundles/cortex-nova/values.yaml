@@ -70,6 +70,9 @@ openstack:
 kvm:
   # Use this flag to enable/disable KVM host related features.
   enabled: false
+  # Set to false to keep KVM-related alerts at warning severity instead of critical.
+  # Useful when rolling out a new KVM region before it is production-ready.
+  criticalAlerts: true
 
 cortex: &cortex
   crd: {enable: false}

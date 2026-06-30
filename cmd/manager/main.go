@@ -771,7 +771,7 @@ func main() {
 			setupLog.Error(err, "failed to register capacity monitor metrics, continuing without metrics")
 		}
 
-		capacityController := capacity.NewController(multiclusterClient, capacityConfig)
+		capacityController := capacity.NewController(multiclusterClient, capacityConfig, commitmentsVMSource)
 		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 			return capacityController.Start(ctx)
 		})); err != nil {

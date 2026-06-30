@@ -30,16 +30,19 @@ import (
 var log = ctrl.Log.WithName("capacity-controller").WithValues("module", "capacity")
 
 // Controller reconciles FlavorGroupCapacity CRDs on a fixed interval.
-// For each (flavor group × AZ) pair it probes all flavors in the group and updates the CRD status.
+// For each AZ it probes all flavor groups, runs the round-robin capacity split, then writes
+// one FlavorGroupCapacity CRD per (flavor group × AZ) pair.
 type Controller struct {
 	client          client.Client
+	vmSource        reservations.VMSource
 	schedulerClient *reservations.SchedulerClient
 	config          Config
 }
 
-func NewController(c client.Client, config Config) *Controller {
+func NewController(c client.Client, config Config, vmSource reservations.VMSource) *Controller {
 	return &Controller{
 		client:          c,
+		vmSource:        vmSource,
 		schedulerClient: reservations.NewSchedulerClient(config.SchedulerURL),
 		config:          config,
 	}
@@ -64,7 +67,18 @@ func (c *Controller) Start(ctx context.Context) error {
 	}
 }
 
-// reconcileAll iterates all flavor groups × AZs and upserts FlavorGroupCapacity CRDs.
+type vmUsageKey struct{ group, az string }
+
+// vmUsage aggregates resource totals for running VMs in one (group × AZ).
+// resources keys are ResourceMemory (bytes) and ResourceCores (count).
+// fresh is false when the VMSource call failed — running fields must not be overwritten.
+type vmUsage struct {
+	instances int64
+	resources map[string]int64
+	fresh     bool
+}
+
+// reconcileAll iterates all AZs, runs the round-robin split per AZ, then writes CRDs.
 func (c *Controller) reconcileAll(ctx context.Context) error {
 	logger := LoggerFromContext(ctx)
 	startTime := time.Now()
@@ -87,25 +101,22 @@ func (c *Controller) reconcileAll(ctx context.Context) error {
 
 	azs := availabilityZones(hvList.Items)
 
-	// Compute reservation memory blocks once per cycle — shared across all (group × AZ) pairs.
 	blockedByReservations, err := c.blockedMemoryByHost(ctx)
 	if err != nil {
 		logger.Error(err, "failed to compute blocked memory by host, placeable slot counts may be overstated")
 		blockedByReservations = map[string]int64{}
 	}
 
+	usageByKey := c.computeVMUsage(ctx, flavorGroups, hvList.Items)
+
 	var succeeded, failed int
-	for groupName, groupData := range flavorGroups {
-		for _, az := range azs {
-			if err := c.reconcileOne(ctx, groupName, groupData, az, hvByName, hvList.Items, blockedByReservations); err != nil {
-				logger.Error(err, "failed to reconcile flavor group capacity",
-					"flavorGroup", groupName, "az", az)
-				failed++
-				// Continue with other pairs rather than aborting the whole cycle.
-				continue
-			}
-			succeeded++
+	for _, az := range azs {
+		if err := c.reconcileAZ(ctx, az, flavorGroups, hvByName, blockedByReservations, usageByKey); err != nil {
+			logger.Error(err, "failed to reconcile AZ", "az", az)
+			failed++
+			continue
 		}
+		succeeded += len(flavorGroups)
 	}
 
 	logger.Info("capacity reconcile cycle completed",
@@ -118,22 +129,292 @@ func (c *Controller) reconcileAll(ctx context.Context) error {
 	return nil
 }
 
-// reconcileOne updates the FlavorGroupCapacity CRD for one (group × AZ) pair.
-func (c *Controller) reconcileOne(
+// computeVMUsage fetches running VMs and aggregates usage per (flavorGroup, az).
+// On error returns an empty map with fresh=false — callers must not overwrite running fields.
+func (c *Controller) computeVMUsage(
+	ctx context.Context,
+	flavorGroups map[string]compute.FlavorGroupFeature,
+	hvs []hv1.Hypervisor,
+) map[vmUsageKey]vmUsage {
+
+	logger := LoggerFromContext(ctx)
+	result := make(map[vmUsageKey]vmUsage)
+	if c.vmSource == nil {
+		return result
+	}
+
+	hvList := &hv1.HypervisorList{Items: hvs}
+	vms, err := c.vmSource.ListVMsOnHypervisors(ctx, hvList, true)
+	if err != nil {
+		logger.Error(err, "failed to list VMs for usage computation, running fields will retain last known values")
+		return result
+	}
+
+	flavorToGroup := make(map[string]string)
+	flavorMemBytes := make(map[string]int64)
+	flavorVCPUs := make(map[string]int64)
+	for groupName, gd := range flavorGroups {
+		for _, f := range gd.Flavors {
+			flavorToGroup[f.Name] = groupName
+			flavorMemBytes[f.Name] = int64(f.MemoryMB) * 1024 * 1024 //nolint:gosec
+			flavorVCPUs[f.Name] = int64(f.VCPUs)                     //nolint:gosec
+		}
+	}
+
+	for _, vm := range vms {
+		groupName, ok := flavorToGroup[vm.FlavorName]
+		if !ok {
+			continue
+		}
+		key := vmUsageKey{group: groupName, az: vm.AvailabilityZone}
+		u := result[key]
+		if u.resources == nil {
+			u.resources = make(map[string]int64)
+		}
+		u.instances++
+		u.resources[ResourceMemory] += flavorMemBytes[vm.FlavorName]
+		u.resources[ResourceCores] += flavorVCPUs[vm.FlavorName]
+		u.fresh = true
+		result[key] = u
+	}
+	return result
+}
+
+// hvRemainingResources returns remaining schedulable resources after subtracting
+// current allocations and (for memory) active reservation blocks.
+// Returns nil if the hypervisor has no capacity data.
+func hvRemainingResources(hv hv1.Hypervisor, blockedMemBytes int64) map[string]int64 {
+	effCap := hv.Status.EffectiveCapacity
+	if effCap == nil {
+		effCap = hv.Status.Capacity
+	}
+	if effCap == nil {
+		return nil
+	}
+
+	result := make(map[string]int64, 2)
+
+	if qty, ok := effCap[hv1.ResourceMemory]; ok {
+		mem := qty.Value()
+		if alloc, ok := hv.Status.Allocation[hv1.ResourceMemory]; ok {
+			mem -= alloc.Value()
+		}
+		mem -= blockedMemBytes
+		if mem < 0 {
+			mem = 0
+		}
+		result[ResourceMemory] = mem
+	}
+
+	if qty, ok := effCap[hv1.ResourceCPU]; ok {
+		cpu := qty.Value()
+		if alloc, ok := hv.Status.Allocation[hv1.ResourceCPU]; ok {
+			cpu -= alloc.Value()
+		}
+		if cpu < 0 {
+			cpu = 0
+		}
+		result[ResourceCores] = cpu
+	}
+
+	return result
+}
+
+// reconcileAZ runs the round-robin capacity split for all flavor groups in one AZ,
+// then writes one FlavorGroupCapacity CRD per group that had all probes succeed.
+// Groups with failed probes are skipped — their CRDs retain the last good state.
+func (c *Controller) reconcileAZ(
+	ctx context.Context,
+	az string,
+	flavorGroups map[string]compute.FlavorGroupFeature,
+	hvByName map[string]hv1.Hypervisor,
+	blockedByReservations map[string]int64,
+	usageByKey map[vmUsageKey]vmUsage,
+) error {
+
+	logger := LoggerFromContext(ctx)
+
+	type probeResult struct {
+		groupName string
+		groupData compute.FlavorGroupFeature
+		flavors   []v1alpha1.FlavorCapacityStatus
+		// allFresh is false if any scheduler probe failed; the group's CRD is left unchanged.
+		allFresh           bool
+		smallestCandidates []string
+		committedCapacity  int64
+	}
+
+	results := make([]probeResult, 0, len(flavorGroups))
+
+	groupNames := make([]string, 0, len(flavorGroups))
+	for name := range flavorGroups {
+		groupNames = append(groupNames, name)
+	}
+	sort.Strings(groupNames)
+
+	for _, groupName := range groupNames {
+		groupData := flavorGroups[groupName]
+
+		smallestFlavorBytes := int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec
+		if smallestFlavorBytes <= 0 {
+			logger.Error(fmt.Errorf("smallest flavor %q has invalid memory %d MB",
+				groupData.SmallestFlavor.Name, groupData.SmallestFlavor.MemoryMB),
+				"skipping flavor group", "flavorGroup", groupName)
+			continue
+		}
+
+		// Probe all flavors. Sort for stable CRD output.
+		flavors := make([]compute.FlavorInGroup, len(groupData.Flavors))
+		copy(flavors, groupData.Flavors)
+		sort.Slice(flavors, func(i, j int) bool { return flavors[i].Name < flavors[j].Name })
+
+		allFresh := true
+		newFlavors := make([]v1alpha1.FlavorCapacityStatus, 0, len(flavors))
+
+		// Load existing per-flavor data to preserve stale values on probe failure.
+		crdName := crdNameFor(groupName, az)
+		var existing v1alpha1.FlavorGroupCapacity
+		if err := c.client.Get(ctx, types.NamespacedName{Name: crdName}, &existing); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to get FlavorGroupCapacity %s: %w", crdName, err)
+		}
+		existingByName := make(map[string]v1alpha1.FlavorCapacityStatus, len(existing.Status.Flavors))
+		for _, f := range existing.Status.Flavors {
+			existingByName[f.FlavorName] = f
+		}
+
+		var smallestCandidates []string
+		for _, flavor := range flavors {
+			cur := existingByName[flavor.Name]
+			cur.FlavorName = flavor.Name
+
+			totalVMSlots, totalHosts, _, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName, true, nil)
+			placeableVMs, placeableHosts, candidates, placeableErr := c.probeScheduler(ctx, flavor, az, c.config.PlaceablePipeline, hvByName, false, blockedByReservations)
+
+			if totalErr != nil {
+				allFresh = false
+			} else {
+				cur.TotalCapacityVMSlots = totalVMSlots
+				cur.TotalCapacityHosts = totalHosts
+			}
+			if placeableErr != nil {
+				allFresh = false
+			} else {
+				cur.PlaceableVMs = placeableVMs
+				cur.PlaceableHosts = placeableHosts
+			}
+			// Capture candidates for the smallest flavor — used as split inputs.
+			if flavor.Name == groupData.SmallestFlavor.Name && placeableErr == nil {
+				smallestCandidates = candidates
+			}
+			newFlavors = append(newFlavors, cur)
+		}
+
+		committedCapacity, committedErr := c.sumCommittedCapacity(ctx, groupName, az, smallestFlavorBytes)
+		if committedErr != nil {
+			logger.Error(committedErr, "failed to sum committed capacity",
+				"flavorGroup", groupName, "az", az)
+			committedCapacity = 0
+		}
+
+		results = append(results, probeResult{
+			groupName:          groupName,
+			groupData:          groupData,
+			flavors:            newFlavors,
+			allFresh:           allFresh,
+			smallestCandidates: smallestCandidates,
+			committedCapacity:  committedCapacity,
+		})
+	}
+
+	// Build HostState and GroupInput for the round-robin split.
+	// Only include groups where all probes succeeded.
+	hosts := make(map[string]HostState)
+	groupInputs := make([]GroupInput, 0, len(results))
+	for _, r := range results {
+		if !r.allFresh || r.smallestCandidates == nil {
+			continue
+		}
+		flavorMemBytes := int64(r.groupData.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec
+		flavorVCPUs := int64(r.groupData.SmallestFlavor.VCPUs)                     //nolint:gosec
+
+		candidateHosts := make([]string, 0, len(r.smallestCandidates))
+		for _, h := range r.smallestCandidates {
+			candidateHosts = append(candidateHosts, h)
+			if _, ok := hosts[h]; !ok {
+				hv, hvOk := hvByName[h]
+				if !hvOk {
+					continue
+				}
+				remaining := hvRemainingResources(hv, blockedByReservations[h])
+				if remaining != nil {
+					hosts[h] = HostState{Remaining: remaining}
+					memSlots := remaining[ResourceMemory] / flavorMemBytes
+					cpuSlots := remaining[ResourceCores] / flavorVCPUs
+					usableSlots := memSlots
+					if cpuSlots < usableSlots {
+						usableSlots = cpuSlots
+					}
+					strandedMem := remaining[ResourceMemory] - usableSlots*flavorMemBytes
+					strandedCPU := remaining[ResourceCores] - usableSlots*flavorVCPUs
+					logger.V(1).Info("candidate host for capacity split",
+						"az", az, "flavorGroup", r.groupName, "host", h,
+						"usableSlots", usableSlots,
+						"strandedMemoryGiB", strandedMem/(1024*1024*1024),
+						"strandedCores", strandedCPU)
+				}
+			}
+		}
+		sort.Strings(candidateHosts) // stable order
+		groupInputs = append(groupInputs, GroupInput{
+			Name: r.groupName,
+			FlavorResources: map[string]int64{
+				ResourceMemory: flavorMemBytes,
+				ResourceCores:  flavorVCPUs,
+			},
+			CandidateHosts: candidateHosts,
+		})
+	}
+
+	freeResources, exclusiveResources, unassigned := SplitCapacity(groupInputs, hosts)
+	if unassigned[ResourceMemory] > 0 || unassigned[ResourceCores] > 0 {
+		logger.Info("fragmented capacity not assigned to any group",
+			"az", az,
+			"unassignedMemoryGiB", unassigned[ResourceMemory]/(1024*1024*1024),
+			"unassignedCores", unassigned[ResourceCores],
+			"candidateHosts", len(hosts),
+			"groups", len(groupInputs))
+	}
+
+	// Write one CRD per group. Skip groups with failed probes — their CRDs retain last good state.
+	for _, r := range results {
+		if !r.allFresh {
+			continue
+		}
+		if err := c.writeCRD(ctx, r.groupName, r.groupData, az,
+			r.flavors, r.committedCapacity,
+			usageByKey[vmUsageKey{r.groupName, az}],
+			freeResources[r.groupName],
+			exclusiveResources[r.groupName],
+		); err != nil {
+			logger.Error(err, "failed to write FlavorGroupCapacity CRD",
+				"flavorGroup", r.groupName, "az", az)
+		}
+	}
+	return nil
+}
+
+// writeCRD upserts one FlavorGroupCapacity CRD with fresh computed values.
+func (c *Controller) writeCRD(
 	ctx context.Context,
 	groupName string,
 	groupData compute.FlavorGroupFeature,
 	az string,
-	hvByName map[string]hv1.Hypervisor,
-	allHVs []hv1.Hypervisor,
-	blockedByReservations map[string]int64,
+	newFlavors []v1alpha1.FlavorCapacityStatus,
+	committedCapacity int64,
+	usage vmUsage,
+	freeRes map[string]int64,
+	exclusiveRes map[string]int64,
 ) error {
-
-	smallestFlavorBytes := int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec
-	if smallestFlavorBytes <= 0 {
-		return fmt.Errorf("smallest flavor %q has invalid memory %d MB",
-			groupData.SmallestFlavor.Name, groupData.SmallestFlavor.MemoryMB)
-	}
 
 	crdName := crdNameFor(groupName, az)
 
@@ -154,54 +435,9 @@ func (c *Controller) reconcileOne(
 		return fmt.Errorf("failed to get FlavorGroupCapacity %s: %w", crdName, err)
 	}
 
-	// Build a lookup of existing per-flavor data so we can preserve stale values on probe failure.
-	existingByName := make(map[string]v1alpha1.FlavorCapacityStatus, len(existing.Status.Flavors))
-	for _, f := range existing.Status.Flavors {
-		existingByName[f.FlavorName] = f
-	}
-
-	// Probe all flavors in the group. Sort for stable CRD output.
-	flavors := make([]compute.FlavorInGroup, len(groupData.Flavors))
-	copy(flavors, groupData.Flavors)
-	sort.Slice(flavors, func(i, j int) bool { return flavors[i].Name < flavors[j].Name })
-
-	allFresh := true
-	newFlavors := make([]v1alpha1.FlavorCapacityStatus, 0, len(flavors))
-	for _, flavor := range flavors {
-		cur := existingByName[flavor.Name]
-		cur.FlavorName = flavor.Name
-
-		totalVMSlots, totalHosts, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName, true, nil)
-		placeableVMs, placeableHosts, placeableErr := c.probeScheduler(ctx, flavor, az, c.config.PlaceablePipeline, hvByName, false, blockedByReservations)
-
-		if totalErr != nil {
-			allFresh = false
-		} else {
-			cur.TotalCapacityVMSlots = totalVMSlots
-			cur.TotalCapacityHosts = totalHosts
-		}
-		if placeableErr != nil {
-			allFresh = false
-		} else {
-			cur.PlaceableVMs = placeableVMs
-			cur.PlaceableHosts = placeableHosts
-		}
-		newFlavors = append(newFlavors, cur)
-	}
-
-	// Count total instances and committed capacity (always available regardless of probe results).
-	totalInstances := countInstancesInAZ(allHVs, az)
-	committedCapacity, committedErr := c.sumCommittedCapacity(ctx, groupName, az, smallestFlavorBytes)
-	if committedErr != nil {
-		LoggerFromContext(ctx).Error(committedErr, "failed to sum committed capacity",
-			"flavorGroup", groupName, "az", az)
-		committedCapacity = 0
-	}
-
-	// Compute TotalCapacity: for each flavor multiply slot count by its RAM/CPU,
-	// then take the max across all flavors independently for each resource.
-	// This reveals the most capacity because the flavor best matching the host's
-	// resource ratio saturates more resources and produces a higher product.
+	// TotalCapacity: for each flavor multiply slot count by its resources; take the max
+	// across all flavors independently. The flavor best matching the host's resource
+	// ratio saturates more resources and produces a higher product.
 	flavorSpecByName := make(map[string]compute.FlavorInGroup, len(groupData.Flavors))
 	for _, f := range groupData.Flavors {
 		flavorSpecByName[f.Name] = f
@@ -222,39 +458,34 @@ func (c *Controller) reconcileOne(
 		}
 	}
 
-	// Only update TotalCapacity when all probes succeeded (allFresh=true).
-	// This preserves stale values across transient probe failures and ensures
-	// the CR controller can distinguish "not yet probed" (key absent) from
-	// "probed but zero capacity" (key present, value=0).
-	var totalCapacity map[string]resource.Quantity
-	if allFresh {
-		totalCapacity = map[string]resource.Quantity{
-			string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(maxMemBytes, resource.BinarySI),
-			string(v1alpha1.CommittedResourceTypeCores):  *resource.NewQuantity(maxCPUCores, resource.DecimalSI),
-		}
-	} else {
-		totalCapacity = existing.Status.TotalCapacity
-	}
-
 	patch := client.MergeFrom(existing.DeepCopy())
 	existing.Status.Flavors = newFlavors
-	existing.Status.TotalInstances = totalInstances
 	existing.Status.CommittedCapacity = committedCapacity
-	existing.Status.TotalCapacity = totalCapacity
+	existing.Status.CommittedCapacityBytes = committedCapacity * int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec
+	existing.Status.SmallestFlavorName = groupData.SmallestFlavor.Name
+	existing.Status.TotalCapacity = map[string]resource.Quantity{
+		string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(maxMemBytes, resource.BinarySI),
+		string(v1alpha1.CommittedResourceTypeCores):  *resource.NewQuantity(maxCPUCores, resource.DecimalSI),
+	}
+	// Only overwrite running fields when the VM data is fresh — a VMSource outage must not
+	// zero out the last-known values while the CRD is still marked ready.
+	if usage.fresh {
+		existing.Status.RunningInstances = usage.instances
+		existing.Status.RunningResources = resMapToQuantity(usage.resources)
+	}
+	existing.Status.FreeCapacity = resMapToQuantity(freeRes)
+	existing.Status.ExclusivelyFreeCapacity = resMapToQuantity(exclusiveRes)
+	if flavorMemBytes := int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024; flavorMemBytes > 0 { //nolint:gosec
+		existing.Status.ExclusivelyFreeSlots = exclusiveRes[ResourceMemory] / flavorMemBytes
+	}
 	existing.Status.LastReconcileAt = metav1.Now()
 
 	freshCondition := metav1.Condition{
 		Type:               v1alpha1.FlavorGroupCapacityConditionReady,
 		ObservedGeneration: existing.Generation,
-	}
-	if allFresh {
-		freshCondition.Status = metav1.ConditionTrue
-		freshCondition.Reason = "ReconcileSucceeded"
-		freshCondition.Message = "capacity data is up-to-date"
-	} else {
-		freshCondition.Status = metav1.ConditionFalse
-		freshCondition.Reason = "ReconcileFailed"
-		freshCondition.Message = "one or more flavor probes failed"
+		Status:             metav1.ConditionTrue,
+		Reason:             "ReconcileSucceeded",
+		Message:            "capacity data is up-to-date",
 	}
 	meta.SetStatusCondition(&existing.Status.Conditions, freshCondition)
 
@@ -264,11 +495,8 @@ func (c *Controller) reconcileOne(
 	return nil
 }
 
-// probeScheduler calls the scheduler with the given pipeline and returns VM slots + host count.
-// Capacity is computed as sum of floor(hostMemory / flavorMemory) across returned hosts.
-// When ignoreAllocations is true (total/empty-datacenter probe), raw effective capacity is used.
-// When false (placeable probe), hv.Status.Allocation and blockedByReservations are subtracted so
-// that slots reflect remaining capacity after running VMs and active reservation blocks.
+// probeScheduler calls the scheduler and returns slot count, host count, and candidate host names.
+// ignoreAllocations=true (total probe) uses raw effective capacity; false (placeable probe) subtracts allocations.
 func (c *Controller) probeScheduler(
 	ctx context.Context,
 	flavor compute.FlavorInGroup,
@@ -276,11 +504,11 @@ func (c *Controller) probeScheduler(
 	hvByName map[string]hv1.Hypervisor,
 	ignoreAllocations bool,
 	blockedByReservations map[string]int64,
-) (capacity, hosts int64, err error) {
+) (capacity, hosts int64, candidateHosts []string, err error) {
 
 	flavorBytes := int64(flavor.MemoryMB) * 1024 * 1024 //nolint:gosec
 	if flavorBytes <= 0 {
-		return 0, 0, fmt.Errorf("flavor %q has invalid memory %d MB", flavor.Name, flavor.MemoryMB)
+		return 0, 0, nil, fmt.Errorf("flavor %q has invalid memory %d MB", flavor.Name, flavor.MemoryMB)
 	}
 
 	// Build EligibleHosts from all known hypervisors so that novaLimitHostsToRequest
@@ -302,10 +530,8 @@ func (c *Controller) probeScheduler(
 	}
 
 	resp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
-		InstanceUUID: "capacity-" + flavor.Name,
-		// Empty project ID so filter_allowed_projects passes all hosts — the capacity probe
-		// must see the full host set regardless of per-project restrictions.
-		ProjectID:        "",
+		InstanceUUID:     "capacity-" + flavor.Name,
+		ProjectID:        "cortex-capacity-probe",
 		FlavorName:       flavor.Name,
 		MemoryMB:         flavor.MemoryMB,
 		VCPUs:            flavor.VCPUs,
@@ -323,46 +549,46 @@ func (c *Controller) probeScheduler(
 		SkipCommittedResourceTracking: true,
 	})
 	if err != nil {
-		return 0, 0, fmt.Errorf("scheduler call failed (pipeline=%s): %w", pipeline, err)
+		return 0, 0, nil, fmt.Errorf("scheduler call failed (pipeline=%s): %w", pipeline, err)
 	}
 
-	hosts = int64(len(resp.Hosts))
 	for _, hostName := range resp.Hosts {
 		hv, ok := hvByName[hostName]
 		if !ok {
 			continue
 		}
-		effectiveCap := hv.Status.EffectiveCapacity
-		if effectiveCap == nil {
-			effectiveCap = hv.Status.Capacity
-		}
-		if effectiveCap == nil {
-			continue
-		}
-		memCap, ok := effectiveCap[hv1.ResourceMemory]
-		if !ok {
-			continue
-		}
-		capBytes := memCap.Value()
-		if !ignoreAllocations {
-			if alloc, ok := hv.Status.Allocation[hv1.ResourceMemory]; ok {
-				capBytes -= alloc.Value()
+		var capBytes int64
+		if ignoreAllocations {
+			effCap := hv.Status.EffectiveCapacity
+			if effCap == nil {
+				effCap = hv.Status.Capacity
 			}
-			capBytes -= blockedByReservations[hostName]
-			if capBytes < 0 {
-				capBytes = 0
+			if effCap == nil {
+				continue
 			}
+			memCap, ok := effCap[hv1.ResourceMemory]
+			if !ok {
+				continue
+			}
+			capBytes = memCap.Value()
+		} else {
+			remaining := hvRemainingResources(hv, blockedByReservations[hostName])
+			if remaining == nil {
+				continue
+			}
+			capBytes = remaining[ResourceMemory]
 		}
-		if capBytes > 0 {
-			capacity += capBytes / flavorBytes
+		if slots := capBytes / flavorBytes; slots > 0 {
+			capacity += slots
+			candidateHosts = append(candidateHosts, hostName)
 		}
 	}
-	return capacity, hosts, nil
+	hosts = int64(len(candidateHosts))
+	return capacity, hosts, candidateHosts, nil
 }
 
-// blockedMemoryByHost lists all Reservations and returns the total bytes blocked per host name.
-// Only placed reservations (TargetHost or Status.Host non-empty) are counted.
-// When a reservation is being migrated (TargetHost != Status.Host), both hosts are blocked.
+// blockedMemoryByHost returns total reservation-blocked bytes per host.
+// Both TargetHost and Status.Host are blocked; migration blocks both simultaneously.
 func (c *Controller) blockedMemoryByHost(ctx context.Context) (map[string]int64, error) {
 	var list v1alpha1.ReservationList
 	if err := c.client.List(ctx, &list); err != nil {
@@ -397,9 +623,8 @@ func (c *Controller) blockedMemoryByHost(ctx context.Context) (map[string]int64,
 	return blocked, nil
 }
 
-// sumCommittedCapacity sums AcceptedSpec.Amount (or Spec.Amount as fallback) across all
-// CommittedResource CRDs for the given (flavorGroup, az) pair with an active state
-// (guaranteed or confirmed) and resource type memory. Returns the total in slots.
+// sumCommittedCapacity sums active CommittedResource amounts (memory type, guaranteed/confirmed)
+// for the given (flavorGroup, az) pair. Returns the total in smallest-flavor slots.
 func (c *Controller) sumCommittedCapacity(ctx context.Context, groupName, az string, smallestFlavorBytes int64) (int64, error) {
 	var list v1alpha1.CommittedResourceList
 	if err := c.client.List(ctx, &list); err != nil {
@@ -431,6 +656,25 @@ func (c *Controller) sumCommittedCapacity(ctx context.Context, groupName, az str
 	return total, nil
 }
 
+// resMapToQuantity converts a raw resource map to a map[string]resource.Quantity.
+// Keys are passed through unchanged — ResourceMemory == string(CommittedResourceTypeMemory)
+// and ResourceCores == string(CommittedResourceTypeCores) by design.
+func resMapToQuantity(res map[string]int64) map[string]resource.Quantity {
+	if len(res) == 0 {
+		return nil
+	}
+	out := make(map[string]resource.Quantity, len(res))
+	for k, v := range res {
+		switch k {
+		case ResourceMemory:
+			out[k] = *resource.NewQuantity(v, resource.BinarySI)
+		case ResourceCores:
+			out[k] = *resource.NewQuantity(v, resource.DecimalSI)
+		}
+	}
+	return out
+}
+
 // availabilityZones returns a sorted, deduplicated list of AZs from Hypervisor CRD labels.
 func availabilityZones(hvs []hv1.Hypervisor) []string {
 	azSet := make(map[string]struct{})
@@ -445,18 +689,6 @@ func availabilityZones(hvs []hv1.Hypervisor) []string {
 	}
 	sort.Strings(azs)
 	return azs
-}
-
-// countInstancesInAZ counts total VM instances across all hypervisors in the given AZ.
-func countInstancesInAZ(hvs []hv1.Hypervisor, az string) int64 {
-	var total int64
-	for _, hv := range hvs {
-		if hv.Labels["topology.kubernetes.io/zone"] != az {
-			continue
-		}
-		total += int64(len(hv.Status.Instances))
-	}
-	return total
 }
 
 // crdNameFor produces a collision-safe DNS label for a (flavorGroup, az) pair.

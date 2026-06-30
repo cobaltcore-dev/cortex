@@ -28,25 +28,21 @@ func NewCapacityCalculator(client client.Client, conf APIConfig) *CapacityCalcul
 
 // CalculateCapacity computes per-AZ capacity for all flavor groups.
 // For each flavor group, three resources are reported: _ram, _cores, _instances.
-// Capacity and usage are read from FlavorGroupCapacity CRDs pre-computed by the capacity controller.
-// Usage is approximated from slot counts (total − placeable of the smallest flavor); this may
-// slightly under-report usage when larger flavors are running, showing more free capacity than
-// reality — acceptable for capacity planning purposes.
+// All values are read from FlavorGroupCapacity CRDs pre-computed by the capacity controller:
+//   - Capacity: RunningInstances + ExclusivelyFreeCapacity converted to slots.
+//   - Usage: RunningInstances / RunningResources.
 func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.ServiceCapacityRequest) (liquid.ServiceCapacityReport, error) {
-	// Get all flavor groups from Knowledge CRDs (needed for smallest-flavor lookup).
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, fmt.Errorf("failed to get flavor groups: %w", err)
 	}
 
-	// Get version from Knowledge CRD (same as info API version).
 	var infoVersion int64 = -1
 	if knowledgeCRD, err := knowledge.Get(ctx); err == nil && knowledgeCRD != nil && !knowledgeCRD.Status.LastContentChange.IsZero() {
 		infoVersion = knowledgeCRD.Status.LastContentChange.Unix()
 	}
 
-	// List all FlavorGroupCapacity CRDs and index by (flavorGroup, az).
 	var capacityList v1alpha1.FlavorGroupCapacityList
 	if err := c.client.List(ctx, &capacityList); err != nil {
 		return liquid.ServiceCapacityReport{}, fmt.Errorf("failed to list FlavorGroupCapacity CRDs: %w", err)
@@ -58,7 +54,6 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 		crdByKey[groupAZKey{crd.Spec.FlavorGroup, crd.Spec.AvailabilityZone}] = crd
 	}
 
-	// Build capacity report for all flavor groups.
 	report := liquid.ServiceCapacityReport{
 		InfoVersion: infoVersion,
 		Resources:   make(map[liquid.ResourceName]*liquid.ResourceCapacityReport),
@@ -72,11 +67,7 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			continue
 		}
 
-		smallestFlavorName := groupData.SmallestFlavor.Name
-		// Add 16 MiB before dividing: flavors may reserve 16 MiB for video RAM (hw_video:ram_max_mb=16),
-		// so a nominal "2 GiB" flavor may report 2032 MiB. Adding 16 restores the intended GiB boundary.
-		memoryGiBPerSlot := (groupData.SmallestFlavor.MemoryMB + 16) / 1024
-		vcpusPerSlot := groupData.SmallestFlavor.VCPUs
+		ramUnitBytes := int64(resCfg.RAM.RAMUnitMiB()) * 1024 * 1024 //nolint:gosec
 
 		ramAZCapacity := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(req.AllAZs))
 		coresAZCapacity := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(req.AllAZs))
@@ -85,7 +76,6 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 		for _, az := range req.AllAZs {
 			crd, ok := crdByKey[groupAZKey{groupName, string(az)}]
 			if !ok {
-				// No CRD for this (group, AZ) pair — report zero.
 				zero := &liquid.AZResourceCapacityReport{Capacity: 0}
 				ramAZCapacity[az] = zero
 				coresAZCapacity[az] = &liquid.AZResourceCapacityReport{Capacity: 0}
@@ -93,55 +83,67 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 				continue
 			}
 
-			// If the CRD data is stale, report last-known capacity but omit usage.
 			if !apimeta.IsStatusConditionTrue(crd.Status.Conditions, v1alpha1.FlavorGroupCapacityConditionReady) {
 				logger.Info("FlavorGroupCapacity CRD is stale, reporting capacity without usage",
 					"flavorGroup", groupName, "az", az)
 			}
 
-			// Find the smallest-flavor entry in the CRD status.
-			var smallest *v1alpha1.FlavorCapacityStatus
-			for i := range crd.Status.Flavors {
-				if crd.Status.Flavors[i].FlavorName == smallestFlavorName {
-					smallest = &crd.Status.Flavors[i]
-					break
-				}
-			}
-			if smallest == nil {
-				zero := &liquid.AZResourceCapacityReport{Capacity: 0}
-				ramAZCapacity[az] = zero
-				coresAZCapacity[az] = &liquid.AZResourceCapacityReport{Capacity: 0}
-				instancesAZCapacity[az] = &liquid.AZResourceCapacityReport{Capacity: 0}
-				continue
-			}
+			// ExclusivelyFreeSlots is pre-computed by the controller using min(memSlots, cpuSlots).
+			exclusiveFreeSlots := uint64(crd.Status.ExclusivelyFreeSlots) //nolint:gosec
 
-			totalSlots := uint64(smallest.TotalCapacityVMSlots) //nolint:gosec // slot count from CRD, realistically bounded
+			// Capacity = running + exclusively free, all derived from CRD bytes.
+			runningInstances := uint64(crd.Status.RunningInstances) //nolint:gosec
+			instancesCapacity := runningInstances + exclusiveFreeSlots
+
+			// RAM capacity: running bytes + exclusively free bytes → declared units.
+			// Fixed-ratio groups report in slots (1 unit = 1 instance).
 			var ramCapacity uint64
 			if groupData.HasFixedRamCoreRatio() {
-				ramCapacity = totalSlots
-			} else {
-				ramCapacity = totalSlots * memoryGiBPerSlot
+				ramCapacity = instancesCapacity
+			} else if ramUnitBytes > 0 {
+				runningMemBytes := int64(0)
+				if qty, ok := crd.Status.RunningResources[string(v1alpha1.CommittedResourceTypeMemory)]; ok {
+					runningMemBytes = qty.Value()
+				}
+				freeMemBytes := int64(0)
+				if qty, ok := crd.Status.ExclusivelyFreeCapacity[string(v1alpha1.CommittedResourceTypeMemory)]; ok {
+					freeMemBytes = qty.Value()
+				}
+				ramCapacity = uint64(runningMemBytes+freeMemBytes) / uint64(ramUnitBytes)
 			}
-			ramEntry := &liquid.AZResourceCapacityReport{Capacity: ramCapacity}
-			coresEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots * vcpusPerSlot}
-			instancesEntry := &liquid.AZResourceCapacityReport{Capacity: totalSlots}
 
-			// Usage is approximated from slot counts. This may slightly under-report usage when
-			// larger flavors are running (safe direction: shows more free capacity than reality).
-			if apimeta.IsStatusConditionTrue(crd.Status.Conditions, v1alpha1.FlavorGroupCapacityConditionReady) {
-				placeableSlots := uint64(smallest.PlaceableVMs) //nolint:gosec // slot count from CRD, realistically bounded
-				var usedSlots uint64
-				if totalSlots > placeableSlots {
-					usedSlots = totalSlots - placeableSlots
-				}
-				if groupData.HasFixedRamCoreRatio() {
-					ramEntry.Usage = Some[uint64](usedSlots)
-				} else {
-					ramEntry.Usage = Some[uint64](usedSlots * memoryGiBPerSlot)
-				}
-				coresEntry.Usage = Some[uint64](usedSlots * vcpusPerSlot)
-				instancesEntry.Usage = Some[uint64](usedSlots)
+			// Cores capacity: running cores + exclusively free cores.
+			var coresCapacity uint64
+			runningCoresCount := int64(0)
+			if qty, ok := crd.Status.RunningResources[string(v1alpha1.CommittedResourceTypeCores)]; ok {
+				runningCoresCount = qty.Value()
 			}
+			freeCoresCount := int64(0)
+			if qty, ok := crd.Status.ExclusivelyFreeCapacity[string(v1alpha1.CommittedResourceTypeCores)]; ok {
+				freeCoresCount = qty.Value()
+			}
+			coresCapacity = uint64(runningCoresCount + freeCoresCount)
+
+			ramEntry := &liquid.AZResourceCapacityReport{Capacity: ramCapacity}
+			coresEntry := &liquid.AZResourceCapacityReport{Capacity: coresCapacity}
+			instancesEntry := &liquid.AZResourceCapacityReport{Capacity: instancesCapacity}
+
+			// Usage from actual running VMs — only when CRD data is fresh.
+			if apimeta.IsStatusConditionTrue(crd.Status.Conditions, v1alpha1.FlavorGroupCapacityConditionReady) {
+				instancesEntry.Usage = Some[uint64](runningInstances)
+				coresEntry.Usage = Some[uint64](uint64(runningCoresCount))
+
+				if groupData.HasFixedRamCoreRatio() {
+					ramEntry.Usage = Some[uint64](runningInstances)
+				} else if ramUnitBytes > 0 {
+					runningMemBytes := int64(0)
+					if qty, ok := crd.Status.RunningResources[string(v1alpha1.CommittedResourceTypeMemory)]; ok {
+						runningMemBytes = qty.Value()
+					}
+					ramEntry.Usage = Some[uint64](uint64(runningMemBytes) / uint64(ramUnitBytes))
+				}
+			}
+
 			ramAZCapacity[az] = ramEntry
 			coresAZCapacity[az] = coresEntry
 			instancesAZCapacity[az] = instancesEntry
