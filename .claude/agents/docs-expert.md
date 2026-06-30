@@ -58,8 +58,8 @@ Everything under `docs/` is in scope. You may read any files there to build your
    | Docs reference something that was **removed or deprecated** | Remove or update the section |
    | A **new feature** was added but the docs don't mention it | Write new documentation for it |
    | An **interesting algorithm or technique** was implemented | Document *why* it was chosen and what constraints drove it — not a step-by-step walkthrough |
-   | A setup step, config option, or API changed | Update the relevant doc |
-   | An existing doc section is **clearly outdated** beyond this week's changes | Note it, but don't fix everything — pick the best one |
+   | A setup step, config option, or API changed | Update the relevant doc — classify as **Conflict** if it makes existing docs wrong, otherwise **Minor gap** |
+   | An existing doc section is **clearly outdated** beyond this week's changes | Note it as a **Dead content** or **Conflict** finding; don't fix everything — pick the best one |
    | An existing doc section is **too verbose or low-level** | Trim it — but only if the content is easily found by reading one or two source files. Keep it if it saves the reader from cross-checking many files, or if it captures something not obvious from the code alone. |
    | The **docs structure** itself is becoming unwieldy (e.g. one file covers too many topics, related docs are scattered, a folder would group things better) | Note it as a **Structural** finding |
 
@@ -105,7 +105,7 @@ Return a structured report of what you found. Do NOT open any pull requests or c
 - Conflicts: N (docs that are wrong)
 - Dead content: N (references to removed things)
 - Verbose content: N (candidates to trim)
-- New features undocumented: N
+- New features: N
 - Cross-component gaps: N
 - Algorithm gaps: N
 - Minor gaps: N
