@@ -734,17 +734,17 @@ func TestProbeScheduler_SetsSkipPlacementContextFilters(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewController(fake.NewClientBuilder().WithScheme(scheme).Build(), Config{SchedulerURL: srv.URL})
+	c := NewController(fake.NewClientBuilder().WithScheme(scheme).Build(), Config{SchedulerURL: srv.URL}, nil)
 	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
 	flavor := compute.FlavorInGroup{Name: "test-flavor", MemoryMB: 4096}
 
-	if _, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "test-pipeline", hvByName, true, nil); err != nil {
+	if _, _, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "test-pipeline", hvByName, true, nil); err != nil {
 		t.Fatalf("probeScheduler failed: %v", err)
 	}
 	if !capturedReq.Options.SkipPlacementContextFilters {
 		t.Error("capacity probe must set SkipPlacementContextFilters=true to see all hosts regardless of project restrictions")
 	}
-	if capturedReq.Spec.Data.ProjectID != "" {
-		t.Errorf("capacity probe must send empty ProjectID, got %q", capturedReq.Spec.Data.ProjectID)
+	if capturedReq.Spec.Data.ProjectID != "cortex-capacity-probe" {
+		t.Errorf("capacity probe must send ProjectID cortex-capacity-probe, got %q", capturedReq.Spec.Data.ProjectID)
 	}
 }
