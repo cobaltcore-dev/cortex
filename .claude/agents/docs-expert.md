@@ -61,7 +61,7 @@ Everything under `docs/` is in scope. You may read any files there to build your
    | A setup step, config option, or API changed | Update the relevant doc |
    | An existing doc section is **clearly outdated** beyond this week's changes | Note it, but don't fix everything — pick the best one |
    | An existing doc section is **too verbose or low-level** | Trim it — but only if the content is easily found by reading one or two source files. Keep it if it saves the reader from cross-checking many files, or if it captures something not obvious from the code alone. |
-   | The **docs structure** itself is becoming unwieldy (e.g. one file covers too many topics, related docs are scattered, a folder would group things better) | Note it as a structural improvement candidate |
+   | The **docs structure** itself is becoming unwieldy (e.g. one file covers too many topics, related docs are scattered, a folder would group things better) | Note it as a **Structural** finding |
 
 3. **Read the actual code.** Don't just rely on the digest. For new features and algorithms, read the implementation to understand the design well enough to explain entry points, cross-component relationships, and the constraints that shaped the approach — not to transcribe what the code does.
 
@@ -74,14 +74,14 @@ Everything under `docs/` is in scope. You may read any files there to build your
    Structural changes are valuable but should be made **slowly and deliberately** — at most one structural change per run, and only when the improvement is clear. Don't reorganize for the sake of reorganizing.
 
 5. **Prioritize what to do.** You will likely find more work than you can do in one pass. That's expected — your job is to make incremental progress each week. Use this priority order:
-   1. **Conflicts** — docs that are actively wrong
+   1. **Conflict** — docs that are actively wrong
    2. **Dead content** — sections referencing removed or deprecated functionality
-   3. **Verbose or low-level content** — prose that duplicates what one or two source files already say clearly
-   4. **New features** — undocumented subsystems or entry points that readers have no orientation for
-   5. **Cross-component gaps** — relationships between components that are invisible when reading files in isolation
-   6. **Algorithms and design** — why an approach was chosen and what constraints drove it (not how it works)
-   7. **Minor gaps** — small omissions in existing docs
-   8. **Structural improvements** — reorganizing files, splitting, merging, adding folders
+   3. **Verbose content** — prose that duplicates what one or two source files already say clearly
+   4. **New feature** — undocumented subsystems or entry points that readers have no orientation for
+   5. **Cross-component gap** — relationships between components that are invisible when reading files in isolation
+   6. **Algorithm** — why an approach was chosen and what constraints drove it (not how it works)
+   7. **Minor gap** — small omissions in existing docs
+   8. **Structural** — reorganizing files, splitting, merging, adding folders
 
 ## Phase 2: Reason over importance
 
@@ -102,12 +102,14 @@ Return a structured report of what you found. Do NOT open any pull requests or c
 ## Docs Expert Results
 
 ### Documentation Health
-- Conflicts found: N (docs that are wrong)
-- Dead content found: N (references to removed things)
-- Verbose/low-level content: N (candidates to trim)
-- Undocumented features: N
+- Conflicts: N (docs that are wrong)
+- Dead content: N (references to removed things)
+- Verbose content: N (candidates to trim)
+- New features undocumented: N
 - Cross-component gaps: N
-- Structural issues: N (files to split, merge, or reorganize)
+- Algorithm gaps: N
+- Minor gaps: N
+- Structural: N (files to split, merge, or reorganize)
 
 ### Findings
 For each issue found:
