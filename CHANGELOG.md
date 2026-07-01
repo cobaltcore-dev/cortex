@@ -1,5 +1,45 @@
 # Changelog
 
+## 2026-07-01 — [#1001](https://github.com/cobaltcore-dev/cortex/pull/1001)
+
+### cortex v0.2.1 (sha-44b8aab7)
+
+Non-breaking changes:
+- Include PAYG slots in MaxSlots guard — the reservation manager now counts existing + PAYG-created slots before allocating blind-scheduler slots, preventing total slot counts from exceeding `MaxSlotsPerCommitment` ([#987](https://github.com/cobaltcore-dev/cortex/pull/987))
+- Use public Limes endpoint in knowledge datasource — fixes HTTP 400 errors after Limes enforced domain name matching on `Host` headers ([#999](https://github.com/cobaltcore-dev/cortex/pull/999))
+
+### cortex-shim v0.1.4 (sha-44b8aab7)
+
+Includes updated image sha-44b8aab7.
+
+### cortex-nova v0.0.78
+
+Includes updated charts cortex v0.2.1, cortex-postgres v0.6.7.
+
+### cortex-cinder v0.0.78
+
+Includes updated charts cortex v0.2.1, cortex-postgres v0.6.7.
+
+### cortex-manila v0.0.78
+
+Includes updated charts cortex v0.2.1, cortex-postgres v0.6.7.
+
+### cortex-crds v0.0.78
+
+Includes updated chart cortex v0.2.1.
+
+### cortex-ironcore v0.0.78
+
+Includes updated chart cortex v0.2.1.
+
+### cortex-pods v0.0.78
+
+Includes updated chart cortex v0.2.1.
+
+### cortex-placement-shim v0.1.4
+
+Includes updated chart cortex-shim v0.1.4.
+
 ## 2026-06-29 — [#990](https://github.com/cobaltcore-dev/cortex/pull/990)
 
 ### cortex v0.2.0 (sha-124ec226)

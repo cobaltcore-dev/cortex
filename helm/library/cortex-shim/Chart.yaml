@@ -2,7 +2,7 @@ apiVersion: v2
 name: cortex-shim
 description: A Helm chart to distribute cortex shims.
 type: application
-version: 0.1.3
-appVersion: "sha-124ec226"
+version: 0.1.4
+appVersion: "sha-44b8aab7"
 icon: "https://example.com/icon.png"
 dependencies: []

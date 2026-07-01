@@ -55,8 +55,9 @@ func (api *limesAPI) Init(ctx context.Context) error {
 	// See: https://github.com/sapcc/limes/blob/5ea068b/docs/users/api-example.md?plain=1#L23
 	provider := api.keystoneClient.Client()
 	serviceType := "resources"
-	sameAsKeystone := api.keystoneClient.Availability()
-	url, err := api.keystoneClient.FindEndpoint(sameAsKeystone, serviceType)
+	// Always use the public endpoint: Limes enforces that requests arrive on its configured public
+	// hostname (LIMES_API_DOMAIN_NAME_V1) and rejects internal-URL requests with 400.
+	url, err := api.keystoneClient.FindEndpoint("public", serviceType)
 	if err != nil {
 		return err
 	}
