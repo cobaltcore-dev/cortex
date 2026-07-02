@@ -38,6 +38,7 @@ func (s *FilterCRMigrationSlotStep) Run(
 	traceLog *slog.Logger,
 	request api.ExternalSchedulerRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
+
 	result := s.IncludeAllHostsFromRequest(request)
 
 	intent, err := request.GetIntent()
