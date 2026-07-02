@@ -4,12 +4,24 @@
 sidecar:
   enabled: true
 
+volumes:
+  - name: perses-plugins
+    emptyDir: {}
+
+volumeMounts:
+  - name: perses-plugins
+    mountPath: /etc/perses/plugins
+
 config:
   provisioning:
     folders:
       - /etc/perses/provisioning
       - /etc/perses/datasources
     interval: 1m
+  plugin:
+    path: /etc/perses/plugins
+    archive_paths:
+      - /etc/perses/plugins-archive
 
 datasources:
   - kind: GlobalDatasource
