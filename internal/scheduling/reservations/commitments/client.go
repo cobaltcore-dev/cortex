@@ -89,7 +89,8 @@ func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf
 		Microversion:   "2.61",
 	}
 
-	// Get the limes endpoint.
+	// Get the limes endpoint — always use public: Limes enforces that requests arrive on its
+	// configured public hostname (LIMES_API_DOMAIN_NAME_V1) and rejects internal-URL requests with 400.
 	url = must.Return(c.provider.EndpointLocator(gophercloud.EndpointOpts{
 		Type:         "resources",
 		Availability: "public",

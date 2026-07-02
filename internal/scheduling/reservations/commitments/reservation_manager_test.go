@@ -5,6 +5,7 @@ package commitments
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -339,7 +340,7 @@ func TestApplyCommitmentState(t *testing.T) {
 			},
 		},
 		{
-			name: "max slots: only new slots counted, existing do not contribute",
+			name: "max slots: only new blind-scheduler slots counted, existing slots excluded",
 			existingSlots: []v1alpha1.Reservation{
 				newTestCRSlot("commitment-abc123-0", 8, "", "test-group", nil),
 				newTestCRSlot("commitment-abc123-1", 8, "", "test-group", nil),
@@ -733,6 +734,147 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 			}
 			if tt.validateTouched != nil {
 				tt.validateTouched(t, result.TouchedReservations)
+			}
+		})
+	}
+}
+
+// ============================================================================
+// Tests: MaxSlots only limits blind-scheduler slots (PAYG remapping excluded)
+// ============================================================================
+
+func TestApplyCommitmentState_MaxSlotsExcludesPAYG(t *testing.T) {
+	const (
+		az        = "test-az"
+		projectID = "project-1"
+		hvName    = "host-1"
+	)
+	fg := testFlavorGroup() // small=8GiB, medium=16GiB, large=32GiB
+
+	hvWithAZ := func(name string, instanceIDs ...string) *hv1.Hypervisor {
+		instances := make([]hv1.Instance, len(instanceIDs))
+		for i, id := range instanceIDs {
+			instances[i] = hv1.Instance{ID: id, Name: id, Active: true}
+		}
+		return &hv1.Hypervisor{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   name,
+				Labels: map[string]string{"topology.kubernetes.io/zone": az},
+			},
+			Status: hv1.HypervisorStatus{Instances: instances},
+		}
+	}
+
+	paygVM := func(uuid, flavorName string) reservations.VM {
+		return reservations.VM{
+			UUID:              uuid,
+			FlavorName:        flavorName,
+			CurrentHypervisor: hvName,
+		}
+	}
+
+	tests := []struct {
+		name             string
+		hypervisors      []*hv1.Hypervisor
+		paygVMs          []reservations.VM
+		existingSlots    []v1alpha1.Reservation
+		desiredMemoryGiB int64
+		maxSlots         int
+		wantError        bool
+	}{
+		{
+			// PAYG creates 4 slots, remaining delta needs 3 blind-scheduler slots.
+			// MaxSlots=3 allows it because only blind-scheduler slots (3) are counted.
+			name: "PAYG slots excluded from MaxSlots — passes when blind slots within limit",
+			hypervisors: []*hv1.Hypervisor{
+				hvWithAZ(hvName, "vm-1", "vm-2", "vm-3", "vm-4"),
+			},
+			paygVMs: []reservations.VM{
+				paygVM("vm-1", "small"), // 8 GiB
+				paygVM("vm-2", "small"), // 8 GiB
+				paygVM("vm-3", "small"), // 8 GiB
+				paygVM("vm-4", "small"), // 8 GiB → PAYG consumes 32 GiB, creates 4 slots
+			},
+			desiredMemoryGiB: 56, // delta=56GiB; PAYG=32GiB → remaining=24GiB → 3 blind slots
+			maxSlots:         3,
+			wantError:        false,
+		},
+		{
+			// PAYG creates 1 slot, remaining delta needs 2 blind-scheduler slots.
+			// MaxSlots=1 rejects because blind-scheduler slots (2) > limit (1).
+			name: "blind-scheduler slots exceed MaxSlots — rejects regardless of PAYG",
+			hypervisors: []*hv1.Hypervisor{
+				hvWithAZ(hvName, "vm-1"),
+			},
+			paygVMs: []reservations.VM{
+				paygVM("vm-1", "small"), // 8 GiB → PAYG=8GiB, 1 slot
+			},
+			desiredMemoryGiB: 32, // delta=32GiB; PAYG=8GiB → remaining=24GiB → 16+8=2 blind slots
+			maxSlots:         1,
+			wantError:        true,
+		},
+		{
+			// Existing slots + PAYG slots present, but MaxSlots only limits blind-scheduler slots.
+			name: "existing + PAYG do not count — only blind slots checked against limit",
+			hypervisors: []*hv1.Hypervisor{
+				hvWithAZ(hvName, "vm-1", "vm-2"),
+			},
+			paygVMs: []reservations.VM{
+				paygVM("vm-1", "small"), // 8 GiB
+				paygVM("vm-2", "small"), // 8 GiB → PAYG=16GiB, 2 slots
+			},
+			existingSlots: []v1alpha1.Reservation{
+				withAZ(newTestCRSlot("commitment-abc123-0", 8, hvName, "test-group", nil), az),
+			},
+			desiredMemoryGiB: 32, // existing=8GiB, delta=24GiB; PAYG=16GiB → remaining=8GiB → 1 blind slot
+			maxSlots:         1,  // 1 blind slot ≤ 1: passes
+			wantError:        false,
+		},
+	}
+
+	scheme := newCRTestScheme(t)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objects := make([]client.Object, 0, len(tt.hypervisors)+len(tt.existingSlots))
+			for _, hv := range tt.hypervisors {
+				objects = append(objects, hv)
+			}
+			for i := range tt.existingSlots {
+				objects = append(objects, &tt.existingSlots[i])
+			}
+			k8sClient := newCRTestClient(scheme, objects...)
+
+			mgr := NewReservationManager(k8sClient, ReservationManagerConfig{
+				EnablePaygPreAllocation: true,
+				VMSource:                &fakeVMSource{vms: tt.paygVMs},
+				MaxSlots:                tt.maxSlots,
+			})
+
+			desiredState := &CommitmentState{
+				CommitmentUUID:   "abc123",
+				ProjectID:        projectID,
+				FlavorGroupName:  "test-group",
+				TotalMemoryBytes: tt.desiredMemoryGiB * 1024 * 1024 * 1024,
+				AvailabilityZone: az,
+			}
+
+			_, err := mgr.ApplyCommitmentState(
+				context.Background(), logr.Discard(), desiredState, map[string]compute.FlavorGroupFeature{"test-group": fg}, "test",
+			)
+
+			if tt.wantError {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				var slotErr *SlotLimitExceededError
+				if !errors.As(err, &slotErr) {
+					t.Errorf("expected SlotLimitExceededError, got %T: %v", err, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
 			}
 		})
 	}

@@ -53,9 +53,9 @@ type ReservationManagerConfig struct {
 	// SlotCreationDelay adds a pause between consecutive Reservation CRD creates to spread
 	// scheduler load across time rather than bursting all creates at once.
 	SlotCreationDelay time.Duration
-	// MaxSlots caps the total number of Reservation CRDs for a single commitment.
-	// When non-zero, ApplyCommitmentState returns an error if the desired slot count would
-	// exceed this limit. Only set by the caller on the AllowRejection=true (API) path.
+	// MaxSlots caps the number of new blind-scheduler slots created per apply call.
+	// PAYG remapping slots and already-existing slots are excluded from this limit.
+	// Only set by the caller on the AllowRejection=true (API) path.
 	MaxSlots                int
 	EnablePaygPreAllocation bool
 	VMSource                reservations.VMSource
@@ -272,6 +272,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 	}
 
 	if deltaMemoryBytes > 0 {
+		// MaxSlots caps only blind-scheduler slots (PAYG remapping slots and existing slots are excluded).
 		newSlots := countNewSlots(deltaMemoryBytes, flavorGroup)
 		if m.cfg.MaxSlots > 0 && newSlots > m.cfg.MaxSlots {
 			return nil, &SlotLimitExceededError{NewSlots: newSlots, Limit: m.cfg.MaxSlots}
