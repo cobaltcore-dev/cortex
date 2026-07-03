@@ -1,5 +1,47 @@
 # Changelog
 
+## 2026-07-03 — [#1009](https://github.com/cobaltcore-dev/cortex/pull/1009)
+
+### cortex v0.2.2 (sha-f4d7df89)
+
+Non-breaking changes:
+- Include host information in error logs when multicluster connection fails ([#997](https://github.com/cobaltcore-dev/cortex/pull/997))
+- Fix Perses config for local development ([#1007](https://github.com/cobaltcore-dev/cortex/pull/1007))
+- Update `github.com/sapcc/go-bits` ([#1005](https://github.com/cobaltcore-dev/cortex/pull/1005))
+- Update kube-prometheus-stack Docker tag to v87.4.0 ([#998](https://github.com/cobaltcore-dev/cortex/pull/998))
+
+### cortex-shim v0.1.5 (sha-c98ddb05)
+
+Includes updated image sha-c98ddb05.
+
+### cortex-nova v0.0.79
+
+Includes updated charts cortex v0.2.2, cortex-postgres v0.6.8.
+
+### cortex-cinder v0.0.79
+
+Includes updated charts cortex v0.2.2, cortex-postgres v0.6.8.
+
+### cortex-manila v0.0.79
+
+Includes updated charts cortex v0.2.2, cortex-postgres v0.6.8.
+
+### cortex-crds v0.0.79
+
+Includes updated chart cortex v0.2.2.
+
+### cortex-ironcore v0.0.79
+
+Includes updated chart cortex v0.2.2.
+
+### cortex-pods v0.0.79
+
+Includes updated chart cortex v0.2.2.
+
+### cortex-placement-shim v0.1.5
+
+Includes updated chart cortex-shim v0.1.5.
+
 ## 2026-07-01 — [#1001](https://github.com/cobaltcore-dev/cortex/pull/1001)
 
 ### cortex v0.2.1 (sha-44b8aab7)
