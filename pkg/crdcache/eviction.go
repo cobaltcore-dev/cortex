@@ -22,6 +22,7 @@ func (c *CRDCache) RegisterEvictionHandler(
 	clusterCache runtimecache.Cache,
 	prototype client.Object,
 ) error {
+
 	informer, err := clusterCache.GetInformer(ctx, prototype)
 	if err != nil {
 		return err
