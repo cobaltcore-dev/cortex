@@ -1,0 +1,21 @@
+{{- if .Values.vpa.enabled }}
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: {{ include "cortex-scheduling-quality-exporter.fullname" . }}
+  labels:
+    {{- include "cortex-scheduling-quality-exporter.labels" . | nindent 4 }}
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "cortex-scheduling-quality-exporter.fullname" . }}
+  updatePolicy:
+    updateMode: {{ .Values.vpa.updateMode | quote }}
+  resourcePolicy:
+    containerPolicies:
+      - containerName: exporter
+        controlledResources:
+          - cpu
+          - memory
+{{- end }}

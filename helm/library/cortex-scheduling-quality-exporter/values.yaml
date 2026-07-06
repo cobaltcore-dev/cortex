@@ -1,0 +1,67 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/cobaltcore-dev/cortex-scheduling-quality-exporter
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+port: 9199
+
+config:
+  metricsPath: /metrics
+  scrapeInterval: 30s
+  logLevel: info
+
+# OpenStack credentials for Nova flavor lookups.
+# If all fields are empty, Nova integration is disabled (--disable-nova is passed).
+openstack:
+  authURL: ""
+  username: ""
+  password: ""
+  projectName: ""
+  userDomainName: Default
+  projectDomainName: Default
+
+serviceAccount:
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+
+service:
+  type: ClusterIP
+
+serviceMonitor:
+  enabled: false
+  namespace: ""
+  interval: 60s
+  scrapeTimeout: 30s
+  labels: {}
+
+vpa:
+  enabled: false
+  updateMode: Auto
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
