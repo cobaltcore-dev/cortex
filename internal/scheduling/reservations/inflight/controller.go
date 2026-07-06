@@ -148,18 +148,21 @@ func (c *Controller) handleReservations() handler.EventHandler {
 	handler := handler.Funcs{}
 	handler.CreateFunc = func(ctx context.Context, evt event.CreateEvent,
 		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+
 		queue.Add(ctrl.Request{NamespacedName: client.ObjectKey{
 			Name: evt.Object.(*v1alpha1.Reservation).Name, // cluster-scoped crd
 		}})
 	}
 	handler.UpdateFunc = func(ctx context.Context, evt event.UpdateEvent,
 		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+
 		queue.Add(ctrl.Request{NamespacedName: client.ObjectKey{
 			Name: evt.ObjectOld.(*v1alpha1.Reservation).Name, // cluster-scoped crd
 		}})
 	}
 	handler.DeleteFunc = func(ctx context.Context, evt event.DeleteEvent,
 		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+
 		queue.Add(ctrl.Request{NamespacedName: client.ObjectKey{
 			Name: evt.Object.(*v1alpha1.Reservation).Name, // cluster-scoped crd
 		}})
@@ -189,6 +192,7 @@ func (c *Controller) handleHypervisors() handler.EventHandler {
 	handler := handler.Funcs{}
 	enqueueCorrespondingReservations := func(ctx context.Context, hvName string,
 		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+
 		log := ctrl.LoggerFrom(ctx)
 		log.V(1).Info("Enqueuing reservations corresponding to hypervisor",
 			"hypervisor", hvName)
@@ -215,16 +219,19 @@ func (c *Controller) handleHypervisors() handler.EventHandler {
 	}
 	handler.CreateFunc = func(ctx context.Context, evt event.CreateEvent,
 		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+
 		hv := evt.Object.(*hv1.Hypervisor)
 		enqueueCorrespondingReservations(ctx, hv.Name, queue)
 	}
 	handler.UpdateFunc = func(ctx context.Context, evt event.UpdateEvent,
 		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+
 		hv := evt.ObjectNew.(*hv1.Hypervisor)
 		enqueueCorrespondingReservations(ctx, hv.Name, queue)
 	}
 	handler.DeleteFunc = func(ctx context.Context, evt event.DeleteEvent,
 		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+
 		hv := evt.Object.(*hv1.Hypervisor)
 		enqueueCorrespondingReservations(ctx, hv.Name, queue)
 	}
