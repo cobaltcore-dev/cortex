@@ -512,17 +512,3 @@ func (Aggregate) TableName() string { return "openstack_aggregates_v2" }
 
 // Index for the openstack model.
 func (Aggregate) Indexes() map[string][]string { return nil }
-
-// Image stores pre-computed os_type for a Glance image UUID.
-// Populated by the NovaDatasourceTypeImages syncer from the Glance API.
-// Used by the CR usage API to include os_type in VM subresources without live API calls.
-type Image struct {
-	ID     string `json:"id" db:"id,primarykey"`
-	OSType string `json:"os_type" db:"os_type"`
-}
-
-// Table in which the openstack model is stored.
-func (Image) TableName() string { return "openstack_images" }
-
-// Index for the openstack model.
-func (Image) Indexes() map[string][]string { return nil }
