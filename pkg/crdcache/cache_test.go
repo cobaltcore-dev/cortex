@@ -122,7 +122,7 @@ func TestList_returnsDeepCopies(t *testing.T) {
 	c.Assume(r)
 
 	items := c.List()
-	items[0].(client.Object).SetName("mutated")
+	items[0].SetName("mutated")
 
 	// Re-get from cache — should not reflect the mutation.
 	got, _ := c.Get("ns/res-1")

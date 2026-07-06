@@ -139,4 +139,4 @@ func matchesListOpts(obj client.Object, opts *client.ListOptions) bool {
 }
 
 // apimeta.SetList requires []runtime.Object.
-var _ runtime.Object = (client.Object)(nil)
+var _ runtime.Object = client.Object(nil)
