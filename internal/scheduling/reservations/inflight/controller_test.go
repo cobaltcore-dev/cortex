@@ -41,13 +41,7 @@ func newTestClient(scheme *runtime.Scheme, objects ...client.Object) client.Clie
 		WithScheme(scheme).
 		WithObjects(objects...).
 		WithStatusSubresource(&v1alpha1.Reservation{}).
-		WithIndex(&v1alpha1.Reservation{}, idxReservationByTargetHost, func(obj client.Object) []string {
-			res, ok := obj.(*v1alpha1.Reservation)
-			if !ok || res.Spec.TargetHost == "" {
-				return nil
-			}
-			return []string{res.Spec.TargetHost}
-		}).
+		WithIndex(&v1alpha1.Reservation{}, idxReservationByTargetHost, idxReservationByTargetHostFn).
 		Build()
 }
 
@@ -333,6 +327,19 @@ func TestPredicateHypervisors(t *testing.T) {
 	}
 	if got := pred.Create(event.CreateEvent{Object: &v1alpha1.Reservation{}}); got {
 		t.Errorf("Create(Reservation) = true, want false")
+	}
+
+	// Update events must only pass when Status.Instances actually changes,
+	// so unrelated status churn on the Hypervisor doesn't trigger a list +
+	// enqueue of all reservations targeting the host.
+	same := newHypervisor("host-1", "vm-1")
+	if got := pred.Update(event.UpdateEvent{ObjectOld: same, ObjectNew: same.DeepCopy()}); got {
+		t.Errorf("Update(no instance change) = true, want false")
+	}
+	changed := same.DeepCopy()
+	changed.Status.Instances = append(changed.Status.Instances, hv1.Instance{ID: "vm-2"})
+	if got := pred.Update(event.UpdateEvent{ObjectOld: same, ObjectNew: changed}); !got {
+		t.Errorf("Update(instance added) = false, want true")
 	}
 }
 

@@ -6,6 +6,7 @@ package inflight
 import (
 	"context"
 	"errors"
+	"reflect"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -120,13 +121,14 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		// too many requeues without the instance spawning.
 		log.V(1).Info("Instance has not spawned on any hypervisor yet, requeuing",
 			"vmID", obj.Spec.InFlightReservation.VMID)
+		orig := obj.DeepCopy()
 		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.ReservationConditionReady,
 			Status:  metav1.ConditionUnknown,
 			Reason:  "InstanceNotFound",
 			Message: "The instance has not spawned on any hypervisor yet",
 		})
-		if err := c.Status().Update(ctx, obj); err != nil {
+		if err := c.Status().Patch(ctx, obj, client.MergeFrom(orig)); err != nil {
 			log.Error(err, "Failed to update reservation status")
 			return ctrl.Result{}, err
 		}
@@ -146,21 +148,18 @@ func (c *Controller) handleReservations() handler.EventHandler {
 	handler := handler.Funcs{}
 	handler.CreateFunc = func(ctx context.Context, evt event.CreateEvent,
 		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-
 		queue.Add(ctrl.Request{NamespacedName: client.ObjectKey{
 			Name: evt.Object.(*v1alpha1.Reservation).Name, // cluster-scoped crd
 		}})
 	}
 	handler.UpdateFunc = func(ctx context.Context, evt event.UpdateEvent,
 		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-
 		queue.Add(ctrl.Request{NamespacedName: client.ObjectKey{
 			Name: evt.ObjectOld.(*v1alpha1.Reservation).Name, // cluster-scoped crd
 		}})
 	}
 	handler.DeleteFunc = func(ctx context.Context, evt event.DeleteEvent,
 		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-
 		queue.Add(ctrl.Request{NamespacedName: client.ObjectKey{
 			Name: evt.Object.(*v1alpha1.Reservation).Name, // cluster-scoped crd
 		}})
@@ -190,7 +189,6 @@ func (c *Controller) handleHypervisors() handler.EventHandler {
 	handler := handler.Funcs{}
 	enqueueCorrespondingReservations := func(ctx context.Context, hvName string,
 		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-
 		log := ctrl.LoggerFrom(ctx)
 		log.V(1).Info("Enqueuing reservations corresponding to hypervisor",
 			"hypervisor", hvName)
@@ -217,31 +215,53 @@ func (c *Controller) handleHypervisors() handler.EventHandler {
 	}
 	handler.CreateFunc = func(ctx context.Context, evt event.CreateEvent,
 		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-
 		hv := evt.Object.(*hv1.Hypervisor)
 		enqueueCorrespondingReservations(ctx, hv.Name, queue)
 	}
 	handler.UpdateFunc = func(ctx context.Context, evt event.UpdateEvent,
 		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-
 		hv := evt.ObjectNew.(*hv1.Hypervisor)
 		enqueueCorrespondingReservations(ctx, hv.Name, queue)
 	}
 	handler.DeleteFunc = func(ctx context.Context, evt event.DeleteEvent,
 		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-
 		hv := evt.Object.(*hv1.Hypervisor)
 		enqueueCorrespondingReservations(ctx, hv.Name, queue)
 	}
 	return handler
 }
 
-// predicateHypervisors generates a new predicate for hypervisors.
+// predicateHypervisors generates a new predicate for hypervisors. Update
+// events are filtered to only trigger when the Status.Instances list actually
+// changes, since that is the only field this controller consumes; without
+// this filter, unrelated status updates from the hypervisor operator would
+// cause a list + enqueue of every reservation targeting the host.
 func (c *Controller) predicateHypervisors() predicate.Predicate {
-	return predicate.NewPredicateFuncs(func(object client.Object) bool {
-		_, ok := object.(*hv1.Hypervisor)
-		return ok
-	})
+	return predicate.Funcs{
+		CreateFunc: func(evt event.CreateEvent) bool {
+			_, ok := evt.Object.(*hv1.Hypervisor)
+			return ok
+		},
+		DeleteFunc: func(evt event.DeleteEvent) bool {
+			_, ok := evt.Object.(*hv1.Hypervisor)
+			return ok
+		},
+		GenericFunc: func(evt event.GenericEvent) bool {
+			_, ok := evt.Object.(*hv1.Hypervisor)
+			return ok
+		},
+		UpdateFunc: func(evt event.UpdateEvent) bool {
+			oldHV, ok := evt.ObjectOld.(*hv1.Hypervisor)
+			if !ok {
+				return false
+			}
+			newHV, ok := evt.ObjectNew.(*hv1.Hypervisor)
+			if !ok {
+				return false
+			}
+			return !reflect.DeepEqual(oldHV.Status.Instances, newHV.Status.Instances)
+		},
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager and a multicluster

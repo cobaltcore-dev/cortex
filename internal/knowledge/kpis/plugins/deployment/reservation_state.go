@@ -5,6 +5,7 @@ package deployment
 
 import (
 	"context"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
@@ -13,8 +14,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+var reservationStateKPILogger = ctrl.Log.WithName("reservation-state-kpi")
 
 type ReservationStateKPIOpts struct {
 	// The scheduling domain to filter reservations by.
@@ -58,10 +62,16 @@ func (k *ReservationStateKPI) Describe(ch chan<- *prometheus.Desc) { ch <- k.cou
 
 // Collect the reservation state metrics.
 func (k *ReservationStateKPI) Collect(ch chan<- prometheus.Metric) {
+	// Bound the list call so a slow API server can't hang the Prometheus
+	// scrape indefinitely; if it fails we log so the disappearance of the
+	// reservation metric is not silent.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	// Get all reservations. The scheduling domain filter is applied per item
 	// since a Reservation is cluster-scoped and may cover multiple domains.
 	reservationList := &v1alpha1.ReservationList{}
-	if err := k.Client.List(context.Background(), reservationList); err != nil {
+	if err := k.Client.List(ctx, reservationList); err != nil {
+		reservationStateKPILogger.Error(err, "Failed to list reservations")
 		return
 	}
 	// Aggregate counts by (type, state, reason) so that we emit one time
