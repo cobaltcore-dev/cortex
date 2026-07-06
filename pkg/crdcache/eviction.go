@@ -6,9 +6,9 @@ package crdcache
 import (
 	"context"
 
+	toolscache "k8s.io/client-go/tools/cache"
 	runtimecache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	toolscache "k8s.io/client-go/tools/cache"
 )
 
 // RegisterEvictionHandler wires the cache's Forget callback into the given cluster cache's
