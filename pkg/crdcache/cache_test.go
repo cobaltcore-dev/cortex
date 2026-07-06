@@ -51,7 +51,7 @@ func TestAssume_returnsDeepCopy(t *testing.T) {
 
 func TestAssume_resetsTimer(t *testing.T) {
 	ttl := 80 * time.Millisecond
-	c := New(Options{TTL: ttl})
+	c := New(Options{Config: Config{CRDCache: CRDCacheSettings{TTL: Duration{ttl}}}})
 	r := makeReservation("ns", "res-1")
 
 	c.Assume(r)
@@ -83,7 +83,7 @@ func TestForget_noopOnMissing(t *testing.T) {
 }
 
 func TestTTL_evictsAfterExpiry(t *testing.T) {
-	c := New(Options{TTL: 40 * time.Millisecond})
+	c := New(Options{Config: Config{CRDCache: CRDCacheSettings{TTL: Duration{40 * time.Millisecond}}}})
 	c.Assume(makeReservation("ns", "res-1"))
 	time.Sleep(80 * time.Millisecond)
 
@@ -93,7 +93,7 @@ func TestTTL_evictsAfterExpiry(t *testing.T) {
 }
 
 func TestTTL_cancelledByForget(t *testing.T) {
-	c := New(Options{TTL: 50 * time.Millisecond})
+	c := New(Options{Config: Config{CRDCache: CRDCacheSettings{TTL: Duration{50 * time.Millisecond}}}})
 	c.Assume(makeReservation("ns", "res-1"))
 	c.Forget("ns/res-1")
 
@@ -139,7 +139,7 @@ func TestObjectKey_clusterScoped(t *testing.T) {
 }
 
 func TestConcurrent_safeUnderRace(t *testing.T) {
-	c := New(Options{TTL: 20 * time.Millisecond})
+	c := New(Options{Config: Config{CRDCache: CRDCacheSettings{TTL: Duration{20 * time.Millisecond}}}})
 	var wg sync.WaitGroup
 	for i := range 100 {
 		wg.Add(1)

@@ -233,14 +233,11 @@ func TestEviction_informerFires(t *testing.T) {
 }
 
 func TestShouldCache_respectsFilter(t *testing.T) {
-	// Build a CachingClient that caches nothing (ShouldCache always false).
 	inner := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
 	cache := New(Options{})
 	cc := NewCachingClient(inner, cache, Options{
 		ShouldCache: func(client.Object) bool { return false },
 	})
-	// Override the embedded client's opts via the CachingClient's opts field.
-	cc.opts.ShouldCache = func(client.Object) bool { return false }
 
 	ctx := context.Background()
 	r := res("ns", "no-cache", nil)
@@ -250,4 +247,48 @@ func TestShouldCache_respectsFilter(t *testing.T) {
 	if _, ok := cache.Get("ns/no-cache"); ok {
 		t.Error("object should not have been cached when ShouldCache returns false")
 	}
+}
+
+func TestShouldCacheFunc_allowsConfiguredGVK(t *testing.T) {
+	scheme := newScheme(t)
+	settings := CRDCacheSettings{
+		GVKs: []GVK{mustParseGVK(t, "cortex.cloud/v1alpha1/Reservation")},
+	}
+
+	inner := fake.NewClientBuilder().WithScheme(scheme).Build()
+	cache := New(Options{})
+	cc := NewCachingClient(inner, cache, Options{
+		ShouldCache: settings.ShouldCacheFunc(scheme),
+	})
+
+	ctx := context.Background()
+
+	// Reservation is in the allowlist — should be cached.
+	r := res("ns", "allowed", nil)
+	if err := cc.Create(ctx, r); err != nil {
+		t.Fatalf("Create Reservation: %v", err)
+	}
+	if _, ok := cache.Get("ns/allowed"); !ok {
+		t.Error("Reservation should have been cached")
+	}
+
+	// CommittedResource is not in the allowlist — should not be cached.
+	cr := &v1alpha1.CommittedResource{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "blocked"},
+	}
+	if err := cc.Create(ctx, cr); err != nil {
+		t.Fatalf("Create CommittedResource: %v", err)
+	}
+	if _, ok := cache.Get("ns/blocked"); ok {
+		t.Error("CommittedResource should not have been cached")
+	}
+}
+
+func mustParseGVK(t *testing.T, s string) GVK {
+	t.Helper()
+	var g GVK
+	if err := g.UnmarshalJSON([]byte(`"` + s + `"`)); err != nil {
+		t.Fatalf("parse GVK %q: %v", s, err)
+	}
+	return g
 }

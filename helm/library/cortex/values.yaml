@@ -112,3 +112,8 @@ conf:
   enabledControllers:
     # The explanation controller is available for all decision resources.
     - explanation-controller
+  # CRD assumption cache settings.
+  crdCache:
+    ttl: "2m"
+    gvks:
+      - "cortex.cloud/v1alpha1/Reservation"

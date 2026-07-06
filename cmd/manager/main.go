@@ -376,13 +376,11 @@ func main() {
 	// In-process cache for Reservation CRDs. Controller-runtime's informer is eventually
 	// consistent; writes via this client are immediately visible to subsequent List/Get calls
 	// within the same pod. Entries are evicted when the informer sees the object or the TTL
-	// (2m) expires.
+	// expires.
+	crdCacheConfig := conf.GetConfigOrDie[crdcache.Config]()
 	reservationCache := crdcache.New(crdcache.Options{
-		TTL: 2 * time.Minute,
-		ShouldCache: func(obj client.Object) bool {
-			_, ok := obj.(*v1alpha1.Reservation)
-			return ok
-		},
+		Config:      crdCacheConfig,
+		ShouldCache: crdCacheConfig.CRDCache.ShouldCacheFunc(scheme),
 	})
 	cachingClient := crdcache.NewCachingClient(multiclusterClient, reservationCache, crdcache.Options{})
 	// Register informer-based eviction handlers after cache sync.
