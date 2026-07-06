@@ -5,13 +5,14 @@ The failover reservation system ensures VMs have pre-reserved capacity on altern
 ## File Structure
 
 ```text
-internal/scheduling/reservations/failover/
-├── config.go                    # Configuration struct (intervals, flavor requirements)
-├── controller.go                # Handles lifecycle of Reservation CRD of type failover
-├── vm_source.go                 # VM data source (reads from Nova DB via postgres)
-├── reservation_eligibility.go   # Checks if a VM can use a failover reservation from a HA perspective (independent of normal scheduling constraints)
-├── reservation_scheduling.go    # Scheduling (new and reusing) of failover reservations via our scheduling pipeline
-└── helpers.go                   # Utility functions for reservation manipulation
+internal/scheduling/reservations/
+├── vm_source.go                 # Shared VM data source interface (used by failover, commitments, and quota controllers)
+└── failover/
+    ├── config.go                    # Configuration struct (intervals, flavor requirements)
+    ├── controller.go                # Handles lifecycle of Reservation CRD of type failover
+    ├── reservation_eligibility.go   # Checks if a VM can use a failover reservation from a HA perspective (independent of normal scheduling constraints)
+    ├── reservation_scheduling.go    # Scheduling (new and reusing) of failover reservations via our scheduling pipeline
+    └── helpers.go                   # Utility functions for reservation manipulation
 ```
 
 ## Reconciliation Flow
@@ -25,14 +26,35 @@ The controller has two reconciliation modes:
 ```mermaid
 flowchart TD
     P1[List Hypervisors from K8s]
+    P1b["Build active-VM set from<br/>Hypervisor CRD Status.Instances"]
     P2["List VMs from Postgres<br/>(vm_source.go)"]
-    P3["Remove Invalid VMs from reservations<br/>(e.g., vm:host mapping wrong or vm deleted)"]
+    P3["Remove Invalid VMs from reservations<br/>(e.g., vm:host mapping wrong or vm deleted)<br/>with postgres data-loss safeguard"]
     P4["Remove Non-eligible VMs from reservations<br/>(via eligibility rules, reservation_eligibility.go)"]
     P5[Delete Empty Reservations]
     P6["Create/Assign Reservations<br/>(reservation_scheduling.go)"]
     
-    P1 --> P2 --> P3 --> P4 --> P5 --> P6
+    P1 --> P1b --> P2 --> P3 --> P4 --> P5 --> P6
 ```
+
+#### Postgres Data-Loss Safeguard
+
+Before removing a VM from a failover reservation because it is missing from the
+postgres-derived VM source, the controller cross-checks the Hypervisor CRD
+`Status.Instances`. If the VM is still reported as active on any hypervisor, its
+allocation is preserved in the reservation.
+
+This safeguard prevents a postgres data loss or restore event from cascading into
+the mass deletion of all failover reservations. Without it, a wiped or partially
+restored Nova database would make every VM appear "deleted," causing the
+controller to empty and then garbage-collect all reservations -- leaving the
+entire fleet without failover coverage until postgres recovers and the
+reservations are rebuilt.
+
+The active-VM set (`vmsOnHypervisor`) is built once per reconciliation cycle by
+iterating over all Hypervisor CRD `Status.Instances` entries that are marked
+active. During the "Remove Invalid VMs" step, if a VM UUID is absent from the
+postgres VM list but present in this set, the allocation is kept and a log
+message is emitted.
 
 
 ### Watch-based Reconciliation
@@ -114,7 +136,7 @@ The main orchestrator with dual reconciliation:
 
 ### 2. VM Source (`vm_source.go`)
 
-Interface `VMSource` with `DBVMSource` implementation:
+Shared interface `VMSource` (located at `internal/scheduling/reservations/vm_source.go`) used by failover, commitments, and quota controllers:
 - Reads VMs from Nova postgres database (servers + flavors join)
 - Can trust either postgres (`OSEXTSRVATTRHost`) or Hypervisor CRD for VM location
 - Returns `VM` structs with UUID, flavor, resources, extra specs, AZ

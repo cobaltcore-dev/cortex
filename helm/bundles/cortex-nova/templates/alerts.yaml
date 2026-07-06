@@ -26,7 +26,7 @@ spec:
         context: liveness
         dashboard: cortex-status-dashboard/cortex-status-dashboard
         service: cortex
-        severity: {{ if .Values.kvm.enabled }}critical{{ else }}warning{{ end }}
+        severity: {{ if and .Values.kvm.enabled .Values.kvm.criticalAlerts }}critical{{ else }}warning{{ end }}
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/down
       annotations:
@@ -570,8 +570,8 @@ spec:
 
     - alert: CortexNovaCommittedResourceCapacityDroppedToZero
       expr: |
-        (cortex_committed_resource_reported_capacity_gib{service="cortex-nova-metrics"} == 0)
-        and on(resource, az) (cortex_committed_resource_reported_capacity_gib{service="cortex-nova-metrics"} offset 30m > 0)
+        (cortex_committed_resource_reported_capacity{service="cortex-nova-metrics"} == 0)
+        and on(resource, az, unit_size) (cortex_committed_resource_reported_capacity{service="cortex-nova-metrics"} offset 30m > 0)
       for: 5m
       labels:
         context: committed-resource-api

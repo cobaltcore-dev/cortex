@@ -78,7 +78,7 @@ func newFlavorGroupKnowledge(t *testing.T, groupName string, smallestMemoryMB ui
 	}
 }
 
-// newHypervisor creates a Hypervisor CRD with a topology AZ label and effective capacity.
+// newHypervisor creates a Hypervisor CRD with a topology AZ label, memory and CPU effective capacity.
 func newHypervisor(name, az string, memoryBytes int64, instanceIDs ...string) *hv1.Hypervisor {
 	hv := &hv1.Hypervisor{
 		ObjectMeta: metav1.ObjectMeta{
@@ -87,9 +87,11 @@ func newHypervisor(name, az string, memoryBytes int64, instanceIDs ...string) *h
 		},
 	}
 	if memoryBytes > 0 {
-		qty := resource.NewQuantity(memoryBytes, resource.BinarySI)
+		memQty := resource.NewQuantity(memoryBytes, resource.BinarySI)
+		cpuQty := resource.NewQuantity(128, resource.DecimalSI) // generous CPU so memory is the binding constraint
 		hv.Status.EffectiveCapacity = map[hv1.ResourceName]resource.Quantity{
-			hv1.ResourceMemory: *qty,
+			hv1.ResourceMemory: *memQty,
+			hv1.ResourceCPU:    *cpuQty,
 		}
 	}
 	for _, id := range instanceIDs {
@@ -107,6 +109,12 @@ func newMockSchedulerServer(t *testing.T, hosts []string) *httptest.Server {
 			t.Errorf("mock scheduler: failed to encode response: %v", err)
 		}
 	}))
+}
+
+// newController is a test helper that creates a Controller with a nil VMSource.
+func newController(t *testing.T, c client.Client, cfg Config) *Controller {
+	t.Helper()
+	return NewController(c, cfg, nil)
 }
 
 // --- unit tests for pure helper functions ---
@@ -173,25 +181,15 @@ func TestAvailabilityZones(t *testing.T) {
 }
 
 func TestCountInstancesInAZ(t *testing.T) {
-	hvs := []hv1.Hypervisor{
-		*newHypervisor("h1", "az-a", 0, "vm1", "vm2"),
-		*newHypervisor("h2", "az-a", 0, "vm3"),
-		*newHypervisor("h3", "az-b", 0, "vm4"),
-	}
-	if got := countInstancesInAZ(hvs, "az-a"); got != 3 {
-		t.Errorf("countInstancesInAZ(az-a) = %d, want 3", got)
-	}
-	if got := countInstancesInAZ(hvs, "az-b"); got != 1 {
-		t.Errorf("countInstancesInAZ(az-b) = %d, want 1", got)
-	}
-	if got := countInstancesInAZ(hvs, "az-c"); got != 0 {
-		t.Errorf("countInstancesInAZ(az-c) = %d, want 0", got)
-	}
+	// countInstancesInAZ was removed since TotalInstances is no longer stored in the CRD.
+	// The AZ instance count is now derived from RunningInstances per flavor group.
+	// This test is replaced by the reconcileAZ integration tests which verify RunningInstances.
+	t.Skip("countInstancesInAZ removed — see TestReconcileAZ_CreatesCRD")
 }
 
-// --- integration-style tests for reconcileOne ---
+// --- integration-style tests for reconcileAZ ---
 
-func TestReconcileOne_CreatesCRD(t *testing.T) {
+func TestReconcileAZ_CreatesCRD(t *testing.T) {
 	const (
 		groupName = "hana-v2"
 		az        = "qa-de-1a"
@@ -209,11 +207,11 @@ func TestReconcileOne_CreatesCRD(t *testing.T) {
 		WithStatusSubresource(&v1alpha1.FlavorGroupCapacity{}, &v1alpha1.Knowledge{}).
 		Build()
 
-	// Both probes return host-1 so capacity = floor(4GiB/4GiB) = 1
+	// Both probes return host-1 → total capacity = floor(4GiB/4GiB) = 1, placeable = 1.
 	schedulerServer := newMockSchedulerServer(t, []string{"host-1"})
 	defer schedulerServer.Close()
 
-	ctrl := NewController(fakeClient, Config{
+	ctrl := newController(t, fakeClient, Config{
 		SchedulerURL:      schedulerServer.URL,
 		TotalPipeline:     "kvm-report-capacity",
 		PlaceablePipeline: "kvm-general-purpose",
@@ -226,8 +224,10 @@ func TestReconcileOne_CreatesCRD(t *testing.T) {
 	}
 	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
 
-	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, hvByName, []hv1.Hypervisor{*hv}, map[string]int64{}); err != nil {
-		t.Fatalf("reconcileOne failed: %v", err)
+	if err := ctrl.reconcileAZ(context.Background(), az,
+		map[string]compute.FlavorGroupFeature{groupName: groupData},
+		hvByName, map[string]int64{}, map[vmUsageKey]vmUsage{}); err != nil {
+		t.Fatalf("reconcileAZ failed: %v", err)
 	}
 
 	var crd v1alpha1.FlavorGroupCapacity
@@ -253,12 +253,18 @@ func TestReconcileOne_CreatesCRD(t *testing.T) {
 	if f.PlaceableHosts != 1 {
 		t.Errorf("PlaceableHosts = %d, want 1", f.PlaceableHosts)
 	}
-	if crd.Status.TotalInstances != 1 {
-		t.Errorf("TotalInstances = %d, want 1", crd.Status.TotalInstances)
+	// Round-robin assigns the 1 available slot → ExclusivelyFreeCapacity[memory] = 1 flavor slot worth.
+	excl := crd.Status.ExclusivelyFreeCapacity[string(v1alpha1.CommittedResourceTypeMemory)]
+	if excl.IsZero() {
+		t.Errorf("ExclusivelyFreeCapacity[memory] is zero, want non-zero (1 slot assigned)")
+	}
+	// TotalInstances removed; per-group running VMs sourced from VMSource (nil in this test → 0).
+	if crd.Status.RunningInstances != 0 {
+		t.Errorf("RunningInstances = %d, want 0 (no VMSource configured)", crd.Status.RunningInstances)
 	}
 }
 
-func TestReconcileOne_SetsReadyConditionFalseOnSchedulerError(t *testing.T) {
+func TestReconcileAZ_SkipsCRDWriteOnSchedulerError(t *testing.T) {
 	const (
 		groupName = "hana-v2"
 		az        = "qa-de-1a"
@@ -274,13 +280,13 @@ func TestReconcileOne_SetsReadyConditionFalseOnSchedulerError(t *testing.T) {
 		WithStatusSubresource(&v1alpha1.FlavorGroupCapacity{}, &v1alpha1.Knowledge{}).
 		Build()
 
-	// Scheduler returns 500 to simulate error
+	// Scheduler returns 500 to simulate error.
 	failServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer failServer.Close()
 
-	ctrl := NewController(fakeClient, Config{
+	ctrl := newController(t, fakeClient, Config{
 		SchedulerURL:      failServer.URL,
 		TotalPipeline:     "kvm-report-capacity",
 		PlaceablePipeline: "kvm-general-purpose",
@@ -292,28 +298,23 @@ func TestReconcileOne_SetsReadyConditionFalseOnSchedulerError(t *testing.T) {
 		Flavors:        []compute.FlavorInGroup{smallFlavor},
 	}
 
-	// reconcileOne returns no error itself (it continues on probe failure), but sets Ready=False
-	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, map[string]hv1.Hypervisor{}, []hv1.Hypervisor{}, map[string]int64{}); err != nil {
-		t.Fatalf("reconcileOne failed: %v", err)
+	if err := ctrl.reconcileAZ(context.Background(), az,
+		map[string]compute.FlavorGroupFeature{groupName: groupData},
+		map[string]hv1.Hypervisor{}, map[string]int64{}, map[vmUsageKey]vmUsage{}); err != nil {
+		t.Fatalf("reconcileAZ failed: %v", err)
 	}
 
-	var crd v1alpha1.FlavorGroupCapacity
-	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdNameFor(groupName, az)}, &crd); err != nil {
-		t.Fatalf("failed to get CRD: %v", err)
+	// Stale probes → CRD must NOT be written; last good state is preserved.
+	var list v1alpha1.FlavorGroupCapacityList
+	if err := fakeClient.List(context.Background(), &list); err != nil {
+		t.Fatalf("failed to list CRDs: %v", err)
 	}
-
-	var freshStatus metav1.ConditionStatus
-	for _, c := range crd.Status.Conditions {
-		if c.Type == v1alpha1.FlavorGroupCapacityConditionReady {
-			freshStatus = c.Status
-		}
-	}
-	if freshStatus != metav1.ConditionFalse {
-		t.Errorf("Ready condition = %q, want %q", freshStatus, metav1.ConditionFalse)
+	if len(list.Items) != 0 {
+		t.Errorf("expected 0 CRDs (stale cycle skips write), got %d", len(list.Items))
 	}
 }
 
-func TestReconcileOne_IdempotentUpdate(t *testing.T) {
+func TestReconcileAZ_IdempotentUpdate(t *testing.T) {
 	const (
 		groupName = "hana-v2"
 		az        = "qa-de-1a"
@@ -326,7 +327,7 @@ func TestReconcileOne_IdempotentUpdate(t *testing.T) {
 	knowledge := newFlavorGroupKnowledge(t, groupName, memMB)
 	crdName := crdNameFor(groupName, az)
 
-	// Pre-create the CRD to test the update path (not create path)
+	// Pre-create the CRD to test the update path (not create path).
 	existing := &v1alpha1.FlavorGroupCapacity{
 		ObjectMeta: metav1.ObjectMeta{Name: crdName},
 		Spec: v1alpha1.FlavorGroupCapacitySpec{
@@ -344,7 +345,7 @@ func TestReconcileOne_IdempotentUpdate(t *testing.T) {
 	schedulerServer := newMockSchedulerServer(t, []string{"host-1"})
 	defer schedulerServer.Close()
 
-	ctrl := NewController(fakeClient, Config{
+	ctrl := newController(t, fakeClient, Config{
 		SchedulerURL:      schedulerServer.URL,
 		TotalPipeline:     "kvm-report-capacity",
 		PlaceablePipeline: "kvm-general-purpose",
@@ -356,14 +357,15 @@ func TestReconcileOne_IdempotentUpdate(t *testing.T) {
 		Flavors:        []compute.FlavorInGroup{smallFlavor},
 	}
 	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
+	groups := map[string]compute.FlavorGroupFeature{groupName: groupData}
 
 	// First call
-	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, hvByName, []hv1.Hypervisor{*hv}, map[string]int64{}); err != nil {
-		t.Fatalf("first reconcileOne failed: %v", err)
+	if err := ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]int64{}, map[vmUsageKey]vmUsage{}); err != nil {
+		t.Fatalf("first reconcileAZ failed: %v", err)
 	}
-	// Second call — should not error on the already-existing CRD
-	if err := ctrl.reconcileOne(context.Background(), groupName, groupData, az, hvByName, []hv1.Hypervisor{*hv}, map[string]int64{}); err != nil {
-		t.Fatalf("second reconcileOne failed: %v", err)
+	// Second call — should not error on the already-existing CRD.
+	if err := ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]int64{}, map[vmUsageKey]vmUsage{}); err != nil {
+		t.Fatalf("second reconcileAZ failed: %v", err)
 	}
 
 	var crd v1alpha1.FlavorGroupCapacity
@@ -382,14 +384,14 @@ func TestReconcileAll_SkipsGroupsWithNoAZs(t *testing.T) {
 	scheme := newTestScheme(t)
 	knowledge := newFlavorGroupKnowledge(t, "hana-v2", 2048)
 
-	// No hypervisors → no AZs → reconcileAll returns without error
+	// No hypervisors → no AZs → reconcileAll returns without error.
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(knowledge).
 		WithStatusSubresource(&v1alpha1.FlavorGroupCapacity{}, &v1alpha1.Knowledge{}).
 		Build()
 
-	ctrl := NewController(fakeClient, Config{
+	ctrl := newController(t, fakeClient, Config{
 		SchedulerURL:      "http://localhost:9999", // unreachable; not called
 		TotalPipeline:     "kvm-report-capacity",
 		PlaceablePipeline: "kvm-general-purpose",
@@ -418,34 +420,44 @@ func TestProbeScheduler_CapacityCalculation(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-	// Scheduler returns both hosts
+	// Scheduler returns both hosts.
 	srv := newMockSchedulerServer(t, []string{"host-1", "host-2"})
 	defer srv.Close()
 
-	c := NewController(fakeClient, Config{SchedulerURL: srv.URL})
+	c := newController(t, fakeClient, Config{SchedulerURL: srv.URL})
 	hvByName := map[string]hv1.Hypervisor{
 		"host-1": *hv1Obj,
 		"host-2": *hv2Obj,
 	}
 	flavor := compute.FlavorInGroup{Name: "test-flavor", MemoryMB: memMB}
 
-	capacity, hosts, err := c.probeScheduler(context.Background(), flavor, "az-a", "test-pipeline", hvByName, true, nil)
+	capacity, hosts, candidates, err := c.probeScheduler(context.Background(), flavor, "az-a", "test-pipeline", hvByName, true, nil)
 	if err != nil {
 		t.Fatalf("probeScheduler failed: %v", err)
 	}
 	if hosts != 2 {
 		t.Errorf("hosts = %d, want 2", hosts)
 	}
-	// host-1 = 1 slot (4GiB/4GiB), host-2 = 2 slots (8GiB/4GiB)
+	// host-1 = 1 slot (4GiB/4GiB), host-2 = 2 slots (8GiB/4GiB).
 	if capacity != 3 {
 		t.Errorf("capacity = %d, want 3", capacity)
+	}
+	// Both hosts should appear in the candidate list.
+	candidateSet := make(map[string]struct{}, len(candidates))
+	for _, h := range candidates {
+		candidateSet[h] = struct{}{}
+	}
+	if _, ok := candidateSet["host-1"]; !ok {
+		t.Errorf("host-1 missing from candidates %v", candidates)
+	}
+	if _, ok := candidateSet["host-2"]; !ok {
+		t.Errorf("host-2 missing from candidates %v", candidates)
 	}
 }
 
 // TestProbeScheduler_SubtractsAllocationsWhenNotIgnored verifies that placeable-probe slot
 // counting uses remaining capacity (effectiveCapacity − allocation) while the total-probe uses
-// raw capacity. This is the regression test for the bug where both probes used raw capacity,
-// making running VMs invisible in the usage = total − placeable calculation.
+// raw capacity.
 func TestProbeScheduler_SubtractsAllocationsWhenNotIgnored(t *testing.T) {
 	const memMB = 4096
 	const memBytes = int64(memMB) * 1024 * 1024
@@ -462,12 +474,12 @@ func TestProbeScheduler_SubtractsAllocationsWhenNotIgnored(t *testing.T) {
 	srv := newMockSchedulerServer(t, []string{"host-1"})
 	defer srv.Close()
 
-	c := NewController(fakeClient, Config{SchedulerURL: srv.URL})
+	c := newController(t, fakeClient, Config{SchedulerURL: srv.URL})
 	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
 	flavor := compute.FlavorInGroup{Name: "test-flavor", MemoryMB: memMB}
 
 	// Total probe (ignoreAllocations=true): raw capacity → 2 slots.
-	totalCap, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "total-pipeline", hvByName, true, nil)
+	totalCap, _, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "total-pipeline", hvByName, true, nil)
 	if err != nil {
 		t.Fatalf("probeScheduler (total) failed: %v", err)
 	}
@@ -476,7 +488,7 @@ func TestProbeScheduler_SubtractsAllocationsWhenNotIgnored(t *testing.T) {
 	}
 
 	// Placeable probe (ignoreAllocations=false): capacity − allocation → 1 slot.
-	placeableCap, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "placeable-pipeline", hvByName, false, nil)
+	placeableCap, _, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "placeable-pipeline", hvByName, false, nil)
 	if err != nil {
 		t.Fatalf("probeScheduler (placeable) failed: %v", err)
 	}
@@ -491,7 +503,7 @@ func TestReconcileAll_MultipleGroupsAndAZs(t *testing.T) {
 	const memMB = 2048
 	const memBytes = int64(memMB) * 1024 * 1024
 
-	// Two AZs, two hypervisors
+	// Two AZs, two hypervisors.
 	hv1Obj := newHypervisor("h1", "az-a", memBytes)
 	hv2Obj := newHypervisor("h2", "az-b", memBytes)
 	knowledge := newFlavorGroupKnowledge(t, "2152", memMB)
@@ -505,7 +517,7 @@ func TestReconcileAll_MultipleGroupsAndAZs(t *testing.T) {
 	srv := newMockSchedulerServer(t, []string{})
 	defer srv.Close()
 
-	c := NewController(fakeClient, Config{
+	c := newController(t, fakeClient, Config{
 		SchedulerURL:      srv.URL,
 		TotalPipeline:     "kvm-report-capacity",
 		PlaceablePipeline: "kvm-general-purpose",
@@ -515,7 +527,7 @@ func TestReconcileAll_MultipleGroupsAndAZs(t *testing.T) {
 		t.Fatalf("reconcileAll failed: %v", err)
 	}
 
-	// Expect one CRD per AZ for the single group
+	// Expect one CRD per AZ for the single group.
 	var list v1alpha1.FlavorGroupCapacityList
 	if err := fakeClient.List(context.Background(), &list); err != nil {
 		t.Fatalf("failed to list CRDs: %v", err)
@@ -532,7 +544,7 @@ func TestReconcileAll_MultipleGroupsAndAZs(t *testing.T) {
 func TestReconcileAll_FlavorGroupsKnowledgeNotReady(t *testing.T) {
 	scheme := newTestScheme(t)
 
-	// Knowledge CRD exists but is not Ready
+	// Knowledge CRD exists but is not Ready.
 	knowledge := &v1alpha1.Knowledge{
 		ObjectMeta: metav1.ObjectMeta{Name: "flavor-groups"},
 		Spec: v1alpha1.KnowledgeSpec{
@@ -556,29 +568,44 @@ func TestReconcileAll_FlavorGroupsKnowledgeNotReady(t *testing.T) {
 		WithStatusSubresource(&v1alpha1.Knowledge{}).
 		Build()
 
-	c := NewController(fakeClient, Config{
+	c := newController(t, fakeClient, Config{
 		SchedulerURL:      "http://localhost:9999",
 		TotalPipeline:     "kvm-report-capacity",
 		PlaceablePipeline: "kvm-general-purpose",
 	})
 
-	// Should return an error when knowledge is not ready
+	// Should return an error when knowledge is not ready.
 	if err := c.reconcileAll(context.Background()); err == nil {
 		t.Error("reconcileAll should fail when flavor groups knowledge is not ready")
 	}
 }
 
-func TestReconcileOne_ZeroMemoryFlavorReturnsError(t *testing.T) {
+func TestReconcileAZ_ZeroMemoryFlavorSkipped(t *testing.T) {
 	scheme := newTestScheme(t)
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	c := NewController(fakeClient, Config{})
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.FlavorGroupCapacity{}).
+		Build()
+	c := newController(t, fakeClient, Config{})
 
 	groupData := compute.FlavorGroupFeature{
 		SmallestFlavor: compute.FlavorInGroup{Name: "bad-flavor", MemoryMB: 0},
 	}
-	err := c.reconcileOne(context.Background(), "hana-v2", groupData, "az-a", nil, nil, nil)
-	if err == nil {
-		t.Error("expected error for zero-memory flavor")
+	// reconcileAZ logs and skips groups with zero memory; it does not return an error.
+	err := c.reconcileAZ(context.Background(), "az-a",
+		map[string]compute.FlavorGroupFeature{"hana-v2": groupData},
+		nil, nil, nil)
+	if err != nil {
+		t.Errorf("reconcileAZ should not return error for zero-memory flavor, got: %v", err)
+	}
+
+	// No CRD should have been created.
+	var list v1alpha1.FlavorGroupCapacityList
+	if err := fakeClient.List(context.Background(), &list); err != nil {
+		t.Fatalf("failed to list CRDs: %v", err)
+	}
+	if len(list.Items) != 0 {
+		t.Errorf("expected 0 CRDs, got %d", len(list.Items))
 	}
 }
 
@@ -619,17 +646,17 @@ func TestSumCommittedCapacity(t *testing.T) {
 
 	scheme := newTestScheme(t)
 	objects := []client.Object{
-		// Should count: confirmed, memory, right group+AZ, AcceptedAmount set
+		// Should count: confirmed, memory, right group+AZ, AcceptedAmount set.
 		newCR("cr1", groupName, az, v1alpha1.CommitmentStatusConfirmed, v1alpha1.CommittedResourceTypeMemory, "8Gi", "8Gi"),
-		// Should count: guaranteed, memory, right group+AZ, no AcceptedAmount → falls back to Spec.Amount
+		// Should count: guaranteed, memory, right group+AZ, no AcceptedAmount → falls back to Spec.Amount.
 		newCR("cr2", groupName, az, v1alpha1.CommitmentStatusGuaranteed, v1alpha1.CommittedResourceTypeMemory, "4Gi", ""),
-		// Should NOT count: wrong state
+		// Should NOT count: wrong state.
 		newCR("cr3", groupName, az, v1alpha1.CommitmentStatusPlanned, v1alpha1.CommittedResourceTypeMemory, "4Gi", ""),
-		// Should NOT count: wrong resource type
+		// Should NOT count: wrong resource type.
 		newCR("cr4", groupName, az, v1alpha1.CommitmentStatusConfirmed, v1alpha1.CommittedResourceTypeCores, "4Gi", ""),
-		// Should NOT count: wrong AZ
+		// Should NOT count: wrong AZ.
 		newCR("cr5", groupName, "other-az", v1alpha1.CommitmentStatusConfirmed, v1alpha1.CommittedResourceTypeMemory, "4Gi", ""),
-		// Should NOT count: wrong flavor group
+		// Should NOT count: wrong flavor group.
 		newCR("cr6", "other-group", az, v1alpha1.CommitmentStatusConfirmed, v1alpha1.CommittedResourceTypeMemory, "4Gi", ""),
 	}
 
@@ -638,8 +665,8 @@ func TestSumCommittedCapacity(t *testing.T) {
 		WithObjects(objects...).
 		Build()
 
-	c := NewController(fakeClient, Config{})
-	// smallestFlavorBytes = 4GiB → cr1 = 8GiB/4GiB = 2 slots, cr2 = 4GiB/4GiB = 1 slot → total = 3
+	c := newController(t, fakeClient, Config{})
+	// smallestFlavorBytes = 4GiB → cr1 = 8GiB/4GiB = 2 slots, cr2 = 4GiB/4GiB = 1 slot → total = 3.
 	got, err := c.sumCommittedCapacity(context.Background(), groupName, az, memBytes)
 	if err != nil {
 		t.Fatalf("sumCommittedCapacity failed: %v", err)
@@ -667,12 +694,12 @@ func TestProbeScheduler_SubtractsReservationBlocksWhenNotIgnored(t *testing.T) {
 	srv := newMockSchedulerServer(t, []string{"host-1"})
 	defer srv.Close()
 
-	c := NewController(fakeClient, Config{SchedulerURL: srv.URL})
+	c := newController(t, fakeClient, Config{SchedulerURL: srv.URL})
 	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
 	flavor := compute.FlavorInGroup{Name: "test-flavor", MemoryMB: memMB}
 
 	// Total probe: raw 3 slots, no subtraction.
-	totalCap, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "total-pipeline", hvByName, true, nil)
+	totalCap, _, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "total-pipeline", hvByName, true, nil)
 	if err != nil {
 		t.Fatalf("probeScheduler (total) failed: %v", err)
 	}
@@ -684,7 +711,7 @@ func TestProbeScheduler_SubtractsReservationBlocksWhenNotIgnored(t *testing.T) {
 	blockedByReservations := map[string]int64{
 		"host-1": memBytes, // 1 reservation blocking 1 slot's worth of memory
 	}
-	placeableCap, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "placeable-pipeline", hvByName, false, blockedByReservations)
+	placeableCap, _, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "placeable-pipeline", hvByName, false, blockedByReservations)
 	if err != nil {
 		t.Fatalf("probeScheduler (placeable) failed: %v", err)
 	}

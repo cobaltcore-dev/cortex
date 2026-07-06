@@ -1,5 +1,182 @@
 # Changelog
 
+## 2026-07-03 — [#1009](https://github.com/cobaltcore-dev/cortex/pull/1009)
+
+### cortex v0.2.2 (sha-f4d7df89)
+
+Non-breaking changes:
+- Include host information in error logs when multicluster connection fails ([#997](https://github.com/cobaltcore-dev/cortex/pull/997))
+- Fix Perses config for local development ([#1007](https://github.com/cobaltcore-dev/cortex/pull/1007))
+- Update `github.com/sapcc/go-bits` ([#1005](https://github.com/cobaltcore-dev/cortex/pull/1005))
+- Update kube-prometheus-stack Docker tag to v87.4.0 ([#998](https://github.com/cobaltcore-dev/cortex/pull/998))
+
+### cortex-shim v0.1.5 (sha-c98ddb05)
+
+Includes updated image sha-c98ddb05.
+
+### cortex-nova v0.0.79
+
+Includes updated charts cortex v0.2.2, cortex-postgres v0.6.8.
+
+### cortex-cinder v0.0.79
+
+Includes updated charts cortex v0.2.2, cortex-postgres v0.6.8.
+
+### cortex-manila v0.0.79
+
+Includes updated charts cortex v0.2.2, cortex-postgres v0.6.8.
+
+### cortex-crds v0.0.79
+
+Includes updated chart cortex v0.2.2.
+
+### cortex-ironcore v0.0.79
+
+Includes updated chart cortex v0.2.2.
+
+### cortex-pods v0.0.79
+
+Includes updated chart cortex v0.2.2.
+
+### cortex-placement-shim v0.1.5
+
+Includes updated chart cortex-shim v0.1.5.
+
+## 2026-07-01 — [#1001](https://github.com/cobaltcore-dev/cortex/pull/1001)
+
+### cortex v0.2.1 (sha-44b8aab7)
+
+Non-breaking changes:
+- Include PAYG slots in MaxSlots guard — the reservation manager now counts existing + PAYG-created slots before allocating blind-scheduler slots, preventing total slot counts from exceeding `MaxSlotsPerCommitment` ([#987](https://github.com/cobaltcore-dev/cortex/pull/987))
+- Use public Limes endpoint in knowledge datasource — fixes HTTP 400 errors after Limes enforced domain name matching on `Host` headers ([#999](https://github.com/cobaltcore-dev/cortex/pull/999))
+
+### cortex-shim v0.1.4 (sha-44b8aab7)
+
+Includes updated image sha-44b8aab7.
+
+### cortex-nova v0.0.78
+
+Includes updated charts cortex v0.2.1, cortex-postgres v0.6.7.
+
+### cortex-cinder v0.0.78
+
+Includes updated charts cortex v0.2.1, cortex-postgres v0.6.7.
+
+### cortex-manila v0.0.78
+
+Includes updated charts cortex v0.2.1, cortex-postgres v0.6.7.
+
+### cortex-crds v0.0.78
+
+Includes updated chart cortex v0.2.1.
+
+### cortex-ironcore v0.0.78
+
+Includes updated chart cortex v0.2.1.
+
+### cortex-pods v0.0.78
+
+Includes updated chart cortex v0.2.1.
+
+### cortex-placement-shim v0.1.4
+
+Includes updated chart cortex-shim v0.1.4.
+
+## 2026-06-29 — [#990](https://github.com/cobaltcore-dev/cortex/pull/990)
+
+### cortex v0.2.0 (sha-124ec226)
+
+Breaking changes:
+- FlavorGroupCapacity CRD status: removed `TotalInstances` field and replaced with `RunningInstances`, `RunningResources`, `FreeCapacity`, `ExclusivelyFreeCapacity`, `ExclusivelyFreeSlots`, `CommittedCapacityBytes`, and `SmallestFlavorName` ([#983](https://github.com/cobaltcore-dev/cortex/pull/983))
+- Committed resource capacity metric renamed from `cortex_committed_resource_reported_capacity_gib` to `cortex_committed_resource_reported_capacity` with added `unit_size` label ([#983](https://github.com/cobaltcore-dev/cortex/pull/983))
+
+Non-breaking changes:
+- VM usage and fair capacity split for overlapping flavor groups — capacity is now split fairly across flavor groups sharing the same hypervisors via a deterministic round-robin algorithm ([#983](https://github.com/cobaltcore-dev/cortex/pull/983))
+- Allow KVM-enabled deployments to opt out of critical-severity alerting via `kvm.criticalAlerts` value ([#988](https://github.com/cobaltcore-dev/cortex/pull/988))
+- Update External dependencies ([#977](https://github.com/cobaltcore-dev/cortex/pull/977), [#982](https://github.com/cobaltcore-dev/cortex/pull/982))
+- Update `github.com/sapcc` ([#960](https://github.com/cobaltcore-dev/cortex/pull/960), [#976](https://github.com/cobaltcore-dev/cortex/pull/976))
+- Update `github.com/sapcc/go-bits` ([#984](https://github.com/cobaltcore-dev/cortex/pull/984))
+- Bump `github.com/opencontainers/runc` from 1.3.3 to 1.3.6 ([#973](https://github.com/cobaltcore-dev/cortex/pull/973))
+- Update kube-prometheus-stack Docker tag to v87 ([#965](https://github.com/cobaltcore-dev/cortex/pull/965))
+- Update postgres Dockerfile base image ([#978](https://github.com/cobaltcore-dev/cortex/pull/978), [#979](https://github.com/cobaltcore-dev/cortex/pull/979))
+- Update actions/checkout action to v7 ([#961](https://github.com/cobaltcore-dev/cortex/pull/961))
+
+### cortex-nova v0.0.77
+
+Includes updated chart cortex v0.2.0.
+
+- Add `kvm.criticalAlerts` config key to opt out of critical-severity alerting for KVM regions ([#988](https://github.com/cobaltcore-dev/cortex/pull/988))
+
+### cortex-crds v0.0.77
+
+Includes updated chart cortex v0.2.0.
+
+### cortex-cinder v0.0.77
+
+Includes updated chart cortex v0.2.0.
+
+### cortex-pods v0.0.77
+
+Includes updated chart cortex v0.2.0.
+
+### cortex-ironcore v0.0.77
+
+Includes updated chart cortex v0.2.0.
+
+### cortex-manila v0.0.77
+
+Includes updated chart cortex v0.2.0.
+
+### General
+
+- Update hypervisor CRD for local development ([#980](https://github.com/cobaltcore-dev/cortex/pull/980))
+- Document InFlightReservation, domain hints, and CRS metrics ([#963](https://github.com/cobaltcore-dev/cortex/pull/963))
+- Fix stale file paths, grace period behavior, and dead cross-reference in docs ([#962](https://github.com/cobaltcore-dev/cortex/pull/962))
+
+## 2026-06-23 — [#966](https://github.com/cobaltcore-dev/cortex/pull/966)
+
+### cortex v0.1.2 (sha-6daa5050)
+
+Non-breaking changes:
+- Pre-allocate PAYG VMs into CR reservation slots on CR creation/modification ([#951](https://github.com/cobaltcore-dev/cortex/pull/951))
+- Keep failover allocation if VM missing from postgres but present on hypervisor ([#909](https://github.com/cobaltcore-dev/cortex/pull/909))
+- All datasources are synced on restart ([#956](https://github.com/cobaltcore-dev/cortex/pull/956))
+- Honor domain restrictions for CR reservation scheduling ([#955](https://github.com/cobaltcore-dev/cortex/pull/955))
+- Create InFlightReservation as part of Reservation CRD ([#954](https://github.com/cobaltcore-dev/cortex/pull/954))
+- Move committed resource status summary business logic to internal ([#953](https://github.com/cobaltcore-dev/cortex/pull/953))
+- Bypass grace period for confirmed VM departure ([#925](https://github.com/cobaltcore-dev/cortex/pull/925))
+- Track VM placements in reservations and classify no-host-found ([#847](https://github.com/cobaltcore-dev/cortex/pull/847))
+- Refactor reservations: move VMSource to shared package, unify VM data layer ([#930](https://github.com/cobaltcore-dev/cortex/pull/930))
+- Add suffix gX to postgresql ([#939](https://github.com/cobaltcore-dev/cortex/pull/939))
+- Update External dependencies to v1.9.1 ([#952](https://github.com/cobaltcore-dev/cortex/pull/952)), v1.14.46 ([#959](https://github.com/cobaltcore-dev/cortex/pull/959))
+- Update `github.com/sapcc` ([#938](https://github.com/cobaltcore-dev/cortex/pull/938))
+
+### cortex-nova v0.0.76
+
+Includes updated chart cortex v0.1.2.
+
+- Add `keystoneSecretRef` and `ssoSecretRef` config keys for domain resolution in committed resource reservation scheduling ([#955](https://github.com/cobaltcore-dev/cortex/pull/955))
+
+### cortex-crds v0.0.76
+
+Includes updated chart cortex v0.1.2.
+
+### cortex-cinder v0.0.76
+
+Includes updated chart cortex v0.1.2.
+
+### cortex-pods v0.0.76
+
+Includes updated chart cortex v0.1.2.
+
+### cortex-ironcore v0.0.76
+
+Includes updated chart cortex v0.1.2.
+
+### cortex-manila v0.0.76
+
+Includes updated chart cortex v0.1.2.
+
 ## 2026-06-08 — [#919](https://github.com/cobaltcore-dev/cortex/pull/919)
 
 ### cortex v0.1.0 (sha-a0373875)

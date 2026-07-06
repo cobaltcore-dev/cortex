@@ -21,8 +21,8 @@ spec:
     - jsonPath: .spec.availabilityZone
       name: AZ
       type: string
-    - jsonPath: .status.totalInstances
-      name: TotalInstances
+    - jsonPath: .status.runningInstances
+      name: Running
       type: integer
     - jsonPath: .status.lastReconcileAt
       name: LastReconcile
@@ -56,7 +56,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of FlavorGroupCapacity
+            description: FlavorGroupCapacitySpec defines the desired state of FlavorGroupCapacity.
             properties:
               availabilityZone:
                 description: AvailabilityZone is the OpenStack AZ this capacity data
@@ -70,12 +70,17 @@ spec:
             - flavorGroup
             type: object
           status:
-            description: status defines the observed state of FlavorGroupCapacity
+            description: FlavorGroupCapacityStatus defines the observed state of FlavorGroupCapacity.
             properties:
               committedCapacity:
                 description: |-
                   CommittedCapacity is the sum of AcceptedAmount across active CommittedResource CRDs,
                   expressed in multiples of the smallest flavor's memory.
+                format: int64
+                type: integer
+              committedCapacityBytes:
+                description: CommittedCapacityBytes is CommittedCapacity converted
+                  to raw bytes.
                 format: int64
                 type: integer
               conditions:
@@ -135,12 +140,33 @@ spec:
                   - type
                   type: object
                 type: array
+              exclusivelyFreeCapacity:
+                additionalProperties:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
+                description: |-
+                  ExclusivelyFreeCapacity is the share of remaining resources fairly attributed to this
+                  group by the round-robin capacity split. The sum across all groups for an AZ never
+                  exceeds actual installed capacity.
+                type: object
+              exclusivelyFreeSlots:
+                description: ExclusivelyFreeSlots is the number of smallest-flavor
+                  VM slots available from ExclusivelyFreeCapacity.
+                format: int64
+                type: integer
               flavors:
                 description: Flavors holds per-flavor capacity data for all flavors
                   in the group.
                 items:
-                  description: FlavorCapacityStatus holds per-flavor capacity numbers
-                    for one (flavor group × AZ) pair.
+                  description: |-
+                    FlavorCapacityStatus holds per-flavor scheduler probe results for one (flavor group × AZ) pair.
+                    These values come directly from scheduler probes and are independent of the cross-group
+                    capacity split (see FreeCapacity and ExclusivelyFreeCapacity on the parent status).
+                    "Placeable" means: if all remaining capacity in this AZ were used solely by this flavor,
+                    this is how many would fit. It does not account for competing flavor groups.
                   properties:
                     flavorName:
                       description: FlavorName is the OpenStack flavor name (e.g. "hana-v2-small").
@@ -157,22 +183,56 @@ spec:
                       type: integer
                     totalCapacityHosts:
                       description: TotalCapacityHosts is the number of eligible hosts
-                        in an empty-datacenter scenario.
+                        assuming an empty datacenter.
                       format: int64
                       type: integer
                     totalCapacityVmSlots:
                       description: TotalCapacityVMSlots is the maximum number of VM
-                        slots in an empty-datacenter scenario.
+                        slots assuming an empty datacenter.
                       format: int64
                       type: integer
                   required:
                   - flavorName
                   type: object
                 type: array
+              freeCapacity:
+                additionalProperties:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
+                description: |-
+                  FreeCapacity is the sum of remaining resources across all candidate hosts for this
+                  group given current allocations. Because groups can share hosts, the sum across groups
+                  may exceed actual installed capacity — this field reflects per-group availability
+                  before any cross-group fairness split.
+                type: object
               lastReconcileAt:
                 description: LastReconcileAt is the timestamp of the last successful
                   reconcile.
                 format: date-time
+                type: string
+              runningInstances:
+                description: |-
+                  RunningInstances is the number of VMs running in this (flavor group × AZ) whose
+                  flavor belongs to this group.
+                format: int64
+                type: integer
+              runningResources:
+                additionalProperties:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
+                description: RunningResources is the total resource consumption of
+                  running VMs, keyed by resource type.
+                type: object
+              smallestFlavorName:
+                description: |-
+                  SmallestFlavorName is the name of the smallest flavor in this group, used as the
+                  slot unit for ExclusivelyFreeSlots and related capacity fields.
                 type: string
               totalCapacity:
                 additionalProperties:
@@ -181,15 +241,10 @@ spec:
                   - type: string
                   pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                   x-kubernetes-int-or-string: true
-                description: TotalCapacity is the total capacity of all eligible hosts
-                  in an empty-datacenter scenario.
-                type: object
-              totalInstances:
                 description: |-
-                  TotalInstances is the total number of VM instances running on hypervisors in this AZ,
-                  derived from Hypervisor CRD Status.Instances (not filtered by flavor group).
-                format: int64
-                type: integer
+                  TotalCapacity is the installed capacity across all eligible hosts in an empty-datacenter
+                  scenario, expressed as raw resource amounts (bytes for memory, count for cores).
+                type: object
             type: object
         required:
         - spec

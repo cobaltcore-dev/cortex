@@ -24,7 +24,11 @@ type FlavorGroupCapacitySpec struct {
 	AvailabilityZone string `json:"availabilityZone"`
 }
 
-// FlavorCapacityStatus holds per-flavor capacity numbers for one (flavor group × AZ) pair.
+// FlavorCapacityStatus holds per-flavor scheduler probe results for one (flavor group × AZ) pair.
+// These values come directly from scheduler probes and are independent of the cross-group
+// capacity split (see FreeCapacity and ExclusivelyFreeCapacity on the parent status).
+// "Placeable" means: if all remaining capacity in this AZ were used solely by this flavor,
+// this is how many would fit. It does not account for competing flavor groups.
 type FlavorCapacityStatus struct {
 	// FlavorName is the OpenStack flavor name (e.g. "hana-v2-small").
 	FlavorName string `json:"flavorName"`
@@ -37,11 +41,11 @@ type FlavorCapacityStatus struct {
 	// +kubebuilder:validation:Optional
 	PlaceableVMs int64 `json:"placeableVms,omitempty"`
 
-	// TotalCapacityHosts is the number of eligible hosts in an empty-datacenter scenario.
+	// TotalCapacityHosts is the number of eligible hosts assuming an empty datacenter.
 	// +kubebuilder:validation:Optional
 	TotalCapacityHosts int64 `json:"totalCapacityHosts,omitempty"`
 
-	// TotalCapacityVMSlots is the maximum number of VM slots in an empty-datacenter scenario.
+	// TotalCapacityVMSlots is the maximum number of VM slots assuming an empty datacenter.
 	// +kubebuilder:validation:Optional
 	TotalCapacityVMSlots int64 `json:"totalCapacityVmSlots,omitempty"`
 }
@@ -57,14 +61,45 @@ type FlavorGroupCapacityStatus struct {
 	// +kubebuilder:validation:Optional
 	CommittedCapacity int64 `json:"committedCapacity,omitempty"`
 
-	// TotalCapacity is the total capacity of all eligible hosts in an empty-datacenter scenario.
+	// CommittedCapacityBytes is CommittedCapacity converted to raw bytes.
+	// +kubebuilder:validation:Optional
+	CommittedCapacityBytes int64 `json:"committedCapacityBytes,omitempty"`
+
+	// SmallestFlavorName is the name of the smallest flavor in this group, used as the
+	// slot unit for ExclusivelyFreeSlots and related capacity fields.
+	// +kubebuilder:validation:Optional
+	SmallestFlavorName string `json:"smallestFlavorName,omitempty"`
+
+	// TotalCapacity is the installed capacity across all eligible hosts in an empty-datacenter
+	// scenario, expressed as raw resource amounts (bytes for memory, count for cores).
 	// +kubebuilder:validation:Optional
 	TotalCapacity map[string]resource.Quantity `json:"totalCapacity,omitempty"`
 
-	// TotalInstances is the total number of VM instances running on hypervisors in this AZ,
-	// derived from Hypervisor CRD Status.Instances (not filtered by flavor group).
+	// FreeCapacity is the sum of remaining resources across all candidate hosts for this
+	// group given current allocations. Because groups can share hosts, the sum across groups
+	// may exceed actual installed capacity — this field reflects per-group availability
+	// before any cross-group fairness split.
 	// +kubebuilder:validation:Optional
-	TotalInstances int64 `json:"totalInstances,omitempty"`
+	FreeCapacity map[string]resource.Quantity `json:"freeCapacity,omitempty"`
+
+	// ExclusivelyFreeCapacity is the share of remaining resources fairly attributed to this
+	// group by the round-robin capacity split. The sum across all groups for an AZ never
+	// exceeds actual installed capacity.
+	// +kubebuilder:validation:Optional
+	ExclusivelyFreeCapacity map[string]resource.Quantity `json:"exclusivelyFreeCapacity,omitempty"`
+
+	// ExclusivelyFreeSlots is the number of smallest-flavor VM slots available from ExclusivelyFreeCapacity.
+	// +kubebuilder:validation:Optional
+	ExclusivelyFreeSlots int64 `json:"exclusivelyFreeSlots,omitempty"`
+
+	// RunningInstances is the number of VMs running in this (flavor group × AZ) whose
+	// flavor belongs to this group.
+	// +kubebuilder:validation:Optional
+	RunningInstances int64 `json:"runningInstances,omitempty"`
+
+	// RunningResources is the total resource consumption of running VMs, keyed by resource type.
+	// +kubebuilder:validation:Optional
+	RunningResources map[string]resource.Quantity `json:"runningResources,omitempty"`
 
 	// LastReconcileAt is the timestamp of the last successful reconcile.
 	// +kubebuilder:validation:Optional
@@ -80,7 +115,7 @@ type FlavorGroupCapacityStatus struct {
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="FlavorGroup",type="string",JSONPath=".spec.flavorGroup"
 // +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
-// +kubebuilder:printcolumn:name="TotalInstances",type="integer",JSONPath=".status.totalInstances"
+// +kubebuilder:printcolumn:name="Running",type="integer",JSONPath=".status.runningInstances"
 // +kubebuilder:printcolumn:name="LastReconcile",type="date",JSONPath=".status.lastReconcileAt"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 
@@ -89,16 +124,10 @@ type FlavorGroupCapacityStatus struct {
 // The capacity API reads these CRDs instead of probing the scheduler on each request.
 type FlavorGroupCapacity struct {
 	metav1.TypeMeta `json:",inline"`
-
-	// metadata is a standard object metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
-
-	// spec defines the desired state of FlavorGroupCapacity
 	// +required
 	Spec FlavorGroupCapacitySpec `json:"spec"`
-
-	// status defines the observed state of FlavorGroupCapacity
 	// +optional
 	Status FlavorGroupCapacityStatus `json:"status,omitempty,omitzero"`
 }
