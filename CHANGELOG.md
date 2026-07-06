@@ -1,18 +1,22 @@
 # Changelog
 
-## 2026-07-03 — [#1009](https://github.com/cobaltcore-dev/cortex/pull/1009)
+## 2026-07-06 — [#1009](https://github.com/cobaltcore-dev/cortex/pull/1009)
 
-### cortex v0.2.2 (sha-f4d7df89)
+### cortex v0.2.2 (sha-8d888397)
+
+Breaking changes:
+- Remove Nova image datasource — the `images` NovaDatasourceType is no longer available ([#1006](https://github.com/cobaltcore-dev/cortex/pull/1006))
 
 Non-breaking changes:
+- Fix stale RunningInstances/RunningResources fields that never zero out when all VMs in a flavor group are removed ([#1017](https://github.com/cobaltcore-dev/cortex/pull/1017))
 - Include host information in error logs when multicluster connection fails ([#997](https://github.com/cobaltcore-dev/cortex/pull/997))
 - Fix Perses config for local development ([#1007](https://github.com/cobaltcore-dev/cortex/pull/1007))
-- Update `github.com/sapcc/go-bits` ([#1005](https://github.com/cobaltcore-dev/cortex/pull/1005))
-- Update kube-prometheus-stack Docker tag to v87.4.0 ([#998](https://github.com/cobaltcore-dev/cortex/pull/998))
+- Update `github.com/sapcc/go-bits` ([#1005](https://github.com/cobaltcore-dev/cortex/pull/1005), [#1013](https://github.com/cobaltcore-dev/cortex/pull/1013))
+- Update kube-prometheus-stack Docker tag to v87.6.0 ([#998](https://github.com/cobaltcore-dev/cortex/pull/998), [#1014](https://github.com/cobaltcore-dev/cortex/pull/1014))
 
-### cortex-shim v0.1.5 (sha-c98ddb05)
+### cortex-shim v0.1.5 (sha-c8295850)
 
-Includes updated image sha-c98ddb05.
+Includes updated image sha-c8295850.
 
 ### cortex-nova v0.0.79
 
