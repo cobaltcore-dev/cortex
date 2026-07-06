@@ -116,10 +116,10 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	if !found {
 		// The instance has not spawned on any hypervisor (yet).
-		// Requeue and check again later.
+		// Requeue and check again later. We'll alert on this if there are
+		// too many requeues without the instance spawning.
 		log.V(1).Info("Instance has not spawned on any hypervisor yet, requeuing",
 			"vmID", obj.Spec.InFlightReservation.VMID)
-		// TODO: monitor this & alert
 		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.ReservationConditionReady,
 			Status:  metav1.ConditionUnknown,
