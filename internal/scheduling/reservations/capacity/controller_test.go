@@ -678,6 +678,135 @@ func TestSumCommittedCapacity(t *testing.T) {
 
 // TestProbeScheduler_SubtractsReservationBlocksWhenNotIgnored verifies that placeable-probe
 // slot counting subtracts per-host reservation blocks in addition to hv.Status.Allocation.
+// mockVMSource is a test implementation of VMSource that returns a fixed list of VMs.
+type mockVMSource struct {
+	vms []reservations.VM
+	err error
+}
+
+func (m *mockVMSource) ListVMs(_ context.Context) ([]reservations.VM, error) {
+	return m.vms, m.err
+}
+
+func (m *mockVMSource) ListVMsByProject(_ context.Context, _ string) ([]reservations.VM, error) {
+	return m.vms, m.err
+}
+
+func (m *mockVMSource) ListVMsOnHypervisors(_ context.Context, _ *hv1.HypervisorList, _ bool) ([]reservations.VM, error) {
+	return m.vms, m.err
+}
+
+func (m *mockVMSource) GetVM(_ context.Context, _ string) (*reservations.VM, error) {
+	return nil, nil
+}
+
+func (m *mockVMSource) IsServerActive(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
+
+func (m *mockVMSource) GetDeletedVMInfo(_ context.Context, _ string) (*reservations.DeletedVMInfo, error) {
+	return nil, nil
+}
+
+// TestComputeVMUsage_ZerosOutWhenAllVMsRemoved verifies that after a successful
+// ListVMsOnHypervisors call that returns no VMs for a (flavorGroup, AZ) pair,
+// the result map entry has fresh=true with zero instances/resources, ensuring
+// RunningInstances and RunningResources are zeroed out in the CRD.
+func TestComputeVMUsage_ZerosOutWhenAllVMsRemoved(t *testing.T) {
+	const (
+		groupName = "hana-v2"
+		az        = "qa-de-1a"
+		memMB     = 4096
+		memBytes  = int64(memMB) * 1024 * 1024
+	)
+
+	scheme := newTestScheme(t)
+	hv := newHypervisor("host-1", az, memBytes, "vm1")
+	knowledge := newFlavorGroupKnowledge(t, groupName, memMB)
+
+	// Pre-create CRD with non-zero RunningInstances to simulate prior state.
+	crdName := crdNameFor(groupName, az)
+	existing := &v1alpha1.FlavorGroupCapacity{
+		ObjectMeta: metav1.ObjectMeta{Name: crdName},
+		Spec: v1alpha1.FlavorGroupCapacitySpec{
+			FlavorGroup:      groupName,
+			AvailabilityZone: az,
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(knowledge, hv, existing).
+		WithStatusSubresource(&v1alpha1.FlavorGroupCapacity{}, &v1alpha1.Knowledge{}).
+		Build()
+
+	// Set RunningInstances to non-zero via a status patch.
+	patch := client.MergeFrom(existing.DeepCopy())
+	existing.Status.RunningInstances = 5
+	existing.Status.RunningResources = map[string]resource.Quantity{
+		string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(memBytes*5, resource.BinarySI),
+	}
+	if err := fakeClient.Status().Patch(context.Background(), existing, patch); err != nil {
+		t.Fatalf("failed to patch CRD status: %v", err)
+	}
+
+	// Scheduler returns host-1 so probes succeed.
+	schedulerServer := newMockSchedulerServer(t, []string{"host-1"})
+	defer schedulerServer.Close()
+
+	// VMSource returns empty list (all VMs removed).
+	vmSource := &mockVMSource{vms: []reservations.VM{}}
+
+	ctrl := NewController(fakeClient, Config{
+		SchedulerURL:      schedulerServer.URL,
+		TotalPipeline:     "kvm-report-capacity",
+		PlaceablePipeline: "kvm-general-purpose",
+	}, vmSource)
+
+	smallFlavor := compute.FlavorInGroup{Name: groupName + "-small", MemoryMB: memMB, VCPUs: 2}
+	groupData := compute.FlavorGroupFeature{
+		Name:           groupName,
+		SmallestFlavor: smallFlavor,
+		Flavors:        []compute.FlavorInGroup{smallFlavor},
+	}
+	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
+	groups := map[string]compute.FlavorGroupFeature{groupName: groupData}
+
+	// Compute VM usage — should return fresh=true with zero instances.
+	usageByKey := ctrl.computeVMUsage(context.Background(), groups, []hv1.Hypervisor{*hv})
+	key := vmUsageKey{group: groupName, az: az}
+	usage, exists := usageByKey[key]
+	if !exists {
+		t.Fatalf("expected usage entry for key %v, got none", key)
+	}
+	if !usage.fresh {
+		t.Errorf("usage.fresh = false, want true (successful call with no VMs)")
+	}
+	if usage.instances != 0 {
+		t.Errorf("usage.instances = %d, want 0", usage.instances)
+	}
+
+	// Now run reconcileAZ to verify the CRD gets zeroed out.
+	if err := ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]int64{}, usageByKey); err != nil {
+		t.Fatalf("reconcileAZ failed: %v", err)
+	}
+
+	var crd v1alpha1.FlavorGroupCapacity
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdName}, &crd); err != nil {
+		t.Fatalf("failed to get CRD: %v", err)
+	}
+	if crd.Status.RunningInstances != 0 {
+		t.Errorf("RunningInstances = %d, want 0 (all VMs removed)", crd.Status.RunningInstances)
+	}
+	if crd.Status.RunningResources != nil {
+		for k, v := range crd.Status.RunningResources {
+			if !v.IsZero() {
+				t.Errorf("RunningResources[%s] = %s, want 0", k, v.String())
+			}
+		}
+	}
+}
+
 func TestProbeScheduler_SubtractsReservationBlocksWhenNotIgnored(t *testing.T) {
 	const memMB = 4096
 	const memBytes = int64(memMB) * 1024 * 1024
