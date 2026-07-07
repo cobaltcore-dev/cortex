@@ -32,8 +32,8 @@ func newCRMigrationSlotFilter(t *testing.T, objs ...client.Object) *FilterCRMigr
 	}
 }
 
-// liveMigrateRequest builds a minimal live-migration request for instanceUUID/projectID.
-func liveMigrateRequest(instanceUUID, projectID string, hosts ...string) api.ExternalSchedulerRequest {
+// liveMigrateRequest builds a minimal live-migration request for instanceUUID.
+func liveMigrateRequest(instanceUUID string, hosts ...string) api.ExternalSchedulerRequest {
 	hostList := make([]api.ExternalSchedulerHost, len(hosts))
 	for i, h := range hosts {
 		hostList[i] = api.ExternalSchedulerHost{ComputeHost: h}
@@ -42,7 +42,7 @@ func liveMigrateRequest(instanceUUID, projectID string, hosts ...string) api.Ext
 		Spec: api.NovaObject[api.NovaSpec]{
 			Data: api.NovaSpec{
 				InstanceUUID: instanceUUID,
-				ProjectID:    projectID,
+				ProjectID:    "proj-1",
 				SchedulerHints: map[string]any{
 					"_nova_check_type": "live_migrate",
 				},
@@ -54,17 +54,17 @@ func liveMigrateRequest(instanceUUID, projectID string, hosts ...string) api.Ext
 
 // confirmedReservation builds a ready CR reservation slot with the VM UUID confirmed in
 // Status.Allocations, used to simulate a VM that is currently running on that slot.
-func confirmedReservation(name, host, projectID, resourceGroup, slotMemory, vmMemory, instanceUUID string) *v1alpha1.Reservation {
+func confirmedReservation(projectID, resourceGroup, slotMemory, instanceUUID string) *v1alpha1.Reservation {
 	return &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
+			Name: "slot-src",
 			Labels: map[string]string{
 				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
 			},
 		},
 		Spec: v1alpha1.ReservationSpec{
 			Type:       v1alpha1.ReservationTypeCommittedResource,
-			TargetHost: host,
+			TargetHost: "host-src",
 			Resources: map[hv1.ResourceName]resource.Quantity{
 				hv1.ResourceMemory: resource.MustParse(slotMemory),
 			},
@@ -74,12 +74,12 @@ func confirmedReservation(name, host, projectID, resourceGroup, slotMemory, vmMe
 			},
 		},
 		Status: v1alpha1.ReservationStatus{
-			Host: host,
+			Host: "host-src",
 			Conditions: []metav1.Condition{
 				{Type: v1alpha1.ReservationConditionReady, Status: metav1.ConditionTrue, Reason: "ReservationActive"},
 			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: map[string]string{instanceUUID: host},
+				Allocations: map[string]string{instanceUUID: "host-src"},
 			},
 		},
 	}
@@ -114,13 +114,13 @@ func emptyReservation(name, host, projectID, resourceGroup, slotMemory string) *
 	}
 }
 
-// hvWithFreeMemory builds a Hypervisor with the given effective capacity and zero allocation.
-func hvWithFreeMemory(name, memory string) *hv1.Hypervisor {
+// hvWithFreeMemory builds a Hypervisor with 32Gi effective capacity and zero allocation.
+func hvWithFreeMemory(name string) *hv1.Hypervisor {
 	return &hv1.Hypervisor{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Status: hv1.HypervisorStatus{
 			EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
-				hv1.ResourceMemory: resource.MustParse(memory),
+				hv1.ResourceMemory: resource.MustParse("32Gi"),
 			},
 			Allocation: map[hv1.ResourceName]resource.Quantity{
 				hv1.ResourceMemory: resource.MustParse("0"),
@@ -153,7 +153,7 @@ func TestFilterKVMCRMigrationSlot_NonMigrationPassthrough(t *testing.T) {
 func TestFilterKVMCRMigrationSlot_NoSourceSlot_Passthrough(t *testing.T) {
 	// VM has no CR reservation — should pass all candidates through unchanged.
 	filter := newCRMigrationSlotFilter(t)
-	req := liveMigrateRequest("vm-no-slot", "proj-1", "host-1", "host-2")
+	req := liveMigrateRequest("vm-no-slot", "host-1", "host-2")
 
 	result, err := filter.Run(slog.Default(), req)
 	if err != nil {
@@ -173,19 +173,19 @@ func TestFilterKVMCRMigrationSlot_SlotSizeFiltering(t *testing.T) {
 	projectID := "proj-1"
 	resourceGroup := "hana-v2"
 
-	srcSlot := confirmedReservation("slot-src", "host-src", projectID, resourceGroup, "16Gi", "8Gi", instanceUUID)
+	srcSlot := confirmedReservation(projectID, resourceGroup, "16Gi", instanceUUID)
 	slotA := emptyReservation("slot-a", "host-a", projectID, resourceGroup, "16Gi")
 	slotB := emptyReservation("slot-b", "host-b", projectID, resourceGroup, "8Gi")
 
 	filter := newCRMigrationSlotFilter(t,
 		srcSlot, slotA, slotB,
-		hvWithFreeMemory("host-src", "32Gi"),
-		hvWithFreeMemory("host-a", "32Gi"),
-		hvWithFreeMemory("host-b", "32Gi"),
-		hvWithFreeMemory("host-c", "32Gi"),
+		hvWithFreeMemory("host-src"),
+		hvWithFreeMemory("host-a"),
+		hvWithFreeMemory("host-b"),
+		hvWithFreeMemory("host-c"),
 	)
 
-	req := liveMigrateRequest(instanceUUID, projectID, "host-a", "host-b", "host-c")
+	req := liveMigrateRequest(instanceUUID, "host-a", "host-b", "host-c")
 	result, err := filter.Run(slog.Default(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -211,16 +211,16 @@ func TestFilterKVMCRMigrationSlot_Fallback_NoSlotOnAnyCandidate(t *testing.T) {
 	projectID := "proj-1"
 	resourceGroup := "hana-v2"
 
-	srcSlot := confirmedReservation("slot-src", "host-src", projectID, resourceGroup, "16Gi", "8Gi", instanceUUID)
+	srcSlot := confirmedReservation(projectID, resourceGroup, "16Gi", instanceUUID)
 
 	filter := newCRMigrationSlotFilter(t,
 		srcSlot,
-		hvWithFreeMemory("host-src", "32Gi"),
-		hvWithFreeMemory("host-a", "32Gi"),
-		hvWithFreeMemory("host-b", "32Gi"),
+		hvWithFreeMemory("host-src"),
+		hvWithFreeMemory("host-a"),
+		hvWithFreeMemory("host-b"),
 	)
 
-	req := liveMigrateRequest(instanceUUID, projectID, "host-a", "host-b")
+	req := liveMigrateRequest(instanceUUID, "host-a", "host-b")
 	result, err := filter.Run(slog.Default(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -236,16 +236,16 @@ func TestFilterKVMCRMigrationSlot_WrongProjectFiltered(t *testing.T) {
 	projectID := "proj-1"
 	resourceGroup := "hana-v2"
 
-	srcSlot := confirmedReservation("slot-src", "host-src", projectID, resourceGroup, "16Gi", "8Gi", instanceUUID)
+	srcSlot := confirmedReservation(projectID, resourceGroup, "16Gi", instanceUUID)
 	slotWrongProject := emptyReservation("slot-a", "host-a", "proj-OTHER", resourceGroup, "16Gi")
 
 	filter := newCRMigrationSlotFilter(t,
 		srcSlot, slotWrongProject,
-		hvWithFreeMemory("host-src", "32Gi"),
-		hvWithFreeMemory("host-a", "32Gi"),
+		hvWithFreeMemory("host-src"),
+		hvWithFreeMemory("host-a"),
 	)
 
-	req := liveMigrateRequest(instanceUUID, projectID, "host-a")
+	req := liveMigrateRequest(instanceUUID, "host-a")
 	result, err := filter.Run(slog.Default(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -260,16 +260,16 @@ func TestFilterKVMCRMigrationSlot_WrongResourceGroupFiltered(t *testing.T) {
 	instanceUUID := "vm-migrating"
 	projectID := "proj-1"
 
-	srcSlot := confirmedReservation("slot-src", "host-src", projectID, "hana-v2", "16Gi", "8Gi", instanceUUID)
+	srcSlot := confirmedReservation(projectID, "hana-v2", "16Gi", instanceUUID)
 	slotWrongGroup := emptyReservation("slot-a", "host-a", projectID, "general-v3", "16Gi")
 
 	filter := newCRMigrationSlotFilter(t,
 		srcSlot, slotWrongGroup,
-		hvWithFreeMemory("host-src", "32Gi"),
-		hvWithFreeMemory("host-a", "32Gi"),
+		hvWithFreeMemory("host-src"),
+		hvWithFreeMemory("host-a"),
 	)
 
-	req := liveMigrateRequest(instanceUUID, projectID, "host-a")
+	req := liveMigrateRequest(instanceUUID, "host-a")
 	result, err := filter.Run(slog.Default(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -313,8 +313,8 @@ func TestFilterCRMigrationSlot_ZeroSlotMemory_Passthrough(t *testing.T) {
 		},
 	}
 
-	filter := newCRMigrationSlotFilter(t, srcSlot, hvWithFreeMemory("host-a", "32Gi"))
-	req := liveMigrateRequest(instanceUUID, projectID, "host-a")
+	filter := newCRMigrationSlotFilter(t, srcSlot, hvWithFreeMemory("host-a"))
+	req := liveMigrateRequest(instanceUUID, "host-a")
 	result, err := filter.Run(slog.Default(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
