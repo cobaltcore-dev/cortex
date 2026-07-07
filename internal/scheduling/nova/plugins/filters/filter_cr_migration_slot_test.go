@@ -32,8 +32,8 @@ func newCRMigrationSlotFilter(t *testing.T, objs ...client.Object) *FilterCRMigr
 	}
 }
 
-// liveMigrateRequest builds a minimal live-migration request for instanceUUID.
-func liveMigrateRequest(instanceUUID string, hosts ...string) api.ExternalSchedulerRequest {
+// liveMigrateRequest builds a minimal live-migration request for "vm-migrating".
+func liveMigrateRequest(hosts ...string) api.ExternalSchedulerRequest {
 	hostList := make([]api.ExternalSchedulerHost, len(hosts))
 	for i, h := range hosts {
 		hostList[i] = api.ExternalSchedulerHost{ComputeHost: h}
@@ -41,7 +41,7 @@ func liveMigrateRequest(instanceUUID string, hosts ...string) api.ExternalSchedu
 	return api.ExternalSchedulerRequest{
 		Spec: api.NovaObject[api.NovaSpec]{
 			Data: api.NovaSpec{
-				InstanceUUID: instanceUUID,
+				InstanceUUID: "vm-migrating",
 				ProjectID:    "proj-1",
 				SchedulerHints: map[string]any{
 					"_nova_check_type": "live_migrate",
@@ -128,134 +128,12 @@ func hvWithFreeMemory(name string) *hv1.Hypervisor {
 	}
 }
 
-func TestFilterKVMCRMigrationSlot_NonMigrationPassthrough(t *testing.T) {
-	filter := newCRMigrationSlotFilter(t)
-	req := api.ExternalSchedulerRequest{
-		Spec: api.NovaObject[api.NovaSpec]{
-			Data: api.NovaSpec{
-				InstanceUUID: "vm-1",
-				ProjectID:    "proj-1",
-				// no _nova_check_type → CreateIntent
-			},
-		},
-		Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host-1"}, {ComputeHost: "host-2"}},
-	}
-	result, err := filter.Run(slog.Default(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result.Activations) != 2 {
-		t.Errorf("expected 2 hosts to pass through, got %d", len(result.Activations))
-	}
-}
+func TestFilterCRMigrationSlot(t *testing.T) {
+	const instanceUUID = "vm-migrating"
 
-func TestFilterKVMCRMigrationSlot_NoSourceSlot_Passthrough(t *testing.T) {
-	// VM has no CR reservation — should pass all candidates through unchanged.
-	filter := newCRMigrationSlotFilter(t)
-	req := liveMigrateRequest("vm-no-slot", "host-1", "host-2")
-
-	result, err := filter.Run(slog.Default(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result.Activations) != 2 {
-		t.Errorf("expected 2 candidates (passthrough), got %d", len(result.Activations))
-	}
-}
-
-func TestFilterKVMCRMigrationSlot_SlotSizeFiltering(t *testing.T) {
-	// VM is confirmed on source slot (16Gi).
-	// host-a has an empty 16Gi slot → should pass.
-	// host-b has only an 8Gi slot → should be filtered out.
-	// host-c has no reservation at all → should be filtered out.
-	instanceUUID := "vm-migrating"
-	resourceGroup := "hana-v2"
-
-	srcSlot := sourceSlotFor(instanceUUID)
-	slotA := emptyReservation("slot-a", "host-a", resourceGroup, "16Gi")
-	slotB := emptyReservation("slot-b", "host-b", resourceGroup, "8Gi")
-
-	filter := newCRMigrationSlotFilter(t,
-		srcSlot, slotA, slotB,
-		hvWithFreeMemory("host-src"),
-		hvWithFreeMemory("host-a"),
-		hvWithFreeMemory("host-b"),
-		hvWithFreeMemory("host-c"),
-	)
-
-	req := liveMigrateRequest(instanceUUID, "host-a", "host-b", "host-c")
-	result, err := filter.Run(slog.Default(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if _, ok := result.Activations["host-a"]; !ok {
-		t.Error("expected host-a (16Gi slot) to pass")
-	}
-	if _, ok := result.Activations["host-b"]; ok {
-		t.Error("expected host-b (8Gi slot, too small) to be filtered out")
-	}
-	if _, ok := result.Activations["host-c"]; ok {
-		t.Error("expected host-c (no slot) to be filtered out")
-	}
-	if len(result.Activations) != 1 {
-		t.Errorf("expected 1 passing host, got %d", len(result.Activations))
-	}
-}
-
-func TestFilterKVMCRMigrationSlot_Fallback_NoSlotOnAnyCandidate(t *testing.T) {
-	// No candidate has a matching slot → all candidates must be returned (fallback).
-	instanceUUID := "vm-migrating"
-
-	srcSlot := sourceSlotFor(instanceUUID)
-
-	filter := newCRMigrationSlotFilter(t,
-		srcSlot,
-		hvWithFreeMemory("host-src"),
-		hvWithFreeMemory("host-a"),
-		hvWithFreeMemory("host-b"),
-	)
-
-	req := liveMigrateRequest(instanceUUID, "host-a", "host-b")
-	result, err := filter.Run(slog.Default(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result.Activations) != 2 {
-		t.Errorf("expected fallback to return all 2 candidates, got %d", len(result.Activations))
-	}
-}
-
-func TestFilterKVMCRMigrationSlot_WrongResourceGroupFiltered(t *testing.T) {
-	// Target host has a slot but for a different resource group → should not count.
-	instanceUUID := "vm-migrating"
-
-	srcSlot := sourceSlotFor(instanceUUID)
-	slotWrongGroup := emptyReservation("slot-a", "host-a", "general-v3", "16Gi")
-
-	filter := newCRMigrationSlotFilter(t,
-		srcSlot, slotWrongGroup,
-		hvWithFreeMemory("host-src"),
-		hvWithFreeMemory("host-a"),
-	)
-
-	req := liveMigrateRequest(instanceUUID, "host-a")
-	result, err := filter.Run(slog.Default(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	// No matching slot → fallback.
-	if len(result.Activations) != 1 {
-		t.Errorf("expected fallback with 1 candidate, got %d", len(result.Activations))
-	}
-}
-
-func TestFilterCRMigrationSlot_ZeroSlotMemory_Passthrough(t *testing.T) {
-	// Source slot has no memory resource entry → filter must pass all candidates through.
-	instanceUUID := "vm-migrating"
-
-	// Build a reservation with the VM confirmed but Spec.Resources deliberately empty.
-	srcSlot := &v1alpha1.Reservation{
+	// zeroMemorySourceSlot is a source slot with no memory resource — used to test
+	// the zero-slot-memory guard.
+	zeroMemorySourceSlot := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "slot-src",
 			Labels: map[string]string{
@@ -265,7 +143,6 @@ func TestFilterCRMigrationSlot_ZeroSlotMemory_Passthrough(t *testing.T) {
 		Spec: v1alpha1.ReservationSpec{
 			Type:       v1alpha1.ReservationTypeCommittedResource,
 			TargetHost: "host-src",
-			// No Resources entry → memory quantity is zero.
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 				ProjectID:     "proj-1",
 				ResourceGroup: "hana-v2",
@@ -282,13 +159,109 @@ func TestFilterCRMigrationSlot_ZeroSlotMemory_Passthrough(t *testing.T) {
 		},
 	}
 
-	filter := newCRMigrationSlotFilter(t, srcSlot, hvWithFreeMemory("host-a"))
-	req := liveMigrateRequest(instanceUUID, "host-a")
-	result, err := filter.Run(slog.Default(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	tests := []struct {
+		name          string
+		objects       []client.Object
+		request       api.ExternalSchedulerRequest
+		wantHosts     []string // hosts that must appear in Activations
+		wantFiltered  []string // hosts that must NOT appear in Activations
+		wantHostCount int      // total expected Activations size
+	}{
+		{
+			name:    "non-migration intent: all hosts pass through unchanged",
+			objects: nil,
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						InstanceUUID: instanceUUID,
+						ProjectID:    "proj-1",
+						// no _nova_check_type → CreateIntent
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host-1"}, {ComputeHost: "host-2"}},
+			},
+			wantHosts:     []string{"host-1", "host-2"},
+			wantHostCount: 2,
+		},
+		{
+			name:          "no source slot: all candidates pass through (fallback)",
+			objects:       []client.Object{},
+			request:       liveMigrateRequest("host-1", "host-2"),
+			wantHosts:     []string{"host-1", "host-2"},
+			wantHostCount: 2,
+		},
+		{
+			name: "slot size filtering: only host with matching 16Gi slot passes",
+			objects: []client.Object{
+				sourceSlotFor(instanceUUID),
+				emptyReservation("slot-a", "host-a", "hana-v2", "16Gi"),
+				emptyReservation("slot-b", "host-b", "hana-v2", "8Gi"),
+				hvWithFreeMemory("host-src"),
+				hvWithFreeMemory("host-a"),
+				hvWithFreeMemory("host-b"),
+				hvWithFreeMemory("host-c"),
+			},
+			request:       liveMigrateRequest("host-a", "host-b", "host-c"),
+			wantHosts:     []string{"host-a"},
+			wantFiltered:  []string{"host-b", "host-c"},
+			wantHostCount: 1,
+		},
+		{
+			name: "no slot on any candidate: fallback returns all candidates",
+			objects: []client.Object{
+				sourceSlotFor(instanceUUID),
+				hvWithFreeMemory("host-src"),
+				hvWithFreeMemory("host-a"),
+				hvWithFreeMemory("host-b"),
+			},
+			request:       liveMigrateRequest("host-a", "host-b"),
+			wantHosts:     []string{"host-a", "host-b"},
+			wantHostCount: 2,
+		},
+		{
+			name: "wrong resource group on target: slot does not match, fallback",
+			objects: []client.Object{
+				sourceSlotFor(instanceUUID),
+				emptyReservation("slot-a", "host-a", "general-v3", "16Gi"),
+				hvWithFreeMemory("host-src"),
+				hvWithFreeMemory("host-a"),
+			},
+			request:       liveMigrateRequest("host-a"),
+			wantHosts:     []string{"host-a"},
+			wantHostCount: 1,
+		},
+		{
+			name: "source slot has zero memory: filter skips slot check, all candidates pass",
+			objects: []client.Object{
+				zeroMemorySourceSlot,
+				hvWithFreeMemory("host-a"),
+			},
+			request:       liveMigrateRequest("host-a"),
+			wantHosts:     []string{"host-a"},
+			wantHostCount: 1,
+		},
 	}
-	if len(result.Activations) != 1 {
-		t.Errorf("expected passthrough with 1 candidate, got %d", len(result.Activations))
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filter := newCRMigrationSlotFilter(t, tt.objects...)
+			result, err := filter.Run(slog.Default(), tt.request)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			for _, host := range tt.wantHosts {
+				if _, ok := result.Activations[host]; !ok {
+					t.Errorf("expected host %q in activations", host)
+				}
+			}
+			for _, host := range tt.wantFiltered {
+				if _, ok := result.Activations[host]; ok {
+					t.Errorf("expected host %q to be filtered out", host)
+				}
+			}
+			if len(result.Activations) != tt.wantHostCount {
+				t.Errorf("expected %d hosts, got %d: %v", tt.wantHostCount, len(result.Activations), result.Activations)
+			}
+		})
 	}
 }
