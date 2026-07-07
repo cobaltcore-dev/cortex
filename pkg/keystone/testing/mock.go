@@ -10,8 +10,9 @@ import (
 )
 
 type MockKeystoneClient struct {
-	Url             string
-	EndpointLocator gophercloud.EndpointLocator
+	Url                  string
+	EndpointLocator      gophercloud.EndpointLocator
+	FindEndpointOverride func(availability, serviceType string)
 }
 
 func (m *MockKeystoneClient) Authenticate(ctx context.Context) error {
@@ -25,6 +26,9 @@ func (m *MockKeystoneClient) Client() *gophercloud.ProviderClient {
 }
 
 func (m *MockKeystoneClient) FindEndpoint(availability, serviceType string) (string, error) {
+	if m.FindEndpointOverride != nil {
+		m.FindEndpointOverride(availability, serviceType)
+	}
 	return m.Url, nil
 }
 

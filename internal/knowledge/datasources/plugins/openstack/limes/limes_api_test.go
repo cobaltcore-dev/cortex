@@ -20,6 +20,29 @@ func setupLimesMockServer(handler http.HandlerFunc) (*httptest.Server, keystone.
 	return server, &testlibKeystone.MockKeystoneClient{Url: server.URL + "/"}
 }
 
+func TestLimesAPI_Init_UsesPublicEndpoint(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer server.Close()
+
+	var gotAvailability string
+	k := &testlibKeystone.MockKeystoneClient{
+		Url: server.URL + "/",
+		FindEndpointOverride: func(availability, serviceType string) {
+			if serviceType == "resources" {
+				gotAvailability = availability
+			}
+		},
+	}
+
+	api := NewLimesAPI(datasources.Monitor{}, k, v1alpha1.LimesDatasource{}).(*limesAPI)
+	if err := api.Init(t.Context()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotAvailability != "public" {
+		t.Errorf("expected public availability for Limes endpoint, got %q", gotAvailability)
+	}
+}
+
 func TestNewLimesAPI(t *testing.T) {
 	mon := datasources.Monitor{}
 	k := &testlibKeystone.MockKeystoneClient{}

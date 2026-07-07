@@ -345,7 +345,8 @@ func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Objec
 			}
 			if !apierrors.IsNotFound(err) {
 				log.Error(err, "error checking for duplicate resource in cluster",
-					"gvk", gvk, "namespace", key.Namespace, "name", key.Name)
+					"gvk", gvk, "namespace", key.Namespace, "name", key.Name,
+					"host", cl.GetConfig().Host)
 			}
 			continue
 		}
@@ -357,7 +358,8 @@ func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Objec
 		}
 		if !apierrors.IsNotFound(err) {
 			log.Error(err, "error getting resource from cluster", "gvk", gvk,
-				"namespace", key.Namespace, "name", key.Name)
+				"namespace", key.Namespace, "name", key.Name,
+				"host", cl.GetConfig().Host)
 		}
 	}
 	if !found {
@@ -392,7 +394,8 @@ func (c *Client) List(ctx context.Context, list client.ObjectList, opts ...clien
 	for _, cl := range clusters {
 		listCopy := list.DeepCopyObject().(client.ObjectList)
 		if err := cl.GetClient().List(ctx, listCopy, opts...); err != nil {
-			log.Error(err, "error listing resources from cluster", "gvk", gvk)
+			log.Error(err, "error listing resources from cluster",
+				"gvk", gvk, "host", cl.GetConfig().Host)
 			continue
 		}
 		items, err := meta.ExtractList(listCopy)
@@ -632,7 +635,7 @@ func (c *subResourceClient) Get(ctx context.Context, obj, subResource client.Obj
 			if !apierrors.IsNotFound(err) {
 				log.Error(err, "error checking for duplicate sub-resource in cluster",
 					"gvk", gvk, "namespace", obj.GetNamespace(), "name", obj.GetName(),
-					"subresource", c.subResource)
+					"subresource", c.subResource, "host", cl.GetConfig().Host)
 			}
 			continue
 		}
@@ -646,7 +649,7 @@ func (c *subResourceClient) Get(ctx context.Context, obj, subResource client.Obj
 		if !apierrors.IsNotFound(err) {
 			log.Error(err, "error getting sub-resource from cluster", "gvk", gvk,
 				"namespace", obj.GetNamespace(), "name", obj.GetName(),
-				"subresource", c.subResource)
+				"subresource", c.subResource, "host", cl.GetConfig().Host)
 		}
 	}
 	if !found {

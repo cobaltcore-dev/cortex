@@ -26,14 +26,35 @@ The controller has two reconciliation modes:
 ```mermaid
 flowchart TD
     P1[List Hypervisors from K8s]
+    P1b["Build active-VM set from<br/>Hypervisor CRD Status.Instances"]
     P2["List VMs from Postgres<br/>(vm_source.go)"]
-    P3["Remove Invalid VMs from reservations<br/>(e.g., vm:host mapping wrong or vm deleted)"]
+    P3["Remove Invalid VMs from reservations<br/>(e.g., vm:host mapping wrong or vm deleted)<br/>with postgres data-loss safeguard"]
     P4["Remove Non-eligible VMs from reservations<br/>(via eligibility rules, reservation_eligibility.go)"]
     P5[Delete Empty Reservations]
     P6["Create/Assign Reservations<br/>(reservation_scheduling.go)"]
     
-    P1 --> P2 --> P3 --> P4 --> P5 --> P6
+    P1 --> P1b --> P2 --> P3 --> P4 --> P5 --> P6
 ```
+
+#### Postgres Data-Loss Safeguard
+
+Before removing a VM from a failover reservation because it is missing from the
+postgres-derived VM source, the controller cross-checks the Hypervisor CRD
+`Status.Instances`. If the VM is still reported as active on any hypervisor, its
+allocation is preserved in the reservation.
+
+This safeguard prevents a postgres data loss or restore event from cascading into
+the mass deletion of all failover reservations. Without it, a wiped or partially
+restored Nova database would make every VM appear "deleted," causing the
+controller to empty and then garbage-collect all reservations -- leaving the
+entire fleet without failover coverage until postgres recovers and the
+reservations are rebuilt.
+
+The active-VM set (`vmsOnHypervisor`) is built once per reconciliation cycle by
+iterating over all Hypervisor CRD `Status.Instances` entries that are marked
+active. During the "Remove Invalid VMs" step, if a VM UUID is absent from the
+postgres VM list but present in this set, the allocation is kept and a log
+message is emitted.
 
 
 ### Watch-based Reconciliation

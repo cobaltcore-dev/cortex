@@ -150,6 +150,16 @@ func (c *Controller) computeVMUsage(
 		return result
 	}
 
+	// Pre-populate all (flavorGroup, AZ) pairs with fresh=true and zero resources.
+	// This ensures that groups with no running VMs still get fresh=true so that
+	// RunningInstances/RunningResources are correctly zeroed out in the CRD.
+	azs := availabilityZones(hvs)
+	for groupName := range flavorGroups {
+		for _, az := range azs {
+			result[vmUsageKey{group: groupName, az: az}] = vmUsage{fresh: true}
+		}
+	}
+
 	flavorToGroup := make(map[string]string)
 	flavorMemBytes := make(map[string]int64)
 	flavorVCPUs := make(map[string]int64)

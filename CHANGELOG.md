@@ -1,5 +1,87 @@
 # Changelog
 
+## 2026-07-03 — [#1009](https://github.com/cobaltcore-dev/cortex/pull/1009)
+
+### cortex v0.2.2 (sha-f4d7df89)
+
+Non-breaking changes:
+- Include host information in error logs when multicluster connection fails ([#997](https://github.com/cobaltcore-dev/cortex/pull/997))
+- Fix Perses config for local development ([#1007](https://github.com/cobaltcore-dev/cortex/pull/1007))
+- Update `github.com/sapcc/go-bits` ([#1005](https://github.com/cobaltcore-dev/cortex/pull/1005))
+- Update kube-prometheus-stack Docker tag to v87.4.0 ([#998](https://github.com/cobaltcore-dev/cortex/pull/998))
+
+### cortex-shim v0.1.5 (sha-c98ddb05)
+
+Includes updated image sha-c98ddb05.
+
+### cortex-nova v0.0.79
+
+Includes updated charts cortex v0.2.2, cortex-postgres v0.6.8.
+
+### cortex-cinder v0.0.79
+
+Includes updated charts cortex v0.2.2, cortex-postgres v0.6.8.
+
+### cortex-manila v0.0.79
+
+Includes updated charts cortex v0.2.2, cortex-postgres v0.6.8.
+
+### cortex-crds v0.0.79
+
+Includes updated chart cortex v0.2.2.
+
+### cortex-ironcore v0.0.79
+
+Includes updated chart cortex v0.2.2.
+
+### cortex-pods v0.0.79
+
+Includes updated chart cortex v0.2.2.
+
+### cortex-placement-shim v0.1.5
+
+Includes updated chart cortex-shim v0.1.5.
+
+## 2026-07-01 — [#1001](https://github.com/cobaltcore-dev/cortex/pull/1001)
+
+### cortex v0.2.1 (sha-44b8aab7)
+
+Non-breaking changes:
+- Include PAYG slots in MaxSlots guard — the reservation manager now counts existing + PAYG-created slots before allocating blind-scheduler slots, preventing total slot counts from exceeding `MaxSlotsPerCommitment` ([#987](https://github.com/cobaltcore-dev/cortex/pull/987))
+- Use public Limes endpoint in knowledge datasource — fixes HTTP 400 errors after Limes enforced domain name matching on `Host` headers ([#999](https://github.com/cobaltcore-dev/cortex/pull/999))
+
+### cortex-shim v0.1.4 (sha-44b8aab7)
+
+Includes updated image sha-44b8aab7.
+
+### cortex-nova v0.0.78
+
+Includes updated charts cortex v0.2.1, cortex-postgres v0.6.7.
+
+### cortex-cinder v0.0.78
+
+Includes updated charts cortex v0.2.1, cortex-postgres v0.6.7.
+
+### cortex-manila v0.0.78
+
+Includes updated charts cortex v0.2.1, cortex-postgres v0.6.7.
+
+### cortex-crds v0.0.78
+
+Includes updated chart cortex v0.2.1.
+
+### cortex-ironcore v0.0.78
+
+Includes updated chart cortex v0.2.1.
+
+### cortex-pods v0.0.78
+
+Includes updated chart cortex v0.2.1.
+
+### cortex-placement-shim v0.1.4
+
+Includes updated chart cortex-shim v0.1.4.
+
 ## 2026-06-29 — [#990](https://github.com/cobaltcore-dev/cortex/pull/990)
 
 ### cortex v0.2.0 (sha-124ec226)

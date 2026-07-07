@@ -27,10 +27,31 @@ jobs:
             echo "allowed=false" >> $GITHUB_OUTPUT
           fi
 
+  check-trigger-phrase:
+    runs-on: ubuntu-latest
+    needs: check-allowlist
+    outputs:
+      triggered: ${{ steps.check.outputs.triggered }}
+    steps:
+      - name: Check for trigger phrase in comment body
+        id: check
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          if [[ "$COMMENT_BODY" == *"@claude"* ]] \
+             || [[ "$ISSUE_BODY" == *"@claude"* ]] \
+             || [[ "$ISSUE_TITLE" == *"@claude"* ]]; then
+            echo "triggered=true" >> $GITHUB_OUTPUT
+          else
+            echo "triggered=false" >> $GITHUB_OUTPUT
+          fi
+
   claude:
     environment: claude
-    needs: check-allowlist
-    if: needs.check-allowlist.outputs.allowed == 'true'
+    needs: [check-allowlist, check-trigger-phrase]
+    if: needs.check-allowlist.outputs.allowed == 'true' && needs.check-trigger-phrase.outputs.triggered == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
