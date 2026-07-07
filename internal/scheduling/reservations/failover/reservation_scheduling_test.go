@@ -508,81 +508,74 @@ func buildMinimalController(t *testing.T, schedulerURL string) *FailoverReservat
 // Test: scheduling options sent to the scheduler
 // ============================================================================
 
-func TestTryReuseExistingReservation_SchedulerOptions(t *testing.T) {
-	// tryReuseExistingReservation must use ReadOnly=true and must NOT set
-	// SkipPlacementContextFilters — tenant-context filters must run so only
-	// hosts the VM can actually reach are returned.
-	var capturedReq novaapi.ExternalSchedulerRequest
-	server := captureSchedulerRequest(t, "host-2", &capturedReq)
-	defer server.Close()
-
-	ctrl := buildMinimalController(t, server.URL)
+func TestFailoverSchedulerOptions(t *testing.T) {
 	vm := buildSchedulingTestVM("vm-1", "host-1")
 	vm.AvailabilityZone = "az1"
 	resolved := resolveVMSpecForScheduling(context.Background(), vm, false, nil)
-
 	reservation := buildSchedulingTestReservation("res-1", "host-2", nil)
-	reservation.Status.FailoverReservation = &v1alpha1.FailoverReservationStatus{
-		Allocations: map[string]string{},
+	reservation.Status.FailoverReservation = &v1alpha1.FailoverReservationStatus{Allocations: map[string]string{}}
+
+	tests := []struct {
+		name                        string
+		call                        func(c *FailoverReservationController, ctx context.Context)
+		wantReadOnly                bool
+		wantLockReservations        bool
+		wantSkipPlacementCtxFilters bool
+	}{
+		{
+			// Read-only compatibility check — must not write scheduling state.
+			// Tenant-context filters must run so only hosts the VM can actually reach are returned.
+			name: "tryReuseExistingReservation",
+			call: func(c *FailoverReservationController, ctx context.Context) {
+				_ = c.tryReuseExistingReservation(ctx, vm, []v1alpha1.Reservation{reservation}, []string{"host-1", "host-2"}, resolved)
+			},
+			wantReadOnly:                true,
+			wantLockReservations:        false,
+			wantSkipPlacementCtxFilters: false,
+		},
+		{
+			// Validates whether a VM can land on the reservation host during evacuation.
+			// LockReservations ensures failover capacity is not unlocked for other VMs.
+			// Tenant-context filters (aggregate metadata, allowed projects, instance group) must run.
+			name: "validateVMViaSchedulerEvacuation",
+			call: func(c *FailoverReservationController, ctx context.Context) {
+				_, _ = c.validateVMViaSchedulerEvacuation(ctx, vm, "host-2") //nolint:errcheck
+			},
+			wantReadOnly:                true,
+			wantLockReservations:        true,
+			wantSkipPlacementCtxFilters: false,
+		},
+		{
+			// Finds a host for a new reservation — writes state, so not read-only.
+			// LockReservations ensures existing reservations are treated as unavailable.
+			// Tenant-context filters must run.
+			name: "scheduleAndBuildNewFailoverReservation",
+			call: func(c *FailoverReservationController, ctx context.Context) {
+				_, _ = c.scheduleAndBuildNewFailoverReservation(ctx, vm, []string{"host-1", "host-2"}, nil, nil, resolved) //nolint:errcheck
+			},
+			wantReadOnly:                false,
+			wantLockReservations:        true,
+			wantSkipPlacementCtxFilters: false,
+		},
 	}
 
-	_ = ctrl.tryReuseExistingReservation(context.Background(), vm, []v1alpha1.Reservation{reservation}, []string{"host-1", "host-2"}, resolved)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedReq novaapi.ExternalSchedulerRequest
+			server := captureSchedulerRequest(t, "host-2", &capturedReq)
+			defer server.Close()
 
-	if !capturedReq.Options.ReadOnly {
-		t.Error("tryReuseExistingReservation must set ReadOnly=true — it must not write scheduling state")
-	}
-	if capturedReq.Options.SkipPlacementContextFilters {
-		t.Error("tryReuseExistingReservation must not set SkipPlacementContextFilters — tenant-context filters must run")
-	}
-}
+			tt.call(buildMinimalController(t, server.URL), context.Background())
 
-func TestValidateVMViaSchedulerEvacuation_SchedulerOptions(t *testing.T) {
-	// validateVMViaSchedulerEvacuation validates whether a VM can actually land on the
-	// reservation host during evacuation. Placement context filters (aggregate metadata,
-	// allowed projects, instance group constraints) must run to properly validate eligibility.
-	var capturedReq novaapi.ExternalSchedulerRequest
-	server := captureSchedulerRequest(t, "host-2", &capturedReq)
-	defer server.Close()
-
-	ctrl := buildMinimalController(t, server.URL)
-	vm := buildSchedulingTestVM("vm-1", "host-1")
-	vm.AvailabilityZone = "az1"
-
-	_, _ = ctrl.validateVMViaSchedulerEvacuation(context.Background(), vm, "host-2") //nolint:errcheck
-
-	if !capturedReq.Options.ReadOnly {
-		t.Error("validateVMViaSchedulerEvacuation must set ReadOnly=true — it must not write scheduling state")
-	}
-	if !capturedReq.Options.LockReservations {
-		t.Error("validateVMViaSchedulerEvacuation must set LockReservations=true — failover capacity must not be unlocked for other VMs during validation")
-	}
-	if capturedReq.Options.SkipPlacementContextFilters {
-		t.Error("validateVMViaSchedulerEvacuation must not set SkipPlacementContextFilters — placement filters must validate real VM eligibility on the reservation host")
-	}
-}
-
-func TestScheduleAndBuildNewFailoverReservation_SchedulerOptions(t *testing.T) {
-	// scheduleAndBuildNewFailoverReservation finds a host for a new reservation.
-	// LockReservations must be set so existing reservations are not double-booked.
-	// SkipPlacementContextFilters must not be set — tenant-context filters must run.
-	var capturedReq novaapi.ExternalSchedulerRequest
-	server := captureSchedulerRequest(t, "host-2", &capturedReq)
-	defer server.Close()
-
-	ctrl := buildMinimalController(t, server.URL)
-	vm := buildSchedulingTestVM("vm-1", "host-1")
-	vm.AvailabilityZone = "az1"
-	resolved := resolveVMSpecForScheduling(context.Background(), vm, false, nil)
-
-	_, _ = ctrl.scheduleAndBuildNewFailoverReservation(context.Background(), vm, []string{"host-1", "host-2"}, nil, nil, resolved) //nolint:errcheck
-
-	if capturedReq.Options.ReadOnly {
-		t.Error("scheduleAndBuildNewFailoverReservation must not set ReadOnly — it writes a new reservation")
-	}
-	if !capturedReq.Options.LockReservations {
-		t.Error("scheduleAndBuildNewFailoverReservation must set LockReservations=true — existing reservations must be treated as unavailable")
-	}
-	if capturedReq.Options.SkipPlacementContextFilters {
-		t.Error("scheduleAndBuildNewFailoverReservation must not set SkipPlacementContextFilters — tenant-context filters must run")
+			if capturedReq.Options.ReadOnly != tt.wantReadOnly {
+				t.Errorf("ReadOnly = %v, want %v", capturedReq.Options.ReadOnly, tt.wantReadOnly)
+			}
+			if capturedReq.Options.LockReservations != tt.wantLockReservations {
+				t.Errorf("LockReservations = %v, want %v", capturedReq.Options.LockReservations, tt.wantLockReservations)
+			}
+			if capturedReq.Options.SkipPlacementContextFilters != tt.wantSkipPlacementCtxFilters {
+				t.Errorf("SkipPlacementContextFilters = %v, want %v", capturedReq.Options.SkipPlacementContextFilters, tt.wantSkipPlacementCtxFilters)
+			}
+		})
 	}
 }
