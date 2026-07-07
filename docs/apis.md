@@ -142,7 +142,7 @@ For more details on how committed resources interact with reservations, see [com
 kubectl get flavorgroupcapacities
 ```
 
-FlavorGroupCapacity caches pre-computed capacity data for one flavor group in one availability zone. One CRD exists per (flavor group × AZ) pair, maintained by the capacity controller on a fixed interval. The spec identifies the flavor group and AZ; the status holds per-flavor slot counts (`PlaceableVMs`, `PlaceableHosts`, `TotalCapacityVMSlots`, `TotalCapacityHosts`), aggregate fields (`CommittedCapacity`, `TotalCapacity`, `TotalInstances`), and a `LastReconcileAt` timestamp. The capacity API reads these CRDs instead of probing the scheduler on each request.
+FlavorGroupCapacity caches pre-computed capacity data for one flavor group in one availability zone. One CRD exists per (flavor group × AZ) pair, maintained by the capacity controller on a fixed interval. The spec identifies the flavor group and AZ; the status holds per-flavor slot counts (`PlaceableVMs`, `PlaceableHosts`, `TotalCapacityVMSlots`, `TotalCapacityHosts`), aggregate fields (`CommittedCapacity`, `CommittedCapacityBytes`, `TotalCapacity`, `FreeCapacity`, `ExclusivelyFreeCapacity`, `ExclusivelyFreeSlots`, `RunningInstances`, `RunningResources`, `SmallestFlavorName`), and a `LastReconcileAt` timestamp. Where flavor groups share hosts, remaining capacity is fairly split across overlapping groups using a round-robin algorithm so that no group's exclusively-free capacity exceeds the actual installed resources. The capacity API reads these CRDs instead of probing the scheduler on each request.
 
 ### ProjectQuota
 
