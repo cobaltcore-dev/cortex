@@ -7,11 +7,14 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"time"
+
+	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
-	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,7 +42,12 @@ var (
 )
 
 // Controller owns the lifecycle of in-flight reservations.
-type Controller struct{ client.Client }
+type Controller struct {
+	client.Client
+
+	// VMClient is a client to call the source of truth for VMs.
+	VMClient VMClient
+}
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -135,12 +143,83 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
-	// We don't care where the instance came up. Even if this in-flight
-	// reservation is for another host, we can prune it.
-	log.Info("Instance has spawned on a hypervisor, removing in-flight reservation",
+	// We cannot free this reservation if the instance is currently being
+	// resized (=migrated to the same hypervisor), i.e. the reservation
+	// doesn't match the actual size of the vm yet. To check the vm size,
+	// we need to query the source of truth for vms.
+	if slices.Contains([]v1alpha1.SchedulingIntent{
+		novaapi.RebuildIntent,
+		novaapi.ResizeIntent,
+	}, obj.Spec.InFlightReservation.Intent) {
+		vmSize, err := c.VMClient.GetCurrentVMSize(ctx, obj.Spec.InFlightReservation.VMID)
+		if err != nil {
+			log.Error(err, "Failed to get current VM size from vmClient",
+				"vmID", obj.Spec.InFlightReservation.VMID)
+			return ctrl.Result{}, err
+		}
+		if !reflect.DeepEqual(vmSize, obj.Spec.Resources) {
+			log.V(1).Info("VM size does not match reservation size yet, requeuing",
+				"vmID", obj.Spec.InFlightReservation.VMID,
+				"reservationSize", obj.Spec.Resources,
+				"currentVMSize", vmSize)
+			orig := obj.DeepCopy()
+			meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.ReservationConditionReady,
+				Status:  metav1.ConditionUnknown,
+				Reason:  "VMSizeMismatch",
+				Message: "The current VM size does not match the reservation size yet",
+			})
+			if err := c.Status().Patch(ctx, obj, client.MergeFrom(orig)); err != nil {
+				log.Error(err, "Failed to update reservation status")
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+	}
+
+	// If the instance spawned on the hypervisor expected by the reservation,
+	// we batch-delete all reservations for that instance, including the
+	// reconciled one.
+	if hypervisorName == obj.Spec.TargetHost {
+		log.V(1).Info("Instance has spawned on the expected hypervisor, deleting reservations",
+			"vmID", obj.Spec.InFlightReservation.VMID,
+			"hypervisor", hypervisorName)
+		reservations := new(v1alpha1.ReservationList)
+		if err := c.List(ctx, reservations, client.MatchingFields{
+			idxReservationByTargetHost: hypervisorName,
+		}); err != nil {
+			log.Error(err, "Failed to list reservations for hypervisor",
+				"hypervisor", hypervisorName)
+			return ctrl.Result{}, err
+		}
+		for _, res := range reservations.Items {
+			if res.Spec.InFlightReservation == nil {
+				continue // Not an in-flight reservation, skip.
+			}
+			if res.Spec.InFlightReservation.VMID != obj.Spec.InFlightReservation.VMID {
+				continue // Not the same instance, skip.
+			}
+			if err := c.Delete(ctx, &res); err != nil {
+				log.Error(err, "Failed to delete reservation",
+					"reservation", res.Name,
+					"vmID", res.Spec.InFlightReservation.VMID)
+				return ctrl.Result{}, err
+			}
+			log.V(1).Info("Deleted reservation",
+				"reservation", res.Name,
+				"vmID", res.Spec.InFlightReservation.VMID)
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// This reservation will be deleted by the hypervisor operator when the
+	// instance spawns on the expected hypervisor, so we don't need to do
+	// anything else here.
+	log.V(1).Info("Reservation stale -- awaiting deletion",
 		"vmID", obj.Spec.InFlightReservation.VMID,
-		"hypervisor", hypervisorName)
-	return ctrl.Result{}, c.Delete(ctx, obj)
+		"expectedHypervisor", obj.Spec.TargetHost,
+		"actualHypervisor", hypervisorName)
+	return ctrl.Result{}, nil
 }
 
 // handleReservations generates a new event handler for in flight reservations.

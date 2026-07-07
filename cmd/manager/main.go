@@ -500,8 +500,15 @@ func main() {
 	if slices.Contains(mainConfig.EnabledControllers, "inflight-reservation-controller") {
 		setupLog.Info("enabling controller",
 			"controller", "inflight-reservation-controller")
+		config := conf.GetConfigOrDie[inflight.NovaVMClientConfig]()
+		novaVMClient, err := inflight.InitNovaVMClient(ctx, multiclusterClient, config)
+		if err != nil {
+			setupLog.Error(err, "unable to initialize nova VM client")
+			os.Exit(1)
+		}
 		if err := (&inflight.Controller{
-			Client: multiclusterClient,
+			Client:   multiclusterClient,
+			VMClient: novaVMClient,
 		}).SetupWithManager(ctx, mgr); err != nil {
 			setupLog.Error(err, "unable to create controller",
 				"controller", "inflight-reservation-controller")

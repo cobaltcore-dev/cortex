@@ -5,12 +5,15 @@ package inflight
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
+	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -21,6 +24,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
+
+// stubVMClient is a test double for vmClient. If err is non-nil, GetCurrentVMSize
+// returns it; otherwise it returns size.
+type stubVMClient struct {
+	size map[hv1.ResourceName]resource.Quantity
+	err  error
+}
+
+func (s *stubVMClient) GetCurrentVMSize(ctx context.Context, vmID string) (map[hv1.ResourceName]resource.Quantity, error) {
+	return s.size, s.err
+}
 
 // newTestScheme returns a runtime.Scheme with all required types registered.
 func newTestScheme(t *testing.T) *runtime.Scheme {
@@ -172,10 +186,12 @@ func TestReconcile_InstanceNotSpawnedRequeues(t *testing.T) {
 	assertReadyCondition(t, k8sClient, "res-1", metav1.ConditionUnknown, "InstanceNotFound")
 }
 
-func TestReconcile_InstanceSpawnedDeletesReservation(t *testing.T) {
+func TestReconcile_InstanceOnDifferentHostAwaitsDeletion(t *testing.T) {
+	// Instance landed on a *different* host than the target. The reservation
+	// is now stale but the hypervisor operator (not this controller) removes
+	// it, so Reconcile should be a no-op that leaves the reservation intact.
 	scheme := newTestScheme(t)
 	res := newInFlightReservation("res-1", "vm-uuid-1", "host-1")
-	// Instance landed on a *different* host than the target — controller still deletes.
 	hv1Obj := newHypervisor("host-1")
 	hv2Obj := newHypervisor("host-2", "vm-uuid-1")
 	k8sClient := newTestClient(scheme, res, hv1Obj, hv2Obj)
@@ -188,13 +204,13 @@ func TestReconcile_InstanceSpawnedDeletesReservation(t *testing.T) {
 		t.Fatalf("Reconcile returned error: %v", err)
 	}
 	if result.RequeueAfter != 0 {
-		t.Errorf("expected empty result after deletion, got %+v", result)
+		t.Errorf("expected empty result, got %+v", result)
 	}
 
+	// Reservation still exists — it's waiting for the hypervisor operator.
 	var got v1alpha1.Reservation
-	err = k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got)
-	if err == nil {
-		t.Fatal("expected reservation to be deleted, but Get succeeded")
+	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err != nil {
+		t.Fatalf("expected reservation to still exist, got error: %v", err)
 	}
 }
 
@@ -204,6 +220,198 @@ func TestReconcile_InstanceOnTargetHostDeletesReservation(t *testing.T) {
 	hv := newHypervisor("host-1", "vm-uuid-1")
 	k8sClient := newTestClient(scheme, res, hv)
 	c := &Controller{Client: k8sClient}
+
+	if _, err := c.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "res-1"},
+	}); err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+
+	var got v1alpha1.Reservation
+	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err == nil {
+		t.Fatal("expected reservation to be deleted, but Get succeeded")
+	}
+}
+
+func TestReconcile_InstanceOnTargetHostBatchDeletesReservationsForSameVM(t *testing.T) {
+	// Multiple in-flight reservations pointing at the same target host for the
+	// same VM (e.g. left over from earlier scheduling attempts). Once the
+	// instance is confirmed on that host, all of them must be cleaned up in a
+	// single reconcile.
+	scheme := newTestScheme(t)
+	res1 := newInFlightReservation("res-1", "vm-uuid-1", "host-1")
+	res2 := newInFlightReservation("res-2", "vm-uuid-1", "host-1")
+	// A reservation for a different VM on the same host must be left alone.
+	other := newInFlightReservation("res-other", "vm-uuid-2", "host-1")
+	hv := newHypervisor("host-1", "vm-uuid-1")
+	k8sClient := newTestClient(scheme, res1, res2, other, hv)
+	c := &Controller{Client: k8sClient}
+
+	if _, err := c.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "res-1"},
+	}); err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+
+	var got v1alpha1.Reservation
+	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err == nil {
+		t.Fatal("expected res-1 to be deleted, but Get succeeded")
+	}
+	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-2"}, &got); err == nil {
+		t.Fatal("expected res-2 to be deleted, but Get succeeded")
+	}
+	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-other"}, &got); err != nil {
+		t.Fatalf("expected res-other to survive, got error: %v", err)
+	}
+}
+
+// newResizeReservation builds an in-flight reservation with the given intent
+// and resource requirements. Used to exercise the resize/rebuild size-check
+// branch of Reconcile.
+//
+//nolint:unparam
+func newResizeReservation(name, vmID, targetHost string, intent v1alpha1.SchedulingIntent, resources map[hv1.ResourceName]resource.Quantity) *v1alpha1.Reservation {
+	return &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec: v1alpha1.ReservationSpec{
+			Type:             v1alpha1.ReservationTypeInFlight,
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			TargetHost:       targetHost,
+			Resources:        resources,
+			InFlightReservation: &v1alpha1.InFlightReservationSpec{
+				VMID:   vmID,
+				Intent: intent,
+			},
+		},
+	}
+}
+
+func TestReconcile_ResizeSizeMismatchRequeues(t *testing.T) {
+	// For a resize/rebuild reservation, the instance being present on the
+	// target host isn't sufficient — the VM must have grown/shrunk to the
+	// reserved size. Until it has, the controller must requeue and set the
+	// Ready condition to VMSizeMismatch.
+	scheme := newTestScheme(t)
+	reserved := map[hv1.ResourceName]resource.Quantity{
+		"cpu":    resource.MustParse("4"),
+		"memory": resource.MustParse("8Gi"),
+	}
+	current := map[hv1.ResourceName]resource.Quantity{
+		"cpu":    resource.MustParse("2"),
+		"memory": resource.MustParse("4Gi"),
+	}
+	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.ResizeIntent, reserved)
+	hv := newHypervisor("host-1", "vm-uuid-1")
+	k8sClient := newTestClient(scheme, res, hv)
+	c := &Controller{Client: k8sClient, VMClient: &stubVMClient{size: current}}
+
+	result, err := c.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "res-1"},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+	if result.RequeueAfter != 10*time.Second {
+		t.Errorf("RequeueAfter = %v, want 10s", result.RequeueAfter)
+	}
+
+	// Reservation must still exist and carry the VMSizeMismatch condition.
+	var got v1alpha1.Reservation
+	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err != nil {
+		t.Fatalf("reservation was unexpectedly deleted: %v", err)
+	}
+	assertReadyCondition(t, k8sClient, "res-1", metav1.ConditionUnknown, "VMSizeMismatch")
+}
+
+func TestReconcile_ResizeSizeMatchesDeletesReservation(t *testing.T) {
+	// Once the VM has been resized to the reserved dimensions, the resize
+	// reservation can be freed like a normal in-flight reservation.
+	scheme := newTestScheme(t)
+	reserved := map[hv1.ResourceName]resource.Quantity{
+		"cpu":    resource.MustParse("4"),
+		"memory": resource.MustParse("8Gi"),
+	}
+	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.ResizeIntent, reserved)
+	hv := newHypervisor("host-1", "vm-uuid-1")
+	k8sClient := newTestClient(scheme, res, hv)
+	c := &Controller{Client: k8sClient, VMClient: &stubVMClient{size: reserved}}
+
+	if _, err := c.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "res-1"},
+	}); err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+
+	var got v1alpha1.Reservation
+	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err == nil {
+		t.Fatal("expected reservation to be deleted, but Get succeeded")
+	}
+}
+
+func TestReconcile_RebuildSizeMismatchRequeues(t *testing.T) {
+	// Same branch as resize but exercised via the rebuild intent to make sure
+	// both intents actually trip the vmClient check.
+	scheme := newTestScheme(t)
+	reserved := map[hv1.ResourceName]resource.Quantity{
+		"cpu": resource.MustParse("4"),
+	}
+	current := map[hv1.ResourceName]resource.Quantity{
+		"cpu": resource.MustParse("2"),
+	}
+	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.RebuildIntent, reserved)
+	hv := newHypervisor("host-1", "vm-uuid-1")
+	k8sClient := newTestClient(scheme, res, hv)
+	c := &Controller{Client: k8sClient, VMClient: &stubVMClient{size: current}}
+
+	result, err := c.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "res-1"},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+	if result.RequeueAfter != 10*time.Second {
+		t.Errorf("RequeueAfter = %v, want 10s", result.RequeueAfter)
+	}
+	assertReadyCondition(t, k8sClient, "res-1", metav1.ConditionUnknown, "VMSizeMismatch")
+}
+
+func TestReconcile_ResizeVMClientErrorReturnsError(t *testing.T) {
+	// If the source of truth for VMs can't be reached we must surface the
+	// error so controller-runtime backs off — silently deleting the
+	// reservation here would be a resource-accounting bug.
+	scheme := newTestScheme(t)
+	reserved := map[hv1.ResourceName]resource.Quantity{
+		"cpu": resource.MustParse("4"),
+	}
+	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.ResizeIntent, reserved)
+	hv := newHypervisor("host-1", "vm-uuid-1")
+	k8sClient := newTestClient(scheme, res, hv)
+	vmErr := errors.New("vm client boom")
+	c := &Controller{Client: k8sClient, VMClient: &stubVMClient{err: vmErr}}
+
+	_, err := c.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "res-1"},
+	})
+	if !errors.Is(err, vmErr) {
+		t.Fatalf("Reconcile err = %v, want %v", err, vmErr)
+	}
+
+	// Reservation must survive the error so it can be retried.
+	var got v1alpha1.Reservation
+	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err != nil {
+		t.Fatalf("reservation was unexpectedly deleted: %v", err)
+	}
+}
+
+func TestReconcile_NonResizeIntentSkipsVMClient(t *testing.T) {
+	// For non-resize/rebuild intents the vmClient must not be consulted at
+	// all — we leave it nil to make an accidental call panic loudly.
+	scheme := newTestScheme(t)
+	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.LiveMigrationIntent,
+		map[hv1.ResourceName]resource.Quantity{"cpu": resource.MustParse("4")})
+	hv := newHypervisor("host-1", "vm-uuid-1")
+	k8sClient := newTestClient(scheme, res, hv)
+	c := &Controller{Client: k8sClient, VMClient: nil}
 
 	if _, err := c.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: "res-1"},
