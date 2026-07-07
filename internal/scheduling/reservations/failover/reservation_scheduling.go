@@ -23,6 +23,14 @@ const (
 	PipelineNewFailoverReservation = "kvm-general-purpose-load-balancing"
 )
 
+// DefaultFailoverOptions is the base scheduling.Options for all failover scheduling calls.
+// Per-call overrides (ReadOnly, LockReservations, SkipPlacementContextFilters) are applied on top.
+var DefaultFailoverOptions = scheduling.Options{
+	SkipHistory:                   true,
+	SkipInflight:                  true,
+	SkipCommittedResourceTracking: true,
+}
+
 // inferFailoverPipeline returns the standard pipeline for a failover scheduling call based on
 // the VM's flavor extra specs — the same HANA vs general-purpose split used by Nova placement.
 func inferFailoverPipeline(extraSpecs map[string]string) string {
@@ -123,13 +131,9 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 
 	logger := LoggerFromContext(ctx)
 
-	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, inferFailoverPipeline(vm.FlavorExtraSpecs), resSpec, api.ReuseFailoverReservationIntent, scheduling.Options{
-		ReadOnly:                      true,
-		SkipPlacementContextFilters:   false,
-		SkipHistory:                   true,
-		SkipInflight:                  true,
-		SkipCommittedResourceTracking: true,
-	})
+	reuseOpts := DefaultFailoverOptions
+	reuseOpts.ReadOnly = true
+	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, inferFailoverPipeline(vm.FlavorExtraSpecs), resSpec, api.ReuseFailoverReservationIntent, reuseOpts)
 	if err != nil {
 		logger.Error(err, "failed to get potential hypervisors for VM", "vmUUID", vm.UUID)
 		return nil
@@ -230,7 +234,10 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		"vmCurrentHost", vm.CurrentHypervisor,
 		"pipeline", scheduleReq.Pipeline)
 
-	resp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq, scheduling.Options{ReadOnly: true, LockReservations: true, SkipPlacementContextFilters: true, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true})
+	evacuateOpts := DefaultFailoverOptions
+	evacuateOpts.ReadOnly = true
+	evacuateOpts.LockReservations = true
+	resp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq, evacuateOpts)
 	if err != nil {
 		logger.Error(err, "failed to validate VM for reservation host", "vmUUID", vm.UUID, "reservationHost", reservationHost)
 		return false, fmt.Errorf("failed to validate VM for reservation host: %w", err)
@@ -272,7 +279,9 @@ func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 
 	// Get potential hypervisors from scheduler using the reservation spec resources
 	// (which may be sized to the LargestFlavor from the flavor group)
-	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineNewFailoverReservation, resSpec, api.ReserveForFailoverIntent, scheduling.Options{LockReservations: true, SkipPlacementContextFilters: false, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true})
+	newResOpts := DefaultFailoverOptions
+	newResOpts.LockReservations = true
+	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, PipelineNewFailoverReservation, resSpec, api.ReserveForFailoverIntent, newResOpts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get potential hypervisors for VM: %w", err)
 	}
