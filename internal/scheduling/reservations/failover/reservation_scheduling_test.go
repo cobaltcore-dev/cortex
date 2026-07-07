@@ -483,7 +483,7 @@ func captureSchedulerRequest(t *testing.T, host string, out *novaapi.ExternalSch
 			return
 		}
 		resp := novaapi.ExternalSchedulerResponse{Hosts: []string{host}}
-		_ = json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
 	}))
 }
 
@@ -548,7 +548,7 @@ func TestValidateVMViaSchedulerEvacuation_SchedulerOptions(t *testing.T) {
 	vm := buildSchedulingTestVM("vm-1", "host-1")
 	vm.AvailabilityZone = "az1"
 
-	_, _ = ctrl.validateVMViaSchedulerEvacuation(context.Background(), vm, "host-2")
+	_, _ = ctrl.validateVMViaSchedulerEvacuation(context.Background(), vm, "host-2") //nolint:errcheck
 
 	if !capturedReq.Options.ReadOnly {
 		t.Error("validateVMViaSchedulerEvacuation must set ReadOnly=true — it must not write scheduling state")
@@ -574,7 +574,7 @@ func TestScheduleAndBuildNewFailoverReservation_SchedulerOptions(t *testing.T) {
 	vm.AvailabilityZone = "az1"
 	resolved := resolveVMSpecForScheduling(context.Background(), vm, false, nil)
 
-	_, _ = ctrl.scheduleAndBuildNewFailoverReservation(context.Background(), vm, []string{"host-1", "host-2"}, nil, nil, resolved)
+	_, _ = ctrl.scheduleAndBuildNewFailoverReservation(context.Background(), vm, []string{"host-1", "host-2"}, nil, nil, resolved) //nolint:errcheck
 
 	if capturedReq.Options.ReadOnly {
 		t.Error("scheduleAndBuildNewFailoverReservation must not set ReadOnly — it writes a new reservation")
