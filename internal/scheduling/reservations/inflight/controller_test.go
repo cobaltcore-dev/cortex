@@ -352,6 +352,80 @@ func TestReconcile_ResizeSizeMatchesDeletesReservation(t *testing.T) {
 	}
 }
 
+// TestReconcile_ResizeSizeMatchesSemanticallyDeletesReservation guards the
+// semantic quantity comparison in Reconcile: the reservation spec and the vm
+// client return numerically-identical quantities that were constructed
+// differently (MustParse vs NewQuantity), so reflect.DeepEqual returns false
+// even though the resources match. If the controller ever regresses to
+// reflect.DeepEqual, this test starts failing.
+func TestReconcile_ResizeSizeMatchesSemanticallyDeletesReservation(t *testing.T) {
+	scheme := newTestScheme(t)
+	// Reservation spec side: built like the API server would (MustParse).
+	reserved := map[hv1.ResourceName]resource.Quantity{
+		"cpu":    resource.MustParse("4"),
+		"memory": resource.MustParse("8Gi"),
+	}
+	// VM client side: built like the nova vm client does (NewQuantity).
+	current := map[hv1.ResourceName]resource.Quantity{
+		"cpu":    *resource.NewQuantity(4, resource.DecimalSI),
+		"memory": *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
+	}
+	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.ResizeIntent, reserved)
+	hv := newHypervisor("host-1", "vm-uuid-1")
+	k8sClient := newTestClient(scheme, res, hv)
+	c := &Controller{Client: k8sClient, VMClient: &stubVMClient{size: current}}
+
+	if _, err := c.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "res-1"},
+	}); err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+
+	var got v1alpha1.Reservation
+	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err == nil {
+		t.Fatal("expected reservation to be deleted (semantic size match), but Get succeeded")
+	}
+}
+
+// TestReconcile_ResizeStaleReservationSkipsVMClient covers the guard that
+// stops the size-check branch from running when the instance landed on a host
+// other than the reservation's target. A stale resize reservation should fall
+// through to the awaiting-deletion no-op — not fire a vmClient call and get
+// marked VMSizeMismatch. VMClient is left nil so an accidental call panics.
+func TestReconcile_ResizeStaleReservationSkipsVMClient(t *testing.T) {
+	scheme := newTestScheme(t)
+	reserved := map[hv1.ResourceName]resource.Quantity{
+		"cpu": resource.MustParse("4"),
+	}
+	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.ResizeIntent, reserved)
+	// Instance ended up on host-2, not the target host-1.
+	hv1Obj := newHypervisor("host-1")
+	hv2Obj := newHypervisor("host-2", "vm-uuid-1")
+	k8sClient := newTestClient(scheme, res, hv1Obj, hv2Obj)
+	c := &Controller{Client: k8sClient, VMClient: nil}
+
+	result, err := c.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "res-1"},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+	if result.RequeueAfter != 0 {
+		t.Errorf("expected empty result for stale reservation, got %+v", result)
+	}
+
+	// Reservation must still exist and must NOT have been marked with
+	// VMSizeMismatch — it's simply awaiting the hypervisor operator to
+	// prune it.
+	var got v1alpha1.Reservation
+	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err != nil {
+		t.Fatalf("expected reservation to still exist, got error: %v", err)
+	}
+	if cond := meta.FindStatusCondition(got.Status.Conditions, v1alpha1.ReservationConditionReady); cond != nil && cond.Reason == "VMSizeMismatch" {
+		t.Errorf("stale reservation was incorrectly marked VMSizeMismatch")
+	}
+}
+
 func TestReconcile_RebuildSizeMismatchRequeues(t *testing.T) {
 	// Same branch as resize but exercised via the rebuild intent to make sure
 	// both intents actually trip the vmClient check.

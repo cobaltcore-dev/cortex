@@ -147,8 +147,13 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	// We cannot free this reservation if the instance is currently being
 	// resized (=migrated to the same hypervisor), i.e. the reservation
 	// doesn't match the actual size of the vm yet. To check the vm size,
-	// we need to query the source of truth for vms.
-	if slices.Contains([]v1alpha1.SchedulingIntent{
+	// we need to query the source of truth for vms. Only relevant when the
+	// instance actually landed on the reservation's target host — for a
+	// stale reservation (instance on a different host) this branch would
+	// otherwise fire an unnecessary vmClient call and mark the reservation
+	// VMSizeMismatch when it should just fall through to the
+	// awaiting-deletion no-op below.
+	if hypervisorName == obj.Spec.TargetHost && slices.Contains([]v1alpha1.SchedulingIntent{
 		novaapi.RebuildIntent,
 		novaapi.ResizeIntent,
 	}, obj.Spec.InFlightReservation.Intent) {
@@ -158,7 +163,23 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				"vmID", obj.Spec.InFlightReservation.VMID)
 			return ctrl.Result{}, err
 		}
-		if !reflect.DeepEqual(vmSize, obj.Spec.Resources) {
+		// Compare the resource maps semantically: reflect.DeepEqual on
+		// resource.Quantity can return false for numerically equal values
+		// because Quantity's unexported cached string/format state may
+		// differ between values coming from API decoding (reservation
+		// spec) and values freshly constructed by the vm client. Using
+		// Quantity.Cmp avoids getting stuck in VMSizeMismatch forever.
+		sizeMatches := len(vmSize) == len(obj.Spec.Resources)
+		if sizeMatches {
+			for k, want := range obj.Spec.Resources {
+				got, ok := vmSize[k]
+				if !ok || got.Cmp(want) != 0 {
+					sizeMatches = false
+					break
+				}
+			}
+		}
+		if !sizeMatches {
 			log.V(1).Info("VM size does not match reservation size yet, requeuing",
 				"vmID", obj.Spec.InFlightReservation.VMID,
 				"reservationSize", obj.Spec.Resources,
