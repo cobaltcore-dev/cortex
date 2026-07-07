@@ -81,43 +81,49 @@ func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.External
 	}
 
 	// Step 1: Skip intents that don't represent new resource consumption.
+	// We distinguish two sub-buckets in the decision label so operators can tell
+	// external non-consuming intents (evacuate / live-migrate — VM already exists,
+	// being moved) apart from cortex-internal reservation intents (failover /
+	// committed-resource reservations — new schedules driven by cortex itself).
 	intent, err := request.GetIntent()
 	if err == nil {
 		switch intent {
 		case api.EvacuateIntent, api.LiveMigrationIntent:
 			traceLog.Info("skipping quota enforcement for non-consuming intent", "intent", intent)
-			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", "", "")
+			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_intent_migration", "", "", "")
 			return result, nil
 		case api.ReserveForFailoverIntent:
 			traceLog.Info("skipping quota enforcement for failover reservation intent")
-			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", "", "")
+			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_intent_internal", "", "", "")
 			return result, nil
 		case api.ReserveForCommittedResourceIntent:
 			// TODO: revisit whether committed resource reservation scheduling should also be quota-checked
 			traceLog.Info("skipping quota enforcement for committed resource reservation intent")
-			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", "", "")
+			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_intent_internal", "", "", "")
 			return result, nil
 		}
 	}
 
 	// Step 2: Extract project, AZ, and hw_version from the request.
+	// Missing-data skips share a single decision bucket; the specific missing
+	// field is in the trace log.
 	projectID := request.Spec.Data.ProjectID
 	az := request.Spec.Data.AvailabilityZone
 	hwVersion := request.Spec.Data.Flavor.Data.ExtraSpecs["hw_version"]
 
 	if projectID == "" {
 		traceLog.Warn("no project ID in request, skipping quota enforcement")
-		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", az, hwVersion)
+		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_missing_data", "", az, hwVersion)
 		return result, nil
 	}
 	if az == "" {
 		traceLog.Warn("no availability zone in request, skipping quota enforcement")
-		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", "", hwVersion)
+		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_missing_data", "", "", hwVersion)
 		return result, nil
 	}
 	if hwVersion == "" {
 		traceLog.Warn("no hw_version in flavor extra specs, skipping quota enforcement")
-		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", az, "")
+		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_missing_data", "", az, "")
 		return result, nil
 	}
 
