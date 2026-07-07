@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -355,10 +356,17 @@ func (c *Controller) predicateHypervisors() predicate.Predicate {
 // Reservation CRD across all clusters and trigger reconciliations accordingly.
 func (c *Controller) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err error) {
 	// Check that the provided client is a multicluster client, since we need
-	// that to watch for hypervisors across clusters.
+	// that to watch for hypervisors across clusters. Do this before adding
+	// any runnables so a misconfigured setup fails fast.
 	mcl, ok := c.Client.(*multicluster.Client)
 	if !ok {
 		return errors.New("provided client must be a multicluster client")
+	}
+	// Add the vm client as runnable to the manager.
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		return c.VMClient.StartWithKubernetesSecrets(ctx, c.Client)
+	})); err != nil {
+		return err
 	}
 	bldr := multicluster.BuildController(mcl, mgr)
 	// The reservation crd & hypervisor crd may be distributed across multiple

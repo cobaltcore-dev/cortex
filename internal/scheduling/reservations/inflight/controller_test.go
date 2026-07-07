@@ -32,6 +32,10 @@ type stubVMClient struct {
 	err  error
 }
 
+func (s *stubVMClient) StartWithKubernetesSecrets(ctx context.Context, client client.Client) error {
+	return nil
+}
+
 func (s *stubVMClient) GetCurrentVMSize(ctx context.Context, vmID string) (map[hv1.ResourceName]resource.Quantity, error) {
 	return s.size, s.err
 }
@@ -641,7 +645,7 @@ func TestHandleHypervisors_NoMatchingReservations(t *testing.T) {
 
 func TestSetupWithManager_RejectsNonMulticlusterClient(t *testing.T) {
 	scheme := newTestScheme(t)
-	c := &Controller{Client: newTestClient(scheme)}
+	c := &Controller{Client: newTestClient(scheme), VMClient: &stubVMClient{}}
 	err := c.SetupWithManager(context.Background(), nil)
 	if err == nil {
 		t.Fatal("expected error for non-multicluster client, got nil")
