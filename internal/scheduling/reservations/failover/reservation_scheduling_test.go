@@ -5,14 +5,20 @@ package failover
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 // ============================================================================
@@ -464,5 +470,119 @@ func buildSchedulingTestVMWithResources(uuid, hypervisor string, memoryMB, vcpus
 			"vcpus":  *resource.NewQuantity(vcpus, resource.DecimalSI),
 			"memory": *resource.NewQuantity(memoryMB*1024*1024, resource.BinarySI),
 		},
+	}
+}
+
+// captureSchedulerRequest spins up a test HTTP server that captures one scheduler request
+// and returns a single host. The captured request is written into *out.
+func captureSchedulerRequest(t *testing.T, host string, out *novaapi.ExternalSchedulerRequest) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(out); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		resp := novaapi.ExternalSchedulerResponse{Hosts: []string{host}}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+}
+
+// buildMinimalController returns a FailoverReservationController wired to a scheduler at the given URL.
+func buildMinimalController(t *testing.T, schedulerURL string) *FailoverReservationController {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add v1alpha1 to scheme: %v", err)
+	}
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add hv1 to scheme: %v", err)
+	}
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	schedulerClient := reservations.NewSchedulerClient(schedulerURL + "/scheduler/nova/external")
+	config := FailoverConfig{}
+	config.ApplyDefaults()
+	return NewFailoverReservationController(k8sClient, nil, config, schedulerClient, nil)
+}
+
+// ============================================================================
+// Test: scheduling options sent to the scheduler
+// ============================================================================
+
+func TestTryReuseExistingReservation_SchedulerOptions(t *testing.T) {
+	// tryReuseExistingReservation must use ReadOnly=true and must NOT set
+	// SkipPlacementContextFilters — tenant-context filters must run so only
+	// hosts the VM can actually reach are returned.
+	var capturedReq novaapi.ExternalSchedulerRequest
+	server := captureSchedulerRequest(t, "host-2", &capturedReq)
+	defer server.Close()
+
+	ctrl := buildMinimalController(t, server.URL)
+	vm := buildSchedulingTestVM("vm-1", "host-1")
+	vm.AvailabilityZone = "az1"
+	resolved := resolveVMSpecForScheduling(context.Background(), vm, false, nil)
+
+	reservation := buildSchedulingTestReservation("res-1", "host-2", nil)
+	reservation.Status.FailoverReservation = &v1alpha1.FailoverReservationStatus{
+		Allocations: map[string]string{},
+	}
+
+	_ = ctrl.tryReuseExistingReservation(context.Background(), vm, []v1alpha1.Reservation{reservation}, []string{"host-1", "host-2"}, resolved)
+
+	if !capturedReq.Options.ReadOnly {
+		t.Error("tryReuseExistingReservation must set ReadOnly=true — it must not write scheduling state")
+	}
+	if capturedReq.Options.SkipPlacementContextFilters {
+		t.Error("tryReuseExistingReservation must not set SkipPlacementContextFilters — tenant-context filters must run")
+	}
+}
+
+func TestValidateVMViaSchedulerEvacuation_SchedulerOptions(t *testing.T) {
+	// validateVMViaSchedulerEvacuation validates whether a VM can actually land on the
+	// reservation host during evacuation. Placement context filters (aggregate metadata,
+	// allowed projects, instance group constraints) must run to properly validate eligibility.
+	var capturedReq novaapi.ExternalSchedulerRequest
+	server := captureSchedulerRequest(t, "host-2", &capturedReq)
+	defer server.Close()
+
+	ctrl := buildMinimalController(t, server.URL)
+	vm := buildSchedulingTestVM("vm-1", "host-1")
+	vm.AvailabilityZone = "az1"
+
+	_, _ = ctrl.validateVMViaSchedulerEvacuation(context.Background(), vm, "host-2")
+
+	if !capturedReq.Options.ReadOnly {
+		t.Error("validateVMViaSchedulerEvacuation must set ReadOnly=true — it must not write scheduling state")
+	}
+	if !capturedReq.Options.LockReservations {
+		t.Error("validateVMViaSchedulerEvacuation must set LockReservations=true — failover capacity must not be unlocked for other VMs during validation")
+	}
+	if capturedReq.Options.SkipPlacementContextFilters {
+		t.Error("validateVMViaSchedulerEvacuation must not set SkipPlacementContextFilters — placement filters must validate real VM eligibility on the reservation host")
+	}
+}
+
+func TestScheduleAndBuildNewFailoverReservation_SchedulerOptions(t *testing.T) {
+	// scheduleAndBuildNewFailoverReservation finds a host for a new reservation.
+	// LockReservations must be set so existing reservations are not double-booked.
+	// SkipPlacementContextFilters must not be set — tenant-context filters must run.
+	var capturedReq novaapi.ExternalSchedulerRequest
+	server := captureSchedulerRequest(t, "host-2", &capturedReq)
+	defer server.Close()
+
+	ctrl := buildMinimalController(t, server.URL)
+	vm := buildSchedulingTestVM("vm-1", "host-1")
+	vm.AvailabilityZone = "az1"
+	resolved := resolveVMSpecForScheduling(context.Background(), vm, false, nil)
+
+	_, _ = ctrl.scheduleAndBuildNewFailoverReservation(context.Background(), vm, []string{"host-1", "host-2"}, nil, nil, resolved)
+
+	if capturedReq.Options.ReadOnly {
+		t.Error("scheduleAndBuildNewFailoverReservation must not set ReadOnly — it writes a new reservation")
+	}
+	if !capturedReq.Options.LockReservations {
+		t.Error("scheduleAndBuildNewFailoverReservation must set LockReservations=true — existing reservations must be treated as unavailable")
+	}
+	if capturedReq.Options.SkipPlacementContextFilters {
+		t.Error("scheduleAndBuildNewFailoverReservation must not set SkipPlacementContextFilters — tenant-context filters must run")
 	}
 }
