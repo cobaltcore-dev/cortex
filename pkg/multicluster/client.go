@@ -163,6 +163,7 @@ func (c *Client) AddRemote(ctx context.Context, host, caCert string, insecureSki
 	}
 	cl, err := cluster.New(&restConfigCopy, func(o *cluster.Options) {
 		o.Scheme = c.HomeScheme
+		o.Logger = ctrl.LoggerFrom(ctx).WithValues("host", host)
 	})
 	if err != nil {
 		return nil, err
