@@ -9,7 +9,6 @@ import (
 	"hash/fnv"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -48,7 +47,6 @@ type Reconciler struct {
 	schedulerClient *reservations.SchedulerClient
 	config          Config
 
-	mu              sync.Mutex
 	lastReconcileAt time.Time
 }
 
@@ -65,10 +63,8 @@ func NewController(c client.Client, config Config, vmSource reservations.VMSourc
 // watched CRD changes, and also on the periodic RequeueAfter floor set by ReconcileInterval.
 // If called sooner than MinReconcileInterval since the last successful run, it returns early.
 func (c *Reconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Result, error) {
-	c.mu.Lock()
 	elapsed := time.Since(c.lastReconcileAt)
 	minInterval := c.config.MinReconcileInterval.Duration
-	c.mu.Unlock()
 
 	if c.lastReconcileAt != (time.Time{}) && elapsed < minInterval {
 		remaining := minInterval - elapsed
@@ -84,9 +80,7 @@ func (c *Reconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Result
 		return ctrl.Result{}, err
 	}
 
-	c.mu.Lock()
 	c.lastReconcileAt = time.Now()
-	c.mu.Unlock()
 
 	return ctrl.Result{RequeueAfter: c.config.ReconcileInterval.Duration}, nil
 }
