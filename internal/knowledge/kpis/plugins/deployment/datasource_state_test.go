@@ -49,7 +49,7 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{Name: "ds1"},
 					Spec:       v1alpha1.DatasourceSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DatasourceStatus{
-						NumberOfObjects: 10,
+						NumberOfObjects: new(int64(10)),
 						Conditions:      []v1.Condition{},
 					},
 				},
@@ -87,7 +87,7 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{Name: "ds-ready"},
 					Spec:       v1alpha1.DatasourceSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DatasourceStatus{
-						NumberOfObjects: 10,
+						NumberOfObjects: new(int64(10)),
 						Conditions:      []v1.Condition{},
 					},
 				},
@@ -127,7 +127,7 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{Name: "ds-correct-operator"},
 					Spec:       v1alpha1.DatasourceSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DatasourceStatus{
-						NumberOfObjects: 10,
+						NumberOfObjects: new(int64(10)),
 						Conditions:      []v1.Condition{},
 					},
 				},
@@ -135,7 +135,7 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{Name: "ds-wrong-operator"},
 					Spec:       v1alpha1.DatasourceSpec{SchedulingDomain: "other-operator"},
 					Status: v1alpha1.DatasourceStatus{
-						NumberOfObjects: 10,
+						NumberOfObjects: new(int64(10)),
 						Conditions:      []v1.Condition{},
 					},
 				},
@@ -151,7 +151,7 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{Name: "ds-unknown"},
 					Spec:       v1alpha1.DatasourceSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DatasourceStatus{
-						NumberOfObjects: 0,
+						NumberOfObjects: new(int64(0)),
 						Conditions:      []v1.Condition{},
 					},
 				},

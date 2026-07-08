@@ -71,7 +71,7 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 		log.Info("skipping datasource, not a prometheus datasource", "name", datasource.Name)
 		return ctrl.Result{}, nil
 	}
-	if datasource.Status.NextSyncTime.After(time.Now()) && datasource.Status.NumberOfObjects != 0 {
+	if datasource.Status.NextSyncTime.After(time.Now()) && datasource.Status.NumberOfObjects != nil {
 		if _, seen := r.reconciledOnce.Load(req.NamespacedName); seen {
 			log.Info("skipping datasource sync, not yet time", "name", datasource.Name)
 			return ctrl.Result{RequeueAfter: time.Until(datasource.Status.NextSyncTime.Time)}, nil
@@ -201,7 +201,7 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 	})
 	datasource.Status.LastSynced = metav1.NewTime(time.Now())
 	datasource.Status.NextSyncTime = metav1.NewTime(nextSync)
-	datasource.Status.NumberOfObjects = nResults
+	datasource.Status.NumberOfObjects = &nResults
 	patch := client.MergeFrom(old)
 	if err := r.Status().Patch(ctx, datasource, patch); err != nil {
 		log.Error(err, "failed to patch datasource status", "name", datasource.Name)
