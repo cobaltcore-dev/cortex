@@ -12,7 +12,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -88,7 +87,7 @@ func TestDatasourceStateKPI_Collect(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{Name: "ds-ready"},
 					Spec:       v1alpha1.DatasourceSpec{SchedulingDomain: "test-operator"},
 					Status: v1alpha1.DatasourceStatus{
-						NumberOfObjects: ptr.To(int64(10)),
+						NumberOfObjects: new(int64(10)),
 						Conditions:      []v1.Condition{},
 					},
 				},
