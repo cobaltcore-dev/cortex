@@ -234,7 +234,7 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, nil
 	}
 
-	// This reservation will be deleted by the hypervisor operator when the
+	// This reservation will be deleted by the controller when the
 	// instance spawns on the expected hypervisor, so we don't need to do
 	// anything else here.
 	log.V(1).Info("Reservation stale -- awaiting deletion",
