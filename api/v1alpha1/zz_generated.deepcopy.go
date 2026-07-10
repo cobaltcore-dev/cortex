@@ -353,6 +353,11 @@ func (in *DatasourceSpec) DeepCopy() *DatasourceSpec {
 func (in *DatasourceStatus) DeepCopyInto(out *DatasourceStatus) {
 	*out = *in
 	in.LastSynced.DeepCopyInto(&out.LastSynced)
+	if in.NumberOfObjects != nil {
+		in, out := &in.NumberOfObjects, &out.NumberOfObjects
+		*out = new(int64)
+		**out = **in
+	}
 	in.NextSyncTime.DeepCopyInto(&out.NextSyncTime)
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions

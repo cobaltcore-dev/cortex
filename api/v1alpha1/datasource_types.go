@@ -232,7 +232,7 @@ type DatasourceStatus struct {
 	// When the datasource was last successfully synced.
 	LastSynced metav1.Time `json:"lastSynced,omitempty"`
 	// The number of objects currently stored for this datasource.
-	NumberOfObjects int64 `json:"numberOfObjects,omitempty"`
+	NumberOfObjects *int64 `json:"numberOfObjects,omitempty"`
 	// Planned time for the next sync.
 	NextSyncTime metav1.Time `json:"nextSyncTime,omitempty"`
 
