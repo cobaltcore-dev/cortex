@@ -74,9 +74,6 @@ type FilterQuotaEnforcement struct {
 
 func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
-	if request.GetOptions().SkipPlacementContextFilters {
-		return result, nil
-	}
 
 	mode := "shadow"
 	if s.Options.Enforce {
@@ -96,8 +93,11 @@ func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.External
 			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", "", "")
 			return result, nil
 		case api.ReserveForCommittedResourceIntent:
-			// TODO: revisit whether committed resource reservation scheduling should also be quota-checked
 			traceLog.Info("skipping quota enforcement for committed resource reservation intent")
+			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", "", "")
+			return result, nil
+		case api.CapacityProbeIntent:
+			traceLog.Info("skipping quota enforcement for capacity probe intent")
 			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", "", "")
 			return result, nil
 		}

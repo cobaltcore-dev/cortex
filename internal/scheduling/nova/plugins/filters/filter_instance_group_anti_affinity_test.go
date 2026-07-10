@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
-	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -549,7 +548,7 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 	}
 }
 
-func TestFilterInstanceGroupAntiAffinityStep_SkipPlacementContextFilters(t *testing.T) {
+func TestFilterInstanceGroupAntiAffinityStep_SkipsForNonPlacementIntent(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := hv1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add hv1 to scheme: %v", err)
@@ -570,10 +569,10 @@ func TestFilterInstanceGroupAntiAffinityStep_SkipPlacementContextFilters(t *test
 			Rules:   map[string]any{"max_server_per_host": 1},
 		},
 	}
+	request.Spec.Data.SchedulerHints = map[string]any{"_nova_check_type": "capacity_probe"}
 	step := &FilterInstanceGroupAntiAffinityStep{}
 	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 
-	request.Options = scheduling.Options{SkipPlacementContextFilters: true}
 	result, err := step.Run(slog.Default(), request)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

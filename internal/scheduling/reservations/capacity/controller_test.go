@@ -849,7 +849,7 @@ func TestProbeScheduler_SubtractsReservationBlocksWhenNotIgnored(t *testing.T) {
 	}
 }
 
-func TestProbeScheduler_SetsSkipPlacementContextFilters(t *testing.T) {
+func TestProbeScheduler_SetsCapacityProbeIntent(t *testing.T) {
 	scheme := newTestScheme(t)
 	hv := newHypervisor("host-1", "az-a", 4096*1024*1024)
 
@@ -870,8 +870,12 @@ func TestProbeScheduler_SetsSkipPlacementContextFilters(t *testing.T) {
 	if _, _, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "test-pipeline", hvByName, true, nil); err != nil {
 		t.Fatalf("probeScheduler failed: %v", err)
 	}
-	if !capturedReq.Options.SkipPlacementContextFilters {
-		t.Error("capacity probe must set SkipPlacementContextFilters=true to see all hosts regardless of project restrictions")
+	hint, err := capturedReq.Spec.Data.GetSchedulerHintStr("_nova_check_type")
+	if err != nil {
+		t.Fatalf("failed to get _nova_check_type hint: %v", err)
+	}
+	if hint != string(schedulerapi.CapacityProbeIntent) {
+		t.Errorf("capacity probe must set _nova_check_type=%q, got %q", schedulerapi.CapacityProbeIntent, hint)
 	}
 	if capturedReq.Spec.Data.ProjectID != "cortex-capacity-probe" {
 		t.Errorf("capacity probe must send ProjectID cortex-capacity-probe, got %q", capturedReq.Spec.Data.ProjectID)

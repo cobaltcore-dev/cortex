@@ -1194,10 +1194,10 @@ func TestCRLifecycle(t *testing.T) {
 	})
 }
 
-func TestCRScheduling_DoesNotSetSkipPlacementContextFilters(t *testing.T) {
+func TestCRScheduling_SetsReserveForCommittedResourceIntent(t *testing.T) {
 	// CR slot scheduling has a real project ID and must run tenant-context filters
-	// (filter_allowed_projects, filter_aggregate_metadata, etc.). Verify SkipPlacementContextFilters
-	// is never set so those filters are not bypassed.
+	// (filter_allowed_projects, filter_aggregate_metadata, etc.). Verify the intent is
+	// reserve_for_committed_resource so filters can identify the call type correctly.
 	var capturedReq schedulerdelegationapi.ExternalSchedulerRequest
 	var schedulerCalled bool
 	captureScheduler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1223,7 +1223,11 @@ func TestCRScheduling_DoesNotSetSkipPlacementContextFilters(t *testing.T) {
 	if !schedulerCalled {
 		t.Fatal("scheduler was never called — test did not exercise the scheduling path")
 	}
-	if capturedReq.Options.SkipPlacementContextFilters {
-		t.Error("CR slot scheduling must not set SkipPlacementContextFilters — tenant-context filters must run")
+	hint, err := capturedReq.Spec.Data.GetSchedulerHintStr("_nova_check_type")
+	if err != nil {
+		t.Fatalf("failed to get _nova_check_type hint: %v", err)
+	}
+	if hint != string(schedulerdelegationapi.ReserveForCommittedResourceIntent) {
+		t.Errorf("CR slot scheduling must set _nova_check_type=%q, got %q", schedulerdelegationapi.ReserveForCommittedResourceIntent, hint)
 	}
 }

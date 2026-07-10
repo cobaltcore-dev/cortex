@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
-	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -1089,7 +1088,7 @@ func TestQuotaEnforcementMetrics_RecordDecision_NilWarns(t *testing.T) {
 	}
 }
 
-func TestFilterQuotaEnforcement_SkipPlacementContextFilters(t *testing.T) {
+func TestFilterQuotaEnforcement_SkipsForNonPlacementIntent(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add v1alpha1 to scheme: %v", err)
@@ -1108,12 +1107,11 @@ func TestFilterQuotaEnforcement_SkipPlacementContextFilters(t *testing.T) {
 			},
 		},
 	}
-	request := makeQuotaEnforcementRequest("project-no-quota", "az-1", "gp", 1, 1, nil)
+	request := makeQuotaEnforcementRequest("project-no-quota", "az-1", "gp", 1, 1, map[string]any{"_nova_check_type": "capacity_probe"})
 	step := &FilterQuotaEnforcement{}
 	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 	step.Options = FilterQuotaEnforcementOpts{Enforce: true}
 
-	request.Options = scheduling.Options{SkipPlacementContextFilters: true}
 	result, err := step.Run(slog.Default(), request)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

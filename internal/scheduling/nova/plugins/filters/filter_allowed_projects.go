@@ -21,7 +21,10 @@ type FilterAllowedProjectsStep struct {
 // Note that hosts without specified projects are still accessible.
 func (s *FilterAllowedProjectsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
-	if request.GetOptions().SkipPlacementContextFilters {
+	// Failover and capacity probe calls are not placed on behalf of a tenant project;
+	if intent, err := request.GetIntent(); err == nil &&
+		(intent == api.ReserveForFailoverIntent || intent == api.ReuseFailoverReservationIntent ||
+			intent == api.CapacityProbeIntent) {
 		return result, nil
 	}
 	if request.Spec.Data.ProjectID == "" {

@@ -516,11 +516,10 @@ func TestFailoverSchedulerOptions(t *testing.T) {
 	reservation.Status.FailoverReservation = &v1alpha1.FailoverReservationStatus{Allocations: map[string]string{}}
 
 	tests := []struct {
-		name                        string
-		call                        func(c *FailoverReservationController, ctx context.Context)
-		wantReadOnly                bool
-		wantLockReservations        bool
-		wantSkipPlacementCtxFilters bool
+		name                 string
+		call                 func(c *FailoverReservationController, ctx context.Context)
+		wantReadOnly         bool
+		wantLockReservations bool
 	}{
 		{
 			// Read-only compatibility check — must not write scheduling state.
@@ -529,9 +528,8 @@ func TestFailoverSchedulerOptions(t *testing.T) {
 			call: func(c *FailoverReservationController, ctx context.Context) {
 				_ = c.tryReuseExistingReservation(ctx, vm, []v1alpha1.Reservation{reservation}, []string{"host-1", "host-2"}, resolved)
 			},
-			wantReadOnly:                true,
-			wantLockReservations:        false,
-			wantSkipPlacementCtxFilters: false,
+			wantReadOnly:         true,
+			wantLockReservations: false,
 		},
 		{
 			// Validates whether a VM can land on the reservation host during evacuation.
@@ -541,9 +539,8 @@ func TestFailoverSchedulerOptions(t *testing.T) {
 			call: func(c *FailoverReservationController, ctx context.Context) {
 				_, _ = c.validateVMViaSchedulerEvacuation(ctx, vm, "host-2") //nolint:errcheck
 			},
-			wantReadOnly:                true,
-			wantLockReservations:        true,
-			wantSkipPlacementCtxFilters: false,
+			wantReadOnly:         true,
+			wantLockReservations: true,
 		},
 		{
 			// Finds a host for a new reservation — writes state, so not read-only.
@@ -553,9 +550,8 @@ func TestFailoverSchedulerOptions(t *testing.T) {
 			call: func(c *FailoverReservationController, ctx context.Context) {
 				_, _ = c.scheduleAndBuildNewFailoverReservation(ctx, vm, []string{"host-1", "host-2"}, nil, nil, resolved) //nolint:errcheck
 			},
-			wantReadOnly:                false,
-			wantLockReservations:        true,
-			wantSkipPlacementCtxFilters: false,
+			wantReadOnly:         false,
+			wantLockReservations: true,
 		},
 	}
 
@@ -572,9 +568,6 @@ func TestFailoverSchedulerOptions(t *testing.T) {
 			}
 			if capturedReq.Options.LockReservations != tt.wantLockReservations {
 				t.Errorf("LockReservations = %v, want %v", capturedReq.Options.LockReservations, tt.wantLockReservations)
-			}
-			if capturedReq.Options.SkipPlacementContextFilters != tt.wantSkipPlacementCtxFilters {
-				t.Errorf("SkipPlacementContextFilters = %v, want %v", capturedReq.Options.SkipPlacementContextFilters, tt.wantSkipPlacementCtxFilters)
 			}
 		})
 	}

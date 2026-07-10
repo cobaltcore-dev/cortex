@@ -549,11 +549,11 @@ func (c *Controller) probeScheduler(
 		AvailabilityZone: az,
 		Pipeline:         pipeline,
 		EligibleHosts:    eligibleHosts,
+		SchedulerHints:   map[string]any{"_nova_check_type": string(schedulerapi.CapacityProbeIntent)},
 	}, scheduling.Options{
 		ReadOnly:                      true,
 		AssumeEmptyHosts:              ignoreAllocations,
 		IgnoredReservationTypes:       ignoredReservationTypes,
-		SkipPlacementContextFilters:   true,
 		SkipHistory:                   true,
 		SkipInflight:                  true,
 		SkipCommittedResourceTracking: true,

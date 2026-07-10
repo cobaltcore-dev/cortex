@@ -25,7 +25,10 @@ func (s *FilterInstanceGroupAntiAffinityStep) Run(
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)
-	if request.GetOptions().SkipPlacementContextFilters {
+	// Instance group hints are only present in user-initiated VM placement requests;
+	if intent, err := request.GetIntent(); err == nil &&
+		(intent == api.ReserveForFailoverIntent || intent == api.ReuseFailoverReservationIntent ||
+			intent == api.ReserveForCommittedResourceIntent || intent == api.CapacityProbeIntent) {
 		return result, nil
 	}
 

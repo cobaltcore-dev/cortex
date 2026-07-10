@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
-	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -781,7 +780,7 @@ func TestFilterLiveMigratableStep_Run_ClientError(t *testing.T) {
 	}
 }
 
-func TestFilterLiveMigratableStep_SkipPlacementContextFilters(t *testing.T) {
+func TestFilterLiveMigratableStep_SkipsForNonPlacementIntent(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := hv1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add hv1 to scheme: %v", err)
@@ -804,10 +803,7 @@ func TestFilterLiveMigratableStep_SkipPlacementContextFilters(t *testing.T) {
 	request := api.ExternalSchedulerRequest{
 		Spec: api.NovaObject[api.NovaSpec]{
 			Data: api.NovaSpec{
-				SchedulerHints: map[string]any{
-					"_nova_check_type": "live_migrate",
-					"source_host":      "source-host",
-				},
+				SchedulerHints: map[string]any{"_nova_check_type": "capacity_probe"},
 			},
 		},
 		Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
@@ -815,7 +811,6 @@ func TestFilterLiveMigratableStep_SkipPlacementContextFilters(t *testing.T) {
 	step := &FilterLiveMigratableStep{}
 	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 
-	request.Options = scheduling.Options{SkipPlacementContextFilters: true}
 	result, err := step.Run(slog.Default(), request)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

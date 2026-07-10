@@ -24,7 +24,7 @@ const (
 )
 
 // DefaultFailoverOptions is the base scheduling.Options for all failover scheduling calls.
-// Per-call overrides (ReadOnly, LockReservations, SkipPlacementContextFilters) are applied on top.
+// Per-call overrides (ReadOnly, LockReservations) are applied on top.
 var DefaultFailoverOptions = scheduling.Options{
 	SkipHistory:                   true,
 	SkipInflight:                  true,

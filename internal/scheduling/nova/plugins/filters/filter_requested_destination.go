@@ -102,7 +102,10 @@ func (s *FilterRequestedDestinationStep) processRequestedHost(
 // host filtering.
 func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
-	if request.GetOptions().SkipPlacementContextFilters {
+	// The requested_destination hint is only set by Nova for user-directed placement;
+	if intent, err := request.GetIntent(); err == nil &&
+		(intent == api.ReserveForFailoverIntent || intent == api.ReuseFailoverReservationIntent ||
+			intent == api.ReserveForCommittedResourceIntent || intent == api.CapacityProbeIntent) {
 		return result, nil
 	}
 	rd := request.Spec.Data.RequestedDestination

@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
-	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -325,7 +324,7 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 	}
 }
 
-func TestFilterAllowedProjectsStep_SkipPlacementContextFilters(t *testing.T) {
+func TestFilterAllowedProjectsStep_SkipsForNonPlacementIntent(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := hv1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add hv1 to scheme: %v", err)
@@ -340,14 +339,16 @@ func TestFilterAllowedProjectsStep_SkipPlacementContextFilters(t *testing.T) {
 	}
 	request := api.ExternalSchedulerRequest{
 		Spec: api.NovaObject[api.NovaSpec]{
-			Data: api.NovaSpec{ProjectID: "project-y"},
+			Data: api.NovaSpec{
+				ProjectID:      "project-y",
+				SchedulerHints: map[string]any{"_nova_check_type": "capacity_probe"},
+			},
 		},
 		Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
 	}
 	step := &FilterAllowedProjectsStep{}
 	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 
-	request.Options = scheduling.Options{SkipPlacementContextFilters: true}
 	result, err := step.Run(slog.Default(), request)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

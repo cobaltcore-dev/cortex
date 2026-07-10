@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
-	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -547,7 +546,7 @@ func TestFilterExternalCustomerStepOpts_Validate(t *testing.T) {
 	}
 }
 
-func TestFilterExternalCustomerStep_SkipPlacementContextFilters(t *testing.T) {
+func TestFilterExternalCustomerStep_SkipsForNonPlacementIntent(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := hv1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add hv1 to scheme: %v", err)
@@ -563,7 +562,10 @@ func TestFilterExternalCustomerStep_SkipPlacementContextFilters(t *testing.T) {
 	request := api.ExternalSchedulerRequest{
 		Spec: api.NovaObject[api.NovaSpec]{
 			Data: api.NovaSpec{
-				SchedulerHints: map[string]any{"domain_name": "iaas-customer"},
+				SchedulerHints: map[string]any{
+					"domain_name":      "iaas-customer",
+					"_nova_check_type": "capacity_probe",
+				},
 			},
 		},
 		Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
@@ -572,7 +574,6 @@ func TestFilterExternalCustomerStep_SkipPlacementContextFilters(t *testing.T) {
 	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 	step.Options = FilterExternalCustomerStepOpts{CustomerDomainNamePrefixes: []string{"iaas-"}}
 
-	request.Options = scheduling.Options{SkipPlacementContextFilters: true}
 	result, err := step.Run(slog.Default(), request)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
