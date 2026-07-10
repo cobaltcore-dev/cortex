@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
@@ -23,9 +24,12 @@ func (s *FilterInstanceGroupAffinityStep) Run(
 
 	result := s.IncludeAllHostsFromRequest(request)
 	// Instance group hints are only present in user-initiated VM placement requests;
-	if intent, err := request.GetIntent(); err == nil &&
-		(intent == api.ReserveForFailoverIntent || intent == api.ReuseFailoverReservationIntent ||
-			intent == api.ReserveForCommittedResourceIntent || intent == api.CapacityProbeIntent) {
+	if intent, err := request.GetIntent(); err == nil && slices.Contains([]v1alpha1.SchedulingIntent{
+		api.ReserveForFailoverIntent,
+		api.ReuseFailoverReservationIntent,
+		api.ReserveForCommittedResourceIntent,
+		api.CapacityProbeIntent,
+	}, intent) {
 		return result, nil
 	}
 

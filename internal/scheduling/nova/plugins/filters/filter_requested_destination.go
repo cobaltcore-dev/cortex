@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
@@ -103,9 +104,12 @@ func (s *FilterRequestedDestinationStep) processRequestedHost(
 func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	// The requested_destination hint is only set by Nova for user-directed placement;
-	if intent, err := request.GetIntent(); err == nil &&
-		(intent == api.ReserveForFailoverIntent || intent == api.ReuseFailoverReservationIntent ||
-			intent == api.ReserveForCommittedResourceIntent || intent == api.CapacityProbeIntent) {
+	if intent, err := request.GetIntent(); err == nil && slices.Contains([]v1alpha1.SchedulingIntent{
+		api.ReserveForFailoverIntent,
+		api.ReuseFailoverReservationIntent,
+		api.ReserveForCommittedResourceIntent,
+		api.CapacityProbeIntent,
+	}, intent) {
 		return result, nil
 	}
 	rd := request.Spec.Data.RequestedDestination
