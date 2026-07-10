@@ -559,26 +559,30 @@ func TestFilterExternalCustomerStep_SkipsForNonPlacementIntent(t *testing.T) {
 			Status:     hv1.HypervisorStatus{Traits: []string{"CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE"}},
 		},
 	}
-	request := api.ExternalSchedulerRequest{
-		Spec: api.NovaObject[api.NovaSpec]{
-			Data: api.NovaSpec{
-				SchedulerHints: map[string]any{
-					"domain_name":      "iaas-customer",
-					"_nova_check_type": "capacity_probe",
-				},
-			},
-		},
-		Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
-	}
 	step := &FilterExternalCustomerStep{}
 	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 	step.Options = FilterExternalCustomerStepOpts{CustomerDomainNamePrefixes: []string{"iaas-"}}
 
-	result, err := step.Run(slog.Default(), request)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result.Activations) != 2 {
-		t.Errorf("expected both hosts to pass, got %d", len(result.Activations))
+	for _, intent := range []string{"reserve_for_failover", "reuse_failover_reservation", "capacity_probe"} {
+		t.Run(intent, func(t *testing.T) {
+			request := api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						SchedulerHints: map[string]any{
+							"domain_name":      "iaas-customer",
+							"_nova_check_type": intent,
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
+			}
+			result, err := step.Run(slog.Default(), request)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result.Activations) != 2 {
+				t.Errorf("expected both hosts to pass, got %d", len(result.Activations))
+			}
+		})
 	}
 }
