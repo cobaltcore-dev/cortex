@@ -4,6 +4,7 @@
 package capacity
 
 import (
+	"fmt"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -51,6 +52,15 @@ func (c *Config) ApplyDefaults() {
 	if c.SchedulerURL == "" {
 		c.SchedulerURL = defaults.SchedulerURL
 	}
+}
+
+// Validate checks that the config is internally consistent after defaults are applied.
+func (c *Config) Validate() error {
+	if c.ReconcileInterval.Duration <= c.MinReconcileInterval.Duration {
+		return fmt.Errorf("capacityReconcileInterval (%s) must be greater than capacityMinReconcileInterval (%s)",
+			c.ReconcileInterval.Duration, c.MinReconcileInterval.Duration)
+	}
+	return nil
 }
 
 func DefaultConfig() Config {

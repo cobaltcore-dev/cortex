@@ -765,6 +765,10 @@ func main() {
 		setupLog.Info("enabling controller", "controller", "capacity-controller")
 		capacityConfig := conf.GetConfigOrDie[capacity.Config]()
 		capacityConfig.ApplyDefaults()
+		if err := capacityConfig.Validate(); err != nil {
+			setupLog.Error(err, "invalid capacity-controller config")
+			os.Exit(1)
+		}
 
 		capacityMonitor := capacity.NewMonitor(multiclusterClient)
 		if err := metrics.Registry.Register(&capacityMonitor); err != nil {
