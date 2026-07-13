@@ -495,11 +495,11 @@ func TestUpdatePredicateIgnoresStatusConditionChanges(t *testing.T) {
 			name: "status NumberOfObjects changes - should trigger reconcile",
 			oldObj: &v1alpha1.Datasource{
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Status:     v1alpha1.DatasourceStatus{NumberOfObjects: 10},
+				Status:     v1alpha1.DatasourceStatus{NumberOfObjects: new(int64(10))},
 			},
 			newObj: &v1alpha1.Datasource{
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Status:     v1alpha1.DatasourceStatus{NumberOfObjects: 20},
+				Status:     v1alpha1.DatasourceStatus{NumberOfObjects: new(int64(20))},
 			},
 			expected: true,
 		},

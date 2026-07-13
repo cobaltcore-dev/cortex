@@ -765,22 +765,25 @@ func main() {
 		setupLog.Info("enabling controller", "controller", "capacity-controller")
 		capacityConfig := conf.GetConfigOrDie[capacity.Config]()
 		capacityConfig.ApplyDefaults()
+		if err := capacityConfig.Validate(); err != nil {
+			setupLog.Error(err, "invalid capacity-controller config")
+			os.Exit(1)
+		}
 
 		capacityMonitor := capacity.NewMonitor(multiclusterClient)
 		if err := metrics.Registry.Register(&capacityMonitor); err != nil {
 			setupLog.Error(err, "failed to register capacity monitor metrics, continuing without metrics")
 		}
 
-		capacityController := capacity.NewController(multiclusterClient, capacityConfig, commitmentsVMSource)
-		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-			return capacityController.Start(ctx)
-		})); err != nil {
-			setupLog.Error(err, "unable to add capacity controller to manager")
+		if err := capacity.NewController(multiclusterClient, capacityConfig, commitmentsVMSource).
+			SetupWithManager(mgr, multiclusterClient); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "capacity")
 			os.Exit(1)
 		}
 		setupLog.Info("capacity-controller registered",
 			"schedulerURL", capacityConfig.SchedulerURL,
 			"reconcileInterval", capacityConfig.ReconcileInterval,
+			"minReconcileInterval", capacityConfig.MinReconcileInterval,
 			"totalPipeline", capacityConfig.TotalPipeline,
 			"placeablePipeline", capacityConfig.PlaceablePipeline)
 	}

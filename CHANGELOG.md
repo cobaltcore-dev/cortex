@@ -1,18 +1,79 @@
 # Changelog
 
-## 2026-07-03 — [#1009](https://github.com/cobaltcore-dev/cortex/pull/1009)
+## 2026-07-13 — [#1036](https://github.com/cobaltcore-dev/cortex/pull/1036)
 
-### cortex v0.2.2 (sha-f4d7df89)
+### cortex v0.3.0 (sha-ee9cd485)
+
+Breaking changes:
+- `NumberOfObjects` field in `DatasourceStatus` changed from `int64` to `*int64` so `omitempty` no longer strips zero values ([#1024](https://github.com/cobaltcore-dev/cortex/pull/1024))
 
 Non-breaking changes:
+- Migrate CR and failover calls to options-based pipeline selection — eliminates dedicated CR and failover pipelines by encoding behavioral differences as call-time scheduling options ([#950](https://github.com/cobaltcore-dev/cortex/pull/950))
+- Convert capacity controller from timer-based to controller-runtime reconciler with reactive watches and coalesced reconcile keys ([#1025](https://github.com/cobaltcore-dev/cortex/pull/1025))
+- Split quota enforcement `accept_skipped` decision into sub-buckets for granular observability ([#1022](https://github.com/cobaltcore-dev/cortex/pull/1022))
+- Fix alert wording: 'LackingBehind' → 'LaggingBehind' ([#1031](https://github.com/cobaltcore-dev/cortex/pull/1031))
+- Increase datasource lagging behind alert time frame to 30 min ([#1035](https://github.com/cobaltcore-dev/cortex/pull/1035))
+- Add logger context for remote cluster communication ([#1023](https://github.com/cobaltcore-dev/cortex/pull/1023))
+- Update `golang.org/x/sync` v0.21.0→v0.22.0, `golang.org/x/term` v0.44.0→v0.45.0 ([#1026](https://github.com/cobaltcore-dev/cortex/pull/1026))
+- Update `ironcore` v0.4.2→v0.4.3 ([#1029](https://github.com/cobaltcore-dev/cortex/pull/1029))
+- Update `github.com/sapcc/go-bits` ([#1030](https://github.com/cobaltcore-dev/cortex/pull/1030))
+
+### cortex-shim v0.1.6 (sha-ee9cd485)
+
+Includes updated image sha-ee9cd485.
+
+### cortex-nova v0.0.80
+
+Includes updated charts cortex v0.3.0, cortex-postgres v0.6.8.
+
+- Scope `SyncObjectsDroppedToZero` alert to only fire when previously non-zero ([#1024](https://github.com/cobaltcore-dev/cortex/pull/1024))
+- Add `capacityMinReconcileInterval` config key for capacity controller ([#1025](https://github.com/cobaltcore-dev/cortex/pull/1025))
+
+### cortex-cinder v0.0.80
+
+Includes updated charts cortex v0.3.0, cortex-postgres v0.6.8.
+
+- Scope `SyncObjectsDroppedToZero` alert to only fire when previously non-zero ([#1024](https://github.com/cobaltcore-dev/cortex/pull/1024))
+
+### cortex-manila v0.0.80
+
+Includes updated charts cortex v0.3.0, cortex-postgres v0.6.8.
+
+- Scope `SyncObjectsDroppedToZero` alert to only fire when previously non-zero ([#1024](https://github.com/cobaltcore-dev/cortex/pull/1024))
+
+### cortex-crds v0.0.80
+
+Includes updated chart cortex v0.3.0.
+
+### cortex-ironcore v0.0.80
+
+Includes updated chart cortex v0.3.0.
+
+### cortex-pods v0.0.80
+
+Includes updated chart cortex v0.3.0.
+
+### cortex-placement-shim v0.1.6
+
+Includes updated chart cortex-shim v0.1.6.
+
+## 2026-07-06 — [#1009](https://github.com/cobaltcore-dev/cortex/pull/1009)
+
+### cortex v0.2.2 (sha-8d888397)
+
+Breaking changes:
+- Remove Nova image datasource — the `images` NovaDatasourceType is no longer available ([#1006](https://github.com/cobaltcore-dev/cortex/pull/1006))
+
+Non-breaking changes:
+- Fix stale RunningInstances/RunningResources fields that never zero out when all VMs in a flavor group are removed ([#1017](https://github.com/cobaltcore-dev/cortex/pull/1017))
 - Include host information in error logs when multicluster connection fails ([#997](https://github.com/cobaltcore-dev/cortex/pull/997))
 - Fix Perses config for local development ([#1007](https://github.com/cobaltcore-dev/cortex/pull/1007))
-- Update `github.com/sapcc/go-bits` ([#1005](https://github.com/cobaltcore-dev/cortex/pull/1005))
-- Update kube-prometheus-stack Docker tag to v87.4.0 ([#998](https://github.com/cobaltcore-dev/cortex/pull/998))
+- Update `github.com/sapcc/go-bits` ([#1005](https://github.com/cobaltcore-dev/cortex/pull/1005), [#1013](https://github.com/cobaltcore-dev/cortex/pull/1013))
+- Update kube-prometheus-stack Docker tag to v87.6.0 ([#998](https://github.com/cobaltcore-dev/cortex/pull/998), [#1014](https://github.com/cobaltcore-dev/cortex/pull/1014))
 
-### cortex-shim v0.1.5 (sha-c98ddb05)
+### cortex-shim v0.1.5 (sha-c8295850)
 
-Includes updated image sha-c98ddb05.
+Includes updated image sha-c8295850.
 
 ### cortex-nova v0.0.79
 

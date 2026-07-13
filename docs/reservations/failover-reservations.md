@@ -166,7 +166,7 @@ We use three different scheduler pipelines for failover reservations, each servi
 
 **Why:** When reusing a reservation, capacity is already reserved on the target host. We only need to verify that the VM is compatible with the host (traits, capabilities, AZ, etc.) without checking if there's enough free capacity.
 
-Options: `ReadOnly: true, SkipHistory: true` — pure compatibility check, no state mutations.
+Options: `ReadOnly: true, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true` — pure compatibility check, no state mutations.
 
 ### `kvm-general-purpose-load-balancing` (new reservation)
 **Used when:** Creating a new failover reservation.
@@ -175,14 +175,14 @@ Options: `ReadOnly: true, SkipHistory: true` — pure compatibility check, no st
 1. Is compatible with the VM (traits, capabilities, AZ, etc.)
 2. Has enough free capacity to accommodate the VM if it needs to evacuate
 
-Options: `LockReservations: true, SkipHistory: true` — capacity check must see true remaining capacity with all reservation slots locked.
+Options: `LockReservations: true, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true` — capacity check must see true remaining capacity with all reservation slots locked.
 
 ### `kvm-acknowledge-failover-reservation`
 **Used when:** Validating that an existing reservation is still valid (watch-based reconciliation).
 
 **Why:** Periodically we need to verify that a VM could still evacuate to its reserved host. This sends an evacuation-style scheduling request with only the reservation's host as the eligible target. If the scheduler rejects it, the reservation is no longer valid and should be deleted so the periodic controller can create a new one on a valid host.
 
-Options: `ReadOnly: true, SkipHistory: true` — validation only, no state mutations.
+Options: `ReadOnly: true, LockReservations: true, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true` — validation only, no state mutations.
 
 ## Data Model
 

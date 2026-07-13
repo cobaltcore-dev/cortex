@@ -333,7 +333,7 @@ func TestController_Reconcile(t *testing.T) {
 						},
 					},
 					Status: v1alpha1.DatasourceStatus{
-						NumberOfObjects: 1,
+						NumberOfObjects: new(int64(1)),
 						Conditions: []metav1.Condition{
 							{
 								Type:   v1alpha1.DatasourceConditionReady,
@@ -393,7 +393,7 @@ func TestController_Reconcile(t *testing.T) {
 						},
 					},
 					Status: v1alpha1.DatasourceStatus{
-						NumberOfObjects: 0,
+						NumberOfObjects: new(int64(0)),
 						Conditions: []metav1.Condition{
 							{
 								Type:   v1alpha1.DatasourceConditionReady,
@@ -622,7 +622,7 @@ func TestController_handleKPIChange(t *testing.T) {
 						DatabaseSecretRef: corev1.SecretReference{Name: "db-secret", Namespace: "default"},
 					},
 					Status: v1alpha1.DatasourceStatus{
-						NumberOfObjects: 1,
+						NumberOfObjects: new(int64(1)),
 						Conditions: []metav1.Condition{
 							{
 								Type:   v1alpha1.DatasourceConditionReady,
@@ -638,7 +638,7 @@ func TestController_handleKPIChange(t *testing.T) {
 						DatabaseSecretRef: corev1.SecretReference{Name: "db-secret", Namespace: "default"},
 					},
 					Status: v1alpha1.DatasourceStatus{
-						NumberOfObjects: 0,
+						NumberOfObjects: new(int64(0)),
 						Conditions: []metav1.Condition{
 							{
 								Type:   v1alpha1.DatasourceConditionReady,
@@ -703,7 +703,7 @@ func TestController_handleKPIChange(t *testing.T) {
 						DatabaseSecretRef: corev1.SecretReference{Name: "db-secret", Namespace: "default"},
 					},
 					Status: v1alpha1.DatasourceStatus{
-						NumberOfObjects: 1,
+						NumberOfObjects: new(int64(1)),
 						Conditions: []metav1.Condition{
 							{
 								Type:   v1alpha1.DatasourceConditionReady,
