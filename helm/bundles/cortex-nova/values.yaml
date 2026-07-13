@@ -157,8 +157,11 @@ cortex-scheduling-controllers:
     capacityTotalPipeline: "kvm-report-capacity"
     # Pipeline used for the current-state capacity probe (considers current VM allocations).
     capacityPlaceablePipeline: "kvm-general-purpose-load-balancing-no-history"
-    # How often the capacity controller re-runs its scheduler probes.
+    # How often the capacity reconciler re-runs its scheduler probes (periodic floor).
     capacityReconcileInterval: 5m
+    # Minimum time between two consecutive capacity reconcile runs.
+    # Prevents back-to-back reconciles on rapid watch events.
+    capacityMinReconcileInterval: 30s
     # If true, the external scheduler API will limit the list of hosts in its
     # response to those included in the scheduling request.
     novaLimitHostsToRequest: true
