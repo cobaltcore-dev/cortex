@@ -11,12 +11,14 @@ import (
 	"regexp"
 	"sort"
 	"testing"
+	"time"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -111,8 +113,8 @@ func newMockSchedulerServer(t *testing.T, hosts []string) *httptest.Server {
 	}))
 }
 
-// newController is a test helper that creates a Controller with a nil VMSource.
-func newController(t *testing.T, c client.Client, cfg Config) *Controller {
+// newController is a test helper that creates a Reconciler with a nil VMSource.
+func newController(t *testing.T, c client.Client, cfg Config) *Reconciler {
 	t.Helper()
 	return NewController(c, cfg, nil)
 }
@@ -879,5 +881,118 @@ func TestProbeScheduler_SetsCapacityProbeIntent(t *testing.T) {
 	}
 	if capturedReq.Spec.Data.ProjectID != "cortex-capacity-probe" {
 		t.Errorf("capacity probe must send ProjectID cortex-capacity-probe, got %q", capturedReq.Spec.Data.ProjectID)
+	}
+}
+
+// TestReconcile_ReactsToKnowledgeChange verifies that Reconcile() runs reconcileAll() and
+// writes FlavorGroupCapacity CRDs when triggered by a watch event (simulated here by calling
+// Reconcile directly with the coalesced key).
+func TestReconcile_ReactsToKnowledgeChange(t *testing.T) {
+	const (
+		groupName = "hana-v2"
+		az        = "qa-de-1a"
+		memMB     = 4096
+		memBytes  = int64(memMB) * 1024 * 1024
+	)
+
+	scheme := newTestScheme(t)
+	hv := newHypervisor("host-1", az, memBytes)
+	knowledge := newFlavorGroupKnowledge(t, groupName, memMB)
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(knowledge, hv).
+		WithStatusSubresource(&v1alpha1.FlavorGroupCapacity{}, &v1alpha1.Knowledge{}).
+		Build()
+
+	schedulerServer := newMockSchedulerServer(t, []string{"host-1"})
+	defer schedulerServer.Close()
+
+	r := NewController(fakeClient, Config{
+		SchedulerURL:         schedulerServer.URL,
+		TotalPipeline:        "kvm-report-capacity",
+		PlaceablePipeline:    "kvm-general-purpose",
+		ReconcileInterval:    metav1.Duration{Duration: 5 * time.Minute},
+		MinReconcileInterval: metav1.Duration{Duration: 30 * time.Second},
+	}, nil)
+
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: coalescedKey}}
+	result, err := r.Reconcile(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+	if result.RequeueAfter != 5*time.Minute {
+		t.Errorf("RequeueAfter = %v, want 5m (periodic floor)", result.RequeueAfter)
+	}
+
+	// reconcileAll should have written one CRD for the single (group × AZ) pair.
+	var list v1alpha1.FlavorGroupCapacityList
+	if err := fakeClient.List(context.Background(), &list); err != nil {
+		t.Fatalf("failed to list CRDs: %v", err)
+	}
+	if len(list.Items) != 1 {
+		t.Errorf("expected 1 FlavorGroupCapacity CRD after reactive reconcile, got %d", len(list.Items))
+	}
+}
+
+// TestReconcile_MinIntervalEarlyReturn verifies that a second Reconcile() call within
+// MinReconcileInterval returns early (no reconcileAll) with RequeueAfter set to the
+// remaining cooldown duration.
+func TestReconcile_MinIntervalEarlyReturn(t *testing.T) {
+	const (
+		groupName = "hana-v2"
+		az        = "qa-de-1a"
+		memMB     = 4096
+		memBytes  = int64(memMB) * 1024 * 1024
+	)
+
+	scheme := newTestScheme(t)
+	hv := newHypervisor("host-1", az, memBytes)
+	knowledge := newFlavorGroupKnowledge(t, groupName, memMB)
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(knowledge, hv).
+		WithStatusSubresource(&v1alpha1.FlavorGroupCapacity{}, &v1alpha1.Knowledge{}).
+		Build()
+
+	schedulerServer := newMockSchedulerServer(t, []string{"host-1"})
+	defer schedulerServer.Close()
+
+	minInterval := 30 * time.Second
+	r := NewController(fakeClient, Config{
+		SchedulerURL:         schedulerServer.URL,
+		TotalPipeline:        "kvm-report-capacity",
+		PlaceablePipeline:    "kvm-general-purpose",
+		ReconcileInterval:    metav1.Duration{Duration: 5 * time.Minute},
+		MinReconcileInterval: metav1.Duration{Duration: minInterval},
+	}, nil)
+
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: coalescedKey}}
+
+	// First call: should run reconcileAll and succeed.
+	if _, err := r.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("first Reconcile returned error: %v", err)
+	}
+
+	// Second call immediately after: should return early without running reconcileAll.
+	result, err := r.Reconcile(context.Background(), req)
+	if err != nil {
+		t.Fatalf("second Reconcile returned error: %v", err)
+	}
+	if result.RequeueAfter == 0 {
+		t.Fatal("second Reconcile: expected non-zero RequeueAfter (min interval early return), got 0")
+	}
+	if result.RequeueAfter > minInterval {
+		t.Errorf("second Reconcile: RequeueAfter %v exceeds MinReconcileInterval %v", result.RequeueAfter, minInterval)
+	}
+
+	// Only one CRD should exist — the second call must not have triggered reconcileAll.
+	var list v1alpha1.FlavorGroupCapacityList
+	if err := fakeClient.List(context.Background(), &list); err != nil {
+		t.Fatalf("failed to list CRDs: %v", err)
+	}
+	if len(list.Items) != 1 {
+		t.Errorf("expected 1 CRD (only first reconcile ran), got %d", len(list.Items))
 	}
 }

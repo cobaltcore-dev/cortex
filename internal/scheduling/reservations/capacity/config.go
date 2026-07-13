@@ -4,15 +4,23 @@
 package capacity
 
 import (
+	"fmt"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Config holds configuration for the capacity controller.
+// Config holds configuration for the capacity reconciler.
 type Config struct {
-	// ReconcileInterval is how often the controller probes the scheduler and updates CRDs.
+	// ReconcileInterval is the periodic floor: how often the reconciler re-runs even without a
+	// watch event. Acts as a fallback for changes not covered by watches (e.g. blocked memory drift).
 	ReconcileInterval metav1.Duration `json:"capacityReconcileInterval"`
+
+	// MinReconcileInterval is the minimum time between two consecutive reconcile runs.
+	// If Reconcile() is called sooner than this since the last successful run, it returns early
+	// with RequeueAfter set to the remaining duration. Prevents back-to-back reconciles on rapid
+	// watch events (e.g. a batch of CommittedResource updates).
+	MinReconcileInterval metav1.Duration `json:"capacityMinReconcileInterval"`
 
 	// TotalPipeline is the scheduler pipeline used for the empty-state probe.
 	// This pipeline should ignore current VM allocations (e.g. kvm-report-capacity).
@@ -32,6 +40,9 @@ func (c *Config) ApplyDefaults() {
 	if c.ReconcileInterval.Duration == 0 {
 		c.ReconcileInterval = defaults.ReconcileInterval
 	}
+	if c.MinReconcileInterval.Duration == 0 {
+		c.MinReconcileInterval = defaults.MinReconcileInterval
+	}
 	if c.TotalPipeline == "" {
 		c.TotalPipeline = defaults.TotalPipeline
 	}
@@ -43,11 +54,21 @@ func (c *Config) ApplyDefaults() {
 	}
 }
 
+// Validate checks that the config is internally consistent after defaults are applied.
+func (c *Config) Validate() error {
+	if c.ReconcileInterval.Duration <= c.MinReconcileInterval.Duration {
+		return fmt.Errorf("capacityReconcileInterval (%s) must be greater than capacityMinReconcileInterval (%s)",
+			c.ReconcileInterval.Duration, c.MinReconcileInterval.Duration)
+	}
+	return nil
+}
+
 func DefaultConfig() Config {
 	return Config{
-		ReconcileInterval: metav1.Duration{Duration: 5 * time.Minute},
-		TotalPipeline:     "kvm-general-purpose-load-balancing",
-		PlaceablePipeline: "kvm-general-purpose-load-balancing",
-		SchedulerURL:      "http://localhost:8080/scheduler/nova/external",
+		ReconcileInterval:    metav1.Duration{Duration: 5 * time.Minute},
+		MinReconcileInterval: metav1.Duration{Duration: 30 * time.Second},
+		TotalPipeline:        "kvm-general-purpose-load-balancing",
+		PlaceablePipeline:    "kvm-general-purpose-load-balancing",
+		SchedulerURL:         "http://localhost:8080/scheduler/nova/external",
 	}
 }

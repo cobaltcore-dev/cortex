@@ -19,28 +19,98 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	schedulerapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 )
 
 var log = ctrl.Log.WithName("capacity-controller").WithValues("module", "capacity")
 
-// Controller reconciles FlavorGroupCapacity CRDs on a fixed interval.
-// For each AZ it probes all flavor groups, runs the round-robin capacity split, then writes
-// one FlavorGroupCapacity CRD per (flavor group × AZ) pair.
-type Controller struct {
+// coalescedKey is the single reconcile key used for all watch events.
+// All CRD changes are coalesced into this one key so rapid changes never
+// cause rapid-fire scheduler probes.
+const coalescedKey = "capacity"
+
+// flavorGroupsKnowledgePredicate fires only for the "flavor_groups" Knowledge object.
+// Other Knowledge objects (different extractors) are irrelevant to capacity.
+var flavorGroupsKnowledgePredicate = predicate.NewPredicateFuncs(func(obj client.Object) bool {
+	k, ok := obj.(*v1alpha1.Knowledge)
+	if !ok {
+		return false
+	}
+	return k.Spec.Extractor.Name == "flavor_groups"
+})
+
+// hvCapacityChangePredicate fires only when Allocation, EffectiveCapacity, or Capacity
+// changed on a Hypervisor, and only for hypervisors that carry an AZ label.
+// Label/annotation-only updates and unrelated status field changes are ignored.
+var hvCapacityChangePredicate = predicate.Funcs{
+	CreateFunc: func(e event.CreateEvent) bool {
+		_, hasAZ := e.Object.GetLabels()["topology.kubernetes.io/zone"]
+		return hasAZ
+	},
+	UpdateFunc: func(e event.UpdateEvent) bool {
+		oldAZ := e.ObjectOld.GetLabels()["topology.kubernetes.io/zone"]
+		newAZ := e.ObjectNew.GetLabels()["topology.kubernetes.io/zone"]
+		if newAZ == "" {
+			return false
+		}
+		if oldAZ != newAZ {
+			return true
+		}
+		oldHV, ok1 := e.ObjectOld.(*hv1.Hypervisor)
+		newHV, ok2 := e.ObjectNew.(*hv1.Hypervisor)
+		if !ok1 || !ok2 {
+			return false
+		}
+		return !capacityMapsEqual(oldHV.Status.Allocation, newHV.Status.Allocation) ||
+			!capacityMapsEqual(oldHV.Status.EffectiveCapacity, newHV.Status.EffectiveCapacity) ||
+			!capacityMapsEqual(oldHV.Status.Capacity, newHV.Status.Capacity)
+	},
+	DeleteFunc: func(e event.DeleteEvent) bool {
+		_, hasAZ := e.Object.GetLabels()["topology.kubernetes.io/zone"]
+		return hasAZ
+	},
+	GenericFunc: func(e event.GenericEvent) bool { return false },
+}
+
+// capacityMapsEqual returns true if two resource maps are equal by value.
+func capacityMapsEqual(a, b map[hv1.ResourceName]resource.Quantity) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, va := range a {
+		vb, ok := b[k]
+		if !ok || va.Cmp(vb) != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// Reconciler reconciles FlavorGroupCapacity CRDs, driven by both watch events and a
+// periodic floor timer. All watch events are coalesced into a single reconcile key so
+// rapid changes produce at most one queued reconcile.
+type Reconciler struct {
 	client          client.Client
 	vmSource        reservations.VMSource
 	schedulerClient *reservations.SchedulerClient
 	config          Config
+
+	lastReconcileAt time.Time
 }
 
-func NewController(c client.Client, config Config, vmSource reservations.VMSource) *Controller {
-	return &Controller{
+func NewController(c client.Client, config Config, vmSource reservations.VMSource) *Reconciler {
+	return &Reconciler{
 		client:          c,
 		vmSource:        vmSource,
 		schedulerClient: reservations.NewSchedulerClient(config.SchedulerURL),
@@ -48,23 +118,66 @@ func NewController(c client.Client, config Config, vmSource reservations.VMSourc
 	}
 }
 
-// Start runs the periodic reconcile loop. Implements manager.Runnable.
-func (c *Controller) Start(ctx context.Context) error {
-	timer := time.NewTimer(0) // fire immediately on start
-	defer timer.Stop()
+// Reconcile implements reconcile.Reconciler. It is called by controller-runtime whenever a
+// watched CRD changes, and also on the periodic RequeueAfter floor set by ReconcileInterval.
+// If called sooner than MinReconcileInterval since the last successful run, it returns early.
+func (c *Reconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Result, error) {
+	elapsed := time.Since(c.lastReconcileAt)
+	minInterval := c.config.MinReconcileInterval.Duration
 
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-timer.C:
-			cycleCtx := WithNewGlobalRequestID(ctx)
-			if err := c.reconcileAll(cycleCtx); err != nil {
-				LoggerFromContext(cycleCtx).Error(err, "reconcile cycle failed")
-			}
-			timer.Reset(c.config.ReconcileInterval.Duration)
-		}
+	if !c.lastReconcileAt.IsZero() && elapsed < minInterval {
+		remaining := minInterval - elapsed
+		LoggerFromContext(ctx).V(1).Info("skipping reconcile: min interval not elapsed",
+			"elapsed", elapsed.Round(time.Second),
+			"remaining", remaining.Round(time.Second))
+		return ctrl.Result{RequeueAfter: remaining}, nil
 	}
+
+	cycleCtx := WithNewGlobalRequestID(ctx)
+	if err := c.reconcileAll(cycleCtx); err != nil {
+		LoggerFromContext(cycleCtx).Error(err, "reconcile cycle failed")
+		return ctrl.Result{}, err
+	}
+
+	c.lastReconcileAt = time.Now()
+
+	return ctrl.Result{RequeueAfter: c.config.ReconcileInterval.Duration}, nil
+}
+
+// SetupWithManager registers the reconciler with the controller manager and sets up watches
+// on all CRDs that affect capacity output. All events are coalesced to a single key.
+func (c *Reconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
+	log.Info("starting capacity reconciler",
+		"reconcileInterval", c.config.ReconcileInterval.Duration,
+		"minReconcileInterval", c.config.MinReconcileInterval.Duration)
+
+	coalesce := func(_ context.Context, _ client.Object) []reconcile.Request {
+		return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: coalescedKey}}}
+	}
+
+	bldr := multicluster.BuildController(mcl, mgr)
+	var err error
+
+	bldr, err = bldr.WatchesMulticluster(&v1alpha1.Knowledge{}, handler.EnqueueRequestsFromMapFunc(coalesce), flavorGroupsKnowledgePredicate)
+	if err != nil {
+		return fmt.Errorf("failed to watch Knowledge: %w", err)
+	}
+	bldr, err = bldr.WatchesMulticluster(&hv1.Hypervisor{}, handler.EnqueueRequestsFromMapFunc(coalesce), hvCapacityChangePredicate)
+	if err != nil {
+		return fmt.Errorf("failed to watch Hypervisor: %w", err)
+	}
+	bldr, err = bldr.WatchesMulticluster(&v1alpha1.Reservation{}, handler.EnqueueRequestsFromMapFunc(coalesce))
+	if err != nil {
+		return fmt.Errorf("failed to watch Reservation: %w", err)
+	}
+	bldr, err = bldr.WatchesMulticluster(&v1alpha1.Pipeline{}, handler.EnqueueRequestsFromMapFunc(coalesce))
+	if err != nil {
+		return fmt.Errorf("failed to watch Pipeline: %w", err)
+	}
+
+	return bldr.Named("capacity").
+		WithOptions(controller.Options{MaxConcurrentReconciles: 1}).
+		Complete(c)
 }
 
 type vmUsageKey struct{ group, az string }
@@ -79,7 +192,7 @@ type vmUsage struct {
 }
 
 // reconcileAll iterates all AZs, runs the round-robin split per AZ, then writes CRDs.
-func (c *Controller) reconcileAll(ctx context.Context) error {
+func (c *Reconciler) reconcileAll(ctx context.Context) error {
 	logger := LoggerFromContext(ctx)
 	startTime := time.Now()
 
@@ -131,7 +244,7 @@ func (c *Controller) reconcileAll(ctx context.Context) error {
 
 // computeVMUsage fetches running VMs and aggregates usage per (flavorGroup, az).
 // On error returns an empty map with fresh=false — callers must not overwrite running fields.
-func (c *Controller) computeVMUsage(
+func (c *Reconciler) computeVMUsage(
 	ctx context.Context,
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	hvs []hv1.Hypervisor,
@@ -233,7 +346,7 @@ func hvRemainingResources(hv hv1.Hypervisor, blockedMemBytes int64) map[string]i
 // reconcileAZ runs the round-robin capacity split for all flavor groups in one AZ,
 // then writes one FlavorGroupCapacity CRD per group that had all probes succeed.
 // Groups with failed probes are skipped — their CRDs retain the last good state.
-func (c *Controller) reconcileAZ(
+func (c *Reconciler) reconcileAZ(
 	ctx context.Context,
 	az string,
 	flavorGroups map[string]compute.FlavorGroupFeature,
@@ -414,7 +527,7 @@ func (c *Controller) reconcileAZ(
 }
 
 // writeCRD upserts one FlavorGroupCapacity CRD with fresh computed values.
-func (c *Controller) writeCRD(
+func (c *Reconciler) writeCRD(
 	ctx context.Context,
 	groupName string,
 	groupData compute.FlavorGroupFeature,
@@ -507,7 +620,7 @@ func (c *Controller) writeCRD(
 
 // probeScheduler calls the scheduler and returns slot count, host count, and candidate host names.
 // ignoreAllocations=true (total probe) uses raw effective capacity; false (placeable probe) subtracts allocations.
-func (c *Controller) probeScheduler(
+func (c *Reconciler) probeScheduler(
 	ctx context.Context,
 	flavor compute.FlavorInGroup,
 	az, pipeline string,
@@ -599,7 +712,7 @@ func (c *Controller) probeScheduler(
 
 // blockedMemoryByHost returns total reservation-blocked bytes per host.
 // Both TargetHost and Status.Host are blocked; migration blocks both simultaneously.
-func (c *Controller) blockedMemoryByHost(ctx context.Context) (map[string]int64, error) {
+func (c *Reconciler) blockedMemoryByHost(ctx context.Context) (map[string]int64, error) {
 	var list v1alpha1.ReservationList
 	if err := c.client.List(ctx, &list); err != nil {
 		return nil, fmt.Errorf("failed to list reservations: %w", err)
@@ -635,7 +748,7 @@ func (c *Controller) blockedMemoryByHost(ctx context.Context) (map[string]int64,
 
 // sumCommittedCapacity sums active CommittedResource amounts (memory type, guaranteed/confirmed)
 // for the given (flavorGroup, az) pair. Returns the total in smallest-flavor slots.
-func (c *Controller) sumCommittedCapacity(ctx context.Context, groupName, az string, smallestFlavorBytes int64) (int64, error) {
+func (c *Reconciler) sumCommittedCapacity(ctx context.Context, groupName, az string, smallestFlavorBytes int64) (int64, error) {
 	var list v1alpha1.CommittedResourceList
 	if err := c.client.List(ctx, &list); err != nil {
 		return 0, fmt.Errorf("failed to list CommittedResources: %w", err)
