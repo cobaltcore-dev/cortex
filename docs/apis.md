@@ -90,8 +90,9 @@ The `scheduling.Options` struct configures a single pipeline invocation. All fie
 | `MaxCandidates` | `int` | Maximum number of candidate hosts returned after weighing. 0 means no limit. |
 | `SkipHistory` | `bool` | Skips recording the placement decision in placement history. |
 | `SkipInflight` | `bool` | Skips creating pessimistic blocking reservations for returned candidates. |
+| `SkipCommittedResourceTracking` | `bool` | Skips writing the placed VM UUID into the matching committed resource reservation slot. Required for ReadOnly runs. |
 
-**Validation constraint:** A `ReadOnly` run must also set `SkipHistory=true` and `SkipInflight=true`. This is enforced by `Options.Validate()` — omitting either field causes validation to fail with an error before the pipeline executes.
+**Validation constraint:** A `ReadOnly` run must also set `SkipHistory=true`, `SkipInflight=true`, and `SkipCommittedResourceTracking=true`. This is enforced by `Options.Validate()` — omitting any of these fields causes validation to fail with an error before the pipeline executes.
 
 ### Decisions
 
