@@ -344,7 +344,7 @@ spec:
       expr: |
         sum by(datasource) (cortex_datasource_seconds_until_reconcile{queued="true",domain="nova"}) < -600
         and on(datasource) cortex_datasource_state{state="ready",domain="nova"} == 1
-      for: 10m
+      for: 30m
       labels:
         context: datasources
         dashboard: cortex-status-dashboard/cortex-status-dashboard
