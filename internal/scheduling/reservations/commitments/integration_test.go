@@ -1193,3 +1193,41 @@ func TestCRLifecycle(t *testing.T) {
 		}
 	})
 }
+
+func TestCRScheduling_SetsReserveForCommittedResourceIntent(t *testing.T) {
+	// CR slot scheduling has a real project ID and must run tenant-context filters
+	// (filter_allowed_projects, filter_aggregate_metadata, etc.). Verify the intent is
+	// reserve_for_committed_resource so filters can identify the call type correctly.
+	var capturedReq schedulerdelegationapi.ExternalSchedulerRequest
+	var schedulerCalled bool
+	captureScheduler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		schedulerCalled = true
+		if err := json.NewDecoder(r.Body).Decode(&capturedReq); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		resp := &schedulerdelegationapi.ExternalSchedulerResponse{Hosts: []string{"host-1"}}
+		json.NewEncoder(w).Encode(resp) //nolint:errcheck
+	})
+
+	env := newIntgEnv(t, []client.Object{newTestFlavorKnowledge(), intgHypervisor("host-1")}, captureScheduler, nil)
+	defer env.close()
+
+	cr := intgCR("test-cr", "commit-uuid-1", v1alpha1.CommitmentStatusConfirmed)
+	if err := env.k8sClient.Create(context.Background(), cr); err != nil {
+		t.Fatalf("create CR: %v", err)
+	}
+	env.reconcileCR(t, cr.Name)
+	env.reconcileChildReservations(t, cr.Name)
+
+	if !schedulerCalled {
+		t.Fatal("scheduler was never called — test did not exercise the scheduling path")
+	}
+	hint, err := capturedReq.Spec.Data.GetSchedulerHintStr("_nova_check_type")
+	if err != nil {
+		t.Fatalf("failed to get _nova_check_type hint: %v", err)
+	}
+	if hint != string(schedulerdelegationapi.ReserveForCommittedResourceIntent) {
+		t.Errorf("CR slot scheduling must set _nova_check_type=%q, got %q", schedulerdelegationapi.ReserveForCommittedResourceIntent, hint)
+	}
+}

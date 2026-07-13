@@ -21,7 +21,10 @@ type QuotaEnforcementMetrics struct {
 	// produces. Labels:
 	//   - mode:              "enforce" | "shadow"
 	//   - decision:          "accept_cr" | "accept_payg" | "accept_no_quota" |
-	//                        "accept_skipped" | "reject"
+	//                        "accept_skipped_intent_migration" |
+	//                        "accept_skipped_intent_internal" |
+	//                        "accept_skipped_missing_data" |
+	//                        "reject"
 	//   - resource:          "ram" | "cores" | "instances" | "" (empty when
 	//                        the decision is not driven by a single resource)
 	//   - availability_zone: AZ string or "" if unknown at decision time

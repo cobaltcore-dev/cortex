@@ -547,3 +547,42 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 		})
 	}
 }
+
+func TestFilterInstanceGroupAntiAffinityStep_SkipsForNonPlacementIntent(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add hv1 to scheme: %v", err)
+	}
+	// host2 has the group member vm; max_server_per_host=1 → host2 would normally be filtered.
+	objects := []client.Object{
+		&hv1.Hypervisor{ObjectMeta: v1.ObjectMeta{Name: "host1"}},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{Name: "host2"},
+			Status:     hv1.HypervisorStatus{Instances: []hv1.Instance{{ID: "vm-existing"}}},
+		},
+	}
+	step := &FilterInstanceGroupAntiAffinityStep{}
+	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+
+	for _, intent := range []string{"reserve_for_failover", "reuse_failover_reservation", "reserve_for_committed_resource", "capacity_probe"} {
+		t.Run(intent, func(t *testing.T) {
+			request := newNovaRequest("vm-new", "proj", "m1.small", "gp", 1, "1Gi", false, []string{"host1", "host2"})
+			request.Spec.Data.InstanceGroup = &api.NovaObject[api.NovaInstanceGroup]{
+				Data: api.NovaInstanceGroup{
+					Policy:  "anti-affinity",
+					Members: []string{"vm-existing"},
+					Rules:   map[string]any{"max_server_per_host": 1},
+				},
+			}
+			request.Spec.Data.SchedulerHints = map[string]any{"_nova_check_type": intent}
+
+			result, err := step.Run(slog.Default(), request)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result.Activations) != 2 {
+				t.Errorf("expected both hosts to pass, got %d", len(result.Activations))
+			}
+		})
+	}
+}

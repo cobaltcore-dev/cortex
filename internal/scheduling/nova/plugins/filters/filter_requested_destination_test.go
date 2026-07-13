@@ -782,3 +782,40 @@ func TestFilterRequestedDestinationStep_Run_ClientError(t *testing.T) {
 		t.Errorf("expected error when client fails, got none")
 	}
 }
+
+func TestFilterRequestedDestinationStep_SkipsForNonPlacementIntent(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add hv1 to scheme: %v", err)
+	}
+	// RequestedDestination forces host1 — host2 would normally be filtered.
+	objects := []client.Object{
+		&hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "host1"}},
+		&hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "host2"}},
+	}
+	step := &FilterRequestedDestinationStep{}
+	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+
+	for _, intent := range []string{"reserve_for_failover", "reuse_failover_reservation", "reserve_for_committed_resource", "capacity_probe"} {
+		t.Run(intent, func(t *testing.T) {
+			request := api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
+							Data: api.NovaRequestedDestination{Host: "host1"},
+						},
+						SchedulerHints: map[string]any{"_nova_check_type": intent},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
+			}
+			result, err := step.Run(slog.Default(), request)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result.Activations) != 2 {
+				t.Errorf("expected both hosts to pass, got %d", len(result.Activations))
+			}
+		})
+	}
+}

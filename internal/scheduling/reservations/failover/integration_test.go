@@ -435,6 +435,22 @@ func TestIntegration(t *testing.T) {
 			ExpectedMinRes:     1, // Both HANA VMs can share reservation on host3
 			UseTraitsFilter:    true,
 		},
+		{
+			Name: "HANA VM uses kvm-hana-bin-packing pipeline (trait:CUSTOM_HANA_EXCLUSIVE_HOST=required)",
+			Hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", 16, 32, 4, 8, []hv1.Instance{{ID: "vm-hana-exclusive-1", Name: "vm-hana-exclusive-1", Active: true}}, []string{"CUSTOM_HANA_EXCLUSIVE_HOST"}),
+				newHypervisor("host2", 16, 32, 0, 0, nil, []string{"CUSTOM_HANA_EXCLUSIVE_HOST"}),
+			},
+			VMs: []reservations.VM{
+				newVMWithExtraSpecs("vm-hana-exclusive-1", "m1.hana", "project-A", "host1", 8192, 4,
+					map[string]string{"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "required"}),
+			},
+			FlavorRequirements:  map[string]int{"m1.hana": 1},
+			ExpectedMinRes:      1,
+			ExpectedMaxRes:      1,
+			VerifyVMReservation: []string{"vm-hana-exclusive-1"},
+			UseTraitsFilter:     true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -1153,7 +1169,7 @@ func newIntegrationTestEnv(t *testing.T, vms []reservations.VM, hypervisors []*h
 		},
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: PipelineReuseFailoverReservation,
+				Name: PipelineNewFailoverReservation,
 			},
 			Spec: v1alpha1.PipelineSpec{
 				Type: v1alpha1.PipelineTypeFilterWeigher,
@@ -1181,6 +1197,17 @@ func newIntegrationTestEnv(t *testing.T, vms []reservations.VM, hypervisors []*h
 			},
 		},
 	}
+	pipelines = append(pipelines, v1alpha1.Pipeline{
+		ObjectMeta: metav1.ObjectMeta{Name: "kvm-hana-bin-packing"},
+		Spec: v1alpha1.PipelineSpec{
+			Type: v1alpha1.PipelineTypeFilterWeigher,
+			Filters: []v1alpha1.FilterSpec{
+				{Name: "filter_has_enough_capacity"},
+				{Name: "filter_correct_az"},
+			},
+			Weighers: []v1alpha1.WeigherSpec{{Name: "kvm_failover_evacuation"}},
+		},
+	})
 
 	ctx := context.Background()
 	for _, pipeline := range pipelines {
@@ -1343,7 +1370,7 @@ func newIntegrationTestEnvWithTraitsFilter(t *testing.T, vms []reservations.VM, 
 		},
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: PipelineReuseFailoverReservation,
+				Name: PipelineNewFailoverReservation,
 			},
 			Spec: v1alpha1.PipelineSpec{
 				Type: v1alpha1.PipelineTypeFilterWeigher,
@@ -1371,6 +1398,18 @@ func newIntegrationTestEnvWithTraitsFilter(t *testing.T, vms []reservations.VM, 
 			},
 		},
 	}
+	pipelines = append(pipelines, v1alpha1.Pipeline{
+		ObjectMeta: metav1.ObjectMeta{Name: "kvm-hana-bin-packing"},
+		Spec: v1alpha1.PipelineSpec{
+			Type: v1alpha1.PipelineTypeFilterWeigher,
+			Filters: []v1alpha1.FilterSpec{
+				{Name: "filter_has_enough_capacity"},
+				{Name: "filter_has_requested_traits"},
+				{Name: "filter_correct_az"},
+			},
+			Weighers: []v1alpha1.WeigherSpec{{Name: "kvm_failover_evacuation"}},
+		},
+	})
 
 	ctx := context.Background()
 	for _, pipeline := range pipelines {
