@@ -59,8 +59,13 @@ var hvCapacityChangePredicate = predicate.Funcs{
 		return hasAZ
 	},
 	UpdateFunc: func(e event.UpdateEvent) bool {
-		if _, hasAZ := e.ObjectNew.GetLabels()["topology.kubernetes.io/zone"]; !hasAZ {
+		oldAZ := e.ObjectOld.GetLabels()["topology.kubernetes.io/zone"]
+		newAZ := e.ObjectNew.GetLabels()["topology.kubernetes.io/zone"]
+		if newAZ == "" {
 			return false
+		}
+		if oldAZ != newAZ {
+			return true
 		}
 		oldHV, ok1 := e.ObjectOld.(*hv1.Hypervisor)
 		newHV, ok2 := e.ObjectNew.(*hv1.Hypervisor)
