@@ -71,7 +71,10 @@ var hvCapacityChangePredicate = predicate.Funcs{
 			!capacityMapsEqual(oldHV.Status.EffectiveCapacity, newHV.Status.EffectiveCapacity) ||
 			!capacityMapsEqual(oldHV.Status.Capacity, newHV.Status.Capacity)
 	},
-	DeleteFunc:  func(e event.DeleteEvent) bool { return true },
+	DeleteFunc: func(e event.DeleteEvent) bool {
+		_, hasAZ := e.Object.GetLabels()["topology.kubernetes.io/zone"]
+		return hasAZ
+	},
 	GenericFunc: func(e event.GenericEvent) bool { return false },
 }
 
@@ -117,7 +120,7 @@ func (c *Reconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Result
 	elapsed := time.Since(c.lastReconcileAt)
 	minInterval := c.config.MinReconcileInterval.Duration
 
-	if c.lastReconcileAt != (time.Time{}) && elapsed < minInterval {
+	if !c.lastReconcileAt.IsZero() && elapsed < minInterval {
 		remaining := minInterval - elapsed
 		LoggerFromContext(ctx).V(1).Info("skipping reconcile: min interval not elapsed",
 			"elapsed", elapsed.Round(time.Second),
