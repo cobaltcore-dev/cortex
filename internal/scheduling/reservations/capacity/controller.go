@@ -529,6 +529,16 @@ func (c *Controller) probeScheduler(
 		eligibleHosts = append(eligibleHosts, schedulerapi.ExternalSchedulerHost{ComputeHost: name})
 	}
 
+	// Total probe ignores all reservation blocks (raw hardware capacity).
+	// Placeable probe counts reservations as capacity blocks.
+	var ignoredReservationTypes []v1alpha1.ReservationType
+	if ignoreAllocations {
+		ignoredReservationTypes = []v1alpha1.ReservationType{
+			v1alpha1.ReservationTypeCommittedResource,
+			v1alpha1.ReservationTypeFailover,
+		}
+	}
+
 	resp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
 		InstanceUUID:     "capacity-" + flavor.Name,
 		ProjectID:        "cortex-capacity-probe",
@@ -539,8 +549,11 @@ func (c *Controller) probeScheduler(
 		AvailabilityZone: az,
 		Pipeline:         pipeline,
 		EligibleHosts:    eligibleHosts,
+		SchedulerHints:   map[string]any{"_nova_check_type": string(schedulerapi.CapacityProbeIntent)},
 	}, scheduling.Options{
 		ReadOnly:                      true,
+		AssumeEmptyHosts:              ignoreAllocations,
+		IgnoredReservationTypes:       ignoredReservationTypes,
 		SkipHistory:                   true,
 		SkipInflight:                  true,
 		SkipCommittedResourceTracking: true,

@@ -848,3 +848,36 @@ func TestProbeScheduler_SubtractsReservationBlocksWhenNotIgnored(t *testing.T) {
 		t.Errorf("placeable capacity = %d, want 1 (3 slots − 1 alloc − 1 reservation)", placeableCap)
 	}
 }
+
+func TestProbeScheduler_SetsCapacityProbeIntent(t *testing.T) {
+	scheme := newTestScheme(t)
+	hv := newHypervisor("host-1", "az-a", 4096*1024*1024)
+
+	var capturedReq schedulerapi.ExternalSchedulerRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&capturedReq); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		json.NewEncoder(w).Encode(schedulerapi.ExternalSchedulerResponse{Hosts: []string{"host-1"}}) //nolint:errcheck
+	}))
+	defer srv.Close()
+
+	c := NewController(fake.NewClientBuilder().WithScheme(scheme).Build(), Config{SchedulerURL: srv.URL}, nil)
+	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
+	flavor := compute.FlavorInGroup{Name: "test-flavor", MemoryMB: 4096}
+
+	if _, _, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "test-pipeline", hvByName, true, nil); err != nil {
+		t.Fatalf("probeScheduler failed: %v", err)
+	}
+	hint, err := capturedReq.Spec.Data.GetSchedulerHintStr("_nova_check_type")
+	if err != nil {
+		t.Fatalf("failed to get _nova_check_type hint: %v", err)
+	}
+	if hint != string(schedulerapi.CapacityProbeIntent) {
+		t.Errorf("capacity probe must set _nova_check_type=%q, got %q", schedulerapi.CapacityProbeIntent, hint)
+	}
+	if capturedReq.Spec.Data.ProjectID != "cortex-capacity-probe" {
+		t.Errorf("capacity probe must send ProjectID cortex-capacity-probe, got %q", capturedReq.Spec.Data.ProjectID)
+	}
+}

@@ -46,8 +46,8 @@ func (c *Config) ApplyDefaults() {
 func DefaultConfig() Config {
 	return Config{
 		ReconcileInterval: metav1.Duration{Duration: 5 * time.Minute},
-		TotalPipeline:     "kvm-report-capacity",
-		PlaceablePipeline: "kvm-general-purpose-load-balancing-no-history",
+		TotalPipeline:     "kvm-general-purpose-load-balancing",
+		PlaceablePipeline: "kvm-general-purpose-load-balancing",
 		SchedulerURL:      "http://localhost:8080/scheduler/nova/external",
 	}
 }
