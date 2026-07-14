@@ -41,10 +41,7 @@ func (c *CachingClient) Start(ctx context.Context) error {
 		}
 	}
 
-	interval := c.ttl / 4
-	if interval < minCleanupInterval {
-		interval = minCleanupInterval
-	}
+	interval := max(c.ttl/4, minCleanupInterval)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
