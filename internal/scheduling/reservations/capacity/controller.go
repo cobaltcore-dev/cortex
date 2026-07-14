@@ -483,7 +483,8 @@ func (c *Reconciler) reconcileAZ(
 						"az", az, "flavorGroup", r.groupName, "host", h,
 						"usableSlots", usableSlots,
 						"strandedMemoryGiB", strandedMem/(1024*1024*1024),
-						"strandedCores", strandedCPU)
+						"strandedCores", strandedCPU,
+						"memSlots", memSlots, "cpuSlots", cpuSlots)
 				}
 			}
 		}
@@ -558,9 +559,7 @@ func (c *Reconciler) writeCRD(
 		return fmt.Errorf("failed to get FlavorGroupCapacity %s: %w", crdName, err)
 	}
 
-	// TotalCapacity: for each flavor multiply slot count by its resources; take the max
-	// across all flavors independently. The flavor best matching the host's resource
-	// ratio saturates more resources and produces a higher product.
+	// TotalCapacity: for each flavor multiply slot count by its resources (across all flavors independently)
 	flavorSpecByName := make(map[string]compute.FlavorInGroup, len(groupData.Flavors))
 	for _, f := range groupData.Flavors {
 		flavorSpecByName[f.Name] = f
@@ -680,7 +679,7 @@ func (c *Reconciler) probeScheduler(
 		if !ok {
 			continue
 		}
-		var capBytes int64
+		var slots int64
 		if ignoreAllocations {
 			effCap := hv.Status.EffectiveCapacity
 			if effCap == nil {
@@ -693,15 +692,27 @@ func (c *Reconciler) probeScheduler(
 			if !ok {
 				continue
 			}
-			capBytes = memCap.Value()
+			slots = memCap.Value() / flavorBytes
+			if flavor.VCPUs > 0 {
+				if cpuCap, ok := effCap[hv1.ResourceCPU]; ok {
+					if cpuSlots := cpuCap.Value() / int64(flavor.VCPUs); cpuSlots < slots { //nolint:gosec
+						slots = cpuSlots
+					}
+				}
+			}
 		} else {
 			remaining := hvRemainingResources(hv, blockedByReservations[hostName])
 			if remaining == nil {
 				continue
 			}
-			capBytes = remaining[ResourceMemory]
+			slots = remaining[ResourceMemory] / flavorBytes
+			if flavor.VCPUs > 0 {
+				if cpuSlots := remaining[ResourceCores] / int64(flavor.VCPUs); cpuSlots < slots { //nolint:gosec
+					slots = cpuSlots
+				}
+			}
 		}
-		if slots := capBytes / flavorBytes; slots > 0 {
+		if slots > 0 {
 			capacity += slots
 			candidateHosts = append(candidateHosts, hostName)
 		}
