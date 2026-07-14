@@ -217,7 +217,7 @@ func (c *HypervisorOvercommitController) predicateRemoteHypervisor() predicate.P
 // SetupWithManager sets up the controller with the Manager and a multicluster
 // client. The multicluster client is used to watch for changes in the
 // Hypervisor CRD across all clusters and trigger reconciliations accordingly.
-func (c *HypervisorOvercommitController) SetupWithManager(mgr ctrl.Manager) (err error) {
+func (c *HypervisorOvercommitController) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) (err error) {
 	// This will load the config in a safe way and gracefully handle errors.
 	c.config, err = conf.GetConfig[HypervisorOvercommitConfig]()
 	if err != nil {
@@ -226,12 +226,6 @@ func (c *HypervisorOvercommitController) SetupWithManager(mgr ctrl.Manager) (err
 	// Validate we don't have any weird values in the config.
 	if err := c.config.Validate(); err != nil {
 		return err
-	}
-	// Check that the provided client is a multicluster client, since we need
-	// that to watch for hypervisors across clusters.
-	mcl, ok := c.Client.(*multicluster.Client)
-	if !ok {
-		return errors.New("provided client must be a multicluster client")
 	}
 	bldr := multicluster.BuildController(mcl, mgr)
 	// The hypervisor crd may be distributed across multiple remote clusters.

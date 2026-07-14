@@ -110,6 +110,9 @@ cortex: &cortex
           - kvm.cloud.sap/v1/Hypervisor
           - kvm.cloud.sap/v1/HypervisorList
           - v1/Secret
+    clientcache:
+      gvks:
+        - cortex.cloud/v1alpha1/Reservation
     keystoneSecretRef:
       name: cortex-nova-openstack-keystone
       namespace: default

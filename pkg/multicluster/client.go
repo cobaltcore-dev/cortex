@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 )
@@ -217,6 +218,30 @@ func (c *Client) ClustersForGVK(gvk schema.GroupVersionKind) ([]cluster.Cluster,
 		clusters = append(clusters, c.HomeCluster)
 	}
 	return clusters, nil
+}
+
+// GetInformersForKind returns the informers of all clusters serving the GVK of
+// the given object. It is used by the in-process client cache to attach
+// eviction event handlers. The GVK is resolved against the home scheme and must
+// be explicitly configured in home or a remote cluster.
+func (c *Client) GetInformersForKind(ctx context.Context, obj client.Object) ([]cache.Informer, error) {
+	gvk, err := c.GVKFromHomeScheme(obj)
+	if err != nil {
+		return nil, err
+	}
+	clusters, err := c.ClustersForGVK(gvk)
+	if err != nil {
+		return nil, err
+	}
+	informers := make([]cache.Informer, 0, len(clusters))
+	for _, cl := range clusters {
+		inf, err := cl.GetCache().GetInformer(ctx, obj)
+		if err != nil {
+			return nil, err
+		}
+		informers = append(informers, inf)
+	}
+	return informers, nil
 }
 
 // clusterForWrite uses a ResourceRouter to determine which remote cluster
