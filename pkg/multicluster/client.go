@@ -245,8 +245,15 @@ func (c *Client) clusterForWrite(gvk schema.GroupVersionKind, obj any) (cluster.
 				return r.cluster, nil
 			}
 		}
-		// No match — collect route key and candidate labels for the error.
-		selector, _ := router.extractClusterSelector(obj)
+		// No remote match — fall back to home if the GVK is also configured there.
+		if c.homeGVKs[gvk] {
+			return c.HomeCluster, nil
+		}
+		// No match and no home fallback — return an error.
+		selector, err := router.extractClusterSelector(obj)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract cluster selector for GVK %s: %w", gvk, err)
+		}
 		return nil, &NoClusterMatchedError{GVK: gvk, ClusterSelector: selector}
 	}
 
