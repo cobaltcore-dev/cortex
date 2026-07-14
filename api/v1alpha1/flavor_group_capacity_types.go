@@ -113,11 +113,17 @@ type FlavorGroupCapacityStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
-// +kubebuilder:printcolumn:name="FlavorGroup",type="string",JSONPath=".spec.flavorGroup"
+// +kubebuilder:printcolumn:name="Group",type="string",JSONPath=".spec.flavorGroup"
 // +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
 // +kubebuilder:printcolumn:name="Running",type="integer",JSONPath=".status.runningInstances"
-// +kubebuilder:printcolumn:name="LastReconcile",type="date",JSONPath=".status.lastReconcileAt"
+// +kubebuilder:printcolumn:name="Avail",type="integer",JSONPath=".status.exclusivelyFreeSlots"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:printcolumn:name="Free_Mem",type="string",JSONPath=".status.freeCapacity.memory",priority=1
+// +kubebuilder:printcolumn:name="Excl_Mem",type="string",JSONPath=".status.exclusivelyFreeCapacity.memory",priority=1
+// +kubebuilder:printcolumn:name="Free_CPU",type="string",JSONPath=".status.freeCapacity.cores",priority=1
+// +kubebuilder:printcolumn:name="Excl_CPU",type="string",JSONPath=".status.exclusivelyFreeCapacity.cores",priority=1
+// +kubebuilder:printcolumn:name="Reconciled",type="date",JSONPath=".status.lastReconcileAt",priority=1
 
 // FlavorGroupCapacity caches pre-computed capacity data for one flavor group in one AZ.
 // One CRD exists per (flavor group × AZ) pair, updated by the capacity controller on a fixed interval.
