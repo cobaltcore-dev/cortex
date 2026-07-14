@@ -30,8 +30,12 @@ spec:
     - jsonPath: .status.conditions[?(@.type=='Ready')].status
       name: Ready
       type: string
+    - jsonPath: .status.lastReconcileAt
+      name: Reconciled
+      type: date
     - jsonPath: .metadata.creationTimestamp
       name: Age
+      priority: 1
       type: date
     - jsonPath: .status.freeCapacity.memory
       name: Free_Mem
@@ -49,10 +53,6 @@ spec:
       name: Excl_CPU
       priority: 1
       type: string
-    - jsonPath: .status.lastReconcileAt
-      name: Reconciled
-      priority: 1
-      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
