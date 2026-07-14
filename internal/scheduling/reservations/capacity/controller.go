@@ -31,6 +31,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
+	"github.com/go-logr/logr"
 )
 
 var log = ctrl.Log.WithName("capacity-controller").WithValues("module", "capacity")
@@ -191,6 +192,29 @@ type vmUsage struct {
 	fresh     bool
 }
 
+// probeGroupResult holds the outcome of probing all flavors in one (group × AZ).
+type probeGroupResult struct {
+	groupName string
+	groupData compute.FlavorGroupFeature
+	flavors   []v1alpha1.FlavorCapacityStatus
+	// allFresh is false if any scheduler probe failed; the group's CRD is left unchanged.
+	allFresh           bool
+	smallestCandidates []string
+	committedCapacity  int64
+}
+
+// flavorSlots returns the number of VM slots a resource map can fit for the given flavor.
+// It is the binding constraint across both memory and CPU: min(memSlots, cpuSlots).
+func flavorSlots(resources map[string]int64, flavorMemBytes, flavorVCPUs int64) int64 {
+	slots := resources[ResourceMemory] / flavorMemBytes
+	if flavorVCPUs > 0 {
+		if cpuSlots := resources[ResourceCores] / flavorVCPUs; cpuSlots < slots {
+			slots = cpuSlots
+		}
+	}
+	return slots
+}
+
 // reconcileAll iterates all AZs, runs the round-robin split per AZ, then writes CRDs.
 func (c *Reconciler) reconcileAll(ctx context.Context) error {
 	logger := LoggerFromContext(ctx)
@@ -343,116 +367,100 @@ func hvRemainingResources(hv hv1.Hypervisor, blockedMemBytes int64) map[string]i
 	return result
 }
 
-// reconcileAZ runs the round-robin capacity split for all flavor groups in one AZ,
-// then writes one FlavorGroupCapacity CRD per group that had all probes succeed.
-// Groups with failed probes are skipped — their CRDs retain the last good state.
-func (c *Reconciler) reconcileAZ(
+// probeGroup probes all flavors in a single group for one AZ and returns the result.
+// It preserves stale per-flavor values from the existing CRD on individual probe failures.
+func (c *Reconciler) probeGroup(
 	ctx context.Context,
+	groupName string,
+	groupData compute.FlavorGroupFeature,
 	az string,
-	flavorGroups map[string]compute.FlavorGroupFeature,
 	hvByName map[string]hv1.Hypervisor,
 	blockedByReservations map[string]int64,
-	usageByKey map[vmUsageKey]vmUsage,
-) error {
+) (probeGroupResult, error) {
 
 	logger := LoggerFromContext(ctx)
 
-	type probeResult struct {
-		groupName string
-		groupData compute.FlavorGroupFeature
-		flavors   []v1alpha1.FlavorCapacityStatus
-		// allFresh is false if any scheduler probe failed; the group's CRD is left unchanged.
-		allFresh           bool
-		smallestCandidates []string
-		committedCapacity  int64
+	smallestFlavorBytes := int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec
+	if smallestFlavorBytes <= 0 {
+		return probeGroupResult{}, fmt.Errorf("smallest flavor %q has invalid memory %d MB",
+			groupData.SmallestFlavor.Name, groupData.SmallestFlavor.MemoryMB)
 	}
 
-	results := make([]probeResult, 0, len(flavorGroups))
-
-	groupNames := make([]string, 0, len(flavorGroups))
-	for name := range flavorGroups {
-		groupNames = append(groupNames, name)
+	// Load existing per-flavor data to preserve stale values on probe failure.
+	crdName := crdNameFor(groupName, az)
+	var existing v1alpha1.FlavorGroupCapacity
+	if err := c.client.Get(ctx, types.NamespacedName{Name: crdName}, &existing); err != nil && !apierrors.IsNotFound(err) {
+		return probeGroupResult{}, fmt.Errorf("failed to get FlavorGroupCapacity %s: %w", crdName, err)
 	}
-	sort.Strings(groupNames)
-
-	for _, groupName := range groupNames {
-		groupData := flavorGroups[groupName]
-
-		smallestFlavorBytes := int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec
-		if smallestFlavorBytes <= 0 {
-			logger.Error(fmt.Errorf("smallest flavor %q has invalid memory %d MB",
-				groupData.SmallestFlavor.Name, groupData.SmallestFlavor.MemoryMB),
-				"skipping flavor group", "flavorGroup", groupName)
-			continue
-		}
-
-		// Probe all flavors. Sort for stable CRD output.
-		flavors := make([]compute.FlavorInGroup, len(groupData.Flavors))
-		copy(flavors, groupData.Flavors)
-		sort.Slice(flavors, func(i, j int) bool { return flavors[i].Name < flavors[j].Name })
-
-		allFresh := true
-		newFlavors := make([]v1alpha1.FlavorCapacityStatus, 0, len(flavors))
-
-		// Load existing per-flavor data to preserve stale values on probe failure.
-		crdName := crdNameFor(groupName, az)
-		var existing v1alpha1.FlavorGroupCapacity
-		if err := c.client.Get(ctx, types.NamespacedName{Name: crdName}, &existing); err != nil && !apierrors.IsNotFound(err) {
-			return fmt.Errorf("failed to get FlavorGroupCapacity %s: %w", crdName, err)
-		}
-		existingByName := make(map[string]v1alpha1.FlavorCapacityStatus, len(existing.Status.Flavors))
-		for _, f := range existing.Status.Flavors {
-			existingByName[f.FlavorName] = f
-		}
-
-		var smallestCandidates []string
-		for _, flavor := range flavors {
-			cur := existingByName[flavor.Name]
-			cur.FlavorName = flavor.Name
-
-			totalVMSlots, totalHosts, _, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName, true, nil)
-			placeableVMs, placeableHosts, candidates, placeableErr := c.probeScheduler(ctx, flavor, az, c.config.PlaceablePipeline, hvByName, false, blockedByReservations)
-
-			if totalErr != nil {
-				allFresh = false
-			} else {
-				cur.TotalCapacityVMSlots = totalVMSlots
-				cur.TotalCapacityHosts = totalHosts
-			}
-			if placeableErr != nil {
-				allFresh = false
-			} else {
-				cur.PlaceableVMs = placeableVMs
-				cur.PlaceableHosts = placeableHosts
-			}
-			// Capture candidates for the smallest flavor — used as split inputs.
-			if flavor.Name == groupData.SmallestFlavor.Name && placeableErr == nil {
-				smallestCandidates = candidates
-			}
-			newFlavors = append(newFlavors, cur)
-		}
-
-		committedCapacity, committedErr := c.sumCommittedCapacity(ctx, groupName, az, smallestFlavorBytes)
-		if committedErr != nil {
-			logger.Error(committedErr, "failed to sum committed capacity",
-				"flavorGroup", groupName, "az", az)
-			committedCapacity = 0
-		}
-
-		results = append(results, probeResult{
-			groupName:          groupName,
-			groupData:          groupData,
-			flavors:            newFlavors,
-			allFresh:           allFresh,
-			smallestCandidates: smallestCandidates,
-			committedCapacity:  committedCapacity,
-		})
+	existingByName := make(map[string]v1alpha1.FlavorCapacityStatus, len(existing.Status.Flavors))
+	for _, f := range existing.Status.Flavors {
+		existingByName[f.FlavorName] = f
 	}
 
-	// Build HostState and GroupInput for the round-robin split.
-	// Only include groups where all probes succeeded.
+	// Probe all flavors. Sort for stable CRD output.
+	flavors := make([]compute.FlavorInGroup, len(groupData.Flavors))
+	copy(flavors, groupData.Flavors)
+	sort.Slice(flavors, func(i, j int) bool { return flavors[i].Name < flavors[j].Name })
+
+	allFresh := true
+	newFlavors := make([]v1alpha1.FlavorCapacityStatus, 0, len(flavors))
+	var smallestCandidates []string
+
+	for _, flavor := range flavors {
+		cur := existingByName[flavor.Name]
+		cur.FlavorName = flavor.Name
+
+		totalVMSlots, totalHosts, _, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName, true, nil)
+		placeableVMs, placeableHosts, candidates, placeableErr := c.probeScheduler(ctx, flavor, az, c.config.PlaceablePipeline, hvByName, false, blockedByReservations)
+
+		if totalErr != nil {
+			allFresh = false
+		} else {
+			cur.TotalCapacityVMSlots = totalVMSlots
+			cur.TotalCapacityHosts = totalHosts
+		}
+		if placeableErr != nil {
+			allFresh = false
+		} else {
+			cur.PlaceableVMs = placeableVMs
+			cur.PlaceableHosts = placeableHosts
+		}
+		// Capture candidates for the smallest flavor — used as split inputs.
+		if flavor.Name == groupData.SmallestFlavor.Name && placeableErr == nil {
+			smallestCandidates = candidates
+		}
+		newFlavors = append(newFlavors, cur)
+	}
+
+	committedCapacity, committedErr := c.sumCommittedCapacity(ctx, groupName, az, smallestFlavorBytes)
+	if committedErr != nil {
+		logger.Error(committedErr, "failed to sum committed capacity", "flavorGroup", groupName, "az", az)
+		committedCapacity = 0
+	}
+
+	return probeGroupResult{
+		groupName:          groupName,
+		groupData:          groupData,
+		flavors:            newFlavors,
+		allFresh:           allFresh,
+		smallestCandidates: smallestCandidates,
+		committedCapacity:  committedCapacity,
+	}, nil
+}
+
+// buildSplitInputs constructs the HostState map and GroupInput slice needed by SplitCapacity.
+// Only groups where all probes succeeded are included.
+func buildSplitInputs(
+	results []probeGroupResult,
+	hvByName map[string]hv1.Hypervisor,
+	blockedByReservations map[string]int64,
+	az string,
+	logger logr.Logger,
+) ([]GroupInput, map[string]HostState) {
+
 	hosts := make(map[string]HostState)
 	groupInputs := make([]GroupInput, 0, len(results))
+
 	for _, r := range results {
 		if !r.allFresh || r.smallestCandidates == nil {
 			continue
@@ -469,23 +477,17 @@ func (c *Reconciler) reconcileAZ(
 					continue
 				}
 				remaining := hvRemainingResources(hv, blockedByReservations[h])
-				if remaining != nil {
-					hosts[h] = HostState{Remaining: remaining}
-					memSlots := remaining[ResourceMemory] / flavorMemBytes
-					cpuSlots := remaining[ResourceCores] / flavorVCPUs
-					usableSlots := memSlots
-					if cpuSlots < usableSlots {
-						usableSlots = cpuSlots
-					}
-					strandedMem := remaining[ResourceMemory] - usableSlots*flavorMemBytes
-					strandedCPU := remaining[ResourceCores] - usableSlots*flavorVCPUs
-					logger.V(1).Info("candidate host for capacity split",
-						"az", az, "flavorGroup", r.groupName, "host", h,
-						"usableSlots", usableSlots,
-						"strandedMemoryGiB", strandedMem/(1024*1024*1024),
-						"strandedCores", strandedCPU,
-						"memSlots", memSlots, "cpuSlots", cpuSlots)
+				if remaining == nil {
+					continue
 				}
+				hosts[h] = HostState{Remaining: remaining}
+				usableSlots := flavorSlots(remaining, flavorMemBytes, flavorVCPUs)
+				strandedMem := remaining[ResourceMemory] - usableSlots*flavorMemBytes
+				strandedCPU := remaining[ResourceCores] - usableSlots*flavorVCPUs
+				logger.V(1).Info("candidate host slot details", "az", az, "flavorGroup", r.groupName, "host", h,
+					"usableSlots", usableSlots,
+					"strandedMemoryGiB", strandedMem/(1024*1024*1024),
+					"strandedCores", strandedCPU)
 			}
 		}
 		sort.Strings(candidateHosts) // stable order
@@ -498,8 +500,41 @@ func (c *Reconciler) reconcileAZ(
 			CandidateHosts: candidateHosts,
 		})
 	}
+	return groupInputs, hosts
+}
 
+// reconcileAZ probes all flavor groups in one AZ, splits capacity across groups,
+// and writes one FlavorGroupCapacity CRD per group that had all probes succeed.
+func (c *Reconciler) reconcileAZ(
+	ctx context.Context,
+	az string,
+	flavorGroups map[string]compute.FlavorGroupFeature,
+	hvByName map[string]hv1.Hypervisor,
+	blockedByReservations map[string]int64,
+	usageByKey map[vmUsageKey]vmUsage,
+) error {
+
+	logger := LoggerFromContext(ctx)
+
+	groupNames := make([]string, 0, len(flavorGroups))
+	for name := range flavorGroups {
+		groupNames = append(groupNames, name)
+	}
+	sort.Strings(groupNames)
+
+	results := make([]probeGroupResult, 0, len(groupNames))
+	for _, groupName := range groupNames {
+		r, err := c.probeGroup(ctx, groupName, flavorGroups[groupName], az, hvByName, blockedByReservations)
+		if err != nil {
+			logger.Error(err, "skipping flavor group", "flavorGroup", groupName, "az", az)
+			continue
+		}
+		results = append(results, r)
+	}
+
+	groupInputs, hosts := buildSplitInputs(results, hvByName, blockedByReservations, az, logger)
 	freeResources, exclusiveResources, unassigned := SplitCapacity(groupInputs, hosts)
+
 	if unassigned[ResourceMemory] > 0 || unassigned[ResourceCores] > 0 {
 		logger.Info("fragmented capacity not assigned to any group",
 			"az", az,
@@ -525,6 +560,26 @@ func (c *Reconciler) reconcileAZ(
 		}
 	}
 	return nil
+}
+
+// computeTotalCapacity returns the maximum memory bytes and CPU cores representable
+// by the flavor with the highest slot count in the group (empty-datacenter view).
+func computeTotalCapacity(newFlavors []v1alpha1.FlavorCapacityStatus, flavorSpecByName map[string]compute.FlavorInGroup) (maxMemBytes, maxCPUCores int64) {
+	for _, f := range newFlavors {
+		spec, ok := flavorSpecByName[f.FlavorName]
+		if !ok || f.TotalCapacityVMSlots <= 0 {
+			continue
+		}
+		memBytes := f.TotalCapacityVMSlots * int64(spec.MemoryMB) * 1024 * 1024 //nolint:gosec
+		cpuCores := f.TotalCapacityVMSlots * int64(spec.VCPUs)                  //nolint:gosec
+		if memBytes > maxMemBytes {
+			maxMemBytes = memBytes
+		}
+		if cpuCores > maxCPUCores {
+			maxCPUCores = cpuCores
+		}
+	}
+	return maxMemBytes, maxCPUCores
 }
 
 // writeCRD upserts one FlavorGroupCapacity CRD with fresh computed values.
@@ -559,26 +614,11 @@ func (c *Reconciler) writeCRD(
 		return fmt.Errorf("failed to get FlavorGroupCapacity %s: %w", crdName, err)
 	}
 
-	// TotalCapacity: for each flavor multiply slot count by its resources (across all flavors independently)
 	flavorSpecByName := make(map[string]compute.FlavorInGroup, len(groupData.Flavors))
 	for _, f := range groupData.Flavors {
 		flavorSpecByName[f.Name] = f
 	}
-	var maxMemBytes, maxCPUCores int64
-	for _, f := range newFlavors {
-		spec, ok := flavorSpecByName[f.FlavorName]
-		if !ok || f.TotalCapacityVMSlots <= 0 {
-			continue
-		}
-		memBytes := f.TotalCapacityVMSlots * int64(spec.MemoryMB) * 1024 * 1024 //nolint:gosec
-		cpuCores := f.TotalCapacityVMSlots * int64(spec.VCPUs)                  //nolint:gosec
-		if memBytes > maxMemBytes {
-			maxMemBytes = memBytes
-		}
-		if cpuCores > maxCPUCores {
-			maxCPUCores = cpuCores
-		}
-	}
+	maxMemBytes, maxCPUCores := computeTotalCapacity(newFlavors, flavorSpecByName)
 
 	patch := client.MergeFrom(existing.DeepCopy())
 	existing.Status.Flavors = newFlavors
@@ -597,8 +637,10 @@ func (c *Reconciler) writeCRD(
 	}
 	existing.Status.FreeCapacity = resMapToQuantity(freeRes)
 	existing.Status.ExclusivelyFreeCapacity = resMapToQuantity(exclusiveRes)
+	var exclusivelyFreeSlots int64
 	if flavorMemBytes := int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024; flavorMemBytes > 0 { //nolint:gosec
-		existing.Status.ExclusivelyFreeSlots = exclusiveRes[ResourceMemory] / flavorMemBytes
+		exclusivelyFreeSlots = exclusiveRes[ResourceMemory] / flavorMemBytes
+		existing.Status.ExclusivelyFreeSlots = exclusivelyFreeSlots
 	}
 	existing.Status.LastReconcileAt = metav1.Now()
 
@@ -632,6 +674,7 @@ func (c *Reconciler) probeScheduler(
 	if flavorBytes <= 0 {
 		return 0, 0, nil, fmt.Errorf("flavor %q has invalid memory %d MB", flavor.Name, flavor.MemoryMB)
 	}
+	flavorVCPUs := int64(flavor.VCPUs) //nolint:gosec
 
 	// Build EligibleHosts from all known hypervisors so that novaLimitHostsToRequest
 	// (which filters the response to hosts present in the request) does not zero out
@@ -679,7 +722,7 @@ func (c *Reconciler) probeScheduler(
 		if !ok {
 			continue
 		}
-		var slots int64
+		var resources map[string]int64
 		if ignoreAllocations {
 			effCap := hv.Status.EffectiveCapacity
 			if effCap == nil {
@@ -692,27 +735,17 @@ func (c *Reconciler) probeScheduler(
 			if !ok {
 				continue
 			}
-			slots = memCap.Value() / flavorBytes
-			if flavor.VCPUs > 0 {
-				if cpuCap, ok := effCap[hv1.ResourceCPU]; ok {
-					if cpuSlots := cpuCap.Value() / int64(flavor.VCPUs); cpuSlots < slots { //nolint:gosec
-						slots = cpuSlots
-					}
-				}
+			resources = map[string]int64{ResourceMemory: memCap.Value()}
+			if cpuCap, ok := effCap[hv1.ResourceCPU]; ok {
+				resources[ResourceCores] = cpuCap.Value()
 			}
 		} else {
-			remaining := hvRemainingResources(hv, blockedByReservations[hostName])
-			if remaining == nil {
+			resources = hvRemainingResources(hv, blockedByReservations[hostName])
+			if resources == nil {
 				continue
 			}
-			slots = remaining[ResourceMemory] / flavorBytes
-			if flavor.VCPUs > 0 {
-				if cpuSlots := remaining[ResourceCores] / int64(flavor.VCPUs); cpuSlots < slots { //nolint:gosec
-					slots = cpuSlots
-				}
-			}
 		}
-		if slots > 0 {
+		if slots := flavorSlots(resources, flavorBytes, flavorVCPUs); slots > 0 {
 			capacity += slots
 			candidateHosts = append(candidateHosts, hostName)
 		}
