@@ -245,9 +245,12 @@ func (c *Client) clusterForWrite(gvk schema.GroupVersionKind, obj any) (cluster.
 				return r.cluster, nil
 			}
 		}
+		// No match — collect route key and candidate labels for the error.
+		routeKey, _ := router.extractClusterSelector(obj)
+		return nil, &NoClusterMatchedError{GVK: gvk, RouteKey: routeKey}
 	}
 
-	// If we couldn't find a matching remote cluster (not configured or not found) but the GVK is configured for home, return the home cluster.
+	// No remotes configured for this GVK — fall back to home if available.
 	if c.homeGVKs[gvk] {
 		return c.HomeCluster, nil
 	}
@@ -272,11 +275,13 @@ func IsDuplicateError(err error) bool {
 // happens in multi-AZ setups where the resource targets an AZ that has no
 // configured cluster.
 type NoClusterMatchedError struct {
-	GVK schema.GroupVersionKind
+	GVK        schema.GroupVersionKind
+	RouteKey   string
+	Candidates []string
 }
 
 func (e *NoClusterMatchedError) Error() string {
-	return fmt.Sprintf("no cluster matched for GVK %s", e.GVK)
+	return fmt.Sprintf("no cluster matched for GVK %s: route key %q did not match any candidate %v", e.GVK, e.RouteKey, e.Candidates)
 }
 
 // IsNoClusterMatchedError returns true if the error indicates that no
