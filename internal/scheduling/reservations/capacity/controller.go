@@ -630,7 +630,8 @@ func (c *Reconciler) writeCRD(
 	existing.Status.ExclusivelyFreeCapacity = resMapToQuantity(exclusiveRes)
 	var exclusivelyFreeSlots int64
 	if flavorMemBytes := int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024; flavorMemBytes > 0 { //nolint:gosec
-		exclusivelyFreeSlots = exclusiveRes[ResourceMemory] / flavorMemBytes
+		flavorVCPUs := int64(groupData.SmallestFlavor.VCPUs) //nolint:gosec
+		exclusivelyFreeSlots = flavorSlots(exclusiveRes, flavorMemBytes, flavorVCPUs)
 		existing.Status.ExclusivelyFreeSlots = exclusivelyFreeSlots
 	}
 	existing.Status.LastReconcileAt = metav1.Now()
