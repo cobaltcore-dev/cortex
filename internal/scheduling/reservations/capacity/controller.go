@@ -246,22 +246,14 @@ func (c *Reconciler) reconcileAll(ctx context.Context) error {
 
 	usageByKey := c.computeVMUsage(ctx, flavorGroups, hvList.Items)
 
-	var succeeded, failed int
 	for _, az := range azs {
-		if err := c.reconcileAZ(ctx, az, flavorGroups, hvByName, blockedByReservations, usageByKey); err != nil {
-			logger.Error(err, "failed to reconcile AZ", "az", az)
-			failed++
-			continue
-		}
-		succeeded += len(flavorGroups)
+		c.reconcileAZ(ctx, az, flavorGroups, hvByName, blockedByReservations, usageByKey)
 	}
 
 	logger.Info("capacity reconcile cycle completed",
 		"flavorGroups", len(flavorGroups),
 		"availabilityZones", len(azs),
 		"hypervisors", len(hvList.Items),
-		"succeeded", succeeded,
-		"failed", failed,
 		"duration", time.Since(startTime).String())
 	return nil
 }
@@ -456,10 +448,10 @@ func buildSplitInputs(
 	blockedByReservations map[string]int64,
 	az string,
 	logger logr.Logger,
-) ([]GroupInput, map[string]HostState) {
+) (groupInputs []GroupInput, hosts map[string]HostState) {
 
-	hosts := make(map[string]HostState)
-	groupInputs := make([]GroupInput, 0, len(results))
+	hosts = make(map[string]HostState)
+	groupInputs = make([]GroupInput, 0, len(results))
 
 	for _, r := range results {
 		if !r.allFresh || r.smallestCandidates == nil {
@@ -512,7 +504,7 @@ func (c *Reconciler) reconcileAZ(
 	hvByName map[string]hv1.Hypervisor,
 	blockedByReservations map[string]int64,
 	usageByKey map[vmUsageKey]vmUsage,
-) error {
+) {
 
 	logger := LoggerFromContext(ctx)
 
@@ -559,7 +551,6 @@ func (c *Reconciler) reconcileAZ(
 				"flavorGroup", r.groupName, "az", az)
 		}
 	}
-	return nil
 }
 
 // computeTotalCapacity returns the maximum memory bytes and CPU cores representable
