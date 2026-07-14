@@ -1087,3 +1087,36 @@ func TestQuotaEnforcementMetrics_RecordDecision_NilWarns(t *testing.T) {
 			msg, got, buf.String())
 	}
 }
+
+func TestFilterQuotaEnforcement_SkipsForNonPlacementIntent(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add v1alpha1 to scheme: %v", err)
+	}
+	// Enforce mode: quota fully consumed → all hosts would normally be filtered.
+	objects := []client.Object{
+		&v1alpha1.ProjectQuota{
+			ObjectMeta: metav1.ObjectMeta{Name: "quota-project-no-quota-az-1"},
+			Spec: v1alpha1.ProjectQuotaSpec{
+				ProjectID:        "project-no-quota",
+				AvailabilityZone: "az-1",
+				Quota:            map[string]int64{"hw_version_gp_ram": 10, "hw_version_gp_cores": 10, "hw_version_gp_instances": 1},
+			},
+			Status: v1alpha1.ProjectQuotaStatus{
+				PaygUsage: map[string]int64{"hw_version_gp_ram": 10, "hw_version_gp_cores": 10, "hw_version_gp_instances": 1},
+			},
+		},
+	}
+	request := makeQuotaEnforcementRequest("project-no-quota", "az-1", "gp", 1, 1, map[string]any{"_nova_check_type": "capacity_probe"})
+	step := &FilterQuotaEnforcement{}
+	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+	step.Options = FilterQuotaEnforcementOpts{Enforce: true}
+
+	result, err := step.Run(slog.Default(), request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Activations) != len(request.Hosts) {
+		t.Errorf("expected all %d hosts to pass, got %d", len(request.Hosts), len(result.Activations))
+	}
+}

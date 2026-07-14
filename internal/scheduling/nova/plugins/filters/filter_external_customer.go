@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
@@ -36,10 +37,15 @@ type FilterExternalCustomerStep struct {
 func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
-	// Skip for failover reservation scheduling — domain restrictions don't apply
-	// since failover reservations are not tied to a specific customer domain.
-	if intent, err := request.GetIntent(); err == nil && intent == api.ReserveForFailoverIntent {
-		traceLog.Info("skipping external customer filter for failover reservation intent")
+	// Failover and capacity probe calls are not associated with a user domain;
+	// domain-based host restrictions don't apply. CR scheduling does carry a real domain
+	// and must be checked.
+	if intent, err := request.GetIntent(); err == nil && slices.Contains([]v1alpha1.SchedulingIntent{
+		api.ReserveForFailoverIntent,
+		api.ReuseFailoverReservationIntent,
+		api.CapacityProbeIntent,
+	}, intent) {
+		traceLog.Info("skipping external customer filter for non-placement intent", "intent", intent)
 		return result, nil
 	}
 

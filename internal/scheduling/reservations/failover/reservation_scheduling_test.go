@@ -5,14 +5,20 @@ package failover
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 // ============================================================================
@@ -464,5 +470,105 @@ func buildSchedulingTestVMWithResources(uuid, hypervisor string, memoryMB, vcpus
 			"vcpus":  *resource.NewQuantity(vcpus, resource.DecimalSI),
 			"memory": *resource.NewQuantity(memoryMB*1024*1024, resource.BinarySI),
 		},
+	}
+}
+
+// captureSchedulerRequest spins up a test HTTP server that captures one scheduler request
+// and returns a single host. The captured request is written into *out.
+func captureSchedulerRequest(t *testing.T, host string, out *novaapi.ExternalSchedulerRequest) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(out); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		resp := novaapi.ExternalSchedulerResponse{Hosts: []string{host}}
+		_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
+	}))
+}
+
+// buildMinimalController returns a FailoverReservationController wired to a scheduler at the given URL.
+func buildMinimalController(t *testing.T, schedulerURL string) *FailoverReservationController {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add v1alpha1 to scheme: %v", err)
+	}
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add hv1 to scheme: %v", err)
+	}
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	schedulerClient := reservations.NewSchedulerClient(schedulerURL + "/scheduler/nova/external")
+	config := FailoverConfig{}
+	config.ApplyDefaults()
+	return NewFailoverReservationController(k8sClient, nil, config, schedulerClient, nil)
+}
+
+// ============================================================================
+// Test: scheduling options sent to the scheduler
+// ============================================================================
+
+func TestFailoverSchedulerOptions(t *testing.T) {
+	vm := buildSchedulingTestVM("vm-1", "host-1")
+	vm.AvailabilityZone = "az1"
+	resolved := resolveVMSpecForScheduling(context.Background(), vm, false, nil)
+	reservation := buildSchedulingTestReservation("res-1", "host-2", nil)
+	reservation.Status.FailoverReservation = &v1alpha1.FailoverReservationStatus{Allocations: map[string]string{}}
+
+	tests := []struct {
+		name                 string
+		call                 func(c *FailoverReservationController, ctx context.Context)
+		wantReadOnly         bool
+		wantLockReservations bool
+	}{
+		{
+			// Read-only compatibility check — must not write scheduling state.
+			// Tenant-context filters must run so only hosts the VM can actually reach are returned.
+			name: "tryReuseExistingReservation",
+			call: func(c *FailoverReservationController, ctx context.Context) {
+				_ = c.tryReuseExistingReservation(ctx, vm, []v1alpha1.Reservation{reservation}, []string{"host-1", "host-2"}, resolved)
+			},
+			wantReadOnly:         true,
+			wantLockReservations: false,
+		},
+		{
+			// Validates whether a VM can land on the reservation host during evacuation.
+			// LockReservations ensures failover capacity is not unlocked for other VMs.
+			// Tenant-context filters (aggregate metadata, allowed projects, instance group) must run.
+			name: "validateVMViaSchedulerEvacuation",
+			call: func(c *FailoverReservationController, ctx context.Context) {
+				_, _ = c.validateVMViaSchedulerEvacuation(ctx, vm, "host-2") //nolint:errcheck
+			},
+			wantReadOnly:         true,
+			wantLockReservations: true,
+		},
+		{
+			// Finds a host for a new reservation — writes state, so not read-only.
+			// LockReservations ensures existing reservations are treated as unavailable.
+			// Tenant-context filters must run.
+			name: "scheduleAndBuildNewFailoverReservation",
+			call: func(c *FailoverReservationController, ctx context.Context) {
+				_, _ = c.scheduleAndBuildNewFailoverReservation(ctx, vm, []string{"host-1", "host-2"}, nil, nil, resolved) //nolint:errcheck
+			},
+			wantReadOnly:         false,
+			wantLockReservations: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedReq novaapi.ExternalSchedulerRequest
+			server := captureSchedulerRequest(t, "host-2", &capturedReq)
+			defer server.Close()
+
+			tt.call(buildMinimalController(t, server.URL), context.Background())
+
+			if capturedReq.Options.ReadOnly != tt.wantReadOnly {
+				t.Errorf("ReadOnly = %v, want %v", capturedReq.Options.ReadOnly, tt.wantReadOnly)
+			}
+			if capturedReq.Options.LockReservations != tt.wantLockReservations {
+				t.Errorf("LockReservations = %v, want %v", capturedReq.Options.LockReservations, tt.wantLockReservations)
+			}
+		})
 	}
 }
