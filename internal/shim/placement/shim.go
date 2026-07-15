@@ -23,7 +23,6 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/go-bits/httpext"
 	"k8s.io/apimachinery/pkg/api/resource"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -178,20 +177,8 @@ type resourceClassesConfig struct {
 	ConfigMapName string `json:"configMapName"`
 }
 
-// userAgentConfig identifies this cortex deployment to the services it talks
-// to. Rendered by helm from the release name and chart version.
-type userAgentConfig struct {
-	// Component is the service name, e.g. "cortex-nova".
-	Component string `json:"component,omitempty"`
-	// Version is the deployed version, e.g. "sha-70af93a8".
-	Version string `json:"version,omitempty"`
-}
-
 // config holds configuration for the placement shim.
 type config struct {
-	// UserAgent sent with all outgoing HTTP requests, identifying this cortex
-	// deployment to the services it talks to.
-	UserAgent userAgentConfig `json:"userAgent,omitempty"`
 	// SSO is an optional configuration for the certificates the http client
 	// should use when talking to the placement API over ingress with single-sign-on.
 	SSO *sso.SSOConfig `json:"sso,omitempty"`
@@ -545,14 +532,6 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 	if err := s.config.validate(); err != nil {
 		return err
 	}
-
-	// Identify this cortex deployment to the services it talks to via the
-	// User-Agent header, before any HTTP requests are made. The shared
-	// http.DefaultTransport is covered here; the shim's own placement
-	// transport is wrapped separately via sso.WrapUserAgent below.
-	httpext.WrapTransport(&http.DefaultTransport).
-		SetOverrideUserAgent(s.config.UserAgent.Component, s.config.UserAgent.Version)
-	sso.SetUserAgent(s.config.UserAgent.Component, s.config.UserAgent.Version)
 
 	// Parse the body log size limit from config (default 4Ki).
 	bodyLogQty := s.config.MaxBodyLogSize
