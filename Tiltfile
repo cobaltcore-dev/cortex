@@ -47,6 +47,12 @@ if len(env_set_overrides) > 0:
 else:
     print("=== No CORTEX_ environment variables found ===")
 
+region = os.getenv('OS_REGION_NAME')
+if region:
+    print("=== Deriving region-scoped URLs from OS_REGION_NAME=" + region + " ===")
+    env_set_overrides.append('openstack.url=https://identity-3.' + region + '.cloud.sap/v3')
+    env_set_overrides.append('prometheus.url=https://metrics-internal.scaleout.' + region + '.cloud.sap/')
+
 load('ext://helm_resource', 'helm_resource', 'helm_repo')
 helm_repo(
     'Prometheus Community Helm Repo',
