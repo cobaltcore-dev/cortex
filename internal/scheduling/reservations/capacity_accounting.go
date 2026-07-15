@@ -10,6 +10,74 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
 
+// HostHasCapacityForReservation reports whether hv has sufficient remaining capacity to
+// accommodate the full Spec.Resources slot of res.
+//
+// It uses the same accounting as the scheduler's filter_has_enough_capacity:
+//  1. Start from EffectiveCapacity (or Capacity when EffectiveCapacity is nil).
+//  2. Subtract hv.Status.Allocation (VMs already running on this host).
+//  3. For each other reservation in allReservations that is assigned to this host
+//     (via Spec.TargetHost or Status.Host), subtract its UnusedReservationCapacity.
+//  4. Check that the remainder is ≥ res.Spec.Resources for every resource.
+//
+// The target reservation itself (matched by name) is excluded from the blocking
+// calculation so we don't double-count it.
+// Returns false when the hypervisor has no capacity data.
+func HostHasCapacityForReservation(allReservations []v1alpha1.Reservation, hv hv1.Hypervisor, res *v1alpha1.Reservation) bool {
+	effCap := hv.Status.EffectiveCapacity
+	if effCap == nil {
+		effCap = hv.Status.Capacity
+	}
+	if effCap == nil {
+		return false
+	}
+
+	free := make(map[hv1.ResourceName]resource.Quantity, len(effCap))
+	for rn, qty := range effCap {
+		free[rn] = qty.DeepCopy()
+	}
+
+	for rn, allocated := range hv.Status.Allocation {
+		if f, ok := free[rn]; ok {
+			f.Sub(allocated)
+			free[rn] = f
+		}
+	}
+
+	for i := range allReservations {
+		other := &allReservations[i]
+		if other.Name == res.Name {
+			continue
+		}
+		// Only block resources from reservations that target or are confirmed on this host.
+		targetsThisHost := other.Spec.TargetHost == hv.Name || other.Status.Host == hv.Name
+		if !targetsThisHost {
+			continue
+		}
+		for rn, block := range UnusedReservationCapacity(other, false) {
+			if f, ok := free[rn]; ok {
+				f.Sub(block)
+				free[rn] = f
+			}
+		}
+	}
+
+	zero := resource.Quantity{}
+	for rn, required := range res.Spec.Resources {
+		remaining, ok := free[rn]
+		if !ok {
+			return false
+		}
+		if remaining.Cmp(zero) < 0 {
+			return false
+		}
+		if remaining.Cmp(required) < 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // UnusedReservationCapacity returns the resources a Reservation should block on its host(s).
 // This is the single source of truth used by both the capacity controller and
 // filter_has_enough_capacity to ensure consistent accounting.

@@ -181,6 +181,12 @@ type ReservationSpec struct {
 const (
 	// ReservationConditionReady indicates whether the reservation is active and ready.
 	ReservationConditionReady = "Ready"
+
+	// ReservationConditionVMMisplaced indicates that one or more VMs have been detected
+	// on a host other than TargetHost (e.g. after a live migration), but the new host
+	// lacks sufficient capacity to accept the full reservation slot. The VM is tracked in
+	// its new location but TargetHost is not updated until capacity becomes available.
+	ReservationConditionVMMisplaced = "VMMisplaced"
 )
 
 // CommittedResourceReservationStatus defines the status fields specific to committed resource reservations.
