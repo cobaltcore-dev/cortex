@@ -149,6 +149,12 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	// Execute the scheduling pipeline. Options not set: pod scheduling always records history.
 	request := pods.PodPipelineRequest{Nodes: nodes.Items, Pod: *pod}
 	result, err := pipeline.Run(request)
+	// Persist the result on the decision before upserting history so that
+	// CreateOrUpdateHistory can observe the target host and ordered hosts.
+	// On error the result is empty/meaningless, so only set it on success.
+	if err == nil {
+		decision.Status.Result = &result
+	}
 	if !request.Options.SkipHistory {
 		if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, nil, err); upsertErr != nil {
 			log.Error(upsertErr, "failed to create/update history")
@@ -158,7 +164,6 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		log.V(1).Error(err, "failed to run scheduler pipeline")
 		return errors.New("failed to run scheduler pipeline")
 	}
-	decision.Status.Result = &result
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
 
 	// Assign the first node returned by the pipeline using a Binding.
