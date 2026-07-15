@@ -12,6 +12,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -406,6 +407,9 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 		expectHistoryCreated bool
 		expectUpdatedStatus  bool
 		errorContains        string
+		// verifyHistory, if set, is invoked with the persisted History CRD so
+		// tests can assert the decision was written through correctly.
+		verifyHistory func(t *testing.T, history *v1alpha1.History)
 	}{
 		{
 			name: "successful processing with decision creation enabled",
@@ -453,6 +457,36 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 			expectResult:         true,
 			expectHistoryCreated: true,
 			expectUpdatedStatus:  true,
+			// Regression guard: the History CRD must reflect the actual
+			// decision (target host selected, ordered hosts, Ready=True).
+			// Previously the result was written to the decision *after* the
+			// history upsert, so history always recorded a failed decision
+			// with no target host.
+			verifyHistory: func(t *testing.T, history *v1alpha1.History) {
+				cur := history.Status.Current
+				if !cur.Successful {
+					t.Errorf("expected history current.successful=true, got false")
+				}
+				if cur.TargetHost == nil {
+					t.Errorf("expected history current.targetHost to be set, got nil")
+				}
+				if len(cur.OrderedHosts) == 0 {
+					t.Errorf("expected history current.orderedHosts to be populated, got empty")
+				}
+				if cur.Explanation == "" {
+					t.Errorf("expected history current.explanation to be set, got empty")
+				}
+				ready := meta.FindStatusCondition(history.Status.Conditions, v1alpha1.HistoryConditionReady)
+				if ready == nil {
+					t.Fatalf("expected Ready condition to be set")
+				}
+				if ready.Status != metav1.ConditionTrue {
+					t.Errorf("expected Ready condition status True, got %s", ready.Status)
+				}
+				if ready.Reason != v1alpha1.HistoryReasonSchedulingSucceeded {
+					t.Errorf("expected Ready reason %q, got %q", v1alpha1.HistoryReasonSchedulingSucceeded, ready.Reason)
+				}
+			},
 		},
 		{
 			name: "successful processing with decision creation disabled",
@@ -729,6 +763,9 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 						t.Fatal("timed out waiting for history CRD to be created")
 					}
 					time.Sleep(5 * time.Millisecond)
+				}
+				if tt.verifyHistory != nil {
+					tt.verifyHistory(t, &histories.Items[0])
 				}
 			} else {
 				var histories v1alpha1.HistoryList
