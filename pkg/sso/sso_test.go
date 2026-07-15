@@ -8,6 +8,73 @@ import (
 	"testing"
 )
 
+// captureTransport records the last request it saw and returns a canned response.
+type captureTransport struct{ last *http.Request }
+
+func (c *captureTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	c.last = req
+	return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody, Header: make(http.Header)}, nil
+}
+
+func TestSetUserAgent(t *testing.T) {
+	old := userAgent
+	defer func() { userAgent = old }()
+
+	tests := []struct {
+		name      string
+		component string
+		version   string
+		want      string
+	}{
+		{name: "ComponentAndVersion", component: "cortex-nova", version: "sha-abc", want: "cortex-nova/sha-abc"},
+		{name: "ComponentOnly", component: "cortex-nova", version: "", want: "cortex-nova"},
+		{name: "EmptyComponentKeepsDefault", component: "", version: "sha-abc", want: "cortex"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			userAgent = "cortex"
+			SetUserAgent(tt.component, tt.version)
+			if userAgent != tt.want {
+				t.Errorf("userAgent = %q, want %q", userAgent, tt.want)
+			}
+		})
+	}
+}
+
+func TestUserAgentTransport(t *testing.T) {
+	old := userAgent
+	userAgent = "cortex-nova/test"
+	defer func() { userAgent = old }()
+
+	tests := []struct {
+		name       string
+		incomingUA string
+	}{
+		{name: "NoExistingUA", incomingUA: ""},
+		{name: "OverridesExistingUA", incomingUA: "gophercloud/2.0"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			capture := &captureTransport{}
+			uat := &userAgentTransport{T: capture}
+			req, _ := http.NewRequest(http.MethodGet, "https://example.com", nil)
+			if tt.incomingUA != "" {
+				req.Header.Set("User-Agent", tt.incomingUA)
+			}
+			if _, err := uat.RoundTrip(req); err != nil {
+				t.Fatalf("RoundTrip() error = %v", err)
+			}
+			if got := capture.last.Header.Get("User-Agent"); got != "cortex-nova/test" {
+				t.Errorf("User-Agent = %q, want %q", got, "cortex-nova/test")
+			}
+			// The original request must not be mutated.
+			if got := req.Header.Get("User-Agent"); got != tt.incomingUA {
+				t.Errorf("original request User-Agent mutated: got %q, want %q", got, tt.incomingUA)
+			}
+		})
+	}
+}
+
 func TestNewHTTPClient(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -154,14 +221,19 @@ nyCru8FaKdd+A5MBMSTb8MX0LcnWvdQ=
 		t.Fatalf("NewHTTPClient() error = %v, want no error", err)
 	}
 
-	transport, ok := client.Transport.(*requestLogger)
+	transport, ok := client.Transport.(*userAgentTransport)
 	if !ok {
-		t.Fatalf("Expected transport to be of type *requestLogger, got %T", client.Transport)
+		t.Fatalf("Expected transport to be of type *userAgentTransport, got %T", client.Transport)
 	}
 
-	httpTransport, ok := transport.T.(*http.Transport)
+	logger, ok := transport.T.(*requestLogger)
 	if !ok {
-		t.Fatalf("Expected inner transport to be of type *http.Transport, got %T", transport.T)
+		t.Fatalf("Expected transport to be of type *requestLogger, got %T", transport.T)
+	}
+
+	httpTransport, ok := logger.T.(*http.Transport)
+	if !ok {
+		t.Fatalf("Expected inner transport to be of type *http.Transport, got %T", logger.T)
 	}
 
 	if httpTransport.TLSClientConfig == nil {
