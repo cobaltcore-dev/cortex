@@ -525,15 +525,31 @@ func (c *Reconciler) reconcileAZ(
 	}
 
 	groupInputs, hosts := buildSplitInputs(results, hvByName, blockedByReservations, az, logger)
-	freeResources, exclusiveResources, unassigned := SplitCapacity(groupInputs, hosts)
+	freeResources, exclusiveResources, unassigned, strandedByHost := SplitCapacity(groupInputs, hosts)
 
 	if unassigned[ResourceMemory] > 0 || unassigned[ResourceCores] > 0 {
+		groupNames := make([]string, 0, len(groupInputs))
+		hostToGroups := make(map[string][]string)
+		for _, g := range groupInputs {
+			groupNames = append(groupNames, g.Name)
+			for _, h := range g.CandidateHosts {
+				hostToGroups[h] = append(hostToGroups[h], g.Name)
+			}
+		}
 		logger.Info("fragmented capacity not assigned to any group",
 			"az", az,
 			"unassignedMemoryGiB", unassigned[ResourceMemory]/(1024*1024*1024),
 			"unassignedCores", unassigned[ResourceCores],
 			"candidateHosts", len(hosts),
-			"groups", len(groupInputs))
+			"groups", groupNames)
+		for host, res := range strandedByHost {
+			logger.V(1).Info("stranded host resources after split",
+				"az", az,
+				"host", host,
+				"strandedMemoryGiB", res[ResourceMemory]/(1024*1024*1024),
+				"strandedCores", res[ResourceCores],
+				"eligibleGroups", hostToGroups[host])
+		}
 	}
 
 	// Write one CRD per group. Skip groups with failed probes — their CRDs retain last good state.
