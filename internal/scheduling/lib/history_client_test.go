@@ -215,10 +215,10 @@ func TestHistoryClient_CreateOrUpdateHistory(t *testing.T) {
 		// assertions on the history list (archived entries only).
 		expectHistoryLen int
 		// assertions on the current decision.
-		expectTargetHost  *string
-		expectSuccessful  bool
-		expectCondStatus  metav1.ConditionStatus
-		expectReason      string
+		expectTargetHost *string
+		expectSuccessful bool
+		expectCondStatus metav1.ConditionStatus
+		expectReason     string
 		// expectMessageContains, if set, asserts the Ready condition message
 		// surfaces this substring (used to check the pipeline-error path tells
 		// the user why scheduling failed).
