@@ -253,3 +253,43 @@ func TestMarshalOpenStackMigration(t *testing.T) {
 		t.Error("expected JSON to contain 'status'")
 	}
 }
+
+func TestUnmarshalOpenStackServerGroup(t *testing.T) {
+	data := []byte(`{
+        "id": "grp-1",
+        "name": "aa-group",
+        "policy": "anti-affinity",
+        "rules": {"max_server_per_host": 3},
+        "members": ["vm-1", "vm-2"],
+        "project_id": "project-1",
+        "user_id": "user-1"
+    }`)
+
+	var g ServerGroup
+	if err := json.Unmarshal(data, &g); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if g.UUID != "grp-1" {
+		t.Errorf("expected UUID grp-1, got %q", g.UUID)
+	}
+	if g.Policy != "anti-affinity" {
+		t.Errorf("expected policy anti-affinity, got %q", g.Policy)
+	}
+	members := g.Members()
+	if len(members) != 2 || members[0] != "vm-1" || members[1] != "vm-2" {
+		t.Errorf("expected members [vm-1, vm-2], got %v", members)
+	}
+	rules := g.Rules()
+	if v, ok := rules["max_server_per_host"].(int); !ok || v != 3 {
+		t.Errorf("expected max_server_per_host=3 (int), got %v (type %T)", rules["max_server_per_host"], rules["max_server_per_host"])
+	}
+}
+
+func TestServerTableName(t *testing.T) {
+	if got := (Server{}).TableName(); got != "openstack_servers_v5" {
+		t.Errorf("expected openstack_servers_v5, got %q", got)
+	}
+	if got := (ServerGroup{}).TableName(); got != "openstack_server_groups" {
+		t.Errorf("expected openstack_server_groups, got %q", got)
+	}
+}

@@ -40,6 +40,8 @@ type NovaAPI interface {
 	GetAllMigrations(ctx context.Context) ([]Migration, error)
 	// Get all aggregates.
 	GetAllAggregates(ctx context.Context) ([]Aggregate, error)
+	// Get all server groups across projects.
+	GetAllServerGroups(ctx context.Context) ([]ServerGroup, error)
 }
 
 // API for OpenStack Nova.
@@ -81,7 +83,10 @@ func (api *novaAPI) Init(ctx context.Context) error {
 		// Since microversion 2.53, the hypervisor id and service id is a UUID.
 		// We need that to find placement resource providers for hypervisors.
 		// Since 2.61, the extra_specs are returned in the flavor details.
-		Microversion: "2.61",
+		// Since 2.64, os-server-groups responses include the flat `policy`
+		// field and the `rules` object (e.g. max_server_per_host) that the
+		// anti-affinity filter needs.
+		Microversion: "2.64",
 	}
 	// Initialize the OS type prober only for the servers datasource.
 	if api.conf.Type == v1alpha1.NovaDatasourceTypeServers {
@@ -491,6 +496,69 @@ func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 		}
 	}
 	return aggregates, nil
+}
+
+// GetAllServerGroups fetches all Nova server groups across all projects.
+// Uses the raw HTTP client (no gophercloud pagination helpers here) to keep
+// microversion handling consistent with the rest of this file.
+func (api *novaAPI) GetAllServerGroups(ctx context.Context) ([]ServerGroup, error) {
+	label := ServerGroup{}.TableName()
+	slog.Info("fetching nova data", "label", label)
+
+	if api.mon.RequestTimer != nil {
+		hist := api.mon.RequestTimer.WithLabelValues(label)
+		timer := prometheus.NewTimer(hist)
+		defer timer.ObserveDuration()
+	}
+
+	initialURL := api.sc.Endpoint + "os-server-groups?all_projects=true"
+	var nextURL = &initialURL
+	var allGroups []ServerGroup
+	seen := make(map[string]struct{})
+
+	for nextURL != nil {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, *nextURL, http.NoBody)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("X-Auth-Token", api.sc.Token())
+		req.Header.Set("X-OpenStack-Nova-API-Version", api.sc.Microversion)
+		resp, err := api.sc.HTTPClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+		var list struct {
+			ServerGroups []ServerGroup `json:"server_groups"`
+			Links        []struct {
+				Rel  string `json:"rel"`
+				Href string `json:"href"`
+			} `json:"server_groups_links"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+			return nil, err
+		}
+		for _, g := range list.ServerGroups {
+			if _, ok := seen[g.UUID]; ok {
+				slog.Warn("skipping duplicate server group", "id", g.UUID)
+				continue
+			}
+			seen[g.UUID] = struct{}{}
+			allGroups = append(allGroups, g)
+		}
+		nextURL = nil
+		for _, link := range list.Links {
+			if link.Rel == "next" {
+				nextURL = &link.Href
+				break
+			}
+		}
+	}
+	slog.Info("fetched", "label", label, "count", len(allGroups))
+	return allGroups, nil
 }
 
 // initOSTypeProber safely creates an OSTypeProber, returning nil on any error or panic.

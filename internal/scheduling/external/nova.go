@@ -22,6 +22,8 @@ type NovaReaderInterface interface {
 	// GetDeletedServerByID returns a deleted server by its ID from the deleted_servers table.
 	// Returns nil, nil if the server is not found in the deleted_servers table.
 	GetDeletedServerByID(ctx context.Context, serverID string) (*nova.DeletedServer, error)
+	// GetAllServerGroups returns all Nova server groups.
+	GetAllServerGroups(ctx context.Context) ([]nova.ServerGroup, error)
 }
 
 // NovaReader provides read access to Nova data stored in the database.
@@ -135,4 +137,14 @@ func (r *NovaReader) GetDeletedServerByID(ctx context.Context, serverID string) 
 		return nil, nil
 	}
 	return &servers[0], nil
+}
+
+// GetAllServerGroups returns all Nova server groups from the database.
+func (r *NovaReader) GetAllServerGroups(ctx context.Context) ([]nova.ServerGroup, error) {
+	var groups []nova.ServerGroup
+	query := "SELECT * FROM " + nova.ServerGroup{}.TableName()
+	if err := r.Select(ctx, &groups, query); err != nil {
+		return nil, fmt.Errorf("failed to query server groups: %w", err)
+	}
+	return groups, nil
 }

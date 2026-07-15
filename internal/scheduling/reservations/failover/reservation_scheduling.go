@@ -93,6 +93,10 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 			"_nova_check_type":       string(intent),
 			api.HintKeyResourceGroup: resSpec.ResourceGroup(vm.FlavorName),
 		},
+		// Forward the VM's instance group so the anti-affinity filter can
+		// account for other members of the group (including those with an
+		// existing failover allocation on a candidate host).
+		InstanceGroup: vm.InstanceGroup,
 	}
 
 	logger.V(1).Info("scheduling failover reservation",
@@ -226,6 +230,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		Pipeline:         inferFailoverPipeline(flavorExtraSpecs),
 		AvailabilityZone: vm.AvailabilityZone,
 		SchedulerHints:   map[string]any{"_nova_check_type": string(api.EvacuateIntent)},
+		InstanceGroup:    vm.InstanceGroup,
 	}
 
 	logger.V(1).Info("validating VM via scheduler evacuation",

@@ -199,7 +199,7 @@ func (c *FailoverReservationController) validateReservation(ctx context.Context,
 		vmCtx := reservations.WithRequestID(ctx, vmUUID)
 		vmLogger := LoggerFromContext(vmCtx).WithValues("vmUUID", vmUUID, "reservationName", res.Name)
 
-		vm, err := c.VMSource.GetVM(vmCtx, vmUUID)
+		vm, err := c.VMSource.GetVM(vmCtx, vmUUID, true)
 		if err != nil {
 			vmLogger.Error(err, "transient error getting VM for validation")
 			return false, fmt.Errorf("failed to get VM %s: %w", vmUUID, err)

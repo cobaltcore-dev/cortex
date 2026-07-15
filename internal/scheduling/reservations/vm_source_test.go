@@ -108,6 +108,150 @@ func TestDBVMSource_ListVMs(t *testing.T) {
 	}
 }
 
+func TestDBVMSource_ListVMs_InstanceGroup(t *testing.T) {
+	tests := []struct {
+		name           string
+		mock           *mockNovaReader
+		wantHasGroup   bool
+		wantGroupUUID  string
+		wantGroupName  string
+		wantPolicy     string
+		wantMembers    []string
+		wantMaxPerHost int
+	}{
+		{
+			name: "server appears in a group's members list",
+			mock: &mockNovaReader{
+				getAllServersFunc: func(ctx context.Context) ([]nova.Server, error) {
+					return []nova.Server{
+						{
+							ID:               "vm-1",
+							FlavorName:       "m1.large",
+							OSEXTSRVATTRHost: "host1",
+							TenantID:         "project-1",
+						},
+					}, nil
+				},
+				getAllFlavorsFunc: func(ctx context.Context) ([]nova.Flavor, error) {
+					return []nova.Flavor{{Name: "m1.large", VCPUs: 4, RAM: 8192}}, nil
+				},
+				getAllServerGroupsFunc: func(ctx context.Context) ([]nova.ServerGroup, error) {
+					return []nova.ServerGroup{
+						{
+							UUID:        "grp-1",
+							Name:        "aa-group",
+							Policy:      "anti-affinity",
+							RulesJSON:   `{"max_server_per_host":3}`,
+							MembersJSON: `["vm-1","vm-2"]`,
+							ProjectID:   "project-1",
+						},
+					}, nil
+				},
+			},
+			wantHasGroup:   true,
+			wantGroupUUID:  "grp-1",
+			wantGroupName:  "aa-group",
+			wantPolicy:     "anti-affinity",
+			wantMembers:    []string{"vm-1", "vm-2"},
+			wantMaxPerHost: 3,
+		},
+		{
+			name: "no server groups at all",
+			mock: &mockNovaReader{
+				getAllServersFunc: func(ctx context.Context) ([]nova.Server, error) {
+					return []nova.Server{
+						{
+							ID:               "vm-1",
+							FlavorName:       "m1.large",
+							OSEXTSRVATTRHost: "host1",
+						},
+					}, nil
+				},
+				getAllFlavorsFunc: func(ctx context.Context) ([]nova.Flavor, error) {
+					return []nova.Flavor{{Name: "m1.large", VCPUs: 4, RAM: 8192}}, nil
+				},
+				getAllServerGroupsFunc: func(ctx context.Context) ([]nova.ServerGroup, error) {
+					return []nova.ServerGroup{}, nil
+				},
+			},
+			wantHasGroup: false,
+		},
+		{
+			name: "server not listed as a member of any known group",
+			mock: &mockNovaReader{
+				getAllServersFunc: func(ctx context.Context) ([]nova.Server, error) {
+					return []nova.Server{
+						{
+							ID:               "vm-1",
+							FlavorName:       "m1.large",
+							OSEXTSRVATTRHost: "host1",
+						},
+					}, nil
+				},
+				getAllFlavorsFunc: func(ctx context.Context) ([]nova.Flavor, error) {
+					return []nova.Flavor{{Name: "m1.large", VCPUs: 4, RAM: 8192}}, nil
+				},
+				getAllServerGroupsFunc: func(ctx context.Context) ([]nova.ServerGroup, error) {
+					return []nova.ServerGroup{
+						{
+							UUID:        "grp-other",
+							Policy:      "anti-affinity",
+							MembersJSON: `["vm-other"]`,
+						},
+					}, nil
+				},
+			},
+			wantHasGroup: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			source := &DBVMSource{NovaReader: tt.mock}
+			vms, err := source.ListVMs(t.Context())
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(vms) != 1 {
+				t.Fatalf("expected 1 VM, got %d", len(vms))
+			}
+			got := vms[0].InstanceGroup
+			if tt.wantHasGroup {
+				if got == nil {
+					t.Fatalf("expected InstanceGroup to be populated, got nil")
+				}
+				if got.Data.UUID != tt.wantGroupUUID {
+					t.Errorf("expected group UUID %q, got %q", tt.wantGroupUUID, got.Data.UUID)
+				}
+				if got.Data.Name != tt.wantGroupName {
+					t.Errorf("expected group name %q, got %q", tt.wantGroupName, got.Data.Name)
+				}
+				if got.Data.Policy != tt.wantPolicy {
+					t.Errorf("expected policy %q, got %q", tt.wantPolicy, got.Data.Policy)
+				}
+				if len(got.Data.Members) != len(tt.wantMembers) {
+					t.Errorf("expected %d members, got %d", len(tt.wantMembers), len(got.Data.Members))
+				}
+				rules := got.Data.Rules
+				maxAny, ok := rules["max_server_per_host"]
+				if !ok {
+					t.Fatalf("expected max_server_per_host in rules, got %v", rules)
+				}
+				maxInt, ok := maxAny.(int)
+				if !ok {
+					t.Fatalf("expected max_server_per_host to be int (for the filter's type assert), got %T", maxAny)
+				}
+				if maxInt != tt.wantMaxPerHost {
+					t.Errorf("expected max_server_per_host %d, got %d", tt.wantMaxPerHost, maxInt)
+				}
+			} else {
+				if got != nil {
+					t.Errorf("expected InstanceGroup to be nil, got %+v", got)
+				}
+			}
+		})
+	}
+}
+
 func TestDBVMSource_GetVM(t *testing.T) {
 	dbError := errors.New("connection refused: database unavailable")
 
@@ -189,7 +333,7 @@ func TestDBVMSource_GetVM(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			source := NewDBVMSource(tt.mock)
-			vm, err := source.GetVM(context.Background(), tt.vmID)
+			vm, err := source.GetVM(context.Background(), tt.vmID, false)
 
 			if tt.wantErr {
 				if err == nil {
@@ -418,10 +562,11 @@ func TestFilterVMsOnKnownHypervisors(t *testing.T) {
 
 // mockNovaReader implements NovaReaderInterface for testing.
 type mockNovaReader struct {
-	getAllServersFunc   func(ctx context.Context) ([]nova.Server, error)
-	getAllFlavorsFunc   func(ctx context.Context) ([]nova.Flavor, error)
-	getServerByIDFunc   func(ctx context.Context, serverID string) (*nova.Server, error)
-	getFlavorByNameFunc func(ctx context.Context, flavorName string) (*nova.Flavor, error)
+	getAllServersFunc      func(ctx context.Context) ([]nova.Server, error)
+	getAllFlavorsFunc      func(ctx context.Context) ([]nova.Flavor, error)
+	getServerByIDFunc      func(ctx context.Context, serverID string) (*nova.Server, error)
+	getFlavorByNameFunc    func(ctx context.Context, flavorName string) (*nova.Flavor, error)
+	getAllServerGroupsFunc func(ctx context.Context) ([]nova.ServerGroup, error)
 }
 
 func (m *mockNovaReader) GetAllServers(ctx context.Context) ([]nova.Server, error) {
@@ -457,5 +602,12 @@ func (m *mockNovaReader) GetDeletedServerByID(_ context.Context, _ string) (*nov
 }
 
 func (m *mockNovaReader) GetServersByProject(_ context.Context, _ string) ([]nova.Server, error) {
+	return nil, nil
+}
+
+func (m *mockNovaReader) GetAllServerGroups(ctx context.Context) ([]nova.ServerGroup, error) {
+	if m.getAllServerGroupsFunc != nil {
+		return m.getAllServerGroupsFunc(ctx)
+	}
 	return nil, nil
 }

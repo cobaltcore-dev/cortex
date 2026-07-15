@@ -893,7 +893,7 @@ func (m *mockVMSource) ListVMsOnHypervisors(_ context.Context, _ *hv1.Hypervisor
 	return m.vms, m.err
 }
 
-func (m *mockVMSource) GetVM(_ context.Context, _ string) (*reservations.VM, error) {
+func (m *mockVMSource) GetVM(_ context.Context, _ string, _ bool) (*reservations.VM, error) {
 	return nil, nil
 }
 

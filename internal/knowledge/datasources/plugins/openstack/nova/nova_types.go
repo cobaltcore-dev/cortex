@@ -238,10 +238,133 @@ func (s *Server) MarshalJSON() ([]byte, error) {
 }
 
 // Table in which the openstack model is stored.
-func (Server) TableName() string { return "openstack_servers_v4" }
+func (Server) TableName() string { return "openstack_servers_v5" }
 
 // Index for the openstack model.
 func (Server) Indexes() map[string][]string { return nil }
+
+// OpenStack server-group model as returned by the Nova API under
+// /os-server-groups. See:
+// https://docs.openstack.org/api-ref/compute/#server-groups-os-server-groups
+//
+// Rules and Members are stored as JSON-encoded strings so that gorp can
+// persist them without a custom scanner. Use the helper methods to decode.
+type ServerGroup struct {
+	// UUID is the unique identifier of the server group.
+	UUID string `json:"id" db:"uuid,primarykey"`
+	// Name is the human-readable name of the group.
+	Name string `json:"name" db:"name"`
+	// Policy is the flat policy field (microversion 2.64+), e.g.
+	// "anti-affinity", "affinity", "soft-anti-affinity", "soft-affinity".
+	Policy string `json:"-" db:"policy"`
+	// RulesJSON is the JSON-encoded rules object (e.g. {"max_server_per_host": 3}).
+	RulesJSON string `json:"-" db:"rules_json"`
+	// MembersJSON is the JSON-encoded list of member VM UUIDs.
+	MembersJSON string `json:"-" db:"members_json"`
+	// ProjectID owns the group.
+	ProjectID string `json:"project_id" db:"project_id"`
+	// UserID that created the group.
+	UserID string `json:"user_id" db:"user_id"`
+}
+
+// UnmarshalJSON parses a Nova os-server-groups entry, encoding the nested
+// rules and members fields into JSON strings for storage.
+func (g *ServerGroup) UnmarshalJSON(data []byte) error {
+	type Alias ServerGroup
+	aux := &struct {
+		Policy  *string        `json:"policy,omitempty"`
+		Rules   map[string]any `json:"rules,omitempty"`
+		Members []string       `json:"members,omitempty"`
+		*Alias
+	}{
+		Alias: (*Alias)(g),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if aux.Policy != nil {
+		g.Policy = *aux.Policy
+	}
+	if aux.Rules == nil {
+		aux.Rules = map[string]any{}
+	}
+	rb, err := json.Marshal(aux.Rules)
+	if err != nil {
+		return err
+	}
+	g.RulesJSON = string(rb)
+	if aux.Members == nil {
+		aux.Members = []string{}
+	}
+	mb, err := json.Marshal(aux.Members)
+	if err != nil {
+		return err
+	}
+	g.MembersJSON = string(mb)
+	return nil
+}
+
+// MarshalJSON emits a Nova-compatible os-server-groups entry from stored fields.
+func (g *ServerGroup) MarshalJSON() ([]byte, error) {
+	type Alias ServerGroup
+	var rules map[string]any
+	if g.RulesJSON != "" {
+		_ = json.Unmarshal([]byte(g.RulesJSON), &rules)
+	}
+	var members []string
+	if g.MembersJSON != "" {
+		_ = json.Unmarshal([]byte(g.MembersJSON), &members)
+	}
+	aux := &struct {
+		Policy  string         `json:"policy"`
+		Rules   map[string]any `json:"rules,omitempty"`
+		Members []string       `json:"members"`
+		*Alias
+	}{
+		Alias:   (*Alias)(g),
+		Policy:  g.Policy,
+		Rules:   rules,
+		Members: members,
+	}
+	return json.Marshal(aux)
+}
+
+// Members returns the decoded list of member VM UUIDs.
+func (g ServerGroup) Members() []string {
+	if g.MembersJSON == "" {
+		return nil
+	}
+	var members []string
+	if err := json.Unmarshal([]byte(g.MembersJSON), &members); err != nil {
+		return nil
+	}
+	return members
+}
+
+// Rules returns the decoded rules map. Numeric values (e.g.
+// max_server_per_host) are converted from JSON's float64 default back to int
+// so consumers can type-assert them as int.
+func (g ServerGroup) Rules() map[string]any {
+	if g.RulesJSON == "" {
+		return nil
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(g.RulesJSON), &raw); err != nil {
+		return nil
+	}
+	for k, v := range raw {
+		if f, ok := v.(float64); ok {
+			raw[k] = int(f)
+		}
+	}
+	return raw
+}
+
+// Table in which the openstack server-group model is stored.
+func (ServerGroup) TableName() string { return "openstack_server_groups" }
+
+// Index for the openstack server-group model.
+func (ServerGroup) Indexes() map[string][]string { return nil }
 
 // OpenStack hypervisor model as returned by the Nova API under /os-hypervisors/detail.
 // See: https://docs.openstack.org/api-ref/compute/#list-hypervisors-details

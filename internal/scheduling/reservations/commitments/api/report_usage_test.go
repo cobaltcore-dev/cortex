@@ -596,8 +596,10 @@ func (m *mockVMSource) ListVMs(_ context.Context) ([]reservations.VM, error) { r
 func (m *mockVMSource) ListVMsOnHypervisors(_ context.Context, _ *hv1.HypervisorList, _ bool) ([]reservations.VM, error) {
 	return nil, nil
 }
-func (m *mockVMSource) GetVM(_ context.Context, _ string) (*reservations.VM, error) { return nil, nil }
-func (m *mockVMSource) IsServerActive(_ context.Context, _ string) (bool, error)    { return false, nil }
+func (m *mockVMSource) GetVM(_ context.Context, _ string, _ bool) (*reservations.VM, error) {
+	return nil, nil
+}
+func (m *mockVMSource) IsServerActive(_ context.Context, _ string) (bool, error) { return false, nil }
 func (m *mockVMSource) GetDeletedVMInfo(_ context.Context, _ string) (*reservations.DeletedVMInfo, error) {
 	return nil, nil
 }

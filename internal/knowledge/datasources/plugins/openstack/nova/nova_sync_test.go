@@ -55,6 +55,10 @@ func (m *mockNovaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error)
 	return []Aggregate{{Name: "aggregate1"}}, nil
 }
 
+func (m *mockNovaAPI) GetAllServerGroups(ctx context.Context) ([]ServerGroup, error) {
+	return []ServerGroup{{UUID: "grp-1", Name: "grp-1"}}, nil
+}
+
 func TestNovaSyncer_Init(t *testing.T) {
 	dbEnv := testlibDB.SetupDBEnv(t)
 	testDB := db.DB{DbMap: dbEnv.DbMap}

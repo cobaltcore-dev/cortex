@@ -595,7 +595,7 @@ func (m *mockVMSource) ListVMs(ctx context.Context) ([]reservations.VM, error) {
 	return nil, nil
 }
 
-func (m *mockVMSource) GetVM(ctx context.Context, vmUUID string) (*reservations.VM, error) {
+func (m *mockVMSource) GetVM(ctx context.Context, vmUUID string, _ bool) (*reservations.VM, error) {
 	if m.getVM != nil {
 		return m.getVM(ctx, vmUUID)
 	}

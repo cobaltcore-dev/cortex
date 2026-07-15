@@ -218,6 +218,30 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: Datasource
 metadata:
+  name: nova-server-groups
+spec:
+  schedulingDomain: nova
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: {{ .Release.Namespace }}
+  {{- if .Values.openstack.sso.enabled }}
+  ssoSecretRef:
+    name: cortex-nova-openstack-sso
+    namespace: {{ .Release.Namespace }}
+  {{- end }}
+  type: openstack
+  openstack:
+    syncInterval: 600s
+    secretRef:
+      name: cortex-nova-openstack-keystone
+      namespace: {{ .Release.Namespace }}
+    type: nova
+    nova:
+      type: serverGroups
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: Datasource
+metadata:
   name: placement-resource-providers
 spec:
   schedulingDomain: nova

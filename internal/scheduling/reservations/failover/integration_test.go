@@ -50,6 +50,18 @@ type IntegrationTestCase struct {
 	VerifyVMReservation []string                     // VM UUIDs to verify have reservations
 	VMsToRemove         map[string]map[string]string // reservationName -> vmUUID -> expectedHost (verify VM removed from reservation)
 
+	// VerifyReservationHost asserts that the failover reservation for a given
+	// vmUUID has Status.Host == expected.
+	VerifyReservationHost map[string]string
+	// VerifyReservationHostNotIn asserts that the failover reservation for a
+	// given vmUUID has Status.Host outside the forbidden list.
+	VerifyReservationHostNotIn map[string][]string
+	// SkipRequiredReservationCheck disables the per-VM sanity check that
+	// asserts every VM matching FlavorRequirements ends up with the required
+	// number of reservations. Useful for scenarios where anti-affinity or
+	// other constraints intentionally leave some VMs uncovered.
+	SkipRequiredReservationCheck bool
+
 	// Test behavior options
 	ReconcileCount        int  // Number of reconciles to run (default: 1)
 	SkipFailureSimulation bool // Set to true to skip failure simulation tests (default: run simulation)
@@ -451,6 +463,133 @@ func TestIntegration(t *testing.T) {
 			VerifyVMReservation: []string{"vm-hana-exclusive-1"},
 			UseTraitsFilter:     true,
 		},
+
+		// =====================================================================
+		// Anti-affinity + failover reservation tests
+		// =====================================================================
+		{
+			Name: "Anti-affinity: reservation lands on host free of peers",
+			Hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", 8, 16, 4, 8, []hv1.Instance{{ID: "vm-1", Name: "vm-1", Active: true}}, nil),
+				newHypervisor("host2", 8, 16, 4, 8, []hv1.Instance{{ID: "vm-2", Name: "vm-2", Active: true}}, nil),
+				newHypervisor("host3", 8, 16, 0, 0, nil, nil),
+				newHypervisor("host4", 8, 16, 0, 0, nil, nil),
+			},
+			VMs: []reservations.VM{
+				newVMWithInstanceGroup("vm-1", "m1.large", "project-A", "host1", 8192, 4,
+					"grp-A", "anti-affinity", []string{"vm-1", "vm-2"}),
+				newVM("vm-2", "m1.large", "project-A", "host2", 8192, 4),
+			},
+			FlavorRequirements:  map[string]int{"m1.large": 1},
+			ExpectedMinRes:      1,
+			ExpectedMaxRes:      1,
+			VerifyVMReservation: []string{"vm-1"},
+			VerifyReservationHostNotIn: map[string][]string{
+				"vm-1": {"host2"}, // host2 has the anti-affinity peer
+			},
+		},
+		{
+			Name: "Anti-affinity: insufficient - running peer on only free host",
+			Hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", 8, 16, 4, 8, []hv1.Instance{{ID: "vm-1", Name: "vm-1", Active: true}}, nil),
+				newHypervisor("host2", 8, 16, 4, 8, []hv1.Instance{{ID: "vm-2", Name: "vm-2", Active: true}}, nil),
+			},
+			VMs: []reservations.VM{
+				newVMWithInstanceGroup("vm-1", "m1.large", "project-A", "host1", 8192, 4,
+					"grp-A", "anti-affinity", []string{"vm-1", "vm-2"}),
+				newVMWithInstanceGroup("vm-2", "m1.large", "project-A", "host2", 8192, 4,
+					"grp-A", "anti-affinity", []string{"vm-1", "vm-2"}),
+			},
+			FlavorRequirements:           map[string]int{"m1.large": 1},
+			ExpectedMinRes:               0,
+			ExpectedMaxRes:               0,
+			SkipRequiredReservationCheck: true, // both VMs are blocked by anti-affinity
+			SkipFailureSimulation:        true,
+		},
+		{
+			// Deterministic variant: vm-2 already has a failover reservation
+			// on host1, which is vm-1's own hypervisor. When vm-1 reconciles,
+			// the reuse path is skipped (host1 fails constraint 1 for vm-1)
+			// and new placement runs. Anti-affinity blocks host2 (running
+			// peer vm-2), leaving host3 as the only viable choice.
+			Name: "Anti-affinity: correctly spread around running peer",
+			Hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", 8, 16, 4, 8, []hv1.Instance{{ID: "vm-1", Name: "vm-1", Active: true}}, nil),
+				newHypervisor("host2", 8, 16, 4, 8, []hv1.Instance{{ID: "vm-2", Name: "vm-2", Active: true}}, nil),
+				newHypervisor("host3", 8, 16, 0, 0, nil, nil),
+			},
+			Reservations: []*v1alpha1.Reservation{
+				newReservation("res-vm-2", "host1", 8192, 4, map[string]string{"vm-2": "host2"}),
+			},
+			VMs: []reservations.VM{
+				newVMWithInstanceGroup("vm-1", "m1.large", "project-A", "host1", 8192, 4,
+					"grp-A", "anti-affinity", []string{"vm-1", "vm-2"}),
+				newVM("vm-2", "m1.large", "project-A", "host2", 8192, 4),
+			},
+			FlavorRequirements:  map[string]int{"m1.large": 1},
+			ExpectedMinRes:      2, // res-vm-2 (pre-seeded) + new one for vm-1 on host3
+			ExpectedMaxRes:      2,
+			VerifyVMReservation: []string{"vm-1"},
+			VerifyReservationHost: map[string]string{
+				"vm-1": "host3", // only viable choice after anti-affinity filtering
+			},
+			SkipFailureSimulation: true,
+		},
+		{
+			// vm-2 already has a failover reservation on host3, sized too
+			// small for vm-1 (so the reuse path cannot fold vm-1 into it).
+			// vm-1's new-placement request is then blocked by anti-affinity
+			// on host2 (running peer) and host3 (peer's failover slot).
+			// host1 is vm-1's own hypervisor, so nothing remains and vm-1
+			// gets no reservation.
+			Name: "Anti-affinity: insufficient - peer's failover slot on only free host",
+			Hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", 8, 16, 4, 8, []hv1.Instance{{ID: "vm-1", Name: "vm-1", Active: true}}, nil),
+				newHypervisor("host2", 8, 16, 4, 8, []hv1.Instance{{ID: "vm-2", Name: "vm-2", Active: true}}, nil),
+				newHypervisor("host3", 8, 16, 0, 0, nil, nil),
+			},
+			Reservations: []*v1alpha1.Reservation{
+				// under-sized so vm-1 (needs 8Gi) cannot reuse it
+				newReservation("res-vm-2", "host3", 4096, 2, map[string]string{"vm-2": "host2"}),
+			},
+			VMs: []reservations.VM{
+				newVMWithInstanceGroup("vm-1", "m1.large", "project-A", "host1", 8192, 4,
+					"grp-A", "anti-affinity", []string{"vm-1", "vm-2"}),
+				newVM("vm-2", "m1.large", "project-A", "host2", 8192, 4),
+			},
+			FlavorRequirements:           map[string]int{"m1.large": 1},
+			ExpectedMinRes:               1, // only the pre-seeded res-vm-2 remains
+			ExpectedMaxRes:               1,
+			SkipRequiredReservationCheck: true, // vm-1 intentionally left uncovered
+			SkipFailureSimulation:        true,
+		},
+		{
+			// Two peers both need a failover slot. The controller places vm-1
+			// first (on host3, the only host free of peers). Then vm-2 is
+			// processed: reuse of vm-1's slot on host3 is blocked because
+			// anti-affinity is enforced on the reuse path as well, and new
+			// placement is blocked because host1 runs vm-1 (peer) and host3
+			// carries vm-1's failover slot; host2 is vm-2's own hypervisor.
+			// vm-2 therefore gets no reservation.
+			Name: "Anti-affinity: two peers reconciled - only first fits",
+			Hypervisors: []*hv1.Hypervisor{
+				newHypervisor("host1", 8, 16, 4, 8, []hv1.Instance{{ID: "vm-1", Name: "vm-1", Active: true}}, nil),
+				newHypervisor("host2", 8, 16, 4, 8, []hv1.Instance{{ID: "vm-2", Name: "vm-2", Active: true}}, nil),
+				newHypervisor("host3", 8, 16, 0, 0, nil, nil),
+			},
+			VMs: []reservations.VM{
+				newVMWithInstanceGroup("vm-1", "m1.large", "project-A", "host1", 8192, 4,
+					"grp-A", "anti-affinity", []string{"vm-1", "vm-2"}),
+				newVMWithInstanceGroup("vm-2", "m1.large", "project-A", "host2", 8192, 4,
+					"grp-A", "anti-affinity", []string{"vm-1", "vm-2"}),
+			},
+			FlavorRequirements:           map[string]int{"m1.large": 1},
+			ExpectedMinRes:               1,
+			ExpectedMaxRes:               1,
+			VerifyVMReservation:          []string{"vm-1"},
+			SkipRequiredReservationCheck: true, // vm-2 intentionally left uncovered
+			SkipFailureSimulation:        true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -499,7 +638,7 @@ func runIntegrationTest(t *testing.T, tc IntegrationTestCase) {
 	}
 
 	// Verify reservation count
-	if tc.ExpectedMaxRes > 0 {
+	if tc.ExpectedMaxRes > 0 || tc.SkipRequiredReservationCheck {
 		env.VerifyReservationCountInRange(tc.ExpectedMinRes, tc.ExpectedMaxRes)
 	} else if tc.ExpectedMinRes > 0 {
 		reservations := env.ListReservations()
@@ -518,8 +657,18 @@ func runIntegrationTest(t *testing.T, tc IntegrationTestCase) {
 		}
 	}
 
+	// Verify reservation host targets
+	for vmUUID, expected := range tc.VerifyReservationHost {
+		env.VerifyReservationHost(vmUUID, expected)
+	}
+	for vmUUID, forbidden := range tc.VerifyReservationHostNotIn {
+		env.VerifyReservationHostNotIn(vmUUID, forbidden)
+	}
+
 	// Verify all VMs have required reservations
-	env.VerifyVMsHaveRequiredReservations(tc.FlavorRequirements)
+	if !tc.SkipRequiredReservationCheck {
+		env.VerifyVMsHaveRequiredReservations(tc.FlavorRequirements)
+	}
 
 	// Run failure simulation unless skipped
 	if !tc.SkipFailureSimulation {
@@ -781,6 +930,53 @@ func (env *IntegrationTestEnv) VerifyVMHasFailoverReservation(vmUUID, vmCurrentH
 		}
 	}
 	env.T.Errorf("No failover reservation found for VM %s", vmUUID)
+}
+
+// VerifyReservationHost asserts that the failover reservation for vmUUID
+// has Status.Host equal to the expected host.
+func (env *IntegrationTestEnv) VerifyReservationHost(vmUUID, expectedHost string) {
+	env.T.Helper()
+	for _, r := range env.ListReservations() {
+		if r.Spec.Type != v1alpha1.ReservationTypeFailover {
+			continue
+		}
+		if r.Status.FailoverReservation == nil {
+			continue
+		}
+		if _, ok := r.Status.FailoverReservation.Allocations[vmUUID]; ok {
+			if r.Status.Host != expectedHost {
+				env.T.Errorf("VM %s: expected reservation on host %q, got %q (reservation %s)",
+					vmUUID, expectedHost, r.Status.Host, r.Name)
+			}
+			return
+		}
+	}
+	env.T.Errorf("VM %s: no failover reservation found", vmUUID)
+}
+
+// VerifyReservationHostNotIn asserts the failover reservation for vmUUID has
+// Status.Host not in the forbidden list.
+func (env *IntegrationTestEnv) VerifyReservationHostNotIn(vmUUID string, forbiddenHosts []string) {
+	env.T.Helper()
+	for _, r := range env.ListReservations() {
+		if r.Spec.Type != v1alpha1.ReservationTypeFailover {
+			continue
+		}
+		if r.Status.FailoverReservation == nil {
+			continue
+		}
+		if _, ok := r.Status.FailoverReservation.Allocations[vmUUID]; ok {
+			for _, h := range forbiddenHosts {
+				if r.Status.Host == h {
+					env.T.Errorf("VM %s: reservation on forbidden host %q (reservation %s)",
+						vmUUID, h, r.Name)
+					return
+				}
+			}
+			return
+		}
+	}
+	env.T.Errorf("VM %s: no failover reservation found", vmUUID)
 }
 
 // VerifyVMRemovedFromReservation checks that a specific VM with a specific host allocation
@@ -1086,7 +1282,7 @@ func (s *MockVMSource) ListVMsOnHypervisors(_ context.Context, _ *hv1.Hypervisor
 
 // GetVM returns a specific VM by UUID.
 // Returns nil, nil if the VM is not found.
-func (s *MockVMSource) GetVM(_ context.Context, vmUUID string) (*reservations.VM, error) {
+func (s *MockVMSource) GetVM(_ context.Context, vmUUID string, _ bool) (*reservations.VM, error) {
 	for i := range s.VMs {
 		if s.VMs[i].UUID == vmUUID {
 			return &s.VMs[i], nil
@@ -1150,7 +1346,15 @@ func newIntegrationTestEnv(t *testing.T, vms []reservations.VM, hypervisors []*h
 		},
 		Monitor: getSharedMonitor(),
 	}
-	// Register all pipelines needed for testing
+	// Register all pipelines needed for testing:
+	//   - "test-filter-pipeline" is used by the raw-HTTP failure-simulation
+	//     helper (VerifyEvacuationForAllFailureCombinations) which bypasses
+	//     the failover controller.
+	//   - "kvm-general-purpose-load-balancing" and "kvm-hana-bin-packing"
+	//     are the two pipelines that inferFailoverPipeline() dispatches to
+	//     for non-HANA and HANA VMs respectively. Every scheduler call made
+	//     by the failover reconciler (new placement, reuse, evacuate-validate)
+	//     lands on one of these two.
 	pipelines := []v1alpha1.Pipeline{
 		{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1174,40 +1378,30 @@ func newIntegrationTestEnv(t *testing.T, vms []reservations.VM, hypervisors []*h
 			Spec: v1alpha1.PipelineSpec{
 				Type: v1alpha1.PipelineTypeFilterWeigher,
 				Filters: []v1alpha1.FilterSpec{
-					{Name: "filter_has_requested_traits"},
-					{Name: "filter_correct_az"},
-				},
-				Weighers: []v1alpha1.WeigherSpec{},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: PipelineNewFailoverReservation,
-			},
-			Spec: v1alpha1.PipelineSpec{
-				Type: v1alpha1.PipelineTypeFilterWeigher,
-				Filters: []v1alpha1.FilterSpec{
 					{Name: "filter_has_enough_capacity"},
 					{Name: "filter_has_requested_traits"},
 					{Name: "filter_correct_az"},
+					antiAffinityFilterSpec(),
 				},
 				Weighers: []v1alpha1.WeigherSpec{
 					{Name: "kvm_failover_evacuation"},
 				},
 			},
 		},
-	}
-	pipelines = append(pipelines, v1alpha1.Pipeline{
-		ObjectMeta: metav1.ObjectMeta{Name: "kvm-hana-bin-packing"},
-		Spec: v1alpha1.PipelineSpec{
-			Type: v1alpha1.PipelineTypeFilterWeigher,
-			Filters: []v1alpha1.FilterSpec{
-				{Name: "filter_has_enough_capacity"},
-				{Name: "filter_correct_az"},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "kvm-hana-bin-packing"},
+			Spec: v1alpha1.PipelineSpec{
+				Type: v1alpha1.PipelineTypeFilterWeigher,
+				Filters: []v1alpha1.FilterSpec{
+					{Name: "filter_has_enough_capacity"},
+					{Name: "filter_has_requested_traits"},
+					{Name: "filter_correct_az"},
+					antiAffinityFilterSpec(),
+				},
+				Weighers: []v1alpha1.WeigherSpec{{Name: "kvm_failover_evacuation"}},
 			},
-			Weighers: []v1alpha1.WeigherSpec{{Name: "kvm_failover_evacuation"}},
 		},
-	})
+	}
 
 	ctx := context.Background()
 	for _, pipeline := range pipelines {
@@ -1375,41 +1569,30 @@ func newIntegrationTestEnvWithTraitsFilter(t *testing.T, vms []reservations.VM, 
 			Spec: v1alpha1.PipelineSpec{
 				Type: v1alpha1.PipelineTypeFilterWeigher,
 				Filters: []v1alpha1.FilterSpec{
-					{Name: "filter_has_requested_traits"},
-					{Name: "filter_correct_az"},
-				},
-				Weighers: []v1alpha1.WeigherSpec{},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: PipelineNewFailoverReservation,
-			},
-			Spec: v1alpha1.PipelineSpec{
-				Type: v1alpha1.PipelineTypeFilterWeigher,
-				Filters: []v1alpha1.FilterSpec{
 					{Name: "filter_has_enough_capacity"},
 					{Name: "filter_has_requested_traits"},
 					{Name: "filter_correct_az"},
+					antiAffinityFilterSpec(),
 				},
 				Weighers: []v1alpha1.WeigherSpec{
 					{Name: "kvm_failover_evacuation"},
 				},
 			},
 		},
-	}
-	pipelines = append(pipelines, v1alpha1.Pipeline{
-		ObjectMeta: metav1.ObjectMeta{Name: "kvm-hana-bin-packing"},
-		Spec: v1alpha1.PipelineSpec{
-			Type: v1alpha1.PipelineTypeFilterWeigher,
-			Filters: []v1alpha1.FilterSpec{
-				{Name: "filter_has_enough_capacity"},
-				{Name: "filter_has_requested_traits"},
-				{Name: "filter_correct_az"},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "kvm-hana-bin-packing"},
+			Spec: v1alpha1.PipelineSpec{
+				Type: v1alpha1.PipelineTypeFilterWeigher,
+				Filters: []v1alpha1.FilterSpec{
+					{Name: "filter_has_enough_capacity"},
+					{Name: "filter_has_requested_traits"},
+					{Name: "filter_correct_az"},
+					antiAffinityFilterSpec(),
+				},
+				Weighers: []v1alpha1.WeigherSpec{{Name: "kvm_failover_evacuation"}},
 			},
-			Weighers: []v1alpha1.WeigherSpec{{Name: "kvm_failover_evacuation"}},
 		},
-	})
+	}
 
 	ctx := context.Background()
 	for _, pipeline := range pipelines {
@@ -1488,7 +1671,7 @@ func newHypervisorWithAZ(name string, cpuCap, memoryGi, cpuAlloc, memoryGiAlloc 
 }
 
 // newReservation creates a Reservation CRD with the given parameters.
-func newReservation(name, host string, memoryMB, vcpus uint64, allocations map[string]string) *v1alpha1.Reservation { //nolint:unparam
+func newReservation(name, host string, memoryMB, vcpus uint64, allocations map[string]string) *v1alpha1.Reservation {
 	return &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
@@ -1526,7 +1709,7 @@ func newReservation(name, host string, memoryMB, vcpus uint64, allocations map[s
 
 // newVM creates a VM with the given parameters.
 // Uses defaultTestAZ as the availability zone.
-func newVM(uuid, flavorName, projectID, host string, memoryMB, vcpus uint64) reservations.VM { //nolint:unparam
+func newVM(uuid, flavorName, projectID, host string, memoryMB, vcpus uint64) reservations.VM {
 	return newVMWithAZ(uuid, flavorName, projectID, host, memoryMB, vcpus, defaultTestAZ)
 }
 
@@ -1557,6 +1740,37 @@ func newVMWithExtraSpecsAndAZ(uuid, flavorName, projectID, host string, memoryMB
 	vm := newVMWithAZ(uuid, flavorName, projectID, host, memoryMB, vcpus, az)
 	if extraSpecs != nil {
 		vm.FlavorExtraSpecs = extraSpecs
+	}
+	return vm
+}
+
+// antiAffinityFilterSpec returns the FilterSpec that installs the
+// filter_instance_group_anti_affinity step with both failover-consideration
+// flags enabled, matching the production helm pipeline configuration.
+func antiAffinityFilterSpec() v1alpha1.FilterSpec {
+	return v1alpha1.FilterSpec{
+		Name: "filter_instance_group_anti_affinity",
+		Params: v1alpha1.Parameters{
+			{Key: "failoverPlacementConsidersFailoverReservation", BoolValue: new(true)},
+			{Key: "vmPlacementConsidersFailoverReservation", BoolValue: new(true)},
+		},
+	}
+}
+
+// newVMWithInstanceGroup returns a VM whose InstanceGroup describes an
+// anti-affinity server-group membership. Rules default to
+// {"max_server_per_host": 1} (int, matching the filter's type assert).
+func newVMWithInstanceGroup(uuid, flavorName, projectID, host string, memoryMB, vcpus uint64, groupUUID, policy string, members []string) reservations.VM { //nolint:unparam
+	vm := newVM(uuid, flavorName, projectID, host, memoryMB, vcpus)
+	vm.InstanceGroup = &novaapi.NovaObject[novaapi.NovaInstanceGroup]{
+		Data: novaapi.NovaInstanceGroup{
+			UUID:      groupUUID,
+			Name:      groupUUID,
+			Policy:    policy,
+			Members:   members,
+			Rules:     map[string]any{"max_server_per_host": 1},
+			ProjectID: projectID,
+		},
 	}
 	return vm
 }

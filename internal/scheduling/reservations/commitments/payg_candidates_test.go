@@ -36,7 +36,7 @@ func (f *fakeVMSource) ListVMsByProject(_ context.Context, _ string) ([]reservat
 func (f *fakeVMSource) ListVMsOnHypervisors(_ context.Context, _ *hv1.HypervisorList, _ bool) ([]reservations.VM, error) {
 	return f.vms, f.err
 }
-func (f *fakeVMSource) GetVM(_ context.Context, _ string) (*reservations.VM, error) {
+func (f *fakeVMSource) GetVM(_ context.Context, _ string, _ bool) (*reservations.VM, error) {
 	return nil, nil
 }
 func (f *fakeVMSource) IsServerActive(_ context.Context, _ string) (bool, error) {

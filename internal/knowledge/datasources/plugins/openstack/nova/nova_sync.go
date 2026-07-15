@@ -46,6 +46,8 @@ func (s *NovaSyncer) Init(ctx context.Context) error {
 		tables = append(tables, s.DB.AddTable(Migration{}))
 	case v1alpha1.NovaDatasourceTypeAggregates:
 		tables = append(tables, s.DB.AddTable(Aggregate{}))
+	case v1alpha1.NovaDatasourceTypeServerGroups:
+		tables = append(tables, s.DB.AddTable(ServerGroup{}))
 	}
 	return s.DB.CreateTable(tables...)
 }
@@ -68,6 +70,8 @@ func (s *NovaSyncer) Sync(ctx context.Context) (int64, error) {
 		nResults, err = s.SyncAllMigrations(ctx)
 	case v1alpha1.NovaDatasourceTypeAggregates:
 		nResults, err = s.SyncAllAggregates(ctx)
+	case v1alpha1.NovaDatasourceTypeServerGroups:
+		nResults, err = s.SyncAllServerGroups(ctx)
 	}
 	return nResults, err
 }
@@ -218,4 +222,26 @@ func (s *NovaSyncer) SyncAllAggregates(ctx context.Context) (int64, error) {
 		counter.Inc()
 	}
 	return int64(len(allAggregates)), nil
+}
+
+// Sync the OpenStack server groups into the database.
+func (s *NovaSyncer) SyncAllServerGroups(ctx context.Context) (int64, error) {
+	allGroups, err := s.API.GetAllServerGroups(ctx)
+	if err != nil {
+		return 0, err
+	}
+	err = db.ReplaceAll(s.DB, allGroups...)
+	if err != nil {
+		return 0, err
+	}
+	label := ServerGroup{}.TableName()
+	if s.Mon.ObjectsGauge != nil {
+		gauge := s.Mon.ObjectsGauge.WithLabelValues(label)
+		gauge.Set(float64(len(allGroups)))
+	}
+	if s.Mon.RequestProcessedCounter != nil {
+		counter := s.Mon.RequestProcessedCounter.WithLabelValues(label)
+		counter.Inc()
+	}
+	return int64(len(allGroups)), nil
 }

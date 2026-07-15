@@ -79,6 +79,10 @@ type ScheduleReservationRequest struct {
 	// SchedulerHints are hints passed to the scheduler pipeline.
 	// Used to set _nova_check_type for evacuation intent detection.
 	SchedulerHints map[string]any
+	// InstanceGroup, when set, is forwarded to the scheduler as the
+	// request's instance group so that anti-affinity/affinity filters can
+	// evaluate the VM's group membership.
+	InstanceGroup *api.NovaObject[api.NovaInstanceGroup]
 }
 
 // ScheduleReservationResponse contains the result of scheduling a reservation.
@@ -134,6 +138,7 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 				AvailabilityZone: req.AvailabilityZone,
 				IgnoreHosts:      ignoreHosts,
 				SchedulerHints:   req.getSchedulerHints(),
+				InstanceGroup:    req.InstanceGroup,
 				Flavor: api.NovaObject[api.NovaFlavor]{
 					Data: api.NovaFlavor{
 						Name:       req.FlavorName,

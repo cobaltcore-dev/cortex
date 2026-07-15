@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"sync"
 
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/external"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -48,6 +50,15 @@ type VM struct {
 	// OSType is the operating system type pre-computed from Glance image properties.
 	// "unknown" when not found or for volume-booted instances.
 	OSType string
+	// InstanceGroup, when set, describes the anti-affinity/affinity server
+	// group the VM belongs to. Consumed by the anti-affinity filter during
+	// placement to honor group policy for both regular VM placement and
+	// failover reservation placement.
+	//
+	// This field is optional; it is left nil when the VM source has no
+	// server-group information for this VM, or when the caller opted out
+	// of loading it (see GetVM's loadInstanceGroup parameter).
+	InstanceGroup *api.NovaObject[api.NovaInstanceGroup]
 }
 
 // VMSource provides VMs managed by the reservation system.
@@ -63,7 +74,11 @@ type VMSource interface {
 	ListVMsOnHypervisors(ctx context.Context, hypervisorList *hv1.HypervisorList, trustHypervisorLocation bool) ([]VM, error)
 	// GetVM returns a specific VM by UUID.
 	// Returns nil, nil if the VM is not found.
-	GetVM(ctx context.Context, vmUUID string) (*VM, error)
+	// When loadInstanceGroup is true, the VM's server-group membership is
+	// resolved and stored on the returned VM.InstanceGroup. This adds one
+	// extra query (all server groups). Callers that do not need
+	// anti-affinity data (e.g. quota reconciliation) should pass false.
+	GetVM(ctx context.Context, vmUUID string, loadInstanceGroup bool) (*VM, error)
 	// IsServerActive returns true if the server exists in the servers table and is not DELETED.
 	// Returns false if not found. Used by quota controller to determine if a removed HV instance was deleted vs migrated.
 	IsServerActive(ctx context.Context, vmUUID string) (bool, error)
@@ -113,6 +128,7 @@ func (s *DBVMSource) ListVMs(ctx context.Context) ([]VM, error) {
 	for _, f := range flavors {
 		flavorByName[f.Name] = flavorData{VCPUs: f.VCPUs, RAM: f.RAM, Disk: f.Disk, ExtraSpecs: f.ExtraSpecs}
 	}
+	serverGroups := loadGroupsByMemberUUID(ctx, s.NovaReader)
 
 	var skippedNoHost, skippedUnknownFlavor int
 	unknownFlavors := make(map[string]int)
@@ -146,6 +162,7 @@ func (s *DBVMSource) ListVMs(ctx context.Context) ([]VM, error) {
 			FlavorExtraSpecs:  parseExtraSpecs(flavor.ExtraSpecs),
 			DiskGB:            flavor.Disk,
 			OSType:            normalizeOSType(server.OSType),
+			InstanceGroup:     buildInstanceGroup(server.ID, serverGroups),
 		})
 	}
 
@@ -183,6 +200,7 @@ func (s *DBVMSource) ListVMsByProject(ctx context.Context, projectID string) ([]
 	for _, f := range flavors {
 		flavorByName[f.Name] = flavorData{VCPUs: f.VCPUs, RAM: f.RAM, Disk: f.Disk, ExtraSpecs: f.ExtraSpecs}
 	}
+	serverGroups := loadGroupsByMemberUUID(ctx, s.NovaReader)
 
 	vms := make([]VM, 0, len(servers))
 	for _, server := range servers {
@@ -210,6 +228,7 @@ func (s *DBVMSource) ListVMsByProject(ctx context.Context, projectID string) ([]
 			FlavorExtraSpecs:  parseExtraSpecs(flavor.ExtraSpecs),
 			DiskGB:            flavor.Disk,
 			OSType:            normalizeOSType(server.OSType),
+			InstanceGroup:     buildInstanceGroup(server.ID, serverGroups),
 		})
 	}
 	return vms, nil
@@ -217,7 +236,12 @@ func (s *DBVMSource) ListVMsByProject(ctx context.Context, projectID string) ([]
 
 // GetVM returns a specific VM by UUID.
 // Returns nil, nil if the VM is not found.
-func (s *DBVMSource) GetVM(ctx context.Context, vmUUID string) (*VM, error) {
+//
+// When loadInstanceGroup is true, the VM's server-group membership is
+// resolved and stored on the returned VM.InstanceGroup. This adds one extra
+// query (all server groups). Callers that do not need anti-affinity data
+// (e.g. quota reconciliation) should pass false.
+func (s *DBVMSource) GetVM(ctx context.Context, vmUUID string, loadInstanceGroup bool) (*VM, error) {
 	server, err := s.NovaReader.GetServerByID(ctx, vmUUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get server: %w", err)
@@ -239,6 +263,11 @@ func (s *DBVMSource) GetVM(ctx context.Context, vmUUID string) (*VM, error) {
 		"memory": *resource.NewQuantity(int64(flavor.RAM)*1024*1024, resource.BinarySI), //nolint:gosec
 	}
 
+	var instanceGroup *api.NovaObject[api.NovaInstanceGroup]
+	if loadInstanceGroup {
+		instanceGroup = buildInstanceGroup(server.ID, loadGroupsByMemberUUID(ctx, s.NovaReader))
+	}
+
 	return &VM{
 		UUID:              server.ID,
 		Name:              server.Name,
@@ -252,6 +281,7 @@ func (s *DBVMSource) GetVM(ctx context.Context, vmUUID string) (*VM, error) {
 		FlavorExtraSpecs:  parseExtraSpecs(flavor.ExtraSpecs),
 		DiskGB:            flavor.Disk,
 		OSType:            normalizeOSType(server.OSType),
+		InstanceGroup:     instanceGroup,
 	}, nil
 }
 
@@ -340,6 +370,66 @@ func parseExtraSpecs(extraSpecsJSON string) map[string]string {
 	return extraSpecs
 }
 
+// buildInstanceGroup looks up the server's UUID in the reverse-index of
+// group members and returns a NovaObject-wrapped NovaInstanceGroup suitable
+// for forwarding to the scheduler.
+//
+// Returns nil when the VM does not appear in any group's members list (i.e.
+// it is not a member of any server group at the time of the last groups
+// sync).
+func buildInstanceGroup(
+	vmUUID string,
+	groupsByMember map[string]nova.ServerGroup,
+) *api.NovaObject[api.NovaInstanceGroup] {
+
+	group, ok := groupsByMember[vmUUID]
+	if !ok {
+		return nil
+	}
+	return &api.NovaObject[api.NovaInstanceGroup]{
+		Data: api.NovaInstanceGroup{
+			UUID:      group.UUID,
+			Name:      group.Name,
+			Policy:    group.Policy,
+			Members:   group.Members(),
+			Rules:     group.Rules(),
+			ProjectID: group.ProjectID,
+			UserID:    group.UserID,
+		},
+	}
+}
+
+// loadGroupsByMemberUUID fetches all server groups and builds a reverse
+// index: member VM UUID -> the group that lists it. A VM appears in at most
+// one group per Nova semantics, so the map is well-defined.
+//
+// Errors are logged and result in an empty map rather than propagated: the
+// anti-affinity filter degrades gracefully when the map is empty
+// (VM.InstanceGroup ends up nil for every VM).
+func loadGroupsByMemberUUID(ctx context.Context, r external.NovaReaderInterface) map[string]nova.ServerGroup {
+	groups, err := r.GetAllServerGroups(ctx)
+	if err != nil {
+		vmSourceLog.Error(err, "failed to load server groups; VM.InstanceGroup will be nil")
+		return map[string]nova.ServerGroup{}
+	}
+	byMember := map[string]nova.ServerGroup{}
+	for _, g := range groups {
+		for _, memberUUID := range g.Members() {
+			if existing, dup := byMember[memberUUID]; dup {
+				vmSourceLog.Info(
+					"VM appears in multiple server groups; keeping first",
+					"vmUUID", memberUUID,
+					"keptGroup", existing.UUID,
+					"skippedGroup", g.UUID,
+				)
+				continue
+			}
+			byMember[memberUUID] = g
+		}
+	}
+	return byMember
+}
+
 func truncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
@@ -399,6 +489,7 @@ func buildVMsFromHypervisors(hypervisorList *hv1.HypervisorList, postgresVMs []V
 				FlavorExtraSpecs:  pgVM.FlavorExtraSpecs,
 				DiskGB:            pgVM.DiskGB,
 				OSType:            pgVM.OSType,
+				InstanceGroup:     pgVM.InstanceGroup,
 			}
 			result = append(result, vm)
 			enrichedCount++
@@ -574,12 +665,12 @@ func (s *lazyDBVMSource) ListVMsOnHypervisors(ctx context.Context, hypervisorLis
 	return inner.ListVMsOnHypervisors(ctx, hypervisorList, trustHypervisorLocation)
 }
 
-func (s *lazyDBVMSource) GetVM(ctx context.Context, vmUUID string) (*VM, error) {
+func (s *lazyDBVMSource) GetVM(ctx context.Context, vmUUID string, loadInstanceGroup bool) (*VM, error) {
 	inner, err := s.get(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return inner.GetVM(ctx, vmUUID)
+	return inner.GetVM(ctx, vmUUID, loadInstanceGroup)
 }
 
 func (s *lazyDBVMSource) IsServerActive(ctx context.Context, vmUUID string) (bool, error) {

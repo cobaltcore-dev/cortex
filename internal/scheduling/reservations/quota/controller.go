@@ -414,7 +414,7 @@ func (c *QuotaController) accumulateAddedVM(
 
 	logger := LoggerFromContext(ctx).WithValues("vmUUID", vmUUID)
 
-	vm, err := c.VMSource.GetVM(ctx, vmUUID)
+	vm, err := c.VMSource.GetVM(ctx, vmUUID, false)
 	if err != nil {
 		logger.Error(err, "failed to get VM for increment")
 		return
