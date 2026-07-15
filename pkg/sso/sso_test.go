@@ -57,7 +57,10 @@ func TestUserAgentTransport(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			capture := &captureTransport{}
 			uat := &userAgentTransport{T: capture}
-			req, _ := http.NewRequest(http.MethodGet, "https://example.com", nil)
+			req, err := http.NewRequest(http.MethodGet, "https://example.com", http.NoBody)
+			if err != nil {
+				t.Fatalf("NewRequest() error = %v", err)
+			}
 			if tt.incomingUA != "" {
 				req.Header.Set("User-Agent", tt.incomingUA)
 			}
