@@ -132,6 +132,26 @@ func newTestScheme(t *testing.T) *runtime.Scheme {
 // testRouter is a simple ResourceRouter for testing.
 type testRouter struct{}
 
+func (r testRouter) Match(obj any, labels map[string]string) (bool, error) {
+	az, ok := labels["az"]
+	if !ok {
+		return false, nil
+	}
+	objAZ, err := r.extractClusterSelector(obj)
+	if err != nil {
+		return false, err
+	}
+	return objAZ == az, nil
+}
+
+func (r testRouter) extractClusterSelector(obj any) (string, error) {
+	cm, ok := obj.(*corev1.ConfigMap)
+	if !ok {
+		return "", errors.New("object is not a ConfigMap")
+	}
+	return cm.Labels["az"], nil
+}
+
 // alwaysMatchRouter matches any object to any cluster.
 type alwaysMatchRouter struct{}
 
@@ -139,20 +159,8 @@ func (r alwaysMatchRouter) Match(any, map[string]string) (bool, error) {
 	return true, nil
 }
 
-func (r testRouter) Match(obj any, labels map[string]string) (bool, error) {
-	cm, ok := obj.(*corev1.ConfigMap)
-	if !ok {
-		return false, nil
-	}
-	az, ok := labels["az"]
-	if !ok {
-		return false, nil
-	}
-	objAZ, ok := cm.Labels["az"]
-	if !ok {
-		return false, nil
-	}
-	return objAZ == az, nil
+func (r alwaysMatchRouter) extractClusterSelector(obj any) (string, error) {
+	return "", nil
 }
 
 var configMapGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}

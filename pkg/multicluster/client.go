@@ -245,9 +245,19 @@ func (c *Client) clusterForWrite(gvk schema.GroupVersionKind, obj any) (cluster.
 				return r.cluster, nil
 			}
 		}
+		// No remote match — fall back to home if the GVK is also configured there.
+		if c.homeGVKs[gvk] {
+			return c.HomeCluster, nil
+		}
+		// No match and no home fallback — return an error.
+		selector, err := router.extractClusterSelector(obj)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract cluster selector for GVK %s: %w", gvk, err)
+		}
+		return nil, &NoClusterMatchedError{GVK: gvk, ClusterSelector: selector}
 	}
 
-	// If we couldn't find a matching remote cluster (not configured or not found) but the GVK is configured for home, return the home cluster.
+	// No remotes configured for this GVK — fall back to home if available.
 	if c.homeGVKs[gvk] {
 		return c.HomeCluster, nil
 	}
@@ -272,11 +282,12 @@ func IsDuplicateError(err error) bool {
 // happens in multi-AZ setups where the resource targets an AZ that has no
 // configured cluster.
 type NoClusterMatchedError struct {
-	GVK schema.GroupVersionKind
+	GVK             schema.GroupVersionKind
+	ClusterSelector string
 }
 
 func (e *NoClusterMatchedError) Error() string {
-	return fmt.Sprintf("no cluster matched for GVK %s", e.GVK)
+	return fmt.Sprintf("no cluster matched for GVK %s: cluster selector %q did not match any candidate", e.GVK, e.ClusterSelector)
 }
 
 // IsNoClusterMatchedError returns true if the error indicates that no
