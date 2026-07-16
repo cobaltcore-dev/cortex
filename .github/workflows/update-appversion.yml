@@ -74,6 +74,8 @@ jobs:
             bump app version [skip ci]
 
             ${{ steps.summary.outputs.log }}
+
+            Signed-off-by: ${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>
           title: bump app version [skip ci]
           body: |
             bump app version [skip ci]
