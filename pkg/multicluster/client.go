@@ -476,17 +476,19 @@ func (c *Client) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts
 }
 
 // ClusterObjectCount is one entry in the result of CountPerClusterByGVK.
-// Labels holds the routing labels for the cluster (nil for the home cluster).
+// Labels holds the routing labels for the cluster. IsHome is true for the home
+// cluster, which has no routing labels.
 type ClusterObjectCount struct {
 	Labels map[string]string
 	Count  int
+	IsHome bool
 }
 
 // CountPerClusterByGVK returns the number of objects of the given GVK in each
 // configured cluster. It uses PartialObjectMetadataList so only object metadata
 // crosses the wire — no spec or status — making it efficient even for large
 // object counts. Clusters that return an error are logged and skipped (same
-// policy as List). The home cluster is included with nil Labels.
+// policy as List). The home cluster is included with IsHome set to true.
 func (c *Client) CountPerClusterByGVK(ctx context.Context, gvk schema.GroupVersionKind, opts ...client.ListOption) ([]ClusterObjectCount, error) {
 	log := ctrl.LoggerFrom(ctx)
 
@@ -499,14 +501,15 @@ func (c *Client) CountPerClusterByGVK(ctx context.Context, gvk schema.GroupVersi
 	}
 	type clusterEntry struct {
 		cl     cluster.Cluster
-		labels map[string]string // nil for home
+		labels map[string]string
+		isHome bool
 	}
 	entries := make([]clusterEntry, 0, len(remotes)+1)
 	for _, r := range remotes {
 		entries = append(entries, clusterEntry{cl: r.cluster, labels: maps.Clone(r.labels)})
 	}
 	if isHome && c.HomeCluster != nil {
-		entries = append(entries, clusterEntry{cl: c.HomeCluster, labels: nil})
+		entries = append(entries, clusterEntry{cl: c.HomeCluster, isHome: true})
 	}
 	c.remoteClustersMu.RUnlock()
 
@@ -523,7 +526,7 @@ func (c *Client) CountPerClusterByGVK(ctx context.Context, gvk schema.GroupVersi
 				"gvk", gvk, "host", e.cl.GetConfig().Host)
 			continue
 		}
-		results = append(results, ClusterObjectCount{Labels: e.labels, Count: len(partialList.Items)})
+		results = append(results, ClusterObjectCount{Labels: e.labels, Count: len(partialList.Items), IsHome: e.isHome})
 	}
 	return results, nil
 }

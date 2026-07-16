@@ -70,7 +70,7 @@ func (k *MulticlusterObjectCountKPI) Init(_ *db.DB, c client.Client, opts conf.R
 				}
 			}
 		}
-		varLabels := append([]string{"group", "version", "kind"}, labelKeys...)
+		varLabels := append([]string{"group", "version", "kind", "is_home"}, labelKeys...)
 		desc := prometheus.NewDesc(
 			"cortex_multicluster_object_count",
 			"Number of objects of a given GVK per cluster",
@@ -98,8 +98,12 @@ func (k *MulticlusterObjectCountKPI) Collect(ch chan<- prometheus.Metric) {
 			continue
 		}
 		for _, c := range counts {
-			labelVals := make([]string, 0, 3+len(d.labelKeys))
-			labelVals = append(labelVals, d.gvk.Group, d.gvk.Version, d.gvk.Kind)
+			isHome := "false"
+			if c.IsHome {
+				isHome = "true"
+			}
+			labelVals := make([]string, 0, 4+len(d.labelKeys))
+			labelVals = append(labelVals, d.gvk.Group, d.gvk.Version, d.gvk.Kind, isHome)
 			for _, key := range d.labelKeys {
 				labelVals = append(labelVals, labelValueForSnakeKey(key, c.Labels))
 			}

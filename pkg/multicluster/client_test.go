@@ -1757,6 +1757,9 @@ func TestClient_CountPerClusterByGVK(t *testing.T) {
 		}
 		byAZ := map[string]int{}
 		for _, r := range results {
+			if r.IsHome {
+				t.Errorf("expected IsHome=false for remote cluster %v", r.Labels)
+			}
 			byAZ[r.Labels["availabilityZone"]] = r.Count
 		}
 		if byAZ["az-1"] != 2 {
@@ -1767,7 +1770,7 @@ func TestClient_CountPerClusterByGVK(t *testing.T) {
 		}
 	})
 
-	t.Run("includes home cluster with nil labels", func(t *testing.T) {
+	t.Run("includes home cluster with IsHome set", func(t *testing.T) {
 		home := newFakeCluster(scheme,
 			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm-home", Namespace: "default"}},
 		)
@@ -1782,6 +1785,9 @@ func TestClient_CountPerClusterByGVK(t *testing.T) {
 		}
 		if len(results) != 1 {
 			t.Fatalf("expected 1 result, got %d", len(results))
+		}
+		if !results[0].IsHome {
+			t.Errorf("expected IsHome=true for home cluster")
 		}
 		if results[0].Labels != nil {
 			t.Errorf("expected nil labels for home cluster, got %v", results[0].Labels)

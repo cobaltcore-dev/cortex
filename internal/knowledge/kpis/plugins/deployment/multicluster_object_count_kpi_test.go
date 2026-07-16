@@ -168,11 +168,17 @@ func TestMulticlusterObjectCountKPI_Collect(t *testing.T) {
 		if err := m.Write(&metric); err != nil {
 			t.Fatalf("failed to write metric: %v", err)
 		}
-		var az string
+		var az, isHome string
 		for _, lp := range metric.Label {
-			if lp.GetName() == "availability_zone" {
+			switch lp.GetName() {
+			case "availability_zone":
 				az = lp.GetValue()
+			case "is_home":
+				isHome = lp.GetValue()
 			}
+		}
+		if isHome != "false" {
+			t.Errorf("az %q: expected is_home=false for remote cluster, got %q", az, isHome)
 		}
 		byAZ[az] = metric.Gauge.GetValue()
 	}
@@ -194,7 +200,6 @@ func TestMulticlusterObjectCountKPI_Collect_HomeCluster(t *testing.T) {
 	home := newFakeCluster(scheme,
 		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm-home", Namespace: "default"}},
 	)
-
 	mcl := newFakeMCLClient(scheme, home, []schema.GroupVersionKind{cmListGVK}, nil)
 
 	kpi := &MulticlusterObjectCountKPI{}
@@ -208,20 +213,27 @@ func TestMulticlusterObjectCountKPI_Collect_HomeCluster(t *testing.T) {
 	close(ch)
 
 	var collected int
-	var count float64
 	for m := range ch {
 		collected++
 		var metric dto.Metric
 		if err := m.Write(&metric); err != nil {
 			t.Fatalf("failed to write metric: %v", err)
 		}
-		count = metric.Gauge.GetValue()
+		var isHome string
+		for _, lp := range metric.Label {
+			if lp.GetName() == "is_home" {
+				isHome = lp.GetValue()
+			}
+		}
+		if isHome != "true" {
+			t.Errorf("expected is_home=true for home cluster, got %q", isHome)
+		}
+		if got := metric.Gauge.GetValue(); got != 1 {
+			t.Errorf("expected count 1, got %g", got)
+		}
 	}
 	if collected != 1 {
-		t.Fatalf("expected 1 metric (home cluster), got %d", collected)
-	}
-	if count != 1 {
-		t.Errorf("expected count 1, got %g", count)
+		t.Fatalf("expected 1 metric, got %d", collected)
 	}
 }
 
