@@ -24,7 +24,7 @@ permissions:
 jobs:
   analyze:
     name: CodeQL
-    runs-on: large_runner_16core_64gb
+    runs-on: large_runner_16core_64gb_nn
     steps:
       - name: Check out code
         uses: actions/checkout@v7
