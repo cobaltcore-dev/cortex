@@ -34,4 +34,6 @@ var supportedKPIs = map[string]plugins.KPI{
 	"decision_state_kpi":   &deployment.DecisionStateKPI{},
 	"kpi_state_kpi":        &deployment.KPIStateKPI{},
 	"pipeline_state_kpi":   &deployment.PipelineStateKPI{},
+
+	"multicluster_object_count_kpi": &deployment.MulticlusterObjectCountKPI{},
 }

@@ -1726,3 +1726,100 @@ func TestClient_ConfiguredRouteLabels(t *testing.T) {
 		}
 	})
 }
+
+func TestClient_CountPerClusterByGVK(t *testing.T) {
+	scheme := newTestScheme(t)
+	ctx := context.Background()
+
+	t.Run("counts objects per remote cluster", func(t *testing.T) {
+		az1 := newFakeCluster(scheme,
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm-1", Namespace: "default"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm-2", Namespace: "default"}},
+		)
+		az2 := newFakeCluster(scheme,
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm-3", Namespace: "default"}},
+		)
+		c := &Client{
+			HomeScheme: scheme,
+			remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+				configMapListGVK: {
+					{cluster: az1, labels: map[string]string{"availabilityZone": "az-1"}},
+					{cluster: az2, labels: map[string]string{"availabilityZone": "az-2"}},
+				},
+			},
+		}
+		results, err := c.CountPerClusterByGVK(ctx, configMapListGVK)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(results) != 2 {
+			t.Fatalf("expected 2 results, got %d", len(results))
+		}
+		byAZ := map[string]int{}
+		for _, r := range results {
+			byAZ[r.Labels["availabilityZone"]] = r.Count
+		}
+		if byAZ["az-1"] != 2 {
+			t.Errorf("expected 2 objects in az-1, got %d", byAZ["az-1"])
+		}
+		if byAZ["az-2"] != 1 {
+			t.Errorf("expected 1 object in az-2, got %d", byAZ["az-2"])
+		}
+	})
+
+	t.Run("includes home cluster with nil labels", func(t *testing.T) {
+		home := newFakeCluster(scheme,
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm-home", Namespace: "default"}},
+		)
+		c := &Client{
+			HomeCluster: home,
+			HomeScheme:  scheme,
+			homeGVKs:    map[schema.GroupVersionKind]bool{configMapListGVK: true},
+		}
+		results, err := c.CountPerClusterByGVK(ctx, configMapListGVK)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(results) != 1 {
+			t.Fatalf("expected 1 result, got %d", len(results))
+		}
+		if results[0].Labels != nil {
+			t.Errorf("expected nil labels for home cluster, got %v", results[0].Labels)
+		}
+		if results[0].Count != 1 {
+			t.Errorf("expected count 1, got %d", results[0].Count)
+		}
+	})
+
+	t.Run("returns error for unconfigured GVK", func(t *testing.T) {
+		c := &Client{
+			HomeScheme: scheme,
+		}
+		_, err := c.CountPerClusterByGVK(ctx, configMapListGVK)
+		if err == nil {
+			t.Fatal("expected error for unconfigured GVK")
+		}
+	})
+
+	t.Run("empty clusters return zero counts", func(t *testing.T) {
+		az1 := newFakeCluster(scheme) // no objects
+		c := &Client{
+			HomeScheme: scheme,
+			remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+				configMapListGVK: {
+					{cluster: az1, labels: map[string]string{"availabilityZone": "az-1"}},
+				},
+			},
+		}
+		results, err := c.CountPerClusterByGVK(ctx, configMapListGVK)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(results) != 1 {
+			t.Fatalf("expected 1 result, got %d", len(results))
+		}
+		if results[0].Count != 0 {
+			t.Errorf("expected count 0, got %d", results[0].Count)
+		}
+	})
+}

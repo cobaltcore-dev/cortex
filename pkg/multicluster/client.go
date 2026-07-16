@@ -13,6 +13,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
@@ -181,6 +182,32 @@ func (c *Client) AddRemote(ctx context.Context, host, caCert string, insecureSki
 		})
 	}
 	return cl, nil
+}
+
+// AddRemoteCluster registers a pre-built cluster.Cluster as a remote for the
+// given GVKs with the provided routing labels. Unlike AddRemote, it does not
+// create a new cluster from a REST config — the caller supplies the cluster
+// directly. This is useful for in-process wiring and for unit tests.
+func (c *Client) AddRemoteCluster(cl cluster.Cluster, labels map[string]string, gvks ...schema.GroupVersionKind) {
+	c.remoteClustersMu.Lock()
+	defer c.remoteClustersMu.Unlock()
+	if c.remoteClusters == nil {
+		c.remoteClusters = make(map[schema.GroupVersionKind][]remoteCluster)
+	}
+	for _, gvk := range gvks {
+		c.remoteClusters[gvk] = append(c.remoteClusters[gvk], remoteCluster{
+			cluster: cl,
+			labels:  labels,
+		})
+	}
+}
+
+// AddHomeGVK marks the given GVK as served by the home cluster.
+func (c *Client) AddHomeGVK(gvk schema.GroupVersionKind) {
+	if c.homeGVKs == nil {
+		c.homeGVKs = make(map[schema.GroupVersionKind]bool)
+	}
+	c.homeGVKs[gvk] = true
 }
 
 // Get the gvk registered for the given resource in the home cluster's scheme.
@@ -446,6 +473,59 @@ func (c *Client) List(ctx context.Context, list client.ObjectList, opts ...clien
 // cannot be inferred from the ApplyConfiguration.
 func (c *Client) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
 	return errors.New("apply operation is not supported in multicluster client")
+}
+
+// ClusterObjectCount is one entry in the result of CountPerClusterByGVK.
+// Labels holds the routing labels for the cluster (nil for the home cluster).
+type ClusterObjectCount struct {
+	Labels map[string]string
+	Count  int
+}
+
+// CountPerClusterByGVK returns the number of objects of the given GVK in each
+// configured cluster. It uses PartialObjectMetadataList so only object metadata
+// crosses the wire — no spec or status — making it efficient even for large
+// object counts. Clusters that return an error are logged and skipped (same
+// policy as List). The home cluster is included with nil Labels.
+func (c *Client) CountPerClusterByGVK(ctx context.Context, gvk schema.GroupVersionKind, opts ...client.ListOption) ([]ClusterObjectCount, error) {
+	log := ctrl.LoggerFrom(ctx)
+
+	c.remoteClustersMu.RLock()
+	remotes := c.remoteClusters[gvk]
+	isHome := c.homeGVKs[gvk]
+	if len(remotes) == 0 && !isHome {
+		c.remoteClustersMu.RUnlock()
+		return nil, fmt.Errorf("GVK %s is not configured in home or any remote cluster", gvk)
+	}
+	type clusterEntry struct {
+		cl     cluster.Cluster
+		labels map[string]string // nil for home
+	}
+	entries := make([]clusterEntry, 0, len(remotes)+1)
+	for _, r := range remotes {
+		entries = append(entries, clusterEntry{cl: r.cluster, labels: maps.Clone(r.labels)})
+	}
+	if isHome && c.HomeCluster != nil {
+		entries = append(entries, clusterEntry{cl: c.HomeCluster, labels: nil})
+	}
+	c.remoteClustersMu.RUnlock()
+
+	results := make([]ClusterObjectCount, 0, len(entries))
+	for _, e := range entries {
+		partialList := &metav1.PartialObjectMetadataList{}
+		partialList.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   gvk.Group,
+			Version: gvk.Version,
+			Kind:    gvk.Kind,
+		})
+		if err := e.cl.GetClient().List(ctx, partialList, opts...); err != nil {
+			log.Error(err, "error counting resources from cluster",
+				"gvk", gvk, "host", e.cl.GetConfig().Host)
+			continue
+		}
+		results = append(results, ClusterObjectCount{Labels: e.labels, Count: len(partialList.Items)})
+	}
+	return results, nil
 }
 
 // Create routes the object to the matching cluster using the ResourceRouter
