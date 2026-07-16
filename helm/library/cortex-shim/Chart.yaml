@@ -3,6 +3,6 @@ name: cortex-shim
 description: A Helm chart to distribute cortex shims.
 type: application
 version: 0.1.6
-appVersion: "sha-ee9cd485"
+appVersion: "sha-7e36a65c"
 icon: "https://example.com/icon.png"
 dependencies: []
