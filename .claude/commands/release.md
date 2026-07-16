@@ -18,7 +18,7 @@ You are the only mutator. The investigator subagents — `release-digest`, `rele
 
 Read `AGENTS.md`. Capture `<PR_NUMBER>` from the user's invocation. If no number was provided, find the open PR targeting `main` whose head branch matches a release pattern:
 
-```
+```sh
 gh pr list --state open --base main --json number,title,headRefName | \
   jq '.[] | select(.headRefName | test("release|bump-app-version"; "i"))'
 ```
@@ -27,7 +27,7 @@ If exactly one candidate is found, use it and tell the user which PR was detecte
 
 Then:
 
-```
+```sh
 git fetch origin main
 git status --porcelain
 git rev-parse --abbrev-ref HEAD
@@ -132,7 +132,7 @@ Capture `<prep_pr_number>` and `<prep_pr_url>` from its report. The agent leaves
 
 Build the new release PR description: `<changelog_entry>` followed by a Dependencies footer. Write it to a tempfile and pass `--body-file` to avoid shell quoting issues.
 
-```
+```sh
 TMP=$(mktemp)
 cat > "$TMP" <<'BODY'
 ## Release cortex <cortex_new_version>
