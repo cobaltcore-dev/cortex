@@ -5,7 +5,7 @@ apiVersion: v2
 name: cortex-prometheus-operator
 description: Prometheus operator setup for Cortex.
 type: application
-version: 0.2.1
+version: 0.2.2
 dependencies:
   # CRDs of the prometheus operator, such as PrometheusRule, ServiceMonitor, etc.
   - name: kube-prometheus-stack
