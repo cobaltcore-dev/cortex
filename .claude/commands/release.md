@@ -1,15 +1,14 @@
 ---
 allowed-tools: Read, Write, Edit, Bash(*), Agent
-description: Release orchestrator — opens a chart-bump PR, opens a changelog PR, and rewrites the release PR description to reference both. Usage: /release PR_NUMBER
+description: Release orchestrator — opens a release-prep PR combining changelog and chart bumps, and rewrites the release PR description. Usage: /release PR_NUMBER
 ---
 
 # Release Orchestrator
 
-You orchestrate the release process for a given release PR. Three deliverables, in order:
+You orchestrate the release process for a given release PR. Two deliverables, in order:
 
-1. A bump PR for helm chart versions (`release/bump-charts-<PR_NUMBER>`).
-2. A changelog PR with the release notes (`release/changelog-<PR_NUMBER>`), using the bumped versions.
-3. The release PR description updated with the changelog and references to both PRs.
+1. A single prep PR (`release/prepare-<PR_NUMBER>`) combining the changelog entry and helm chart version bumps.
+2. The release PR description updated with the changelog and a reference to the prep PR.
 
 You are the only mutator. The investigator subagents — `release-digest`, `release-bump-planner`, `release-changelog-writer` — are read-only by construction. They return text; you apply edits, run git, push branches, and dispatch `pull-request-creator` to open PRs. Never call `gh pr create` directly.
 
@@ -17,7 +16,16 @@ You are the only mutator. The investigator subagents — `release-digest`, `rele
 
 ## Phase 1: Setup
 
-Read `AGENTS.md`. Capture `<PR_NUMBER>` from the user's invocation. Then:
+Read `AGENTS.md`. Capture `<PR_NUMBER>` from the user's invocation. Take the PR where the user commented on, if that one matches `main` whose head branch matches a release pattern:
+
+```
+gh pr list --state open --base main --json number,title,headRefName | \
+  jq '.[] | select(.headRefName | test("release|bump-app-version"; "i"))'
+```
+
+If exactly one candidate is found, use it and tell the user which PR was detected. If none or multiple, abort and ask the user to specify the PR number explicitly.
+
+Then:
 
 ```
 git fetch origin main
@@ -59,6 +67,7 @@ Save its full output as `<bump_plan>`. From the plan extract:
 - The `### Bundle dependency updates` block — likewise.
 - The `### Bundle self-bumps` block — likewise.
 - The single `### Bumped Versions Summary` line — the only piece you forward to Phase 5. Save it as `<bumped_summary>`.
+- The new cortex library version (the `<new>` side of `cortex <old>→<new>`) — save as `<cortex_new_version>`.
 
 ---
 
@@ -70,14 +79,7 @@ Starting from `main` with a clean tree, apply the plan to the working tree:
 - For each line in `### Bundle dependency updates`, use `Edit` on the named `helm/bundles/<name>/Chart.yaml` to change the `version:` field of the dependency entry at the given index. Anchor your `Edit` on the specific old version string plus the dependency's `name:` and any `alias:` line so the match is unique.
 - For each line in `### Bundle self-bumps`, use `Edit` on the named bundle's Chart.yaml to change the top-level `version:`. Anchor on the chart's `name: <bundle_name>` plus the version line to disambiguate from dependency `version:` entries.
 
-Dispatch **`pull-request-creator`** with:
-
-- `branch`: `release/bump-charts-<PR_NUMBER>`
-- `commit_message`: `Bump chart versions for release PR #<PR_NUMBER>`
-- `motivation`: `Bump helm chart versions for release PR #<PR_NUMBER>. Bumped: <bumped_summary>. This PR must be merged before #<PR_NUMBER>.`
-- `assign_reviewers`: `false` (release-mechanics PRs route to the release owner regardless of code area)
-
-Capture `<bump_pr_number>` and `<bump_pr_url>` from its report. The agent leaves the working tree clean on `release/bump-charts-<PR_NUMBER>` — switch back yourself with `git checkout main` before the next phase.
+Do NOT commit yet — leave the edits uncommitted in the working tree.
 
 ---
 
@@ -100,40 +102,46 @@ Produce the changelog entry.
 
 Save its full output as `<changelog_entry>`.
 
+If `CHANGELOG.md` does not exist, write it with `# Changelog\n\n` followed by `<changelog_entry>`. Otherwise, read the file and check whether an entry for `#<PR_NUMBER>` already exists (grep for `[#<PR_NUMBER>]`):
+
+- **First run** (no existing entry): prepend `<changelog_entry>` (followed by a blank line) directly under the `# Changelog` header, before any existing entries.
+- **Update run** (entry already present): replace the entire existing entry for `#<PR_NUMBER>` — from its `##` heading line down to (but not including) the next `##` heading or end of file — with `<changelog_entry>`. Do not prepend a second entry.
+
+Do NOT commit yet — both `helm/` edits and `CHANGELOG.md` remain uncommitted in the working tree.
+
 ---
 
-## Phase 6: Apply the changelog
-
-If `CHANGELOG.md` does not exist, write it with `# Changelog\n\n` followed by `<changelog_entry>`. Otherwise, read the file and prepend `<changelog_entry>` (followed by a blank line) directly under the `# Changelog` header, before any existing entries.
+## Phase 6: Open the prep PR
 
 Dispatch **`pull-request-creator`** with:
 
-- `branch`: `release/changelog-<PR_NUMBER>`
-- `commit_message`: `Add changelog entry for release PR #<PR_NUMBER>`
-- `motivation`: `Add changelog entry for release PR #<PR_NUMBER>. Merge after #<PR_NUMBER>.`
+- `branch`: `release/prepare-<PR_NUMBER>`
+- `commit_message`: `Release cortex <cortex_new_version>`
+- `motivation`: `Release prep for #<PR_NUMBER>: changelog entry and helm chart version bumps. Merge this before merging #<PR_NUMBER>.`
 - `assign_reviewers`: `false`
 
-Capture `<changelog_pr_number>` and `<changelog_pr_url>`. The agent leaves the working tree clean on `release/changelog-<PR_NUMBER>` — `git checkout main` yourself before Phase 7.
+Capture `<prep_pr_number>` and `<prep_pr_url>` from its report. Switch back to `main` with `git checkout main` before Phase 7.
+
+`pull-request-creator`'s idempotency handles the "update" case: if the branch already exists with only bot commits, it resets and force-pushes automatically.
 
 ---
 
 ## Phase 7: Update the release PR description
 
-Build the new release PR description: `<changelog_entry>` followed by a Dependencies footer linking the bump PR and the changelog PR. Write it to a tempfile and pass `--body-file` to avoid shell quoting issues.
+Build the new release PR description: `<changelog_entry>` followed by a Dependencies footer. Write it to a tempfile and pass `--body-file` to avoid shell quoting issues.
 
 ```
 TMP=$(mktemp)
 cat > "$TMP" <<'BODY'
-## Changelog
+## Release cortex <cortex_new_version>
 
 <changelog_entry>
 
 ## Dependencies
 
-- Bump PR: #<bump_pr_number> (must be merged before this PR)
-- Changelog PR: #<changelog_pr_number> (merge after this PR)
+- Prep PR: #<prep_pr_number> (must be merged before this PR)
 BODY
-gh pr edit <PR_NUMBER> --body-file "$TMP"
+gh pr edit <PR_NUMBER> --title "Release cortex <cortex_new_version>" --body-file "$TMP"
 rm "$TMP"
 ```
 
@@ -148,9 +156,8 @@ Print:
 ```
 ## Release #<PR_NUMBER> Post-Open Summary
 
-- Bump PR: #<bump_pr_number> (<bump_pr_url>)
-- Changelog PR: #<changelog_pr_number> (<changelog_pr_url>)
-- Release PR #<PR_NUMBER>: description updated with changelog and PR references
+- Prep PR: #<prep_pr_number> (<prep_pr_url>)
+- Release PR #<PR_NUMBER>: description updated with changelog and prep PR reference
 - Bumped: <bumped_summary>
 ```
 
@@ -161,5 +168,5 @@ If any phase aborted, list which phase and why, and skip the remaining phases �
 ## Critical rules
 
 - Phases 2 → 7 strictly in order. Each depends on the previous.
-- Never read chart files or `CHANGELOG.md` for analysis — that is what the investigator agents do. You read those files only for the mechanical `Edit` and prepend in Phases 4 and 6.
+- Never read chart files or `CHANGELOG.md` for analysis — that is what the investigator agents do. You read those files only for the mechanical `Edit` and prepend in Phases 4 and 5.
 - All PR creation flows through `pull-request-creator`. Do not call `gh pr create` directly. The agent owns branch reset, commit, force-push, the human-commit guard, and clean-tree postcondition — you only stage the working-tree edits.
