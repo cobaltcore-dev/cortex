@@ -58,7 +58,11 @@ func (k *MulticlusterObjectCountKPI) Init(_ *db.DB, c client.Client, opts conf.R
 			return fmt.Errorf("invalid GVK %q: %w", raw, err)
 		}
 		routeLabels := mcl.ConfiguredRouteLabels(gvk)
-		// Collect unique label keys across all clusters (stable order via insertion).
+		// Each remote cluster is registered with a routing label map (e.g.
+		// {"availabilityZone": "eu-de-1a"}). We collect the union of all key names
+		// across every remote cluster and snake_case them to produce Prometheus label
+		// names (availabilityZone → availability_zone). These become variable labels
+		// on the descriptor so each cluster gets its own time series.
 		keySet := map[string]bool{}
 		var labelKeys []string
 		for _, lm := range routeLabels {
@@ -70,6 +74,9 @@ func (k *MulticlusterObjectCountKPI) Init(_ *db.DB, c client.Client, opts conf.R
 				}
 			}
 		}
+		// Fixed labels: group/version/kind identify the resource type; is_home
+		// distinguishes the home cluster (no routing labels) from remote clusters.
+		// The routing label keys follow (e.g. availability_zone).
 		varLabels := append([]string{"group", "version", "kind", "is_home"}, labelKeys...)
 		desc := prometheus.NewDesc(
 			"cortex_multicluster_object_count",
@@ -102,6 +109,11 @@ func (k *MulticlusterObjectCountKPI) Collect(ch chan<- prometheus.Metric) {
 			if c.IsHome {
 				isHome = "true"
 			}
+			// Label values must match the descriptor order: group, version, kind,
+			// is_home, then one value per routing label key. For remote clusters the
+			// routing label value comes from the cluster's registration labels (e.g.
+			// Labels["availabilityZone"] → label value for "availability_zone"). The
+			// home cluster has no routing labels, so those positions are empty strings.
 			labelVals := make([]string, 0, 4+len(d.labelKeys))
 			labelVals = append(labelVals, d.gvk.Group, d.gvk.Version, d.gvk.Kind, isHome)
 			for _, key := range d.labelKeys {
