@@ -1,6 +1,6 @@
 ---
 allowed-tools: Read, Write, Edit, Bash(*), Agent
-description: Release orchestrator — opens a release-prep PR combining changelog and chart bumps, and rewrites the release PR description. Usage: /release PR_NUMBER
+description: Release orchestrator — opens a single release-prep PR combining changelog and chart bumps, and rewrites the release PR description. Usage: /release PR_NUMBER
 ---
 
 # Release Orchestrator
@@ -16,7 +16,7 @@ You are the only mutator. The investigator subagents — `release-digest`, `rele
 
 ## Phase 1: Setup
 
-Read `AGENTS.md`. Capture `<PR_NUMBER>` from the user's invocation. Take the PR where the user commented on, if that one matches `main` whose head branch matches a release pattern:
+Read `AGENTS.md`. Capture `<PR_NUMBER>` from the user's invocation. If no number was provided, find the open PR targeting `main` whose head branch matches a release pattern:
 
 ```
 gh pr list --state open --base main --json number,title,headRefName | \
@@ -102,10 +102,12 @@ Produce the changelog entry.
 
 Save its full output as `<changelog_entry>`.
 
-If `CHANGELOG.md` does not exist, write it with `# Changelog\n\n` followed by `<changelog_entry>`. Otherwise, read the file and check whether an entry for `#<PR_NUMBER>` already exists (grep for `[#<PR_NUMBER>]`):
+Read the first 100 lines of `CHANGELOG.md` (or the full file if it does not exist) to check whether an entry for `#<PR_NUMBER>` is already present (use `grep -F "[#<PR_NUMBER>]"`):
 
 - **First run** (no existing entry): prepend `<changelog_entry>` (followed by a blank line) directly under the `# Changelog` header, before any existing entries.
 - **Update run** (entry already present): replace the entire existing entry for `#<PR_NUMBER>` — from its `##` heading line down to (but not including) the next `##` heading or end of file — with `<changelog_entry>`. Do not prepend a second entry.
+
+If `CHANGELOG.md` does not exist at all, create it with `# Changelog\n\n` followed by `<changelog_entry>`.
 
 Do NOT commit yet — both `helm/` edits and `CHANGELOG.md` remain uncommitted in the working tree.
 
@@ -120,7 +122,7 @@ Dispatch **`pull-request-creator`** with:
 - `motivation`: `Release prep for #<PR_NUMBER>: changelog entry and helm chart version bumps. Merge this before merging #<PR_NUMBER>.`
 - `assign_reviewers`: `false`
 
-Capture `<prep_pr_number>` and `<prep_pr_url>` from its report. Switch back to `main` with `git checkout main` before Phase 7.
+Capture `<prep_pr_number>` and `<prep_pr_url>` from its report. The agent leaves the working tree clean on `release/prepare-<PR_NUMBER>` — switch back yourself with `git checkout main` before Phase 7.
 
 `pull-request-creator`'s idempotency handles the "update" case: if the branch already exists with only bot commits, it resets and force-pushes automatically.
 
@@ -168,5 +170,5 @@ If any phase aborted, list which phase and why, and skip the remaining phases �
 ## Critical rules
 
 - Phases 2 → 7 strictly in order. Each depends on the previous.
-- Never read chart files or `CHANGELOG.md` for analysis — that is what the investigator agents do. You read those files only for the mechanical `Edit` and prepend in Phases 4 and 5.
+- Never read chart files or `CHANGELOG.md` for analysis — that is what the investigator agents do. You read those files only for the mechanical `Edit` in Phase 4 and the mechanical prepend/replace in Phase 5 (reading the first 100 lines to detect an existing entry is explicitly permitted).
 - All PR creation flows through `pull-request-creator`. Do not call `gh pr create` directly. The agent owns branch reset, commit, force-push, the human-commit guard, and clean-tree postcondition — you only stage the working-tree edits.
