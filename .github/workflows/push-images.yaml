@@ -17,7 +17,7 @@ jobs:
       packages: write
       attestations: write
       id-token: write
-    runs-on: large_runner_16core_64gb
+    runs-on: ubuntu-latest #large_runner_16core_64gb
     steps:
       - uses: actions/checkout@v7
       - name: Set up QEMU

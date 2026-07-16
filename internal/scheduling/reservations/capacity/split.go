@@ -196,27 +196,34 @@ func allocateRoundRobin(states []groupState, hostRes map[string]map[string]int64
 	}
 }
 
-// computeUnassigned sums remaining resources on candidate hosts after allocation.
+// computeUnassigned sums remaining resources on candidate hosts after allocation
+// and returns per-host stranded resources for operator visibility.
 // Non-candidate hosts are excluded — their leftover is not fragmentation.
-func computeUnassigned(groups []GroupInput, hostRes map[string]map[string]int64) map[string]int64 {
+func computeUnassigned(groups []GroupInput, hostRes map[string]map[string]int64) (unassigned map[string]int64, strandedByHost map[string]map[string]int64) {
 	candidateSet := make(map[string]struct{})
 	for _, g := range groups {
 		for _, h := range g.CandidateHosts {
 			candidateSet[h] = struct{}{}
 		}
 	}
-	unassigned := make(map[string]int64)
+	unassigned = make(map[string]int64)
+	strandedByHost = make(map[string]map[string]int64)
 	for h, res := range hostRes {
 		if _, isCandidate := candidateSet[h]; !isCandidate {
 			continue
 		}
+		hasStranded := false
 		for r, remaining := range res {
 			if remaining > 0 {
 				unassigned[r] += remaining
+				hasStranded = true
 			}
 		}
+		if hasStranded {
+			strandedByHost[h] = res
+		}
 	}
-	return unassigned
+	return
 }
 
 // collectExclusiveResources builds the exclusive allocation map from group assigned counts.
@@ -248,12 +255,12 @@ func collectExclusiveResources(states []groupState) map[string]map[string]int64 
 //
 // The caller divides exclusiveResources[group][ResourceMemory] by the group's flavor memory
 // to obtain the slot count meaningful to that group.
-func SplitCapacity(groups []GroupInput, hosts map[string]HostState) (freeResources, exclusiveResources map[string]map[string]int64, unassigned map[string]int64) {
+func SplitCapacity(groups []GroupInput, hosts map[string]HostState) (freeResources, exclusiveResources map[string]map[string]int64, unassigned map[string]int64, strandedByHost map[string]map[string]int64) {
 	states := initGroupStates(groups, hosts)
 	freeResources = computeFreeResources(groups, hosts)
 	hostRes := copyHostResources(hosts)
 	allocateRoundRobin(states, hostRes)
-	unassigned = computeUnassigned(groups, hostRes)
+	unassigned, strandedByHost = computeUnassigned(groups, hostRes)
 	exclusiveResources = collectExclusiveResources(states)
-	return freeResources, exclusiveResources, unassigned
+	return
 }

@@ -133,6 +133,14 @@ data:
     {{- if .Values.conf }}
     {{- $mergedConf = mergeOverwrite .Values.conf $mergedConf }}
     {{- end }}
+    {{- /* Default the outgoing HTTP User-Agent so every deployment is        */ -}}
+    {{- /* identifiable by the services it talks to: component from the        */ -}}
+    {{- /* release name, version from the chart appVersion (the image tag).    */ -}}
+    {{- $userAgent := dict "component" .Release.Name "version" .Chart.AppVersion }}
+    {{- if hasKey $mergedConf "userAgent" }}
+    {{- $userAgent = mergeOverwrite $userAgent $mergedConf.userAgent }}
+    {{- end }}
+    {{- $_ := set $mergedConf "userAgent" $userAgent }}
     {{ toJson $mergedConf }}
 ---
 apiVersion: v1

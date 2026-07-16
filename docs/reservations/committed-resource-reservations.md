@@ -1,50 +1,34 @@
 # Committed Resource Reservation System
 
-Cortex reserves hypervisor capacity for customers who pre-commit resources (committed resources, CRs), and exposes usage and capacity data via APIs.
+Cortex reserves hypervisor capacity for customers who pre-commit resources (committed resources, CRs), and exposes usage and capacity data to Limes via the LIQUID API.
+
+Implementation: `internal/scheduling/reservations/commitments/`
 
 - [Committed Resource Reservation System](#committed-resource-reservation-system)
+  - [Architecture Overview](#architecture-overview)
+  - [Limes State → Cortex Action](#limes-state--cortex-action)
+  - [Resource Types](#resource-types)
+  - [Commitment Lifecycle](#commitment-lifecycle)
+  - [Reservation Lifecycle](#reservation-lifecycle)
+    - [Capacity Blocking](#capacity-blocking)
+    - [InFlightReservation](#inflightreservation)
+  - [APIs](#apis)
+    - [Change-Commitments](#change-commitments)
+    - [Quota](#quota)
+    - [Report-Usage](#report-usage)
+    - [Report-Capacity](#report-capacity)
+    - [Capacity Reporting Reference](#capacity-reporting-reference)
+      - [FlavorGroupCapacity CRD — per-flavor fields](#flavorgroupcapacity-crd--per-flavor-fields)
+      - [FlavorGroupCapacity CRD — group-level fields](#flavorgroupcapacity-crd--group-level-fields)
+      - [Prometheus metrics](#prometheus-metrics)
+      - [Report-Capacity REST endpoint](#report-capacity-rest-endpoint)
+  - [Syncer Task](#syncer-task)
+  - [Placement Observability](#placement-observability)
   - [Configuration and Observability](#configuration-and-observability)
-  - [Lifecycle Management](#lifecycle-management)
-    - [State (CRDs)](#state-crds)
-    - [CR Commitment Lifecycle](#cr-commitment-lifecycle)
-      - [Resource types](#resource-types)
-      - [CommittedResource Controller](#committedresource-controller)
-    - [Reservation Lifecycle](#reservation-lifecycle)
-      - [VM Lifecycle](#vm-lifecycle)
-      - [Capacity Blocking](#capacity-blocking)
-      - [InFlightReservation](#inflightreservation)
-      - [Reservation Controller](#reservation-controller)
-    - [Info API](#info-api)
-    - [Change-Commitments API](#change-commitments-api)
-    - [Quota API](#quota-api)
-    - [Report-Usage API](#report-usage-api)
-    - [Report-Capacity API](#report-capacity-api)
-    - [Syncer Task](#syncer-task)
-    - [Placement Observability (CRS Evaluation)](#placement-observability-crs-evaluation)
 
-The CR reservation implementation is located in `internal/scheduling/reservations/commitments/`. Key components include:
-- `CommittedResource` controller — acceptance, rejection, child Reservation CRUD (memory) or arithmetic headroom check (cores)
-- `Reservation` controller — placement, VM allocation verification
-- API endpoints (`api/`)
-- Capacity and usage calculation logic
-- Syncer for periodic state sync
+## Architecture Overview
 
-## Configuration and Observability
-
-**Configuration**: Helm values for intervals, API flags, and pipeline configuration are defined in `helm/bundles/cortex-nova/values.yaml`. Key configuration includes:
-- API endpoint toggles (change-commitments, report-usage, report-capacity) — each endpoint can be disabled independently
-- Reconciliation intervals (grace period, active monitoring)
-- Scheduling pipeline selection per flavor group
-- Per-flavor-group resource flags (`handlesCommitments`, `hasCapacity`, `hasQuota`) controlling which resource types are active for each group
-
-**Metrics and Alerts**: Defined in `helm/bundles/cortex-nova/templates/alerts.yaml` with prefixes:
-- `cortex_committed_resource_change_api_*`
-- `cortex_committed_resource_usage_api_*`
-- `cortex_committed_resource_capacity_api_*`
-
-## Lifecycle Management
-
-The system is organized around two CRD types and two controllers. `CommittedResource` CRDs represent customer commitments; `Reservation` CRDs represent individual hypervisor capacity slots. Each has its own controller with a well-defined responsibility boundary.
+The system is organized around two CRD types and two controllers. `CommittedResource` CRDs represent customer commitments; `Reservation` CRDs represent individual hypervisor capacity slots held on behalf of a commitment.
 
 ```mermaid
 flowchart LR
@@ -80,71 +64,30 @@ flowchart LR
     ResCtrl -->|update status| Res
 ```
 
-### State (CRDs)
+`FlavorGroupCapacity` CRDs are maintained by the capacity controller (outside this subsystem) and read by the Report-Capacity endpoint. `ProjectQuota` CRDs are written by the Quota API and read by the Report-Usage endpoint.
 
-**`CommittedResource` CRD** — primary source of truth for a commitment accepted by Cortex. One CRD per commitment UUID. Spec holds the commitment identity (project, flavor group, resource type, amount, ...). Status holds the acceptance outcome (`Ready` condition with reason `Planned`/`Reserving`/`Rejected`/`Accepted`), the accepted amount, and usage fields populated by the usage reconciler: `AssignedInstances` (VM UUIDs deterministically assigned to this CR), `UsedResources` (total resource consumption of assigned VMs), `LastUsageReconcileAt`, and `UsageObservedGeneration`.
+## Limes State → Cortex Action
 
-**`Reservation` CRD** — a single reservation slot on a hypervisor, owned by a `CommittedResource`. One `CommittedResource` may drive multiple `Reservation` CRDs (one per flavor-sized slot). Only memory commitments create Reservation CRDs; cores commitments do not. See [./failover-reservations.md](./failover-reservations.md) for the failover reservation type.
+| Limes State | Cortex action |
+|---|---|
+| `planned` | No capacity reserved |
+| `pending` | One-shot acceptance attempt — accept or reject; no retry |
+| `guaranteed` / `confirmed` | Accept and keep in sync; retry indefinitely unless `AllowRejection=true` |
+| `superseded` / `expired` | Release all held capacity |
 
-**`ProjectQuota` CRD** — per-project, per-AZ quota store. One CRD exists per (project × availability zone) pair, named `quota-{projectID}-{az}`. Written by the Quota API when Limes pushes quota (one CRD is created for each AZ in the request). The quota controller reconciles usage into the status: `TotalUsage` and `PaygUsage` are flat `map[string]int64` fields tracking per-resource consumption in that AZ. The controller watches CommittedResource and Hypervisor CRDs to maintain these values via periodic full reconciles, incremental HV diffs, and PaygUsage-only recomputes triggered by CommittedResource status changes.
+`AllowRejection` mirrors the request's `RequiresConfirmation` flag. When set, the controller rejects and rolls back on failure rather than retrying. On any rejection, capacity is rolled back to the last successfully accepted amount (or fully released if never accepted).
 
-**`FlavorGroupCapacity` CRD** — per-flavor-group, per-AZ capacity snapshot maintained by the capacity controller (outside this subsystem). The Report-Capacity endpoint reads these to compute available capacity.
+## Resource Types
 
-### CR Commitment Lifecycle
+Cortex handles two resource types with different acceptance mechanisms:
 
-The CR commitment lifecycle covers everything from a commitment being accepted by Limes through to Cortex confirming or rejecting it. The `CommittedResource` CRD is the entry point; the `CommittedResource` controller owns the acceptance decision.
+**Memory (`_ram`)** — Cortex creates `Reservation` CRDs on specific hypervisors. Acceptance requires the scheduler to place the required slots. If placement fails, the commitment is rejected or retried based on its state and `AllowRejection`.
 
-**Limes state → Cortex action:**
+**CPU cores (`_cores`)** — No `Reservation` CRDs are created. Cortex does an arithmetic headroom check: requested cores vs. total CPU capacity for the flavor group and AZ (from `FlavorGroupCapacity`) minus cores already held by active CRs. Lightweight, no scheduler interaction.
 
-| Limes State | Meaning | Cortex action |
-|---|---|---|
-| `planned` | Future start, no guarantee yet | No capacity reserved |
-| `pending` | Limes asking for a yes/no decision now | One-shot acceptance attempt — accept or reject; no retry |
-| `guaranteed` / `confirmed` | Capacity must be honoured | Accept and keep in sync; see failure handling below |
-| `superseded` / `expired` | Commitment no longer active | Release all held capacity |
+The two types share lifecycle states and acceptance/rejection semantics — they differ only in how capacity is verified and held.
 
-#### Resource types
-
-Cortex handles two resource types for committed resources, with different acceptance mechanisms:
-
-**Memory (`_ram`)** — Cortex creates and manages `Reservation` CRDs on specific hypervisors. Acceptance means Cortex can place the required number of reservation slots via the scheduling pipeline. If placement is impossible (no hosts with enough free memory), the commitment is rejected or retried depending on the commitment state and `AllowRejection` flag.
-
-**CPU cores (`_cores`)** — No `Reservation` CRDs are created. Cortex checks whether sufficient CPU headroom exists by comparing the requested cores against the total CPU capacity for the flavor group and AZ (as reported by the `FlavorGroupCapacity` CRD) minus cores already committed by other active CRs. This is a lightweight arithmetic check that does not interact with the scheduling pipeline.
-
-The two types share the same lifecycle states and the same acceptance/rejection semantics — they differ only in how capacity is verified and held.
-
-#### CommittedResource Controller
-
-The controller accepts or rejects commitments and keeps the allocated capacity in sync with what Limes expects.
-
-**`pending`** — Cortex is being asked for a yes/no answer. A single acceptance attempt is made. On failure, the commitment is rejected and all held capacity is released. No retry.
-
-**`guaranteed` / `confirmed`** — Cortex is expected to honour the commitment indefinitely. The default is to keep retrying on failure (`Ready=False, Reason=Reserving`). Callers that can tolerate rejection set `AllowRejection=true`; the controller then rejects on failure rather than retrying.
-
-**On rejection** — any capacity held for this CR is rolled back to the last successfully accepted amount (or fully released if never accepted).
-
-**Reconcile trigger flow:**
-
-```mermaid
-sequenceDiagram
-    participant API as Change-Commitments API
-    participant CRCtrl as CR Controller
-    participant CRCRD as CommittedResource CRD
-    participant ResCRD as Reservation CRD
-    participant ResCtrl as Reservation Controller
-
-    API->>CRCRD: write (create/update)
-    CRCRD-->>CRCtrl: watch fires
-    CRCtrl->>ResCRD: create/update child slots (memory only)
-    ResCRD-->>ResCtrl: watch fires
-    ResCtrl->>ResCRD: update (ObservedParentGeneration, Ready=True/False)
-    ResCRD-->>CRCtrl: watch fires (Reservation→parent CR lookup)
-    CRCtrl->>CRCRD: update status (Accepted / Reserving / Rejected)
-```
-
-For cores commitments the middle steps (Reservation CRUD, Reservation controller) are skipped — the CR controller updates the `CommittedResource` status directly after the arithmetic check.
-
-**CommittedResource status states:**
+## Commitment Lifecycle
 
 ```mermaid
 stateDiagram-v2
@@ -170,22 +113,30 @@ stateDiagram-v2
     Planned --> [*] : deleted
 ```
 
-### Reservation Lifecycle
+The reconcile trigger chain for memory commitments:
 
-*Applies to memory commitments only. Cores commitments do not create Reservations.*
+```mermaid
+sequenceDiagram
+    participant API as Change-Commitments API
+    participant CRCtrl as CR Controller
+    participant CRCRD as CommittedResource CRD
+    participant ResCRD as Reservation CRD
+    participant ResCtrl as Reservation Controller
 
-| Component | Event | Timing | Action |
-|-----------|-------|--------|--------|
-| **Reservation Controller** | `Reservation` created | Immediate (watch) | Find host via scheduler API, set `TargetHost` |
-| **Scheduling Pipeline** | VM Create, Migrate, Resize | Immediate | Add VM to `Spec.Allocations` |
-| **Reservation Controller** | Reservation CRD updated | `committedResourceRequeueIntervalGracePeriod` (default: 1 min) | Defer verification for new VMs still spawning; update `Status.Allocations` |
-| **Reservation Controller** | Hypervisor CRD updated (VM appeared/disappeared) | Immediate (event-driven) | Verify allocations via Hypervisor CRD; remove gone VMs from `Spec.Allocations` |
-| **Reservation Controller** | Periodic safety-net | `committedResourceRequeueIntervalActive` (default: 5 min) | Same as above; catches any missed events |
-| **Reservation Controller** | Optimize unused slots | >> minutes | Assign PAYG VMs or re-place reservations |
+    API->>CRCRD: write (create/update)
+    CRCRD-->>CRCtrl: watch fires
+    CRCtrl->>ResCRD: create/update child slots
+    ResCRD-->>ResCtrl: watch fires
+    ResCtrl->>ResCRD: update (Ready=True/False)
+    ResCRD-->>CRCtrl: watch fires
+    CRCtrl->>CRCRD: update status (Accepted / Reserving / Rejected)
+```
 
-#### VM Lifecycle
+## Reservation Lifecycle
 
-VM allocations are tracked within reservations:
+*Applies to memory commitments only.*
+
+A `Reservation` CRD represents one flavor-sized slot on a specific hypervisor. The Reservation controller uses the **Hypervisor CRD as the sole source of truth** for VM presence — no Nova API calls.
 
 ```mermaid
 flowchart LR
@@ -201,177 +152,159 @@ flowchart LR
     C -->|update Spec/Status.Allocations| Res
 ```
 
-**Allocation fields**:
-- `Spec.Allocations` — Expected VMs (written by the scheduling pipeline on placement)
-- `Status.Allocations` — Confirmed VMs (written by the controller after verifying the VM is on the expected host)
+VM allocation has two fields with distinct semantics: `Spec.Allocations` (expected — written by the scheduling pipeline) and `Status.Allocations` (confirmed — written by the controller after the VM is verified on the expected hypervisor). New VMs stay in `Spec` only during a grace period to allow for startup time. After the grace period, absence from the Hypervisor CRD removes the VM.
 
-**VM allocation state diagram**:
+When a VM is confirmed on a reservation for the first time, the controller proactively removes it from `Spec.Allocations` on all other candidate reservations. This frees phantom capacity blocks immediately rather than waiting for each candidate's grace period to expire.
 
-The controller uses the **Hypervisor CRD** as the sole source of truth for VM allocation verification:
+`MaxConcurrentReconciles=1` on the Reservation controller is intentional — parallel reconciles would allow concurrent placements to race and double-book a slot.
 
-```mermaid
-stateDiagram-v2
-    direction LR
-    state "Spec only (grace period)" as SpecOnly
-    state "Spec + Status (on expected host)" as Confirmed
+### Capacity Blocking
 
-    [*] --> SpecOnly : placement (create, migrate, resize)
-    SpecOnly --> SpecOnly : within grace period
-    SpecOnly --> Confirmed : found on HV CRD after grace period
-    SpecOnly --> [*] : not on HV CRD after grace period
-    Confirmed --> [*] : not on HV CRD
-```
+Each active Reservation blocks capacity on its target hypervisor so the scheduler cannot double-allocate. The block is recalculated on every reconcile:
 
-**Candidate reservation cleanup**: When a VM is newly confirmed on a reservation (transitions from Spec-only to Spec+Status for the first time), the controller immediately removes that VM's UUID from `Spec.Allocations` on all other candidate reservations that still carry it. This proactive cleanup frees phantom capacity blocks on non-selected hosts immediately rather than waiting for each candidate reservation's own grace period expiry or periodic requeue to detect that the VM landed elsewhere.
-
-**Note**: VM allocations may not consume all resources of a reservation slot. A reservation with 128 GB may have VMs totaling only 96 GB if that fits the project's needs. Allocations may exceed reservation capacity (e.g., after VM resize).
-
-#### Capacity Blocking
-
-**Blocking rules by allocation state:**
-
-| State | In HV Allocation? | Reservation must block? |
-|---|---|---|
-| No allocations | — | Full `Spec.Resources` |
-| Confirmed (Spec + Status) | Yes — already subtracted | No — subtract from reservation block |
-| Spec only (not yet running) | No — not yet on host | Yes — must remain in reservation block |
-
-**Formal calculation (stable state, `Spec.TargetHost == Status.Host`):**
+**Stable state (`Spec.TargetHost == Status.Host`):**
 
 ```
-confirmed            = sum of resources for VMs in both Spec.Allocations and Status.Allocations
-spec_only_unblocked  = sum of resources for VMs in Spec.Allocations only, NOT having an active pessimistic blocking reservation on this host
+confirmed            = resources of VMs in both Spec and Status allocations
+spec_only_unblocked  = resources of Spec-only VMs without an active InFlightReservation on this host
 remaining            = max(0, Spec.Resources - confirmed)
 block                = max(remaining, spec_only_unblocked)
 ```
 
-**Interaction with pessimistic blocking reservations:**
+The `spec_only_unblocked` term exists because an InFlightReservation on the same host already blocks those resources pessimistically — the CR reservation must not double-count them.
 
-When a VM is in flight (Nova choosing between candidates), a pessimistic blocking reservation exists on each candidate host. For any SpecOnly VM that has such a reservation on the same host, the pessimistic blocking reservation is the authority — the CR reservation must not double-count it. The `spec_only_unblocked` term excludes those VMs.
+**Migration state (`Spec.TargetHost != Status.Host`):** Block full `max(Spec.Resources, spec_only_unblocked)` on **both** hosts. VMs may be split across hosts mid-migration; conservative blocking on both prevents overcommit until migration completes.
 
-See the [InFlightReservation](#inflightreservation) section below for how these reservations are managed.
+**Corner cases worth noting:**
+- Confirmed VMs exceed reservation size (e.g. after resize): clamp `remaining` to 0, never negative
+- Spec-only VM larger than remaining slot: block `spec_only_unblocked` — those resources will land when the VM starts
+- Live migration within a reservation: handled implicitly by `hv.Status.Allocation`, which libvirt reports on both source and target during migration; no special logic needed
 
-**Migration state (`Spec.TargetHost != Status.Host`):**
+### InFlightReservation
 
-When a reservation is being migrated to a new host, block the full `max(Spec.Resources, spec_only_unblocked)` on **both** hosts — no subtraction of confirmed VMs. VMs may be split across hosts mid-migration and the split is not reliably known from reservation data alone; conservatively blocking both hosts prevents overcommit during the transition. The over-blocking resolves once migration completes and `Spec.TargetHost == Status.Host` again.
+A short-lived `InFlightReservation` CRD is created at the end of each VM placement run, one per candidate host returned to Nova. It pessimistically blocks capacity on every candidate while Nova decides where the VM lands — preventing a second concurrent placement from booking the same slot.
 
-**Corner cases:**
+Created by the scheduling pipeline; deleted once the VM is confirmed on a host or after a timeout. Skipped for non-VM-placement runs (reservation scheduling, capacity probes, failover — all set `SkipInflight`).
 
-- **Confirmed VMs exceed reservation size** (e.g., after VM resize): `Spec.Resources - confirmed` goes negative. Clamp to `0` — otherwise the filter would add capacity back to the host.
+## APIs
 
-- **Spec-only VM larger than remaining reservation** (e.g., confirmed VMs have consumed most of the slot, and a new VM awaiting startup is larger than what remains): `remaining < spec_only_unblocked`. Block `spec_only_unblocked` — the VM will consume those resources when it starts, and they are not yet in HV Allocation.
+### Change-Commitments
 
-- **VM live migration within a reservation** (VM moves away from the reservation's host): handled implicitly by `hv.Status.Allocation`. Libvirt reports resource consumption on both source and target during live migration, so both hosts' `hv.Status.Allocation` already reflects the in-flight state. No special filter logic needed. The reservation controller will eventually remove the VM from the reservation once it's confirmed on the wrong host past the grace period.
+`POST /commitments/v1/change-commitments`
 
-#### InFlightReservation
+**Write-intent, watch-for-outcome**: the handler writes `CommittedResource` CRDs and polls their `Ready` condition until terminal. It does not interact with Reservation CRDs directly.
 
-An `InFlightReservation` is a short-lived Reservation CRD (type `InFlightReservation`) that pessimistically blocks capacity on each candidate host while a VM is being scheduled. It prevents double-booking when multiple scheduling decisions are in flight concurrently.
+**All-or-nothing semantics**: if any commitment in a batch cannot be fulfilled, the entire request is rolled back. All modified CRDs are restored to their pre-request specs.
 
-**Lifecycle:**
-- **Created** by the scheduling pipeline at the end of a successful placement run, one per candidate host returned to Nova. Creation is skipped when the `SkipInflight` pipeline option is set (used by reservation scheduling, capacity checks, and failover — any non-VM-placement run).
-- **Deleted** once the VM has been confirmed on a host (the in-flight reservation is no longer needed) or after a timeout if the VM never lands.
+### Quota
 
-**Spec fields** (`InFlightReservationSpec`):
-- `VMID` — Nova server UUID of the VM being scheduled
-- `UserID` — owner of the VM
-- `ProjectID` — project/tenant of the VM
-- `Intent` — lifecycle operation that triggered the placement (e.g., create, migrate, resize)
+`PUT /commitments/v1/projects/:project_id/quota`
 
-**Interaction with CR reservations:** When computing how much capacity a CR reservation must block, Spec-only VMs that already have an InFlightReservation on the same host are excluded from the CR reservation's block calculation (the `spec_only_unblocked` term). This avoids double-counting resources that are already blocked by the pessimistic InFlightReservation.
+Persists Limes quota as `ProjectQuota` CRDs (one per project × AZ). The quota controller reconciles actual usage into each CRD's status. Writes are idempotent; concurrent writes are resolved with retry-on-conflict.
 
-#### Reservation Controller
+### Report-Usage
 
-The `Reservation` controller watches `Reservation` CRDs and `Hypervisor` CRDs. `MaxConcurrentReconciles=1` prevents overbooking during concurrent placements.
+`POST /commitments/v1/projects/:project_id/report-usage`
 
-**Placement** — finds hosts for new reservations (calls scheduler API). Placement requests include a `domain_name` scheduler hint resolved from the reservation's `DomainID` via Keystone. This allows the `filter_external_customer` pipeline filter to enforce host restrictions for external customer domains. Domain name resolution uses an in-process cache that stores names indefinitely (domain names are immutable in OpenStack). If the Keystone integration is not configured (`keystoneSecretRef` absent), the hint is omitted and domain-based host restrictions are not enforced.
+Reports current usage per flavor group (ram, cores, instances). VM-to-commitment assignment is **pre-computed** by a background usage reconciler that writes into `CommittedResource.Status` — it is not calculated inline at request time. This assignment is deterministic but may differ from Cortex's internal scheduling assignment.
 
-**Allocation Verification** — tracks VM lifecycle on reservations. The controller uses the Hypervisor CRD as the sole source of truth, with two triggers:
-- New VMs (within `committedResourceAllocationGracePeriod`, default: 15 min): verification deferred — VM may still be spawning; requeued every `committedResourceRequeueIntervalGracePeriod` (default: 1 min)
-- Established VMs: verified reactively when the Hypervisor CRD changes (VM appeared or disappeared in `Status.Instances`), with `committedResourceRequeueIntervalActive` (default: 5 min) as a safety-net fallback
-- Missing unconfirmed VMs (in `Spec.Allocations` only): removed from `Spec.Allocations` when not found on the Hypervisor CRD after the grace period
-- Missing confirmed VMs (already present in `Status.Allocations`): bypass the grace period entirely — their disappearance from the Hypervisor CRD is treated as authoritative and they are removed immediately
+For flavor groups with `HandlesCommitments=true`, the response includes per-AZ quota from `ProjectQuota` CRDs.
 
-**Reservation migration is not supported yet.**
+### Report-Capacity
 
-### Info API
+`POST /commitments/v1/report-capacity`
 
-`GET /commitments/v1/info` — describes the full service to Limes: which flavor groups are active, what resource types each group exposes (ram, cores, instances), their units, LIQUID topologies, and whether each accepts commitments.
+Reports available capacity per flavor group and AZ, read from pre-computed `FlavorGroupCapacity` CRDs. If a CRD's `Ready` condition is stale, usage is omitted from the response (capacity is still reported) to avoid underreporting during a controller outage.
 
-- RAM resources with `HandlesCommitments=true` use `AZSeparatedTopology` — Limes treats quota as AZ-specific and sends per-AZ breakdowns in quota requests.
-- All other resources (cores, instances, and RAM without commitments) use `AZAwareTopology` — no per-AZ quota.
+### Capacity Reporting Reference
 
-Limes calls this endpoint once on startup and whenever the service description changes.
+This section maps every reporting surface to the values it exposes, the resource dimensions it considers, and the cluster state it reflects.
 
-### Change-Commitments API
+#### FlavorGroupCapacity CRD — per-flavor fields
 
-The change-commitments API receives batched commitment changes from Limes and applies them using a **write-intent, watch-for-outcome** pattern: the handler creates or updates `CommittedResource` CRDs and polls their `Status.Conditions` until each reaches a terminal state — it does not interact with `Reservation` CRDs directly.
+| Field | Dimensions | Cluster state | Notes |
+|---|---|---|---|
+| `TotalCapacityVMSlots` | Min(memory, CPU) | Empty datacenter | All reservation types ignored; competing groups not subtracted |
+| `TotalCapacityHosts` | Min(memory, CPU) | Empty datacenter | Host count for `TotalCapacityVMSlots` |
+| `PlaceableVMs` | Min(memory, CPU) | Current + reservations | If this flavor consumed all remaining capacity; competing groups not subtracted |
+| `PlaceableHosts` | Min(memory, CPU) | Current + reservations | Host count for `PlaceableVMs` |
 
-**Request Semantics**: A request can contain multiple commitment changes across different projects and flavor groups. The semantic is **all-or-nothing** — if any commitment in the batch cannot be fulfilled (e.g., insufficient capacity), the entire request is rejected and rolled back.
+#### FlavorGroupCapacity CRD — group-level fields
 
-**Operations**:
-1. For each commitment in the batch, create or update a `CommittedResource` CRD. `Spec.AllowRejection` mirrors the request's `RequiresConfirmation` flag: `true` for changes where Limes needs a yes/no answer (new commitments, resizes), `false` for non-confirming changes (deletions, status-only transitions) where Limes doesn't act on the rejection reason
-2. Poll `CommittedResource.Status.Conditions[Ready]` until each reaches a terminal state: `Reason=Accepted` (success), `Reason=Planned` (deferred; accepted), or `Reason=Rejected` (failure) — only for confirming changes; non-confirming changes return immediately without polling
-3. On any failure or timeout, restore all modified `CommittedResource` CRDs to their pre-request specs (or delete newly-created ones)
+| Field | Dimensions | Cluster state | Notes |
+|---|---|---|---|
+| `FreeCapacity` | Memory + Cores (separate) | Current + reservations | Raw sum across candidate hosts; may double-count across groups sharing hosts |
+| `ExclusivelyFreeCapacity` | Memory + Cores (separate) | Current + reservations | Round-robin split result — sum across all groups never exceeds installed capacity |
+| `ExclusivelyFreeSlots` | Min(memory, CPU) → Memory | Current + reservations | `ExclusivelyFreeCapacity[memory] / smallestFlavorMemBytes`; the memory pool is CPU-gated: the round-robin excludes hosts where the flavor doesn't fit on CPU before summing bytes |
+| `TotalCapacity` | Memory + Cores (separate) | Empty datacenter | `max(TotalCapacityVMSlots × flavorResources)` over all flavors in the group |
+| `CommittedCapacity` | Memory (slot units) | — | Active CR accepted amounts in smallest-flavor slot units |
+| `RunningInstances` / `RunningResources` | Memory + Cores | — | Actual running VMs in this group × AZ |
 
-The `CommittedResource` controller handles all downstream work. `AllowRejection=true` tells it to reject and roll back on failure rather than retrying indefinitely.
+#### Prometheus metrics
 
-### Quota API
+All metrics carry `flavor_group` and `az` labels; per-flavor metrics additionally carry `flavor_name`.
 
-`PUT /commitments/v1/projects/:project_id/quota` — receives the project's quota allocation from Limes and persists it as `ProjectQuota` CRDs, one per (project × availability zone) combination, named `quota-{projectID}-{az}`. For flavor groups with `HandlesCommitments=true`, Limes sends per-AZ quota breakdowns; each AZ gets its own CRD with a flat `Quota map[string]int64` holding per-resource quota values for that zone. The quota controller then reconciles usage into each CRD's status (`TotalUsage`, `PaygUsage`). Writes are idempotent; concurrent writes are resolved with retry-on-conflict.
+| Metric suffix | Source field | Dimensions | Cluster state |
+|---|---|---|---|
+| `_vm_slots_empty_datacenter` | `TotalCapacityVMSlots` | Min(memory, CPU) | Empty datacenter |
+| `_vm_slots_placeable` | `PlaceableVMs` | Min(memory, CPU) | Current + reservations |
+| `_hosts_empty_datacenter` | `TotalCapacityHosts` | Min(memory, CPU) | Empty datacenter |
+| `_hosts_placeable` | `PlaceableHosts` | Min(memory, CPU) | Current + reservations |
+| `_free_capacity_gib` | `FreeCapacity[memory]` | Memory only | Current + reservations — may overlap across groups |
+| `_exclusively_free_capacity_gib` | `ExclusivelyFreeCapacity[memory]` | Memory only | Current + reservations |
+| `_exclusively_free_slots` | `ExclusivelyFreeSlots` | Min(memory, CPU) → Memory | Current + reservations |
+| `_committed_gib` | `CommittedCapacityBytes` | Memory | — |
+| `_committed_reservations` | `CommittedCapacity` | Memory (slot units) | — |
+| `_running_instances` | `RunningInstances` | — | — |
 
-### Report-Usage API
+#### Report-Capacity REST endpoint
 
-`POST /commitments/v1/projects/:project_id/report-usage` — reports current resource usage for a project.
+Capacity and usage are derived from `FlavorGroupCapacity` CRDs and reported per AZ for three resource types per group:
 
-For each flavor group `X` that accepts commitments, Cortex exposes three resource types:
-- `hw_version_X_ram` — RAM in units of the smallest flavor in the group (`HandlesCommitments=true`)
-- `hw_version_X_cores` — CPU cores (`HandlesCommitments=false`; derived from RAM via fixed ratio where applicable)
-- `hw_version_X_instances` — instance count (`HandlesCommitments=false`)
+| Resource | Capacity formula | Usage formula | Notes |
+|---|---|---|---|
+| `_instances` | `runningInstances + ExclusivelyFreeSlots` | `runningInstances` | `ExclusivelyFreeSlots` is CPU-and-memory-gated (round-robin), final slot count via memory division |
+| `_ram` (fixed core ratio) | same as `_instances` | `runningInstances` | Slot count stands in for RAM |
+| `_ram` (variable) | `(runningMemBytes + ExclusivelyFreeCapacity[memory]) / ramUnitBytes` | `runningMemBytes / ramUnitBytes` | Both in declared units (e.g. GiB); `ramUnitBytes` configured per group |
+| `_cores` | `runningCoresCount + ExclusivelyFreeCapacity[cores]` | `runningCoresCount` | CPU-dimension-driven |
 
-For flavor groups with `HandlesCommitments=true`, the response includes per-AZ quota from the `ProjectQuota` CRDs (written by the Quota API).
+## Syncer Task
 
-VM-to-commitment assignment is read from pre-computed `CommittedResource.Status` fields rather than being calculated inline at request time. A dedicated **usage reconciler** (in `internal/scheduling/reservations/commitments/usage_reconciler.go`) watches `CommittedResource` and `Hypervisor` CRDs and periodically runs the deterministic assignment algorithm, writing `AssignedInstances`, `UsedResources`, `LastUsageReconcileAt`, and `UsageObservedGeneration` into each CommittedResource's status. The Report-Usage endpoint reads these status fields to determine which VMs belong to which commitment. If a CR has not yet been reconciled, its VMs appear as PAYG until the first usage reconcile completes.
+Runs periodically and reconciles local `CommittedResource` CRD state against Limes' view, correcting drift from missed API calls or restarts. Writes `CommittedResource` CRDs only — capacity management remains the controller's responsibility.
 
-For each VM, the API reports whether it accounts to a specific commitment or PAYG. This assignment is deterministic and may differ from the actual Cortex internal assignment used for scheduling.
+## Placement Observability
 
-### Report-Capacity API
-
-`POST /commitments/v1/report-capacity` — reports available hypervisor capacity per flavor group and AZ. Capacity data is pre-computed by the capacity controller and stored in `FlavorGroupCapacity` CRDs; the endpoint aggregates these per-AZ values into the response. If a `FlavorGroupCapacity` CRD is stale (controller behind), the endpoint reports total capacity without subtracting usage to avoid underreporting.
-
-### Syncer Task
-
-The syncer task runs periodically and syncs local `CommittedResource` CRD state to match Limes' view of commitments, correcting drift from missed API calls or restarts. It writes `CommittedResource` CRDs only — capacity management is the controller's responsibility.
-
-### Placement Observability (CRS Evaluation)
-
-The `internal/scheduling/nova/crs/` package provides post-placement classification and Prometheus metrics for committed resource slot utilization. It answers the question: "For each VM placement (or no-host-found failure), what was the CR slot situation?"
-
-**Prometheus metrics:**
+The `internal/scheduling/nova/crs/` package classifies every placement decision by CR slot coverage and emits Prometheus metrics. This answers: "For each VM placement or no-host-found, what was the CR slot situation?"
 
 | Metric | Labels | Description |
 |--------|--------|-------------|
 | `cortex_nova_no_host_found_total` | `cr_slot`, `flavor_group`, `intent` | No-host-found results classified by CR coverage |
 | `cortex_nova_placement_total` | `flavor_group`, `intent`, `cr_slot` | Successful placements classified by CR slot outcome |
 
-PAYG placements (flavor not in any configured group) are not counted by either metric.
+PAYG placements (flavor not in any configured group) are not counted.
 
-**No-host-found classification (`cr_slot` label on `cortex_nova_no_host_found_total`):**
+**`cr_slot` values for no-host-found:**
 
-| Category | Meaning |
-|----------|---------|
+| Value | Meaning |
+|---|---|
 | `no_cr` | Project has no active CommittedResources for the flavor group |
-| `cr_exhausted` | CommittedResources exist but are fully occupied (used >= capacity) |
-| `slot_exhausted` | CR has remaining capacity but no input host has a usable reservation slot |
-| `slot_blocked` | A usable slot exists on an input host but scheduling constraints excluded all such hosts |
+| `cr_exhausted` | CommittedResources exist but are fully occupied |
+| `slot_exhausted` | CR has remaining capacity but no candidate host has a usable reservation slot |
+| `slot_blocked` | A usable slot exists but scheduling constraints excluded all such hosts |
 
-**Placement classification (`cr_slot` label on `cortex_nova_placement_total`):**
+**`cr_slot` values for successful placements:**
 
-| Category | Meaning |
-|----------|---------|
+| Value | Meaning |
+|---|---|
 | `no_cr` | No active CR or CR capacity fully exhausted |
 | `slot_missed` | CR has remaining capacity but no candidate host has a slot with remaining memory > 0 |
 | `slot_used` | CR has remaining capacity and at least one candidate host has a usable slot |
 
-**Slot evaluator:** The `SlotEvaluator` is built once per scheduling request from Hypervisor and Reservation CRDs (no further K8s reads during classification). It computes per-host free memory and indexes ready CR reservation slots by host. `HasUsableSlot` checks whether a host has a slot that can accommodate the VM under the overfill model: `slot.remaining + host.base_free >= vmMemBytes`.
+## Configuration and Observability
 
-**Recorder:** The `Recorder` is called after each placement decision. On success (`slot_used`), it writes the VM UUID into the best-fit reservation slot (`PickSlot` selects the slot that maximises coverage with tightest-fit tiebreaking). On no-host-found, it classifies the failure and increments the counter.
+**Configuration**: `helm/bundles/cortex-nova/values.yaml` — API endpoint toggles, reconciliation intervals, scheduling pipeline selection, and per-flavor-group resource flags.
+
+**Metrics and Alerts**: `helm/bundles/cortex-nova/templates/alerts.yaml`, prefixes:
+- `cortex_committed_resource_change_api_*`
+- `cortex_committed_resource_usage_api_*`
+- `cortex_committed_resource_capacity_api_*`
