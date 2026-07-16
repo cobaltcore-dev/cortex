@@ -1,5 +1,55 @@
 # Changelog
 
+## 2026-07-16 — [#1051](https://github.com/cobaltcore-dev/cortex/pull/1051)
+
+### cortex v0.3.1 (sha-fc47858e)
+
+Non-breaking changes:
+- Add configurable HTTP User-Agent for service identity in SSO/HTTP client layer ([#1045](https://github.com/cobaltcore-dev/cortex/pull/1045))
+- Enhance multicluster client 'no cluster matched' error log messages with richer diagnostic context ([#1043](https://github.com/cobaltcore-dev/cortex/pull/1043))
+- Account for CPU & memory as a binding constraint in slot counting ([#1044](https://github.com/cobaltcore-dev/cortex/pull/1044))
+- Persist pipeline results before history upsert to prevent data loss on error ([#1047](https://github.com/cobaltcore-dev/cortex/pull/1047))
+- Fix broken CI workflows with large GitHub runner configuration ([#1050](https://github.com/cobaltcore-dev/cortex/pull/1050))
+- Add missing `SkipCommittedResourceTracking` to Options table and failover docs ([#1034](https://github.com/cobaltcore-dev/cortex/pull/1034))
+- Update external dependencies ([#1040](https://github.com/cobaltcore-dev/cortex/pull/1040), [#1032](https://github.com/cobaltcore-dev/cortex/pull/1032))
+
+### cortex-shim v0.1.7 (sha-7e36a65c)
+
+Includes updated image sha-7e36a65c.
+
+### cortex-postgres v0.6.9 (sha-e06153f8)
+
+Non-breaking changes:
+- Rebuild image to resolve CVEs ([#1033](https://github.com/cobaltcore-dev/cortex/pull/1033))
+
+### cortex-nova v0.0.81
+
+Includes updated charts cortex v0.3.1, cortex-postgres v0.6.9.
+
+### cortex-cinder v0.0.81
+
+Includes updated charts cortex v0.3.1, cortex-postgres v0.6.9.
+
+### cortex-manila v0.0.81
+
+Includes updated charts cortex v0.3.1, cortex-postgres v0.6.9.
+
+### cortex-crds v0.0.81
+
+Includes updated chart cortex v0.3.1.
+
+### cortex-ironcore v0.0.81
+
+Includes updated chart cortex v0.3.1.
+
+### cortex-pods v0.0.81
+
+Includes updated chart cortex v0.3.1.
+
+### cortex-placement-shim v0.1.7
+
+Includes updated chart cortex-shim v0.1.7.
+
 ## 2026-07-13 — [#1036](https://github.com/cobaltcore-dev/cortex/pull/1036)
 
 ### cortex v0.3.0 (sha-ee9cd485)
