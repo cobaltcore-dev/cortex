@@ -379,7 +379,7 @@ func (s *Shim) initHTTPClient(ctx context.Context) error {
 	transport.ResponseHeaderTimeout = 60 * time.Second
 	transport.ExpectContinueTimeout = 1 * time.Second
 	transport.IdleConnTimeout = 90 * time.Second
-	s.httpClient = &http.Client{Transport: transport, Timeout: 60 * time.Second}
+	s.httpClient = &http.Client{Transport: sso.WrapUserAgent(transport), Timeout: 60 * time.Second}
 
 	setupLog.Info("Testing connection to placement API", "url", s.config.PlacementURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.config.PlacementURL, http.NoBody)

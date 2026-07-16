@@ -16,6 +16,27 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// userAgent is the User-Agent value set on every outgoing HTTP request made
+// through clients created by this package, identifying cortex as the caller.
+// It defaults to "cortex" and can be overridden once at process startup via
+// SetUserAgent (e.g. "cortex-nova/sha-70af93a8").
+var userAgent = "cortex"
+
+// SetUserAgent sets the User-Agent that this package's HTTP clients send. The
+// component and version are combined as "component/version"; if version is
+// empty, only the component is used. An empty component leaves the default
+// ("cortex") unchanged.
+func SetUserAgent(component, version string) {
+	if component == "" {
+		return
+	}
+	if version == "" {
+		userAgent = component
+		return
+	}
+	userAgent = component + "/" + version
+}
+
 // Configuration for single-sign-on (SSO).
 type SSOConfig struct {
 	Cert    string `json:"cert,omitempty"`
@@ -34,6 +55,28 @@ type requestLogger struct {
 func (lrt *requestLogger) RoundTrip(req *http.Request) (*http.Response, error) {
 	slog.Info("making http request", "url", req.URL.String())
 	return lrt.T.RoundTrip(req)
+}
+
+// Custom HTTP round tripper that sets the cortex User-Agent on every request,
+// identifying cortex as the caller. SSO clients build their own transport and
+// therefore need this, as they don't share http.DefaultTransport.
+type userAgentTransport struct {
+	T http.RoundTripper
+}
+
+// RoundTrip sets the User-Agent header to the cortex user agent. The request
+// is cloned so the caller's request is not mutated.
+func (uat *userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Set("User-Agent", userAgent)
+	return uat.T.RoundTrip(req)
+}
+
+// WrapUserAgent wraps the given RoundTripper so that every request carries the
+// cortex User-Agent header. Use it for hand-built transports that neither go
+// through NewHTTPClient nor the shared http.DefaultTransport.
+func WrapUserAgent(rt http.RoundTripper) http.RoundTripper {
+	return &userAgentTransport{T: rt}
 }
 
 // Kubernetes connector which initializes the sso connection from a secret.
@@ -110,5 +153,5 @@ func NewHTTPClient(conf SSOConfig) (*http.Client, error) {
 	if conf.Cert == "" {
 		slog.Debug("making http requests without SSO")
 	}
-	return &http.Client{Transport: &requestLogger{T: transport}}, nil
+	return &http.Client{Transport: &userAgentTransport{T: &requestLogger{T: transport}}}, nil
 }
