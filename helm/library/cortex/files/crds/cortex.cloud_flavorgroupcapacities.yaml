@@ -16,7 +16,7 @@ spec:
   versions:
   - additionalPrinterColumns:
     - jsonPath: .spec.flavorGroup
-      name: FlavorGroup
+      name: Group
       type: string
     - jsonPath: .spec.availabilityZone
       name: AZ
@@ -24,11 +24,34 @@ spec:
     - jsonPath: .status.runningInstances
       name: Running
       type: integer
-    - jsonPath: .status.lastReconcileAt
-      name: LastReconcile
-      type: date
+    - jsonPath: .status.exclusivelyFreeSlots
+      name: Avail
+      type: integer
     - jsonPath: .status.conditions[?(@.type=='Ready')].status
       name: Ready
+      type: string
+    - jsonPath: .status.lastReconcileAt
+      name: Reconciled
+      type: date
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      priority: 1
+      type: date
+    - jsonPath: .status.freeCapacity.memory
+      name: Free_Mem
+      priority: 1
+      type: string
+    - jsonPath: .status.exclusivelyFreeCapacity.memory
+      name: Excl_Mem
+      priority: 1
+      type: string
+    - jsonPath: .status.freeCapacity.cores
+      name: Free_CPU
+      priority: 1
+      type: string
+    - jsonPath: .status.exclusivelyFreeCapacity.cores
+      name: Excl_CPU
+      priority: 1
       type: string
     name: v1alpha1
     schema:

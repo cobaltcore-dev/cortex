@@ -199,6 +199,12 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	}
 
 	result, err := pipeline.Run(request)
+	// Persist the result on the decision before upserting history so that
+	// CreateOrUpdateHistory can observe the target host and ordered hosts.
+	// On error the result is empty/meaningless, so only set it on success.
+	if err == nil {
+		decision.Status.Result = &result
+	}
 	if !request.Options.SkipHistory {
 		c.upsertHistory(ctx, decision, err)
 	}
@@ -206,7 +212,6 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		log.Error(err, "failed to run pipeline")
 		return &request, err
 	}
-	decision.Status.Result = &result
 	meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
 		Type:    v1alpha1.DecisionConditionReady,
 		Status:  metav1.ConditionTrue,

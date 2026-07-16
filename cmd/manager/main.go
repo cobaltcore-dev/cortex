@@ -68,6 +68,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
+	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	"github.com/cobaltcore-dev/cortex/pkg/task"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/sapcc/go-bits/httpext"
@@ -91,6 +92,15 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
+// UserAgentConfig identifies this cortex deployment to the services it talks
+// to. Rendered by helm from the release name and chart version.
+type UserAgentConfig struct {
+	// Component is the service name, e.g. "cortex-nova".
+	Component string `json:"component,omitempty"`
+	// Version is the deployed version, e.g. "sha-70af93a8".
+	Version string `json:"version,omitempty"`
+}
+
 type MainConfig struct {
 	// ID used to identify leader election participants.
 	LeaderElectionID string `json:"leaderElectionID,omitempty"`
@@ -98,6 +108,8 @@ type MainConfig struct {
 	EnabledControllers []string `json:"enabledControllers"`
 	// List of enabled tasks.
 	EnabledTasks []string `json:"enabledTasks"`
+	// User-Agent sent with all outgoing HTTP requests.
+	UserAgent UserAgentConfig `json:"userAgent,omitempty"`
 }
 
 //nolint:gocyclo
@@ -105,6 +117,15 @@ func main() {
 	ctx := context.Background()
 	mainConfig := conf.GetConfigOrDie[MainConfig]()
 	restConfig := ctrl.GetConfigOrDie()
+
+	// Identify this cortex deployment to the services it talks to via the
+	// User-Agent header, before any HTTP requests are made. The shared
+	// http.DefaultTransport covers http.DefaultClient and any http.Client
+	// without its own transport; SSO clients build their own transport and
+	// are handled separately by pkg/sso.
+	httpext.WrapTransport(&http.DefaultTransport).
+		SetOverrideUserAgent(mainConfig.UserAgent.Component, mainConfig.UserAgent.Version)
+	sso.SetUserAgent(mainConfig.UserAgent.Component, mainConfig.UserAgent.Version)
 
 	// Custom entrypoint for scheduler e2e tests.
 	// Usage: /main <subcommand> [json-override]

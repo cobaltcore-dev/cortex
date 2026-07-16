@@ -215,12 +215,16 @@ func TestHistoryClient_CreateOrUpdateHistory(t *testing.T) {
 		// assertions on the history list (archived entries only).
 		expectHistoryLen int
 		// assertions on the current decision.
-		expectTargetHost  *string
-		expectSuccessful  bool
-		expectCondStatus  metav1.ConditionStatus
-		expectReason      string
-		checkExplanation  func(t *testing.T, explanation string)
-		checkCurrentHosts func(t *testing.T, hosts []string)
+		expectTargetHost *string
+		expectSuccessful bool
+		expectCondStatus metav1.ConditionStatus
+		expectReason     string
+		// expectMessageContains, if set, asserts the Ready condition message
+		// surfaces this substring (used to check the pipeline-error path tells
+		// the user why scheduling failed).
+		expectMessageContains string
+		checkExplanation      func(t *testing.T, explanation string)
+		checkCurrentHosts     func(t *testing.T, hosts []string)
 	}{
 		{
 			name: "create new history",
@@ -362,6 +366,9 @@ func TestHistoryClient_CreateOrUpdateHistory(t *testing.T) {
 			expectSuccessful: false,
 			expectCondStatus: metav1.ConditionFalse,
 			expectReason:     v1alpha1.HistoryReasonPipelineRunFailed,
+			// The Ready condition message must tell the user the pipeline
+			// errored and why, so devops can troubleshoot from the CRD status.
+			expectMessageContains: "pipeline run failed: no hosts available",
 			checkExplanation: func(t *testing.T, explanation string) {
 				if !strings.Contains(explanation, "no hosts available") {
 					t.Errorf("expected explanation to contain error text, got: %q", explanation)
@@ -545,6 +552,9 @@ func TestHistoryClient_CreateOrUpdateHistory(t *testing.T) {
 			}
 			if readyCond.Reason != tt.expectReason {
 				t.Errorf("condition reason = %q, want %q", readyCond.Reason, tt.expectReason)
+			}
+			if tt.expectMessageContains != "" && !strings.Contains(readyCond.Message, tt.expectMessageContains) {
+				t.Errorf("condition message = %q, want it to contain %q", readyCond.Message, tt.expectMessageContains)
 			}
 
 			// Verify explanation.
