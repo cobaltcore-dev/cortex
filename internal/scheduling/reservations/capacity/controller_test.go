@@ -81,7 +81,7 @@ func newFlavorGroupKnowledge(t *testing.T, groupName string, smallestMemoryMB ui
 }
 
 // newHypervisor creates a Hypervisor CRD with a topology AZ label, memory and CPU effective capacity.
-func newHypervisor(name, az string, memoryBytes int64, instanceIDs ...string) *hv1.Hypervisor {
+func newHypervisor(name, az string, memoryBytes int64) *hv1.Hypervisor {
 	hv := &hv1.Hypervisor{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   name,
@@ -95,9 +95,6 @@ func newHypervisor(name, az string, memoryBytes int64, instanceIDs ...string) *h
 			hv1.ResourceMemory: *memQty,
 			hv1.ResourceCPU:    *cpuQty,
 		}
-	}
-	for _, id := range instanceIDs {
-		hv.Status.Instances = append(hv.Status.Instances, hv1.Instance{ID: id})
 	}
 	return hv
 }
@@ -200,7 +197,7 @@ func TestReconcileAZ_CreatesCRD(t *testing.T) {
 	)
 
 	scheme := newTestScheme(t)
-	hv := newHypervisor("host-1", az, memBytes, "vm1")
+	hv := newHypervisor("host-1", az, memBytes)
 	knowledge := newFlavorGroupKnowledge(t, groupName, memMB)
 
 	fakeClient := fake.NewClientBuilder().
@@ -309,6 +306,85 @@ func TestReconcileAZ_SkipsCRDWriteOnSchedulerError(t *testing.T) {
 	}
 	if len(list.Items) != 0 {
 		t.Errorf("expected 0 CRDs (stale cycle skips write), got %d", len(list.Items))
+	}
+}
+
+func TestReconcileAZ_MarksExistingCRDNotReadyOnSchedulerError(t *testing.T) {
+	const (
+		groupName = "hana-v2"
+		az        = "qa-de-1a"
+		memMB     = 2048
+		memBytes  = int64(memMB) * 1024 * 1024
+	)
+
+	scheme := newTestScheme(t)
+	knowledge := newFlavorGroupKnowledge(t, groupName, memMB)
+	crdName := crdNameFor(groupName, az)
+
+	// Pre-create a CRD that was previously Ready=True.
+	existing := &v1alpha1.FlavorGroupCapacity{
+		ObjectMeta: metav1.ObjectMeta{Name: crdName},
+		Spec: v1alpha1.FlavorGroupCapacitySpec{
+			FlavorGroup:      groupName,
+			AvailabilityZone: az,
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(knowledge, existing).
+		WithStatusSubresource(&v1alpha1.FlavorGroupCapacity{}, &v1alpha1.Knowledge{}).
+		Build()
+
+	// Set Ready=True on the pre-existing CRD.
+	patch := client.MergeFrom(existing.DeepCopy())
+	existing.Status.Conditions = []metav1.Condition{{
+		Type:   v1alpha1.FlavorGroupCapacityConditionReady,
+		Status: metav1.ConditionTrue,
+		Reason: "ReconcileSucceeded",
+	}}
+	if err := fakeClient.Status().Patch(context.Background(), existing, patch); err != nil {
+		t.Fatalf("failed to set Ready=True: %v", err)
+	}
+
+	// Scheduler returns 500 to simulate error.
+	failServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer failServer.Close()
+
+	ctrl := newController(t, fakeClient, Config{
+		SchedulerURL:      failServer.URL,
+		TotalPipeline:     "kvm-report-capacity",
+		PlaceablePipeline: "kvm-general-purpose",
+	})
+
+	smallFlavor := compute.FlavorInGroup{Name: groupName + "-small", MemoryMB: memMB, VCPUs: 2}
+	groupData := compute.FlavorGroupFeature{
+		SmallestFlavor: smallFlavor,
+		Flavors:        []compute.FlavorInGroup{smallFlavor},
+	}
+	hv := newHypervisor("host-1", az, memBytes)
+	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
+
+	ctrl.reconcileAZ(context.Background(), az,
+		map[string]compute.FlavorGroupFeature{groupName: groupData},
+		hvByName, map[string]int64{}, map[vmUsageKey]vmUsage{})
+
+	var crd v1alpha1.FlavorGroupCapacity
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdName}, &crd); err != nil {
+		t.Fatalf("failed to get CRD: %v", err)
+	}
+
+	// CRD must now have Ready=False.
+	var readyStatus metav1.ConditionStatus
+	for _, c := range crd.Status.Conditions {
+		if c.Type == v1alpha1.FlavorGroupCapacityConditionReady {
+			readyStatus = c.Status
+		}
+	}
+	if readyStatus != metav1.ConditionFalse {
+		t.Errorf("Ready condition = %q, want False after scheduler error", readyStatus)
 	}
 }
 
@@ -842,7 +918,7 @@ func TestComputeVMUsage_ZerosOutWhenAllVMsRemoved(t *testing.T) {
 	)
 
 	scheme := newTestScheme(t)
-	hv := newHypervisor("host-1", az, memBytes, "vm1")
+	hv := newHypervisor("host-1", az, memBytes)
 	knowledge := newFlavorGroupKnowledge(t, groupName, memMB)
 
 	// Pre-create CRD with non-zero RunningInstances to simulate prior state.

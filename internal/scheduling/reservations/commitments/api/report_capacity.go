@@ -5,6 +5,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -77,7 +78,11 @@ func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request)
 	report, err := calculator.CalculateCapacity(ctx, req)
 	if err != nil {
 		logger.Error(err, "failed to calculate capacity")
-		statusCode = http.StatusInternalServerError
+		if errors.Is(err, commitments.ErrCapacityNotReady) {
+			statusCode = http.StatusServiceUnavailable
+		} else {
+			statusCode = http.StatusInternalServerError
+		}
 		http.Error(w, "Failed to calculate capacity: "+err.Error(), statusCode)
 		api.recordCapacityMetrics(statusCode, startTime)
 		return

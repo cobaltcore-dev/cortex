@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -184,7 +185,8 @@ func TestCapacityCalculator(t *testing.T) {
 		wantCapacity       uint64
 		wantUsage          *uint64 // nil = expect absent
 		cfg                *commitments.APIConfig
-		wantResourceCount  int // 0 = don't check
+		wantResourceCount  int  // 0 = don't check
+		wantNotReady       bool // expect ErrCapacityNotReady
 	}
 	u := func(v uint64) *uint64 { return &v }
 
@@ -196,10 +198,10 @@ func TestCapacityCalculator(t *testing.T) {
 			checkAZ: "az-one", wantCapacity: 1000, wantUsage: u(200),
 		},
 		{
-			// stale CRD: last-known capacity still reported, usage omitted
-			name:             "stale CRD: capacity reported, usage absent",
+			// stale CRD: CalculateCapacity returns ErrCapacityNotReady → caller returns 503
+			name:             "stale CRD: returns ErrCapacityNotReady",
 			runningInstances: 200, exclusiveFreeBytes: 800 * flavorMemBytes, ready: false,
-			checkAZ: "az-one", wantCapacity: 1000, wantUsage: nil,
+			checkAZ: "az-one", wantNotReady: true,
 		},
 		{
 			// CRD only covers az-one; az-two has no CRD → capacity=0
@@ -233,6 +235,12 @@ func TestCapacityCalculator(t *testing.T) {
 				}
 				report, err := calc.CalculateCapacity(context.Background(),
 					liquid.ServiceCapacityRequest{AllAZs: allAZs})
+				if tc.wantNotReady {
+					if !errors.Is(err, commitments.ErrCapacityNotReady) {
+						t.Fatalf("expected ErrCapacityNotReady, got %v", err)
+					}
+					return
+				}
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}

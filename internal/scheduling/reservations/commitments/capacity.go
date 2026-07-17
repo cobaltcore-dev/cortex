@@ -5,6 +5,7 @@ package commitments
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -15,6 +16,11 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 )
+
+// ErrCapacityNotReady is returned by CalculateCapacity when one or more FlavorGroupCapacity
+// CRDs have Ready=False, indicating the controller's last probe cycle failed. Callers should
+// return 503 Service Unavailable rather than serving potentially stale data.
+var ErrCapacityNotReady = errors.New("one or more FlavorGroupCapacity CRDs are not ready")
 
 // CapacityCalculator computes capacity reports for Limes LIQUID API.
 type CapacityCalculator struct {
@@ -86,6 +92,7 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			if !apimeta.IsStatusConditionTrue(crd.Status.Conditions, v1alpha1.FlavorGroupCapacityConditionReady) {
 				logger.Info("FlavorGroupCapacity CRD is stale, reporting capacity without usage",
 					"flavorGroup", groupName, "az", az)
+				return liquid.ServiceCapacityReport{}, fmt.Errorf("%w: flavorGroup=%s az=%s", ErrCapacityNotReady, groupName, string(az))
 			}
 
 			// ExclusivelyFreeSlots is pre-computed by the controller using min(memSlots, cpuSlots).
