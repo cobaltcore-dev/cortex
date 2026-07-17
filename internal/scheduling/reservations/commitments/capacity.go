@@ -65,7 +65,6 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 		Resources:   make(map[liquid.ResourceName]*liquid.ResourceCapacityReport),
 	}
 
-	logger := LoggerFromContext(ctx)
 	for groupName, groupData := range flavorGroups {
 		resCfg := c.conf.ResourceConfigForGroup(groupName)
 		// Skip groups not configured for capacity reporting.
@@ -90,8 +89,6 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			}
 
 			if !apimeta.IsStatusConditionTrue(crd.Status.Conditions, v1alpha1.FlavorGroupCapacityConditionReady) {
-				logger.Info("FlavorGroupCapacity CRD is stale, reporting capacity without usage",
-					"flavorGroup", groupName, "az", az)
 				return liquid.ServiceCapacityReport{}, fmt.Errorf("%w: flavorGroup=%s az=%s", ErrCapacityNotReady, groupName, string(az))
 			}
 
