@@ -77,10 +77,11 @@ func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request)
 	calculator := commitments.NewCapacityCalculator(api.client, api.config)
 	report, err := calculator.CalculateCapacity(ctx, req)
 	if err != nil {
-		logger.Error(err, "failed to calculate capacity")
 		if errors.Is(err, commitments.ErrCapacityNotReady) {
+			logger.Info("capacity data not ready, returning 503", "reason", err.Error())
 			statusCode = http.StatusServiceUnavailable
 		} else {
+			logger.Error(err, "failed to calculate capacity")
 			statusCode = http.StatusInternalServerError
 		}
 		http.Error(w, "Failed to calculate capacity: "+err.Error(), statusCode)
