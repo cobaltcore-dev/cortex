@@ -28,10 +28,35 @@ var DefaultResourceRouters = map[schema.GroupVersionKind]ResourceRouter{
 // by matching the resource content against the cluster's labels.
 type ResourceRouter interface {
 	Match(obj any, labels map[string]string) (bool, error)
+	// extractClusterSelector extracts the routing key from the object (e.g. availability zone).
+	// Used to enrich error messages when no cluster matches.
+	extractClusterSelector(obj any) (string, error)
 }
 
 // HypervisorResourceRouter routes hypervisors to clusters based on availability zone.
 type HypervisorResourceRouter struct{}
+
+func (h HypervisorResourceRouter) extractClusterSelector(obj any) (string, error) {
+	switch v := obj.(type) {
+	case *hv1.Hypervisor:
+		if v == nil {
+			return "", errors.New("object is nil")
+		}
+		az, ok := v.Labels[corev1.LabelTopologyZone]
+		if !ok {
+			return "", errors.New("hypervisor does not have availability zone label")
+		}
+		return az, nil
+	case hv1.Hypervisor:
+		az, ok := v.Labels[corev1.LabelTopologyZone]
+		if !ok {
+			return "", errors.New("hypervisor does not have availability zone label")
+		}
+		return az, nil
+	default:
+		return "", errors.New("object is not a Hypervisor")
+	}
+}
 
 func (h HypervisorResourceRouter) Match(obj any, labels map[string]string) (bool, error) {
 	var hv hv1.Hypervisor
@@ -61,6 +86,26 @@ func (h HypervisorResourceRouter) Match(obj any, labels map[string]string) (bool
 // ReservationsResourceRouter routes reservations to clusters based on availability zone.
 type ReservationsResourceRouter struct{}
 
+func (r ReservationsResourceRouter) extractClusterSelector(obj any) (string, error) {
+	switch v := obj.(type) {
+	case *v1alpha1.Reservation:
+		if v == nil {
+			return "", errors.New("object is nil")
+		}
+		if v.Spec.AvailabilityZone == "" {
+			return "", errors.New("reservation does not have availability zone in spec")
+		}
+		return v.Spec.AvailabilityZone, nil
+	case v1alpha1.Reservation:
+		if v.Spec.AvailabilityZone == "" {
+			return "", errors.New("reservation does not have availability zone in spec")
+		}
+		return v.Spec.AvailabilityZone, nil
+	default:
+		return "", errors.New("object is not a Reservation")
+	}
+}
+
 func (r ReservationsResourceRouter) Match(obj any, labels map[string]string) (bool, error) {
 	var res v1alpha1.Reservation
 
@@ -89,6 +134,26 @@ func (r ReservationsResourceRouter) Match(obj any, labels map[string]string) (bo
 // CommittedResourceRouter routes committed resources to clusters based on availability zone.
 type CommittedResourceRouter struct{}
 
+func (c CommittedResourceRouter) extractClusterSelector(obj any) (string, error) {
+	switch v := obj.(type) {
+	case *v1alpha1.CommittedResource:
+		if v == nil {
+			return "", errors.New("object is nil")
+		}
+		if v.Spec.AvailabilityZone == "" {
+			return "", errors.New("committed resource does not have availability zone in spec")
+		}
+		return v.Spec.AvailabilityZone, nil
+	case v1alpha1.CommittedResource:
+		if v.Spec.AvailabilityZone == "" {
+			return "", errors.New("committed resource does not have availability zone in spec")
+		}
+		return v.Spec.AvailabilityZone, nil
+	default:
+		return "", errors.New("object is not a CommittedResource")
+	}
+}
+
 func (c CommittedResourceRouter) Match(obj any, labels map[string]string) (bool, error) {
 	var cr v1alpha1.CommittedResource
 
@@ -115,6 +180,26 @@ func (c CommittedResourceRouter) Match(obj any, labels map[string]string) (bool,
 
 // FlavorGroupCapacityResourceRouter routes flavor group capacity CRDs to clusters based on availability zone.
 type FlavorGroupCapacityResourceRouter struct{}
+
+func (f FlavorGroupCapacityResourceRouter) extractClusterSelector(obj any) (string, error) {
+	switch v := obj.(type) {
+	case *v1alpha1.FlavorGroupCapacity:
+		if v == nil {
+			return "", errors.New("object is nil")
+		}
+		if v.Spec.AvailabilityZone == "" {
+			return "", errors.New("flavor group capacity does not have availability zone in spec")
+		}
+		return v.Spec.AvailabilityZone, nil
+	case v1alpha1.FlavorGroupCapacity:
+		if v.Spec.AvailabilityZone == "" {
+			return "", errors.New("flavor group capacity does not have availability zone in spec")
+		}
+		return v.Spec.AvailabilityZone, nil
+	default:
+		return "", errors.New("object is not a FlavorGroupCapacity")
+	}
+}
 
 func (f FlavorGroupCapacityResourceRouter) Match(obj any, labels map[string]string) (bool, error) {
 	var fgc v1alpha1.FlavorGroupCapacity
@@ -143,6 +228,26 @@ func (f FlavorGroupCapacityResourceRouter) Match(obj any, labels map[string]stri
 // HistoryResourceRouter routes histories to clusters based on availability zone.
 type HistoryResourceRouter struct{}
 
+func (h HistoryResourceRouter) extractClusterSelector(obj any) (string, error) {
+	switch v := obj.(type) {
+	case *v1alpha1.History:
+		if v == nil {
+			return "", errors.New("object is nil")
+		}
+		if v.Spec.AvailabilityZone == nil || *v.Spec.AvailabilityZone == "" {
+			return "", errors.New("history does not have availability zone in spec")
+		}
+		return *v.Spec.AvailabilityZone, nil
+	case v1alpha1.History:
+		if v.Spec.AvailabilityZone == nil || *v.Spec.AvailabilityZone == "" {
+			return "", errors.New("history does not have availability zone in spec")
+		}
+		return *v.Spec.AvailabilityZone, nil
+	default:
+		return "", errors.New("object is not a History")
+	}
+}
+
 func (h HistoryResourceRouter) Match(obj any, labels map[string]string) (bool, error) {
 	var hist v1alpha1.History
 
@@ -169,6 +274,26 @@ func (h HistoryResourceRouter) Match(obj any, labels map[string]string) (bool, e
 
 // ProjectQuotaResourceRouter routes project quotas to clusters based on availability zone.
 type ProjectQuotaResourceRouter struct{}
+
+func (p ProjectQuotaResourceRouter) extractClusterSelector(obj any) (string, error) {
+	switch v := obj.(type) {
+	case *v1alpha1.ProjectQuota:
+		if v == nil {
+			return "", errors.New("object is nil")
+		}
+		if v.Spec.AvailabilityZone == "" {
+			return "", errors.New("project quota does not have availability zone in spec")
+		}
+		return v.Spec.AvailabilityZone, nil
+	case v1alpha1.ProjectQuota:
+		if v.Spec.AvailabilityZone == "" {
+			return "", errors.New("project quota does not have availability zone in spec")
+		}
+		return v.Spec.AvailabilityZone, nil
+	default:
+		return "", errors.New("object is not a ProjectQuota")
+	}
+}
 
 func (p ProjectQuotaResourceRouter) Match(obj any, labels map[string]string) (bool, error) {
 	var pq v1alpha1.ProjectQuota

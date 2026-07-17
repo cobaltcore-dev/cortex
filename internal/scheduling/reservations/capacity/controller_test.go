@@ -226,11 +226,9 @@ func TestReconcileAZ_CreatesCRD(t *testing.T) {
 	}
 	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
 
-	if err := ctrl.reconcileAZ(context.Background(), az,
+	ctrl.reconcileAZ(context.Background(), az,
 		map[string]compute.FlavorGroupFeature{groupName: groupData},
-		hvByName, map[string]int64{}, map[vmUsageKey]vmUsage{}); err != nil {
-		t.Fatalf("reconcileAZ failed: %v", err)
-	}
+		hvByName, map[string]int64{}, map[vmUsageKey]vmUsage{})
 
 	var crd v1alpha1.FlavorGroupCapacity
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdNameFor(groupName, az)}, &crd); err != nil {
@@ -300,11 +298,9 @@ func TestReconcileAZ_SkipsCRDWriteOnSchedulerError(t *testing.T) {
 		Flavors:        []compute.FlavorInGroup{smallFlavor},
 	}
 
-	if err := ctrl.reconcileAZ(context.Background(), az,
+	ctrl.reconcileAZ(context.Background(), az,
 		map[string]compute.FlavorGroupFeature{groupName: groupData},
-		map[string]hv1.Hypervisor{}, map[string]int64{}, map[vmUsageKey]vmUsage{}); err != nil {
-		t.Fatalf("reconcileAZ failed: %v", err)
-	}
+		map[string]hv1.Hypervisor{}, map[string]int64{}, map[vmUsageKey]vmUsage{})
 
 	// Stale probes → CRD must NOT be written; last good state is preserved.
 	var list v1alpha1.FlavorGroupCapacityList
@@ -362,13 +358,9 @@ func TestReconcileAZ_IdempotentUpdate(t *testing.T) {
 	groups := map[string]compute.FlavorGroupFeature{groupName: groupData}
 
 	// First call
-	if err := ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]int64{}, map[vmUsageKey]vmUsage{}); err != nil {
-		t.Fatalf("first reconcileAZ failed: %v", err)
-	}
+	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]int64{}, map[vmUsageKey]vmUsage{})
 	// Second call — should not error on the already-existing CRD.
-	if err := ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]int64{}, map[vmUsageKey]vmUsage{}); err != nil {
-		t.Fatalf("second reconcileAZ failed: %v", err)
-	}
+	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]int64{}, map[vmUsageKey]vmUsage{})
 
 	var crd v1alpha1.FlavorGroupCapacity
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdName}, &crd); err != nil {
@@ -594,12 +586,9 @@ func TestReconcileAZ_ZeroMemoryFlavorSkipped(t *testing.T) {
 		SmallestFlavor: compute.FlavorInGroup{Name: "bad-flavor", MemoryMB: 0},
 	}
 	// reconcileAZ logs and skips groups with zero memory; it does not return an error.
-	err := c.reconcileAZ(context.Background(), "az-a",
+	c.reconcileAZ(context.Background(), "az-a",
 		map[string]compute.FlavorGroupFeature{"hana-v2": groupData},
 		nil, nil, nil)
-	if err != nil {
-		t.Errorf("reconcileAZ should not return error for zero-memory flavor, got: %v", err)
-	}
 
 	// No CRD should have been created.
 	var list v1alpha1.FlavorGroupCapacityList
@@ -608,6 +597,136 @@ func TestReconcileAZ_ZeroMemoryFlavorSkipped(t *testing.T) {
 	}
 	if len(list.Items) != 0 {
 		t.Errorf("expected 0 CRDs, got %d", len(list.Items))
+	}
+}
+
+func TestFlavorSlots(t *testing.T) {
+	const (
+		mem4GiB  = 4 * 1024 * 1024 * 1024
+		mem8GiB  = 8 * 1024 * 1024 * 1024
+		mem32GiB = 32 * 1024 * 1024 * 1024
+	)
+	tests := []struct {
+		name           string
+		memRemaining   int64
+		coresRemaining int64
+		flavorMem      int64
+		flavorCPUs     int64
+		want           int64
+	}{
+		{
+			name: "memory is binding constraint",
+			// 8 GiB available, flavor needs 4 GiB and 2 cores; 64 cores available → 2 mem-slots, 32 cpu-slots
+			memRemaining: mem8GiB, coresRemaining: 64, flavorMem: mem4GiB, flavorCPUs: 2, want: 2,
+		},
+		{
+			name: "CPU is binding constraint",
+			// 32 GiB available (fits 8 slots), only 3 cores available (fits 1 slot at 2 vcpus)
+			memRemaining: mem32GiB, coresRemaining: 3, flavorMem: mem4GiB, flavorCPUs: 2, want: 1,
+		},
+		{
+			name:         "both constraints equal",
+			memRemaining: mem8GiB, coresRemaining: 4, flavorMem: mem4GiB, flavorCPUs: 2, want: 2,
+		},
+		{
+			name:         "zero VCPUs — CPU dimension ignored",
+			memRemaining: mem8GiB, coresRemaining: 0, flavorMem: mem4GiB, flavorCPUs: 0, want: 2,
+		},
+		{
+			name:         "not enough memory for even one slot",
+			memRemaining: mem4GiB - 1, coresRemaining: 64, flavorMem: mem4GiB, flavorCPUs: 2, want: 0,
+		},
+		{
+			name:         "not enough CPU for even one slot",
+			memRemaining: mem32GiB, coresRemaining: 1, flavorMem: mem4GiB, flavorCPUs: 2, want: 0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resources := map[string]int64{
+				ResourceMemory: tt.memRemaining,
+				ResourceCores:  tt.coresRemaining,
+			}
+			got := flavorSlots(resources, tt.flavorMem, tt.flavorCPUs)
+			if got != tt.want {
+				t.Errorf("flavorSlots() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestComputeTotalCapacity(t *testing.T) {
+	mb := func(mb int64) int64 { return mb * 1024 * 1024 }
+	tests := []struct {
+		name         string
+		flavors      []v1alpha1.FlavorCapacityStatus
+		specs        map[string]compute.FlavorInGroup
+		wantMemBytes int64
+		wantCPU      int64
+	}{
+		{
+			name: "single flavor",
+			flavors: []v1alpha1.FlavorCapacityStatus{
+				{FlavorName: "small", TotalCapacityVMSlots: 10},
+			},
+			specs: map[string]compute.FlavorInGroup{
+				"small": {Name: "small", MemoryMB: 4096, VCPUs: 2},
+			},
+			wantMemBytes: 10 * mb(4096),
+			wantCPU:      20,
+		},
+		{
+			name: "picks flavor with most total memory, not most slots",
+			// mem: large wins (2×32GiB=64GiB > 10×4GiB=40GiB); CPU: small wins (10×2=20 > 2×8=16)
+			flavors: []v1alpha1.FlavorCapacityStatus{
+				{FlavorName: "small", TotalCapacityVMSlots: 10},
+				{FlavorName: "large", TotalCapacityVMSlots: 2},
+			},
+			specs: map[string]compute.FlavorInGroup{
+				"small": {Name: "small", MemoryMB: 4096, VCPUs: 2},
+				"large": {Name: "large", MemoryMB: 32768, VCPUs: 8},
+			},
+			wantMemBytes: 2 * mb(32768),
+			wantCPU:      20,
+		},
+		{
+			name: "zero slots excluded",
+			flavors: []v1alpha1.FlavorCapacityStatus{
+				{FlavorName: "small", TotalCapacityVMSlots: 0},
+				{FlavorName: "large", TotalCapacityVMSlots: 3},
+			},
+			specs: map[string]compute.FlavorInGroup{
+				"small": {Name: "small", MemoryMB: 4096, VCPUs: 2},
+				"large": {Name: "large", MemoryMB: 8192, VCPUs: 4},
+			},
+			wantMemBytes: 3 * mb(8192),
+			wantCPU:      12,
+		},
+		{
+			name:         "all zero slots",
+			flavors:      []v1alpha1.FlavorCapacityStatus{{FlavorName: "small", TotalCapacityVMSlots: 0}},
+			specs:        map[string]compute.FlavorInGroup{"small": {MemoryMB: 4096, VCPUs: 2}},
+			wantMemBytes: 0,
+			wantCPU:      0,
+		},
+		{
+			name:         "empty input",
+			flavors:      nil,
+			specs:        map[string]compute.FlavorInGroup{},
+			wantMemBytes: 0,
+			wantCPU:      0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotMem, gotCPU := computeTotalCapacity(tt.flavors, tt.specs)
+			if gotMem != tt.wantMemBytes {
+				t.Errorf("maxMemBytes = %d, want %d", gotMem, tt.wantMemBytes)
+			}
+			if gotCPU != tt.wantCPU {
+				t.Errorf("maxCPUCores = %d, want %d", gotCPU, tt.wantCPU)
+			}
+		})
 	}
 }
 
@@ -789,9 +908,7 @@ func TestComputeVMUsage_ZerosOutWhenAllVMsRemoved(t *testing.T) {
 	}
 
 	// Now run reconcileAZ to verify the CRD gets zeroed out.
-	if err := ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]int64{}, usageByKey); err != nil {
-		t.Fatalf("reconcileAZ failed: %v", err)
-	}
+	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]int64{}, usageByKey)
 
 	var crd v1alpha1.FlavorGroupCapacity
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdName}, &crd); err != nil {

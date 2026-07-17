@@ -234,7 +234,7 @@ func TestComputeUnassigned(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := computeUnassigned(tc.groups, tc.hostRes)
+			got, _ := computeUnassigned(tc.groups, tc.hostRes)
 			for r, want := range tc.wantUnassigned {
 				if got[r] != want {
 					t.Errorf("unassigned[%s] = %d, want %d", r, got[r], want)
@@ -449,7 +449,7 @@ func TestSplitCapacity(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			free, assigned, unassigned := SplitCapacity(tc.groups, tc.hosts)
+			free, assigned, unassigned, _ := SplitCapacity(tc.groups, tc.hosts)
 
 			for groupName, wantMem := range tc.wantAssignedMem {
 				if got := assigned[groupName][ResourceMemory]; got != wantMem {
@@ -492,7 +492,7 @@ func TestSplitCapacity_SumNeverExceedsTotal(t *testing.T) {
 		"h3": host(24*GiB, 12),
 	}
 
-	_, assigned, _ := SplitCapacity(groups, hosts)
+	_, assigned, _, _ := SplitCapacity(groups, hosts)
 
 	var totalInstalled, totalAssigned int64
 	for _, hs := range hosts {
@@ -518,9 +518,9 @@ func TestSplitCapacity_Deterministic(t *testing.T) {
 		"h2": host(8*GiB, 4),
 	}
 
-	_, first, firstUnassigned := SplitCapacity(groups, hosts)
+	_, first, firstUnassigned, _ := SplitCapacity(groups, hosts)
 	for i := range 10 {
-		_, got, gotUnassigned := SplitCapacity(groups, hosts)
+		_, got, gotUnassigned, _ := SplitCapacity(groups, hosts)
 		for _, g := range groups {
 			if got[g.Name][ResourceMemory] != first[g.Name][ResourceMemory] {
 				t.Errorf("run %d: assigned[%s][memory] = %d, want %d (non-deterministic)",
