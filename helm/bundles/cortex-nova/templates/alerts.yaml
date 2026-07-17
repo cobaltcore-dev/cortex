@@ -588,6 +588,28 @@ spec:
           This may mean hypervisors in that AZ are fully utilized for the corresponding
           flavor group and no further committed resources can be placed there.
 
+    - alert: CortexNovaCommittedResourceCapacityNotReady
+      expr: |
+        cortex_committed_resource_capacity_ready{service="cortex-nova-metrics"} == 0
+      for: 10m
+      labels:
+        context: committed-resource-capacity
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/committed-resource-capacity
+      annotations:
+        summary: "FlavorGroupCapacity for {{ "{{" }} $labels.flavor_group {{ "}}" }} in {{ "{{" }} $labels.az {{ "}}" }} has been not-ready for >10 minutes"
+        description: >
+          The FlavorGroupCapacity CRD for flavor group {{ "{{" }} $labels.flavor_group {{ "}}" }}
+          in availability zone {{ "{{" }} $labels.az {{ "}}" }} has had Ready=False for more than
+          10 minutes. The capacity controller failed to complete all scheduler probes for this
+          (flavor group x AZ) pair. The capacity API (report-capacity) is serving stale total
+          capacity values for this group without usage data — Limes receives capacity but no
+          usage, causing silent staleness. Investigate the capacity controller logs for probe
+          errors and check scheduler availability.
+
     # Committed Resource Usage API
     - alert: CortexNovaCommittedResourceUsageErrors
       expr: |
