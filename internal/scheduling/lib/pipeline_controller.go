@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -20,6 +21,8 @@ import (
 
 // Base controller for decision pipelines.
 type BasePipelineController[PipelineType any] struct {
+	// Mutex protecting Pipelines and PipelineConfigs maps from concurrent access.
+	pipelinesMu sync.RWMutex
 	// Initialized pipelines by their name.
 	Pipelines map[string]PipelineType
 	// The configured pipelines by their name.
@@ -34,12 +37,30 @@ type BasePipelineController[PipelineType any] struct {
 	HistoryManager HistoryClient
 }
 
+// GetPipeline returns the initialized pipeline for the given name, if it exists.
+func (c *BasePipelineController[PipelineType]) GetPipeline(name string) (PipelineType, bool) {
+	c.pipelinesMu.RLock()
+	defer c.pipelinesMu.RUnlock()
+	p, ok := c.Pipelines[name]
+	return p, ok
+}
+
+// GetPipelineConfig returns the pipeline configuration for the given name, if it exists.
+func (c *BasePipelineController[PipelineType]) GetPipelineConfig(name string) (v1alpha1.Pipeline, bool) {
+	c.pipelinesMu.RLock()
+	defer c.pipelinesMu.RUnlock()
+	p, ok := c.PipelineConfigs[name]
+	return p, ok
+}
+
 // Handle the startup of the manager by initializing the pipeline map.
 func (c *BasePipelineController[PipelineType]) InitAllPipelines(ctx context.Context) error {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("initializing pipeline map")
+	c.pipelinesMu.Lock()
 	c.Pipelines = make(map[string]PipelineType)
 	c.PipelineConfigs = make(map[string]v1alpha1.Pipeline)
+	c.pipelinesMu.Unlock()
 	// List all existing pipelines and initialize them.
 	var pipelines v1alpha1.PipelineList
 	if err := c.List(ctx, &pipelines); err != nil {
@@ -54,7 +75,6 @@ func (c *BasePipelineController[PipelineType]) InitAllPipelines(ctx context.Cont
 		}
 		log.Info("initializing existing pipeline", "pipelineName", pipelineConf.Name)
 		c.handlePipelineChange(ctx, &pipelineConf, nil)
-		c.PipelineConfigs[pipelineConf.Name] = pipelineConf
 	}
 	return nil
 }
@@ -65,10 +85,11 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	obj *v1alpha1.Pipeline,
 	_ workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
-
 	if obj.Spec.SchedulingDomain != c.SchedulingDomain {
+		c.pipelinesMu.Lock()
 		delete(c.Pipelines, obj.Name) // Just to be sure.
 		delete(c.PipelineConfigs, obj.Name)
+		c.pipelinesMu.Unlock()
 		return
 	}
 	log := ctrl.LoggerFrom(ctx)
@@ -96,8 +117,10 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 		if err := c.Status().Patch(ctx, obj, patch); err != nil {
 			log.Error(err, "failed to patch pipeline status", "pipelineName", obj.Name)
 		}
+		c.pipelinesMu.Lock()
 		delete(c.Pipelines, obj.Name)
 		delete(c.PipelineConfigs, obj.Name)
+		c.pipelinesMu.Unlock()
 		return
 	}
 
@@ -153,8 +176,10 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 		})
 	}
 
+	c.pipelinesMu.Lock()
 	c.Pipelines[obj.Name] = initResult.Pipeline
 	c.PipelineConfigs[obj.Name] = *obj
+	c.pipelinesMu.Unlock()
 	log.Info("pipeline created and ready", "pipelineName", obj.Name)
 	meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 		Type:    v1alpha1.PipelineConditionReady,
@@ -205,10 +230,11 @@ func (c *BasePipelineController[PipelineType]) HandlePipelineDeleted(
 	evt event.DeleteEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
-
 	pipelineConf := evt.Object.(*v1alpha1.Pipeline)
+	c.pipelinesMu.Lock()
 	delete(c.Pipelines, pipelineConf.Name)
 	delete(c.PipelineConfigs, pipelineConf.Name)
+	c.pipelinesMu.Unlock()
 }
 
 // Handle a knowledge creation, readiness update, or delete event from watching knowledge resources.

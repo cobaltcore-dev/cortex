@@ -117,7 +117,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	log := ctrl.LoggerFrom(ctx)
 	startedAt := time.Now() // So we can measure sync duration.
 
-	pipeline, ok := c.Pipelines[decision.Spec.PipelineRef.Name]
+	pipeline, ok := c.GetPipeline(decision.Spec.PipelineRef.Name)
 	if !ok {
 		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
 		return errors.New("pipeline not found or not ready")
