@@ -1,0 +1,5 @@
+allowRemediationCommits:
+  individual: true # allow to signed-off old commit
+  thirdParty: true # also for third-party contributors
+require:
+  members: false # members of cobaltcore-dev do not need to sign their commits
