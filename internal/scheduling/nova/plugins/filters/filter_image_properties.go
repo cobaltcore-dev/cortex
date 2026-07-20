@@ -39,7 +39,7 @@ func (s *FilterImagePropertiesStep) Run(traceLog *slog.Logger, request api.Exter
 		}
 		for _, hv := range hvs.Items {
 			delete(result.Activations, hv.Name)
-			traceLog.Info("filtering host which is kvm hypervisor", "host", hv.Name)
+			traceLog.Debug("filtering host which is kvm hypervisor", "host", hv.Name)
 		}
 	}
 	return result, nil
