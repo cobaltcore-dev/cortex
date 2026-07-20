@@ -85,6 +85,7 @@ func (c *BasePipelineController[PipelineType]) handlePipelineChange(
 	obj *v1alpha1.Pipeline,
 	_ workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	if obj.Spec.SchedulingDomain != c.SchedulingDomain {
 		c.pipelinesMu.Lock()
 		delete(c.Pipelines, obj.Name) // Just to be sure.
@@ -230,6 +231,7 @@ func (c *BasePipelineController[PipelineType]) HandlePipelineDeleted(
 	evt event.DeleteEvent,
 	queue workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
+
 	pipelineConf := evt.Object.(*v1alpha1.Pipeline)
 	c.pipelinesMu.Lock()
 	delete(c.Pipelines, pipelineConf.Name)
