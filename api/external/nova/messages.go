@@ -315,6 +315,46 @@ type NovaImageMeta struct {
 	Properties      NovaObject[map[string]any] `json:"properties"`
 }
 
+type NovaImageMetaHVType string
+
+const (
+	NovaImageMetaHVTypeVMware    NovaImageMetaHVType = "vmware"
+	NovaImageMetaHVTypeBaremetal NovaImageMetaHVType = "baremetal"
+	NovaImageMetaHVTypeKVM       NovaImageMetaHVType = "kvm"
+)
+
+// GetHypervisorType determines the hypervisor type based on the image properties.
+func (m NovaImageMeta) GetHypervisorType() (NovaImageMetaHVType, error) {
+	if m.Properties.Data == nil {
+		return "", errors.New("image properties are not set")
+	}
+	keys := []string{
+		"img_hv_type",     // Used by kvm images
+		"hypervisor_type", // Used by other images (e.g., VMware)
+	}
+	for _, key := range keys {
+		val, ok := m.Properties.Data[key]
+		if !ok {
+			continue
+		}
+		str, ok := val.(string)
+		if !ok {
+			return "", fmt.Errorf("hypervisor type in image properties is not a string: %v", val)
+		}
+		switch strings.ToLower(str) {
+		case "vmware":
+			return NovaImageMetaHVTypeVMware, nil
+		case "baremetal":
+			return NovaImageMetaHVTypeBaremetal, nil
+		case "kvm":
+			return NovaImageMetaHVTypeKVM, nil
+		default:
+			return "", fmt.Errorf("unsupported hypervisor type in image properties: %s", str)
+		}
+	}
+	return "", errors.New("hypervisor type not found in image properties")
+}
+
 // Nova flavor metadata for the specified VM.
 type NovaFlavor struct {
 	ID          int               `json:"id"`
