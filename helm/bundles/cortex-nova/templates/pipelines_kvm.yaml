@@ -26,6 +26,11 @@ spec:
         This step will consider the `ignore_hosts` and `force_hosts` instructions
         from the nova scheduler request spec to filter out or exclusively allow
         certain hosts.
+    - name: filter_image_properties
+      description: |
+        This step will filter out hosts for which the hypervisor type does not match
+        the one specified in the image properties, for example, filtering out all
+        known KVM hypervisors if the image requires a different hypervisor type.
     - name: filter_status_conditions
       description: |
         This step will filter out hosts for which the hypervisor status conditions
@@ -178,6 +183,11 @@ spec:
         This step will consider the `ignore_hosts` and `force_hosts` instructions
         from the nova scheduler request spec to filter out or exclusively allow
         certain hosts.
+    - name: filter_image_properties
+      description: |
+        This step will filter out hosts for which the hypervisor type does not match
+        the one specified in the image properties, for example, filtering out all
+        known KVM hypervisors if the image requires a different hypervisor type.
     - name: filter_status_conditions
       description: |
         This step will filter out hosts for which the hypervisor status conditions
@@ -629,6 +639,11 @@ spec:
         This step will consider the `ignore_hosts` and `force_hosts` instructions
         from the nova scheduler request spec to filter out or exclusively allow
         certain hosts.
+    - name: filter_image_properties
+      description: |
+        This step will filter out hosts for which the hypervisor type does not match
+        the one specified in the image properties, for example, filtering out all
+        known KVM hypervisors if the image requires a different hypervisor type.
     - name: filter_status_conditions
       description: |
         This step will filter out hosts for which the hypervisor status conditions
@@ -781,6 +796,11 @@ spec:
         This step will consider the `ignore_hosts` and `force_hosts` instructions
         from the nova scheduler request spec to filter out or exclusively allow
         certain hosts.
+    - name: filter_image_properties
+      description: |
+        This step will filter out hosts for which the hypervisor type does not match
+        the one specified in the image properties, for example, filtering out all
+        known KVM hypervisors if the image requires a different hypervisor type.
     - name: filter_status_conditions
       description: |
         This step will filter out hosts for which the hypervisor status conditions
