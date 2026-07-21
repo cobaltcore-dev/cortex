@@ -329,7 +329,9 @@ func (m NovaImageMeta) GetHypervisorType() (NovaImageMetaHVType, error) {
 		return "", errors.New("image properties are not set")
 	}
 	keys := []string{
-		"img_hv_type",     // Used by kvm images
+		// See https://github.com/sapcc/nova/blob/27eb1f0/nova/scheduler/filters/image_props_filter.py#L55
+		"img_hv_type", // Used by kvm images
+		// See https://github.com/sapcc/nova/blob/27eb1f0/doc/source/admin/configuration/hypervisor-vmware.rst#tag-vmware-images
 		"hypervisor_type", // Used by other images (e.g., VMware)
 	}
 	for _, key := range keys {
