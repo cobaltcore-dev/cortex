@@ -27,6 +27,9 @@ func (s *FilterImagePropertiesStep) Run(traceLog *slog.Logger, request api.Exter
 		// ignore the filter and return all hosts.
 		traceLog.Warn("could not determine hypervisor type from image properties",
 			"error", err)
+		// Expose this event through the step monitor to alert on high-frequency
+		// occurrences of this situation.
+		result.Events = append(result.Events, "image_properties_hv_type_undetermined")
 		return result, nil
 	}
 	if hvType != api.NovaImageMetaHVTypeKVM {
