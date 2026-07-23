@@ -6,8 +6,10 @@ package filters
 import (
 	"context"
 	"log/slog"
+	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
@@ -19,6 +21,26 @@ type FilterImagePropertiesStep struct {
 // Filter hosts based on image properties given in the request spec.
 func (s *FilterImagePropertiesStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
+
+	// Apply this filter to all requests, unless we know from the request's
+	// intent that image metadata is expected to not be set.
+	if intent, err := request.GetIntent(); err == nil {
+		intentsExpectedToNotHaveImageMeta := []v1alpha1.SchedulingIntent{
+			// Cortex-internal intents in which scheduling requests are sent
+			// mainly based on flavor-related metadata, independent of the
+			// image that'll land there.
+			api.ReserveForFailoverIntent,
+			api.ReuseFailoverReservationIntent,
+			api.ReserveForCommittedResourceIntent,
+			api.CapacityProbeIntent,
+		}
+		if slices.Contains(intentsExpectedToNotHaveImageMeta, intent) {
+			traceLog.Debug("skipping filter: expected to have no image metadata",
+				"intent", intent)
+			return result, nil
+		}
+	}
+
 	// If the image properties indicate any other hypervisor type than kvm,
 	// we filter out all known kvm hypervisors.
 	hvType, err := request.Spec.Data.Image.Data.GetHypervisorType()
@@ -32,6 +54,7 @@ func (s *FilterImagePropertiesStep) Run(traceLog *slog.Logger, request api.Exter
 		result.Events = append(result.Events, "image_properties_hv_type_undetermined")
 		return result, nil
 	}
+
 	if hvType != api.NovaImageMetaHVTypeKVM {
 		traceLog.Info("filtering out all known kvm hypervisors since image properties indicate a different hypervisor type",
 			"image_hypervisor_type", hvType)
@@ -45,6 +68,7 @@ func (s *FilterImagePropertiesStep) Run(traceLog *slog.Logger, request api.Exter
 			traceLog.Debug("filtering host which is kvm hypervisor", "host", hv.Name)
 		}
 	}
+
 	return result, nil
 }
 

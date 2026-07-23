@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-07-23 — [#1080](https://github.com/cobaltcore-dev/cortex/pull/1080)
+
+### cortex v0.3.3 (sha-4eba8400)
+
+Non-breaking changes:
+- Skip image property filtering for internal scheduling intents — the FilterImageProperties Nova scheduling filter now skips image-property-based filtering for Cortex-internal intents (reserve_for_failover, reuse_failover_reservation, reserve_for_committed_resource, capacity_probe) which schedule based on flavor metadata independent of the image ([#1078](https://github.com/cobaltcore-dev/cortex/pull/1078))
+- Bump `google.golang.org/grpc` from 1.82.0 to 1.82.1 — security patch addressing HTTP/2 flood protection and xds/rbac fixes ([#1079](https://github.com/cobaltcore-dev/cortex/pull/1079))
+
+### cortex-shim v0.1.9 (sha-378ee2f5)
+
+Includes updated image sha-378ee2f5.
+
+### cortex-postgres v0.6.11 (sha-e06153f8)
+
+Includes updated image sha-e06153f8.
+
+### cortex-nova v0.0.83
+
+Includes updated charts cortex v0.3.3, cortex-postgres v0.6.11.
+
+### cortex-cinder v0.0.83
+
+Includes updated charts cortex v0.3.3, cortex-postgres v0.6.11.
+
+### cortex-manila v0.0.83
+
+Includes updated charts cortex v0.3.3, cortex-postgres v0.6.11.
+
+### cortex-crds v0.0.83
+
+Includes updated chart cortex v0.3.3.
+
+### cortex-ironcore v0.0.83
+
+Includes updated chart cortex v0.3.3.
+
+### cortex-pods v0.0.83
+
+Includes updated chart cortex v0.3.3.
+
+### cortex-placement-shim v0.1.9
+
+Includes updated chart cortex-shim v0.1.9.
+
 ## 2026-07-22 — [#1068](https://github.com/cobaltcore-dev/cortex/pull/1068)
 
 ### cortex v0.3.2 (sha-378ee2f5)
