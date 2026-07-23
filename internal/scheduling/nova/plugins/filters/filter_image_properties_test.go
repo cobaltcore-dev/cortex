@@ -27,6 +27,15 @@ func requestWith(hosts []string, properties map[string]any) api.ExternalSchedule
 	return request
 }
 
+// requestWithIntent builds an ExternalSchedulerRequest like requestWith, but
+// additionally sets the _nova_check_type scheduler hint so GetIntent resolves
+// to the given intent.
+func requestWithIntent(hosts []string, properties map[string]any, checkType string) api.ExternalSchedulerRequest {
+	request := requestWith(hosts, properties)
+	request.Spec.Data.SchedulerHints = map[string]any{"_nova_check_type": checkType}
+	return request
+}
+
 func TestFilterImagePropertiesStep_Run(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := hv1.AddToScheme(scheme); err != nil {
@@ -80,6 +89,36 @@ func TestFilterImagePropertiesStep_Run(t *testing.T) {
 			request:       requestWith([]string{}, map[string]any{"hypervisor_type": "vmware"}),
 			expectedHosts: []string{},
 			filteredHosts: []string{},
+		},
+		{
+			name:          "reserve_for_failover intent skips filter and keeps all hosts",
+			request:       requestWithIntent([]string{"host1", "host2", "host3"}, map[string]any{"hypervisor_type": "vmware"}, "reserve_for_failover"),
+			expectedHosts: []string{"host1", "host2", "host3"},
+			filteredHosts: []string{},
+		},
+		{
+			name:          "reuse_failover_reservation intent skips filter and keeps all hosts",
+			request:       requestWithIntent([]string{"host1", "host2", "host3"}, map[string]any{"hypervisor_type": "vmware"}, "reuse_failover_reservation"),
+			expectedHosts: []string{"host1", "host2", "host3"},
+			filteredHosts: []string{},
+		},
+		{
+			name:          "reserve_for_committed_resource intent skips filter and keeps all hosts",
+			request:       requestWithIntent([]string{"host1", "host2", "host3"}, map[string]any{"hypervisor_type": "vmware"}, "reserve_for_committed_resource"),
+			expectedHosts: []string{"host1", "host2", "host3"},
+			filteredHosts: []string{},
+		},
+		{
+			name:          "capacity_probe intent skips filter and keeps all hosts",
+			request:       requestWithIntent([]string{"host1", "host2", "host3"}, map[string]any{"hypervisor_type": "vmware"}, "capacity_probe"),
+			expectedHosts: []string{"host1", "host2", "host3"},
+			filteredHosts: []string{},
+		},
+		{
+			name:          "create intent still filters out known kvm hypervisors",
+			request:       requestWithIntent([]string{"host1", "host2", "host3"}, map[string]any{"hypervisor_type": "vmware"}, "create"),
+			expectedHosts: []string{"host3"},
+			filteredHosts: []string{"host1", "host2"},
 		},
 	}
 
