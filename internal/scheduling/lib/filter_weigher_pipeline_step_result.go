@@ -23,6 +23,13 @@ type FilterWeigherPipelineStepResult struct {
 	// These statistics are used to display the step's effect on the hosts.
 	// For example: max cpu contention: before [ 100%, 50%, 40% ], after [ 40%, 50%, 100% ]
 	Statistics map[string]FilterWeigherPipelineStepStatistics
+
+	// Named events reported by the step during its run, e.g.
+	// "hypervisor_type_undetermined". Each event is counted by the pipeline
+	// monitor as cortex_filter_weigher_pipeline_step_events_total, labeled by
+	// pipeline, step and event. Use this to expose noteworthy step conditions
+	// (skipped filtering, missing data, ...) as Prometheus metrics.
+	Events []string
 }
 
 type FilterWeigherPipelineStepStatistics struct {

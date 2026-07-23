@@ -7,6 +7,9 @@ import (
 	"log/slog"
 	"os"
 	"testing"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 type mockObserver struct {
@@ -52,6 +55,37 @@ func TestStepMonitorRun(t *testing.T) {
 	}
 	if runTimer.Observations[0] <= 0 {
 		t.Errorf("runTimer.Observations[0] = %v, want > 0", runTimer.Observations[0])
+	}
+}
+
+func TestStepMonitorRunEvents(t *testing.T) {
+	stepEventCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "cortex_filter_weigher_pipeline_step_events_total",
+		Help: "Number of named events reported by a scheduler pipeline step",
+	}, []string{"pipeline", "step", "event"})
+	monitor := &FilterWeigherPipelineStepMonitor[mockFilterWeigherPipelineRequest]{
+		stepName:         "mock_step",
+		pipelineName:     "mock_pipeline",
+		stepEventCounter: stepEventCounter,
+	}
+	step := &mockWeigher[mockFilterWeigherPipelineRequest]{
+		RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+			return &FilterWeigherPipelineStepResult{
+				Activations: map[string]float64{"host1": 0.0},
+				Events:      []string{"hypervisor_type_undetermined"},
+			}, nil
+		},
+	}
+	request := mockFilterWeigherPipelineRequest{
+		Hosts:   []string{"host1"},
+		Weights: map[string]float64{"host1": 0.0},
+	}
+	if _, err := monitor.RunWrapped(slog.Default(), request, step); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	got := testutil.ToFloat64(stepEventCounter.WithLabelValues("mock_pipeline", "mock_step", "hypervisor_type_undetermined"))
+	if got != 1 {
+		t.Errorf("stepEventCounter = %v, want 1", got)
 	}
 }
 

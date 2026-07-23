@@ -491,3 +491,81 @@ func TestNovaSpecUnmarshal(t *testing.T) {
 		t.Errorf("Expected NumInstances to be 1, got %d", spec.Spec.Data.NumInstances)
 	}
 }
+
+func TestNovaImageMeta_GetHypervisorType(t *testing.T) {
+	tests := []struct {
+		name        string
+		properties  map[string]any
+		propsNil    bool
+		expected    NovaImageMetaHVType
+		expectError bool
+	}{
+		{
+			name:       "kvm via img_hv_type",
+			properties: map[string]any{"img_hv_type": "kvm"},
+			expected:   NovaImageMetaHVTypeKVM,
+		},
+		{
+			name:       "vmware via hypervisor_type",
+			properties: map[string]any{"hypervisor_type": "vmware"},
+			expected:   NovaImageMetaHVTypeVMware,
+		},
+		{
+			name:       "baremetal via hypervisor_type",
+			properties: map[string]any{"hypervisor_type": "baremetal"},
+			expected:   NovaImageMetaHVTypeBaremetal,
+		},
+		{
+			name:       "case insensitive",
+			properties: map[string]any{"img_hv_type": "KVM"},
+			expected:   NovaImageMetaHVTypeKVM,
+		},
+		{
+			name:       "img_hv_type takes precedence over hypervisor_type",
+			properties: map[string]any{"img_hv_type": "kvm", "hypervisor_type": "vmware"},
+			expected:   NovaImageMetaHVTypeKVM,
+		},
+		{
+			name:        "properties nil",
+			propsNil:    true,
+			expectError: true,
+		},
+		{
+			name:        "no hypervisor key present",
+			properties:  map[string]any{"other_key": "value"},
+			expectError: true,
+		},
+		{
+			name:        "unsupported hypervisor type",
+			properties:  map[string]any{"img_hv_type": "xen"},
+			expectError: true,
+		},
+		{
+			name:        "value not a string",
+			properties:  map[string]any{"img_hv_type": 42},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			meta := NovaImageMeta{}
+			if !tt.propsNil {
+				meta.Properties = NovaObject[map[string]any]{Data: tt.properties}
+			}
+			got, err := meta.GetHypervisorType()
+			if tt.expectError {
+				if err == nil {
+					t.Fatalf("expected an error, got nil (result: %q)", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			if got != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, got)
+			}
+		})
+	}
+}

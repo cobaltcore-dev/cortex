@@ -303,6 +303,28 @@ spec:
           configuration. It is recommended to investigate the
           pipeline status and logs for more details.
 
+    - alert: CortexNovaImagePropertiesHypervisorTypeUndetermined
+      expr: |
+        sum by (pipeline, step) (rate(cortex_filter_weigher_pipeline_step_events_total{service="cortex-nova-metrics", event="image_properties_hv_type_undetermined"}[5m])) > 0.1
+      for: 15m
+      labels:
+        context: scheduling
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/scheduling
+      annotations:
+        summary: "Nova scheduling frequently cannot determine the hypervisor type from image properties"
+        description: >
+          The `filter_image_properties` step in pipeline `{{ "{{" }} $labels.pipeline {{ "}}" }}`
+          is frequently unable to determine the hypervisor type from the image properties
+          of incoming scheduling requests. In this case the filter is skipped and all hosts
+          are returned, so kvm-only images may be placed on non-kvm hypervisors (or vice
+          versa). This may indicate that images are missing the expected hypervisor
+          type property, or that the property format has changed. Investigate the
+          image metadata of the affected requests.
+
     {{- if .Values.kvm.enabled }}
     - alert: CortexNovaDoesntFindValidKVMHosts
       expr: sum by (az, hvtype) (increase(cortex_vm_faults{hvtype=~"CH|QEMU",faultmsg=~".*No valid host was found.*",faultmsg!~".*No such host.*"}[5m])) > 0
@@ -587,6 +609,28 @@ spec:
           availability zone {{ "{{" }} $labels.az {{ "}}" }} has dropped from a positive value to zero.
           This may mean hypervisors in that AZ are fully utilized for the corresponding
           flavor group and no further committed resources can be placed there.
+
+    - alert: CortexNovaCommittedResourceCapacityNotReady
+      expr: |
+        cortex_committed_resource_capacity_ready{service="cortex-nova-metrics"} == 0
+      for: 10m
+      labels:
+        context: committed-resource-capacity
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/committed-resource-capacity
+      annotations:
+        summary: "FlavorGroupCapacity for {{ "{{" }} $labels.flavor_group {{ "}}" }} in {{ "{{" }} $labels.az {{ "}}" }} has been not-ready for >10 minutes"
+        description: >
+          The FlavorGroupCapacity CRD for flavor group {{ "{{" }} $labels.flavor_group {{ "}}" }}
+          in availability zone {{ "{{" }} $labels.az {{ "}}" }} has had Ready=False for more than
+          10 minutes. The capacity controller failed to complete all scheduler probes for this
+          (flavor group x AZ) pair. The capacity API (report-capacity) is serving stale total
+          capacity values for this group without usage data — Limes receives capacity but no
+          usage, causing silent staleness. Investigate the capacity controller logs for probe
+          errors and check scheduler availability.
 
     # Committed Resource Usage API
     - alert: CortexNovaCommittedResourceUsageErrors

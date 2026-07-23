@@ -160,7 +160,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	log := ctrl.LoggerFrom(ctx)
 	startedAt := time.Now() // So we can measure sync duration.
 
-	pipeline, ok := c.Pipelines[decision.Spec.PipelineRef.Name]
+	pipeline, ok := c.GetPipeline(decision.Spec.PipelineRef.Name)
 	if !ok {
 		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
 		return nil, errors.New("pipeline not found or not ready")
@@ -184,7 +184,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 
 	// If necessary gather all placement candidates before filtering.
 	// This will override the hosts and weights in the nova request.
-	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
+	pipelineConf, ok := c.GetPipelineConfig(decision.Spec.PipelineRef.Name)
 	if !ok {
 		log.Error(nil, "pipeline config not found", "pipelineName", decision.Spec.PipelineRef.Name)
 		return &request, errors.New("pipeline config not found")

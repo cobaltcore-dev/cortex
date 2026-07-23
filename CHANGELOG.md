@@ -1,5 +1,58 @@
 # Changelog
 
+## 2026-07-22 — [#1068](https://github.com/cobaltcore-dev/cortex/pull/1068)
+
+### cortex v0.3.2 (sha-378ee2f5)
+
+Non-breaking changes:
+- Filter KVM hypervisors for non-KVM images — adds a new Nova scheduler filter that removes KVM hypervisors from scheduling candidates when the image declares a non-KVM hypervisor type ([#1067](https://github.com/cobaltcore-dev/cortex/pull/1067))
+- Improve FlavorGroupCapacity CRD observability with better metrics and status reporting ([#942](https://github.com/cobaltcore-dev/cortex/pull/942))
+- Protect pipeline maps with RWMutex to prevent concurrent map read/write data race ([#1066](https://github.com/cobaltcore-dev/cortex/pull/1066))
+- Fix broken relative links in quickstart and develop docs ([#1063](https://github.com/cobaltcore-dev/cortex/pull/1063))
+- Update `actions/setup-go` to v7 ([#1049](https://github.com/cobaltcore-dev/cortex/pull/1049))
+- Update `actions/setup-python` to v7 ([#1062](https://github.com/cobaltcore-dev/cortex/pull/1062))
+- Update `github.com/sapcc/go-bits` ([#1059](https://github.com/cobaltcore-dev/cortex/pull/1059), [#1071](https://github.com/cobaltcore-dev/cortex/pull/1071), [#1074](https://github.com/cobaltcore-dev/cortex/pull/1074))
+- Update external dependencies: `actions/checkout` v7.0.1, `go-logr/logr` v1.4.4, `prometheus/client_golang` v1.24.0 ([#1072](https://github.com/cobaltcore-dev/cortex/pull/1072))
+
+### cortex-shim v0.1.8 (sha-378ee2f5)
+
+Includes updated image sha-378ee2f5.
+
+### cortex-postgres v0.6.10 (sha-e06153f8)
+
+Includes updated image sha-e06153f8.
+
+### cortex-nova v0.0.82
+
+Includes updated charts cortex v0.3.2, cortex-postgres v0.6.10.
+
+- Add alert for missing hypervisor properties and KVM pipeline registration ([#1067](https://github.com/cobaltcore-dev/cortex/pull/1067))
+- Update `kube-prometheus-stack` to v87.19.0 ([#1061](https://github.com/cobaltcore-dev/cortex/pull/1061), [#1075](https://github.com/cobaltcore-dev/cortex/pull/1075))
+
+### cortex-cinder v0.0.82
+
+Includes updated charts cortex v0.3.2, cortex-postgres v0.6.10.
+
+### cortex-manila v0.0.82
+
+Includes updated charts cortex v0.3.2, cortex-postgres v0.6.10.
+
+### cortex-crds v0.0.82
+
+Includes updated chart cortex v0.3.2.
+
+### cortex-ironcore v0.0.82
+
+Includes updated chart cortex v0.3.2.
+
+### cortex-pods v0.0.82
+
+Includes updated chart cortex v0.3.2.
+
+### cortex-placement-shim v0.1.8
+
+Includes updated chart cortex-shim v0.1.8.
+
 ## 2026-07-16 — [#1051](https://github.com/cobaltcore-dev/cortex/pull/1051)
 
 ### cortex v0.3.1 (sha-fc47858e)
