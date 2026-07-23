@@ -11,9 +11,9 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/sapcc/go-bits v0.0.0-20260721134224-acf388eecf26
 	go.xyrillian.de/gg v1.11.1
-	k8s.io/api v0.36.2
-	k8s.io/apimachinery v0.36.2
-	k8s.io/client-go v0.36.2
+	k8s.io/api v0.36.3
+	k8s.io/apimachinery v0.36.3
+	k8s.io/client-go v0.36.3
 	sigs.k8s.io/controller-runtime v0.24.1
 )
 
@@ -32,7 +32,7 @@ require (
 	github.com/gofrs/uuid/v5 v5.4.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
-	k8s.io/streaming v0.36.2 // indirect
+	k8s.io/streaming v0.36.3 // indirect
 )
 
 require (
