@@ -140,6 +140,17 @@ func (h kvmHost) getHostLabels() []string {
 	}
 }
 
+func (k kvmHost) getPhysicalCapacity(resourceName hv1.ResourceName) (capacity resource.Quantity, ok bool) {
+	if k.Status.Capacity == nil {
+		return resource.Quantity{}, false
+	}
+	qty, exists := k.Status.Capacity[resourceName]
+	if !exists || qty.IsZero() {
+		return resource.Quantity{}, false
+	}
+	return qty, true
+}
+
 // getResourceCapacity attempts to retrieve the effective capacity for the specified resource from the hypervisor status, falling back to the physical capacity if effective capacity is not available. It returns the capacity quantity and a boolean indicating whether any capacity information was found.
 func (k kvmHost) getResourceCapacity(resourceName hv1.ResourceName) (capacity resource.Quantity, ok bool) {
 	if k.Status.EffectiveCapacity != nil {
