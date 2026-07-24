@@ -12,7 +12,7 @@ Cortex
 Cortex is a modular and extensible service for initial placement and scheduling in cloud-native environments covering workloads such as compute, storage, network, and other scheduling domains.
 It improves resource utilization and operational performance by making smart placement decisions based on the current state of the environment and defined constraints and objectives.
 
-As part of the CobaltCore project, it complements the platform with advanced placement and scheduling capabilities.
+As part of the CobaltCore project, it complements the platform with advanced placement and scheduling capabilities. 
 
 Learn more about [CobaltCore](https://cobaltcore-dev.github.io/docs/) and the broader [Apeiro Reference Architecture](https://apeirora.eu) ecosystem.
 
