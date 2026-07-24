@@ -4,77 +4,40 @@
 package deployment
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-var (
-	cmListGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMapList"}
-)
-
-func newKPITestScheme(t *testing.T) *runtime.Scheme {
-	t.Helper()
-	s := runtime.NewScheme()
-	if err := corev1.AddToScheme(s); err != nil {
-		t.Fatal(err)
-	}
-	if err := v1alpha1.AddToScheme(s); err != nil {
-		t.Fatal(err)
-	}
-	return s
+// fakeReader is a stub multiclusterReader that returns canned per-cluster
+// metadata. It lets the KPI be tested without any real or fake clusters.
+type fakeReader struct {
+	routeLabels []map[string]string
+	perCluster  []multicluster.ClusterObjectMetadata
+	err         error
 }
 
-// FakeCluster is a minimal cluster.Cluster backed by a fake client.
-type fakeCluster struct {
-	cluster.Cluster
-	FakeClient client.Client
+func (f *fakeReader) ConfiguredRouteLabels(schema.GroupVersionKind) []map[string]string {
+	return f.routeLabels
 }
 
-func (f *fakeCluster) GetClient() client.Client { return f.FakeClient }
-func (f *fakeCluster) GetCache() cache.Cache    { return nil }
-
-// NewFakeCluster returns a FakeCluster pre-loaded with the given objects.
-func newFakeCluster(scheme *runtime.Scheme, objs ...client.Object) *fakeCluster {
-	return &fakeCluster{
-		FakeClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build(),
-	}
+func (f *fakeReader) ListMetadataPerCluster(context.Context, schema.GroupVersionKind, ...client.ListOption) ([]multicluster.ClusterObjectMetadata, error) {
+	return f.perCluster, f.err
 }
 
-// RemoteEntry describes one remote cluster to register in the client.
-type RemoteEntry struct {
-	Cluster cluster.Cluster
-	Labels  map[string]string
-	GVKs    []schema.GroupVersionKind
-}
-
-// NewClient builds a *multicluster.Client with a home cluster and the given
-// remote entries. It uses AddRemoteCluster so no real REST config is needed.
-func newFakeMCLClient(scheme *runtime.Scheme, home cluster.Cluster, homeGVKs []schema.GroupVersionKind, remotes []RemoteEntry) *multicluster.Client {
-	c := &multicluster.Client{
-		HomeScheme:  scheme,
-		HomeCluster: home,
-	}
-	for _, gvk := range homeGVKs {
-		c.AddHomeGVK(gvk)
-	}
-	for _, r := range remotes {
-		c.AddRemoteCluster(r.Cluster, r.Labels, r.GVKs...)
-	}
-	return c
+// items builds n PartialObjectMetadata entries to represent a count of n.
+func items(n int) []metav1.PartialObjectMetadata {
+	out := make([]metav1.PartialObjectMetadata, n)
+	return out
 }
 
 func TestMulticlusterObjectCountKPI_GetName(t *testing.T) {
@@ -96,10 +59,44 @@ func TestMulticlusterObjectCountKPI_Init_RejectsNonMCLClient(t *testing.T) {
 	}
 }
 
-func TestMulticlusterObjectCountKPI_Init_RejectsInvalidGVK(t *testing.T) {
-	scheme := newKPITestScheme(t)
-	mcl := newFakeMCLClient(scheme, newFakeCluster(scheme), nil, nil)
+// initWithReader builds a KPI whose descriptors are derived from the given
+// route labels, bypassing Init's *multicluster.Client type assertion so the
+// KPI logic can be tested against a fakeReader.
+func initWithReader(t *testing.T, r *fakeReader, gvkStr string) *MulticlusterObjectCountKPI {
+	t.Helper()
 	kpi := &MulticlusterObjectCountKPI{}
+	kpi.mcl = r
+	gvk, err := parseGVK(gvkStr)
+	if err != nil {
+		t.Fatalf("parseGVK: %v", err)
+	}
+	keySet := map[string]bool{}
+	var labelKeys []string
+	for _, lm := range r.routeLabels {
+		for k := range lm {
+			snake := toSnakeCase(k)
+			if !keySet[snake] {
+				keySet[snake] = true
+				labelKeys = append(labelKeys, snake)
+			}
+		}
+	}
+	varLabels := append([]string{"group", "version", "kind", "is_home"}, labelKeys...)
+	desc := prometheus.NewDesc(
+		"cortex_multicluster_object_count",
+		"Number of objects of a given GVK per cluster",
+		varLabels,
+		nil,
+	)
+	kpi.descs = append(kpi.descs, gvkDesc{gvk: gvk, labelKeys: labelKeys, desc: desc})
+	return kpi
+}
+
+func TestMulticlusterObjectCountKPI_Init_RejectsInvalidGVK(t *testing.T) {
+	kpi := &MulticlusterObjectCountKPI{}
+	// A *multicluster.Client with no configured GVKs still passes the type
+	// assertion; the invalid GVK string must be rejected during parsing.
+	mcl := &multicluster.Client{}
 	opts := conf.NewRawOpts(`{"gvks":["not-a-valid-gvk"]}`)
 	if err := kpi.Init(nil, mcl, opts); err == nil {
 		t.Fatal("expected error for invalid GVK string")
@@ -107,21 +104,8 @@ func TestMulticlusterObjectCountKPI_Init_RejectsInvalidGVK(t *testing.T) {
 }
 
 func TestMulticlusterObjectCountKPI_Describe(t *testing.T) {
-	scheme := newKPITestScheme(t)
-	remote := newFakeCluster(scheme)
-	mcl := newFakeMCLClient(scheme, newFakeCluster(scheme), nil, []RemoteEntry{
-		{
-			Cluster: remote,
-			Labels:  map[string]string{"availabilityZone": "az-1"},
-			GVKs:    []schema.GroupVersionKind{cmListGVK},
-		},
-	})
-
-	kpi := &MulticlusterObjectCountKPI{}
-	opts := conf.NewRawOpts(`{"gvks":["/v1/ConfigMapList"]}`)
-	if err := kpi.Init(nil, mcl, opts); err != nil {
-		t.Fatalf("Init failed: %v", err)
-	}
+	r := &fakeReader{routeLabels: []map[string]string{{"availabilityZone": "az-1"}}}
+	kpi := initWithReader(t, r, "/v1/ConfigMapList")
 
 	ch := make(chan *prometheus.Desc, 5)
 	kpi.Describe(ch)
@@ -136,26 +120,17 @@ func TestMulticlusterObjectCountKPI_Describe(t *testing.T) {
 }
 
 func TestMulticlusterObjectCountKPI_Collect(t *testing.T) {
-	scheme := newKPITestScheme(t)
-
-	az1 := newFakeCluster(scheme,
-		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm-1", Namespace: "default"}},
-		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm-2", Namespace: "default"}},
-	)
-	az2 := newFakeCluster(scheme,
-		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm-3", Namespace: "default"}},
-	)
-
-	mcl := newFakeMCLClient(scheme, newFakeCluster(scheme), nil, []RemoteEntry{
-		{Cluster: az1, Labels: map[string]string{"availabilityZone": "az-1"}, GVKs: []schema.GroupVersionKind{cmListGVK}},
-		{Cluster: az2, Labels: map[string]string{"availabilityZone": "az-2"}, GVKs: []schema.GroupVersionKind{cmListGVK}},
-	})
-
-	kpi := &MulticlusterObjectCountKPI{}
-	opts := conf.NewRawOpts(`{"gvks":["/v1/ConfigMapList"]}`)
-	if err := kpi.Init(nil, mcl, opts); err != nil {
-		t.Fatalf("Init failed: %v", err)
+	r := &fakeReader{
+		routeLabels: []map[string]string{
+			{"availabilityZone": "az-1"},
+			{"availabilityZone": "az-2"},
+		},
+		perCluster: []multicluster.ClusterObjectMetadata{
+			{Labels: map[string]string{"availabilityZone": "az-1"}, Items: items(2)},
+			{Labels: map[string]string{"availabilityZone": "az-2"}, Items: items(1)},
+		},
 	}
+	kpi := initWithReader(t, r, "/v1/ConfigMapList")
 
 	ch := make(chan prometheus.Metric, 10)
 	kpi.Collect(ch)
@@ -195,18 +170,12 @@ func TestMulticlusterObjectCountKPI_Collect(t *testing.T) {
 }
 
 func TestMulticlusterObjectCountKPI_Collect_HomeCluster(t *testing.T) {
-	scheme := newKPITestScheme(t)
-
-	home := newFakeCluster(scheme,
-		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm-home", Namespace: "default"}},
-	)
-	mcl := newFakeMCLClient(scheme, home, []schema.GroupVersionKind{cmListGVK}, nil)
-
-	kpi := &MulticlusterObjectCountKPI{}
-	opts := conf.NewRawOpts(`{"gvks":["/v1/ConfigMapList"]}`)
-	if err := kpi.Init(nil, mcl, opts); err != nil {
-		t.Fatalf("Init failed: %v", err)
+	r := &fakeReader{
+		perCluster: []multicluster.ClusterObjectMetadata{
+			{Items: items(1), IsHome: true},
+		},
 	}
+	kpi := initWithReader(t, r, "/v1/ConfigMapList")
 
 	ch := make(chan prometheus.Metric, 10)
 	kpi.Collect(ch)

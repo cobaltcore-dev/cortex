@@ -184,32 +184,6 @@ func (c *Client) AddRemote(ctx context.Context, host, caCert string, insecureSki
 	return cl, nil
 }
 
-// AddRemoteCluster registers a pre-built cluster.Cluster as a remote for the
-// given GVKs with the provided routing labels. Unlike AddRemote, it does not
-// create a new cluster from a REST config — the caller supplies the cluster
-// directly. This is useful for in-process wiring and for unit tests.
-func (c *Client) AddRemoteCluster(cl cluster.Cluster, labels map[string]string, gvks ...schema.GroupVersionKind) {
-	c.remoteClustersMu.Lock()
-	defer c.remoteClustersMu.Unlock()
-	if c.remoteClusters == nil {
-		c.remoteClusters = make(map[schema.GroupVersionKind][]remoteCluster)
-	}
-	for _, gvk := range gvks {
-		c.remoteClusters[gvk] = append(c.remoteClusters[gvk], remoteCluster{
-			cluster: cl,
-			labels:  labels,
-		})
-	}
-}
-
-// AddHomeGVK marks the given GVK as served by the home cluster.
-func (c *Client) AddHomeGVK(gvk schema.GroupVersionKind) {
-	if c.homeGVKs == nil {
-		c.homeGVKs = make(map[schema.GroupVersionKind]bool)
-	}
-	c.homeGVKs[gvk] = true
-}
-
 // Get the gvk registered for the given resource in the home cluster's scheme.
 func (c *Client) GVKFromHomeScheme(obj runtime.Object) (gvk schema.GroupVersionKind, err error) {
 	gvks, unversioned, err := c.HomeScheme.ObjectKinds(obj)
@@ -475,21 +449,23 @@ func (c *Client) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts
 	return errors.New("apply operation is not supported in multicluster client")
 }
 
-// ClusterObjectCount is one entry in the result of CountPerClusterByGVK.
-// Labels holds the routing labels for the cluster. IsHome is true for the home
-// cluster, which has no routing labels.
-type ClusterObjectCount struct {
+// ClusterObjectMetadata is one entry in the result of ListMetadataPerCluster.
+// Labels holds the routing labels for the cluster. Items holds the object
+// metadata returned by the cluster (no spec or status). IsHome is true for the
+// home cluster, which has no routing labels.
+type ClusterObjectMetadata struct {
 	Labels map[string]string
-	Count  int
+	Items  []metav1.PartialObjectMetadata
 	IsHome bool
 }
 
-// CountPerClusterByGVK returns the number of objects of the given GVK in each
+// ListMetadataPerCluster returns the object metadata of the given GVK for each
 // configured cluster. It uses PartialObjectMetadataList so only object metadata
 // crosses the wire — no spec or status — making it efficient even for large
-// object counts. Clusters that return an error are logged and skipped (same
-// policy as List). The home cluster is included with IsHome set to true.
-func (c *Client) CountPerClusterByGVK(ctx context.Context, gvk schema.GroupVersionKind, opts ...client.ListOption) ([]ClusterObjectCount, error) {
+// object counts. Callers that only need counts can use len(Items). Clusters
+// that return an error are logged and skipped (same policy as List). The home
+// cluster is included with IsHome set to true.
+func (c *Client) ListMetadataPerCluster(ctx context.Context, gvk schema.GroupVersionKind, opts ...client.ListOption) ([]ClusterObjectMetadata, error) {
 	log := ctrl.LoggerFrom(ctx)
 
 	c.remoteClustersMu.RLock()
@@ -513,7 +489,7 @@ func (c *Client) CountPerClusterByGVK(ctx context.Context, gvk schema.GroupVersi
 	}
 	c.remoteClustersMu.RUnlock()
 
-	results := make([]ClusterObjectCount, 0, len(entries))
+	results := make([]ClusterObjectMetadata, 0, len(entries))
 	for _, e := range entries {
 		partialList := &metav1.PartialObjectMetadataList{}
 		partialList.SetGroupVersionKind(schema.GroupVersionKind{
@@ -522,11 +498,11 @@ func (c *Client) CountPerClusterByGVK(ctx context.Context, gvk schema.GroupVersi
 			Kind:    gvk.Kind,
 		})
 		if err := e.cl.GetClient().List(ctx, partialList, opts...); err != nil {
-			log.Error(err, "error counting resources from cluster",
+			log.Error(err, "error listing resource metadata from cluster",
 				"gvk", gvk, "host", e.cl.GetConfig().Host)
 			continue
 		}
-		results = append(results, ClusterObjectCount{Labels: e.labels, Count: len(partialList.Items), IsHome: e.isHome})
+		results = append(results, ClusterObjectMetadata{Labels: e.labels, Items: partialList.Items, IsHome: e.isHome})
 	}
 	return results, nil
 }

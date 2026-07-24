@@ -32,11 +32,19 @@ type gvkDesc struct {
 	desc      *prometheus.Desc
 }
 
+// multiclusterReader is the subset of *multicluster.Client this KPI needs.
+// Keeping it narrow lets the KPI logic be unit-tested without wiring real or
+// fake clusters into a multicluster.Client.
+type multiclusterReader interface {
+	ConfiguredRouteLabels(gvk schema.GroupVersionKind) []map[string]string
+	ListMetadataPerCluster(ctx context.Context, gvk schema.GroupVersionKind, opts ...client.ListOption) ([]multicluster.ClusterObjectMetadata, error)
+}
+
 // MulticlusterObjectCountKPI reports the number of objects of each configured
 // GVK per remote cluster, labelled by the cluster's routing labels.
 type MulticlusterObjectCountKPI struct {
 	plugins.BaseKPI[MulticlusterObjectCountKPIOpts]
-	mcl   *multicluster.Client
+	mcl   multiclusterReader
 	descs []gvkDesc
 }
 
@@ -98,13 +106,13 @@ func (k *MulticlusterObjectCountKPI) Describe(ch chan<- *prometheus.Desc) {
 func (k *MulticlusterObjectCountKPI) Collect(ch chan<- prometheus.Metric) {
 	ctx := context.Background()
 	for _, d := range k.descs {
-		counts, err := k.mcl.CountPerClusterByGVK(ctx, d.gvk)
+		perCluster, err := k.mcl.ListMetadataPerCluster(ctx, d.gvk)
 		if err != nil {
-			slog.Error("multicluster_object_count_kpi: failed to count objects",
+			slog.Error("multicluster_object_count_kpi: failed to list object metadata",
 				"gvk", d.gvk, "err", err)
 			continue
 		}
-		for _, c := range counts {
+		for _, c := range perCluster {
 			isHome := "false"
 			if c.IsHome {
 				isHome = "true"
@@ -120,7 +128,7 @@ func (k *MulticlusterObjectCountKPI) Collect(ch chan<- prometheus.Metric) {
 				labelVals = append(labelVals, labelValueForSnakeKey(key, c.Labels))
 			}
 			ch <- prometheus.MustNewConstMetric(d.desc, prometheus.GaugeValue,
-				float64(c.Count), labelVals...)
+				float64(len(c.Items)), labelVals...)
 		}
 	}
 }
