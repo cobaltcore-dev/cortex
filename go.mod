@@ -9,7 +9,7 @@ require (
 	github.com/ironcore-dev/ironcore v0.4.3
 	github.com/prometheus/client_golang v1.24.0
 	github.com/prometheus/client_model v0.6.2
-	github.com/sapcc/go-bits v0.0.0-20260721134224-acf388eecf26
+	github.com/sapcc/go-bits v0.0.0-20260723170232-89c8670b5841
 	go.xyrillian.de/gg v1.11.1
 	k8s.io/api v0.36.3
 	k8s.io/apimachinery v0.36.3
@@ -85,7 +85,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/poy/onpar v0.3.5 // indirect
-	github.com/prometheus/common v0.70.0 // indirect
+	github.com/prometheus/common v0.70.1 // indirect
 	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/sapcc/go-api-declarations v1.24.0
 	github.com/sirupsen/logrus v1.9.3 // indirect
