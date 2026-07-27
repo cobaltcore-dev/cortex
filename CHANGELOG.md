@@ -1,5 +1,53 @@
 # Changelog
 
+## 2026-07-27 — [#1093](https://github.com/cobaltcore-dev/cortex/pull/1093)
+
+### cortex v0.3.4 (sha-4f44f3b7)
+
+Bug fixes:
+- Deep-copy capacity map to prevent informer cache corruption — the capacity filter assigned hypervisor Status.Capacity map references directly into a local working map, then mutated those maps during free-resource calculations. Since the maps are shared with the controller-runtime informer cache, each scheduling pass permanently decremented cached capacity values, progressively starving scheduling until all hosts appeared full ([#1065](https://github.com/cobaltcore-dev/cortex/pull/1065))
+- Reset gauge metrics in reservation monitor to prevent stale values — adds `Reset()` calls on `numberOfReservations` and `reservedResources` GaugeVecs before repopulating in `Collect`, preventing stale label combinations from persisting when reservations are deleted or change status ([#1092](https://github.com/cobaltcore-dev/cortex/pull/1092))
+- Stop committed resource controller reconcile storm — `setAccepted` unconditionally wrote a new AcceptedAt timestamp and a time-varying StatusSummary on every call, causing a non-empty status patch even when the CR was already accepted. Adds an early-return guard that skips the patch when Ready=True/Accepted is already set for the current generation ([#1089](https://github.com/cobaltcore-dev/cortex/pull/1089))
+
+Non-breaking changes:
+- Add History CRD documentation and multicluster guide link ([#1091](https://github.com/cobaltcore-dev/cortex/pull/1091))
+- Update `github.com/prometheus/client_golang` to v1.24.1 ([#1090](https://github.com/cobaltcore-dev/cortex/pull/1090))
+- Update `k8s.io/api`, `k8s.io/apimachinery`, `k8s.io/client-go` to v0.36.3 ([#1086](https://github.com/cobaltcore-dev/cortex/pull/1086))
+- Update `github.com/sapcc/go-bits` ([#1085](https://github.com/cobaltcore-dev/cortex/pull/1085))
+- Update `kube-prometheus-stack` to 87.19.2 ([#1090](https://github.com/cobaltcore-dev/cortex/pull/1090))
+
+### cortex-shim v0.1.10 (sha-51c773d9)
+
+Includes updated image sha-51c773d9 with dependency updates.
+
+### cortex-nova v0.0.84
+
+Includes updated chart cortex v0.3.4.
+
+### cortex-cinder v0.0.84
+
+Includes updated chart cortex v0.3.4.
+
+### cortex-manila v0.0.84
+
+Includes updated chart cortex v0.3.4.
+
+### cortex-crds v0.0.84
+
+Includes updated chart cortex v0.3.4.
+
+### cortex-ironcore v0.0.84
+
+Includes updated chart cortex v0.3.4.
+
+### cortex-pods v0.0.84
+
+Includes updated chart cortex v0.3.4.
+
+### cortex-placement-shim v0.1.10
+
+Includes updated chart cortex-shim v0.1.10.
+
 ## 2026-07-23 — [#1080](https://github.com/cobaltcore-dev/cortex/pull/1080)
 
 ### cortex v0.3.3 (sha-4eba8400)
