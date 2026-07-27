@@ -1172,6 +1172,7 @@ func TestCommittedResourceController_SetAcceptedIdempotent(t *testing.T) {
 	// which triggers the self-watch and causes a reconcile storm.
 	scheme := newCRTestScheme(t)
 	cr := newTestCoresCR("test-cr", v1alpha1.CommitmentStatusConfirmed, 4, false)
+	cr.Generation = 1
 	fgc := newTestFlavorGroupCapacity("test-group", "test-az", 16)
 	k8sClient := newCRTestClient(scheme, cr, fgc)
 
@@ -1190,6 +1191,13 @@ func TestCommittedResourceController_SetAcceptedIdempotent(t *testing.T) {
 	var after1 v1alpha1.CommittedResource
 	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: cr.Name}, &after1); err != nil {
 		t.Fatalf("get after first reconcile: %v", err)
+	}
+	cond := meta.FindStatusCondition(after1.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+	if cond == nil {
+		t.Fatalf("Ready condition not set after first reconcile")
+	}
+	if cond.ObservedGeneration != 1 {
+		t.Errorf("ObservedGeneration: want 1, got %d", cond.ObservedGeneration)
 	}
 	rv1 := after1.ResourceVersion
 
