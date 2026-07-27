@@ -82,13 +82,20 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		return nil, err
 	}
 	for _, hv := range hvs.Items {
+		var sourceMap map[hv1.ResourceName]resource.Quantity
 		if hv.Status.EffectiveCapacity == nil {
 			traceLog.Warn("hypervisor with nil effective capacity, use capacity instead (overprovisioning not considered)", "host", hv.Name)
-			freeResourcesByHost[hv.Name] = hv.Status.Capacity
+			sourceMap = hv.Status.Capacity
 		} else {
 			// Start with the total effective capacity which is capacity * overcommit ratio.
-			freeResourcesByHost[hv.Name] = hv.Status.EffectiveCapacity
+			sourceMap = hv.Status.EffectiveCapacity
 		}
+		// Deep-copy the map to avoid mutating the informer cache.
+		copied := make(map[hv1.ResourceName]resource.Quantity, len(sourceMap))
+		for k, v := range sourceMap {
+			copied[k] = v.DeepCopy()
+		}
+		freeResourcesByHost[hv.Name] = copied
 
 		// Subtract allocated resources (skip when ignoring allocations for empty-datacenter capacity queries).
 		if !ignoreAllocations {
