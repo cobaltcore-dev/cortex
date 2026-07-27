@@ -7,7 +7,7 @@ require (
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.13.0
 	github.com/ironcore-dev/ironcore v0.4.3
-	github.com/prometheus/client_golang v1.24.0
+	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.2
 	github.com/sapcc/go-bits v0.0.0-20260723170232-89c8670b5841
 	go.xyrillian.de/gg v1.11.1
