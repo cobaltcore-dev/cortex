@@ -463,33 +463,6 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		return nil
 	}
 
-	// vmUUIDToHost and hvByName are built lazily alongside allHVs/allReservations.
-	// vmUUIDToHost is a reverse index from VM UUID to hypervisor name, covering all
-	// hypervisors — the same pattern used by vm_source.go and failover/controller.go.
-	// Building it once amortises the cost across all confirmed-missing VMs in one reconcile.
-	var vmUUIDToHost map[string]string
-	var hvByName map[string]hv1.Hypervisor
-
-	ensureReverseIndex := func() error {
-		if vmUUIDToHost != nil {
-			return nil
-		}
-		if err := ensureHVsAndReservations(); err != nil {
-			return err
-		}
-		vmUUIDToHost = make(map[string]string)
-		hvByName = make(map[string]hv1.Hypervisor, len(allHVs.Items))
-		for _, hv := range allHVs.Items {
-			hvByName[hv.Name] = hv
-			for _, inst := range hv.Status.Instances {
-				if _, seen := vmUUIDToHost[inst.ID]; !seen {
-					vmUUIDToHost[inst.ID] = hv.Name
-				}
-			}
-		}
-		return nil
-	}
-
 	// Build new Status.Allocations map based on HV CRD state.
 	newStatusAllocations := make(map[string]string)
 	// Track allocations to remove from Spec (stale/leaving VMs).
@@ -541,17 +514,28 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		}
 
 		// Confirmed VM missing from expected host — could be a live migration.
-		// Build the reverse index (vmUUID → hvName) lazily on first miss.
-		if err := ensureReverseIndex(); err != nil {
+		// Scan all HVs to find where the VM is now. The list is fetched lazily
+		// and shared across any further misses in this reconcile cycle.
+		if err := ensureHVsAndReservations(); err != nil {
 			return nil, err
 		}
 
-		foundHost := vmUUIDToHost[vmUUID]
-		if foundHost == expectedHost {
-			// Index says it's still on the expected host — treat as present
-			// (race between HV CRD update and our per-host set built above).
-			newStatusAllocations[vmUUID] = expectedHost
-			continue
+		var foundHost string
+		var foundHV hv1.Hypervisor
+		for _, hv := range allHVs.Items {
+			if hv.Name == expectedHost {
+				continue // already checked via hvInstanceSet above
+			}
+			for _, inst := range hv.Status.Instances {
+				if inst.ID == vmUUID {
+					foundHost = hv.Name
+					foundHV = hv
+					break
+				}
+			}
+			if foundHost != "" {
+				break
+			}
 		}
 
 		if foundHost == "" {
@@ -566,8 +550,6 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 
 		// VM found on a different host — live migration detected.
 		// Check whether the new host can absorb the full reservation slot.
-		foundHV := hvByName[foundHost]
-
 		if reservations.HostHasCapacityForReservation(allReservations.Items, foundHV, res) {
 			// New host has enough room — follow the VM.
 			logger.Info("VM live-migrated to host with capacity, updating TargetHost",
