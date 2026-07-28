@@ -1019,7 +1019,6 @@ func newConfirmedCRReservation(name, host, vmUUID string, memGiB, cpuCores int64
 				ResourceName: "test-flavor",
 				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
 					vmUUID: {
-						// allocation age well past any grace period
 						CreationTimestamp: metav1.NewTime(time.Now().Add(-1 * time.Hour)),
 						Resources: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dGi", memGiB)),
@@ -1041,271 +1040,126 @@ func newConfirmedCRReservation(name, host, vmUUID string, memGiB, cpuCores int64
 	}
 }
 
-// TestReconcileAllocations_LiveMigration_CapacityAvailable verifies that when a confirmed VM
-// is detected on a different host that has sufficient capacity, TargetHost is updated to the
-// new host and the VM is tracked at its actual location in Status.Allocations.
-func TestReconcileAllocations_LiveMigration_CapacityAvailable(t *testing.T) {
-	scheme := newCRTestScheme(t)
-	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
-
+func TestReconcileAllocations_LiveMigration(t *testing.T) {
 	const (
-		vmUUID  = "vm-migrated"
+		vmUUID  = "vm-uuid"
 		oldHost = "host-old"
 		newHost = "host-new"
 	)
 
-	res := newConfirmedCRReservation("res-1", oldHost, vmUUID, 480, 40)
-
-	// Old host: VM is gone.
-	hvOld := newTestHypervisorCRD(oldHost, []hv1.Instance{})
-
-	// New host: VM is present, has plenty of capacity, no other reservations blocking it.
-	hvNew := newHVWithCapacity(newHost, 960, 80, []hv1.Instance{
-		{ID: vmUUID, Name: "vm-name", Active: true},
-	})
-
-	k8sClient := newCRTestClient(scheme, res, hvOld, hvNew)
-	ctrl := &CommitmentReservationController{Client: k8sClient, Scheme: scheme, Conf: config}
-	ctx := WithNewGlobalRequestID(context.Background())
-
-	if _, err := ctrl.reconcileAllocations(ctx, res); err != nil {
-		t.Fatalf("reconcileAllocations() error = %v", err)
-	}
-
-	var updated v1alpha1.Reservation
-	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(res), &updated); err != nil {
-		t.Fatalf("failed to get updated reservation: %v", err)
-	}
-
-	// Spec.TargetHost must be updated to the new host.
-	if updated.Spec.TargetHost != newHost {
-		t.Errorf("expected Spec.TargetHost=%q, got %q", newHost, updated.Spec.TargetHost)
-	}
-
-	// VM must still be in Spec.Allocations (not removed).
-	if _, ok := updated.Spec.CommittedResourceReservation.Allocations[vmUUID]; !ok {
-		t.Errorf("expected VM %s to remain in Spec.Allocations after migration", vmUUID)
-	}
-
-	// Status.Allocations must record the VM at its new actual host.
-	if updated.Status.CommittedResourceReservation == nil {
-		t.Fatal("expected Status.CommittedResourceReservation to be set")
-	}
-	if got := updated.Status.CommittedResourceReservation.Allocations[vmUUID]; got != newHost {
-		t.Errorf("expected Status.Allocations[%s]=%q, got %q", vmUUID, newHost, got)
-	}
-
-	// VMMisplaced condition must NOT be set.
-	if cond := meta.FindStatusCondition(updated.Status.Conditions, v1alpha1.ReservationConditionVMMisplaced); cond != nil && cond.Status == metav1.ConditionTrue {
-		t.Errorf("expected VMMisplaced condition to be absent or false, got %+v", cond)
-	}
-}
-
-// TestReconcileAllocations_LiveMigration_NoCapacity verifies that when a confirmed VM is
-// detected on a different host that lacks sufficient capacity, TargetHost is left unchanged
-// and the VMMisplaced condition is set.
-func TestReconcileAllocations_LiveMigration_NoCapacity(t *testing.T) {
-	scheme := newCRTestScheme(t)
 	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
 
-	const (
-		vmUUID  = "vm-migrated-no-cap"
-		oldHost = "host-old"
-		newHost = "host-new-full"
-	)
-
-	res := newConfirmedCRReservation("res-1", oldHost, vmUUID, 480, 40)
-
-	// Old host: VM is gone.
-	hvOld := newTestHypervisorCRD(oldHost, []hv1.Instance{})
-
-	// New host: VM is present, but another reservation already blocks all capacity.
-	hvNew := newHVWithCapacity(newHost, 480, 40, []hv1.Instance{
-		{ID: vmUUID, Name: "vm-name", Active: true},
-	})
-	blocker := &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: "res-blocker"},
-		Spec: v1alpha1.ReservationSpec{
-			Type:       v1alpha1.ReservationTypeCommittedResource,
-			TargetHost: newHost,
-			Resources: map[hv1.ResourceName]resource.Quantity{
-				hv1.ResourceMemory: resource.MustParse("480Gi"),
-				hv1.ResourceCPU:    resource.MustParse("40"),
+	tests := []struct {
+		name string
+		// extra objects beyond the base reservation and old host HV
+		extraObjects    []client.Object
+		startConditions []metav1.Condition
+		// expected outcomes
+		wantTargetHost      string
+		wantStatusHost      string // expected in Status.Allocations[vmUUID]; "" means absent
+		wantSpecHasVM       bool
+		wantVMMisplaced     bool
+	}{
+		{
+			name: "migrated to host with capacity: follow the VM",
+			extraObjects: []client.Object{
+				newHVWithCapacity(newHost, 960, 80, []hv1.Instance{{ID: vmUUID, Active: true}}),
 			},
+			wantTargetHost:  newHost,
+			wantStatusHost:  newHost,
+			wantSpecHasVM:   true,
+			wantVMMisplaced: false,
 		},
-		Status: v1alpha1.ReservationStatus{Host: newHost},
-	}
-
-	k8sClient := newCRTestClient(scheme, res, hvOld, hvNew, blocker)
-	ctrl := &CommitmentReservationController{Client: k8sClient, Scheme: scheme, Conf: config}
-	ctx := WithNewGlobalRequestID(context.Background())
-
-	if _, err := ctrl.reconcileAllocations(ctx, res); err != nil {
-		t.Fatalf("reconcileAllocations() error = %v", err)
-	}
-
-	var updated v1alpha1.Reservation
-	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(res), &updated); err != nil {
-		t.Fatalf("failed to get updated reservation: %v", err)
-	}
-
-	// Spec.TargetHost must remain unchanged (old host).
-	if updated.Spec.TargetHost != oldHost {
-		t.Errorf("expected Spec.TargetHost to remain %q, got %q", oldHost, updated.Spec.TargetHost)
-	}
-
-	// VM must still be in Spec.Allocations (not removed).
-	if _, ok := updated.Spec.CommittedResourceReservation.Allocations[vmUUID]; !ok {
-		t.Errorf("expected VM %s to remain in Spec.Allocations after misplaced migration", vmUUID)
-	}
-
-	// Status.Allocations must record the VM at its actual (new) host even though we can't follow it.
-	if updated.Status.CommittedResourceReservation == nil {
-		t.Fatal("expected Status.CommittedResourceReservation to be set")
-	}
-	if got := updated.Status.CommittedResourceReservation.Allocations[vmUUID]; got != newHost {
-		t.Errorf("expected Status.Allocations[%s]=%q (actual location), got %q", vmUUID, newHost, got)
-	}
-
-	// VMMisplaced condition must be set to True.
-	cond := meta.FindStatusCondition(updated.Status.Conditions, v1alpha1.ReservationConditionVMMisplaced)
-	if cond == nil {
-		t.Fatal("expected VMMisplaced condition to be set")
-	}
-	if cond.Status != metav1.ConditionTrue {
-		t.Errorf("expected VMMisplaced condition status True, got %s", cond.Status)
-	}
-	if cond.Reason != "MigratedToFullHost" {
-		t.Errorf("expected VMMisplaced reason MigratedToFullHost, got %s", cond.Reason)
-	}
-}
-
-// TestReconcileAllocations_LiveMigration_VMGone verifies that when a confirmed VM is absent
-// from its expected host and cannot be found on any other hypervisor, it is treated as
-// terminated and removed from Spec.Allocations normally.
-func TestReconcileAllocations_LiveMigration_VMGone(t *testing.T) {
-	scheme := newCRTestScheme(t)
-	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
-
-	const (
-		vmUUID  = "vm-gone"
-		oldHost = "host-old"
-	)
-
-	res := newConfirmedCRReservation("res-1", oldHost, vmUUID, 480, 40)
-
-	// Old host: VM is gone. No other hypervisor has the VM either.
-	hvOld := newTestHypervisorCRD(oldHost, []hv1.Instance{})
-	hvOther := newTestHypervisorCRD("host-other", []hv1.Instance{
-		{ID: "some-other-vm", Name: "other-vm", Active: true},
-	})
-
-	k8sClient := newCRTestClient(scheme, res, hvOld, hvOther)
-	ctrl := &CommitmentReservationController{Client: k8sClient, Scheme: scheme, Conf: config}
-	ctx := WithNewGlobalRequestID(context.Background())
-
-	if _, err := ctrl.reconcileAllocations(ctx, res); err != nil {
-		t.Fatalf("reconcileAllocations() error = %v", err)
-	}
-
-	var updated v1alpha1.Reservation
-	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(res), &updated); err != nil {
-		t.Fatalf("failed to get updated reservation: %v", err)
-	}
-
-	// VM must be removed from Spec.Allocations.
-	if _, ok := updated.Spec.CommittedResourceReservation.Allocations[vmUUID]; ok {
-		t.Errorf("expected VM %s to be removed from Spec.Allocations when not found anywhere", vmUUID)
-	}
-
-	// Status.Allocations must be empty.
-	if updated.Status.CommittedResourceReservation != nil &&
-		len(updated.Status.CommittedResourceReservation.Allocations) != 0 {
-		t.Errorf("expected empty Status.Allocations after VM removal, got %v",
-			updated.Status.CommittedResourceReservation.Allocations)
-	}
-
-	// Spec.TargetHost must remain unchanged.
-	if updated.Spec.TargetHost != oldHost {
-		t.Errorf("expected Spec.TargetHost to remain %q, got %q", oldHost, updated.Spec.TargetHost)
-	}
-
-	// VMMisplaced condition must NOT be set.
-	if cond := meta.FindStatusCondition(updated.Status.Conditions, v1alpha1.ReservationConditionVMMisplaced); cond != nil && cond.Status == metav1.ConditionTrue {
-		t.Errorf("expected VMMisplaced condition to be absent or false after removal, got %+v", cond)
-	}
-}
-
-// TestReconcileAllocations_LiveMigration_ClearsStaleVMMisplaced verifies that the
-// VMMisplaced condition is removed when the misplaced VM is no longer present in
-// Spec.Allocations on a subsequent reconcile (e.g. after it was removed by the operator).
-func TestReconcileAllocations_LiveMigration_ClearsStaleVMMisplaced(t *testing.T) {
-	scheme := newCRTestScheme(t)
-	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
-
-	const (
-		vmUUID = "vm-was-misplaced"
-		host   = "host-1"
-	)
-
-	// Reservation still carries the VM in Spec but it's now confirmed back on its host.
-	// The VMMisplaced condition is stale from a previous cycle.
-	res := &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: "res-1"},
-		Spec: v1alpha1.ReservationSpec{
-			Type:       v1alpha1.ReservationTypeCommittedResource,
-			TargetHost: host,
-			Resources: map[hv1.ResourceName]resource.Quantity{
-				hv1.ResourceMemory: resource.MustParse("480Gi"),
-				hv1.ResourceCPU:    resource.MustParse("40"),
-			},
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				ProjectID:    "test-project",
-				ResourceName: "test-flavor",
-				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
-					vmUUID: {
-						CreationTimestamp: metav1.NewTime(time.Now().Add(-1 * time.Hour)),
+		{
+			name: "migrated to full host: mark misplaced, keep TargetHost",
+			extraObjects: []client.Object{
+				newHVWithCapacity(newHost, 480, 40, []hv1.Instance{{ID: vmUUID, Active: true}}),
+				&v1alpha1.Reservation{
+					ObjectMeta: metav1.ObjectMeta{Name: "res-blocker"},
+					Spec: v1alpha1.ReservationSpec{
+						Type:       v1alpha1.ReservationTypeCommittedResource,
+						TargetHost: newHost,
 						Resources: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceMemory: resource.MustParse("480Gi"),
 							hv1.ResourceCPU:    resource.MustParse("40"),
 						},
 					},
+					Status: v1alpha1.ReservationStatus{Host: newHost},
 				},
 			},
+			wantTargetHost:  oldHost,
+			wantStatusHost:  newHost,
+			wantSpecHasVM:   true,
+			wantVMMisplaced: true,
 		},
-		Status: v1alpha1.ReservationStatus{
-			Host: host,
-			Conditions: []metav1.Condition{
-				{Type: v1alpha1.ReservationConditionReady, Status: metav1.ConditionTrue, Reason: "ReservationActive"},
+		{
+			name:            "VM gone from all hosts: remove allocation",
+			extraObjects:    []client.Object{newTestHypervisorCRD("host-other", []hv1.Instance{{ID: "other-vm"}})},
+			wantTargetHost:  oldHost,
+			wantStatusHost:  "",
+			wantSpecHasVM:   false,
+			wantVMMisplaced: false,
+		},
+		{
+			name: "stale VMMisplaced cleared when VM back on expected host",
+			startConditions: []metav1.Condition{
 				{Type: v1alpha1.ReservationConditionVMMisplaced, Status: metav1.ConditionTrue, Reason: "MigratedToFullHost"},
 			},
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: map[string]string{vmUUID: host},
-			},
+			// VM is back on oldHost — newHVWithCapacity for oldHost provided via the base setup below
+			wantTargetHost:  oldHost,
+			wantStatusHost:  oldHost,
+			wantSpecHasVM:   true,
+			wantVMMisplaced: false,
 		},
 	}
 
-	// VM is now back on the expected host.
-	hv := newTestHypervisorCRD(host, []hv1.Instance{
-		{ID: vmUUID, Name: "vm-name", Active: true},
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := newCRTestScheme(t)
+			res := newConfirmedCRReservation("res-1", oldHost, vmUUID, 480, 40)
+			res.Status.Conditions = append(res.Status.Conditions, tt.startConditions...)
 
-	k8sClient := newCRTestClient(scheme, res, hv)
-	ctrl := &CommitmentReservationController{Client: k8sClient, Scheme: scheme, Conf: config}
-	ctx := WithNewGlobalRequestID(context.Background())
+			// oldHost HV always has the VM absent (already migrated away), except for the
+			// "stale VMMisplaced" case where the VM is back.
+			oldInstances := []hv1.Instance{}
+			if tt.wantStatusHost == oldHost {
+				oldInstances = []hv1.Instance{{ID: vmUUID, Active: true}}
+			}
+			objects := []client.Object{res, newTestHypervisorCRD(oldHost, oldInstances)}
+			objects = append(objects, tt.extraObjects...)
 
-	if _, err := ctrl.reconcileAllocations(ctx, res); err != nil {
-		t.Fatalf("reconcileAllocations() error = %v", err)
-	}
+			k8sClient := newCRTestClient(scheme, objects...)
+			controller := &CommitmentReservationController{Client: k8sClient, Scheme: scheme, Conf: config}
+			ctx := WithNewGlobalRequestID(context.Background())
 
-	var updated v1alpha1.Reservation
-	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(res), &updated); err != nil {
-		t.Fatalf("failed to get updated reservation: %v", err)
-	}
+			if _, err := controller.reconcileAllocations(ctx, res); err != nil {
+				t.Fatalf("reconcileAllocations() error = %v", err)
+			}
 
-	// VMMisplaced condition must be removed (VM is healthy on its expected host).
-	cond := meta.FindStatusCondition(updated.Status.Conditions, v1alpha1.ReservationConditionVMMisplaced)
-	if cond != nil && cond.Status == metav1.ConditionTrue {
-		t.Errorf("expected VMMisplaced condition to be cleared, still present: %+v", cond)
+			var updated v1alpha1.Reservation
+			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(res), &updated); err != nil {
+				t.Fatalf("failed to get updated reservation: %v", err)
+			}
+
+			if updated.Spec.TargetHost != tt.wantTargetHost {
+				t.Errorf("Spec.TargetHost = %q, want %q", updated.Spec.TargetHost, tt.wantTargetHost)
+			}
+			_, specHasVM := updated.Spec.CommittedResourceReservation.Allocations[vmUUID]
+			if specHasVM != tt.wantSpecHasVM {
+				t.Errorf("VM in Spec.Allocations = %v, want %v", specHasVM, tt.wantSpecHasVM)
+			}
+			var statusHost string
+			if updated.Status.CommittedResourceReservation != nil {
+				statusHost = updated.Status.CommittedResourceReservation.Allocations[vmUUID]
+			}
+			if statusHost != tt.wantStatusHost {
+				t.Errorf("Status.Allocations[%s] = %q, want %q", vmUUID, statusHost, tt.wantStatusHost)
+			}
+			cond := meta.FindStatusCondition(updated.Status.Conditions, v1alpha1.ReservationConditionVMMisplaced)
+			isMisplaced := cond != nil && cond.Status == metav1.ConditionTrue
+			if isMisplaced != tt.wantVMMisplaced {
+				t.Errorf("VMMisplaced condition = %v, want %v", isMisplaced, tt.wantVMMisplaced)
+			}
+		})
 	}
 }
