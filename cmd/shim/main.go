@@ -361,7 +361,7 @@ func setupMulticlusterClient(ctx context.Context, mgr manager.Manager, restConfi
 		HomeRestConfig:  restConfig,
 		HomeScheme:      scheme,
 		ResourceRouters: multicluster.DefaultResourceRouters,
-		Monitor:         multicluster.NewMonitor(),
+		Monitor:         multicluster.NewMonitor("cortex_"),
 	}
 	mclConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
 	if err := mcl.InitFromConf(ctx, mgr, mclConfig); err != nil {

@@ -12,41 +12,51 @@ import (
 // method of access (e.g. "create", "get", "list") and the resource GVK.
 var duplicateConflictLabels = []string{"method", "gvk"}
 
-// Monitor provides Prometheus metrics for the multicluster client. It is
-// optional: a nil *Monitor is safe to call and records nothing, so the client
-// can be constructed without one in tests or callers that don't wire metrics.
-type Monitor struct {
+// Monitor is the metrics sink for the multicluster client. It is optional on
+// the Client: a nil Monitor causes recording to be skipped entirely. It embeds
+// prometheus.Collector so a concrete implementation can be registered with a
+// Prometheus registry.
+type Monitor interface {
+	prometheus.Collector
+
+	// recordCrossClusterNameConflict is called when the same namespace/name was
+	// detected on more than one cluster serving the GVK, labeled by the method
+	// of access and the resource GVK.
+	recordCrossClusterNameConflict(method string, gvk schema.GroupVersionKind)
+}
+
+// cortexMonitor is the default Prometheus-backed Monitor implementation.
+type cortexMonitor struct {
 	// crossClusterNameConflicts counts how often the same namespace/name was
 	// detected on more than one cluster serving the GVK, labeled by the method
 	// of access and the resource GVK.
 	crossClusterNameConflicts *prometheus.CounterVec
 }
 
-// NewMonitor creates a new multicluster client monitor with Prometheus metrics.
-func NewMonitor() *Monitor {
-	return &Monitor{
+// NewMonitor creates a new Prometheus-backed multicluster client monitor. The
+// prefix is prepended to every metric name (e.g. pass "cortex_" to produce
+// "cortex_multicluster_cross_cluster_name_conflicts_total").
+func NewMonitor(prefix string) Monitor {
+	return &cortexMonitor{
 		crossClusterNameConflicts: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "cortex_multicluster_cross_cluster_name_conflicts_total",
+			Name: prefix + "multicluster_cross_cluster_name_conflicts_total",
 			Help: "Total number of times the same resource name was detected on more than one cluster serving the same GVK",
 		}, duplicateConflictLabels),
 	}
 }
 
 // recordCrossClusterNameConflict increments the conflict counter for the given
-// access method and GVK. Safe to call on a nil *Monitor.
-func (m *Monitor) recordCrossClusterNameConflict(method string, gvk schema.GroupVersionKind) {
-	if m == nil {
-		return
-	}
+// access method and GVK.
+func (m *cortexMonitor) recordCrossClusterNameConflict(method string, gvk schema.GroupVersionKind) {
 	m.crossClusterNameConflicts.WithLabelValues(method, gvk.String()).Inc()
 }
 
 // Describe implements prometheus.Collector.
-func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
+func (m *cortexMonitor) Describe(ch chan<- *prometheus.Desc) {
 	m.crossClusterNameConflicts.Describe(ch)
 }
 
 // Collect implements prometheus.Collector.
-func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
+func (m *cortexMonitor) Collect(ch chan<- prometheus.Metric) {
 	m.crossClusterNameConflicts.Collect(ch)
 }

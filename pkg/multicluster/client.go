@@ -40,9 +40,9 @@ type Client struct {
 	// This scheme should include all types used in the remote clusters.
 	HomeScheme *runtime.Scheme
 
-	// Optional monitor for Prometheus metrics. A nil Monitor is safe and
-	// records nothing, so the client can be used without wiring metrics.
-	Monitor *Monitor
+	// Optional monitor for Prometheus metrics. A nil Monitor causes recording
+	// to be skipped, so the client can be used without wiring metrics.
+	Monitor Monitor
 
 	// Remote clusters to use by resource type. Multiple clusters can serve
 	// the same GVK (e.g. one per availability zone).
@@ -356,7 +356,9 @@ func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Objec
 			err := cl.GetClient().Get(ctx, key, candidate, opts...)
 			if err == nil {
 				// In this case Get() was already called and the object set.
-				c.Monitor.recordCrossClusterNameConflict("get", gvk)
+				if c.Monitor != nil {
+					c.Monitor.recordCrossClusterNameConflict("get", gvk)
+				}
 				return &duplicateError{msg: fmt.Sprintf("duplicate %s %s/%s in multiple clusters",
 					gvk, key.Namespace, key.Name)}
 			}
@@ -441,7 +443,9 @@ func (c *Client) List(ctx context.Context, list client.ObjectList, opts ...clien
 		return err
 	}
 	if len(duplicates) > 0 {
-		c.Monitor.recordCrossClusterNameConflict("list", gvk)
+		if c.Monitor != nil {
+			c.Monitor.recordCrossClusterNameConflict("list", gvk)
+		}
 		return &duplicateError{msg: fmt.Sprintf("duplicate %s [%s] in multiple clusters",
 			gvk, strings.Join(duplicates, ", "))}
 	}
@@ -489,7 +493,9 @@ func (c *Client) Create(ctx context.Context, obj client.Object, opts ...client.C
 		candidate := obj.DeepCopyObject().(client.Object)
 		getErr := other.GetClient().Get(ctx, key, candidate)
 		if getErr == nil {
-			c.Monitor.recordCrossClusterNameConflict("create", gvk)
+			if c.Monitor != nil {
+				c.Monitor.recordCrossClusterNameConflict("create", gvk)
+			}
 			return &duplicateError{msg: fmt.Sprintf("cannot create %s %s/%s: already exists on another cluster",
 				gvk, key.Namespace, key.Name)}
 		}
@@ -682,7 +688,9 @@ func (c *subResourceClient) Get(ctx context.Context, obj, subResource client.Obj
 				Get(ctx, candidateObj, candidateSub, opts...)
 			if err == nil {
 				// In this case Get() was already called and the object set.
-				c.multiclusterClient.Monitor.recordCrossClusterNameConflict("subresource_get", gvk)
+				if c.multiclusterClient.Monitor != nil {
+					c.multiclusterClient.Monitor.recordCrossClusterNameConflict("subresource_get", gvk)
+				}
 				return &duplicateError{msg: fmt.Sprintf("duplicate %s %s/%s subresource %s in multiple clusters",
 					gvk, candidateObj.GetNamespace(), candidateObj.GetName(), c.subResource)}
 			}

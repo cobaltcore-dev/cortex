@@ -12,7 +12,7 @@ import (
 )
 
 func TestMonitor_Registration(t *testing.T) {
-	monitor := NewMonitor()
+	monitor := NewMonitor("cortex_")
 
 	registry := prometheus.NewRegistry()
 	if err := registry.Register(monitor); err != nil {
@@ -39,11 +39,37 @@ func TestMonitor_Registration(t *testing.T) {
 	}
 }
 
+func TestMonitor_Prefix(t *testing.T) {
+	monitor := NewMonitor("myprefix_")
+
+	registry := prometheus.NewRegistry()
+	if err := registry.Register(monitor); err != nil {
+		t.Fatalf("failed to register monitor: %v", err)
+	}
+
+	gvk := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}
+	monitor.recordCrossClusterNameConflict("create", gvk)
+
+	families, err := registry.Gather()
+	if err != nil {
+		t.Fatalf("failed to gather metrics: %v", err)
+	}
+	var found bool
+	for _, f := range families {
+		if f.GetName() == "myprefix_multicluster_cross_cluster_name_conflicts_total" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected metric name to use the supplied prefix")
+	}
+}
+
 func TestMonitor_RecordCrossClusterNameConflict(t *testing.T) {
 	gvk := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}
 	otherGVK := schema.GroupVersionKind{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}
 
-	monitor := NewMonitor()
+	monitor := NewMonitor("cortex_").(*cortexMonitor)
 
 	// Recording accumulates per (method, gvk) label pair.
 	monitor.recordCrossClusterNameConflict("create", gvk)
@@ -64,12 +90,4 @@ func TestMonitor_RecordCrossClusterNameConflict(t *testing.T) {
 	if got := testutil.ToFloat64(monitor.crossClusterNameConflicts.WithLabelValues("list", gvk.String())); got != 0 {
 		t.Errorf("list/%s: got %v, want 0", gvk, got)
 	}
-}
-
-func TestMonitor_RecordCrossClusterNameConflict_NilSafe(t *testing.T) {
-	var monitor *Monitor
-	gvk := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}
-
-	// Recording on a nil monitor must be a no-op and must not panic.
-	monitor.recordCrossClusterNameConflict("create", gvk)
 }

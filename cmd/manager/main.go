@@ -374,7 +374,7 @@ func main() {
 	committedResourceGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}
 	flavorGroupCapacityGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "FlavorGroupCapacity"}
 	projectQuotaGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "ProjectQuota"}
-	multiclusterMonitor := multicluster.NewMonitor()
+	multiclusterMonitor := multicluster.NewMonitor("cortex_")
 	multiclusterClient := &multicluster.Client{
 		HomeCluster:    homeCluster,
 		HomeRestConfig: restConfig,
