@@ -382,20 +382,15 @@ type reconcileAllocationsResult struct {
 // reconcileAllocations verifies all allocations in Spec against actual VM state using the
 // Hypervisor CRD as the sole source of truth.
 //
-// For new allocations (within grace period): the VM may not yet appear in the HV CRD
-// (still spawning), so we skip verification and requeue with a short interval.
-// For older allocations: we check the HV CRD; VMs not found are considered leaving and
-// removed from the reservation.
+// New allocations within the grace period are skipped — the VM may not yet appear in the
+// HV CRD while it is still spawning. Older allocations are verified; VMs no longer present
+// on their expected host are either followed to a new host (live migration) or removed.
 //
-// Live migration: when a confirmed VM is absent from the expected host, all HV CRDs are
-// scanned to detect whether it moved to a different host.
-//   - New host has capacity: Spec.TargetHost is updated; the existing Branch B in Reconcile
-//     will then advance Status.Host on the next cycle.
-//   - New host has no capacity: TargetHost is left unchanged; the VM's actual location is
-//     recorded in Status; the VMMisplaced condition is set.
-//
-// Only the migrated VM's host is considered — other allocated VMs in the reservation are
-// not moved, consistent with the single-VM scope defined in issue #373.
+// When a confirmed VM is absent from its expected host, all HV CRDs are searched to
+// determine whether it live-migrated. If the new host has capacity for the reservation
+// slot, Spec.TargetHost is updated so the reservation follows the VM. If not, TargetHost
+// is left unchanged and the VMMisplaced condition is set. Each VM is evaluated
+// independently; other allocated VMs in the same reservation are not affected.
 func (r *CommitmentReservationController) reconcileAllocations(ctx context.Context, res *v1alpha1.Reservation) (*reconcileAllocationsResult, error) {
 	logger := LoggerFromContext(ctx)
 	result := &reconcileAllocationsResult{}

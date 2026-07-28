@@ -447,7 +447,7 @@ func newTestCRReservation(allocations map[string]metav1.Time) *v1alpha1.Reservat
 
 // newTestHypervisorCRD creates a test Hypervisor CRD with instances.
 //
-//nolint:unparam // name parameter allows future test flexibility
+
 func newTestHypervisorCRD(name string, instances []hv1.Instance) *hv1.Hypervisor {
 	return &hv1.Hypervisor{
 		ObjectMeta: metav1.ObjectMeta{
@@ -995,7 +995,7 @@ func newHVWithCapacity(name string, memGiB, cpuCores int64, instances []hv1.Inst
 		Status: hv1.HypervisorStatus{
 			EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
 				hv1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dGi", memGiB)),
-				hv1.ResourceCPU:    resource.MustParse(fmt.Sprintf("%d", cpuCores)),
+				hv1.ResourceCPU:    resource.MustParse(strconv.FormatInt(cpuCores, 10)),
 			},
 			Instances: instances,
 		},
@@ -1011,7 +1011,7 @@ func newConfirmedCRReservation(name, host, vmUUID string, memGiB, cpuCores int64
 			TargetHost: host,
 			Resources: map[hv1.ResourceName]resource.Quantity{
 				hv1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dGi", memGiB)),
-				hv1.ResourceCPU:    resource.MustParse(fmt.Sprintf("%d", cpuCores)),
+				hv1.ResourceCPU:    resource.MustParse(strconv.FormatInt(cpuCores, 10)),
 			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 				ProjectID:    "test-project",
@@ -1022,7 +1022,7 @@ func newConfirmedCRReservation(name, host, vmUUID string, memGiB, cpuCores int64
 						CreationTimestamp: metav1.NewTime(time.Now().Add(-1 * time.Hour)),
 						Resources: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dGi", memGiB)),
-							hv1.ResourceCPU:    resource.MustParse(fmt.Sprintf("%d", cpuCores)),
+							hv1.ResourceCPU:    resource.MustParse(strconv.FormatInt(cpuCores, 10)),
 						},
 					},
 				},
