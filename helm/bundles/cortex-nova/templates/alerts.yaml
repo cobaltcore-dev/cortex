@@ -672,7 +672,7 @@ spec:
 
     - alert: CortexNovaMulticlusterNameConflicts
       expr: |
-        sum by (method, gvk) (increase(cortex_multicluster_cross_cluster_name_conflicts_total{service="cortex-nova-metrics"}[5m])) > 0
+        sum by (method, gvk) (increase(cortex_multicluster_cross_cluster_name_conflicts_total{service="cortex-nova-metrics"}[10m])) > 0
       for: 5m
       labels:
         context: multicluster
