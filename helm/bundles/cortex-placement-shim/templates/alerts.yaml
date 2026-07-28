@@ -188,4 +188,27 @@ spec:
           against a limit of 500m. Under normal operation the shim should use
           much less since it primarily proxies requests. This may indicate a
           hot loop, excessive logging, or an unusual traffic spike.
+
+    # Multicluster
+    - alert: CortexPlacementShimMulticlusterNameConflicts
+      expr: |
+        sum by (method, gvk) (increase(cortex_multicluster_cross_cluster_name_conflicts_total{service="cortex-placement-shim-metrics-service"}[5m])) > 0
+      for: 5m
+      labels:
+        context: multicluster
+        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+      annotations:
+        summary: "Cross-cluster name conflicts detected for `{{ "{{" }} $labels.gvk {{ "}}" }}`"
+        description: >
+          The multicluster client detected the same resource name for
+          `{{ "{{" }} $labels.gvk {{ "}}" }}` on more than one cluster during
+          `{{ "{{" }} $labels.method {{ "}}" }}` operations. This means reads fan
+          out to duplicates (surfaced as duplicate errors) and creates may be
+          rejected to avoid introducing new collisions. This usually indicates a
+          resource router is mapping the same object to multiple clusters, or an
+          object was created out-of-band on the wrong cluster. Investigate the
+          affected resources and the routing configuration.
 {{- end }}
