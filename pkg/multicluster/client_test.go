@@ -1071,11 +1071,11 @@ func TestClient_Create_CrossClusterNameConflict(t *testing.T) {
 	remote1 := newFakeCluster(scheme, existing)
 	remote2 := newFakeCluster(scheme)
 
-	monitor := NewMonitor("cortex_")
+	mon := NewMonitor("cortex_")
 	c := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
-		Monitor:     monitor,
+		Monitor:     mon,
 		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
 			configMapGVK: testRouter{},
 		},
@@ -1110,7 +1110,7 @@ func TestClient_Create_CrossClusterNameConflict(t *testing.T) {
 	}
 
 	// The conflict counter should have been incremented for method "create".
-	cm2 := monitor.(*cortexMonitor)
+	cm2 := mon.(*monitor)
 	if got := testutil.ToFloat64(cm2.crossClusterNameConflicts.WithLabelValues("create", configMapGVK.String())); got != 1 {
 		t.Errorf("expected conflict counter = 1, got %v", got)
 	}

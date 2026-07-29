@@ -69,25 +69,25 @@ func TestMonitor_RecordCrossClusterNameConflict(t *testing.T) {
 	gvk := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}
 	otherGVK := schema.GroupVersionKind{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}
 
-	monitor := NewMonitor("cortex_").(*cortexMonitor)
+	m := NewMonitor("cortex_").(*monitor)
 
 	// Recording accumulates per (method, gvk) label pair.
-	monitor.recordCrossClusterNameConflict("create", gvk)
-	monitor.recordCrossClusterNameConflict("create", gvk)
-	monitor.recordCrossClusterNameConflict("get", gvk)
-	monitor.recordCrossClusterNameConflict("list", otherGVK)
+	m.recordCrossClusterNameConflict("create", gvk)
+	m.recordCrossClusterNameConflict("create", gvk)
+	m.recordCrossClusterNameConflict("get", gvk)
+	m.recordCrossClusterNameConflict("list", otherGVK)
 
-	if got := testutil.ToFloat64(monitor.crossClusterNameConflicts.WithLabelValues("create", gvk.String())); got != 2 {
+	if got := testutil.ToFloat64(m.crossClusterNameConflicts.WithLabelValues("create", gvk.String())); got != 2 {
 		t.Errorf("create/%s: got %v, want 2", gvk, got)
 	}
-	if got := testutil.ToFloat64(monitor.crossClusterNameConflicts.WithLabelValues("get", gvk.String())); got != 1 {
+	if got := testutil.ToFloat64(m.crossClusterNameConflicts.WithLabelValues("get", gvk.String())); got != 1 {
 		t.Errorf("get/%s: got %v, want 1", gvk, got)
 	}
-	if got := testutil.ToFloat64(monitor.crossClusterNameConflicts.WithLabelValues("list", otherGVK.String())); got != 1 {
+	if got := testutil.ToFloat64(m.crossClusterNameConflicts.WithLabelValues("list", otherGVK.String())); got != 1 {
 		t.Errorf("list/%s: got %v, want 1", otherGVK, got)
 	}
 	// A label pair that was never recorded stays at zero.
-	if got := testutil.ToFloat64(monitor.crossClusterNameConflicts.WithLabelValues("list", gvk.String())); got != 0 {
+	if got := testutil.ToFloat64(m.crossClusterNameConflicts.WithLabelValues("list", gvk.String())); got != 0 {
 		t.Errorf("list/%s: got %v, want 0", gvk, got)
 	}
 }

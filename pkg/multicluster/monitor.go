@@ -25,8 +25,8 @@ type Monitor interface {
 	recordCrossClusterNameConflict(method string, gvk schema.GroupVersionKind)
 }
 
-// cortexMonitor is the default Prometheus-backed Monitor implementation.
-type cortexMonitor struct {
+// monitor is the default Prometheus-backed Monitor implementation.
+type monitor struct {
 	// crossClusterNameConflicts counts how often the same namespace/name was
 	// detected on more than one cluster serving the GVK, labeled by the method
 	// of access and the resource GVK.
@@ -37,7 +37,7 @@ type cortexMonitor struct {
 // prefix is prepended to every metric name (e.g. pass "cortex_" to produce
 // "cortex_multicluster_cross_cluster_name_conflicts_total").
 func NewMonitor(prefix string) Monitor {
-	return &cortexMonitor{
+	return &monitor{
 		crossClusterNameConflicts: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: prefix + "multicluster_cross_cluster_name_conflicts_total",
 			Help: "Total number of times the same resource name was detected on more than one cluster serving the same GVK",
@@ -47,16 +47,16 @@ func NewMonitor(prefix string) Monitor {
 
 // recordCrossClusterNameConflict increments the conflict counter for the given
 // access method and GVK.
-func (m *cortexMonitor) recordCrossClusterNameConflict(method string, gvk schema.GroupVersionKind) {
+func (m *monitor) recordCrossClusterNameConflict(method string, gvk schema.GroupVersionKind) {
 	m.crossClusterNameConflicts.WithLabelValues(method, gvk.String()).Inc()
 }
 
 // Describe implements prometheus.Collector.
-func (m *cortexMonitor) Describe(ch chan<- *prometheus.Desc) {
+func (m *monitor) Describe(ch chan<- *prometheus.Desc) {
 	m.crossClusterNameConflicts.Describe(ch)
 }
 
 // Collect implements prometheus.Collector.
-func (m *cortexMonitor) Collect(ch chan<- prometheus.Metric) {
+func (m *monitor) Collect(ch chan<- prometheus.Metric) {
 	m.crossClusterNameConflicts.Collect(ch)
 }
