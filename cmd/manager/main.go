@@ -375,10 +375,12 @@ func main() {
 	committedResourceGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}
 	flavorGroupCapacityGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "FlavorGroupCapacity"}
 	projectQuotaGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "ProjectQuota"}
+	multiclusterMonitor := multicluster.NewMonitor("cortex_")
 	multiclusterClient := &multicluster.Client{
 		HomeCluster:    homeCluster,
 		HomeRestConfig: restConfig,
 		HomeScheme:     scheme,
+		Monitor:        multiclusterMonitor,
 		ResourceRouters: map[schema.GroupVersionKind]multicluster.ResourceRouter{
 			hvGVK:                  multicluster.HypervisorResourceRouter{},
 			reservationGVK:         multicluster.ReservationsResourceRouter{},
@@ -399,6 +401,7 @@ func main() {
 	metricsConfig := conf.GetConfigOrDie[monitoring.Config]()
 	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, metricsConfig)
 	metrics.Registry.MustRegister(&logMetricsMonitor)
+	metrics.Registry.MustRegister(multiclusterMonitor)
 
 	// TODO: Remove me after scheduling pipeline steps don't require DB connections anymore.
 	metrics.Registry.MustRegister(&db.Monitor)

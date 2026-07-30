@@ -36,6 +36,8 @@ type FilterWeigherPipelineStepMonitor[RequestType FilterWeigherPipelineRequest] 
 	stepReorderingsObserver *prometheus.HistogramVec
 	// A metric measuring the impact of the step on the hosts.
 	stepImpactObserver *prometheus.HistogramVec
+	// A counter for named events reported by the step during its run.
+	stepEventCounter *prometheus.CounterVec
 }
 
 // Schedule using the wrapped step and measure the time it takes.
@@ -58,6 +60,7 @@ func monitorStep[RequestType FilterWeigherPipelineRequest](stepName string, m Fi
 		removedHostsObserver:    removedHostsObserver,
 		stepReorderingsObserver: m.stepReorderingsObserver,
 		stepImpactObserver:      m.stepImpactObserver,
+		stepEventCounter:        m.stepEventCounter,
 	}
 }
 
@@ -82,6 +85,15 @@ func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
 		"scheduler: finished step", "name", s.stepName,
 		"inWeights", inWeights, "outWeights", stepResult.Activations,
 	)
+
+	// Count named events reported by the step during its run.
+	if s.stepEventCounter != nil {
+		for _, event := range stepResult.Events {
+			s.stepEventCounter.
+				WithLabelValues(s.pipelineName, s.stepName, event).
+				Inc()
+		}
+	}
 
 	// Observe how much the step modifies the weights of the hosts.
 	if s.stepHostWeight != nil {

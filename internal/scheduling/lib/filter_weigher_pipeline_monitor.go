@@ -22,6 +22,8 @@ type FilterWeigherPipelineMonitor struct {
 	stepReorderingsObserver *prometheus.HistogramVec
 	// A histogram to observe the impact of the step on the hosts.
 	stepImpactObserver *prometheus.HistogramVec
+	// A counter for named events reported by a step during its run.
+	stepEventCounter *prometheus.CounterVec
 	// A histogram to measure how long the pipeline takes to run in total.
 	pipelineRunTimer *prometheus.HistogramVec
 	// A histogram to observe the number of hosts going into the scheduler pipeline.
@@ -64,6 +66,10 @@ func NewPipelineMonitor() FilterWeigherPipelineMonitor {
 			Help:    "Impact of the step on the hosts",
 			Buckets: prometheus.ExponentialBucketsRange(0.01, 1000, 20),
 		}, []string{"pipeline", "step", "stat", "unit"}),
+		stepEventCounter: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "cortex_filter_weigher_pipeline_step_events_total",
+			Help: "Number of named events reported by a scheduler pipeline step",
+		}, []string{"pipeline", "step", "event"}),
 		pipelineRunTimer: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "cortex_filter_weigher_pipeline_run_duration_seconds",
 			Help:    "Duration of scheduler pipeline run",
@@ -121,6 +127,7 @@ func (m *FilterWeigherPipelineMonitor) Describe(ch chan<- *prometheus.Desc) {
 	m.stepRemovedHostsObserver.Describe(ch)
 	m.stepReorderingsObserver.Describe(ch)
 	m.stepImpactObserver.Describe(ch)
+	m.stepEventCounter.Describe(ch)
 	m.pipelineRunTimer.Describe(ch)
 	m.hostNumberInObserver.Describe(ch)
 	m.hostNumberOutObserver.Describe(ch)
@@ -133,6 +140,7 @@ func (m *FilterWeigherPipelineMonitor) Collect(ch chan<- prometheus.Metric) {
 	m.stepRemovedHostsObserver.Collect(ch)
 	m.stepReorderingsObserver.Collect(ch)
 	m.stepImpactObserver.Collect(ch)
+	m.stepEventCounter.Collect(ch)
 	m.pipelineRunTimer.Collect(ch)
 	m.hostNumberInObserver.Collect(ch)
 	m.hostNumberOutObserver.Collect(ch)
