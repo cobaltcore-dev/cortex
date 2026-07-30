@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -99,7 +100,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	pipeline, ok := c.GetPipeline(decision.Spec.PipelineRef.Name)
 	if !ok {
 		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
-		return errors.New("pipeline not found or not ready")
+		return fmt.Errorf("pipeline not found or not ready: %q", decision.Spec.PipelineRef.Name)
 	}
 	if decision.Spec.CinderRaw == nil {
 		log.Error(nil, "skipping decision, no cinderRaw spec defined")

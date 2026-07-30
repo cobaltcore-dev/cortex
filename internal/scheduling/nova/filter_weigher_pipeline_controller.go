@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -163,7 +164,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	pipeline, ok := c.GetPipeline(decision.Spec.PipelineRef.Name)
 	if !ok {
 		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
-		return nil, errors.New("pipeline not found or not ready")
+		return nil, fmt.Errorf("pipeline not found or not ready: %q", decision.Spec.PipelineRef.Name)
 	}
 	if decision.Spec.NovaRaw == nil {
 		log.Error(nil, "skipping decision, no novaRaw spec defined")
@@ -187,7 +188,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	pipelineConf, ok := c.GetPipelineConfig(decision.Spec.PipelineRef.Name)
 	if !ok {
 		log.Error(nil, "pipeline config not found", "pipelineName", decision.Spec.PipelineRef.Name)
-		return &request, errors.New("pipeline config not found")
+		return &request, fmt.Errorf("pipeline config not found: %q", decision.Spec.PipelineRef.Name)
 	}
 	if pipelineConf.Spec.IgnorePreselection {
 		log.Info("gathering all placement candidates before filtering")
