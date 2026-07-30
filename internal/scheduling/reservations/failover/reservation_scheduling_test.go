@@ -572,3 +572,64 @@ func TestFailoverSchedulerOptions(t *testing.T) {
 		})
 	}
 }
+
+// ============================================================================
+// Test: imagePropertiesFromFlavor
+// ============================================================================
+
+func TestImagePropertiesFromFlavor(t *testing.T) {
+	tests := []struct {
+		name       string
+		extraSpecs map[string]string
+		want       map[string]any
+	}{
+		{
+			name:       "qemu (lowercase) -> kvm img_hv_type",
+			extraSpecs: map[string]string{"capabilities:hypervisor_type": "qemu"},
+			want:       map[string]any{"img_hv_type": "kvm"},
+		},
+		{
+			name:       "QEMU (uppercase) -> kvm img_hv_type",
+			extraSpecs: map[string]string{"capabilities:hypervisor_type": "QEMU"},
+			want:       map[string]any{"img_hv_type": "kvm"},
+		},
+		{
+			name:       "CH -> kvm img_hv_type",
+			extraSpecs: map[string]string{"capabilities:hypervisor_type": "CH"},
+			want:       map[string]any{"img_hv_type": "kvm"},
+		},
+		{
+			name:       "VMware -> hypervisor_type=vmware",
+			extraSpecs: map[string]string{"capabilities:hypervisor_type": "VMware vCenter Server"},
+			want:       map[string]any{"hypervisor_type": "vmware"},
+		},
+		{
+			name:       "Ironic -> hypervisor_type=baremetal",
+			extraSpecs: map[string]string{"capabilities:hypervisor_type": "Ironic"},
+			want:       map[string]any{"hypervisor_type": "baremetal"},
+		},
+		{
+			name:       "unspecified -> nil",
+			extraSpecs: map[string]string{},
+			want:       nil,
+		},
+		{
+			name:       "unknown value -> nil",
+			extraSpecs: map[string]string{"capabilities:hypervisor_type": "SomeFuturisticThing"},
+			want:       nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := imagePropertiesFromFlavor(tt.extraSpecs)
+			if len(got) != len(tt.want) {
+				t.Fatalf("length mismatch: got %v want %v", got, tt.want)
+			}
+			for k, v := range tt.want {
+				if got[k] != v {
+					t.Errorf("key %q: got %v want %v", k, got[k], v)
+				}
+			}
+		})
+	}
+}
