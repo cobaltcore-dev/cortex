@@ -301,19 +301,37 @@ func newPipelineStepEventCollector() *pipelineStepEventCollector {
 	}
 }
 
+// reservedStepEventLabels are the fixed label names used by the event metric.
+// Dynamic labels with these names are dropped because prometheus.Desc does not
+// allow duplicate label names.
+var reservedStepEventLabels = map[string]struct{}{
+	"pipeline": {},
+	"step":     {},
+	"event":    {},
+}
+
 // Record increments the counter for the given event. The same event can be
 // recorded multiple times; each call increments the matching counter.
+// Dynamic labels that collide with the fixed label names (pipeline, step,
+// event) are silently dropped to avoid panicking prometheus.MustNewConstMetric.
 func (c *pipelineStepEventCollector) Record(pipeline, step, eventName string, labels map[string]string) {
 	c.Lock()
 	defer c.Unlock()
-	key := stepEventKey(pipeline, step, eventName, labels)
+	cleaned := make(map[string]string, len(labels))
+	for k, v := range labels {
+		if _, reserved := reservedStepEventLabels[k]; reserved {
+			continue
+		}
+		cleaned[k] = v
+	}
+	key := stepEventKey(pipeline, step, eventName, cleaned)
 	if _, ok := c.counts[key]; !ok {
 		c.counts[key] = 0
 		c.events[key] = recordedStepEvent{
 			pipeline:  pipeline,
 			step:      step,
 			eventName: eventName,
-			labels:    maps.Clone(labels),
+			labels:    cleaned,
 		}
 	}
 	c.counts[key]++

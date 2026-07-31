@@ -272,3 +272,27 @@ func TestPipelineStepEventCollector_DescribeIsNoOp(t *testing.T) {
 		t.Errorf("expected Describe to send no descriptors, got %d", len(ch))
 	}
 }
+
+func TestPipelineStepEventCollector_DropsReservedLabels(t *testing.T) {
+	collector := newPipelineStepEventCollector()
+	// Reserved label names must be dropped so the emitted metric does not
+	// contain duplicate label names.
+	collector.Record("pipeline", "step", "event_d", map[string]string{
+		"intent":   "create",
+		"pipeline": "ignored",
+		"step":     "ignored",
+		"event":    "ignored",
+	})
+
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(collector)
+
+	expected := `
+		# HELP cortex_filter_weigher_pipeline_step_events_total Number of named events reported by a scheduler pipeline step
+		# TYPE cortex_filter_weigher_pipeline_step_events_total counter
+		cortex_filter_weigher_pipeline_step_events_total{event="event_d",intent="create",pipeline="pipeline",step="step"} 1
+	`
+	if err := testutil.GatherAndCompare(registry, strings.NewReader(expected)); err != nil {
+		t.Fatalf("GatherAndCompare() error = %v", err)
+	}
+}
