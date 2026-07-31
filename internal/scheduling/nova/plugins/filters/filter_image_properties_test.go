@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -49,10 +50,11 @@ func TestFilterImagePropertiesStep_Run(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		request       api.ExternalSchedulerRequest
-		expectedHosts []string
-		filteredHosts []string
+		name           string
+		request        api.ExternalSchedulerRequest
+		expectedHosts  []string
+		filteredHosts  []string
+		expectedEvents []lib.FilterWeigherPipelineStepEvent
 	}{
 		{
 			name:          "kvm image keeps all hosts",
@@ -77,12 +79,18 @@ func TestFilterImagePropertiesStep_Run(t *testing.T) {
 			request:       requestWith([]string{"host1", "host2", "host3"}, nil),
 			expectedHosts: []string{"host1", "host2", "host3"},
 			filteredHosts: []string{},
+			expectedEvents: []lib.FilterWeigherPipelineStepEvent{
+				{Name: "image_properties_hv_type_undetermined", Labels: map[string]string{"intent": "unknown"}},
+			},
 		},
 		{
 			name:          "unsupported hypervisor type keeps all hosts",
 			request:       requestWith([]string{"host1", "host2"}, map[string]any{"img_hv_type": "xen"}),
 			expectedHosts: []string{"host1", "host2"},
 			filteredHosts: []string{},
+			expectedEvents: []lib.FilterWeigherPipelineStepEvent{
+				{Name: "image_properties_hv_type_undetermined", Labels: map[string]string{"intent": "unknown"}},
+			},
 		},
 		{
 			name:          "empty host list",
@@ -148,6 +156,27 @@ func TestFilterImagePropertiesStep_Run(t *testing.T) {
 
 			if len(result.Activations) != len(tt.expectedHosts) {
 				t.Errorf("expected %d hosts, got %d", len(tt.expectedHosts), len(result.Activations))
+			}
+
+			if len(result.Events) != len(tt.expectedEvents) {
+				t.Errorf("expected %d events, got %d", len(tt.expectedEvents), len(result.Events))
+			}
+			for i, expectedEvent := range tt.expectedEvents {
+				if i >= len(result.Events) {
+					break
+				}
+				gotEvent := result.Events[i]
+				if gotEvent.Name != expectedEvent.Name {
+					t.Errorf("expected event name %q, got %q", expectedEvent.Name, gotEvent.Name)
+				}
+				if len(gotEvent.Labels) != len(expectedEvent.Labels) {
+					t.Errorf("expected event labels %v, got %v", expectedEvent.Labels, gotEvent.Labels)
+				}
+				for k, v := range expectedEvent.Labels {
+					if gotEvent.Labels[k] != v {
+						t.Errorf("expected event label %q=%q, got %q", k, v, gotEvent.Labels[k])
+					}
+				}
 			}
 		})
 	}

@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -36,8 +37,10 @@ type FilterWeigherPipelineStepMonitor[RequestType FilterWeigherPipelineRequest] 
 	stepReorderingsObserver *prometheus.HistogramVec
 	// A metric measuring the impact of the step on the hosts.
 	stepImpactObserver *prometheus.HistogramVec
-	// A counter for named events reported by the step during its run.
-	stepEventCounter *prometheus.CounterVec
+
+	// stepEventCollector is a collector for named events reported by the
+	// step during its run.
+	stepEventCollector *pipelineStepEventCollector
 }
 
 // Schedule using the wrapped step and measure the time it takes.
@@ -60,7 +63,7 @@ func monitorStep[RequestType FilterWeigherPipelineRequest](stepName string, m Fi
 		removedHostsObserver:    removedHostsObserver,
 		stepReorderingsObserver: m.stepReorderingsObserver,
 		stepImpactObserver:      m.stepImpactObserver,
-		stepEventCounter:        m.stepEventCounter,
+		stepEventCollector:      m.stepEventCollector,
 	}
 }
 
@@ -87,11 +90,9 @@ func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
 	)
 
 	// Count named events reported by the step during its run.
-	if s.stepEventCounter != nil {
+	if s.stepEventCollector != nil {
 		for _, event := range stepResult.Events {
-			s.stepEventCounter.
-				WithLabelValues(s.pipelineName, s.stepName, event).
-				Inc()
+			s.stepEventCollector.Record(s.pipelineName, s.stepName, event.Name, event.Labels)
 		}
 	}
 
@@ -271,4 +272,89 @@ func impact(before, after []string, stats map[string]float64, topK int) (float64
 	)
 
 	return impact, nil
+}
+
+// pipelineStepEventCollector is a prometheus.Collector that counts named events
+// reported by scheduler pipeline steps. It supports a dynamic set of labels per
+// event: the label names are not fixed upfront but derived from the labels
+// attached to each event.
+type pipelineStepEventCollector struct {
+	sync.Mutex
+	// counts holds the event counter values keyed by a deterministic signature.
+	counts map[string]float64
+	// events maps the signature to the full event context (pipeline, step,
+	// event name and dynamic labels).
+	events map[string]recordedStepEvent
+}
+
+type recordedStepEvent struct {
+	pipeline  string
+	step      string
+	eventName string
+	labels    map[string]string
+}
+
+func newPipelineStepEventCollector() *pipelineStepEventCollector {
+	return &pipelineStepEventCollector{
+		counts: make(map[string]float64),
+		events: make(map[string]recordedStepEvent),
+	}
+}
+
+// Record increments the counter for the given event. The same event can be
+// recorded multiple times; each call increments the matching counter.
+func (c *pipelineStepEventCollector) Record(pipeline, step, eventName string, labels map[string]string) {
+	c.Lock()
+	defer c.Unlock()
+	key := stepEventKey(pipeline, step, eventName, labels)
+	if _, ok := c.counts[key]; !ok {
+		c.counts[key] = 0
+		c.events[key] = recordedStepEvent{
+			pipeline:  pipeline,
+			step:      step,
+			eventName: eventName,
+			labels:    maps.Clone(labels),
+		}
+	}
+	c.counts[key]++
+}
+
+// Describe is intentionally a no-op. Because the label names are dynamic and
+// only known at collect time, we cannot describe the metric upfront.
+func (c *pipelineStepEventCollector) Describe(ch chan<- *prometheus.Desc) {
+}
+
+// Collect emits one metric per recorded event. Each metric shares the same
+// fully-qualified name but may have a different set of labels depending on the
+// labels provided by the step that reported the event.
+func (c *pipelineStepEventCollector) Collect(ch chan<- prometheus.Metric) {
+	c.Lock()
+	defer c.Unlock()
+	for key, count := range c.counts {
+		ev := c.events[key]
+		labelNames := slices.Sorted(maps.Keys(ev.labels))
+		labelValues := make([]string, len(labelNames))
+		for i, name := range labelNames {
+			labelValues[i] = ev.labels[name]
+		}
+		desc := prometheus.NewDesc(
+			"cortex_filter_weigher_pipeline_step_events_total",
+			"Number of named events reported by a scheduler pipeline step",
+			append([]string{"pipeline", "step", "event"}, labelNames...),
+			nil,
+		)
+		values := append([]string{ev.pipeline, ev.step, ev.eventName}, labelValues...)
+		ch <- prometheus.MustNewConstMetric(desc, prometheus.CounterValue, count, values...)
+	}
+}
+
+// stepEventKey returns a deterministic signature for an event record.
+func stepEventKey(pipeline, step, eventName string, labels map[string]string) string {
+	keys := slices.Sorted(maps.Keys(labels))
+	parts := make([]string, 0, 3+2*len(keys))
+	parts = append(parts, pipeline, step, eventName)
+	for _, k := range keys {
+		parts = append(parts, k, labels[k])
+	}
+	return strings.Join(parts, "\x00")
 }
