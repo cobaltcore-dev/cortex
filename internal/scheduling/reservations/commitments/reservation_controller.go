@@ -539,7 +539,13 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		}
 
 		if foundHost == "" {
-			// VM is not on any known hypervisor — it has been terminated or evacuated.
+			// VM is not on any known hypervisor. This covers two cases:
+			// 1. The VM was terminated or evacuated — correct to remove.
+			// 2. The VM is mid-live-migration: it has left host-old's HV CRD but
+			//    host-new's CRD has not been updated yet. In this window the VM
+			//    is incorrectly treated as gone and removed from the reservation.
+			//    A VM CRD with lifecycle state (migrating/active) would close this
+			//    gap; without one we accept this narrow race as a known limitation.
 			allocationsToRemove = append(allocationsToRemove, vmUUID)
 			logger.Info("removing confirmed allocation (VM not found on any hypervisor)",
 				"vm", vmUUID,
