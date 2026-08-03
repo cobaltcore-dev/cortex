@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 	"slices"
+	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -40,15 +41,31 @@ func (s *FilterAggregateMetadata) Run(traceLog *slog.Logger, request api.Externa
 	restrictedProjectsByHost := make(map[string][]string)
 	for _, hv := range hvs.Items {
 		for _, aggregate := range hv.Status.Aggregates {
-			tenantID, ok := aggregate.Metadata["filter_tenant_id"]
-			if !ok {
+			// Any metadata key prefixed with "filter_tenant_id" restricts the
+			// aggregate to the referenced projects. Multiple numbered keys (e.g.
+			// filter_tenant_id, filter_tenant_id1, ...) circumvent per-field
+			// database string length limits; each of their values can itself be
+			// a comma-separated list of project ids.
+			foundFilter := false
+			for key, value := range aggregate.Metadata {
+				if !strings.HasPrefix(key, "filter_tenant_id") {
+					continue
+				}
+				foundFilter = true
+				for projectID := range strings.SplitSeq(value, ",") {
+					projectID = strings.TrimSpace(projectID)
+					if projectID == "" {
+						continue
+					}
+					restrictedProjectsByHost[hv.Name] = append(restrictedProjectsByHost[hv.Name], projectID)
+				}
+				traceLog.Info("host is in aggregate with filter_tenant_id, adding restriction",
+					"host", hv.Name, "aggregate", aggregate.Name, "key", key, "tenant_id", value)
+			}
+			if !foundFilter {
 				traceLog.Info("aggregate does not have filter_tenant_id metadata, skipping",
 					"aggregate", aggregate.Name)
-				continue
 			}
-			restrictedProjectsByHost[hv.Name] = append(restrictedProjectsByHost[hv.Name], tenantID)
-			traceLog.Info("host is in aggregate with filter_tenant_id, adding restriction",
-				"host", hv.Name, "aggregate", aggregate.Name, "tenant_id", tenantID)
 		}
 	}
 
