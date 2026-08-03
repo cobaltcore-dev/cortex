@@ -1055,10 +1055,10 @@ func TestReconcileAllocations_LiveMigration(t *testing.T) {
 		extraObjects    []client.Object
 		startConditions []metav1.Condition
 		// expected outcomes
-		wantTargetHost      string
-		wantStatusHost      string // expected in Status.Allocations[vmUUID]; "" means absent
-		wantSpecHasVM       bool
-		wantVMMisplaced     bool
+		wantTargetHost  string
+		wantStatusHost  string // expected in Status.Allocations[vmUUID]; "" means absent
+		wantSpecHasVM   bool
+		wantVMMisplaced bool
 	}{
 		{
 			name: "migrated to host with capacity: follow the VM",
