@@ -1,5 +1,53 @@
 # Changelog
 
+## 2026-08-03 — [#1114](https://github.com/cobaltcore-dev/cortex/pull/1114)
+
+### cortex v0.3.5 (sha-684e0b07)
+
+Non-breaking changes:
+- Support comma-separated and prefixed tenant ids in aggregate filter — the `filter_aggregate_metadata` filter now splits `filter_tenant_id` values on commas and matches any metadata key with the `filter_tenant_id` prefix (e.g. `filter_tenant_id1`, `filter_tenant_id2`), unioning all values into the allowed project set ([#1103](https://github.com/cobaltcore-dev/cortex/pull/1103))
+- Return more information on 500 in external scheduler call — improves error reporting when external scheduler API calls fail with HTTP 500, now including the response body in the error message ([#1104](https://github.com/cobaltcore-dev/cortex/pull/1104))
+- Send image type in failover requests — failover reservation scheduling now includes the image type in scheduling requests ([#1105](https://github.com/cobaltcore-dev/cortex/pull/1105))
+- Add az to failover reservation CRD name — failover reservation names now include the availability zone for uniqueness ([#1106](https://github.com/cobaltcore-dev/cortex/pull/1106))
+- Guard multicluster Create against cross-cluster name collisions — `Create` now performs a best-effort cross-cluster existence check before writing and returns a duplicate error instead of creating a colliding object. Adds a `cortex_multicluster_cross_cluster_name_conflicts_total` Prometheus counter and corresponding alerts ([#1097](https://github.com/cobaltcore-dev/cortex/pull/1097))
+- Fix incorrect pipeline names and default interval in failover doc ([#1064](https://github.com/cobaltcore-dev/cortex/pull/1064))
+- Update `github.com/sapcc/go-bits` ([#1101](https://github.com/cobaltcore-dev/cortex/pull/1101), [#1107](https://github.com/cobaltcore-dev/cortex/pull/1107))
+- Update `github.com/mattn/go-sqlite3` to v1.14.49 ([#1102](https://github.com/cobaltcore-dev/cortex/pull/1102))
+- Update `kube-prometheus-stack` to v87.21.0 ([#1096](https://github.com/cobaltcore-dev/cortex/pull/1096), [#1099](https://github.com/cobaltcore-dev/cortex/pull/1099))
+- Update `actions/stale` to v11 ([#1100](https://github.com/cobaltcore-dev/cortex/pull/1100))
+
+### cortex-shim v0.1.11 (sha-c325b29e)
+
+Includes updated image sha-c325b29e with dependency updates.
+
+### cortex-nova v0.0.85
+
+Includes updated chart cortex v0.3.5.
+
+### cortex-cinder v0.0.85
+
+Includes updated chart cortex v0.3.5.
+
+### cortex-manila v0.0.85
+
+Includes updated chart cortex v0.3.5.
+
+### cortex-crds v0.0.85
+
+Includes updated chart cortex v0.3.5.
+
+### cortex-ironcore v0.0.85
+
+Includes updated chart cortex v0.3.5.
+
+### cortex-pods v0.0.85
+
+Includes updated chart cortex v0.3.5.
+
+### cortex-placement-shim v0.1.11
+
+Includes updated chart cortex-shim v0.1.11.
+
 ## 2026-07-27 — [#1093](https://github.com/cobaltcore-dev/cortex/pull/1093)
 
 ### cortex v0.3.4 (sha-4f44f3b7)

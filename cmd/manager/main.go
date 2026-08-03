@@ -63,6 +63,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	commitmentsapi "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/inflight"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/quota"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
@@ -496,6 +497,18 @@ func main() {
 		novaPipelineWebhook := nova.NewPipelineWebhook()
 		if err := novaPipelineWebhook.SetupWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to setup nova pipeline webhook")
+			os.Exit(1)
+		}
+	}
+	if slices.Contains(mainConfig.EnabledControllers, "inflight-reservation-controller") {
+		setupLog.Info("enabling controller",
+			"controller", "inflight-reservation-controller")
+		config := conf.GetConfigOrDie[inflight.NovaVMClientConfig]()
+		vmClient := inflight.NewNovaVMClient(config)
+		controller := &inflight.Controller{Client: multiclusterClient, VMClient: vmClient}
+		if err := controller.SetupWithManager(ctx, mgr); err != nil {
+			setupLog.Error(err, "unable to create controller",
+				"controller", "inflight-reservation-controller")
 			os.Exit(1)
 		}
 	}

@@ -147,6 +147,21 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
+  name: cortex-nova-reservation-state
+spec:
+  schedulingDomain: nova
+  impl: reservation_state_kpi
+  opts:
+    reservationSchedulingDomain: nova
+  description: |
+    This KPI tracks the state of reservation resources managed by cortex,
+    labelled by reservation type (e.g. InFlightReservation) and the reason
+    on the Ready condition. It is used to alert on sustained increases of
+    unready in-flight reservations (e.g. reason=InstanceNotFound).
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
   name: vmware-project-utilization
 spec:
   schedulingDomain: nova

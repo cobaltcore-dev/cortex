@@ -1,0 +1,426 @@
+// Copyright SAP SE
+// SPDX-License-Identifier: Apache-2.0
+
+package inflight
+
+import (
+	"context"
+	"errors"
+	"reflect"
+	"slices"
+	"time"
+
+	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/workqueue"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+)
+
+var (
+	idxReservationByTargetHost   = "spec.targetHost"
+	idxReservationByTargetHostFn = func(obj client.Object) []string {
+		res, ok := obj.(*v1alpha1.Reservation)
+		if !ok {
+			return nil
+		}
+		if res.Spec.TargetHost == "" {
+			return nil
+		}
+		return []string{res.Spec.TargetHost}
+	}
+)
+
+// Controller owns the lifecycle of in-flight reservations.
+type Controller struct {
+	client.Client
+
+	// VMClient is a client to call the source of truth for VMs.
+	VMClient VMClient
+}
+
+// Reconcile is part of the main kubernetes reconciliation loop which aims to
+// move the current state of the cluster closer to the desired state.
+//
+// For more details, check Reconcile and its Result here:
+// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.2/pkg/reconcile
+//
+// For more details about the method shape, read up here:
+// - https://ahmet.im/blog/controller-pitfalls/#reconcile-method-shape
+func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	log := ctrl.LoggerFrom(ctx)
+	log.V(1).Info("Reconciling resource")
+
+	obj := new(v1alpha1.Reservation)
+	if err := c.Get(ctx, req.NamespacedName, obj); err != nil {
+		if apierrors.IsNotFound(err) {
+			// If the custom resource is not found then it usually means
+			// that it was deleted or not created.
+			log.Info("Resource not found. Ignoring since object must be deleted")
+			return ctrl.Result{}, nil
+		}
+		// Error reading the object - requeue the request.
+		log.Error(err, "Failed to get resource")
+		return ctrl.Result{}, err
+	}
+
+	// Sanity checks which should always succeed due to the predicate.
+	if obj.Spec.Type != v1alpha1.ReservationTypeInFlight {
+		log.Error(errors.New("unexpected reservation type"),
+			"Received a reservation with an unexpected type",
+			"reservationType", obj.Spec.Type)
+		orig := obj.DeepCopy()
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.ReservationConditionReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "UnexpectedType",
+			Message: "Expected reservation type to be InFlightReservation",
+		})
+		return ctrl.Result{}, c.Status().Patch(ctx, obj, client.MergeFrom(orig))
+	}
+	if obj.Spec.InFlightReservation == nil {
+		log.Error(errors.New("missing in-flight reservation spec"),
+			"Received a reservation with missing in-flight reservation spec")
+		orig := obj.DeepCopy()
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.ReservationConditionReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "MissingSpec",
+			Message: "In-flight reservation spec is required when type is InFlightReservation",
+		})
+		return ctrl.Result{}, c.Status().Patch(ctx, obj, client.MergeFrom(orig))
+	}
+
+	// Get a list of all hypervisors and check if the instance
+	// has spawned on any of them.
+	hvs := new(hv1.HypervisorList)
+	if err := c.List(ctx, hvs); err != nil {
+		log.Error(err, "Failed to list hypervisors")
+		return ctrl.Result{}, err
+	}
+	found := false
+	hypervisorName := ""
+	for _, hv := range hvs.Items {
+		for _, instance := range hv.Status.Instances {
+			if instance.ID == obj.Spec.InFlightReservation.VMID {
+				found = true
+				hypervisorName = hv.Name
+				break
+			}
+		}
+		if found {
+			break
+		}
+	}
+
+	if !found {
+		// The instance has not spawned on any hypervisor (yet).
+		// Requeue and check again later. We'll alert on this if there are
+		// too many requeues without the instance spawning.
+
+		// TODO: delete reservation if spec.endTime is exceeded
+		log.V(1).Info("Instance has not spawned on any hypervisor yet, requeuing",
+			"vmID", obj.Spec.InFlightReservation.VMID)
+		orig := obj.DeepCopy()
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.ReservationConditionReady,
+			Status:  metav1.ConditionUnknown,
+			Reason:  "InstanceNotFound",
+			Message: "The instance has not spawned on any hypervisor yet",
+		})
+		if err := c.Status().Patch(ctx, obj, client.MergeFrom(orig)); err != nil {
+			log.Error(err, "Failed to update reservation status")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// We cannot free this reservation if the instance is currently being
+	// resized (=migrated to the same hypervisor), i.e. the reservation
+	// doesn't match the actual size of the vm yet. To check the vm size,
+	// we need to query the source of truth for vms. Only relevant when the
+	// instance actually landed on the reservation's target host — for a
+	// stale reservation (instance on a different host) this branch would
+	// otherwise fire an unnecessary vmClient call and mark the reservation
+	// VMSizeMismatch when it should just fall through to the
+	// awaiting-deletion no-op below.
+	if hypervisorName == obj.Spec.TargetHost && slices.Contains([]v1alpha1.SchedulingIntent{
+		novaapi.RebuildIntent,
+		novaapi.ResizeIntent,
+	}, obj.Spec.InFlightReservation.Intent) {
+		vmSize, err := c.VMClient.GetCurrentVMSize(ctx, obj.Spec.InFlightReservation.VMID)
+		if err != nil {
+			log.Error(err, "Failed to get current VM size from vmClient",
+				"vmID", obj.Spec.InFlightReservation.VMID)
+			return ctrl.Result{}, err
+		}
+		// Compare the resource maps semantically: reflect.DeepEqual on
+		// resource.Quantity can return false for numerically equal values
+		// because Quantity's unexported cached string/format state may
+		// differ between values coming from API decoding (reservation
+		// spec) and values freshly constructed by the vm client. Using
+		// Quantity.Cmp avoids getting stuck in VMSizeMismatch forever.
+		sizeMatches := len(vmSize) == len(obj.Spec.Resources)
+		if sizeMatches {
+			for k, want := range obj.Spec.Resources {
+				got, ok := vmSize[k]
+				if !ok || got.Cmp(want) != 0 {
+					sizeMatches = false
+					break
+				}
+			}
+		}
+		if !sizeMatches {
+			log.V(1).Info("VM size does not match reservation size yet, requeuing",
+				"vmID", obj.Spec.InFlightReservation.VMID,
+				"reservationSize", obj.Spec.Resources,
+				"currentVMSize", vmSize)
+			orig := obj.DeepCopy()
+			meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.ReservationConditionReady,
+				Status:  metav1.ConditionUnknown,
+				Reason:  "VMSizeMismatch",
+				Message: "The current VM size does not match the reservation size yet",
+			})
+			if err := c.Status().Patch(ctx, obj, client.MergeFrom(orig)); err != nil {
+				log.Error(err, "Failed to update reservation status")
+				return ctrl.Result{}, err
+			}
+			// TODO: EndTime check needed to catch canceled scenarios. Waiting for VM crd to consider this scenario
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+	}
+
+	// If the instance spawned on the hypervisor expected by the reservation,
+	// we batch-delete all reservations for that instance, including the
+	// reconciled one.
+	if hypervisorName == obj.Spec.TargetHost {
+		log.V(1).Info("Instance has spawned on the expected hypervisor, deleting reservations",
+			"vmID", obj.Spec.InFlightReservation.VMID,
+			"hypervisor", hypervisorName)
+		reservations := new(v1alpha1.ReservationList)
+		if err := c.List(ctx, reservations, client.MatchingFields{
+			idxReservationByTargetHost: hypervisorName,
+		}); err != nil {
+			log.Error(err, "Failed to list reservations for hypervisor",
+				"hypervisor", hypervisorName)
+			return ctrl.Result{}, err
+		}
+		for _, res := range reservations.Items {
+			if res.Spec.InFlightReservation == nil {
+				continue // Not an in-flight reservation, skip.
+			}
+			if res.Spec.InFlightReservation.VMID != obj.Spec.InFlightReservation.VMID {
+				continue // Not the same instance, skip.
+			}
+			if err := c.Delete(ctx, &res); err != nil {
+				log.Error(err, "Failed to delete reservation",
+					"reservation", res.Name,
+					"vmID", res.Spec.InFlightReservation.VMID)
+				return ctrl.Result{}, err
+			}
+			log.V(1).Info("Deleted reservation",
+				"reservation", res.Name,
+				"vmID", res.Spec.InFlightReservation.VMID)
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// This reservation will be deleted by the controller when the
+	// instance spawns on the expected hypervisor, so we don't need to do
+	// anything else here.
+	log.V(1).Info("Reservation stale -- awaiting deletion",
+		"vmID", obj.Spec.InFlightReservation.VMID,
+		"expectedHypervisor", obj.Spec.TargetHost,
+		"actualHypervisor", hypervisorName)
+	return ctrl.Result{}, nil
+}
+
+// handleReservations generates a new event handler for in flight reservations.
+func (c *Controller) handleReservations() handler.EventHandler {
+	handler := handler.Funcs{}
+	handler.CreateFunc = func(ctx context.Context, evt event.CreateEvent,
+		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+
+		queue.Add(ctrl.Request{NamespacedName: client.ObjectKey{
+			Name: evt.Object.(*v1alpha1.Reservation).Name, // cluster-scoped crd
+		}})
+	}
+	handler.UpdateFunc = func(ctx context.Context, evt event.UpdateEvent,
+		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+
+		queue.Add(ctrl.Request{NamespacedName: client.ObjectKey{
+			Name: evt.ObjectOld.(*v1alpha1.Reservation).Name, // cluster-scoped crd
+		}})
+	}
+	handler.DeleteFunc = func(ctx context.Context, evt event.DeleteEvent,
+		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+
+		queue.Add(ctrl.Request{NamespacedName: client.ObjectKey{
+			Name: evt.Object.(*v1alpha1.Reservation).Name, // cluster-scoped crd
+		}})
+	}
+	return handler
+}
+
+// predicateReservations generates a new predicate for in flight reservations.
+func (c *Controller) predicateReservations() predicate.Predicate {
+	return predicate.NewPredicateFuncs(func(object client.Object) bool {
+		reservation, ok := object.(*v1alpha1.Reservation)
+		if !ok {
+			return false // Not a Reservation object.
+		}
+		if reservation.Spec.Type != v1alpha1.ReservationTypeInFlight {
+			return false // Not an in-flight reservation.
+		}
+		if reservation.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
+			return false // Not a Nova reservation.
+		}
+		return true // Reconcile.
+	})
+}
+
+// handleHypervisors generates a new event handler for hypervisors.
+func (c *Controller) handleHypervisors() handler.EventHandler {
+	handler := handler.Funcs{}
+	enqueueCorrespondingReservations := func(ctx context.Context, hvName string,
+		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+
+		log := ctrl.LoggerFrom(ctx)
+		log.V(1).Info("Enqueuing reservations corresponding to hypervisor",
+			"hypervisor", hvName)
+		// Requeue all reservations targeting this hypervisor, since the
+		// instance list has changed and we might find the instance for
+		// some in-flight reservation now.
+		reservations := &v1alpha1.ReservationList{}
+		if err := c.List(ctx, reservations, client.MatchingFields{
+			idxReservationByTargetHost: hvName,
+		}); err != nil {
+			log.Error(err, "Failed to list reservations for hypervisor",
+				"hypervisor", hvName)
+			return
+		}
+		for _, res := range reservations.Items {
+			log.V(1).Info("Enqueuing reservation for reconciliation",
+				"reservation", res.Name,
+				"targetHost", res.Spec.TargetHost,
+				"hypervisor", hvName)
+			queue.Add(ctrl.Request{NamespacedName: client.ObjectKey{
+				Name: res.Name, // cluster-scoped crd
+			}})
+		}
+	}
+	handler.CreateFunc = func(ctx context.Context, evt event.CreateEvent,
+		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+
+		hv := evt.Object.(*hv1.Hypervisor)
+		enqueueCorrespondingReservations(ctx, hv.Name, queue)
+	}
+	handler.UpdateFunc = func(ctx context.Context, evt event.UpdateEvent,
+		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+
+		hv := evt.ObjectNew.(*hv1.Hypervisor)
+		enqueueCorrespondingReservations(ctx, hv.Name, queue)
+	}
+	handler.DeleteFunc = func(ctx context.Context, evt event.DeleteEvent,
+		queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+
+		hv := evt.Object.(*hv1.Hypervisor)
+		enqueueCorrespondingReservations(ctx, hv.Name, queue)
+	}
+	return handler
+}
+
+// predicateHypervisors generates a new predicate for hypervisors. Update
+// events are filtered to only trigger when the Status.Instances list actually
+// changes, since that is the only field this controller consumes; without
+// this filter, unrelated status updates from the hypervisor operator would
+// cause a list + enqueue of every reservation targeting the host.
+func (c *Controller) predicateHypervisors() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(evt event.CreateEvent) bool {
+			_, ok := evt.Object.(*hv1.Hypervisor)
+			return ok
+		},
+		DeleteFunc: func(evt event.DeleteEvent) bool {
+			_, ok := evt.Object.(*hv1.Hypervisor)
+			return ok
+		},
+		GenericFunc: func(evt event.GenericEvent) bool {
+			_, ok := evt.Object.(*hv1.Hypervisor)
+			return ok
+		},
+		UpdateFunc: func(evt event.UpdateEvent) bool {
+			oldHV, ok := evt.ObjectOld.(*hv1.Hypervisor)
+			if !ok {
+				return false
+			}
+			newHV, ok := evt.ObjectNew.(*hv1.Hypervisor)
+			if !ok {
+				return false
+			}
+			return !reflect.DeepEqual(oldHV.Status.Instances, newHV.Status.Instances)
+		},
+	}
+}
+
+// SetupWithManager sets up the controller with the Manager and a multicluster
+// client. The multicluster client is used to watch for changes in the
+// Reservation CRD across all clusters and trigger reconciliations accordingly.
+func (c *Controller) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err error) {
+	// Check that the provided client is a multicluster client, since we need
+	// that to watch for hypervisors across clusters. Do this before adding
+	// any runnables so a misconfigured setup fails fast.
+	mcl, ok := c.Client.(*multicluster.Client)
+	if !ok {
+		return errors.New("provided client must be a multicluster client")
+	}
+	// Add the vm client as runnable to the manager.
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		return c.VMClient.StartWithKubernetesSecrets(ctx, c.Client)
+	})); err != nil {
+		return err
+	}
+	bldr := multicluster.BuildController(mcl, mgr)
+	// The reservation crd & hypervisor crd may be distributed across multiple
+	// remote clusters.
+	bldr, err = bldr.WatchesMulticluster(&v1alpha1.Reservation{},
+		c.handleReservations(),
+		c.predicateReservations(),
+	)
+	if err != nil {
+		return err
+	}
+	// Index reservations by their target host so we can requeue reservations
+	// for which the list of instances on a hypervisor has changed.
+	if err := mcl.IndexField(ctx,
+		&v1alpha1.Reservation{},
+		&v1alpha1.ReservationList{},
+		idxReservationByTargetHost,
+		idxReservationByTargetHostFn,
+	); err != nil {
+		return err
+	}
+	// Watch hypervisor changes and requeue reservations targeting
+	// the changed hypervisor.
+	bldr, err = bldr.WatchesMulticluster(&hv1.Hypervisor{},
+		c.handleHypervisors(),
+		c.predicateHypervisors(),
+	)
+	if err != nil {
+		return err
+	}
+	return bldr.Named("inflight-reservation-controller").
+		Complete(c)
+}
