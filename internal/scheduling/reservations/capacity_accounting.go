@@ -11,21 +11,18 @@ import (
 )
 
 // HostHasCapacityForReservation reports whether hv has sufficient remaining capacity to
-// accommodate the reservation's unfilled slot portion.
+// absorb res moving to it — i.e. whether the unfilled portion of res's slot fits alongside
+// everything already committed on the host.
 //
-// It uses the same accounting as the scheduler's filter_has_enough_capacity:
 //  1. Start from EffectiveCapacity (or Capacity when EffectiveCapacity is nil).
-//  2. Subtract hv.Status.Allocation (VMs already running on this host).
-//  3. For each other reservation in allReservations assigned to this host
-//     (via Spec.TargetHost or Status.Host), subtract its UnusedReservationCapacity.
-//  4. Check that the remainder is ≥ UnusedReservationCapacity(res).
+//  2. Subtract hv.Status.Allocation (VMs physically running on this host).
+//  3. For each other reservation assigned to this host (via Spec.TargetHost or Status.Host),
+//     subtract its UnusedReservationCapacity.
+//  4. Check that the remainder is ≥ UnusedReservationCapacity(res): the unfilled portion of
+//     res's slot. Confirmed VMs in res already appear in hv.Status.Allocation (step 2), so
+//     comparing against the full slot would count them twice.
 //
-// Step 4 uses UnusedReservationCapacity rather than the full Spec.Resources because
-// confirmed VMs already appear in hv.Status.Allocation (step 2); comparing against the
-// full slot would count those resources twice. UnusedReservationCapacity returns the
-// unfilled portion (slot − confirmed VMs), which is what the host still needs to absorb.
-//
-// The target reservation itself is excluded from step 3 to avoid double-counting it.
+// res itself is excluded from step 3 to avoid subtracting its own block from free capacity.
 // Returns false when the hypervisor has no capacity data.
 func HostHasCapacityForReservation(allReservations []v1alpha1.Reservation, hv hv1.Hypervisor, res *v1alpha1.Reservation) bool {
 	effCap := hv.Status.EffectiveCapacity
