@@ -6,6 +6,7 @@ package machines
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -120,7 +121,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	pipeline, ok := c.GetPipeline(decision.Spec.PipelineRef.Name)
 	if !ok {
 		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
-		return errors.New("pipeline not found or not ready")
+		return fmt.Errorf("pipeline not found or not ready: %q", decision.Spec.PipelineRef.Name)
 	}
 
 	// Find all available machine pools.
