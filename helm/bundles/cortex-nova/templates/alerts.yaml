@@ -303,6 +303,43 @@ spec:
           configuration. It is recommended to investigate the
           pipeline status and logs for more details.
 
+    - alert: CortexNovaInFlightReservationsBacklogGrowing
+      # Alert when the number of in-flight reservations stuck with
+      # reason=InstanceNotFound is trending upwards over a long window,
+      # rather than staying roughly the same or draining down. A healthy
+      # scheduler-hypervisor loop should quickly resolve in-flight
+      # reservations once the VM shows up on any hypervisor; a sustained
+      # positive derivative indicates the backlog is not being worked off.
+      #
+      # deriv() over 1h returns the per-second slope of the gauge; multiplied
+      # by 3600 it becomes "expected growth per hour". We require this to be
+      # meaningfully positive AND the current count to be non-trivial, so we
+      # don't page on a single lingering reservation.
+      expr: |
+        deriv(cortex_reservation_state{domain="nova",type="InFlightReservation",state="unknown",reason="InstanceNotFound"}[1h]) * 3600 > 5
+        and
+        cortex_reservation_state{domain="nova",type="InFlightReservation",state="unknown",reason="InstanceNotFound"} > 10
+      for: 2h
+      labels:
+        context: reservations
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/unready
+      annotations:
+        summary: "In-flight reservation backlog with reason=InstanceNotFound keeps growing"
+        description: >
+          The number of in-flight reservations that have not yet observed
+          their VM on any hypervisor (reason=InstanceNotFound) has been
+          increasing steadily for at least two hours. Normally these
+          reservations resolve once the hypervisor operator reports the
+          instance; a sustained positive trend suggests either VMs are not
+          landing on hypervisors, or the hypervisor status feed is stalled,
+          or the in-flight reservation controller is not pruning cleanly.
+          Investigate the hypervisor operator, the nova build pipeline, and
+          the in-flight reservation controller logs.
+
     - alert: CortexNovaImagePropertiesHypervisorTypeUndetermined
       expr: |
         sum by (pipeline, step) (rate(cortex_filter_weigher_pipeline_step_events_total{service="cortex-nova-metrics", event="image_properties_hv_type_undetermined"}[5m])) > 0.1
