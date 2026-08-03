@@ -584,9 +584,9 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 	}
 
 	// Update TargetHost when the migrated VM moved to a host with capacity.
-	// This will be picked up by the TargetHost→Status.Host sync in the next Reconcile
-	// cycle (Branch B), which advances Status.Host and marks the reservation active on
-	// the new host. We do NOT update Status.Host here to avoid bypassing that sync path.
+	// Setting Spec.TargetHost triggers the TargetHost→Status.Host sync path in Reconcile,
+	// which advances Status.Host and marks the reservation active on the new host.
+	// We do NOT update Status.Host here to avoid bypassing that sync path.
 	if migrationTargetHost != "" {
 		res.Spec.TargetHost = migrationTargetHost
 		specChanged = true
