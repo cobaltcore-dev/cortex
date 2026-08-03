@@ -299,7 +299,7 @@ func TestHostHasCapacityForReservation(t *testing.T) {
 				r := resWithSlot("res-target", "host-old", 480, 40)
 				return &r
 			}(),
-			wantFits: false, // 480-100 = 380 GiB < 480 GiB required
+			wantFits: false, // 480-100 = 380 GiB remaining < 480 GiB slot (no confirmed VMs, so full slot is required)
 		},
 		{
 			name: "reservation targeting via Status.Host (not TargetHost) still blocks",

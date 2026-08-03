@@ -1004,15 +1004,17 @@ func newHVWithCapacity(name string, memGiB, cpuCores int64, instances []hv1.Inst
 }
 
 // newConfirmedCRReservation creates a ready CR reservation with one confirmed VM on host.
-func newConfirmedCRReservation(name, host, vmUUID string, memGiB, cpuCores int64) *v1alpha1.Reservation {
+// slotMemGiB/slotCPU define the full reservation slot; vmMemGiB/vmCPU define what the VM
+// actually consumes — these may be smaller, leaving an unfilled remainder in the slot.
+func newConfirmedCRReservation(name, host, vmUUID string, slotMemGiB, slotCPU, vmMemGiB, vmCPU int64) *v1alpha1.Reservation {
 	return &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec: v1alpha1.ReservationSpec{
 			Type:       v1alpha1.ReservationTypeCommittedResource,
 			TargetHost: host,
 			Resources: map[hv1.ResourceName]resource.Quantity{
-				hv1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dGi", memGiB)),
-				hv1.ResourceCPU:    resource.MustParse(strconv.FormatInt(cpuCores, 10)),
+				hv1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dGi", slotMemGiB)),
+				hv1.ResourceCPU:    resource.MustParse(strconv.FormatInt(slotCPU, 10)),
 			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 				ProjectID:    "test-project",
@@ -1021,8 +1023,8 @@ func newConfirmedCRReservation(name, host, vmUUID string, memGiB, cpuCores int64
 					vmUUID: {
 						CreationTimestamp: metav1.NewTime(time.Now().Add(-1 * time.Hour)),
 						Resources: map[hv1.ResourceName]resource.Quantity{
-							hv1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dGi", memGiB)),
-							hv1.ResourceCPU:    resource.MustParse(strconv.FormatInt(cpuCores, 10)),
+							hv1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dGi", vmMemGiB)),
+							hv1.ResourceCPU:    resource.MustParse(strconv.FormatInt(vmCPU, 10)),
 						},
 					},
 				},
@@ -1063,6 +1065,7 @@ func TestReconcileAllocations_LiveMigration(t *testing.T) {
 		{
 			name: "migrated to host with capacity: follow the VM",
 			extraObjects: []client.Object{
+				// VM (240Gi/20) already running here; slot remainder is 240Gi/20 — fits easily.
 				newHVWithCapacity(newHost, 960, 80, []hv1.Instance{{ID: vmUUID, Active: true}}),
 			},
 			wantTargetHost:  newHost,
@@ -1073,6 +1076,8 @@ func TestReconcileAllocations_LiveMigration(t *testing.T) {
 		{
 			name: "migrated to full host: mark misplaced, keep TargetHost",
 			extraObjects: []client.Object{
+				// VM (240Gi/20) already running here; a full-slot blocker leaves no room
+				// for the slot remainder (240Gi/20).
 				newHVWithCapacity(newHost, 480, 40, []hv1.Instance{{ID: vmUUID, Active: true}}),
 				&v1alpha1.Reservation{
 					ObjectMeta: metav1.ObjectMeta{Name: "res-blocker"},
@@ -1116,7 +1121,7 @@ func TestReconcileAllocations_LiveMigration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			scheme := newCRTestScheme(t)
-			res := newConfirmedCRReservation("res-1", oldHost, vmUUID, 480, 40)
+			res := newConfirmedCRReservation("res-1", oldHost, vmUUID, 480, 40, 240, 20)
 			res.Status.Conditions = append(res.Status.Conditions, tt.startConditions...)
 
 			// oldHost HV always has the VM absent (already migrated away), except for the
