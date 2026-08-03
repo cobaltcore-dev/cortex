@@ -40,6 +40,38 @@ func inferFailoverPipeline(extraSpecs map[string]string) string {
 	return "kvm-general-purpose-load-balancing"
 }
 
+// imagePropertiesFromFlavor synthesizes Glance-style image properties from a flavor's
+// capabilities:hypervisor_type extra spec. The failover controller does not have access
+// to the real Glance image metadata of the VM, but for reservation scheduling the VM
+// already exists and has passed FilterImagePropertiesStep at original create time, so
+// this synthesis is safe: it exists only to keep the filter from emitting spurious
+// "image_properties_hv_type_undetermined" events when the failover controller reuses
+// the EvacuateIntent to validate reservation hosts.
+//
+// The extra-spec values below duplicate the canonical mapping in
+// nova.Flavor.GetHypervisorType() (see internal/knowledge/datasources/plugins/openstack/nova/nova_types.go);
+// keep the two in sync. Real observed fixtures also carry lowercase "qemu"/"ch", so
+// those are accepted here too.
+//
+// Returns nil for unknown/unspecified hypervisor types, which preserves the filter's
+// existing tolerant fallback (log a warning event, keep all hosts).
+//
+// TODO(vm-crd): remove this and populate image properties from real Glance metadata
+// once the VM CRD carries them. See also the TODO on validateVMViaSchedulerEvacuation.
+func imagePropertiesFromFlavor(flavorExtraSpecs map[string]string) map[string]any {
+	switch flavorExtraSpecs["capabilities:hypervisor_type"] {
+	case "QEMU", "CH", "qemu", "ch":
+		// KVM family; the kvm-flavored key is "img_hv_type".
+		return map[string]any{"img_hv_type": string(api.NovaImageMetaHVTypeKVM)}
+	case "VMware vCenter Server":
+		return map[string]any{"hypervisor_type": string(api.NovaImageMetaHVTypeVMware)}
+	case "Ironic":
+		return map[string]any{"hypervisor_type": string(api.NovaImageMetaHVTypeBaremetal)}
+	default:
+		return nil
+	}
+}
+
 func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm reservations.VM, allHypervisors []string, pipeline string, resSpec resolvedReservationSpec, intent v1alpha1.SchedulingIntent, opts scheduling.Options) ([]string, error) {
 	logger := LoggerFromContext(ctx)
 
@@ -93,6 +125,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 			"_nova_check_type":       string(intent),
 			api.HintKeyResourceGroup: resSpec.ResourceGroup(vm.FlavorName),
 		},
+		ImageProperties: imagePropertiesFromFlavor(flavorExtraSpecs),
 	}
 
 	logger.V(1).Info("scheduling failover reservation",
@@ -226,6 +259,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		Pipeline:         inferFailoverPipeline(flavorExtraSpecs),
 		AvailabilityZone: vm.AvailabilityZone,
 		SchedulerHints:   map[string]any{"_nova_check_type": string(api.EvacuateIntent)},
+		ImageProperties:  imagePropertiesFromFlavor(flavorExtraSpecs),
 	}
 
 	logger.V(1).Info("validating VM via scheduler evacuation",
