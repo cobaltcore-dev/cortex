@@ -128,6 +128,8 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		// The instance has not spawned on any hypervisor (yet).
 		// Requeue and check again later. We'll alert on this if there are
 		// too many requeues without the instance spawning.
+
+		// TODO: delete reservation if spec.endTime is exceeded
 		log.V(1).Info("Instance has not spawned on any hypervisor yet, requeuing",
 			"vmID", obj.Spec.InFlightReservation.VMID)
 		orig := obj.DeepCopy()
@@ -195,6 +197,7 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				log.Error(err, "Failed to update reservation status")
 				return ctrl.Result{}, err
 			}
+			// TODO: EndTime check needed to catch canceled scenarios. Waiting for VM crd to consider this scenario
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 	}
