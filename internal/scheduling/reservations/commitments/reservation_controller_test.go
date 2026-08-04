@@ -1058,19 +1058,22 @@ func TestReconcileAllocations_LiveMigration(t *testing.T) {
 		reservation *v1alpha1.Reservation
 		// extra objects beyond the base reservation and old host HV
 		extraObjects []client.Object
-		// expected outcomes
+		// expected outcomes after first reconcile pass
 		wantTargetHost string
 		wantStatusHost string // expected in Status.Allocations[vmUUID]; "" means absent
 		wantSpecHasVM  bool
+		// if true, run a second reconcile pass and assert state is stable
+		assertSecondPass bool
 	}{
 		{
 			name: "single VM, new host has capacity: follow the VM",
 			extraObjects: []client.Object{
 				newHVWithCapacity(newHost, 960, 80, []hv1.Instance{{ID: vmUUID, Active: true}}),
 			},
-			wantTargetHost: newHost,
-			wantStatusHost: newHost,
-			wantSpecHasVM:  true,
+			wantTargetHost:   newHost,
+			wantStatusHost:   newHost,
+			wantSpecHasVM:    true,
+			assertSecondPass: true,
 		},
 		{
 			name: "single VM, new host at capacity: remove VM, slot stays on old host",
@@ -1150,11 +1153,7 @@ func TestReconcileAllocations_LiveMigration(t *testing.T) {
 				}
 			}
 			if !addsOldHostHV {
-				oldInstances := []hv1.Instance{}
-				if tt.wantStatusHost == oldHost {
-					oldInstances = []hv1.Instance{{ID: vmUUID, Active: true}}
-				}
-				objects = append(objects, newTestHypervisorCRD(oldHost, oldInstances))
+				objects = append(objects, newTestHypervisorCRD(oldHost, []hv1.Instance{}))
 			}
 			objects = append(objects, tt.extraObjects...)
 
@@ -1184,6 +1183,35 @@ func TestReconcileAllocations_LiveMigration(t *testing.T) {
 			}
 			if statusHost != tt.wantStatusHost {
 				t.Errorf("Status.Allocations[%s] = %q, want %q", vmUUID, statusHost, tt.wantStatusHost)
+			}
+
+			// For the migration-follow case: run a second reconcile to confirm state is
+			// stable and Status.Host was advanced to the new host in the first pass.
+			if tt.assertSecondPass {
+				if _, err := controller.reconcileAllocations(ctx, &updated); err != nil {
+					t.Fatalf("second reconcileAllocations() error = %v", err)
+				}
+				var updated2 v1alpha1.Reservation
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(res), &updated2); err != nil {
+					t.Fatalf("failed to get reservation after second pass: %v", err)
+				}
+				if updated2.Spec.TargetHost != tt.wantTargetHost {
+					t.Errorf("second pass: Spec.TargetHost = %q, want %q", updated2.Spec.TargetHost, tt.wantTargetHost)
+				}
+				if updated2.Status.Host != tt.wantTargetHost {
+					t.Errorf("second pass: Status.Host = %q, want %q", updated2.Status.Host, tt.wantTargetHost)
+				}
+				_, specHasVM2 := updated2.Spec.CommittedResourceReservation.Allocations[vmUUID]
+				if !specHasVM2 {
+					t.Errorf("second pass: VM unexpectedly removed from Spec.Allocations")
+				}
+				var statusHost2 string
+				if updated2.Status.CommittedResourceReservation != nil {
+					statusHost2 = updated2.Status.CommittedResourceReservation.Allocations[vmUUID]
+				}
+				if statusHost2 != tt.wantStatusHost {
+					t.Errorf("second pass: Status.Allocations[%s] = %q, want %q", vmUUID, statusHost2, tt.wantStatusHost)
+				}
 			}
 		})
 	}

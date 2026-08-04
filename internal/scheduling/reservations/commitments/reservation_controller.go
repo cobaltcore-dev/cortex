@@ -448,17 +448,19 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 	var allReservations *v1alpha1.ReservationList
 
 	ensureHVsAndReservations := func() error {
-		if allHVs != nil {
+		if allHVs != nil && allReservations != nil {
 			return nil
 		}
-		allHVs = &hv1.HypervisorList{}
-		if err := r.List(ctx, allHVs); err != nil {
+		hvs := &hv1.HypervisorList{}
+		if err := r.List(ctx, hvs); err != nil {
 			return fmt.Errorf("failed to list hypervisors: %w", err)
 		}
-		allReservations = &v1alpha1.ReservationList{}
-		if err := r.List(ctx, allReservations); err != nil {
+		res := &v1alpha1.ReservationList{}
+		if err := r.List(ctx, res); err != nil {
 			return fmt.Errorf("failed to list reservations: %w", err)
 		}
+		allHVs = hvs
+		allReservations = res
 		return nil
 	}
 
@@ -591,12 +593,14 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		specChanged = true
 	}
 
-	// Update TargetHost when the single migrated VM moved to a host with capacity.
-	// Setting Spec.TargetHost triggers the TargetHost→Status.Host sync path in Reconcile,
-	// which advances Status.Host and marks the reservation active on the new host.
-	// We do NOT update Status.Host here to avoid bypassing that sync path.
+	// Update TargetHost and Status.Host when the single migrated VM moved to a host
+	// with capacity. Setting Spec.TargetHost makes the new host the desired state.
+	// Advancing Status.Host here in the same patch cycle avoids a second reconcile
+	// cycle where Status.Host would lag behind TargetHost and temporarily block
+	// capacity accounting on the old host.
 	if migrationTargetHost != "" {
 		res.Spec.TargetHost = migrationTargetHost
+		res.Status.Host = migrationTargetHost
 		specChanged = true
 	}
 
@@ -622,8 +626,11 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		// the status update. Otherwise MergeFrom(old) would see no diff
 		// and the status patch would be a no-op.
 		old = res.DeepCopy()
-		// Re-apply the status update that was overwritten by the re-fetch.
+		// Re-apply status updates that were overwritten by the re-fetch.
 		res.Status.CommittedResourceReservation.Allocations = newStatusAllocations
+		if migrationTargetHost != "" {
+			res.Status.Host = migrationTargetHost
+		}
 	}
 
 	// Proactively remove this VM UUID from all other candidate reservations that still

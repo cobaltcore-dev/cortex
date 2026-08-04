@@ -47,7 +47,7 @@ func HostHasCapacityForReservation(allReservations []v1alpha1.Reservation, hv hv
 
 	for i := range allReservations {
 		other := &allReservations[i]
-		if other.Name == res.Name {
+		if other.Name == res.Name && other.Namespace == res.Namespace {
 			continue
 		}
 		// Only block resources from reservations that target or are confirmed on this host.
@@ -63,13 +63,9 @@ func HostHasCapacityForReservation(allReservations []v1alpha1.Reservation, hv hv
 		}
 	}
 
-	zero := resource.Quantity{}
 	for rn, required := range UnusedReservationCapacity(res, false) {
 		remaining, ok := free[rn]
 		if !ok {
-			return false
-		}
-		if remaining.Cmp(zero) < 0 {
 			return false
 		}
 		if remaining.Cmp(required) < 0 {

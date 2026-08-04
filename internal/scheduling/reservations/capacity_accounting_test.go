@@ -188,8 +188,8 @@ func TestHostHasCapacityForReservation(t *testing.T) {
 		}
 	}
 
-	resWithSlot := func(name, targetHost string, memGiB, cpuCores int64) v1alpha1.Reservation {
-		return v1alpha1.Reservation{
+	resWithSlot := func(name, targetHost string, memGiB, cpuCores int64) *v1alpha1.Reservation {
+		return &v1alpha1.Reservation{
 			ObjectMeta: metav1.ObjectMeta{Name: name},
 			Spec: v1alpha1.ReservationSpec{
 				Type:       v1alpha1.ReservationTypeCommittedResource,
@@ -202,6 +202,7 @@ func TestHostHasCapacityForReservation(t *testing.T) {
 			Status: v1alpha1.ReservationStatus{Host: targetHost},
 		}
 	}
+	deref := func(r *v1alpha1.Reservation) v1alpha1.Reservation { return *r }
 
 	tests := []struct {
 		name     string
@@ -213,43 +214,43 @@ func TestHostHasCapacityForReservation(t *testing.T) {
 		{
 			name:     "empty host: slot fits easily",
 			hv:       hvWithCapacity("host-new", 960, 80),
-			res:      func() *v1alpha1.Reservation { r := resWithSlot("res-1", "host-old", 480, 40); return &r }(),
+			res:      resWithSlot("res-1", "host-old", 480, 40),
 			wantFits: true,
 		},
 		{
 			name: "host fully consumed by another reservation: no capacity",
 			hv:   hvWithCapacity("host-new", 480, 40),
-			res:  func() *v1alpha1.Reservation { r := resWithSlot("res-target", "host-old", 480, 40); return &r }(),
+			res:  resWithSlot("res-target", "host-old", 480, 40),
 			others: []v1alpha1.Reservation{
-				resWithSlot("res-blocker", "host-new", 480, 40),
+				deref(resWithSlot("res-blocker", "host-new", 480, 40)),
 			},
 			wantFits: false,
 		},
 		{
 			name: "host partially consumed, enough room left",
 			hv:   hvWithCapacity("host-new", 960, 80),
-			res:  func() *v1alpha1.Reservation { r := resWithSlot("res-target", "host-old", 480, 40); return &r }(),
+			res:  resWithSlot("res-target", "host-old", 480, 40),
 			others: []v1alpha1.Reservation{
-				resWithSlot("res-blocker", "host-new", 480, 40),
+				deref(resWithSlot("res-blocker", "host-new", 480, 40)),
 			},
 			wantFits: true,
 		},
 		{
 			name: "host partially consumed, exactly at boundary: fits",
 			hv:   hvWithCapacity("host-new", 960, 80),
-			res:  func() *v1alpha1.Reservation { r := resWithSlot("res-target", "host-old", 480, 40); return &r }(),
+			res:  resWithSlot("res-target", "host-old", 480, 40),
 			others: []v1alpha1.Reservation{
-				resWithSlot("res-blocker-a", "host-new", 240, 20),
-				resWithSlot("res-blocker-b", "host-new", 240, 20),
+				deref(resWithSlot("res-blocker-a", "host-new", 240, 20)),
+				deref(resWithSlot("res-blocker-b", "host-new", 240, 20)),
 			},
 			wantFits: true,
 		},
 		{
 			name: "host partially consumed, one resource short (CPU)",
 			hv:   hvWithCapacity("host-new", 960, 60),
-			res:  func() *v1alpha1.Reservation { r := resWithSlot("res-target", "host-old", 480, 40); return &r }(),
+			res:  resWithSlot("res-target", "host-old", 480, 40),
 			others: []v1alpha1.Reservation{
-				resWithSlot("res-blocker", "host-new", 480, 40),
+				deref(resWithSlot("res-blocker", "host-new", 480, 40)),
 			},
 			// 960-480=480 memory OK, but 60-40=20 CPU < 40 required
 			wantFits: false,
@@ -257,19 +258,19 @@ func TestHostHasCapacityForReservation(t *testing.T) {
 		{
 			name: "target reservation itself excluded from blocking calculation",
 			hv:   hvWithCapacity("host-new", 480, 40),
-			res:  func() *v1alpha1.Reservation { r := resWithSlot("res-target", "host-new", 480, 40); return &r }(),
+			res:  resWithSlot("res-target", "host-new", 480, 40),
 			others: []v1alpha1.Reservation{
 				// Same name as res — should be ignored
-				resWithSlot("res-target", "host-new", 480, 40),
+				deref(resWithSlot("res-target", "host-new", 480, 40)),
 			},
 			wantFits: true,
 		},
 		{
 			name: "reservations on other hosts do not count",
 			hv:   hvWithCapacity("host-new", 480, 40),
-			res:  func() *v1alpha1.Reservation { r := resWithSlot("res-target", "host-old", 480, 40); return &r }(),
+			res:  resWithSlot("res-target", "host-old", 480, 40),
 			others: []v1alpha1.Reservation{
-				resWithSlot("res-on-other-host", "host-unrelated", 480, 40),
+				deref(resWithSlot("res-on-other-host", "host-unrelated", 480, 40)),
 			},
 			wantFits: true,
 		},
@@ -278,7 +279,7 @@ func TestHostHasCapacityForReservation(t *testing.T) {
 			hv: hv1.Hypervisor{
 				ObjectMeta: metav1.ObjectMeta{Name: "host-nocap"},
 			},
-			res:      func() *v1alpha1.Reservation { r := resWithSlot("res-target", "host-old", 480, 40); return &r }(),
+			res:      resWithSlot("res-target", "host-old", 480, 40),
 			wantFits: false,
 		},
 		{
@@ -295,16 +296,13 @@ func TestHostHasCapacityForReservation(t *testing.T) {
 					},
 				},
 			},
-			res: func() *v1alpha1.Reservation {
-				r := resWithSlot("res-target", "host-old", 480, 40)
-				return &r
-			}(),
+			res:      resWithSlot("res-target", "host-old", 480, 40),
 			wantFits: false, // 480-100 = 380 GiB remaining < 480 GiB slot (no confirmed VMs, so full slot is required)
 		},
 		{
 			name: "reservation targeting via Status.Host (not TargetHost) still blocks",
 			hv:   hvWithCapacity("host-new", 480, 40),
-			res:  func() *v1alpha1.Reservation { r := resWithSlot("res-target", "host-old", 480, 40); return &r }(),
+			res:  resWithSlot("res-target", "host-old", 480, 40),
 			others: []v1alpha1.Reservation{
 				// TargetHost empty but Status.Host = host-new
 				{
