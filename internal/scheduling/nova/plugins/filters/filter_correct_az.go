@@ -34,6 +34,9 @@ func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSch
 	// "topology.kubernetes.io/zone" on the hv crd.
 	var computeHostsInAZ = make(map[string]struct{})
 	for _, hv := range hvs.Items {
+		if _, ok := result.Activations[hv.Name]; !ok {
+			continue
+		}
 		az, ok := hv.Labels[corev1.LabelTopologyZone]
 		if !ok {
 			traceLog.Warn("host missing zone label, keeping", "host", hv.Name)

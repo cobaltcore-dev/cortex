@@ -40,6 +40,9 @@ func (s *FilterAggregateMetadata) Run(traceLog *slog.Logger, request api.Externa
 
 	restrictedProjectsByHost := make(map[string][]string)
 	for _, hv := range hvs.Items {
+		if _, ok := result.Activations[hv.Name]; !ok {
+			continue
+		}
 		for _, aggregate := range hv.Status.Aggregates {
 			// Any metadata key prefixed with "filter_tenant_id" restricts the
 			// aggregate to the referenced projects. Multiple numbered keys (e.g.

@@ -363,6 +363,26 @@ spec:
           property format has changed. Investigate the image metadata of the affected
           requests.
 
+    - alert: CortexNovaCapabilitiesUnknownHypervisorType
+      expr: |
+        sum by (pipeline, step, hypervisor_type) (rate(cortex_filter_weigher_pipeline_step_events_total{service="cortex-nova-metrics", event="filter_capabilities_unknown_hypervisor_type"}[5m])) > 0.1
+      for: 15m
+      labels:
+        context: scheduling
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/scheduling
+      annotations:
+        summary: "Nova capabilities filter frequently encounters unknown hypervisor types"
+        description: >
+          The `filter_capabilities` step in pipeline `{{ "{{" }} $labels.pipeline {{ "}}" }}`
+          is frequently unable to determine the hypervisor type
+          (`{{ "{{" }} $labels.hypervisor_type {{ "}}" }}`) for candidate hosts.
+          This may indicate that hypervisors are reporting incomplete domain capabilities.
+          Investigate the affected hosts and hypervisor operator status.
+
     {{- if .Values.kvm.enabled }}
     - alert: CortexNovaDoesntFindValidKVMHosts
       expr: sum by (az, hvtype) (increase(cortex_vm_faults{hvtype=~"CH|QEMU",faultmsg=~".*No valid host was found.*",faultmsg!~".*No such host.*"}[5m])) > 0
