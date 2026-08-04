@@ -17,6 +17,11 @@ spec:
   # Fetch all placement candidates, ignoring nova's preselection.
   ignorePreselection: true
   filters:
+    - name: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
     - name: filter_correct_az
       description: |
         This step will filter out hosts whose aggregate information indicates they
@@ -31,11 +36,6 @@ spec:
         This step will filter out hosts for which the hypervisor type does not match
         the one specified in the image properties, for example, filtering out all
         known KVM hypervisors if the image requires a different hypervisor type.
-    - name: filter_status_conditions
-      description: |
-        This step will filter out hosts for which the hypervisor status conditions
-        do not meet the expected values, for example, that the hypervisor is ready
-        and not disabled.
     - name: filter_capabilities
       description: |
         This step will filter out hosts that do not meet the compute capabilities
@@ -131,8 +131,8 @@ spec:
         instance group are already running on that host. The more instances of the
         same group on a host, the lower (for soft-anti-affinity) or higher
         (for soft-affinity) the weight, which makes it less likely or more likely,
-        respectively, for the scheduler to choose that host for new instances of
-        the same group.
+        respectively, for the scheduler to choose that host for new instances of the
+        same group.
     - name: kvm_binpack
       multiplier: -1.0 # inverted = balancing
       params:
@@ -174,6 +174,11 @@ spec:
   # Fetch all placement candidates, ignoring nova's preselection.
   ignorePreselection: true
   filters:
+    - name: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
     - name: filter_correct_az
       description: |
         This step will filter out hosts whose aggregate information indicates they
@@ -188,11 +193,6 @@ spec:
         This step will filter out hosts for which the hypervisor type does not match
         the one specified in the image properties, for example, filtering out all
         known KVM hypervisors if the image requires a different hypervisor type.
-    - name: filter_status_conditions
-      description: |
-        This step will filter out hosts for which the hypervisor status conditions
-        do not meet the expected values, for example, that the hypervisor is ready
-        and not disabled.
     - name: filter_capabilities
       description: |
         This step will filter out hosts that do not meet the compute capabilities
@@ -287,8 +287,8 @@ spec:
         instance group are already running on that host. The more instances of the
         same group on a host, the lower (for soft-anti-affinity) or higher
         (for soft-affinity) the weight, which makes it less likely or more likely,
-        respectively, for the scheduler to choose that host for new instances of
-        the same group.
+        respectively, for the scheduler to choose that host for new instances of the
+        same group.
     - name: kvm_binpack
       params:
         - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
@@ -323,11 +323,20 @@ spec:
   type: filter-weigher
   ignorePreselection: true
   filters:
+    - name: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
     - name: filter_host_instructions
       description: |
         This step will consider the `ignore_hosts` and `force_hosts` instructions
         from the nova scheduler request spec to filter out or exclusively allow
         certain hosts.
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone.
     - name: filter_has_enough_capacity
       description: |
         This step will filter out hosts that do not have enough available capacity
@@ -345,15 +354,6 @@ spec:
       description: |
         This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
         the nova flavor extra specs request accelerators via "accel:device_profile".
-    - name: filter_correct_az
-      description: |
-        This step will filter out hosts whose aggregate information indicates they
-        are not placed in the requested availability zone.
-    - name: filter_status_conditions
-      description: |
-        This step will filter out hosts for which the hypervisor status conditions
-        do not meet the expected values, for example, that the hypervisor is ready
-        and not disabled.
     - name: filter_allowed_projects
       description: |
         This step filters hosts based on allowed projects defined in the
@@ -454,11 +454,21 @@ spec:
     on a host, this pipeline validates the host is still suitable for the VM.
   type: filter-weigher
   filters:
+    - name: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
     - name: filter_host_instructions
       description: |
         This step will consider the `ignore_hosts` and `force_hosts` instructions
         from the nova scheduler request spec to filter out or exclusively allow
         certain hosts.
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone. This ensures VMs can
+        only reuse reservations in their own AZ.
     - name: filter_has_requested_traits
       description: |
         This step filters hosts that do not have the requested traits given by the
@@ -469,16 +479,6 @@ spec:
       description: |
         This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
         the nova flavor extra specs request accelerators via "accel:device_profile".
-    - name: filter_correct_az
-      description: |
-        This step will filter out hosts whose aggregate information indicates they
-        are not placed in the requested availability zone. This ensures VMs can
-        only reuse reservations in their own AZ.
-    - name: filter_status_conditions
-      description: |
-        This step will filter out hosts for which the hypervisor status conditions
-        do not meet the expected values, for example, that the hypervisor is ready
-        and not disabled.
     - name: filter_external_customer
       description: |
         This step prefix-matches the domain name for external customer domains and
@@ -517,11 +517,21 @@ spec:
     fails for any VM, the reservation is deleted (nack).
   type: filter-weigher
   filters:
+    - name: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
     - name: filter_host_instructions
       description: |
         This step will consider the `ignore_hosts` and `force_hosts` instructions
         from the nova scheduler request spec to filter out or exclusively allow
         certain hosts.
+    - name: filter_correct_az
+      description: |
+        This step will filter out hosts whose aggregate information indicates they
+        are not placed in the requested availability zone. This ensures reservation
+        validation respects AZ boundaries.
     - name: filter_has_enough_capacity
       description: |
         This step will filter out hosts that do not have enough available capacity
@@ -538,16 +548,6 @@ spec:
       description: |
         This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
         the nova flavor extra specs request accelerators via "accel:device_profile".
-    - name: filter_correct_az
-      description: |
-        This step will filter out hosts whose aggregate information indicates they
-        are not placed in the requested availability zone. This ensures reservation
-        validation respects AZ boundaries.
-    - name: filter_status_conditions
-      description: |
-        This step will filter out hosts for which the hypervisor status conditions
-        do not meet the expected values, for example, that the hypervisor is ready
-        and not disabled.
     - name: filter_external_customer
       description: |
         This step prefix-matches the domain name for external customer domains and
@@ -592,6 +592,9 @@ spec:
   # Fetch all placement candidates, ignoring nova's preselection.
   ignorePreselection: true
   filters:
+    - name: filter_status_conditions
+      description: |
+        Excludes hosts that are not ready or are disabled.
     - name: filter_correct_az
       description: |
         Restricts host candidates to the requested availability zone.
@@ -610,9 +613,6 @@ spec:
       description: |
         Ensures hosts meet the compute capabilities required by the flavor
         extra specs (e.g., architecture, maxphysaddr bits).
-    - name: filter_status_conditions
-      description: |
-        Excludes hosts that are not ready or are disabled.
   weighers: []
 ---
 apiVersion: cortex.cloud/v1alpha1
@@ -630,6 +630,11 @@ spec:
   ignorePreselection: true
   createHistory: false
   filters:
+    - name: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
     - name: filter_correct_az
       description: |
         This step will filter out hosts whose aggregate information indicates they
@@ -644,11 +649,6 @@ spec:
         This step will filter out hosts for which the hypervisor type does not match
         the one specified in the image properties, for example, filtering out all
         known KVM hypervisors if the image requires a different hypervisor type.
-    - name: filter_status_conditions
-      description: |
-        This step will filter out hosts for which the hypervisor status conditions
-        do not meet the expected values, for example, that the hypervisor is ready
-        and not disabled.
     - name: filter_capabilities
       description: |
         This step will filter out hosts that do not meet the compute capabilities
@@ -746,8 +746,8 @@ spec:
         instance group are already running on that host. The more instances of the
         same group on a host, the lower (for soft-anti-affinity) or higher
         (for soft-affinity) the weight, which makes it less likely or more likely,
-        respectively, for the scheduler to choose that host for new instances of
-        the same group.
+        respectively, for the scheduler to choose that host for new instances of the
+        same group.
     - name: kvm_binpack
       multiplier: -1.0 # inverted = balancing
       params:
@@ -787,6 +787,11 @@ spec:
   ignorePreselection: true
   createHistory: false
   filters:
+    - name: filter_status_conditions
+      description: |
+        This step will filter out hosts for which the hypervisor status conditions
+        do not meet the expected values, for example, that the hypervisor is ready
+        and not disabled.
     - name: filter_correct_az
       description: |
         This step will filter out hosts whose aggregate information indicates they
@@ -801,11 +806,6 @@ spec:
         This step will filter out hosts for which the hypervisor type does not match
         the one specified in the image properties, for example, filtering out all
         known KVM hypervisors if the image requires a different hypervisor type.
-    - name: filter_status_conditions
-      description: |
-        This step will filter out hosts for which the hypervisor status conditions
-        do not meet the expected values, for example, that the hypervisor is ready
-        and not disabled.
     - name: filter_capabilities
       description: |
         This step will filter out hosts that do not meet the compute capabilities
@@ -902,8 +902,8 @@ spec:
         instance group are already running on that host. The more instances of the
         same group on a host, the lower (for soft-anti-affinity) or higher
         (for soft-affinity) the weight, which makes it less likely or more likely,
-        respectively, for the scheduler to choose that host for new instances of
-        the same group.
+        respectively, for the scheduler to choose that host for new instances of the
+        same group.
     - name: kvm_binpack
       params:
         - {key: resourceWeights, floatMapValue: {"memory": 1.0}}
