@@ -1044,18 +1044,18 @@ func newConfirmedCRReservation(name, host, vmUUID string, slotMemGiB, slotCPU, v
 
 func TestReconcileAllocations_LiveMigration(t *testing.T) {
 	const (
-		vmUUID   = "vm-uuid"
-		vm2UUID  = "vm-uuid-2"
-		oldHost  = "host-old"
-		newHost  = "host-new"
+		vmUUID  = "vm-uuid"
+		vm2UUID = "vm-uuid-2"
+		oldHost = "host-old"
+		newHost = "host-new"
 	)
 
 	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
 
 	tests := []struct {
-		name         string
+		name string
 		// reservation to use; nil uses the default single-VM reservation
-		reservation  *v1alpha1.Reservation
+		reservation *v1alpha1.Reservation
 		// extra objects beyond the base reservation and old host HV
 		extraObjects []client.Object
 		// expected outcomes
