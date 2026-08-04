@@ -1044,40 +1044,39 @@ func newConfirmedCRReservation(name, host, vmUUID string, slotMemGiB, slotCPU, v
 
 func TestReconcileAllocations_LiveMigration(t *testing.T) {
 	const (
-		vmUUID  = "vm-uuid"
-		oldHost = "host-old"
-		newHost = "host-new"
+		vmUUID   = "vm-uuid"
+		vm2UUID  = "vm-uuid-2"
+		oldHost  = "host-old"
+		newHost  = "host-new"
 	)
 
 	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
 
 	tests := []struct {
-		name string
+		name         string
+		// reservation to use; nil uses the default single-VM reservation
+		reservation  *v1alpha1.Reservation
 		// extra objects beyond the base reservation and old host HV
-		extraObjects    []client.Object
-		startConditions []metav1.Condition
+		extraObjects []client.Object
 		// expected outcomes
-		wantTargetHost  string
-		wantStatusHost  string // expected in Status.Allocations[vmUUID]; "" means absent
-		wantSpecHasVM   bool
-		wantVMMisplaced bool
+		wantTargetHost string
+		wantStatusHost string // expected in Status.Allocations[vmUUID]; "" means absent
+		wantSpecHasVM  bool
 	}{
 		{
-			name: "migrated to host with capacity: follow the VM",
+			name: "single VM, new host has capacity: follow the VM",
 			extraObjects: []client.Object{
-				// VM (240Gi/20) already running here; slot remainder is 240Gi/20 — fits easily.
 				newHVWithCapacity(newHost, 960, 80, []hv1.Instance{{ID: vmUUID, Active: true}}),
 			},
-			wantTargetHost:  newHost,
-			wantStatusHost:  newHost,
-			wantSpecHasVM:   true,
-			wantVMMisplaced: false,
+			wantTargetHost: newHost,
+			wantStatusHost: newHost,
+			wantSpecHasVM:  true,
 		},
 		{
-			name: "migrated to full host: mark misplaced, keep TargetHost",
+			name: "single VM, new host at capacity: remove VM, slot stays on old host",
 			extraObjects: []client.Object{
-				// VM (240Gi/20) already running here; a full-slot blocker leaves no room
-				// for the slot remainder (240Gi/20).
+				// VM (240Gi/20) running on newHost; a full-slot blocker leaves no room for
+				// the 240Gi/20 slot remainder.
 				newHVWithCapacity(newHost, 480, 40, []hv1.Instance{{ID: vmUUID, Active: true}}),
 				&v1alpha1.Reservation{
 					ObjectMeta: metav1.ObjectMeta{Name: "res-blocker"},
@@ -1092,45 +1091,71 @@ func TestReconcileAllocations_LiveMigration(t *testing.T) {
 					Status: v1alpha1.ReservationStatus{Host: newHost},
 				},
 			},
-			wantTargetHost:  oldHost,
-			wantStatusHost:  newHost,
-			wantSpecHasVM:   true,
-			wantVMMisplaced: true,
+			wantTargetHost: oldHost,
+			wantStatusHost: "",
+			wantSpecHasVM:  false,
 		},
 		{
-			name:            "VM gone from all hosts: remove allocation",
-			extraObjects:    []client.Object{newTestHypervisorCRD("host-other", []hv1.Instance{{ID: "other-vm"}})},
-			wantTargetHost:  oldHost,
-			wantStatusHost:  "",
-			wantSpecHasVM:   false,
-			wantVMMisplaced: false,
-		},
-		{
-			name: "stale VMMisplaced cleared when VM back on expected host",
-			startConditions: []metav1.Condition{
-				{Type: v1alpha1.ReservationConditionVMMisplaced, Status: metav1.ConditionTrue, Reason: "MigratedToFullHost"},
+			name: "multiple VMs, one migrated: remove migrated VM, never update TargetHost",
+			reservation: func() *v1alpha1.Reservation {
+				res := newConfirmedCRReservation("res-1", oldHost, vmUUID, 480, 40, 240, 20)
+				// Add a second VM confirmed on oldHost.
+				res.Spec.CommittedResourceReservation.Allocations[vm2UUID] = v1alpha1.CommittedResourceAllocation{
+					CreationTimestamp: metav1.NewTime(time.Now().Add(-1 * time.Hour)),
+					Resources: map[hv1.ResourceName]resource.Quantity{
+						hv1.ResourceMemory: resource.MustParse("240Gi"),
+						hv1.ResourceCPU:    resource.MustParse("20"),
+					},
+				}
+				res.Status.CommittedResourceReservation.Allocations[vm2UUID] = oldHost
+				return res
+			}(),
+			extraObjects: []client.Object{
+				// vmUUID has migrated to newHost with plenty of capacity; vm2UUID stays on oldHost.
+				// Supply oldHost HV explicitly so vm2UUID is present on it.
+				newTestHypervisorCRD(oldHost, []hv1.Instance{{ID: vm2UUID, Active: true}}),
+				newHVWithCapacity(newHost, 960, 80, []hv1.Instance{{ID: vmUUID, Active: true}}),
 			},
-			// VM is back on oldHost — newHVWithCapacity for oldHost provided via the base setup below
-			wantTargetHost:  oldHost,
-			wantStatusHost:  oldHost,
-			wantSpecHasVM:   true,
-			wantVMMisplaced: false,
+			wantTargetHost: oldHost,
+			wantStatusHost: "",
+			wantSpecHasVM:  false,
+		},
+		{
+			name:           "VM gone from all hosts: remove allocation",
+			extraObjects:   []client.Object{newTestHypervisorCRD("host-other", []hv1.Instance{{ID: "other-vm"}})},
+			wantTargetHost: oldHost,
+			wantStatusHost: "",
+			wantSpecHasVM:  false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			scheme := newCRTestScheme(t)
-			res := newConfirmedCRReservation("res-1", oldHost, vmUUID, 480, 40, 240, 20)
-			res.Status.Conditions = append(res.Status.Conditions, tt.startConditions...)
 
-			// oldHost HV always has the VM absent (already migrated away), except for the
-			// "stale VMMisplaced" case where the VM is back.
-			oldInstances := []hv1.Instance{}
-			if tt.wantStatusHost == oldHost {
-				oldInstances = []hv1.Instance{{ID: vmUUID, Active: true}}
+			res := tt.reservation
+			if res == nil {
+				res = newConfirmedCRReservation("res-1", oldHost, vmUUID, 480, 40, 240, 20)
 			}
-			objects := []client.Object{res, newTestHypervisorCRD(oldHost, oldInstances)}
+
+			var objects []client.Object
+			objects = append(objects, res)
+
+			// Add an oldHost HV unless the test provides its own via extraObjects.
+			addsOldHostHV := false
+			for _, obj := range tt.extraObjects {
+				if hv, ok := obj.(*hv1.Hypervisor); ok && hv.Name == oldHost {
+					addsOldHostHV = true
+					break
+				}
+			}
+			if !addsOldHostHV {
+				oldInstances := []hv1.Instance{}
+				if tt.wantStatusHost == oldHost {
+					oldInstances = []hv1.Instance{{ID: vmUUID, Active: true}}
+				}
+				objects = append(objects, newTestHypervisorCRD(oldHost, oldInstances))
+			}
 			objects = append(objects, tt.extraObjects...)
 
 			k8sClient := newCRTestClient(scheme, objects...)
@@ -1159,11 +1184,6 @@ func TestReconcileAllocations_LiveMigration(t *testing.T) {
 			}
 			if statusHost != tt.wantStatusHost {
 				t.Errorf("Status.Allocations[%s] = %q, want %q", vmUUID, statusHost, tt.wantStatusHost)
-			}
-			cond := meta.FindStatusCondition(updated.Status.Conditions, v1alpha1.ReservationConditionVMMisplaced)
-			isMisplaced := cond != nil && cond.Status == metav1.ConditionTrue
-			if isMisplaced != tt.wantVMMisplaced {
-				t.Errorf("VMMisplaced condition = %v, want %v", isMisplaced, tt.wantVMMisplaced)
 			}
 		})
 	}

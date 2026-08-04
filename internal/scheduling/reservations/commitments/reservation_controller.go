@@ -384,13 +384,14 @@ type reconcileAllocationsResult struct {
 //
 // New allocations within the grace period are skipped — the VM may not yet appear in the
 // HV CRD while it is still spawning. Older allocations are verified; VMs no longer present
-// on their expected host are either followed to a new host (live migration) or removed.
+// on their expected host are handled as follows:
 //
-// When a confirmed VM is absent from its expected host, all HV CRDs are searched to
-// determine whether it live-migrated. If the new host has capacity for the reservation
-// slot, Spec.TargetHost is updated so the reservation follows the VM. If not, TargetHost
-// is left unchanged and the VMMisplaced condition is set. Each VM is evaluated
-// independently; other allocated VMs in the same reservation are not affected.
+// Live migration: when a confirmed VM is found on a different host, the reservation follows
+// it only when the reservation has exactly one allocated VM and the new host has capacity.
+// In all other cases (multiple VMs, or new host at capacity), the migrated VM is removed
+// from the reservation so the slot remains available for re-use on the original host.
+// Moving TargetHost when other VMs are present would cause those remaining VMs to appear
+// misplaced on the next reconcile cycle.
 func (r *CommitmentReservationController) reconcileAllocations(ctx context.Context, res *v1alpha1.Reservation) (*reconcileAllocationsResult, error) {
 	logger := LoggerFromContext(ctx)
 	result := &reconcileAllocationsResult{}
@@ -441,13 +442,11 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		existingStatusAllocations[k] = v
 	}
 
-	// hvList is fetched lazily and only once — only needed when a confirmed VM is missing
-	// from its expected host and we need to search for it across all hypervisors.
+	// allHVs and allReservations are fetched lazily — only needed when a confirmed VM is
+	// missing from its expected host and we need to scan for a live migration.
 	var allHVs *hv1.HypervisorList
-	// allReservations is fetched lazily — needed alongside allHVs to check capacity.
 	var allReservations *v1alpha1.ReservationList
 
-	// ensureHVsAndReservations fetches allHVs and allReservations on first call.
 	ensureHVsAndReservations := func() error {
 		if allHVs != nil {
 			return nil
@@ -468,11 +467,10 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 	// Track allocations to remove from Spec (stale/leaving VMs).
 	var allocationsToRemove []string
 
-	// migrationTargetHost is set when exactly one confirmed VM is detected on a new host
-	// that has capacity — in that case we update Spec.TargetHost to the new host.
+	// migrationTargetHost is set when the reservation has exactly one VM, that VM
+	// live-migrated to a new host, and the new host has capacity. In that case
+	// Spec.TargetHost is updated so the reservation follows the VM.
 	migrationTargetHost := ""
-	// misplacedVMs accumulates VM UUIDs that moved to a host without capacity.
-	var misplacedVMs []string
 
 	for vmUUID, allocation := range res.Spec.CommittedResourceReservation.Allocations {
 		allocationAge := now.Sub(allocation.CreationTimestamp.Time)
@@ -555,9 +553,14 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		}
 
 		// VM found on a different host — live migration detected.
-		// Check whether the new host can absorb the full reservation slot.
-		if reservations.HostHasCapacityForReservation(allReservations.Items, foundHV, res) {
-			// New host has enough room — follow the VM.
+		//
+		// Follow the VM only when this is the sole VM in the reservation and the new
+		// host has capacity. Moving TargetHost with multiple VMs present would cause
+		// the remaining VMs to appear misplaced on the next reconcile. When there are
+		// multiple VMs, or the new host is at capacity, remove this VM so the slot
+		// on the original host remains available for re-use.
+		isSingleVM := len(res.Spec.CommittedResourceReservation.Allocations) == 1
+		if isSingleVM && reservations.HostHasCapacityForReservation(allReservations.Items, foundHV, res) {
 			logger.Info("VM live-migrated to host with capacity, updating TargetHost",
 				"vm", vmUUID,
 				"reservation", res.Name,
@@ -566,14 +569,13 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 			migrationTargetHost = foundHost
 			newStatusAllocations[vmUUID] = foundHost
 		} else {
-			// New host is over capacity — record misplacement; keep old TargetHost.
-			logger.Info("VM live-migrated to host without sufficient capacity, marking misplaced",
+			logger.Info("removing VM from reservation after live migration: either multiple VMs present or new host lacks capacity",
 				"vm", vmUUID,
 				"reservation", res.Name,
 				"expectedHost", expectedHost,
-				"actualHost", foundHost)
-			misplacedVMs = append(misplacedVMs, vmUUID)
-			newStatusAllocations[vmUUID] = foundHost
+				"actualHost", foundHost,
+				"singleVM", isSingleVM)
+			allocationsToRemove = append(allocationsToRemove, vmUUID)
 		}
 	}
 
@@ -589,7 +591,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		specChanged = true
 	}
 
-	// Update TargetHost when the migrated VM moved to a host with capacity.
+	// Update TargetHost when the single migrated VM moved to a host with capacity.
 	// Setting Spec.TargetHost triggers the TargetHost→Status.Host sync path in Reconcile,
 	// which advances Status.Host and marks the reservation active on the new host.
 	// We do NOT update Status.Host here to avoid bypassing that sync path.
@@ -600,21 +602,6 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 
 	// Update Status.Allocations
 	res.Status.CommittedResourceReservation.Allocations = newStatusAllocations
-
-	// Set or clear the VMMisplaced condition.
-	if len(misplacedVMs) > 0 {
-		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
-			Type:   v1alpha1.ReservationConditionVMMisplaced,
-			Status: metav1.ConditionTrue,
-			Reason: "MigratedToFullHost",
-			Message: fmt.Sprintf(
-				"VM(s) live-migrated to a host that lacks capacity for the reservation slot: %v",
-				misplacedVMs,
-			),
-		})
-	} else {
-		meta.RemoveStatusCondition(&res.Status.Conditions, v1alpha1.ReservationConditionVMMisplaced)
-	}
 
 	// Patch Spec if changed (stale allocations removed and/or TargetHost updated)
 	if specChanged {
@@ -635,21 +622,8 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		// the status update. Otherwise MergeFrom(old) would see no diff
 		// and the status patch would be a no-op.
 		old = res.DeepCopy()
-		// Re-apply status updates that were overwritten by the re-fetch.
+		// Re-apply the status update that was overwritten by the re-fetch.
 		res.Status.CommittedResourceReservation.Allocations = newStatusAllocations
-		if len(misplacedVMs) > 0 {
-			meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
-				Type:   v1alpha1.ReservationConditionVMMisplaced,
-				Status: metav1.ConditionTrue,
-				Reason: "MigratedToFullHost",
-				Message: fmt.Sprintf(
-					"VM(s) live-migrated to a host that lacks capacity for the reservation slot: %v",
-					misplacedVMs,
-				),
-			})
-		} else {
-			meta.RemoveStatusCondition(&res.Status.Conditions, v1alpha1.ReservationConditionVMMisplaced)
-		}
 	}
 
 	// Proactively remove this VM UUID from all other candidate reservations that still
