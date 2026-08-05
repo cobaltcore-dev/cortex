@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1057,6 +1058,136 @@ func TestClient_Create_NoMatchReturnsError(t *testing.T) {
 	err := c.Create(context.Background(), cm)
 	if err == nil {
 		t.Error("expected error when no remote cluster matches")
+	}
+}
+
+func TestClient_Create_CrossClusterNameConflict(t *testing.T) {
+	scheme := newTestScheme(t)
+	// The same name already exists on remote1.
+	existing := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "dup-cm", Namespace: "default"},
+	}
+	homeCluster := newFakeCluster(scheme)
+	remote1 := newFakeCluster(scheme, existing)
+	remote2 := newFakeCluster(scheme)
+
+	mon := NewMonitor("cortex_")
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		Monitor:     mon,
+		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
+			configMapGVK: testRouter{},
+		},
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {
+				{cluster: remote1, labels: map[string]string{"az": "az-1"}},
+				{cluster: remote2, labels: map[string]string{"az": "az-2"}},
+			},
+		},
+	}
+
+	// Routes to remote2 (az-2), but the name already exists on remote1.
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "dup-cm",
+			Namespace: "default",
+			Labels:    map[string]string{"az": "az-2"},
+		},
+	}
+	err := c.Create(context.Background(), cm)
+	if err == nil {
+		t.Fatal("expected error due to cross-cluster name conflict")
+	}
+	if !IsDuplicateError(err) {
+		t.Errorf("expected duplicate error, got %v", err)
+	}
+
+	// Must NOT have been created on the target cluster remote2.
+	result := &corev1.ConfigMap{}
+	if err := remote2.GetClient().Get(context.Background(), client.ObjectKey{Name: "dup-cm", Namespace: "default"}, result); err == nil {
+		t.Error("object should not have been created on remote2 after a conflict")
+	}
+
+	// The conflict counter should have been incremented for method "create".
+	cm2 := mon.(*monitor)
+	if got := testutil.ToFloat64(cm2.crossClusterNameConflicts.WithLabelValues("create", configMapGVK.String())); got != 1 {
+		t.Errorf("expected conflict counter = 1, got %v", got)
+	}
+}
+
+func TestClient_Create_NoConflictWhenNameFreeElsewhere(t *testing.T) {
+	scheme := newTestScheme(t)
+	homeCluster := newFakeCluster(scheme)
+	remote1 := newFakeCluster(scheme)
+	remote2 := newFakeCluster(scheme)
+
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
+			configMapGVK: testRouter{},
+		},
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {
+				{cluster: remote1, labels: map[string]string{"az": "az-1"}},
+				{cluster: remote2, labels: map[string]string{"az": "az-2"}},
+			},
+		},
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "unique-cm",
+			Namespace: "default",
+			Labels:    map[string]string{"az": "az-2"},
+		},
+	}
+	if err := c.Create(context.Background(), cm); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should have been created on the routed cluster remote2.
+	result := &corev1.ConfigMap{}
+	if err := remote2.GetClient().Get(context.Background(), client.ObjectKey{Name: "unique-cm", Namespace: "default"}, result); err != nil {
+		t.Errorf("expected object on remote2: %v", err)
+	}
+}
+
+func TestClient_Create_NilMonitorSafe(t *testing.T) {
+	scheme := newTestScheme(t)
+	existing := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "dup-cm", Namespace: "default"},
+	}
+	homeCluster := newFakeCluster(scheme)
+	remote1 := newFakeCluster(scheme, existing)
+	remote2 := newFakeCluster(scheme)
+
+	// No Monitor set — recording the conflict must not panic.
+	c := &Client{
+		HomeCluster: homeCluster,
+		HomeScheme:  scheme,
+		ResourceRouters: map[schema.GroupVersionKind]ResourceRouter{
+			configMapGVK: testRouter{},
+		},
+		remoteClusters: map[schema.GroupVersionKind][]remoteCluster{
+			configMapGVK: {
+				{cluster: remote1, labels: map[string]string{"az": "az-1"}},
+				{cluster: remote2, labels: map[string]string{"az": "az-2"}},
+			},
+		},
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "dup-cm",
+			Namespace: "default",
+			Labels:    map[string]string{"az": "az-2"},
+		},
+	}
+	err := c.Create(context.Background(), cm)
+	if !IsDuplicateError(err) {
+		t.Errorf("expected duplicate error, got %v", err)
 	}
 }
 

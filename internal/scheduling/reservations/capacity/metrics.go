@@ -9,6 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -31,6 +32,7 @@ type Monitor struct {
 	freeCapacityGiB            *prometheus.GaugeVec
 	exclusivelyFreeCapacityGiB *prometheus.GaugeVec
 	exclusivelyFreeSlots       *prometheus.GaugeVec
+	readyGauge                 *prometheus.GaugeVec
 }
 
 // NewMonitor creates a new Monitor that reads FlavorGroupCapacity CRDs.
@@ -77,6 +79,10 @@ func NewMonitor(c client.Client) Monitor {
 			Name: "cortex_committed_resource_exclusively_free_slots",
 			Help: "Number of smallest-flavor VM slots available after the cross-group capacity split.",
 		}, capacityFlavorLabels),
+		readyGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_committed_resource_capacity_ready",
+			Help: "1 if the FlavorGroupCapacity CRD is Ready (all scheduler probes succeeded), 0 otherwise.",
+		}, capacityLabels),
 	}
 }
 
@@ -92,6 +98,7 @@ func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
 	m.freeCapacityGiB.Describe(ch)
 	m.exclusivelyFreeCapacityGiB.Describe(ch)
 	m.exclusivelyFreeSlots.Describe(ch)
+	m.readyGauge.Describe(ch)
 }
 
 // Collect implements prometheus.Collector — lists all FlavorGroupCapacity CRDs and exports gauges.
@@ -115,6 +122,7 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	m.freeCapacityGiB.Reset()
 	m.exclusivelyFreeCapacityGiB.Reset()
 	m.exclusivelyFreeSlots.Reset()
+	m.readyGauge.Reset()
 
 	for _, crd := range list.Items {
 		groupAZLabels := prometheus.Labels{
@@ -137,6 +145,12 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 			m.exclusivelyFreeCapacityGiB.With(groupAZFlavorLabels).Set(float64(qty.Value()) / (1024 * 1024 * 1024))
 		}
 		m.exclusivelyFreeSlots.With(groupAZFlavorLabels).Set(float64(crd.Status.ExclusivelyFreeSlots))
+
+		readyVal := 0.0
+		if apimeta.IsStatusConditionTrue(crd.Status.Conditions, v1alpha1.FlavorGroupCapacityConditionReady) {
+			readyVal = 1.0
+		}
+		m.readyGauge.With(groupAZLabels).Set(readyVal)
 
 		for _, f := range crd.Status.Flavors {
 			flavorLabels := prometheus.Labels{
@@ -161,4 +175,5 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	m.freeCapacityGiB.Collect(ch)
 	m.exclusivelyFreeCapacityGiB.Collect(ch)
 	m.exclusivelyFreeSlots.Collect(ch)
+	m.readyGauge.Collect(ch)
 }

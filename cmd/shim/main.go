@@ -17,6 +17,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
+	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/sapcc/go-bits/httpext"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -50,10 +51,34 @@ func init() {
 	utilruntime.Must(hv1.AddToScheme(scheme))      // Hypervisor crd
 }
 
+// UserAgentConfig identifies this cortex deployment to the services it talks
+// to. Rendered by helm from the release name and chart version.
+type UserAgentConfig struct {
+	// Component is the service name, e.g. "cortex-nova".
+	Component string `json:"component,omitempty"`
+	// Version is the deployed version, e.g. "sha-70af93a8".
+	Version string `json:"version,omitempty"`
+}
+
+type MainConfig struct {
+	// User-Agent sent with all outgoing HTTP requests.
+	UserAgent UserAgentConfig `json:"userAgent,omitempty"`
+}
+
 func main() {
 	ctx := ctrl.SetupSignalHandler()
 
+	mainConfig := conf.GetConfigOrDie[MainConfig]()
 	restConfig := ctrl.GetConfigOrDie()
+
+	// Identify this cortex deployment to the services it talks to via the
+	// User-Agent header, before any HTTP requests are made. The shared
+	// http.DefaultTransport covers http.DefaultClient and any http.Client
+	// without its own transport; SSO clients build their own transport and
+	// are handled separately by pkg/sso.
+	httpext.WrapTransport(&http.DefaultTransport).
+		SetOverrideUserAgent(mainConfig.UserAgent.Component, mainConfig.UserAgent.Version)
+	sso.SetUserAgent(mainConfig.UserAgent.Component, mainConfig.UserAgent.Version)
 
 	var metricsAddr string
 	var apiBindAddr string
@@ -260,6 +285,7 @@ func main() {
 	// This is useful to distinguish metrics from different deployments.
 	metricsConfig := conf.GetConfigOrDie[monitoring.Config]()
 	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, metricsConfig)
+	metrics.Registry.MustRegister(multiclusterClient.Monitor)
 
 	// API endpoint.
 	mux := http.NewServeMux()
@@ -335,6 +361,7 @@ func setupMulticlusterClient(ctx context.Context, mgr manager.Manager, restConfi
 		HomeRestConfig:  restConfig,
 		HomeScheme:      scheme,
 		ResourceRouters: multicluster.DefaultResourceRouters,
+		Monitor:         multicluster.NewMonitor("cortex_"),
 	}
 	mclConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
 	if err := mcl.InitFromConf(ctx, mgr, mclConfig); err != nil {

@@ -138,6 +138,7 @@ cortex-scheduling-controllers:
         component: nova-scheduling
     enabledControllers:
       - nova-pipeline-controllers
+      - inflight-reservation-controller
       - nova-deschedulings-executor
       - hypervisor-overcommit-controller
       - committed-resource-reservations-controller

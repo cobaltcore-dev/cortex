@@ -1,5 +1,248 @@
 # Changelog
 
+## 2026-08-03 — [#1114](https://github.com/cobaltcore-dev/cortex/pull/1114)
+
+### cortex v0.3.5 (sha-684e0b07)
+
+Non-breaking changes:
+- Support comma-separated and prefixed tenant ids in aggregate filter — the `filter_aggregate_metadata` filter now splits `filter_tenant_id` values on commas and matches any metadata key with the `filter_tenant_id` prefix (e.g. `filter_tenant_id1`, `filter_tenant_id2`), unioning all values into the allowed project set ([#1103](https://github.com/cobaltcore-dev/cortex/pull/1103))
+- Return more information on 500 in external scheduler call — improves error reporting when external scheduler API calls fail with HTTP 500, now including the response body in the error message ([#1104](https://github.com/cobaltcore-dev/cortex/pull/1104))
+- Send image type in failover requests — failover reservation scheduling now includes the image type in scheduling requests ([#1105](https://github.com/cobaltcore-dev/cortex/pull/1105))
+- Add az to failover reservation CRD name — failover reservation names now include the availability zone for uniqueness ([#1106](https://github.com/cobaltcore-dev/cortex/pull/1106))
+- Guard multicluster Create against cross-cluster name collisions — `Create` now performs a best-effort cross-cluster existence check before writing and returns a duplicate error instead of creating a colliding object. Adds a `cortex_multicluster_cross_cluster_name_conflicts_total` Prometheus counter and corresponding alerts ([#1097](https://github.com/cobaltcore-dev/cortex/pull/1097))
+- Fix incorrect pipeline names and default interval in failover doc ([#1064](https://github.com/cobaltcore-dev/cortex/pull/1064))
+- Update `github.com/sapcc/go-bits` ([#1101](https://github.com/cobaltcore-dev/cortex/pull/1101), [#1107](https://github.com/cobaltcore-dev/cortex/pull/1107))
+- Update `github.com/mattn/go-sqlite3` to v1.14.49 ([#1102](https://github.com/cobaltcore-dev/cortex/pull/1102))
+- Update `kube-prometheus-stack` to v87.21.0 ([#1096](https://github.com/cobaltcore-dev/cortex/pull/1096), [#1099](https://github.com/cobaltcore-dev/cortex/pull/1099))
+- Update `actions/stale` to v11 ([#1100](https://github.com/cobaltcore-dev/cortex/pull/1100))
+
+### cortex-shim v0.1.11 (sha-c325b29e)
+
+Includes updated image sha-c325b29e with dependency updates.
+
+### cortex-nova v0.0.85
+
+Includes updated chart cortex v0.3.5.
+
+### cortex-cinder v0.0.85
+
+Includes updated chart cortex v0.3.5.
+
+### cortex-manila v0.0.85
+
+Includes updated chart cortex v0.3.5.
+
+### cortex-crds v0.0.85
+
+Includes updated chart cortex v0.3.5.
+
+### cortex-ironcore v0.0.85
+
+Includes updated chart cortex v0.3.5.
+
+### cortex-pods v0.0.85
+
+Includes updated chart cortex v0.3.5.
+
+### cortex-placement-shim v0.1.11
+
+Includes updated chart cortex-shim v0.1.11.
+
+## 2026-07-27 — [#1093](https://github.com/cobaltcore-dev/cortex/pull/1093)
+
+### cortex v0.3.4 (sha-4f44f3b7)
+
+Bug fixes:
+- Deep-copy capacity map to prevent informer cache corruption — the capacity filter assigned hypervisor Status.Capacity map references directly into a local working map, then mutated those maps during free-resource calculations. Since the maps are shared with the controller-runtime informer cache, each scheduling pass permanently decremented cached capacity values, progressively starving scheduling until all hosts appeared full ([#1065](https://github.com/cobaltcore-dev/cortex/pull/1065))
+- Reset gauge metrics in reservation monitor to prevent stale values — adds `Reset()` calls on `numberOfReservations` and `reservedResources` GaugeVecs before repopulating in `Collect`, preventing stale label combinations from persisting when reservations are deleted or change status ([#1092](https://github.com/cobaltcore-dev/cortex/pull/1092))
+- Stop committed resource controller reconcile storm — `setAccepted` unconditionally wrote a new AcceptedAt timestamp and a time-varying StatusSummary on every call, causing a non-empty status patch even when the CR was already accepted. Adds an early-return guard that skips the patch when Ready=True/Accepted is already set for the current generation ([#1089](https://github.com/cobaltcore-dev/cortex/pull/1089))
+
+Non-breaking changes:
+- Add History CRD documentation and multicluster guide link ([#1091](https://github.com/cobaltcore-dev/cortex/pull/1091))
+- Update `github.com/prometheus/client_golang` to v1.24.1 ([#1090](https://github.com/cobaltcore-dev/cortex/pull/1090))
+- Update `k8s.io/api`, `k8s.io/apimachinery`, `k8s.io/client-go` to v0.36.3 ([#1086](https://github.com/cobaltcore-dev/cortex/pull/1086))
+- Update `github.com/sapcc/go-bits` ([#1085](https://github.com/cobaltcore-dev/cortex/pull/1085))
+- Update `kube-prometheus-stack` to 87.19.2 ([#1090](https://github.com/cobaltcore-dev/cortex/pull/1090))
+
+### cortex-shim v0.1.10 (sha-51c773d9)
+
+Includes updated image sha-51c773d9 with dependency updates.
+
+### cortex-nova v0.0.84
+
+Includes updated chart cortex v0.3.4.
+
+### cortex-cinder v0.0.84
+
+Includes updated chart cortex v0.3.4.
+
+### cortex-manila v0.0.84
+
+Includes updated chart cortex v0.3.4.
+
+### cortex-crds v0.0.84
+
+Includes updated chart cortex v0.3.4.
+
+### cortex-ironcore v0.0.84
+
+Includes updated chart cortex v0.3.4.
+
+### cortex-pods v0.0.84
+
+Includes updated chart cortex v0.3.4.
+
+### cortex-placement-shim v0.1.10
+
+Includes updated chart cortex-shim v0.1.10.
+
+## 2026-07-23 — [#1080](https://github.com/cobaltcore-dev/cortex/pull/1080)
+
+### cortex v0.3.3 (sha-4eba8400)
+
+Non-breaking changes:
+- Skip image property filtering for internal scheduling intents — the FilterImageProperties Nova scheduling filter now skips image-property-based filtering for Cortex-internal intents (reserve_for_failover, reuse_failover_reservation, reserve_for_committed_resource, capacity_probe) which schedule based on flavor metadata independent of the image ([#1078](https://github.com/cobaltcore-dev/cortex/pull/1078))
+- Bump `google.golang.org/grpc` from 1.82.0 to 1.82.1 — security patch addressing HTTP/2 flood protection and xds/rbac fixes ([#1079](https://github.com/cobaltcore-dev/cortex/pull/1079))
+
+### cortex-shim v0.1.9 (sha-378ee2f5)
+
+Includes updated image sha-378ee2f5.
+
+### cortex-postgres v0.6.11 (sha-e06153f8)
+
+Includes updated image sha-e06153f8.
+
+### cortex-nova v0.0.83
+
+Includes updated charts cortex v0.3.3, cortex-postgres v0.6.11.
+
+### cortex-cinder v0.0.83
+
+Includes updated charts cortex v0.3.3, cortex-postgres v0.6.11.
+
+### cortex-manila v0.0.83
+
+Includes updated charts cortex v0.3.3, cortex-postgres v0.6.11.
+
+### cortex-crds v0.0.83
+
+Includes updated chart cortex v0.3.3.
+
+### cortex-ironcore v0.0.83
+
+Includes updated chart cortex v0.3.3.
+
+### cortex-pods v0.0.83
+
+Includes updated chart cortex v0.3.3.
+
+### cortex-placement-shim v0.1.9
+
+Includes updated chart cortex-shim v0.1.9.
+
+## 2026-07-22 — [#1068](https://github.com/cobaltcore-dev/cortex/pull/1068)
+
+### cortex v0.3.2 (sha-378ee2f5)
+
+Non-breaking changes:
+- Filter KVM hypervisors for non-KVM images — adds a new Nova scheduler filter that removes KVM hypervisors from scheduling candidates when the image declares a non-KVM hypervisor type ([#1067](https://github.com/cobaltcore-dev/cortex/pull/1067))
+- Improve FlavorGroupCapacity CRD observability with better metrics and status reporting ([#942](https://github.com/cobaltcore-dev/cortex/pull/942))
+- Protect pipeline maps with RWMutex to prevent concurrent map read/write data race ([#1066](https://github.com/cobaltcore-dev/cortex/pull/1066))
+- Fix broken relative links in quickstart and develop docs ([#1063](https://github.com/cobaltcore-dev/cortex/pull/1063))
+- Update `actions/setup-go` to v7 ([#1049](https://github.com/cobaltcore-dev/cortex/pull/1049))
+- Update `actions/setup-python` to v7 ([#1062](https://github.com/cobaltcore-dev/cortex/pull/1062))
+- Update `github.com/sapcc/go-bits` ([#1059](https://github.com/cobaltcore-dev/cortex/pull/1059), [#1071](https://github.com/cobaltcore-dev/cortex/pull/1071), [#1074](https://github.com/cobaltcore-dev/cortex/pull/1074))
+- Update external dependencies: `actions/checkout` v7.0.1, `go-logr/logr` v1.4.4, `prometheus/client_golang` v1.24.0 ([#1072](https://github.com/cobaltcore-dev/cortex/pull/1072))
+
+### cortex-shim v0.1.8 (sha-378ee2f5)
+
+Includes updated image sha-378ee2f5.
+
+### cortex-postgres v0.6.10 (sha-e06153f8)
+
+Includes updated image sha-e06153f8.
+
+### cortex-nova v0.0.82
+
+Includes updated charts cortex v0.3.2, cortex-postgres v0.6.10.
+
+- Add alert for missing hypervisor properties and KVM pipeline registration ([#1067](https://github.com/cobaltcore-dev/cortex/pull/1067))
+- Update `kube-prometheus-stack` to v87.19.0 ([#1061](https://github.com/cobaltcore-dev/cortex/pull/1061), [#1075](https://github.com/cobaltcore-dev/cortex/pull/1075))
+
+### cortex-cinder v0.0.82
+
+Includes updated charts cortex v0.3.2, cortex-postgres v0.6.10.
+
+### cortex-manila v0.0.82
+
+Includes updated charts cortex v0.3.2, cortex-postgres v0.6.10.
+
+### cortex-crds v0.0.82
+
+Includes updated chart cortex v0.3.2.
+
+### cortex-ironcore v0.0.82
+
+Includes updated chart cortex v0.3.2.
+
+### cortex-pods v0.0.82
+
+Includes updated chart cortex v0.3.2.
+
+### cortex-placement-shim v0.1.8
+
+Includes updated chart cortex-shim v0.1.8.
+
+## 2026-07-16 — [#1051](https://github.com/cobaltcore-dev/cortex/pull/1051)
+
+### cortex v0.3.1 (sha-fc47858e)
+
+Non-breaking changes:
+- Add configurable HTTP User-Agent for service identity in SSO/HTTP client layer ([#1045](https://github.com/cobaltcore-dev/cortex/pull/1045))
+- Enhance multicluster client 'no cluster matched' error log messages with richer diagnostic context ([#1043](https://github.com/cobaltcore-dev/cortex/pull/1043))
+- Account for CPU & memory as a binding constraint in slot counting ([#1044](https://github.com/cobaltcore-dev/cortex/pull/1044))
+- Persist pipeline results before history upsert to prevent data loss on error ([#1047](https://github.com/cobaltcore-dev/cortex/pull/1047))
+- Fix broken CI workflows with large GitHub runner configuration ([#1050](https://github.com/cobaltcore-dev/cortex/pull/1050))
+- Add missing `SkipCommittedResourceTracking` to Options table and failover docs ([#1034](https://github.com/cobaltcore-dev/cortex/pull/1034))
+- Update external dependencies ([#1040](https://github.com/cobaltcore-dev/cortex/pull/1040), [#1032](https://github.com/cobaltcore-dev/cortex/pull/1032))
+
+### cortex-shim v0.1.7 (sha-7e36a65c)
+
+Includes updated image sha-7e36a65c.
+
+### cortex-postgres v0.6.9 (sha-e06153f8)
+
+Non-breaking changes:
+- Rebuild image to resolve CVEs ([#1033](https://github.com/cobaltcore-dev/cortex/pull/1033))
+
+### cortex-nova v0.0.81
+
+Includes updated charts cortex v0.3.1, cortex-postgres v0.6.9.
+
+### cortex-cinder v0.0.81
+
+Includes updated charts cortex v0.3.1, cortex-postgres v0.6.9.
+
+### cortex-manila v0.0.81
+
+Includes updated charts cortex v0.3.1, cortex-postgres v0.6.9.
+
+### cortex-crds v0.0.81
+
+Includes updated chart cortex v0.3.1.
+
+### cortex-ironcore v0.0.81
+
+Includes updated chart cortex v0.3.1.
+
+### cortex-pods v0.0.81
+
+Includes updated chart cortex v0.3.1.
+
+### cortex-placement-shim v0.1.7
+
+Includes updated chart cortex-shim v0.1.7.
+
 ## 2026-07-13 — [#1036](https://github.com/cobaltcore-dev/cortex/pull/1036)
 
 ### cortex v0.3.0 (sha-ee9cd485)

@@ -68,6 +68,9 @@ func (s *FilterInstanceGroupAntiAffinityStep) Run(
 	}
 	hvsByName := make(map[string]hv1.Hypervisor)
 	for _, hv := range hvs.Items {
+		if _, ok := result.Activations[hv.Name]; !ok {
+			continue
+		}
 		hvsByName[hv.Name] = hv
 	}
 

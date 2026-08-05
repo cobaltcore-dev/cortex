@@ -29,11 +29,12 @@ var supportedKPIs = map[string]plugins.KPI{
 
 	"netapp_storage_pool_cpu_usage_kpi": &storage.NetAppStoragePoolCPUUsageKPI{},
 
-	"datasource_state_kpi": &deployment.DatasourceStateKPI{},
-	"knowledge_state_kpi":  &deployment.KnowledgeStateKPI{},
-	"decision_state_kpi":   &deployment.DecisionStateKPI{},
-	"kpi_state_kpi":        &deployment.KPIStateKPI{},
-	"pipeline_state_kpi":   &deployment.PipelineStateKPI{},
+	"datasource_state_kpi":  &deployment.DatasourceStateKPI{},
+	"knowledge_state_kpi":   &deployment.KnowledgeStateKPI{},
+	"decision_state_kpi":    &deployment.DecisionStateKPI{},
+	"kpi_state_kpi":         &deployment.KPIStateKPI{},
+	"pipeline_state_kpi":    &deployment.PipelineStateKPI{},
+	"reservation_state_kpi": &deployment.ReservationStateKPI{},
 
 	"multicluster_object_count_kpi": &deployment.MulticlusterObjectCountKPI{},
 }

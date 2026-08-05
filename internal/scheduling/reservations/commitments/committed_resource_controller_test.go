@@ -1165,3 +1165,52 @@ func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 		})
 	}
 }
+
+func TestCommittedResourceController_SetAcceptedIdempotent(t *testing.T) {
+	// Reconciling an already-accepted cores CR must not patch the status again.
+	// Without the idempotency guard, every reconcile writes a new AcceptedAt timestamp,
+	// which triggers the self-watch and causes a reconcile storm.
+	scheme := newCRTestScheme(t)
+	cr := newTestCoresCR("test-cr", v1alpha1.CommitmentStatusConfirmed, 4, false)
+	cr.Generation = 1
+	fgc := newTestFlavorGroupCapacity("test-group", "test-az", 16)
+	k8sClient := newCRTestClient(scheme, cr, fgc)
+
+	controller := &CommittedResourceController{
+		Client: k8sClient,
+		Scheme: scheme,
+		Conf:   CommittedResourceControllerConfig{RequeueIntervalRetry: metav1.Duration{Duration: 1 * time.Minute}},
+	}
+
+	// First reconcile: CR transitions to Accepted and status is written.
+	if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
+		t.Fatalf("first reconcile: %v", err)
+	}
+	assertCondition(t, k8sClient, cr.Name, metav1.ConditionTrue, v1alpha1.CommittedResourceReasonAccepted)
+
+	var after1 v1alpha1.CommittedResource
+	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: cr.Name}, &after1); err != nil {
+		t.Fatalf("get after first reconcile: %v", err)
+	}
+	cond := meta.FindStatusCondition(after1.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+	if cond == nil {
+		t.Fatalf("Ready condition not set after first reconcile")
+	}
+	if cond.ObservedGeneration != 1 {
+		t.Errorf("ObservedGeneration: want 1, got %d", cond.ObservedGeneration)
+	}
+	rv1 := after1.ResourceVersion
+
+	// Second reconcile: CR is already accepted — must not patch status.
+	if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
+		t.Fatalf("second reconcile: %v", err)
+	}
+
+	var after2 v1alpha1.CommittedResource
+	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: cr.Name}, &after2); err != nil {
+		t.Fatalf("get after second reconcile: %v", err)
+	}
+	if after2.ResourceVersion != rv1 {
+		t.Errorf("ResourceVersion changed on second reconcile (%s → %s): status was patched unnecessarily", rv1, after2.ResourceVersion)
+	}
+}

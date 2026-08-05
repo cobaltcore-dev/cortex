@@ -33,6 +33,9 @@ func (s *FilterHasAcceleratorsStep) Run(traceLog *slog.Logger, request api.Exter
 	}
 	hvsWithTrait := make(map[string]struct{})
 	for _, hv := range hvs.Items {
+		if _, ok := result.Activations[hv.Name]; !ok {
+			continue
+		}
 		traits := hv.Status.Traits
 		traits = append(traits, hv.Spec.CustomTraits...)
 		if !slices.Contains(traits, "COMPUTE_ACCELERATORS") {
