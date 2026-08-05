@@ -7,8 +7,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -446,7 +448,7 @@ func newTestCRReservation(allocations map[string]metav1.Time) *v1alpha1.Reservat
 
 // newTestHypervisorCRD creates a test Hypervisor CRD with instances.
 //
-//nolint:unparam // name parameter allows future test flexibility
+
 func newTestHypervisorCRD(name string, instances []hv1.Instance) *hv1.Hypervisor {
 	return &hv1.Hypervisor{
 		ObjectMeta: metav1.ObjectMeta{
@@ -978,6 +980,238 @@ func TestCommitmentReservationController_DomainNameHint(t *testing.T) {
 			gotIntent, err := captured.Spec.Data.GetSchedulerHintStr("_nova_check_type")
 			if err != nil || gotIntent != string(schedulerdelegationapi.ReserveForCommittedResourceIntent) {
 				t.Errorf("expected _nova_check_type=%q, got %q (err=%v)", schedulerdelegationapi.ReserveForCommittedResourceIntent, gotIntent, err)
+			}
+		})
+	}
+}
+
+// ============================================================================
+// Tests: live migration detection in reconcileAllocations
+// ============================================================================
+
+// newHVWithCapacity creates a Hypervisor CRD with the given instances and effective capacity.
+func newHVWithCapacity(name string, memGiB, cpuCores int64, instances []hv1.Instance) *hv1.Hypervisor {
+	return &hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Status: hv1.HypervisorStatus{
+			EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dGi", memGiB)),
+				hv1.ResourceCPU:    resource.MustParse(strconv.FormatInt(cpuCores, 10)),
+			},
+			Instances: instances,
+		},
+	}
+}
+
+// newConfirmedCRReservation creates a ready CR reservation with one confirmed VM on host.
+// slotMemGiB/slotCPU define the full reservation slot; vmMemGiB/vmCPU define what the VM
+// actually consumes — these may be smaller, leaving an unfilled remainder in the slot.
+func newConfirmedCRReservation(name, host, vmUUID string, slotMemGiB, slotCPU, vmMemGiB, vmCPU int64) *v1alpha1.Reservation {
+	return &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec: v1alpha1.ReservationSpec{
+			Type:       v1alpha1.ReservationTypeCommittedResource,
+			TargetHost: host,
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dGi", slotMemGiB)),
+				hv1.ResourceCPU:    resource.MustParse(strconv.FormatInt(slotCPU, 10)),
+			},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				ProjectID:    "test-project",
+				ResourceName: "test-flavor",
+				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+					vmUUID: {
+						CreationTimestamp: metav1.NewTime(time.Now().Add(-1 * time.Hour)),
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dGi", vmMemGiB)),
+							hv1.ResourceCPU:    resource.MustParse(strconv.FormatInt(vmCPU, 10)),
+						},
+					},
+				},
+			},
+		},
+		Status: v1alpha1.ReservationStatus{
+			Host: host,
+			Conditions: []metav1.Condition{
+				{Type: v1alpha1.ReservationConditionReady, Status: metav1.ConditionTrue, Reason: "ReservationActive"},
+			},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
+				Allocations: map[string]string{vmUUID: host},
+			},
+		},
+	}
+}
+
+func TestReconcileAllocations_LiveMigration(t *testing.T) {
+	const (
+		vmUUID  = "vm-uuid"
+		vm2UUID = "vm-uuid-2"
+		oldHost = "host-old"
+		newHost = "host-new"
+	)
+
+	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
+
+	tests := []struct {
+		name string
+		// reservation to use; nil uses the default single-VM reservation
+		reservation *v1alpha1.Reservation
+		// extra objects beyond the base reservation and old host HV
+		extraObjects []client.Object
+		// expected outcomes after first reconcile pass
+		wantTargetHost string
+		wantStatusHost string // expected in Status.Allocations[vmUUID]; "" means absent
+		wantSpecHasVM  bool
+		// if true, run a second reconcile pass and assert state is stable
+		assertSecondPass bool
+	}{
+		{
+			name: "single VM, new host has capacity: follow the VM",
+			extraObjects: []client.Object{
+				newHVWithCapacity(newHost, 960, 80, []hv1.Instance{{ID: vmUUID, Active: true}}),
+			},
+			wantTargetHost:   newHost,
+			wantStatusHost:   newHost,
+			wantSpecHasVM:    true,
+			assertSecondPass: true,
+		},
+		{
+			name: "single VM, new host at capacity: remove VM, slot stays on old host",
+			extraObjects: []client.Object{
+				// VM (240Gi/20) running on newHost; a full-slot blocker leaves no room for
+				// the 240Gi/20 slot remainder.
+				newHVWithCapacity(newHost, 480, 40, []hv1.Instance{{ID: vmUUID, Active: true}}),
+				&v1alpha1.Reservation{
+					ObjectMeta: metav1.ObjectMeta{Name: "res-blocker"},
+					Spec: v1alpha1.ReservationSpec{
+						Type:       v1alpha1.ReservationTypeCommittedResource,
+						TargetHost: newHost,
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceMemory: resource.MustParse("480Gi"),
+							hv1.ResourceCPU:    resource.MustParse("40"),
+						},
+					},
+					Status: v1alpha1.ReservationStatus{Host: newHost},
+				},
+			},
+			wantTargetHost: oldHost,
+			wantStatusHost: "",
+			wantSpecHasVM:  false,
+		},
+		{
+			name: "multiple VMs, one migrated: remove migrated VM, never update TargetHost",
+			reservation: func() *v1alpha1.Reservation {
+				res := newConfirmedCRReservation("res-1", oldHost, vmUUID, 480, 40, 240, 20)
+				// Add a second VM confirmed on oldHost.
+				res.Spec.CommittedResourceReservation.Allocations[vm2UUID] = v1alpha1.CommittedResourceAllocation{
+					CreationTimestamp: metav1.NewTime(time.Now().Add(-1 * time.Hour)),
+					Resources: map[hv1.ResourceName]resource.Quantity{
+						hv1.ResourceMemory: resource.MustParse("240Gi"),
+						hv1.ResourceCPU:    resource.MustParse("20"),
+					},
+				}
+				res.Status.CommittedResourceReservation.Allocations[vm2UUID] = oldHost
+				return res
+			}(),
+			extraObjects: []client.Object{
+				// vmUUID has migrated to newHost with plenty of capacity; vm2UUID stays on oldHost.
+				// Supply oldHost HV explicitly so vm2UUID is present on it.
+				newTestHypervisorCRD(oldHost, []hv1.Instance{{ID: vm2UUID, Active: true}}),
+				newHVWithCapacity(newHost, 960, 80, []hv1.Instance{{ID: vmUUID, Active: true}}),
+			},
+			wantTargetHost: oldHost,
+			wantStatusHost: "",
+			wantSpecHasVM:  false,
+		},
+		{
+			name:           "VM gone from all hosts: remove allocation",
+			extraObjects:   []client.Object{newTestHypervisorCRD("host-other", []hv1.Instance{{ID: "other-vm"}})},
+			wantTargetHost: oldHost,
+			wantStatusHost: "",
+			wantSpecHasVM:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := newCRTestScheme(t)
+
+			res := tt.reservation
+			if res == nil {
+				res = newConfirmedCRReservation("res-1", oldHost, vmUUID, 480, 40, 240, 20)
+			}
+
+			var objects []client.Object
+			objects = append(objects, res)
+
+			// Add an oldHost HV unless the test provides its own via extraObjects.
+			addsOldHostHV := false
+			for _, obj := range tt.extraObjects {
+				if hv, ok := obj.(*hv1.Hypervisor); ok && hv.Name == oldHost {
+					addsOldHostHV = true
+					break
+				}
+			}
+			if !addsOldHostHV {
+				objects = append(objects, newTestHypervisorCRD(oldHost, []hv1.Instance{}))
+			}
+			objects = append(objects, tt.extraObjects...)
+
+			k8sClient := newCRTestClient(scheme, objects...)
+			controller := &CommitmentReservationController{Client: k8sClient, Scheme: scheme, Conf: config}
+			ctx := WithNewGlobalRequestID(context.Background())
+
+			if _, err := controller.reconcileAllocations(ctx, res); err != nil {
+				t.Fatalf("reconcileAllocations() error = %v", err)
+			}
+
+			var updated v1alpha1.Reservation
+			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(res), &updated); err != nil {
+				t.Fatalf("failed to get updated reservation: %v", err)
+			}
+
+			if updated.Spec.TargetHost != tt.wantTargetHost {
+				t.Errorf("Spec.TargetHost = %q, want %q", updated.Spec.TargetHost, tt.wantTargetHost)
+			}
+			_, specHasVM := updated.Spec.CommittedResourceReservation.Allocations[vmUUID]
+			if specHasVM != tt.wantSpecHasVM {
+				t.Errorf("VM in Spec.Allocations = %v, want %v", specHasVM, tt.wantSpecHasVM)
+			}
+			var statusHost string
+			if updated.Status.CommittedResourceReservation != nil {
+				statusHost = updated.Status.CommittedResourceReservation.Allocations[vmUUID]
+			}
+			if statusHost != tt.wantStatusHost {
+				t.Errorf("Status.Allocations[%s] = %q, want %q", vmUUID, statusHost, tt.wantStatusHost)
+			}
+
+			// For the migration-follow case: run a second reconcile to confirm state is
+			// stable and Status.Host was advanced to the new host in the first pass.
+			if tt.assertSecondPass {
+				if _, err := controller.reconcileAllocations(ctx, &updated); err != nil {
+					t.Fatalf("second reconcileAllocations() error = %v", err)
+				}
+				var updated2 v1alpha1.Reservation
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(res), &updated2); err != nil {
+					t.Fatalf("failed to get reservation after second pass: %v", err)
+				}
+				if updated2.Spec.TargetHost != tt.wantTargetHost {
+					t.Errorf("second pass: Spec.TargetHost = %q, want %q", updated2.Spec.TargetHost, tt.wantTargetHost)
+				}
+				if updated2.Status.Host != tt.wantTargetHost {
+					t.Errorf("second pass: Status.Host = %q, want %q", updated2.Status.Host, tt.wantTargetHost)
+				}
+				_, specHasVM2 := updated2.Spec.CommittedResourceReservation.Allocations[vmUUID]
+				if !specHasVM2 {
+					t.Errorf("second pass: VM unexpectedly removed from Spec.Allocations")
+				}
+				var statusHost2 string
+				if updated2.Status.CommittedResourceReservation != nil {
+					statusHost2 = updated2.Status.CommittedResourceReservation.Allocations[vmUUID]
+				}
+				if statusHost2 != tt.wantStatusHost {
+					t.Errorf("second pass: Status.Allocations[%s] = %q, want %q", vmUUID, statusHost2, tt.wantStatusHost)
+				}
 			}
 		})
 	}

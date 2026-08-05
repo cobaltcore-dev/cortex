@@ -238,10 +238,10 @@ func (c *Reconciler) reconcileAll(ctx context.Context) error {
 
 	azs := availabilityZones(hvList.Items)
 
-	blockedByReservations, err := c.blockedMemoryByHost(ctx)
+	blockedByReservations, err := c.blockedResourcesByHost(ctx)
 	if err != nil {
-		logger.Error(err, "failed to compute blocked memory by host, placeable slot counts may be overstated")
-		blockedByReservations = map[string]int64{}
+		logger.Error(err, "failed to compute blocked resources by host, placeable slot counts may be overstated")
+		blockedByReservations = map[string]map[string]int64{}
 	}
 
 	usageByKey := c.computeVMUsage(ctx, flavorGroups, hvList.Items)
@@ -320,9 +320,10 @@ func (c *Reconciler) computeVMUsage(
 }
 
 // hvRemainingResources returns remaining schedulable resources after subtracting
-// current allocations and (for memory) active reservation blocks.
+// current allocations and active reservation blocks.
+// blockedResources uses ResourceMemory/ResourceCores keys.
 // Returns nil if the hypervisor has no capacity data.
-func hvRemainingResources(hv hv1.Hypervisor, blockedMemBytes int64) map[string]int64 {
+func hvRemainingResources(hv hv1.Hypervisor, blockedResources map[string]int64) map[string]int64 {
 	effCap := hv.Status.EffectiveCapacity
 	if effCap == nil {
 		effCap = hv.Status.Capacity
@@ -338,7 +339,7 @@ func hvRemainingResources(hv hv1.Hypervisor, blockedMemBytes int64) map[string]i
 		if alloc, ok := hv.Status.Allocation[hv1.ResourceMemory]; ok {
 			mem -= alloc.Value()
 		}
-		mem -= blockedMemBytes
+		mem -= blockedResources[ResourceMemory]
 		if mem < 0 {
 			mem = 0
 		}
@@ -350,6 +351,7 @@ func hvRemainingResources(hv hv1.Hypervisor, blockedMemBytes int64) map[string]i
 		if alloc, ok := hv.Status.Allocation[hv1.ResourceCPU]; ok {
 			cpu -= alloc.Value()
 		}
+		cpu -= blockedResources[ResourceCores]
 		if cpu < 0 {
 			cpu = 0
 		}
@@ -367,7 +369,7 @@ func (c *Reconciler) probeGroup(
 	groupData compute.FlavorGroupFeature,
 	az string,
 	hvByName map[string]hv1.Hypervisor,
-	blockedByReservations map[string]int64,
+	blockedByReservations map[string]map[string]int64,
 ) (probeGroupResult, error) {
 
 	logger := LoggerFromContext(ctx)
@@ -445,7 +447,7 @@ func (c *Reconciler) probeGroup(
 func buildSplitInputs(
 	results []probeGroupResult,
 	hvByName map[string]hv1.Hypervisor,
-	blockedByReservations map[string]int64,
+	blockedByReservations map[string]map[string]int64,
 	az string,
 	logger logr.Logger,
 ) (groupInputs []GroupInput, hosts map[string]HostState) {
@@ -502,7 +504,7 @@ func (c *Reconciler) reconcileAZ(
 	az string,
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	hvByName map[string]hv1.Hypervisor,
-	blockedByReservations map[string]int64,
+	blockedByReservations map[string]map[string]int64,
 	usageByKey map[vmUsageKey]vmUsage,
 ) {
 
@@ -552,9 +554,14 @@ func (c *Reconciler) reconcileAZ(
 		}
 	}
 
-	// Write one CRD per group. Skip groups with failed probes — their CRDs retain last good state.
+	// Write one CRD per group. For groups with failed probes, mark Ready=False so the
+	// capacity API can detect staleness and return 5xx rather than serving stale data silently.
 	for _, r := range results {
 		if !r.allFresh {
+			if err := c.markCRDNotReady(ctx, r.groupName, az); err != nil {
+				logger.Error(err, "failed to mark FlavorGroupCapacity CRD not-ready",
+					"flavorGroup", r.groupName, "az", az)
+			}
 			continue
 		}
 		if err := c.writeCRD(ctx, r.groupName, r.groupData, az,
@@ -667,6 +674,32 @@ func (c *Reconciler) writeCRD(
 	return nil
 }
 
+// markCRDNotReady sets Ready=False on an existing FlavorGroupCapacity CRD without touching
+// any other status fields, preserving the last-known capacity values for operator inspection.
+// If the CRD does not exist yet it is a no-op.
+func (c *Reconciler) markCRDNotReady(ctx context.Context, groupName, az string) error {
+	crdName := crdNameFor(groupName, az)
+	var existing v1alpha1.FlavorGroupCapacity
+	if err := c.client.Get(ctx, types.NamespacedName{Name: crdName}, &existing); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to get FlavorGroupCapacity %s: %w", crdName, err)
+	}
+	patch := client.MergeFrom(existing.DeepCopy())
+	meta.SetStatusCondition(&existing.Status.Conditions, metav1.Condition{
+		Type:               v1alpha1.FlavorGroupCapacityConditionReady,
+		ObservedGeneration: existing.Generation,
+		Status:             metav1.ConditionFalse,
+		Reason:             "ReconcileFailed",
+		Message:            "one or more scheduler probes failed; capacity data may be stale",
+	})
+	if err := c.client.Status().Patch(ctx, &existing, patch); err != nil {
+		return fmt.Errorf("failed to patch FlavorGroupCapacity %s status: %w", crdName, err)
+	}
+	return nil
+}
+
 // probeScheduler calls the scheduler and returns slot count, host count, and candidate host names.
 // ignoreAllocations=true (total probe) uses raw effective capacity; false (placeable probe) subtracts allocations.
 func (c *Reconciler) probeScheduler(
@@ -675,7 +708,7 @@ func (c *Reconciler) probeScheduler(
 	az, pipeline string,
 	hvByName map[string]hv1.Hypervisor,
 	ignoreAllocations bool,
-	blockedByReservations map[string]int64,
+	blockedByReservations map[string]map[string]int64,
 ) (capacity, hosts int64, candidateHosts []string, err error) {
 
 	flavorBytes := int64(flavor.MemoryMB) * 1024 * 1024 //nolint:gosec
@@ -762,15 +795,16 @@ func (c *Reconciler) probeScheduler(
 	return capacity, hosts, candidateHosts, nil
 }
 
-// blockedMemoryByHost returns total reservation-blocked bytes per host.
+// blockedResourcesByHost returns total reservation-blocked resources per host.
 // Both TargetHost and Status.Host are blocked; migration blocks both simultaneously.
-func (c *Reconciler) blockedMemoryByHost(ctx context.Context) (map[string]int64, error) {
+// The inner map uses ResourceMemory and ResourceCores keys.
+func (c *Reconciler) blockedResourcesByHost(ctx context.Context) (map[string]map[string]int64, error) {
 	var list v1alpha1.ReservationList
 	if err := c.client.List(ctx, &list); err != nil {
 		return nil, fmt.Errorf("failed to list reservations: %w", err)
 	}
 
-	blocked := make(map[string]int64)
+	blocked := make(map[string]map[string]int64)
 	for i := range list.Items {
 		res := &list.Items[i]
 
@@ -786,13 +820,16 @@ func (c *Reconciler) blockedMemoryByHost(ctx context.Context) (map[string]int64,
 		}
 
 		resourcesToBlock := reservations.UnusedReservationCapacity(res, false)
-		memQty, ok := resourcesToBlock[hv1.ResourceMemory]
-		if !ok {
-			continue
-		}
-		memBytes := memQty.Value()
 		for host := range hostsToBlock {
-			blocked[host] += memBytes
+			if blocked[host] == nil {
+				blocked[host] = make(map[string]int64)
+			}
+			if qty, ok := resourcesToBlock[hv1.ResourceMemory]; ok {
+				blocked[host][ResourceMemory] += qty.Value()
+			}
+			if qty, ok := resourcesToBlock[hv1.ResourceCPU]; ok {
+				blocked[host][ResourceCores] += qty.Value()
+			}
 		}
 	}
 	return blocked, nil

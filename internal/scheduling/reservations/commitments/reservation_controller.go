@@ -382,10 +382,16 @@ type reconcileAllocationsResult struct {
 // reconcileAllocations verifies all allocations in Spec against actual VM state using the
 // Hypervisor CRD as the sole source of truth.
 //
-// For new allocations (within grace period): the VM may not yet appear in the HV CRD
-// (still spawning), so we skip verification and requeue with a short interval.
-// For older allocations: we check the HV CRD; VMs not found are considered leaving and
-// removed from the reservation.
+// New allocations within the grace period are skipped — the VM may not yet appear in the
+// HV CRD while it is still spawning. Older allocations are verified; VMs no longer present
+// on their expected host are handled as follows:
+//
+// Live migration: when a confirmed VM is found on a different host, the reservation follows
+// it only when the reservation has exactly one allocated VM and the new host has capacity.
+// In all other cases (multiple VMs, or new host at capacity), the migrated VM is removed
+// from the reservation so the slot remains available for re-use on the original host.
+// Moving TargetHost when other VMs are present would cause those remaining VMs to appear
+// misplaced on the next reconcile cycle.
 func (r *CommitmentReservationController) reconcileAllocations(ctx context.Context, res *v1alpha1.Reservation) (*reconcileAllocationsResult, error) {
 	logger := LoggerFromContext(ctx)
 	result := &reconcileAllocationsResult{}
@@ -436,10 +442,36 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		existingStatusAllocations[k] = v
 	}
 
+	// allHVs and allReservations are fetched lazily — only needed when a confirmed VM is
+	// missing from its expected host and we need to scan for a live migration.
+	var allHVs *hv1.HypervisorList
+	var allReservations *v1alpha1.ReservationList
+
+	ensureHVsAndReservations := func() error {
+		if allHVs != nil && allReservations != nil {
+			return nil
+		}
+		hvs := &hv1.HypervisorList{}
+		if err := r.List(ctx, hvs); err != nil {
+			return fmt.Errorf("failed to list hypervisors: %w", err)
+		}
+		res := &v1alpha1.ReservationList{}
+		if err := r.List(ctx, res); err != nil {
+			return fmt.Errorf("failed to list reservations: %w", err)
+		}
+		allHVs = hvs
+		allReservations = res
+		return nil
+	}
+
 	// Build new Status.Allocations map based on HV CRD state.
 	newStatusAllocations := make(map[string]string)
 	// Track allocations to remove from Spec (stale/leaving VMs).
 	var allocationsToRemove []string
+
+	// migrationTargetHost is set when the reservation has exactly one VM, that VM
+	// live-migrated to a new host, and the new host has capacity.
+	migrationTargetHost := ""
 
 	for vmUUID, allocation := range res.Spec.CommittedResourceReservation.Allocations {
 		allocationAge := now.Sub(allocation.CreationTimestamp.Time)
@@ -464,7 +496,12 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 			logger.V(1).Info("verified VM allocation via Hypervisor CRD",
 				"vm", vmUUID,
 				"host", expectedHost)
-		} else {
+			continue
+		}
+
+		// VM not on the expected host. For unconfirmed post-grace VMs this is a clean
+		// stale allocation — remove it without further searching.
+		if !isConfirmed {
 			allocationsToRemove = append(allocationsToRemove, vmUUID)
 			logger.Info("removing stale allocation (VM not found on hypervisor)",
 				"vm", vmUUID,
@@ -472,6 +509,73 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 				"expectedHost", expectedHost,
 				"allocationAge", allocationAge,
 				"gracePeriod", r.Conf.AllocationGracePeriod.Duration)
+			continue
+		}
+
+		// Confirmed VM missing from expected host — could be a live migration.
+		// Scan all HVs lazily; the list is shared across any further misses this cycle.
+		if err := ensureHVsAndReservations(); err != nil {
+			return nil, err
+		}
+
+		var foundHost string
+		var foundHV hv1.Hypervisor
+		for _, hv := range allHVs.Items {
+			if hv.Name == expectedHost {
+				continue // already checked via hvInstanceSet above
+			}
+			for _, inst := range hv.Status.Instances {
+				if inst.ID == vmUUID {
+					foundHost = hv.Name
+					foundHV = hv
+					break
+				}
+			}
+			if foundHost != "" {
+				break
+			}
+		}
+
+		if foundHost == "" {
+			// VM is not on any known hypervisor. This covers two cases:
+			// 1. The VM was terminated or evacuated — correct to remove.
+			// 2. The VM is mid-live-migration: it has left host-old's HV CRD but
+			//    host-new's CRD has not been updated yet. In this window the VM
+			//    is incorrectly treated as gone and removed from the reservation.
+			//    A VM CRD with lifecycle state (migrating/active) would close this
+			//    gap; without one we accept this narrow race as a known limitation.
+			allocationsToRemove = append(allocationsToRemove, vmUUID)
+			logger.Info("removing confirmed allocation (VM not found on any hypervisor)",
+				"vm", vmUUID,
+				"reservation", res.Name,
+				"expectedHost", expectedHost)
+			continue
+		}
+
+		// VM found on a different host — live migration detected.
+		//
+		// Follow the VM only when this is the sole VM in the reservation and the new
+		// host has capacity. Moving TargetHost with multiple VMs present would cause
+		// the remaining VMs to appear misplaced on the next reconcile. When there are
+		// multiple VMs, or the new host is at capacity, remove this VM so the slot
+		// on the original host remains available for re-use.
+		isSingleVM := len(res.Spec.CommittedResourceReservation.Allocations) == 1
+		if isSingleVM && reservations.HostHasCapacityForReservation(allReservations.Items, foundHV, res) {
+			logger.Info("VM live-migrated to host with capacity, updating TargetHost",
+				"vm", vmUUID,
+				"reservation", res.Name,
+				"oldHost", expectedHost,
+				"newHost", foundHost)
+			migrationTargetHost = foundHost
+			newStatusAllocations[vmUUID] = foundHost
+		} else {
+			logger.Info("removing VM from reservation after live migration: either multiple VMs present or new host lacks capacity",
+				"vm", vmUUID,
+				"reservation", res.Name,
+				"expectedHost", expectedHost,
+				"actualHost", foundHost,
+				"singleVM", isSingleVM)
+			allocationsToRemove = append(allocationsToRemove, vmUUID)
 		}
 	}
 
@@ -487,10 +591,19 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		specChanged = true
 	}
 
+	// Advance both TargetHost and Status.Host in the same patch cycle to avoid a
+	// transient state where Status.Host lags behind TargetHost and blocks capacity
+	// accounting on the old host during the next reconcile.
+	if migrationTargetHost != "" {
+		res.Spec.TargetHost = migrationTargetHost
+		res.Status.Host = migrationTargetHost
+		specChanged = true
+	}
+
 	// Update Status.Allocations
 	res.Status.CommittedResourceReservation.Allocations = newStatusAllocations
 
-	// Patch Spec if changed (stale allocations removed)
+	// Patch Spec if changed (stale allocations removed and/or TargetHost updated)
 	if specChanged {
 		if err := r.Patch(ctx, res, client.MergeFrom(old)); err != nil {
 			if client.IgnoreNotFound(err) == nil {
@@ -509,8 +622,11 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		// the status update. Otherwise MergeFrom(old) would see no diff
 		// and the status patch would be a no-op.
 		old = res.DeepCopy()
-		// Re-apply the status update that was overwritten by the re-fetch.
+		// Re-apply status updates that were overwritten by the re-fetch.
 		res.Status.CommittedResourceReservation.Allocations = newStatusAllocations
+		if migrationTargetHost != "" {
+			res.Status.Host = migrationTargetHost
+		}
 	}
 
 	// Proactively remove this VM UUID from all other candidate reservations that still

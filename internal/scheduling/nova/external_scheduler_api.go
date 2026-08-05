@@ -245,7 +245,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	}
 	ctx := r.Context()
 	if err := httpAPI.delegate.ProcessNewDecisionFromAPI(ctx, decision); err != nil {
-		c.Respond(logger, http.StatusInternalServerError, err, "failed to process scheduling decision")
+		c.Respond(logger, http.StatusInternalServerError, err, fmt.Sprintf("failed to process scheduling decision: %v", err))
 		return
 	}
 	// Check if the decision contains status conditions indicating an error.

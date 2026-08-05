@@ -61,8 +61,10 @@ If `git stash pop` reports conflicts, abort and surface them — something on th
 
 ```
 git add -A
-git commit -m "<commit_message>"
+git commit -s -m "<commit_message>"
 ```
+
+Note: the `-s` adds a Signed-off-by trailer to the commit message. This is required for all commits in this project.
 
 ## Step 5: Push
 
