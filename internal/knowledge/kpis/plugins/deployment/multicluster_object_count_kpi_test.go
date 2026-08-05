@@ -61,36 +61,29 @@ func TestMulticlusterObjectCountKPI_Init_RejectsNonMCLClient(t *testing.T) {
 
 // initWithReader builds a KPI whose descriptors are derived from the given
 // route labels, bypassing Init's *multicluster.Client type assertion so the
-// KPI logic can be tested against a fakeReader.
+// KPI logic can be tested against a fakeReader. Uses the production
+// buildObjectCountSchema helper so the test exercises the same schema path.
 func initWithReader(t *testing.T, r *fakeReader, gvkStrs ...string) *MulticlusterObjectCountKPI {
 	t.Helper()
 	kpi := &MulticlusterObjectCountKPI{}
 	kpi.mcl = r
 
-	keySet := map[string]bool{}
-	for _, lm := range r.routeLabels {
-		for k := range lm {
-			snake := toSnakeCase(k)
-			if !keySet[snake] {
-				keySet[snake] = true
-				kpi.labelKeys = append(kpi.labelKeys, snake)
-			}
-		}
-	}
-	varLabels := append([]string{"group", "version", "kind", "is_home"}, kpi.labelKeys...)
-	kpi.sharedDesc = prometheus.NewDesc(
-		"cortex_multicluster_object_count",
-		"Number of objects of a given GVK per cluster",
-		varLabels,
-		nil,
-	)
+	var gvks []schema.GroupVersionKind
 	for _, gvkStr := range gvkStrs {
 		gvk, err := parseGVK(gvkStr)
 		if err != nil {
 			t.Fatalf("parseGVK(%q): %v", gvkStr, err)
 		}
+		gvks = append(gvks, gvk)
 		kpi.descs = append(kpi.descs, gvkDesc{gvk: gvk})
 	}
+
+	labelKeys, desc, err := buildObjectCountSchema(r, gvks)
+	if err != nil {
+		t.Fatalf("buildObjectCountSchema: %v", err)
+	}
+	kpi.labelKeys = labelKeys
+	kpi.sharedDesc = desc
 	return kpi
 }
 

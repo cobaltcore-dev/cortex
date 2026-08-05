@@ -61,41 +61,22 @@ func (k *MulticlusterObjectCountKPI) Init(_ *db.DB, c client.Client, opts conf.R
 	}
 	k.mcl = mcl
 
-	// Parse all GVKs and compute the union of routing-label keys across all of
-	// them before building the descriptor. All GVKs share one descriptor with
-	// the same label schema; clusters that lack a key emit an empty string for
-	// that position. This prevents Prometheus from seeing two descriptors with
-	// the same metric name but differing label sets, which would be rejected on
-	// registration.
+	// Parse all GVKs, then build the shared descriptor via buildObjectCountSchema.
 	var gvks []schema.GroupVersionKind
-	keySet := map[string]bool{}
 	for _, raw := range k.Options.GVKs {
 		gvk, err := parseGVK(raw)
 		if err != nil {
 			return fmt.Errorf("invalid GVK %q: %w", raw, err)
 		}
 		gvks = append(gvks, gvk)
-		for _, lm := range mcl.ConfiguredRouteLabels(gvk) {
-			for key := range lm {
-				snake := toSnakeCase(key)
-				if !keySet[snake] {
-					keySet[snake] = true
-					k.labelKeys = append(k.labelKeys, snake)
-				}
-			}
-		}
 	}
 
-	// Fixed labels: group/version/kind identify the resource type; is_home
-	// distinguishes the home cluster (no routing labels) from remote clusters.
-	// The routing label keys follow (e.g. availability_zone).
-	varLabels := append([]string{"group", "version", "kind", "is_home"}, k.labelKeys...)
-	k.sharedDesc = prometheus.NewDesc(
-		"cortex_multicluster_object_count",
-		"Number of objects of a given GVK per cluster",
-		varLabels,
-		nil,
-	)
+	var err error
+	k.labelKeys, k.sharedDesc, err = buildObjectCountSchema(mcl, gvks)
+	if err != nil {
+		return err
+	}
+
 	for _, gvk := range gvks {
 		k.descs = append(k.descs, gvkDesc{gvk: gvk})
 	}
@@ -138,6 +119,41 @@ func (k *MulticlusterObjectCountKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
+// buildObjectCountSchema computes the union of snake_case routing-label keys
+// across all given GVKs and returns the label keys and a single shared
+// prometheus.Desc. Fails if any routing-label key collides with a fixed label
+// (group, version, kind, is_home).
+func buildObjectCountSchema(r multiclusterReader, gvks []schema.GroupVersionKind) ([]string, *prometheus.Desc, error) {
+	fixedLabels := map[string]bool{"group": true, "version": true, "kind": true, "is_home": true}
+	keySet := map[string]bool{}
+	var labelKeys []string
+	for _, gvk := range gvks {
+		for _, lm := range r.ConfiguredRouteLabels(gvk) {
+			for key := range lm {
+				snake := toSnakeCase(key)
+				if fixedLabels[snake] {
+					return nil, nil, fmt.Errorf("routing label key %q collides with fixed label", snake)
+				}
+				if !keySet[snake] {
+					keySet[snake] = true
+					labelKeys = append(labelKeys, snake)
+				}
+			}
+		}
+	}
+	// Fixed labels: group/version/kind identify the resource type; is_home
+	// distinguishes the home cluster (no routing labels) from remote clusters.
+	// The routing label keys follow (e.g. availability_zone).
+	varLabels := append([]string{"group", "version", "kind", "is_home"}, labelKeys...)
+	desc := prometheus.NewDesc(
+		"cortex_multicluster_object_count",
+		"Number of objects of a given GVK per cluster",
+		varLabels,
+		nil,
+	)
+	return labelKeys, desc, nil
+}
+
 // parseGVK parses a "group/version/Kind" string.
 func parseGVK(s string) (schema.GroupVersionKind, error) {
 	parts := strings.SplitN(s, "/", 3)
@@ -145,6 +161,9 @@ func parseGVK(s string) (schema.GroupVersionKind, error) {
 		return schema.GroupVersionKind{}, fmt.Errorf("expected group/version/Kind, got: %s", s)
 	}
 	if parts[1] == "" || parts[2] == "" {
+		return schema.GroupVersionKind{}, fmt.Errorf("expected group/version/Kind, got: %s", s)
+	}
+	if strings.ContainsRune(parts[2], '/') {
 		return schema.GroupVersionKind{}, fmt.Errorf("expected group/version/Kind, got: %s", s)
 	}
 	return schema.GroupVersionKind{Group: parts[0], Version: parts[1], Kind: parts[2]}, nil
