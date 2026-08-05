@@ -208,7 +208,7 @@ func (c *Client) ClustersForGVK(gvk schema.GroupVersionKind) ([]cluster.Cluster,
 	remotes := c.remoteClusters[gvk]
 	isHome := c.homeGVKs[gvk]
 	if len(remotes) == 0 && !isHome {
-		return nil, fmt.Errorf("GVK %s is not configured in home or any remote cluster", gvk)
+		return nil, fmt.Errorf("gvk %s is not configured in home or any remote cluster", gvk)
 	}
 	clusters := make([]cluster.Cluster, 0, len(remotes)+1)
 	for _, r := range remotes {
@@ -473,7 +473,7 @@ func (c *Client) ListMetadataPerCluster(ctx context.Context, gvk schema.GroupVer
 	isHome := c.homeGVKs[gvk]
 	if len(remotes) == 0 && !isHome {
 		c.remoteClustersMu.RUnlock()
-		return nil, fmt.Errorf("GVK %s is not configured in home or any remote cluster", gvk)
+		return nil, fmt.Errorf("gvk %s is not configured in home or any remote cluster", gvk)
 	}
 	type clusterEntry struct {
 		cl     cluster.Cluster

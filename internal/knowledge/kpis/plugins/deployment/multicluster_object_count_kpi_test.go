@@ -62,33 +62,35 @@ func TestMulticlusterObjectCountKPI_Init_RejectsNonMCLClient(t *testing.T) {
 // initWithReader builds a KPI whose descriptors are derived from the given
 // route labels, bypassing Init's *multicluster.Client type assertion so the
 // KPI logic can be tested against a fakeReader.
-func initWithReader(t *testing.T, r *fakeReader, gvkStr string) *MulticlusterObjectCountKPI {
+func initWithReader(t *testing.T, r *fakeReader, gvkStrs ...string) *MulticlusterObjectCountKPI {
 	t.Helper()
 	kpi := &MulticlusterObjectCountKPI{}
 	kpi.mcl = r
-	gvk, err := parseGVK(gvkStr)
-	if err != nil {
-		t.Fatalf("parseGVK: %v", err)
-	}
+
 	keySet := map[string]bool{}
-	var labelKeys []string
 	for _, lm := range r.routeLabels {
 		for k := range lm {
 			snake := toSnakeCase(k)
 			if !keySet[snake] {
 				keySet[snake] = true
-				labelKeys = append(labelKeys, snake)
+				kpi.labelKeys = append(kpi.labelKeys, snake)
 			}
 		}
 	}
-	varLabels := append([]string{"group", "version", "kind", "is_home"}, labelKeys...)
-	desc := prometheus.NewDesc(
+	varLabels := append([]string{"group", "version", "kind", "is_home"}, kpi.labelKeys...)
+	kpi.sharedDesc = prometheus.NewDesc(
 		"cortex_multicluster_object_count",
 		"Number of objects of a given GVK per cluster",
 		varLabels,
 		nil,
 	)
-	kpi.descs = append(kpi.descs, gvkDesc{gvk: gvk, labelKeys: labelKeys, desc: desc})
+	for _, gvkStr := range gvkStrs {
+		gvk, err := parseGVK(gvkStr)
+		if err != nil {
+			t.Fatalf("parseGVK(%q): %v", gvkStr, err)
+		}
+		kpi.descs = append(kpi.descs, gvkDesc{gvk: gvk})
+	}
 	return kpi
 }
 
@@ -100,6 +102,15 @@ func TestMulticlusterObjectCountKPI_Init_RejectsInvalidGVK(t *testing.T) {
 	opts := conf.NewRawOpts(`{"gvks":["not-a-valid-gvk"]}`)
 	if err := kpi.Init(nil, mcl, opts); err == nil {
 		t.Fatal("expected error for invalid GVK string")
+	}
+}
+
+func TestMulticlusterObjectCountKPI_Init_RejectsEmptyVersionOrKind(t *testing.T) {
+	cases := []string{"apps//DeploymentList", "/v1/"}
+	for _, raw := range cases {
+		if _, err := parseGVK(raw); err == nil {
+			t.Errorf("parseGVK(%q): expected error for empty segment, got nil", raw)
+		}
 	}
 }
 
@@ -219,6 +230,62 @@ func TestMulticlusterObjectCountKPI_SnakeCaseLabels(t *testing.T) {
 	for _, tt := range tests {
 		if got := toSnakeCase(tt.input); got != tt.want {
 			t.Errorf("toSnakeCase(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+// TestMulticlusterObjectCountKPI_UnionLabelSchema verifies that two GVKs with
+// differing routing-label sets share a single descriptor whose label schema is
+// the union of both sets, and that Prometheus collection succeeds without
+// duplicate-descriptor errors.
+func TestMulticlusterObjectCountKPI_UnionLabelSchema(t *testing.T) {
+	// GVK A clusters use "availabilityZone"; GVK B clusters use "region".
+	// The union descriptor must carry both keys.
+	r := &fakeReader{
+		routeLabels: []map[string]string{
+			{"availabilityZone": "az-1"},
+			{"region": "us-east"},
+		},
+		perCluster: []multicluster.ClusterObjectMetadata{
+			{Labels: map[string]string{"availabilityZone": "az-1"}, Items: items(3)},
+			{Labels: map[string]string{"region": "us-east"}, Items: items(5)},
+		},
+	}
+	kpi := initWithReader(t, r, "/v1/ConfigMapList", "apps/v1/DeploymentList")
+
+	// Registering with a real prometheus.Registry would panic if two descriptors
+	// share the same metric name but have different label schemas.
+	reg := prometheus.NewRegistry()
+	if err := reg.Register(kpi); err != nil {
+		t.Fatalf("Register failed (likely duplicate/inconsistent descriptor): %v", err)
+	}
+
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("Gather failed: %v", err)
+	}
+	var total int
+	for _, mf := range mfs {
+		total += len(mf.Metric)
+	}
+	// Two GVKs × two clusters each = 4 metrics.
+	if total != 4 {
+		t.Errorf("expected 4 metrics, got %d", total)
+	}
+
+	// Every metric must have both union keys present (empty string for missing).
+	for _, mf := range mfs {
+		for _, m := range mf.Metric {
+			labelMap := map[string]string{}
+			for _, lp := range m.Label {
+				labelMap[lp.GetName()] = lp.GetValue()
+			}
+			if _, ok := labelMap["availability_zone"]; !ok {
+				t.Errorf("metric missing label availability_zone: %v", labelMap)
+			}
+			if _, ok := labelMap["region"]; !ok {
+				t.Errorf("metric missing label region: %v", labelMap)
+			}
 		}
 	}
 }

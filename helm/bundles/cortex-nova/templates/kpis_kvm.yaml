@@ -56,8 +56,9 @@ spec:
       - cortex.cloud/v1alpha1/CommittedResourceList
       - kvm.cloud.sap/v1/HypervisorList
   description: |
-    This KPI reports the number of objects of each configured GVK per remote
-    cluster, labelled by the configured cluster labels. It uses
+    This KPI reports the number of objects of each configured GVK per cluster
+    (home and remote), labelled by the configured cluster labels. Home-cluster
+    metrics use is_home=true with empty routing-label values. It uses
     PartialObjectMetadataList so only object metadata is fetched, making it
     efficient even for large object counts.
 {{- end }}
