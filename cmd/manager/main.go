@@ -400,10 +400,10 @@ func main() {
 	// Transparent in-process overlay cache for CRDs that are eventually
 	// consistent across in-pod clients (e.g. Reservations). Writes populate an
 	// overlay; reads merge it with the informer result until the real object is
-	// observed. *multicluster.Client serves as both the inner client.Client and
-	// the InformerSource; the cache itself has no multicluster dependency.
+	// observed. *multicluster.Client satisfies clientcache.Client, providing
+	// both the inner client.Client and informer access for eviction.
 	clientCacheConfig := conf.GetConfigOrDie[clientcache.RootConfig]()
-	cachingClient, err := clientcache.New(multiclusterClient, multiclusterClient, scheme, clientCacheConfig.ClientCache)
+	cachingClient, err := clientcache.New(multiclusterClient, scheme, clientCacheConfig.ClientCache)
 	if err != nil {
 		setupLog.Error(err, "unable to create client cache")
 		os.Exit(1)

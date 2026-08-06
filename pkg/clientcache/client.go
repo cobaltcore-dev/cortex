@@ -78,10 +78,10 @@ const defaultTTL = 2 * time.Minute
 type CachingClient struct {
 	client.Client // inner client, used for delegation
 
-	informers InformerSource
-	scheme    *runtime.Scheme
-	ttl       time.Duration
-	gvks      map[schema.GroupVersionKind]bool
+	inner  Client
+	scheme *runtime.Scheme
+	ttl    time.Duration
+	gvks   map[schema.GroupVersionKind]bool
 
 	mu       sync.RWMutex
 	byGVK    map[schema.GroupVersionKind]map[objectKey]*entry
@@ -92,7 +92,7 @@ type CachingClient struct {
 // used for eviction, scheme resolves object GVKs, and conf lists the GVKs to
 // overlay and the TTL. GVK strings are formatted as "<group>/<version>/<Kind>"
 // and are resolved against scheme.
-func New(inner client.Client, informers InformerSource, scheme *runtime.Scheme, conf Config) (*CachingClient, error) {
+func New(inner Client, scheme *runtime.Scheme, conf Config) (*CachingClient, error) {
 	gvks, err := resolveGVKs(scheme, conf.GVKs)
 	if err != nil {
 		return nil, err
@@ -102,13 +102,13 @@ func New(inner client.Client, informers InformerSource, scheme *runtime.Scheme, 
 		ttl = defaultTTL
 	}
 	return &CachingClient{
-		Client:    inner,
-		informers: informers,
-		scheme:    scheme,
-		ttl:       ttl,
-		gvks:      gvks,
-		byGVK:     make(map[schema.GroupVersionKind]map[objectKey]*entry),
-		indexers:  make(map[schema.GroupVersionKind]map[string]client.IndexerFunc),
+		Client:   inner,
+		inner:    inner,
+		scheme:   scheme,
+		ttl:      ttl,
+		gvks:     gvks,
+		byGVK:    make(map[schema.GroupVersionKind]map[objectKey]*entry),
+		indexers: make(map[schema.GroupVersionKind]map[string]client.IndexerFunc),
 	}, nil
 }
 

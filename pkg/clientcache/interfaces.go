@@ -10,11 +10,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// InformerSource provides, per object type, the informers the cache attaches
-// to for eviction purposes. It is satisfied structurally e.g. by
-// *multicluster.Client (via ClustersForGVK + cluster.GetCache().GetInformer),
-// so that this package does not need to import pkg/multicluster.
-type InformerSource interface {
+// Client is the interface the CachingClient requires of its inner client.
+// It extends client.Client with the informer access needed for overlay eviction.
+// *multicluster.Client satisfies this interface.
+type Client interface {
+	client.Client
 	// GetInformersForKind returns all informers serving the GVK of the given
 	// object. The cache attaches Add/Update event handlers to each informer to
 	// evict overlay entries once the real object appears in the informer cache.

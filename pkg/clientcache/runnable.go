@@ -28,7 +28,7 @@ func (c *CachingClient) Start(ctx context.Context) error {
 			log.Error(err, "failed to build object for gvk; eviction disabled for it", "gvk", gvk)
 			continue
 		}
-		informers, err := c.informers.GetInformersForKind(ctx, obj)
+		informers, err := c.inner.GetInformersForKind(ctx, obj)
 		if err != nil {
 			log.Error(err, "failed to get informers for gvk; eviction disabled for it", "gvk", gvk)
 			continue
