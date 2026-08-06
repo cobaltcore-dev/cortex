@@ -77,10 +77,6 @@ func resolveGVKs(scheme *runtime.Scheme, gvkStrs []string) (map[schema.GroupVers
 	return out, nil
 }
 
-// Inner returns the wrapped client, e.g. for use with a controller Builder that
-// needs the raw client rather than the caching wrapper.
-func (c *CachingClient) Inner() client.Client { return c.Client }
-
 // gvkFor resolves the GVK of obj and reports whether it is cached.
 func (c *CachingClient) gvkFor(obj runtime.Object) (schema.GroupVersionKind, bool) {
 	gvks, _, err := c.scheme.ObjectKinds(obj)

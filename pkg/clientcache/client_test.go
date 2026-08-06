@@ -146,15 +146,6 @@ func TestNewExplicitTTL(t *testing.T) {
 	}
 }
 
-// TestInnerReturnsWrappedClient: Inner returns the exact client passed to New.
-func TestInnerReturnsWrappedClient(t *testing.T) {
-	inner := newTestClient(t)
-	c := newCaching(t, inner, &fakeInformerSource{inf: &fakeInformer{}})
-	if c.Inner() != inner {
-		t.Fatalf("Inner did not return the wrapped client")
-	}
-}
-
 // TestWriteErrorLeavesOverlayUntouched: for every mutating method, a failing
 // inner call surfaces the error and leaves the overlay untouched (no live entry
 // and no tombstone).
