@@ -316,6 +316,155 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 			expectedHosts: []string{"host1"},
 			filteredHosts: []string{},
 		},
+		{
+			name: "Comma-separated filter_tenant_id - project matches one of many",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID: "project-b",
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+				},
+			},
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
+					Status: hv1.HypervisorStatus{
+						Aggregates: []hv1.Aggregate{{Name: "restricted", Metadata: map[string]string{"filter_tenant_id": "project-a,project-b,project-c"}}},
+					},
+				},
+			},
+			expectedHosts: []string{"host1"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "Comma-separated filter_tenant_id - project matches none",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID: "project-d",
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+				},
+			},
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
+					Status: hv1.HypervisorStatus{
+						Aggregates: []hv1.Aggregate{{Name: "restricted", Metadata: map[string]string{"filter_tenant_id": "project-a,project-b,project-c"}}},
+					},
+				},
+			},
+			expectedHosts: []string{},
+			filteredHosts: []string{"host1"},
+		},
+		{
+			name: "Comma-separated filter_tenant_id with surrounding whitespace - project matches",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID: "project-b",
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+				},
+			},
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
+					Status: hv1.HypervisorStatus{
+						Aggregates: []hv1.Aggregate{{Name: "restricted", Metadata: map[string]string{"filter_tenant_id": "project-a, project-b , project-c"}}},
+					},
+				},
+			},
+			expectedHosts: []string{"host1"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "Numbered filter_tenant_id keys - project matches one of the numbered keys",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID: "project-c",
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+				},
+			},
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
+					Status: hv1.HypervisorStatus{
+						Aggregates: []hv1.Aggregate{{Name: "restricted", Metadata: map[string]string{
+							"filter_tenant_id":  "project-a",
+							"filter_tenant_id1": "project-b",
+							"filter_tenant_id2": "project-c",
+						}}},
+					},
+				},
+			},
+			expectedHosts: []string{"host1"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "Numbered filter_tenant_id keys with comma-separated values - project matches",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID: "project-e",
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+				},
+			},
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
+					Status: hv1.HypervisorStatus{
+						Aggregates: []hv1.Aggregate{{Name: "restricted", Metadata: map[string]string{
+							"filter_tenant_id":  "project-a,project-b",
+							"filter_tenant_id1": "project-c,project-d",
+							"filter_tenant_id2": "project-e,project-f",
+						}}},
+					},
+				},
+			},
+			expectedHosts: []string{"host1"},
+			filteredHosts: []string{},
+		},
+		{
+			name: "Numbered filter_tenant_id keys - project matches none",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						ProjectID: "project-z",
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+				},
+			},
+			hypervisors: []hv1.Hypervisor{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "host1"},
+					Status: hv1.HypervisorStatus{
+						Aggregates: []hv1.Aggregate{{Name: "restricted", Metadata: map[string]string{
+							"filter_tenant_id":  "project-a,project-b",
+							"filter_tenant_id1": "project-c,project-d",
+						}}},
+					},
+				},
+			},
+			expectedHosts: []string{},
+			filteredHosts: []string{"host1"},
+		},
 	}
 
 	for _, tt := range tests {

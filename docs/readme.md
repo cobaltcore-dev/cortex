@@ -7,3 +7,4 @@
 - To get started quickly, see [the quickstart guide](quickstart.md).
 - For details on committed resource reservations, see [committed resource reservations](reservations/committed-resource-reservations.md).
 - For details on failover reservations, see [failover reservations](reservations/failover-reservations.md).
+- For multi-cluster scheduling, see [the multicluster guide](guides/multicluster/readme.md).

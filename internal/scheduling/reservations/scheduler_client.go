@@ -79,6 +79,10 @@ type ScheduleReservationRequest struct {
 	// SchedulerHints are hints passed to the scheduler pipeline.
 	// Used to set _nova_check_type for evacuation intent detection.
 	SchedulerHints map[string]any
+	// ImageProperties are Glance-style image properties (e.g., "img_hv_type", "hypervisor_type")
+	// forwarded on Spec.Data.Image.Data.Properties.Data. Optional; when empty the outgoing
+	// request leaves the image field at its zero value. Used by FilterImagePropertiesStep.
+	ImageProperties map[string]any
 }
 
 // ScheduleReservationResponse contains the result of scheduling a reservation.
@@ -141,6 +145,13 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 						MemoryMB:   req.MemoryMB,
 						VCPUs:      req.VCPUs,
 						// Disk is currently not considered.
+					},
+				},
+				Image: api.NovaObject[api.NovaImageMeta]{
+					Data: api.NovaImageMeta{
+						Properties: api.NovaObject[map[string]any]{
+							Data: req.ImageProperties,
+						},
 					},
 				},
 			},

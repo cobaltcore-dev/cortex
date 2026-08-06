@@ -58,6 +58,9 @@ func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog *slog.Logger, request ap
 	}
 	hvsByName := make(map[string]hv1.Hypervisor, len(hvs.Items))
 	for _, hv := range hvs.Items {
+		if _, ok := result.Activations[hv.Name]; !ok {
+			continue
+		}
 		hvsByName[hv.Name] = hv
 	}
 

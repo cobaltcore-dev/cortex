@@ -303,6 +303,86 @@ spec:
           configuration. It is recommended to investigate the
           pipeline status and logs for more details.
 
+    - alert: CortexNovaInFlightReservationsBacklogGrowing
+      # Alert when the number of in-flight reservations stuck with
+      # reason=InstanceNotFound is trending upwards over a long window,
+      # rather than staying roughly the same or draining down. A healthy
+      # scheduler-hypervisor loop should quickly resolve in-flight
+      # reservations once the VM shows up on any hypervisor; a sustained
+      # positive derivative indicates the backlog is not being worked off.
+      #
+      # deriv() over 1h returns the per-second slope of the gauge; multiplied
+      # by 3600 it becomes "expected growth per hour". We require this to be
+      # meaningfully positive AND the current count to be non-trivial, so we
+      # don't page on a single lingering reservation.
+      expr: |
+        deriv(cortex_reservation_state{domain="nova",type="InFlightReservation",state="unknown",reason="InstanceNotFound"}[1h]) * 3600 > 5
+        and
+        cortex_reservation_state{domain="nova",type="InFlightReservation",state="unknown",reason="InstanceNotFound"} > 10
+      for: 2h
+      labels:
+        context: reservations
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/unready
+      annotations:
+        summary: "In-flight reservation backlog with reason=InstanceNotFound keeps growing"
+        description: >
+          The number of in-flight reservations that have not yet observed
+          their VM on any hypervisor (reason=InstanceNotFound) has been
+          increasing steadily for at least two hours. Normally these
+          reservations resolve once the hypervisor operator reports the
+          instance; a sustained positive trend suggests either VMs are not
+          landing on hypervisors, or the hypervisor status feed is stalled,
+          or the in-flight reservation controller is not pruning cleanly.
+          Investigate the hypervisor operator, the nova build pipeline, and
+          the in-flight reservation controller logs.
+
+    - alert: CortexNovaImagePropertiesHypervisorTypeUndetermined
+      expr: |
+        sum by (pipeline, step, intent) (rate(cortex_filter_weigher_pipeline_step_events_total{service="cortex-nova-metrics", event="image_properties_hv_type_undetermined"}[5m])) > 0.1
+      for: 15m
+      labels:
+        context: scheduling
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/scheduling
+      annotations:
+        summary: "Nova scheduling frequently cannot determine the hypervisor type from image properties"
+        description: >
+          The `filter_image_properties` step in pipeline `{{ "{{" }} $labels.pipeline {{ "}}" }}`
+          is frequently unable to determine the hypervisor type from the image properties
+          of incoming scheduling requests for intent `{{ "{{" }} $labels.intent {{ "}}" }}`.
+          In this case the filter is skipped and all hosts are returned, so kvm-only
+          images may be placed on non-kvm hypervisors (or vice versa). This may indicate
+          that images are missing the expected hypervisor type property, or that the
+          property format has changed. Investigate the image metadata of the affected
+          requests.
+
+    - alert: CortexNovaCapabilitiesUnknownHypervisorType
+      expr: |
+        sum by (pipeline, step, hypervisor_type) (rate(cortex_filter_weigher_pipeline_step_events_total{service="cortex-nova-metrics", event="filter_capabilities_unknown_hypervisor_type"}[5m])) > 0.1
+      for: 15m
+      labels:
+        context: scheduling
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/scheduling
+      annotations:
+        summary: "Nova capabilities filter frequently encounters unknown hypervisor types"
+        description: >
+          The `filter_capabilities` step in pipeline `{{ "{{" }} $labels.pipeline {{ "}}" }}`
+          is frequently unable to determine the hypervisor type
+          (`{{ "{{" }} $labels.hypervisor_type {{ "}}" }}`) for candidate hosts.
+          This may indicate that hypervisors are reporting incomplete domain capabilities.
+          Investigate the affected hosts and hypervisor operator status.
+
     {{- if .Values.kvm.enabled }}
     - alert: CortexNovaDoesntFindValidKVMHosts
       expr: sum by (az, hvtype) (increase(cortex_vm_faults{hvtype=~"CH|QEMU",faultmsg=~".*No valid host was found.*",faultmsg!~".*No such host.*"}[5m])) > 0
@@ -588,6 +668,28 @@ spec:
           This may mean hypervisors in that AZ are fully utilized for the corresponding
           flavor group and no further committed resources can be placed there.
 
+    - alert: CortexNovaCommittedResourceCapacityNotReady
+      expr: |
+        cortex_committed_resource_capacity_ready{service="cortex-nova-metrics"} == 0
+      for: 10m
+      labels:
+        context: committed-resource-capacity
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/committed-resource-capacity
+      annotations:
+        summary: "FlavorGroupCapacity for {{ "{{" }} $labels.flavor_group {{ "}}" }} in {{ "{{" }} $labels.az {{ "}}" }} has been not-ready for >10 minutes"
+        description: >
+          The FlavorGroupCapacity CRD for flavor group {{ "{{" }} $labels.flavor_group {{ "}}" }}
+          in availability zone {{ "{{" }} $labels.az {{ "}}" }} has had Ready=False for more than
+          10 minutes. The capacity controller failed to complete all scheduler probes for this
+          (flavor group x AZ) pair. The capacity API (report-capacity) is serving stale total
+          capacity values for this group without usage data — Limes receives capacity but no
+          usage, causing silent staleness. Investigate the capacity controller logs for probe
+          errors and check scheduler availability.
+
     # Committed Resource Usage API
     - alert: CortexNovaCommittedResourceUsageErrors
       expr: |
@@ -625,4 +727,26 @@ spec:
           The committed resource quota API (Limes LIQUID integration) is returning
           HTTP 5xx errors. This indicates internal problems computing or applying
           quota. Limes may not be able to enforce committed resource quotas.
+
+    - alert: CortexNovaMulticlusterNameConflicts
+      expr: |
+        sum by (method, gvk) (increase(cortex_multicluster_cross_cluster_name_conflicts_total{service="cortex-nova-metrics"}[10m])) > 0
+      for: 5m
+      labels:
+        context: multicluster
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+      annotations:
+        summary: "Cross-cluster name conflicts detected for `{{ "{{" }} $labels.gvk {{ "}}" }}`"
+        description: >
+          The multicluster client detected the same resource name for
+          `{{ "{{" }} $labels.gvk {{ "}}" }}` on more than one cluster during
+          `{{ "{{" }} $labels.method {{ "}}" }}` operations. This means reads fan
+          out to duplicates (surfaced as duplicate errors) and creates may be
+          rejected to avoid introducing new collisions. This usually indicates a
+          resource router is mapping the same object to multiple clusters, or an
+          object was created out-of-band on the wrong cluster. Investigate the
+          affected resources and the routing configuration.
 {{- end }}

@@ -63,6 +63,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	commitmentsapi "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/inflight"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/quota"
 	"github.com/cobaltcore-dev/cortex/pkg/clientcache"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -375,10 +376,12 @@ func main() {
 	committedResourceGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}
 	flavorGroupCapacityGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "FlavorGroupCapacity"}
 	projectQuotaGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "ProjectQuota"}
+	multiclusterMonitor := multicluster.NewMonitor("cortex_")
 	multiclusterClient := &multicluster.Client{
 		HomeCluster:    homeCluster,
 		HomeRestConfig: restConfig,
 		HomeScheme:     scheme,
+		Monitor:        multiclusterMonitor,
 		ResourceRouters: map[schema.GroupVersionKind]multicluster.ResourceRouter{
 			hvGVK:                  multicluster.HypervisorResourceRouter{},
 			reservationGVK:         multicluster.ReservationsResourceRouter{},
@@ -415,6 +418,7 @@ func main() {
 	metricsConfig := conf.GetConfigOrDie[monitoring.Config]()
 	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, metricsConfig)
 	metrics.Registry.MustRegister(&logMetricsMonitor)
+	metrics.Registry.MustRegister(multiclusterMonitor)
 
 	// TODO: Remove me after scheduling pipeline steps don't require DB connections anymore.
 	metrics.Registry.MustRegister(&db.Monitor)
@@ -510,6 +514,18 @@ func main() {
 		novaPipelineWebhook := nova.NewPipelineWebhook()
 		if err := novaPipelineWebhook.SetupWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to setup nova pipeline webhook")
+			os.Exit(1)
+		}
+	}
+	if slices.Contains(mainConfig.EnabledControllers, "inflight-reservation-controller") {
+		setupLog.Info("enabling controller",
+			"controller", "inflight-reservation-controller")
+		config := conf.GetConfigOrDie[inflight.NovaVMClientConfig]()
+		vmClient := inflight.NewNovaVMClient(config)
+		controller := &inflight.Controller{Client: multiclusterClient, VMClient: vmClient}
+		if err := controller.SetupWithManager(ctx, mgr); err != nil {
+			setupLog.Error(err, "unable to create controller",
+				"controller", "inflight-reservation-controller")
 			os.Exit(1)
 		}
 	}

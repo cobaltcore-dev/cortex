@@ -13,6 +13,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
@@ -40,6 +41,10 @@ type Client struct {
 	// The scheme for the home cluster in which cortex is deployed.
 	// This scheme should include all types used in the remote clusters.
 	HomeScheme *runtime.Scheme
+
+	// Optional monitor for Prometheus metrics. A nil Monitor causes recording
+	// to be skipped, so the client can be used without wiring metrics.
+	Monitor Monitor
 
 	// Remote clusters to use by resource type. Multiple clusters can serve
 	// the same GVK (e.g. one per availability zone).
@@ -208,7 +213,7 @@ func (c *Client) ClustersForGVK(gvk schema.GroupVersionKind) ([]cluster.Cluster,
 	remotes := c.remoteClusters[gvk]
 	isHome := c.homeGVKs[gvk]
 	if len(remotes) == 0 && !isHome {
-		return nil, fmt.Errorf("GVK %s is not configured in home or any remote cluster", gvk)
+		return nil, fmt.Errorf("gvk %s is not configured in home or any remote cluster", gvk)
 	}
 	clusters := make([]cluster.Cluster, 0, len(remotes)+1)
 	for _, r := range remotes {
@@ -377,6 +382,9 @@ func (c *Client) Get(ctx context.Context, key client.ObjectKey, obj client.Objec
 			err := cl.GetClient().Get(ctx, key, candidate, opts...)
 			if err == nil {
 				// In this case Get() was already called and the object set.
+				if c.Monitor != nil {
+					c.Monitor.recordCrossClusterNameConflict("get", gvk)
+				}
 				return &duplicateError{msg: fmt.Sprintf("duplicate %s %s/%s in multiple clusters",
 					gvk, key.Namespace, key.Name)}
 			}
@@ -461,6 +469,9 @@ func (c *Client) List(ctx context.Context, list client.ObjectList, opts ...clien
 		return err
 	}
 	if len(duplicates) > 0 {
+		if c.Monitor != nil {
+			c.Monitor.recordCrossClusterNameConflict("list", gvk)
+		}
 		return &duplicateError{msg: fmt.Sprintf("duplicate %s [%s] in multiple clusters",
 			gvk, strings.Join(duplicates, ", "))}
 	}
@@ -473,9 +484,75 @@ func (c *Client) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts
 	return errors.New("apply operation is not supported in multicluster client")
 }
 
+// ClusterObjectMetadata is one entry in the result of ListMetadataPerCluster.
+// Labels holds the routing labels for the cluster. Items holds the object
+// metadata returned by the cluster (no spec or status). IsHome is true for the
+// home cluster, which has no routing labels.
+type ClusterObjectMetadata struct {
+	Labels map[string]string
+	Items  []metav1.PartialObjectMetadata
+	IsHome bool
+}
+
+// ListMetadataPerCluster returns the object metadata of the given GVK for each
+// configured cluster. It uses PartialObjectMetadataList so only object metadata
+// crosses the wire — no spec or status — making it efficient even for large
+// object counts. Callers that only need counts can use len(Items). Clusters
+// that return an error are logged and skipped (same policy as List). The home
+// cluster is included with IsHome set to true.
+func (c *Client) ListMetadataPerCluster(ctx context.Context, gvk schema.GroupVersionKind, opts ...client.ListOption) ([]ClusterObjectMetadata, error) {
+	log := ctrl.LoggerFrom(ctx)
+
+	c.remoteClustersMu.RLock()
+	remotes := c.remoteClusters[gvk]
+	isHome := c.homeGVKs[gvk]
+	if len(remotes) == 0 && !isHome {
+		c.remoteClustersMu.RUnlock()
+		return nil, fmt.Errorf("gvk %s is not configured in home or any remote cluster", gvk)
+	}
+	type clusterEntry struct {
+		cl     cluster.Cluster
+		labels map[string]string
+		isHome bool
+	}
+	entries := make([]clusterEntry, 0, len(remotes)+1)
+	for _, r := range remotes {
+		entries = append(entries, clusterEntry{cl: r.cluster, labels: maps.Clone(r.labels)})
+	}
+	if isHome && c.HomeCluster != nil {
+		entries = append(entries, clusterEntry{cl: c.HomeCluster, isHome: true})
+	}
+	c.remoteClustersMu.RUnlock()
+
+	results := make([]ClusterObjectMetadata, 0, len(entries))
+	for _, e := range entries {
+		partialList := &metav1.PartialObjectMetadataList{}
+		partialList.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   gvk.Group,
+			Version: gvk.Version,
+			Kind:    gvk.Kind,
+		})
+		if err := e.cl.GetClient().List(ctx, partialList, opts...); err != nil {
+			log.Error(err, "error listing resource metadata from cluster",
+				"gvk", gvk, "host", e.cl.GetConfig().Host)
+			continue
+		}
+		results = append(results, ClusterObjectMetadata{Labels: e.labels, Items: partialList.Items, IsHome: e.isHome})
+	}
+	return results, nil
+}
+
 // Create routes the object to the matching cluster using the ResourceRouter
 // and performs a Create operation.
+//
+// Before writing, it performs a best-effort Get against the other clusters
+// serving the same GVK to detect a cross-cluster name collision. If the object
+// name already exists on another cluster, a duplicateError is returned (checkable
+// with IsDuplicateError) and no create is performed. Non-NotFound errors from the
+// probe clusters are logged and ignored so that a single unavailable cluster does
+// not block writes.
 func (c *Client) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	log := ctrl.LoggerFrom(ctx)
 	gvk, err := c.GVKFromHomeScheme(obj)
 	if err != nil {
 		return err
@@ -484,6 +561,35 @@ func (c *Client) Create(ctx context.Context, obj client.Object, opts ...client.C
 	if err != nil {
 		return err
 	}
+
+	// Best-effort cross-cluster name collision check: the same namespace/name
+	// must not already exist on another cluster serving this GVK, otherwise
+	// reads would fan out to a duplicate (see IsDuplicateError).
+	clusters, err := c.ClustersForGVK(gvk)
+	if err != nil {
+		return err
+	}
+	key := client.ObjectKeyFromObject(obj)
+	for _, other := range clusters {
+		if other == cl {
+			continue
+		}
+		candidate := obj.DeepCopyObject().(client.Object)
+		getErr := other.GetClient().Get(ctx, key, candidate)
+		if getErr == nil {
+			if c.Monitor != nil {
+				c.Monitor.recordCrossClusterNameConflict("create", gvk)
+			}
+			return &duplicateError{msg: fmt.Sprintf("cannot create %s %s/%s: already exists on another cluster",
+				gvk, key.Namespace, key.Name)}
+		}
+		if !apierrors.IsNotFound(getErr) {
+			log.Error(getErr, "error checking for cross-cluster name conflict before create",
+				"gvk", gvk, "namespace", key.Namespace, "name", key.Name,
+				"host", other.GetConfig().Host)
+		}
+	}
+
 	return cl.GetClient().Create(ctx, obj, opts...)
 }
 
@@ -666,6 +772,9 @@ func (c *subResourceClient) Get(ctx context.Context, obj, subResource client.Obj
 				Get(ctx, candidateObj, candidateSub, opts...)
 			if err == nil {
 				// In this case Get() was already called and the object set.
+				if c.multiclusterClient.Monitor != nil {
+					c.multiclusterClient.Monitor.recordCrossClusterNameConflict("subresource_get", gvk)
+				}
 				return &duplicateError{msg: fmt.Sprintf("duplicate %s %s/%s subresource %s in multiple clusters",
 					gvk, candidateObj.GetNamespace(), candidateObj.GetName(), c.subResource)}
 			}

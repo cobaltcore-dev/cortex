@@ -6,7 +6,11 @@ package lib
 import (
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 type mockObserver struct {
@@ -52,6 +56,79 @@ func TestStepMonitorRun(t *testing.T) {
 	}
 	if runTimer.Observations[0] <= 0 {
 		t.Errorf("runTimer.Observations[0] = %v, want > 0", runTimer.Observations[0])
+	}
+}
+
+func TestStepMonitorRunEvents(t *testing.T) {
+	stepEventCollector := newPipelineStepEventCollector()
+	monitor := &FilterWeigherPipelineStepMonitor[mockFilterWeigherPipelineRequest]{
+		stepName:           "mock_step",
+		pipelineName:       "mock_pipeline",
+		stepEventCollector: stepEventCollector,
+	}
+	step := &mockWeigher[mockFilterWeigherPipelineRequest]{
+		RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+			return &FilterWeigherPipelineStepResult{
+				Activations: map[string]float64{"host1": 0.0},
+				Events: []FilterWeigherPipelineStepEvent{
+					{Name: "hypervisor_type_undetermined"},
+				},
+			}, nil
+		},
+	}
+	request := mockFilterWeigherPipelineRequest{
+		Hosts:   []string{"host1"},
+		Weights: map[string]float64{"host1": 0.0},
+	}
+	if _, err := monitor.RunWrapped(slog.Default(), request, step); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	if got := len(stepEventCollector.counts); got != 1 {
+		t.Fatalf("stepEventCollector.counts = %v, want 1", got)
+	}
+	for _, count := range stepEventCollector.counts {
+		if count != 1 {
+			t.Errorf("stepEventCollector count = %v, want 1", count)
+		}
+	}
+}
+
+func TestStepMonitorRunEventsWithDynamicLabels(t *testing.T) {
+	stepEventCollector := newPipelineStepEventCollector()
+	monitor := &FilterWeigherPipelineStepMonitor[mockFilterWeigherPipelineRequest]{
+		stepName:           "mock_step",
+		pipelineName:       "mock_pipeline",
+		stepEventCollector: stepEventCollector,
+	}
+	step := &mockWeigher[mockFilterWeigherPipelineRequest]{
+		RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+			return &FilterWeigherPipelineStepResult{
+				Activations: map[string]float64{"host1": 0.0},
+				Events: []FilterWeigherPipelineStepEvent{
+					{
+						Name:   "hypervisor_type_undetermined",
+						Labels: map[string]string{"intent": "create"},
+					},
+				},
+			}, nil
+		},
+	}
+	request := mockFilterWeigherPipelineRequest{
+		Hosts:   []string{"host1"},
+		Weights: map[string]float64{"host1": 0.0},
+	}
+	if _, err := monitor.RunWrapped(slog.Default(), request, step); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(stepEventCollector)
+	expected := `
+		# HELP cortex_filter_weigher_pipeline_step_events_total Number of named events reported by a scheduler pipeline step
+		# TYPE cortex_filter_weigher_pipeline_step_events_total counter
+		cortex_filter_weigher_pipeline_step_events_total{event="hypervisor_type_undetermined",intent="create",pipeline="mock_pipeline",step="mock_step"} 1
+	`
+	if err := testutil.GatherAndCompare(registry, strings.NewReader(expected)); err != nil {
+		t.Fatalf("GatherAndCompare() error = %v", err)
 	}
 }
 
@@ -144,5 +221,78 @@ func TestImpact(t *testing.T) {
 				t.Errorf("impact() = %v, want %v", impactValue, tc.expected)
 			}
 		})
+	}
+}
+
+func TestPipelineStepEventCollector_DynamicLabels(t *testing.T) {
+	collector := newPipelineStepEventCollector()
+	collector.Record("pipeline", "step", "event_a", map[string]string{"intent": "create"})
+	collector.Record("pipeline", "step", "event_a", map[string]string{"intent": "create"})
+	collector.Record("pipeline", "step", "event_a", map[string]string{"intent": "resize"})
+	collector.Record("pipeline", "step", "event_b", map[string]string{"foo": "bar"})
+
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(collector)
+
+	expected := `
+		# HELP cortex_filter_weigher_pipeline_step_events_total Number of named events reported by a scheduler pipeline step
+		# TYPE cortex_filter_weigher_pipeline_step_events_total counter
+		cortex_filter_weigher_pipeline_step_events_total{event="event_a",intent="create",pipeline="pipeline",step="step"} 2
+		cortex_filter_weigher_pipeline_step_events_total{event="event_a",intent="resize",pipeline="pipeline",step="step"} 1
+		cortex_filter_weigher_pipeline_step_events_total{event="event_b",foo="bar",pipeline="pipeline",step="step"} 1
+	`
+	if err := testutil.GatherAndCompare(registry, strings.NewReader(expected)); err != nil {
+		t.Fatalf("GatherAndCompare() error = %v", err)
+	}
+}
+
+func TestPipelineStepEventCollector_NoLabels(t *testing.T) {
+	collector := newPipelineStepEventCollector()
+	collector.Record("pipeline", "step", "event_c", nil)
+
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(collector)
+
+	expected := `
+		# HELP cortex_filter_weigher_pipeline_step_events_total Number of named events reported by a scheduler pipeline step
+		# TYPE cortex_filter_weigher_pipeline_step_events_total counter
+		cortex_filter_weigher_pipeline_step_events_total{event="event_c",pipeline="pipeline",step="step"} 1
+	`
+	if err := testutil.GatherAndCompare(registry, strings.NewReader(expected)); err != nil {
+		t.Fatalf("GatherAndCompare() error = %v", err)
+	}
+}
+
+func TestPipelineStepEventCollector_DescribeIsNoOp(t *testing.T) {
+	collector := newPipelineStepEventCollector()
+	ch := make(chan *prometheus.Desc, 1)
+	collector.Describe(ch)
+	close(ch)
+	if len(ch) != 0 {
+		t.Errorf("expected Describe to send no descriptors, got %d", len(ch))
+	}
+}
+
+func TestPipelineStepEventCollector_DropsReservedLabels(t *testing.T) {
+	collector := newPipelineStepEventCollector()
+	// Reserved label names must be dropped so the emitted metric does not
+	// contain duplicate label names.
+	collector.Record("pipeline", "step", "event_d", map[string]string{
+		"intent":   "create",
+		"pipeline": "ignored",
+		"step":     "ignored",
+		"event":    "ignored",
+	})
+
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(collector)
+
+	expected := `
+		# HELP cortex_filter_weigher_pipeline_step_events_total Number of named events reported by a scheduler pipeline step
+		# TYPE cortex_filter_weigher_pipeline_step_events_total counter
+		cortex_filter_weigher_pipeline_step_events_total{event="event_d",intent="create",pipeline="pipeline",step="step"} 1
+	`
+	if err := testutil.GatherAndCompare(registry, strings.NewReader(expected)); err != nil {
+		t.Fatalf("GatherAndCompare() error = %v", err)
 	}
 }
