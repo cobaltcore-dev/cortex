@@ -49,7 +49,7 @@ func (c *CachingClient) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case now := <-ticker.C:
-			c.overlay.cleanupExpired(now)
+			c.cleanupExpired(now)
 		}
 	}
 }
@@ -62,7 +62,7 @@ func (c *CachingClient) evictionHandler(gvk schema.GroupVersionKind) toolscachek
 		if !ok {
 			return
 		}
-		c.overlay.evictIfSeen(gvk, obj)
+		c.evictIfSeen(gvk, obj)
 	}
 	return toolscachek8s.ResourceEventHandlerFuncs{
 		AddFunc:    func(o any) { evict(o) },

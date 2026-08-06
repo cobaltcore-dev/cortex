@@ -6,17 +6,148 @@ package clientcache
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	toolscachek8s "k8s.io/client-go/tools/cache"
+	ccache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
+
+const azIndexField = "spec.availabilityZone"
+
+// --- shared test infrastructure ---
+
+func testScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add to scheme: %v", err)
+	}
+	return scheme
+}
+
+func newReservation(name, az, rv string) *v1alpha1.Reservation {
+	return &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            name,
+			UID:             types.UID("uid-" + name),
+			ResourceVersion: rv,
+		},
+		Spec: v1alpha1.ReservationSpec{
+			Type:             v1alpha1.ReservationTypeCommittedResource,
+			AvailabilityZone: az,
+		},
+	}
+}
+
+func newTestClient(t *testing.T, objs ...client.Object) client.Client {
+	t.Helper()
+	return fake.NewClientBuilder().
+		WithScheme(testScheme(t)).
+		WithObjects(objs...).
+		WithStatusSubresource(&v1alpha1.Reservation{}).
+		WithIndex(&v1alpha1.Reservation{}, azIndexField, func(obj client.Object) []string {
+			res, ok := obj.(*v1alpha1.Reservation)
+			if !ok || res.Spec.AvailabilityZone == "" {
+				return nil
+			}
+			return []string{res.Spec.AvailabilityZone}
+		}).
+		Build()
+}
+
+// fakeInformer is a controllable informer that records handlers and lets tests
+// fire Add/Update events to trigger eviction.
+type fakeInformer struct {
+	ccache.Informer
+	mu       sync.Mutex
+	handlers []toolscachek8s.ResourceEventHandler
+}
+
+func (f *fakeInformer) AddEventHandler(h toolscachek8s.ResourceEventHandler) (toolscachek8s.ResourceEventHandlerRegistration, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.handlers = append(f.handlers, h)
+	return nil, nil
+}
+
+func (f *fakeInformer) fireAdd(obj any) {
+	f.mu.Lock()
+	handlers := append([]toolscachek8s.ResourceEventHandler(nil), f.handlers...)
+	f.mu.Unlock()
+	for _, h := range handlers {
+		h.OnAdd(obj, false)
+	}
+}
+
+func (f *fakeInformer) fireUpdate(oldObj, newObj any) {
+	f.mu.Lock()
+	handlers := append([]toolscachek8s.ResourceEventHandler(nil), f.handlers...)
+	f.mu.Unlock()
+	for _, h := range handlers {
+		h.OnUpdate(oldObj, newObj)
+	}
+}
+
+// fakeInformerSource returns a single shared fakeInformer for all kinds.
+type fakeInformerSource struct {
+	inf *fakeInformer
+}
+
+func (s *fakeInformerSource) GetInformersForKind(_ context.Context, _ client.Object) ([]ccache.Informer, error) {
+	return []ccache.Informer{s.inf}, nil
+}
+
+func reservationConfig() Config {
+	return Config{
+		GVKs: []string{"cortex.cloud/v1alpha1/Reservation"},
+		TTL:  metav1.Duration{Duration: 2 * time.Minute},
+	}
+}
+
+func newCaching(t *testing.T, inner client.Client, src InformerSource) *CachingClient {
+	t.Helper()
+	c, err := New(inner, src, testScheme(t), reservationConfig())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return c
+}
+
+func listReservations(t *testing.T, c client.Client, opts ...client.ListOption) []v1alpha1.Reservation {
+	t.Helper()
+	var list v1alpha1.ReservationList
+	if err := c.List(context.Background(), &list, opts...); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	return list.Items
+}
+
+func reservationGVK() schema.GroupVersionKind {
+	return v1alpha1.GroupVersion.WithKind("Reservation")
+}
+
+func waitFor(t *testing.T, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("condition not met within timeout")
+}
 
 // errClient wraps an inner client.Client and injects a configurable error into
 // each mutating/read operation, so the error-propagation paths of
@@ -74,8 +205,8 @@ func (e *errClient) List(ctx context.Context, list client.ObjectList, opts ...cl
 }
 
 // forceInnerAZ writes a divergent AvailabilityZone directly to the inner client,
-// bypassing the caching wrapper (and its overlay). Used to prove that reads
-// through the caching client are served from the overlay, not the inner client.
+// bypassing the caching wrapper. Used to prove that reads through the caching
+// client are served from the overlay, not the inner client.
 func forceInnerAZ(t *testing.T, inner client.Client, name, az string) {
 	t.Helper()
 	var cur v1alpha1.Reservation
@@ -88,8 +219,8 @@ func forceInnerAZ(t *testing.T, inner client.Client, name, az string) {
 	}
 }
 
-// forceInnerStatusHost writes a divergent status Host directly to the inner
-// client, bypassing the caching wrapper.
+// forceInnerStatusHost writes a divergent status Host directly to the inner client,
+// bypassing the caching wrapper.
 func forceInnerStatusHost(t *testing.T, inner client.Client, name, host string) {
 	t.Helper()
 	var cur v1alpha1.Reservation
@@ -101,6 +232,17 @@ func forceInnerStatusHost(t *testing.T, inner client.Client, name, host string) 
 		t.Fatalf("forceInnerStatusHost update: %v", err)
 	}
 }
+
+// unknownObject is a client.Object whose type is not registered in the test
+// scheme, used to exercise the "unresolvable GVK" branches.
+type unknownObject struct {
+	metav1.TypeMeta
+	metav1.ObjectMeta
+}
+
+func (u *unknownObject) DeepCopyObject() runtime.Object { return u }
+
+// --- constructor tests ---
 
 // TestNewUnknownGVKError: New fails when a configured GVK string is not
 // registered in the scheme.
@@ -126,9 +268,6 @@ func TestNewDefaultTTL(t *testing.T) {
 	if c.ttl != defaultTTL {
 		t.Fatalf("expected ttl %v, got %v", defaultTTL, c.ttl)
 	}
-	if c.overlay.ttl != defaultTTL {
-		t.Fatalf("expected overlay ttl %v, got %v", defaultTTL, c.overlay.ttl)
-	}
 }
 
 // TestNewExplicitTTL: a non-zero TTL is honoured verbatim.
@@ -146,17 +285,284 @@ func TestNewExplicitTTL(t *testing.T) {
 	}
 }
 
-// TestWriteErrorLeavesOverlayUntouched: for every mutating method, a failing
-// inner call surfaces the error and leaves the overlay untouched (no live entry
-// and no tombstone).
+// --- overlay behaviour tests ---
+
+// TestCreateThenGetVisible: Create then immediate Get shows the object via the
+// overlay even before the informer has caught up.
+func TestCreateThenGetVisible(t *testing.T) {
+	inner := newTestClient(t)
+	c := newCaching(t, inner, &fakeInformerSource{inf: &fakeInformer{}})
+
+	r := newReservation("res-1", "az-1", "")
+	if err := c.Create(context.Background(), r); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	var got v1alpha1.Reservation
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err != nil {
+		t.Fatalf("Get after create: %v", err)
+	}
+	if got.Spec.AvailabilityZone != "az-1" {
+		t.Fatalf("expected az-1, got %q", got.Spec.AvailabilityZone)
+	}
+}
+
+// TestOverlayWhenInnerEmpty: a seeded overlay entry appears in List even when
+// the inner client returns nothing.
+func TestOverlayWhenInnerEmpty(t *testing.T) {
+	inner := newTestClient(t)
+	c := newCaching(t, inner, &fakeInformerSource{inf: &fakeInformer{}})
+
+	c.upsert(reservationGVK(), newReservation("res-2", "az-1", "5"))
+
+	items := listReservations(t, c)
+	if len(items) != 1 || items[0].Name != "res-2" {
+		t.Fatalf("expected overlay entry res-2, got %+v", items)
+	}
+}
+
+// TestEviction: an informer sighting evicts the overlay entry only when it
+// matches by UID and carries a ResourceVersion >= the cached one.
+func TestEviction(t *testing.T) {
+	const cachedRV = "10"
+	cases := []struct {
+		name        string
+		useUpdate   bool
+		observedUID string
+		observedRV  string
+		wantEvicted bool
+	}{
+		{name: "add older RV keeps", observedRV: "9", wantEvicted: false},
+		{name: "add equal RV evicts", observedRV: "10", wantEvicted: true},
+		{name: "add newer RV evicts", observedRV: "11", wantEvicted: true},
+		{name: "update newer RV evicts", useUpdate: true, observedRV: "11", wantEvicted: true},
+		{name: "update older RV keeps", useUpdate: true, observedRV: "9", wantEvicted: false},
+		{name: "uid mismatch keeps", observedUID: "uid-other", observedRV: "11", wantEvicted: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			inf := &fakeInformer{}
+			c := newCaching(t, newTestClient(t), &fakeInformerSource{inf: inf})
+
+			ctx := t.Context()
+			go func() {
+				if err := c.Start(ctx); err != nil && ctx.Err() == nil {
+					t.Errorf("c.Start: %v", err)
+				}
+			}()
+			waitFor(t, func() bool {
+				inf.mu.Lock()
+				defer inf.mu.Unlock()
+				return len(inf.handlers) > 0
+			})
+
+			c.upsert(reservationGVK(), newReservation("res-3", "az-1", cachedRV))
+
+			observed := newReservation("res-3", "az-1", tc.observedRV)
+			if tc.observedUID != "" {
+				observed.UID = types.UID(tc.observedUID)
+			}
+			if tc.useUpdate {
+				inf.fireUpdate(nil, observed)
+			} else {
+				inf.fireAdd(observed)
+			}
+
+			_, present := c.getEntry(reservationGVK(), objectKey{name: "res-3"})
+			if present == tc.wantEvicted {
+				t.Fatalf("evicted=%v, want evicted=%v", !present, tc.wantEvicted)
+			}
+		})
+	}
+}
+
+// TestEvictionIgnoresNonObject: a non-client.Object informer payload does not
+// panic or evict.
+func TestEvictionIgnoresNonObject(t *testing.T) {
+	inf := &fakeInformer{}
+	c := newCaching(t, newTestClient(t), &fakeInformerSource{inf: inf})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		if err := c.Start(ctx); err != nil && ctx.Err() == nil {
+			t.Errorf("c.Start: %v", err)
+		}
+	}()
+	waitFor(t, func() bool {
+		inf.mu.Lock()
+		defer inf.mu.Unlock()
+		return len(inf.handlers) > 0
+	})
+
+	c.upsert(reservationGVK(), newReservation("res-x", "az-1", "1"))
+	inf.fireAdd("not-an-object")
+	if _, ok := c.getEntry(reservationGVK(), objectKey{name: "res-x"}); !ok {
+		t.Fatalf("non-object event must not evict the entry")
+	}
+}
+
+// TestTTLCleanup: cleanupExpired removes entries whose TTL has passed.
+func TestTTLCleanup(t *testing.T) {
+	c := newCaching(t, newTestClient(t), &fakeInformerSource{inf: &fakeInformer{}})
+	c.upsert(reservationGVK(), newReservation("res-4", "az-1", "1"))
+	c.mu.Lock()
+	for _, entries := range c.byGVK {
+		for _, e := range entries {
+			e.expiresAt = time.Now().Add(-time.Second)
+		}
+	}
+	c.mu.Unlock()
+	c.cleanupExpired(time.Now())
+	if _, ok := c.getEntry(reservationGVK(), objectKey{name: "res-4"}); ok {
+		t.Fatalf("expired entry should be removed")
+	}
+}
+
+// TestTombstone: Delete stores a tombstone so subsequent Get/List return
+// NotFound even while the inner client still has the object.
+func TestTombstone(t *testing.T) {
+	r := newReservation("res-5", "az-1", "")
+	inner := newTestClient(t, r)
+	c := newCaching(t, inner, &fakeInformerSource{inf: &fakeInformer{}})
+
+	if err := c.Delete(context.Background(), r); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	// Re-create directly in inner to simulate informer lag.
+	if err := inner.Create(context.Background(), newReservation("res-5", "az-1", "")); err != nil {
+		t.Fatalf("re-create inner: %v", err)
+	}
+
+	var got v1alpha1.Reservation
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "res-5"}, &got); !apierrors.IsNotFound(err) {
+		t.Fatalf("expected NotFound for tombstoned object, got %v", err)
+	}
+	if items := listReservations(t, c); len(items) != 0 {
+		t.Fatalf("expected tombstone to filter from list, got %+v", items)
+	}
+}
+
+// TestUpdateOverridesInner: after Update the overlay version wins over a stale
+// inner read.
+func TestUpdateOverridesInner(t *testing.T) {
+	r := newReservation("res-6", "az-old", "1")
+	inner := newTestClient(t, r)
+	c := newCaching(t, inner, &fakeInformerSource{inf: &fakeInformer{}})
+
+	var cur v1alpha1.Reservation
+	if err := inner.Get(context.Background(), types.NamespacedName{Name: "res-6"}, &cur); err != nil {
+		t.Fatalf("inner get: %v", err)
+	}
+	cur.Spec.AvailabilityZone = "az-new"
+	if err := c.Update(context.Background(), &cur); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	var got v1alpha1.Reservation
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "res-6"}, &got); err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Spec.AvailabilityZone != "az-new" {
+		t.Fatalf("expected az-new from overlay, got %q", got.Spec.AvailabilityZone)
+	}
+}
+
+// TestLabelMatching: an overlay-only entry appears only for matching labels.
+func TestLabelMatching(t *testing.T) {
+	c := newCaching(t, newTestClient(t), &fakeInformerSource{inf: &fakeInformer{}})
+
+	r := newReservation("res-7", "az-1", "1")
+	r.Labels = map[string]string{"team": "a"}
+	c.upsert(reservationGVK(), r)
+
+	if match := listReservations(t, c, client.MatchingLabels{"team": "a"}); len(match) != 1 {
+		t.Fatalf("expected match for team=a, got %+v", match)
+	}
+	if noMatch := listReservations(t, c, client.MatchingLabels{"team": "b"}); len(noMatch) != 0 {
+		t.Fatalf("expected no match for team=b, got %+v", noMatch)
+	}
+}
+
+// TestFieldMatching: after IndexField registration, an overlay-only entry
+// appears only for matching field selectors.
+func TestFieldMatching(t *testing.T) {
+	c := newCaching(t, newTestClient(t), &fakeInformerSource{inf: &fakeInformer{}})
+
+	if err := c.IndexField(context.Background(), &v1alpha1.Reservation{}, azIndexField, func(obj client.Object) []string {
+		res := obj.(*v1alpha1.Reservation)
+		if res.Spec.AvailabilityZone == "" {
+			return nil
+		}
+		return []string{res.Spec.AvailabilityZone}
+	}); err != nil {
+		t.Fatalf("IndexField: %v", err)
+	}
+
+	c.upsert(reservationGVK(), newReservation("res-8", "az-1", "1"))
+
+	if match := listReservations(t, c, client.MatchingFields{azIndexField: "az-1"}); len(match) != 1 {
+		t.Fatalf("expected field match az-1, got %+v", match)
+	}
+	if noMatch := listReservations(t, c, client.MatchingFields{azIndexField: "az-2"}); len(noMatch) != 0 {
+		t.Fatalf("expected no field match az-2, got %+v", noMatch)
+	}
+}
+
+// TestNonCachedGVKPassthrough: calls for unconfigured GVKs pass through to the
+// inner client with no overlay involvement.
+func TestNonCachedGVKPassthrough(t *testing.T) {
+	inner := newTestClient(t)
+	c, err := New(inner, &fakeInformerSource{inf: &fakeInformer{}}, testScheme(t), Config{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	r := newReservation("res-9", "az-1", "")
+	if err := c.Create(context.Background(), r); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, ok := c.getEntry(reservationGVK(), objectKey{name: "res-9"}); ok {
+		t.Fatalf("non-cached GVK should not populate overlay")
+	}
+	if err := c.Delete(context.Background(), r); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	var got v1alpha1.Reservation
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "res-9"}, &got); !apierrors.IsNotFound(err) {
+		t.Fatalf("expected NotFound, got %v", err)
+	}
+}
+
+// TestDedup: an object present in both the inner client and the overlay appears
+// exactly once in List, with the overlay version winning.
+func TestDedup(t *testing.T) {
+	r := newReservation("res-10", "az-1", "1")
+	inner := newTestClient(t, r)
+	c := newCaching(t, inner, &fakeInformerSource{inf: &fakeInformer{}})
+
+	newer := newReservation("res-10", "az-1", "2")
+	newer.Spec.TargetHost = "host-x"
+	c.upsert(reservationGVK(), newer)
+
+	items := listReservations(t, c)
+	if len(items) != 1 {
+		t.Fatalf("expected exactly one item after dedup, got %d: %+v", len(items), items)
+	}
+	if items[0].Spec.TargetHost != "host-x" {
+		t.Fatalf("expected overlay version to win, got %+v", items[0])
+	}
+}
+
+// --- error-propagation tests ---
+
+// TestWriteErrorLeavesOverlayUntouched: a failing inner call leaves the overlay
+// untouched (no live entry and no tombstone).
 func TestWriteErrorLeavesOverlayUntouched(t *testing.T) {
 	sentinel := errors.New("boom")
 	cases := []struct {
-		name string
-		rv   string // ResourceVersion for the object passed to the op
-		seed bool   // pre-seed the object in the inner client (delete needs it)
-		// mkClient wraps an inner client (which may already contain r) with the
-		// relevant injected error.
+		name     string
+		rv       string
+		seed     bool
 		mkClient func(inner client.Client) client.Client
 		op       func(c *CachingClient, r *v1alpha1.Reservation) error
 	}{
@@ -202,7 +608,7 @@ func TestWriteErrorLeavesOverlayUntouched(t *testing.T) {
 			if err := tc.op(c, r); !errors.Is(err, sentinel) {
 				t.Fatalf("expected sentinel error, got %v", err)
 			}
-			if _, ok := c.overlay.get(reservationGVK(), objectKey{name: r.Name}); ok {
+			if _, ok := c.getEntry(reservationGVK(), objectKey{name: r.Name}); ok {
 				t.Fatalf("overlay must not be touched on %s failure", tc.name)
 			}
 		})
@@ -211,18 +617,13 @@ func TestWriteErrorLeavesOverlayUntouched(t *testing.T) {
 
 // TestWriteServedFromOverlay: after a write through the caching client, a Get
 // returns the written value even though the inner client has been forced to a
-// divergent (stale) value behind the cache's back. This proves the read path is
-// actually served from the overlay, not merely that the overlay was written.
+// divergent (stale) value behind the cache's back.
 func TestWriteServedFromOverlay(t *testing.T) {
 	cases := []struct {
-		name string
-		// write performs the write under test through c, given the current
-		// object cur fetched from inner, and returns the value it wrote.
-		write func(t *testing.T, c *CachingClient, cur *v1alpha1.Reservation) string
-		// diverge forces the inner client to a stale value behind the cache.
+		name    string
+		write   func(t *testing.T, c *CachingClient, cur *v1alpha1.Reservation) string
 		diverge func(t *testing.T, inner client.Client, name string)
-		// read extracts the field under test from a Get result.
-		read func(*v1alpha1.Reservation) string
+		read    func(*v1alpha1.Reservation) string
 	}{
 		{
 			name: "patch spec",
@@ -291,30 +692,24 @@ func TestWriteServedFromOverlay(t *testing.T) {
 	}
 }
 
-// TestGetPropagatesNonNotFoundError: a cached-GVK Get surfaces inner errors
-// other than NotFound without consulting the overlay.
+// TestGetPropagatesNonNotFoundError: a non-NotFound inner error is surfaced
+// without consulting the overlay.
 func TestGetPropagatesNonNotFoundError(t *testing.T) {
 	sentinel := errors.New("get boom")
-	inner := &errClient{Client: newTestClient(t), getErr: sentinel}
-	c := newCaching(t, inner, &fakeInformerSource{inf: &fakeInformer{}})
-
-	// Seed a live overlay entry that must NOT mask the underlying error.
-	c.overlay.upsert(reservationGVK(), newReservation("res-ge", "az-1", "1"))
+	c := newCaching(t, &errClient{Client: newTestClient(t), getErr: sentinel}, &fakeInformerSource{inf: &fakeInformer{}})
+	c.upsert(reservationGVK(), newReservation("res-ge", "az-1", "1"))
 
 	var got v1alpha1.Reservation
-	err := c.Get(context.Background(), types.NamespacedName{Name: "res-ge"}, &got)
-	if !errors.Is(err, sentinel) {
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "res-ge"}, &got); !errors.Is(err, sentinel) {
 		t.Fatalf("expected sentinel error, got %v", err)
 	}
 }
 
 // TestGetOverlayResurrectsNotFound: a live overlay entry satisfies a Get that
-// the inner client reports as NotFound (write not yet visible in the informer).
+// the inner client reports as NotFound.
 func TestGetOverlayResurrectsNotFound(t *testing.T) {
-	inner := newTestClient(t) // empty: inner Get returns NotFound
-	c := newCaching(t, inner, &fakeInformerSource{inf: &fakeInformer{}})
-
-	c.overlay.upsert(reservationGVK(), newReservation("res-gr", "az-z", "1"))
+	c := newCaching(t, newTestClient(t), &fakeInformerSource{inf: &fakeInformer{}})
+	c.upsert(reservationGVK(), newReservation("res-gr", "az-z", "1"))
 
 	var got v1alpha1.Reservation
 	if err := c.Get(context.Background(), types.NamespacedName{Name: "res-gr"}, &got); err != nil {
@@ -326,24 +721,21 @@ func TestGetOverlayResurrectsNotFound(t *testing.T) {
 }
 
 // TestGetNotFoundWithNoOverlay: inner NotFound with no overlay entry propagates
-// NotFound unchanged for a cached GVK.
+// NotFound unchanged.
 func TestGetNotFoundWithNoOverlay(t *testing.T) {
-	inner := newTestClient(t)
-	c := newCaching(t, inner, &fakeInformerSource{inf: &fakeInformer{}})
+	c := newCaching(t, newTestClient(t), &fakeInformerSource{inf: &fakeInformer{}})
 
 	var got v1alpha1.Reservation
-	err := c.Get(context.Background(), types.NamespacedName{Name: "missing"}, &got)
-	if !apierrors.IsNotFound(err) {
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "missing"}, &got); !apierrors.IsNotFound(err) {
 		t.Fatalf("expected NotFound, got %v", err)
 	}
 }
 
 // TestGetNonCachedPropagatesError: for a non-cached GVK, Get is a pure
-// passthrough and surfaces the inner error verbatim.
+// passthrough.
 func TestGetNonCachedPropagatesError(t *testing.T) {
 	sentinel := errors.New("get boom")
-	inner := &errClient{Client: newTestClient(t), getErr: sentinel}
-	c, err := New(inner, &fakeInformerSource{inf: &fakeInformer{}}, testScheme(t), Config{})
+	c, err := New(&errClient{Client: newTestClient(t), getErr: sentinel}, &fakeInformerSource{inf: &fakeInformer{}}, testScheme(t), Config{})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -353,13 +745,12 @@ func TestGetNonCachedPropagatesError(t *testing.T) {
 	}
 }
 
-// TestListPropagatesError: for a cached GVK, a failing inner List surfaces the
-// error rather than returning a partial overlay merge.
+// TestListPropagatesError: a failing inner List surfaces the error rather than
+// returning a partial overlay merge.
 func TestListPropagatesError(t *testing.T) {
 	sentinel := errors.New("list boom")
-	inner := &errClient{Client: newTestClient(t), listErr: sentinel}
-	c := newCaching(t, inner, &fakeInformerSource{inf: &fakeInformer{}})
-	c.overlay.upsert(reservationGVK(), newReservation("res-le", "az-1", "1"))
+	c := newCaching(t, &errClient{Client: newTestClient(t), listErr: sentinel}, &fakeInformerSource{inf: &fakeInformer{}})
+	c.upsert(reservationGVK(), newReservation("res-le", "az-1", "1"))
 
 	var list v1alpha1.ReservationList
 	if err := c.List(context.Background(), &list); !errors.Is(err, sentinel) {
@@ -370,31 +761,27 @@ func TestListPropagatesError(t *testing.T) {
 // TestStatusUpdateErrorLeavesOverlayUntouched: a failed status update does not
 // populate the overlay.
 func TestStatusUpdateErrorLeavesOverlayUntouched(t *testing.T) {
-	inner := newTestClient(t) // object absent → status update fails
-	c := newCaching(t, inner, &fakeInformerSource{inf: &fakeInformer{}})
+	c := newCaching(t, newTestClient(t), &fakeInformerSource{inf: &fakeInformer{}})
 
 	r := newReservation("res-se", "az-1", "1")
 	if err := c.Status().Update(context.Background(), r); err == nil {
 		t.Fatalf("expected status update to fail for missing object")
 	}
-	if _, ok := c.overlay.get(reservationGVK(), objectKey{name: "res-se"}); ok {
+	if _, ok := c.getEntry(reservationGVK(), objectKey{name: "res-se"}); ok {
 		t.Fatalf("overlay must not be populated on status update failure")
 	}
 }
 
 // TestStatusCreateDelegates: Status().Create delegates to the inner status
-// writer (fake client reports it unsupported) and never touches the overlay.
+// writer and never touches the overlay.
 func TestStatusCreateDelegates(t *testing.T) {
 	r := newReservation("res-sc", "az-1", "")
-	inner := newTestClient(t, r)
-	c := newCaching(t, inner, &fakeInformerSource{inf: &fakeInformer{}})
+	c := newCaching(t, newTestClient(t, r), &fakeInformerSource{inf: &fakeInformer{}})
 
-	// The fake client does not support subresource Create; we only assert the
-	// call is delegated (returns an error) and the overlay stays empty.
 	if err := c.Status().Create(context.Background(), r, r); err == nil {
 		t.Fatalf("expected Status().Create to fail on fake client")
 	}
-	if _, ok := c.overlay.get(reservationGVK(), objectKey{name: "res-sc"}); ok {
+	if _, ok := c.getEntry(reservationGVK(), objectKey{name: "res-sc"}); ok {
 		t.Fatalf("Status().Create must not populate the overlay")
 	}
 }
@@ -416,16 +803,17 @@ func TestStatusUpdateNonCachedNoOverlay(t *testing.T) {
 	if err := c.Status().Update(context.Background(), &cur); err != nil {
 		t.Fatalf("Status().Update: %v", err)
 	}
-	if _, ok := c.overlay.get(reservationGVK(), objectKey{name: "res-sn"}); ok {
+	if _, ok := c.getEntry(reservationGVK(), objectKey{name: "res-sn"}); ok {
 		t.Fatalf("non-cached GVK status update should not populate overlay")
 	}
 }
 
+// --- helper / utility tests ---
+
 // TestGVKForUnknownType: gvkFor reports not-cached for a type not registered in
 // the scheme.
 func TestGVKForUnknownType(t *testing.T) {
-	inner := newTestClient(t)
-	c := newCaching(t, inner, &fakeInformerSource{inf: &fakeInformer{}})
+	c := newCaching(t, newTestClient(t), &fakeInformerSource{inf: &fakeInformer{}})
 	if _, cached := c.gvkFor(&unknownObject{}); cached {
 		t.Fatalf("unknown type must not be reported as cached")
 	}
@@ -439,7 +827,7 @@ func TestTrimListSuffix(t *testing.T) {
 		wantOK   bool
 	}{
 		{"ReservationList", "Reservation", true},
-		{"List", "List", false}, // len(kind) not > len("List")
+		{"List", "List", false},
 		{"Reservation", "Reservation", false},
 		{"", "", false},
 	}
@@ -450,12 +838,3 @@ func TestTrimListSuffix(t *testing.T) {
 		}
 	}
 }
-
-// unknownObject is a client.Object whose type is not registered in the test
-// scheme, used to exercise the "unresolvable GVK" branches.
-type unknownObject struct {
-	metav1.TypeMeta
-	metav1.ObjectMeta
-}
-
-func (u *unknownObject) DeepCopyObject() runtime.Object { return u }
