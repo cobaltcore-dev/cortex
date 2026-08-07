@@ -120,13 +120,13 @@ func newTestClient(t *testing.T, objs ...client.Object) *fakeClient {
 // touch the overlay on failure) can be exercised.
 type errClient struct {
 	Client
-	createErr       error
-	updateErr       error
-	patchErr        error
-	deleteErr       error
-	deleteAllOfErr  error
-	getErr          error
-	listErr         error
+	createErr      error
+	updateErr      error
+	patchErr       error
+	deleteErr      error
+	deleteAllOfErr error
+	getErr         error
+	listErr        error
 }
 
 func (e *errClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
@@ -481,6 +481,33 @@ func TestUpdateOverridesInner(t *testing.T) {
 	}
 	if got.Spec.AvailabilityZone != "az-new" {
 		t.Fatalf("expected az-new from overlay, got %q", got.Spec.AvailabilityZone)
+	}
+}
+
+func TestLabelMatchingAfterOverlayChange(t *testing.T) {
+	// Regression: if a write changes a field that is part of the query, the
+	// overlay version must be re-matched against the list options. Before the
+	// fix, the inner List would include the object (matching the old value in
+	// the informer), and overlayList would silently swap in the new version,
+	// returning an object that does not satisfy the query.
+	r := newReservation("res-overlay-label", "az-1", "1")
+	r.Labels = map[string]string{"team": "a"}
+	inner := newTestClient(t, r)
+	c := newCaching(t, inner)
+
+	// Update label in overlay only (bypass inner to simulate informer lag).
+	updated := r.DeepCopy()
+	updated.Labels = map[string]string{"team": "b"}
+	c.upsert(reservationGVK(), updated)
+
+	// Query for the OLD label value — informer still returns the object, but
+	// the overlay version has team=b, so it must be excluded.
+	if got := listReservations(t, c, client.MatchingLabels{"team": "a"}); len(got) != 0 {
+		t.Fatalf("expected no results for team=a after overlay changed label to b, got %+v", got)
+	}
+	// Query for the NEW label value — overlay-only path must include it.
+	if got := listReservations(t, c, client.MatchingLabels{"team": "b"}); len(got) != 1 {
+		t.Fatalf("expected one result for team=b, got %+v", got)
 	}
 }
 

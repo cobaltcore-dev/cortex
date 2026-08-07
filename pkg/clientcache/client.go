@@ -375,6 +375,12 @@ func (c *CachingClient) overlayList(gvk schema.GroupVersionKind, existing []runt
 			// Tombstone: drop the object entirely.
 			continue
 		}
+		// The inner result matched the query against the informer's (old) field
+		// values. Re-check the overlay version: if a write changed a queried
+		// field, the overlay object no longer belongs in this result set.
+		if !c.matchesLocked(gvk, e.obj, lo) {
+			continue
+		}
 		result = append(result, e.obj.DeepCopyObject())
 	}
 

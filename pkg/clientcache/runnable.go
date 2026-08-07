@@ -75,6 +75,13 @@ func (c *CachingClient) evictionHandler(gvk schema.GroupVersionKind) toolscachek
 	return toolscachek8s.ResourceEventHandlerFuncs{
 		AddFunc:    func(o any) { evict(o) },
 		UpdateFunc: func(_, o any) { evict(o) },
+		DeleteFunc: func(o any) {
+			if d, ok := o.(toolscachek8s.DeletedFinalStateUnknown); ok {
+				evict(d.Obj)
+				return
+			}
+			evict(o)
+		},
 	}
 }
 
