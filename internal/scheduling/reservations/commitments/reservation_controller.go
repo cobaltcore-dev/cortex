@@ -1038,13 +1038,21 @@ func (r *CommitmentReservationController) checkHostOversubscription(
 	}
 
 	if firstSeen.IsZero() {
-		logger.Info("host over-subscribed, grace period started", "gracePeriod", gracePeriod)
+		logger.Info("host over-subscribed, starting grace period",
+			"gracePeriod", gracePeriod,
+			"violations", func() map[string]string {
+				m := make(map[string]string, len(violations))
+				for rn, q := range violations {
+					m[string(rn)] = q.String()
+				}
+				return m
+			}())
 		return false, false, nil
 	}
 
 	elapsed := time.Since(firstSeen)
 	if elapsed < gracePeriod {
-		logger.Info("host over-subscribed, waiting grace period",
+		logger.V(1).Info("host over-subscribed, grace period in progress",
 			"elapsed", elapsed.Round(time.Second),
 			"remaining", (gracePeriod - elapsed).Round(time.Second))
 		return false, false, nil
@@ -1094,13 +1102,24 @@ func (r *CommitmentReservationController) checkHostOversubscription(
 		}
 	}
 
-	candidates := append(unallocatedReservations, allocatedReservations...)
-	if len(candidates) == 0 {
-		logger.Error(nil, "host over-subscribed but no CR reservation slots found to evict")
+	// Pick the eviction target: smallest unallocated first, then smallest allocated.
+	var target *v1alpha1.Reservation
+	if len(unallocatedReservations) > 0 {
+		target = unallocatedReservations[0]
+	} else if len(allocatedReservations) > 0 {
+		target = allocatedReservations[0]
+	}
+	if target == nil {
+		logger.Info("host over-subscribed but no evictable CR reservation slots found — manual intervention required",
+			"violations", func() map[string]string {
+				m := make(map[string]string, len(violations))
+				for rn, q := range violations {
+					m[string(rn)] = q.String()
+				}
+				return m
+			}())
 		return false, false, nil
 	}
-
-	target := candidates[0]
 	freed, err := r.unplaceReservation(ctx, target, host)
 	if err != nil {
 		return false, false, err

@@ -1383,3 +1383,190 @@ func TestCheckHostOversubscription_GracePeriodDefers(t *testing.T) {
 		t.Errorf("expected TargetHost to be cleared, got %q", updated.Spec.TargetHost)
 	}
 }
+
+func TestUnplaceReservation_ClearsAllocations(t *testing.T) {
+	scheme := newCRTestScheme(t)
+	gib := func(n int64) resource.Quantity { return *resource.NewQuantity(n*1024*1024*1024, resource.BinarySI) }
+
+	slot := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "slot-1"},
+		Spec: v1alpha1.ReservationSpec{
+			Type:       v1alpha1.ReservationTypeCommittedResource,
+			TargetHost: "host-1",
+			Resources:  map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+					"vm-1": {Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(256)}},
+				},
+			},
+		},
+		Status: v1alpha1.ReservationStatus{
+			Host: "host-1",
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
+				Allocations: map[string]string{"vm-1": "host-1"},
+			},
+		},
+	}
+
+	k8sClient := newCRTestClient(scheme, slot)
+	controller := &CommitmentReservationController{Client: k8sClient}
+
+	freed, err := controller.unplaceReservation(context.Background(), slot, "host-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	freedMem := freed[hv1.ResourceMemory]
+	expected512 := gib(512)
+	if freedMem.Value() != expected512.Value() {
+		t.Errorf("expected freed memory = 512 GiB, got %s", freedMem.String())
+	}
+
+	var updated v1alpha1.Reservation
+	if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: "slot-1"}, &updated); err != nil {
+		t.Fatalf("failed to get updated reservation: %v", err)
+	}
+	if updated.Spec.TargetHost != "" {
+		t.Errorf("expected TargetHost cleared, got %q", updated.Spec.TargetHost)
+	}
+	if len(updated.Spec.CommittedResourceReservation.Allocations) != 0 {
+		t.Errorf("expected Spec.Allocations cleared, got %v", updated.Spec.CommittedResourceReservation.Allocations)
+	}
+	if updated.Status.Host != "" {
+		t.Errorf("expected Status.Host cleared, got %q", updated.Status.Host)
+	}
+	if updated.Status.CommittedResourceReservation != nil && len(updated.Status.CommittedResourceReservation.Allocations) != 0 {
+		t.Errorf("expected Status.Allocations cleared, got %v", updated.Status.CommittedResourceReservation.Allocations)
+	}
+}
+
+func TestCheckHostOversubscription_PrefersUnallocated(t *testing.T) {
+	scheme := newCRTestScheme(t)
+	gib := func(n int64) resource.Quantity { return *resource.NewQuantity(n*1024*1024*1024, resource.BinarySI) }
+
+	// Host has 1024 GiB. Two 512 GiB slots + 256 GiB VM allocation = 1280 GiB → over-subscribed by 256 GiB.
+	hv := hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{Name: "host-1", Labels: map[string]string{"topology.kubernetes.io/zone": "az1"}},
+		Status: hv1.HypervisorStatus{
+			EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(1024)},
+			Allocation:        map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(256)},
+		},
+	}
+	allocated := v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "slot-allocated"},
+		Spec: v1alpha1.ReservationSpec{
+			Type: v1alpha1.ReservationTypeCommittedResource, TargetHost: "host-1",
+			Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+					"vm-1": {Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(256)}},
+				},
+			},
+		},
+		Status: v1alpha1.ReservationStatus{
+			Host: "host-1",
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
+				Allocations: map[string]string{"vm-1": "host-1"},
+			},
+		},
+	}
+	unallocated := v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "slot-unallocated"},
+		Spec: v1alpha1.ReservationSpec{
+			Type: v1alpha1.ReservationTypeCommittedResource, TargetHost: "host-1",
+			Resources:                    map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
+		},
+		Status: v1alpha1.ReservationStatus{Host: "host-1"},
+	}
+	// free = 1024 - 256(alloc) - 256(allocated slot remaining) - 512(unallocated) = 0 — exactly at boundary
+	// Need one more slot to push over. Add a third small unallocated slot.
+	extra := v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "slot-extra"},
+		Spec: v1alpha1.ReservationSpec{
+			Type: v1alpha1.ReservationTypeCommittedResource, TargetHost: "host-1",
+			Resources:                    map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(128)},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
+		},
+		Status: v1alpha1.ReservationStatus{Host: "host-1"},
+	}
+	// free = 1024 - 256(alloc) - 256(allocated remaining) - 512(unallocated) - 128(extra) = -128 GiB
+	slots := []v1alpha1.Reservation{allocated, unallocated, extra}
+
+	k8sClient := newCRTestClient(scheme, &allocated, &unallocated, &extra)
+	monitor := NewReservationControllerMonitor()
+	controller := &CommitmentReservationController{Client: k8sClient, Monitor: &monitor}
+
+	firstSeen := time.Now().Add(-3 * time.Minute)
+	evicted, _, err := controller.checkHostOversubscription(context.Background(), "host-1",
+		slots, hv, &monitor, 2*time.Minute, firstSeen)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !evicted {
+		t.Fatal("expected eviction")
+	}
+	// The smallest unallocated slot (extra=128GiB) should be evicted first
+	var updatedAllocated v1alpha1.Reservation
+	if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: "slot-allocated"}, &updatedAllocated); err != nil {
+		t.Fatalf("failed to get slot: %v", err)
+	}
+	if updatedAllocated.Spec.TargetHost == "" {
+		t.Error("allocated slot should not have been evicted")
+	}
+	var updatedExtra v1alpha1.Reservation
+	if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: "slot-extra"}, &updatedExtra); err != nil {
+		t.Fatalf("failed to get slot: %v", err)
+	}
+	if updatedExtra.Spec.TargetHost != "" {
+		t.Error("smallest unallocated slot should have been evicted")
+	}
+}
+
+func TestRunOversubscriptionCheck_RateLimit(t *testing.T) {
+	scheme := newCRTestScheme(t)
+	gib := func(n int64) resource.Quantity { return *resource.NewQuantity(n*1024*1024*1024, resource.BinarySI) }
+
+	hv := &hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{Name: "host-1", Labels: map[string]string{"topology.kubernetes.io/zone": "az1"}},
+		Status: hv1.HypervisorStatus{
+			EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(1024)},
+		},
+	}
+	slot := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "slot-1"},
+		Spec: v1alpha1.ReservationSpec{
+			Type: v1alpha1.ReservationTypeCommittedResource, TargetHost: "host-1",
+			Resources:                    map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
+		},
+		Status: v1alpha1.ReservationStatus{Host: "host-1"},
+	}
+	k8sClient := newCRTestClient(scheme, hv, slot)
+	monitor := NewReservationControllerMonitor()
+	controller := &CommitmentReservationController{
+		Client:  k8sClient,
+		Monitor: &monitor,
+		Conf:    ReservationControllerConfig{RequeueIntervalActive: metav1.Duration{Duration: 30 * time.Minute}},
+	}
+
+	// First call: runs the check (no violation, returns 0)
+	result := controller.runOversubscriptionCheck(context.Background(), "host-1")
+	if result != 0 {
+		t.Errorf("expected 0 on first call (no violation), got %v", result)
+	}
+
+	// Second call immediately: should be rate-limited, set pending, return remaining interval
+	result = controller.runOversubscriptionCheck(context.Background(), "host-1")
+	if result == 0 {
+		t.Error("expected non-zero requeue when rate-limited")
+	}
+	if !controller.oversubscriptionPendingCheck["host-1"] {
+		t.Error("expected pending flag to be set")
+	}
+
+	// Third call while already pending: should return 0 (no duplicate requeue)
+	result = controller.runOversubscriptionCheck(context.Background(), "host-1")
+	if result != 0 {
+		t.Errorf("expected 0 when already pending (no duplicate requeue), got %v", result)
+	}
+}
