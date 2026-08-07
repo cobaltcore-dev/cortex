@@ -520,7 +520,10 @@ func (c *CachingClient) Get(ctx context.Context, key client.ObjectKey, obj clien
 		return apierrors.NewNotFound(schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind}, key.Name)
 	}
 	// Live overlay entry: copy it into obj, overriding the inner result.
-	if cpErr := c.scheme.Convert(e.obj, obj, nil); cpErr != nil {
+	// Deep-copy the cached object first so scheme.Convert cannot alias the
+	// overlay entry's maps, slices, or metadata into the caller's obj (which
+	// would let callers mutate the shared cache entry).
+	if cpErr := c.scheme.Convert(e.obj.DeepCopyObject(), obj, nil); cpErr != nil {
 		return cpErr
 	}
 	return nil
