@@ -54,6 +54,14 @@ func (c *CachingClient) Start(ctx context.Context) error {
 	}
 }
 
+// NeedLeaderElection reports that the CachingClient's Start lifecycle must run
+// on every replica, not only the elected leader. The overlay is per-process
+// state, so its eviction handlers and TTL cleanup have to run wherever the
+// client is used, regardless of leader election.
+func (c *CachingClient) NeedLeaderElection() bool {
+	return false
+}
+
 // evictionHandler returns an informer event handler that evicts overlay entries
 // for the GVK when the real object is observed at a >= ResourceVersion.
 func (c *CachingClient) evictionHandler(gvk schema.GroupVersionKind) toolscachek8s.ResourceEventHandler {
