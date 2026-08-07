@@ -626,10 +626,14 @@ func main() {
 		monitor := reservations.NewMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&monitor)
 
+		reservationControllerMonitor := commitments.NewReservationControllerMonitor()
+		metrics.Registry.MustRegister(&reservationControllerMonitor)
+
 		if err := (&commitments.CommitmentReservationController{
-			Client: multiclusterClient,
-			Scheme: mgr.GetScheme(),
-			Conf:   commitmentsConfig.ReservationController,
+			Client:  multiclusterClient,
+			Scheme:  mgr.GetScheme(),
+			Conf:    commitmentsConfig.ReservationController,
+			Monitor: &reservationControllerMonitor,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "CommitmentReservation")
 			os.Exit(1)

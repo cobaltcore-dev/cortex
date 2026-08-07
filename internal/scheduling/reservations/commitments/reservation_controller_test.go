@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -1214,5 +1215,171 @@ func TestReconcileAllocations_LiveMigration(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestHvCapacityChangePredicate(t *testing.T) {
+	gib := func(n int64) resource.Quantity { return *resource.NewQuantity(n*1024*1024*1024, resource.BinarySI) }
+	cpu := func(n int64) resource.Quantity { return *resource.NewQuantity(n, resource.DecimalSI) }
+
+	makeHV := func(memGiB, cpuCores int64, instances []hv1.Instance) hv1.Hypervisor {
+		return hv1.Hypervisor{
+			Status: hv1.HypervisorStatus{
+				EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: gib(memGiB),
+					hv1.ResourceCPU:    cpu(cpuCores),
+				},
+				Instances: instances,
+			},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		old      hv1.Hypervisor
+		new      hv1.Hypervisor
+		wantFire bool
+	}{
+		{
+			name:     "instances changed → fires",
+			old:      makeHV(1024, 256, nil),
+			new:      makeHV(1024, 256, []hv1.Instance{{ID: "vm-1"}}),
+			wantFire: true,
+		},
+		{
+			name:     "effective capacity changed → fires",
+			old:      makeHV(1024, 256, nil),
+			new:      makeHV(2048, 256, nil),
+			wantFire: true,
+		},
+		{
+			name: "allocation changed → fires",
+			old:  makeHV(1024, 256, nil),
+			new: func() hv1.Hypervisor {
+				h := makeHV(1024, 256, nil)
+				h.Status.Allocation = map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)}
+				return h
+			}(),
+			wantFire: true,
+		},
+		{
+			name:     "nothing relevant changed → does not fire",
+			old:      makeHV(1024, 256, nil),
+			new:      makeHV(1024, 256, nil),
+			wantFire: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oldObj := tt.old
+			newObj := tt.new
+			got := hvCapacityChangePredicate.UpdateFunc(event.UpdateEvent{
+				ObjectOld: &oldObj,
+				ObjectNew: &newObj,
+			})
+			if got != tt.wantFire {
+				t.Errorf("hvCapacityChangePredicate.UpdateFunc = %v, want %v", got, tt.wantFire)
+			}
+		})
+	}
+}
+
+func TestCheckHostOversubscription_NoViolation(t *testing.T) {
+	scheme := newCRTestScheme(t)
+	gib := func(n int64) resource.Quantity { return *resource.NewQuantity(n*1024*1024*1024, resource.BinarySI) }
+
+	hv := hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{Name: "host-1", Labels: map[string]string{"topology.kubernetes.io/zone": "az1"}},
+		Status: hv1.HypervisorStatus{
+			EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(1024)},
+		},
+	}
+	slot := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "slot-1"},
+		Spec: v1alpha1.ReservationSpec{
+			Type:                         v1alpha1.ReservationTypeCommittedResource,
+			TargetHost:                   "host-1",
+			Resources:                    map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
+		},
+		Status: v1alpha1.ReservationStatus{Host: "host-1"},
+	}
+
+	k8sClient := newCRTestClient(scheme, slot)
+	monitor := NewReservationControllerMonitor()
+	controller := &CommitmentReservationController{Client: k8sClient, Monitor: &monitor}
+
+	evicted, resolved, err := controller.checkHostOversubscription(context.Background(), "host-1",
+		[]v1alpha1.Reservation{*slot}, hv, &monitor, 2*time.Minute, time.Time{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if evicted {
+		t.Error("expected no eviction when host is not over-subscribed")
+	}
+	if !resolved {
+		t.Error("expected resolved=true when host is not over-subscribed")
+	}
+}
+
+func TestCheckHostOversubscription_GracePeriodDefers(t *testing.T) {
+	scheme := newCRTestScheme(t)
+	gib := func(n int64) resource.Quantity { return *resource.NewQuantity(n*1024*1024*1024, resource.BinarySI) }
+
+	hv := hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{Name: "host-1", Labels: map[string]string{"topology.kubernetes.io/zone": "az1"}},
+		Status: hv1.HypervisorStatus{
+			EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(1024)},
+		},
+	}
+	// 3 x 512 GiB slots on a 1024 GiB host → over-subscribed by 512 GiB
+	makeSlot := func(name string) v1alpha1.Reservation {
+		return v1alpha1.Reservation{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Spec: v1alpha1.ReservationSpec{
+				Type:                         v1alpha1.ReservationTypeCommittedResource,
+				TargetHost:                   "host-1",
+				Resources:                    map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)},
+				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
+			},
+			Status: v1alpha1.ReservationStatus{Host: "host-1"},
+		}
+	}
+	slots := []v1alpha1.Reservation{makeSlot("slot-1"), makeSlot("slot-2"), makeSlot("slot-3")}
+
+	k8sClient := newCRTestClient(scheme, &slots[0], &slots[1], &slots[2])
+	monitor := NewReservationControllerMonitor()
+	controller := &CommitmentReservationController{Client: k8sClient, Monitor: &monitor}
+
+	// First call: no firstSeen yet → grace period starts, no eviction
+	evicted, resolved, err := controller.checkHostOversubscription(context.Background(), "host-1",
+		slots, hv, &monitor, 2*time.Minute, time.Time{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if evicted || resolved {
+		t.Error("expected no eviction and no resolution during initial grace period")
+	}
+
+	// Second call with elapsed grace period: should evict
+	firstSeen := time.Now().Add(-3 * time.Minute)
+
+	evicted, _, err = controller.checkHostOversubscription(context.Background(), "host-1",
+		slots, hv, &monitor, 2*time.Minute, firstSeen)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !evicted {
+		t.Error("expected eviction after grace period elapsed")
+	}
+
+	// Verify the evicted slot has TargetHost cleared
+	var updated v1alpha1.Reservation
+	if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: "slot-1"}, &updated); err != nil {
+		t.Fatalf("failed to get slot: %v", err)
+	}
+	if updated.Spec.TargetHost != "" {
+		t.Errorf("expected TargetHost to be cleared, got %q", updated.Spec.TargetHost)
 	}
 }

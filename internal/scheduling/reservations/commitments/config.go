@@ -62,6 +62,9 @@ type ReservationControllerConfig struct {
 	// reservation during which it's expected to appear on the target host.
 	// VMs not confirmed within this period are considered stale and removed.
 	AllocationGracePeriod metav1.Duration `json:"allocationGracePeriod"`
+	// OversubscriptionGracePeriod is how long to wait after detecting host over-subscription
+	// before evicting slots. Gives other controllers (e.g. failover) time to self-heal.
+	OversubscriptionGracePeriod metav1.Duration `json:"oversubscriptionGracePeriod,omitempty"`
 	// SchedulerURL is the endpoint of the nova external scheduler.
 	SchedulerURL string `json:"schedulerURL"`
 	// PipelineDefault is the fallback pipeline when no FlavorGroupPipelines entry matches.

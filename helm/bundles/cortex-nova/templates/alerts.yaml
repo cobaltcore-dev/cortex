@@ -749,4 +749,41 @@ spec:
           resource router is mapping the same object to multiple clusters, or an
           object was created out-of-band on the wrong cluster. Investigate the
           affected resources and the routing configuration.
+
+    {{- if .Values.kvm.enabled }}
+    - alert: CortexNovaHostReservationsOversubscribed
+      # Fires when the sum of running VM allocations + reservation blocks (committed +
+      # failover) exceeds the host's effective capacity for CPU or memory.
+      # This can happen due to: concurrent slot creation with stale informer cache,
+      # operator-driven VM migrations where the slot stays on the old host, or
+      # capacity changes (e.g. hardware replacement changing EffectiveCapacity).
+      # The 10m hold-off tolerates the known migration window: after a VM departs,
+      # the slot remains on the old host until the usage reconciler cleans it up.
+      # Note: `reserved` only counts Ready reservations — violations during the
+      # initial unready window (slot just created) are not captured by this alert.
+      expr: |
+        (
+          cortex_kvm_host_capacity_usage{type="utilized"}
+          + on(compute_host, availability_zone, resource) cortex_kvm_host_capacity_usage{type="reserved"}
+          + on(compute_host, availability_zone, resource) cortex_kvm_host_capacity_usage{type="failover"}
+          - on(compute_host, availability_zone, resource) cortex_kvm_host_capacity_total
+        ) > 0
+      for: 10m
+      labels:
+        context: committed-resource-capacity
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/committed-resource-capacity
+      annotations:
+        summary: "Host {{ "{{" }} $labels.compute_host {{ "}}" }} reservation blocks exceed capacity for {{ "{{" }} $labels.resource {{ "}}" }}"
+        description: >
+          The total of running VM allocations and reservation blocks (committed resource +
+          failover) on host {{ "{{" }} $labels.compute_host {{ "}}" }} exceeds its effective
+          capacity for {{ "{{" }} $labels.resource {{ "}}" }} by {{ "{{" }} $value | humanize1024 {{ "}}" }}.
+          This means the host is over-subscribed and committed resource guarantees may not be
+          honourable. Common causes: operator-driven VM migration with slot not yet reclaimed, a hardware
+          capacity change, or out of sync issues. If problem remains, inspect the reservations on this host and check the CR controller logs.
+    {{- end }}
 {{- end }}
