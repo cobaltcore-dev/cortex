@@ -6,6 +6,8 @@ package clientcache
 import (
 	"context"
 	"errors"
+	goruntime "runtime"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -753,6 +755,77 @@ func TestStatusUpdateNonCachedNoOverlay(t *testing.T) {
 	}
 	if _, ok := c.getEntry(reservationGVK(), objectKey{name: "res-sn"}); ok {
 		t.Fatalf("non-cached GVK status update should not populate overlay")
+	}
+}
+
+// --- concurrency regression test ---
+
+// orderingClient is a fake inner client whose Update records the committed
+// ResourceVersion (in inner-commit order) and then yields, widening the window
+// between the inner commit and the overlay upsert. This exposes the ordering
+// race the per-object write lock is meant to prevent: without the lock two
+// concurrent writers to the same object can commit in one order yet upsert in
+// the reverse order, leaving the overlay behind the apiserver.
+//
+// The per-object write lock makes each inner call + upsert atomic, so the inner
+// commit order and the overlay upsert order are identical: the overlay always
+// reflects the last write that reached the inner client (lastRV).
+type orderingClient struct {
+	Client
+	mu     sync.Mutex
+	lastRV string // ResourceVersion of the most recent inner commit
+}
+
+func (o *orderingClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	o.mu.Lock()
+	o.lastRV = obj.GetResourceVersion()
+	o.mu.Unlock()
+	// Yield after the inner commit but before the caller upserts, widening the
+	// commit-vs-overlay reorder window.
+	goruntime.Gosched()
+	return nil
+}
+
+// TestConcurrentUpdatesOverlayNotBehind fires many concurrent Updates to the
+// SAME object with distinct ResourceVersions. The per-object write lock must
+// make each inner call + overlay update atomic, so once all writes settle the
+// overlay entry reflects the last write that reached the inner client (overlay
+// RV == last committed RV, never a reordered/stale one). Run under -race to
+// also catch data races.
+func TestConcurrentUpdatesOverlayNotBehind(t *testing.T) {
+	const (
+		rounds = 50
+		n      = 8
+	)
+	for round := range rounds {
+		oc := &orderingClient{Client: newTestClient(t)}
+		c := newCaching(t, oc)
+
+		var wg sync.WaitGroup
+		for i := 1; i <= n; i++ {
+			wg.Add(1)
+			go func(rv int) {
+				defer wg.Done()
+				r := newReservation("res-conc", "az-1", strconv.Itoa(rv))
+				if err := c.Update(context.Background(), r); err != nil {
+					t.Errorf("Update rv=%d: %v", rv, err)
+				}
+			}(i)
+		}
+		wg.Wait()
+
+		oc.mu.Lock()
+		lastRV := oc.lastRV
+		oc.mu.Unlock()
+
+		e, ok := c.getEntry(reservationGVK(), objectKey{name: "res-conc"})
+		if !ok {
+			t.Fatalf("round %d: expected overlay entry for res-conc", round)
+		}
+		if e.resourceVersion != lastRV {
+			t.Fatalf("round %d: overlay RV %q does not match last inner commit %q",
+				round, e.resourceVersion, lastRV)
+		}
 	}
 }
 

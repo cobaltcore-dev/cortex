@@ -39,6 +39,80 @@ func keyForObject(obj client.Object) objectKey {
 	return objectKey{namespace: obj.GetNamespace(), name: obj.GetName()}
 }
 
+// lockKey identifies the object whose write path a keyedMutex serializes.
+type lockKey struct {
+	gvk schema.GroupVersionKind
+	key objectKey
+}
+
+// refMutex is the actual per-object lock plus a reference count of how many
+// callers currently hold or are waiting for it. The count lets keyedMutex know
+// when the entry is unused so it can be deleted (see keyedMutex.lock).
+type refMutex struct {
+	mu  sync.Mutex
+	ref int
+}
+
+// keyedMutex hands out one mutex per key, serializing operations that share a
+// key while letting distinct keys proceed concurrently.
+//
+// A sync.Map (or a map we only ever insert into) would be simpler, but it would leak:
+// this cache wraps a single client for the whole lifetime of the controller-manager process,
+// and a controller reconciles a continuous stream of (often short-lived) objects.
+// A map would therefore accumulate one mutex per distinct object ever written and
+// grow without bound. To avoid that we reference count each entry and delete it
+// once the last holder unlocks, so the map only ever holds locks for objects
+// with writes currently in flight.
+//
+// The two mutexes have distinct, non-overlapping roles:
+//   - k.mu guards the locks map itself. It is only ever held for the tiny
+//     bookkeeping critical sections below (map lookup/insert/delete and the
+//     ref counter), never across the caller's I/O.
+//   - rm.mu is the real per-object lock, held by the caller across the inner
+//     client call and the overlay mutation.
+//
+// Because k.mu is never held while rm.mu is locked (we release k.mu before
+// taking rm.mu), the two can never deadlock against each other.
+type keyedMutex struct {
+	mu    sync.Mutex
+	locks map[lockKey]*refMutex
+}
+
+func newKeyedMutex() *keyedMutex {
+	return &keyedMutex{locks: make(map[lockKey]*refMutex)}
+}
+
+// lock acquires the per-key mutex and returns a function that releases it.
+func (k *keyedMutex) lock(lk lockKey) func() {
+	// Look up (or create) the entry for this key and register our interest by
+	// bumping ref, all under k.mu so the map stays consistent. We increment ref
+	// here, before taking rm.mu, so that a concurrent unlock cannot see ref==0
+	// and delete the entry out from under us while we are blocked waiting on it.
+	k.mu.Lock()
+	rm := k.locks[lk]
+	if rm == nil {
+		rm = &refMutex{}
+		k.locks[lk] = rm
+	}
+	rm.ref++
+	k.mu.Unlock()
+
+	// Take the real per-object lock outside k.mu; this is where a second caller
+	// for the same key blocks (and where we may block across the caller's I/O).
+	rm.mu.Lock()
+	return func() {
+		rm.mu.Unlock()
+		// Drop our reference and, if we were the last holder, remove the entry
+		// so the map does not grow unbounded.
+		k.mu.Lock()
+		rm.ref--
+		if rm.ref == 0 {
+			delete(k.locks, lk)
+		}
+		k.mu.Unlock()
+	}
+}
+
 // resourceVersionAtLeast reports whether observed >= cached, treating
 // ResourceVersions as opaque monotonically increasing integers (as the
 // kubernetes apiserver guarantees per resource). Unparsable or empty values
@@ -86,6 +160,11 @@ type CachingClient struct {
 	mu       sync.RWMutex
 	byGVK    map[schema.GroupVersionKind]map[objectKey]*entry
 	indexers map[schema.GroupVersionKind]map[string]client.IndexerFunc
+
+	// writeLocks serializes writes to the same object so the inner call and the
+	// overlay mutation are atomic per object, keeping the overlay from falling
+	// behind the apiserver under concurrent writes.
+	writeLocks *keyedMutex
 }
 
 // New builds a CachingClient wrapping inner. informers supplies the informers
@@ -102,13 +181,14 @@ func New(inner Client, scheme *runtime.Scheme, conf Config) (*CachingClient, err
 		ttl = defaultTTL
 	}
 	return &CachingClient{
-		Client:   inner,
-		inner:    inner,
-		scheme:   scheme,
-		ttl:      ttl,
-		gvks:     gvks,
-		byGVK:    make(map[schema.GroupVersionKind]map[objectKey]*entry),
-		indexers: make(map[schema.GroupVersionKind]map[string]client.IndexerFunc),
+		Client:     inner,
+		inner:      inner,
+		scheme:     scheme,
+		ttl:        ttl,
+		gvks:       gvks,
+		byGVK:      make(map[schema.GroupVersionKind]map[objectKey]*entry),
+		indexers:   make(map[schema.GroupVersionKind]map[string]client.IndexerFunc),
+		writeLocks: newKeyedMutex(),
 	}, nil
 }
 
@@ -354,36 +434,48 @@ func (c *CachingClient) fieldSetLocked(gvk schema.GroupVersionKind, obj client.O
 // Create delegates to the inner client and, on success for a cached GVK, adds
 // the object to the overlay.
 func (c *CachingClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	gvk, cached := c.gvkFor(obj)
+	if !cached {
+		return c.Client.Create(ctx, obj, opts...)
+	}
+	unlock := c.writeLocks.lock(lockKey{gvk: gvk, key: keyForObject(obj)})
+	defer unlock()
 	if err := c.Client.Create(ctx, obj, opts...); err != nil {
 		return err
 	}
-	if gvk, cached := c.gvkFor(obj); cached {
-		c.upsert(gvk, obj)
-	}
+	c.upsert(gvk, obj)
 	return nil
 }
 
 // Update delegates to the inner client and, on success for a cached GVK,
 // refreshes the overlay entry.
 func (c *CachingClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	gvk, cached := c.gvkFor(obj)
+	if !cached {
+		return c.Client.Update(ctx, obj, opts...)
+	}
+	unlock := c.writeLocks.lock(lockKey{gvk: gvk, key: keyForObject(obj)})
+	defer unlock()
 	if err := c.Client.Update(ctx, obj, opts...); err != nil {
 		return err
 	}
-	if gvk, cached := c.gvkFor(obj); cached {
-		c.upsert(gvk, obj)
-	}
+	c.upsert(gvk, obj)
 	return nil
 }
 
 // Patch delegates to the inner client and, on success for a cached GVK,
 // refreshes the overlay entry with the patched object.
 func (c *CachingClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	gvk, cached := c.gvkFor(obj)
+	if !cached {
+		return c.Client.Patch(ctx, obj, patch, opts...)
+	}
+	unlock := c.writeLocks.lock(lockKey{gvk: gvk, key: keyForObject(obj)})
+	defer unlock()
 	if err := c.Client.Patch(ctx, obj, patch, opts...); err != nil {
 		return err
 	}
-	if gvk, cached := c.gvkFor(obj); cached {
-		c.upsert(gvk, obj)
-	}
+	c.upsert(gvk, obj)
 	return nil
 }
 
@@ -394,12 +486,16 @@ func (c *CachingClient) Patch(ctx context.Context, obj client.Object, patch clie
 // ensures that reads between the Delete call and the informer event correctly
 // return NotFound rather than serving a stale object from the informer cache.
 func (c *CachingClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	gvk, cached := c.gvkFor(obj)
+	if !cached {
+		return c.Client.Delete(ctx, obj, opts...)
+	}
+	unlock := c.writeLocks.lock(lockKey{gvk: gvk, key: keyForObject(obj)})
+	defer unlock()
 	if err := c.Client.Delete(ctx, obj, opts...); err != nil {
 		return err
 	}
-	if gvk, cached := c.gvkFor(obj); cached {
-		c.tombstone(gvk, obj)
-	}
+	c.tombstone(gvk, obj)
 	return nil
 }
 
@@ -482,22 +578,30 @@ func (s *statusWriter) Create(ctx context.Context, obj, subResource client.Objec
 }
 
 func (s *statusWriter) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+	gvk, cached := s.c.gvkFor(obj)
+	if !cached {
+		return s.inner.Update(ctx, obj, opts...)
+	}
+	unlock := s.c.writeLocks.lock(lockKey{gvk: gvk, key: keyForObject(obj)})
+	defer unlock()
 	if err := s.inner.Update(ctx, obj, opts...); err != nil {
 		return err
 	}
-	if gvk, cached := s.c.gvkFor(obj); cached {
-		s.c.upsert(gvk, obj)
-	}
+	s.c.upsert(gvk, obj)
 	return nil
 }
 
 func (s *statusWriter) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
+	gvk, cached := s.c.gvkFor(obj)
+	if !cached {
+		return s.inner.Patch(ctx, obj, patch, opts...)
+	}
+	unlock := s.c.writeLocks.lock(lockKey{gvk: gvk, key: keyForObject(obj)})
+	defer unlock()
 	if err := s.inner.Patch(ctx, obj, patch, opts...); err != nil {
 		return err
 	}
-	if gvk, cached := s.c.gvkFor(obj); cached {
-		s.c.upsert(gvk, obj)
-	}
+	s.c.upsert(gvk, obj)
 	return nil
 }
 
