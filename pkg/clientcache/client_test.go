@@ -120,12 +120,13 @@ func newTestClient(t *testing.T, objs ...client.Object) *fakeClient {
 // touch the overlay on failure) can be exercised.
 type errClient struct {
 	Client
-	createErr error
-	updateErr error
-	patchErr  error
-	deleteErr error
-	getErr    error
-	listErr   error
+	createErr       error
+	updateErr       error
+	patchErr        error
+	deleteErr       error
+	deleteAllOfErr  error
+	getErr          error
+	listErr         error
 }
 
 func (e *errClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
@@ -154,6 +155,13 @@ func (e *errClient) Delete(ctx context.Context, obj client.Object, opts ...clien
 		return e.deleteErr
 	}
 	return e.Client.Delete(ctx, obj, opts...)
+}
+
+func (e *errClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
+	if e.deleteAllOfErr != nil {
+		return e.deleteAllOfErr
+	}
+	return e.Client.DeleteAllOf(ctx, obj, opts...)
 }
 
 func (e *errClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
@@ -424,6 +432,32 @@ func TestTombstone(t *testing.T) {
 	}
 	if items := listReservations(t, c); len(items) != 0 {
 		t.Fatalf("expected tombstone to filter from list, got %+v", items)
+	}
+}
+
+func TestDeleteAllOf(t *testing.T) {
+	r1 := newReservation("res-dao-1", "az-1", "1")
+	r1.Labels = map[string]string{"zone": "a"}
+	r2 := newReservation("res-dao-2", "az-2", "1")
+	r2.Labels = map[string]string{"zone": "b"}
+	inner := newTestClient(t, r1, r2)
+	c := newCaching(t, inner)
+
+	// Populate overlay for both so we can verify tombstoning.
+	c.upsert(reservationGVK(), r1)
+	c.upsert(reservationGVK(), r2)
+
+	// DeleteAllOf with a label selector — only r1 should be tombstoned.
+	if err := c.DeleteAllOf(context.Background(), &v1alpha1.Reservation{}, client.MatchingLabels{"zone": "a"}); err != nil {
+		t.Fatalf("DeleteAllOf: %v", err)
+	}
+
+	var got v1alpha1.Reservation
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "res-dao-1"}, &got); !apierrors.IsNotFound(err) {
+		t.Fatalf("expected NotFound for tombstoned res-dao-1, got %v", err)
+	}
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "res-dao-2"}, &got); err != nil {
+		t.Fatalf("res-dao-2 should still be visible, got %v", err)
 	}
 }
 

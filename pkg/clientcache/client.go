@@ -499,6 +499,37 @@ func (c *CachingClient) Delete(ctx context.Context, obj client.Object, opts ...c
 	return nil
 }
 
+// DeleteAllOf delegates to the inner client and, on success for a cached GVK,
+// tombstones all overlay entries that match the delete options. Objects that
+// live only in the informer cache (not in the overlay) will be evicted
+// naturally once the deletion propagates through the informer.
+func (c *CachingClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
+	gvk, cached := c.gvkFor(obj)
+	if !cached {
+		return c.Client.DeleteAllOf(ctx, obj, opts...)
+	}
+	if err := c.Client.DeleteAllOf(ctx, obj, opts...); err != nil {
+		return err
+	}
+	dao := &client.DeleteAllOfOptions{}
+	dao.ApplyOptions(opts)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for key, e := range c.byGVK[gvk] {
+		if !c.matchesLocked(gvk, e.obj, &dao.ListOptions) {
+			continue
+		}
+		c.byGVK[gvk][key] = &entry{
+			obj:             e.obj,
+			uid:             e.uid,
+			resourceVersion: e.resourceVersion,
+			deleted:         true,
+			expiresAt:       time.Now().Add(c.ttl),
+		}
+	}
+	return nil
+}
+
 // Get delegates to the inner client, then applies the overlay: a tombstone
 // yields NotFound; a live overlay entry overrides the inner result; and an
 // overlay entry can satisfy a Get that the inner client reports as NotFound.
