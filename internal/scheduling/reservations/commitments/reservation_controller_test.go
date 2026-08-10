@@ -63,13 +63,15 @@ func TestCommitmentReservationController_Reconcile(t *testing.T) {
 					Name: "test-reservation",
 				},
 				Spec: v1alpha1.ReservationSpec{
-					Type: v1alpha1.ReservationTypeCommittedResource,
+					Type:       v1alpha1.ReservationTypeCommittedResource,
+					TargetHost: "host-1",
 					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 						ProjectID:    "test-project",
 						ResourceName: "test-flavor",
 					},
 				},
 				Status: v1alpha1.ReservationStatus{
+					Host: "host-1",
 					Conditions: []metav1.Condition{
 						{
 							Type:   v1alpha1.ReservationConditionReady,
@@ -1411,7 +1413,7 @@ func TestUnplaceReservation_ClearsAllocations(t *testing.T) {
 	k8sClient := newCRTestClient(scheme, slot)
 	controller := &CommitmentReservationController{Client: k8sClient}
 
-	freed, err := controller.unplaceReservation(context.Background(), slot, "host-1")
+	freed, err := controller.unplaceReservation(context.Background(), slot)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1431,12 +1433,7 @@ func TestUnplaceReservation_ClearsAllocations(t *testing.T) {
 	if len(updated.Spec.CommittedResourceReservation.Allocations) != 0 {
 		t.Errorf("expected Spec.Allocations cleared, got %v", updated.Spec.CommittedResourceReservation.Allocations)
 	}
-	if updated.Status.Host != "" {
-		t.Errorf("expected Status.Host cleared, got %q", updated.Status.Host)
-	}
-	if updated.Status.CommittedResourceReservation != nil && len(updated.Status.CommittedResourceReservation.Allocations) != 0 {
-		t.Errorf("expected Status.Allocations cleared, got %v", updated.Status.CommittedResourceReservation.Allocations)
-	}
+	// Status cleanup is left to the reconcile loop — not asserted here.
 }
 
 func TestCheckHostOversubscription_PrefersUnallocated(t *testing.T) {
@@ -1568,5 +1565,66 @@ func TestRunOversubscriptionCheck_RateLimit(t *testing.T) {
 	result = controller.runOversubscriptionCheck(context.Background(), "host-1")
 	if result != 0 {
 		t.Errorf("expected 0 when already pending (no duplicate requeue), got %v", result)
+	}
+}
+
+func TestReconcile_RevokesReadyWhenTargetHostCleared(t *testing.T) {
+	scheme := newCRTestScheme(t)
+
+	// Slot is Ready (Status.Host set, condition true) but Spec.TargetHost was cleared —
+	// simulates the oversubscription eviction path.
+	slot := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "slot-1"},
+		Spec: v1alpha1.ReservationSpec{
+			Type:       v1alpha1.ReservationTypeCommittedResource,
+			TargetHost: "",
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				ResourceName: "test-flavor",
+				ProjectID:    "test-project",
+			},
+		},
+		Status: v1alpha1.ReservationStatus{
+			Host: "host-1",
+			Conditions: []metav1.Condition{
+				{
+					Type:               v1alpha1.ReservationConditionReady,
+					Status:             metav1.ConditionTrue,
+					Reason:             "ReservationActive",
+					LastTransitionTime: metav1.Now(),
+				},
+			},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
+				Allocations: map[string]string{"vm-1": "host-1"},
+			},
+		},
+	}
+
+	k8sClient := newCRTestClient(scheme, slot)
+	controller := &CommitmentReservationController{
+		Client: k8sClient,
+		Conf:   ReservationControllerConfig{RequeueIntervalActive: metav1.Duration{Duration: 30 * time.Minute}},
+	}
+
+	_, err := controller.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKey{Name: "slot-1"}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var updated v1alpha1.Reservation
+	if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: "slot-1"}, &updated); err != nil {
+		t.Fatalf("failed to get updated reservation: %v", err)
+	}
+	if updated.Status.Host != "" {
+		t.Errorf("expected Status.Host cleared, got %q", updated.Status.Host)
+	}
+	if updated.Status.CommittedResourceReservation != nil && len(updated.Status.CommittedResourceReservation.Allocations) != 0 {
+		t.Errorf("expected Status.Allocations cleared, got %v", updated.Status.CommittedResourceReservation.Allocations)
+	}
+	cond := meta.FindStatusCondition(updated.Status.Conditions, v1alpha1.ReservationConditionReady)
+	if cond == nil || cond.Status != metav1.ConditionFalse {
+		t.Errorf("expected Ready=False, got %v", cond)
+	}
+	if cond != nil && cond.Reason != "PlacementRevoked" {
+		t.Errorf("expected reason PlacementRevoked, got %q", cond.Reason)
 	}
 }

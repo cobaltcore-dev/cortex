@@ -188,6 +188,9 @@ cortex-scheduling-controllers:
       # How long to wait after first detecting host over-subscription before evicting
       # reservation slots. Gives other controllers (e.g. failover) time to self-heal.
       oversubscriptionGracePeriod: "2m"
+      # Minimum time between consecutive over-subscription checks for the same host.
+      # Should be shorter than oversubscriptionGracePeriod.
+      oversubscriptionMinCheckInterval: "30s"
       # URL of the nova external scheduler API for placement decisions
       schedulerURL: "http://localhost:8080/scheduler/nova/external"
       # Keystone credentials used to resolve domain IDs to domain names for the

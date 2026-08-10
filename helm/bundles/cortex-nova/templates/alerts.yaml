@@ -781,7 +781,7 @@ spec:
         description: >
           The total of running VM allocations and reservation blocks (committed resource +
           failover) on host {{ "{{" }} $labels.compute_host {{ "}}" }} exceeds its effective
-          capacity for {{ "{{" }} $labels.resource {{ "}}" }} by {{ "{{" }} $value | humanize1024 {{ "}}" }}.
+          capacity for {{ "{{" }} $labels.resource {{ "}}" }} by {{ "{{" }} $value | humanize {{ "}}" }}.
           This means the host is over-subscribed and committed resource guarantees may not be
           honourable. Common causes: operator-driven VM migration with slot not yet reclaimed, a hardware
           capacity change, or out of sync issues. If problem remains, inspect the reservations on this host and check the CR controller logs.
