@@ -480,9 +480,10 @@ func newIntgEnv(t *testing.T, initialObjects []client.Object, schedulerFn http.H
 		Client: k8sClient,
 		Scheme: scheme,
 		Conf: ReservationControllerConfig{
-			SchedulerURL:          schedulerSrv.URL,
-			AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute},
-			RequeueIntervalActive: metav1.Duration{Duration: 5 * time.Minute},
+			SchedulerURL:                schedulerSrv.URL,
+			AllocationGracePeriod:       metav1.Duration{Duration: 15 * time.Minute},
+			RequeueIntervalActive:       metav1.Duration{Duration: 5 * time.Minute},
+			EnableOversubscriptionCheck: true,
 		},
 		Monitor: &monitor,
 	}
@@ -512,7 +513,10 @@ func (e *intgEnv) reconcileReservation(t *testing.T, resName string) {
 	t.Helper()
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: resName}}
 	if _, err := e.resController.Reconcile(context.Background(), req); err != nil {
-		t.Fatalf("reservation reconcile %s: %v", resName, err)
+		// "no hosts found" is a retriable error surfaced deliberately for backoff — not a test failure.
+		if !strings.Contains(err.Error(), "no hosts found") {
+			t.Fatalf("reservation reconcile %s: %v", resName, err)
+		}
 	}
 }
 

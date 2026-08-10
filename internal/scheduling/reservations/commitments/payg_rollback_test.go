@@ -5,6 +5,7 @@ package commitments
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -82,10 +83,10 @@ func TestCRLifecycle_PAYGRollback(t *testing.T) {
 	}
 	for _, res := range resList.Items {
 		resReq := ctrl.Request{NamespacedName: types.NamespacedName{Name: res.Name}}
-		if _, err := env.resController.Reconcile(ctx, resReq); err != nil {
+		if _, err := env.resController.Reconcile(ctx, resReq); err != nil && !strings.Contains(err.Error(), "no hosts found") {
 			t.Fatalf("reservation reconcile %s (pass 1): %v", res.Name, err)
 		}
-		if _, err := env.resController.Reconcile(ctx, resReq); err != nil {
+		if _, err := env.resController.Reconcile(ctx, resReq); err != nil && !strings.Contains(err.Error(), "no hosts found") {
 			t.Fatalf("reservation reconcile %s (pass 2): %v", res.Name, err)
 		}
 	}

@@ -371,7 +371,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	}
 
 	if len(scheduleResp.Hosts) == 0 {
-		logger.Info("no hosts found for reservation", "reservation", res.Name, "flavorName", resourceName)
+		logger.Info("no hosts found for reservation, will retry", "reservation", res.Name, "flavorName", resourceName)
 		old := res.DeepCopy()
 		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.ReservationConditionReady,
@@ -390,7 +390,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			// Object was deleted, no need to continue
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, nil // No need to requeue, we didn't find a host.
+		return ctrl.Result{}, fmt.Errorf("no hosts found for reservation %s (flavor %s)", res.Name, resourceName)
 	}
 
 	// Update the reservation Spec with the found host (idx 0)
@@ -937,7 +937,7 @@ func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl
 // Rate-limited per host: skipped checks mark the host pending so the next reconcile retries.
 // Returns non-zero when the caller should requeue (grace period pending or after eviction).
 func (r *CommitmentReservationController) runOversubscriptionCheck(ctx context.Context, host string) time.Duration {
-	if host == "" || r.Monitor == nil {
+	if host == "" || r.Monitor == nil || !r.Conf.EnableOversubscriptionCheck {
 		return 0
 	}
 
@@ -1021,6 +1021,143 @@ func (r *CommitmentReservationController) runOversubscriptionCheck(ctx context.C
 	return 0
 }
 
+// unusedRatioBuckets returns unused/total bucketed into 10 steps (0–10); 0 when total is zero.
+func unusedRatioBuckets(unused, total resource.Quantity) int64 {
+	if t := total.Value(); t != 0 {
+		return unused.Value() * 10 / t
+	}
+	return 0
+}
+
+// formatQuantityMap converts a resource quantity map to a string map for logging.
+func formatQuantityMap[K ~string](m map[K]resource.Quantity) map[string]string {
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[string(k)] = v.String()
+	}
+	return out
+}
+
+// computeViolations returns the per-resource excess (positive quantity) for any resource where
+// the host is over-subscribed. Returns nil if capacity data is unavailable, empty map if no violation.
+func computeViolations(allReservations []v1alpha1.Reservation, hv hv1.Hypervisor) map[hv1.ResourceName]resource.Quantity {
+	free := reservations.HostFreeCapacity(allReservations, hv)
+	if free == nil {
+		return nil
+	}
+	zero := resource.MustParse("0")
+	violations := make(map[hv1.ResourceName]resource.Quantity)
+	for rn, f := range free {
+		if f.Cmp(zero) < 0 {
+			excess := f.DeepCopy()
+			excess.Neg()
+			violations[rn] = excess
+		}
+	}
+	return violations
+}
+
+// selectEvictionTarget picks the best slot to evict from allReservations given the active violations.
+// Prefers the smallest unallocated slot that covers all violations; falls back to the allocated slot
+// with the largest fraction of unused capacity.
+func (r *CommitmentReservationController) selectEvictionTarget(
+	ctx context.Context,
+	allReservations []v1alpha1.Reservation,
+	violations map[hv1.ResourceName]resource.Quantity,
+) *v1alpha1.Reservation {
+
+	logger := LoggerFromContext(ctx).WithValues("component", "oversubscription-check")
+
+	var unallocated, allocated []*v1alpha1.Reservation
+	for i := range allReservations {
+		res := &allReservations[i]
+		if res.Spec.Type != v1alpha1.ReservationTypeCommittedResource {
+			continue
+		}
+		if res.Spec.CommittedResourceReservation == nil ||
+			len(res.Spec.CommittedResourceReservation.Allocations) == 0 {
+			unallocated = append(unallocated, res)
+		} else {
+			allocated = append(allocated, res)
+		}
+	}
+
+	// Sort unallocated by memory asc, then CPU asc — smallest slots are easiest to re-place.
+	sort.SliceStable(unallocated, func(i, j int) bool {
+		ri, rj := unallocated[i].Spec.Resources, unallocated[j].Spec.Resources
+		mi, mj := ri[hv1.ResourceMemory], rj[hv1.ResourceMemory]
+		if c := mi.Cmp(mj); c != 0 {
+			return c < 0
+		}
+		ci, cj := ri[hv1.ResourceCPU], rj[hv1.ResourceCPU]
+		return ci.Cmp(cj) < 0
+	})
+
+	// Prefer the smallest unallocated slot that still covers all violations.
+	for i, res := range unallocated {
+		covers := true
+		for rn, excess := range violations {
+			slotRes := res.Spec.Resources[rn]
+			if slotRes.Cmp(excess) < 0 {
+				covers = false
+				break
+			}
+		}
+		if covers {
+			logger.Info("eviction target selected (unallocated slot covers all violations)",
+				"reservation", res.Name,
+				"order count", i+1,
+				"total unallocated slots", len(unallocated),
+				"slot resources", res.Spec.Resources,
+				"violations", formatQuantityMap(violations),
+			)
+			return res
+		}
+	}
+	// Fall back to the last (smallest) unallocated if none covers all violations.
+	if len(unallocated) > 0 {
+		res := unallocated[len(unallocated)-1]
+		logger.Info("eviction target selected (largest unallocated slot, partial coverage)",
+			"reservation", res.Name,
+			"total unallocated slots", len(unallocated),
+			"slot resources", res.Spec.Resources,
+			"violations", formatQuantityMap(violations),
+		)
+		return res
+	}
+
+	// Last resort: allocated slot with the largest fraction of unused capacity.
+	if len(allocated) == 0 {
+		return nil
+	}
+	unusedCap := make([]map[hv1.ResourceName]resource.Quantity, len(allocated))
+	for i, res := range allocated {
+		unusedCap[i] = reservations.UnusedReservationCapacity(res, false)
+	}
+	// Sort: 1st by unused mem ratio desc, 2nd by unused CPU ratio desc, 3rd by total mem asc.
+	sort.SliceStable(allocated, func(i, j int) bool {
+		ri, rj := allocated[i].Spec.Resources, allocated[j].Spec.Resources
+		if d := unusedRatioBuckets(unusedCap[i][hv1.ResourceMemory], ri[hv1.ResourceMemory]) -
+			unusedRatioBuckets(unusedCap[j][hv1.ResourceMemory], rj[hv1.ResourceMemory]); d != 0 {
+			return d > 0
+		}
+		if d := unusedRatioBuckets(unusedCap[i][hv1.ResourceCPU], ri[hv1.ResourceCPU]) -
+			unusedRatioBuckets(unusedCap[j][hv1.ResourceCPU], rj[hv1.ResourceCPU]); d != 0 {
+			return d > 0
+		}
+		mi, mj := allocated[i].Spec.Resources[hv1.ResourceMemory], allocated[j].Spec.Resources[hv1.ResourceMemory]
+		return mi.Cmp(mj) < 0
+	})
+	res := allocated[0]
+	logger.Info("eviction target selected (allocated slot with largest unused capacity)",
+		"reservation", res.Name,
+		"total allocated slots", len(allocated),
+		"slot resources", res.Spec.Resources,
+		"violations", formatQuantityMap(violations),
+	)
+	return res
+}
+
 // checkHostOversubscription detects host over-subscription and evicts one slot if grace period elapsed.
 // firstSeen is the time the violation was first detected (zero if not yet seen).
 // Returns (evicted, resolved, err): evicted=slot was unplaced, resolved=no violation.
@@ -1037,19 +1174,9 @@ func (r *CommitmentReservationController) checkHostOversubscription(
 	logger := LoggerFromContext(ctx).WithValues("component", "oversubscription-check", "host", host)
 	az := hv.Labels["topology.kubernetes.io/zone"]
 
-	free := reservations.HostFreeCapacity(allReservations, hv)
-	if free == nil {
+	violations := computeViolations(allReservations, hv)
+	if violations == nil {
 		return false, false, nil
-	}
-
-	zero := resource.MustParse("0")
-	violations := make(map[hv1.ResourceName]resource.Quantity)
-	for rn, f := range free {
-		if f.Cmp(zero) < 0 {
-			excess := f.DeepCopy()
-			excess.Neg()
-			violations[rn] = excess
-		}
 	}
 	if len(violations) == 0 {
 		monitor.ClearHost(host, az)
@@ -1064,13 +1191,7 @@ func (r *CommitmentReservationController) checkHostOversubscription(
 	if firstSeen.IsZero() {
 		logger.Info("host over-subscribed, starting grace period",
 			"gracePeriod", gracePeriod,
-			"violations", func() map[string]string {
-				m := make(map[string]string, len(violations))
-				for rn, q := range violations {
-					m[string(rn)] = q.String()
-				}
-				return m
-			}())
+			"violations", formatQuantityMap(violations))
 		return false, false, nil
 	}
 
@@ -1082,112 +1203,15 @@ func (r *CommitmentReservationController) checkHostOversubscription(
 		return false, false, nil
 	}
 
-	logger.Info("host over-subscribed, evicting one slot",
-		"violations", func() map[string]string {
-			m := make(map[string]string, len(violations))
-			for rn, q := range violations {
-				m[string(rn)] = q.String()
-			}
-			return m
-		}())
+	logger.Info("host over-subscribed, evicting one slot", "violations", formatQuantityMap(violations))
 
-	var unallocatedReservations, allocatedReservations []*v1alpha1.Reservation
-	for i := range allReservations {
-		res := &allReservations[i]
-		if res.Spec.Type != v1alpha1.ReservationTypeCommittedResource {
-			continue
-		}
-		if res.Spec.CommittedResourceReservation == nil ||
-			len(res.Spec.CommittedResourceReservation.Allocations) == 0 {
-			unallocatedReservations = append(unallocatedReservations, res)
-		} else {
-			allocatedReservations = append(allocatedReservations, res)
-		}
-	}
-	// unusedRatioBuckets returns unused/total bucketed into 10 steps (0–10); 0 when total is zero.
-	unusedRatioBuckets := func(unused, total resource.Quantity) int64 {
-		if t := total.Value(); t != 0 {
-			return unused.Value() * 10 / t
-		}
-		return 0
-	}
-
-	// Sort unallocated by memory asc, then CPU asc — smallest slots are easiest to re-place.
-	sort.SliceStable(unallocatedReservations, func(i, j int) bool {
-		ri, rj := unallocatedReservations[i].Spec.Resources, unallocatedReservations[j].Spec.Resources
-		mi, mj := ri[hv1.ResourceMemory], rj[hv1.ResourceMemory]
-		if c := mi.Cmp(mj); c != 0 {
-			return c < 0
-		}
-		ci, cj := ri[hv1.ResourceCPU], rj[hv1.ResourceCPU]
-		return ci.Cmp(cj) < 0
-	})
-
-	// Pick the eviction target: prefer the smallest unallocated slot that is still large enough to cover all violations
-	var target *v1alpha1.Reservation
-	for i, res := range unallocatedReservations {
-		target = res
-		covers := true
-		for rn, excess := range violations {
-			slotRes := res.Spec.Resources[rn]
-			if slotRes.Cmp(excess) < 0 {
-				covers = false
-				break
-			}
-		}
-		if covers {
-			logger.Info("eviction target selected (unallocated slot covers all violations)",
-				"reservation", target.Name,
-				"order count", i+1,
-				"total unallocated slots", len(unallocatedReservations),
-				"slot resources", res.Spec.Resources,
-				"violations", violations,
-			)
-			break
-		}
-	}
-	// nothing selected yet, then try the allocated slots
-	if target == nil && len(allocatedReservations) > 0 {
-		// Pre-compute unused capacities once
-		unusedCap := make([]map[hv1.ResourceName]resource.Quantity, len(allocatedReservations))
-		for i, res := range allocatedReservations {
-			unusedCap[i] = reservations.UnusedReservationCapacity(res, false)
-		}
-		// Sort allocated: 1st by unused mem ratio desc, 2nd by unused CPU ratio desc, 3rd by total mem asc.
-		// Prefers slots with the largest fraction of unused capacity — least disruptive to move.
-		sort.SliceStable(allocatedReservations, func(i, j int) bool {
-			ri, rj := allocatedReservations[i].Spec.Resources, allocatedReservations[j].Spec.Resources
-			if r := unusedRatioBuckets(unusedCap[i][hv1.ResourceMemory], ri[hv1.ResourceMemory]) -
-				unusedRatioBuckets(unusedCap[j][hv1.ResourceMemory], rj[hv1.ResourceMemory]); r != 0 {
-				return r > 0 // desc
-			}
-			if r := unusedRatioBuckets(unusedCap[i][hv1.ResourceCPU], ri[hv1.ResourceCPU]) -
-				unusedRatioBuckets(unusedCap[j][hv1.ResourceCPU], rj[hv1.ResourceCPU]); r != 0 {
-				return r > 0 // desc
-			}
-			mi, mj := ri[hv1.ResourceMemory], rj[hv1.ResourceMemory]
-			return mi.Cmp(mj) < 0 // asc: smaller total mem last resort
-		})
-		target = allocatedReservations[0]
-		logger.Info("eviction target selected (allocated slot with largest unused capacity)",
-			"reservation", target.Name,
-			"order count", 1,
-			"total allocated slots", len(allocatedReservations),
-			"slot resources", target.Spec.Resources,
-			"violations", violations,
-		)
-	}
+	target := r.selectEvictionTarget(ctx, allReservations, violations)
 	if target == nil {
 		logger.Info("host over-subscribed but no evictable CR reservation slots found — manual intervention required",
-			"violations", func() map[string]string {
-				m := make(map[string]string, len(violations))
-				for rn, q := range violations {
-					m[string(rn)] = q.String()
-				}
-				return m
-			}())
+			"violations", formatQuantityMap(violations))
 		return false, false, nil
 	}
+
 	freed, err := r.unplaceReservation(ctx, target)
 	if err != nil {
 		return false, false, err
@@ -1195,13 +1219,7 @@ func (r *CommitmentReservationController) checkHostOversubscription(
 	logger.Info("evicted slot for over-subscription remediation",
 		"reservation", target.Name,
 		"hasAllocations", target.Spec.CommittedResourceReservation != nil && len(target.Spec.CommittedResourceReservation.Allocations) > 0,
-		"freed", func() map[string]string {
-			m := make(map[string]string, len(freed))
-			for rn, q := range freed {
-				m[string(rn)] = q.String()
-			}
-			return m
-		}())
+		"freed", formatQuantityMap(freed))
 	return true, false, nil
 }
 

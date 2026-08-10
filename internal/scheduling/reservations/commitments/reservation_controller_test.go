@@ -1287,18 +1287,15 @@ func TestHvCapacityChangePredicate(t *testing.T) {
 	}
 }
 
-func TestCheckHostOversubscription_NoViolation(t *testing.T) {
-	scheme := newCRTestScheme(t)
+func TestComputeViolations_NoViolation(t *testing.T) {
 	gib := func(n int64) resource.Quantity { return *resource.NewQuantity(n*1024*1024*1024, resource.BinarySI) }
 
 	hv := hv1.Hypervisor{
-		ObjectMeta: metav1.ObjectMeta{Name: "host-1", Labels: map[string]string{"topology.kubernetes.io/zone": "az1"}},
 		Status: hv1.HypervisorStatus{
 			EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(1024)},
 		},
 	}
-	slot := &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: "slot-1"},
+	slot := v1alpha1.Reservation{
 		Spec: v1alpha1.ReservationSpec{
 			Type:                         v1alpha1.ReservationTypeCommittedResource,
 			TargetHost:                   "host-1",
@@ -1308,20 +1305,39 @@ func TestCheckHostOversubscription_NoViolation(t *testing.T) {
 		Status: v1alpha1.ReservationStatus{Host: "host-1"},
 	}
 
-	k8sClient := newCRTestClient(scheme, slot)
-	monitor := NewReservationControllerMonitor()
-	controller := &CommitmentReservationController{Client: k8sClient, Monitor: &monitor}
+	violations := computeViolations([]v1alpha1.Reservation{slot}, hv)
+	if len(violations) != 0 {
+		t.Errorf("expected no violations, got %v", violations)
+	}
+}
 
-	evicted, resolved, err := controller.checkHostOversubscription(context.Background(), "host-1",
-		[]v1alpha1.Reservation{*slot}, hv, &monitor, 2*time.Minute, time.Time{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestComputeViolations_Oversubscribed(t *testing.T) {
+	gib := func(n int64) resource.Quantity { return *resource.NewQuantity(n*1024*1024*1024, resource.BinarySI) }
+
+	hv := hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{Name: "host-1"},
+		Status: hv1.HypervisorStatus{
+			EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)},
+		},
 	}
-	if evicted {
-		t.Error("expected no eviction when host is not over-subscribed")
+	slot := v1alpha1.Reservation{
+		Spec: v1alpha1.ReservationSpec{
+			Type:                         v1alpha1.ReservationTypeCommittedResource,
+			TargetHost:                   "host-1",
+			Resources:                    map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(768)},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
+		},
+		Status: v1alpha1.ReservationStatus{Host: "host-1"},
 	}
-	if !resolved {
-		t.Error("expected resolved=true when host is not over-subscribed")
+
+	violations := computeViolations([]v1alpha1.Reservation{slot}, hv)
+	if len(violations) == 0 {
+		t.Fatal("expected violation for memory")
+	}
+	excess := violations[hv1.ResourceMemory]
+	expected := gib(256)
+	if excess.Cmp(expected) != 0 {
+		t.Errorf("expected excess 256 GiB, got %s", excess.String())
 	}
 }
 
@@ -1436,26 +1452,66 @@ func TestUnplaceReservation_ClearsAllocations(t *testing.T) {
 	// Status cleanup is left to the reconcile loop — not asserted here.
 }
 
-func TestCheckHostOversubscription_PrefersUnallocated(t *testing.T) {
-	scheme := newCRTestScheme(t)
+func TestSelectEvictionTarget_PrefersSmallestUnallocated(t *testing.T) {
 	gib := func(n int64) resource.Quantity { return *resource.NewQuantity(n*1024*1024*1024, resource.BinarySI) }
 
-	// Host has 1024 GiB. Two 512 GiB slots + 256 GiB VM allocation = 1280 GiB → over-subscribed by 256 GiB.
-	hv := hv1.Hypervisor{
-		ObjectMeta: metav1.ObjectMeta{Name: "host-1", Labels: map[string]string{"topology.kubernetes.io/zone": "az1"}},
-		Status: hv1.HypervisorStatus{
-			EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(1024)},
-			Allocation:        map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(256)},
-		},
-	}
 	allocated := v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{Name: "slot-allocated"},
 		Spec: v1alpha1.ReservationSpec{
-			Type: v1alpha1.ReservationTypeCommittedResource, TargetHost: "host-1",
-			Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)},
+			Type:       v1alpha1.ReservationTypeCommittedResource,
+			TargetHost: "host-1",
+			Resources:  map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
 					"vm-1": {Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(256)}},
+				},
+			},
+		},
+	}
+	large := v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "slot-large"},
+		Spec: v1alpha1.ReservationSpec{
+			Type:                         v1alpha1.ReservationTypeCommittedResource,
+			TargetHost:                   "host-1",
+			Resources:                    map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
+		},
+	}
+	small := v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "slot-small"},
+		Spec: v1alpha1.ReservationSpec{
+			Type:                         v1alpha1.ReservationTypeCommittedResource,
+			TargetHost:                   "host-1",
+			Resources:                    map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(128)},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
+		},
+	}
+
+	controller := &CommitmentReservationController{}
+	violations := map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(128)}
+	target := controller.selectEvictionTarget(context.Background(),
+		[]v1alpha1.Reservation{allocated, large, small}, violations)
+
+	if target == nil {
+		t.Fatal("expected a target to be selected")
+	}
+	if target.Name != "slot-small" {
+		t.Errorf("expected smallest unallocated slot (slot-small), got %q", target.Name)
+	}
+}
+
+func TestSelectEvictionTarget_FallsBackToAllocatedWhenNoUnallocated(t *testing.T) {
+	gib := func(n int64) resource.Quantity { return *resource.NewQuantity(n*1024*1024*1024, resource.BinarySI) }
+
+	mostly := v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "slot-mostly-used"},
+		Spec: v1alpha1.ReservationSpec{
+			Type:       v1alpha1.ReservationTypeCommittedResource,
+			TargetHost: "host-1",
+			Resources:  map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+					"vm-1": {Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(480)}},
 				},
 			},
 		},
@@ -1466,56 +1522,36 @@ func TestCheckHostOversubscription_PrefersUnallocated(t *testing.T) {
 			},
 		},
 	}
-	unallocated := v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: "slot-unallocated"},
+	idle := v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "slot-idle"},
 		Spec: v1alpha1.ReservationSpec{
-			Type: v1alpha1.ReservationTypeCommittedResource, TargetHost: "host-1",
-			Resources:                    map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)},
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
+			Type:       v1alpha1.ReservationTypeCommittedResource,
+			TargetHost: "host-1",
+			Resources:  map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+					"vm-2": {Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(10)}},
+				},
+			},
 		},
-		Status: v1alpha1.ReservationStatus{Host: "host-1"},
-	}
-	// free = 1024 - 256(alloc) - 256(allocated slot remaining) - 512(unallocated) = 0 — exactly at boundary
-	// Need one more slot to push over. Add a third small unallocated slot.
-	extra := v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: "slot-extra"},
-		Spec: v1alpha1.ReservationSpec{
-			Type: v1alpha1.ReservationTypeCommittedResource, TargetHost: "host-1",
-			Resources:                    map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(128)},
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
+		Status: v1alpha1.ReservationStatus{
+			Host: "host-1",
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
+				Allocations: map[string]string{"vm-2": "host-1"},
+			},
 		},
-		Status: v1alpha1.ReservationStatus{Host: "host-1"},
 	}
-	// free = 1024 - 256(alloc) - 256(allocated remaining) - 512(unallocated) - 128(extra) = -128 GiB
-	slots := []v1alpha1.Reservation{allocated, unallocated, extra}
 
-	k8sClient := newCRTestClient(scheme, &allocated, &unallocated, &extra)
-	monitor := NewReservationControllerMonitor()
-	controller := &CommitmentReservationController{Client: k8sClient, Monitor: &monitor}
+	controller := &CommitmentReservationController{}
+	violations := map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(128)}
+	target := controller.selectEvictionTarget(context.Background(),
+		[]v1alpha1.Reservation{mostly, idle}, violations)
 
-	firstSeen := time.Now().Add(-3 * time.Minute)
-	evicted, _, err := controller.checkHostOversubscription(context.Background(), "host-1",
-		slots, hv, &monitor, 2*time.Minute, firstSeen)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if target == nil {
+		t.Fatal("expected a target to be selected")
 	}
-	if !evicted {
-		t.Fatal("expected eviction")
-	}
-	// The smallest unallocated slot (extra=128GiB) should be evicted first
-	var updatedAllocated v1alpha1.Reservation
-	if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: "slot-allocated"}, &updatedAllocated); err != nil {
-		t.Fatalf("failed to get slot: %v", err)
-	}
-	if updatedAllocated.Spec.TargetHost == "" {
-		t.Error("allocated slot should not have been evicted")
-	}
-	var updatedExtra v1alpha1.Reservation
-	if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: "slot-extra"}, &updatedExtra); err != nil {
-		t.Fatalf("failed to get slot: %v", err)
-	}
-	if updatedExtra.Spec.TargetHost != "" {
-		t.Error("smallest unallocated slot should have been evicted")
+	if target.Name != "slot-idle" {
+		t.Errorf("expected slot with most unused capacity (slot-idle), got %q", target.Name)
 	}
 }
 
@@ -1543,7 +1579,10 @@ func TestRunOversubscriptionCheck_RateLimit(t *testing.T) {
 	controller := &CommitmentReservationController{
 		Client:  k8sClient,
 		Monitor: &monitor,
-		Conf:    ReservationControllerConfig{RequeueIntervalActive: metav1.Duration{Duration: 30 * time.Minute}},
+		Conf: ReservationControllerConfig{
+			RequeueIntervalActive:       metav1.Duration{Duration: 30 * time.Minute},
+			EnableOversubscriptionCheck: true,
+		},
 	}
 
 	// First call: runs the check (no violation, returns 0)
@@ -1551,6 +1590,13 @@ func TestRunOversubscriptionCheck_RateLimit(t *testing.T) {
 	if result != 0 {
 		t.Errorf("expected 0 on first call (no violation), got %v", result)
 	}
+
+	// Disabled flag: must always return 0 regardless of state.
+	controller.Conf.EnableOversubscriptionCheck = false
+	if got := controller.runOversubscriptionCheck(context.Background(), "host-1"); got != 0 {
+		t.Errorf("expected 0 when check is disabled, got %v", got)
+	}
+	controller.Conf.EnableOversubscriptionCheck = true
 
 	// Second call immediately: should be rate-limited, set pending, return remaining interval
 	result = controller.runOversubscriptionCheck(context.Background(), "host-1")

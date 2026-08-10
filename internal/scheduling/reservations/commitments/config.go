@@ -70,6 +70,11 @@ type ReservationControllerConfig struct {
 	// to a value shorter than the grace period without affecting normal reconcile cadence.
 	// Defaults to 30s.
 	OversubscriptionMinCheckInterval metav1.Duration `json:"oversubscriptionMinCheckInterval,omitempty"`
+	// EnableOversubscriptionCheck enables the host over-subscription detection and slot eviction
+	// logic. When false, no oversubscription checks are performed and no slots are evicted.
+	// Acts as a kill switch for rollout control or when investigating capacity anomalies.
+	// Defaults to false (opt-in).
+	EnableOversubscriptionCheck bool `json:"enableOversubscriptionCheck,omitempty"`
 	// SchedulerURL is the endpoint of the nova external scheduler.
 	SchedulerURL string `json:"schedulerURL"`
 	// PipelineDefault is the fallback pipeline when no FlavorGroupPipelines entry matches.
