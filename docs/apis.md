@@ -96,6 +96,10 @@ The `scheduling.Options` struct configures a single pipeline invocation. All fie
 
 **Validation constraint:** A `ReadOnly` run must also set `SkipHistory=true`, `SkipInflight=true`, and `SkipCommittedResourceTracking=true`. This is enforced by `Options.Validate()` — omitting any of these fields causes validation to fail with an error before the pipeline executes.
 
+#### Step Events
+
+Pipeline steps can report named events via the `Events []FilterWeigherPipelineStepEvent` field on their result. Each event carries a `Name` and an optional `Labels map[string]string` for dynamic Prometheus labels. The pipeline monitor exports these as the `cortex_filter_weigher_pipeline_step_events_total` counter with fixed labels `pipeline`, `step`, `event` plus any dynamic labels the step provides. Use events to surface noteworthy step conditions (skipped filtering, missing data) as observable metrics. See `filter_image_properties` for a reference implementation that emits an `image_properties_hv_type_undetermined` event with an `intent` label.
+
 ### Decisions
 
 ```bash

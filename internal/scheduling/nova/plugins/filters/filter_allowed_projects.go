@@ -42,6 +42,9 @@ func (s *FilterAllowedProjectsStep) Run(traceLog *slog.Logger, request api.Exter
 	}
 
 	for _, hv := range hvs.Items {
+		if _, ok := result.Activations[hv.Name]; !ok {
+			continue
+		}
 		if len(hv.Spec.AllowedProjects) == 0 {
 			// Hypervisor is available for all projects.
 			traceLog.Info("host allows all projects, keeping", "host", hv.Name)

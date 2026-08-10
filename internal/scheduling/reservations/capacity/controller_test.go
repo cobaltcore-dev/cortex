@@ -225,7 +225,7 @@ func TestReconcileAZ_CreatesCRD(t *testing.T) {
 
 	ctrl.reconcileAZ(context.Background(), az,
 		map[string]compute.FlavorGroupFeature{groupName: groupData},
-		hvByName, map[string]int64{}, map[vmUsageKey]vmUsage{})
+		hvByName, map[string]map[string]int64{}, map[vmUsageKey]vmUsage{})
 
 	var crd v1alpha1.FlavorGroupCapacity
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdNameFor(groupName, az)}, &crd); err != nil {
@@ -297,7 +297,7 @@ func TestReconcileAZ_SkipsCRDWriteOnSchedulerError(t *testing.T) {
 
 	ctrl.reconcileAZ(context.Background(), az,
 		map[string]compute.FlavorGroupFeature{groupName: groupData},
-		map[string]hv1.Hypervisor{}, map[string]int64{}, map[vmUsageKey]vmUsage{})
+		map[string]hv1.Hypervisor{}, map[string]map[string]int64{}, map[vmUsageKey]vmUsage{})
 
 	// Stale probes → CRD must NOT be written; last good state is preserved.
 	var list v1alpha1.FlavorGroupCapacityList
@@ -369,7 +369,7 @@ func TestReconcileAZ_MarksExistingCRDNotReadyOnSchedulerError(t *testing.T) {
 
 	ctrl.reconcileAZ(context.Background(), az,
 		map[string]compute.FlavorGroupFeature{groupName: groupData},
-		hvByName, map[string]int64{}, map[vmUsageKey]vmUsage{})
+		hvByName, map[string]map[string]int64{}, map[vmUsageKey]vmUsage{})
 
 	var crd v1alpha1.FlavorGroupCapacity
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdName}, &crd); err != nil {
@@ -434,9 +434,9 @@ func TestReconcileAZ_IdempotentUpdate(t *testing.T) {
 	groups := map[string]compute.FlavorGroupFeature{groupName: groupData}
 
 	// First call
-	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]int64{}, map[vmUsageKey]vmUsage{})
+	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]map[string]int64{}, map[vmUsageKey]vmUsage{})
 	// Second call — should not error on the already-existing CRD.
-	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]int64{}, map[vmUsageKey]vmUsage{})
+	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]map[string]int64{}, map[vmUsageKey]vmUsage{})
 
 	var crd v1alpha1.FlavorGroupCapacity
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdName}, &crd); err != nil {
@@ -984,7 +984,7 @@ func TestComputeVMUsage_ZerosOutWhenAllVMsRemoved(t *testing.T) {
 	}
 
 	// Now run reconcileAZ to verify the CRD gets zeroed out.
-	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]int64{}, usageByKey)
+	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]map[string]int64{}, usageByKey)
 
 	var crd v1alpha1.FlavorGroupCapacity
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdName}, &crd); err != nil {
@@ -1032,8 +1032,8 @@ func TestProbeScheduler_SubtractsReservationBlocksWhenNotIgnored(t *testing.T) {
 	}
 
 	// Placeable probe with 1 reservation block: 3 - 1 (alloc) - 1 (reservation) = 1 slot.
-	blockedByReservations := map[string]int64{
-		"host-1": memBytes, // 1 reservation blocking 1 slot's worth of memory
+	blockedByReservations := map[string]map[string]int64{
+		"host-1": {ResourceMemory: memBytes}, // 1 reservation blocking 1 slot's worth of memory
 	}
 	placeableCap, _, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "placeable-pipeline", hvByName, false, blockedByReservations)
 	if err != nil {

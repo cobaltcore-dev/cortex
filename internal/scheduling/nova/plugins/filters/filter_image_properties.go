@@ -22,9 +22,17 @@ type FilterImagePropertiesStep struct {
 func (s *FilterImagePropertiesStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
+	// Resolve the scheduling intent once and fall back to a readable default
+	// when it cannot be determined.
+	intent, intentErr := request.GetIntent()
+	intentLabel := "unknown"
+	if intentErr == nil {
+		intentLabel = string(intent)
+	}
+
 	// Apply this filter to all requests, unless we know from the request's
 	// intent that image metadata is expected to not be set.
-	if intent, err := request.GetIntent(); err == nil {
+	if intentErr == nil {
 		intentsExpectedToNotHaveImageMeta := []v1alpha1.SchedulingIntent{
 			// Cortex-internal intents in which scheduling requests are sent
 			// mainly based on flavor-related metadata, independent of the
@@ -50,8 +58,12 @@ func (s *FilterImagePropertiesStep) Run(traceLog *slog.Logger, request api.Exter
 		traceLog.Warn("could not determine hypervisor type from image properties",
 			"error", err)
 		// Expose this event through the step monitor to alert on high-frequency
-		// occurrences of this situation.
-		result.Events = append(result.Events, "image_properties_hv_type_undetermined")
+		// occurrences of this situation. Include the request intent as a dynamic
+		// label so the alert can pinpoint which scheduling intents are affected.
+		result.Events = append(result.Events, lib.FilterWeigherPipelineStepEvent{
+			Name:   "image_properties_hv_type_undetermined",
+			Labels: map[string]string{"intent": intentLabel},
+		})
 		return result, nil
 	}
 

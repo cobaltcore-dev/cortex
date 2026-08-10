@@ -13,6 +13,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
@@ -211,7 +212,7 @@ func (c *Client) ClustersForGVK(gvk schema.GroupVersionKind) ([]cluster.Cluster,
 	remotes := c.remoteClusters[gvk]
 	isHome := c.homeGVKs[gvk]
 	if len(remotes) == 0 && !isHome {
-		return nil, fmt.Errorf("GVK %s is not configured in home or any remote cluster", gvk)
+		return nil, fmt.Errorf("gvk %s is not configured in home or any remote cluster", gvk)
 	}
 	clusters := make([]cluster.Cluster, 0, len(remotes)+1)
 	for _, r := range remotes {
@@ -456,6 +457,64 @@ func (c *Client) List(ctx context.Context, list client.ObjectList, opts ...clien
 // cannot be inferred from the ApplyConfiguration.
 func (c *Client) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
 	return errors.New("apply operation is not supported in multicluster client")
+}
+
+// ClusterObjectMetadata is one entry in the result of ListMetadataPerCluster.
+// Labels holds the routing labels for the cluster. Items holds the object
+// metadata returned by the cluster (no spec or status). IsHome is true for the
+// home cluster, which has no routing labels.
+type ClusterObjectMetadata struct {
+	Labels map[string]string
+	Items  []metav1.PartialObjectMetadata
+	IsHome bool
+}
+
+// ListMetadataPerCluster returns the object metadata of the given GVK for each
+// configured cluster. It uses PartialObjectMetadataList so only object metadata
+// crosses the wire — no spec or status — making it efficient even for large
+// object counts. Callers that only need counts can use len(Items). Clusters
+// that return an error are logged and skipped (same policy as List). The home
+// cluster is included with IsHome set to true.
+func (c *Client) ListMetadataPerCluster(ctx context.Context, gvk schema.GroupVersionKind, opts ...client.ListOption) ([]ClusterObjectMetadata, error) {
+	log := ctrl.LoggerFrom(ctx)
+
+	c.remoteClustersMu.RLock()
+	remotes := c.remoteClusters[gvk]
+	isHome := c.homeGVKs[gvk]
+	if len(remotes) == 0 && !isHome {
+		c.remoteClustersMu.RUnlock()
+		return nil, fmt.Errorf("gvk %s is not configured in home or any remote cluster", gvk)
+	}
+	type clusterEntry struct {
+		cl     cluster.Cluster
+		labels map[string]string
+		isHome bool
+	}
+	entries := make([]clusterEntry, 0, len(remotes)+1)
+	for _, r := range remotes {
+		entries = append(entries, clusterEntry{cl: r.cluster, labels: maps.Clone(r.labels)})
+	}
+	if isHome && c.HomeCluster != nil {
+		entries = append(entries, clusterEntry{cl: c.HomeCluster, isHome: true})
+	}
+	c.remoteClustersMu.RUnlock()
+
+	results := make([]ClusterObjectMetadata, 0, len(entries))
+	for _, e := range entries {
+		partialList := &metav1.PartialObjectMetadataList{}
+		partialList.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   gvk.Group,
+			Version: gvk.Version,
+			Kind:    gvk.Kind,
+		})
+		if err := e.cl.GetClient().List(ctx, partialList, opts...); err != nil {
+			log.Error(err, "error listing resource metadata from cluster",
+				"gvk", gvk, "host", e.cl.GetConfig().Host)
+			continue
+		}
+		results = append(results, ClusterObjectMetadata{Labels: e.labels, Items: partialList.Items, IsHome: e.isHome})
+	}
+	return results, nil
 }
 
 // Create routes the object to the matching cluster using the ResourceRouter

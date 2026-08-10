@@ -80,6 +80,9 @@ func (s *KVMBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSchedule
 	}
 	hvsByName := make(map[string]hv1.Hypervisor, len(hvs.Items))
 	for _, hv := range hvs.Items {
+		if _, ok := result.Activations[hv.Name]; !ok {
+			continue
+		}
 		hvsByName[hv.Name] = hv
 	}
 	vmResources := s.calcVMResources(request)
