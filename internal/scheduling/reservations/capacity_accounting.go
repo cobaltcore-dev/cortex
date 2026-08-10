@@ -101,6 +101,9 @@ func HostFreeCapacity(hostReservations []v1alpha1.Reservation, hv hv1.Hypervisor
 	}
 	for i := range hostReservations {
 		res := &hostReservations[i]
+		if res.Spec.TargetHost == "" {
+			continue // evicted/unplaced; status.Host may lag until reconcile
+		}
 		if res.Spec.TargetHost != hv.Name && res.Status.Host != hv.Name {
 			continue
 		}

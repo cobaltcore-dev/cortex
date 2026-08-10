@@ -177,7 +177,7 @@ cortex-scheduling-controllers:
         "*": "kvm-general-purpose-load-balancing"
       pipelineDefault: "kvm-general-purpose-load-balancing"
       # How often to re-verify active Reservation CRDs (healthy state)
-      requeueIntervalActive: "30m"
+      requeueIntervalActive: "5m"
       # Back-off interval when knowledge is unavailable
       requeueIntervalRetry: "1m"
       # Back-off interval while a VM allocation is still within allocationGracePeriod
@@ -187,10 +187,10 @@ cortex-scheduling-controllers:
       allocationGracePeriod: "15m"
       # How long to wait after first detecting host over-subscription before evicting
       # reservation slots. Gives other controllers (e.g. failover) time to self-heal.
-      oversubscriptionGracePeriod: "2m"
+      oversubscriptionGracePeriod: "3m"
       # Minimum time between consecutive over-subscription checks for the same host.
       # Should be shorter than oversubscriptionGracePeriod.
-      oversubscriptionMinCheckInterval: "30s"
+      oversubscriptionMinCheckInterval: "1m"
       # Enable host over-subscription detection and slot eviction. Acts as a kill switch
       # for rollout control or when investigating capacity anomalies. Defaults to false.
       enableOversubscriptionCheck: true

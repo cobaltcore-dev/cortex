@@ -1263,10 +1263,6 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 	gib := func(n int64) resource.Quantity { return *resource.NewQuantity(n*1024*1024*1024, resource.BinarySI) }
 	cpu := func(n int64) resource.Quantity { return *resource.NewQuantity(n, resource.DecimalSI) }
 
-	// Host: 200 GiB, 200 cores.
-	// Allocated slots (0-9): confirmed VMs fill the slot → UnusedReservationCapacity = 0 → don't block
-	// Unallocated slots (10-19): 20+21+...+29 = 245 GiB → exceeds 200 GiB by 45 GiB
-	// Evicting smallest unallocated (slot-10 = 20 GiB, slot-11 = 21 GiB, ...) resolves violation.
 	hv := &hv1.Hypervisor{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "host-1",
@@ -1280,10 +1276,6 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 		},
 	}
 
-	// 20 reservation slots: memory 10..29 GiB, cpu 10..29 cores.
-	// Total: sum(10..29) = 390 GiB and 390 cores — far exceeds 200 GiB / 200 cores.
-	// Slots 0..9: allocated (have a running VM), slots 10..19: unallocated.
-	// Eviction must prefer unallocated (slots 10..19), smallest first.
 	objects := []client.Object{hv}
 	for i := range 20 {
 		memGiB := int64(10 + i)
@@ -1313,7 +1305,7 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 			},
 		}
 		if i < 10 {
-			// Slots 0-9: allocated — have a confirmed VM
+			// slots 0-9: allocated — have a confirmed VM
 			vmID := fmt.Sprintf("vm-%02d", i)
 			slot.Spec.CommittedResourceReservation.Allocations = map[string]v1alpha1.CommittedResourceAllocation{
 				vmID: {Resources: map[hv1.ResourceName]resource.Quantity{
@@ -1336,17 +1328,15 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 	env := newIntgEnv(t, append(objects, newTestFlavorKnowledge()), schedulerFn, nil)
 	defer env.close()
 
-	// Reconcile slot-10 (first unallocated) — triggers oversubscription detection.
+	// Reconcile slot-10 — triggers oversubscription detection.
 	env.reconcileReservation(t, "slot-10")
 
 	if _, ok := env.resController.oversubscriptionFirstSeen["host-1"]; !ok {
 		t.Fatal("expected oversubscription to be detected after first reconcile")
 	}
 
-	// Drive remediation: fast-forward grace period and reset rate limit, then reconcile
-	// repeatedly until the host is no longer over-subscribed (one eviction per cycle).
-	// Rotate through unallocated slots as trigger — one eviction per cycle.
-	// Using a different trigger slot each time avoids fake client index staleness
+	// Drive remediation: fast-forward grace period and reset rate limit per cycle.
+	// Rotate trigger slot each time — avoids fake client index staleness
 	// (status patches don't update field indexes in the fake client).
 	resolved := false
 	for i := range 25 {
@@ -1364,13 +1354,11 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 		t.Fatal("expected oversubscription to be resolved after remediation cycles")
 	}
 
-	// Final state: compute remaining capacity and verify the host is no longer over-subscribed.
 	var resList v1alpha1.ReservationList
 	if err := env.k8sClient.List(context.Background(), &resList); err != nil {
 		t.Fatalf("list reservations: %v", err)
 	}
 
-	// Only placed slots (TargetHost set) block capacity.
 	var placedSlots []v1alpha1.Reservation
 	for _, r := range resList.Items {
 		if r.Spec.TargetHost == "host-1" || r.Status.Host == "host-1" {
@@ -1385,7 +1373,6 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 		}
 	}
 
-	// Allocated slots must not be evicted — they have running VMs.
 	for _, r := range resList.Items {
 		if r.Spec.TargetHost == "" &&
 			r.Spec.CommittedResourceReservation != nil &&
@@ -1394,8 +1381,7 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 		}
 	}
 
-	// Evicted slots should attempt re-scheduling.
-	// First reconcile clears status (PlacementRevoked); second reconcile triggers the scheduler.
+	// Two reconciles needed: first clears status (PlacementRevoked), second triggers placement.
 	callsBefore := schedulerCalls.Load()
 	for _, r := range resList.Items {
 		if r.Spec.TargetHost == "" {

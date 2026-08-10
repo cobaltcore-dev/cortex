@@ -1086,8 +1086,6 @@ func computeViolations(allReservations []v1alpha1.Reservation, hv hv1.Hypervisor
 }
 
 // selectEvictionTarget picks the best slot to evict from allReservations given the active violations.
-// Prefers the smallest unallocated slot that covers all violations; falls back to the allocated slot
-// with the largest fraction of unused capacity.
 func (r *CommitmentReservationController) selectEvictionTarget(
 	ctx context.Context,
 	allReservations []v1alpha1.Reservation,
@@ -1095,12 +1093,16 @@ func (r *CommitmentReservationController) selectEvictionTarget(
 ) *v1alpha1.Reservation {
 
 	logger := LoggerFromContext(ctx).WithValues("component", "oversubscription-check")
+	var selectedRes *v1alpha1.Reservation
 
 	var unallocated, allocated []*v1alpha1.Reservation
 	for i := range allReservations {
 		res := &allReservations[i]
 		if res.Spec.Type != v1alpha1.ReservationTypeCommittedResource {
 			continue
+		}
+		if res.Spec.TargetHost == "" {
+			continue // already evicted, pending status cleanup
 		}
 		if res.Spec.CommittedResourceReservation == nil ||
 			len(res.Spec.CommittedResourceReservation.Allocations) == 0 {
@@ -1121,69 +1123,47 @@ func (r *CommitmentReservationController) selectEvictionTarget(
 		return ci.Cmp(cj) < 0
 	})
 
-	// Prefer the smallest unallocated slot that still covers all violations.
-	for i, res := range unallocated {
-		covers := true
-		for rn, excess := range violations {
-			slotRes := res.Spec.Resources[rn]
-			if slotRes.Cmp(excess) < 0 {
-				covers = false
-				break
-			}
-		}
-		if covers {
-			logger.Info("eviction target selected (unallocated slot covers all violations)",
-				"reservation", res.Name,
-				"order count", i+1,
-				"total unallocated slots", len(unallocated),
-				"slot resources", res.Spec.Resources,
-				"violations", formatQuantityMap(violations),
-			)
-			return res
-		}
-	}
-	// Fall back to the last (smallest) unallocated if none covers all violations.
+	// First choice: smallest unallocated slot (easiest to re-place).
 	if len(unallocated) > 0 {
-		res := unallocated[len(unallocated)-1]
-		logger.Info("eviction target selected (largest unallocated slot, partial coverage)",
-			"reservation", res.Name,
-			"total unallocated slots", len(unallocated),
-			"slot resources", res.Spec.Resources,
-			"violations", formatQuantityMap(violations),
-		)
-		return res
+		selectedRes = unallocated[0]
 	}
 
 	// Last resort: allocated slot with the largest fraction of unused capacity.
-	if len(allocated) == 0 {
+	if selectedRes == nil && len(allocated) > 0 {
+		unusedCapRatioBuckets := make([]map[hv1.ResourceName]int64, len(allocated))
+		for i, res := range allocated {
+			unusedCap := reservations.UnusedReservationCapacity(res, false)
+			buckets := make(map[hv1.ResourceName]int64)
+			for rn, total := range res.Spec.Resources {
+				buckets[rn] = unusedRatioBuckets(unusedCap[rn], total)
+			}
+			unusedCapRatioBuckets[i] = buckets
+		}
+		// Sort: 1st by unused mem ratio desc, 2nd by unused CPU ratio desc, 3rd by total mem asc.
+		sort.SliceStable(allocated, func(i, j int) bool {
+			if d := unusedCapRatioBuckets[i][hv1.ResourceMemory] - unusedCapRatioBuckets[j][hv1.ResourceMemory]; d != 0 {
+				return d > 0
+			}
+			if d := unusedCapRatioBuckets[i][hv1.ResourceCPU] - unusedCapRatioBuckets[j][hv1.ResourceCPU]; d != 0 {
+				return d > 0
+			}
+			mi, mj := allocated[i].Spec.Resources[hv1.ResourceMemory], allocated[j].Spec.Resources[hv1.ResourceMemory]
+			return mi.Cmp(mj) < 0
+		})
+		selectedRes = allocated[0]
+	}
+
+	if selectedRes == nil {
 		return nil
 	}
-	unusedCap := make([]map[hv1.ResourceName]resource.Quantity, len(allocated))
-	for i, res := range allocated {
-		unusedCap[i] = reservations.UnusedReservationCapacity(res, false)
-	}
-	// Sort: 1st by unused mem ratio desc, 2nd by unused CPU ratio desc, 3rd by total mem asc.
-	sort.SliceStable(allocated, func(i, j int) bool {
-		ri, rj := allocated[i].Spec.Resources, allocated[j].Spec.Resources
-		if d := unusedRatioBuckets(unusedCap[i][hv1.ResourceMemory], ri[hv1.ResourceMemory]) -
-			unusedRatioBuckets(unusedCap[j][hv1.ResourceMemory], rj[hv1.ResourceMemory]); d != 0 {
-			return d > 0
-		}
-		if d := unusedRatioBuckets(unusedCap[i][hv1.ResourceCPU], ri[hv1.ResourceCPU]) -
-			unusedRatioBuckets(unusedCap[j][hv1.ResourceCPU], rj[hv1.ResourceCPU]); d != 0 {
-			return d > 0
-		}
-		mi, mj := allocated[i].Spec.Resources[hv1.ResourceMemory], allocated[j].Spec.Resources[hv1.ResourceMemory]
-		return mi.Cmp(mj) < 0
-	})
-	res := allocated[0]
-	logger.Info("eviction target selected (allocated slot with largest unused capacity)",
-		"reservation", res.Name,
+	logger.Info("eviction target selected",
+		"reservation", selectedRes.Name,
+		"total unallocated slots", len(unallocated),
 		"total allocated slots", len(allocated),
-		"slot resources", res.Spec.Resources,
+		"slot resources", selectedRes.Spec.Resources,
 		"violations", formatQuantityMap(violations),
 	)
-	return res
+	return selectedRes
 }
 
 // checkHostOversubscription detects host over-subscription and evicts one slot if grace period elapsed.
