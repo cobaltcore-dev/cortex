@@ -21,6 +21,7 @@ func TestValidateWeigher(t *testing.T) {
 
 	if validator == nil {
 		t.Fatal("expected validator but got nil")
+		return
 	}
 	if validator.Weigher != weigher {
 		t.Error("expected weigher to be set in validator")

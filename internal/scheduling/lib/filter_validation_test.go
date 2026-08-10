@@ -20,6 +20,7 @@ func TestValidateFilter(t *testing.T) {
 
 	if validator == nil {
 		t.Fatal("expected validator but got nil")
+		return
 	}
 	if validator.Filter != filter {
 		t.Error("expected filter to be set in validator")

@@ -33,6 +33,7 @@ func TestMonitorWeigher(t *testing.T) {
 	wm := monitorWeigher(mockWeigher, "test-weigher", monitor)
 	if wm == nil {
 		t.Fatal("expected weigher monitor, got nil")
+		return
 	}
 	if wm.weigher == nil {
 		t.Error("expected weigher to be set")
@@ -109,6 +110,7 @@ func TestWeigherMonitor_Run(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("expected result, got nil")
+		return
 	}
 	if len(result.Activations) != 2 {
 		t.Errorf("expected 2 activations, got %d", len(result.Activations))

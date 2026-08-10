@@ -121,6 +121,7 @@ func TestBaseFilterWeigherPipelineStep_IncludeAllHostsFromRequest(t *testing.T) 
 
 			if result == nil {
 				t.Fatal("expected result but got nil")
+				return
 			}
 			if len(result.Activations) != tt.expectedCount {
 				t.Errorf("expected %d activations, got %d", tt.expectedCount, len(result.Activations))

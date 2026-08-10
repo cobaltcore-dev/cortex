@@ -1214,6 +1214,7 @@ func TestCommittedResourceController_SetAcceptedIdempotent(t *testing.T) {
 	cond := meta.FindStatusCondition(after1.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
 	if cond == nil {
 		t.Fatalf("Ready condition not set after first reconcile")
+		return
 	}
 	if cond.ObservedGeneration != 1 {
 		t.Errorf("ObservedGeneration: want 1, got %d", cond.ObservedGeneration)

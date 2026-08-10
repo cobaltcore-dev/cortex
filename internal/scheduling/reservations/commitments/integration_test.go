@@ -1035,6 +1035,7 @@ func TestCRLifecycle(t *testing.T) {
 		cond := meta.FindStatusCondition(final.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
 		if cond == nil {
 			t.Fatalf("no Ready condition")
+			return
 		}
 		if cond.Reason == v1alpha1.CommittedResourceReasonRejected {
 			t.Errorf("AllowRejection=false: CR must not transition to Rejected, got Reason=%s", cond.Reason)
@@ -1209,6 +1210,7 @@ func TestCRLifecycle(t *testing.T) {
 		cond := meta.FindStatusCondition(final.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
 		if cond == nil {
 			t.Fatalf("no Ready condition after retries")
+			return
 		}
 		if cond.Reason == v1alpha1.CommittedResourceReasonRejected {
 			t.Errorf("AllowRejection=false: CR must not be Rejected, got Reason=%s", cond.Reason)
@@ -1283,12 +1285,10 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 	// Slots 0..9: allocated (have a running VM), slots 10..19: unallocated.
 	// Eviction must prefer unallocated (slots 10..19), smallest first.
 	objects := []client.Object{hv}
-	var slotNames []string
 	for i := range 20 {
 		memGiB := int64(10 + i)
 		cores := int64(10 + i)
 		name := fmt.Sprintf("slot-%02d", i)
-		slotNames = append(slotNames, name)
 
 		slot := &v1alpha1.Reservation{
 			ObjectMeta: metav1.ObjectMeta{Name: name},

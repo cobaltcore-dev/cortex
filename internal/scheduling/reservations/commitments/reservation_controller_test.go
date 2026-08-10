@@ -1494,6 +1494,7 @@ func TestSelectEvictionTarget_PrefersSmallestUnallocated(t *testing.T) {
 
 	if target == nil {
 		t.Fatal("expected a target to be selected")
+		return
 	}
 	if target.Name != "slot-small" {
 		t.Errorf("expected smallest unallocated slot (slot-small), got %q", target.Name)
@@ -1549,6 +1550,7 @@ func TestSelectEvictionTarget_FallsBackToAllocatedWhenNoUnallocated(t *testing.T
 
 	if target == nil {
 		t.Fatal("expected a target to be selected")
+		return
 	}
 	if target.Name != "slot-idle" {
 		t.Errorf("expected slot with most unused capacity (slot-idle), got %q", target.Name)

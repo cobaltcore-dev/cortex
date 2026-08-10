@@ -250,10 +250,12 @@ func TestCapacityCalculator(t *testing.T) {
 				ramRes := report.Resources["hw_version_test-group_ram"]
 				if ramRes == nil {
 					t.Fatal("missing hw_version_test-group_ram")
+					return
 				}
 				az := ramRes.PerAZ[tc.checkAZ]
 				if az == nil {
 					t.Fatalf("missing entry for AZ %s", tc.checkAZ)
+					return
 				}
 				if az.Capacity != tc.wantCapacity {
 					t.Errorf("capacity = %d, want %d", az.Capacity, tc.wantCapacity)
