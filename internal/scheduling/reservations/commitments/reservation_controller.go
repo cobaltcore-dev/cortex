@@ -338,7 +338,14 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	logger.Info("selected pipeline for CR reservation",
 		"flavorName", resourceName,
 		"flavorGroup", flavorGroupName,
-		"pipeline", pipelineName)
+		"pipeline", pipelineName,
+		"reason", func() string {
+			cond := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ReservationConditionReady)
+			if cond != nil {
+				return cond.Reason
+			}
+			return "initial"
+		}())
 
 	// Use the SchedulerClient to schedule the reservation
 	scheduleReq := reservations.ScheduleReservationRequest{
@@ -397,7 +404,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	// Only update Spec here - the Status will be synced in the next reconcile cycle
 	// This avoids race conditions from doing two patches in one reconcile
 	host := scheduleResp.Hosts[0]
-	logger.Info("found host for reservation", "host", host)
+	logger.Info("found host for reservation", "host", host, "flavorName", resourceName)
 
 	old := res.DeepCopy()
 	res.Spec.TargetHost = host
@@ -965,11 +972,14 @@ func (r *CommitmentReservationController) runOversubscriptionCheck(ctx context.C
 	if timeSinceLastCheck := time.Since(r.oversubscriptionLastCheckedAt[host]); timeSinceLastCheck < minCheckInterval {
 		if !r.oversubscriptionPendingCheck[host] {
 			r.oversubscriptionPendingCheck[host] = true
-			return minCheckInterval - timeSinceLastCheck + time.Second
-		} else {
-			// already dirty, so someone else requeued already
-			return 0
+			requeue := minCheckInterval - timeSinceLastCheck + time.Second
+			logger.V(1).Info("over-subscription check rate-limited, requeue scheduled",
+				"lastCheckedAgo", timeSinceLastCheck.Round(time.Second),
+				"requeueIn", requeue.Round(time.Second))
+			return requeue
 		}
+		// already dirty, so someone else requeued already
+		return 0
 	}
 
 	var hv hv1.Hypervisor
@@ -982,6 +992,16 @@ func (r *CommitmentReservationController) runOversubscriptionCheck(ctx context.C
 		logger.Error(err, "failed to list reservations for over-subscription check")
 		return 0
 	}
+
+	logger.Info("running over-subscription check",
+		"slotCount", len(hostReservations.Items),
+		"lastCheckedAgo", time.Since(r.oversubscriptionLastCheckedAt[host]).Round(time.Second),
+		"violationFirstSeen", func() string {
+			if t := r.oversubscriptionFirstSeen[host]; !t.IsZero() {
+				return time.Since(t).Round(time.Second).String()
+			}
+			return "none"
+		}())
 
 	// Mark check as done and clear dirty flag before delegating.
 	r.oversubscriptionLastCheckedAt[host] = time.Now()
@@ -996,6 +1016,12 @@ func (r *CommitmentReservationController) runOversubscriptionCheck(ctx context.C
 
 	// No violation — clear grace period state.
 	if resolved {
+		if !firstSeen.IsZero() {
+			logger.Info("host over-subscription resolved",
+				"violationDuration", time.Since(firstSeen).Round(time.Second))
+		} else {
+			logger.Info("host over-subscription check: no violations detected")
+		}
 		delete(r.oversubscriptionFirstSeen, host)
 		return 0
 	}
@@ -1003,6 +1029,7 @@ func (r *CommitmentReservationController) runOversubscriptionCheck(ctx context.C
 	// Slot evicted — reset grace period so next eviction waits a full interval.
 	if evicted {
 		r.oversubscriptionFirstSeen[host] = time.Now()
+		logger.Info("slot evicted, next remediation check in", "nextCheckIn", gracePeriod)
 		return gracePeriod
 	}
 
