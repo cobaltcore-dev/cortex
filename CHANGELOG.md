@@ -1,5 +1,61 @@
 # Changelog
 
+## 2026-08-10 — [#1129](https://github.com/cobaltcore-dev/cortex/pull/1129)
+
+### cortex v0.3.6 (sha-85d9d0cf)
+
+New features:
+- Implement in-flight reservations controller — adds a new controller that tracks reservations currently being fulfilled by monitoring VM creation state via Nova API, transitioning reservations through their lifecycle stages and cleaning up stale in-flight reservations ([#957](https://github.com/cobaltcore-dev/cortex/pull/957))
+- Add KPI that tracks CR count per configured cluster — introduces the `MulticlusterObjectCountKPI` plugin which counts custom resource objects (e.g. Hypervisors, Reservations) per cluster and exposes them as Prometheus metrics for deployment monitoring ([#1054](https://github.com/cobaltcore-dev/cortex/pull/1054))
+- Follow VM live migration in CR reservation reconciler — the committed resource reservation controller now detects when a VM has been live-migrated to a different host and updates the reservation's target host accordingly, preventing stale capacity accounting ([#1048](https://github.com/cobaltcore-dev/cortex/pull/1048))
+
+Bug fixes:
+- Subtract reservation CPU blocks when counting placeable slots — the capacity accounting now correctly deducts reserved CPU blocks from available capacity before calculating how many new instances can be placed, preventing over-commitment ([#1118](https://github.com/cobaltcore-dev/cortex/pull/1118))
+
+Non-breaking changes:
+- Skip non-candidate hypervisors in nova filters and weighers — filters and weighers now skip hypervisors that are not in the candidate set, improving performance and avoiding unnecessary processing ([#1117](https://github.com/cobaltcore-dev/cortex/pull/1117))
+- Add dynamic labels to pipeline step event metrics — scheduling pipeline step monitors can now emit events with dynamic label key-value pairs, enabling richer per-step observability ([#1108](https://github.com/cobaltcore-dev/cortex/pull/1108))
+- Update `go.xyrillian.de/gg` to v1.13.2 ([#1111](https://github.com/cobaltcore-dev/cortex/pull/1111), [#1122](https://github.com/cobaltcore-dev/cortex/pull/1122))
+- Update `github.com/sapcc/go-bits` ([#1124](https://github.com/cobaltcore-dev/cortex/pull/1124))
+- Update `kube-prometheus-stack` to v88.1.5 ([#1112](https://github.com/cobaltcore-dev/cortex/pull/1112), [#1119](https://github.com/cobaltcore-dev/cortex/pull/1119), [#1121](https://github.com/cobaltcore-dev/cortex/pull/1121))
+- Update `debian:trixie-slim` Docker digest ([#1120](https://github.com/cobaltcore-dev/cortex/pull/1120))
+
+### cortex-shim v0.1.12 (sha-85d9d0cf)
+
+Includes updated image sha-85d9d0cf with dependency updates.
+
+### cortex-postgres v0.6.12 (sha-85d9d0cf)
+
+Includes updated base image (debian:trixie-slim digest update).
+
+### cortex-nova v0.0.86
+
+Includes updated chart cortex v0.3.6.
+
+### cortex-cinder v0.0.86
+
+Includes updated chart cortex v0.3.6.
+
+### cortex-manila v0.0.86
+
+Includes updated chart cortex v0.3.6.
+
+### cortex-crds v0.0.86
+
+Includes updated chart cortex v0.3.6.
+
+### cortex-ironcore v0.0.86
+
+Includes updated chart cortex v0.3.6.
+
+### cortex-pods v0.0.86
+
+Includes updated chart cortex v0.3.6.
+
+### cortex-placement-shim v0.1.12
+
+Includes updated chart cortex-shim v0.1.12.
+
 ## 2026-08-03 — [#1114](https://github.com/cobaltcore-dev/cortex/pull/1114)
 
 ### cortex v0.3.5 (sha-684e0b07)
