@@ -1281,7 +1281,7 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 	}
 
 	// 20 reservation slots: memory 10..29 GiB, cpu 10..29 cores.
-	// Total: sum(10..29) = 390 GiB and 390 cores — far exceeds 128 GiB / 128 cores.
+	// Total: sum(10..29) = 390 GiB and 390 cores — far exceeds 200 GiB / 200 cores.
 	// Slots 0..9: allocated (have a running VM), slots 10..19: unallocated.
 	// Eviction must prefer unallocated (slots 10..19), smallest first.
 	objects := []client.Object{hv}
@@ -1345,11 +1345,10 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 
 	// Drive remediation: fast-forward grace period and reset rate limit, then reconcile
 	// repeatedly until the host is no longer over-subscribed (one eviction per cycle).
-	// Reconcile slot-10 (first unallocated slot) which is the trigger reservation.
-	resolved := false
 	// Rotate through unallocated slots as trigger — one eviction per cycle.
 	// Using a different trigger slot each time avoids fake client index staleness
 	// (status patches don't update field indexes in the fake client).
+	resolved := false
 	for i := range 25 {
 		triggerSlot := fmt.Sprintf("slot-%02d", 10+i%10)
 		env.resController.oversubscriptionFirstSeen["host-1"] = time.Now().Add(-3 * time.Minute)
