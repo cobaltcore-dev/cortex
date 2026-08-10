@@ -193,7 +193,7 @@ cortex-scheduling-controllers:
       oversubscriptionMinCheckInterval: "30s"
       # Enable host over-subscription detection and slot eviction. Acts as a kill switch
       # for rollout control or when investigating capacity anomalies. Defaults to false.
-      enableOversubscriptionCheck: false
+      enableOversubscriptionCheck: true
       # URL of the nova external scheduler API for placement decisions
       schedulerURL: "http://localhost:8080/scheduler/nova/external"
       # Keystone credentials used to resolve domain IDs to domain names for the

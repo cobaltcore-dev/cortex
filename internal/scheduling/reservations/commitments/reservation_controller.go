@@ -145,7 +145,8 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			if err := r.Status().Patch(ctx, &res, client.MergeFrom(old)); client.IgnoreNotFound(err) != nil {
 				return ctrl.Result{}, err
 			}
-			logger.Info("revoked ready status after placement eviction, slot re-enters placement flow")
+			logger.Info("revoked ready status after placement eviction, slot re-enters placement flow",
+				"component", "oversubscription-check")
 			return ctrl.Result{}, nil
 		}
 
