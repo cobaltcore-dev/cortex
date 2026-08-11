@@ -9,7 +9,7 @@ require (
 	github.com/ironcore-dev/ironcore v0.5.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.2
-	github.com/sapcc/go-bits v0.0.0-20260806170240-4bbc84d224db
+	github.com/sapcc/go-bits v0.0.0-20260807114049-ed453da227d5
 	go.xyrillian.de/gg v1.13.3
 	k8s.io/api v0.36.3
 	k8s.io/apimachinery v0.36.3
