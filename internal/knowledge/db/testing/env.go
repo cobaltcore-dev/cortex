@@ -13,7 +13,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing/containers"
 	"github.com/go-gorp/gorp"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-api-declarations/bininfo"
+	"go.xyrillian.de/gg/pgruntime"
 )
 
 type DBEnv struct {
@@ -28,14 +29,16 @@ func SetupDBEnv(t *testing.T) DBEnv {
 		slog.Info("Using real postgres container")
 		container := containers.PostgresContainer{}
 		container.Init(t)
-		dbURL, err := easypg.URLFrom(easypg.URLParts{
+		target := pgruntime.ConnectionTarget{
 			HostName:          "localhost",
 			Port:              container.GetPort(),
 			UserName:          "postgres",
 			Password:          "secret",
 			ConnectionOptions: "sslmode=disable",
 			DatabaseName:      "postgres",
-		})
+			ApplicationName:   bininfo.Component(),
+		}
+		dbURL, err := target.IntoURL()
 		if err != nil {
 			t.Fatal(err)
 		}
