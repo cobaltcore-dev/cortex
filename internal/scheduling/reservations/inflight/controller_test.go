@@ -716,12 +716,3 @@ func TestHandleHypervisors_NoMatchingReservations(t *testing.T) {
 		t.Errorf("queue = %+v, want empty", q.items)
 	}
 }
-
-func TestSetupWithManager_RejectsNonMulticlusterClient(t *testing.T) {
-	scheme := newTestScheme(t)
-	c := &Controller{Client: newTestClient(scheme), VMClient: &stubVMClient{}}
-	err := c.SetupWithManager(context.Background(), nil)
-	if err == nil {
-		t.Fatal("expected error for non-multicluster client, got nil")
-	}
-}

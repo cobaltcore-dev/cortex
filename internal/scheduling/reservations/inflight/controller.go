@@ -378,14 +378,7 @@ func (c *Controller) predicateHypervisors() predicate.Predicate {
 // SetupWithManager sets up the controller with the Manager and a multicluster
 // client. The multicluster client is used to watch for changes in the
 // Reservation CRD across all clusters and trigger reconciliations accordingly.
-func (c *Controller) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err error) {
-	// Check that the provided client is a multicluster client, since we need
-	// that to watch for hypervisors across clusters. Do this before adding
-	// any runnables so a misconfigured setup fails fast.
-	mcl, ok := c.Client.(*multicluster.Client)
-	if !ok {
-		return errors.New("provided client must be a multicluster client")
-	}
+func (c *Controller) SetupWithManager(ctx context.Context, mgr ctrl.Manager, mcl *multicluster.Client) (err error) {
 	// Add the vm client as runnable to the manager.
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		return c.VMClient.StartWithKubernetesSecrets(ctx, c.Client)
@@ -411,6 +404,13 @@ func (c *Controller) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (er
 		idxReservationByTargetHostFn,
 	); err != nil {
 		return err
+	}
+	// Register the same index with the overlay so that List calls with
+	// MatchingFields correctly filter in-flight overlay entries.
+	if fi, ok := c.Client.(client.FieldIndexer); ok {
+		if err := fi.IndexField(ctx, &v1alpha1.Reservation{}, idxReservationByTargetHost, idxReservationByTargetHostFn); err != nil {
+			return err
+		}
 	}
 	// Watch hypervisor changes and requeue reservations targeting
 	// the changed hypervisor.
