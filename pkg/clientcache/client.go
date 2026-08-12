@@ -152,10 +152,11 @@ const defaultTTL = 2 * time.Minute
 type CachingClient struct {
 	client.Client // inner client, used for delegation
 
-	inner  Client
-	scheme *runtime.Scheme
-	ttl    time.Duration
-	gvks   map[schema.GroupVersionKind]bool
+	inner   Client
+	scheme  *runtime.Scheme
+	ttl     time.Duration
+	gvks    map[schema.GroupVersionKind]bool
+	monitor Monitor
 
 	mu       sync.RWMutex
 	byGVK    map[schema.GroupVersionKind]map[objectKey]*entry
@@ -170,8 +171,8 @@ type CachingClient struct {
 // New builds a CachingClient wrapping inner. informers supplies the informers
 // used for eviction, scheme resolves object GVKs, and conf lists the GVKs to
 // overlay and the TTL. GVK strings are formatted as "<group>/<version>/<Kind>"
-// and are resolved against scheme.
-func New(inner Client, scheme *runtime.Scheme, conf Config) (*CachingClient, error) {
+// and are resolved against scheme. A nil mon disables metric recording.
+func New(inner Client, scheme *runtime.Scheme, conf Config, mon Monitor) (*CachingClient, error) {
 	gvks, err := resolveGVKs(scheme, conf.GVKs)
 	if err != nil {
 		return nil, err
@@ -186,6 +187,7 @@ func New(inner Client, scheme *runtime.Scheme, conf Config) (*CachingClient, err
 		scheme:     scheme,
 		ttl:        ttl,
 		gvks:       gvks,
+		monitor:    mon,
 		byGVK:      make(map[schema.GroupVersionKind]map[objectKey]*entry),
 		indexers:   make(map[schema.GroupVersionKind]map[string]client.IndexerFunc),
 		writeLocks: newKeyedMutex(),
@@ -256,6 +258,7 @@ func (c *CachingClient) upsert(gvk schema.GroupVersionKind, obj client.Object) {
 		deleted:         false,
 		expiresAt:       time.Now().Add(c.ttl),
 	}
+	c.recordSizeLocked(gvk)
 }
 
 // tombstone marks the object as deleted in the overlay so it is filtered out
@@ -271,6 +274,7 @@ func (c *CachingClient) tombstone(gvk schema.GroupVersionKind, obj client.Object
 		deleted:         true,
 		expiresAt:       time.Now().Add(c.ttl),
 	}
+	c.recordSizeLocked(gvk)
 }
 
 // evictIfSeen removes the overlay entry for obj if the informer-observed object
@@ -297,6 +301,7 @@ func (c *CachingClient) evictIfSeen(gvk schema.GroupVersionKind, obj client.Obje
 		return
 	}
 	delete(entries, key)
+	c.recordSizeLocked(gvk)
 }
 
 // getEntry returns the overlay entry for the key, if present.
@@ -315,12 +320,13 @@ func (c *CachingClient) getEntry(gvk schema.GroupVersionKind, key objectKey) (*e
 func (c *CachingClient) cleanupExpired(now time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for _, entries := range c.byGVK {
+	for gvk, entries := range c.byGVK {
 		for key, e := range entries {
 			if now.After(e.expiresAt) {
 				delete(entries, key)
 			}
 		}
+		c.recordSizeLocked(gvk)
 	}
 }
 
@@ -340,6 +346,15 @@ func (c *CachingClient) ensureGVK(gvk schema.GroupVersionKind) {
 	if c.byGVK[gvk] == nil {
 		c.byGVK[gvk] = make(map[objectKey]*entry)
 	}
+}
+
+// recordSizeLocked reports the current overlay size (live + tombstones) for the
+// GVK to the monitor, if one is configured. Callers must hold c.mu.
+func (c *CachingClient) recordSizeLocked(gvk schema.GroupVersionKind) {
+	if c.monitor == nil {
+		return
+	}
+	c.monitor.observe(gvk, len(c.byGVK[gvk]))
 }
 
 // overlayList merges the overlay entries for the GVK into the informer result,
@@ -533,6 +548,7 @@ func (c *CachingClient) DeleteAllOf(ctx context.Context, obj client.Object, opts
 			expiresAt:       time.Now().Add(c.ttl),
 		}
 	}
+	c.recordSizeLocked(gvk)
 	return nil
 }
 

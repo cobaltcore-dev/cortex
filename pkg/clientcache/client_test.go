@@ -224,7 +224,7 @@ func reservationConfig() Config {
 
 func newCaching(t *testing.T, inner Client) *CachingClient {
 	t.Helper()
-	c, err := New(inner, testScheme(t), reservationConfig())
+	c, err := New(inner, testScheme(t), reservationConfig(), nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -261,7 +261,7 @@ func waitFor(t *testing.T, cond func() bool) {
 func TestNewUnknownGVKError(t *testing.T) {
 	_, err := New(newTestClient(t), testScheme(t), Config{
 		GVKs: []string{"cortex.cloud/v1alpha1/DoesNotExist"},
-	})
+	}, nil)
 	if err == nil {
 		t.Fatalf("expected error for unknown GVK, got nil")
 	}
@@ -270,7 +270,7 @@ func TestNewUnknownGVKError(t *testing.T) {
 func TestNewDefaultTTL(t *testing.T) {
 	c, err := New(newTestClient(t), testScheme(t), Config{
 		GVKs: []string{"cortex.cloud/v1alpha1/Reservation"},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -283,7 +283,7 @@ func TestNewExplicitTTL(t *testing.T) {
 	c, err := New(newTestClient(t), testScheme(t), Config{
 		GVKs: []string{"cortex.cloud/v1alpha1/Reservation"},
 		TTL:  metav1.Duration{Duration: 90 * time.Second},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -548,7 +548,7 @@ func TestFieldMatching(t *testing.T) {
 
 func TestNonCachedGVKPassthrough(t *testing.T) {
 	inner := newTestClient(t)
-	c, err := New(inner, testScheme(t), Config{})
+	c, err := New(inner, testScheme(t), Config{}, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -754,7 +754,7 @@ func TestGetNotFoundWithNoOverlay(t *testing.T) {
 
 func TestGetNonCachedPropagatesError(t *testing.T) {
 	sentinel := errors.New("get boom")
-	c, err := New(&errClient{Client: newTestClient(t), getErr: sentinel}, testScheme(t), Config{})
+	c, err := New(&errClient{Client: newTestClient(t), getErr: sentinel}, testScheme(t), Config{}, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -802,7 +802,7 @@ func TestStatusCreateDelegates(t *testing.T) {
 func TestStatusUpdateNonCachedNoOverlay(t *testing.T) {
 	r := newReservation("res-sn", "az-1", "")
 	inner := newTestClient(t, r)
-	c, err := New(inner, testScheme(t), Config{})
+	c, err := New(inner, testScheme(t), Config{}, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

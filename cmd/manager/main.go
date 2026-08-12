@@ -403,7 +403,8 @@ func main() {
 	// observed. *multicluster.Client satisfies clientcache.Client, providing
 	// both the inner client.Client and informer access for eviction.
 	clientCacheConfig := conf.GetConfigOrDie[clientcache.RootConfig]()
-	cachingClient, err := clientcache.New(multiclusterClient, scheme, clientCacheConfig.ClientCache)
+	clientCacheMonitor := clientcache.NewMonitor("cortex_")
+	cachingClient, err := clientcache.New(multiclusterClient, scheme, clientCacheConfig.ClientCache, clientCacheMonitor)
 	if err != nil {
 		setupLog.Error(err, "unable to create client cache")
 		os.Exit(1)
@@ -419,6 +420,7 @@ func main() {
 	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, metricsConfig)
 	metrics.Registry.MustRegister(&logMetricsMonitor)
 	metrics.Registry.MustRegister(multiclusterMonitor)
+	metrics.Registry.MustRegister(clientCacheMonitor)
 
 	// TODO: Remove me after scheduling pipeline steps don't require DB connections anymore.
 	metrics.Registry.MustRegister(&db.Monitor)
