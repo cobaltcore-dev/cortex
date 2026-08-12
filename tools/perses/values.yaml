@@ -4,14 +4,6 @@
 sidecar:
   enabled: true
 
-volumes:
-  - name: perses-plugins
-    emptyDir: {}
-
-volumeMounts:
-  - name: perses-plugins
-    mountPath: /etc/perses/plugins
-
 config:
   provisioning:
     folders:
