@@ -1052,23 +1052,6 @@ func (r *CommitmentReservationController) runOversubscriptionCheck(ctx context.C
 	return 0
 }
 
-// unusedRatioBuckets returns unused/total bucketed into 10 steps (0–10); 0 when total is zero.
-func unusedRatioBuckets(unused, total resource.Quantity) int64 {
-	if t := total.Value(); t != 0 {
-		return unused.Value() * 10 / t
-	}
-	return 0
-}
-
-// formatQuantityMap converts a resource quantity map to a string map for logging.
-func formatQuantityMap[K ~string](m map[K]resource.Quantity) map[string]string {
-	out := make(map[string]string, len(m))
-	for k, v := range m {
-		out[string(k)] = v.String()
-	}
-	return out
-}
-
 // computeViolations returns the per-resource excess (positive quantity) for any resource where
 // the host is over-subscribed. Returns nil if capacity data is unavailable, empty map if no violation.
 func computeViolations(allReservations []v1alpha1.Reservation, hv hv1.Hypervisor) map[hv1.ResourceName]resource.Quantity {
@@ -1107,8 +1090,10 @@ func (r *CommitmentReservationController) selectEvictionTarget(
 		if res.Spec.TargetHost == "" {
 			continue // already evicted, pending status cleanup
 		}
-		if res.Spec.CommittedResourceReservation == nil ||
-			len(res.Spec.CommittedResourceReservation.Allocations) == 0 {
+		if res.Spec.CommittedResourceReservation == nil {
+			continue // no CR payload — nothing to evict
+		}
+		if len(res.Spec.CommittedResourceReservation.Allocations) == 0 {
 			unallocated = append(unallocated, res)
 		} else {
 			allocated = append(allocated, res)
@@ -1138,7 +1123,10 @@ func (r *CommitmentReservationController) selectEvictionTarget(
 			unusedCap := reservations.UnusedReservationCapacity(res, false)
 			buckets := make(map[hv1.ResourceName]int64)
 			for rn, total := range res.Spec.Resources {
-				buckets[rn] = unusedRatioBuckets(unusedCap[rn], total)
+				if t := total.Value(); t != 0 {
+					unused := unusedCap[rn]
+					buckets[rn] = unused.Value() * 10 / t
+				}
 			}
 			unusedCapRatioBuckets[i] = buckets
 		}
@@ -1165,7 +1153,7 @@ func (r *CommitmentReservationController) selectEvictionTarget(
 		"total unallocated slots", len(unallocated),
 		"total allocated slots", len(allocated),
 		"slot resources", selectedRes.Spec.Resources,
-		"violations", formatQuantityMap(violations),
+		"violations", violations,
 	)
 	return selectedRes
 }
@@ -1186,24 +1174,28 @@ func (r *CommitmentReservationController) checkHostOversubscription(
 	logger := LoggerFromContext(ctx).WithValues("component", "oversubscription-check", "host", host)
 	az := hv.Labels["topology.kubernetes.io/zone"]
 
+	updateMonitor := func(v map[hv1.ResourceName]resource.Quantity) {
+		monitor.ClearHost(host, az)
+		for rn, excess := range v {
+			monitor.SetOversubscribed(host, az, string(rn), float64(excess.Value()))
+		}
+	}
+
 	violations := computeViolations(allReservations, hv)
 	if violations == nil {
 		monitor.ClearHost(host, az)
 		return false, false, nil
 	}
-	monitor.ClearHost(host, az)
-
 	if len(violations) == 0 {
+		monitor.ClearHost(host, az)
 		return false, true, nil
-	}
-	for rn, excess := range violations {
-		monitor.SetOversubscribed(host, az, string(rn), float64(excess.Value()))
 	}
 
 	if firstSeen.IsZero() {
 		logger.Info("host over-subscribed, starting grace period",
 			"gracePeriod", gracePeriod,
-			"violations", formatQuantityMap(violations))
+			"violations", violations)
+		updateMonitor(violations)
 		return false, false, nil
 	}
 
@@ -1212,28 +1204,43 @@ func (r *CommitmentReservationController) checkHostOversubscription(
 		logger.Info("host over-subscribed, grace period in progress",
 			"elapsed", elapsed.Round(time.Second),
 			"remaining", (gracePeriod - elapsed).Round(time.Second))
+		updateMonitor(violations)
 		return false, false, nil
 	}
 
-	logger.Info("host over-subscribed, evicting one slot", "violations", formatQuantityMap(violations))
+	logger.Info("host over-subscribed, evicting one slot", "violations", violations)
 
 	target := r.selectEvictionTarget(ctx, allReservations, violations)
 	if target == nil {
 		logger.Info("host over-subscribed but no evictable CR reservation slots found — manual intervention required",
-			"violations", formatQuantityMap(violations))
+			"violations", violations)
+		updateMonitor(violations)
 		return false, false, nil
 	}
 
 	freed, err := r.unplaceReservation(ctx, target)
 	if err != nil {
 		logger.Error(err, "failed to unplace reservation for over-subscription remediation", "reservation", target.Name)
+		updateMonitor(violations)
 		return false, false, err
 	}
 
 	logger.Info("evicted slot for over-subscription remediation",
 		"reservation", target.Name,
 		"hasAllocations", target.Spec.CommittedResourceReservation != nil && len(target.Spec.CommittedResourceReservation.Allocations) > 0,
-		"freed", formatQuantityMap(freed))
+		"freed", freed)
+
+	remaining := make([]v1alpha1.Reservation, 0, len(allReservations)-1)
+	for i := range allReservations {
+		if allReservations[i].Name != target.Name {
+			remaining = append(remaining, allReservations[i])
+		}
+	}
+	if postViolations := computeViolations(remaining, hv); len(postViolations) > 0 {
+		updateMonitor(postViolations)
+	} else {
+		monitor.ClearHost(host, az)
+	}
 	return true, false, nil
 }
 
@@ -1255,7 +1262,7 @@ func (r *CommitmentReservationController) unplaceReservation(
 		res.Spec.CommittedResourceReservation.Allocations = nil
 	}
 	logger.Info("unplacing reservation for over-subscription remediation",
-		"freed", formatQuantityMap(freed),
+		"freed", freed,
 		"previous host", old.Spec.TargetHost,
 		"flavor", old.Spec.CommittedResourceReservation.ResourceName,
 		"flavorGroup", old.Spec.CommittedResourceReservation.ResourceGroup,

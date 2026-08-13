@@ -32,7 +32,7 @@ func (m *ReservationControllerMonitor) SetOversubscribed(host, az, resource stri
 
 // ClearHost resets all resource gauges for a host that is no longer over-subscribed.
 func (m *ReservationControllerMonitor) ClearHost(host, az string) {
-	m.oversubscribed.DeletePartialMatch(prometheus.Labels{"host": host, "az": az})
+	m.oversubscribed.DeletePartialMatch(prometheus.Labels{"host": host})
 }
 
 // Describe implements prometheus.Collector.
