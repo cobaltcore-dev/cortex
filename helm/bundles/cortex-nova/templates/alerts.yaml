@@ -763,10 +763,10 @@ spec:
       # initial unready window (slot just created) are not captured by this alert.
       expr: |
         (
-          cortex_kvm_host_capacity_usage{type="utilized"}
-          + on(compute_host, availability_zone, resource) cortex_kvm_host_capacity_usage{type="reserved"}
-          + on(compute_host, availability_zone, resource) cortex_kvm_host_capacity_usage{type="failover"}
-          - on(compute_host, availability_zone, resource) cortex_kvm_host_capacity_total
+          max by (compute_host, availability_zone, resource) (cortex_kvm_host_capacity_usage{type="utilized"})
+          + max by (compute_host, availability_zone, resource) (cortex_kvm_host_capacity_usage{type="reserved"})
+          + max by (compute_host, availability_zone, resource) (cortex_kvm_host_capacity_usage{type="failover"})
+          - max by (compute_host, availability_zone, resource) (cortex_kvm_host_capacity_total)
         ) > 0
       for: 10m
       labels:

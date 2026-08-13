@@ -1037,12 +1037,15 @@ func (r *CommitmentReservationController) runOversubscriptionCheck(ctx context.C
 	// Violation detected for the first time — start grace period, requeue after it.
 	if firstSeen.IsZero() {
 		r.oversubscriptionFirstSeen[host] = time.Now()
+		logger.Info("violation detected first time, starting grace period", "gracePeriod", gracePeriod)
 		return gracePeriod
 	}
 
 	// Grace period still running — requeue with remaining time.
 	if elapsed := time.Since(firstSeen); elapsed < gracePeriod {
-		return gracePeriod - elapsed
+		var remaining = gracePeriod - elapsed
+		logger.Info("violation still present, grace period running", "elapsed", elapsed.Round(time.Second), "remaining", remaining.Round(time.Second))
+		return remaining
 	}
 
 	// Grace period elapsed but checkHostOversubscription did not evict (no candidates).
@@ -1154,6 +1157,7 @@ func (r *CommitmentReservationController) selectEvictionTarget(
 	}
 
 	if selectedRes == nil {
+		logger.Info("no eviction target found")
 		return nil
 	}
 	logger.Info("eviction target selected",
@@ -1184,14 +1188,14 @@ func (r *CommitmentReservationController) checkHostOversubscription(
 
 	violations := computeViolations(allReservations, hv)
 	if violations == nil {
+		monitor.ClearHost(host, az)
 		return false, false, nil
 	}
+	monitor.ClearHost(host, az)
+
 	if len(violations) == 0 {
-		monitor.ClearHost(host, az)
 		return false, true, nil
 	}
-
-	monitor.ClearHost(host, az)
 	for rn, excess := range violations {
 		monitor.SetOversubscribed(host, az, string(rn), float64(excess.Value()))
 	}
@@ -1205,7 +1209,7 @@ func (r *CommitmentReservationController) checkHostOversubscription(
 
 	elapsed := time.Since(firstSeen)
 	if elapsed < gracePeriod {
-		logger.V(1).Info("host over-subscribed, grace period in progress",
+		logger.Info("host over-subscribed, grace period in progress",
 			"elapsed", elapsed.Round(time.Second),
 			"remaining", (gracePeriod - elapsed).Round(time.Second))
 		return false, false, nil
@@ -1222,8 +1226,10 @@ func (r *CommitmentReservationController) checkHostOversubscription(
 
 	freed, err := r.unplaceReservation(ctx, target)
 	if err != nil {
+		logger.Error(err, "failed to unplace reservation for over-subscription remediation", "reservation", target.Name)
 		return false, false, err
 	}
+
 	logger.Info("evicted slot for over-subscription remediation",
 		"reservation", target.Name,
 		"hasAllocations", target.Spec.CommittedResourceReservation != nil && len(target.Spec.CommittedResourceReservation.Allocations) > 0,
@@ -1239,6 +1245,8 @@ func (r *CommitmentReservationController) unplaceReservation(
 	res *v1alpha1.Reservation,
 ) (map[hv1.ResourceName]resource.Quantity, error) {
 
+	logger := LoggerFromContext(ctx).WithValues("component", "oversubscription-check", "reservation", res.Name)
+
 	freed := reservations.UnusedReservationCapacity(res, true)
 
 	old := res.DeepCopy()
@@ -1246,7 +1254,14 @@ func (r *CommitmentReservationController) unplaceReservation(
 	if res.Spec.CommittedResourceReservation != nil {
 		res.Spec.CommittedResourceReservation.Allocations = nil
 	}
+	logger.Info("unplacing reservation for over-subscription remediation",
+		"freed", formatQuantityMap(freed),
+		"previous host", old.Spec.TargetHost,
+		"flavor", old.Spec.CommittedResourceReservation.ResourceName,
+		"flavorGroup", old.Spec.CommittedResourceReservation.ResourceGroup,
+		"hasAllocations", old.Spec.CommittedResourceReservation != nil && len(old.Spec.CommittedResourceReservation.Allocations) > 0)
 	if err := r.Patch(ctx, res, client.MergeFrom(old)); err != nil {
+		logger.Error(err, "failed to patch reservation", "reservation", res.Name)
 		return nil, fmt.Errorf("failed to patch reservation %s: %w", res.Name, err)
 	}
 	return freed, nil
