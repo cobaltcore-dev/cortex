@@ -404,6 +404,7 @@ type intgEnv struct {
 	k8sClient     client.Client
 	crController  *CommittedResourceController
 	resController *CommitmentReservationController
+	hvController  *HostOversubscriptionController
 	schedulerSrv  *httptest.Server
 }
 
@@ -480,17 +481,22 @@ func newIntgEnv(t *testing.T, initialObjects []client.Object, schedulerFn http.H
 		Client: k8sClient,
 		Scheme: scheme,
 		Conf: ReservationControllerConfig{
-			SchedulerURL:                schedulerSrv.URL,
-			AllocationGracePeriod:       metav1.Duration{Duration: 15 * time.Minute},
-			RequeueIntervalActive:       metav1.Duration{Duration: 5 * time.Minute},
-			EnableOversubscriptionCheck: true,
+			SchedulerURL:                              schedulerSrv.URL,
+			AllocationGracePeriod:                     metav1.Duration{Duration: 15 * time.Minute},
+			RequeueIntervalActive:                     metav1.Duration{Duration: 5 * time.Minute},
+			EnableOversubscriptionCheck:               true,
+			EnableOversubscriptionUnplaceReservations: true,
 		},
-		Monitor: &monitor,
 	}
 	if err := resCtrl.Init(context.Background(), resCtrl.Conf); err != nil {
 		t.Fatalf("resCtrl.Init: %v", err)
 	}
-	return &intgEnv{k8sClient: k8sClient, crController: crCtrl, resController: resCtrl, schedulerSrv: schedulerSrv}
+	hvCtrl := &HostOversubscriptionController{
+		Client:  k8sClient,
+		Monitor: &monitor,
+		Conf:    resCtrl.Conf,
+	}
+	return &intgEnv{k8sClient: k8sClient, crController: crCtrl, resController: resCtrl, hvController: hvCtrl, schedulerSrv: schedulerSrv}
 }
 
 func (e *intgEnv) close() { e.schedulerSrv.Close() }
@@ -517,6 +523,14 @@ func (e *intgEnv) reconcileReservation(t *testing.T, resName string) {
 		if !strings.Contains(err.Error(), "no hosts found") {
 			t.Fatalf("reservation reconcile %s: %v", resName, err)
 		}
+	}
+}
+
+func (e *intgEnv) reconcileHV(t *testing.T, host string) {
+	t.Helper()
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: host}}
+	if _, err := e.hvController.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("HV reconcile %s: %v", host, err)
 	}
 }
 
@@ -1273,6 +1287,12 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 				hv1.ResourceMemory: gib(200),
 				hv1.ResourceCPU:    cpu(200),
 			},
+			Conditions: []metav1.Condition{{
+				Type:               hv1.ConditionTypeReady,
+				Status:             metav1.ConditionTrue,
+				Reason:             hv1.ConditionReasonReadyReady,
+				LastTransitionTime: metav1.Now(),
+			}},
 		},
 	}
 
@@ -1328,24 +1348,20 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 	env := newIntgEnv(t, append(objects, newTestFlavorKnowledge()), schedulerFn, nil)
 	defer env.close()
 
-	// Reconcile slot-10 — triggers oversubscription detection.
-	env.reconcileReservation(t, "slot-10")
-
-	if _, ok := env.resController.oversubscriptionFirstSeen["host-1"]; !ok {
+	// Reconcile host-1 — triggers oversubscription detection (firstSeen set).
+	env.reconcileHV(t, "host-1")
+	if _, detected := env.hvController.firstSeen["host-1"]; !detected {
 		t.Fatal("expected oversubscription to be detected after first reconcile")
 	}
 
-	// Drive remediation: fast-forward grace period and reset rate limit per cycle.
-	// Rotate trigger slot each time — avoids fake client index staleness
-	// (status patches don't update field indexes in the fake client).
+	// Drive remediation: fast-forward grace period and reset rate limit each cycle.
 	resolved := false
-	for i := range 25 {
-		triggerSlot := fmt.Sprintf("slot-%02d", 10+i%10)
-		env.resController.oversubscriptionFirstSeen["host-1"] = time.Now().Add(-3 * time.Minute)
-		env.resController.oversubscriptionLastCheckedAt["host-1"] = time.Time{}
-		env.reconcileReservation(t, triggerSlot)
+	for range 25 {
+		env.hvController.firstSeen["host-1"] = time.Now().Add(-3 * time.Minute)
+		env.hvController.lastCheck["host-1"] = time.Time{}
+		env.reconcileHV(t, "host-1")
 
-		if _, still := env.resController.oversubscriptionFirstSeen["host-1"]; !still {
+		if _, still := env.hvController.firstSeen["host-1"]; !still {
 			resolved = true
 			break
 		}

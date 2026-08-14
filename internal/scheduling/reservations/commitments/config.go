@@ -70,11 +70,15 @@ type ReservationControllerConfig struct {
 	// to a value shorter than the grace period without affecting normal reconcile cadence.
 	// Defaults to 30s.
 	OversubscriptionMinCheckInterval metav1.Duration `json:"oversubscriptionMinCheckInterval,omitempty"`
-	// EnableOversubscriptionCheck enables the host over-subscription detection and slot eviction
-	// logic. When false, no oversubscription checks are performed and no slots are evicted.
-	// Acts as a kill switch for rollout control or when investigating capacity anomalies.
-	// Defaults to false (opt-in).
+	// EnableOversubscriptionCheck enables the HostOversubscriptionController, which watches
+	// Hypervisor objects and detects committed-resource oversubscription.
+	// When false, the controller is not wired up and no oversubscription detection runs.
 	EnableOversubscriptionCheck bool `json:"enableOversubscriptionCheck,omitempty"`
+	// EnableOversubscriptionUnplaceReservations controls whether the oversubscription controller
+	// actively evicts reservation slots when a host is over-subscribed.
+	// When false, violations are detected and exposed via metrics but no eviction is performed.
+	// Has no effect when EnableOversubscriptionCheck is false.
+	EnableOversubscriptionUnplaceReservations bool `json:"enableOversubscriptionUnplaceReservations,omitempty"`
 	// SchedulerURL is the endpoint of the nova external scheduler.
 	SchedulerURL string `json:"schedulerURL"`
 	// PipelineDefault is the fallback pipeline when no FlavorGroupPipelines entry matches.

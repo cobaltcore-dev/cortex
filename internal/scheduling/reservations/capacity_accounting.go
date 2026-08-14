@@ -25,6 +25,7 @@ import (
 // res itself is excluded from step 3 to avoid subtracting its own block from free capacity.
 // Returns false when the hypervisor has no capacity data.
 func HostHasCapacityForReservation(allReservations []v1alpha1.Reservation, hv hv1.Hypervisor, res *v1alpha1.Reservation) bool {
+	// TODO consider refactor with HostFreeCapacity
 	effCap := hv.Status.EffectiveCapacity
 	if effCap == nil {
 		effCap = hv.Status.Capacity
@@ -81,6 +82,7 @@ func HostHasCapacityForReservation(allReservations []v1alpha1.Reservation, hv hv
 // Returns nil when the hypervisor has no capacity data.
 // Reservations not targeting this host (via Spec.TargetHost or Status.Host) are ignored.
 func HostFreeCapacity(hostReservations []v1alpha1.Reservation, hv hv1.Hypervisor) map[hv1.ResourceName]resource.Quantity {
+	// TODO consider refactor with HostHasCapacityForReservation
 	effCap := hv.Status.EffectiveCapacity
 	if effCap == nil {
 		effCap = hv.Status.Capacity

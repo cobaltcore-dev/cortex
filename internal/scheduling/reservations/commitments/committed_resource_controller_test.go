@@ -159,6 +159,10 @@ func newCRTestClient(scheme *runtime.Scheme, objects ...client.Object) client.Cl
 		Build()
 }
 
+func testGiB(n int64) resource.Quantity {
+	return *resource.NewQuantity(n*1024*1024*1024, resource.BinarySI)
+}
+
 func reconcileReq(name string) ctrl.Request {
 	return ctrl.Request{NamespacedName: types.NamespacedName{Name: name}}
 }

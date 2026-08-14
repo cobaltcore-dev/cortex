@@ -626,14 +626,10 @@ func main() {
 		monitor := reservations.NewMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&monitor)
 
-		reservationControllerMonitor := commitments.NewReservationControllerMonitor()
-		metrics.Registry.MustRegister(&reservationControllerMonitor)
-
 		if err := (&commitments.CommitmentReservationController{
-			Client:  multiclusterClient,
-			Scheme:  mgr.GetScheme(),
-			Conf:    commitmentsConfig.ReservationController,
-			Monitor: &reservationControllerMonitor,
+			Client: multiclusterClient,
+			Scheme: mgr.GetScheme(),
+			Conf:   commitmentsConfig.ReservationController,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "CommitmentReservation")
 			os.Exit(1)
@@ -669,6 +665,20 @@ func main() {
 				Monitor:  usageReconcilerMonitor,
 			}).SetupWithManager(mgr, multiclusterClient); err != nil {
 				setupLog.Error(err, "unable to create controller", "controller", "CommittedResourceUsage")
+				os.Exit(1)
+			}
+		}
+
+		if commitmentsConfig.ReservationController.EnableOversubscriptionCheck {
+			reservationControllerMonitor := commitments.NewReservationControllerMonitor()
+			metrics.Registry.MustRegister(&reservationControllerMonitor)
+
+			if err := (&commitments.HostOversubscriptionController{
+				Client:  multiclusterClient,
+				Conf:    commitmentsConfig.ReservationController,
+				Monitor: &reservationControllerMonitor,
+			}).SetupWithManager(mgr, multiclusterClient); err != nil {
+				setupLog.Error(err, "unable to create controller", "controller", "HostOversubscription")
 				os.Exit(1)
 			}
 		}
