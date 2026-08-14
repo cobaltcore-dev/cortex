@@ -768,7 +768,7 @@ spec:
           + max by (compute_host, availability_zone, resource) (cortex_kvm_host_capacity_usage{type="failover"})
           - max by (compute_host, availability_zone, resource) (cortex_kvm_host_capacity_total)
         ) > 0
-      for: 10m
+      for: 15m
       labels:
         context: committed-resource-capacity
         dashboard: cortex-status-dashboard/cortex-status-dashboard
