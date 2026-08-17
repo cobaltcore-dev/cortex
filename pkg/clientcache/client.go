@@ -181,7 +181,7 @@ func New(inner Client, scheme *runtime.Scheme, conf Config, mon Monitor) (*Cachi
 	if ttl <= 0 {
 		ttl = defaultTTL
 	}
-	return &CachingClient{
+	c := &CachingClient{
 		Client:     inner,
 		inner:      inner,
 		scheme:     scheme,
@@ -191,7 +191,14 @@ func New(inner Client, scheme *runtime.Scheme, conf Config, mon Monitor) (*Cachi
 		byGVK:      make(map[schema.GroupVersionKind]map[objectKey]*entry),
 		indexers:   make(map[schema.GroupVersionKind]map[string]client.IndexerFunc),
 		writeLocks: newKeyedMutex(),
-	}, nil
+	}
+	if mon != nil {
+		// Initialize the monitor with zero counts for all GVKs so the metric is always present.
+		for gvk := range gvks {
+			mon.observe(gvk, 0)
+		}
+	}
+	return c, nil
 }
 
 // resolveGVKs maps "<group>/<version>/<Kind>" strings to GVKs via the scheme's

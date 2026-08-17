@@ -170,6 +170,30 @@ func TestMonitor_ClientRecords(t *testing.T) {
 	}
 }
 
+// TestMonitor_SeedOnNew verifies that New seeds the monitor so that
+// cortex_clientcache_overlay_entries appears immediately (as 0) without any
+// writes. The _max metric must remain absent until at least one write occurs.
+func TestMonitor_SeedOnNew(t *testing.T) {
+	inner := newTestClient(t)
+	m := NewMonitor("cortex_")
+	reg := prometheus.NewRegistry()
+	if err := reg.Register(m); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	if _, err := New(inner, testScheme(t), reservationConfig(), m); err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	gvk := reservationGVK().String()
+	s := scrape(t, reg)
+	if got, ok := s["cortex_clientcache_overlay_entries|"+gvk]; !ok || got != 0 {
+		t.Errorf("seeded current: got %v (ok=%v), want 0", got, ok)
+	}
+	if _, ok := s["cortex_clientcache_overlay_entries_max|"+gvk]; ok {
+		t.Errorf("seeded max: expected absent before any writes, got a sample")
+	}
+}
+
 // TestMonitor_NilSafe verifies a client built with a nil monitor does not panic
 // on the recording paths.
 func TestMonitor_NilSafe(t *testing.T) {
