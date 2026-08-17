@@ -485,7 +485,7 @@ func newIntgEnv(t *testing.T, initialObjects []client.Object, schedulerFn http.H
 			AllocationGracePeriod:                     metav1.Duration{Duration: 15 * time.Minute},
 			RequeueIntervalActive:                     metav1.Duration{Duration: 5 * time.Minute},
 			EnableOversubscriptionCheck:               true,
-			EnableOversubscriptionUnplaceReservations: true,
+			EnableOversubscriptionReservationEviction: true,
 		},
 	}
 	if err := resCtrl.Init(context.Background(), resCtrl.Conf); err != nil {

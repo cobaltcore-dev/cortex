@@ -194,7 +194,7 @@ cortex-scheduling-controllers:
       # Enable host over-subscription detection
       enableOversubscriptionCheck: true
       # When false, violations are detected and exposed via metrics but no slots are evicted.
-      enableOversubscriptionUnplaceReservations: true
+      enableOversubscriptionReservationEviction: true
       # URL of the nova external scheduler API for placement decisions
       schedulerURL: "http://localhost:8080/scheduler/nova/external"
       # Keystone credentials used to resolve domain IDs to domain names for the

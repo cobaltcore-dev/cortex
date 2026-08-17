@@ -129,8 +129,8 @@ func (r *HostOversubscriptionController) checkOversubscription(
 	}
 
 	logger.Info("grace period elapsed, evicting slot", "violations", violations)
-	if !r.Conf.EnableOversubscriptionUnplaceReservations {
-		logger.Info("unplace disabled — violations detected but eviction skipped (enableOversubscriptionUnplaceReservations=false)")
+	if !r.Conf.EnableOversubscriptionReservationEviction {
+		logger.Info("eviction disabled — violations detected but eviction skipped (enableOversubscriptionReservationEviction=false)")
 		r.resetFirstSeen(host)
 		return gracePeriod, nil
 	}
@@ -141,11 +141,11 @@ func (r *HostOversubscriptionController) checkOversubscription(
 		return gracePeriod, nil
 	}
 
-	if _, err := unplaceReservation(ctx, r.Client, target); err != nil {
+	if _, err := evictReservation(ctx, r.Client, target); err != nil {
 		r.updateMonitor(host, az, violations) // keep monitor current on error
 		return 0, err
 	}
-	r.Monitor.IncSlotsUnplaced(az)
+	r.Monitor.IncSlotsEvicted(az)
 
 	// Recompute violations without the evicted slot to get an accurate post-eviction picture.
 	remaining := make([]v1alpha1.Reservation, 0, len(allReservations)-1)
@@ -371,9 +371,9 @@ func selectEvictionTarget(
 	return selectedRes
 }
 
-// unplaceReservation clears Spec.TargetHost and Spec.Allocations, and returns the resources
-// freed (full Spec.Resources — the slot is fully unplaced). Status cleanup is left to the reconcile loop
-func unplaceReservation(
+// evictReservation clears Spec.TargetHost and Spec.Allocations, and returns the resources
+// freed (full Spec.Resources — the slot is fully evicted). Status cleanup is left to the reconcile loop
+func evictReservation(
 	ctx context.Context,
 	c client.Client,
 	res *v1alpha1.Reservation,
@@ -388,7 +388,7 @@ func unplaceReservation(
 	if res.Spec.CommittedResourceReservation != nil {
 		res.Spec.CommittedResourceReservation.Allocations = nil
 	}
-	logger.Info("unplacing reservation",
+	logger.Info("evicting reservation",
 		"freed", freed,
 		"previous host", old.Spec.TargetHost,
 		"resources", old.Spec.Resources)

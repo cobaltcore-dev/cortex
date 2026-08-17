@@ -11,7 +11,7 @@ import (
 // detected by the CommitmentReservationController.
 type ReservationControllerMonitor struct {
 	oversubscribed *prometheus.GaugeVec
-	slotsUnplaced  *prometheus.CounterVec
+	slotsEvicted   *prometheus.CounterVec
 }
 
 func NewReservationControllerMonitor() ReservationControllerMonitor {
@@ -21,8 +21,8 @@ func NewReservationControllerMonitor() ReservationControllerMonitor {
 			Help: "Excess resource units by which a host's reservation blocks + VM allocations exceed its effective capacity. " +
 				"Non-zero when the host is over-subscribed and unresolvable via unallocated slot eviction.",
 		}, []string{"host", "az", "resource"}),
-		slotsUnplaced: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "cortex_committed_resource_host_oversubscribed_unplaced_reservations_total",
+		slotsEvicted: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "cortex_committed_resource_host_oversubscribed_evicted_reservations_total",
 			Help: "Total number of reservation slots evicted by the oversubscription controller. " +
 				"A sustained increase indicates recurring oversubscription events in an AZ.",
 		}, []string{"az"}),
@@ -40,19 +40,19 @@ func (m *ReservationControllerMonitor) ClearHost(host, az string) {
 	m.oversubscribed.DeletePartialMatch(prometheus.Labels{"host": host, "az": az})
 }
 
-// IncSlotsUnplaced increments the counter for slots evicted in the given AZ.
-func (m *ReservationControllerMonitor) IncSlotsUnplaced(az string) {
-	m.slotsUnplaced.WithLabelValues(az).Inc()
+// IncSlotsEvicted increments the counter for slots evicted in the given AZ.
+func (m *ReservationControllerMonitor) IncSlotsEvicted(az string) {
+	m.slotsEvicted.WithLabelValues(az).Inc()
 }
 
 // Describe implements prometheus.Collector.
 func (m *ReservationControllerMonitor) Describe(ch chan<- *prometheus.Desc) {
 	m.oversubscribed.Describe(ch)
-	m.slotsUnplaced.Describe(ch)
+	m.slotsEvicted.Describe(ch)
 }
 
 // Collect implements prometheus.Collector.
 func (m *ReservationControllerMonitor) Collect(ch chan<- prometheus.Metric) {
 	m.oversubscribed.Collect(ch)
-	m.slotsUnplaced.Collect(ch)
+	m.slotsEvicted.Collect(ch)
 }

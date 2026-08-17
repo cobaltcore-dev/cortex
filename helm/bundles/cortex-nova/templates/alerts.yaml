@@ -803,7 +803,7 @@ spec:
           The oversubscription controller was unable to resolve this by evicting unallocated slots.
           Inspect the CR reservations on this host and check the oversubscription controller logs.
     - alert: CortexCommittedResourceHostOversubscriptionEvictionsHigh
-      expr: sum by (az) (increase(cortex_committed_resource_host_oversubscribed_unplaced_reservations_total{service="cortex-nova-metrics"}[1h])) > 10
+      expr: sum by (az) (increase(cortex_committed_resource_host_oversubscribed_evicted_reservations_total{service="cortex-nova-metrics"}[1h])) > 10
       labels:
         context: committed-resource-capacity
         dashboard: cortex-status-dashboard/cortex-status-dashboard

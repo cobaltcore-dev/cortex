@@ -238,7 +238,7 @@ func TestCheckOversubscription_StartsGracePeriod(t *testing.T) {
 	controller := &HostOversubscriptionController{
 		Client:  k8sClient,
 		Monitor: &monitor,
-		Conf:    ReservationControllerConfig{EnableOversubscriptionUnplaceReservations: true},
+		Conf:    ReservationControllerConfig{EnableOversubscriptionReservationEviction: true},
 	}
 
 	requeue, err := controller.checkOversubscription(context.Background(), "host-1", slots, hv, 2*time.Minute)
@@ -290,7 +290,7 @@ func TestCheckOversubscription_EvictsAfterGracePeriod(t *testing.T) {
 	controller := &HostOversubscriptionController{
 		Client:    k8sClient,
 		Monitor:   &monitor,
-		Conf:      ReservationControllerConfig{EnableOversubscriptionUnplaceReservations: true},
+		Conf:      ReservationControllerConfig{EnableOversubscriptionReservationEviction: true},
 		firstSeen: map[string]time.Time{"host-1": time.Now().Add(-3 * time.Minute)},
 	}
 
@@ -338,7 +338,7 @@ func TestCheckOversubscription_SkipsWhenHVNotReady(t *testing.T) {
 	controller := &HostOversubscriptionController{
 		Client:  k8sClient,
 		Monitor: &monitor,
-		Conf:    ReservationControllerConfig{EnableOversubscriptionUnplaceReservations: true},
+		Conf:    ReservationControllerConfig{EnableOversubscriptionReservationEviction: true},
 	}
 
 	requeue, err := controller.checkOversubscription(context.Background(), "host-1", []v1alpha1.Reservation{slot}, hv, 2*time.Minute)
@@ -415,7 +415,7 @@ func TestHostOversubscriptionController_RateLimit(t *testing.T) {
 	}
 }
 
-func TestUnplaceReservation_ClearsAllocations(t *testing.T) {
+func TestEvictReservation_ClearsAllocations(t *testing.T) {
 	scheme := newCRTestScheme(t)
 	slot := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{Name: "slot-1"},
@@ -438,7 +438,7 @@ func TestUnplaceReservation_ClearsAllocations(t *testing.T) {
 	}
 
 	k8sClient := newCRTestClient(scheme, slot)
-	freed, err := unplaceReservation(context.Background(), k8sClient, slot)
+	freed, err := evictReservation(context.Background(), k8sClient, slot)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
