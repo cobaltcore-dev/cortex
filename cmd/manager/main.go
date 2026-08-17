@@ -668,6 +668,20 @@ func main() {
 				os.Exit(1)
 			}
 		}
+
+		if commitmentsConfig.ReservationController.EnableOversubscriptionCheck {
+			reservationControllerMonitor := commitments.NewReservationControllerMonitor()
+			metrics.Registry.MustRegister(&reservationControllerMonitor)
+
+			if err := (&commitments.HostOversubscriptionController{
+				Client:  multiclusterClient,
+				Conf:    commitmentsConfig.ReservationController,
+				Monitor: &reservationControllerMonitor,
+			}).SetupWithManager(mgr, multiclusterClient); err != nil {
+				setupLog.Error(err, "unable to create controller", "controller", "HostOversubscription")
+				os.Exit(1)
+			}
+		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "datasource-controllers") {
 		setupLog.Info("enabling controller", "controller", "datasource-controllers")

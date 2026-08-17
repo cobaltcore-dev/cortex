@@ -749,4 +749,74 @@ spec:
           resource router is mapping the same object to multiple clusters, or an
           object was created out-of-band on the wrong cluster. Investigate the
           affected resources and the routing configuration.
+
+    {{- if .Values.kvm.enabled }}
+    - alert: CortexNovaHostReservationsOversubscribed
+      # Fires when the sum of running VM allocations + reservation blocks (committed +
+      # failover) exceeds the host's effective capacity for CPU or memory.
+      # This can happen due to: concurrent slot creation with stale informer cache,
+      # operator-driven VM migrations where the slot stays on the old host, or
+      # capacity changes (e.g. hardware replacement changing EffectiveCapacity).
+      # The 10m hold-off tolerates the known migration window: after a VM departs,
+      # the slot remains on the old host until the usage reconciler cleans it up.
+      # Note: `reserved` only counts Ready reservations — violations during the
+      # initial unready window (slot just created) are not captured by this alert.
+      expr: |
+        (
+          max by (compute_host, availability_zone, resource) (cortex_kvm_host_capacity_usage{type="utilized"})
+          + max by (compute_host, availability_zone, resource) (cortex_kvm_host_capacity_usage{type="reserved"})
+          + max by (compute_host, availability_zone, resource) (cortex_kvm_host_capacity_usage{type="failover"})
+          - max by (compute_host, availability_zone, resource) (cortex_kvm_host_capacity_total)
+        ) > 0
+      for: 15m
+      labels:
+        context: committed-resource-capacity
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/committed-resource-capacity
+      annotations:
+        summary: "Host {{ "{{" }} $labels.compute_host {{ "}}" }} reservation blocks exceed capacity for {{ "{{" }} $labels.resource {{ "}}" }}"
+        description: >
+          The total of running VM allocations and reservation blocks (committed resource +
+          failover) on host {{ "{{" }} $labels.compute_host {{ "}}" }} exceeds its effective
+          capacity for {{ "{{" }} $labels.resource {{ "}}" }} by {{ "{{" }} $value | humanize {{ "}}" }}.
+          This means the host is over-subscribed and committed resource or failover guarantees may not be
+          satisfied. Common causes: VM migrations with slot not yet reclaimed, outdated/stale reservations, or out of sync issues. 
+          If problem remains, inspect the reservations on this host and check the CR/failover controller logs.
+    - alert: CortexCommittedResourceHostOversubscribed
+      expr: max by (host, az, resource) (cortex_committed_resource_host_oversubscribed) > 0
+      for: 15m
+      labels:
+        context: committed-resource-capacity
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/committed-resource-capacity
+      annotations:
+        summary: "Host {{ "{{" }} $labels.host {{ "}}" }} CR slots exceed effective capacity for {{ "{{" }} $labels.resource {{ "}}" }}"
+        description: >
+          Committed resource reservation slots on host {{ "{{" }} $labels.host {{ "}}" }} exceed
+          its effective capacity for {{ "{{" }} $labels.resource {{ "}}" }} by {{ "{{" }} $value | humanize {{ "}}" }}.
+          The oversubscription controller was unable to resolve this by evicting unallocated slots.
+          Inspect the CR reservations on this host and check the oversubscription controller logs.
+    - alert: CortexCommittedResourceHostOversubscriptionEvictionsHigh
+      expr: sum by (az) (increase(cortex_committed_resource_host_oversubscribed_evicted_reservations_total{service="cortex-nova-metrics"}[1h])) > 10
+      labels:
+        context: committed-resource-capacity
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/committed-resource-capacity
+      annotations:
+        summary: "High CR slot eviction rate in AZ {{ "{{" }} $labels.az {{ "}}" }}"
+        description: >
+          More than 10 committed resource reservation slots were evicted due to oversubscription
+          in AZ {{ "{{" }} $labels.az {{ "}}" }} within the last hour ({{ "{{" }} $value | humanize {{ "}}" }} evictions).
+          This indicates recurring oversubscription events — investigate capacity changes,
+          concurrent slot creation races, or VM migration patterns in this AZ.
+    {{- end }}
 {{- end }}

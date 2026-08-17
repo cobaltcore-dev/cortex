@@ -6,6 +6,8 @@ package commitments
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"reflect"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -32,7 +34,6 @@ import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
 	"github.com/gophercloud/gophercloud/v2"
-	"net/http"
 )
 
 // CommitmentReservationController reconciles commitment Reservation objects
@@ -114,6 +115,28 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	}
 
 	if res.IsReady() {
+		// Spec.TargetHost was cleared (e.g. oversubscription eviction) — revoke status so the
+		// slot re-enters the placement flow on the next reconcile.
+		if res.Spec.TargetHost == "" {
+			old := res.DeepCopy()
+			res.Status.Host = ""
+			if res.Status.CommittedResourceReservation != nil {
+				res.Status.CommittedResourceReservation.Allocations = nil
+			}
+			meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.ReservationConditionReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  "PlacementRevoked",
+				Message: "target host was cleared; pending re-placement",
+			})
+			if err := r.Status().Patch(ctx, &res, client.MergeFrom(old)); client.IgnoreNotFound(err) != nil {
+				return ctrl.Result{}, err
+			}
+			logger.Info("revoked ready status after placement eviction, slot re-enters placement flow",
+				"component", "oversubscription-check")
+			return ctrl.Result{}, nil
+		}
+
 		logger.V(1).Info("reservation is active, verifying allocations")
 
 		// Sync ObservedParentGeneration if the CR controller bumped ParentGeneration since
@@ -295,7 +318,14 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	logger.Info("selected pipeline for CR reservation",
 		"flavorName", resourceName,
 		"flavorGroup", flavorGroupName,
-		"pipeline", pipelineName)
+		"pipeline", pipelineName,
+		"reason", func() string {
+			cond := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ReservationConditionReady)
+			if cond != nil {
+				return cond.Reason
+			}
+			return "initial"
+		}())
 
 	// Use the SchedulerClient to schedule the reservation
 	scheduleReq := reservations.ScheduleReservationRequest{
@@ -328,7 +358,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	}
 
 	if len(scheduleResp.Hosts) == 0 {
-		logger.Info("no hosts found for reservation", "reservation", res.Name, "flavorName", resourceName)
+		logger.Info("no hosts found for reservation, will retry", "reservation", res.Name, "flavorName", resourceName)
 		old := res.DeepCopy()
 		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.ReservationConditionReady,
@@ -347,14 +377,14 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			// Object was deleted, no need to continue
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, nil // No need to requeue, we didn't find a host.
+		return ctrl.Result{}, fmt.Errorf("no hosts found for reservation %s (flavor %s)", res.Name, resourceName)
 	}
 
 	// Update the reservation Spec with the found host (idx 0)
 	// Only update Spec here - the Status will be synced in the next reconcile cycle
 	// This avoids race conditions from doing two patches in one reconcile
 	host := scheduleResp.Hosts[0]
-	logger.Info("found host for reservation", "host", host)
+	logger.Info("found host for reservation", "host", host, "flavorName", resourceName)
 
 	old := res.DeepCopy()
 	res.Spec.TargetHost = host
@@ -718,7 +748,7 @@ func (r *CommitmentReservationController) getPipelineForFlavorGroup(flavorGroupN
 func (r *CommitmentReservationController) hypervisorToReservations(ctx context.Context, obj client.Object) []reconcile.Request {
 	hvName := obj.GetName()
 	var reservationList v1alpha1.ReservationList
-	if err := r.List(ctx, &reservationList); err != nil {
+	if err := r.List(ctx, &reservationList, client.MatchingFields{reservations.IdxReservationByHost: hvName}); err != nil {
 		logf.FromContext(ctx).Error(err, "failed to list reservations for hypervisor", "hypervisor", hvName)
 		return nil
 	}
@@ -811,6 +841,28 @@ var commitmentReservationPredicate = predicate.Funcs{
 	},
 }
 
+// hvCapacityChangePredicate fires when Status.Instances, Status.Allocation,
+// Status.EffectiveCapacity, or Status.Capacity changes on a Hypervisor. Instances covers
+// VM presence (used by allocation verification); Allocation, EffectiveCapacity, and Capacity
+// cover capacity accounting (used by the over-subscription check; Capacity is the fallback
+// when EffectiveCapacity is nil).
+var hvCapacityChangePredicate = predicate.Funcs{
+	CreateFunc:  func(e event.CreateEvent) bool { _, ok := e.Object.(*hv1.Hypervisor); return ok },
+	DeleteFunc:  func(e event.DeleteEvent) bool { _, ok := e.Object.(*hv1.Hypervisor); return ok },
+	GenericFunc: func(e event.GenericEvent) bool { _, ok := e.Object.(*hv1.Hypervisor); return ok },
+	UpdateFunc: func(e event.UpdateEvent) bool {
+		oldHV, ok1 := e.ObjectOld.(*hv1.Hypervisor)
+		newHV, ok2 := e.ObjectNew.(*hv1.Hypervisor)
+		if !ok1 || !ok2 {
+			return false
+		}
+		return !reflect.DeepEqual(oldHV.Status.Instances, newHV.Status.Instances) ||
+			!reflect.DeepEqual(oldHV.Status.Allocation, newHV.Status.Allocation) ||
+			!reflect.DeepEqual(oldHV.Status.EffectiveCapacity, newHV.Status.EffectiveCapacity) ||
+			!reflect.DeepEqual(oldHV.Status.Capacity, newHV.Status.Capacity)
+	},
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
@@ -824,6 +876,9 @@ func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl
 
 	if err := indexReservationByAllocationVMUUID(context.Background(), mcl); err != nil {
 		return fmt.Errorf("failed to set up reservation allocation VM UUID index: %w", err)
+	}
+	if err := reservations.IndexReservationByHost(context.Background(), mcl); err != nil {
+		return fmt.Errorf("failed to set up reservation by host index: %w", err)
 	}
 
 	// Use WatchesMulticluster to watch Reservations across all configured clusters
@@ -848,6 +903,7 @@ func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl
 	bldr, err = bldr.WatchesMulticluster(
 		&hv1.Hypervisor{},
 		handler.EnqueueRequestsFromMapFunc(r.hypervisorToReservations),
+		hvCapacityChangePredicate,
 	)
 	if err != nil {
 		return err

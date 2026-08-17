@@ -9,7 +9,7 @@ require (
 	github.com/ironcore-dev/ironcore v0.5.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.2
-	github.com/sapcc/go-bits v0.0.0-20260806170240-4bbc84d224db
+	github.com/sapcc/go-bits v0.0.0-20260813170327-ea1a14435d35
 	go.xyrillian.de/gg v1.13.3
 	k8s.io/api v0.36.3
 	k8s.io/apimachinery v0.36.3
@@ -29,6 +29,7 @@ require (
 	github.com/go-openapi/swag/stringutils v0.25.1 // indirect
 	github.com/go-openapi/swag/typeutils v0.25.1 // indirect
 	github.com/go-openapi/swag/yamlutils v0.25.1 // indirect
+	github.com/go-sql-driver/mysql v1.10.0 // indirect
 	github.com/gofrs/uuid/v5 v5.5.1 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
@@ -62,7 +63,6 @@ require (
 	github.com/go-openapi/jsonreference v0.21.4 // indirect
 	github.com/go-openapi/swag v0.25.1 // indirect
 	github.com/go-openapi/swag/jsonname v0.25.4 // indirect
-	github.com/golang-migrate/migrate/v4 v4.19.1 // indirect
 	github.com/google/cel-go v0.29.0 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
@@ -113,7 +113,7 @@ require (
 	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.45.0
-	golang.org/x/text v0.40.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478 // indirect
