@@ -1049,7 +1049,6 @@ func TestCRLifecycle(t *testing.T) {
 		cond := meta.FindStatusCondition(final.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
 		if cond == nil {
 			t.Fatalf("no Ready condition")
-			return
 		}
 		if cond.Reason == v1alpha1.CommittedResourceReasonRejected {
 			t.Errorf("AllowRejection=false: CR must not transition to Rejected, got Reason=%s", cond.Reason)
@@ -1224,7 +1223,6 @@ func TestCRLifecycle(t *testing.T) {
 		cond := meta.FindStatusCondition(final.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
 		if cond == nil {
 			t.Fatalf("no Ready condition after retries")
-			return
 		}
 		if cond.Reason == v1alpha1.CommittedResourceReasonRejected {
 			t.Errorf("AllowRejection=false: CR must not be Rejected, got Reason=%s", cond.Reason)

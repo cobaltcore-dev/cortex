@@ -479,7 +479,6 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 			ramResource := report.Resources[liquid.ResourceName("hw_version_hw_2101_ram")]
 			if ramResource == nil {
 				t.Fatal("hw_version_hw_2101_ram resource not found")
-				return
 			}
 			var totalRAM uint64
 			for _, azReport := range ramResource.PerAZ {
@@ -492,7 +491,6 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 			coresResource := report.Resources[liquid.ResourceName("hw_version_hw_2101_cores")]
 			if coresResource == nil {
 				t.Fatal("hw_version_hw_2101_cores resource not found")
-				return
 			}
 			var totalCores uint64
 			for _, azReport := range coresResource.PerAZ {
@@ -505,7 +503,6 @@ func TestUsageMultipleCalculation_FloorDivision(t *testing.T) {
 			instancesResource := report.Resources[liquid.ResourceName("hw_version_hw_2101_instances")]
 			if instancesResource == nil {
 				t.Fatal("hw_version_hw_2101_instances resource not found")
-				return
 			}
 			var totalInstances uint64
 			for _, azReport := range instancesResource.PerAZ {

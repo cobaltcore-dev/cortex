@@ -33,7 +33,6 @@ func TestMonitorFilter(t *testing.T) {
 	fm := monitorFilter(mockFilter, "test-filter", monitor)
 	if fm == nil {
 		t.Fatal("expected filter monitor, got nil")
-		return
 	}
 	if fm.filter == nil {
 		t.Error("expected filter to be set")
@@ -110,7 +109,6 @@ func TestFilterMonitor_Run(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("expected result, got nil")
-		return
 	}
 	if len(result.Activations) != 2 {
 		t.Errorf("expected 2 activations, got %d", len(result.Activations))

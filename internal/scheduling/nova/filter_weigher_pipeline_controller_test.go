@@ -479,7 +479,6 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				ready := meta.FindStatusCondition(history.Status.Conditions, v1alpha1.HistoryConditionReady)
 				if ready == nil {
 					t.Fatalf("expected Ready condition to be set")
-					return
 				}
 				if ready.Status != metav1.ConditionTrue {
 					t.Errorf("expected Ready condition status True, got %s", ready.Status)

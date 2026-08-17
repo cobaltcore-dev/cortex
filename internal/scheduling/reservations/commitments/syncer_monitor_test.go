@@ -81,7 +81,6 @@ func TestSyncerMonitor_SkipReasonsPreInitialized(t *testing.T) {
 	}
 	if skippedFamily == nil {
 		t.Fatal("cortex_committed_resource_syncer_commitments_skipped_total missing after registration")
-		return
 	}
 
 	presentReasons := make(map[string]bool)
