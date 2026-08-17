@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -62,13 +63,15 @@ func TestCommitmentReservationController_Reconcile(t *testing.T) {
 					Name: "test-reservation",
 				},
 				Spec: v1alpha1.ReservationSpec{
-					Type: v1alpha1.ReservationTypeCommittedResource,
+					Type:       v1alpha1.ReservationTypeCommittedResource,
+					TargetHost: "host-1",
 					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 						ProjectID:    "test-project",
 						ResourceName: "test-flavor",
 					},
 				},
 				Status: v1alpha1.ReservationStatus{
+					Host: "host-1",
 					Conditions: []metav1.Condition{
 						{
 							Type:   v1alpha1.ReservationConditionReady,
@@ -1214,5 +1217,133 @@ func TestReconcileAllocations_LiveMigration(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestHvCapacityChangePredicate(t *testing.T) {
+	gib := func(n int64) resource.Quantity { return *resource.NewQuantity(n*1024*1024*1024, resource.BinarySI) }
+	cpu := func(n int64) resource.Quantity { return *resource.NewQuantity(n, resource.DecimalSI) }
+
+	makeHV := func(memGiB, cpuCores int64, instances []hv1.Instance) hv1.Hypervisor {
+		return hv1.Hypervisor{
+			Status: hv1.HypervisorStatus{
+				EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: gib(memGiB),
+					hv1.ResourceCPU:    cpu(cpuCores),
+				},
+				Instances: instances,
+			},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		old      hv1.Hypervisor
+		new      hv1.Hypervisor
+		wantFire bool
+	}{
+		{
+			name:     "instances changed → fires",
+			old:      makeHV(1024, 256, nil),
+			new:      makeHV(1024, 256, []hv1.Instance{{ID: "vm-1"}}),
+			wantFire: true,
+		},
+		{
+			name:     "effective capacity changed → fires",
+			old:      makeHV(1024, 256, nil),
+			new:      makeHV(2048, 256, nil),
+			wantFire: true,
+		},
+		{
+			name: "allocation changed → fires",
+			old:  makeHV(1024, 256, nil),
+			new: func() hv1.Hypervisor {
+				h := makeHV(1024, 256, nil)
+				h.Status.Allocation = map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)}
+				return h
+			}(),
+			wantFire: true,
+		},
+		{
+			name:     "nothing relevant changed → does not fire",
+			old:      makeHV(1024, 256, nil),
+			new:      makeHV(1024, 256, nil),
+			wantFire: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oldObj := tt.old
+			newObj := tt.new
+			got := hvCapacityChangePredicate.UpdateFunc(event.UpdateEvent{
+				ObjectOld: &oldObj,
+				ObjectNew: &newObj,
+			})
+			if got != tt.wantFire {
+				t.Errorf("hvCapacityChangePredicate.UpdateFunc = %v, want %v", got, tt.wantFire)
+			}
+		})
+	}
+}
+
+func TestReconcile_RevokesReadyWhenTargetHostCleared(t *testing.T) {
+	scheme := newCRTestScheme(t)
+
+	// Slot is Ready (Status.Host set, condition true) but Spec.TargetHost was cleared —
+	// simulates the oversubscription eviction path.
+	slot := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "slot-1"},
+		Spec: v1alpha1.ReservationSpec{
+			Type:       v1alpha1.ReservationTypeCommittedResource,
+			TargetHost: "",
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				ResourceName: "test-flavor",
+				ProjectID:    "test-project",
+			},
+		},
+		Status: v1alpha1.ReservationStatus{
+			Host: "host-1",
+			Conditions: []metav1.Condition{
+				{
+					Type:               v1alpha1.ReservationConditionReady,
+					Status:             metav1.ConditionTrue,
+					Reason:             "ReservationActive",
+					LastTransitionTime: metav1.Now(),
+				},
+			},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
+				Allocations: map[string]string{"vm-1": "host-1"},
+			},
+		},
+	}
+
+	k8sClient := newCRTestClient(scheme, slot)
+	controller := &CommitmentReservationController{
+		Client: k8sClient,
+		Conf:   ReservationControllerConfig{RequeueIntervalActive: metav1.Duration{Duration: 30 * time.Minute}},
+	}
+
+	_, err := controller.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKey{Name: "slot-1"}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var updated v1alpha1.Reservation
+	if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: "slot-1"}, &updated); err != nil {
+		t.Fatalf("failed to get updated reservation: %v", err)
+	}
+	if updated.Status.Host != "" {
+		t.Errorf("expected Status.Host cleared, got %q", updated.Status.Host)
+	}
+	if updated.Status.CommittedResourceReservation != nil && len(updated.Status.CommittedResourceReservation.Allocations) != 0 {
+		t.Errorf("expected Status.Allocations cleared, got %v", updated.Status.CommittedResourceReservation.Allocations)
+	}
+	cond := meta.FindStatusCondition(updated.Status.Conditions, v1alpha1.ReservationConditionReady)
+	if cond == nil || cond.Status != metav1.ConditionFalse {
+		t.Errorf("expected Ready=False, got %v", cond)
+	}
+	if cond != nil && cond.Reason != "PlacementRevoked" {
+		t.Errorf("expected reason PlacementRevoked, got %q", cond.Reason)
 	}
 }

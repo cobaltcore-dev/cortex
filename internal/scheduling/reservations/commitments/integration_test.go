@@ -20,6 +20,7 @@ package commitments
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -403,6 +404,7 @@ type intgEnv struct {
 	k8sClient     client.Client
 	crController  *CommittedResourceController
 	resController *CommitmentReservationController
+	hvController  *HostOversubscriptionController
 	schedulerSrv  *httptest.Server
 }
 
@@ -443,6 +445,24 @@ func newIntgEnv(t *testing.T, initialObjects []client.Object, schedulerFn http.H
 			}
 			return uuids
 		}).
+		WithIndex(&v1alpha1.Reservation{}, reservations.IdxReservationByHost, func(obj client.Object) []string {
+			res, ok := obj.(*v1alpha1.Reservation)
+			if !ok {
+				return nil
+			}
+			hosts := make(map[string]struct{})
+			if res.Spec.TargetHost != "" {
+				hosts[res.Spec.TargetHost] = struct{}{}
+			}
+			if res.Status.Host != "" {
+				hosts[res.Status.Host] = struct{}{}
+			}
+			result := make([]string, 0, len(hosts))
+			for h := range hosts {
+				result = append(result, h)
+			}
+			return result
+		}).
 		Build()
 
 	schedulerSrv := httptest.NewServer(schedulerFn)
@@ -456,19 +476,27 @@ func newIntgEnv(t *testing.T, initialObjects []client.Object, schedulerFn http.H
 		},
 		VMSource: vmSource,
 	}
+	monitor := NewReservationControllerMonitor()
 	resCtrl := &CommitmentReservationController{
 		Client: k8sClient,
 		Scheme: scheme,
 		Conf: ReservationControllerConfig{
-			SchedulerURL:          schedulerSrv.URL,
-			AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute},
-			RequeueIntervalActive: metav1.Duration{Duration: 5 * time.Minute},
+			SchedulerURL:                              schedulerSrv.URL,
+			AllocationGracePeriod:                     metav1.Duration{Duration: 15 * time.Minute},
+			RequeueIntervalActive:                     metav1.Duration{Duration: 5 * time.Minute},
+			EnableOversubscriptionCheck:               true,
+			EnableOversubscriptionReservationEviction: true,
 		},
 	}
 	if err := resCtrl.Init(context.Background(), resCtrl.Conf); err != nil {
 		t.Fatalf("resCtrl.Init: %v", err)
 	}
-	return &intgEnv{k8sClient: k8sClient, crController: crCtrl, resController: resCtrl, schedulerSrv: schedulerSrv}
+	hvCtrl := &HostOversubscriptionController{
+		Client:  k8sClient,
+		Monitor: &monitor,
+		Conf:    resCtrl.Conf,
+	}
+	return &intgEnv{k8sClient: k8sClient, crController: crCtrl, resController: resCtrl, hvController: hvCtrl, schedulerSrv: schedulerSrv}
 }
 
 func (e *intgEnv) close() { e.schedulerSrv.Close() }
@@ -491,7 +519,18 @@ func (e *intgEnv) reconcileReservation(t *testing.T, resName string) {
 	t.Helper()
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: resName}}
 	if _, err := e.resController.Reconcile(context.Background(), req); err != nil {
-		t.Fatalf("reservation reconcile %s: %v", resName, err)
+		// "no hosts found" is a retriable error surfaced deliberately for backoff — not a test failure.
+		if !strings.Contains(err.Error(), "no hosts found") {
+			t.Fatalf("reservation reconcile %s: %v", resName, err)
+		}
+	}
+}
+
+func (e *intgEnv) reconcileHV(t *testing.T, host string) {
+	t.Helper()
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: host}}
+	if _, err := e.hvController.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("HV reconcile %s: %v", host, err)
 	}
 }
 
@@ -1229,5 +1268,143 @@ func TestCRScheduling_SetsReserveForCommittedResourceIntent(t *testing.T) {
 	}
 	if hint != string(schedulerdelegationapi.ReserveForCommittedResourceIntent) {
 		t.Errorf("CR slot scheduling must set _nova_check_type=%q, got %q", schedulerdelegationapi.ReserveForCommittedResourceIntent, hint)
+	}
+}
+
+func TestCROversubscriptionRemediation(t *testing.T) {
+	gib := func(n int64) resource.Quantity { return *resource.NewQuantity(n*1024*1024*1024, resource.BinarySI) }
+	cpu := func(n int64) resource.Quantity { return *resource.NewQuantity(n, resource.DecimalSI) }
+
+	hv := &hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "host-1",
+			Labels: map[string]string{"topology.kubernetes.io/zone": "az1"},
+		},
+		Status: hv1.HypervisorStatus{
+			EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: gib(200),
+				hv1.ResourceCPU:    cpu(200),
+			},
+			Conditions: []metav1.Condition{{
+				Type:               hv1.ConditionTypeReady,
+				Status:             metav1.ConditionTrue,
+				Reason:             hv1.ConditionReasonReadyReady,
+				LastTransitionTime: metav1.Now(),
+			}},
+		},
+	}
+
+	objects := []client.Object{hv}
+	for i := range 20 {
+		memGiB := int64(10 + i)
+		cores := int64(10 + i)
+		name := fmt.Sprintf("slot-%02d", i)
+
+		slot := &v1alpha1.Reservation{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Spec: v1alpha1.ReservationSpec{
+				Type:       v1alpha1.ReservationTypeCommittedResource,
+				TargetHost: "host-1",
+				Resources: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: gib(memGiB),
+					hv1.ResourceCPU:    cpu(cores),
+				},
+				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+					ResourceName: "test-flavor",
+				},
+			},
+			Status: v1alpha1.ReservationStatus{
+				Host: "host-1",
+				Conditions: []metav1.Condition{{
+					Type:   v1alpha1.ReservationConditionReady,
+					Status: metav1.ConditionTrue,
+					Reason: "ReservationActive",
+				}},
+			},
+		}
+		if i < 10 {
+			// slots 0-9: allocated — have a confirmed VM
+			vmID := fmt.Sprintf("vm-%02d", i)
+			slot.Spec.CommittedResourceReservation.Allocations = map[string]v1alpha1.CommittedResourceAllocation{
+				vmID: {Resources: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: gib(memGiB),
+					hv1.ResourceCPU:    cpu(cores),
+				}},
+			}
+			slot.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
+				Allocations: map[string]string{vmID: "host-1"},
+			}
+		}
+		objects = append(objects, slot)
+	}
+
+	var schedulerCalls atomic.Int32
+	schedulerFn := func(w http.ResponseWriter, r *http.Request) {
+		schedulerCalls.Add(1)
+		intgRejectScheduler(w, r) // reject so evicted slots don't land back on host-1
+	}
+	env := newIntgEnv(t, append(objects, newTestFlavorKnowledge()), schedulerFn, nil)
+	defer env.close()
+
+	// Reconcile host-1 — triggers oversubscription detection (firstSeen set).
+	env.reconcileHV(t, "host-1")
+	if _, detected := env.hvController.firstSeen["host-1"]; !detected {
+		t.Fatal("expected oversubscription to be detected after first reconcile")
+	}
+
+	// Drive remediation: fast-forward grace period and reset rate limit each cycle.
+	resolved := false
+	for range 25 {
+		env.hvController.firstSeen["host-1"] = time.Now().Add(-3 * time.Minute)
+		env.hvController.lastCheck["host-1"] = time.Time{}
+		env.reconcileHV(t, "host-1")
+
+		if _, still := env.hvController.firstSeen["host-1"]; !still {
+			resolved = true
+			break
+		}
+	}
+	if !resolved {
+		t.Fatal("expected oversubscription to be resolved after remediation cycles")
+	}
+
+	var resList v1alpha1.ReservationList
+	if err := env.k8sClient.List(context.Background(), &resList); err != nil {
+		t.Fatalf("list reservations: %v", err)
+	}
+
+	var placedSlots []v1alpha1.Reservation
+	for _, r := range resList.Items {
+		if r.Spec.TargetHost == "host-1" || r.Status.Host == "host-1" {
+			placedSlots = append(placedSlots, r)
+		}
+	}
+	free := reservations.HostFreeCapacity(placedSlots, *hv)
+	zero := resource.MustParse("0")
+	for rn, f := range free {
+		if f.Cmp(zero) < 0 {
+			t.Errorf("host still over-subscribed for %s by %s after remediation", rn, f.String())
+		}
+	}
+
+	for _, r := range resList.Items {
+		if r.Spec.TargetHost == "" &&
+			r.Spec.CommittedResourceReservation != nil &&
+			len(r.Spec.CommittedResourceReservation.Allocations) > 0 {
+			t.Errorf("slot %s has allocations but was evicted", r.Name)
+		}
+	}
+
+	// Two reconciles needed: first clears status (PlacementRevoked), second triggers placement.
+	callsBefore := schedulerCalls.Load()
+	for _, r := range resList.Items {
+		if r.Spec.TargetHost == "" {
+			env.reconcileReservation(t, r.Name) // revoke status
+			env.reconcileReservation(t, r.Name) // trigger placement
+			break
+		}
+	}
+	if schedulerCalls.Load() <= callsBefore {
+		t.Error("expected evicted slot to trigger a scheduler call on next reconcile")
 	}
 }
