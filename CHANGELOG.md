@@ -1,5 +1,55 @@
 # Changelog
 
+## 2026-08-17 — [#1139](https://github.com/cobaltcore-dev/cortex/pull/1139)
+
+### cortex v0.3.7 (sha-67daed47)
+
+New features:
+- Host oversubscription detection and remediation — adds a new controller that automatically detects when a host has more committed reservation blocks than its capacity allows and evicts excess reservation slots to restore headroom, with a configurable grace period and detection-only mode ([#1125](https://github.com/cobaltcore-dev/cortex/pull/1125))
+
+Non-breaking changes:
+- Remove `go-bits/easypg` — replaces `go-bits/easypg` usage with the equivalent API from `gg/pgruntime`, as part of the upstream deprecation of easypg ([#1123](https://github.com/cobaltcore-dev/cortex/pull/1123))
+- Fix: remove unused volumes and volumeMounts for perses-plugins ([#1133](https://github.com/cobaltcore-dev/cortex/pull/1133))
+- Update `github.com/sapcc/go-bits` ([#1126](https://github.com/cobaltcore-dev/cortex/pull/1126), [#1136](https://github.com/cobaltcore-dev/cortex/pull/1136))
+- Update `kube-prometheus-stack` to v88.3.0 ([#1127](https://github.com/cobaltcore-dev/cortex/pull/1127), [#1132](https://github.com/cobaltcore-dev/cortex/pull/1132))
+- Update postgres Docker tag to v18.6 ([#1137](https://github.com/cobaltcore-dev/cortex/pull/1137), [#1141](https://github.com/cobaltcore-dev/cortex/pull/1141))
+
+### cortex-shim v0.1.13 (sha-67daed47)
+
+Includes updated image sha-67daed47 with dependency updates.
+
+### cortex-postgres v0.6.13 (sha-67daed47)
+
+Includes updated PostgreSQL base image (v18.6).
+
+### cortex-nova v0.0.87
+
+Includes updated charts cortex v0.3.7 and cortex-postgres v0.6.13.
+
+### cortex-cinder v0.0.87
+
+Includes updated charts cortex v0.3.7 and cortex-postgres v0.6.13.
+
+### cortex-manila v0.0.87
+
+Includes updated charts cortex v0.3.7 and cortex-postgres v0.6.13.
+
+### cortex-crds v0.0.87
+
+Includes updated chart cortex v0.3.7.
+
+### cortex-ironcore v0.0.87
+
+Includes updated chart cortex v0.3.7.
+
+### cortex-pods v0.0.87
+
+Includes updated chart cortex v0.3.7.
+
+### cortex-placement-shim v0.1.13
+
+Includes updated chart cortex-shim v0.1.13.
+
 ## 2026-08-10 — [#1129](https://github.com/cobaltcore-dev/cortex/pull/1129)
 
 ### cortex v0.3.6 (sha-85d9d0cf)
