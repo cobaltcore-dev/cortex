@@ -178,7 +178,7 @@ The `spec_only_unblocked` term exists because an InFlightReservation on the same
 **Corner cases worth noting:**
 - Confirmed VMs exceed reservation size (e.g. after resize): clamp `remaining` to 0, never negative
 - Spec-only VM larger than remaining slot: block `spec_only_unblocked` — those resources will land when the VM starts
-- Live migration within a reservation: handled implicitly by `hv.Status.Allocation`, which libvirt reports on both source and target during migration; no special logic needed
+- Live migration within a reservation: when a confirmed VM disappears from its expected host, the controller scans all hypervisors. If the VM is the sole allocation and the new host has capacity, the reservation follows the VM; otherwise the VM is removed from the reservation.
 
 ### InFlightReservation
 
