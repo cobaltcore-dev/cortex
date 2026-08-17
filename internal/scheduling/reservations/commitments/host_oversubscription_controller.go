@@ -283,7 +283,9 @@ func computeViolations(allReservations []v1alpha1.Reservation, hv hv1.Hypervisor
 	return violations
 }
 
-// selectEvictionTarget picks the best slot to evict from allReservations given the active violations.
+// selectEvictionTarget picks the least-disruptive slot to evict: prefers the smallest
+// unallocated slot (no running VMs, easiest to re-place), falling back to the most-idle
+// allocated slot when no unallocated candidates exist.
 func selectEvictionTarget(
 	ctx context.Context,
 	allReservations []v1alpha1.Reservation,
@@ -320,12 +322,10 @@ func selectEvictionTarget(
 		return ci.Cmp(cj) < 0
 	})
 
-	// First choice: smallest unallocated slot (easiest to re-place).
 	if len(unallocated) > 0 {
 		selectedRes = unallocated[0]
 	}
 
-	// Last resort: allocated slot with the largest fraction of unused capacity.
 	if selectedRes == nil && len(allocated) > 0 {
 		type allocatedEntry struct {
 			res     *v1alpha1.Reservation
