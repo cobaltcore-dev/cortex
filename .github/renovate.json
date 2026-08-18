@@ -114,7 +114,6 @@
     {
       "matchPackageNames": [
         "!/^github\\.com\\/sapcc\\/.*/",
-        "!postgres",
         "!postgresql-18",
         "/.*/"
       ],
