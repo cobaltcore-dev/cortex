@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package pendingcache
+package cache
 
 import (
 	"context"
@@ -103,7 +103,7 @@ func (f *fakeCache) IndexField(_ context.Context, _ client.Object, _ string, _ c
 }
 
 // fakeCluster composes a fake client.Client with a fakeCache to satisfy the
-// cluster.Cluster interface consumed by pendingcache.WrapCluster.
+// cluster.Cluster interface consumed by cache.WrapCluster.
 type fakeCluster struct {
 	cluster.Cluster
 	client client.Client
@@ -447,7 +447,7 @@ func TestEviction(t *testing.T) {
 				inner.inf.fireAdd(observed)
 			}
 
-			_, present := c.getEntry(reservationGVK(), objectKey{name: "res-3"})
+			_, present := c.getEntry(reservationGVK(), client.ObjectKey{Name: "res-3"})
 			if present == tc.wantEvicted {
 				t.Fatalf("evicted=%v, want evicted=%v", !present, tc.wantEvicted)
 			}
@@ -459,7 +459,7 @@ func TestEvictionIgnoresNonObject(t *testing.T) {
 	inner := newTestClient(t)
 	c := newCaching(t, inner)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	go func() {
 		if err := c.Start(ctx); err != nil && ctx.Err() == nil {
@@ -474,7 +474,7 @@ func TestEvictionIgnoresNonObject(t *testing.T) {
 
 	c.upsert(reservationGVK(), newReservation("res-x", "az-1", "1"))
 	inner.inf.fireAdd("not-an-object")
-	if _, ok := c.getEntry(reservationGVK(), objectKey{name: "res-x"}); !ok {
+	if _, ok := c.getEntry(reservationGVK(), client.ObjectKey{Name: "res-x"}); !ok {
 		t.Fatalf("non-object event must not evict the entry")
 	}
 }
@@ -490,7 +490,7 @@ func TestTTLCleanup(t *testing.T) {
 	}
 	c.mu.Unlock()
 	c.cleanupExpired(time.Now())
-	if _, ok := c.getEntry(reservationGVK(), objectKey{name: "res-4"}); ok {
+	if _, ok := c.getEntry(reservationGVK(), client.ObjectKey{Name: "res-4"}); ok {
 		t.Fatalf("expired entry should be removed")
 	}
 }
@@ -635,7 +635,7 @@ func TestNonCachedGVKPassthrough(t *testing.T) {
 	if err := c.Create(context.Background(), r); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if _, ok := c.getEntry(reservationGVK(), objectKey{name: "res-9"}); ok {
+	if _, ok := c.getEntry(reservationGVK(), client.ObjectKey{Name: "res-9"}); ok {
 		t.Fatalf("non-cached GVK should not populate overlay")
 	}
 	if err := c.Delete(context.Background(), r); err != nil {
@@ -725,7 +725,7 @@ func TestWriteErrorLeavesOverlayUntouched(t *testing.T) {
 			if err := tc.op(c, r); !errors.Is(err, sentinel) {
 				t.Fatalf("expected sentinel error, got %v", err)
 			}
-			if _, ok := c.getEntry(reservationGVK(), objectKey{name: r.Name}); ok {
+			if _, ok := c.getEntry(reservationGVK(), client.ObjectKey{Name: r.Name}); ok {
 				t.Fatalf("overlay must not be touched on %s failure", tc.name)
 			}
 		})
@@ -866,7 +866,7 @@ func TestStatusUpdateErrorLeavesOverlayUntouched(t *testing.T) {
 	if err := c.Status().Update(context.Background(), r); err == nil {
 		t.Fatalf("expected status update to fail for missing object")
 	}
-	if _, ok := c.getEntry(reservationGVK(), objectKey{name: "res-se"}); ok {
+	if _, ok := c.getEntry(reservationGVK(), client.ObjectKey{Name: "res-se"}); ok {
 		t.Fatalf("overlay must not be populated on status update failure")
 	}
 }
@@ -878,7 +878,7 @@ func TestStatusCreateDelegates(t *testing.T) {
 	if err := c.Status().Create(context.Background(), r, r); err == nil {
 		t.Fatalf("expected Status().Create to fail on fake client")
 	}
-	if _, ok := c.getEntry(reservationGVK(), objectKey{name: "res-sc"}); ok {
+	if _, ok := c.getEntry(reservationGVK(), client.ObjectKey{Name: "res-sc"}); ok {
 		t.Fatalf("Status().Create must not populate the overlay")
 	}
 }
@@ -895,7 +895,7 @@ func TestStatusUpdateNonCachedNoOverlay(t *testing.T) {
 	if err := c.Status().Update(context.Background(), &cur); err != nil {
 		t.Fatalf("Status().Update: %v", err)
 	}
-	if _, ok := c.getEntry(reservationGVK(), objectKey{name: "res-sn"}); ok {
+	if _, ok := c.getEntry(reservationGVK(), client.ObjectKey{Name: "res-sn"}); ok {
 		t.Fatalf("non-cached GVK status update should not populate overlay")
 	}
 }
@@ -960,7 +960,7 @@ func TestConcurrentUpdatesOverlayNotBehind(t *testing.T) {
 		lastRV := oc.lastRV
 		oc.mu.Unlock()
 
-		e, ok := c.getEntry(reservationGVK(), objectKey{name: "res-conc"})
+		e, ok := c.getEntry(reservationGVK(), client.ObjectKey{Name: "res-conc"})
 		if !ok {
 			t.Fatalf("round %d: expected overlay entry for res-conc", round)
 		}

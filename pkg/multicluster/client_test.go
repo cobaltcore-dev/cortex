@@ -26,7 +26,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/pkg/pendingcache"
 )
 
 // unversionedType is a type that is registered as unversioned in the scheme.
@@ -1974,64 +1973,4 @@ func TestClient_ListMetadataPerCluster(t *testing.T) {
 			t.Errorf("expected 0 items, got %d", len(results[0].Items))
 		}
 	})
-}
-
-// TestClient_CacheEnabled_WrappedHomeOverlay verifies that when a home cluster
-// is wrapped by the pendingcache overlay, a write immediately followed by a read
-// of a cached GVK is served from the overlay (before any informer catches up),
-// and that ListMetadataPerCluster passes through the overlay unchanged (its
-// PartialObjectMetadata queries do not resolve a cached GVK).
-func TestClient_CacheEnabled_WrappedHomeOverlay(t *testing.T) {
-	scheme := newTestScheme(t)
-	inner := newFakeCluster(scheme)
-
-	cacheConf := pendingcache.Config{
-		Enabled: true,
-		GVKs:    []string{"v1/ConfigMap"},
-	}
-	wrapped, runnable, err := pendingcache.WrapCluster(inner, cacheConf)
-	if err != nil {
-		t.Fatalf("pendingcache.WrapCluster: %v", err)
-	}
-	if runnable == nil {
-		t.Fatalf("expected a non-nil overlay Runnable")
-	}
-
-	c := &Client{
-		HomeCluster: wrapped,
-		HomeScheme:  scheme,
-		homeGVKs:    map[schema.GroupVersionKind]bool{configMapGVK: true},
-	}
-
-	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm-1", Namespace: "default"}}
-	if err := c.Create(context.Background(), cm); err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-
-	// Immediately read back through the multicluster client — the overlay must
-	// serve it even though the fake cache/informer never observed it.
-	var got corev1.ConfigMap
-	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "cm-1"}, &got); err != nil {
-		t.Fatalf("Get after create: %v", err)
-	}
-	if got.Name != "cm-1" {
-		t.Fatalf("expected cm-1 from overlay, got %q", got.Name)
-	}
-
-	// ListMetadataPerCluster uses PartialObjectMetadataList → the overlay passes
-	// through. It must still return the underlying cluster's metadata result.
-	results, err := c.ListMetadataPerCluster(context.Background(), configMapGVK)
-	if err != nil {
-		t.Fatalf("ListMetadataPerCluster: %v", err)
-	}
-	if len(results) != 1 || !results[0].IsHome {
-		t.Fatalf("expected one home result, got %+v", results)
-	}
-	if len(results[0].Items) != 1 {
-		t.Fatalf("expected one item in home result, got %d", len(results[0].Items))
-	}
-	if got := results[0].Items[0]; got.Name != cm.Name || got.Namespace != cm.Namespace {
-		t.Fatalf("expected item {Name:%q Namespace:%q}, got {Name:%q Namespace:%q}",
-			cm.Name, cm.Namespace, got.Name, got.Namespace)
-	}
 }

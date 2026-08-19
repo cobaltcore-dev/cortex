@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package pendingcache
+package cache
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,4 +19,9 @@ type Config struct {
 	// the background cleanup goroutine, guarding against entries that never
 	// appear in the informer (e.g. after a crash). Defaults to 2m when zero.
 	TTL metav1.Duration `json:"ttl,omitzero"`
+}
+
+type RootConfig struct {
+	// Cache configures the transparent in-process overlay cache.
+	Cache Config `json:"cache"`
 }

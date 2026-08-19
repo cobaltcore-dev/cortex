@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package pendingcache
+package cache
 
 import (
 	"context"
@@ -20,7 +20,7 @@ const minCleanupInterval = 30 * time.Second
 // Start implements manager.Runnable. It attaches informer event handlers for
 // eviction and runs the TTL cleanup loop until ctx is done.
 func (c *Overlay) Start(ctx context.Context) error {
-	log := ctrl.LoggerFrom(ctx).WithName("pendingcache")
+	log := ctrl.LoggerFrom(ctx).WithName("cache")
 
 	for gvk := range c.gvks {
 		obj, err := c.newObjectForGVK(gvk)
@@ -90,7 +90,7 @@ func (c *Overlay) newObjectForGVK(gvk schema.GroupVersionKind) (client.Object, e
 	}
 	obj, ok := ro.(client.Object)
 	if !ok {
-		return nil, fmt.Errorf("pendingcache: object for gvk %s does not implement client.Object", gvk)
+		return nil, fmt.Errorf("cache: object for gvk %s does not implement client.Object", gvk)
 	}
 	return obj, nil
 }

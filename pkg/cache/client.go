@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package pendingcache
+package cache
 
 import (
 	"context"
@@ -30,90 +30,6 @@ type entry struct {
 	resourceVersion string
 	deleted         bool // tombstone: object was deleted through the caching client
 	expiresAt       time.Time
-}
-
-// objectKey identifies an object within a GVK by namespace and name.
-type objectKey struct {
-	namespace string
-	name      string
-}
-
-func keyForObject(obj client.Object) objectKey {
-	return objectKey{namespace: obj.GetNamespace(), name: obj.GetName()}
-}
-
-// lockKey identifies the object whose write path a keyedMutex serializes.
-type lockKey struct {
-	gvk schema.GroupVersionKind
-	key objectKey
-}
-
-// refMutex is the actual per-object lock plus a reference count of how many
-// callers currently hold or are waiting for it. The count lets keyedMutex know
-// when the entry is unused so it can be deleted (see keyedMutex.lock).
-type refMutex struct {
-	mu  sync.Mutex
-	ref int
-}
-
-// keyedMutex hands out one mutex per key, serializing operations that share a
-// key while letting distinct keys proceed concurrently.
-//
-// A sync.Map (or a map we only ever insert into) would be simpler, but it would leak:
-// this cache wraps a single client for the whole lifetime of the controller-manager process,
-// and a controller reconciles a continuous stream of (often short-lived) objects.
-// A map would therefore accumulate one mutex per distinct object ever written and
-// grow without bound. To avoid that we reference count each entry and delete it
-// once the last holder unlocks, so the map only ever holds locks for objects
-// with writes currently in flight.
-//
-// The two mutexes have distinct, non-overlapping roles:
-//   - k.mu guards the locks map itself. It is only ever held for the tiny
-//     bookkeeping critical sections below (map lookup/insert/delete and the
-//     ref counter), never across the caller's I/O.
-//   - rm.mu is the real per-object lock, held by the caller across the inner
-//     client call and the overlay mutation.
-//
-// Because k.mu is never held while rm.mu is locked (we release k.mu before
-// taking rm.mu), the two can never deadlock against each other.
-type keyedMutex struct {
-	mu    sync.Mutex
-	locks map[lockKey]*refMutex
-}
-
-func newKeyedMutex() *keyedMutex {
-	return &keyedMutex{locks: make(map[lockKey]*refMutex)}
-}
-
-// lock acquires the per-key mutex and returns a function that releases it.
-func (k *keyedMutex) lock(lk lockKey) func() {
-	// Look up (or create) the entry for this key and register our interest by
-	// bumping ref, all under k.mu so the map stays consistent. We increment ref
-	// here, before taking rm.mu, so that a concurrent unlock cannot see ref==0
-	// and delete the entry out from under us while we are blocked waiting on it.
-	k.mu.Lock()
-	rm := k.locks[lk]
-	if rm == nil {
-		rm = &refMutex{}
-		k.locks[lk] = rm
-	}
-	rm.ref++
-	k.mu.Unlock()
-
-	// Take the real per-object lock outside k.mu; this is where a second caller
-	// for the same key blocks (and where we may block across the caller's I/O).
-	rm.mu.Lock()
-	return func() {
-		rm.mu.Unlock()
-		// Drop our reference and, if we were the last holder, remove the entry
-		// so the map does not grow unbounded.
-		k.mu.Lock()
-		rm.ref--
-		if rm.ref == 0 {
-			delete(k.locks, lk)
-		}
-		k.mu.Unlock()
-	}
 }
 
 // resourceVersionAtLeast reports whether observed >= cached, treating
@@ -161,7 +77,7 @@ type Overlay struct {
 	gvks          map[schema.GroupVersionKind]bool
 
 	mu       sync.RWMutex
-	byGVK    map[schema.GroupVersionKind]map[objectKey]*entry
+	byGVK    map[schema.GroupVersionKind]map[client.ObjectKey]*entry
 	indexers map[schema.GroupVersionKind]map[string]client.IndexerFunc
 
 	// writeLocks serializes writes to the same object so the inner call and the
@@ -199,7 +115,7 @@ func WrapCluster(inner cluster.Cluster, conf Config) (cluster.Cluster, manager.R
 		scheme:        scheme,
 		ttl:           ttl,
 		gvks:          gvks,
-		byGVK:         make(map[schema.GroupVersionKind]map[objectKey]*entry),
+		byGVK:         make(map[schema.GroupVersionKind]map[client.ObjectKey]*entry),
 		indexers:      make(map[schema.GroupVersionKind]map[string]client.IndexerFunc),
 		writeLocks:    newKeyedMutex(),
 	}
@@ -218,7 +134,7 @@ func resolveGVKs(scheme *runtime.Scheme, gvkStrs []string) (map[schema.GroupVers
 	for _, s := range gvkStrs {
 		gvk, ok := byStr[s]
 		if !ok {
-			return nil, errors.New("pendingcache: no gvk registered in scheme for " + s)
+			return nil, errors.New("cache: no gvk registered in scheme for " + s)
 		}
 		out[gvk] = true
 	}
@@ -263,7 +179,7 @@ func (c *Overlay) upsert(gvk schema.GroupVersionKind, obj client.Object) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.ensureGVK(gvk)
-	c.byGVK[gvk][keyForObject(obj)] = &entry{
+	c.byGVK[gvk][client.ObjectKeyFromObject(obj)] = &entry{
 		obj:             obj.DeepCopyObject().(client.Object),
 		uid:             obj.GetUID(),
 		resourceVersion: obj.GetResourceVersion(),
@@ -278,7 +194,7 @@ func (c *Overlay) tombstone(gvk schema.GroupVersionKind, obj client.Object) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.ensureGVK(gvk)
-	c.byGVK[gvk][keyForObject(obj)] = &entry{
+	c.byGVK[gvk][client.ObjectKeyFromObject(obj)] = &entry{
 		obj:             obj.DeepCopyObject().(client.Object),
 		uid:             obj.GetUID(),
 		resourceVersion: obj.GetResourceVersion(),
@@ -296,7 +212,7 @@ func (c *Overlay) evictIfSeen(gvk schema.GroupVersionKind, obj client.Object) {
 	if !ok {
 		return
 	}
-	key := keyForObject(obj)
+	key := client.ObjectKeyFromObject(obj)
 	e, ok := entries[key]
 	if !ok {
 		return
@@ -314,7 +230,7 @@ func (c *Overlay) evictIfSeen(gvk schema.GroupVersionKind, obj client.Object) {
 }
 
 // getEntry returns the overlay entry for the key, if present.
-func (c *Overlay) getEntry(gvk schema.GroupVersionKind, key objectKey) (*entry, bool) {
+func (c *Overlay) getEntry(gvk schema.GroupVersionKind, key client.ObjectKey) (*entry, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	entries, ok := c.byGVK[gvk]
@@ -352,12 +268,12 @@ func (c *Overlay) registerIndex(gvk schema.GroupVersionKind, field string, fn cl
 // ensureGVK initialises the per-GVK entry map if absent. Callers must hold the write lock.
 func (c *Overlay) ensureGVK(gvk schema.GroupVersionKind) {
 	if c.byGVK[gvk] == nil {
-		c.byGVK[gvk] = make(map[objectKey]*entry)
+		c.byGVK[gvk] = make(map[client.ObjectKey]*entry)
 	}
 }
 
 // overlayList merges the overlay entries for the GVK into the informer result,
-// deduplicating by objectKey (overlay wins), dropping tombstones, and filtering
+// deduplicating by client.ObjectKey (overlay wins), dropping tombstones, and filtering
 // overlay-only entries against the list options' label and field selectors.
 func (c *Overlay) overlayList(gvk schema.GroupVersionKind, existing []runtime.Object, lo *client.ListOptions) []runtime.Object {
 	c.mu.RLock()
@@ -369,7 +285,7 @@ func (c *Overlay) overlayList(gvk schema.GroupVersionKind, existing []runtime.Ob
 
 	result := make([]runtime.Object, 0, len(existing)+len(entries))
 	// Track which overlay keys are handled so overlay-only entries can be added.
-	handled := make(map[objectKey]bool, len(entries))
+	handled := make(map[client.ObjectKey]bool, len(entries))
 
 	for _, item := range existing {
 		obj, ok := item.(client.Object)
@@ -377,7 +293,7 @@ func (c *Overlay) overlayList(gvk schema.GroupVersionKind, existing []runtime.Ob
 			result = append(result, item)
 			continue
 		}
-		key := keyForObject(obj)
+		key := client.ObjectKeyFromObject(obj)
 		e, present := entries[key]
 		if !present {
 			result = append(result, item)
@@ -458,7 +374,7 @@ func (c *Overlay) Create(ctx context.Context, obj client.Object, opts ...client.
 	if !cached {
 		return c.Client.Create(ctx, obj, opts...)
 	}
-	unlock := c.writeLocks.lock(lockKey{gvk: gvk, key: keyForObject(obj)})
+	unlock := c.writeLocks.lock(lockKey{gvk: gvk, key: client.ObjectKeyFromObject(obj)})
 	defer unlock()
 	if err := c.Client.Create(ctx, obj, opts...); err != nil {
 		return err
@@ -474,7 +390,7 @@ func (c *Overlay) Update(ctx context.Context, obj client.Object, opts ...client.
 	if !cached {
 		return c.Client.Update(ctx, obj, opts...)
 	}
-	unlock := c.writeLocks.lock(lockKey{gvk: gvk, key: keyForObject(obj)})
+	unlock := c.writeLocks.lock(lockKey{gvk: gvk, key: client.ObjectKeyFromObject(obj)})
 	defer unlock()
 	if err := c.Client.Update(ctx, obj, opts...); err != nil {
 		return err
@@ -490,7 +406,7 @@ func (c *Overlay) Patch(ctx context.Context, obj client.Object, patch client.Pat
 	if !cached {
 		return c.Client.Patch(ctx, obj, patch, opts...)
 	}
-	unlock := c.writeLocks.lock(lockKey{gvk: gvk, key: keyForObject(obj)})
+	unlock := c.writeLocks.lock(lockKey{gvk: gvk, key: client.ObjectKeyFromObject(obj)})
 	defer unlock()
 	if err := c.Client.Patch(ctx, obj, patch, opts...); err != nil {
 		return err
@@ -510,7 +426,7 @@ func (c *Overlay) Delete(ctx context.Context, obj client.Object, opts ...client.
 	if !cached {
 		return c.Client.Delete(ctx, obj, opts...)
 	}
-	unlock := c.writeLocks.lock(lockKey{gvk: gvk, key: keyForObject(obj)})
+	unlock := c.writeLocks.lock(lockKey{gvk: gvk, key: client.ObjectKeyFromObject(obj)})
 	defer unlock()
 	if err := c.Client.Delete(ctx, obj, opts...); err != nil {
 		return err
@@ -562,7 +478,7 @@ func (c *Overlay) Get(ctx context.Context, key client.ObjectKey, obj client.Obje
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	e, ok := c.getEntry(gvk, objectKey{namespace: key.Namespace, name: key.Name})
+	e, ok := c.getEntry(gvk, key)
 	if !ok {
 		// No overlay entry: return the inner result (value or NotFound) as-is.
 		return err
@@ -634,7 +550,7 @@ func (s *statusWriter) Update(ctx context.Context, obj client.Object, opts ...cl
 	if !cached {
 		return s.inner.Update(ctx, obj, opts...)
 	}
-	unlock := s.c.writeLocks.lock(lockKey{gvk: gvk, key: keyForObject(obj)})
+	unlock := s.c.writeLocks.lock(lockKey{gvk: gvk, key: client.ObjectKeyFromObject(obj)})
 	defer unlock()
 	if err := s.inner.Update(ctx, obj, opts...); err != nil {
 		return err
@@ -648,7 +564,7 @@ func (s *statusWriter) Patch(ctx context.Context, obj client.Object, patch clien
 	if !cached {
 		return s.inner.Patch(ctx, obj, patch, opts...)
 	}
-	unlock := s.c.writeLocks.lock(lockKey{gvk: gvk, key: keyForObject(obj)})
+	unlock := s.c.writeLocks.lock(lockKey{gvk: gvk, key: client.ObjectKeyFromObject(obj)})
 	defer unlock()
 	if err := s.inner.Patch(ctx, obj, patch, opts...); err != nil {
 		return err

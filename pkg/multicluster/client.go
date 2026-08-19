@@ -21,9 +21,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-
-	"github.com/cobaltcore-dev/cortex/pkg/pendingcache"
 )
+
+// ClusterWrapper can be registered on the Client to transparently transform each
+// cluster before it is stored for routing. WrapCluster receives the manager and
+// the raw inner cluster; it must return the (possibly wrapped) cluster to use for
+// all routing and is responsible for registering any lifecycle Runnables with mgr
+// itself. Wrappers are applied in order for every home and remote cluster during
+// InitFromConf. The raw inner cluster is always added to the manager separately
+// so its informers start regardless of wrapping.
+type ClusterWrapper interface {
+	WrapCluster(mgr manager.Manager, cl cluster.Cluster) (cluster.Cluster, error)
+}
 
 // A remote cluster with routing labels used to match resources to clusters.
 type remoteCluster struct {
@@ -35,6 +44,12 @@ type Client struct {
 	// ResourceRouters determine which cluster a resource should be written to
 	// when multiple clusters serve the same GVK.
 	ResourceRouters map[schema.GroupVersionKind]ResourceRouter
+
+	// Wrappers are applied to every cluster (home and remotes) during InitFromConf.
+	// Each wrapper transforms the cluster before it is stored for routing.
+	// Applied in slice order; the raw inner cluster is always added to the manager
+	// so its informers start independently of wrapping.
+	Wrappers []ClusterWrapper
 
 	// The cluster in which cortex is deployed.
 	HomeCluster cluster.Cluster
@@ -56,11 +71,6 @@ type Client struct {
 
 	// GVKs explicitly configured for the home cluster.
 	homeGVKs map[schema.GroupVersionKind]bool
-
-	// cacheConf configures the optional in-process overlay cache. When
-	// Enabled, each home/remote cluster is wrapped so its GetClient/
-	// GetFieldIndexer route through a per-cluster overlay. Set in InitFromConf.
-	cacheConf pendingcache.Config
 }
 
 // Helper function to initialize a new multicluster client during service startup,
@@ -68,7 +78,6 @@ type Client struct {
 func (c *Client) InitFromConf(ctx context.Context, mgr ctrl.Manager, conf ClientConfig) error {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("initializing multicluster client with config", "config", conf)
-	c.cacheConf = conf.PendingCache
 	// Map the formatted gvk from the config to the actual gvk object so that we
 	// can look up the right cluster for a given API server override.
 	gvksByConfStr := make(map[string]schema.GroupVersionKind)
@@ -99,33 +108,25 @@ func (c *Client) InitFromConf(ctx context.Context, mgr ctrl.Manager, conf Client
 			}
 			resolvedGVKs = append(resolvedGVKs, gvk)
 		}
-		cl, overlay, err := c.AddRemote(ctx, remote.Host, remote.CACert, remote.InsecureSkipTLSVerify, remote.Labels, resolvedGVKs...)
+		cl, err := c.AddRemote(ctx, mgr, remote.Host, remote.CACert, remote.InsecureSkipTLSVerify, remote.Labels, resolvedGVKs...)
 		if err != nil {
 			return err
 		}
-		// Add the raw inner cluster so its informers/caches start (as today).
+		// Add the raw inner cluster so its informers/caches start.
 		if err := mgr.Add(cl); err != nil {
 			return err
 		}
-		// When caching is enabled, also add the overlay's lifecycle Runnable
-		// (eviction handlers + TTL cleanup). It does not re-Start the cluster.
-		if overlay != nil {
-			if err := mgr.Add(overlay); err != nil {
-				return err
-			}
-		}
 	}
-	// When caching is enabled, wrap the home cluster the same way. The manager
-	// already owns the home cluster's lifecycle, so we only add the overlay
-	// Runnable and must NOT re-Start the inner home cluster.
-	if c.cacheConf.Enabled && c.HomeCluster != nil {
-		wrapped, overlay, err := pendingcache.WrapCluster(c.HomeCluster, c.cacheConf)
-		if err != nil {
-			return err
-		}
-		c.HomeCluster = wrapped
-		if err := mgr.Add(overlay); err != nil {
-			return err
+	// Apply wrappers to the home cluster. The manager already owns the home
+	// cluster's lifecycle, so we only apply wrappers (each wrapper registers its
+	// own Runnables) and must NOT re-Start the inner home cluster.
+	if c.HomeCluster != nil {
+		for _, w := range c.Wrappers {
+			wrapped, werr := w.WrapCluster(mgr, c.HomeCluster)
+			if werr != nil {
+				return werr
+			}
+			c.HomeCluster = wrapped
 		}
 	}
 	return nil
@@ -142,12 +143,11 @@ func (c *Client) InitFromConf(ctx context.Context, mgr ctrl.Manager, conf Client
 // account tokens. See the kubernetes documentation on structured auth to
 // learn more about jwt-based authentication across clusters.
 // AddRemote returns the raw inner cluster.Cluster (which the caller must add to
-// the manager so its informers/caches start) and, when caching is enabled, the
-// overlay's lifecycle Runnable (which the caller must also add to the manager).
-// The overlay Runnable is nil when caching is disabled. The wrapped cluster (or
-// the raw cluster when caching is disabled) is stored in remoteClusters so all
-// routing goes through the per-cluster overlay.
-func (c *Client) AddRemote(ctx context.Context, host, caCert string, insecureSkipTLSVerify bool, labels map[string]string, gvks ...schema.GroupVersionKind) (cluster.Cluster, manager.Runnable, error) {
+// the manager so its informers/caches start). Each registered Wrapper is
+// responsible for adding its own lifecycle Runnables to mgr directly.
+// The wrapped cluster is stored in remoteClusters so all routing goes through
+// any per-cluster wrapper.
+func (c *Client) AddRemote(ctx context.Context, mgr manager.Manager, host, caCert string, insecureSkipTLSVerify bool, labels map[string]string, gvks ...schema.GroupVersionKind) (cluster.Cluster, error) {
 	log := ctrl.LoggerFrom(ctx)
 	homeRestConfig := *c.HomeRestConfig
 	restConfigCopy := homeRestConfig
@@ -165,20 +165,18 @@ func (c *Client) AddRemote(ctx context.Context, host, caCert string, insecureSki
 		o.Logger = ctrl.LoggerFrom(ctx).WithValues("host", host)
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	// stored is the cluster placed in remoteClusters and used for all routing.
-	// When caching is enabled it is the overlay-wrapped cluster; otherwise the
-	// raw cluster. overlay is the overlay's lifecycle Runnable (nil when off).
+	// Apply each registered wrapper in order. stored is the cluster placed in
+	// remoteClusters. Each wrapper is responsible for registering its own
+	// lifecycle Runnables with mgr directly.
 	stored := cl
-	var overlay manager.Runnable
-	if c.cacheConf.Enabled {
-		wrapped, ov, werr := pendingcache.WrapCluster(cl, c.cacheConf)
+	for _, w := range c.Wrappers {
+		wrapped, werr := w.WrapCluster(mgr, stored)
 		if werr != nil {
-			return nil, nil, werr
+			return nil, werr
 		}
 		stored = wrapped
-		overlay = ov
 	}
 	c.remoteClustersMu.Lock()
 	defer c.remoteClustersMu.Unlock()
@@ -192,9 +190,8 @@ func (c *Client) AddRemote(ctx context.Context, host, caCert string, insecureSki
 			labels:  labels,
 		})
 	}
-	// Return the raw inner cluster so the caller starts its informers/caches;
-	// the overlay Runnable (if any) is returned separately.
-	return cl, overlay, nil
+	// Return the raw inner cluster so the caller starts its informers/caches.
+	return cl, nil
 }
 
 // Get the gvk registered for the given resource in the home cluster's scheme.

@@ -74,6 +74,12 @@ kvm:
   # Useful when rolling out a new KVM region before it is production-ready.
   criticalAlerts: true
 
+# Cache configuration for the transparent in-process overlay cache.
+cache:
+  enabled: true
+  gvks:
+    - cortex.cloud/v1alpha1/Reservation
+
 cortex: &cortex
   crd: {enable: false}
   # Disable the default ServiceMonitor and metrics service from the kubebuilder stack.
@@ -110,10 +116,6 @@ cortex: &cortex
           - kvm.cloud.sap/v1/Hypervisor
           - kvm.cloud.sap/v1/HypervisorList
           - v1/Secret
-    pendingcache:
-      enabled: true
-      gvks:
-        - cortex.cloud/v1alpha1/Reservation
     keystoneSecretRef:
       name: cortex-nova-openstack-keystone
       namespace: default
@@ -189,7 +191,7 @@ cortex-scheduling-controllers:
       # How long after a VM is allocated to a reservation before it is expected to appear
       # on the target host; allocations not confirmed within this window are removed
       allocationGracePeriod: "15m"
-      # How long to wait after detecting host over-subscription before evicting reservation slots. 
+      # How long to wait after detecting host over-subscription before evicting reservation slots.
       # Gives other controllers (e.g. failover) time to self-heal.
       oversubscriptionGracePeriod: "3m"
       # Minimum time between consecutive over-subscription checks for the same host.

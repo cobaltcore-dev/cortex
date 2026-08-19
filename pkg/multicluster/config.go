@@ -3,17 +3,11 @@
 
 package multicluster
 
-import "github.com/cobaltcore-dev/cortex/pkg/pendingcache"
-
 type ClientConfig struct {
 	// Apiserver configuration mapping GVKs to home or remote clusters.
 	// Every GVK used through the multicluster client must be listed
 	// in either Home or Remotes. Unknown GVKs will cause an error.
 	APIServers APIServersConfig `json:"apiservers"`
-
-	// PendingCache configures the optional transparent in-process overlay cache. When
-	// PendingCache.Enabled is false (the default), clusters are used unwrapped.
-	PendingCache pendingcache.Config `json:"pendingcache"`
 }
 
 // APIServersConfig separates resources into home and remote clusters.
