@@ -45,6 +45,10 @@ type FailoverReservationController struct {
 	Recorder        events.EventRecorder // Event recorder for emitting Kubernetes events
 	Monitor         *FailoverMonitor
 	reconcileCount  int64 // Track reconciliation count for rotating VM selection
+
+	// RandFloat64 returns a value in [0.0, 1.0). Used for revalidation interval jitter.
+	// If nil, math/rand/v2 rand.Float64 is used. Overridable in tests.
+	RandFloat64 func() float64
 }
 
 func NewFailoverReservationController(c client.Client, vmSource reservations.VMSource, config FailoverConfig, schedulerClient *reservations.SchedulerClient, monitor *FailoverMonitor) *FailoverReservationController {
@@ -94,7 +98,7 @@ func (c *FailoverReservationController) Reconcile(ctx context.Context, req ctrl.
 	// Skip if no failover status (reservation not yet initialized by periodic controller)
 	if res.Status.FailoverReservation == nil {
 		logger.V(1).Info("skipping reservation without failover status")
-		return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: c.revalidationIntervalWithJitter()}, nil
 	}
 
 	// Validate and acknowledge the reservation
@@ -126,7 +130,7 @@ func (c *FailoverReservationController) reconcileValidateAndAcknowledge(ctx cont
 			return ctrl.Result{}, patchErr
 		}
 
-		return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: c.revalidationIntervalWithJitter()}, nil
 	}
 
 	// Validate the reservation
@@ -134,7 +138,7 @@ func (c *FailoverReservationController) reconcileValidateAndAcknowledge(ctx cont
 
 	if validationErr != nil {
 		logger.Error(validationErr, "transient error during reservation validation, will retry", "host", res.Status.Host)
-		return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: c.revalidationIntervalWithJitter()}, nil
 	}
 
 	if !valid {
@@ -172,7 +176,18 @@ func (c *FailoverReservationController) reconcileValidateAndAcknowledge(ctx cont
 		logger.V(1).Info("reservation validation passed (no new changes to acknowledge)", "host", res.Status.Host)
 	}
 
-	return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval.Duration}, nil
+	return ctrl.Result{RequeueAfter: c.revalidationIntervalWithJitter()}, nil
+}
+
+// revalidationIntervalWithJitter returns RevalidationInterval jittered uniformly
+// within [Duration/2, 3*Duration/2] to spread requeues over time.
+func (c *FailoverReservationController) revalidationIntervalWithJitter() time.Duration {
+	rnd := c.RandFloat64
+	if rnd == nil {
+		rnd = rand.Float64
+	}
+	base := c.Config.RevalidationInterval.Duration
+	return base/2 + time.Duration(rnd()*float64(base))
 }
 
 // validateReservation validates that a reservation is still valid for all its allocated VMs.

@@ -5,7 +5,9 @@ package failover
 
 import (
 	"context"
+	"math"
 	"testing"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
@@ -977,6 +979,58 @@ func TestSelectVMsToProcess(t *testing.T) {
 				if !vmSet[s.VM.UUID] {
 					t.Errorf("iteration %d: selected VM %s not in original list", i, s.VM.UUID)
 				}
+			}
+		}
+	})
+}
+
+// ============================================================================
+// Test: revalidationIntervalWithJitter
+// ============================================================================
+
+func TestRevalidationIntervalWithJitter(t *testing.T) {
+	const base = 30 * time.Minute
+	c := &FailoverReservationController{
+		Config: FailoverConfig{
+			RevalidationInterval: metav1.Duration{Duration: base},
+		},
+	}
+
+	t.Run("bounds at rnd=0 return base/2", func(t *testing.T) {
+		c.RandFloat64 = func() float64 { return 0 }
+		got := c.revalidationIntervalWithJitter()
+		if got != base/2 {
+			t.Errorf("rnd=0: got %v, want %v", got, base/2)
+		}
+	})
+
+	t.Run("bounds near rnd=1 return ~3*base/2", func(t *testing.T) {
+		// rand.Float64 returns values in [0.0, 1.0), so the true max is exclusive.
+		// Use a value close to 1 and assert the result is within a small delta of 3*base/2.
+		c.RandFloat64 = func() float64 { return 0.9999999 }
+		got := c.revalidationIntervalWithJitter()
+		want := 3 * base / 2
+		epsilon := time.Millisecond
+		if math.Abs(float64(got-want)) > float64(epsilon) {
+			t.Errorf("rnd~1: got %v, want %v (±%v)", got, want, epsilon)
+		}
+	})
+
+	t.Run("midpoint rnd=0.5 returns base", func(t *testing.T) {
+		c.RandFloat64 = func() float64 { return 0.5 }
+		got := c.revalidationIntervalWithJitter()
+		if got != base {
+			t.Errorf("rnd=0.5: got %v, want %v", got, base)
+		}
+	})
+
+	t.Run("default (nil) source stays within [base/2, 3*base/2]", func(t *testing.T) {
+		c.RandFloat64 = nil
+		lo, hi := base/2, 3*base/2
+		for i := range 1000 {
+			got := c.revalidationIntervalWithJitter()
+			if got < lo || got > hi {
+				t.Fatalf("iteration %d: got %v, want in [%v, %v]", i, got, lo, hi)
 			}
 		}
 	})
