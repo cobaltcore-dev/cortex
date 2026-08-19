@@ -65,7 +65,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/inflight"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/quota"
-	"github.com/cobaltcore-dev/cortex/pkg/clientcache"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
@@ -397,22 +396,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Transparent in-process overlay cache for CRDs that are eventually
-	// consistent across in-pod clients (e.g. Reservations). Writes populate an
-	// overlay; reads merge it with the informer result until the real object is
-	// observed. *multicluster.Client satisfies clientcache.Client, providing
-	// both the inner client.Client and informer access for eviction.
-	clientCacheConfig := conf.GetConfigOrDie[clientcache.RootConfig]()
-	cachingClient, err := clientcache.New(multiclusterClient, scheme, clientCacheConfig.ClientCache)
-	if err != nil {
-		setupLog.Error(err, "unable to create client cache")
-		os.Exit(1)
-	}
-	if err := mgr.Add(cachingClient); err != nil {
-		setupLog.Error(err, "unable to add client cache to manager")
-		os.Exit(1)
-	}
-
 	// Our custom monitoring registry can add prometheus labels to all metrics.
 	// This is useful to distinguish metrics from different deployments.
 	metricsConfig := conf.GetConfigOrDie[monitoring.Config]()
@@ -445,10 +428,10 @@ func main() {
 	commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
 	var commitmentsVMSource reservations.VMSource
 	if commitmentsConfig.DatasourceName != "" {
-		commitmentsVMSource = reservations.NewPostgresVMSource(cachingClient, commitmentsConfig.DatasourceName)
+		commitmentsVMSource = reservations.NewPostgresVMSource(multiclusterClient, commitmentsConfig.DatasourceName)
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "committed-resource-reservations-controller") {
-		commitmentsAPI := commitmentsapi.NewAPIWithConfig(cachingClient, commitmentsConfig.API, commitmentsVMSource)
+		commitmentsAPI := commitmentsapi.NewAPIWithConfig(multiclusterClient, commitmentsConfig.API, commitmentsVMSource)
 		commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
 	}
 
@@ -468,8 +451,8 @@ func main() {
 		metrics.Registry.MustRegister(noHostFoundCounter)
 		metrics.Registry.MustRegister(placementCounter)
 		// Inferred through the base controller.
-		filterWeigherController.Client = cachingClient
-		filterWeigherController.CRRecorder.Client = cachingClient
+		filterWeigherController.Client = multiclusterClient
+		filterWeigherController.CRRecorder.Client = multiclusterClient
 		if err := filterWeigherController.SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "nova FilterWeigherPipelineController")
 			os.Exit(1)
@@ -484,7 +467,7 @@ func main() {
 		novaClient := nova.NewNovaClient()
 		novaClientConfig := conf.GetConfigOrDie[nova.NovaClientConfig]()
 		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-			return novaClient.Init(ctx, cachingClient, novaClientConfig)
+			return novaClient.Init(ctx, multiclusterClient, novaClientConfig)
 		})); err != nil {
 			setupLog.Error(err, "unable to initialize nova client")
 			os.Exit(1)
@@ -495,7 +478,7 @@ func main() {
 			Breaker: &nova.DetectorCycleBreaker{NovaClient: novaClient},
 		}
 		// Inferred through the base controller.
-		deschedulingsController.Client = cachingClient
+		deschedulingsController.Client = multiclusterClient
 		if err := (deschedulingsController).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "nova DetectorPipelineController")
 			os.Exit(1)
@@ -503,7 +486,7 @@ func main() {
 		go deschedulingsController.CreateDeschedulingsPeriodically(ctx)
 		// Deschedulings cleanup on startup
 		if err := (&nova.DeschedulingsCleanup{
-			Client: cachingClient,
+			Client: multiclusterClient,
 			Scheme: mgr.GetScheme(),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "Cleanup")
@@ -522,7 +505,7 @@ func main() {
 			"controller", "inflight-reservation-controller")
 		config := conf.GetConfigOrDie[inflight.NovaVMClientConfig]()
 		vmClient := inflight.NewNovaVMClient(config)
-		controller := &inflight.Controller{Client: cachingClient, VMClient: vmClient}
+		controller := &inflight.Controller{Client: multiclusterClient, VMClient: vmClient}
 		if err := controller.SetupWithManager(ctx, mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller",
 				"controller", "inflight-reservation-controller")
@@ -535,13 +518,13 @@ func main() {
 		novaClient := nova.NewNovaClient()
 		novaClientConfig := conf.GetConfigOrDie[nova.NovaClientConfig]()
 		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-			return novaClient.Init(ctx, cachingClient, novaClientConfig)
+			return novaClient.Init(ctx, multiclusterClient, novaClientConfig)
 		})); err != nil {
 			setupLog.Error(err, "unable to initialize nova client")
 			os.Exit(1)
 		}
 		if err := (&nova.DeschedulingsExecutor{
-			Client:     cachingClient,
+			Client:     multiclusterClient,
 			Scheme:     mgr.GetScheme(),
 			Conf:       executorConfig,
 			NovaClient: novaClient,
@@ -552,7 +535,7 @@ func main() {
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "hypervisor-overcommit-controller") {
 		hypervisorOvercommitController := &nova.HypervisorOvercommitController{}
-		hypervisorOvercommitController.Client = cachingClient
+		hypervisorOvercommitController.Client = multiclusterClient
 		if err := hypervisorOvercommitController.SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller",
 				"controller", "HypervisorOvercommitController")
@@ -565,7 +548,7 @@ func main() {
 			Monitor: filterWeigherPipelineMonitor,
 		}
 		// Inferred through the base controller.
-		controller.Client = cachingClient
+		controller.Client = multiclusterClient
 		if err := (controller).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
@@ -585,7 +568,7 @@ func main() {
 			Monitor: filterWeigherPipelineMonitor,
 		}
 		// Inferred through the base controller.
-		controller.Client = cachingClient
+		controller.Client = multiclusterClient
 		if err := (controller).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
@@ -605,7 +588,7 @@ func main() {
 			Monitor: filterWeigherPipelineMonitor,
 		}
 		// Inferred through the base controller.
-		controller.Client = cachingClient
+		controller.Client = multiclusterClient
 		if err := (controller).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
@@ -624,7 +607,7 @@ func main() {
 			Monitor: filterWeigherPipelineMonitor,
 		}
 		// Inferred through the base controller.
-		controller.Client = cachingClient
+		controller.Client = multiclusterClient
 		if err := (controller).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DecisionReconciler")
 			os.Exit(1)
@@ -640,11 +623,11 @@ func main() {
 
 	if slices.Contains(mainConfig.EnabledControllers, "committed-resource-reservations-controller") {
 		setupLog.Info("enabling controller", "controller", "committed-resource-reservations-controller")
-		monitor := reservations.NewMonitor(cachingClient)
+		monitor := reservations.NewMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&monitor)
 
 		if err := (&commitments.CommitmentReservationController{
-			Client: cachingClient,
+			Client: multiclusterClient,
 			Scheme: mgr.GetScheme(),
 			Conf:   commitmentsConfig.ReservationController,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
@@ -654,11 +637,11 @@ func main() {
 
 		crControllerConf := commitmentsConfig.CommittedResourceController
 
-		crControllerMonitor := commitments.NewCRControllerMonitor(cachingClient)
+		crControllerMonitor := commitments.NewCRControllerMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&crControllerMonitor)
 
 		if err := (&commitments.CommittedResourceController{
-			Client:   cachingClient,
+			Client:   multiclusterClient,
 			Scheme:   mgr.GetScheme(),
 			Conf:     crControllerConf,
 			Monitor:  &crControllerMonitor,
@@ -676,7 +659,7 @@ func main() {
 			usageReconcilerConf := commitmentsConfig.UsageReconciler
 			usageReconcilerConf.ApplyDefaults()
 			if err := (&commitments.UsageReconciler{
-				Client:   cachingClient,
+				Client:   multiclusterClient,
 				Conf:     usageReconcilerConf,
 				VMSource: commitmentsVMSource,
 				Monitor:  usageReconcilerMonitor,
@@ -691,7 +674,7 @@ func main() {
 		monitor := datasources.NewMonitor()
 		metrics.Registry.MustRegister(&monitor)
 		if err := (&openstack.OpenStackDatasourceReconciler{
-			Client:  cachingClient,
+			Client:  multiclusterClient,
 			Scheme:  mgr.GetScheme(),
 			Monitor: monitor,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
@@ -699,7 +682,7 @@ func main() {
 			os.Exit(1)
 		}
 		if err := (&prometheus.PrometheusDatasourceReconciler{
-			Client:  cachingClient,
+			Client:  multiclusterClient,
 			Scheme:  mgr.GetScheme(),
 			Monitor: monitor,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
@@ -712,7 +695,7 @@ func main() {
 		monitor := extractor.NewMonitor()
 		metrics.Registry.MustRegister(&monitor)
 		if err := (&extractor.KnowledgeReconciler{
-			Client:  cachingClient,
+			Client:  multiclusterClient,
 			Scheme:  mgr.GetScheme(),
 			Monitor: monitor,
 			Conf:    conf.GetConfigOrDie[extractor.KnowledgeReconcilerConfig](),
@@ -721,7 +704,7 @@ func main() {
 			os.Exit(1)
 		}
 		if err := (&extractor.TriggerReconciler{
-			Client: cachingClient,
+			Client: multiclusterClient,
 			Scheme: mgr.GetScheme(),
 			Conf:   conf.GetConfigOrDie[extractor.TriggerReconcilerConfig](),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
@@ -733,7 +716,7 @@ func main() {
 		setupLog.Info("enabling controller", "controller", "kpis-controller")
 		kpisControllerConfig := conf.GetConfigOrDie[kpis.ControllerConfig]()
 		if err := (&kpis.Controller{
-			Client: cachingClient,
+			Client: multiclusterClient,
 			Config: kpisControllerConfig,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "KPIController")
@@ -765,7 +748,7 @@ func main() {
 		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 			// Create PostgresReader from the configured Datasource CRD
 			// This runs after the cache is started
-			postgresReader, err := external.NewPostgresReader(ctx, cachingClient, failoverConfig.DatasourceName)
+			postgresReader, err := external.NewPostgresReader(ctx, multiclusterClient, failoverConfig.DatasourceName)
 			if err != nil {
 				setupLog.Error(err, "unable to create postgres reader for failover controller",
 					"datasourceName", failoverConfig.DatasourceName)
@@ -781,7 +764,7 @@ func main() {
 			// 1. Watch-based per-reservation reconciliation (acknowledgment, validation)
 			// 2. Periodic bulk VM processing (creating/assigning reservations)
 			failoverController := failover.NewFailoverReservationController(
-				cachingClient,
+				multiclusterClient,
 				vmSource,
 				failoverConfig,
 				schedulerClient,
@@ -824,12 +807,12 @@ func main() {
 			os.Exit(1)
 		}
 
-		capacityMonitor := capacity.NewMonitor(cachingClient)
+		capacityMonitor := capacity.NewMonitor(multiclusterClient)
 		if err := metrics.Registry.Register(&capacityMonitor); err != nil {
 			setupLog.Error(err, "failed to register capacity monitor metrics, continuing without metrics")
 		}
 
-		if err := capacity.NewController(cachingClient, capacityConfig, commitmentsVMSource).
+		if err := capacity.NewController(multiclusterClient, capacityConfig, commitmentsVMSource).
 			SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "capacity")
 			os.Exit(1)
@@ -861,7 +844,7 @@ func main() {
 		// Defer initialization until the manager starts (cache must be ready for postgres reader)
 		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 			// Create PostgresReader from the configured Datasource CRD
-			postgresReader, err := external.NewPostgresReader(ctx, cachingClient, datasourceName)
+			postgresReader, err := external.NewPostgresReader(ctx, multiclusterClient, datasourceName)
 			if err != nil {
 				setupLog.Error(err, "unable to create postgres reader for quota controller",
 					"datasourceName", datasourceName)
@@ -874,7 +857,7 @@ func main() {
 
 			// Create the quota controller
 			quotaController := quota.NewQuotaController(
-				cachingClient,
+				multiclusterClient,
 				vmSource,
 				quotaConfig,
 				quotaMetrics,
@@ -936,11 +919,11 @@ func main() {
 		setupLog.Info("starting commitments syncer")
 		syncerMonitor := commitments.NewSyncerMonitor()
 		must.Succeed(metrics.Registry.Register(syncerMonitor))
-		syncer := commitments.NewSyncer(cachingClient, syncerMonitor)
+		syncer := commitments.NewSyncer(multiclusterClient, syncerMonitor)
 		syncerConfig := conf.GetConfigOrDie[commitments.SyncerConfig]()
 		syncerConfig.FlavorGroupResourceConfig = commitmentsConfig.API.FlavorGroupResourceConfig
 		if err := (&task.Runner{
-			Client:   cachingClient,
+			Client:   multiclusterClient,
 			Interval: syncerConfig.SyncInterval.Duration,
 			Name:     "commitments-sync-task",
 			Run:      func(ctx context.Context) error { return syncer.SyncReservations(ctx) },
@@ -954,11 +937,11 @@ func main() {
 		setupLog.Info("starting nova history cleanup task")
 		historyCleanupConfig := conf.GetConfigOrDie[nova.HistoryCleanupConfig]()
 		if err := (&task.Runner{
-			Client:   cachingClient,
+			Client:   multiclusterClient,
 			Interval: time.Hour,
 			Name:     "nova-history-cleanup-task",
 			Run: func(ctx context.Context) error {
-				return nova.HistoryCleanup(ctx, cachingClient, historyCleanupConfig)
+				return nova.HistoryCleanup(ctx, multiclusterClient, historyCleanupConfig)
 			},
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add nova history cleanup task to manager")
@@ -969,11 +952,11 @@ func main() {
 		setupLog.Info("starting manila history cleanup task")
 		historyCleanupConfig := conf.GetConfigOrDie[manila.HistoryCleanupConfig]()
 		if err := (&task.Runner{
-			Client:   cachingClient,
+			Client:   multiclusterClient,
 			Interval: time.Hour,
 			Name:     "manila-history-cleanup-task",
 			Run: func(ctx context.Context) error {
-				return manila.HistoryCleanup(ctx, cachingClient, historyCleanupConfig)
+				return manila.HistoryCleanup(ctx, multiclusterClient, historyCleanupConfig)
 			},
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add manila history cleanup task to manager")
@@ -984,11 +967,11 @@ func main() {
 		setupLog.Info("starting cinder history cleanup task")
 		historyCleanupConfig := conf.GetConfigOrDie[cinder.HistoryCleanupConfig]()
 		if err := (&task.Runner{
-			Client:   cachingClient,
+			Client:   multiclusterClient,
 			Interval: time.Hour,
 			Name:     "cinder-history-cleanup-task",
 			Run: func(ctx context.Context) error {
-				return cinder.HistoryCleanup(ctx, cachingClient, historyCleanupConfig)
+				return cinder.HistoryCleanup(ctx, multiclusterClient, historyCleanupConfig)
 			},
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add cinder history cleanup task to manager")

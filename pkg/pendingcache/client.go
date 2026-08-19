@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package clientcache
+package pendingcache
 
 import (
 	"context"
@@ -17,7 +17,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // entry is a single overlaid object with the bookkeeping needed for eviction.
@@ -136,7 +139,7 @@ func resourceVersionAtLeast(observed, cached string) bool {
 // defaultTTL is used when Config.TTL is zero.
 const defaultTTL = 2 * time.Minute
 
-// CachingClient wraps an inner client.Client with a transparent in-process
+// Overlay wraps an inner client.Client with a transparent in-process
 // overlay. Writes populate the overlay; reads merge the overlay with the inner
 // (informer-backed) result; entries are evicted once the real object appears in
 // an informer (see runnable.go) or after TTL expiry.
@@ -149,13 +152,13 @@ const defaultTTL = 2 * time.Minute
 // the informer) or a tombstone (a Delete that has not yet propagated). Reads
 // merge the inner result with these entries: tombstones suppress objects;
 // live entries override or supplement the inner result.
-type CachingClient struct {
+type Overlay struct {
 	client.Client // inner client, used for delegation
 
-	inner  Client
-	scheme *runtime.Scheme
-	ttl    time.Duration
-	gvks   map[schema.GroupVersionKind]bool
+	informerCache cache.Cache // used by Start to attach eviction event handlers
+	scheme        *runtime.Scheme
+	ttl           time.Duration
+	gvks          map[schema.GroupVersionKind]bool
 
 	mu       sync.RWMutex
 	byGVK    map[schema.GroupVersionKind]map[objectKey]*entry
@@ -167,29 +170,40 @@ type CachingClient struct {
 	writeLocks *keyedMutex
 }
 
-// New builds a CachingClient wrapping inner. informers supplies the informers
-// used for eviction, scheme resolves object GVKs, and conf lists the GVKs to
-// overlay and the TTL. GVK strings are formatted as "<group>/<version>/<Kind>"
-// and are resolved against scheme.
-func New(inner Client, scheme *runtime.Scheme, conf Config) (*CachingClient, error) {
+// WrapCluster wraps inner with a transparent in-process overlay cache and
+// returns the wrapped cluster.Cluster together with the overlay's lifecycle
+// Runnable.
+//
+// The returned cluster.Cluster delegates everything to inner except GetClient
+// and GetFieldIndexer, which return the overlay client so per-cluster reads and
+// writes flow through the cache. GVK strings in conf are formatted as
+// "<group>/<version>/<Kind>" and resolved against inner.GetScheme().
+//
+// The returned manager.Runnable is the overlay itself: it attaches informer
+// eviction handlers (reading informers from inner.GetCache()) and runs the TTL
+// cleanup loop. The caller MUST add it to the manager. It does NOT re-Start the
+// inner cluster — the manager owns the inner cluster's lifecycle separately.
+func WrapCluster(inner cluster.Cluster, conf Config) (cluster.Cluster, manager.Runnable, error) {
+	scheme := inner.GetScheme()
 	gvks, err := resolveGVKs(scheme, conf.GVKs)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	ttl := conf.TTL.Duration
 	if ttl <= 0 {
 		ttl = defaultTTL
 	}
-	return &CachingClient{
-		Client:     inner,
-		inner:      inner,
-		scheme:     scheme,
-		ttl:        ttl,
-		gvks:       gvks,
-		byGVK:      make(map[schema.GroupVersionKind]map[objectKey]*entry),
-		indexers:   make(map[schema.GroupVersionKind]map[string]client.IndexerFunc),
-		writeLocks: newKeyedMutex(),
-	}, nil
+	cc := &Overlay{
+		Client:        inner.GetClient(),
+		informerCache: inner.GetCache(),
+		scheme:        scheme,
+		ttl:           ttl,
+		gvks:          gvks,
+		byGVK:         make(map[schema.GroupVersionKind]map[objectKey]*entry),
+		indexers:      make(map[schema.GroupVersionKind]map[string]client.IndexerFunc),
+		writeLocks:    newKeyedMutex(),
+	}
+	return &overlayCluster{Cluster: inner, cache: cc}, cc, nil
 }
 
 // resolveGVKs maps "<group>/<version>/<Kind>" strings to GVKs via the scheme's
@@ -204,7 +218,7 @@ func resolveGVKs(scheme *runtime.Scheme, gvkStrs []string) (map[schema.GroupVers
 	for _, s := range gvkStrs {
 		gvk, ok := byStr[s]
 		if !ok {
-			return nil, errors.New("clientcache: no gvk registered in scheme for " + s)
+			return nil, errors.New("pendingcache: no gvk registered in scheme for " + s)
 		}
 		out[gvk] = true
 	}
@@ -212,7 +226,7 @@ func resolveGVKs(scheme *runtime.Scheme, gvkStrs []string) (map[schema.GroupVers
 }
 
 // gvkFor resolves the GVK of obj and reports whether it is cached.
-func (c *CachingClient) gvkFor(obj runtime.Object) (schema.GroupVersionKind, bool) {
+func (c *Overlay) gvkFor(obj runtime.Object) (schema.GroupVersionKind, bool) {
 	gvks, _, err := c.scheme.ObjectKinds(obj)
 	if err != nil || len(gvks) != 1 {
 		return schema.GroupVersionKind{}, false
@@ -223,7 +237,7 @@ func (c *CachingClient) gvkFor(obj runtime.Object) (schema.GroupVersionKind, boo
 
 // itemGVKForList resolves the singular item GVK for a list object and reports
 // whether that item GVK is cached. The list GVK's Kind ends with "List".
-func (c *CachingClient) itemGVKForList(list client.ObjectList) (schema.GroupVersionKind, bool) {
+func (c *Overlay) itemGVKForList(list client.ObjectList) (schema.GroupVersionKind, bool) {
 	gvks, _, err := c.scheme.ObjectKinds(list)
 	if err != nil || len(gvks) != 1 {
 		return schema.GroupVersionKind{}, false
@@ -245,7 +259,7 @@ func trimListSuffix(kind string) (string, bool) {
 }
 
 // upsert stores a live (non-tombstone) entry for the object.
-func (c *CachingClient) upsert(gvk schema.GroupVersionKind, obj client.Object) {
+func (c *Overlay) upsert(gvk schema.GroupVersionKind, obj client.Object) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.ensureGVK(gvk)
@@ -260,7 +274,7 @@ func (c *CachingClient) upsert(gvk schema.GroupVersionKind, obj client.Object) {
 
 // tombstone marks the object as deleted in the overlay so it is filtered out
 // of reads until the deletion is observed in an informer.
-func (c *CachingClient) tombstone(gvk schema.GroupVersionKind, obj client.Object) {
+func (c *Overlay) tombstone(gvk schema.GroupVersionKind, obj client.Object) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.ensureGVK(gvk)
@@ -275,7 +289,7 @@ func (c *CachingClient) tombstone(gvk schema.GroupVersionKind, obj client.Object
 
 // evictIfSeen removes the overlay entry for obj if the informer-observed object
 // matches by UID and its ResourceVersion is at least as new as the cached one.
-func (c *CachingClient) evictIfSeen(gvk schema.GroupVersionKind, obj client.Object) {
+func (c *Overlay) evictIfSeen(gvk schema.GroupVersionKind, obj client.Object) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	entries, ok := c.byGVK[gvk]
@@ -300,7 +314,7 @@ func (c *CachingClient) evictIfSeen(gvk schema.GroupVersionKind, obj client.Obje
 }
 
 // getEntry returns the overlay entry for the key, if present.
-func (c *CachingClient) getEntry(gvk schema.GroupVersionKind, key objectKey) (*entry, bool) {
+func (c *Overlay) getEntry(gvk schema.GroupVersionKind, key objectKey) (*entry, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	entries, ok := c.byGVK[gvk]
@@ -312,7 +326,7 @@ func (c *CachingClient) getEntry(gvk schema.GroupVersionKind, key objectKey) (*e
 }
 
 // cleanupExpired removes entries whose TTL has passed.
-func (c *CachingClient) cleanupExpired(now time.Time) {
+func (c *Overlay) cleanupExpired(now time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, entries := range c.byGVK {
@@ -326,7 +340,7 @@ func (c *CachingClient) cleanupExpired(now time.Time) {
 
 // registerIndex captures an IndexerFunc for a field so overlay entries can be
 // matched against MatchingFields queries.
-func (c *CachingClient) registerIndex(gvk schema.GroupVersionKind, field string, fn client.IndexerFunc) {
+func (c *Overlay) registerIndex(gvk schema.GroupVersionKind, field string, fn client.IndexerFunc) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.indexers[gvk] == nil {
@@ -336,7 +350,7 @@ func (c *CachingClient) registerIndex(gvk schema.GroupVersionKind, field string,
 }
 
 // ensureGVK initialises the per-GVK entry map if absent. Callers must hold the write lock.
-func (c *CachingClient) ensureGVK(gvk schema.GroupVersionKind) {
+func (c *Overlay) ensureGVK(gvk schema.GroupVersionKind) {
 	if c.byGVK[gvk] == nil {
 		c.byGVK[gvk] = make(map[objectKey]*entry)
 	}
@@ -345,7 +359,7 @@ func (c *CachingClient) ensureGVK(gvk schema.GroupVersionKind) {
 // overlayList merges the overlay entries for the GVK into the informer result,
 // deduplicating by objectKey (overlay wins), dropping tombstones, and filtering
 // overlay-only entries against the list options' label and field selectors.
-func (c *CachingClient) overlayList(gvk schema.GroupVersionKind, existing []runtime.Object, lo *client.ListOptions) []runtime.Object {
+func (c *Overlay) overlayList(gvk schema.GroupVersionKind, existing []runtime.Object, lo *client.ListOptions) []runtime.Object {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	entries := c.byGVK[gvk]
@@ -403,7 +417,7 @@ func (c *CachingClient) overlayList(gvk schema.GroupVersionKind, existing []runt
 
 // matchesLocked reports whether obj satisfies the list options' namespace,
 // label and field selectors. Callers must hold at least the read lock.
-func (c *CachingClient) matchesLocked(gvk schema.GroupVersionKind, obj client.Object, lo *client.ListOptions) bool {
+func (c *Overlay) matchesLocked(gvk schema.GroupVersionKind, obj client.Object, lo *client.ListOptions) bool {
 	if lo == nil {
 		return true
 	}
@@ -424,7 +438,7 @@ func (c *CachingClient) matchesLocked(gvk schema.GroupVersionKind, obj client.Ob
 
 // fieldSetLocked builds a fields.Set for obj using the registered IndexerFuncs
 // for the GVK. Callers must hold at least the read lock.
-func (c *CachingClient) fieldSetLocked(gvk schema.GroupVersionKind, obj client.Object) fields.Set {
+func (c *Overlay) fieldSetLocked(gvk schema.GroupVersionKind, obj client.Object) fields.Set {
 	set := fields.Set{}
 	for field, fn := range c.indexers[gvk] {
 		for _, v := range fn(obj) {
@@ -439,7 +453,7 @@ func (c *CachingClient) fieldSetLocked(gvk schema.GroupVersionKind, obj client.O
 
 // Create delegates to the inner client and, on success for a cached GVK, adds
 // the object to the overlay.
-func (c *CachingClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+func (c *Overlay) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	gvk, cached := c.gvkFor(obj)
 	if !cached {
 		return c.Client.Create(ctx, obj, opts...)
@@ -455,7 +469,7 @@ func (c *CachingClient) Create(ctx context.Context, obj client.Object, opts ...c
 
 // Update delegates to the inner client and, on success for a cached GVK,
 // refreshes the overlay entry.
-func (c *CachingClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+func (c *Overlay) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	gvk, cached := c.gvkFor(obj)
 	if !cached {
 		return c.Client.Update(ctx, obj, opts...)
@@ -471,7 +485,7 @@ func (c *CachingClient) Update(ctx context.Context, obj client.Object, opts ...c
 
 // Patch delegates to the inner client and, on success for a cached GVK,
 // refreshes the overlay entry with the patched object.
-func (c *CachingClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+func (c *Overlay) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 	gvk, cached := c.gvkFor(obj)
 	if !cached {
 		return c.Client.Patch(ctx, obj, patch, opts...)
@@ -491,7 +505,7 @@ func (c *CachingClient) Patch(ctx context.Context, obj client.Object, patch clie
 // through the informer (which triggers eviction) or the TTL expires. This
 // ensures that reads between the Delete call and the informer event correctly
 // return NotFound rather than serving a stale object from the informer cache.
-func (c *CachingClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+func (c *Overlay) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 	gvk, cached := c.gvkFor(obj)
 	if !cached {
 		return c.Client.Delete(ctx, obj, opts...)
@@ -509,7 +523,7 @@ func (c *CachingClient) Delete(ctx context.Context, obj client.Object, opts ...c
 // tombstones all overlay entries that match the delete options. Objects that
 // live only in the informer cache (not in the overlay) will be evicted
 // naturally once the deletion propagates through the informer.
-func (c *CachingClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
+func (c *Overlay) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
 	gvk, cached := c.gvkFor(obj)
 	if !cached {
 		return c.Client.DeleteAllOf(ctx, obj, opts...)
@@ -539,7 +553,7 @@ func (c *CachingClient) DeleteAllOf(ctx context.Context, obj client.Object, opts
 // Get delegates to the inner client, then applies the overlay: a tombstone
 // yields NotFound; a live overlay entry overrides the inner result; and an
 // overlay entry can satisfy a Get that the inner client reports as NotFound.
-func (c *CachingClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (c *Overlay) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	gvk, cached := c.gvkFor(obj)
 	if !cached {
 		return c.Client.Get(ctx, key, obj, opts...)
@@ -567,7 +581,7 @@ func (c *CachingClient) Get(ctx context.Context, key client.ObjectKey, obj clien
 }
 
 // List delegates to the inner client, then merges the overlay into the result.
-func (c *CachingClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+func (c *Overlay) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	itemGVK, cached := c.itemGVKForList(list)
 	if !cached {
 		return c.Client.List(ctx, list, opts...)
@@ -588,7 +602,7 @@ func (c *CachingClient) List(ctx context.Context, list client.ObjectList, opts .
 // IndexField delegates to the inner client (if it is a FieldIndexer) and also
 // registers the IndexerFunc with the overlay so overlay entries can be matched
 // against MatchingFields.
-func (c *CachingClient) IndexField(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error {
+func (c *Overlay) IndexField(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error {
 	if indexer, ok := c.Client.(client.FieldIndexer); ok {
 		if err := indexer.IndexField(ctx, obj, field, extractValue); err != nil {
 			return err
@@ -602,14 +616,14 @@ func (c *CachingClient) IndexField(ctx context.Context, obj client.Object, field
 
 // Status returns a status writer that mirrors status Update/Patch writes for
 // cached GVKs into the overlay.
-func (c *CachingClient) Status() client.StatusWriter {
+func (c *Overlay) Status() client.StatusWriter {
 	return &statusWriter{c: c, inner: c.Client.Status()}
 }
 
 // statusWriter wraps the inner status writer and reflects status writes into
 // the overlay for cached GVKs.
 type statusWriter struct {
-	c     *CachingClient
+	c     *Overlay
 	inner client.StatusWriter
 }
 

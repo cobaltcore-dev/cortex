@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package clientcache
+package pendingcache
 
 import (
 	"context"
@@ -21,6 +21,8 @@ import (
 	ccache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
@@ -85,41 +87,68 @@ func (f *fakeInformer) fireUpdate(oldObj, newObj any) {
 	}
 }
 
-// fakeClient composes a fake client.Client with a fakeInformer to satisfy the
-// clientcache.Client interface.
-type fakeClient struct {
-	client.Client
+// fakeCache is a minimal cache.Cache that returns a single fakeInformer for any
+// GetInformer call, so the Overlay runnable can wire eviction handlers.
+type fakeCache struct {
+	ccache.Cache
 	inf *fakeInformer
 }
 
-func (f *fakeClient) GetInformersForKind(_ context.Context, _ client.Object) ([]ccache.Informer, error) {
-	return []ccache.Informer{f.inf}, nil
+func (f *fakeCache) GetInformer(_ context.Context, _ client.Object, _ ...ccache.InformerGetOption) (ccache.Informer, error) {
+	return f.inf, nil
+}
+
+// fakeCluster composes a fake client.Client with a fakeCache to satisfy the
+// cluster.Cluster interface consumed by pendingcache.WrapCluster.
+type fakeCluster struct {
+	cluster.Cluster
+	client client.Client
+	cache  *fakeCache
+	scheme *runtime.Scheme
+}
+
+func (f *fakeCluster) GetClient() client.Client   { return f.client }
+func (f *fakeCluster) GetCache() ccache.Cache     { return f.cache }
+func (f *fakeCluster) GetScheme() *runtime.Scheme { return f.scheme }
+
+// fakeClient exposes the underlying informer so eviction tests can fire events,
+// while itself acting as a cluster.Cluster wrapping the fake client.Client.
+type fakeClient struct {
+	*fakeCluster
+	inf *fakeInformer
 }
 
 func newTestClient(t *testing.T, objs ...client.Object) *fakeClient {
 	t.Helper()
+	scheme := testScheme(t)
+	inf := &fakeInformer{}
+	inner := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(objs...).
+		WithStatusSubresource(&v1alpha1.Reservation{}).
+		WithIndex(&v1alpha1.Reservation{}, azIndexField, func(obj client.Object) []string {
+			res, ok := obj.(*v1alpha1.Reservation)
+			if !ok || res.Spec.AvailabilityZone == "" {
+				return nil
+			}
+			return []string{res.Spec.AvailabilityZone}
+		}).
+		Build()
 	return &fakeClient{
-		Client: fake.NewClientBuilder().
-			WithScheme(testScheme(t)).
-			WithObjects(objs...).
-			WithStatusSubresource(&v1alpha1.Reservation{}).
-			WithIndex(&v1alpha1.Reservation{}, azIndexField, func(obj client.Object) []string {
-				res, ok := obj.(*v1alpha1.Reservation)
-				if !ok || res.Spec.AvailabilityZone == "" {
-					return nil
-				}
-				return []string{res.Spec.AvailabilityZone}
-			}).
-			Build(),
-		inf: &fakeInformer{},
+		fakeCluster: &fakeCluster{
+			client: inner,
+			cache:  &fakeCache{inf: inf},
+			scheme: scheme,
+		},
+		inf: inf,
 	}
 }
 
-// errClient wraps a Client and injects configurable errors into mutating/read
-// operations, so the error-propagation paths of CachingClient (which must not
-// touch the overlay on failure) can be exercised.
+// errClient wraps a client.Client and injects configurable errors into
+// mutating/read operations, so the error-propagation paths of Overlay
+// (which must not touch the overlay on failure) can be exercised.
 type errClient struct {
-	Client
+	client.Client
 	createErr      error
 	updateErr      error
 	patchErr       error
@@ -222,13 +251,43 @@ func reservationConfig() Config {
 	}
 }
 
-func newCaching(t *testing.T, inner Client) *CachingClient {
+// clusterFor wraps a client.Client (and the given informer) as a cluster.Cluster
+// so it can be passed to New. Used by tests that inject a custom client.Client
+// (e.g. errClient, orderingClient) below the overlay.
+func clusterFor(t *testing.T, inner client.Client, inf *fakeInformer) cluster.Cluster {
 	t.Helper()
-	c, err := New(inner, testScheme(t), reservationConfig())
+	if inf == nil {
+		inf = &fakeInformer{}
+	}
+	return &fakeCluster{
+		client: inner,
+		cache:  &fakeCache{inf: inf},
+		scheme: testScheme(t),
+	}
+}
+
+// cachingFrom builds a *Overlay over the given cluster.Cluster.
+func cachingFrom(t *testing.T, cl cluster.Cluster, conf Config) *Overlay {
+	t.Helper()
+	wrapped, runnable, err := WrapCluster(cl, conf)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	return c
+	cc, ok := wrapped.GetClient().(*Overlay)
+	if !ok {
+		t.Fatalf("WrapCluster did not return an Overlay")
+	}
+	if _, ok := runnable.(*Overlay); !ok {
+		t.Fatalf("WrapCluster did not return a *Overlay runnable")
+	}
+	return cc
+}
+
+// newCaching builds a *Overlay over the given fake cluster using the
+// default reservation config.
+func newCaching(t *testing.T, inner *fakeClient) *Overlay {
+	t.Helper()
+	return cachingFrom(t, inner.fakeCluster, reservationConfig())
 }
 
 func listReservations(t *testing.T, c client.Client, opts ...client.ListOption) []v1alpha1.Reservation {
@@ -259,7 +318,7 @@ func waitFor(t *testing.T, cond func() bool) {
 // --- constructor tests ---
 
 func TestNewUnknownGVKError(t *testing.T) {
-	_, err := New(newTestClient(t), testScheme(t), Config{
+	_, _, err := WrapCluster(newTestClient(t).fakeCluster, Config{
 		GVKs: []string{"cortex.cloud/v1alpha1/DoesNotExist"},
 	})
 	if err == nil {
@@ -268,27 +327,49 @@ func TestNewUnknownGVKError(t *testing.T) {
 }
 
 func TestNewDefaultTTL(t *testing.T) {
-	c, err := New(newTestClient(t), testScheme(t), Config{
+	c := cachingFrom(t, newTestClient(t).fakeCluster, Config{
 		GVKs: []string{"cortex.cloud/v1alpha1/Reservation"},
 	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
 	if c.ttl != defaultTTL {
 		t.Fatalf("expected ttl %v, got %v", defaultTTL, c.ttl)
 	}
 }
 
 func TestNewExplicitTTL(t *testing.T) {
-	c, err := New(newTestClient(t), testScheme(t), Config{
+	c := cachingFrom(t, newTestClient(t).fakeCluster, Config{
 		GVKs: []string{"cortex.cloud/v1alpha1/Reservation"},
 		TTL:  metav1.Duration{Duration: 90 * time.Second},
 	})
+	if c.ttl != 90*time.Second {
+		t.Fatalf("expected ttl 90s, got %v", c.ttl)
+	}
+}
+
+func TestNewWrapsClusterClientAndIndexer(t *testing.T) {
+	inner := newTestClient(t)
+	wrapped, runnable, err := WrapCluster(inner.fakeCluster, reservationConfig())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if c.ttl != 90*time.Second {
-		t.Fatalf("expected ttl 90s, got %v", c.ttl)
+	// GetClient and GetFieldIndexer must both return the overlay so per-cluster
+	// reads/writes and IndexField flow through the cache.
+	cc, ok := wrapped.GetClient().(*Overlay)
+	if !ok {
+		t.Fatalf("GetClient did not return the overlay")
+	}
+	if wrapped.GetFieldIndexer() != client.FieldIndexer(cc) {
+		t.Fatalf("GetFieldIndexer did not return the overlay")
+	}
+	// The returned Runnable is the same overlay.
+	if runnable != manager.Runnable(cc) {
+		t.Fatalf("returned Runnable is not the overlay")
+	}
+	// Everything else delegates to the inner cluster.
+	if wrapped.GetScheme() != inner.GetScheme() {
+		t.Fatalf("GetScheme did not delegate to inner")
+	}
+	if wrapped.GetCache() != inner.GetCache() {
+		t.Fatalf("GetCache did not delegate to inner")
 	}
 }
 
@@ -422,7 +503,7 @@ func TestTombstone(t *testing.T) {
 		t.Fatalf("Delete: %v", err)
 	}
 	// Re-create directly in inner to simulate informer lag.
-	if err := inner.Create(context.Background(), newReservation("res-5", "az-1", "")); err != nil {
+	if err := inner.GetClient().Create(context.Background(), newReservation("res-5", "az-1", "")); err != nil {
 		t.Fatalf("re-create inner: %v", err)
 	}
 
@@ -467,7 +548,7 @@ func TestUpdateOverridesInner(t *testing.T) {
 	c := newCaching(t, inner)
 
 	var cur v1alpha1.Reservation
-	if err := inner.Get(context.Background(), types.NamespacedName{Name: "res-6"}, &cur); err != nil {
+	if err := inner.GetClient().Get(context.Background(), types.NamespacedName{Name: "res-6"}, &cur); err != nil {
 		t.Fatalf("inner get: %v", err)
 	}
 	cur.Spec.AvailabilityZone = "az-new"
@@ -548,10 +629,7 @@ func TestFieldMatching(t *testing.T) {
 
 func TestNonCachedGVKPassthrough(t *testing.T) {
 	inner := newTestClient(t)
-	c, err := New(inner, testScheme(t), Config{})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	c := cachingFrom(t, inner.fakeCluster, Config{})
 	r := newReservation("res-9", "az-1", "")
 	if err := c.Create(context.Background(), r); err != nil {
 		t.Fatalf("Create: %v", err)
@@ -593,35 +671,43 @@ func TestWriteErrorLeavesOverlayUntouched(t *testing.T) {
 		name     string
 		rv       string
 		seed     bool
-		mkClient func(inner *fakeClient) Client
-		op       func(c *CachingClient, r *v1alpha1.Reservation) error
+		mkClient func(inner *fakeClient) client.Client
+		op       func(c *Overlay, r *v1alpha1.Reservation) error
 	}{
 		{
-			name:     "create",
-			mkClient: func(inner *fakeClient) Client { return &errClient{Client: inner, createErr: sentinel} },
-			op:       func(c *CachingClient, r *v1alpha1.Reservation) error { return c.Create(context.Background(), r) },
+			name: "create",
+			mkClient: func(inner *fakeClient) client.Client {
+				return &errClient{Client: inner.GetClient(), createErr: sentinel}
+			},
+			op: func(c *Overlay, r *v1alpha1.Reservation) error { return c.Create(context.Background(), r) },
 		},
 		{
-			name:     "update",
-			rv:       "1",
-			mkClient: func(inner *fakeClient) Client { return &errClient{Client: inner, updateErr: sentinel} },
-			op:       func(c *CachingClient, r *v1alpha1.Reservation) error { return c.Update(context.Background(), r) },
+			name: "update",
+			rv:   "1",
+			mkClient: func(inner *fakeClient) client.Client {
+				return &errClient{Client: inner.GetClient(), updateErr: sentinel}
+			},
+			op: func(c *Overlay, r *v1alpha1.Reservation) error { return c.Update(context.Background(), r) },
 		},
 		{
-			name:     "patch",
-			rv:       "1",
-			mkClient: func(inner *fakeClient) Client { return &errClient{Client: inner, patchErr: sentinel} },
-			op: func(c *CachingClient, r *v1alpha1.Reservation) error {
+			name: "patch",
+			rv:   "1",
+			mkClient: func(inner *fakeClient) client.Client {
+				return &errClient{Client: inner.GetClient(), patchErr: sentinel}
+			},
+			op: func(c *Overlay, r *v1alpha1.Reservation) error {
 				p := r.DeepCopy()
 				p.Spec.AvailabilityZone = "az-new"
 				return c.Patch(context.Background(), p, client.MergeFrom(r))
 			},
 		},
 		{
-			name:     "delete",
-			seed:     true,
-			mkClient: func(inner *fakeClient) Client { return &errClient{Client: inner, deleteErr: sentinel} },
-			op:       func(c *CachingClient, r *v1alpha1.Reservation) error { return c.Delete(context.Background(), r) },
+			name: "delete",
+			seed: true,
+			mkClient: func(inner *fakeClient) client.Client {
+				return &errClient{Client: inner.GetClient(), deleteErr: sentinel}
+			},
+			op: func(c *Overlay, r *v1alpha1.Reservation) error { return c.Delete(context.Background(), r) },
 		},
 	}
 	for _, tc := range cases {
@@ -633,7 +719,7 @@ func TestWriteErrorLeavesOverlayUntouched(t *testing.T) {
 			} else {
 				base = newTestClient(t)
 			}
-			c := newCaching(t, tc.mkClient(base))
+			c := cachingFrom(t, clusterFor(t, tc.mkClient(base), nil), reservationConfig())
 
 			if err := tc.op(c, r); !errors.Is(err, sentinel) {
 				t.Fatalf("expected sentinel error, got %v", err)
@@ -648,13 +734,13 @@ func TestWriteErrorLeavesOverlayUntouched(t *testing.T) {
 func TestWriteServedFromOverlay(t *testing.T) {
 	cases := []struct {
 		name    string
-		write   func(t *testing.T, c *CachingClient, cur *v1alpha1.Reservation) string
+		write   func(t *testing.T, c *Overlay, cur *v1alpha1.Reservation) string
 		diverge func(t *testing.T, inner client.Client, name string)
 		read    func(*v1alpha1.Reservation) string
 	}{
 		{
 			name: "patch spec",
-			write: func(t *testing.T, c *CachingClient, cur *v1alpha1.Reservation) string {
+			write: func(t *testing.T, c *Overlay, cur *v1alpha1.Reservation) string {
 				base := cur.DeepCopy()
 				cur.Spec.AvailabilityZone = "az-new"
 				if err := c.Patch(context.Background(), cur, client.MergeFrom(base)); err != nil {
@@ -667,7 +753,7 @@ func TestWriteServedFromOverlay(t *testing.T) {
 		},
 		{
 			name: "status update",
-			write: func(t *testing.T, c *CachingClient, cur *v1alpha1.Reservation) string {
+			write: func(t *testing.T, c *Overlay, cur *v1alpha1.Reservation) string {
 				cur.Status.Host = "host-active"
 				if err := c.Status().Update(context.Background(), cur); err != nil {
 					t.Fatalf("Status().Update: %v", err)
@@ -681,7 +767,7 @@ func TestWriteServedFromOverlay(t *testing.T) {
 		},
 		{
 			name: "status patch",
-			write: func(t *testing.T, c *CachingClient, cur *v1alpha1.Reservation) string {
+			write: func(t *testing.T, c *Overlay, cur *v1alpha1.Reservation) string {
 				base := cur.DeepCopy()
 				cur.Status.Host = "host-patched"
 				if err := c.Status().Patch(context.Background(), cur, client.MergeFrom(base)); err != nil {
@@ -702,11 +788,11 @@ func TestWriteServedFromOverlay(t *testing.T) {
 			c := newCaching(t, inner)
 
 			var cur v1alpha1.Reservation
-			if err := inner.Get(context.Background(), types.NamespacedName{Name: r.Name}, &cur); err != nil {
+			if err := inner.GetClient().Get(context.Background(), types.NamespacedName{Name: r.Name}, &cur); err != nil {
 				t.Fatalf("inner get: %v", err)
 			}
 			want := tc.write(t, c, &cur)
-			tc.diverge(t, inner, r.Name)
+			tc.diverge(t, inner.GetClient(), r.Name)
 
 			var got v1alpha1.Reservation
 			if err := c.Get(context.Background(), types.NamespacedName{Name: r.Name}, &got); err != nil {
@@ -721,7 +807,7 @@ func TestWriteServedFromOverlay(t *testing.T) {
 
 func TestGetPropagatesNonNotFoundError(t *testing.T) {
 	sentinel := errors.New("get boom")
-	c := newCaching(t, &errClient{Client: newTestClient(t), getErr: sentinel})
+	c := cachingFrom(t, clusterFor(t, &errClient{Client: newTestClient(t).GetClient(), getErr: sentinel}, nil), reservationConfig())
 	c.upsert(reservationGVK(), newReservation("res-ge", "az-1", "1"))
 
 	var got v1alpha1.Reservation
@@ -754,10 +840,7 @@ func TestGetNotFoundWithNoOverlay(t *testing.T) {
 
 func TestGetNonCachedPropagatesError(t *testing.T) {
 	sentinel := errors.New("get boom")
-	c, err := New(&errClient{Client: newTestClient(t), getErr: sentinel}, testScheme(t), Config{})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	c := cachingFrom(t, clusterFor(t, &errClient{Client: newTestClient(t).GetClient(), getErr: sentinel}, nil), Config{})
 	var got v1alpha1.Reservation
 	if gerr := c.Get(context.Background(), types.NamespacedName{Name: "x"}, &got); !errors.Is(gerr, sentinel) {
 		t.Fatalf("expected sentinel error, got %v", gerr)
@@ -766,7 +849,7 @@ func TestGetNonCachedPropagatesError(t *testing.T) {
 
 func TestListPropagatesError(t *testing.T) {
 	sentinel := errors.New("list boom")
-	c := newCaching(t, &errClient{Client: newTestClient(t), listErr: sentinel})
+	c := cachingFrom(t, clusterFor(t, &errClient{Client: newTestClient(t).GetClient(), listErr: sentinel}, nil), reservationConfig())
 	c.upsert(reservationGVK(), newReservation("res-le", "az-1", "1"))
 
 	var list v1alpha1.ReservationList
@@ -802,12 +885,9 @@ func TestStatusCreateDelegates(t *testing.T) {
 func TestStatusUpdateNonCachedNoOverlay(t *testing.T) {
 	r := newReservation("res-sn", "az-1", "")
 	inner := newTestClient(t, r)
-	c, err := New(inner, testScheme(t), Config{})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	c := cachingFrom(t, inner.fakeCluster, Config{})
 	var cur v1alpha1.Reservation
-	if err := inner.Get(context.Background(), types.NamespacedName{Name: "res-sn"}, &cur); err != nil {
+	if err := inner.GetClient().Get(context.Background(), types.NamespacedName{Name: "res-sn"}, &cur); err != nil {
 		t.Fatalf("inner get: %v", err)
 	}
 	cur.Status.Host = "host-active"
@@ -832,7 +912,7 @@ func TestStatusUpdateNonCachedNoOverlay(t *testing.T) {
 // commit order and the overlay upsert order are identical: the overlay always
 // reflects the last write that reached the inner client (lastRV).
 type orderingClient struct {
-	Client
+	client.Client
 	mu     sync.Mutex
 	lastRV string // ResourceVersion of the most recent inner commit
 }
@@ -859,8 +939,8 @@ func TestConcurrentUpdatesOverlayNotBehind(t *testing.T) {
 		n      = 8
 	)
 	for round := range rounds {
-		oc := &orderingClient{Client: newTestClient(t)}
-		c := newCaching(t, oc)
+		oc := &orderingClient{Client: newTestClient(t).GetClient()}
+		c := cachingFrom(t, clusterFor(t, oc, nil), reservationConfig())
 
 		var wg sync.WaitGroup
 		for i := 1; i <= n; i++ {

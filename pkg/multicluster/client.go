@@ -18,9 +18,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+
+	"github.com/cobaltcore-dev/cortex/pkg/pendingcache"
 )
 
 // A remote cluster with routing labels used to match resources to clusters.
@@ -54,48 +56,11 @@ type Client struct {
 
 	// GVKs explicitly configured for the home cluster.
 	homeGVKs map[schema.GroupVersionKind]bool
-}
 
-type ClientConfig struct {
-	// Apiserver configuration mapping GVKs to home or remote clusters.
-	// Every GVK used through the multicluster client must be listed
-	// in either Home or Remotes. Unknown GVKs will cause an error.
-	APIServers APIServersConfig `json:"apiservers"`
-}
-
-// APIServersConfig separates resources into home and remote clusters.
-type APIServersConfig struct {
-	// Resources managed in the cluster where cortex is deployed.
-	Home HomeConfig `json:"home"`
-	// Resources managed in remote clusters.
-	Remotes []RemoteConfig `json:"remotes,omitempty"`
-}
-
-// HomeConfig lists GVKs that are managed in the home cluster.
-type HomeConfig struct {
-	// The resource GVKs formatted as "<group>/<version>/<Kind>".
-	GVKs []string `json:"gvks"`
-}
-
-// RemoteConfig maps multiple GVKs to a remote kubernetes apiserver with
-// routing labels. It is assumed that the remote apiserver accepts the
-// serviceaccount tokens issued by the local cluster.
-type RemoteConfig struct {
-	// The remote kubernetes apiserver url, e.g. "https://my-apiserver:6443".
-	Host string `json:"host"`
-	// The root CA certificate to verify the remote apiserver.
-	// Ignored if InsecureSkipTLSVerify is true.
-	CACert string `json:"caCert,omitempty"`
-	// InsecureSkipTLSVerify disables verification of the remote apiserver's
-	// TLS certificate. Use this for apiservers whose CA certificate rotates
-	// frequently and does not chain to a stable root. Mutually exclusive
-	// with CACert: when true, CACert is ignored.
-	InsecureSkipTLSVerify bool `json:"insecureSkipTLSVerify,omitempty"`
-	// The resource GVKs this apiserver serves, formatted as "<group>/<version>/<Kind>".
-	GVKs []string `json:"gvks"`
-	// Labels used by ResourceRouters to match resources to this cluster
-	// for write operations (Create/Update/Delete/Patch).
-	Labels map[string]string `json:"labels,omitempty"`
+	// cacheConf configures the optional in-process overlay cache. When
+	// Enabled, each home/remote cluster is wrapped so its GetClient/
+	// GetFieldIndexer route through a per-cluster overlay. Set in InitFromConf.
+	cacheConf pendingcache.Config
 }
 
 // Helper function to initialize a new multicluster client during service startup,
@@ -103,6 +68,7 @@ type RemoteConfig struct {
 func (c *Client) InitFromConf(ctx context.Context, mgr ctrl.Manager, conf ClientConfig) error {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("initializing multicluster client with config", "config", conf)
+	c.cacheConf = conf.PendingCache
 	// Map the formatted gvk from the config to the actual gvk object so that we
 	// can look up the right cluster for a given API server override.
 	gvksByConfStr := make(map[string]schema.GroupVersionKind)
@@ -133,11 +99,32 @@ func (c *Client) InitFromConf(ctx context.Context, mgr ctrl.Manager, conf Client
 			}
 			resolvedGVKs = append(resolvedGVKs, gvk)
 		}
-		cl, err := c.AddRemote(ctx, remote.Host, remote.CACert, remote.InsecureSkipTLSVerify, remote.Labels, resolvedGVKs...)
+		cl, overlay, err := c.AddRemote(ctx, remote.Host, remote.CACert, remote.InsecureSkipTLSVerify, remote.Labels, resolvedGVKs...)
 		if err != nil {
 			return err
 		}
+		// Add the raw inner cluster so its informers/caches start (as today).
 		if err := mgr.Add(cl); err != nil {
+			return err
+		}
+		// When caching is enabled, also add the overlay's lifecycle Runnable
+		// (eviction handlers + TTL cleanup). It does not re-Start the cluster.
+		if overlay != nil {
+			if err := mgr.Add(overlay); err != nil {
+				return err
+			}
+		}
+	}
+	// When caching is enabled, wrap the home cluster the same way. The manager
+	// already owns the home cluster's lifecycle, so we only add the overlay
+	// Runnable and must NOT re-Start the inner home cluster.
+	if c.cacheConf.Enabled && c.HomeCluster != nil {
+		wrapped, overlay, err := pendingcache.WrapCluster(c.HomeCluster, c.cacheConf)
+		if err != nil {
+			return err
+		}
+		c.HomeCluster = wrapped
+		if err := mgr.Add(overlay); err != nil {
 			return err
 		}
 	}
@@ -154,7 +141,13 @@ func (c *Client) InitFromConf(ctx context.Context, mgr ctrl.Manager, conf Client
 // This can be used when the remote cluster accepts the home cluster's service
 // account tokens. See the kubernetes documentation on structured auth to
 // learn more about jwt-based authentication across clusters.
-func (c *Client) AddRemote(ctx context.Context, host, caCert string, insecureSkipTLSVerify bool, labels map[string]string, gvks ...schema.GroupVersionKind) (cluster.Cluster, error) {
+// AddRemote returns the raw inner cluster.Cluster (which the caller must add to
+// the manager so its informers/caches start) and, when caching is enabled, the
+// overlay's lifecycle Runnable (which the caller must also add to the manager).
+// The overlay Runnable is nil when caching is disabled. The wrapped cluster (or
+// the raw cluster when caching is disabled) is stored in remoteClusters so all
+// routing goes through the per-cluster overlay.
+func (c *Client) AddRemote(ctx context.Context, host, caCert string, insecureSkipTLSVerify bool, labels map[string]string, gvks ...schema.GroupVersionKind) (cluster.Cluster, manager.Runnable, error) {
 	log := ctrl.LoggerFrom(ctx)
 	homeRestConfig := *c.HomeRestConfig
 	restConfigCopy := homeRestConfig
@@ -172,7 +165,20 @@ func (c *Client) AddRemote(ctx context.Context, host, caCert string, insecureSki
 		o.Logger = ctrl.LoggerFrom(ctx).WithValues("host", host)
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	// stored is the cluster placed in remoteClusters and used for all routing.
+	// When caching is enabled it is the overlay-wrapped cluster; otherwise the
+	// raw cluster. overlay is the overlay's lifecycle Runnable (nil when off).
+	stored := cl
+	var overlay manager.Runnable
+	if c.cacheConf.Enabled {
+		wrapped, ov, werr := pendingcache.WrapCluster(cl, c.cacheConf)
+		if werr != nil {
+			return nil, nil, werr
+		}
+		stored = wrapped
+		overlay = ov
 	}
 	c.remoteClustersMu.Lock()
 	defer c.remoteClustersMu.Unlock()
@@ -182,11 +188,13 @@ func (c *Client) AddRemote(ctx context.Context, host, caCert string, insecureSki
 	for _, gvk := range gvks {
 		log.Info("adding remote cluster for resource", "gvk", gvk, "host", host, "labels", labels, "insecureSkipTLSVerify", insecureSkipTLSVerify)
 		c.remoteClusters[gvk] = append(c.remoteClusters[gvk], remoteCluster{
-			cluster: cl,
+			cluster: stored,
 			labels:  labels,
 		})
 	}
-	return cl, nil
+	// Return the raw inner cluster so the caller starts its informers/caches;
+	// the overlay Runnable (if any) is returned separately.
+	return cl, overlay, nil
 }
 
 // Get the gvk registered for the given resource in the home cluster's scheme.
@@ -223,30 +231,6 @@ func (c *Client) ClustersForGVK(gvk schema.GroupVersionKind) ([]cluster.Cluster,
 		clusters = append(clusters, c.HomeCluster)
 	}
 	return clusters, nil
-}
-
-// GetInformersForKind returns the informers of all clusters serving the GVK of
-// the given object. It is used by the in-process client cache to attach
-// eviction event handlers. The GVK is resolved against the home scheme and must
-// be explicitly configured in home or a remote cluster.
-func (c *Client) GetInformersForKind(ctx context.Context, obj client.Object) ([]cache.Informer, error) {
-	gvk, err := c.GVKFromHomeScheme(obj)
-	if err != nil {
-		return nil, err
-	}
-	clusters, err := c.ClustersForGVK(gvk)
-	if err != nil {
-		return nil, err
-	}
-	informers := make([]cache.Informer, 0, len(clusters))
-	for _, cl := range clusters {
-		inf, err := cl.GetCache().GetInformer(ctx, obj)
-		if err != nil {
-			return nil, err
-		}
-		informers = append(informers, inf)
-	}
-	return informers, nil
 }
 
 // clusterForWrite uses a ResourceRouter to determine which remote cluster
@@ -879,7 +863,7 @@ func (c *Client) IndexField(ctx context.Context, obj client.Object, list client.
 			continue
 		}
 		indexed[ch] = true
-		if err := ch.IndexField(ctx, obj, field, extractValue); err != nil {
+		if err := cl.GetFieldIndexer().IndexField(ctx, obj, field, extractValue); err != nil {
 			log.Error(err, "failed to register field index for cluster — objects from this cluster will be absent from index queries; restart required to recover", "field", field)
 			continue
 		}
@@ -894,7 +878,7 @@ func (c *Client) IndexField(ctx context.Context, obj client.Object, list client.
 			continue
 		}
 		indexed[ch] = true
-		if err := ch.IndexField(ctx, obj, field, extractValue); err != nil {
+		if err := cl.GetFieldIndexer().IndexField(ctx, obj, field, extractValue); err != nil {
 			log.Error(err, "failed to register field index for cluster — objects from this cluster will be absent from index queries; restart required to recover", "field", field)
 			continue
 		}

@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package clientcache
+package pendingcache
 
 import (
 	"context"
@@ -19,8 +19,8 @@ const minCleanupInterval = 30 * time.Second
 
 // Start implements manager.Runnable. It attaches informer event handlers for
 // eviction and runs the TTL cleanup loop until ctx is done.
-func (c *CachingClient) Start(ctx context.Context) error {
-	log := ctrl.LoggerFrom(ctx).WithName("clientcache")
+func (c *Overlay) Start(ctx context.Context) error {
+	log := ctrl.LoggerFrom(ctx).WithName("pendingcache")
 
 	for gvk := range c.gvks {
 		obj, err := c.newObjectForGVK(gvk)
@@ -28,16 +28,13 @@ func (c *CachingClient) Start(ctx context.Context) error {
 			log.Error(err, "failed to build object for gvk; eviction disabled for it", "gvk", gvk)
 			continue
 		}
-		informers, err := c.inner.GetInformersForKind(ctx, obj)
+		inf, err := c.informerCache.GetInformer(ctx, obj)
 		if err != nil {
-			log.Error(err, "failed to get informers for gvk; eviction disabled for it", "gvk", gvk)
+			log.Error(err, "failed to get informer for gvk; eviction disabled for it", "gvk", gvk)
 			continue
 		}
-		handler := c.evictionHandler(gvk)
-		for _, inf := range informers {
-			if _, err := inf.AddEventHandler(handler); err != nil {
-				log.Error(err, "failed to add eviction event handler", "gvk", gvk)
-			}
+		if _, err := inf.AddEventHandler(c.evictionHandler(gvk)); err != nil {
+			log.Error(err, "failed to add eviction event handler", "gvk", gvk)
 		}
 	}
 
@@ -54,17 +51,17 @@ func (c *CachingClient) Start(ctx context.Context) error {
 	}
 }
 
-// NeedLeaderElection reports that the CachingClient's Start lifecycle must run
+// NeedLeaderElection reports that the Overlay's Start lifecycle must run
 // on every replica, not only the elected leader. The overlay is per-process
 // state, so its eviction handlers and TTL cleanup have to run wherever the
 // client is used, regardless of leader election.
-func (c *CachingClient) NeedLeaderElection() bool {
+func (c *Overlay) NeedLeaderElection() bool {
 	return false
 }
 
 // evictionHandler returns an informer event handler that evicts overlay entries
 // for the GVK when the real object is observed at a >= ResourceVersion.
-func (c *CachingClient) evictionHandler(gvk schema.GroupVersionKind) toolscachek8s.ResourceEventHandler {
+func (c *Overlay) evictionHandler(gvk schema.GroupVersionKind) toolscachek8s.ResourceEventHandler {
 	evict := func(o any) {
 		obj, ok := o.(client.Object)
 		if !ok {
@@ -86,14 +83,14 @@ func (c *CachingClient) evictionHandler(gvk schema.GroupVersionKind) toolscachek
 }
 
 // newObjectForGVK builds an empty typed object for the GVK using the scheme.
-func (c *CachingClient) newObjectForGVK(gvk schema.GroupVersionKind) (client.Object, error) {
+func (c *Overlay) newObjectForGVK(gvk schema.GroupVersionKind) (client.Object, error) {
 	ro, err := c.scheme.New(gvk)
 	if err != nil {
 		return nil, err
 	}
 	obj, ok := ro.(client.Object)
 	if !ok {
-		return nil, fmt.Errorf("clientcache: object for gvk %s does not implement client.Object", gvk)
+		return nil, fmt.Errorf("pendingcache: object for gvk %s does not implement client.Object", gvk)
 	}
 	return obj, nil
 }
