@@ -725,7 +725,7 @@ func TestHypervisorOvercommitController_SetupWithManager_InvalidClient(t *testin
 	// SetupWithManager should fail - either because config loading fails
 	// (in test environment without config files) or because the client
 	// is not a multicluster client.
-	err := controller.SetupWithManager(mgr, nil)
+	err := controller.SetupWithManager(mgr)
 	if err == nil {
 		t.Error("expected error when calling SetupWithManager, got nil")
 	}

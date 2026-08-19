@@ -506,7 +506,7 @@ func main() {
 		config := conf.GetConfigOrDie[inflight.NovaVMClientConfig]()
 		vmClient := inflight.NewNovaVMClient(config)
 		controller := &inflight.Controller{Client: multiclusterClient, VMClient: vmClient}
-		if err := controller.SetupWithManager(ctx, mgr, multiclusterClient); err != nil {
+		if err := controller.SetupWithManager(ctx, mgr); err != nil {
 			setupLog.Error(err, "unable to create controller",
 				"controller", "inflight-reservation-controller")
 			os.Exit(1)
@@ -536,7 +536,7 @@ func main() {
 	if slices.Contains(mainConfig.EnabledControllers, "hypervisor-overcommit-controller") {
 		hypervisorOvercommitController := &nova.HypervisorOvercommitController{}
 		hypervisorOvercommitController.Client = multiclusterClient
-		if err := hypervisorOvercommitController.SetupWithManager(mgr, multiclusterClient); err != nil {
+		if err := hypervisorOvercommitController.SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller",
 				"controller", "HypervisorOvercommitController")
 			os.Exit(1)
