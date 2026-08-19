@@ -98,6 +98,10 @@ func (f *fakeCache) GetInformer(_ context.Context, _ client.Object, _ ...ccache.
 	return f.inf, nil
 }
 
+func (f *fakeCache) IndexField(_ context.Context, _ client.Object, _ string, _ client.IndexerFunc) error {
+	return nil
+}
+
 // fakeCluster composes a fake client.Client with a fakeCache to satisfy the
 // cluster.Cluster interface consumed by pendingcache.WrapCluster.
 type fakeCluster struct {
@@ -251,17 +255,14 @@ func reservationConfig() Config {
 	}
 }
 
-// clusterFor wraps a client.Client (and the given informer) as a cluster.Cluster
-// so it can be passed to New. Used by tests that inject a custom client.Client
-// (e.g. errClient, orderingClient) below the overlay.
-func clusterFor(t *testing.T, inner client.Client, inf *fakeInformer) cluster.Cluster {
+// clusterFor wraps a client.Client as a cluster.Cluster so it can be passed to
+// WrapCluster. Used by tests that inject a custom client.Client (e.g. errClient,
+// orderingClient) below the overlay.
+func clusterFor(t *testing.T, inner client.Client) cluster.Cluster {
 	t.Helper()
-	if inf == nil {
-		inf = &fakeInformer{}
-	}
 	return &fakeCluster{
 		client: inner,
-		cache:  &fakeCache{inf: inf},
+		cache:  &fakeCache{inf: &fakeInformer{}},
 		scheme: testScheme(t),
 	}
 }
@@ -719,7 +720,7 @@ func TestWriteErrorLeavesOverlayUntouched(t *testing.T) {
 			} else {
 				base = newTestClient(t)
 			}
-			c := cachingFrom(t, clusterFor(t, tc.mkClient(base), nil), reservationConfig())
+			c := cachingFrom(t, clusterFor(t, tc.mkClient(base)), reservationConfig())
 
 			if err := tc.op(c, r); !errors.Is(err, sentinel) {
 				t.Fatalf("expected sentinel error, got %v", err)
@@ -807,7 +808,7 @@ func TestWriteServedFromOverlay(t *testing.T) {
 
 func TestGetPropagatesNonNotFoundError(t *testing.T) {
 	sentinel := errors.New("get boom")
-	c := cachingFrom(t, clusterFor(t, &errClient{Client: newTestClient(t).GetClient(), getErr: sentinel}, nil), reservationConfig())
+	c := cachingFrom(t, clusterFor(t, &errClient{Client: newTestClient(t).GetClient(), getErr: sentinel}), reservationConfig())
 	c.upsert(reservationGVK(), newReservation("res-ge", "az-1", "1"))
 
 	var got v1alpha1.Reservation
@@ -840,7 +841,7 @@ func TestGetNotFoundWithNoOverlay(t *testing.T) {
 
 func TestGetNonCachedPropagatesError(t *testing.T) {
 	sentinel := errors.New("get boom")
-	c := cachingFrom(t, clusterFor(t, &errClient{Client: newTestClient(t).GetClient(), getErr: sentinel}, nil), Config{})
+	c := cachingFrom(t, clusterFor(t, &errClient{Client: newTestClient(t).GetClient(), getErr: sentinel}), Config{})
 	var got v1alpha1.Reservation
 	if gerr := c.Get(context.Background(), types.NamespacedName{Name: "x"}, &got); !errors.Is(gerr, sentinel) {
 		t.Fatalf("expected sentinel error, got %v", gerr)
@@ -849,7 +850,7 @@ func TestGetNonCachedPropagatesError(t *testing.T) {
 
 func TestListPropagatesError(t *testing.T) {
 	sentinel := errors.New("list boom")
-	c := cachingFrom(t, clusterFor(t, &errClient{Client: newTestClient(t).GetClient(), listErr: sentinel}, nil), reservationConfig())
+	c := cachingFrom(t, clusterFor(t, &errClient{Client: newTestClient(t).GetClient(), listErr: sentinel}), reservationConfig())
 	c.upsert(reservationGVK(), newReservation("res-le", "az-1", "1"))
 
 	var list v1alpha1.ReservationList
@@ -940,7 +941,7 @@ func TestConcurrentUpdatesOverlayNotBehind(t *testing.T) {
 	)
 	for round := range rounds {
 		oc := &orderingClient{Client: newTestClient(t).GetClient()}
-		c := cachingFrom(t, clusterFor(t, oc, nil), reservationConfig())
+		c := cachingFrom(t, clusterFor(t, oc), reservationConfig())
 
 		var wg sync.WaitGroup
 		for i := 1; i <= n; i++ {

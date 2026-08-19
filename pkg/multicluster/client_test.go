@@ -2027,4 +2027,11 @@ func TestClient_CacheEnabled_WrappedHomeOverlay(t *testing.T) {
 	if len(results) != 1 || !results[0].IsHome {
 		t.Fatalf("expected one home result, got %+v", results)
 	}
+	if len(results[0].Items) != 1 {
+		t.Fatalf("expected one item in home result, got %d", len(results[0].Items))
+	}
+	if got := results[0].Items[0]; got.Name != cm.Name || got.Namespace != cm.Namespace {
+		t.Fatalf("expected item {Name:%q Namespace:%q}, got {Name:%q Namespace:%q}",
+			cm.Name, cm.Namespace, got.Name, got.Namespace)
+	}
 }

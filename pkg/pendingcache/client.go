@@ -603,10 +603,8 @@ func (c *Overlay) List(ctx context.Context, list client.ObjectList, opts ...clie
 // registers the IndexerFunc with the overlay so overlay entries can be matched
 // against MatchingFields.
 func (c *Overlay) IndexField(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error {
-	if indexer, ok := c.Client.(client.FieldIndexer); ok {
-		if err := indexer.IndexField(ctx, obj, field, extractValue); err != nil {
-			return err
-		}
+	if err := c.informerCache.IndexField(ctx, obj, field, extractValue); err != nil {
+		return err
 	}
 	if gvk, cached := c.gvkFor(obj); cached {
 		c.registerIndex(gvk, field, extractValue)
