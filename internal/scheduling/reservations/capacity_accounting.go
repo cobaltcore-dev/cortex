@@ -25,6 +25,7 @@ import (
 // res itself is excluded from step 3 to avoid subtracting its own block from free capacity.
 // Returns false when the hypervisor has no capacity data.
 func HostHasCapacityForReservation(allReservations []v1alpha1.Reservation, hv hv1.Hypervisor, res *v1alpha1.Reservation) bool {
+	// TODO consider refactor with HostFreeCapacity
 	effCap := hv.Status.EffectiveCapacity
 	if effCap == nil {
 		effCap = hv.Status.Capacity
@@ -73,6 +74,49 @@ func HostHasCapacityForReservation(allReservations []v1alpha1.Reservation, hv hv
 		}
 	}
 	return true
+}
+
+// HostFreeCapacity computes the remaining free capacity on hv after subtracting
+// hv.Status.Allocation and UnusedReservationCapacity for all reservations on this host.
+// Negative values indicate over-subscription for that resource.
+// Returns nil when the hypervisor has no capacity data.
+// Reservations not targeting this host (via Spec.TargetHost or Status.Host) are ignored.
+func HostFreeCapacity(hostReservations []v1alpha1.Reservation, hv hv1.Hypervisor) map[hv1.ResourceName]resource.Quantity {
+	// TODO consider refactor with HostHasCapacityForReservation
+	effCap := hv.Status.EffectiveCapacity
+	if effCap == nil {
+		effCap = hv.Status.Capacity
+	}
+	if effCap == nil {
+		return nil
+	}
+
+	free := make(map[hv1.ResourceName]resource.Quantity, len(effCap))
+	for rn, qty := range effCap {
+		free[rn] = qty.DeepCopy()
+	}
+	for rn, allocated := range hv.Status.Allocation {
+		if f, ok := free[rn]; ok {
+			f.Sub(allocated)
+			free[rn] = f
+		}
+	}
+	for i := range hostReservations {
+		res := &hostReservations[i]
+		if res.Spec.TargetHost == "" {
+			continue // evicted; status.Host may lag until reconcile
+		}
+		if res.Spec.TargetHost != hv.Name && res.Status.Host != hv.Name {
+			continue
+		}
+		for rn, block := range UnusedReservationCapacity(res, false) {
+			if f, ok := free[rn]; ok {
+				f.Sub(block)
+				free[rn] = f
+			}
+		}
+	}
+	return free
 }
 
 // UnusedReservationCapacity returns the resources a Reservation should block on its host(s).

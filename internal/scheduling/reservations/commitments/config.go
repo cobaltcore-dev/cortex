@@ -62,6 +62,23 @@ type ReservationControllerConfig struct {
 	// reservation during which it's expected to appear on the target host.
 	// VMs not confirmed within this period are considered stale and removed.
 	AllocationGracePeriod metav1.Duration `json:"allocationGracePeriod"`
+	// OversubscriptionGracePeriod is how long to wait after detecting host over-subscription
+	// before evicting slots. Gives other controllers (e.g. failover) time to self-heal.
+	OversubscriptionGracePeriod metav1.Duration `json:"oversubscriptionGracePeriod,omitempty"`
+	// OversubscriptionMinCheckInterval is the minimum time between consecutive over-subscription
+	// checks for the same host. Independent of RequeueIntervalActive so it can be tuned
+	// to a value shorter than the grace period without affecting normal reconcile cadence.
+	// Defaults to 30s.
+	OversubscriptionMinCheckInterval metav1.Duration `json:"oversubscriptionMinCheckInterval,omitempty"`
+	// EnableOversubscriptionCheck enables the HostOversubscriptionController, which watches
+	// Hypervisor objects and detects committed-resource oversubscription.
+	// When false, the controller is not wired up and no oversubscription detection runs.
+	EnableOversubscriptionCheck bool `json:"enableOversubscriptionCheck,omitempty"`
+	// EnableOversubscriptionReservationEviction controls whether the oversubscription controller
+	// actively evicts reservation slots when a host is over-subscribed.
+	// When false, violations are detected and exposed via metrics but no eviction is performed.
+	// Has no effect when EnableOversubscriptionCheck is false.
+	EnableOversubscriptionReservationEviction bool `json:"enableOversubscriptionReservationEviction,omitempty"`
 	// SchedulerURL is the endpoint of the nova external scheduler.
 	SchedulerURL string `json:"schedulerURL"`
 	// PipelineDefault is the fallback pipeline when no FlavorGroupPipelines entry matches.

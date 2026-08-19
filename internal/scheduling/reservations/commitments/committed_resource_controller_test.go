@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 )
 
 // ============================================================================
@@ -137,7 +138,29 @@ func newCRTestClient(scheme *runtime.Scheme, objects ...client.Object) client.Cl
 			}
 			return uuids
 		}).
+		WithIndex(&v1alpha1.Reservation{}, reservations.IdxReservationByHost, func(obj client.Object) []string {
+			res, ok := obj.(*v1alpha1.Reservation)
+			if !ok {
+				return nil
+			}
+			hosts := make(map[string]struct{})
+			if res.Spec.TargetHost != "" {
+				hosts[res.Spec.TargetHost] = struct{}{}
+			}
+			if res.Status.Host != "" {
+				hosts[res.Status.Host] = struct{}{}
+			}
+			result := make([]string, 0, len(hosts))
+			for h := range hosts {
+				result = append(result, h)
+			}
+			return result
+		}).
 		Build()
+}
+
+func testGiB(n int64) resource.Quantity {
+	return *resource.NewQuantity(n*1024*1024*1024, resource.BinarySI)
 }
 
 func reconcileReq(name string) ctrl.Request {

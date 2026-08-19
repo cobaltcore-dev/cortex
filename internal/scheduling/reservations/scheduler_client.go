@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -196,8 +197,13 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 
 	// Check response status
 	if response.StatusCode != http.StatusOK {
-		logger.Error(nil, "external scheduler returned non-OK status", "statusCode", response.StatusCode)
-		return nil, fmt.Errorf("external scheduler returned status %d", response.StatusCode)
+		body, err := io.ReadAll(io.LimitReader(response.Body, 1024))
+		if err != nil {
+			logger.Error(err, "failed to read error response body", "statusCode", response.StatusCode)
+			return nil, fmt.Errorf("external scheduler returned status %d", response.StatusCode)
+		}
+		logger.Error(nil, "external scheduler returned non-OK status", "statusCode", response.StatusCode, "body", string(body))
+		return nil, fmt.Errorf("external scheduler returned status %d: %s", response.StatusCode, string(body))
 	}
 
 	// Decode the response
