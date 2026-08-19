@@ -25,11 +25,13 @@ import (
 
 // ClusterWrapper can be registered on the Client to transparently transform each
 // cluster before it is stored for routing. WrapCluster receives the manager and
-// the raw inner cluster; it must return the (possibly wrapped) cluster to use for
-// all routing and is responsible for registering any lifecycle Runnables with mgr
-// itself. Wrappers are applied in order for every home and remote cluster during
-// InitFromConf. The raw inner cluster is always added to the manager separately
-// so its informers start regardless of wrapping.
+// the current cluster: raw for the first wrapper in the chain, or the previous
+// wrapper's result for subsequent ones. It must return the (possibly wrapped)
+// cluster to use for routing and is responsible for registering any lifecycle
+// Runnables with mgr itself. Wrappers are applied in order for every home and
+// remote cluster during InitFromConf. For remote clusters the original unwrapped
+// cluster is always added to the manager separately so its informers start
+// independently of wrapping.
 type ClusterWrapper interface {
 	WrapCluster(mgr manager.Manager, cl cluster.Cluster) (cluster.Cluster, error)
 }
