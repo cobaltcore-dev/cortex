@@ -134,7 +134,7 @@ func shuffleTopHosts(hosts []string, k int) []string {
 	}
 	result := make([]string, len(hosts))
 	copy(result, hosts)
-	rand.Shuffle(n, func(i, j int) { //nolint:gosec non-crypto shuffle, safe to suppress
+	rand.Shuffle(n, func(i, j int) { //nolint:gosec // non-crypto shuffle for load balancing
 		result[i], result[j] = result[j], result[i]
 	})
 	slog.Info("shuffled top hosts for evacuation", "k", n, "hosts", result[:n])
