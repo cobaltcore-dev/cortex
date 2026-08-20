@@ -200,7 +200,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 
 		logger.Info("marked pre-allocated reservation as ready", "host", res.Status.Host)
 		// Requeue immediately to run verification in next reconcile loop
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 	}
 
 	// Sync Spec values to Status fields for non-pre-allocated reservations
