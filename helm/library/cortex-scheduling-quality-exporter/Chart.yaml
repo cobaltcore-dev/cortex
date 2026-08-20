@@ -1,0 +1,17 @@
+apiVersion: v2
+name: cortex-scheduling-quality-exporter
+description: Prometheus exporter for Cortex scheduling quality and resource efficiency metrics
+type: application
+version: 0.1.0
+appVersion: "sha-9f115a57"
+keywords:
+  - prometheus
+  - exporter
+  - openstack
+  - cortex
+  - scheduling
+sources:
+  - https://github.com/cobaltcore-dev/cortex
+maintainers:
+  - name: cobaltcore-dev
+dependencies: []
