@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
-	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -69,6 +68,7 @@ var vmwareHostLabels = []string{
 
 var kvmHostLabels = []string{
 	"compute_host",
+	"compute_cluster",
 	"availability_zone",
 	"building_block",
 	"cpu_architecture",
@@ -95,11 +95,14 @@ func (h kvmHost) getHostLabels() []string {
 		availabilityZone = "unknown"
 	}
 
-	buildingBlock := "unknown"
-	// Assuming hypervisor names are in the format nodeXXX-bbYY
-	parts := strings.Split(h.Name, "-")
-	if len(parts) > 1 {
-		buildingBlock = parts[1]
+	buildingBlock := h.Labels["kubernetes.metal.cloud.sap/bb"]
+	if buildingBlock == "" {
+		buildingBlock = "unknown"
+	}
+
+	computeCluster := h.Labels["kubernetes.metal.cloud.sap/cluster"]
+	if computeCluster == "" {
+		computeCluster = "unknown"
 	}
 
 	osVersion := h.Status.OperatingSystem.Version
@@ -124,6 +127,7 @@ func (h kvmHost) getHostLabels() []string {
 
 	return []string{
 		h.Name,
+		computeCluster,
 		availabilityZone,
 		buildingBlock,
 		cpuArchitecture,
@@ -134,6 +138,17 @@ func (h kvmHost) getHostLabels() []string {
 		strconv.FormatBool(maintenance),
 		osVersion,
 	}
+}
+
+func (k kvmHost) getPhysicalCapacity(resourceName hv1.ResourceName) (capacity resource.Quantity, ok bool) {
+	if k.Status.Capacity == nil {
+		return resource.Quantity{}, false
+	}
+	qty, exists := k.Status.Capacity[resourceName]
+	if !exists || qty.IsZero() {
+		return resource.Quantity{}, false
+	}
+	return qty, true
 }
 
 // getResourceCapacity attempts to retrieve the effective capacity for the specified resource from the hypervisor status, falling back to the physical capacity if effective capacity is not available. It returns the capacity quantity and a boolean indicating whether any capacity information was found.
