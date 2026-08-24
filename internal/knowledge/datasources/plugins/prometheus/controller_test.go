@@ -29,10 +29,9 @@ func TestPrometheusDatasourceReconciler_Creation(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	reconciler := &PrometheusDatasourceReconciler{
-		Client:  client,
-		Scheme:  scheme,
-		conf:    config{SchedulingDomain: "test-operator"},
-		Monitor: datasources.Monitor{},
+		Client: client,
+		Scheme: scheme,
+		conf:   config{SchedulingDomain: "test-operator"},
 	}
 
 	if reconciler.Client == nil {

@@ -64,11 +64,12 @@
       "managerFilePatterns": [
         "/^postgres/Dockerfile$/"
       ],
-      "matchStrings": ["ENV PG_VERSION (?<currentValue>[\\d]+\\.[\\d]+)-[^\\n]+"],
-      "depNameTemplate": "postgres",
-      "datasourceTemplate": "docker",
-      "versioningTemplate": "semver-coerced",
-      "autoReplaceStringTemplate": "ENV PG_VERSION {{{newValue}}}-1.pgdg13+1"
+      "matchStrings": ["ENV PG_VERSION (?<currentValue>\\d+\\.\\d+-\\d+\\.pgdg\\d+\\+\\d+)"],
+      "depNameTemplate": "postgresql-18",
+      "datasourceTemplate": "deb",
+      "registryUrlTemplate": "https://apt.postgresql.org/pub/repos/apt?suite=trixie-pgdg&components=main&binaryArch=amd64",
+      "versioningTemplate": "deb",
+      "autoReplaceStringTemplate": "ENV PG_VERSION {{{newValue}}}"
     }
   ],
   "packageRules": [
@@ -80,12 +81,11 @@
     },
     {
       "matchPackageNames": [
-        "postgres"
+        "postgresql-18"
       ],
       "matchFileNames": [
         "postgres/Dockerfile"
       ],
-      "allowedVersions": "18.x",
       "groupName": "postgres Dockerfile"
     },
     {
@@ -114,7 +114,7 @@
     {
       "matchPackageNames": [
         "!/^github\\.com\\/sapcc\\/.*/",
-        "!postgres",
+        "!postgresql-18",
         "/.*/"
       ],
       "matchUpdateTypes": [

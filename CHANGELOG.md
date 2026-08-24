@@ -1,5 +1,63 @@
 # Changelog
 
+## 2026-08-24 — [#1154](https://github.com/cobaltcore-dev/cortex/pull/1154)
+
+### cortex v0.3.8 (sha-1742e3ee)
+
+New features:
+- Apply jitter to failover revalidation requeue interval — adds a randomized jitter within [base/2, 3*base/2] to the failover reservation controller's revalidation interval, preventing thundering-herd effects when many reservations revalidate simultaneously ([#1147](https://github.com/cobaltcore-dev/cortex/pull/1147))
+
+Bug fixes:
+- Include response body in scheduler client error on non-200 status — the SchedulerClient now reads and includes the response body (capped at 1024 bytes) in error messages when the external scheduler returns a non-200 status code, improving debuggability of failover scheduling failures ([#1113](https://github.com/cobaltcore-dev/cortex/pull/1113))
+- Fix quota hardware version key in extraSpecs — corrects the key used to look up the hardware version in flavor extra specs for quota enforcement and capacity filtering ([#1149](https://github.com/cobaltcore-dev/cortex/pull/1149))
+
+Non-breaking changes:
+- Fix issues introduced with new linter version ([#1150](https://github.com/cobaltcore-dev/cortex/pull/1150))
+- Fix inaccurate live migration bullet in CR reservations docs ([#1138](https://github.com/cobaltcore-dev/cortex/pull/1138))
+- Fix renovate PG_VERSION matching to use debian deb datasource ([#1144](https://github.com/cobaltcore-dev/cortex/pull/1144))
+- Update `github.com/gophercloud/gophercloud/v2` to v2.14.0 ([#1151](https://github.com/cobaltcore-dev/cortex/pull/1151))
+- Update `k8s.io/api`, `k8s.io/apimachinery`, `k8s.io/client-go` to v0.36.4 ([#1151](https://github.com/cobaltcore-dev/cortex/pull/1151))
+- Update `github.com/sapcc` dependencies ([#1146](https://github.com/cobaltcore-dev/cortex/pull/1146))
+- Update `github.com/mattn/go-sqlite3` to v1.14.50 ([#1143](https://github.com/cobaltcore-dev/cortex/pull/1143))
+- Update `golangci-lint` to v2.13.1 ([#1148](https://github.com/cobaltcore-dev/cortex/pull/1148), [#1151](https://github.com/cobaltcore-dev/cortex/pull/1151))
+- Update `kube-prometheus-stack` to v88.5.2 ([#1145](https://github.com/cobaltcore-dev/cortex/pull/1145), [#1151](https://github.com/cobaltcore-dev/cortex/pull/1151))
+
+### cortex-shim v0.1.14 (sha-1742e3ee)
+
+Includes updated dependencies (k8s.io v0.36.4, gophercloud v2.14.0).
+
+### cortex-postgres v0.6.14
+
+Includes updated renovate configuration for PG_VERSION matching.
+
+### cortex-nova v0.0.88
+
+Includes updated charts cortex v0.3.8 and cortex-postgres v0.6.14.
+
+### cortex-cinder v0.0.88
+
+Includes updated charts cortex v0.3.8 and cortex-postgres v0.6.14.
+
+### cortex-manila v0.0.88
+
+Includes updated charts cortex v0.3.8 and cortex-postgres v0.6.14.
+
+### cortex-crds v0.0.88
+
+Includes updated chart cortex v0.3.8.
+
+### cortex-ironcore v0.0.88
+
+Includes updated chart cortex v0.3.8.
+
+### cortex-pods v0.0.88
+
+Includes updated chart cortex v0.3.8.
+
+### cortex-placement-shim v0.1.14
+
+Includes updated chart cortex-shim v0.1.14.
+
 ## 2026-08-17 — [#1139](https://github.com/cobaltcore-dev/cortex/pull/1139)
 
 ### cortex v0.3.7 (sha-67daed47)
