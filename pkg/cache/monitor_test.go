@@ -94,10 +94,10 @@ func TestMonitorCollectResetsWindow(t *testing.T) {
 		t.Fatalf("first scrape max: got %v, want 3", got)
 	}
 	// Second scrape (no further writes) reports max == current == 1.
-	max, _ := gaugeValue(t, m, maxMetric, gvkStr, host)
+	maxOverTime, _ := gaugeValue(t, m, maxMetric, gvkStr, host)
 	cur, _ := gaugeValue(t, m, currentMetric, gvkStr, host)
-	if max != cur || max != 1 {
-		t.Fatalf("second scrape: max=%v current=%v, want both 1", max, cur)
+	if maxOverTime != cur || maxOverTime != 1 {
+		t.Fatalf("second scrape: max=%v current=%v, want both 1", maxOverTime, cur)
 	}
 }
 
