@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	toolscachek8s "k8s.io/client-go/tools/cache"
 	ccache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -109,11 +110,19 @@ type fakeCluster struct {
 	client client.Client
 	cache  *fakeCache
 	scheme *runtime.Scheme
+	host   string
 }
 
 func (f *fakeCluster) GetClient() client.Client   { return f.client }
 func (f *fakeCluster) GetCache() ccache.Cache     { return f.cache }
 func (f *fakeCluster) GetScheme() *runtime.Scheme { return f.scheme }
+func (f *fakeCluster) GetConfig() *rest.Config {
+	host := f.host
+	if host == "" {
+		host = "test-host"
+	}
+	return &rest.Config{Host: host}
+}
 
 // fakeClient exposes the underlying informer so eviction tests can fire events,
 // while itself acting as a cluster.Cluster wrapping the fake client.Client.
@@ -270,7 +279,7 @@ func clusterFor(t *testing.T, inner client.Client) cluster.Cluster {
 // cachingFrom builds a *Overlay over the given cluster.Cluster.
 func cachingFrom(t *testing.T, cl cluster.Cluster, conf Config) *Overlay {
 	t.Helper()
-	wrapped, runnable, err := WrapCluster(cl, conf)
+	wrapped, runnable, err := WrapCluster(cl, conf, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -321,7 +330,7 @@ func waitFor(t *testing.T, cond func() bool) {
 func TestNewUnknownGVKError(t *testing.T) {
 	_, _, err := WrapCluster(newTestClient(t).fakeCluster, Config{
 		GVKs: []string{"cortex.cloud/v1alpha1/DoesNotExist"},
-	})
+	}, nil)
 	if err == nil {
 		t.Fatalf("expected error for unknown GVK, got nil")
 	}
@@ -348,7 +357,7 @@ func TestNewExplicitTTL(t *testing.T) {
 
 func TestNewWrapsClusterClientAndIndexer(t *testing.T) {
 	inner := newTestClient(t)
-	wrapped, runnable, err := WrapCluster(inner.fakeCluster, reservationConfig())
+	wrapped, runnable, err := WrapCluster(inner.fakeCluster, reservationConfig(), nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
