@@ -218,7 +218,6 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	// onto specific hosts/nodes (force_hosts/force_nodes) and no _nova_check_type
 	// is set, Nova skips its filters entirely. We do the same here and return
 	// only the forced hosts, bypassing pipeline inference and execution.
-	// See: https://github.com/sapcc/nova/blob/05f384a938e3d6a8740a8f404d79d767d6ebdbd7/nova/scheduler/host_manager.py#L610-L620
 	if requestData.IsForcedDestination() {
 		hosts := requestData.ForcedHosts()
 		logger.Info("forced destination request, skipping filters", "hosts", hosts)

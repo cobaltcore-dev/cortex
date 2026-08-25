@@ -94,7 +94,7 @@ func (r ExternalSchedulerRequest) Filter(includedHosts map[string]float64) lib.F
 // This replicates Nova's native behavior: when force_hosts or force_nodes is
 // set and the scheduler hint "_nova_check_type" is not set, Nova skips the
 // filters and returns only the forced destinations.
-// See: nova/scheduler/host_manager.py get_filtered_hosts.
+// See: https://github.com/sapcc/nova/blob/05f384a938e3d6a8740a8f404d79d767d6ebdbd7/nova/scheduler/host_manager.py#L610-L620
 func (r ExternalSchedulerRequest) IsForcedDestination() bool {
 	forceHosts := r.Spec.Data.ForceHosts != nil && len(*r.Spec.Data.ForceHosts) > 0
 	forceNodes := r.Spec.Data.ForceNodes != nil && len(*r.Spec.Data.ForceNodes) > 0
