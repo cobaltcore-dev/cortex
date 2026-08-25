@@ -214,6 +214,27 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// Replicate Nova's forced-destination behavior: when the request is forced
+	// onto specific hosts/nodes (force_hosts/force_nodes) and no _nova_check_type
+	// is set, Nova skips its filters entirely. We do the same here and return
+	// only the forced hosts, bypassing pipeline inference and execution.
+	// See: https://github.com/sapcc/nova/blob/05f384a938e3d6a8740a8f404d79d767d6ebdbd7/nova/scheduler/host_manager.py#L610-L620
+	if requestData.IsForcedDestination() {
+		hosts := requestData.ForcedHosts()
+		logger.Info("forced destination request, skipping filters",
+			"forceHosts", requestData.Spec.Data.ForceHosts,
+			"forceNodes", requestData.Spec.Data.ForceNodes,
+			"hosts", hosts)
+		response := api.ExternalSchedulerResponse{Hosts: hosts}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			c.Respond(logger, http.StatusInternalServerError, err, "failed to encode response")
+			return
+		}
+		c.Respond(logger, http.StatusOK, nil, "Success")
+		return
+	}
+
 	// If the pipeline name is not set, infer it from the request data.
 	if requestData.Pipeline == "" {
 		var err error

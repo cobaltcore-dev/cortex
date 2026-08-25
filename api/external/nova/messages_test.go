@@ -569,3 +569,178 @@ func TestNovaImageMeta_GetHypervisorType(t *testing.T) {
 		})
 	}
 }
+
+func strPtrSlice(s ...string) *[]string {
+	out := s
+	return &out
+}
+
+func TestIsForcedDestination(t *testing.T) {
+	tests := []struct {
+		name       string
+		forceHosts *[]string
+		forceNodes *[]string
+		hints      map[string]any
+		expected   bool
+	}{
+		{
+			name:     "no force",
+			expected: false,
+		},
+		{
+			name:       "empty force_hosts slice",
+			forceHosts: strPtrSlice(),
+			expected:   false,
+		},
+		{
+			name:       "force_hosts set, no check_type",
+			forceHosts: strPtrSlice("node017-bb545"),
+			expected:   true,
+		},
+		{
+			name:       "force_nodes set, no check_type",
+			forceNodes: strPtrSlice("domain-c123"),
+			expected:   true,
+		},
+		{
+			name:       "force_hosts set with check_type rebuild",
+			forceHosts: strPtrSlice("node017-bb545"),
+			hints:      map[string]any{"_nova_check_type": "rebuild"},
+			expected:   false,
+		},
+		{
+			name:       "force_hosts set with check_type as list",
+			forceHosts: strPtrSlice("node017-bb545"),
+			hints:      map[string]any{"_nova_check_type": []any{"resize"}},
+			expected:   false,
+		},
+		{
+			name:       "force_hosts set with empty check_type",
+			forceHosts: strPtrSlice("node017-bb545"),
+			hints:      map[string]any{"_nova_check_type": ""},
+			expected:   true,
+		},
+		{
+			name:       "force_hosts set, hints without check_type",
+			forceHosts: strPtrSlice("node017-bb545"),
+			hints:      map[string]any{"some_other_hint": "value"},
+			expected:   true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := ExternalSchedulerRequest{
+				Spec: NovaObject[NovaSpec]{
+					Data: NovaSpec{
+						ForceHosts:     tt.forceHosts,
+						ForceNodes:     tt.forceNodes,
+						SchedulerHints: tt.hints,
+					},
+				},
+			}
+			if got := req.IsForcedDestination(); got != tt.expected {
+				t.Errorf("expected %v, got %v", tt.expected, got)
+			}
+		})
+	}
+}
+
+func TestForcedHosts(t *testing.T) {
+	hosts := []ExternalSchedulerHost{
+		{ComputeHost: "node017-bb545", HypervisorHostname: "domain-c17"},
+		{ComputeHost: "node018-bb545", HypervisorHostname: "domain-c18"},
+		{ComputeHost: "NODE019-bb545", HypervisorHostname: "domain-c19"},
+	}
+	tests := []struct {
+		name       string
+		hosts      []ExternalSchedulerHost
+		forceHosts *[]string
+		forceNodes *[]string
+		expected   []string
+	}{
+		{
+			name:       "match single host",
+			forceHosts: strPtrSlice("node017-bb545"),
+			expected:   []string{"node017-bb545"},
+		},
+		{
+			name:       "match host case-insensitive",
+			forceHosts: strPtrSlice("node019-bb545"),
+			expected:   []string{"NODE019-bb545"},
+		},
+		{
+			name:       "match node case-sensitive",
+			forceNodes: strPtrSlice("domain-c18"),
+			expected:   []string{"node018-bb545"},
+		},
+		{
+			name:       "node case-sensitive no match",
+			forceNodes: strPtrSlice("DOMAIN-C18"),
+			expected:   []string{},
+		},
+		{
+			name:       "intersection of host and node",
+			forceHosts: strPtrSlice("node017-bb545", "node018-bb545"),
+			forceNodes: strPtrSlice("domain-c18"),
+			expected:   []string{"node018-bb545"},
+		},
+		{
+			name:       "intersection empty",
+			forceHosts: strPtrSlice("node017-bb545"),
+			forceNodes: strPtrSlice("domain-c18"),
+			expected:   []string{},
+		},
+		{
+			name:       "no match returns empty",
+			forceHosts: strPtrSlice("unknown-host"),
+			expected:   []string{},
+		},
+		{
+			name: "multi-node host deduplicated by force_hosts",
+			hosts: []ExternalSchedulerHost{
+				{ComputeHost: "hostA", HypervisorHostname: "node1"},
+				{ComputeHost: "hostA", HypervisorHostname: "node2"},
+				{ComputeHost: "hostB", HypervisorHostname: "node1"},
+			},
+			forceHosts: strPtrSlice("hostA"),
+			expected:   []string{"hostA"},
+		},
+		{
+			name: "multi-node host intersection picks single node",
+			hosts: []ExternalSchedulerHost{
+				{ComputeHost: "hostA", HypervisorHostname: "node1"},
+				{ComputeHost: "hostA", HypervisorHostname: "node2"},
+				{ComputeHost: "hostB", HypervisorHostname: "node1"},
+			},
+			forceHosts: strPtrSlice("hostA"),
+			forceNodes: strPtrSlice("node1"),
+			expected:   []string{"hostA"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			candidates := tt.hosts
+			if candidates == nil {
+				candidates = hosts
+			}
+			req := ExternalSchedulerRequest{
+				Hosts: candidates,
+				Spec: NovaObject[NovaSpec]{
+					Data: NovaSpec{
+						ForceHosts: tt.forceHosts,
+						ForceNodes: tt.forceNodes,
+					},
+				},
+			}
+			got := req.ForcedHosts()
+			if len(got) != len(tt.expected) {
+				t.Fatalf("expected %v, got %v", tt.expected, got)
+			}
+			for i, h := range tt.expected {
+				if got[i] != h {
+					t.Errorf("expected host[%d]=%s, got %s", i, h, got[i])
+				}
+			}
+		})
+	}
+}
