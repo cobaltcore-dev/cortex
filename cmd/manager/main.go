@@ -394,7 +394,8 @@ func main() {
 	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
 
 	if c := conf.GetConfigOrDie[cache.RootConfig](); c.Cache.Enabled {
-		multiclusterClient.Wrappers = append(multiclusterClient.Wrappers, cache.NewWrapper(c.Cache))
+		cacheWrapper := cache.NewWrapper(mgr, c.Cache)
+		multiclusterClient.Wrappers = append(multiclusterClient.Wrappers, cacheWrapper)
 	}
 	if err := multiclusterClient.InitFromConf(ctx, mgr, multiclusterClientConfig); err != nil {
 		setupLog.Error(err, "unable to initialize multicluster client")

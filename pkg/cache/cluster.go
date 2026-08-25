@@ -33,22 +33,27 @@ func (w *overlayCluster) GetFieldIndexer() client.FieldIndexer { return w.cache 
 
 // Wrapper implements the multicluster.ClusterWrapper interface for the overlay
 // cache. It does not import the multicluster package; interface satisfaction is
-// structural and checked at the call site (e.g. in main.go).
-type Wrapper struct{ conf Config }
+// structural and checked at the call site (e.g. in main.go). It captures the
+// manager at construction time because the ClusterWrapper interface does not
+// pass a manager to WrapCluster.
+type Wrapper struct {
+	mgr  manager.Manager
+	conf Config
+}
 
 // NewWrapper returns a Wrapper that applies the overlay cache to any cluster
-// passed to WrapCluster.
-func NewWrapper(conf Config) *Wrapper { return &Wrapper{conf} }
+// passed to WrapCluster, registering the overlay's lifecycle Runnable with mgr.
+func NewWrapper(mgr manager.Manager, conf Config) *Wrapper { return &Wrapper{mgr, conf} }
 
 // WrapCluster applies the overlay cache to cl, registers the overlay's lifecycle
-// Runnable with mgr, and returns the wrapped cluster.
+// Runnable with the captured manager, and returns the wrapped cluster.
 // Satisfies multicluster.ClusterWrapper structurally.
-func (w *Wrapper) WrapCluster(mgr manager.Manager, cl cluster.Cluster) (cluster.Cluster, error) {
+func (w *Wrapper) WrapCluster(cl cluster.Cluster) (cluster.Cluster, error) {
 	wrapped, cleanUpRunnable, err := WrapCluster(cl, w.conf)
 	if err != nil {
 		return nil, err
 	}
-	if err := mgr.Add(cleanUpRunnable); err != nil {
+	if err := w.mgr.Add(cleanUpRunnable); err != nil {
 		return nil, err
 	}
 	return wrapped, nil

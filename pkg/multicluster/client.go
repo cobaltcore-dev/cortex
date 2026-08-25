@@ -20,20 +20,21 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // ClusterWrapper can be registered on the Client to transparently transform each
-// cluster before it is stored for routing. WrapCluster receives the manager and
-// the current cluster: raw for the first wrapper in the chain, or the previous
-// wrapper's result for subsequent ones. It must return the (possibly wrapped)
-// cluster to use for routing and is responsible for registering any lifecycle
-// Runnables with mgr itself. Wrappers are applied in order for every home and
-// remote cluster during InitFromConf. For remote clusters the original unwrapped
+// cluster before it is stored for routing. WrapCluster receives the current
+// cluster: raw for the first wrapper in the chain, or the previous wrapper's
+// result for subsequent ones. It must return the (possibly wrapped) cluster to
+// use for routing and is responsible for registering any lifecycle Runnables
+// with the manager itself. Because the manager is not passed to WrapCluster, a
+// wrapper that needs it must capture it at construction time (e.g. by storing it
+// on the wrapper). Wrappers are applied in order for every home and remote
+// cluster during InitFromConf. For remote clusters the original unwrapped
 // cluster is always added to the manager separately so its informers start
 // independently of wrapping.
 type ClusterWrapper interface {
-	WrapCluster(mgr manager.Manager, cl cluster.Cluster) (cluster.Cluster, error)
+	WrapCluster(cl cluster.Cluster) (cluster.Cluster, error)
 }
 
 // A remote cluster with routing labels used to match resources to clusters.
@@ -110,7 +111,7 @@ func (c *Client) InitFromConf(ctx context.Context, mgr ctrl.Manager, conf Client
 			}
 			resolvedGVKs = append(resolvedGVKs, gvk)
 		}
-		cl, err := c.AddRemote(ctx, mgr, remote.Host, remote.CACert, remote.InsecureSkipTLSVerify, remote.Labels, resolvedGVKs...)
+		cl, err := c.AddRemote(ctx, remote.Host, remote.CACert, remote.InsecureSkipTLSVerify, remote.Labels, resolvedGVKs...)
 		if err != nil {
 			return err
 		}
@@ -124,7 +125,7 @@ func (c *Client) InitFromConf(ctx context.Context, mgr ctrl.Manager, conf Client
 	// own Runnables) and must NOT re-Start the inner home cluster.
 	if c.HomeCluster != nil {
 		for _, w := range c.Wrappers {
-			wrapped, werr := w.WrapCluster(mgr, c.HomeCluster)
+			wrapped, werr := w.WrapCluster(c.HomeCluster)
 			if werr != nil {
 				return werr
 			}
@@ -149,7 +150,7 @@ func (c *Client) InitFromConf(ctx context.Context, mgr ctrl.Manager, conf Client
 // responsible for adding its own lifecycle Runnables to mgr directly.
 // The wrapped cluster is stored in remoteClusters so all routing goes through
 // any per-cluster wrapper.
-func (c *Client) AddRemote(ctx context.Context, mgr manager.Manager, host, caCert string, insecureSkipTLSVerify bool, labels map[string]string, gvks ...schema.GroupVersionKind) (cluster.Cluster, error) {
+func (c *Client) AddRemote(ctx context.Context, host, caCert string, insecureSkipTLSVerify bool, labels map[string]string, gvks ...schema.GroupVersionKind) (cluster.Cluster, error) {
 	log := ctrl.LoggerFrom(ctx)
 	homeRestConfig := *c.HomeRestConfig
 	restConfigCopy := homeRestConfig
@@ -174,7 +175,7 @@ func (c *Client) AddRemote(ctx context.Context, mgr manager.Manager, host, caCer
 	// lifecycle Runnables with mgr directly.
 	stored := cl
 	for _, w := range c.Wrappers {
-		wrapped, werr := w.WrapCluster(mgr, stored)
+		wrapped, werr := w.WrapCluster(stored)
 		if werr != nil {
 			return nil, werr
 		}
