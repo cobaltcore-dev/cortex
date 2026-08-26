@@ -27,7 +27,7 @@ func makeQuotaEnforcementRequest(projectID, az, hwVersion string, memoryMB, numI
 		VCPUs:    4,
 	}
 	if hwVersion != "" {
-		flavor.ExtraSpecs = map[string]string{"hw_version": hwVersion}
+		flavor.ExtraSpecs = map[string]string{"quota:hw_version": hwVersion}
 	} else {
 		flavor.ExtraSpecs = map[string]string{}
 	}
