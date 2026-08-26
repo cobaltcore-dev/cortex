@@ -37,19 +37,30 @@ func (w *overlayCluster) GetFieldIndexer() client.FieldIndexer { return w.cache 
 // manager at construction time because the ClusterWrapper interface does not
 // pass a manager to WrapCluster.
 type Wrapper struct {
-	mgr  manager.Manager
-	conf Config
+	mgr     manager.Manager
+	conf    Config
+	monitor *Monitor
 }
 
 // NewWrapper returns a Wrapper that applies the overlay cache to any cluster
 // passed to WrapCluster, registering the overlay's lifecycle Runnable with mgr.
-func NewWrapper(mgr manager.Manager, conf Config) *Wrapper { return &Wrapper{mgr, conf} }
+// The monitor is shared across every wrapped cluster and is supplied by the
+// caller (so this library package hardcodes no project-specific metric prefix);
+// it may be nil to disable overlay size metrics. Register it on the metrics
+// registry from the caller.
+func NewWrapper(mgr manager.Manager, conf Config, monitor *Monitor) *Wrapper {
+	return &Wrapper{
+		mgr:     mgr,
+		conf:    conf,
+		monitor: monitor,
+	}
+}
 
 // WrapCluster applies the overlay cache to cl, registers the overlay's lifecycle
 // Runnable with the captured manager, and returns the wrapped cluster.
 // Satisfies multicluster.ClusterWrapper structurally.
 func (w *Wrapper) WrapCluster(cl cluster.Cluster) (cluster.Cluster, error) {
-	wrapped, cleanUpRunnable, err := WrapCluster(cl, w.conf)
+	wrapped, cleanUpRunnable, err := WrapCluster(cl, w.conf, w.monitor)
 	if err != nil {
 		return nil, err
 	}

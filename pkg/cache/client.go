@@ -76,6 +76,13 @@ type Overlay struct {
 	ttl           time.Duration
 	gvks          map[schema.GroupVersionKind]bool
 
+	// monitor observes the overlay size per GVK. It may be nil (metrics off);
+	// noteSizeLocked and Monitor.observeSize are nil-safe. host identifies this
+	// overlay's cluster (its rest config Host) so a single shared Monitor can
+	// distinguish home from remotes.
+	monitor *Monitor
+	host    string
+
 	mu       sync.RWMutex
 	byGVK    map[schema.GroupVersionKind]map[client.ObjectKey]*entry
 	indexers map[schema.GroupVersionKind]map[string]client.IndexerFunc
@@ -99,7 +106,11 @@ type Overlay struct {
 // eviction handlers (reading informers from inner.GetCache()) and runs the TTL
 // cleanup loop. The caller MUST add it to the manager. It does NOT re-Start the
 // inner cluster — the manager owns the inner cluster's lifecycle separately.
-func WrapCluster(inner cluster.Cluster, conf Config) (cluster.Cluster, manager.Runnable, error) {
+//
+// monitor observes the overlay size per GVK and may be nil (metrics off). It is
+// internal to this package (only Wrapper and tests call WrapCluster), so this
+// signature does not touch the multicluster client.
+func WrapCluster(inner cluster.Cluster, conf Config, monitor *Monitor) (cluster.Cluster, manager.Runnable, error) {
 	scheme := inner.GetScheme()
 	gvks, err := resolveGVKs(scheme, conf.GVKs)
 	if err != nil {
@@ -115,6 +126,8 @@ func WrapCluster(inner cluster.Cluster, conf Config) (cluster.Cluster, manager.R
 		scheme:        scheme,
 		ttl:           ttl,
 		gvks:          gvks,
+		monitor:       monitor,
+		host:          inner.GetConfig().Host,
 		byGVK:         make(map[schema.GroupVersionKind]map[client.ObjectKey]*entry),
 		indexers:      make(map[schema.GroupVersionKind]map[string]client.IndexerFunc),
 		writeLocks:    newKeyedMutex(),
@@ -186,6 +199,7 @@ func (c *Overlay) upsert(gvk schema.GroupVersionKind, obj client.Object) {
 		deleted:         false,
 		expiresAt:       time.Now().Add(c.ttl),
 	}
+	c.noteSizeLocked(gvk)
 }
 
 // tombstone marks the object as deleted in the overlay so it is filtered out
@@ -201,6 +215,7 @@ func (c *Overlay) tombstone(gvk schema.GroupVersionKind, obj client.Object) {
 		deleted:         true,
 		expiresAt:       time.Now().Add(c.ttl),
 	}
+	c.noteSizeLocked(gvk)
 }
 
 // evictIfSeen removes the overlay entry for obj if the informer-observed object
@@ -227,6 +242,7 @@ func (c *Overlay) evictIfSeen(gvk schema.GroupVersionKind, obj client.Object) {
 		return
 	}
 	delete(entries, key)
+	c.noteSizeLocked(gvk)
 }
 
 // getEntry returns the overlay entry for the key, if present.
@@ -245,11 +261,16 @@ func (c *Overlay) getEntry(gvk schema.GroupVersionKind, key client.ObjectKey) (*
 func (c *Overlay) cleanupExpired(now time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for _, entries := range c.byGVK {
+	for gvk, entries := range c.byGVK {
+		changed := false
 		for key, e := range entries {
 			if now.After(e.expiresAt) {
 				delete(entries, key)
+				changed = true
 			}
+		}
+		if changed {
+			c.noteSizeLocked(gvk)
 		}
 	}
 }
@@ -270,6 +291,12 @@ func (c *Overlay) ensureGVK(gvk schema.GroupVersionKind) {
 	if c.byGVK[gvk] == nil {
 		c.byGVK[gvk] = make(map[client.ObjectKey]*entry)
 	}
+}
+
+// noteSizeLocked reports the current overlay size for the GVK to the monitor.
+// Callers must hold c.mu. Nil-safe when there is no monitor.
+func (c *Overlay) noteSizeLocked(gvk schema.GroupVersionKind) {
+	c.monitor.observeSize(c.host, gvk, len(c.byGVK[gvk]))
 }
 
 // overlayList merges the overlay entries for the GVK into the informer result,
@@ -463,6 +490,7 @@ func (c *Overlay) DeleteAllOf(ctx context.Context, obj client.Object, opts ...cl
 			expiresAt:       time.Now().Add(c.ttl),
 		}
 	}
+	c.noteSizeLocked(gvk)
 	return nil
 }
 

@@ -393,8 +393,11 @@ func main() {
 	}
 	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
 
+	var cacheMonitor *cache.Monitor
+	var cacheWrapper *cache.Wrapper
 	if c := conf.GetConfigOrDie[cache.RootConfig](); c.Cache.Enabled {
-		cacheWrapper := cache.NewWrapper(mgr, c.Cache)
+		cacheMonitor = cache.NewMonitor("cortex_")
+		cacheWrapper = cache.NewWrapper(mgr, c.Cache, cacheMonitor)
 		multiclusterClient.Wrappers = append(multiclusterClient.Wrappers, cacheWrapper)
 	}
 	if err := multiclusterClient.InitFromConf(ctx, mgr, multiclusterClientConfig); err != nil {
@@ -408,6 +411,9 @@ func main() {
 	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, metricsConfig)
 	metrics.Registry.MustRegister(&logMetricsMonitor)
 	metrics.Registry.MustRegister(multiclusterMonitor)
+	if cacheMonitor != nil {
+		metrics.Registry.MustRegister(cacheMonitor)
+	}
 
 	// TODO: Remove me after scheduling pipeline steps don't require DB connections anymore.
 	metrics.Registry.MustRegister(&db.Monitor)
