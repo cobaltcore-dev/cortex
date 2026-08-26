@@ -68,7 +68,7 @@ SELECT
     END AS disabled_reason,
     -- Physical host size category of a single host inside the building block.
     -- The size is first rounded to whole GiB; if that is at least 1024 GiB it is
-    -- reported in TiB ("<n>TiB"), otherwise in GiB ("<n>GiB"). Rounding to GiB
+    -- reported in TiB, otherwise in GiB. Rounding to GiB
     -- first avoids a value like 1023.6 GiB being shown as "1024GiB" instead of
     -- "1TiB". "unknown" when the memory inventory is missing.
     CASE
