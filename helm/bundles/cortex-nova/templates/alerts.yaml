@@ -751,15 +751,13 @@ spec:
           affected resources and the routing configuration.
 
     - alert: CortexNovaCacheOverlayNotDraining
-      # The pending-cache overlay holds writes only until the informer observes
-      # them, which normally happens within milliseconds. A plain gauge sampled
-      # at scrape time would therefore almost always read zero, so the monitor
-      # exposes a high-watermark (reset on each scrape) instead. A watermark that
-      # stays above the threshold across every scrape in the `for` window means
-      # entries are piling up rather than draining — i.e. eviction is broken
-      # (informer lag, UID mismatch, or TTL fallback firing).
+      # The cache overlay holds writes only until the informer observes
+      # them, which normally happens within milliseconds. If the current entry
+      # count stays above the threshold for the entire `for` window, entries are
+      # piling up rather than draining — i.e. eviction is broken (informer lag,
+      # UID mismatch, or TTL fallback firing).
       expr: |
-        max by (gvk, host) (cortex_cache_overlay_entries_max{service="cortex-nova-metrics"}) > {{ .Values.alerts.thresholds.cacheOverlayMaxEntries }}
+        max by (gvk, host) (cortex_cache_overlay_entries{service="cortex-nova-metrics"}) > {{ .Values.alerts.thresholds.cacheOverlayMaxEntries }}
       for: 5m
       labels:
         context: multicluster
@@ -775,7 +773,7 @@ spec:
           configured threshold across the whole alert window. The overlay is only
           meant to bridge the short gap between a write and the informer observing
           it, so it should drain back to zero within milliseconds. A sustained
-          non-zero high-watermark indicates entries are not being evicted —
+          non-zero current size indicates entries are not being evicted —
           typically informer lag, a UID mismatch between the write and the observed
           object, or the TTL fallback repeatedly firing. Investigate the informer
           for this GVK/cluster and the overlay eviction logs.
