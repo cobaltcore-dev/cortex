@@ -82,13 +82,25 @@ type fakeCluster struct {
 	fakeClient   client.Client
 	fakeCache    *fakeCache
 	fakeRecorder events.EventRecorder
+	scheme       *runtime.Scheme
 }
 
 func (f *fakeCluster) GetClient() client.Client {
 	return f.fakeClient
 }
 
+func (f *fakeCluster) GetScheme() *runtime.Scheme {
+	return f.scheme
+}
+
 func (f *fakeCluster) GetCache() cache.Cache {
+	return f.fakeCache
+}
+
+// GetFieldIndexer returns the fake cache, which implements client.FieldIndexer
+// via its IndexField method. This mirrors production, where an unwrapped
+// cluster's field indexer is its cache.
+func (f *fakeCluster) GetFieldIndexer() client.FieldIndexer {
 	return f.fakeCache
 }
 
@@ -107,6 +119,7 @@ func newFakeCluster(scheme *runtime.Scheme, objs ...client.Object) *fakeCluster 
 	return &fakeCluster{
 		fakeClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build(),
 		fakeCache:  &fakeCache{},
+		scheme:     scheme,
 	}
 }
 
@@ -115,6 +128,7 @@ func newFakeClusterWithCache(scheme *runtime.Scheme, fakeCache *fakeCache, objs 
 	return &fakeCluster{
 		fakeClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build(),
 		fakeCache:  fakeCache,
+		scheme:     scheme,
 	}
 }
 
