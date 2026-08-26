@@ -173,7 +173,7 @@ spec:
       - name: identity-projects
       - name: identity-domains
     knowledges:
-      - name: host-details
+      - name: vmware-host-details
   description: |
     This KPI tracks the resource utilization of projects running VMs on VMware hosts.
 ---
@@ -203,7 +203,7 @@ spec:
   impl: vmware_host_capacity_kpi
   dependencies:
     knowledges:
-      - name: host-details
+      - name: vmware-host-details
       - name: host-utilization
   description: |
     This KPI tracks the capacity and utilization of VMware hosts in terms of CPU, RAM, and disk resources.

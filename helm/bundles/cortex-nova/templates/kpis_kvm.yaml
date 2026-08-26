@@ -9,7 +9,6 @@ spec:
   impl: kvm_host_capacity_kpi
   dependencies:
     knowledges:
-      - name: host-details
       - name: host-utilization
   description: |
     This KPI tracks the total, utilized, reserved and failover capacity of KVM hosts.

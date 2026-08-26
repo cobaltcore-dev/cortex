@@ -450,7 +450,7 @@ func TestKnowledgeReconciler_Reconcile_SupportedExtractors(t *testing.T) {
 		"vm_life_span_histogram_extractor",
 		"host_az_extractor",
 		"host_pinned_projects_extractor",
-		"sap_host_details_extractor",
+		"vmware_host_details_extractor",
 	}
 
 	for _, extractorName := range supportedExtractors {

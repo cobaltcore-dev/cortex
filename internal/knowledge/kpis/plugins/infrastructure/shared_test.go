@@ -58,7 +58,7 @@ func TestVMwareHost_GetHostLabels(t *testing.T) {
 	}{
 		{
 			name: "all optional fields nil",
-			host: vmwareHost{compute.HostDetails{
+			host: vmwareHost{compute.VMwareHostDetails{
 				AvailabilityZone: "az1",
 				ComputeHost:      "nova-compute-1",
 				CPUArchitecture:  "cascade-lake",
@@ -73,7 +73,7 @@ func TestVMwareHost_GetHostLabels(t *testing.T) {
 		},
 		{
 			name: "disabled reason set",
-			host: vmwareHost{compute.HostDetails{
+			host: vmwareHost{compute.VMwareHostDetails{
 				AvailabilityZone: "az2",
 				ComputeHost:      "nova-compute-2",
 				DisabledReason:   str("scheduled-maintenance"),
@@ -82,7 +82,7 @@ func TestVMwareHost_GetHostLabels(t *testing.T) {
 		},
 		{
 			name: "pinned projects set",
-			host: vmwareHost{compute.HostDetails{
+			host: vmwareHost{compute.VMwareHostDetails{
 				AvailabilityZone: "az1",
 				ComputeHost:      "nova-compute-3",
 				PinnedProjects:   str("proj-a,proj-b"),
@@ -91,7 +91,7 @@ func TestVMwareHost_GetHostLabels(t *testing.T) {
 		},
 		{
 			name: "decommissioned and external customer",
-			host: vmwareHost{compute.HostDetails{
+			host: vmwareHost{compute.VMwareHostDetails{
 				AvailabilityZone: "az3",
 				ComputeHost:      "nova-compute-4",
 				Decommissioned:   true,
@@ -101,7 +101,7 @@ func TestVMwareHost_GetHostLabels(t *testing.T) {
 		},
 		{
 			name: "physical host size set",
-			host: vmwareHost{compute.HostDetails{
+			host: vmwareHost{compute.VMwareHostDetails{
 				AvailabilityZone: "az1",
 				ComputeHost:      "nova-compute-5",
 				PhysicalHostSize: "4TiB",

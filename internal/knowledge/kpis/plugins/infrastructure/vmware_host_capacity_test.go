@@ -18,7 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func buildHostCapacityClient(t *testing.T, hostDetails []compute.HostDetails, utilizations []compute.HostUtilization) *fake.ClientBuilder {
+func buildHostCapacityClient(t *testing.T, hostDetails []compute.VMwareHostDetails, utilizations []compute.HostUtilization) *fake.ClientBuilder {
 	t.Helper()
 	scheme, err := v1alpha1.SchemeBuilder.Build()
 	if err != nil {
@@ -34,7 +34,7 @@ func buildHostCapacityClient(t *testing.T, hostDetails []compute.HostDetails, ut
 	}
 	return fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(
 		&v1alpha1.Knowledge{
-			ObjectMeta: v1.ObjectMeta{Name: hostDetailsKnowledgeName},
+			ObjectMeta: v1.ObjectMeta{Name: vmwareHostDetailsKnowledgeName},
 			Status:     v1alpha1.KnowledgeStatus{Raw: rawDetails},
 		},
 		&v1alpha1.Knowledge{
@@ -55,11 +55,11 @@ func TestVMwareHostCapacityKPI_Init(t *testing.T) {
 }
 
 func TestVMwareHostCapacityKPI_getVMwareHosts(t *testing.T) {
-	hostDetails := []compute.HostDetails{
-		{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware},
-		{ComputeHost: "nova-compute-2", HypervisorFamily: hypervisorFamilyVMware},
-		{ComputeHost: "nova-compute-ironic-1", HypervisorType: vmwareIronicHypervisorType, HypervisorFamily: hypervisorFamilyVMware},
-		{ComputeHost: "nova-compute-3", HypervisorFamily: "other"},
+	// The extractor SQL is responsible for filtering out KVM and ironic hosts,
+	// so the KPI returns every host present in the knowledge unchanged.
+	hostDetails := []compute.VMwareHostDetails{
+		{ComputeHost: "nova-compute-1"},
+		{ComputeHost: "nova-compute-2"},
 	}
 
 	client := buildHostCapacityClient(t, hostDetails, nil)
@@ -155,14 +155,14 @@ func TestVMwareHostCapacityKPI_getHostUtilizations(t *testing.T) {
 func TestVMwareHostCapacityKPI_Collect(t *testing.T) {
 	tests := []struct {
 		name            string
-		hostDetails     []compute.HostDetails
+		hostDetails     []compute.VMwareHostDetails
 		utilizations    []compute.HostUtilization
 		expectedMetrics []collectedVMwareMetric
 	}{
 		{
 			name: "single host emits usage and total metrics",
-			hostDetails: []compute.HostDetails{
-				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
+			hostDetails: []compute.VMwareHostDetails{
+				{ComputeHost: "nova-compute-1", AvailabilityZone: "az1"},
 			},
 			utilizations: []compute.HostUtilization{
 				{
@@ -186,9 +186,9 @@ func TestVMwareHostCapacityKPI_Collect(t *testing.T) {
 		},
 		{
 			name: "multiple hosts each emit their own metrics",
-			hostDetails: []compute.HostDetails{
-				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
-				{ComputeHost: "nova-compute-2", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az2"},
+			hostDetails: []compute.VMwareHostDetails{
+				{ComputeHost: "nova-compute-1", AvailabilityZone: "az1"},
+				{ComputeHost: "nova-compute-2", AvailabilityZone: "az2"},
 			},
 			utilizations: []compute.HostUtilization{
 				{ComputeHost: "nova-compute-1", VCPUsUsed: 2, TotalVCPUsAllocatable: 8, RAMUsedMB: 512, TotalRAMAllocatableMB: 2048, DiskUsedGB: 10, TotalDiskAllocatableGB: 100},
@@ -210,55 +210,17 @@ func TestVMwareHostCapacityKPI_Collect(t *testing.T) {
 			},
 		},
 		{
-			name: "ironic hosts are excluded",
-			hostDetails: []compute.HostDetails{
-				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
-				{ComputeHost: "nova-compute-ironic-1", HypervisorType: vmwareIronicHypervisorType, HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
-			},
-			utilizations: []compute.HostUtilization{
-				{ComputeHost: "nova-compute-1", VCPUsUsed: 2, TotalVCPUsAllocatable: 8, RAMUsedMB: 512, TotalRAMAllocatableMB: 2048, DiskUsedGB: 10, TotalDiskAllocatableGB: 100},
-				{ComputeHost: "nova-compute-ironic-1", VCPUsUsed: 4, TotalVCPUsAllocatable: 16, RAMUsedMB: 1024, TotalRAMAllocatableMB: 4096, DiskUsedGB: 20, TotalDiskAllocatableGB: 200},
-			},
-			expectedMetrics: []collectedVMwareMetric{
-				{Name: "cortex_vmware_host_capacity_usage", Labels: hostCapacityLabels("nova-compute-1", "az1", "cpu"), Value: 2},
-				{Name: "cortex_vmware_host_capacity_usage", Labels: hostCapacityLabels("nova-compute-1", "az1", "ram"), Value: 512 * 1024 * 1024},
-				{Name: "cortex_vmware_host_capacity_usage", Labels: hostCapacityLabels("nova-compute-1", "az1", "disk"), Value: 10 * 1024 * 1024 * 1024},
-				{Name: "cortex_vmware_host_capacity_total", Labels: hostCapacityLabels("nova-compute-1", "az1", "cpu"), Value: 8},
-				{Name: "cortex_vmware_host_capacity_total", Labels: hostCapacityLabels("nova-compute-1", "az1", "ram"), Value: 2048 * 1024 * 1024},
-				{Name: "cortex_vmware_host_capacity_total", Labels: hostCapacityLabels("nova-compute-1", "az1", "disk"), Value: 100 * 1024 * 1024 * 1024},
-			},
-		},
-		{
-			name: "non-vmware hosts are excluded",
-			hostDetails: []compute.HostDetails{
-				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
-				{ComputeHost: "nova-compute-2", HypervisorFamily: "kvm", AvailabilityZone: "az1"},
-			},
-			utilizations: []compute.HostUtilization{
-				{ComputeHost: "nova-compute-1", VCPUsUsed: 2, TotalVCPUsAllocatable: 8, RAMUsedMB: 512, TotalRAMAllocatableMB: 2048, DiskUsedGB: 10, TotalDiskAllocatableGB: 100},
-				{ComputeHost: "nova-compute-2", VCPUsUsed: 4, TotalVCPUsAllocatable: 16, RAMUsedMB: 1024, TotalRAMAllocatableMB: 4096, DiskUsedGB: 20, TotalDiskAllocatableGB: 200},
-			},
-			expectedMetrics: []collectedVMwareMetric{
-				{Name: "cortex_vmware_host_capacity_usage", Labels: hostCapacityLabels("nova-compute-1", "az1", "cpu"), Value: 2},
-				{Name: "cortex_vmware_host_capacity_usage", Labels: hostCapacityLabels("nova-compute-1", "az1", "ram"), Value: 512 * 1024 * 1024},
-				{Name: "cortex_vmware_host_capacity_usage", Labels: hostCapacityLabels("nova-compute-1", "az1", "disk"), Value: 10 * 1024 * 1024 * 1024},
-				{Name: "cortex_vmware_host_capacity_total", Labels: hostCapacityLabels("nova-compute-1", "az1", "cpu"), Value: 8},
-				{Name: "cortex_vmware_host_capacity_total", Labels: hostCapacityLabels("nova-compute-1", "az1", "ram"), Value: 2048 * 1024 * 1024},
-				{Name: "cortex_vmware_host_capacity_total", Labels: hostCapacityLabels("nova-compute-1", "az1", "disk"), Value: 100 * 1024 * 1024 * 1024},
-			},
-		},
-		{
 			name: "host without matching utilization produces no metrics",
-			hostDetails: []compute.HostDetails{
-				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
+			hostDetails: []compute.VMwareHostDetails{
+				{ComputeHost: "nova-compute-1", AvailabilityZone: "az1"},
 			},
 			utilizations:    []compute.HostUtilization{},
 			expectedMetrics: []collectedVMwareMetric{},
 		},
 		{
 			name: "utilization with zero allocatable resources is skipped",
-			hostDetails: []compute.HostDetails{
-				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
+			hostDetails: []compute.VMwareHostDetails{
+				{ComputeHost: "nova-compute-1", AvailabilityZone: "az1"},
 			},
 			utilizations: []compute.HostUtilization{
 				{ComputeHost: "nova-compute-1", VCPUsUsed: 2, TotalVCPUsAllocatable: 0, RAMUsedMB: 512, TotalRAMAllocatableMB: 2048, DiskUsedGB: 10, TotalDiskAllocatableGB: 100},
@@ -267,7 +229,7 @@ func TestVMwareHostCapacityKPI_Collect(t *testing.T) {
 		},
 		{
 			name:            "no hosts produces no metrics",
-			hostDetails:     []compute.HostDetails{},
+			hostDetails:     []compute.VMwareHostDetails{},
 			utilizations:    []compute.HostUtilization{},
 			expectedMetrics: []collectedVMwareMetric{},
 		},

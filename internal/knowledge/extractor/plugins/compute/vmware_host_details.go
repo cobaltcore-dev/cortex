@@ -14,7 +14,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type HostDetails struct {
+// VMwareHostDetails describes a single VMware compute host. Only VMware hosts
+// are extracted here (KVM hosts are served by a dedicated CRD, and ironic hosts
+// are excluded); the extractor SQL filters everything else out.
+type VMwareHostDetails struct {
 	// Name of the OpenStack compute host.
 	ComputeHost string `db:"compute_host"`
 	// Availability zone of the compute host.
@@ -22,11 +25,6 @@ type HostDetails struct {
 	// CPU Architecture of the compute host.
 	// Can be "cascade-lake" or "sapphire-rapids"
 	CPUArchitecture string `db:"cpu_architecture"`
-	// Hypervisor type of the compute host.
-	HypervisorType string `db:"hypervisor_type"`
-	// Hypervisor family of the compute host.
-	// Can be "kvm" or "vmware"
-	HypervisorFamily string `db:"hypervisor_family"`
 	// Amount of VMs currently running on the compute host.
 	RunningVMs int `db:"running_vms"`
 	// Type of workload running on the compute host.
@@ -45,28 +43,28 @@ type HostDetails struct {
 	// Physical size category of a single host inside a VMware building block,
 	// derived from the memory inventory and rounded to the nearest TiB
 	// (e.g. "4TiB"), or to the nearest GiB (e.g. "512GiB") when smaller than
-	// 1 TiB. Only meaningful for VMware hosts; "unknown" otherwise.
+	// 1 TiB. "unknown" when the memory inventory is missing.
 	PhysicalHostSize string `db:"physical_host_size"`
 }
 
-type HostDetailsExtractor struct {
+type VMwareHostDetailsExtractor struct {
 	// Common base for all extractors that provides standard functionality.
 	plugins.BaseExtractor[
-		struct{},    // No options passed through yaml config
-		HostDetails, // Feature model
+		struct{},          // No options passed through yaml config
+		VMwareHostDetails, // Feature model
 	]
 }
 
-//go:embed host_details.sql
-var hostDetailsQuery string
+//go:embed vmware_host_details.sql
+var vmwareHostDetailsQuery string
 
-// Extract the traits of a compute host from the database.
-func (e *HostDetailsExtractor) Extract() ([]plugins.Feature, error) {
+// Extract the details of the VMware compute hosts from the database.
+func (e *VMwareHostDetailsExtractor) Extract() ([]plugins.Feature, error) {
 	if e.DB == nil {
 		return nil, errors.New("database connection is not initialized")
 	}
-	var hostDetails []HostDetails
-	if _, err := e.DB.Select(&hostDetails, hostDetailsQuery); err != nil {
+	var hostDetails []VMwareHostDetails
+	if _, err := e.DB.Select(&hostDetails, vmwareHostDetailsQuery); err != nil {
 		return nil, err
 	}
 
