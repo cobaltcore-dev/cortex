@@ -44,6 +44,7 @@ func mockVMwareHostLabels(computeHost, az string) map[string]string {
 		"disabled_reason":    "-",
 		"pinned_projects":    "false",
 		"pinned_project_ids": "",
+		"physical_host_size": "unknown",
 	}
 }
 
@@ -68,7 +69,7 @@ func TestVMwareHost_GetHostLabels(t *testing.T) {
 				DisabledReason:   nil,
 				PinnedProjects:   nil,
 			}},
-			want: []string{"az1", "nova-compute-1", "cascade-lake", "general-purpose", "true", "false", "false", "-", "false", ""},
+			want: []string{"az1", "nova-compute-1", "cascade-lake", "general-purpose", "true", "false", "false", "-", "false", "", "unknown"},
 		},
 		{
 			name: "disabled reason set",
@@ -77,7 +78,7 @@ func TestVMwareHost_GetHostLabels(t *testing.T) {
 				ComputeHost:      "nova-compute-2",
 				DisabledReason:   str("scheduled-maintenance"),
 			}},
-			want: []string{"az2", "nova-compute-2", "", "", "false", "false", "false", "scheduled-maintenance", "false", ""},
+			want: []string{"az2", "nova-compute-2", "", "", "false", "false", "false", "scheduled-maintenance", "false", "", "unknown"},
 		},
 		{
 			name: "pinned projects set",
@@ -86,7 +87,7 @@ func TestVMwareHost_GetHostLabels(t *testing.T) {
 				ComputeHost:      "nova-compute-3",
 				PinnedProjects:   str("proj-a,proj-b"),
 			}},
-			want: []string{"az1", "nova-compute-3", "", "", "false", "false", "false", "-", "true", "proj-a,proj-b"},
+			want: []string{"az1", "nova-compute-3", "", "", "false", "false", "false", "-", "true", "proj-a,proj-b", "unknown"},
 		},
 		{
 			name: "decommissioned and external customer",
@@ -96,7 +97,16 @@ func TestVMwareHost_GetHostLabels(t *testing.T) {
 				Decommissioned:   true,
 				ExternalCustomer: true,
 			}},
-			want: []string{"az3", "nova-compute-4", "", "", "false", "true", "true", "-", "false", ""},
+			want: []string{"az3", "nova-compute-4", "", "", "false", "true", "true", "-", "false", "", "unknown"},
+		},
+		{
+			name: "physical host size set",
+			host: vmwareHost{compute.HostDetails{
+				AvailabilityZone: "az1",
+				ComputeHost:      "nova-compute-5",
+				PhysicalHostSize: "4TiB",
+			}},
+			want: []string{"az1", "nova-compute-5", "", "", "false", "false", "false", "-", "false", "", "4TiB"},
 		},
 	}
 

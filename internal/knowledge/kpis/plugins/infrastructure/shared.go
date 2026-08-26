@@ -40,6 +40,10 @@ func (h vmwareHost) getHostLabels() []string {
 	if h.DisabledReason != nil {
 		disabledReason = *h.DisabledReason
 	}
+	physicalHostSize := h.PhysicalHostSize
+	if physicalHostSize == "" {
+		physicalHostSize = "unknown"
+	}
 	return []string{
 		h.AvailabilityZone,
 		h.ComputeHost,
@@ -51,6 +55,7 @@ func (h vmwareHost) getHostLabels() []string {
 		disabledReason,
 		strconv.FormatBool(pinnedProjects),
 		pinnedProjectIds,
+		physicalHostSize,
 	}
 }
 
@@ -65,6 +70,7 @@ var vmwareHostLabels = []string{
 	"disabled_reason",
 	"pinned_projects",
 	"pinned_project_ids",
+	"physical_host_size",
 }
 
 var kvmHostLabels = []string{

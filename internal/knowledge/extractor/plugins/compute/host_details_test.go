@@ -38,6 +38,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 	if err := testDB.CreateTable(
 		testDB.AddTable(nova.Hypervisor{}),
 		testDB.AddTable(placement.Trait{}),
+		testDB.AddTable(placement.InventoryUsage{}),
 	); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -69,6 +70,10 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		&nova.Hypervisor{ID: "uuid5", ServiceHost: "node003-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "disabled", ServiceDisabledReason: new("example reason")},
 		// Host with disabled trait
 		&nova.Hypervisor{ID: "uuid6", ServiceHost: "node004-bb03", HypervisorType: "test", RunningVMs: 2, State: "up", Status: "enabled", ServiceDisabledReason: new("example reason")},
+		// VMware host with a sub-TiB physical host size
+		&nova.Hypervisor{ID: "uuid7", ServiceHost: "nova-compute-bb04", HypervisorType: "vcenter", RunningVMs: 1, State: "up", Status: "enabled"},
+		// VMware host just under 1 TiB that rounds up to a full TiB
+		&nova.Hypervisor{ID: "uuid8", ServiceHost: "nova-compute-bb05", HypervisorType: "vcenter", RunningVMs: 1, State: "up", Status: "enabled"},
 	}
 
 	if err := testDB.Insert(hypervisors...); err != nil {
@@ -94,6 +99,42 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
+	// Memory inventory for the VMware building block host (uuid1). The building
+	// block pools 3 physical hosts of 4 TiB each (4 TiB = 4194304 MiB):
+	//   amount_hosts       = (total - reserved) / max_unit = 12582912 / 4194304 = 3
+	//   physical_host_size = max_unit + reserved / amount_hosts = 4194304 MiB = 4 TiB
+	inventories := []any{
+		&placement.InventoryUsage{
+			ResourceProviderUUID: "uuid1",
+			InventoryClassName:   "MEMORY_MB",
+			Total:                12582912,
+			Reserved:             0,
+			MaxUnit:              4194304,
+		},
+		// Building block of 2 physical hosts of 512 GiB each (512 GiB = 524288 MiB):
+		//   amount_hosts       = (1048576 - 0) / 524288 = 2
+		//   physical_host_size = 524288 MiB = 512 GiB (< 1 TiB, reported in GiB)
+		&placement.InventoryUsage{
+			ResourceProviderUUID: "uuid7",
+			InventoryClassName:   "MEMORY_MB",
+			Total:                1048576,
+			Reserved:             0,
+			MaxUnit:              524288,
+		},
+		// Single host of 1048064 MiB (1023.5 GiB) which rounds to 1024 GiB and is
+		// therefore reported as "1TiB" rather than "1024GiB".
+		&placement.InventoryUsage{
+			ResourceProviderUUID: "uuid8",
+			InventoryClassName:   "MEMORY_MB",
+			Total:                1048064,
+			Reserved:             0,
+			MaxUnit:              1048064,
+		},
+	}
+	if err := testDB.Insert(inventories...); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
 	hostAvailabilityZones, err := v1alpha1.BoxFeatureList([]any{
 		&HostAZ{AvailabilityZone: new("az1"), ComputeHost: "nova-compute-bb01"},
 		&HostAZ{AvailabilityZone: nil, ComputeHost: "node001-bb02"},
@@ -101,6 +142,8 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 		&HostAZ{AvailabilityZone: new("az2"), ComputeHost: "ironic-host-01"},
 		&HostAZ{AvailabilityZone: new("az2"), ComputeHost: "node003-bb03"},
 		&HostAZ{AvailabilityZone: new("az2"), ComputeHost: "node004-bb03"},
+		&HostAZ{AvailabilityZone: new("az1"), ComputeHost: "nova-compute-bb04"},
+		&HostAZ{AvailabilityZone: new("az1"), ComputeHost: "nova-compute-bb05"},
 	})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -141,6 +184,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			DisabledReason:   nil,
 			RunningVMs:       0,
 			PinnedProjects:   nil,
+			PhysicalHostSize: "unknown",
 		},
 		{
 			ComputeHost:      "node001-bb02",
@@ -155,6 +199,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			DisabledReason:   new("[down] --"),
 			RunningVMs:       3,
 			PinnedProjects:   nil,
+			PhysicalHostSize: "unknown",
 		},
 		{
 			ComputeHost:      "node002-bb03",
@@ -169,6 +214,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			DisabledReason:   nil,
 			RunningVMs:       2,
 			PinnedProjects:   nil,
+			PhysicalHostSize: "unknown",
 		},
 		{
 			ComputeHost:      "node003-bb03",
@@ -183,6 +229,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			DisabledReason:   new("[disabled] example reason"),
 			RunningVMs:       2,
 			PinnedProjects:   nil,
+			PhysicalHostSize: "unknown",
 		},
 		{
 			ComputeHost:      "node004-bb03",
@@ -197,6 +244,7 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			DisabledReason:   new("[disabled] example reason"),
 			RunningVMs:       2,
 			PinnedProjects:   nil,
+			PhysicalHostSize: "unknown",
 		},
 		{
 			ComputeHost:      "nova-compute-bb01",
@@ -211,6 +259,37 @@ func TestHostDetailsExtractor_Extract(t *testing.T) {
 			DisabledReason:   nil,
 			RunningVMs:       5,
 			PinnedProjects:   new("project-123,project-456"),
+			PhysicalHostSize: "4TiB",
+		},
+		{
+			ComputeHost:      "nova-compute-bb04",
+			AvailabilityZone: "az1",
+			CPUArchitecture:  "cascade-lake",
+			HypervisorType:   "vcenter",
+			HypervisorFamily: "vmware",
+			WorkloadType:     "general-purpose",
+			Enabled:          true,
+			Decommissioned:   false,
+			ExternalCustomer: false,
+			DisabledReason:   nil,
+			RunningVMs:       1,
+			PinnedProjects:   nil,
+			PhysicalHostSize: "512GiB",
+		},
+		{
+			ComputeHost:      "nova-compute-bb05",
+			AvailabilityZone: "az1",
+			CPUArchitecture:  "cascade-lake",
+			HypervisorType:   "vcenter",
+			HypervisorFamily: "vmware",
+			WorkloadType:     "general-purpose",
+			Enabled:          true,
+			Decommissioned:   false,
+			ExternalCustomer: false,
+			DisabledReason:   nil,
+			RunningVMs:       1,
+			PinnedProjects:   nil,
+			PhysicalHostSize: "1TiB",
 		},
 	}
 
