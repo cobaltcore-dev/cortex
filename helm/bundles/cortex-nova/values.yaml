@@ -22,6 +22,11 @@ alerts:
     highMemoryMiB: 6000
     # Reconcile-duration threshold for CortexNovaReconcileDurationHigher10Min in seconds.
     reconcileDurationSeconds: 600
+    # High-watermark of cache overlay entries above which
+    # CortexNovaCacheOverlayNotDraining fires. The overlay is expected to drain
+    # back to zero within milliseconds, so any sustained non-zero watermark
+    # indicates eviction is not keeping up.
+    cacheOverlayMaxEntries: 50
 
 serviceMonitor:
   extraLabels: {}
