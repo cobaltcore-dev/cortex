@@ -42,6 +42,11 @@ type HostDetails struct {
 	DisabledReason *string `db:"disabled_reason"`
 	// Comma separated list of pinned projects of the ComputeHost.
 	PinnedProjects *string `db:"pinned_projects"`
+	// Physical size category of a single host inside a VMware building block,
+	// derived from the memory inventory and rounded to the nearest TiB
+	// (e.g. "4TiB"), or to the nearest GiB (e.g. "512GiB") when smaller than
+	// 1 TiB. Only meaningful for VMware hosts; "unknown" otherwise.
+	PhysicalHostSize string `db:"physical_host_size"`
 }
 
 type HostDetailsExtractor struct {
