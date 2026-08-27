@@ -1,8 +1,11 @@
+-- Details of VMware compute hosts. Only VMware hosts are considered here: KVM
+-- hosts are served by a dedicated CRD, and ironic hosts are excluded. The
+-- WHERE clause keeps rows whose service host matches the VMware naming
+-- convention (nova-compute-%) while dropping ironic ones (nova-compute-ironic-%).
 WITH host_traits AS (
     SELECT
         h.id AS hypervisor_id,
         h.service_host,
-        h.hypervisor_type,
         h.running_vms,
         h.state,
         h.status,
@@ -11,7 +14,9 @@ WITH host_traits AS (
     FROM openstack_hypervisors h
     LEFT JOIN openstack_resource_provider_traits t
         ON h.id = t.resource_provider_uuid
-    GROUP BY h.id, h.service_host, h.hypervisor_type, h.running_vms, h.state, h.status, h.service_disabled_reason
+    WHERE h.service_host LIKE 'nova-compute-%'
+        AND h.service_host NOT LIKE 'nova-compute-ironic-%'
+    GROUP BY h.id, h.service_host, h.running_vms, h.state, h.status, h.service_disabled_reason
 ),
 -- Physical memory size (in MiB) of a single host inside a VMware building block.
 -- A building block pools multiple physical hosts into one resource provider, so
@@ -37,12 +42,6 @@ SELECT
         WHEN ht.traits LIKE '%CUSTOM_HW_SAPPHIRE_RAPIDS%' THEN 'sapphire-rapids'
         ELSE 'cascade-lake'
     END AS cpu_architecture,
-    ht.hypervisor_type,
-    CASE
-        WHEN ht.service_host LIKE 'nova-compute-%' THEN 'vmware'
-        WHEN ht.service_host LIKE 'node%-bb%' THEN 'kvm'
-        ELSE 'unknown'
-    END AS hypervisor_family,
     CASE
         WHEN ht.traits LIKE '%CUSTOM_HANA_EXCLUSIVE_HOST%' THEN 'hana'
         ELSE 'general-purpose'
@@ -67,10 +66,11 @@ SELECT
         WHEN ht.state != 'up' THEN '[down] ' || COALESCE(ht.service_disabled_reason, '--')
         ELSE NULL
     END AS disabled_reason,
-    -- Physical host size category. The size is first rounded to whole GiB; if
-    -- that is at least 1024 GiB it is reported in TiB ("<n>TiB"), otherwise in
-    -- GiB ("<n>GiB"). Rounding to GiB first avoids a value like 1023.6 GiB being
-    -- shown as "1024GiB" instead of "1TiB".
+    -- Physical host size category of a single host inside the building block.
+    -- The size is first rounded to whole GiB; if that is at least 1024 GiB it is
+    -- reported in TiB, otherwise in GiB. Rounding to GiB
+    -- first avoids a value like 1023.6 GiB being shown as "1024GiB" instead of
+    -- "1TiB". "unknown" when the memory inventory is missing.
     CASE
         WHEN hpm.physical_size_mb IS NULL THEN 'unknown'
         WHEN ROUND(hpm.physical_size_mb / 1024.0) >= 1024
