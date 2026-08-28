@@ -33,6 +33,17 @@ type HTTPAPIConfig struct {
 	// NovaLimitHostsToRequest, if true, will filter the Nova scheduler response
 	// to only include hosts that were in the original request.
 	NovaLimitHostsToRequest bool `json:"novaLimitHostsToRequest,omitempty"`
+	// ForcedDestinationEnabled toggles replicating Nova's forced-destination
+	// behavior (force_hosts/force_nodes skip the scheduling pipeline and
+	// filters). Defaults to true when unset; set to false to disable and let
+	// forced requests flow through the normal pipeline instead.
+	ForcedDestinationEnabled *bool `json:"forcedDestinationEnabled,omitempty"`
+}
+
+// forcedDestinationEnabled reports whether the forced-destination behavior is
+// enabled. It defaults to true when the config value is unset.
+func (c HTTPAPIConfig) forcedDestinationEnabled() bool {
+	return c.ForcedDestinationEnabled == nil || *c.ForcedDestinationEnabled
 }
 
 type HTTPAPIDelegate interface {
@@ -218,7 +229,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	// onto specific hosts/nodes (force_hosts/force_nodes) and no _nova_check_type
 	// is set, Nova skips its filters entirely. We do the same here and return
 	// only the forced hosts, bypassing pipeline inference and execution.
-	if requestData.IsForcedDestination() {
+	if httpAPI.config.forcedDestinationEnabled() && requestData.IsForcedDestination() {
 		hosts := requestData.ForcedHosts()
 		logger.Info("forced destination request, skipping filters", "hosts", hosts)
 		response := api.ExternalSchedulerResponse{Hosts: hosts}

@@ -169,6 +169,11 @@ cortex-scheduling-controllers:
     # Number of top hosts to shuffle for evacuation requests.
     # Set to 0 or negative to disable shuffling.
     evacuationShuffleK: 3
+    # If true (default), the external scheduler API replicates Nova's
+    # forced-destination behavior: requests with force_hosts/force_nodes skip
+    # the scheduling pipeline and filters. Set to false to disable this as a
+    # kill-switch and route forced requests through the normal pipeline.
+    forcedDestinationEnabled: true
     committedResourceReservationController:
       # Pipeline selection for CR reservation scheduling. The catch-all default covers
       # general-purpose flavors. For HANA flavor groups, add an explicit entry, e.g.:
