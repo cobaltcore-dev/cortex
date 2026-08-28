@@ -185,8 +185,8 @@ github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/sapcc/go-api-declarations v1.25.0 h1:vLkSVV8oaZExoBMEkwX31AqUjZIjwxKkxXr4q2sAAOg=
 github.com/sapcc/go-api-declarations v1.25.0/go.mod h1:7NrwidCCv/MxwBpb/qqYLbQb/eY6rlnYkXwWMGx/wlI=
-github.com/sapcc/go-bits v0.0.0-20260826135401-2ac89aae0f95 h1:H7SeGwxqAW1bq5x1uWDfu3gi+bb3DQSHTyR8X34aV6Q=
-github.com/sapcc/go-bits v0.0.0-20260826135401-2ac89aae0f95/go.mod h1:9aWC+WAsOkDgTPvwnZJKTGRZIcADxsblJ+obA4DYA/M=
+github.com/sapcc/go-bits v0.0.0-20260827091731-7669cbdb53fb h1:jORKY0SgUAhXCq40zGSDRaBzDk2zUX+p2wsJeCYxITk=
+github.com/sapcc/go-bits v0.0.0-20260827091731-7669cbdb53fb/go.mod h1:X2M3A28UnHSRGlRmiztvmBhdETrplwDFn7QLyxCOYtA=
 github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ=
 github.com/sirupsen/logrus v1.9.3/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
 github.com/spf13/cobra v1.10.2 h1:DMTTonx5m65Ic0GOoRY2c16WCbHxOOw6xxezuLaBpcU=
