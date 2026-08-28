@@ -24,6 +24,7 @@ Implementation: `internal/scheduling/reservations/commitments/`
       - [Report-Capacity REST endpoint](#report-capacity-rest-endpoint)
   - [Syncer Task](#syncer-task)
   - [Placement Observability](#placement-observability)
+  - [Host Oversubscription Detection and Remediation](#host-oversubscription-detection-and-remediation)
   - [Configuration and Observability](#configuration-and-observability)
 
 ## Architecture Overview
@@ -300,6 +301,45 @@ PAYG placements (flavor not in any configured group) are not counted.
 | `slot_missed` | CR has remaining capacity but no candidate host has a slot with remaining memory > 0 |
 | `slot_used` | CR has remaining capacity and at least one candidate host has a usable slot |
 
+## Host Oversubscription Detection and Remediation
+
+Reservation slots can accumulate beyond a host's effective capacity due to concurrent slot creation with a stale informer cache, operator-driven VM migrations where the slot stays on the old host, or hardware changes that reduce `EffectiveCapacity`. The `HostOversubscriptionController` detects these violations and optionally evicts slots to restore capacity invariants.
+
+Implementation: `internal/scheduling/reservations/commitments/host_oversubscription_controller.go`
+
+### Operational Modes
+
+| Mode | Config | Behavior |
+|---|---|---|
+| Disabled | `enableOversubscriptionCheck: false` | Controller is not wired up; no detection runs |
+| Detection only | `enableOversubscriptionCheck: true`, `enableOversubscriptionReservationEviction: false` | Violations are detected, metrics are emitted, but no slots are evicted |
+| Active remediation | Both `true` | Violations trigger slot eviction after the grace period expires |
+
+### Grace Period and Rate Limiting
+
+When a violation is first detected, the controller waits `oversubscriptionGracePeriod` (default 3m) before evicting. This gives other controllers (e.g. failover) time to self-heal. If the violation resolves within the grace period, no eviction occurs.
+
+Checks for the same host are rate-limited to `oversubscriptionMinCheckInterval` (default 1m) to avoid thrashing under rapid reconcile events.
+
+### Eviction Target Selection
+
+The controller evicts one slot per grace-period cycle and re-evaluates:
+
+1. **Unallocated slots** (no running VMs) — smallest memory first, then smallest CPU. These are cheapest to re-place elsewhere.
+2. **Allocated slots** (has VMs) — most idle first (highest unused-capacity ratio), then smallest total size. Only used when no unallocated candidates exist.
+
+### Metrics and Alerts
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `cortex_committed_resource_host_oversubscribed` | Gauge | `host`, `az`, `resource` | Excess resource units beyond host capacity; non-zero = active violation |
+| `cortex_committed_resource_host_oversubscribed_evicted_reservations_total` | Counter | `az` | Cumulative slots evicted by the controller |
+
+| Alert | Condition | Meaning |
+|---|---|---|
+| `CortexCommittedResourceHostOversubscribed` | gauge > 0 for 15m | Host remains oversubscribed despite eviction attempts — manual intervention needed |
+| `CortexCommittedResourceHostOversubscriptionEvictionsHigh` | > 10 evictions/hour in an AZ | Recurring oversubscription — investigate capacity changes or slot creation races |
+
 ## Configuration and Observability
 
 **Configuration**: `helm/bundles/cortex-nova/values.yaml` — API endpoint toggles, reconciliation intervals, scheduling pipeline selection, and per-flavor-group resource flags.
@@ -308,3 +348,4 @@ PAYG placements (flavor not in any configured group) are not counted.
 - `cortex_committed_resource_change_api_*`
 - `cortex_committed_resource_usage_api_*`
 - `cortex_committed_resource_capacity_api_*`
+- `cortex_committed_resource_host_oversubscribed*`
