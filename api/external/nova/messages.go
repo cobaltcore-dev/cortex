@@ -147,10 +147,11 @@ func (r ExternalSchedulerRequest) ForcedHosts() []string {
 		if len(forceNodeSet) > 0 && !forceNodeSet[host.HypervisorHostname] {
 			continue
 		}
-		if seen[host.ComputeHost] {
+		key := strings.ToLower(host.ComputeHost)
+		if seen[key] {
 			continue
 		}
-		seen[host.ComputeHost] = true
+		seen[key] = true
 		matched = append(matched, host.ComputeHost)
 	}
 	return matched
