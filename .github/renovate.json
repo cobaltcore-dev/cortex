@@ -10,7 +10,6 @@
   ],
   "commitMessageAction": "Renovate: Update",
   "constraints": {
-    "go": "1.26",
     "python": "3.13"
   },
   "dependencyDashboardOSVVulnerabilitySummary": "all",
@@ -73,12 +72,6 @@
     }
   ],
   "packageRules": [
-    {
-      "matchPackageNames": [
-        "golang"
-      ],
-      "allowedVersions": "1.26.x"
-    },
     {
       "matchPackageNames": [
         "postgresql-18"
