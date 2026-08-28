@@ -65,6 +65,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/inflight"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/quota"
+	"github.com/cobaltcore-dev/cortex/pkg/cache"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
@@ -391,6 +392,14 @@ func main() {
 		},
 	}
 	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
+
+	var cacheMonitor *cache.Monitor
+	var cacheWrapper *cache.Wrapper
+	if c := conf.GetConfigOrDie[cache.RootConfig](); c.Cache.Enabled {
+		cacheMonitor = cache.NewMonitor("cortex_")
+		cacheWrapper = cache.NewWrapper(mgr, c.Cache, cacheMonitor)
+		multiclusterClient.Wrappers = append(multiclusterClient.Wrappers, cacheWrapper)
+	}
 	if err := multiclusterClient.InitFromConf(ctx, mgr, multiclusterClientConfig); err != nil {
 		setupLog.Error(err, "unable to initialize multicluster client")
 		os.Exit(1)
@@ -402,6 +411,9 @@ func main() {
 	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, metricsConfig)
 	metrics.Registry.MustRegister(&logMetricsMonitor)
 	metrics.Registry.MustRegister(multiclusterMonitor)
+	if cacheMonitor != nil {
+		metrics.Registry.MustRegister(cacheMonitor)
+	}
 
 	// TODO: Remove me after scheduling pipeline steps don't require DB connections anymore.
 	metrics.Registry.MustRegister(&db.Monitor)
