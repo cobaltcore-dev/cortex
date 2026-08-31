@@ -44,7 +44,7 @@ deployment:
 # [INGRESS]: To enable an ingress resource for the placement shim set true
 ingress:
   # Enable or disable the ingress resource for the placement shim.
-  enabled: true
+  enabled: false
   # Which ingress controller to use.
   className: nginx
   # Override this default set of annotations if needed.
