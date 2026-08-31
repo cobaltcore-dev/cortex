@@ -83,18 +83,6 @@ func serveHandler(t *testing.T, method, pattern string, handler http.HandlerFunc
 	return w
 }
 
-// serveHandlerWithBody is like serveHandler but allows providing a request body.
-func serveHandlerWithBody(t *testing.T, method, pattern string, handler http.HandlerFunc, reqPath string, body io.Reader) *httptest.ResponseRecorder {
-	t.Helper()
-	mux := http.NewServeMux()
-	mux.HandleFunc(method+" "+pattern, handler)
-	req := httptest.NewRequest(method, reqPath, body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-	return w
-}
-
 func TestForward(t *testing.T) {
 	tests := []struct {
 		name           string
