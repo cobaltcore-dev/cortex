@@ -107,6 +107,21 @@ func emptyTargetSlot(name, host, resourceGroup, memory string) *v1alpha1.Reserva
 	}
 }
 
+// hvWithFreeMemory builds a Hypervisor with the given effective capacity and zero allocation.
+func hvWithFreeMemory(name, memory string) *hv1.Hypervisor {
+	return &hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Status: hv1.HypervisorStatus{
+			EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: resource.MustParse(memory),
+			},
+			Allocation: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: resource.MustParse("0"),
+			},
+		},
+	}
+}
+
 func TestKVMCRMigrationSlotStep_Run(t *testing.T) {
 	const (
 		instanceUUID = "vm-migrating"
@@ -159,23 +174,34 @@ func TestKVMCRMigrationSlotStep_Run(t *testing.T) {
 			expectedWeights: map[string]float64{"host-a": 1.0, "host-b": 0.1, "host-c": 0.1},
 		},
 		{
-			name: "no compatible slot on any candidate: all reset to no-effect",
+			name: "no compatible slot on any candidate: hosts penalised (no capacity)",
 			objects: []client.Object{
 				confirmedSourceSlot(instanceUUID, "host-src", "hana-v2", "16Gi"),
 			},
 			request:         migrationRequest(instanceUUID, projectID, "host-a", "host-b"),
 			opts:            defaultOpts,
-			expectedWeights: map[string]float64{"host-a": 0.0, "host-b": 0.0},
+			expectedWeights: map[string]float64{"host-a": 0.1, "host-b": 0.1},
 		},
 		{
-			name: "wrong resource group on target: no match, all reset to no-effect",
+			name: "host with free capacity but no slot: boosted via accommodate path",
+			objects: []client.Object{
+				confirmedSourceSlot(instanceUUID, "host-src", "hana-v2", "16Gi"),
+				hvWithFreeMemory("host-a", "32Gi"), // enough free memory for the slot
+				hvWithFreeMemory("host-b", "8Gi"),  // too small for the slot
+			},
+			request:         migrationRequest(instanceUUID, projectID, "host-a", "host-b"),
+			opts:            defaultOpts,
+			expectedWeights: map[string]float64{"host-a": 1.0, "host-b": 0.1},
+		},
+		{
+			name: "wrong resource group on target: no slot match, falls back to capacity check",
 			objects: []client.Object{
 				confirmedSourceSlot(instanceUUID, "host-src", "hana-v2", "16Gi"),
 				emptyTargetSlot("slot-a", "host-a", "general-v3", "16Gi"),
 			},
 			request:         migrationRequest(instanceUUID, projectID, "host-a"),
 			opts:            defaultOpts,
-			expectedWeights: map[string]float64{"host-a": 0.0},
+			expectedWeights: map[string]float64{"host-a": 0.1},
 		},
 		{
 			name: "source slot has zero memory: no-effect weight for all",
@@ -199,8 +225,8 @@ func TestKVMCRMigrationSlotStep_Run(t *testing.T) {
 				emptyTargetSlot("slot-a", "host-a", "hana-v2", "16Gi"),
 			},
 			request:         migrationRequest(instanceUUID, projectID, "host-a", "host-b"),
-			opts:            KVMCRMigrationSlotOpts{}, // nil → defaults: slot=1.0, default=0.1
-			expectedWeights: map[string]float64{"host-a": 1.0, "host-b": 0.1},
+			opts:            KVMCRMigrationSlotOpts{}, // nil → defaults: slot=0.1, default=0.0
+			expectedWeights: map[string]float64{"host-a": 0.1, "host-b": 0.0},
 		},
 	}
 
