@@ -32,14 +32,14 @@ func (o KVMCRMigrationSlotOpts) Validate() error {
 
 func (o KVMCRMigrationSlotOpts) GetSlotHostWeight() float64 {
 	if o.SlotHostWeight == nil {
-		return 1.0
+		return 0.1
 	}
 	return *o.SlotHostWeight
 }
 
 func (o KVMCRMigrationSlotOpts) GetDefaultHostWeight() float64 {
 	if o.DefaultHostWeight == nil {
-		return 0.1
+		return 0.0
 	}
 	return *o.DefaultHostWeight
 }
@@ -130,29 +130,28 @@ func (s *KVMCRMigrationSlotStep) Run(
 
 	slotFound := false
 	for host := range result.Activations {
-		if evaluator.HasSlotWithCapacity(host, projectID, resourceGroup, slotMemoryBytes.Value()) {
+		hasSlot := evaluator.HasSlotWithCapacity(host, projectID, resourceGroup, slotMemoryBytes.Value())
+		canFit := evaluator.CanAccommodateSlot(host, slotMemoryBytes.Value())
+		if hasSlot {
 			result.Activations[host] = slotHostWeight
 			slotFound = true
-			traceLog.Info("host has usable CR slot for migration, boosting weight",
+			traceLog.Info("host has existing CR slot for migration, boosting weight",
+				"host", host, "weight", slotHostWeight)
+		} else if canFit {
+			result.Activations[host] = slotHostWeight
+			traceLog.Info("host can accommodate slot via reconciler, boosting weight",
 				"host", host, "weight", slotHostWeight)
 		} else {
 			result.Activations[host] = defaultHostWeight
-			traceLog.Info("host has no usable CR slot for migration",
+			traceLog.Info("host cannot accommodate CR slot, applying low weight",
 				"host", host, "weight", defaultHostWeight)
 		}
 	}
 
-	if !slotFound {
-		// No candidate has a compatible slot — reset to no-effect so this weigher
-		// does not penalise all candidates equally when there is nothing to prefer.
-		traceLog.Info("no hosts with matching CR slot found, resetting to no-effect",
-			"instanceUUID", instanceUUID)
-		for host := range result.Activations {
-			result.Activations[host] = s.NoEffect()
-		}
-		CRMigrationSlotMetricsSingleton.RecordResult("no_slot")
-	} else {
+	if slotFound {
 		CRMigrationSlotMetricsSingleton.RecordResult("slot_found")
+	} else {
+		CRMigrationSlotMetricsSingleton.RecordResult("no_slot")
 	}
 
 	return result, nil

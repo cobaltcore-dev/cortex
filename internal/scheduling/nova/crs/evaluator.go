@@ -125,6 +125,21 @@ func (e *SlotEvaluator) HasSlotWithCapacity(hostName, projectID, flavorGroup str
 	return false
 }
 
+// CanAccommodateSlot reports whether hostName has enough free memory to absorb
+// a reservation block of requiredBytes. Used to check whether a slot can follow
+// a migrating VM to this host via the reconciler, even when no existing
+// compatible slot is present.
+//
+// Free memory is computed as: hvFreeMemory - sum(all reservation blocks on host).
+func (e *SlotEvaluator) CanAccommodateSlot(hostName string, requiredBytes int64) bool {
+	var allBlocks int64
+	for _, res := range e.reservationsByHost[hostName] {
+		blockQ := res.Spec.Resources[hv1.ResourceMemory]
+		allBlocks += blockQ.Value()
+	}
+	return e.hvFreeMemory[hostName]-allBlocks >= requiredBytes
+}
+
 // ReservationRemainingMemory returns how many bytes of memory remain
 // unallocated in a reservation slot. Returns 0 if the slot is full or nil.
 func ReservationRemainingMemory(res v1alpha1.Reservation) int64 {
