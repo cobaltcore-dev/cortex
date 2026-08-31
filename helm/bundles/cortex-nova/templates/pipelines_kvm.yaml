@@ -109,16 +109,6 @@ spec:
         requests without headroom, add `params: [{key: enforce, boolValue: true}]`
         to this step. The shadow default is intentional so that newly-rolled-out
         releases never silently start rejecting requests.
-    - name: filter_cr_migration_slot
-      description: |
-        During live migrations of VMs that occupy a committed-resource reservation
-        slot, this filter restricts candidates to hosts that have a ready CR
-        reservation with sufficient remaining capacity for the full slot size (not
-        just the VM flavor size). This ensures the reservation slot is migrated
-        alongside the VM.
-        If no candidate has a matching slot, all candidates are returned unchanged
-        so the VM can still migrate using regular (non-slot) capacity.
-        Only activates for live_migrate requests. All other intents pass through.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -161,6 +151,16 @@ spec:
         matching the request's project, resource group, and availability zone,
         with enough free memory capacity for the requested VM. Hosts without a
         matching reservation or without enough free capacity receive a lower weight.
+    - name: kvm_cr_migration_slot
+      description: |
+        During live migrations of VMs that occupy a committed-resource reservation
+        slot, this weigher boosts hosts that have a ready CR reservation with
+        sufficient remaining capacity for the full slot size. This steers migrations
+        toward hosts where the reservation can follow the VM, minimising the
+        double-blocking window. If no candidate has a matching slot, or the VM has
+        no CR reservation, all candidates receive equal weight.
+        Only activates for live_migrate requests. All other intents pass through.
+        Emits cortex_nova_weigh_cr_migration_slot_requests_total.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -271,16 +271,6 @@ spec:
         requests without headroom, add `params: [{key: enforce, boolValue: true}]`
         to this step. The shadow default is intentional so that newly-rolled-out
         releases never silently start rejecting requests.
-    - name: filter_cr_migration_slot
-      description: |
-        During live migrations of VMs that occupy a committed-resource reservation
-        slot, this filter restricts candidates to hosts that have a ready CR
-        reservation with sufficient remaining capacity for the full slot size (not
-        just the VM flavor size). This ensures the reservation slot is migrated
-        alongside the VM.
-        If no candidate has a matching slot, all candidates are returned unchanged
-        so the VM can still migrate using regular (non-slot) capacity.
-        Only activates for live_migrate requests. All other intents pass through.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -320,6 +310,16 @@ spec:
         matching the request's project, resource group, and availability zone,
         with enough free memory capacity for the requested VM. Hosts without a
         matching reservation or without enough free capacity receive a lower weight.
+    - name: kvm_cr_migration_slot
+      description: |
+        During live migrations of VMs that occupy a committed-resource reservation
+        slot, this weigher boosts hosts that have a ready CR reservation with
+        sufficient remaining capacity for the full slot size. This steers migrations
+        toward hosts where the reservation can follow the VM, minimising the
+        double-blocking window. If no candidate has a matching slot, or the VM has
+        no CR reservation, all candidates receive equal weight.
+        Only activates for live_migrate requests. All other intents pass through.
+        Emits cortex_nova_weigh_cr_migration_slot_requests_total.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -734,16 +734,6 @@ spec:
         requests without headroom, add `params: [{key: enforce, boolValue: true}]`
         to this step. The shadow default is intentional so that newly-rolled-out
         releases never silently start rejecting requests.
-    - name: filter_cr_migration_slot
-      description: |
-        During live migrations of VMs that occupy a committed-resource reservation
-        slot, this filter restricts candidates to hosts that have a ready CR
-        reservation with sufficient remaining capacity for the full slot size (not
-        just the VM flavor size). This ensures the reservation slot is migrated
-        alongside the VM.
-        If no candidate has a matching slot, all candidates are returned unchanged
-        so the VM can still migrate using regular (non-slot) capacity.
-        Only activates for live_migrate requests. All other intents pass through.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -786,6 +776,16 @@ spec:
         matching the request's project, resource group, and availability zone,
         with enough free memory capacity for the requested VM. Hosts without a
         matching reservation or without enough free capacity receive a lower weight.
+    - name: kvm_cr_migration_slot
+      description: |
+        During live migrations of VMs that occupy a committed-resource reservation
+        slot, this weigher boosts hosts that have a ready CR reservation with
+        sufficient remaining capacity for the full slot size. This steers migrations
+        toward hosts where the reservation can follow the VM, minimising the
+        double-blocking window. If no candidate has a matching slot, or the VM has
+        no CR reservation, all candidates receive equal weight.
+        Only activates for live_migrate requests. All other intents pass through.
+        Emits cortex_nova_weigh_cr_migration_slot_requests_total.
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
@@ -896,16 +896,6 @@ spec:
         requests without headroom, add `params: [{key: enforce, boolValue: true}]`
         to this step. The shadow default is intentional so that newly-rolled-out
         releases never silently start rejecting requests.
-    - name: filter_cr_migration_slot
-      description: |
-        During live migrations of VMs that occupy a committed-resource reservation
-        slot, this filter restricts candidates to hosts that have a ready CR
-        reservation with sufficient remaining capacity for the full slot size (not
-        just the VM flavor size). This ensures the reservation slot is migrated
-        alongside the VM.
-        If no candidate has a matching slot, all candidates are returned unchanged
-        so the VM can still migrate using regular (non-slot) capacity.
-        Only activates for live_migrate requests. All other intents pass through.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -945,4 +935,14 @@ spec:
         matching the request's project, resource group, and availability zone,
         with enough free memory capacity for the requested VM. Hosts without a
         matching reservation or without enough free capacity receive a lower weight.
+    - name: kvm_cr_migration_slot
+      description: |
+        During live migrations of VMs that occupy a committed-resource reservation
+        slot, this weigher boosts hosts that have a ready CR reservation with
+        sufficient remaining capacity for the full slot size. This steers migrations
+        toward hosts where the reservation can follow the VM, minimising the
+        double-blocking window. If no candidate has a matching slot, or the VM has
+        no CR reservation, all candidates receive equal weight.
+        Only activates for live_migrate requests. All other intents pass through.
+        Emits cortex_nova_weigh_cr_migration_slot_requests_total.
 {{- end }}
