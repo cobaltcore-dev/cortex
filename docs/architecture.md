@@ -30,6 +30,12 @@ Cortex receives the list of possible hosts and their weights from Nova. It then 
 > [!NOTE]
 > Since, by default, Nova does not support calling an external service, this functionality needs to be added like in [SAP's fork of Nova](https://github.com/sapcc/nova/blob/stable/2023.2-m3/nova/scheduler/external.py).
 
+### Forced Destinations
+
+When Nova sets `force_hosts` or `force_nodes` on a request and the `_nova_check_type` scheduler hint is absent, Cortex skips its entire filter/weigher pipeline and returns only the forced destinations. This replicates Nova's native behavior, where forced requests bypass the scheduler filters and land directly on the specified hosts. If `_nova_check_type` is present (e.g. rebuild, evacuate, resize), the forced hosts still pass through the full pipeline because the filters need to validate the destination.
+
+This behavior is controlled by `forcedDestinationEnabled` in the Helm config (defaults to true). Set it to false as a kill-switch to route forced requests through the normal scheduling pipeline instead. See `api/external/nova/messages.go` for the detection logic (`IsForcedDestination`, `ForcedHosts`).
+
 ## Placement API Shim
 
 [Placement](https://github.com/openstack/placement) is OpenStack's resource inventory service. It provides an API to query the inventory of resources in the OpenStack cloud, such as compute nodes, their available resources, and the current resource usage. In the OpenStack realm, Placement is used by [Nova](https://github.com/openstack/nova) to carry out virtual machine scheduling, as well as [Neutron](https://github.com/openstack/neutron) for network resource allocation.
