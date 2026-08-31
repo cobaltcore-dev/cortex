@@ -32,7 +32,7 @@ Cortex receives the list of possible hosts and their weights from Nova. It then 
 
 ### Forced Destinations
 
-When Nova sets `force_hosts` or `force_nodes` on a request and the `_nova_check_type` scheduler hint is absent, Cortex skips its entire filter/weigher pipeline and returns only the forced destinations. This replicates Nova's native behavior, where forced requests bypass the scheduler filters and land directly on the specified hosts. If `_nova_check_type` is present (e.g. rebuild, evacuate, resize), the forced hosts still pass through the full pipeline because the filters need to validate the destination.
+When Nova sets `force_hosts` or `force_nodes` on a request and the `_nova_check_type` scheduler hint is not set (or is empty), Cortex skips its entire filter/weigher pipeline and returns only the forced destinations. This replicates Nova's native behavior, where forced requests bypass the scheduler filters and land directly on the specified hosts. If `_nova_check_type` is set to a non-empty value (e.g. rebuild, evacuate, resize), the forced hosts still pass through the full pipeline because the filters need to validate the destination.
 
 This behavior is controlled by `forcedDestinationEnabled` in the Helm config (defaults to true). Set it to false as a kill-switch to route forced requests through the normal scheduling pipeline instead. See `api/external/nova/messages.go` for the detection logic (`IsForcedDestination`, `ForcedHosts`).
 
