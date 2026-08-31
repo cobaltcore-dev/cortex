@@ -219,16 +219,12 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	logger := slog.With(traceArgsAny...)
 	logger.Info("handling POST request", "url", "/scheduler/nova/external", "body", string(body))
 
-	if ok, reason := httpAPI.canRunScheduler(requestData); !ok {
-		internalErr := fmt.Errorf("cannot run scheduler: %s", reason)
-		c.Respond(logger, http.StatusBadRequest, internalErr, reason)
-		return
-	}
-
 	// Replicate Nova's forced-destination behavior: when the request is forced
 	// onto specific hosts/nodes (force_hosts/force_nodes) and no _nova_check_type
 	// is set, Nova skips its filters entirely. We do the same here and return
 	// only the forced hosts, bypassing pipeline inference and execution.
+	// This must run before canRunScheduler because Nova may not send weights
+	// for forced-destination requests.
 	if httpAPI.config.forcedDestinationEnabled() && requestData.IsForcedDestination() {
 		hosts := requestData.ForcedHosts()
 		logger.Info("forced destination request, skipping filters", "hosts", hosts)
@@ -239,6 +235,12 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 			return
 		}
 		c.Respond(logger, http.StatusOK, nil, "Success")
+		return
+	}
+
+	if ok, reason := httpAPI.canRunScheduler(requestData); !ok {
+		internalErr := fmt.Errorf("cannot run scheduler: %s", reason)
+		c.Respond(logger, http.StatusBadRequest, internalErr, reason)
 		return
 	}
 
