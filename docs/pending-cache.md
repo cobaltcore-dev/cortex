@@ -10,7 +10,7 @@ The pending cache is an in-process write-through overlay on `client.Client` that
 
 ## Why It Exists
 
-controller-runtime's default client reads from informers. Between the moment a controller writes (or patches) an object and the moment the informer delivers the event, there is a window — typically tens to hundreds of milliseconds — during which any read returns the pre-write version. For scheduling workloads where multiple reconciles may touch the same objects in quick succession, this lag causes read-after-write inconsistencies: a controller creates a Reservation, then immediately lists Reservations and does not see the one it just created.
+The controller-runtime default client reads from informers. Between the moment a controller writes (or patches) an object and the moment the informer delivers the event, there is a window — typically tens to hundreds of milliseconds — during which any read returns the pre-write version. For scheduling workloads where multiple reconciles may touch the same objects in quick succession, this lag causes read-after-write inconsistencies: a controller creates a Reservation, then immediately lists Reservations and does not see the one it just created.
 
 The overlay closes this window transparently without switching to direct apiserver reads (which would defeat the purpose of informers at scale).
 
