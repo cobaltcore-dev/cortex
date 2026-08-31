@@ -1,0 +1,24 @@
+# Copyright SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.namePrefix }}-shim-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    {{- if .Values.ingress.rules }}
+    {{- toYaml .Values.ingress.rules | nindent 4 }}
+    {{- end }}
+  tls:
+    {{- if .Values.ingress.tls }}
+    {{- toYaml .Values.ingress.tls | nindent 4 }}
+    {{- end }}
+{{- end }}

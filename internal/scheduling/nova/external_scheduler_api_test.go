@@ -383,6 +383,152 @@ func TestHTTPAPI_NovaExternalScheduler_DecisionCreation(t *testing.T) {
 	}
 }
 
+func TestHTTPAPI_NovaExternalScheduler_ForcedDestination(t *testing.T) {
+	forceHosts := []string{"host2"}
+	requestData := novaapi.ExternalSchedulerRequest{
+		Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+			Data: novaapi.NovaSpec{
+				InstanceUUID: "test-uuid",
+				ForceHosts:   &forceHosts,
+			},
+		},
+		Hosts: []novaapi.ExternalSchedulerHost{
+			{ComputeHost: "host1", HypervisorHostname: "domain-c1"},
+			{ComputeHost: "host2", HypervisorHostname: "domain-c2"},
+		},
+		Weights: map[string]float64{
+			"host1": 1.0,
+			"host2": 2.0,
+		},
+	}
+
+	delegateCalled := false
+	delegate := &mockHTTPAPIDelegate{
+		processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
+			delegateCalled = true
+			return nil
+		},
+	}
+	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
+
+	body, err := json.Marshal(requestData)
+	if err != nil {
+		t.Fatalf("Failed to marshal request data: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/scheduler/nova/external", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	api.NovaExternalScheduler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	if delegateCalled {
+		t.Error("delegate should not be called for forced destination requests")
+	}
+	var response novaapi.ExternalSchedulerResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+	if len(response.Hosts) != 1 || response.Hosts[0] != "host2" {
+		t.Errorf("Expected hosts [host2], got %v", response.Hosts)
+	}
+}
+
+func TestHTTPAPI_NovaExternalScheduler_ForcedDestinationNoWeights(t *testing.T) {
+	forceHosts := []string{"host2"}
+	requestData := novaapi.ExternalSchedulerRequest{
+		Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+			Data: novaapi.NovaSpec{
+				InstanceUUID: "test-uuid",
+				ForceHosts:   &forceHosts,
+			},
+		},
+		Hosts: []novaapi.ExternalSchedulerHost{
+			{ComputeHost: "host1", HypervisorHostname: "domain-c1"},
+			{ComputeHost: "host2", HypervisorHostname: "domain-c2"},
+		},
+		// Weights intentionally omitted — Nova does not always send them
+		// for forced-destination requests.
+	}
+
+	delegateCalled := false
+	delegate := &mockHTTPAPIDelegate{
+		processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
+			delegateCalled = true
+			return nil
+		},
+	}
+	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
+
+	body, err := json.Marshal(requestData)
+	if err != nil {
+		t.Fatalf("Failed to marshal request data: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/scheduler/nova/external", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	api.NovaExternalScheduler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status %d, got %d (forced destination with no weights must not be rejected)", http.StatusOK, w.Code)
+	}
+	if delegateCalled {
+		t.Error("delegate should not be called for forced destination requests")
+	}
+	var response novaapi.ExternalSchedulerResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+	if len(response.Hosts) != 1 || response.Hosts[0] != "host2" {
+		t.Errorf("Expected hosts [host2], got %v", response.Hosts)
+	}
+}
+
+func TestHTTPAPI_NovaExternalScheduler_ForcedDestinationDisabled(t *testing.T) {
+	forceHosts := []string{"host2"}
+	requestData := novaapi.ExternalSchedulerRequest{
+		Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+			Data: novaapi.NovaSpec{
+				InstanceUUID: "test-uuid",
+				ForceHosts:   &forceHosts,
+			},
+		},
+		Hosts: []novaapi.ExternalSchedulerHost{
+			{ComputeHost: "host1", HypervisorHostname: "domain-c1"},
+			{ComputeHost: "host2", HypervisorHostname: "domain-c2"},
+		},
+		Weights: map[string]float64{
+			"host1": 1.0,
+			"host2": 2.0,
+		},
+		Pipeline: "test-pipeline",
+	}
+
+	delegateCalled := false
+	delegate := &mockHTTPAPIDelegate{
+		processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
+			delegateCalled = true
+			return nil
+		},
+	}
+	disabled := false
+	api := NewAPI(HTTPAPIConfig{ForcedDestinationEnabled: &disabled}, delegate).(*httpAPI)
+
+	body, err := json.Marshal(requestData)
+	if err != nil {
+		t.Fatalf("Failed to marshal request data: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/scheduler/nova/external", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	api.NovaExternalScheduler(w, req)
+
+	if !delegateCalled {
+		t.Error("delegate should be called when forced destination is disabled")
+	}
+}
+
 func TestLimitHostsToRequest(t *testing.T) {
 	tests := []struct {
 		name          string

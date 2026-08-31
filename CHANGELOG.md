@@ -1,5 +1,72 @@
 # Changelog
 
+## 2026-08-31 — [#1177](https://github.com/cobaltcore-dev/cortex/pull/1177)
+
+### cortex v0.4.0 (sha-23f975db)
+
+New features:
+- Pending cache overlay — a transparent, in-process write-through cache on `client.Client` that eliminates informer lag for configurable GVKs; after a successful write the overlay keeps the object in memory so subsequent reads return the fresh version immediately instead of the stale informer snapshot; includes per-object keyed mutex, tombstone tracking, field selector support, and fallback TTL expiry ([#1042](https://github.com/cobaltcore-dev/cortex/pull/1042))
+- Cache monitoring — new `cortex_cache_overlay_entries` (current count) and `cortex_cache_overlay_entries_max` (high-watermark) Prometheus gauge metrics per GVK/host ([#1160](https://github.com/cobaltcore-dev/cortex/pull/1160))
+- Forced destination behavior in Nova external scheduler — replicates Nova's native `force_hosts`/`force_nodes` behavior; when a scheduling request specifies forced destinations and no `_nova_check_type` hint is set, Cortex skips the entire filter/weigher pipeline and returns only the forced hosts directly; configurable via `forcedDestinationEnabled` ([#1163](https://github.com/cobaltcore-dev/cortex/pull/1163))
+- Forced destination evaluated before `canRunScheduler` — critical because Nova may not send weights for forced requests ([#1176](https://github.com/cobaltcore-dev/cortex/pull/1176))
+- Physical host size label — adds a `physical_host_size` label derived from memory inventory (e.g. `"4TiB"`, `"512GiB"`) to VMware host capacity metrics ([#1165](https://github.com/cobaltcore-dev/cortex/pull/1165))
+
+Breaking changes:
+- Knowledge resource renamed from `host-details` to `vmware-host-details` — existing Knowledge CRDs with the old name will be orphaned and must be deleted manually; extractor renamed from `sap_host_details_extractor` to `vmware_host_details_extractor`; SQL rewritten to filter at the query level, eliminating Go-side hypervisor type/family filtering ([#1166](https://github.com/cobaltcore-dev/cortex/pull/1166))
+
+Non-breaking changes:
+- Document forced destination behavior in Nova external scheduler ([#1174](https://github.com/cobaltcore-dev/cortex/pull/1174))
+- Document pending cache overlay architecture ([#1175](https://github.com/cobaltcore-dev/cortex/pull/1175))
+- Document host oversubscription detection and remediation ([#1153](https://github.com/cobaltcore-dev/cortex/pull/1153))
+- Update Go version to 1.27, remove Go version constraint from Renovate ([#1170](https://github.com/cobaltcore-dev/cortex/pull/1170))
+- Update `k8s.io/api`, `k8s.io/apimachinery`, `k8s.io/client-go` to v0.37.0 ([#1169](https://github.com/cobaltcore-dev/cortex/pull/1169))
+- Update `github.com/sapcc/go-bits` ([#1168](https://github.com/cobaltcore-dev/cortex/pull/1168), [#1171](https://github.com/cobaltcore-dev/cortex/pull/1171))
+- Update `kube-prometheus-stack` to v88.6.0 ([#1152](https://github.com/cobaltcore-dev/cortex/pull/1152))
+
+### cortex-shim v0.1.15 (sha-23f975db)
+
+New features:
+- Ingress resource template — new `ingress.yaml` template with configurable className, annotations, rules, and TLS support ([#1158](https://github.com/cobaltcore-dev/cortex/pull/1158))
+
+Includes updated dependencies (Go 1.27, k8s.io v0.37.0).
+
+### cortex-postgres v0.6.15 (sha-23f975db)
+
+- Rebuild image to resolve CVEs ([#1164](https://github.com/cobaltcore-dev/cortex/pull/1164))
+- Update `debian:trixie-slim` base image digest ([#1159](https://github.com/cobaltcore-dev/cortex/pull/1159))
+
+### cortex-nova v0.0.89
+
+- New alert `CortexNovaCacheOverlayNotDraining` (5m window, warning severity)
+- New values: `cache.enabled` (true), `cache.gvks`, `forcedDestinationEnabled` (true)
+- Knowledge renamed: `host-details` → `vmware-host-details`
+
+Includes updated charts cortex v0.4.0 and cortex-postgres v0.6.15.
+
+### cortex-cinder v0.0.89
+
+Includes updated charts cortex v0.4.0 and cortex-postgres v0.6.15.
+
+### cortex-manila v0.0.89
+
+Includes updated charts cortex v0.4.0 and cortex-postgres v0.6.15.
+
+### cortex-crds v0.0.89
+
+Includes updated chart cortex v0.4.0.
+
+### cortex-ironcore v0.0.89
+
+Includes updated chart cortex v0.4.0.
+
+### cortex-pods v0.0.89
+
+Includes updated chart cortex v0.4.0.
+
+### cortex-placement-shim v0.1.15
+
+Includes updated chart cortex-shim v0.1.15.
+
 ## 2026-08-24 — [#1154](https://github.com/cobaltcore-dev/cortex/pull/1154)
 
 ### cortex v0.3.8 (sha-1742e3ee)

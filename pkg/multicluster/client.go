@@ -22,6 +22,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 )
 
+// ClusterWrapper can be registered on the Client to transparently transform each
+// cluster before it is stored for routing. WrapCluster receives the current
+// cluster: raw for the first wrapper in the chain, or the previous wrapper's
+// result for subsequent ones. It must return the (possibly wrapped) cluster to
+// use for routing and is responsible for registering any lifecycle Runnables
+// with the manager itself. Because the manager is not passed to WrapCluster, a
+// wrapper that needs it must capture it at construction time (e.g. by storing it
+// on the wrapper). Wrappers are applied in order for every home and remote
+// cluster during InitFromConf. For remote clusters the original unwrapped
+// cluster is always added to the manager separately so its informers start
+// independently of wrapping.
+type ClusterWrapper interface {
+	WrapCluster(cl cluster.Cluster) (cluster.Cluster, error)
+}
+
 // A remote cluster with routing labels used to match resources to clusters.
 type remoteCluster struct {
 	cluster cluster.Cluster
@@ -32,6 +47,12 @@ type Client struct {
 	// ResourceRouters determine which cluster a resource should be written to
 	// when multiple clusters serve the same GVK.
 	ResourceRouters map[schema.GroupVersionKind]ResourceRouter
+
+	// Wrappers are applied to every cluster (home and remotes) during InitFromConf.
+	// Each wrapper transforms the cluster before it is stored for routing.
+	// Applied in slice order; the raw inner cluster is always added to the manager
+	// so its informers start independently of wrapping.
+	Wrappers []ClusterWrapper
 
 	// The cluster in which cortex is deployed.
 	HomeCluster cluster.Cluster
@@ -53,48 +74,6 @@ type Client struct {
 
 	// GVKs explicitly configured for the home cluster.
 	homeGVKs map[schema.GroupVersionKind]bool
-}
-
-type ClientConfig struct {
-	// Apiserver configuration mapping GVKs to home or remote clusters.
-	// Every GVK used through the multicluster client must be listed
-	// in either Home or Remotes. Unknown GVKs will cause an error.
-	APIServers APIServersConfig `json:"apiservers"`
-}
-
-// APIServersConfig separates resources into home and remote clusters.
-type APIServersConfig struct {
-	// Resources managed in the cluster where cortex is deployed.
-	Home HomeConfig `json:"home"`
-	// Resources managed in remote clusters.
-	Remotes []RemoteConfig `json:"remotes,omitempty"`
-}
-
-// HomeConfig lists GVKs that are managed in the home cluster.
-type HomeConfig struct {
-	// The resource GVKs formatted as "<group>/<version>/<Kind>".
-	GVKs []string `json:"gvks"`
-}
-
-// RemoteConfig maps multiple GVKs to a remote kubernetes apiserver with
-// routing labels. It is assumed that the remote apiserver accepts the
-// serviceaccount tokens issued by the local cluster.
-type RemoteConfig struct {
-	// The remote kubernetes apiserver url, e.g. "https://my-apiserver:6443".
-	Host string `json:"host"`
-	// The root CA certificate to verify the remote apiserver.
-	// Ignored if InsecureSkipTLSVerify is true.
-	CACert string `json:"caCert,omitempty"`
-	// InsecureSkipTLSVerify disables verification of the remote apiserver's
-	// TLS certificate. Use this for apiservers whose CA certificate rotates
-	// frequently and does not chain to a stable root. Mutually exclusive
-	// with CACert: when true, CACert is ignored.
-	InsecureSkipTLSVerify bool `json:"insecureSkipTLSVerify,omitempty"`
-	// The resource GVKs this apiserver serves, formatted as "<group>/<version>/<Kind>".
-	GVKs []string `json:"gvks"`
-	// Labels used by ResourceRouters to match resources to this cluster
-	// for write operations (Create/Update/Delete/Patch).
-	Labels map[string]string `json:"labels,omitempty"`
 }
 
 // Helper function to initialize a new multicluster client during service startup,
@@ -136,8 +115,21 @@ func (c *Client) InitFromConf(ctx context.Context, mgr ctrl.Manager, conf Client
 		if err != nil {
 			return err
 		}
+		// Add the raw inner cluster so its informers/caches start.
 		if err := mgr.Add(cl); err != nil {
 			return err
+		}
+	}
+	// Apply wrappers to the home cluster. The manager already owns the home
+	// cluster's lifecycle, so we only apply wrappers (each wrapper registers its
+	// own Runnables) and must NOT re-Start the inner home cluster.
+	if c.HomeCluster != nil {
+		for _, w := range c.Wrappers {
+			wrapped, werr := w.WrapCluster(c.HomeCluster)
+			if werr != nil {
+				return werr
+			}
+			c.HomeCluster = wrapped
 		}
 	}
 	return nil
@@ -153,6 +145,11 @@ func (c *Client) InitFromConf(ctx context.Context, mgr ctrl.Manager, conf Client
 // This can be used when the remote cluster accepts the home cluster's service
 // account tokens. See the kubernetes documentation on structured auth to
 // learn more about jwt-based authentication across clusters.
+// AddRemote returns the raw inner cluster.Cluster (which the caller must add to
+// the manager so its informers/caches start). Each registered Wrapper is
+// responsible for adding its own lifecycle Runnables to mgr directly.
+// The wrapped cluster is stored in remoteClusters so all routing goes through
+// any per-cluster wrapper.
 func (c *Client) AddRemote(ctx context.Context, host, caCert string, insecureSkipTLSVerify bool, labels map[string]string, gvks ...schema.GroupVersionKind) (cluster.Cluster, error) {
 	log := ctrl.LoggerFrom(ctx)
 	homeRestConfig := *c.HomeRestConfig
@@ -173,6 +170,17 @@ func (c *Client) AddRemote(ctx context.Context, host, caCert string, insecureSki
 	if err != nil {
 		return nil, err
 	}
+	// Apply each registered wrapper in order. stored is the cluster placed in
+	// remoteClusters. Each wrapper is responsible for registering its own
+	// lifecycle Runnables with mgr directly.
+	stored := cl
+	for _, w := range c.Wrappers {
+		wrapped, werr := w.WrapCluster(stored)
+		if werr != nil {
+			return nil, werr
+		}
+		stored = wrapped
+	}
 	c.remoteClustersMu.Lock()
 	defer c.remoteClustersMu.Unlock()
 	if c.remoteClusters == nil {
@@ -181,10 +189,11 @@ func (c *Client) AddRemote(ctx context.Context, host, caCert string, insecureSki
 	for _, gvk := range gvks {
 		log.Info("adding remote cluster for resource", "gvk", gvk, "host", host, "labels", labels, "insecureSkipTLSVerify", insecureSkipTLSVerify)
 		c.remoteClusters[gvk] = append(c.remoteClusters[gvk], remoteCluster{
-			cluster: cl,
+			cluster: stored,
 			labels:  labels,
 		})
 	}
+	// Return the raw inner cluster so the caller starts its informers/caches.
 	return cl, nil
 }
 
@@ -854,7 +863,7 @@ func (c *Client) IndexField(ctx context.Context, obj client.Object, list client.
 			continue
 		}
 		indexed[ch] = true
-		if err := ch.IndexField(ctx, obj, field, extractValue); err != nil {
+		if err := cl.GetFieldIndexer().IndexField(ctx, obj, field, extractValue); err != nil {
 			log.Error(err, "failed to register field index for cluster — objects from this cluster will be absent from index queries; restart required to recover", "field", field)
 			continue
 		}
@@ -869,7 +878,7 @@ func (c *Client) IndexField(ctx context.Context, obj client.Object, list client.
 			continue
 		}
 		indexed[ch] = true
-		if err := ch.IndexField(ctx, obj, field, extractValue); err != nil {
+		if err := cl.GetFieldIndexer().IndexField(ctx, obj, field, extractValue); err != nil {
 			log.Error(err, "failed to register field index for cluster — objects from this cluster will be absent from index queries; restart required to recover", "field", field)
 			continue
 		}

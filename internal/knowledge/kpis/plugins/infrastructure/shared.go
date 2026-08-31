@@ -15,18 +15,16 @@ import (
 )
 
 const (
-	hostDetailsKnowledgeName       = "host-details"
+	vmwareHostDetailsKnowledgeName = "vmware-host-details"
 	hostUtilizationKnowledgeName   = "host-utilization"
-	vmwareIronicHypervisorType     = "ironic"
-	hypervisorFamilyVMware         = "vmware"
 	vmwareComputeHostPattern       = "nova-compute-%"
 	vmwareIronicComputeHostPattern = "nova-compute-ironic-%"
 	kvmComputeHostPattern          = "node%-bb%"
 )
 
-// vmwareHost wraps HostDetails with Prometheus metric helpers.
+// vmwareHost wraps VMwareHostDetails with Prometheus metric helpers.
 type vmwareHost struct {
-	compute.HostDetails
+	compute.VMwareHostDetails
 }
 
 func (h vmwareHost) getHostLabels() []string {
@@ -40,6 +38,10 @@ func (h vmwareHost) getHostLabels() []string {
 	if h.DisabledReason != nil {
 		disabledReason = *h.DisabledReason
 	}
+	physicalHostSize := h.PhysicalHostSize
+	if physicalHostSize == "" {
+		physicalHostSize = "unknown"
+	}
 	return []string{
 		h.AvailabilityZone,
 		h.ComputeHost,
@@ -51,6 +53,7 @@ func (h vmwareHost) getHostLabels() []string {
 		disabledReason,
 		strconv.FormatBool(pinnedProjects),
 		pinnedProjectIds,
+		physicalHostSize,
 	}
 }
 
@@ -65,6 +68,7 @@ var vmwareHostLabels = []string{
 	"disabled_reason",
 	"pinned_projects",
 	"pinned_project_ids",
+	"physical_host_size",
 }
 
 var kvmHostLabels = []string{

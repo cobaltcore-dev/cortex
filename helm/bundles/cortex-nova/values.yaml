@@ -22,6 +22,11 @@ alerts:
     highMemoryMiB: 6000
     # Reconcile-duration threshold for CortexNovaReconcileDurationHigher10Min in seconds.
     reconcileDurationSeconds: 600
+    # High-watermark of cache overlay entries above which
+    # CortexNovaCacheOverlayNotDraining fires. The overlay is expected to drain
+    # back to zero within milliseconds, so any sustained non-zero watermark
+    # indicates eviction is not keeping up.
+    cacheOverlayMaxEntries: 50
 
 serviceMonitor:
   extraLabels: {}
@@ -73,6 +78,12 @@ kvm:
   # Set to false to keep KVM-related alerts at warning severity instead of critical.
   # Useful when rolling out a new KVM region before it is production-ready.
   criticalAlerts: true
+
+# Cache configuration for the transparent in-process overlay cache.
+cache:
+  enabled: true
+  gvks:
+    - cortex.cloud/v1alpha1/Reservation
 
 cortex: &cortex
   crd: {enable: false}
@@ -169,6 +180,11 @@ cortex-scheduling-controllers:
     # Number of top hosts to shuffle for evacuation requests.
     # Set to 0 or negative to disable shuffling.
     evacuationShuffleK: 3
+    # If true (default), the external scheduler API replicates Nova's
+    # forced-destination behavior: requests with force_hosts/force_nodes skip
+    # the scheduling pipeline and filters. Set to false to disable this as a
+    # kill-switch and route forced requests through the normal pipeline.
+    forcedDestinationEnabled: true
     committedResourceReservationController:
       # Pipeline selection for CR reservation scheduling. The catch-all default covers
       # general-purpose flavors. For HANA flavor groups, add an explicit entry, e.g.:
@@ -185,7 +201,7 @@ cortex-scheduling-controllers:
       # How long after a VM is allocated to a reservation before it is expected to appear
       # on the target host; allocations not confirmed within this window are removed
       allocationGracePeriod: "15m"
-      # How long to wait after detecting host over-subscription before evicting reservation slots. 
+      # How long to wait after detecting host over-subscription before evicting reservation slots.
       # Gives other controllers (e.g. failover) time to self-heal.
       oversubscriptionGracePeriod: "3m"
       # Minimum time between consecutive over-subscription checks for the same host.

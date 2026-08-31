@@ -41,6 +41,19 @@ deployment:
   terminationGracePeriodSeconds: 10
   serviceAccountName: shim
 
+# [INGRESS]: To enable an ingress resource for the placement shim set true
+ingress:
+  # Enable or disable the ingress resource for the placement shim.
+  enabled: true
+  # Which ingress controller to use.
+  className: nginx
+  # Override this default set of annotations if needed.
+  annotations:
+    # Enables https://github.com/sapcc/disco
+    disco: "true"
+    # Enables automatic TLS certificate provisioning via cert-manager.
+    kubernetes.io/tls-acme: "true"
+
 # [METRICS]: Set to true to generate manifests for exporting metrics.
 # To disable metrics export set false, and remove the container args
 # "--metrics-bind-address=:2112" and "--metrics-secure=false".

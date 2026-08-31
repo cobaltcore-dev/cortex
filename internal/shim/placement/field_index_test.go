@@ -50,6 +50,10 @@ type stubCluster struct {
 func (s *stubCluster) GetClient() client.Client { return s.cl }
 func (s *stubCluster) GetCache() cache.Cache    { return s.cache }
 
+// GetFieldIndexer returns the cache, which implements client.FieldIndexer via
+// its IndexField method — mirroring an unwrapped controller-runtime cluster.
+func (s *stubCluster) GetFieldIndexer() client.FieldIndexer { return s.cache }
+
 type stubManager struct {
 	manager.Manager
 }

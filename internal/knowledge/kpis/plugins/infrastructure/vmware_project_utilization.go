@@ -128,21 +128,18 @@ func (k *VMwareProjectUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 // getVMwareHosts retrieves the mapping of VMware hypervisors to their corresponding host information
 func (k *VMwareProjectUtilizationKPI) getVMwareHosts() (map[string]vmwareHost, error) {
 	knowledge := &v1alpha1.Knowledge{}
-	if err := k.Client.Get(context.Background(), client.ObjectKey{Name: hostDetailsKnowledgeName}, knowledge); err != nil {
+	if err := k.Client.Get(context.Background(), client.ObjectKey{Name: vmwareHostDetailsKnowledgeName}, knowledge); err != nil {
 		return nil, err
 	}
 
-	hostDetails, err := v1alpha1.UnboxFeatureList[compute.HostDetails](knowledge.Status.Raw)
+	hostDetails, err := v1alpha1.UnboxFeatureList[compute.VMwareHostDetails](knowledge.Status.Raw)
 	if err != nil {
 		return nil, err
 	}
 
 	hostMapping := make(map[string]vmwareHost)
 	for _, host := range hostDetails {
-		if host.HypervisorType == vmwareIronicHypervisorType || host.HypervisorFamily != hypervisorFamilyVMware {
-			continue
-		}
-		hostMapping[host.ComputeHost] = vmwareHost{HostDetails: host}
+		hostMapping[host.ComputeHost] = vmwareHost{VMwareHostDetails: host}
 	}
 
 	return hostMapping, nil
