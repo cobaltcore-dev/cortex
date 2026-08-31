@@ -66,7 +66,7 @@ The `Monitor` (`pkg/cache/monitor.go`) is a `prometheus.Collector` that exposes 
 - **`cortex_cache_overlay_entries`** — current number of overlay entries (live + tombstone) at scrape time.
 - **`cortex_cache_overlay_entries_max`** — high-watermark since the last scrape, reset on each collect. Because entries are extremely short-lived (evicted within milliseconds), a plain gauge would almost always read zero; the watermark captures transient spikes.
 
-A sustained non-zero watermark is a strong signal that eviction is broken. The PrometheusRule **`CortexNovaCacheOverlayNotDraining`** fires (severity: warning) when `cortex_cache_overlay_entries` stays above the `alerts.thresholds.cacheOverlayMaxEntries` threshold (default 50) for 5 minutes. Investigate the informer for the affected GVK/cluster and the overlay eviction logs.
+A sustained non-zero current size is a strong signal that eviction is broken. The PrometheusRule **`CortexNovaCacheOverlayNotDraining`** fires (severity: warning) when `cortex_cache_overlay_entries` stays above the `alerts.thresholds.cacheOverlayMaxEntries` threshold (default 50) for 5 minutes. Investigate the informer for the affected GVK/cluster and the overlay eviction logs.
 
 ## Code Pointers
 
