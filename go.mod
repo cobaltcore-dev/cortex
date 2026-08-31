@@ -13,7 +13,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.50
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/prometheus/client_golang v1.24.1
-	github.com/prometheus/client_model v0.6.2
+	github.com/prometheus/client_model v0.6.3
 	github.com/sapcc/go-api-declarations v1.25.0
 	github.com/sapcc/go-bits v0.0.0-20260827091731-7669cbdb53fb
 	go.uber.org/zap v1.28.0
