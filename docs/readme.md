@@ -8,3 +8,4 @@
 - For details on committed resource reservations, see [committed resource reservations](reservations/committed-resource-reservations.md).
 - For details on failover reservations, see [failover reservations](reservations/failover-reservations.md).
 - For multi-cluster scheduling, see [the multicluster guide](guides/multicluster/readme.md).
+- For the pending cache overlay (informer lag mitigation), see [pending cache](pending-cache.md).

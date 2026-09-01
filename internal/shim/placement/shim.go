@@ -11,17 +11,13 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
-	"github.com/cobaltcore-dev/cortex/pkg/resourcelock"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
-	"github.com/gophercloud/gophercloud/v2"
-	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/api/resource"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -52,129 +48,20 @@ type requestIDContextKey struct{}
 // header value through the request lifecycle for tracing.
 var requestIDKey = requestIDContextKey{}
 
-// featureModeOverrideContextKey is a separate type for the per-request feature
-// mode override injected via the X-Cortex-Feature-Mode header.
-type featureModeOverrideContextKey struct{}
-
-// featureModeOverrideKey is the context key used to propagate the feature mode
-// override from the middleware to handlers.
-var featureModeOverrideKey = featureModeOverrideContextKey{}
-
-// headerFeatureModeOverride is the HTTP header that allows e2e tests to
-// override the configured feature mode on a per-request basis.
-const headerFeatureModeOverride = "X-Cortex-Feature-Mode"
-
-// FeatureMode controls how an endpoint group interacts with upstream
-// placement and the hypervisor CRD.
-type FeatureMode string
-
-const (
-	// FeatureModePassthrough forwards all requests to upstream placement
-	// without any shim logic.
-	FeatureModePassthrough FeatureMode = "passthrough"
-	// FeatureModeHybrid directs requests to both upstream placement and the
-	// hypervisor CRD. Upstream must respond; the shim keeps CRD state in
-	// sync to prepare for cutover.
-	FeatureModeHybrid FeatureMode = "hybrid"
-	// FeatureModeCRD serves requests exclusively from the hypervisor CRD.
-	// No upstream placement dependency is required.
-	FeatureModeCRD FeatureMode = "crd"
-)
-
-// orDefault returns FeatureModePassthrough when m is the zero value.
-func (m FeatureMode) orDefault() FeatureMode {
-	if m == "" {
-		return FeatureModePassthrough
-	}
-	return m
-}
-
-// valid reports whether m is a recognized feature mode (including the
-// zero value, which maps to passthrough).
-func (m FeatureMode) valid() bool {
-	switch m {
-	case FeatureModePassthrough, FeatureModeHybrid, FeatureModeCRD, "":
-		return true
-	}
-	return false
-}
-
-// dispatchPassthroughOnly forwards in passthrough mode, returns 501 for
-// hybrid/crd, and 500 for unknown modes. These endpoints have no backing
-// config requirement so we pass true — the 501 response already guards
-// against actual nil dereferences.
-func (s *Shim) dispatchPassthroughOnly(w http.ResponseWriter, r *http.Request, mode FeatureMode) {
-	resolved := s.featureModeFromConfOrHeader(r, mode, true)
-	switch resolved {
-	case FeatureModePassthrough:
-		s.forward(w, r)
-	case FeatureModeHybrid, FeatureModeCRD:
-		http.Error(w, fmt.Sprintf("%s mode is not yet implemented for this endpoint", resolved), http.StatusNotImplemented)
-	default:
-		http.Error(w, "unknown feature mode", http.StatusInternalServerError)
-	}
-}
-
-// featureModeFromConfOrHeader returns the effective feature mode for the
-// current request. If a valid override is present in the request context
-// (injected by wrapHandler from the X-Cortex-Feature-Mode header), the
-// override takes precedence — unless it would escalate to hybrid/crd without
-// the endpoint's backing config being available. Callers pass hasBackingConfig
-// to indicate whether the infrastructure required by hybrid/crd mode for their
-// specific endpoint was validated at startup.
-func (s *Shim) featureModeFromConfOrHeader(r *http.Request, configured FeatureMode, hasBackingConfig bool) FeatureMode {
-	override, ok := r.Context().Value(featureModeOverrideKey).(FeatureMode)
-	if !ok {
-		return configured.orDefault()
-	}
-	resolved := override.orDefault()
-	if resolved == FeatureModeHybrid || resolved == FeatureModeCRD {
-		if !hasBackingConfig {
-			return configured.orDefault()
-		}
-	}
-	return resolved
-}
-
-// featuresConfig controls the feature mode for each endpoint group.
-// Every field defaults to passthrough (zero value) when omitted.
+// featuresConfig toggles the KVM-backend behavior for each endpoint group.
+// Every field defaults to false (pure passthrough) when omitted.
 type featuresConfig struct {
-	ResourceProviders      FeatureMode `json:"resourceProviders,omitempty"`
-	Root                   FeatureMode `json:"root,omitempty"`
-	Traits                 FeatureMode `json:"traits,omitempty"`
-	ResourceProviderTraits FeatureMode `json:"resourceProviderTraits,omitempty"`
-	ResourceClasses        FeatureMode `json:"resourceClasses,omitempty"`
-	Inventories            FeatureMode `json:"inventories,omitempty"`
-	Aggregates             FeatureMode `json:"aggregates,omitempty"`
-	Allocations            FeatureMode `json:"allocations,omitempty"`
-	Usages                 FeatureMode `json:"usages,omitempty"`
-	AllocationCandidates   FeatureMode `json:"allocationCandidates,omitempty"`
-	Reshaper               FeatureMode `json:"reshaper,omitempty"`
-}
-
-// versioningConfig describes the Placement API version advertised by the
-// static root endpoint when features.root is hybrid or crd.
-type versioningConfig struct {
-	ID         string `json:"id"`
-	MinVersion string `json:"minVersion"`
-	MaxVersion string `json:"maxVersion"`
-	Status     string `json:"status"`
-}
-
-// traitsConfig configures the local trait store used when
-// features.traits is hybrid or crd.
-type traitsConfig struct {
-	// ConfigMapName is the name of the ConfigMap used to persist traits.
-	// Must exist in the same namespace as the shim pod.
-	ConfigMapName string `json:"configMapName"`
-}
-
-// resourceClassesConfig configures the local resource class store used when
-// features.resourceClasses is hybrid or crd.
-type resourceClassesConfig struct {
-	// ConfigMapName is the name of the ConfigMap used to persist resource classes.
-	// Must exist in the same namespace as the shim pod.
-	ConfigMapName string `json:"configMapName"`
+	ResourceProviders      bool `json:"resourceProviders,omitempty"`
+	Root                   bool `json:"root,omitempty"`
+	Traits                 bool `json:"traits,omitempty"`
+	ResourceProviderTraits bool `json:"resourceProviderTraits,omitempty"`
+	ResourceClasses        bool `json:"resourceClasses,omitempty"`
+	Inventories            bool `json:"inventories,omitempty"`
+	Aggregates             bool `json:"aggregates,omitempty"`
+	Allocations            bool `json:"allocations,omitempty"`
+	Usages                 bool `json:"usages,omitempty"`
+	AllocationCandidates   bool `json:"allocationCandidates,omitempty"`
+	Reshaper               bool `json:"reshaper,omitempty"`
 }
 
 // config holds configuration for the placement shim.
@@ -214,17 +101,9 @@ type config struct {
 	// Kubernetes resource.Quantity string (e.g. "4Ki"). Defaults to "4Ki"
 	// when unset or empty.
 	MaxBodyLogSize string `json:"maxBodyLogSize,omitempty"`
-	// Features controls the feature mode for each endpoint group.
+	// Features toggles the KVM-backend behavior for each endpoint group.
+	// Every field defaults to false (pure passthrough) when omitted.
 	Features featuresConfig `json:"features"`
-	// Versioning configures the static version discovery document returned
-	// by GET / when features.root is hybrid or crd.
-	Versioning *versioningConfig `json:"versioning,omitempty"`
-	// Traits configures the local trait store used when
-	// features.traits is hybrid or crd.
-	Traits *traitsConfig `json:"traits,omitempty"`
-	// ResourceClasses configures the local resource class store used when
-	// features.resourceClasses is hybrid or crd.
-	ResourceClasses *resourceClassesConfig `json:"resourceClasses,omitempty"`
 }
 
 // validate checks the config for required fields and returns an error if the
@@ -232,56 +111,6 @@ type config struct {
 func (c *config) validate() error {
 	if c.PlacementURL == "" {
 		return errors.New("placement URL is required")
-	}
-	for name, mode := range map[string]FeatureMode{
-		"resourceProviders":      c.Features.ResourceProviders,
-		"root":                   c.Features.Root,
-		"traits":                 c.Features.Traits,
-		"resourceProviderTraits": c.Features.ResourceProviderTraits,
-		"resourceClasses":        c.Features.ResourceClasses,
-		"inventories":            c.Features.Inventories,
-		"aggregates":             c.Features.Aggregates,
-		"allocations":            c.Features.Allocations,
-		"usages":                 c.Features.Usages,
-		"allocationCandidates":   c.Features.AllocationCandidates,
-		"reshaper":               c.Features.Reshaper,
-	} {
-		if !mode.valid() {
-			return fmt.Errorf("features.%s has invalid mode %q (must be passthrough, hybrid, or crd)", name, mode)
-		}
-	}
-	rootMode := c.Features.Root.orDefault()
-	if rootMode == FeatureModeHybrid || rootMode == FeatureModeCRD {
-		if c.Versioning == nil {
-			return fmt.Errorf("versioning config is required when features.root is %s", rootMode)
-		}
-		if c.Versioning.ID == "" || c.Versioning.MinVersion == "" || c.Versioning.MaxVersion == "" || c.Versioning.Status == "" {
-			return fmt.Errorf("versioning id, minVersion, maxVersion, and status are required when features.root is %s", rootMode)
-		}
-	}
-	traitsMode := c.Features.Traits.orDefault()
-	if traitsMode != FeatureModePassthrough && c.Traits == nil {
-		return fmt.Errorf("traits config is required when features.traits is %s", traitsMode)
-	}
-	if c.Traits != nil {
-		if c.Traits.ConfigMapName == "" {
-			return errors.New("traits.configMapName is required when traits config is present")
-		}
-		if os.Getenv("POD_NAMESPACE") == "" {
-			return errors.New("pod namespace (POD_NAMESPACE) is required when traits config is present")
-		}
-	}
-	rcMode := c.Features.ResourceClasses.orDefault()
-	if rcMode != FeatureModePassthrough && c.ResourceClasses == nil {
-		return fmt.Errorf("resourceClasses config is required when features.resourceClasses is %s", rcMode)
-	}
-	if c.ResourceClasses != nil {
-		if c.ResourceClasses.ConfigMapName == "" {
-			return errors.New("resourceClasses.configMapName is required when resourceClasses config is present")
-		}
-		if os.Getenv("POD_NAMESPACE") == "" {
-			return errors.New("pod namespace (POD_NAMESPACE) is required when resourceClasses config is present")
-		}
 	}
 	if c.Auth != nil && c.KeystoneURL == "" {
 		return errors.New("keystoneURL is required when auth is configured")
@@ -328,14 +157,6 @@ type Shim struct {
 	tokenCache *tokenCache
 	// tokenIntrospector validates tokens against Keystone.
 	tokenIntrospector tokenIntrospector
-	// resourceLocker serializes writes to ConfigMaps across replicas
-	// using a Kubernetes Lease.
-	resourceLocker *resourcelock.ResourceLocker
-	// placementServiceClient is an authenticated gophercloud service client
-	// used by background tasks (trait sync) to make requests to upstream
-	// placement with automatic token management (including reauth on 401).
-	// Nil when Keystone credentials are not configured.
-	placementServiceClient *gophercloud.ServiceClient
 }
 
 // Describe implements prometheus.Collector.
@@ -401,51 +222,6 @@ func (s *Shim) initHTTPClient(ctx context.Context) error {
 	return nil
 }
 
-// initPlacementServiceClient creates an authenticated gophercloud
-// ServiceClient that background tasks (e.g. the trait sync loop) use to
-// make requests to upstream placement with automatic token management.
-// After initial Keystone authentication the provider's HTTP transport is
-// replaced with the shim's own transport (which carries SSO TLS certs)
-// so that subsequent placement requests use the correct transport.
-// Skipped when Keystone credentials are not configured.
-func (s *Shim) initPlacementServiceClient(ctx context.Context) error {
-	if s.config.KeystoneURL == "" || s.config.OSUsername == "" || s.config.OSPassword == "" {
-		setupLog.Info("Keystone credentials not configured, background tasks will make unauthenticated upstream requests")
-		return nil
-	}
-	authOpts := gophercloud.AuthOptions{
-		IdentityEndpoint: s.config.KeystoneURL,
-		Username:         s.config.OSUsername,
-		DomainName:       s.config.OSUserDomainName,
-		Password:         s.config.OSPassword,
-		AllowReauth:      true,
-		Scope: &gophercloud.AuthScope{
-			ProjectName: s.config.OSProjectName,
-			DomainName:  s.config.OSProjectDomainName,
-		},
-	}
-	provider, err := openstack.NewClient(s.config.KeystoneURL)
-	if err != nil {
-		return fmt.Errorf("creating Keystone provider for upstream auth: %w", err)
-	}
-	provider.HTTPClient = http.Client{Timeout: 30 * time.Second}
-	if err := openstack.Authenticate(ctx, provider, authOpts); err != nil {
-		return fmt.Errorf("authenticating with Keystone for upstream auth: %w", err)
-	}
-	// After successful Keystone auth, switch the provider's HTTP transport
-	// to the shim's transport so placement requests use SSO TLS certs.
-	if s.httpClient != nil && s.httpClient.Transport != nil {
-		provider.HTTPClient.Transport = s.httpClient.Transport
-	}
-	s.placementServiceClient = &gophercloud.ServiceClient{
-		ProviderClient: provider,
-		Endpoint:       s.config.PlacementURL,
-		Type:           "placement",
-	}
-	setupLog.Info("Placement service client initialized for background upstream requests")
-	return nil
-}
-
 // Start is called after the manager has started and the cache is running.
 func (s *Shim) Start(ctx context.Context) error {
 	setupLog.Info("Starting placement shim")
@@ -454,39 +230,6 @@ func (s *Shim) Start(ctx context.Context) error {
 	}
 	if err := s.initTokenIntrospector(ctx); err != nil {
 		return err
-	}
-	if err := s.initPlacementServiceClient(ctx); err != nil {
-		return err
-	}
-	if s.config.Traits != nil {
-		ts := NewTraitSyncer(
-			s.Client,
-			s.config.Traits.ConfigMapName,
-			os.Getenv("POD_NAMESPACE"),
-			s.placementServiceClient,
-			s.resourceLocker,
-		)
-		if err := ts.Init(ctx); err != nil {
-			return err
-		}
-		if s.config.Features.Traits.orDefault() != FeatureModeCRD {
-			go ts.Run(ctx)
-		}
-	}
-	if s.config.ResourceClasses != nil {
-		rs := NewResourceClassSyncer(
-			s.Client,
-			s.config.ResourceClasses.ConfigMapName,
-			os.Getenv("POD_NAMESPACE"),
-			s.placementServiceClient,
-			s.resourceLocker,
-		)
-		if err := rs.Init(ctx); err != nil {
-			return err
-		}
-		if s.config.Features.ResourceClasses.orDefault() != FeatureModeCRD {
-			go rs.Run(ctx)
-		}
 	}
 	return nil
 }
@@ -560,11 +303,6 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 		Buckets: prometheus.DefBuckets,
 	}, []string{"method", "pattern", "responsecode"})
 
-	s.resourceLocker = resourcelock.NewResourceLocker(
-		s.Client,
-		os.Getenv("POD_NAMESPACE"),
-	)
-
 	// Check that the provided client is a multicluster client, since we need
 	// that to watch for hypervisors across clusters.
 	mcl, ok := s.Client.(*multicluster.Client)
@@ -590,15 +328,6 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 // The route pattern for metric labels is read from the request context
 // (set by the measurement middleware in RegisterRoutes).
 func (s *Shim) forward(w http.ResponseWriter, r *http.Request) {
-	s.forwardWithHook(w, r, nil)
-}
-
-// forwardWithHook works like forward but accepts an optional intercept
-// callback. When hook is non-nil and the upstream returns a successful
-// response, the hook receives the *http.Response and is responsible for
-// writing the final response to w. If hook is nil the response is copied
-// through unchanged, identical to forward.
-func (s *Shim) forwardWithHook(w http.ResponseWriter, r *http.Request, hook func(w http.ResponseWriter, resp *http.Response)) {
 	ctx := r.Context()
 	log := logf.FromContext(ctx)
 	log.Info("Forwarding request to placement API",
@@ -639,15 +368,6 @@ func (s *Shim) forwardWithHook(w http.ResponseWriter, r *http.Request, hook func
 	// Copy all incoming headers.
 	upstreamReq.Header = r.Header.Clone()
 
-	// When a hook will inspect the response body, remove Accept-Encoding
-	// so the upstream returns uncompressed data. Go's Transport would
-	// normally handle this automatically, but we're forwarding the
-	// downstream client's explicit Accept-Encoding, which bypasses the
-	// auto-decompression in net/http.
-	if hook != nil {
-		upstreamReq.Header.Del("Accept-Encoding")
-	}
-
 	pattern, _ := ctx.Value(routePatternKey).(string)
 	start := time.Now()
 	resp, err := s.httpClient.Do(upstreamReq) //nolint:gosec // G704: intentional reverse proxy
@@ -661,18 +381,13 @@ func (s *Shim) forwardWithHook(w http.ResponseWriter, r *http.Request, hook func
 	}
 	defer resp.Body.Close()
 
-	// Observe after the response is received (the hook or copy below
-	// may consume the body, but the upstream latency is already known).
+	// Observe after the response is received (the copy below consumes the
+	// body, but the upstream latency is already known).
 	s.upstreamRequestTimer.
 		WithLabelValues(r.Method, pattern, strconv.Itoa(resp.StatusCode)).
 		Observe(time.Since(start).Seconds())
 
-	if hook != nil {
-		hook(w, resp)
-		return
-	}
-
-	// Default: copy response headers, status code, and body back to the caller.
+	// Copy response headers, status code, and body back to the caller.
 	for k, vs := range resp.Header {
 		for _, v := range vs {
 			w.Header().Add(k, v)

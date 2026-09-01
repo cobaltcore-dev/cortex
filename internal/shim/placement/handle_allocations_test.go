@@ -29,12 +29,12 @@ func TestHandleListAllocations(t *testing.T) {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 		}
 	})
-	t.Run("invalid uuid", func(t *testing.T) {
+	t.Run("invalid uuid forwards when disabled", func(t *testing.T) {
 		s := newTestShim(t, http.StatusOK, "{}", nil)
 		w := serveHandler(t, "GET", "/allocations/{consumer_uuid}",
 			s.HandleListAllocations, "/allocations/bad")
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 		}
 	})
 }
@@ -48,12 +48,12 @@ func TestHandleUpdateAllocations(t *testing.T) {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
 		}
 	})
-	t.Run("invalid uuid", func(t *testing.T) {
+	t.Run("invalid uuid forwards when disabled", func(t *testing.T) {
 		s := newTestShim(t, http.StatusOK, "{}", nil)
 		w := serveHandler(t, "PUT", "/allocations/{consumer_uuid}",
 			s.HandleUpdateAllocations, "/allocations/bad")
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 		}
 	})
 }
@@ -67,94 +67,60 @@ func TestHandleDeleteAllocations(t *testing.T) {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
 		}
 	})
-	t.Run("invalid uuid", func(t *testing.T) {
+	t.Run("invalid uuid forwards when disabled", func(t *testing.T) {
 		s := newTestShim(t, http.StatusOK, "{}", nil)
 		w := serveHandler(t, "DELETE", "/allocations/{consumer_uuid}",
 			s.HandleDeleteAllocations, "/allocations/bad")
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+	})
+}
+
+func TestHandleAllocations_Enabled(t *testing.T) {
+	down, up := newTestTimers()
+	s := &Shim{
+		config: config{
+			PlacementURL: "http://should-not-be-called:1234",
+			Features:     featuresConfig{Allocations: true},
+		},
+		maxBodyLogSize:         4096,
+		downstreamRequestTimer: down,
+		upstreamRequestTimer:   up,
+	}
+	t.Run("POST returns 501", func(t *testing.T) {
+		w := serveHandler(t, "POST", "/allocations",
+			s.HandleManageAllocations, "/allocations")
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("GET returns 501", func(t *testing.T) {
+		w := serveHandler(t, "GET", "/allocations/{consumer_uuid}",
+			s.HandleListAllocations, "/allocations/"+validUUID)
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("PUT returns 501", func(t *testing.T) {
+		w := serveHandler(t, "PUT", "/allocations/{consumer_uuid}",
+			s.HandleUpdateAllocations, "/allocations/"+validUUID)
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("DELETE returns 501", func(t *testing.T) {
+		w := serveHandler(t, "DELETE", "/allocations/{consumer_uuid}",
+			s.HandleDeleteAllocations, "/allocations/"+validUUID)
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+		}
+	})
+	t.Run("invalid uuid returns 400", func(t *testing.T) {
+		w := serveHandler(t, "GET", "/allocations/{consumer_uuid}",
+			s.HandleListAllocations, "/allocations/bad")
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
-		}
-	})
-}
-
-func TestHandleAllocations_HybridMode(t *testing.T) {
-	down, up := newTestTimers()
-	s := &Shim{
-		config: config{
-			PlacementURL: "http://should-not-be-called:1234",
-			Features:     featuresConfig{Allocations: FeatureModeHybrid},
-		},
-		maxBodyLogSize:         4096,
-		downstreamRequestTimer: down,
-		upstreamRequestTimer:   up,
-	}
-	t.Run("POST returns 501", func(t *testing.T) {
-		w := serveHandler(t, "POST", "/allocations",
-			s.HandleManageAllocations, "/allocations")
-		if w.Code != http.StatusNotImplemented {
-			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
-		}
-	})
-	t.Run("GET returns 501", func(t *testing.T) {
-		w := serveHandler(t, "GET", "/allocations/{consumer_uuid}",
-			s.HandleListAllocations, "/allocations/"+validUUID)
-		if w.Code != http.StatusNotImplemented {
-			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
-		}
-	})
-	t.Run("PUT returns 501", func(t *testing.T) {
-		w := serveHandler(t, "PUT", "/allocations/{consumer_uuid}",
-			s.HandleUpdateAllocations, "/allocations/"+validUUID)
-		if w.Code != http.StatusNotImplemented {
-			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
-		}
-	})
-	t.Run("DELETE returns 501", func(t *testing.T) {
-		w := serveHandler(t, "DELETE", "/allocations/{consumer_uuid}",
-			s.HandleDeleteAllocations, "/allocations/"+validUUID)
-		if w.Code != http.StatusNotImplemented {
-			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
-		}
-	})
-}
-
-func TestHandleAllocations_CRDMode(t *testing.T) {
-	down, up := newTestTimers()
-	s := &Shim{
-		config: config{
-			PlacementURL: "http://should-not-be-called:1234",
-			Features:     featuresConfig{Allocations: FeatureModeCRD},
-		},
-		maxBodyLogSize:         4096,
-		downstreamRequestTimer: down,
-		upstreamRequestTimer:   up,
-	}
-	t.Run("POST returns 501", func(t *testing.T) {
-		w := serveHandler(t, "POST", "/allocations",
-			s.HandleManageAllocations, "/allocations")
-		if w.Code != http.StatusNotImplemented {
-			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
-		}
-	})
-	t.Run("GET returns 501", func(t *testing.T) {
-		w := serveHandler(t, "GET", "/allocations/{consumer_uuid}",
-			s.HandleListAllocations, "/allocations/"+validUUID)
-		if w.Code != http.StatusNotImplemented {
-			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
-		}
-	})
-	t.Run("PUT returns 501", func(t *testing.T) {
-		w := serveHandler(t, "PUT", "/allocations/{consumer_uuid}",
-			s.HandleUpdateAllocations, "/allocations/"+validUUID)
-		if w.Code != http.StatusNotImplemented {
-			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
-		}
-	})
-	t.Run("DELETE returns 501", func(t *testing.T) {
-		w := serveHandler(t, "DELETE", "/allocations/{consumer_uuid}",
-			s.HandleDeleteAllocations, "/allocations/"+validUUID)
-		if w.Code != http.StatusNotImplemented {
-			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotImplemented)
 		}
 	})
 }
