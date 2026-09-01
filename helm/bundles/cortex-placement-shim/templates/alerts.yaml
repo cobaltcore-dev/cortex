@@ -34,6 +34,30 @@ spec:
           on the shim for resource provider lookups and allocation candidates
           will degrade.
 
+    # Self-healing controller-manager (decoupled from pod liveness)
+    - alert: CortexPlacementShimManagerLooping
+      expr: |
+        cortex_placement_shim_manager_up{service="cortex-placement-shim-metrics-service"} == 0
+      for: 5m
+      labels:
+        context: liveness
+        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/shim-down
+      annotations:
+        summary: "Cortex Placement Shim controller-manager is not running"
+        description: >
+          The Cortex Placement Shim controller-manager has been down for at
+          least 5 minutes while the shim process itself stays up (the pod does
+          not crash by design). This means the manager cannot reach its
+          (local or remote) apiserver and is crash-looping, so the Kubernetes
+          informer cache is stale or empty. Passthrough requests to upstream
+          Placement are unaffected, but any KVM-backend behavior that reads from
+          the cache is degraded. Investigate apiserver connectivity and the shim
+          logs for the self-healing supervisor's restart errors.
+
     # Downstream HTTP errors (client -> shim)
     - alert: CortexPlacementShimDownstreamHttp400sTooHigh
       expr: rate(cortex_placement_shim_downstream_request_duration_seconds_count{service="cortex-placement-shim-metrics-service", responsecode=~"4.."}[5m]) > 0.1
