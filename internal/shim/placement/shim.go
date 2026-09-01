@@ -243,9 +243,14 @@ func (s *Shim) initHTTPClient(ctx context.Context) error {
 // SetManagerReady records whether a controller-manager with a synced cache is
 // currently running. The self-healing supervisor sets it true once the cache
 // has synced and false when the manager cycle ends (see pkg/shim/supervisor and
-// cmd/shim). It is safe to call concurrently with ManagerReady. The holder is
-// normally allocated in Init before any HTTP handler runs; the nil guard here
-// only covers shims constructed in tests without calling Init.
+// cmd/shim).
+//
+// Once Init has run, the holder is allocated and calls to SetManagerReady and
+// ManagerReady are race-free (they only load/store the atomic). The nil guard
+// below is a convenience for shims constructed in tests without Init; in that
+// case the first SetManagerReady is NOT safe to race with a concurrent
+// ManagerReady, since it may write the s.managerReady pointer itself. Production
+// code always goes through Init before serving, so this is not a concern there.
 func (s *Shim) SetManagerReady(ready bool) {
 	if s.managerReady == nil {
 		s.managerReady = &atomic.Bool{}
@@ -257,6 +262,8 @@ func (s *Shim) SetManagerReady(ready bool) {
 // currently running. Cache-backed handlers should gate on it and return 503
 // when it is false; passthrough handlers, which never touch the cache, ignore
 // it. It defaults to false until the supervisor brings the first manager up.
+// Safe to call concurrently once Init has allocated the holder (see
+// SetManagerReady).
 func (s *Shim) ManagerReady() bool {
 	return s.managerReady != nil && s.managerReady.Load()
 }
