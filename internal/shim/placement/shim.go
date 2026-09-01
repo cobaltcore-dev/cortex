@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -136,10 +137,20 @@ func (c *config) validate() error {
 // watches, however, may be rebuilt underneath it by a self-healing supervisor
 // (see pkg/shim/supervisor), which calls SetupControllerWithManager again for
 // each fresh manager. The HTTP request path is pure passthrough today and does
-// not touch the cache, so it is unaffected by manager restarts.
+// not touch the cache, so it is unaffected by manager restarts. Handlers that
+// do need the cache can gate on ManagerReady, which the supervisor drives via
+// SetManagerReady (true once the cache is synced, false when the manager is
+// down or restarting).
 type Shim struct {
 	client.Client
 	config config
+	// managerReady is true while a controller-manager is running with a synced
+	// cache. It is driven by the self-healing supervisor via SetManagerReady and
+	// read on the request path via ManagerReady so cache-backed handlers can
+	// return 503 while the cache is unavailable. Passthrough handlers ignore it.
+	// It is a pointer to the atomic holder (rather than an embedded atomic value)
+	// so the Shim struct itself stays copy-safe for tests.
+	managerReady *atomic.Bool
 	// HTTP client that can talk to openstack placement, if needed, over
 	// ingress with single-sign-on.
 	httpClient *http.Client
@@ -227,6 +238,25 @@ func (s *Shim) initHTTPClient(ctx context.Context) error {
 	}
 	setupLog.Info("Successfully connected to placement API")
 	return nil
+}
+
+// SetManagerReady records whether a controller-manager with a synced cache is
+// currently running. The self-healing supervisor sets it true once the cache
+// has synced and false when the manager cycle ends (see pkg/shim/supervisor and
+// cmd/shim). It is safe to call concurrently with ManagerReady.
+func (s *Shim) SetManagerReady(ready bool) {
+	if s.managerReady == nil {
+		s.managerReady = &atomic.Bool{}
+	}
+	s.managerReady.Store(ready)
+}
+
+// ManagerReady reports whether a controller-manager with a synced cache is
+// currently running. Cache-backed handlers should gate on it and return 503
+// when it is false; passthrough handlers, which never touch the cache, ignore
+// it. It defaults to false until the supervisor brings the first manager up.
+func (s *Shim) ManagerReady() bool {
+	return s.managerReady != nil && s.managerReady.Load()
 }
 
 // Reconcile is not used by the shim, but must be implemented to satisfy the

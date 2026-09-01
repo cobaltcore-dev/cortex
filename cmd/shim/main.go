@@ -378,6 +378,16 @@ func main() {
 			if err := placementShim.SetupControllerWithManager(ctx, mgr, multiclusterClient); err != nil {
 				return fmt.Errorf("unable to set up placement shim controller: %w", err)
 			}
+			// Drive the shim's cache-readiness flag: mark ready once this
+			// manager's cache has synced, and clear it when the cycle returns so
+			// cache-backed handlers degrade to 503 while the manager is down or
+			// restarting. Passthrough handlers ignore the flag.
+			defer placementShim.SetManagerReady(false)
+			go func() {
+				if mgr.GetCache().WaitForCacheSync(ctx) {
+					placementShim.SetManagerReady(true)
+				}
+			}()
 		}
 
 		if metricsCertWatcher != nil {
