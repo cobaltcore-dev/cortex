@@ -243,7 +243,9 @@ func (s *Shim) initHTTPClient(ctx context.Context) error {
 // SetManagerReady records whether a controller-manager with a synced cache is
 // currently running. The self-healing supervisor sets it true once the cache
 // has synced and false when the manager cycle ends (see pkg/shim/supervisor and
-// cmd/shim). It is safe to call concurrently with ManagerReady.
+// cmd/shim). It is safe to call concurrently with ManagerReady. The holder is
+// normally allocated in Init before any HTTP handler runs; the nil guard here
+// only covers shims constructed in tests without calling Init.
 func (s *Shim) SetManagerReady(ready bool) {
 	if s.managerReady == nil {
 		s.managerReady = &atomic.Bool{}
@@ -293,6 +295,13 @@ func (s *Shim) predicateRemoteHypervisor() predicate.Predicate {
 // pkg/shim/supervisor).
 func (s *Shim) Init(ctx context.Context) (err error) {
 	setupLog.Info("Initializing placement shim")
+
+	// Allocate the readiness holder before any HTTP handler can run, so the
+	// pointer itself is never written concurrently with ManagerReady reads from
+	// the request path (the API server comes up before the first cache sync).
+	if s.managerReady == nil {
+		s.managerReady = &atomic.Bool{}
+	}
 
 	s.config, err = conf.GetConfig[config]()
 	if err != nil {

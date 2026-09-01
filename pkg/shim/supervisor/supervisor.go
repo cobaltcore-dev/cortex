@@ -117,36 +117,27 @@ func Run(ctx context.Context, o Options) error {
 		healthyResetAfter = DefaultHealthyResetAfter
 	}
 
-	// serverErr carries a bind/serve failure from any outer server. A failure to
-	// open a port (e.g. address in use) is fatal — even while a manager is
-	// running healthily — rather than leaving the process "healthy" while serving
-	// nothing. A clean exit on ctx cancellation reports nil.
-	serverErr := make(chan error, 3)
+	// loopCtx is cancelled when the outer ctx is cancelled, when Run returns, or
+	// when an outer server fails — so a bind/serve failure tears down every outer
+	// server and any running manager instead of leaving some alive. The cancel
+	// cause carries the first fatal server error (if any) back to the loop without
+	// sharing mutable state between goroutines. All outer servers are bound to
+	// loopCtx (not ctx) so they reliably shut down whenever Run exits.
+	loopCtx, cancelLoop := context.WithCancelCause(ctx)
+	defer cancelLoop(nil)
 	serve := func(name, addr string, handler http.Handler) {
 		go func() {
 			log.Info("starting "+name+" server", "address", addr)
-			err := httpext.ListenAndServeContext(ctx, addr, handler)
-			if err != nil && ctx.Err() == nil {
+			err := httpext.ListenAndServeContext(loopCtx, addr, handler)
+			if err != nil && loopCtx.Err() == nil {
+				// A genuine bind/serve failure (not a shutdown triggered by
+				// loopCtx). Make it fatal by cancelling the loop with the error as
+				// the cause.
 				log.Error(err, name+" server exited with error")
-				serverErr <- err
-				return
+				cancelLoop(fmt.Errorf("supervisor: %s server failed: %w", name, err))
 			}
-			serverErr <- nil
 		}()
 	}
-
-	// loopCtx is cancelled either when the outer ctx is cancelled or when an
-	// outer server fails, so a bind/serve failure also tears down a running
-	// manager instead of waiting for it to exit on its own.
-	loopCtx, cancelLoop := context.WithCancel(ctx)
-	defer cancelLoop()
-	var fatalErr error
-	go func() {
-		if err := <-serverErr; err != nil {
-			fatalErr = err
-			cancelLoop()
-		}
-	}()
 
 	// Bind the liveness/readiness probe once. It always reports healthy so pod
 	// liveness reflects the process being up, not apiserver reachability.
@@ -171,6 +162,20 @@ func Run(ctx context.Context, o Options) error {
 		serve("metrics", o.MetricsAddr, metricsMux)
 	}
 
+	// exitErr returns the fatal outer-server error when the loop is ending because
+	// a server failed, and nil for a graceful shutdown (outer ctx cancelled). A
+	// failing server cancels loopCtx with an explicit error cause; a graceful
+	// shutdown cancels the parent ctx, so loopCtx's cause equals the parent's
+	// cause. Comparing the two distinguishes the two cases without treating parent
+	// cancellation as an error.
+	exitErr := func() error {
+		cause := context.Cause(loopCtx)
+		if cause == nil || errors.Is(cause, context.Cause(ctx)) {
+			return nil
+		}
+		return cause
+	}
+
 	// Supervision loop: (re)build and start the manager, backing off on each
 	// return, until the outer context is cancelled or an outer server fails to
 	// bind/serve.
@@ -179,10 +184,7 @@ func Run(ctx context.Context, o Options) error {
 		// during shutdown or after a fatal outer-server failure.
 		select {
 		case <-loopCtx.Done():
-			if fatalErr != nil {
-				return fmt.Errorf("supervisor: outer server failed: %w", fatalErr)
-			}
-			return nil
+			return exitErr()
 		default:
 		}
 
@@ -192,10 +194,7 @@ func Run(ctx context.Context, o Options) error {
 		log.Info("manager stopped, backing off before restart", "delay", delay.String())
 		select {
 		case <-loopCtx.Done():
-			if fatalErr != nil {
-				return fmt.Errorf("supervisor: outer server failed: %w", fatalErr)
-			}
-			return nil
+			return exitErr()
 		case <-time.After(delay):
 		}
 	}
