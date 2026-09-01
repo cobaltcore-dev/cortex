@@ -381,10 +381,16 @@ func main() {
 			// Drive the shim's cache-readiness flag: mark ready once this
 			// manager's cache has synced, and clear it when the cycle returns so
 			// cache-backed handlers degrade to 503 while the manager is down or
-			// restarting. Passthrough handlers ignore the flag.
-			defer placementShim.SetManagerReady(false)
+			// restarting. Passthrough handlers ignore the flag. The goroutine uses
+			// a per-cycle context cancelled on return so WaitForCacheSync cannot
+			// block or set readiness after this manager has already exited.
+			cacheCtx, cancelCacheSync := context.WithCancel(ctx)
+			defer func() {
+				cancelCacheSync()
+				placementShim.SetManagerReady(false)
+			}()
 			go func() {
-				if mgr.GetCache().WaitForCacheSync(ctx) {
+				if mgr.GetCache().WaitForCacheSync(cacheCtx) {
 					placementShim.SetManagerReady(true)
 				}
 			}()

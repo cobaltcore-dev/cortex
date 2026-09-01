@@ -350,6 +350,14 @@ func (s *Shim) Init(ctx context.Context) (err error) {
 // metric collectors, or config.
 func (s *Shim) SetupControllerWithManager(ctx context.Context, mgr ctrl.Manager, mcl *multicluster.Client) error {
 	setupLog.Info("Setting up placement shim controller with manager")
+	if mcl == nil {
+		return errors.New("multicluster client must not be nil")
+	}
+	// Store the fresh multicluster client as the shim's cache-backed client so
+	// cache-read handlers have a live client for this manager cycle. It is
+	// re-assigned on every rebuild; readiness is gated separately via
+	// SetManagerReady once the cache has synced.
+	s.Client = mcl
 	if err := IndexFields(ctx, mcl); err != nil {
 		return fmt.Errorf("failed to set up indexes: %w", err)
 	}

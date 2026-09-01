@@ -220,14 +220,95 @@ func TestContextCancelStopsLoop(t *testing.T) {
 	}
 }
 
+// TestRunRequiresMetricsGathererWhenMetricsAddrSet verifies Run fails fast when
+// a metrics bind address is configured without a gatherer, rather than silently
+// serving no metrics.
+func TestRunRequiresMetricsGathererWhenMetricsAddrSet(t *testing.T) {
+	o := baseOptions(t)
+	o.MetricsAddr = freeAddr(t)
+	o.BuildAndStart = func(context.Context) error { return nil }
+	if err := Run(context.Background(), o); err == nil {
+		t.Fatal("expected error when MetricsAddr is set without MetricsGatherer, got nil")
+	}
+}
+
+// TestOuterServerBindFailureIsFatal verifies that if an outer server cannot bind
+// its port, Run returns an error instead of leaving the process "healthy" while
+// serving nothing.
+func TestOuterServerBindFailureIsFatal(t *testing.T) {
+	// Occupy a port so the API server cannot bind to it.
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to reserve port: %v", err)
+	}
+	defer func() {
+		if err := l.Close(); err != nil {
+			t.Errorf("failed to close listener: %v", err)
+		}
+	}()
+	occupied := l.Addr().String()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	o := baseOptions(t)
+	o.APIAddr = occupied
+	o.BuildAndStart = func(ctx context.Context) error { <-ctx.Done(); return nil }
+
+	done := make(chan error, 1)
+	go func() { done <- Run(ctx, o) }()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected Run to return an error on bind failure, got nil")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not return after outer server bind failure")
+	}
+}
+
 // TestBackoffProgressionAndReset verifies the delay grows across failures and
-// resets after the manager stays up past the healthy threshold.
+// that runManagerCycle resets the backoff after the manager stays up past the
+// healthy threshold.
 func TestBackoffProgressionAndReset(t *testing.T) {
+	// Progression: successive Step() calls grow.
 	b := wait.Backoff{Duration: 10 * time.Millisecond, Factor: 2.0, Steps: 100}
 	first := b.Step()
 	second := b.Step()
 	if second <= first {
 		t.Errorf("expected backoff to grow: first=%v second=%v", first, second)
+	}
+
+	// Reset: after a manager stays up longer than healthyResetAfter,
+	// runManagerCycle resets the working backoff to the configured Options.Backoff
+	// so a later outage starts from the initial delay again.
+	initial := wait.Backoff{Duration: 10 * time.Millisecond, Factor: 2.0, Steps: 100}
+	o := &Options{Backoff: initial}
+	working := initial
+	working.Step() // advance it so a no-op reset would be observable
+	working.Step()
+	const healthyResetAfter = 20 * time.Millisecond
+	o.BuildAndStart = func(context.Context) error {
+		time.Sleep(2 * healthyResetAfter) // stay "up" past the threshold
+		return nil
+	}
+	runManagerCycle(context.Background(), o, healthyResetAfter, &working)
+	// After a healthy cycle, the working backoff should equal a fresh initial
+	// backoff: its first Step() must match the first Step() of the initial.
+	wantFirst := initial
+	if got, want := working.Step(), wantFirst.Step(); got != want {
+		t.Errorf("backoff not reset after healthy cycle: first step=%v, want %v", got, want)
+	}
+
+	// And a cycle that returns quickly (before the threshold) must NOT reset.
+	working2 := initial
+	working2.Step()
+	advanced := working2 // snapshot of the advanced state
+	o.BuildAndStart = func(context.Context) error { return errors.New("boom") }
+	runManagerCycle(context.Background(), o, time.Hour, &working2)
+	if got, want := working2.Step(), advanced.Step(); got != want {
+		t.Errorf("backoff reset after a short cycle: first step=%v, want %v", got, want)
 	}
 }
 

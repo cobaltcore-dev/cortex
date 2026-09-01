@@ -31,6 +31,7 @@ package supervisor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -103,6 +104,10 @@ func Run(ctx context.Context, o Options) error {
 	if o.ProbeAddr == "" || o.APIAddr == "" || o.Mux == nil || o.BuildAndStart == nil {
 		return errors.New("supervisor: ProbeAddr, APIAddr, Mux and BuildAndStart are required")
 	}
+	metricsEnabled := o.MetricsAddr != "" && o.MetricsAddr != "0"
+	if metricsEnabled && o.MetricsGatherer == nil {
+		return errors.New("supervisor: MetricsGatherer is required when MetricsAddr is set")
+	}
 	backoff := o.Backoff
 	if backoff.Duration == 0 {
 		backoff = DefaultBackoff
@@ -112,6 +117,37 @@ func Run(ctx context.Context, o Options) error {
 		healthyResetAfter = DefaultHealthyResetAfter
 	}
 
+	// serverErr carries a bind/serve failure from any outer server. A failure to
+	// open a port (e.g. address in use) is fatal — even while a manager is
+	// running healthily — rather than leaving the process "healthy" while serving
+	// nothing. A clean exit on ctx cancellation reports nil.
+	serverErr := make(chan error, 3)
+	serve := func(name, addr string, handler http.Handler) {
+		go func() {
+			log.Info("starting "+name+" server", "address", addr)
+			err := httpext.ListenAndServeContext(ctx, addr, handler)
+			if err != nil && ctx.Err() == nil {
+				log.Error(err, name+" server exited with error")
+				serverErr <- err
+				return
+			}
+			serverErr <- nil
+		}()
+	}
+
+	// loopCtx is cancelled either when the outer ctx is cancelled or when an
+	// outer server fails, so a bind/serve failure also tears down a running
+	// manager instead of waiting for it to exit on its own.
+	loopCtx, cancelLoop := context.WithCancel(ctx)
+	defer cancelLoop()
+	var fatalErr error
+	go func() {
+		if err := <-serverErr; err != nil {
+			fatalErr = err
+			cancelLoop()
+		}
+	}()
+
 	// Bind the liveness/readiness probe once. It always reports healthy so pod
 	// liveness reflects the process being up, not apiserver reachability.
 	probeMux := http.NewServeMux()
@@ -120,53 +156,45 @@ func Run(ctx context.Context, o Options) error {
 	}
 	probeMux.HandleFunc("/healthz", alwaysOK)
 	probeMux.HandleFunc("/readyz", alwaysOK)
-	go func() {
-		log.Info("starting liveness probe server", "address", o.ProbeAddr)
-		if err := httpext.ListenAndServeContext(ctx, o.ProbeAddr, probeMux); err != nil {
-			log.Error(err, "probe server exited with error")
-		}
-	}()
+	serve("liveness probe", o.ProbeAddr, probeMux)
 
 	// Bind the REST API once so it survives manager restarts.
-	go func() {
-		log.Info("starting api server", "address", o.APIAddr)
-		if err := httpext.ListenAndServeContext(ctx, o.APIAddr, o.Mux); err != nil {
-			log.Error(err, "api server exited with error")
-		}
-	}()
+	serve("api", o.APIAddr, o.Mux)
 
 	// Bind the metrics server once (if configured) so metrics — including
 	// ManagerUp — stay scrapable during a manager restart.
-	if o.MetricsAddr != "" && o.MetricsAddr != "0" && o.MetricsGatherer != nil {
+	if metricsEnabled {
 		metricsMux := http.NewServeMux()
 		metricsMux.Handle("/metrics", promhttp.HandlerFor(
 			o.MetricsGatherer, promhttp.HandlerOpts{},
 		))
-		go func() {
-			log.Info("starting metrics server", "address", o.MetricsAddr)
-			if err := httpext.ListenAndServeContext(ctx, o.MetricsAddr, metricsMux); err != nil {
-				log.Error(err, "metrics server exited with error")
-			}
-		}()
+		serve("metrics", o.MetricsAddr, metricsMux)
 	}
 
 	// Supervision loop: (re)build and start the manager, backing off on each
-	// return, until the outer context is cancelled.
+	// return, until the outer context is cancelled or an outer server fails to
+	// bind/serve.
 	for {
-		// Observe cancellation before doing any work so we never rebuild a
-		// manager during shutdown.
+		// Observe cancellation before doing any work so we never rebuild a manager
+		// during shutdown or after a fatal outer-server failure.
 		select {
-		case <-ctx.Done():
+		case <-loopCtx.Done():
+			if fatalErr != nil {
+				return fmt.Errorf("supervisor: outer server failed: %w", fatalErr)
+			}
 			return nil
 		default:
 		}
 
-		runManagerCycle(ctx, &o, healthyResetAfter, &backoff)
+		runManagerCycle(loopCtx, &o, healthyResetAfter, &backoff)
 
 		delay := backoff.Step()
 		log.Info("manager stopped, backing off before restart", "delay", delay.String())
 		select {
-		case <-ctx.Done():
+		case <-loopCtx.Done():
+			if fatalErr != nil {
+				return fmt.Errorf("supervisor: outer server failed: %w", fatalErr)
+			}
 			return nil
 		case <-time.After(delay):
 		}
