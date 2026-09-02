@@ -31,6 +31,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -364,6 +365,15 @@ func main() {
 			Metrics:                metricsServerOptions,
 			WebhookServer:          webhookServer,
 			HealthProbeBindAddress: managerProbeAddr,
+			// In self-heal mode the supervisor rebuilds this manager on every
+			// connectivity failure, re-registering the same controller name
+			// ("placement-shim") and its metrics. controller-runtime's
+			// process-global name-uniqueness check would reject the rebuilt
+			// controller ("controller with name ... already exists"), so skip it
+			// here: the collision is intentional and expected across restarts.
+			// The coupled path never rebuilds, so it keeps validation on to catch
+			// a genuine double-registration bug.
+			Controller: config.Controller{SkipNameValidation: &selfHeal},
 			// Kept for consistency with kubebuilder scaffold, but the shim should
 			// always run with leader election disabled.
 			LeaderElection: enableLeaderElection,
