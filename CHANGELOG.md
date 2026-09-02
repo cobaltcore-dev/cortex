@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-09-02 — [#1184](https://github.com/cobaltcore-dev/cortex/pull/1184)
+
+### cortex-shim v0.1.16 (sha-b577e306)
+
+New features:
+- Self-healing supervisor — new `pkg/shim/supervisor` package decouples the shim's HTTP surface (REST API, liveness probe, metrics) from the controller-runtime manager's lifecycle; the supervisor binds outer servers once and runs a capped, jittered-backoff loop that rebuilds the manager whenever it exits, so an apiserver connectivity blip no longer crashes the pod ([#1182](https://github.com/cobaltcore-dev/cortex/pull/1182))
+- `cortex_placement_shim_manager_up` gauge — exposes whether the controller-manager's informer cache is synced and healthy; the new `CortexPlacementShimManagerLooping` alert fires when the average over 15 minutes drops below 0.9 ([#1182](https://github.com/cobaltcore-dev/cortex/pull/1182))
+- Ingress template guard — the Ingress resource is now only rendered when both `ingress.enabled` is true and `ingress.rules` is non-empty, preventing invalid empty Ingress objects in local/dev setups ([#1182](https://github.com/cobaltcore-dev/cortex/pull/1182))
+
+Breaking changes:
+- Feature toggle type changed from string enum (`passthrough`/`hybrid`/`crd`) to boolean — all feature toggles in `values.yaml` are now `true`/`false` instead of the previous string modes; `versioning`, `traits.configMapName`, and `resourceClasses.configMapName` values removed ([#1179](https://github.com/cobaltcore-dev/cortex/pull/1179), [#1182](https://github.com/cobaltcore-dev/cortex/pull/1182))
+- ConfigMap/Lease RBAC removed — the shim no longer requires permissions on ConfigMaps or Leases; the syncer subsystem (`syncer.go`, `syncer_resource_classes.go`, `syncer_traits.go`) has been deleted ([#1179](https://github.com/cobaltcore-dev/cortex/pull/1179), [#1182](https://github.com/cobaltcore-dev/cortex/pull/1182))
+
+Non-breaking changes:
+- Consolidated and simplified placement shim handler logic — removed the `FeatureMode` enum, `featureModeFromConfOrHeader` dispatch, per-request feature-mode overrides, and `dispatchPassthroughOnly`; handlers now use a simple boolean toggle to decide between passthrough and KVM-backend behavior ([#1179](https://github.com/cobaltcore-dev/cortex/pull/1179))
+- Extensive test suite cleanup — removed redundant e2e scaffolding and test helpers for the deleted syncer and multi-mode dispatch logic ([#1179](https://github.com/cobaltcore-dev/cortex/pull/1179), [#1182](https://github.com/cobaltcore-dev/cortex/pull/1182))
+- Update `kube-prometheus-stack` to v88.6.2 ([#1172](https://github.com/cobaltcore-dev/cortex/pull/1172), [#1181](https://github.com/cobaltcore-dev/cortex/pull/1181))
+
+### cortex-placement-shim v0.1.16
+
+Includes updated chart cortex-shim v0.1.16.
+
 ## 2026-08-31 — [#1177](https://github.com/cobaltcore-dev/cortex/pull/1177)
 
 ### cortex v0.4.0 (sha-23f975db)
