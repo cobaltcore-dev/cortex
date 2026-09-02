@@ -309,15 +309,17 @@ func main() {
 	multiclusterMonitor := multicluster.NewMonitor("cortex_")
 	metrics.Registry.MustRegister(multiclusterMonitor)
 
-	// managerUp reports whether a controller-manager is currently running: 1
-	// while a manager (and its cache) is up, 0 between restarts. It is served
-	// from the outer process so a crash-looping manager can be detected via
-	// alerting without ever crashing the pod. Registered once.
+	// managerUp reports whether a controller-manager with a synced cache is
+	// currently running: 1 once the manager's cache has synced, 0 while it is
+	// being (re)built, has failed, or is between restarts. It is served from the
+	// outer process so a crash-looping manager can be detected via alerting
+	// without ever crashing the pod. Registered once.
 	managerUp := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "cortex_placement_shim_manager_up",
-		Help: "1 while the placement shim controller-manager is running, 0 while it is being (re)built. " +
-			"A value stuck at 0 indicates the manager cannot reach the apiserver / is crash-looping " +
-			"while the shim keeps serving in passthrough mode.",
+		Help: "1 while the placement shim controller-manager is running with a synced cache, 0 while it is " +
+			"being (re)built or has failed. A value that stays low (see the manager-looping alert) indicates " +
+			"the manager cannot reach the apiserver / is crash-looping while the shim keeps serving in " +
+			"passthrough mode.",
 	})
 	metrics.Registry.MustRegister(managerUp)
 
@@ -379,36 +381,47 @@ func main() {
 			if err := placementShim.SetupControllerWithManager(ctx, mgr, multiclusterClient); err != nil {
 				return fmt.Errorf("unable to set up placement shim controller: %w", err)
 			}
-			// Drive the shim's cache-readiness flag: mark ready once this
-			// manager's cache has synced, and clear it when the cycle returns so
-			// cache-backed handlers degrade to 503 while the manager is down or
-			// restarting. Passthrough handlers ignore the flag.
-			//
-			// A per-cycle context (cancelled on return) stops WaitForCacheSync from
-			// blocking across restarts. The mutex + cacheCtx.Err() re-check under
-			// the lock closes the ordering race where the sync goroutine has just
-			// observed a synced cache but the cycle is returning: cancelCacheSync
-			// runs before the defer takes the lock, so whichever critical section
-			// runs first, the goroutine only sets ready=true while the context is
-			// still live, and the deferred ready=false always wins the final state.
-			var readyMu sync.Mutex
-			cacheCtx, cancelCacheSync := context.WithCancel(ctx)
-			defer func() {
-				cancelCacheSync()
-				readyMu.Lock()
+		}
+
+		// Drive the manager_up gauge and (if present) the shim's cache-readiness
+		// flag: mark both once this manager's cache has synced, and clear them
+		// when the cycle returns so cache-backed handlers degrade to 503 while the
+		// manager is down or restarting. Passthrough handlers ignore the flag.
+		// The gauge deliberately tracks a *synced cache*, not merely a running
+		// build: a cycle that fails during construction never flips it to 1, so
+		// the metric (and its alert) reflects a healthy manager rather than "a
+		// cycle is executing".
+		//
+		// A per-cycle context (cancelled on return) stops WaitForCacheSync from
+		// blocking across restarts. The mutex + cacheCtx.Err() re-check under the
+		// lock closes the ordering race where the sync goroutine has just observed
+		// a synced cache but the cycle is returning: cancelCacheSync runs before
+		// the defer takes the lock, so whichever critical section runs first, the
+		// goroutine only marks ready while the context is still live, and the
+		// deferred clear always wins the final state.
+		var readyMu sync.Mutex
+		cacheCtx, cancelCacheSync := context.WithCancel(ctx)
+		defer func() {
+			cancelCacheSync()
+			readyMu.Lock()
+			managerUp.Set(0)
+			if placementShim != nil {
 				placementShim.SetManagerReady(false)
-				readyMu.Unlock()
-			}()
-			go func() {
-				if mgr.GetCache().WaitForCacheSync(cacheCtx) {
-					readyMu.Lock()
-					if cacheCtx.Err() == nil {
+			}
+			readyMu.Unlock()
+		}()
+		go func() {
+			if mgr.GetCache().WaitForCacheSync(cacheCtx) {
+				readyMu.Lock()
+				if cacheCtx.Err() == nil {
+					managerUp.Set(1)
+					if placementShim != nil {
 						placementShim.SetManagerReady(true)
 					}
-					readyMu.Unlock()
 				}
-			}()
-		}
+				readyMu.Unlock()
+			}
+		}()
 
 		if metricsCertWatcher != nil {
 			if err := mgr.Add(metricsCertWatcher); err != nil {
@@ -455,7 +468,6 @@ func main() {
 			MetricsAddr:     managerMetricsAddr,
 			MetricsGatherer: metrics.Registry,
 			Mux:             mux,
-			ManagerUp:       managerUp,
 			BuildAndStart:   buildAndStart,
 		}); err != nil {
 			setupLog.Error(err, "supervisor exited with error")
@@ -465,8 +477,8 @@ func main() {
 	}
 
 	// Coupled mode (--self-heal=false): a manager failure exits the process.
-	// This is the classic behavior kept for parity.
-	managerUp.Set(1)
+	// This is the classic behavior kept for parity. The manager_up gauge is
+	// driven from within buildAndStart (on cache sync), so it is not set here.
 	if err := buildAndStart(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)

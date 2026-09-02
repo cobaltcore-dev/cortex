@@ -13,8 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	dto "github.com/prometheus/client_model/go"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
@@ -43,16 +41,6 @@ func runAsync(t *testing.T, ctx context.Context, o Options) {
 			t.Errorf("Run returned error: %v", err)
 		}
 	}()
-}
-
-// gaugeValue reads the current value of a gauge.
-func gaugeValue(t *testing.T, g prometheus.Gauge) float64 {
-	t.Helper()
-	m := &dto.Metric{}
-	if err := g.Write(m); err != nil {
-		t.Fatalf("failed to write gauge: %v", err)
-	}
-	return m.GetGauge().GetValue()
 }
 
 // getStatus issues a GET against the given address+path and returns the status
@@ -145,42 +133,27 @@ func TestAPIServedFromMux(t *testing.T) {
 	}
 }
 
-// TestManagerUpGaugeTransitions verifies the gauge is 1 while a manager runs
-// and 0 after it returns.
-func TestManagerUpGaugeTransitions(t *testing.T) {
+// TestManagerRestartsOnFailure verifies a failing BuildAndStart is retried
+// (the supervisor keeps the process alive and rebuilds the manager) rather than
+// returning. The manager_up metric is owned by the caller (it needs to observe
+// cache sync), so the supervisor is only responsible for the restart behavior.
+func TestManagerRestartsOnFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	gauge := prometheus.NewGauge(prometheus.GaugeOpts{Name: "test_manager_up"})
-	running := make(chan struct{})
-	release := make(chan struct{})
 	var cycles atomic.Int32
 
 	o := baseOptions(t)
-	o.ManagerUp = gauge
 	// Fast backoff so we do not slow the test down.
 	o.Backoff = wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: 100}
 	o.BuildAndStart = func(context.Context) error {
-		if cycles.Add(1) == 1 {
-			close(running)
-			<-release // hold the first manager "up" until the test releases it
-		}
+		cycles.Add(1)
 		return errors.New("boom")
 	}
 	runAsync(t, ctx, o)
 
-	<-running
-	// Give the deferred Set(1) a moment (it runs before BuildAndStart is called).
-	waitFor(t, func() bool { return gaugeValue(t, gauge) == 1 }, "gauge to reach 1 while manager up")
-
-	close(release)
-	// After the manager returns the gauge should drop to 0 at least momentarily;
-	// since it restarts quickly it may flip back to 1, so just assert we saw a
-	// restart happen (cycles advanced) and the gauge is a valid 0/1 value.
-	waitFor(t, func() bool { return cycles.Load() >= 2 }, "manager to restart after failure")
-	if v := gaugeValue(t, gauge); v != 0 && v != 1 {
-		t.Errorf("gauge value = %v, want 0 or 1", v)
-	}
+	// A failing manager must be rebuilt repeatedly, not cause Run to return.
+	waitFor(t, func() bool { return cycles.Load() >= 3 }, "manager to be rebuilt after repeated failures")
 }
 
 // TestContextCancelStopsLoop verifies cancelling the context stops the loop and

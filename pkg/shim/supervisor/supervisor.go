@@ -21,9 +21,10 @@
 //     up, so pod liveness reflects the process, not the apiserver.
 //   - It runs a supervision loop that builds and starts a fresh manager (and
 //     its caches) via a caller-supplied BuildAndStart function, and restarts it
-//     with capped, jittered backoff whenever it returns. A looping manager is
-//     surfaced via the ManagerUp gauge (1 while a manager is running, 0
-//     otherwise) rather than by crashing the pod.
+//     with capped, jittered backoff whenever it returns, rather than crashing
+//     the pod. Surfacing a looping manager as a metric is left to the caller,
+//     since only it can observe when the manager's cache has actually synced
+//     (BuildAndStart running is not the same as a healthy manager).
 //
 // The package is deliberately shim-agnostic so future shims can reuse it.
 package supervisor
@@ -65,9 +66,6 @@ type Options struct {
 	// Mux serves the REST API on APIAddr. Its routes must be registered before
 	// Run is called; the supervisor never mutates it. Required.
 	Mux *http.ServeMux
-	// ManagerUp is set to 1 while a manager is running and 0 between restarts.
-	// Optional; nil disables the gauge.
-	ManagerUp prometheus.Gauge
 	// Backoff controls the wait between manager restarts. The zero value uses
 	// DefaultBackoff. The backoff is reset after a manager has stayed up longer
 	// than HealthyResetAfter, so a brief blip does not inflate the delay before
@@ -200,15 +198,13 @@ func Run(ctx context.Context, o Options) error {
 	}
 }
 
-// runManagerCycle runs a single manager lifecycle: it sets the ManagerUp gauge,
-// runs BuildAndStart to completion, and clears the gauge on return. If the
-// manager stayed up longer than healthyResetAfter, the backoff is reset so the
-// next outage starts from the initial delay.
+// runManagerCycle runs a single manager lifecycle: it runs BuildAndStart to
+// completion. If the manager stayed up longer than healthyResetAfter, the
+// backoff is reset so the next outage starts from the initial delay. The caller
+// is responsible for any "manager healthy" metric, since only it can observe
+// when the manager's cache has actually synced (a running BuildAndStart is not
+// the same as a healthy manager).
 func runManagerCycle(ctx context.Context, o *Options, healthyResetAfter time.Duration, backoff *wait.Backoff) {
-	if o.ManagerUp != nil {
-		o.ManagerUp.Set(1)
-		defer o.ManagerUp.Set(0)
-	}
 	start := time.Now()
 	log.Info("starting manager")
 	if err := o.BuildAndStart(ctx); err != nil {
