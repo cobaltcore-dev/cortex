@@ -141,10 +141,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Check that the metrics and API bind addresses don't overlap.
-	if metricsAddr != "0" && metricsAddr == apiBindAddr {
+	// The probe, API and (when enabled) metrics endpoints each bind their own
+	// listener, so their addresses must all differ. Reject overlaps up front with
+	// a clear message rather than failing later with an opaque bind error. The
+	// metrics address "0" means "no metrics server", so it is exempt.
+	metricsBinds := metricsAddr != "0"
+	switch {
+	case probeAddr == apiBindAddr:
+		err := errors.New("health-probe-bind-address and api-bind-address must not be the same")
+		setupLog.Error(err, "invalid configuration", "health-probe-bind-address", probeAddr, "api-bind-address", apiBindAddr)
+		os.Exit(1)
+	case metricsBinds && metricsAddr == apiBindAddr:
 		err := errors.New("metrics-bind-address and api-bind-address must not be the same")
 		setupLog.Error(err, "invalid configuration", "metrics-bind-address", metricsAddr, "api-bind-address", apiBindAddr)
+		os.Exit(1)
+	case metricsBinds && metricsAddr == probeAddr:
+		err := errors.New("metrics-bind-address and health-probe-bind-address must not be the same")
+		setupLog.Error(err, "invalid configuration", "metrics-bind-address", metricsAddr, "health-probe-bind-address", probeAddr)
 		os.Exit(1)
 	}
 

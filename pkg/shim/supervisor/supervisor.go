@@ -161,17 +161,20 @@ func Run(ctx context.Context, o Options) error {
 	}
 
 	// exitErr returns the fatal outer-server error when the loop is ending because
-	// a server failed, and nil for a graceful shutdown (outer ctx cancelled). A
-	// failing server cancels loopCtx with an explicit error cause; a graceful
-	// shutdown cancels the parent ctx, so loopCtx's cause equals the parent's
-	// cause. Comparing the two distinguishes the two cases without treating parent
-	// cancellation as an error.
+	// a server failed, and nil for a graceful shutdown. The only two ways the loop
+	// ends are: the parent ctx is cancelled (graceful — a rollout/scale-down), or
+	// a server calls cancelLoop with an explicit error cause while the parent is
+	// still live. So the parent's own cancellation is the unambiguous signal for
+	// "graceful": if it is cancelled, return nil; otherwise the loop is ending
+	// because a server failed, so surface that cause.
 	exitErr := func() error {
-		cause := context.Cause(loopCtx)
-		if cause == nil || errors.Is(cause, context.Cause(ctx)) {
-			return nil
+		// A cancelled parent is a graceful shutdown (rollout/scale-down): report
+		// no error. Otherwise the loop is only ending because a server failed and
+		// cancelled loopCtx with an explicit cause, so surface that cause.
+		if ctx.Err() == nil {
+			return context.Cause(loopCtx)
 		}
-		return cause
+		return nil
 	}
 
 	// Supervision loop: (re)build and start the manager, backing off on each
