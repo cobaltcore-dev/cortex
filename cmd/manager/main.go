@@ -57,6 +57,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 	novafilters "github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
+	novaweighers "github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/weighers"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/capacity"
@@ -435,6 +436,8 @@ func main() {
 	// filter runs.
 	novafilters.QuotaEnforcementMetricsSingleton = novafilters.NewQuotaEnforcementMetrics()
 	metrics.Registry.MustRegister(novafilters.QuotaEnforcementMetricsSingleton)
+	novaweighers.CRMigrationSlotMetricsSingleton = novaweighers.NewCRMigrationSlotMetrics()
+	metrics.Registry.MustRegister(novaweighers.CRMigrationSlotMetricsSingleton)
 
 	// Initialize commitments API for LIQUID interface (Postgres-backed usage reporting).
 	commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
