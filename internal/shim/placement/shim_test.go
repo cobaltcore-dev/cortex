@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -513,4 +514,29 @@ func TestWrapHandlerWithAuth(t *testing.T) {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 		}
 	})
+}
+
+// TestManagerReadyConcurrent verifies ManagerReady/SetManagerReady are safe
+// under concurrent access once the holder has been allocated (as Init does
+// before serving). Run with -race to catch pointer/value data races.
+func TestManagerReadyConcurrent(t *testing.T) {
+	s := &Shim{}
+	// Simulate Init allocating the holder before any handler runs.
+	s.SetManagerReady(false)
+	if s.ManagerReady() {
+		t.Fatal("ManagerReady should be false initially")
+	}
+
+	var wg sync.WaitGroup
+	for range 50 {
+		wg.Add(2)
+		go func() { defer wg.Done(); s.SetManagerReady(true) }()
+		go func() { defer wg.Done(); _ = s.ManagerReady() }()
+	}
+	wg.Wait()
+
+	s.SetManagerReady(true)
+	if !s.ManagerReady() {
+		t.Fatal("ManagerReady should be true after SetManagerReady(true)")
+	}
 }

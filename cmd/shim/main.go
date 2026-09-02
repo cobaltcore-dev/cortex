@@ -8,17 +8,21 @@ import (
 	"crypto/tls"
 	"errors"
 	"flag"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/shim/placement"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
+	"github.com/cobaltcore-dev/cortex/pkg/shim/supervisor"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/httpext"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -27,6 +31,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -92,6 +97,7 @@ func main() {
 	var enableHTTP2 bool
 	var enablePlacementShim bool
 	var runPlacementShimE2E bool
+	var selfHeal bool
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -115,6 +121,13 @@ func main() {
 		"If set, the placement API shim handlers are registered on the API server.")
 	flag.BoolVar(&runPlacementShimE2E, "e2e-placement-shim", false,
 		"If set, runs end-to-end tests for the placement shim instead of starting the manager. ")
+	flag.BoolVar(&selfHeal, "self-heal", true,
+		"If set (the default), the controller-manager runs under a supervisor that rebuilds it "+
+			"(cache and controllers) with backoff on failure, while the REST API, liveness probe, and "+
+			"metrics endpoint run in the durable outer process and survive manager restarts. The pod never "+
+			"crashes on apiserver/cache connectivity issues; a looping manager is surfaced via the "+
+			"cortex_placement_shim_manager_up gauge instead. Set --self-heal=false to fall back to the "+
+			"coupled behavior where a manager failure exits the process.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -128,11 +141,44 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Check that the metrics and API bind addresses don't overlap.
-	if metricsAddr != "0" && metricsAddr == apiBindAddr {
+	// The probe, API and (when enabled) metrics endpoints each bind their own
+	// listener, so their addresses must all differ. Reject overlaps up front with
+	// a clear message rather than failing later with an opaque bind error. The
+	// metrics address "0" means "no metrics server", so it is exempt.
+	metricsBinds := metricsAddr != "0"
+	switch {
+	case probeAddr == apiBindAddr:
+		err := errors.New("health-probe-bind-address and api-bind-address must not be the same")
+		setupLog.Error(err, "invalid configuration", "health-probe-bind-address", probeAddr, "api-bind-address", apiBindAddr)
+		os.Exit(1)
+	case metricsBinds && metricsAddr == apiBindAddr:
 		err := errors.New("metrics-bind-address and api-bind-address must not be the same")
 		setupLog.Error(err, "invalid configuration", "metrics-bind-address", metricsAddr, "api-bind-address", apiBindAddr)
 		os.Exit(1)
+	case metricsBinds && metricsAddr == probeAddr:
+		err := errors.New("metrics-bind-address and health-probe-bind-address must not be the same")
+		setupLog.Error(err, "invalid configuration", "metrics-bind-address", metricsAddr, "health-probe-bind-address", probeAddr)
+		os.Exit(1)
+	}
+
+	// In self-heal mode the metrics endpoint is served by the durable outer
+	// process (plain promhttp) so it survives manager restarts, which means it
+	// cannot apply controller-runtime's authn/authz FilterProvider or serve TLS.
+	// Secure metrics and metrics TLS certs are therefore incompatible with
+	// self-heal; reject them rather than silently serving unauthenticated,
+	// plaintext metrics while a cert path implies otherwise (and needlessly
+	// spinning up a cert watcher that is never applied).
+	if selfHeal && metricsAddr != "0" {
+		switch {
+		case secureMetrics:
+			err := errors.New("--metrics-secure is not supported with --self-heal; run with --metrics-secure=false or --self-heal=false")
+			setupLog.Error(err, "invalid configuration")
+			os.Exit(1)
+		case metricsCertPath != "":
+			err := errors.New("--metrics-cert-path is not supported with --self-heal (the outer metrics server serves plain HTTP and cannot apply the cert); unset it or run with --self-heal=false")
+			setupLog.Error(err, "invalid configuration")
+			os.Exit(1)
+		}
 	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
@@ -152,7 +198,12 @@ func main() {
 			setupLog.Error(err, "unable to start e2e manager")
 			os.Exit(1)
 		}
-		multiclusterClient := setupMulticlusterClient(mgrCtx, mgr, restConfig)
+		multiclusterClient, err := setupMulticlusterClient(mgrCtx, mgr, restConfig, multicluster.NewMonitor("cortex_"))
+		if err != nil {
+			setupLog.Error(err, "unable to set up e2e multicluster client")
+			mgrCancel()
+			os.Exit(1)
+		}
 		if err := placement.IndexFields(mgrCtx, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to set up e2e field indexes")
 			os.Exit(1)
@@ -265,108 +316,224 @@ func main() {
 		})
 	}
 
-	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
-		Scheme:                 scheme,
-		Metrics:                metricsServerOptions,
-		WebhookServer:          webhookServer,
-		HealthProbeBindAddress: probeAddr,
-		// Kept for consistency with kubebuilder scaffold, but the shim should
-		// always run with leader election disabled.
-		LeaderElection: enableLeaderElection,
-	})
-	if err != nil {
-		setupLog.Error(err, "unable to start manager")
-		os.Exit(1)
-	}
-
-	multiclusterClient := setupMulticlusterClient(ctx, mgr, restConfig)
-
 	// Our custom monitoring registry can add prometheus labels to all metrics.
-	// This is useful to distinguish metrics from different deployments.
+	// This is useful to distinguish metrics from different deployments. This is
+	// process-lifetime state: the registry and its collectors are wrapped and
+	// registered exactly once, so they stay scrapable across manager restarts in
+	// self-heal mode (MustRegister panics on a duplicate).
 	metricsConfig := conf.GetConfigOrDie[monitoring.Config]()
 	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, metricsConfig)
-	metrics.Registry.MustRegister(multiclusterClient.Monitor)
 
-	// API endpoint.
+	// One multicluster Monitor for the whole process. In self-heal mode the
+	// manager (and its multicluster client) is rebuilt per cycle, but the
+	// Monitor collector must be registered only once, so it is owned here and
+	// handed to each client build.
+	multiclusterMonitor := multicluster.NewMonitor("cortex_")
+	metrics.Registry.MustRegister(multiclusterMonitor)
+
+	// managerUp reports whether a controller-manager with a synced cache is
+	// currently running: 1 once the manager's cache has synced, 0 while it is
+	// being (re)built, has failed, or is between restarts. It is served from the
+	// outer process so a crash-looping manager can be detected via alerting
+	// without ever crashing the pod. Registered once.
+	managerUp := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "cortex_placement_shim_manager_up",
+		Help: "1 while the placement shim controller-manager is running with a synced cache, 0 while it is " +
+			"being (re)built or has failed. A value that stays low (see the manager-looping alert) indicates " +
+			"the manager cannot reach the apiserver / is crash-looping while the shim keeps serving in " +
+			"passthrough mode.",
+	})
+	metrics.Registry.MustRegister(managerUp)
+
+	// API endpoint. The mux and the shim's HTTP layer are process-lifetime: the
+	// shim is initialized and its routes and metric collectors registered exactly
+	// once. In self-heal mode the supervisor rebuilds only the manager (cache +
+	// controllers) per cycle; the HTTP layer here is untouched by restarts.
 	mux := http.NewServeMux()
 	var placementShim *placement.Shim
 	if enablePlacementShim {
-		placementShim = &placement.Shim{Client: multiclusterClient}
-		setupLog.Info("Adding placement shim to manager")
-		if err := placementShim.SetupWithManager(ctx, mgr); err != nil {
-			setupLog.Error(err, "unable to set up placement shim")
+		placementShim = &placement.Shim{}
+		if err := placementShim.Init(ctx); err != nil {
+			setupLog.Error(err, "unable to initialize placement shim")
 			os.Exit(1)
 		}
 		metrics.Registry.MustRegister(placementShim)
 		placementShim.RegisterRoutes(mux)
 	}
 
+	// The liveness probe, REST API, and metrics endpoint bind addresses. In
+	// self-heal mode they are owned by the durable outer process (the
+	// supervisor) so they survive manager restarts, and the manager binds none
+	// of them (an empty/"0" address disables the manager-owned server). In
+	// coupled mode the manager owns them, matching the classic behavior.
+	managerProbeAddr := probeAddr
+	managerMetricsAddr := metricsServerOptions.BindAddress
+	if selfHeal {
+		managerProbeAddr = ""
+		metricsServerOptions.BindAddress = "0"
+	}
+
+	// buildAndStart builds a fresh controller-manager (cache + multicluster
+	// client + controllers) and runs it to completion. It is invoked once by the
+	// coupled path and repeatedly by the supervisor in self-heal mode. Transient
+	// errors (e.g. a lost apiserver connection) are returned rather than exiting
+	// the process, so the supervisor can back off and retry. In coupled mode it
+	// also binds the API server and health checks to the manager so a manager
+	// failure exits the process, as before.
+	buildAndStart := func(ctx context.Context) error {
+		mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
+			Scheme:                 scheme,
+			Metrics:                metricsServerOptions,
+			WebhookServer:          webhookServer,
+			HealthProbeBindAddress: managerProbeAddr,
+			// In self-heal mode the supervisor rebuilds this manager on every
+			// connectivity failure, re-registering the same controller name
+			// ("placement-shim") and its metrics. controller-runtime's
+			// process-global name-uniqueness check would reject the rebuilt
+			// controller ("controller with name ... already exists"), so skip it
+			// here: the collision is intentional and expected across restarts.
+			// The coupled path never rebuilds, so it keeps validation on to catch
+			// a genuine double-registration bug.
+			Controller: config.Controller{SkipNameValidation: &selfHeal},
+			// Kept for consistency with kubebuilder scaffold, but the shim should
+			// always run with leader election disabled.
+			LeaderElection: enableLeaderElection,
+		})
+		if err != nil {
+			return fmt.Errorf("unable to create manager: %w", err)
+		}
+
+		multiclusterClient, err := setupMulticlusterClient(ctx, mgr, restConfig, multiclusterMonitor)
+		if err != nil {
+			return fmt.Errorf("unable to set up multicluster client: %w", err)
+		}
+
+		if placementShim != nil {
+			if err := placementShim.SetupControllerWithManager(ctx, mgr, multiclusterClient); err != nil {
+				return fmt.Errorf("unable to set up placement shim controller: %w", err)
+			}
+		}
+
+		// Drive the manager_up gauge and (if present) the shim's cache-readiness
+		// flag: mark both once this manager's cache has synced, and clear them
+		// when the cycle returns so cache-backed handlers degrade to 503 while the
+		// manager is down or restarting. Passthrough handlers ignore the flag.
+		// The gauge deliberately tracks a *synced cache*, not merely a running
+		// build: a cycle that fails during construction never flips it to 1, so
+		// the metric (and its alert) reflects a healthy manager rather than "a
+		// cycle is executing".
+		//
+		// A per-cycle context (cancelled on return) stops WaitForCacheSync from
+		// blocking across restarts. The mutex + cacheCtx.Err() re-check under the
+		// lock closes the ordering race where the sync goroutine has just observed
+		// a synced cache but the cycle is returning: cancelCacheSync runs before
+		// the defer takes the lock, so whichever critical section runs first, the
+		// goroutine only marks ready while the context is still live, and the
+		// deferred clear always wins the final state.
+		var readyMu sync.Mutex
+		cacheCtx, cancelCacheSync := context.WithCancel(ctx)
+		defer func() {
+			cancelCacheSync()
+			readyMu.Lock()
+			managerUp.Set(0)
+			if placementShim != nil {
+				placementShim.SetManagerReady(false)
+			}
+			readyMu.Unlock()
+		}()
+		go func() {
+			if mgr.GetCache().WaitForCacheSync(cacheCtx) {
+				readyMu.Lock()
+				if cacheCtx.Err() == nil {
+					managerUp.Set(1)
+					if placementShim != nil {
+						placementShim.SetManagerReady(true)
+					}
+				}
+				readyMu.Unlock()
+			}
+		}()
+
+		if metricsCertWatcher != nil {
+			if err := mgr.Add(metricsCertWatcher); err != nil {
+				return fmt.Errorf("unable to add metrics certificate watcher: %w", err)
+			}
+		}
+		if webhookCertWatcher != nil {
+			if err := mgr.Add(webhookCertWatcher); err != nil {
+				return fmt.Errorf("unable to add webhook certificate watcher: %w", err)
+			}
+		}
+
+		if !selfHeal {
+			// Coupled mode: the manager owns the health checks and the API server,
+			// so the process shares the manager's lifecycle.
+			if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+				return fmt.Errorf("unable to set up health check: %w", err)
+			}
+			if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+				return fmt.Errorf("unable to set up ready check: %w", err)
+			}
+			if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+				setupLog.Info("starting api server", "address", apiBindAddr)
+				return httpext.ListenAndServeContext(ctx, apiBindAddr, mux)
+			})); err != nil {
+				return fmt.Errorf("unable to add api server to manager: %w", err)
+			}
+		}
+
+		setupLog.Info("starting manager")
+		return mgr.Start(ctx)
+	}
+
 	// +kubebuilder:scaffold:builder
 
-	if metricsCertWatcher != nil {
-		setupLog.Info("Adding metrics certificate watcher to manager")
-		if err := mgr.Add(metricsCertWatcher); err != nil {
-			setupLog.Error(err, "unable to add metrics certificate watcher to manager")
+	if selfHeal {
+		// Self-healing mode: the REST API, liveness probe, and metrics endpoint
+		// are bound once in the outer process and survive manager restarts, while
+		// the supervisor rebuilds the manager (and its cache) with backoff on
+		// failure. The pod never crashes on apiserver/cache connectivity issues.
+		if err := supervisor.Run(ctx, supervisor.Options{
+			ProbeAddr:       probeAddr,
+			APIAddr:         apiBindAddr,
+			MetricsAddr:     managerMetricsAddr,
+			MetricsGatherer: metrics.Registry,
+			Mux:             mux,
+			BuildAndStart:   buildAndStart,
+		}); err != nil {
+			setupLog.Error(err, "supervisor exited with error")
 			os.Exit(1)
 		}
+		return
 	}
 
-	if webhookCertWatcher != nil {
-		setupLog.Info("Adding webhook certificate watcher to manager")
-		if err := mgr.Add(webhookCertWatcher); err != nil {
-			setupLog.Error(err, "unable to add webhook certificate watcher to manager")
-			os.Exit(1)
-		}
-	}
-
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up health check")
-		os.Exit(1)
-	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
-		os.Exit(1)
-	}
-
-	// Couple the API server to the manager lifecycle so the informer cache is
-	// available as soon as the mux starts, and graceful shutdown is handled by
-	// the manager context cancellation.
-	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-		setupLog.Info("starting api server", "address", ":8080")
-		return httpext.ListenAndServeContext(ctx, ":8080", mux)
-	})); err != nil {
-		setupLog.Error(err, "unable to add api server to manager")
-		os.Exit(1)
-	}
-
-	setupLog.Info("starting manager")
-	if err := mgr.Start(ctx); err != nil {
+	// Coupled mode (--self-heal=false): a manager failure exits the process.
+	// This is the classic behavior kept for parity. The manager_up gauge is
+	// driven from within buildAndStart (on cache sync), so it is not set here.
+	if err := buildAndStart(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
 }
 
-func setupMulticlusterClient(ctx context.Context, mgr manager.Manager, restConfig *rest.Config) *multicluster.Client {
+func setupMulticlusterClient(ctx context.Context, mgr manager.Manager, restConfig *rest.Config, monitor multicluster.Monitor) (*multicluster.Client, error) {
 	homeCluster, err := cluster.New(restConfig, func(o *cluster.Options) { o.Scheme = scheme })
 	if err != nil {
-		setupLog.Error(err, "unable to create home cluster")
-		os.Exit(1)
+		return nil, fmt.Errorf("unable to create home cluster: %w", err)
 	}
 	if err := mgr.Add(homeCluster); err != nil {
-		setupLog.Error(err, "unable to add home cluster")
-		os.Exit(1)
+		return nil, fmt.Errorf("unable to add home cluster: %w", err)
 	}
 	mcl := &multicluster.Client{
 		HomeCluster:     homeCluster,
 		HomeRestConfig:  restConfig,
 		HomeScheme:      scheme,
 		ResourceRouters: multicluster.DefaultResourceRouters,
-		Monitor:         multicluster.NewMonitor("cortex_"),
+		Monitor:         monitor,
 	}
 	mclConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
 	if err := mcl.InitFromConf(ctx, mgr, mclConfig); err != nil {
-		setupLog.Error(err, "unable to initialize multicluster client")
-		os.Exit(1)
+		return nil, fmt.Errorf("unable to initialize multicluster client: %w", err)
 	}
-	return mcl
+	return mcl, nil
 }

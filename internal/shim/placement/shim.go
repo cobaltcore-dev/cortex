@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -130,9 +131,26 @@ func (c *config) validate() error {
 // Shim is the placement API shim. It holds a controller-runtime client for
 // making Kubernetes API calls and exposes HTTP handlers that mirror the
 // OpenStack Placement API surface.
+//
+// The Shim is process-lifetime: it is built and initialized once (Init) and its
+// HTTP routes are registered once (RegisterRoutes). The controller/cache it
+// watches, however, may be rebuilt underneath it by a self-healing supervisor
+// (see pkg/shim/supervisor), which calls SetupControllerWithManager again for
+// each fresh manager. The HTTP request path is pure passthrough today and does
+// not touch the cache, so it is unaffected by manager restarts. Handlers that
+// do need the cache can gate on ManagerReady, which the supervisor drives via
+// SetManagerReady (true once the cache is synced, false when the manager is
+// down or restarting).
 type Shim struct {
 	client.Client
 	config config
+	// managerReady is true while a controller-manager is running with a synced
+	// cache. It is driven by the self-healing supervisor via SetManagerReady and
+	// read on the request path via ManagerReady so cache-backed handlers can
+	// return 503 while the cache is unavailable. Passthrough handlers ignore it.
+	// It is a pointer to the atomic holder (rather than an embedded atomic value)
+	// so the Shim struct itself stays copy-safe for tests.
+	managerReady *atomic.Bool
 	// HTTP client that can talk to openstack placement, if needed, over
 	// ingress with single-sign-on.
 	httpClient *http.Client
@@ -222,16 +240,32 @@ func (s *Shim) initHTTPClient(ctx context.Context) error {
 	return nil
 }
 
-// Start is called after the manager has started and the cache is running.
-func (s *Shim) Start(ctx context.Context) error {
-	setupLog.Info("Starting placement shim")
-	if err := s.initHTTPClient(ctx); err != nil {
-		return err
+// SetManagerReady records whether a controller-manager with a synced cache is
+// currently running. The self-healing supervisor sets it true once the cache
+// has synced and false when the manager cycle ends (see pkg/shim/supervisor and
+// cmd/shim).
+//
+// Once Init has run, the holder is allocated and calls to SetManagerReady and
+// ManagerReady are race-free (they only load/store the atomic). The nil guard
+// below is a convenience for shims constructed in tests without Init; in that
+// case the first SetManagerReady is NOT safe to race with a concurrent
+// ManagerReady, since it may write the s.managerReady pointer itself. Production
+// code always goes through Init before serving, so this is not a concern there.
+func (s *Shim) SetManagerReady(ready bool) {
+	if s.managerReady == nil {
+		s.managerReady = &atomic.Bool{}
 	}
-	if err := s.initTokenIntrospector(ctx); err != nil {
-		return err
-	}
-	return nil
+	s.managerReady.Store(ready)
+}
+
+// ManagerReady reports whether a controller-manager with a synced cache is
+// currently running. Cache-backed handlers should gate on it and return 503
+// when it is false; passthrough handlers, which never touch the cache, ignore
+// it. It defaults to false until the supervisor brings the first manager up.
+// Safe to call concurrently once Init has allocated the holder (see
+// SetManagerReady).
+func (s *Shim) ManagerReady() bool {
+	return s.managerReady != nil && s.managerReady.Load()
 }
 
 // Reconcile is not used by the shim, but must be implemented to satisfy the
@@ -257,14 +291,23 @@ func (s *Shim) predicateRemoteHypervisor() predicate.Predicate {
 	})
 }
 
-// SetupWithManager sets up the controller with the manager.
-// It registers watches for the Hypervisor CRD across all clusters and sets up
-// the HTTP client for talking to the placement API.
-func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err error) {
-	setupLog.Info("Setting up placement shim with manager")
+// Init performs the once-only, manager-independent setup of the shim: it loads
+// and validates the shim config, compiles the auth policies, allocates the
+// Prometheus metric vectors, and initializes the upstream HTTP client and
+// Keystone token introspector. It must be called exactly once per process
+// (before RegisterRoutes and before the metric collectors are registered),
+// because it allocates collectors and the HTTP request path depends on the
+// fields it sets. It is intentionally decoupled from the controller-manager
+// lifecycle so that the HTTP layer survives manager restarts (see
+// pkg/shim/supervisor).
+func (s *Shim) Init(ctx context.Context) (err error) {
+	setupLog.Info("Initializing placement shim")
 
-	if err := mgr.Add(s); err != nil {
-		return err
+	// Allocate the readiness holder before any HTTP handler can run, so the
+	// pointer itself is never written concurrently with ManagerReady reads from
+	// the request path (the API server comes up before the first cache sync).
+	if s.managerReady == nil {
+		s.managerReady = &atomic.Bool{}
 	}
 
 	s.config, err = conf.GetConfig[config]()
@@ -303,17 +346,39 @@ func (s *Shim) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (err erro
 		Buckets: prometheus.DefBuckets,
 	}, []string{"method", "pattern", "responsecode"})
 
-	// Check that the provided client is a multicluster client, since we need
-	// that to watch for hypervisors across clusters.
-	mcl, ok := s.Client.(*multicluster.Client)
-	if !ok {
-		return errors.New("provided client must be a multicluster client")
+	// Initialize the upstream HTTP client and token introspector. These are
+	// safe to set up before any manager exists and do not depend on the cache.
+	if err := s.initHTTPClient(ctx); err != nil {
+		return err
 	}
+	if err := s.initTokenIntrospector(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+// SetupControllerWithManager wires the shim's Hypervisor watch into the given
+// manager, backed by the given multicluster client. It sets up the field
+// indexes and registers a watch across all clusters serving the Hypervisor
+// GVK. Unlike Init, this is called once per manager cycle: the self-healing
+// supervisor rebuilds the manager (and its caches) on connectivity failure and
+// calls this again for the fresh manager. It does NOT touch the HTTP layer,
+// metric collectors, or config.
+func (s *Shim) SetupControllerWithManager(ctx context.Context, mgr ctrl.Manager, mcl *multicluster.Client) error {
+	setupLog.Info("Setting up placement shim controller with manager")
+	if mcl == nil {
+		return errors.New("multicluster client must not be nil")
+	}
+	// Store the fresh multicluster client as the shim's cache-backed client so
+	// cache-read handlers have a live client for this manager cycle. It is
+	// re-assigned on every rebuild; readiness is gated separately via
+	// SetManagerReady once the cache has synced.
+	s.Client = mcl
 	if err := IndexFields(ctx, mcl); err != nil {
 		return fmt.Errorf("failed to set up indexes: %w", err)
 	}
 	bldr := multicluster.BuildController(mcl, mgr)
-	bldr, err = bldr.WatchesMulticluster(&hv1.Hypervisor{},
+	bldr, err := bldr.WatchesMulticluster(&hv1.Hypervisor{},
 		s.handleRemoteHypervisor(),
 		s.predicateRemoteHypervisor(),
 	)
