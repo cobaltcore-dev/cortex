@@ -150,14 +150,22 @@ func main() {
 
 	// In self-heal mode the metrics endpoint is served by the durable outer
 	// process (plain promhttp) so it survives manager restarts, which means it
-	// cannot apply controller-runtime's authn/authz FilterProvider. Secure
-	// metrics are therefore incompatible with self-heal; the shim always runs
-	// with --metrics-secure=false, so reject the combination rather than
-	// silently serving unauthenticated metrics.
-	if selfHeal && secureMetrics && metricsAddr != "0" {
-		err := errors.New("--metrics-secure is not supported with --self-heal; run with --metrics-secure=false or --self-heal=false")
-		setupLog.Error(err, "invalid configuration")
-		os.Exit(1)
+	// cannot apply controller-runtime's authn/authz FilterProvider or serve TLS.
+	// Secure metrics and metrics TLS certs are therefore incompatible with
+	// self-heal; reject them rather than silently serving unauthenticated,
+	// plaintext metrics while a cert path implies otherwise (and needlessly
+	// spinning up a cert watcher that is never applied).
+	if selfHeal && metricsAddr != "0" {
+		switch {
+		case secureMetrics:
+			err := errors.New("--metrics-secure is not supported with --self-heal; run with --metrics-secure=false or --self-heal=false")
+			setupLog.Error(err, "invalid configuration")
+			os.Exit(1)
+		case metricsCertPath != "":
+			err := errors.New("--metrics-cert-path is not supported with --self-heal (the outer metrics server serves plain HTTP and cannot apply the cert); unset it or run with --self-heal=false")
+			setupLog.Error(err, "invalid configuration")
+			os.Exit(1)
+		}
 	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
