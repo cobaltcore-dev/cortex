@@ -25,6 +25,12 @@ func TestKVMResourceCapacityKPI_Init(t *testing.T) {
 	}
 }
 
+func kvmPhysicalMetric(host, res, az string, value float64) collectedVMwareMetric {
+	l := mockKVMHostLabels(host, az)
+	l["resource"] = res
+	return collectedVMwareMetric{Name: "cortex_kvm_host_physical_capacity_total", Labels: l, Value: value}
+}
+
 func kvmTotalMetric(host, res, az string, value float64) collectedVMwareMetric {
 	l := mockKVMHostLabels(host, az)
 	l["resource"] = res
@@ -117,6 +123,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				},
 			},
 			expectedMetrics: []collectedVMwareMetric{
+				kvmPhysicalMetric("node001-bb088", "cpu", "qa-1a", 128),
+				kvmPhysicalMetric("node001-bb088", "ram", "qa-1a", 549755813888), // 512Gi
 				kvmTotalMetric("node001-bb088", "cpu", "qa-1a", 128),
 				kvmTotalMetric("node001-bb088", "ram", "qa-1a", 549755813888), // 512Gi
 				kvmUsageMetric("node001-bb088", "cpu", "utilized", "qa-1a", 64),
@@ -157,6 +165,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				},
 			},
 			expectedMetrics: []collectedVMwareMetric{
+				kvmPhysicalMetric("node001-bb088", "cpu", "qa-1a", 128),
+				kvmPhysicalMetric("node001-bb088", "ram", "qa-1a", 549755813888), // 512Gi
 				kvmTotalMetric("node001-bb088", "cpu", "qa-1a", 128),
 				kvmTotalMetric("node001-bb088", "ram", "qa-1a", 549755813888), // 512Gi
 				kvmUsageMetric("node001-bb088", "cpu", "utilized", "qa-1a", 64),
@@ -231,6 +241,10 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 							hv1.ResourceCPU:    resource.MustParse("128"),
 							hv1.ResourceMemory: resource.MustParse("512Gi"),
 						},
+						Capacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("128"),
+							hv1.ResourceMemory: resource.MustParse("512Gi"),
+						},
 						Allocation: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("64"),
 							hv1.ResourceMemory: resource.MustParse("256Gi"),
@@ -240,6 +254,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				},
 			},
 			expectedMetrics: []collectedVMwareMetric{
+				kvmPhysicalMetric("node001-bb088", "cpu", "qa-1a", 128),
+				kvmPhysicalMetric("node001-bb088", "ram", "qa-1a", 549755813888), // 512Gi
 				kvmTotalMetric("node001-bb088", "cpu", "qa-1a", 128),
 				kvmTotalMetric("node001-bb088", "ram", "qa-1a", 549755813888), // 512Gi
 				kvmUsageMetric("node001-bb088", "cpu", "utilized", "qa-1a", 64),
@@ -267,6 +283,10 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 							hv1.ResourceCPU:    resource.MustParse("256"),
 							hv1.ResourceMemory: resource.MustParse("1Ti"),
 						},
+						Capacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("256"),
+							hv1.ResourceMemory: resource.MustParse("1Ti"),
+						},
 						Allocation: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("128"),
 							hv1.ResourceMemory: resource.MustParse("512Gi"),
@@ -290,6 +310,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					return m
 				}
 				return []collectedVMwareMetric{
+					{Name: "cortex_kvm_host_physical_capacity_total", Labels: l("cpu", ""), Value: 256},
+					{Name: "cortex_kvm_host_physical_capacity_total", Labels: l("ram", ""), Value: 1099511627776}, // 1Ti
 					{Name: "cortex_kvm_host_capacity_total", Labels: l("cpu", ""), Value: 256},
 					{Name: "cortex_kvm_host_capacity_total", Labels: l("ram", ""), Value: 1099511627776}, // 1Ti
 					{Name: "cortex_kvm_host_capacity_usage", Labels: l("cpu", "utilized"), Value: 128},
@@ -318,6 +340,10 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 							hv1.ResourceCPU:    resource.MustParse("64"),
 							hv1.ResourceMemory: resource.MustParse("256Gi"),
 						},
+						Capacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("64"),
+							hv1.ResourceMemory: resource.MustParse("256Gi"),
+						},
 						Allocation: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("32"),
 							hv1.ResourceMemory: resource.MustParse("128Gi"),
@@ -341,6 +367,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					return m
 				}
 				return []collectedVMwareMetric{
+					{Name: "cortex_kvm_host_physical_capacity_total", Labels: l("cpu", ""), Value: 64},
+					{Name: "cortex_kvm_host_physical_capacity_total", Labels: l("ram", ""), Value: 274877906944}, // 256Gi
 					{Name: "cortex_kvm_host_capacity_total", Labels: l("cpu", ""), Value: 64},
 					{Name: "cortex_kvm_host_capacity_total", Labels: l("ram", ""), Value: 274877906944}, // 256Gi
 					{Name: "cortex_kvm_host_capacity_usage", Labels: l("cpu", "utilized"), Value: 32},
@@ -369,6 +397,10 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 							hv1.ResourceCPU:    resource.MustParse("100"),
 							hv1.ResourceMemory: resource.MustParse("200Gi"),
 						},
+						Capacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("100"),
+							hv1.ResourceMemory: resource.MustParse("200Gi"),
+						},
 						Allocation: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("50"),
 							hv1.ResourceMemory: resource.MustParse("100Gi"),
@@ -385,6 +417,10 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 					Status: hv1.HypervisorStatus{
 						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("200"),
+							hv1.ResourceMemory: resource.MustParse("400Gi"),
+						},
+						Capacity: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("200"),
 							hv1.ResourceMemory: resource.MustParse("400Gi"),
 						},
@@ -407,6 +443,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					return m
 				}
 				return []collectedVMwareMetric{
+					kvmPhysicalMetric("node010-bb100", "cpu", "qa-1a", 100),
+					kvmPhysicalMetric("node010-bb100", "ram", "qa-1a", 214748364800), // 200Gi
 					kvmTotalMetric("node010-bb100", "cpu", "qa-1a", 100),
 					kvmTotalMetric("node010-bb100", "ram", "qa-1a", 214748364800), // 200Gi
 					kvmUsageMetric("node010-bb100", "cpu", "utilized", "qa-1a", 50),
@@ -417,6 +455,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					kvmUsageMetric("node010-bb100", "ram", "failover", "qa-1a", 0),
 					kvmUsageMetric("node010-bb100", "cpu", "available", "qa-1a", 50),           // 100-50-0-0
 					kvmUsageMetric("node010-bb100", "ram", "available", "qa-1a", 107374182400), // 200Gi-100Gi
+					{Name: "cortex_kvm_host_physical_capacity_total", Labels: sapphire("cpu", ""), Value: 200},
+					{Name: "cortex_kvm_host_physical_capacity_total", Labels: sapphire("ram", ""), Value: 429496729600}, // 400Gi
 					{Name: "cortex_kvm_host_capacity_total", Labels: sapphire("cpu", ""), Value: 200},
 					{Name: "cortex_kvm_host_capacity_total", Labels: sapphire("ram", ""), Value: 429496729600}, // 400Gi
 					{Name: "cortex_kvm_host_capacity_usage", Labels: sapphire("cpu", "utilized"), Value: 150},
@@ -445,12 +485,18 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 							hv1.ResourceCPU:    resource.MustParse("96"),
 							hv1.ResourceMemory: resource.MustParse("384Gi"),
 						},
+						Capacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("96"),
+							hv1.ResourceMemory: resource.MustParse("384Gi"),
+						},
 						Allocation: nil,
 						Traits:     []string{},
 					},
 				},
 			},
 			expectedMetrics: []collectedVMwareMetric{
+				kvmPhysicalMetric("node004-bb091", "cpu", "qa-1d", 96),
+				kvmPhysicalMetric("node004-bb091", "ram", "qa-1d", 412316860416), // 384Gi
 				kvmTotalMetric("node004-bb091", "cpu", "qa-1d", 96),
 				kvmTotalMetric("node004-bb091", "ram", "qa-1d", 412316860416), // 384Gi
 				kvmUsageMetric("node004-bb091", "cpu", "utilized", "qa-1d", 0),
@@ -475,6 +521,10 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 					Status: hv1.HypervisorStatus{
 						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("128"),
+							hv1.ResourceMemory: resource.MustParse("512Gi"),
+						},
+						Capacity: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("128"),
 							hv1.ResourceMemory: resource.MustParse("512Gi"),
 						},
@@ -509,6 +559,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				},
 			},
 			expectedMetrics: []collectedVMwareMetric{
+				kvmPhysicalMetric("node001-bb088", "cpu", "qa-1a", 128),
+				kvmPhysicalMetric("node001-bb088", "ram", "qa-1a", 549755813888), // 512Gi
 				kvmTotalMetric("node001-bb088", "cpu", "qa-1a", 128),
 				kvmTotalMetric("node001-bb088", "ram", "qa-1a", 549755813888), // 512Gi
 				kvmUsageMetric("node001-bb088", "cpu", "utilized", "qa-1a", 64),
@@ -533,6 +585,10 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 					Status: hv1.HypervisorStatus{
 						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("128"),
+							hv1.ResourceMemory: resource.MustParse("512Gi"),
+						},
+						Capacity: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("128"),
 							hv1.ResourceMemory: resource.MustParse("512Gi"),
 						},
@@ -576,6 +632,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				},
 			},
 			expectedMetrics: []collectedVMwareMetric{
+				kvmPhysicalMetric("node001-bb088", "cpu", "qa-1a", 128),
+				kvmPhysicalMetric("node001-bb088", "ram", "qa-1a", 549755813888), // 512Gi
 				kvmTotalMetric("node001-bb088", "cpu", "qa-1a", 128),
 				kvmTotalMetric("node001-bb088", "ram", "qa-1a", 549755813888), // 512Gi
 				kvmUsageMetric("node001-bb088", "cpu", "utilized", "qa-1a", 64),
@@ -601,6 +659,10 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 					Status: hv1.HypervisorStatus{
 						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("128"),
+							hv1.ResourceMemory: resource.MustParse("512Gi"),
+						},
+						Capacity: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("128"),
 							hv1.ResourceMemory: resource.MustParse("512Gi"),
 						},
@@ -635,6 +697,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				},
 			},
 			expectedMetrics: []collectedVMwareMetric{
+				kvmPhysicalMetric("node001-bb088", "cpu", "qa-1a", 128),
+				kvmPhysicalMetric("node001-bb088", "ram", "qa-1a", 549755813888), // 512Gi
 				kvmTotalMetric("node001-bb088", "cpu", "qa-1a", 128),
 				kvmTotalMetric("node001-bb088", "ram", "qa-1a", 549755813888), // 512Gi
 				kvmUsageMetric("node001-bb088", "cpu", "utilized", "qa-1a", 64),
@@ -660,6 +724,10 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 					Status: hv1.HypervisorStatus{
 						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("128"),
+							hv1.ResourceMemory: resource.MustParse("512Gi"),
+						},
+						Capacity: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("128"),
 							hv1.ResourceMemory: resource.MustParse("512Gi"),
 						},
@@ -714,6 +782,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				},
 			},
 			expectedMetrics: []collectedVMwareMetric{
+				kvmPhysicalMetric("node001-bb088", "cpu", "qa-1a", 128),
+				kvmPhysicalMetric("node001-bb088", "ram", "qa-1a", 549755813888), // 512Gi
 				kvmTotalMetric("node001-bb088", "cpu", "qa-1a", 128),
 				kvmTotalMetric("node001-bb088", "ram", "qa-1a", 549755813888), // 512Gi
 				kvmUsageMetric("node001-bb088", "cpu", "utilized", "qa-1a", 64),
@@ -737,6 +807,10 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 					},
 					Status: hv1.HypervisorStatus{
 						EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceCPU:    resource.MustParse("100"),
+							hv1.ResourceMemory: resource.MustParse("200Gi"),
+						},
+						Capacity: map[hv1.ResourceName]resource.Quantity{
 							hv1.ResourceCPU:    resource.MustParse("100"),
 							hv1.ResourceMemory: resource.MustParse("200Gi"),
 						},
@@ -790,6 +864,8 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				},
 			},
 			expectedMetrics: []collectedVMwareMetric{
+				kvmPhysicalMetric("node001-bb088", "cpu", "qa-1a", 100),
+				kvmPhysicalMetric("node001-bb088", "ram", "qa-1a", 214748364800), // 200Gi
 				kvmTotalMetric("node001-bb088", "cpu", "qa-1a", 100),
 				kvmTotalMetric("node001-bb088", "ram", "qa-1a", 214748364800), // 200Gi
 				kvmUsageMetric("node001-bb088", "cpu", "utilized", "qa-1a", 80),
