@@ -39,7 +39,7 @@ func (k *VMwareHostCapacityKPI) Init(dbConn *db.DB, c client.Client, opts conf.R
 	)
 	k.capacityPhysicalPerHost = prometheus.NewDesc(
 		"cortex_vmware_host_physical_capacity_total",
-		"Total physical resource capacity per VMware host (ignoring overcommit factor). CPU in vCPUs, memory and disk in bytes.",
+		"Usable physical resource capacity per VMware host (total - reserved; ignoring overcommit factor). CPU in vCPUs, memory and disk in bytes.",
 		append(vmwareHostLabels, "resource"), nil,
 	)
 	k.capacityTotalPerHost = prometheus.NewDesc(
