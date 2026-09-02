@@ -207,9 +207,16 @@ func Run(ctx context.Context, o Options) error {
 func runManagerCycle(ctx context.Context, o *Options, healthyResetAfter time.Duration, backoff *wait.Backoff) {
 	start := time.Now()
 	log.Info("starting manager")
-	if err := o.BuildAndStart(ctx); err != nil {
+	err := o.BuildAndStart(ctx)
+	switch {
+	case err != nil && ctx.Err() != nil:
+		// The loop is shutting down (outer context cancelled): BuildAndStart
+		// returning an error here is just the manager unwinding, not a failure to
+		// restart. Log it quietly so it does not look like a real restart error.
+		log.Info("manager exited during shutdown", "cause", err.Error())
+	case err != nil:
 		log.Error(err, "manager exited with error; will restart")
-	} else {
+	default:
 		log.Info("manager exited")
 	}
 	if time.Since(start) >= healthyResetAfter {
