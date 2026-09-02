@@ -17,16 +17,19 @@ type HostUtilization struct {
 	// VCPU resource usage
 	VCPUsUsed             float64 `db:"vcpus_used" json:"vcpusUsed"`
 	VCPUsUtilizedPct      float64 `db:"vcpus_utilized_pct" json:"vcpusUtilizedPct"`
+	PhysicalVCPUs         float64 `db:"physical_vcpus" json:"physicalVCPUs"`
 	TotalVCPUsAllocatable float64 `db:"total_vcpus_allocatable" json:"totalVCPUsAllocatable"`
 
 	// RAM resource usage
 	RAMUsedMB             float64 `db:"ram_used_mb" json:"ramUsedMB"`
 	RAMUtilizedPct        float64 `db:"ram_utilized_pct" json:"ramUtilizedPct"`
+	PhysicalRAMMB         float64 `db:"physical_ram_mb" json:"physicalRAMMB"`
 	TotalRAMAllocatableMB float64 `db:"total_ram_allocatable_mb" json:"totalRAMAllocatableMB"`
 
 	// Disk resource usage
 	DiskUsedGB             float64 `db:"disk_used_gb" json:"diskUsedGB"`
 	DiskUtilizedPct        float64 `db:"disk_utilized_pct" json:"diskUtilizedPct"`
+	PhysicalDiskGB         float64 `db:"physical_disk_gb" json:"physicalDiskGB"`
 	TotalDiskAllocatableGB float64 `db:"total_disk_allocatable_gb" json:"totalDiskAllocatableGB"`
 }
 

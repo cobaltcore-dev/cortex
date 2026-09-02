@@ -19,8 +19,9 @@ import (
 type VMwareHostCapacityKPI struct {
 	plugins.BaseKPI[struct{}]
 
-	capacityUsagePerHost *prometheus.Desc
-	capacityTotalPerHost *prometheus.Desc
+	capacityUsagePerHost    *prometheus.Desc
+	capacityPhysicalPerHost *prometheus.Desc
+	capacityTotalPerHost    *prometheus.Desc
 }
 
 func (k *VMwareHostCapacityKPI) GetName() string {
@@ -36,6 +37,11 @@ func (k *VMwareHostCapacityKPI) Init(dbConn *db.DB, c client.Client, opts conf.R
 		"Capacity usage per VMware host. CPU in vCPUs, memory and disk in bytes.",
 		append(vmwareHostLabels, "resource"), nil,
 	)
+	k.capacityPhysicalPerHost = prometheus.NewDesc(
+		"cortex_vmware_host_physical_capacity_total",
+		"Usable physical resource capacity per VMware host (total - reserved; ignoring overcommit factor). CPU in vCPUs, memory and disk in bytes.",
+		append(vmwareHostLabels, "resource"), nil,
+	)
 	k.capacityTotalPerHost = prometheus.NewDesc(
 		"cortex_vmware_host_capacity_total",
 		"Total allocatable capacity per VMware host. CPU in vCPUs, memory and disk in bytes.",
@@ -46,6 +52,7 @@ func (k *VMwareHostCapacityKPI) Init(dbConn *db.DB, c client.Client, opts conf.R
 
 func (k *VMwareHostCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.capacityUsagePerHost
+	ch <- k.capacityPhysicalPerHost
 	ch <- k.capacityTotalPerHost
 }
 
@@ -72,6 +79,10 @@ func (k *VMwareHostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerHost, prometheus.GaugeValue, util.VCPUsUsed, append(labels, "cpu")...)
 		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerHost, prometheus.GaugeValue, util.RAMUsedMB*1024*1024, append(labels, "ram")...)
 		ch <- prometheus.MustNewConstMetric(k.capacityUsagePerHost, prometheus.GaugeValue, util.DiskUsedGB*1024*1024*1024, append(labels, "disk")...)
+
+		ch <- prometheus.MustNewConstMetric(k.capacityPhysicalPerHost, prometheus.GaugeValue, util.PhysicalVCPUs, append(labels, "cpu")...)
+		ch <- prometheus.MustNewConstMetric(k.capacityPhysicalPerHost, prometheus.GaugeValue, util.PhysicalRAMMB*1024*1024, append(labels, "ram")...)
+		ch <- prometheus.MustNewConstMetric(k.capacityPhysicalPerHost, prometheus.GaugeValue, util.PhysicalDiskGB*1024*1024*1024, append(labels, "disk")...)
 
 		ch <- prometheus.MustNewConstMetric(k.capacityTotalPerHost, prometheus.GaugeValue, util.TotalVCPUsAllocatable, append(labels, "cpu")...)
 		ch <- prometheus.MustNewConstMetric(k.capacityTotalPerHost, prometheus.GaugeValue, util.TotalRAMAllocatableMB*1024*1024, append(labels, "ram")...)

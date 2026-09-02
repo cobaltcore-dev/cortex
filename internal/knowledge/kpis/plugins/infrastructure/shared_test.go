@@ -4,7 +4,6 @@
 package infrastructure
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
@@ -13,15 +12,11 @@ import (
 )
 
 func mockKVMHostLabels(host, az string) map[string]string {
-	bb := "unknown"
-	parts := strings.Split(host, "-")
-	if len(parts) > 1 {
-		bb = parts[1]
-	}
 	return map[string]string{
 		"compute_host":      host,
+		"compute_cluster":   "unknown",
 		"availability_zone": az,
-		"building_block":    bb,
+		"building_block":    "unknown",
 		"cpu_architecture":  "cascade-lake",
 		"workload_type":     "general-purpose",
 		"enabled":           "true",
@@ -136,7 +131,7 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 			host: kvmHost{hv1.Hypervisor{
 				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
 			}},
-			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false"},
+			want: []string{"node001-bb01", "unknown", "unknown", "unknown", "cascade-lake", "general-purpose", "true", "false", "false", "false", "unknown"},
 		},
 		{
 			name: "availability zone from label",
@@ -146,14 +141,20 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 					Labels: map[string]string{"topology.kubernetes.io/zone": "az1"},
 				},
 			}},
-			want: []string{"node001-bb01", "az1", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false"},
+			want: []string{"node001-bb01", "unknown", "az1", "unknown", "cascade-lake", "general-purpose", "true", "false", "false", "false", "unknown"},
 		},
 		{
-			name: "name without dash results in unknown building block",
+			name: "bb and cluster from labels",
 			host: kvmHost{hv1.Hypervisor{
-				ObjectMeta: metav1.ObjectMeta{Name: "nodewithoutdash"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node001-bb01",
+					Labels: map[string]string{
+						"kubernetes.metal.cloud.sap/bb":      "bb01",
+						"kubernetes.metal.cloud.sap/cluster": "cluster-a",
+					},
+				},
 			}},
-			want: []string{"nodewithoutdash", "unknown", "unknown", "cascade-lake", "general-purpose", "true", "false", "false", "false"},
+			want: []string{"node001-bb01", "cluster-a", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false", "unknown"},
 		},
 		{
 			name: "sapphire rapids trait",
@@ -161,7 +162,7 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
 				Status:     hv1.HypervisorStatus{Traits: []string{"CUSTOM_HW_SAPPHIRE_RAPIDS"}},
 			}},
-			want: []string{"node001-bb01", "unknown", "bb01", "sapphire-rapids", "general-purpose", "true", "false", "false", "false"},
+			want: []string{"node001-bb01", "unknown", "unknown", "unknown", "sapphire-rapids", "general-purpose", "true", "false", "false", "false", "unknown"},
 		},
 		{
 			name: "hana exclusive host trait",
@@ -169,7 +170,7 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
 				Status:     hv1.HypervisorStatus{Traits: []string{"CUSTOM_HANA_EXCLUSIVE_HOST"}},
 			}},
-			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "hana", "true", "false", "false", "false"},
+			want: []string{"node001-bb01", "unknown", "unknown", "unknown", "cascade-lake", "hana", "true", "false", "false", "false", "unknown"},
 		},
 		{
 			name: "decommissioning trait",
@@ -177,7 +178,7 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
 				Status:     hv1.HypervisorStatus{Traits: []string{"CUSTOM_DECOMMISSIONING"}},
 			}},
-			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "true", "false", "false"},
+			want: []string{"node001-bb01", "unknown", "unknown", "unknown", "cascade-lake", "general-purpose", "true", "true", "false", "false", "unknown"},
 		},
 		{
 			name: "external customer exclusive trait",
@@ -185,7 +186,7 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
 				Status:     hv1.HypervisorStatus{Traits: []string{"CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE"}},
 			}},
-			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "true", "false"},
+			want: []string{"node001-bb01", "unknown", "unknown", "unknown", "cascade-lake", "general-purpose", "true", "false", "true", "false", "unknown"},
 		},
 		{
 			name: "maintenance set",
@@ -193,14 +194,18 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
 				Spec:       hv1.HypervisorSpec{Maintenance: hv1.MaintenanceManual},
 			}},
-			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "true"},
+			want: []string{"node001-bb01", "unknown", "unknown", "unknown", "cascade-lake", "general-purpose", "true", "false", "false", "true", "unknown"},
 		},
 		{
 			name: "all traits and maintenance set",
 			host: kvmHost{hv1.Hypervisor{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:   "node001-bb42",
-					Labels: map[string]string{"topology.kubernetes.io/zone": "az3"},
+					Name: "node001-bb42",
+					Labels: map[string]string{
+						"topology.kubernetes.io/zone":        "az3",
+						"kubernetes.metal.cloud.sap/bb":      "bb42",
+						"kubernetes.metal.cloud.sap/cluster": "cluster-b",
+					},
 				},
 				Spec: hv1.HypervisorSpec{Maintenance: hv1.MaintenanceAuto},
 				Status: hv1.HypervisorStatus{Traits: []string{
@@ -210,7 +215,7 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 					"CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE",
 				}},
 			}},
-			want: []string{"node001-bb42", "az3", "bb42", "sapphire-rapids", "hana", "true", "true", "true", "true"},
+			want: []string{"node001-bb42", "cluster-b", "az3", "bb42", "sapphire-rapids", "hana", "true", "true", "true", "true", "unknown"},
 		},
 		{
 			name: "os version set",
@@ -218,7 +223,7 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
 				Status:     hv1.HypervisorStatus{OperatingSystem: hv1.OperatingSystemStatus{Version: "1.1.1"}},
 			}},
-			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false", "1.1.1"},
+			want: []string{"node001-bb01", "unknown", "unknown", "unknown", "cascade-lake", "general-purpose", "true", "false", "false", "false", "1.1.1"},
 		},
 	}
 
