@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/shim/placement"
@@ -381,17 +382,30 @@ func main() {
 			// Drive the shim's cache-readiness flag: mark ready once this
 			// manager's cache has synced, and clear it when the cycle returns so
 			// cache-backed handlers degrade to 503 while the manager is down or
-			// restarting. Passthrough handlers ignore the flag. The goroutine uses
-			// a per-cycle context cancelled on return so WaitForCacheSync cannot
-			// block or set readiness after this manager has already exited.
+			// restarting. Passthrough handlers ignore the flag.
+			//
+			// A per-cycle context (cancelled on return) stops WaitForCacheSync from
+			// blocking across restarts. The mutex + cacheCtx.Err() re-check under
+			// the lock closes the ordering race where the sync goroutine has just
+			// observed a synced cache but the cycle is returning: cancelCacheSync
+			// runs before the defer takes the lock, so whichever critical section
+			// runs first, the goroutine only sets ready=true while the context is
+			// still live, and the deferred ready=false always wins the final state.
+			var readyMu sync.Mutex
 			cacheCtx, cancelCacheSync := context.WithCancel(ctx)
 			defer func() {
 				cancelCacheSync()
+				readyMu.Lock()
 				placementShim.SetManagerReady(false)
+				readyMu.Unlock()
 			}()
 			go func() {
 				if mgr.GetCache().WaitForCacheSync(cacheCtx) {
-					placementShim.SetManagerReady(true)
+					readyMu.Lock()
+					if cacheCtx.Err() == nil {
+						placementShim.SetManagerReady(true)
+					}
+					readyMu.Unlock()
 				}
 			}()
 		}
