@@ -41,12 +41,24 @@ deployment:
   terminationGracePeriodSeconds: 10
   serviceAccountName: shim
 
-# [INGRESS]: To enable an ingress resource for the placement shim set true
+# [INGRESS]: To expose the placement shim via an Ingress, set enabled true AND
+# provide ingress.rules. The Ingress is only rendered when both are set: an
+# Ingress with no rules is invalid, and local/dev setups (e.g. tilt) enable the
+# shim without any ingress rules and expect no Ingress to be created.
 ingress:
-  # Enable or disable the ingress resource for the placement shim.
+  # Enable or disable the ingress resource for the placement shim. Note this is
+  # necessary but not sufficient: ingress.rules must also be provided for the
+  # Ingress to be rendered.
   enabled: true
   # Which ingress controller to use.
   className: nginx
+  # The routing rules for the Ingress. Deployments must supply these; there is
+  # no sensible default host, so the library ships this empty and renders no
+  # Ingress until it is set. See networking.k8s.io/v1 Ingress .spec.rules.
+  rules: []
+  # Optional TLS configuration for the Ingress (networking.k8s.io/v1
+  # Ingress .spec.tls). Left empty by default.
+  tls: []
   # Override this default set of annotations if needed.
   annotations:
     # Enables https://github.com/sapcc/disco
