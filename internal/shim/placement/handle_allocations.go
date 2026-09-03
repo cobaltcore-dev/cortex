@@ -23,7 +23,11 @@ import (
 // success, or 409 Conflict if inventory is insufficient or a concurrent
 // update is detected (error code: placement.concurrent_update).
 func (s *Shim) HandleManageAllocations(w http.ResponseWriter, r *http.Request) {
-	s.dispatchPassthroughOnly(w, r, s.config.Features.Allocations)
+	if !s.config.Features.Allocations {
+		s.forward(w, r)
+		return
+	}
+	http.Error(w, "not yet implemented", http.StatusNotImplemented)
 }
 
 // HandleListAllocations handles GET /allocations/{consumer_uuid} requests.
@@ -38,10 +42,14 @@ func (s *Shim) HandleManageAllocations(w http.ResponseWriter, r *http.Request) {
 // The consumer_generation and consumer_type fields are absent when the
 // consumer has no allocations.
 func (s *Shim) HandleListAllocations(w http.ResponseWriter, r *http.Request) {
+	if !s.config.Features.Allocations {
+		s.forward(w, r)
+		return
+	}
 	if _, ok := requiredUUIDPathParam(w, r, "consumer_uuid"); !ok {
 		return
 	}
-	s.dispatchPassthroughOnly(w, r, s.config.Features.Allocations)
+	http.Error(w, "not yet implemented", http.StatusNotImplemented)
 }
 
 // HandleUpdateAllocations handles PUT /allocations/{consumer_uuid} requests.
@@ -56,10 +64,14 @@ func (s *Shim) HandleListAllocations(w http.ResponseWriter, r *http.Request) {
 // Returns 204 No Content on success. Returns 409 Conflict if there is
 // insufficient inventory or if a concurrent update was detected.
 func (s *Shim) HandleUpdateAllocations(w http.ResponseWriter, r *http.Request) {
+	if !s.config.Features.Allocations {
+		s.forward(w, r)
+		return
+	}
 	if _, ok := requiredUUIDPathParam(w, r, "consumer_uuid"); !ok {
 		return
 	}
-	s.dispatchPassthroughOnly(w, r, s.config.Features.Allocations)
+	http.Error(w, "not yet implemented", http.StatusNotImplemented)
 }
 
 // HandleDeleteAllocations handles DELETE /allocations/{consumer_uuid} requests.
@@ -68,8 +80,12 @@ func (s *Shim) HandleUpdateAllocations(w http.ResponseWriter, r *http.Request) {
 // providers. Returns 204 No Content on success, or 404 Not Found if the
 // consumer has no existing allocations.
 func (s *Shim) HandleDeleteAllocations(w http.ResponseWriter, r *http.Request) {
+	if !s.config.Features.Allocations {
+		s.forward(w, r)
+		return
+	}
 	if _, ok := requiredUUIDPathParam(w, r, "consumer_uuid"); !ok {
 		return
 	}
-	s.dispatchPassthroughOnly(w, r, s.config.Features.Allocations)
+	http.Error(w, "not yet implemented", http.StatusNotImplemented)
 }

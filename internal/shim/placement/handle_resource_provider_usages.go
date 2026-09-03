@@ -16,8 +16,12 @@ import (
 // Unlike the provider allocations endpoint, this does not break down usage by
 // individual consumer. Returns 404 if the provider does not exist.
 func (s *Shim) HandleListResourceProviderUsages(w http.ResponseWriter, r *http.Request) {
+	if !s.config.Features.Usages {
+		s.forward(w, r)
+		return
+	}
 	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	s.dispatchPassthroughOnly(w, r, s.config.Features.Usages)
+	http.Error(w, "not yet implemented", http.StatusNotImplemented)
 }
