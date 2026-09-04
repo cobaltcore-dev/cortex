@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -83,10 +84,22 @@ type fakeCluster struct {
 	fakeCache    *fakeCache
 	fakeRecorder recorder.EventRecorder
 	scheme       *runtime.Scheme
+	restConfig   *rest.Config
 }
 
 func (f *fakeCluster) GetClient() client.Client {
 	return f.fakeClient
+}
+
+// GetConfig returns the rest config the cluster was built with, defaulting to a
+// placeholder host when unset. Production clusters always have one (used for
+// per-cluster logging and reachability probing); the default keeps tests that
+// don't care about the host from panicking on the embedded nil interface.
+func (f *fakeCluster) GetConfig() *rest.Config {
+	if f.restConfig != nil {
+		return f.restConfig
+	}
+	return &rest.Config{Host: "https://fake-cluster"}
 }
 
 func (f *fakeCluster) GetScheme() *runtime.Scheme {
