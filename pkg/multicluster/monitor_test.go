@@ -91,3 +91,24 @@ func TestMonitor_RecordCrossClusterNameConflict(t *testing.T) {
 		t.Errorf("list/%s: got %v, want 0", gvk, got)
 	}
 }
+
+func TestMonitor_RecordRemoteReachable(t *testing.T) {
+	m := NewMonitor("cortex_").(*monitor)
+
+	// reachable=true sets the gauge to 1, reachable=false to 0, and the latest
+	// value for a host wins.
+	m.recordRemoteReachable("https://a", true)
+	m.recordRemoteReachable("https://b", false)
+	if got := testutil.ToFloat64(m.remoteReachable.WithLabelValues("https://a")); got != 1 {
+		t.Errorf("host a: got %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(m.remoteReachable.WithLabelValues("https://b")); got != 0 {
+		t.Errorf("host b: got %v, want 0", got)
+	}
+
+	// A host flipping from reachable to unreachable overwrites the prior value.
+	m.recordRemoteReachable("https://a", false)
+	if got := testutil.ToFloat64(m.remoteReachable.WithLabelValues("https://a")); got != 0 {
+		t.Errorf("host a after loss: got %v, want 0", got)
+	}
+}

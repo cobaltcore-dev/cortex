@@ -403,10 +403,31 @@ func main() {
 			return fmt.Errorf("unable to create manager: %w", err)
 		}
 
-		multiclusterClient, err := setupMulticlusterClient(ctx, mgr, restConfig, multiclusterMonitor)
+		// cycleCtx scopes this manager cycle: cancelling it makes mgr.Start return
+		// so the supervisor rebuilds the manager (re-reading config and
+		// reconnecting to the currently-configured remotes). It is cancelled on a
+		// clean return (defer), when the parent ctx is cancelled (child), or by the
+		// reachability probe below when a remote apiserver is lost. This is the
+		// external liveness signal the supervisor lacks on its own: a remote whose
+		// informer already synced and then disappears is retried by
+		// controller-runtime forever without mgr.Start ever returning.
+		cycleCtx, cancelCycle := context.WithCancelCause(ctx)
+		defer cancelCycle(nil)
+
+		multiclusterClient, err := setupMulticlusterClient(cycleCtx, mgr, restConfig, multiclusterMonitor)
 		if err != nil {
 			return fmt.Errorf("unable to set up multicluster client: %w", err)
 		}
+
+		// Probe each remote apiserver for reachability. When a remote is
+		// sustained-unreachable (e.g. its cluster was deleted after its cache had
+		// already synced), cancel the cycle so the supervisor rebuilds the manager.
+		// A remote that answers with any HTTP status is reachable, so an authz or
+		// server error does not trigger a rebuild storm.
+		go multiclusterClient.ProbeRemotes(cycleCtx, multicluster.DefaultProbeOptions, func(host string) {
+			setupLog.Info("remote apiserver sustained-unreachable; recycling manager", "host", host)
+			cancelCycle(fmt.Errorf("remote apiserver unreachable: %s", host))
+		})
 
 		if placementShim != nil {
 			if err := placementShim.SetupControllerWithManager(ctx, mgr, multiclusterClient); err != nil {
@@ -431,7 +452,7 @@ func main() {
 		// goroutine only marks ready while the context is still live, and the
 		// deferred clear always wins the final state.
 		var readyMu sync.Mutex
-		cacheCtx, cancelCacheSync := context.WithCancel(ctx)
+		cacheCtx, cancelCacheSync := context.WithCancel(cycleCtx)
 		defer func() {
 			cancelCacheSync()
 			readyMu.Lock()
@@ -483,7 +504,7 @@ func main() {
 		}
 
 		setupLog.Info("starting manager")
-		return mgr.Start(ctx)
+		return mgr.Start(cycleCtx)
 	}
 
 	// +kubebuilder:scaffold:builder

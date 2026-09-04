@@ -285,6 +285,35 @@ func TestBackoffProgressionAndReset(t *testing.T) {
 	}
 }
 
+// TestManagerRestartsOnInternalCycleCancel locks down the exact mechanism the
+// placement shim relies on: BuildAndStart derives a per-cycle child context from
+// the one the supervisor passes in and cancels it itself (as the shim does when a
+// remote apiserver goes unreachable), then returns. The parent context is still
+// live, so the supervisor must treat this as a manager exit and rebuild — not
+// mistake it for a graceful shutdown and stop the loop.
+func TestManagerRestartsOnInternalCycleCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var cycles atomic.Int32
+
+	o := baseOptions(t)
+	o.Backoff = wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: 100}
+	o.BuildAndStart = func(parent context.Context) error {
+		cycles.Add(1)
+		// Mirror main.go's buildAndStart: derive a per-cycle context and cancel
+		// it from within (as the reachability probe does), then return its error.
+		cycleCtx, cancelCycle := context.WithCancel(parent)
+		cancelCycle()
+		return cycleCtx.Err()
+	}
+	runAsync(t, ctx, o)
+
+	// A cycle that self-cancels and returns while the parent is live must be
+	// rebuilt, not end the supervision loop.
+	waitFor(t, func() bool { return cycles.Load() >= 3 }, "manager to be rebuilt after an internal per-cycle cancel")
+}
+
 // waitFor polls cond up to ~2s, failing the test if it never becomes true.
 func waitFor(t *testing.T, cond func() bool, what string) {
 	t.Helper()
