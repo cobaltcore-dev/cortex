@@ -5,18 +5,18 @@ package multicluster
 
 import (
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	"sigs.k8s.io/controller-runtime/pkg/recorder"
 )
 
-// MultiClusterRecorder implements events.EventRecorder and routes events to the
-// correct cluster based on the GVK of the "regarding" object. It uses the same
-// routing logic as the multicluster Client's write path.
+// MultiClusterRecorder implements recorder.EventRecorder and routes events to
+// the correct cluster based on the GVK of the "regarding" object. It uses the
+// same routing logic as the multicluster Client's write path.
 type MultiClusterRecorder struct {
 	client       *Client
-	homeRecorder events.EventRecorder
-	recorders    map[cluster.Cluster]events.EventRecorder
+	homeRecorder recorder.EventRecorder
+	recorders    map[cluster.Cluster]recorder.EventRecorder
 }
 
 // GetEventRecorder creates a multi-cluster-aware EventRecorder. It pre-creates
@@ -24,10 +24,10 @@ type MultiClusterRecorder struct {
 // registered in the client. The name parameter is passed through to each
 // cluster's GetEventRecorder method (it becomes the reportingController in the
 // Kubernetes Event).
-func (c *Client) GetEventRecorder(name string) events.EventRecorder {
+func (c *Client) GetEventRecorder(name string) recorder.EventRecorder {
 	homeRecorder := c.HomeCluster.GetEventRecorder(name)
 
-	recorders := make(map[cluster.Cluster]events.EventRecorder)
+	recorders := make(map[cluster.Cluster]recorder.EventRecorder)
 	recorders[c.HomeCluster] = homeRecorder
 
 	c.remoteClustersMu.RLock()
@@ -55,8 +55,15 @@ func (r *MultiClusterRecorder) Eventf(regarding, related runtime.Object, eventty
 	recorder.Eventf(regarding, related, eventtype, reason, action, note, args...)
 }
 
+// AnnotatedEventf routes the annotated event to the cluster that owns the
+// "regarding" object. Falls back to the home cluster recorder if routing fails.
+func (r *MultiClusterRecorder) AnnotatedEventf(regarding, related runtime.Object, annotations map[string]string, eventtype, reason, action, note string, args ...any) {
+	recorder := r.recorderFor(regarding)
+	recorder.AnnotatedEventf(regarding, related, annotations, eventtype, reason, action, note, args...)
+}
+
 // recorderFor resolves which per-cluster recorder to use for the given object.
-func (r *MultiClusterRecorder) recorderFor(obj runtime.Object) events.EventRecorder {
+func (r *MultiClusterRecorder) recorderFor(obj runtime.Object) recorder.EventRecorder {
 	if obj == nil {
 		return r.homeRecorder
 	}
