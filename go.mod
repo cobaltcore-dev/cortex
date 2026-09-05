@@ -10,7 +10,7 @@ require (
 	github.com/gophercloud/gophercloud/v2 v2.14.0
 	github.com/ironcore-dev/ironcore v0.6.1
 	github.com/lib/pq v1.12.3
-	github.com/mattn/go-sqlite3 v1.14.50
+	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.3
