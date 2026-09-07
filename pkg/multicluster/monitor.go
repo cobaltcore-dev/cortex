@@ -23,6 +23,11 @@ type Monitor interface {
 	// detected on more than one cluster serving the GVK, labeled by the method
 	// of access and the resource GVK.
 	recordCrossClusterNameConflict(method string, gvk schema.GroupVersionKind)
+
+	// recordRemoteReachable records whether a remote apiserver was reachable at
+	// the last reachability probe, labeled by host. See pkg/multicluster's
+	// ProbeRemotes for how reachability is determined.
+	recordRemoteReachable(host string, reachable bool)
 }
 
 // monitor is the default Prometheus-backed Monitor implementation.
@@ -31,6 +36,10 @@ type monitor struct {
 	// detected on more than one cluster serving the GVK, labeled by the method
 	// of access and the resource GVK.
 	crossClusterNameConflicts *prometheus.CounterVec
+	// remoteReachable reports whether each remote apiserver was reachable at the
+	// last reachability probe, labeled by host. It lives on the process-lifetime
+	// Monitor (not the per-cycle Client) so it survives manager rebuilds.
+	remoteReachable *prometheus.GaugeVec
 }
 
 // NewMonitor creates a new Prometheus-backed multicluster client monitor. The
@@ -42,6 +51,10 @@ func NewMonitor(prefix string) Monitor {
 			Name: prefix + "multicluster_cross_cluster_name_conflicts_total",
 			Help: "Total number of times the same resource name was detected on more than one cluster serving the same GVK",
 		}, duplicateConflictLabels),
+		remoteReachable: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: prefix + "multicluster_remote_apiserver_reachable",
+			Help: "1 if the remote apiserver was reachable at the last probe, 0 if sustained-unreachable, labeled by host",
+		}, []string{"host"}),
 	}
 }
 
@@ -51,12 +64,24 @@ func (m *monitor) recordCrossClusterNameConflict(method string, gvk schema.Group
 	m.crossClusterNameConflicts.WithLabelValues(method, gvk.String()).Inc()
 }
 
+// recordRemoteReachable sets the reachability gauge for the given host to 1
+// (reachable) or 0 (unreachable).
+func (m *monitor) recordRemoteReachable(host string, reachable bool) {
+	v := 0.0
+	if reachable {
+		v = 1.0
+	}
+	m.remoteReachable.WithLabelValues(host).Set(v)
+}
+
 // Describe implements prometheus.Collector.
 func (m *monitor) Describe(ch chan<- *prometheus.Desc) {
 	m.crossClusterNameConflicts.Describe(ch)
+	m.remoteReachable.Describe(ch)
 }
 
 // Collect implements prometheus.Collector.
 func (m *monitor) Collect(ch chan<- prometheus.Metric) {
 	m.crossClusterNameConflicts.Collect(ch)
+	m.remoteReachable.Collect(ch)
 }

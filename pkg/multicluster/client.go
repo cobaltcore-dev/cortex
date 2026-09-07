@@ -89,7 +89,7 @@ func (c *Client) InitFromConf(ctx context.Context, mgr ctrl.Manager, conf Client
 		gvksByConfStr[formatted] = gvk
 	}
 	for gvkStr := range gvksByConfStr {
-		log.Info("scheme gvk registered", "gvk", gvkStr)
+		log.V(1).Info("scheme gvk registered", "gvk", gvkStr)
 	}
 	// Parse home GVKs.
 	c.homeGVKs = make(map[schema.GroupVersionKind]bool)

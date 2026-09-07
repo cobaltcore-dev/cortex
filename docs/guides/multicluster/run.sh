@@ -78,4 +78,4 @@ kubectl --context kind-cortex-remote-az-b apply \
 
 echo "Starting cortex in home cluster with tilt, using overrides from $TILT_OVERRIDES_PATH"
 kubectl config use-context kind-cortex-home
-export ACTIVE_DEPLOYMENTS="nova" && tilt up
+tilt up

@@ -41,6 +41,18 @@ func (f *fakeEventRecorder) Eventf(regarding, _ runtime.Object, eventtype, reaso
 	})
 }
 
+func (f *fakeEventRecorder) AnnotatedEventf(regarding, _ runtime.Object, _ map[string]string, eventtype, reason, action, note string, args ...any) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, eventfCall{
+		regarding: regarding,
+		eventtype: eventtype,
+		reason:    reason,
+		action:    action,
+		note:      fmt.Sprintf(note, args...),
+	})
+}
+
 func (f *fakeEventRecorder) getCalls() []eventfCall {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -242,4 +242,31 @@ spec:
           resource router is mapping the same object to multiple clusters, or an
           object was created out-of-band on the wrong cluster. Investigate the
           affected resources and the routing configuration.
+
+    - alert: CortexPlacementShimRemoteApiserverUnreachable
+      # min by (host): a remote is unreachable only if it was 0 for the whole
+      # window (a rebuild flips it 1->0->1, and min ignores the brief 1s during a
+      # reconnect attempt). Fires per host so the offending remote is named.
+      expr: |
+        min by (host) (cortex_multicluster_remote_apiserver_reachable{service="cortex-placement-shim-metrics-service"}) < 1
+      for: 5m
+      labels:
+        context: multicluster
+        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+      annotations:
+        summary: "Remote apiserver `{{ "{{" }} $labels.host {{ "}}" }}` is unreachable"
+        description: >
+          The multicluster client cannot reach the remote apiserver at
+          `{{ "{{" }} $labels.host {{ "}}" }}`. The reachability probe has seen
+          sustained transport failures (connection refused, TLS/handshake failure,
+          or timeout), which is the signature of a deleted or network-partitioned
+          cluster rather than an authz/server error. The shim recycles its
+          controller-manager in response, so the manager cache for resources served
+          by that remote is stale or empty and `cortex_placement_shim_manager_up`
+          will average low (see CortexPlacementShimManagerLooping). Passthrough
+          requests to upstream Placement are unaffected. Investigate whether the
+          remote cluster still exists and network connectivity to its apiserver.
 {{- end }}
