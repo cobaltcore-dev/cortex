@@ -1,5 +1,57 @@
 # Changelog
 
+## 2026-09-07 — [#1195](https://github.com/cobaltcore-dev/cortex/pull/1195)
+
+### cortex-shim v0.1.17 (sha-cd38777a)
+
+New features:
+- Remote apiserver liveness probe — adds a per-remote reachability probe (`GET /readyz`) that detects when a remote apiserver becomes unreachable after its informer cache has synced; after a configurable failure threshold (default 3 × 10s), the probe cancels the manager cycle context so the existing self-healing supervisor rebuilds the manager with current config ([#1190](https://github.com/cobaltcore-dev/cortex/pull/1190))
+- `cortex_multicluster_remote_apiserver_reachable{host}` gauge — exposes per-remote apiserver reachability on the process-lifetime monitor, surviving manager rebuilds ([#1190](https://github.com/cobaltcore-dev/cortex/pull/1190))
+- `CortexPlacementShimRemoteApiserverUnreachable` alert — fires when a remote apiserver is unreachable ([#1190](https://github.com/cobaltcore-dev/cortex/pull/1190))
+
+Non-breaking changes:
+- Fix multicluster recorder for controller-runtime v0.25.0 `EventRecorder` interface change — adds `AnnotatedEventf` method to `MultiClusterRecorder` to satisfy the wider `recorder.EventRecorder` interface ([#1191](https://github.com/cobaltcore-dev/cortex/pull/1191))
+- Update `sigs.k8s.io/controller-runtime` to v0.25.0 ([#1188](https://github.com/cobaltcore-dev/cortex/pull/1188))
+- Update `sigs.k8s.io/controller-tools` to v0.22.0 (CRD annotation bump) ([#1186](https://github.com/cobaltcore-dev/cortex/pull/1186))
+- Update `github.com/sapcc/go-bits` ([#1187](https://github.com/cobaltcore-dev/cortex/pull/1187))
+- Update `kube-prometheus-stack` to v89 ([#1189](https://github.com/cobaltcore-dev/cortex/pull/1189))
+
+### cortex v0.4.1 (sha-cd38777a)
+
+Non-breaking changes:
+- Fix multicluster recorder for controller-runtime v0.25.0 `EventRecorder` interface change ([#1191](https://github.com/cobaltcore-dev/cortex/pull/1191))
+- CRDs regenerated with controller-tools v0.22.0 ([#1186](https://github.com/cobaltcore-dev/cortex/pull/1186))
+- Update `sigs.k8s.io/controller-runtime` to v0.25.0 ([#1188](https://github.com/cobaltcore-dev/cortex/pull/1188))
+- Update `github.com/sapcc/go-bits` ([#1187](https://github.com/cobaltcore-dev/cortex/pull/1187))
+
+### cortex-placement-shim v0.1.17
+
+Includes updated chart cortex-shim v0.1.17.
+
+### cortex-nova v0.0.90
+
+Includes updated chart cortex v0.4.1.
+
+### cortex-cinder v0.0.90
+
+Includes updated chart cortex v0.4.1.
+
+### cortex-manila v0.0.90
+
+Includes updated chart cortex v0.4.1.
+
+### cortex-crds v0.0.90
+
+Includes updated chart cortex v0.4.1.
+
+### cortex-ironcore v0.0.90
+
+Includes updated chart cortex v0.4.1.
+
+### cortex-pods v0.0.90
+
+Includes updated chart cortex v0.4.1.
+
 ## 2026-09-02 — [#1184](https://github.com/cobaltcore-dev/cortex/pull/1184)
 
 ### cortex-shim v0.1.16 (sha-b577e306)
