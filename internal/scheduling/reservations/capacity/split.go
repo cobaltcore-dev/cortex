@@ -226,6 +226,38 @@ func computeUnassigned(groups []GroupInput, hostRes map[string]map[string]int64)
 	return
 }
 
+// groupOverlap inspects the split inputs for one AZ and returns:
+//   - participating: the sorted names of all groups that took part in the split.
+//   - sharedHostCount: the number of hypervisors that are candidates for more than
+//     one group. These are the hosts the round-robin split has to arbitrate, since
+//     any capacity handed to one group is unavailable to the others sharing that host.
+//
+// A host is counted once regardless of how many groups share it.
+func groupOverlap(groups []GroupInput) (participating []string, sharedHostCount int) {
+	participating = make([]string, 0, len(groups))
+	hostGroupCount := make(map[string]int)
+	for _, g := range groups {
+		participating = append(participating, g.Name)
+		// Deduplicate hosts within a single group so a repeated candidate does
+		// not inflate the shared count on its own.
+		seen := make(map[string]struct{}, len(g.CandidateHosts))
+		for _, h := range g.CandidateHosts {
+			if _, ok := seen[h]; ok {
+				continue
+			}
+			seen[h] = struct{}{}
+			hostGroupCount[h]++
+		}
+	}
+	for _, count := range hostGroupCount {
+		if count > 1 {
+			sharedHostCount++
+		}
+	}
+	sort.Strings(participating)
+	return participating, sharedHostCount
+}
+
 // collectExclusiveResources builds the exclusive allocation map from group assigned counts.
 func collectExclusiveResources(states []groupState) map[string]map[string]int64 {
 	exclusive := make(map[string]map[string]int64, len(states))
