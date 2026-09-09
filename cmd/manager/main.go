@@ -838,7 +838,10 @@ func main() {
 			setupLog.Error(err, "failed to register capacity monitor metrics, continuing without metrics")
 		}
 
+		splitMetrics := capacity.NewSplitMetrics(metrics.Registry)
+
 		if err := capacity.NewController(multiclusterClient, capacityConfig, commitmentsVMSource).
+			WithSplitMetrics(splitMetrics).
 			SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "capacity")
 			os.Exit(1)

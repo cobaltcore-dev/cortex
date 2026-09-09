@@ -106,6 +106,7 @@ type Reconciler struct {
 	vmSource        reservations.VMSource
 	schedulerClient *reservations.SchedulerClient
 	config          Config
+	splitMetrics    *SplitMetrics
 
 	lastReconcileAt time.Time
 }
@@ -117,6 +118,14 @@ func NewController(c client.Client, config Config, vmSource reservations.VMSourc
 		schedulerClient: reservations.NewSchedulerClient(config.SchedulerURL),
 		config:          config,
 	}
+}
+
+// WithSplitMetrics attaches the round-robin split metrics to the reconciler and
+// returns the reconciler for chaining. When unset, the split metric calls are
+// no-ops (the SplitMetrics methods are nil-safe).
+func (c *Reconciler) WithSplitMetrics(m *SplitMetrics) *Reconciler {
+	c.splitMetrics = m
+	return c
 }
 
 // Reconcile implements reconcile.Reconciler. It is called by controller-runtime whenever a
@@ -245,6 +254,10 @@ func (c *Reconciler) reconcileAll(ctx context.Context) error {
 	}
 
 	usageByKey := c.computeVMUsage(ctx, flavorGroups, hvList.Items)
+
+	// Clear per-AZ split metrics before recomputing them; series for AZs or group
+	// sets that no longer participate in a split must not linger across cycles.
+	c.splitMetrics.Reset()
 
 	for _, az := range azs {
 		c.reconcileAZ(ctx, az, flavorGroups, hvByName, blockedByReservations, usageByKey)
@@ -528,6 +541,14 @@ func (c *Reconciler) reconcileAZ(
 
 	groupInputs, hosts := buildSplitInputs(results, hvByName, blockedByReservations, az, logger)
 	freeResources, exclusiveResources, unassigned, strandedByHost := SplitCapacity(groupInputs, hosts)
+
+	// Export the split's structural outcomes (stranded fragmentation and shared
+	// host pools) as per-AZ metrics. Computed unconditionally so a healthy
+	// "nothing stranded / no overlap" state is observable and trendable.
+	participatingGroups, sharedHostCount := groupOverlap(groupInputs)
+	groupsLabel := strings.Join(participatingGroups, ",")
+	c.splitMetrics.RecordStranded(az, groupsLabel, unassigned)
+	c.splitMetrics.RecordOverlap(az, groupsLabel, sharedHostCount)
 
 	if unassigned[ResourceMemory] > 0 || unassigned[ResourceCores] > 0 {
 		groupNames := make([]string, 0, len(groupInputs))
