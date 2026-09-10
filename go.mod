@@ -10,7 +10,7 @@ require (
 	github.com/gophercloud/gophercloud/v2 v2.14.0
 	github.com/ironcore-dev/ironcore v0.6.1
 	github.com/lib/pq v1.12.3
-	github.com/mattn/go-sqlite3 v1.14.50
+	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.3
@@ -18,8 +18,8 @@ require (
 	github.com/sapcc/go-bits v0.0.0-20260908173957-572b68774a1c
 	go.uber.org/zap v1.28.0
 	go.xyrillian.de/gg v1.15.0
-	golang.org/x/sync v0.22.0
-	golang.org/x/term v0.45.0
+	golang.org/x/sync v0.23.0
+	golang.org/x/term v0.46.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.37.0
 	k8s.io/apimachinery v0.37.0
@@ -108,7 +108,7 @@ require (
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
