@@ -314,6 +314,49 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 	}
 }
 
+func TestHTTPAPI_NovaExternalScheduler_EmptyHostsSerializedAsArray(t *testing.T) {
+	// When the pipeline filters out all hosts, OrderedHosts is nil. The
+	// response must serialize hosts as an empty array, not null, since Nova's
+	// schema requires an array.
+	delegate := &mockHTTPAPIDelegate{
+		processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
+			decision.Status = v1alpha1.DecisionStatus{
+				Result: &v1alpha1.DecisionResult{OrderedHosts: nil},
+			}
+			return nil
+		},
+	}
+	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
+
+	req := novaapi.ExternalSchedulerRequest{
+		Spec: novaapi.NovaObject[novaapi.NovaSpec]{
+			Data: novaapi.NovaSpec{InstanceUUID: "test-uuid"},
+		},
+		Hosts:    []novaapi.ExternalSchedulerHost{{ComputeHost: "host1"}},
+		Weights:  map[string]float64{"host1": 1.0},
+		Pipeline: "test-pipeline",
+	}
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("Failed to marshal request data: %v", err)
+	}
+
+	httpReq := httptest.NewRequest(http.MethodPost, "/scheduler/nova/external", strings.NewReader(string(data)))
+	w := httptest.NewRecorder()
+	api.NovaExternalScheduler(w, httpReq)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	body := strings.TrimSpace(w.Body.String())
+	if strings.Contains(body, "null") {
+		t.Errorf("Expected hosts to serialize as array, got %q", body)
+	}
+	if body != `{"hosts":[]}` {
+		t.Errorf("Expected body %q, got %q", `{"hosts":[]}`, body)
+	}
+}
+
 func TestHTTPAPI_NovaExternalScheduler_DecisionCreation(t *testing.T) {
 	var capturedDecision *v1alpha1.Decision
 	delegate := &mockHTTPAPIDelegate{
