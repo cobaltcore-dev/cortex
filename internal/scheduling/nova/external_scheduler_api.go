@@ -299,6 +299,11 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	if err == nil && intent == api.EvacuateIntent {
 		hosts = shuffleTopHosts(hosts, httpAPI.config.EvacuationShuffleK)
 	}
+	// Ensure we always return an array, never null. Nova's schema requires
+	// hosts to be an array, and a nil slice would serialize to null.
+	if hosts == nil {
+		hosts = []string{}
+	}
 	response := api.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(response); err != nil {
