@@ -58,7 +58,10 @@ spec:
         the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait on hosts as well as the
         `domain_name` scheduler hint from the nova request spec.
       params:
-        - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
+        - {key: domainNamePrefixes, stringListValue: {{ .Values.kvm.filterExternalCustomer.domainNamePrefixes | toJson }}}
+        {{- with .Values.kvm.filterExternalCustomer.ignoredDomainNames }}
+        - {key: ignoredDomainNames, stringListValue: {{ . | toJson }}}
+        {{- end }}
     - name: filter_has_accelerators
       description: |
         This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
@@ -215,7 +218,10 @@ spec:
         the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait on hosts as well as the
         `domain_name` scheduler hint from the nova request spec.
       params:
-        - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
+        - {key: domainNamePrefixes, stringListValue: {{ .Values.kvm.filterExternalCustomer.domainNamePrefixes | toJson }}}
+        {{- with .Values.kvm.filterExternalCustomer.ignoredDomainNames }}
+        - {key: ignoredDomainNames, stringListValue: {{ . | toJson }}}
+        {{- end }}
     - name: filter_has_accelerators
       description: |
         This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
@@ -486,7 +492,10 @@ spec:
         the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait on hosts as well as the
         `domain_name` scheduler hint from the nova request spec.
       params:
-        - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
+        - {key: domainNamePrefixes, stringListValue: {{ .Values.kvm.filterExternalCustomer.domainNamePrefixes | toJson }}}
+        {{- with .Values.kvm.filterExternalCustomer.ignoredDomainNames }}
+        - {key: ignoredDomainNames, stringListValue: {{ . | toJson }}}
+        {{- end }}
     - name: filter_allowed_projects
       description: |
         This step filters hosts based on allowed projects defined in the
@@ -555,7 +564,10 @@ spec:
         the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait on hosts as well as the
         `domain_name` scheduler hint from the nova request spec.
       params:
-        - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
+        - {key: domainNamePrefixes, stringListValue: {{ .Values.kvm.filterExternalCustomer.domainNamePrefixes | toJson }}}
+        {{- with .Values.kvm.filterExternalCustomer.ignoredDomainNames }}
+        - {key: ignoredDomainNames, stringListValue: {{ . | toJson }}}
+        {{- end }}
     - name: filter_allowed_projects
       description: |
         This step filters hosts based on allowed projects defined in the
@@ -671,7 +683,10 @@ spec:
         the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait on hosts as well as the
         `domain_name` scheduler hint from the nova request spec.
       params:
-        - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
+        - {key: domainNamePrefixes, stringListValue: {{ .Values.kvm.filterExternalCustomer.domainNamePrefixes | toJson }}}
+        {{- with .Values.kvm.filterExternalCustomer.ignoredDomainNames }}
+        - {key: ignoredDomainNames, stringListValue: {{ . | toJson }}}
+        {{- end }}
     - name: filter_has_accelerators
       description: |
         This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
@@ -828,7 +843,10 @@ spec:
         the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait on hosts as well as the
         `domain_name` scheduler hint from the nova request spec.
       params:
-        - {key: domainNamePrefixes, stringListValue: ["iaas-"]}
+        - {key: domainNamePrefixes, stringListValue: {{ .Values.kvm.filterExternalCustomer.domainNamePrefixes | toJson }}}
+        {{- with .Values.kvm.filterExternalCustomer.ignoredDomainNames }}
+        - {key: ignoredDomainNames, stringListValue: {{ . | toJson }}}
+        {{- end }}
     - name: filter_has_accelerators
       description: |
         This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
