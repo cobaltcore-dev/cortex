@@ -152,7 +152,7 @@ Now we can start Cortex using Tilt, which will pick up the Helm values override 
 
 ```bash
 kubectl config use-context kind-cortex-home
-export ACTIVE_DEPLOYMENTS="nova" && tilt up
+tilt up
 ```
 
 ## Outcome
