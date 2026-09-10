@@ -78,6 +78,17 @@ kvm:
   # Set to false to keep KVM-related alerts at warning severity instead of critical.
   # Useful when rolling out a new KVM region before it is production-ready.
   criticalAlerts: true
+  # Options for the filter_external_customer pipeline step, which restricts hosts
+  # for external customer domains. Applied to every KVM pipeline that uses the step.
+  filterExternalCustomer:
+    # Domain name prefixes that identify external customer domains. Requests whose
+    # domain_name scheduler hint starts with one of these prefixes are restricted to
+    # hosts carrying the CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE trait. Must not be empty.
+    domainNamePrefixes:
+      - "iaas-"
+    # Domain names that are explicitly treated as non-external-customer domains and
+    # skipped by the filter, even if they match one of the prefixes above.
+    ignoredDomainNames: []
 
 # Cache configuration for the transparent in-process overlay cache.
 cache:
