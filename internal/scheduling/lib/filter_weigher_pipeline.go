@@ -254,8 +254,11 @@ func (p *filterWeigherPipeline[RequestType]) applyWeights(
 
 // Sort the hosts by their weights.
 func (s *filterWeigherPipeline[RequestType]) sortHostsByWeights(weights map[string]float64) []string {
-	// Sort the hosts (keys) by their weights.
-	hosts := slices.Collect(maps.Keys(weights))
+	// Sort the hosts (keys) by their weights. Collect into a non-nil slice so
+	// an empty weights map yields [] rather than nil, ensuring OrderedHosts is
+	// never nil (which would serialize to null in the external scheduler API).
+	hosts := make([]string, 0, len(weights))
+	hosts = append(hosts, slices.Collect(maps.Keys(weights))...)
 	sort.Slice(hosts, func(i, j int) bool {
 		return weights[hosts[i]] > weights[hosts[j]]
 	})
