@@ -218,11 +218,22 @@ func TestPipeline_SortHostsByWeights(t *testing.T) {
 			},
 			expected: []string{"host2", "host1", "host3"},
 		},
+		{
+			name:     "empty weights returns empty non-nil slice",
+			weights:  map[string]float64{},
+			expected: []string{},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := p.sortHostsByWeights(tt.weights)
+			if result == nil {
+				t.Fatalf("expected non-nil slice, got nil")
+			}
+			if len(result) != len(tt.expected) {
+				t.Fatalf("expected %d hosts, got %d", len(tt.expected), len(result))
+			}
 			for i, host := range tt.expected {
 				if result[i] != host {
 					t.Errorf("expected host %s at position %d, got %s", host, i, result[i])

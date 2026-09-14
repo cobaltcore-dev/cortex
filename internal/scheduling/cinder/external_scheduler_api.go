@@ -170,6 +170,11 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 		return
 	}
 	hosts := decision.Status.Result.OrderedHosts
+	// Ensure we always return an array, never null. The schema requires hosts
+	// to be an array, and a nil slice would serialize to null.
+	if hosts == nil {
+		hosts = []string{}
+	}
 	response := api.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(response); err != nil {
