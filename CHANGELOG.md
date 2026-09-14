@@ -1,5 +1,55 @@
 # Changelog
 
+## 2026-09-14 — [#1204](https://github.com/cobaltcore-dev/cortex/pull/1204)
+
+### cortex v0.4.2 (sha-306a1ea2)
+
+Bug fixes:
+- Fix nil-instead-of-empty-array in scheduler API responses — the external scheduler API endpoints (Nova, Cinder, Manila) could return `"hosts": null` instead of `"hosts": []` when the pipeline filtered out all hosts; added nil-guards in all three service API handlers ([#1198](https://github.com/cobaltcore-dev/cortex/pull/1198))
+- `sortHostsByWeights` now returns `[]` on empty input — `slices.Collect(maps.Keys(...))` returns `nil` for an empty map; replaced with explicit `make([]string, 0, …)` allocation to guarantee a non-nil empty slice ([#1199](https://github.com/cobaltcore-dev/cortex/pull/1199))
+
+New features:
+- Template `filter_external_customer` options as Helm values — the `domainNamePrefixes` parameter (previously hardcoded to `["iaas-"]`) and a new `ignoredDomainNames` parameter for the `filter_external_customer` pipeline step are now configurable via Helm values (`kvm.filterExternalCustomer.*`) ([#1200](https://github.com/cobaltcore-dev/cortex/pull/1200))
+
+Non-breaking changes:
+- Remove stale `ACTIVE_DEPLOYMENTS` pinning from multicluster guide ([#1194](https://github.com/cobaltcore-dev/cortex/pull/1194))
+- Update `github.com/sapcc/go-bits` ([#1197](https://github.com/cobaltcore-dev/cortex/pull/1197))
+- Update `kube-prometheus-stack` to v90 ([#1193](https://github.com/cobaltcore-dev/cortex/pull/1193))
+- Update Go dependencies: `github.com/mattn/go-sqlite3` v1.14.52, `golang.org/x/sync` v0.23.0, `golang.org/x/term` v0.46.0 ([#1192](https://github.com/cobaltcore-dev/cortex/pull/1192))
+
+### cortex-shim v0.1.18 (sha-fa2a5caa)
+
+Non-breaking changes:
+- Shared binary rebuild with updated Go dependencies ([#1192](https://github.com/cobaltcore-dev/cortex/pull/1192), [#1197](https://github.com/cobaltcore-dev/cortex/pull/1197))
+
+### cortex-placement-shim v0.1.18
+
+Includes updated chart cortex-shim v0.1.18.
+
+### cortex-nova v0.0.91
+
+Includes updated chart cortex v0.4.2.
+
+### cortex-cinder v0.0.91
+
+Includes updated chart cortex v0.4.2.
+
+### cortex-manila v0.0.91
+
+Includes updated chart cortex v0.4.2.
+
+### cortex-crds v0.0.91
+
+Includes updated chart cortex v0.4.2.
+
+### cortex-ironcore v0.0.91
+
+Includes updated chart cortex v0.4.2.
+
+### cortex-pods v0.0.91
+
+Includes updated chart cortex v0.4.2.
+
 ## 2026-09-07 — [#1195](https://github.com/cobaltcore-dev/cortex/pull/1195)
 
 ### cortex-shim v0.1.17 (sha-cd38777a)
