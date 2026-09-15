@@ -1,5 +1,41 @@
 # Changelog
 
+## 2026-09-15 — [#1208](https://github.com/cobaltcore-dev/cortex/pull/1208)
+
+### cortex v0.4.3 (sha-83e5f5ec)
+
+Non-breaking changes:
+- Shared binary rebuild with updated base image ([#1203](https://github.com/cobaltcore-dev/cortex/pull/1203))
+
+### cortex-postgres v0.6.16 (sha-83e5f5ec)
+
+Non-breaking changes:
+- Rebuild image to resolve CVEs ([#1203](https://github.com/cobaltcore-dev/cortex/pull/1203))
+
+### cortex-nova v0.0.92
+
+Includes updated charts cortex v0.4.3 and cortex-postgres v0.6.16.
+
+### cortex-cinder v0.0.92
+
+Includes updated charts cortex v0.4.3 and cortex-postgres v0.6.16.
+
+### cortex-manila v0.0.92
+
+Includes updated charts cortex v0.4.3 and cortex-postgres v0.6.16.
+
+### cortex-crds v0.0.92
+
+Includes updated chart cortex v0.4.3.
+
+### cortex-ironcore v0.0.92
+
+Includes updated chart cortex v0.4.3.
+
+### cortex-pods v0.0.92
+
+Includes updated chart cortex v0.4.3.
+
 ## 2026-09-14 — [#1204](https://github.com/cobaltcore-dev/cortex/pull/1204)
 
 ### cortex v0.4.2 (sha-306a1ea2)
