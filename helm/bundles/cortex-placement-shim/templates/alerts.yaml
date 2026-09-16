@@ -104,7 +104,7 @@ spec:
           degraded placement functionality until the issue is resolved.
 
     # Upstream HTTP errors (shim -> Placement API)
-    - alert: CortexPlacementShimUpstreamHttp5xxTooHigh
+    - alert: CortexPlacementShimUpstreamHttp500sTooHigh
       expr: rate(cortex_placement_shim_upstream_request_duration_seconds_count{service="cortex-placement-shim-metrics-service", responsecode=~"5.."}[5m]) > 0.1
       for: 5m
       labels:
@@ -121,25 +121,6 @@ spec:
           This indicates the OpenStack Placement service itself is having
           problems. The shim forwards these errors to its clients. Investigate
           the Placement API service health and logs.
-
-    - alert: CortexPlacementShimUpstreamUnreachable
-      expr: rate(cortex_placement_shim_upstream_request_duration_seconds_count{service="cortex-placement-shim-metrics-service", responsecode="502"}[5m]) > 0.1
-      for: 5m
-      labels:
-        context: upstream
-        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
-        service: cortex
-        severity: warning
-        support_group: workload-management
-        playbook: docs/support/playbook/cortex/alerts/shim-api-errors
-      annotations:
-        summary: "Placement Shim cannot reach the upstream Placement API"
-        description: >
-          The Placement Shim is unable to reach the upstream OpenStack Placement
-          API and is returning 502 Bad Gateway errors. This means all forwarded
-          requests are failing. Check network connectivity, the Placement API
-          service endpoint configuration, and whether the upstream service is
-          running.
 
     # Latency alerts
     - alert: CortexPlacementShimDownstreamLatencyTooHigh
