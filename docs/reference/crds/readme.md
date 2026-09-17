@@ -34,9 +34,9 @@ installed separately.
 | Kind | API group | Provided by |
 |---|---|---|
 | Hypervisor | `kvm.cloud.sap/v1` | [openstack-hypervisor-operator](https://github.com/cobaltcore-dev/openstack-hypervisor-operator) |
-| Machine | `compute.ironcore.dev` (wrapped as `api/external/ironcore`) | IronCore |
-| MachinePool | `compute.ironcore.dev` | IronCore |
-| MachineClass | `compute.ironcore.dev` | IronCore |
+| Machine | `compute.ironcore.dev/v1alpha1` (wrapped as `api/external/ironcore/v1alpha1`) | IronCore |
+| MachinePool | `compute.ironcore.dev/v1alpha1` | IronCore |
+| MachineClass | `compute.ironcore.dev/v1alpha1` | IronCore |
 
 > [!NOTE]
 > The IronCore `Machine` type Cortex uses embeds the upstream `computev1alpha1.MachineSpec` and

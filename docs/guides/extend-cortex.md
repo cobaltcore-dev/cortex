@@ -21,17 +21,26 @@ Cortex uses three registration mechanisms depending on the plugin category:
 
 | Plugin | Registration | Referenced by |
 |---|---|---|
-| Filter / weigher / detector | Self-register via `init()` into a package-level `Index` map of factory functions | `Pipeline` CRD step name |
-| Knowledge extractor | Entry in a hand-maintained static map | `Knowledge` CRD |
-| KPI | Entry in a hand-maintained static map | `KPI` CRD |
+| Filter / weigher / detector | Self-register via `init()` into a package-level `Index` map of factory functions (e.g. `internal/scheduling/nova/plugins/filters/`) | `Pipeline` CRD step name |
+| Knowledge extractor | Entry in the hand-maintained `supportedExtractors` map (`internal/knowledge/extractor/supported_extractors.go`) | `Knowledge` CRD |
+| KPI | Entry in the hand-maintained `supportedKPIs` map (`internal/knowledge/kpis/supported_kpis.go`) | `KPI` CRD |
 | Datasource | Typed switch / map on datasource kind | `Datasource` CRD |
 
 ## Add a scheduling step (filter / weigher / detector)
 
-1. Implement the step interface in the appropriate scheduling package.
+1. Implement the step interface in the appropriate scheduling package (filters, weighers, and
+   detectors live under `internal/scheduling/<domain>/plugins/`).
 2. Register it in that package's `init()` by adding a factory function to the `Index` map under a
-   unique name. Because registration happens in `init()`, importing the package is enough — no
-   central list to edit.
+   unique name — for example:
+
+   ```go
+   func init() {
+       Index["filter_has_enough_capacity"] = func() NovaFilter { return &FilterHasEnoughCapacity{} }
+   }
+   ```
+
+   Because registration happens in `init()`, importing the package is enough — no central list to
+   edit.
 3. Reference the step by that name in a `Pipeline` resource.
 
 Filters run sequentially and remove hosts; weighers run in parallel and emit an activation that is
@@ -75,10 +84,6 @@ go build ./...
 
 Run the change under Tilt to see it reconcile against a live cluster — see the
 [Tilt tutorial](../tutorials/local-development-with-tilt.md).
-
-> [!NOTE]
-> Do not run `make` as part of documentation work. For code contributions, follow the project's
-> normal build/test workflow.
 
 ## Next steps
 

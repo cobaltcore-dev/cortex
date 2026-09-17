@@ -21,7 +21,7 @@ kubectl get committedresources
 |---|---|---|
 | `commitmentUUID` | string | UUID of the commitment. |
 | `schedulingDomain` | string | Domain (e.g. `nova`). |
-| `flavorGroupName` | string | Flavor group targeted (e.g. `kvm_v2_hana_s`). |
+| `flavorGroupName` | string | Flavor group targeted (e.g. `hana-v2`). |
 | `resourceType` | string | `memory` (drives Reservation slots) or `cores` (arithmetic headroom check only, no slots). |
 | `amount` | Quantity | Total committed quantity. `memory` in binary SI MiB (e.g. `1280Gi`); `cores` as an integer. |
 | `availabilityZone` | string | AZ. |

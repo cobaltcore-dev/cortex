@@ -30,7 +30,19 @@ kind: Datasource
 metadata:
   name: nova-servers
 spec:
-  # fields per your source; see the Datasource reference
+  schedulingDomain: nova
+  databaseSecretRef:
+    name: cortex-nova-postgres
+    namespace: cortex
+  type: openstack
+  openstack:
+    syncInterval: 600s
+    secretRef:
+      name: cortex-nova-openstack-keystone
+      namespace: cortex
+    type: nova
+    nova:
+      type: servers
 EOF
 ```
 
@@ -51,7 +63,9 @@ cortex_sync_request_processed_total{...} increasing
 
 A `Knowledge` resource declares a named extractor that reads raw facts and writes features. The
 extractor name must be registered in the binary (extractors live in a hand-maintained map — see
-[Extend Cortex](extend-cortex.md)).
+[Extend Cortex](extend-cortex.md)). Its `dependencies.datasources` must name datasources that already
+exist and are Ready — the example below depends on `nova-hypervisors` and
+`placement-resource-provider-inventory-usages`, so create those datasources (as in Step 1) first.
 
 ```bash
 kubectl apply -f - <<'EOF'
@@ -60,7 +74,16 @@ kind: Knowledge
 metadata:
   name: host-utilization
 spec:
-  # extractor name + inputs; see the Knowledge reference
+  schedulingDomain: nova
+  extractor:
+    name: host_utilization_extractor
+  description: |
+    Calculates how much space is available on each host.
+  recency: "60s"
+  dependencies:
+    datasources:
+      - name: nova-hypervisors
+      - name: placement-resource-provider-inventory-usages
 EOF
 ```
 
@@ -90,9 +113,20 @@ kind: KPI
 metadata:
   name: host-utilization-kpi
 spec:
-  # KPI name + inputs; see the KPI reference
+  schedulingDomain: nova
+  impl: vmware_host_capacity_kpi
+  dependencies:
+    knowledges:
+      - name: host-utilization
+  description: |
+    Tracks CPU, RAM, and disk capacity and utilization per host.
 EOF
 ```
+
+> [!NOTE]
+> The KPI's implementation is named by `spec.impl` (a string that must be registered in the binary),
+> not `spec.name`. Available implementations live in a hand-maintained map — see
+> [Extend Cortex](extend-cortex.md).
 
 Verify the metric appears on the metrics endpoint (see [Metrics and alerts](../reference/metrics.md)):
 

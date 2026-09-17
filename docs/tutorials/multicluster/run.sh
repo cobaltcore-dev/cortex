@@ -3,10 +3,10 @@
 set -e
 
 echo "Creating home cluster"
-kind create cluster --config docs/guides/multicluster/cortex-home.yaml
+kind create cluster --config docs/tutorials/multicluster/cortex-home.yaml
 
 echo "Applying cluster role binding for oidc endpoint access"
-kubectl --context kind-cortex-home apply -f docs/guides/multicluster/cortex-home-crb.yaml
+kubectl --context kind-cortex-home apply -f docs/tutorials/multicluster/cortex-home-crb.yaml
 
 echo "Storing home cluster cert under /tmp/root-ca-home.pem"
 kubectl --context kind-cortex-home --namespace kube-system \
@@ -14,12 +14,12 @@ kubectl --context kind-cortex-home --namespace kube-system \
   -o jsonpath="{.data['client-ca-file']}" > /tmp/root-ca-home.pem
 
 echo "Creating az-a and az-b clusters"
-kind create cluster --config docs/guides/multicluster/cortex-remote-az-a.yaml
-kind create cluster --config docs/guides/multicluster/cortex-remote-az-b.yaml
+kind create cluster --config docs/tutorials/multicluster/cortex-remote-az-a.yaml
+kind create cluster --config docs/tutorials/multicluster/cortex-remote-az-b.yaml
 
 echo "Granting cortex-home sa tokens access to az-a and az-b clusters"
-kubectl --context kind-cortex-remote-az-a apply -f docs/guides/multicluster/cortex-remote-crb.yaml
-kubectl --context kind-cortex-remote-az-b apply -f docs/guides/multicluster/cortex-remote-crb.yaml
+kubectl --context kind-cortex-remote-az-a apply -f docs/tutorials/multicluster/cortex-remote-crb.yaml
+kubectl --context kind-cortex-remote-az-b apply -f docs/tutorials/multicluster/cortex-remote-crb.yaml
 
 echo "Installing cortex crds in az-a and az-b clusters"
 kubectl config use-context kind-cortex-remote-az-a
@@ -72,9 +72,9 @@ EOF
 
 echo "Applying hypervisor resources in az-a and az-b clusters"
 kubectl --context kind-cortex-remote-az-a apply \
-    -f docs/guides/multicluster/hypervisors-az-a.yaml
+    -f docs/tutorials/multicluster/hypervisors-az-a.yaml
 kubectl --context kind-cortex-remote-az-b apply \
-    -f docs/guides/multicluster/hypervisors-az-b.yaml
+    -f docs/tutorials/multicluster/hypervisors-az-b.yaml
 
 echo "Starting cortex in home cluster with tilt, using overrides from $TILT_OVERRIDES_PATH"
 kubectl config use-context kind-cortex-home

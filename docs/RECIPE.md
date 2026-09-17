@@ -108,8 +108,9 @@ docs/
 - **`adrs/`** is a special case: an append-only historical record of decisions, not one of the
   four content types. ADRs are never rewritten to match new code — a superseded decision gets
   a *new* ADR that supersedes it. Leave existing ADRs alone.
-- Sub-directories under `concepts/`, `guides/`, `reference/` are permitted **only** when a
-  single topic genuinely spans multiple pages (e.g. `guides/multicluster/`, `reference/crds/`).
+- Sub-directories under `concepts/`, `guides/`, `reference/`, `tutorials/` are permitted **only**
+  when a single topic genuinely spans multiple pages or ships companion assets (e.g.
+  `reference/crds/`, or a tutorial's script directory like `tutorials/multicluster/`).
   Prefer a single page until it demonstrably needs splitting; see
   [Page length](#page-length-and-splitting).
 

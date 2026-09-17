@@ -130,7 +130,8 @@ need Postgres (failover, quota, commitments) reference a Datasource by `datasour
 | `apiservers.home.gvks` | []string | GVKs served by the home cluster, as `group/version/Kind`. |
 | `apiservers.remotes[]` | object | `{ host, caCert, insecureSkipTLSVerify, gvks[], labels{} }` per remote. |
 
-See [Set up multicluster](../guides/set-up-multicluster.md).
+See [Multicluster](../concepts/multicluster.md) and the
+[Multicluster with kind tutorial](../tutorials/multicluster-with-kind.md).
 
 ## Pending-cache overlay (`cache` key)
 

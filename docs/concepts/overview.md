@@ -24,11 +24,25 @@ rarely reflects historical load, cross-project commitments, hardware health tren
 is promised but not yet consumed. Encoding that richer picture into each platform scheduler is hard
 and couples policy to the platform.
 
+There is also a *fragmentation* problem. In a typical OpenStack cloud, placement intelligence is
+scattered across several independent schedulers — one inside Nova for compute, one inside Cinder for
+block storage, one inside Manila for shares, and network-locality logic in Neutron. Each has its own
+extension mechanism, its own configuration surface, and its own copy of concerns that recur
+everywhere: how to weigh load, how to respect capacity commitments, how to keep related workloads
+together or apart. Improving placement means making the same change in several different codebases,
+in several different ways, and cross-service objectives — placing a VM near the storage it will
+attach, or spreading a tenant's resources across failure domains regardless of which service
+provisions them — have no single place to live at all.
+
 Cortex takes a different stance: it treats *placement intelligence* as its own concern, deployed
-beside the platform. The platform still owns the workload lifecycle; Cortex supplies a better
-ordering of candidates (or a descheduling recommendation) built from data the platform does not
-track. Because the intelligence lives outside the platform, the same model serves compute, storage,
-bare metal, and Kubernetes pods.
+beside the platform and shared across domains. The platform still owns the workload lifecycle;
+Cortex supplies a better ordering of candidates (or a descheduling recommendation) built from data
+the platform does not track. Because the intelligence lives outside the platform, the same model
+serves compute, storage, bare metal, and Kubernetes pods, and generic scheduling logic (load
+balancing, anti-affinity) is written once and reused, while domain-specific logic is layered on top.
+Consolidating the logic in one operator is also what makes *cross-domain* placement possible in
+principle — reasoning about compute and storage together in a single decision. Today each domain is
+scheduled independently; joint cross-domain scheduling is a future direction, not current behaviour.
 
 ## The three components
 
@@ -42,6 +56,25 @@ Cortex is delivered as three deployables:
 - **cortex-shim** — the `shim` binary (`cortex-shim` library, `cortex-placement-shim` bundle) that
   presents an OpenStack Placement-API-compatible surface. See
   [Placement API shim](placement-api-shim.md).
+
+## How Cortex is deployed
+
+The `manager` binary is a *modular monolith*: one image contains every controller, every knowledge
+extractor, and every pipeline type, but a given process runs only the subset selected by
+`enabledControllers` and `enabledTasks`. There is no separate build per domain — a `cortex-nova`
+deployment and a `cortex-cinder` deployment run the same binary with different lists switched on.
+This keeps the code in one place (a step added for Nova is instantly available to any domain) while
+letting each deployment stay small and purpose-built.
+
+That single-binary design is deliberately decoupled from *how many* deployments you run. The
+straightforward shape is one Cortex deployment per region handling every domain; the shape Cortex is
+built to support, and the strategic target, is **one deployment per domain** — a `cortex-nova`, a
+`cortex-cinder`, and so on, each with only its own controllers enabled. Splitting by domain buys
+fault isolation (a crash loop in the storage scheduler cannot take compute scheduling down),
+security isolation (each deployment holds only the credentials its domain needs), and independent
+evolution (domains upgrade and roll back on their own cadence). The trade-off — that cross-domain
+decisions would then span process boundaries — is why joint cross-domain scheduling remains a future
+direction rather than something the current split-by-domain deployment does today.
 
 ## The end-to-end flow
 
@@ -60,6 +93,7 @@ flowchart LR
         FW[Filter-weigher pipeline]
         DET[Detector pipeline]
     end
+    RES[Reservations / capacity]
     DEC[Decision / Descheduling]
     PLAT[Platform scheduler]
 
@@ -68,8 +102,10 @@ flowchart LR
     DB --> K
     K --> FW
     K --> DET
+    RES -->|reserved capacity| FW
     PLAT -->|placement request| FW
     FW -->|ordered hosts| PLAT
+    FW --> DEC
     DET --> DEC
     K --> KPI[KPIs → Prometheus]
 ```
@@ -78,11 +114,14 @@ flowchart LR
    [Configure datasources, knowledge, and KPIs](../guides/configure-knowledge.md).
 2. **Knowledge extractors** turn those raw rows into features — the reusable, query-ready facts a
    pipeline step consumes.
-3. **Filter-weigher pipelines** answer a live placement request: filters remove unsuitable hosts,
+3. **Reservations** hold capacity that is promised but not yet consumed — customer commitments,
+   failover headroom, and in-flight placements — so a pipeline treats reserved space as unavailable
+   even before a workload lands on it. See [Operate reservations](../guides/operate-reservations.md).
+4. **Filter-weigher pipelines** answer a live placement request: filters remove unsuitable hosts,
    weighers score the survivors, and the platform receives a re-ordered candidate list.
-4. **Detector pipelines** run on a schedule to spot already-placed workloads that should move,
+5. **Detector pipelines** run on a schedule to spot already-placed workloads that should move,
    emitting descheduling recommendations.
-5. **KPIs** publish knowledge as Prometheus metrics for dashboards and alerting.
+6. **KPIs** publish knowledge as Prometheus metrics for dashboards and alerting.
 
 ## How pipelines combine steps
 
@@ -108,7 +147,7 @@ hatches — forced destinations bypass the pipeline entirely. See the
 ## Where Cortex runs
 
 Cortex can span multiple Kubernetes clusters, routing each resource kind to the cluster that owns it
-by availability zone. See [Multicluster](multicluster.md). To hide informer lag during rapid
+by matching labels (commonly the availability zone). See [Multicluster](multicluster.md). To hide informer lag during rapid
 reconciliation it uses an in-process [pending-cache overlay](pending-cache-overlay.md).
 
 ## Next steps

@@ -22,11 +22,12 @@ see [Placement API shim](../concepts/placement-api-shim.md).
 
 ## Step 1 — Point the shim at upstream Placement
 
-Set the required `placementURL` and (for auth) `keystoneURL` under `global.conf`:
+Set the required `placementURL` and (for auth) `keystoneURL` under the `cortex-shim.conf` block
+(the bundle imports the `cortex-shim` library under that alias):
 
 ```yaml
 # values.yaml
-global:
+cortex-shim:
   conf:
     placementURL: https://placement.example.com
     keystoneURL: https://keystone.example.com
@@ -65,10 +66,13 @@ Expected — the same JSON the upstream Placement API returns.
 
 ## Step 3 — (Optional) enable a KVM-backed endpoint group
 
-Endpoint groups are switched from passthrough to the KVM backend individually:
+Endpoint groups are switched from passthrough to the KVM backend individually. There are eleven
+toggles — `root`, `resourceProviders`, `traits`, `resourceProviderTraits`, `resourceClasses`,
+`inventories`, `aggregates`, `allocations`, `usages`, `allocationCandidates`, and `reshaper` — each
+defaulting to `false`:
 
 ```yaml
-global:
+cortex-shim:
   conf:
     features:
       resourceProviders: true
@@ -86,7 +90,7 @@ roles (optionally project-scoped); first match wins, no match denies with `403`,
 is public.
 
 ```yaml
-global:
+cortex-shim:
   conf:
     auth:
       tokenCacheTTL: 5m
@@ -97,8 +101,15 @@ global:
         - pattern: "PUT /resource_providers/*"
           roles:
             - name: admin
-              projectScope: true
+              projectScope:
+                from: query
+                param: project_id
 ```
+
+> [!NOTE]
+> `projectScope` is an object, not a boolean. `from` selects where the project ID is read —
+> `query` (with `param`), `body` (with `field`), or `header` — and Cortex checks the caller's token
+> is scoped to that project. Omit `projectScope` entirely for a role that is not project-scoped.
 
 Supply the service credentials as secrets (rendered into `secrets.json`) — see
 [Configuration](../reference/configuration.md). Verify an unauthorized call is rejected:

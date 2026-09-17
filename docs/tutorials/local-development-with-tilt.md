@@ -38,8 +38,9 @@ it fails fast if the variable is unset or the file is missing. Create a minimal 
 
 ```bash
 cat > /tmp/cortex-dev-values.yaml <<'EOF'
-# Minimal local values. Add datasource credentials and enabledControllers
-# for the domains you want to exercise; see the configuration reference.
+# Minimal local values. Add datasource credentials and, per subchart,
+# conf.enabledControllers for the domains you want to exercise; see the
+# configuration reference.
 global:
   conf: {}
 EOF
@@ -49,7 +50,7 @@ export TILT_VALUES_PATH=/tmp/cortex-dev-values.yaml
 You can layer environment-specific overrides two ways (both optional):
 
 - Set `TILT_OVERRIDES_PATH` to a second values file that is merged on top (this is how the
-  [multicluster example](../guides/set-up-multicluster.md) injects remote clusters).
+  [multicluster tutorial](multicluster-with-kind.md) injects remote clusters).
 - Export `CORTEX_*` variables — `CORTEX_AAA_BBB_CCC=value` becomes the Helm override
   `aaa.bbb.ccc=value`. Setting `OS_REGION_NAME` additionally derives region-scoped OpenStack and
   Prometheus URLs.
@@ -70,8 +71,8 @@ tilt up
 ```
 
 Tilt opens a web UI (press `space`) and starts building. Watch the resources go green: the CRDs, the
-manager image build, and the `cortex-nova` deployment. When the manager resource is green, Cortex is
-running against your cluster.
+manager image build, and the `cortex-nova-scheduling-controller-manager` deployment. When the manager
+resource is green, Cortex is running against your cluster.
 
 Verify from another terminal:
 
@@ -79,11 +80,11 @@ Verify from another terminal:
 kubectl get pods
 ```
 
-Expected — a running Cortex manager pod (and Postgres, if your values enabled it):
+Expected — a running Cortex manager pod (and Postgres):
 
 ```
-NAME                          READY   STATUS    RESTARTS   AGE
-cortex-nova-...               1/1     Running   0          1m
+NAME                                                    READY   STATUS    RESTARTS   AGE
+cortex-nova-scheduling-controller-manager-...           1/1     Running   0          1m
 ```
 
 ## Step 5 — Make a change and watch it reload
@@ -93,7 +94,7 @@ save. Tilt detects the change, rebuilds the image, and redeploys automatically. 
 manager resource turns yellow (building) then green (updated); your new log line appears in its logs:
 
 ```bash
-kubectl logs deploy/cortex-nova --follow
+kubectl logs deploy/cortex-nova-scheduling-controller-manager --follow
 ```
 
 This is the core inner loop: edit, save, and let Tilt reconcile the running deployment.
@@ -117,6 +118,6 @@ kind delete cluster --name cortex-dev
 ## Next steps
 
 - Guide: [Extend Cortex](../guides/extend-cortex.md) to add a pipeline step, extractor, or KPI.
-- Guide: [Set up multicluster](../guides/set-up-multicluster.md) — its `run.sh` uses Tilt with
-  overrides.
+- Tutorial: [Multicluster with kind](multicluster-with-kind.md) — stands up three clusters with Tilt.
+- Concept: [Multicluster](../concepts/multicluster.md) for how a real deployment is wired up.
 - Concept: [Overview](../concepts/overview.md)

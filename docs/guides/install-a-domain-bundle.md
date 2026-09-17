@@ -17,7 +17,8 @@ If you are new to Cortex, read the [overview](../concepts/overview.md) first.
 - A Kubernetes cluster and `kubectl` pointed at it.
 - Helm 3.
 - Access to the Cortex chart directory (`helm/`) or a chart repository hosting the bundles.
-- A reachable Postgres, or plan to let the bundle deploy one (`postgres.enabled`).
+- A reachable Postgres, or use the Postgres the bundle deploys by default (via its `cortex-postgres`
+  subchart).
 
 ## Step 1 — Install the CRDs first
 
@@ -65,17 +66,18 @@ Each domain has its own bundle. Pick the one for your platform:
 | `cortex-ironcore` | Bare metal (IronCore) |
 | `cortex-pods` | Kubernetes pods |
 
-Provide your configuration through `global.conf` (see [Configuration](../reference/configuration.md))
-and, if you have no external database, let the bundle deploy Postgres:
+Provide your configuration under the subchart's `conf` block (see
+[Configuration](../reference/configuration.md)) and the credential blocks (`openstack`, `postgres`,
+`prometheus`). By default the bundle deploys its own Postgres via the `cortex-postgres` subchart:
 
 ```bash
 helm install cortex-nova helm/bundles/cortex-nova \
-  --set postgres.enabled=true \
   --values my-values.yaml
 ```
 
 Where `my-values.yaml` supplies at minimum the datasource credentials and the controllers/tasks you
-want enabled. See [Helm values](../reference/helm-values.md).
+want enabled (under `cortex-scheduling-controllers.conf.enabledControllers`). See
+[Helm values](../reference/helm-values.md).
 
 Expected output:
 
@@ -86,28 +88,31 @@ STATUS: deployed
 
 ## Step 3 — Verify the manager is running
 
+The Nova bundle runs two managers — a scheduling manager and a knowledge manager:
+
 ```bash
-kubectl get pods -l app.kubernetes.io/name=cortex-nova
+kubectl get pods -l app.kubernetes.io/instance=cortex-nova
 ```
 
 Expected output:
 
 ```
-NAME                          READY   STATUS    RESTARTS   AGE
-cortex-nova-xxxxxxxxxx-xxxxx   1/1     Running   0          30s
+NAME                                                    READY   STATUS    RESTARTS   AGE
+cortex-nova-scheduling-controller-manager-xxxx-xxxxx    1/1     Running   0          30s
+cortex-nova-knowledge-controller-manager-xxxx-xxxxx     1/1     Running   0          30s
 ```
 
-Check the readiness probe is passing (the manager serves it on `:8081` — see
+Check the manager started (it serves its readiness probe on `:8081` — see
 [CLI flags](../reference/cli-flags.md)):
 
 ```bash
-kubectl logs deploy/cortex-nova | grep -i "starting manager"
+kubectl logs deploy/cortex-nova-scheduling-controller-manager | grep -i "starting manager"
 ```
 
 ## Deploy order recap
 
 1. `cortex-crds` (once per cluster).
-2. Postgres (bundled via `postgres.enabled`, or external).
+2. Postgres (deployed by the bundle's `cortex-postgres` subchart, or external).
 3. The domain bundle(s).
 
 Install additional domains by repeating step 2 with a different bundle in the same cluster; the CRDs

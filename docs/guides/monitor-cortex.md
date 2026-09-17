@@ -19,23 +19,26 @@ the full metric and alert catalog, see [Metrics and alerts](../reference/metrics
 ## Step 1 — Enable the metrics endpoint
 
 The manager's metrics bind address defaults to `0` (disabled). Enable it and, in most clusters,
-serve it securely (see [CLI flags](../reference/cli-flags.md)). Through the chart, enable a
-`ServiceMonitor`:
+serve it securely (see [CLI flags](../reference/cli-flags.md)). Through the chart, render a
+`ServiceMonitor` via the library `prometheus.enable` key (on by default; set it under the bundle's
+subchart alias):
 
 ```yaml
 # values.yaml
-serviceMonitor:
-  enabled: true
+cortex:
+  prometheus:
+    enable: true
 ```
 
 ```bash
 helm upgrade cortex-nova helm/bundles/cortex-nova --values values.yaml
 ```
 
-Verify the endpoint is scraped:
+Verify the endpoint is scraped (the bundle labels its `ServiceMonitor`
+`app.kubernetes.io/instance: cortex-nova`):
 
 ```bash
-kubectl get servicemonitor -l app.kubernetes.io/name=cortex-nova
+kubectl get servicemonitor -l app.kubernetes.io/instance=cortex-nova
 ```
 
 Then confirm metrics appear in Prometheus:
@@ -65,13 +68,14 @@ kvm:
   criticalAlerts: true   # CortexNovaSchedulingDown becomes 'critical'
 ```
 
-Verify the rule is loaded:
+Verify the rule is loaded (the bundle names it `cortex-nova-alerts` and labels it
+`type: alerting-rules` plus your `prometheus` value):
 
 ```bash
-kubectl get prometheusrules -l app.kubernetes.io/name=cortex-nova
+kubectl get prometheusrules cortex-nova-alerts
 ```
 
-Expected — a rule containing the `cortex-nova-alerts` group.
+Expected — the `PrometheusRule` containing the `cortex-nova-alerts` group.
 
 > [!NOTE]
 > The IronCore and Pods bundles ship no alert rules. The placement-shim bundle has its own rule set

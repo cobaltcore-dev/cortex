@@ -16,7 +16,7 @@ echo "  - filter_correct_az    (filters hosts not matching the requested AZ)"
 echo "  - no weighers          (hosts are returned in their original order)"
 echo ""
 
-kubectl --context kind-cortex-home apply -f docs/guides/multicluster/test-pipeline.yaml
+kubectl --context kind-cortex-home apply -f docs/tutorials/multicluster/test-pipeline.yaml
 
 echo ""
 echo "Press enter to send a scheduling request..."
