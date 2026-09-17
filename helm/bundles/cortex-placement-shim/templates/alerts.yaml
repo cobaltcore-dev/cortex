@@ -212,6 +212,7 @@ spec:
         service: cortex
         severity: warning
         support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/shim-multicluster
       annotations:
         summary: "Cross-cluster name conflicts detected for `{{ "{{" }} $labels.gvk {{ "}}" }}`"
         description: >
@@ -237,6 +238,7 @@ spec:
         service: cortex
         severity: warning
         support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/shim-multicluster
       annotations:
         summary: "Remote apiserver `{{ "{{" }} $labels.host {{ "}}" }}` is unreachable"
         description: >
