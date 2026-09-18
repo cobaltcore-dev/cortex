@@ -37,7 +37,13 @@ flowchart BT
     B1 --> L1
     B1 --> L3
     B2 --> L1
+    B2 --> L3
+    B3 --> L1
+    B3 --> L3
+    B4 --> L1
+    B5 --> L1
     B6 --> L2
+    B7 --> L1
 ```
 
 - **`helm/library/`** holds the *library charts* — `cortex` (the manager), `cortex-shim`, and
