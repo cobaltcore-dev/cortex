@@ -7,9 +7,9 @@
 # Architecture at a glance
 
 The previous page described *what* Cortex does. This page describes *how it is put together*: one
-binary that serves every domain, a set of custom resources reconciled by controllers, and the design
-principle that shapes its integrations today — advise, don't replace. Understanding these three ideas up
-front makes the feature chapters much easier to read.
+binary that serves every domain, a set of custom resources reconciled by controllers, and the
+delegation model that shapes its integrations — advisory for legacy hypervisors, authoritative for KVM.
+Understanding these three ideas up front makes the feature chapters much easier to read.
 
 ## One binary, many deployments: the modular monolith
 
@@ -164,32 +164,38 @@ a step, see [Extend Cortex](../02-external-scheduler-api/07-extending-cortex.md)
 deployed pipeline, see
 [The scheduling engine](../02-external-scheduler-api/01-the-scheduling-engine.md#inspecting-and-editing-a-pipeline).
 
-## Advise, don't replace — for now
+## Advise or own — it depends on the hypervisor type
 
-Today Cortex hooks into Nova as an *external scheduler*: the platform calls Cortex, Cortex returns an
-ordering, and the platform proceeds. Nova still creates, tracks, and destroys workloads; Cortex
-re-orders the candidate hosts (or recommends a move), and operators keep escape hatches — forced
-destinations bypass the pipeline entirely. In this mode Cortex is the home for scheduling *logic*, not
-for scheduling *state*.
+Cortex hooks into Nova as an *external scheduler*, but how much of the decision it owns is not uniform —
+it depends on the hypervisor type of the workload. For **KVM** (`qemu`/`ch`), Cortex is the authoritative
+placement brain: it sources the candidate hosts itself from the `Hypervisor` CRD and runs its own filters
+and weighers, so the filtering that Nova would otherwise do happens only in Cortex. For **legacy types
+such as VMware**, Cortex stays advisory: Nova hands it a pre-filtered candidate list and Cortex only
+*re-orders* it (VMware pipelines carry weighers, no filters).
+
+In both modes Nova still creates, tracks, and destroys the workload, and operators keep escape hatches —
+forced destinations bypass the pipeline entirely. Cortex is the home for scheduling *logic*, not for
+scheduling *state*; what varies is whether it also owns *host selection*.
 
 > [!NOTE]
-> This is the current integration, but not the endpoint. Within cobaltcore-dev, Cortex is transitioning
-> toward being the **authoritative scheduler** — where the filtering that Nova performs today runs only
-> in Cortex, against Kubernetes-native inventory such as the `Hypervisor` CRD (and a planned VM CRD)
-> rather than Nova's internal host state. That shift moves more of the placement decision into Cortex's
-> declarative model; the advisory external-scheduler contract described here is the shape of the
-> integration as it stands.
+> The per-hypervisor split is a real, present-day distinction in the code, not a roadmap: KVM pipelines
+> set `ignorePreselection: true` and gather candidates from the `Hypervisor` CRD, while VMware pipelines
+> run on Nova's preselected list. The direction of travel within cobaltcore-dev is to widen the
+> authoritative, self-sourced path — pulling more of the decision into Cortex's declarative model — but
+> the `Hypervisor` CRD it relies on is an existing external dependency
+> (`openstack-hypervisor-operator`), not a Cortex-internal kind.
 
 This delegation contract is the subject of
 [The scheduling engine](../02-external-scheduler-api/01-the-scheduling-engine.md), where it is
 explained in full.
 
-These three ideas — one binary switched per deployment, a graph of cluster-scoped CRDs, and (today)
-advisory delegation — are the frame for the whole book. When a later chapter says "enable the
-`capacity-controller`", it means add that string to `enabledControllers` on a manager that already
-runs the shared datasource/knowledge stack. When it says "apply a `Pipeline`", it means author a
-custom resource whose step names resolve to registered plugins. And when it says Cortex "recommends" a
-placement, it means exactly that — today the platform still decides.
+These three ideas — one binary switched per deployment, a graph of cluster-scoped CRDs, and a
+delegation model that ranges from advisory (VMware) to authoritative (KVM) — are the frame for the whole
+book. When a later chapter says "enable the `capacity-controller`", it means add that string to
+`enabledControllers` on a manager that already runs the shared datasource/knowledge stack. When it says
+"apply a `Pipeline`", it means author a custom resource whose step names resolve to registered plugins.
+And when it describes how Cortex places a workload, whether Cortex *reorders* Nova's list or *selects*
+the hosts itself depends on the hypervisor type.
 
 ## Next
 

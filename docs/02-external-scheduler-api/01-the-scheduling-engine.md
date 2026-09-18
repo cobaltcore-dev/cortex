@@ -14,10 +14,19 @@ for descheduling.
 
 ## The delegation contract
 
-Cortex is an *external* scheduler. Today it advises rather than owning the workload lifecycle — the
-principle introduced in
-[Architecture at a glance](../01-getting-started/02-architecture-at-a-glance.md). For a live placement,
-the platform asks Cortex to reorder a candidate list; the platform then acts on the answer:
+Cortex is an *external* scheduler, but how much of the placement decision it owns depends on the
+hypervisor type — the principle introduced in
+[Architecture at a glance](../01-getting-started/02-architecture-at-a-glance.md). There are two modes,
+selected per pipeline by the `ignorePreselection` field:
+
+- **Self-sourced (KVM).** For KVM hosts (`qemu`/`ch`), the pipelines set `ignorePreselection: true`.
+  Cortex gathers the candidate hosts *itself* from the Hypervisor CRD, then runs its own filters and
+  weighers — it owns host selection, not just ordering. This is the current default for KVM.
+- **Reorder-only (legacy, e.g. VMware).** For legacy hypervisor types, Cortex runs on the candidate
+  list the platform already handed it and returns a better ordering. VMware pipelines carry weighers
+  only — no filters — so Cortex reorders but does not remove hosts.
+
+The sequence below shows the reorder-only case, where the platform supplies the candidates:
 
 ```mermaid
 sequenceDiagram
@@ -30,17 +39,10 @@ sequenceDiagram
     Plat->>Plat: place workload on the top candidate
 ```
 
-Cortex receives the candidates *the platform already considers valid* and returns a better ordering (and
-may drop hosts it deems unsuitable). In today's model it does not invent hosts, place the workload, or
-track it afterwards. Operators keep escape hatches — a **forced destination** bypasses the pipeline
-entirely, so an operator override always wins over Cortex's opinion.
-
-> [!NOTE]
-> This delegation contract describes the current, advisory-first integration. Cortex is in transition
-> to becoming the *authoritative* scheduler for the platform, running filters against its own knowledge
-> (the Hypervisor CRD, and a planned VM CRD) rather than reordering a list the platform hands it. The
-> pipeline shape below is unchanged; what shifts is how much of the placement decision originates in
-> Cortex. See ["Advise, don't replace — for now"](../01-getting-started/02-architecture-at-a-glance.md#advise-dont-replace--for-now).
+In the self-sourced KVM case the first step differs: Cortex builds the candidate set from the
+Hypervisor CRD instead of receiving it. In both cases the platform still performs the boot and tracks
+the workload afterwards, and operators keep escape hatches — a **forced destination** bypasses the
+pipeline entirely, so an operator override always wins over Cortex's opinion.
 
 ### Advisory before drop-in
 
@@ -56,7 +58,9 @@ along it in two phases:
   fully drives placement; the cost is that Cortex is now on the critical path and must be treated as such.
 
 The two phases share exactly the same pipeline; what changes is whether the platform treats Cortex's
-output as a hint or as the decision.
+output as a hint or as the decision. This maps onto the two modes above: the legacy reorder-only path
+(VMware) sits at the advisory end, while KVM has already moved to delegation — Cortex self-sources and
+filters its own candidates there.
 
 ### Initial placement is not ongoing scheduling
 

@@ -29,10 +29,10 @@ binding is what actually places the pod — Cortex is the scheduler, so it commi
 advising another one.
 
 > [!NOTE]
-> This is the one domain where Cortex *does* place the workload directly, because in Kubernetes the
-> scheduler's job is to bind. The "advise, don't replace" principle still holds for the OpenStack domains,
-> where Cortex only reorders candidates; here Cortex *is* the platform scheduler for the pods that select
-> it.
+> This is the one domain where Cortex *binds* the workload directly, because in Kubernetes the
+> scheduler's job is to bind. In the OpenStack domains Nova still performs the boot even when Cortex
+> owns host selection (as it does for KVM); here Cortex *is* the platform scheduler for the pods that
+> select it, so it commits the placement itself.
 
 ## The steps it ships
 

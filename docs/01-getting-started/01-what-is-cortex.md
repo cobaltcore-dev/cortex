@@ -50,9 +50,11 @@ different ways — and cross-service objectives (placing a VM near the storage i
 a tenant's resources across failure domains) have no single place to live at all.
 
 Cortex takes a different stance: it treats *placement intelligence* as its own concern, deployed
-beside the platform and shared across domains. The platform still owns the workload lifecycle; Cortex
-supplies a better ordering of candidates (or a descheduling recommendation) built from data the
-platform does not track. Because the intelligence lives outside the platform, the same model serves
+beside the platform and shared across domains. The platform still owns the workload lifecycle — it
+boots and tracks the workload — while Cortex owns the placement decision: depending on the domain it
+either reorders the platform's candidates or selects the hosts itself, built from data the platform
+does not track (see [Architecture at a glance](02-architecture-at-a-glance.md#advise-or-own--it-depends-on-the-hypervisor-type)).
+Because the intelligence lives outside the platform, the same model serves
 compute, storage, bare metal, and Kubernetes pods, and generic scheduling logic (load balancing,
 anti-affinity) is written once and reused, while domain-specific logic is layered on top.
 

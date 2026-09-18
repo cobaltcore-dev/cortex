@@ -22,7 +22,7 @@ watch a code change reload.
 ## In this chapter
 
 1. [What is Cortex?](01-what-is-cortex.md) — the problem it solves and the three components.
-2. [Architecture at a glance](02-architecture-at-a-glance.md) — the modular monolith, the CRD/controller model, and "advise, don't replace".
+2. [Architecture at a glance](02-architecture-at-a-glance.md) — the modular monolith, the CRD/controller model, and the advisory-to-authoritative delegation model.
 3. [CI/CD and packaging](03-cicd-and-packaging.md) — how images are built and charts are released.
 4. [The Helm charts](04-helm-charts.md) — the three-tier chart layout and how a deployment is rendered.
 5. [Make targets](05-make-targets.md) — building, generating, linting, and testing.
