@@ -77,6 +77,28 @@ request.
 > to how fast the underlying signal actually moves — utilization drifts slowly; a per-second value gains
 > nothing from a per-second re-extraction.
 
+## Inspecting knowledge resources
+
+`Knowledge` is cluster-scoped. List what is deployed and see extraction state at a glance:
+
+```bash
+kubectl get knowledges
+```
+
+```
+NAME               DOMAIN   CREATED   EXTRACTED   CHANGED   RECENCY   FEATURES   READY
+host-utilization   nova     3d        45s         12m       60s       1240       True
+```
+
+`Extracted` is the last run (`.status.lastExtracted`), `Changed` the last time the features actually
+differed (`.status.lastContentChange`), and `Features` the number produced (`.status.rawLength`) — so a
+`Changed` timestamp far older than `Extracted` means the extractor is re-running but the signal is stable.
+Read the conditions (including `InconsistentDatabaseSecretRefs`) and the extracted feature envelope with:
+
+```bash
+kubectl get knowledge host-utilization -o yaml
+```
+
 ## How this relates to Cortex
 
 Feature extraction is the value-add stage of the [knowledge flow](01-knowledge-flow-overview.md): it turns

@@ -137,6 +137,48 @@ knowledge feature) exceeds a threshold over an observed window. The flow:
    issue real live-migrations via the Nova client).
 4. A **cleanup** controller TTL-expires old `Descheduling` resources (and runs once on startup).
 
+## Inspecting decisions, descheduling, and history
+
+Three cluster-scoped CRDs record what the pipelines did — inspect them with `kubectl` (no namespace,
+Cortex kinds are cluster-scoped). Each request that hits the external scheduler produces a **`Decision`**:
+
+```bash
+kubectl get decisions
+```
+
+```
+DOMAIN   RESOURCE ID   #   CREATED   PIPELINE                             TARGETHOST   READY
+nova     a1b2c3…       1   2m        kvm-general-purpose-load-balancing   node-042     True
+```
+
+`TargetHost` (`.status.result.targetHost`) is what Cortex recommended and `Pipeline` names the pipeline
+that ran; `-o yaml` shows the full filter/weigher trace. The detector pipeline emits **`Descheduling`**
+resources for VMs it wants to move:
+
+```bash
+kubectl get deschedulings
+```
+
+```
+PREVIOUS HOST   NEW HOST   CREATED   REASON(S)              READY
+node-042        node-017   30s       avoid_high_steal_pct   True
+```
+
+And **`History`** keeps the rolling record of past scheduling for a resource, so you can see where a VM has
+been placed over time:
+
+```bash
+kubectl get histories
+```
+
+```
+DOMAIN   RESOURCE ID   AZ     TARGET HOST   STATUS      LAST SCHEDULED   CREATED
+nova     a1b2c3…       az-a   node-017      Successful   30s              3d
+```
+
+The columns come from each resource's status; the field-by-field definitions live on the `Decision`,
+`Descheduling`, and `History` Go types in `api/v1alpha1/`.
+
 ## How this relates to Cortex
 
 Nova exercises the full arc: an HTTP request drives a filter-weigher pipeline whose weighers read

@@ -116,10 +116,103 @@ decides whether to act.
 Pipeline steps are referenced by **name** from a `Pipeline` (or descheduling) custom resource, and the
 manager resolves each name to code. Scheduling steps — filters, weighers, and detectors — **self-register**
 via `init()` into package-level `Index` maps of factory functions: importing the package that defines a
-step is what makes its name resolvable. An admission webhook validates a `Pipeline`'s step names at apply
-time, so a typo or an unimported step is rejected up front rather than failing mid-request. (Knowledge
-extractors and KPIs use hand-maintained maps instead — see
+step is what makes its name resolvable. A per-domain admission webhook validates a `Pipeline` on create
+and update, but it does *not* reject an unknown step name: an unrecognized name is **admitted with a
+warning and then ignored** at run time, so a pipeline can safely reference a step that a newer binary will
+add without breaking the rollout. What the webhook *does* reject is a known step whose parameters are
+invalid, or a step of the wrong kind for the pipeline `type` (a detector in a filter-weigher pipeline, or
+a filter/weigher in a detector pipeline), or an unknown `type`. The next section shows both outcomes in
+practice. (Knowledge extractors and KPIs use hand-maintained maps instead — see
 [Architecture at a glance](../01-getting-started/02-architecture-at-a-glance.md).)
+
+## Inspecting and editing a pipeline
+
+A `Pipeline` is a cluster-scoped custom resource (`api/v1alpha1/pipeline_types.go`), so there is no
+namespace to pass. List what is deployed:
+
+```bash
+kubectl get pipelines
+```
+
+```
+NAME                                  DOMAIN   TYPE             ALL STEPS READY   ALL STEPS KNOWN   PIPELINE READY
+kvm-general-purpose-load-balancing    nova     filter-weigher   True              True              True
+kvm-descheduler                       nova     detector         True              True              True
+```
+
+The three status columns come from the pipeline's conditions and answer different questions:
+
+- **All Steps Known** (`AllStepsIndexed`) — every step *name* referenced in the spec resolves to code in
+  the running binary. This is the column that goes `False` when a pipeline references a step the binary
+  does not have (the same case the webhook only *warns* about) — the unknown step is silently ignored, so
+  watch this condition rather than assuming a successful apply means every step is active.
+- **All Steps Ready** (`AllStepsReady`) — the known steps are initialized and ready to run.
+- **Pipeline Ready** (`Ready`) — the pipeline as a whole is usable.
+
+Read the full spec and conditions with:
+
+```bash
+kubectl get pipeline kvm-general-purpose-load-balancing -o yaml
+```
+
+### Adding or removing a filter or weigher
+
+A filter-weigher pipeline lists its steps in two ordered blocks — `filters` run first and sequentially,
+then `weighers` score in parallel. Each step is matched to registered code **by `name`**; a weigher may
+carry an optional `multiplier`:
+
+```yaml
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: kvm-general-purpose-load-balancing
+spec:
+  schedulingDomain: nova
+  type: filter-weigher
+  filters:
+    - name: filter_correct_az
+    - name: filter_has_enough_capacity      # order matters: cheap, high-rejection filters first
+  weighers:
+    - name: kvm_binpack
+      multiplier: 1.0
+    - name: kvm_prefer_smaller_hosts
+      multiplier: 0.5
+```
+
+To change the pipeline, edit the resource and re-apply — add a step by inserting it in the list (position
+sets filter order), remove one by deleting its entry:
+
+```bash
+kubectl edit pipeline kvm-general-purpose-load-balancing
+# or
+kubectl apply -f kvm-general-purpose-load-balancing.yaml
+```
+
+### What the webhook does on that edit
+
+The per-domain admission webhook (`internal/scheduling/lib/pipeline_webhook.go`) runs on every create and
+update and has two distinct behaviours:
+
+- **Rejected** — the apply fails with a validation error if a step's `params` are invalid, if a step is
+  the wrong kind for the `type` (e.g. a `detectors:` entry in a `filter-weigher` pipeline, or a
+  `filters:`/`weighers:` entry in a `detector` pipeline), or if the `type` itself is unknown:
+
+  ```
+  Error from server (Forbidden): error when applying: admission webhook "..." denied the request:
+  pipeline is invalid: weigher "kvm_binpack": <parameter error>; detectors are not allowed in a filter/weigher pipeline
+  ```
+
+- **Admitted with a warning** — an unknown step *name* does not block the apply; the resource is accepted
+  and the unknown step is ignored:
+
+  ```
+  Warning: unknown weigher "kvm_typo": this weigher will be ignored
+  pipeline.cortex.cloud/kvm-general-purpose-load-balancing configured
+  ```
+
+  This is deliberate: it lets a pipeline reference a step a newer binary will introduce without breaking a
+  staged rollout. The consequence surfaces on the resource itself — its **All Steps Known** condition goes
+  `False` — so after an edit, confirm that column is `True` rather than trusting that the apply succeeded.
 
 ## How this relates to Cortex
 

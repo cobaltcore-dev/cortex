@@ -48,14 +48,21 @@ Filters run sequentially and remove hosts; weighers run in parallel and emit an 
 aggregated as `weight + multiplier * tanh(activation)`; detectors emit descheduling detections. See
 [The scheduling engine](01-the-scheduling-engine.md) for the pipeline model.
 
-Verify the step is registered by applying a `Pipeline` that references it — the pipeline admission
-webhook rejects unknown step names, so a successful apply confirms registration:
+Verify the step is actually registered by applying a `Pipeline` that references it — but note that a
+successful apply is **not** by itself proof of registration. The pipeline admission webhook only *warns*
+about an unknown step name and admits the resource anyway (the step is ignored at run time); it hard-fails
+only on invalid parameters or a step of the wrong kind for the pipeline type. So confirm registration on
+the resource itself:
 
 ```bash
 kubectl apply -f my-pipeline.yaml
+kubectl get pipeline <name>   # All Steps Known must be True
 ```
 
-If the name is unknown, the apply is rejected with a validation error naming the missing step.
+If the step name is unknown, the apply still succeeds but prints a `Warning: unknown ... will be ignored`
+and the pipeline's `All Steps Known` (`AllStepsIndexed`) condition stays `False` — that, not the apply
+result, is the signal your step was picked up. See
+[Inspecting and editing a pipeline](01-the-scheduling-engine.md#inspecting-and-editing-a-pipeline).
 
 ## Add a knowledge extractor or KPI
 
@@ -94,9 +101,10 @@ change to the `api/v1alpha1` types means running `make generate` and committing 
 
 This is the whole point of the plugin model: because steps, extractors, and KPIs are named and resolved
 at run time, extending Cortex is adding code plus a registration, never editing a scheduler core. The
-webhook validation ties it back to the `Pipeline` CRD (`api/v1alpha1/pipeline_types.go`) — an unknown
-name is caught at apply time. With the scheduler API covered end to end, the next chapter turns to what
-Cortex reserves on top of it.
+webhook ties it back to the `Pipeline` CRD (`api/v1alpha1/pipeline_types.go`) — invalid parameters and
+wrong-kind steps are caught at apply time, while an unknown name is admitted with a warning and reported
+through the pipeline's `All Steps Known` condition. With the scheduler API covered end to end, the next
+chapter turns to what Cortex reserves on top of it.
 
 ## Next
 

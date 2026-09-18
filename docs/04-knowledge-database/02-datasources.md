@@ -73,6 +73,32 @@ Every field is defined on the `Datasource` type in `api/v1alpha1/datasource_type
 > pull is failing. The credentials are supplied through the `secrets.json` overlay loaded via
 > [the `conf` package](../06-cortex-library/04-conf.md).
 
+## Inspecting datasources
+
+`Datasource` is cluster-scoped, so no namespace is needed. List what is deployed and see sync state at a
+glance:
+
+```bash
+kubectl get datasources
+```
+
+```
+NAME           TYPE        DOMAIN   CREATED   SYNCED   NEXT   OBJECTS   READY
+nova-servers   openstack   nova     3d        30s      570s   1240      True
+```
+
+The columns come straight from the resource's status: `Synced` is the last successful pull
+(`.status.lastSynced`), `Next` the time until the next one, and `Objects` the number of objects cached on
+the last sync (`.status.numberOfObjects`). A `Ready` of `True` with `Objects` climbing over time is a
+healthy datasource. Read the full status — including the `conditions` that explain a `False` — with:
+
+```bash
+kubectl get datasource nova-servers -o yaml
+```
+
+Unlike `Pipeline`, a `Datasource` is not admission-webhook-validated; a misconfigured source surfaces as a
+non-`Ready` condition and flat sync metrics rather than a rejected apply.
+
 ## Adding a new datasource kind
 
 Datasources are dispatched by a typed switch/map on kind. Adding a new source kind means adding it to that

@@ -62,6 +62,29 @@ in-flight reservation blocks that capacity from "decided" until "running", then 
 > [Concurrency and in-flight reservations](04-concurrency-and-in-flight-reservations.md) explains the
 > races they defend against and how the scheduler serializes around them.
 
+## Inspecting reservations
+
+All three kinds are the same cluster-scoped `Reservation` CRD (`api/v1alpha1/reservation_types.go`),
+distinguished by a `reservations.cortex.cloud/type` label. List them:
+
+```bash
+kubectl get reservations
+```
+
+```
+TYPE                 HOST      READY   RESOURCEGROUP   PROJECT     AZ     ENDTIME
+committed-resource   node-042  True    mem-large       proj-1234   az-a   2026-12-01T00:00:00Z
+failover             node-017  True                                az-a
+```
+
+`Type` tells the three apart; `Host` (`.status.host`) is where the reservation is held. Filter to one kind
+with the label, and read the full spec/status — including per-kind allocation detail — with `-o yaml`:
+
+```bash
+kubectl get reservations -l reservations.cortex.cloud/type=committed-resource
+kubectl get reservation <name> -o yaml
+```
+
 ## What reservations do and do not do today
 
 > [!IMPORTANT]

@@ -141,9 +141,13 @@ by name, and the binary resolves the name to code. There are three registration 
   available only if it has an entry.
 - **Datasources** are dispatched by a **typed switch / map** keyed on the datasource kind.
 
-Admission webhooks validate a resource's step references before it is accepted, so an unknown step
-name is rejected at apply time rather than failing silently at run time. To add a step, see
-[Extend Cortex](../02-external-scheduler-api/07-extending-cortex.md).
+A per-domain admission webhook validates a `Pipeline` when it is applied: it **rejects** a step whose
+parameters are invalid or a step of the wrong kind for the pipeline type, but an **unknown step name is
+admitted with a warning and ignored** — surfaced on the resource's `All Steps Known` (`AllStepsIndexed`)
+condition rather than blocking the apply, so a rollout can reference a step a newer binary will add. To add
+a step, see [Extend Cortex](../02-external-scheduler-api/07-extending-cortex.md); to inspect and edit a
+deployed pipeline, see
+[The scheduling engine](../02-external-scheduler-api/01-the-scheduling-engine.md#inspecting-and-editing-a-pipeline).
 
 ## Advise, don't replace
 

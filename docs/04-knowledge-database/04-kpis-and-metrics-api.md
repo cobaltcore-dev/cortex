@@ -49,6 +49,30 @@ KPIs are grouped into four plugin directories by what they measure:
 A KPI resource names its extractor-produced inputs the same way a `Knowledge` resource names its datasources,
 and the controller re-collects when those inputs change.
 
+## Inspecting KPIs
+
+`KPI` is cluster-scoped. List the deployed KPIs and whether they are collecting:
+
+```bash
+kubectl get kpis
+```
+
+```
+NAME                     CREATED   DOMAIN   READY   DEPENDENCIES   READY
+vm_migration_statistics  3d        nova     true    3/3            True
+```
+
+`Dependencies` (`.status.dependenciesReadyFrac`) shows how many of the KPI's inputs are ready — a KPI stuck
+below `n/n` is waiting on a `Knowledge` or datasource, not on itself. Read the full status with `-o yaml`:
+
+```bash
+kubectl get kpi vm_migration_statistics -o yaml
+```
+
+Because KPIs publish onto the controller-manager's `/metrics` endpoint (above), confirm one is actually
+emitting by scraping that endpoint and looking for its gauge — for the `deployment` family, the
+`*_state_kpi` metrics report the health of each Cortex resource kind.
+
 ## How this relates to Cortex
 
 KPIs are the read-out end of the [knowledge flow](01-knowledge-flow-overview.md): they consume the features
