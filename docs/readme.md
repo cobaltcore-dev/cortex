@@ -82,10 +82,6 @@ and `cmd/shim`, and the Helm defaults under `helm/`.
 8. [The `task` package](06-cortex-library/08-task.md)
 9. [The `supervisor` package](06-cortex-library/09-supervisor.md)
 
-### [Glossary](glossary.md)
-
-One-line definitions of the domain terms used throughout the book.
-
 ## Who this book is for
 
 - **Operators** deploy and run Cortex — install per domain, configure via Helm values and CRDs, wire
