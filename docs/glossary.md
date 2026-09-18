@@ -44,7 +44,7 @@ reference page where they are explained in depth.
 | **[Home cluster](06-cortex-library/01-multicluster-client.md)** | The cluster running the Cortex pods and controllers. |
 | **[Remote cluster](06-cortex-library/01-multicluster-client.md)** | A cluster that stores selected CRDs/resources for Cortex, addressed per-GVK and routed by matching labels (commonly the availability zone). |
 | **Resource router** | The rule that maps an object to the remote cluster whose labels it matches. |
-| **[Overlay cache](06-cortex-library/03-controller-runtime-cache.md)** | An in-process write-through overlay that makes just-written objects immediately visible, masking informer lag. |
+| **[Overlay cache](06-cortex-library/02-controller-runtime-cache.md)** | An in-process write-through overlay that makes just-written objects immediately visible, masking informer lag. |
 | **Hypervisor CR** | The `kvm.cloud.sap/v1` `Hypervisor` custom resource Cortex consumes (and, for overcommit, updates); provided by the openstack-hypervisor-operator. |
 | **IronCore Machine / MachinePool** | Bare-metal resources (`compute.ironcore.dev/v1alpha1`) Cortex consumes to schedule machines. |
 | **Bundle** | A domain-specific Helm chart (e.g. `cortex-nova`) that stylizes the `cortex` library chart for one deployment. |

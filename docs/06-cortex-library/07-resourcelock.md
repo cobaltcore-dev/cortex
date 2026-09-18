@@ -34,4 +34,4 @@ piece of in-manager machinery: running periodic work as a controller.
 
 ## Next
 
-[Prev: The `monitoring` package](07-monitoring-package.md) · [Next: The `task` package »](09-task.md)
+[Prev: The `monitoring` package](06-monitoring-package.md) · [Next: The `task` package »](08-task.md)

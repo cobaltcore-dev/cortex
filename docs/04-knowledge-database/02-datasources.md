@@ -21,7 +21,7 @@ CRD sets a `syncInterval` controlling how often the pull runs.
 There are two source families, dispatched by the datasource `type`:
 
 - **OpenStack** — pulls objects from an OpenStack service through Keystone-authenticated calls (using
-  [`pkg/keystone`](../06-cortex-library/05-keystone.md)). The `openstack.type` selects the
+  [`pkg/keystone`](../06-cortex-library/04-keystone.md)). The `openstack.type` selects the
   service (Nova, Cinder, Manila, Placement …) and a sub-type selects the object kind (for example Nova
   `servers` or `hypervisors`).
 - **Prometheus** — pulls metric series from a Prometheus endpoint, caching time-series-derived facts.
@@ -71,7 +71,7 @@ Every field is defined on the `Datasource` type in `api/v1alpha1/datasource_type
 > If a datasource never becomes Ready, check the referenced Secret and — for OpenStack — that the Keystone
 > credentials in `secrets.json` are correct. `cortex_sync_request_processed_total` staying flat means the
 > pull is failing. The credentials are supplied through the `secrets.json` overlay loaded via
-> [the `conf` package](../06-cortex-library/04-conf.md).
+> [the `conf` package](../06-cortex-library/03-conf.md).
 
 ## Inspecting datasources
 

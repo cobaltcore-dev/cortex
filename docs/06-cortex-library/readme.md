@@ -19,16 +19,15 @@ the Placement API shim serving even when its controller-manager cannot.
 
 ## In this chapter
 
-1. [The multicluster client](01-multicluster-client.md) — one `client.Client` across many clusters, routed per GVK.
-2. [Multicluster with kind (walkthrough)](02-multicluster-with-kind.md) — a hands-on multi-cluster setup on your laptop.
-3. [The controller-runtime client cache](03-controller-runtime-cache.md) — the write-through overlay with tombstones.
-4. [The `conf` package](04-conf.md) — typed config loading with the `conf.json`/`secrets.json` overlay.
-5. [The `keystone` package](05-keystone.md) — the Keystone connector behind every OpenStack datasource.
-6. [The `sso` package](06-sso.md) — mTLS transports and outbound User-Agent tagging.
-7. [The `monitoring` package](07-monitoring-package.md) — the registry wrapper and log-to-metric hooks.
-8. [The `resourcelock` package](08-resourcelock.md) — short-lived Lease locks for serializing writes.
-9. [The `task` package](09-task.md) — running periodic work as a controller.
-10. [The `supervisor` package](10-supervisor.md) — decoupling the shim's request path from apiserver liveness.
+1. [The multicluster client](01-multicluster-client.md) — one `client.Client` across many clusters, routed per GVK, with a hands-on kind walkthrough.
+2. [The controller-runtime client cache](02-controller-runtime-cache.md) — the write-through overlay with tombstones.
+3. [The `conf` package](03-conf.md) — typed config loading with the `conf.json`/`secrets.json` overlay.
+4. [The `keystone` package](04-keystone.md) — the Keystone connector behind every OpenStack datasource.
+5. [The `sso` package](05-sso.md) — mTLS transports and outbound User-Agent tagging.
+6. [The `monitoring` package](06-monitoring-package.md) — the registry wrapper and log-to-metric hooks.
+7. [The `resourcelock` package](07-resourcelock.md) — short-lived Lease locks for serializing writes.
+8. [The `task` package](08-task.md) — running periodic work as a controller.
+9. [The `supervisor` package](09-supervisor.md) — decoupling the shim's request path from apiserver liveness.
 
 ## Next
 

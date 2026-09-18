@@ -54,7 +54,7 @@ cache the world, extractors derive features, the `infrastructure` KPIs turn thos
 gauges, and these dashboards render them for planning. It is also where the two halves of the book meet — the
 capacity these dashboards show is the capacity the [reservations](../03-reservations-and-inventory/readme.md)
 subtract from and the [scheduler](../02-external-scheduler-api/readme.md) weighs against. Every metric is
-registered through [the `monitoring` package](../06-cortex-library/07-monitoring-package.md), next to the
+registered through [the `monitoring` package](../06-cortex-library/06-monitoring-package.md), next to the
 subsystem that emits it. The next chapter acts on this same fleet picture:
 adjusting hypervisor overcommit automatically.
 

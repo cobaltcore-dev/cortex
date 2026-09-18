@@ -43,7 +43,7 @@ default under a narrow exception.
 > [!NOTE]
 > The config is loaded from the manager's mounted configuration (`conf.GetConfig`, reading
 > `/etc/config/conf.json` merged with secrets) — the same ConfigMap-backed mechanism every controller uses,
-> not a separate CRD. See [the `conf` package](../06-cortex-library/04-conf.md).
+> not a separate CRD. See [the `conf` package](../06-cortex-library/03-conf.md).
 
 ## What the controller does
 

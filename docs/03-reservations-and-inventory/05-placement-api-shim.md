@@ -177,7 +177,7 @@ cortex-shim:
 
 The shim's controller-manager (cache + controllers) is not on the request path, but the request path must
 stay up even if the manager cannot reach the apiserver. With `--self-heal` (default **on**) the manager
-runs under the [supervisor](../06-cortex-library/10-supervisor.md), which rebuilds it with backoff
+runs under the [supervisor](../06-cortex-library/09-supervisor.md), which rebuilds it with backoff
 on failure, while the REST API, liveness probe, and metrics endpoint run in a durable outer process. The
 pod does not crash on apiserver or cache hiccups; a looping manager is surfaced through
 `cortex_placement_shim_manager_up`.

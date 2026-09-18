@@ -52,7 +52,7 @@ export TILT_VALUES_PATH=/tmp/cortex-dev-values.yaml
 You can layer environment-specific overrides two ways (both optional):
 
 - Set `TILT_OVERRIDES_PATH` to a second values file that is merged on top (this is how the
-  [multicluster walkthrough](../06-cortex-library/02-multicluster-with-kind.md) injects remote clusters).
+  [multicluster walkthrough](../06-cortex-library/01-multicluster-client.md#walkthrough-multicluster-with-kind) injects remote clusters).
 - Export `CORTEX_*` variables — `CORTEX_AAA_BBB_CCC=value` becomes the Helm override
   `aaa.bbb.ccc=value`. Setting `OS_REGION_NAME` additionally derives region-scoped OpenStack and
   Prometheus URLs.
@@ -118,7 +118,7 @@ you select with `ACTIVE_DEPLOYMENTS`, and brings up the [Postgres](06-postgres-a
 depend on. Once you have this loop, you are ready to read how the scheduler actually makes decisions.
 When you want to add a pipeline step, extractor, or KPI, see
 [Extend Cortex](../02-external-scheduler-api/07-extending-cortex.md); for a multi-cluster local setup, the
-[multicluster-with-kind walkthrough](../06-cortex-library/02-multicluster-with-kind.md) stands up three
+[multicluster-with-kind walkthrough](../06-cortex-library/01-multicluster-client.md#walkthrough-multicluster-with-kind) stands up three
 clusters with this same tooling.
 
 ## Next

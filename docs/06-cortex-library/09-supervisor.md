@@ -66,4 +66,4 @@ the authoritative next stop.
 
 ## Next
 
-[Prev: The `task` package](09-task.md) · [Contents](../readme.md)
+[Prev: The `task` package](08-task.md) · [Contents](../readme.md)

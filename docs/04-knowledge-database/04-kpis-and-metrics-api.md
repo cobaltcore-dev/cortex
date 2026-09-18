@@ -80,7 +80,7 @@ that [feature extraction](03-feature-extraction.md) writes and expose them where
 see them. The `deployment` family closes the loop by making Cortex's own resources observable — the metrics
 the [Monitoring](06-monitoring.md) page alerts on. The `KPI` CRD is defined by the `KPI` Go type in
 `api/v1alpha1/kpi_types.go`, and every metric is registered through
-[the `monitoring` package](../06-cortex-library/07-monitoring-package.md). The next page follows the
+[the `monitoring` package](../06-cortex-library/06-monitoring-package.md). The next page follows the
 `infrastructure` KPIs out to
 the dashboards they feed.
 

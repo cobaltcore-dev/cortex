@@ -105,7 +105,7 @@ These include a compute KVM overview and a placement-shim status dashboard, and 
 ## How this relates to Cortex
 
 Monitoring is where the whole book's machinery becomes observable: the `cortex_` metrics come from
-`pkg/monitoring` ([The monitoring package](../06-cortex-library/07-monitoring-package.md)), the KPIs
+`pkg/monitoring` ([The monitoring package](../06-cortex-library/06-monitoring-package.md)), the KPIs
 from the [knowledge database](04-kpis-and-metrics-api.md), and the multicluster and overlay signals
 from the [library](../06-cortex-library/readme.md). The alerts encode the failure surfaces each chapter
 described. With observability in place, the next chapter looks at a lifecycle action Cortex takes on the

@@ -73,15 +73,14 @@ and `cmd/shim`, and the Helm defaults under `helm/`.
 ### [6 — The Cortex library (`pkg/`)](06-cortex-library/readme.md)
 
 1. [The multicluster client](06-cortex-library/01-multicluster-client.md)
-2. [Multicluster with kind (walkthrough)](06-cortex-library/02-multicluster-with-kind.md)
-3. [The controller-runtime client cache](06-cortex-library/03-controller-runtime-cache.md)
-4. [The `conf` package](06-cortex-library/04-conf.md)
-5. [The `keystone` package](06-cortex-library/05-keystone.md)
-6. [The `sso` package](06-cortex-library/06-sso.md)
-7. [The `monitoring` package](06-cortex-library/07-monitoring-package.md)
-8. [The `resourcelock` package](06-cortex-library/08-resourcelock.md)
-9. [The `task` package](06-cortex-library/09-task.md)
-10. [The `supervisor` package](06-cortex-library/10-supervisor.md)
+2. [The controller-runtime client cache](06-cortex-library/02-controller-runtime-cache.md)
+3. [The `conf` package](06-cortex-library/03-conf.md)
+4. [The `keystone` package](06-cortex-library/04-keystone.md)
+5. [The `sso` package](06-cortex-library/05-sso.md)
+6. [The `monitoring` package](06-cortex-library/06-monitoring-package.md)
+7. [The `resourcelock` package](06-cortex-library/07-resourcelock.md)
+8. [The `task` package](06-cortex-library/08-task.md)
+9. [The `supervisor` package](06-cortex-library/09-supervisor.md)
 
 ### [Glossary](glossary.md)
 

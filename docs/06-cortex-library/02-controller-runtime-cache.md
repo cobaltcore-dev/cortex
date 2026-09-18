@@ -60,7 +60,7 @@ The overlay is scoped and bounded so it cannot grow without limit or hide stalen
 > layer — turning it on for kinds that do not need it just adds memory and a TTL window for no benefit.
 
 The `cache.*` keys are fields of the `conf` struct the manager loads via `pkg/conf`; see
-[The `conf` package](04-conf.md).
+[The `conf` package](03-conf.md).
 
 ## How this relates to Cortex
 
@@ -75,4 +75,4 @@ the smaller `pkg/` libraries, one each, starting with configuration loading.
 
 ## Next
 
-[Prev: Multicluster with kind (walkthrough)](02-multicluster-with-kind.md) · [Next: The `conf` package »](04-conf.md)
+[Prev: The multicluster client](01-multicluster-client.md) · [Next: The `conf` package »](03-conf.md)

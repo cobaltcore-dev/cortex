@@ -33,11 +33,11 @@ respectively (`/etc/config/conf.json`, `/etc/secrets/secrets.json`).
 
 `conf` is the intake for nearly everything else in this chapter: the `apiservers` block the
 [multicluster client](01-multicluster-client.md) routes on, the `cache.*` keys of the
-[client cache](03-controller-runtime-cache.md), and the `HypervisorOvercommitConfig` of the
+[client cache](02-controller-runtime-cache.md), and the `HypervisorOvercommitConfig` of the
 [overcommit controller](../05-hypervisor-lifecycle/01-automated-overcommit.md) are all loaded this way.
 The config shapes themselves live beside the code that consumes them. The next package covers how a
 datasource authenticates to OpenStack.
 
 ## Next
 
-[Prev: The controller-runtime client cache](03-controller-runtime-cache.md) · [Next: The `keystone` package »](05-keystone.md)
+[Prev: The controller-runtime client cache](02-controller-runtime-cache.md) · [Next: The `keystone` package »](04-keystone.md)

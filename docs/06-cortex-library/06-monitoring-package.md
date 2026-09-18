@@ -37,4 +37,4 @@ of coordination: short-lived distributed locks.
 
 ## Next
 
-[Prev: The `sso` package](06-sso.md) · [Next: The `resourcelock` package »](08-resourcelock.md)
+[Prev: The `sso` package](05-sso.md) · [Next: The `resourcelock` package »](07-resourcelock.md)

@@ -38,4 +38,4 @@ alive independently of the manager.
 
 ## Next
 
-[Prev: The `resourcelock` package](08-resourcelock.md) · [Next: The `supervisor` package »](10-supervisor.md)
+[Prev: The `resourcelock` package](07-resourcelock.md) · [Next: The `supervisor` package »](09-supervisor.md)

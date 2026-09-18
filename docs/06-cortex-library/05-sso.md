@@ -32,11 +32,11 @@ run side by side during a rollout.
 
 ## How this relates to Cortex
 
-`sso` is the transport under the [`keystone`](05-keystone.md) sessions and other outbound calls: where
+`sso` is the transport under the [`keystone`](04-keystone.md) sessions and other outbound calls: where
 `keystone` authenticates, `sso` carries the bytes and labels them. The User-Agent it stamps is the same
 build identity that shows up in logs and metrics. The next page covers where those metrics are
 registered.
 
 ## Next
 
-[Prev: The `keystone` package](05-keystone.md) · [Next: The `monitoring` package »](07-monitoring-package.md)
+[Prev: The `keystone` package](04-keystone.md) · [Next: The `monitoring` package »](06-monitoring-package.md)

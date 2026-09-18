@@ -32,9 +32,9 @@ across every OpenStack datasource kind.
 
 `keystone` is the doorway the OpenStack [datasources](../04-knowledge-database/02-datasources.md) use to
 reach the services they cache — it is what a Nova or Cinder syncer holds to make its authenticated calls.
-It pairs with [`sso`](06-sso.md), which owns the outbound HTTP transport and User-Agent for those calls.
+It pairs with [`sso`](05-sso.md), which owns the outbound HTTP transport and User-Agent for those calls.
 The next page covers that transport layer.
 
 ## Next
 
-[Prev: The `conf` package](04-conf.md) · [Next: The `sso` package »](06-sso.md)
+[Prev: The `conf` package](03-conf.md) · [Next: The `sso` package »](05-sso.md)
