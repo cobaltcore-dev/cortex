@@ -14,7 +14,8 @@ for descheduling.
 
 ## The delegation contract
 
-Cortex is an *external* scheduler. It never owns the workload lifecycle — the principle introduced in
+Cortex is an *external* scheduler. Today it advises rather than owning the workload lifecycle — the
+principle introduced in
 [Architecture at a glance](../01-getting-started/02-architecture-at-a-glance.md). For a live placement,
 the platform asks Cortex to reorder a candidate list; the platform then acts on the answer:
 
@@ -30,9 +31,16 @@ sequenceDiagram
 ```
 
 Cortex receives the candidates *the platform already considers valid* and returns a better ordering (and
-may drop hosts it deems unsuitable). It does not invent hosts, it does not place the workload, and it
-does not track it afterwards. Operators keep escape hatches — a **forced destination** bypasses the
-pipeline entirely, so an operator override always wins over Cortex's opinion.
+may drop hosts it deems unsuitable). In today's model it does not invent hosts, place the workload, or
+track it afterwards. Operators keep escape hatches — a **forced destination** bypasses the pipeline
+entirely, so an operator override always wins over Cortex's opinion.
+
+> [!NOTE]
+> This delegation contract describes the current, advisory-first integration. Cortex is in transition
+> to becoming the *authoritative* scheduler for the platform, running filters against its own knowledge
+> (the Hypervisor CRD, and a planned VM CRD) rather than reordering a list the platform hands it. The
+> pipeline shape below is unchanged; what shifts is how much of the placement decision originates in
+> Cortex. See ["Advise, don't replace — for now"](../01-getting-started/02-architecture-at-a-glance.md#advise-dont-replace--for-now).
 
 ### Advisory before drop-in
 
