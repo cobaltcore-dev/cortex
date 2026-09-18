@@ -21,7 +21,7 @@ component introduced on the [previous pages](02-architecture-at-a-glance.md):
 |---|---|---|
 | `ghcr.io/cobaltcore-dev/cortex` | `cmd/manager` | The `manager` binary (all controllers, extractors, pipelines). |
 | `ghcr.io/cobaltcore-dev/cortex-shim` | `cmd/shim` | The `shim` binary. |
-| `ghcr.io/cobaltcore-dev/cortex-postgres` | `postgres/` | The custom Postgres image (see [Postgres and tooling](06-postgres-and-tooling.md)). |
+| `ghcr.io/cobaltcore-dev/cortex-postgres` | `postgres/` | The custom Postgres image (see [Postgres](06-postgres.md)). |
 
 Each image is published with a build-provenance attestation (`actions/attest-build-provenance`), so a
 consumer can verify the image was built by this repository's CI rather than substituted.
@@ -82,7 +82,7 @@ Postgres image daily and opens a PR if doing so reduces CVEs, and the `claude-*`
 assistant automation. There is no separate DCO / sign-off gate in this repository.
 
 The pipeline is the bridge between the source tree you edit and the artifacts you deploy in later
-chapters. When [Install a domain bundle](08-installing-a-domain-bundle.md) tells you to
+chapters. When [Install a domain bundle](09-installing-a-domain-bundle.md) tells you to
 `helm install cortex-nova`, that bundle came from `push-charts.yaml` and pulls the manager image built
 by `push-images.yaml`. When you extend Cortex, `lint.yaml` and `reuse.yaml` are the checks your PR
 must pass. The next page looks at the charts themselves.

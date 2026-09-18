@@ -12,8 +12,9 @@ machinery a developer or operator touches on day one. It assumes no prior knowle
 We start with *what Cortex is and why it exists*, then look at how the pieces fit together
 architecturally. From there the chapter turns practical: how Cortex is built and shipped (CI/CD and
 the container images), how it is packaged (the Helm charts), how you build and test it locally (the
-Make targets), where its data lives (Postgres and the developer tooling), and finally how to run the
-whole thing on your laptop with Tilt. It closes with installing a real domain bundle into a cluster.
+Make targets), where its data lives (Postgres), the developer and operator tooling that ships alongside
+it, and finally how to run the whole thing on your laptop with Tilt. It closes with installing a real
+domain bundle into a cluster.
 
 By the end you will understand the shape of the system and be able to stand up a local Cortex and
 watch a code change reload.
@@ -25,9 +26,10 @@ watch a code change reload.
 3. [CI/CD and packaging](03-cicd-and-packaging.md) — how images are built and charts are released.
 4. [The Helm charts](04-helm-charts.md) — the three-tier chart layout and how a deployment is rendered.
 5. [Make targets](05-make-targets.md) — building, generating, linting, and testing.
-6. [Postgres and tooling](06-postgres-and-tooling.md) — the datastore and the `tools/` folder.
-7. [Local development with Tilt](07-local-development-with-tilt.md) — a hands-on first run.
-8. [Install a domain bundle](08-installing-a-domain-bundle.md) — deploying a domain into a real cluster.
+6. [Postgres](06-postgres.md) — the datastore, its custom image, and why it behaves like a cache.
+7. [Developer and operator tooling](07-tooling.md) — the standalone utilities under `tools/`.
+8. [Local development with Tilt](08-local-development-with-tilt.md) — a hands-on first run.
+9. [Install a domain bundle](09-installing-a-domain-bundle.md) — deploying a domain into a real cluster.
 
 ## Next
 

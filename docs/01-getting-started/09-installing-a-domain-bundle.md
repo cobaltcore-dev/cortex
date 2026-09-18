@@ -18,7 +18,7 @@ is running. It rounds out Getting Started by turning the chart structure of
 - Helm 3.
 - Access to the Cortex chart directory (`helm/`) or a chart repository hosting the bundles.
 - A reachable Postgres, or use the Postgres the bundle deploys by default (via its `cortex-postgres`
-  subchart — see [Postgres and tooling](06-postgres-and-tooling.md)).
+  subchart — see [Postgres](06-postgres.md)).
 
 ## Step 1 — Install the CRDs first
 
@@ -125,4 +125,4 @@ chart *structure*, this one runs it. Once a bundle is up, configure its knowledg
 
 ## Next
 
-[Prev: Local development with Tilt](07-local-development-with-tilt.md) · [Next: Chapter 2 — The external scheduler API »](../02-external-scheduler-api/readme.md)
+[Prev: Local development with Tilt](08-local-development-with-tilt.md) · [Next: Chapter 2 — The external scheduler API »](../02-external-scheduler-api/readme.md)

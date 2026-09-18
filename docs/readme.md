@@ -35,9 +35,10 @@ and `cmd/shim`, and the Helm defaults under `helm/`.
 3. [CI/CD and packaging](01-getting-started/03-cicd-and-packaging.md)
 4. [The Helm charts](01-getting-started/04-helm-charts.md)
 5. [Make targets](01-getting-started/05-make-targets.md)
-6. [Postgres and tooling](01-getting-started/06-postgres-and-tooling.md)
-7. [Local development with Tilt](01-getting-started/07-local-development-with-tilt.md)
-8. [Install a domain bundle](01-getting-started/08-installing-a-domain-bundle.md)
+6. [Postgres](01-getting-started/06-postgres.md)
+7. [Developer and operator tooling](01-getting-started/07-tooling.md)
+8. [Local development with Tilt](01-getting-started/08-local-development-with-tilt.md)
+9. [Install a domain bundle](01-getting-started/09-installing-a-domain-bundle.md)
 
 ### [2 — The external scheduler API](02-external-scheduler-api/readme.md)
 
@@ -86,7 +87,7 @@ and `cmd/shim`, and the Helm defaults under `helm/`.
 
 - **Operators** deploy and run Cortex — install per domain, configure via Helm values and CRDs, wire
   feature toggles, monitor, run multicluster, operate reservations. Read Chapter 1 (including
-  [Install a domain bundle](01-getting-started/08-installing-a-domain-bundle.md)), then the feature
+  [Install a domain bundle](01-getting-started/09-installing-a-domain-bundle.md)), then the feature
   chapters for your domain, and keep [Monitoring Cortex](04-knowledge-database/06-monitoring.md) nearby.
 - **Integrators** wire Cortex into an existing scheduler — start with
   [The scheduling engine](02-external-scheduler-api/01-the-scheduling-engine.md) and the

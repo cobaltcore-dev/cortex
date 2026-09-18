@@ -14,7 +14,7 @@ is already placed.
 
 This page explains the problem Cortex solves, the components it ships as, and the single arc that
 everything else in the book elaborates on. If you are impatient to run it, skip ahead to
-[Local development with Tilt](07-local-development-with-tilt.md) and come back.
+[Local development with Tilt](08-local-development-with-tilt.md) and come back.
 
 ## Declarative by design
 
@@ -76,7 +76,7 @@ Cortex is delivered as three separately deployed components:
   `cortex-pods`). This runs the controllers, the knowledge pipeline, and the external scheduler API.
 - **cortex-postgres** — the datastore for ingested facts and derived knowledge, a custom Postgres
   image rendered by the `cortex-postgres` library chart. See
-  [Postgres and tooling](06-postgres-and-tooling.md).
+  [Postgres](06-postgres.md).
 - **cortex-shim** — the `shim` binary (`cmd/shim`), packaged through the `cortex-shim` library and the
   `cortex-placement-shim` bundle, presenting an OpenStack Placement-API-compatible surface. See
   [The Placement API shim](../03-reservations-and-inventory/05-placement-api-shim.md).

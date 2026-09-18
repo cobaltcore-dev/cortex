@@ -67,4 +67,4 @@ front door to keeping those in sync with the Go types you edit when you
 
 ## Next
 
-[Prev: The Helm charts](04-helm-charts.md) · [Next: Postgres and tooling »](06-postgres-and-tooling.md)
+[Prev: The Helm charts](04-helm-charts.md) · [Next: Postgres »](06-postgres.md)

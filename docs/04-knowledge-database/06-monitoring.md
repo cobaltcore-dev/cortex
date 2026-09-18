@@ -12,7 +12,7 @@ exports metrics under the `cortex_` prefix and ships `PrometheusRule` alerts wit
 
 ## Before you begin
 
-- A domain bundle installed — see [Installing a domain bundle](../01-getting-started/08-installing-a-domain-bundle.md).
+- A domain bundle installed — see [Installing a domain bundle](../01-getting-started/09-installing-a-domain-bundle.md).
 - Prometheus (typically kube-prometheus-stack) with the Prometheus Operator, so `ServiceMonitor` and
   `PrometheusRule` objects are honoured.
 

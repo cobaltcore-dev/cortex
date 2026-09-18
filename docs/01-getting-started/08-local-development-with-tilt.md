@@ -112,7 +112,7 @@ kind delete cluster --name cortex-dev
 
 Tilt is just an orchestrator over the same artifacts the rest of the book describes: it runs the
 [Make targets](05-make-targets.md) to build the manager, installs the [bundles](04-helm-charts.md)
-you select with `ACTIVE_DEPLOYMENTS`, and brings up the [Postgres](06-postgres-and-tooling.md) they
+you select with `ACTIVE_DEPLOYMENTS`, and brings up the [Postgres](06-postgres.md) they
 depend on. Once you have this loop, you are ready to read how the scheduler actually makes decisions.
 When you want to add a pipeline step, extractor, or KPI, see
 [Extend Cortex](../02-external-scheduler-api/07-extending-cortex.md); for a multi-cluster local setup, the
@@ -121,4 +121,4 @@ clusters with this same tooling.
 
 ## Next
 
-[Prev: Postgres and tooling](06-postgres-and-tooling.md) · [Next: Install a domain bundle »](08-installing-a-domain-bundle.md)
+[Prev: Developer and operator tooling](07-tooling.md) · [Next: Install a domain bundle »](09-installing-a-domain-bundle.md)

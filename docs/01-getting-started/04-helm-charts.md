@@ -56,7 +56,7 @@ flowchart BT
 > [!IMPORTANT]
 > `cortex-crds` must be installed **first**, once per cluster — the `cortex.cloud/v1alpha1` CRDs must
 > exist before any manager starts. See
-> [Install a domain bundle](08-installing-a-domain-bundle.md).
+> [Install a domain bundle](09-installing-a-domain-bundle.md).
 
 ## The `# from:` convention
 
@@ -113,9 +113,9 @@ reference talks about `<subchart>.conf` rather than a single top-level `conf`.
 
 The chart tiers mirror the architecture: the `cortex` library chart *is* the modular-monolith manager
 packaged for Helm, and each bundle is one point in the "one deployment per domain" design from the
-previous page. When Chapter 8 walks through installing a bundle, and when the reference lists
-`<subchart>.conf.enabledControllers`, both are describing this structure. The published versions of
-these charts come from the `release` branch via `push-charts.yaml`.
+previous page. When [Install a domain bundle](09-installing-a-domain-bundle.md) walks through installing
+a bundle, and when the reference lists `<subchart>.conf.enabledControllers`, both are describing this
+structure. The published versions of these charts come from the `release` branch via `push-charts.yaml`.
 
 ## Next
 

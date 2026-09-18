@@ -4,83 +4,16 @@
 # SPDX-License-Identifier: Apache-2.0
 -->
 
-# Postgres and tooling
-
-Cortex stores everything it ingests and everything it derives in Postgres — the `cortex-postgres`
-component introduced in [What is Cortex?](01-what-is-cortex.md). This page explains why Cortex ships
-its *own* Postgres image, how the schema is created without a migration tool, and how to safely change
-storage-affecting settings. It closes with a tour of the developer utilities under `tools/`, which you
-will meet again in later chapters.
-
-## Why a custom Postgres image
-
-Rather than depend on an off-the-shelf Postgres, Cortex builds its own image from `postgres/Dockerfile`
-so it can pin the major version and the extensions Cortex needs. The current major is **Postgres 18**
-(`PG_MAJOR` in the Dockerfile). Building the image in-repo also lets CI keep it patched: the
-`rebuild-postgres.yaml` workflow (see [CI/CD and packaging](03-cicd-and-packaging.md)) rebuilds it
-daily and opens a PR when doing so lowers the CVE count.
-
-The image is deployed as a **StatefulSet** by the `cortex-postgres` library chart
-(`helm/library/cortex-postgres/templates/statefulset.yaml`), so the database gets stable network
-identity and a persistent volume.
-
-> [!NOTE]
-> Cortex is tightly coupled to Postgres today, but this is a direction rather than a fixed commitment.
-> The plan is to **abstract the storage layer** behind a dedicated kind/interface so the rest of Cortex
-> no longer depends on Postgres specifics, and — for the knowledge that is derived and re-derivable
-> rather than authoritative — to move toward **cache-driven backends such as Redis** in the future.
-> The pages that follow describe the current Postgres-backed model; treat the storage engine as an
-> implementation detail Cortex intends to make swappable, not a permanent part of the contract.
-
-## No migration tool — Go creates the schema
-
-There is deliberately **no SQL migration framework**. The schema is created by the Go code at startup:
-`internal/knowledge/db` maps structs to tables through `gorp`, and a sync plugin calls
-`DB.CreateTable` (backed by `DB.AddTable`) for the tables it owns. A datasource or extractor that needs
-a table ensures it on startup; there is no separate `migrate` step to run.
-
-> [!NOTE]
-> Because the tables follow the Go structs, a schema change is a *code* change: edit the struct, and
-> the table it maps to is (re)created by the owning plugin. Keep this in mind when reading
-> [Datasources](../04-knowledge-database/02-datasources.md) and
-> [Feature extraction](../04-knowledge-database/03-feature-extraction.md) — the "schema" is the set of
-> ingested and derived row types those chapters describe.
-
-## Rotating the instance with `instanceSuffix`
-
-The Postgres resources are named `…-v<major>-<instanceSuffix>`, where `instanceSuffix` defaults to
-`"g0"` (`helm/library/cortex-postgres/values.yaml`). Because the suffix is part of the StatefulSet
-name and therefore its PersistentVolumeClaim, **changing it provisions a brand-new StatefulSet and a
-brand-new empty volume** rather than reusing the old data:
-
-```yaml
-cortex-postgres:
-  instanceSuffix: "g1"   # was "g0" → new StatefulSet + new PVC, old data left behind
-```
-
-> [!WARNING]
-> Bumping `instanceSuffix` (g0 → g1 → g2 …) is the intended way to roll to a fresh database instance —
-> for a major-version move or to abandon a corrupted volume. It does **not** migrate data; the old PVC
-> is left in place untouched. Do it only when you mean to start clean, and clean up the orphaned PVC
-> afterwards.
-
-Since Cortex re-derives all knowledge from its datasources, starting a fresh instance is recoverable:
-the datasources re-ingest and the extractors re-run. It is disruptive, not destructive. In effect the
-Postgres database is a **cache**, not a system of record — when it is empty, Cortex simply syncs the
-data in again from the datasources, so the instance can be replaced without losing any authoritative
-state. That property is exactly why a caching backend such as Redis is being considered in place of
-strong Postgres persistence (see the note under [Why a custom Postgres image](#why-a-custom-postgres-image)):
-if the store holds only re-derivable data, a lighter cache serves the purpose without the persistence
-guarantees a system of record would need.
-
-## The `tools/` utilities
+# Developer and operator tooling
 
 The `tools/` directory holds standalone developer and operator utilities — not shipped in the Helm
 charts, run by hand during development, debugging, or dashboard work. Each is a small Go program you
 run with `go run` from the repository root (except the two dashboard directories, which hold static
-definitions). The rest of this page documents each one in turn.
+definitions). This page documents each one in turn, with an illustrative slice of its output where the
+tool prints a report. The example outputs are hand-authored to show the shape of what each tool prints;
+they are not captured from a live run.
 
-### `tools/spawner` — synthetic workload generator
+## `tools/spawner` — synthetic workload generator
 
 Boots a fleet of real VMs that immediately put themselves under CPU and RAM load, so you can exercise
 a scheduler against genuine, moving inventory rather than empty hosts.
@@ -113,7 +46,7 @@ source ~/my-openstack.rc
 go run tools/spawner/main.go
 ```
 
-### `tools/resdiff` — structural diff of two resources
+## `tools/resdiff` — structural diff of two resources
 
 Reads a Kubernetes **List** (YAML, e.g. `kubectl get … -o yaml`) from **stdin** and prints a colorized,
 recursive structural diff between items — useful for spotting where an expected resource state diverges
@@ -130,7 +63,22 @@ kubectl get committedresources -o yaml | go run tools/resdiff/main.go -diff a,b
 
 The input list must contain at least two items.
 
-### `tools/mirror` — live one-way resource replicator
+Illustrative output — equal fields are shown dimmed, differing leaves show each item's value, and a
+key present in only one item is called out (colors omitted here):
+
+```
+spec:
+  schedulingDomain: nova
+  flavorGroupName: hana-group
+  amount:
+    a: 4
+    b: 6
+  availabilityZone: only in a: az-1
+status:
+  ready: True
+```
+
+## `tools/mirror` — live one-way resource replicator
 
 Replicates custom resources from one cluster into another: an initial sync followed by a watch, mirroring
 creates, updates (including status), and deletes, while stripping server-managed metadata. Handy for
@@ -151,7 +99,7 @@ go run tools/mirror/mirror.go \
 | `--source-context`, `--target-context` | no | Context to select within each kubeconfig. |
 | `--namespace` | no | Restrict to one namespace. |
 
-### `tools/visualize-committed-resources` — committed-resource report
+## `tools/visualize-committed-resources` — committed-resource report
 
 Reads `CommittedResource` CRs and their child `Reservation` slots from one or more clusters and prints a
 colorized report. Pairs with [Chapter 3](../03-reservations-and-inventory/readme.md).
@@ -170,7 +118,22 @@ go run tools/visualize-committed-resources/main.go --views summary,commitments -
 | `--watch <dur>` | Redraw on change every interval; `0` renders once and exits. |
 | `--limit` | Max rows (default 200). |
 
-### `tools/visualize-reservations` — reservation audit against Nova
+The `summary` view prints counts by commitment state and Ready condition; `commitments` lists each
+`CommittedResource` with its slots. Illustrative (colors omitted):
+
+```
+────────────────────────────────────────────────────────────────────────────────
+▶ Summary
+  CommittedResources : 3 total
+    Confirmed:     2
+    Pending:       1
+
+  Ready conditions   : 2 accepted, 1 reserving, 0 rejected
+
+  Reservation slots  : 5 total — 4 ready, 0 not-ready, 1 pending
+```
+
+## `tools/visualize-reservations` — reservation audit against Nova
 
 Audits failover/committed `Reservation`s against the VMs actually present on hypervisors, cross-referenced
 with Nova's Postgres. It renders once and exits. Postgres features degrade gracefully if the database is
@@ -192,7 +155,26 @@ go run tools/visualize-reservations/main.go --sort res-host --views summary
 | `--hypervisor-context(s)`, `--reservation-context(s)`, `--postgres-context` | Kube contexts for each data source. |
 | `--postgres-port-forward`, `--postgres-port-forward-service`, `--postgres-port-forward-local-port`, `--postgres-port-forward-remote-port` | Set up a port-forward to reach Postgres. |
 
-### `tools/logs` — scheduler log parser
+Illustrative `summary` output — reservation slots cross-referenced with the VMs actually on the
+hypervisors, plus the Postgres connection status (colors and emoji omitted):
+
+```
+==============================================
+  Summary Statistics
+==============================================
+Hypervisor context:   (current context)
+Reservation context:  (current context)
+Postgres context:     (current context)
+
+Database: connected (servers: 148, flavors: 32)
+
+Total Hypervisors: 6
+Total VMs (from hypervisors): 148
+Total Failover Reservations: 9
+Total All Reservations: 12
+```
+
+## `tools/logs` — scheduler log parser
 
 Reads Nova external-scheduler logs from **stdin** (no flags) and prints a colorized per-request breakdown:
 request id, flavor, the inferred pipeline, the per-filter and per-weigher host sets with weights, and the
@@ -202,18 +184,33 @@ final ordered output. It is the fastest way to see *why* a pipeline ordered host
 kubectl logs deploy/cortex-nova-scheduling-controller-manager -f | go run tools/logs/parser.go
 ```
 
-### `tools/perses` and `tools/plutono` — dashboard definitions
+Illustrative per-request breakdown — the input host set, each filter (with surviving host count) and
+weigher (with per-host weights) in pipeline order, then the final ordering (colors omitted):
+
+```
+========================================
+New Nova request with id: req-8f2c1a
+========================================
+Flavor           : m1.large
+Inferred Pipeline : nova-default
+Input hosts      : host-a, host-b, host-c
+Filter filter_has_enough_capacity : host-a, host-b (2 hosts)
+Weigher kvm_binpack : host-a: 0.9200, host-b: 0.4100
+Output of pipeline : host-a, host-b
+Final output     : host-a, host-b
+```
+
+## `tools/perses` and `tools/plutono` — dashboard definitions
 
 These two are **not** runnable Go programs. `tools/perses` holds Perses dashboard definitions (JSON) and
 `tools/plutono` is a Grafana-fork container image used to render them. They are covered in
 [The infrastructure dashboard](../04-knowledge-database/05-infrastructure-dashboard.md).
 
-Postgres is the hinge in the [end-to-end flow](01-what-is-cortex.md): datasources write raw facts into
-it, extractors read those facts and write features back, and KPIs and pipelines read the features. The
-custom image and the code-owned schema keep that hinge versioned with the rest of the source tree —
-which is why there is no migration tool to coordinate and why a clean restart is a supported recovery
-path.
+These utilities sit beside Cortex rather than inside it: none is shipped in the Helm charts, and each
+reads the same CRDs, logs, and [Postgres](06-postgres.md) datastore the rest of the book describes —
+they are windows onto a running system, useful once you have one up. The next page gets you there,
+running Cortex locally with Tilt.
 
 ## Next
 
-[Prev: Make targets](05-make-targets.md) · [Next: Local development with Tilt »](07-local-development-with-tilt.md)
+[Prev: Postgres](06-postgres.md) · [Next: Local development with Tilt »](08-local-development-with-tilt.md)

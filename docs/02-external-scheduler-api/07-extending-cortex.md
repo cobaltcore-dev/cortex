@@ -14,7 +14,7 @@ implementation in code, then reference it by name from a custom resource. The mo
 
 ## Before you begin
 
-- A local checkout and the Go toolchain — see [Local development with Tilt](../01-getting-started/07-local-development-with-tilt.md).
+- A local checkout and the Go toolchain — see [Local development with Tilt](../01-getting-started/08-local-development-with-tilt.md).
 - Familiarity with which index your plugin belongs to (below).
 
 ## Choose the right registration style
@@ -93,7 +93,7 @@ go build ./...
 ```
 
 Run the change under Tilt to see it reconcile against a live cluster — see
-[Local development with Tilt](../01-getting-started/07-local-development-with-tilt.md). Remember that a
+[Local development with Tilt](../01-getting-started/08-local-development-with-tilt.md). Remember that a
 change to the `api/v1alpha1` types means running `make generate` and committing the result
 ([Make targets](../01-getting-started/05-make-targets.md)).
 
