@@ -24,6 +24,14 @@ The image is deployed as a **StatefulSet** by the `cortex-postgres` library char
 (`helm/library/cortex-postgres/templates/statefulset.yaml`), so the database gets stable network
 identity and a persistent volume.
 
+> [!NOTE]
+> Cortex is tightly coupled to Postgres today, but this is a direction rather than a fixed commitment.
+> The plan is to **abstract the storage layer** behind a dedicated kind/interface so the rest of Cortex
+> no longer depends on Postgres specifics, and — for the knowledge that is derived and re-derivable
+> rather than authoritative — to move toward **cache-driven backends such as Redis** in the future.
+> The pages that follow describe the current Postgres-backed model; treat the storage engine as an
+> implementation detail Cortex intends to make swappable, not a permanent part of the contract.
+
 ## No migration tool — Go creates the schema
 
 There is deliberately **no SQL migration framework**. The schema is created by the Go code at startup:
