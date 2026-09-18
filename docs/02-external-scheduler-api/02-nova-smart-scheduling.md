@@ -179,8 +179,6 @@ nova     a1b2c3…       az-a   node-017      Successful   30s              3d
 The columns come from each resource's status; the field-by-field definitions live on the `Decision`,
 `Descheduling`, and `History` Go types in `api/v1alpha1/`.
 
-## How this relates to Cortex
-
 Nova exercises the full arc: an HTTP request drives a filter-weigher pipeline whose weighers read
 knowledge features and respect reservations, the result is a `Decision`, committed slots are recorded, and
 a scheduled detector emits `Descheduling` recommendations recorded as `History`. Every other domain in

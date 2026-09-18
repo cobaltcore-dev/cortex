@@ -519,8 +519,6 @@ Two conditions are specific to multicluster and worth monitoring:
 - **`403` from a remote** — the request authenticated but the remote `ClusterRoleBinding` does not grant
   the home service account access to that kind. Check the binding installed in step 2 above.
 
-## How this relates to Cortex
-
 The multicluster client is why a single Cortex control plane can schedule for a partitioned cloud: the
 [hypervisor overcommit controller](../05-hypervisor-lifecycle/01-automated-overcommit.md), for example,
 watches `Hypervisor` CRs across every remote through this client, and the placement shim reports remote

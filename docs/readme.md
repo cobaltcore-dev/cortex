@@ -21,10 +21,10 @@ metrics, read the code: the CRD types under `api/v1alpha1/`, the flag definition
 and `cmd/shim`, and the Helm defaults under `helm/`.
 
 > [!NOTE]
-> Cortex is a [Kubebuilder](https://book.kubebuilder.io/)-based Kubernetes operator: everything it
-> does is driven by custom resources in the API group `cortex.cloud/v1alpha1`, reconciled by
-> controllers. Its behaviour is configured declaratively and observed through Kubernetes-native
-> status and metrics.
+> Cortex is a **cloud-native Kubernetes operator**: everything it does is driven by custom resources in
+> the API group `cortex.cloud/v1alpha1`, reconciled by controllers. Its behaviour is configured
+> declaratively and observed through Kubernetes-native status and metrics — the reconcile-to-desired-state
+> model applied to placement intelligence.
 
 ## Table of contents
 

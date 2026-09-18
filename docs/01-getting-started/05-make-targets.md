@@ -58,8 +58,6 @@ same on your machine and in CI:
 > you committed. So after changing anything under `api/v1alpha1`, run `make generate` (or `make all`)
 > and commit the result.
 
-## How this relates to Cortex
-
 The generated artifacts are load-bearing everywhere else in the book. `make crds` produces the very
 `cortex.cloud/v1alpha1` CustomResourceDefinitions that the Go types under `api/v1alpha1/*_types.go`
 define (rendered into `helm/library/cortex/files/crds/`) and that the `cortex-crds` bundle ([The Helm charts](04-helm-charts.md)) installs;

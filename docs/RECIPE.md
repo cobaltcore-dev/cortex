@@ -80,9 +80,10 @@ Every content page (everything except `readme.md` index pages) has, in order:
 3. **A short intro paragraph** stating what the page covers and what the reader will know by the
    end. No preamble like "In this document we will…".
 4. **Body sections** (`##` / `###`) teaching the concept, in a logical reading order.
-5. **`## How this relates to Cortex`** — a closing paragraph tying the page back to the wider
-   system and pointing forward. Present on every content page; omitted only on `readme.md`
-   index pages.
+5. **An unheaded closing paragraph** — the last prose before `## Next`, tying the page back to the
+   wider system and pointing forward. Do **not** give it a heading (no `## How this relates to
+   Cortex` or similar); it reads as the natural conclusion of the last body section. Keep it
+   substantive — real cross-links and a forward pointer, not a rehearsal of what was just said.
 6. **`## Next`** — exactly one per page, the last section, a single prev/next line (§5).
 
 `readme.md` index pages have the SPDX header, an `# Chapter title`, a short intro, an

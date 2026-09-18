@@ -47,8 +47,6 @@ The dashboard definitions are development/operations tooling, deliberately kept 
 > use one, import it into your own Perses or Plutono instance; Cortex does not deploy a dashboard server for
 > you.
 
-## How this relates to Cortex
-
 This page is the visual read-out of the whole [knowledge flow](01-knowledge-flow-overview.md): datasources
 cache the world, extractors derive features, the `infrastructure` KPIs turn those features into fleet-level
 gauges, and these dashboards render them for planning. It is also where the two halves of the book meet — the

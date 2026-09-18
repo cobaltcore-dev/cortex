@@ -105,8 +105,6 @@ Datasources are dispatched by a typed switch/map on kind. Adding a new source ki
 dispatch and implementing its ingestion, then referencing it from a `Datasource` — the process in
 [Extend Cortex](../02-external-scheduler-api/07-extending-cortex.md).
 
-## How this relates to Cortex
-
 Datasources are the intake of the [knowledge flow](01-knowledge-flow-overview.md): they populate the
 Postgres rows that [feature extraction](03-feature-extraction.md) reads, which in turn feed every pipeline
 and reservation. They are also what the failover controller points its `datasourceName` at

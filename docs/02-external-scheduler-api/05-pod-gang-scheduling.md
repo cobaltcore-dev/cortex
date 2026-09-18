@@ -55,8 +55,6 @@ Registered under `internal/scheduling/pods/plugins/`:
 So a default pod pipeline filters nodes down to the feasible set, then binpacks — the pod lands on the
 most-utilized node that still fits.
 
-## How this relates to Cortex
-
 The pod scheduler reuses the exact `lib` filter/weigher engine of
 [The scheduling engine](01-the-scheduling-engine.md), producing the same `Decision`/`History` records as
 every other domain — only the trigger (a watch on pods, not an HTTP call) and the final action (a

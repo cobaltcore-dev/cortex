@@ -26,8 +26,6 @@ defer rl.ReleaseLock(ctx, "my-lock", "holder-abc")
 Because the lock is acquired and released around a single critical section, there is no background lease
 renewal to manage and no leader to fail over — the lock exists only while a write is in flight.
 
-## How this relates to Cortex
-
 `resourcelock` is what lets Cortex run multiple replicas without them clobbering each other's writes to a
 shared object. It is deliberately small and importable on its own. The next package covers the other
 piece of in-manager machinery: running periodic work as a controller.

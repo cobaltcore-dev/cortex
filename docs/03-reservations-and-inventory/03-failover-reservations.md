@@ -84,8 +84,6 @@ Two Nova weighers cooperate with this headroom during scheduling
 > continuously-maintained target, not a precondition. Verify the controller is reserving what you expect
 > before relying on it for capacity planning.
 
-## How this relates to Cortex
-
 Failover reservations are the second term subtracted from usable capacity in
 [Reservations overview](01-reservations-overview.md): like committed resources, they make a host look
 fuller to the pipeline than its raw capacity suggests, but for resilience rather than billing. They read

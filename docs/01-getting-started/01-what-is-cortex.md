@@ -16,6 +16,22 @@ This page explains the problem Cortex solves, the components it ships as, and th
 everything else in the book elaborates on. If you are impatient to run it, skip ahead to
 [Local development with Tilt](07-local-development-with-tilt.md) and come back.
 
+## Declarative by design
+
+Cortex is a Kubernetes operator built **cloud-native**: its entire behaviour is modeled as custom
+resources in the API group `cortex.cloud/v1alpha1`, reconciled by controllers. You do not call Cortex to
+*perform* an action — you declare the *desired state* (which datasources to ingest, which pipelines to
+run, which capacity to reserve) as Kubernetes objects, and the controllers continuously converge the
+system toward it, reporting progress through resource `status`/conditions and Prometheus metrics.
+
+This is deliberately the opposite of the world Cortex extends. OpenStack is **imperative and RPC-driven**:
+you issue a request over an API and the service carries it out then and there. Cortex sits beside that
+platform and adds a **declarative control plane** on top of it — the same reconcile-to-desired-state model
+Kubernetes uses for pods, applied to placement intelligence. Every concept in the rest of this book —
+`Datasource`, `Knowledge`, `Pipeline`, `Reservation`, `Decision` — is an instance of this one idea; they
+are all cluster-scoped custom resources, catalogued in
+[Architecture at a glance](02-architecture-at-a-glance.md#everything-is-a-cluster-scoped-custom-resource).
+
 ## Why a scheduling operator
 
 A cloud platform's built-in scheduler (Nova for compute, Cinder for block storage, and so on) decides
@@ -68,6 +84,31 @@ Cortex is delivered as three separately deployed components:
 The next page, [Architecture at a glance](02-architecture-at-a-glance.md), explains how one binary
 serves every domain and how its custom resources and controllers fit together.
 
+## Cortex in the CobaltCore ecosystem
+
+Cortex is not a standalone product; it is the placement brain of a larger open-source platform.
+
+- **CobaltCore** ([cobaltcore.dev](https://cobaltcore.dev/)) is the platform Cortex ships as part of —
+  "infrastructure management for cloud-native and traditional workloads," pairing Kubernetes-native
+  orchestration with OpenStack-compatible APIs (Nova, Neutron, Cinder, Keystone, Glance). Alongside
+  Cortex it includes services such as a unified management frontend and an observability stack, all
+  operated declaratively through operators and Helm charts. Cortex is the component that makes the
+  platform's placement decisions smarter, using data the individual OpenStack schedulers do not track.
+- **ApeiroRA** ([apeirora.eu](https://apeirora.eu/)), the Apeiro Reference Architecture, is the wider
+  initiative CobaltCore belongs to: an open blueprint for a sovereign European **cloud-edge continuum**,
+  developed as SAP's contribution to the IPCEI-CIS and governed for the long term under **NeoNephos**
+  (part of the Linux Foundation Europe). Cortex's cloud-native, declarative approach is what lets it fit
+  a construction-kit architecture built on open standards rather than proprietary lock-in.
+- **Downstream services build on Cortex.** Because its scheduling is exposed as a reusable, declarative
+  control plane, higher-level services delegate placement to it. **Thalamus**
+  ([docs](https://cobaltcore-dev.github.io/thalamus/main/)) — a sovereign, Kubernetes-native LLM
+  inference service — uses Cortex for orchestration, a concrete example of Cortex extending the platform
+  well beyond OpenStack compute.
+
+In short: Cortex reaches down into the imperative OpenStack world to gather state and influence
+placement, and reaches up into the cloud-native CobaltCore/ApeiroRA ecosystem that consumes its
+decisions.
+
 ## The end-to-end flow
 
 Everything Cortex does follows one arc: raw facts become knowledge, knowledge feeds pipelines, and
@@ -117,8 +158,6 @@ flowchart LR
    descheduling recommendations.
 6. **KPIs** publish knowledge as Prometheus metrics for dashboards and alerting. See
    [KPIs and the Metrics API](../04-knowledge-database/04-kpis-and-metrics-api.md).
-
-## How this relates to Cortex
 
 This arc *is* Cortex — every feature chapter in this book slots into one of its stages. Chapter 2
 covers the pipelines and the scheduler API; Chapter 3 covers reservations and inventory; Chapter 4

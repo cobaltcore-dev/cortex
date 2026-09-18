@@ -7,8 +7,8 @@
 # Architecture at a glance
 
 The previous page described *what* Cortex does. This page describes *how it is put together*: one
-binary that serves every domain, a set of custom resources reconciled by controllers, and a design
-principle — advise, don't replace — that shapes every integration. Understanding these three ideas up
+binary that serves every domain, a set of custom resources reconciled by controllers, and the design
+principle that shapes its integrations today — advise, don't replace. Understanding these three ideas up
 front makes the feature chapters much easier to read.
 
 ## One binary, many deployments: the modular monolith
@@ -79,43 +79,58 @@ claims about a current topology.
 
 ## Everything is a cluster-scoped custom resource
 
-Cortex is a Kubebuilder operator: its behaviour is authored as Kubernetes custom resources and
-reconciled by controllers. All Cortex kinds live in the API group `cortex.cloud/v1alpha1` and are
+Cortex is a cloud-native Kubernetes operator: its behaviour is authored as Kubernetes custom resources
+and reconciled by controllers. All Cortex kinds live in the API group `cortex.cloud/v1alpha1` and are
 **cluster-scoped** — there is no per-namespace placement policy; policy is a property of the cluster
-(and, in multicluster, of the availability zone). Cortex owns eleven kinds:
+(and, in multicluster, of the availability zone).
 
-`Datasource`, `Knowledge`, `KPI`, `Pipeline`, `Decision`, `Descheduling`, `History`, `Reservation`,
-`CommittedResource`, `ProjectQuota`, `FlavorGroupCapacity`.
-
-It also *consumes but does not own* external kinds: `Hypervisor` (`kvm.cloud.sap/v1`) and IronCore's
-`Machine`, `MachinePool`, and `MachineClass` (`compute.ironcore.dev/v1alpha1`).
+The core of the model is a short arc — facts become knowledge, knowledge feeds a pipeline, the pipeline
+emits decisions — with capacity and metrics hanging off it:
 
 ```mermaid
-flowchart TB
-    DS[Datasource] -->|raw facts| PG[(Postgres)]
-    K[Knowledge] -->|reads facts, writes features| PG
-    P[Pipeline] -->|references knowledge features| K
+flowchart LR
+    DS[Datasource] -->|raw facts| K[Knowledge]
+    K -->|features| P[Pipeline]
     P -->|emits| DEC[Decision]
     P -->|emits| DSC[Descheduling]
-    DSC --> H[History]
-    KPI[KPI] -->|reads features| K
-    KPI --> M[Prometheus metrics]
-    R[Reservation] -.->|informs capacity| P
-    CR[CommittedResource] --> R
-    PQ[ProjectQuota]
-    FGC[FlavorGroupCapacity]
+    K --> KPI[KPI]
+    R[Reservation] -.->|reserved capacity| P
 ```
 
 - A **Datasource** declares where raw facts come from and lands them in Postgres.
 - A **Knowledge** resource declares a feature extraction over those facts.
 - A **Pipeline** wires ordered filter/weigher (or detector) steps that consume features and produces
-  **Decision** / **Descheduling** outputs; **History** records past decisions.
+  **Decision** / **Descheduling** outputs.
 - **KPI** turns features into Prometheus metrics.
-- **Reservation**, **CommittedResource**, **ProjectQuota**, and **FlavorGroupCapacity** model
-  promised-but-unconsumed capacity and quota (Chapter 3).
+- **Reservation** models capacity that is promised but not yet consumed, so a pipeline treats it as
+  unavailable.
 
-Every field of every kind is defined on the Go types under `api/v1alpha1/*_types.go`; the generated
-CRD manifests are under `helm/library/cortex/files/crds/` (regenerate with `make generate`).
+That is the whole picture at a glance. Cortex owns eleven kinds in all — besides the six above,
+`History` records past decisions, and `CommittedResource`, `ProjectQuota`, and `FlavorGroupCapacity`
+round out the reservation-and-quota family, covered in
+[Chapter 3](../03-reservations-and-inventory/readme.md). Every field of every kind is defined on the Go
+types under `api/v1alpha1/*_types.go`; the generated CRD manifests are under
+`helm/library/cortex/files/crds/` (regenerate with `make generate`).
+
+Cortex also *consumes but does not own* external kinds: `Hypervisor` (`kvm.cloud.sap/v1`) and IronCore's
+`Machine`, `MachinePool`, and `MachineClass` (`compute.ironcore.dev/v1alpha1`).
+
+Because the kinds are cluster-scoped but a cluster may run more than one Cortex deployment, the
+domain-owned kinds (`Datasource`, `Knowledge`, `KPI`, `Pipeline`, `Decision`, `History`, and the
+reservation kinds) carry a **`spec.schedulingDomain`** field — one of `nova`, `cinder`, `manila`,
+`machines`, or `pods`. Each domain controller watches with a predicate that ignores any object whose
+`schedulingDomain` does not match its own, so a `cortex-nova` and a `cortex-cinder` deployment can
+coexist in the same cluster, reconciling the same cluster-scoped CRDs without stepping on each other —
+each only acts on the resources tagged for its domain. Most of these kinds also surface the value as a
+`Domain` print column (`+kubebuilder:printcolumn`), so `kubectl get pipelines` shows which deployment
+owns each resource.
+
+> [!NOTE]
+> The CRD manifests are generated from **kubebuilder marker annotations** on the Go types in
+> `api/v1alpha1/` with `controller-gen`, via `make generate` / `make manifests`
+> ([Make targets](05-make-targets.md)). That is the extent of the kubebuilder tooling Cortex uses — the
+> API-authoring workflow is customized, so do **not** expect `kubebuilder create api` to scaffold a new
+> kind. Add types and their markers directly, then regenerate.
 
 ### How a change propagates
 
@@ -149,27 +164,32 @@ a step, see [Extend Cortex](../02-external-scheduler-api/07-extending-cortex.md)
 deployed pipeline, see
 [The scheduling engine](../02-external-scheduler-api/01-the-scheduling-engine.md#inspecting-and-editing-a-pipeline).
 
-## Advise, don't replace
+## Advise, don't replace — for now
 
-The principle that ties the architecture together is that **Cortex never owns the workload
-lifecycle**. For Nova it hooks in as an *external scheduler*: the platform calls Cortex, Cortex
-returns an ordering, and the platform proceeds. The platform still creates, tracks, and destroys
-workloads; Cortex only re-orders the candidate hosts (or recommends a move). Operators keep escape
-hatches — forced destinations bypass the pipeline entirely.
+Today Cortex hooks into Nova as an *external scheduler*: the platform calls Cortex, Cortex returns an
+ordering, and the platform proceeds. Nova still creates, tracks, and destroys workloads; Cortex
+re-orders the candidate hosts (or recommends a move), and operators keep escape hatches — forced
+destinations bypass the pipeline entirely. In this mode Cortex is the home for scheduling *logic*, not
+for scheduling *state*.
+
+> [!NOTE]
+> This is the current integration, but not the endpoint. Within cobaltcore-dev, Cortex is transitioning
+> toward being the **authoritative scheduler** — where the filtering that Nova performs today runs only
+> in Cortex, against Kubernetes-native inventory such as the `Hypervisor` CRD (and a planned VM CRD)
+> rather than Nova's internal host state. That shift moves more of the placement decision into Cortex's
+> declarative model; the advisory external-scheduler contract described here is the shape of the
+> integration as it stands.
 
 This delegation contract is the subject of
 [The scheduling engine](../02-external-scheduler-api/01-the-scheduling-engine.md), where it is
-explained in full. For now, hold onto the idea: Cortex is the home for scheduling *logic*, never for
-scheduling *state*.
+explained in full.
 
-## How this relates to Cortex
-
-These three ideas — one binary switched per deployment, a graph of cluster-scoped CRDs, and advisory
-delegation — are the frame for the whole book. When a later chapter says "enable the
+These three ideas — one binary switched per deployment, a graph of cluster-scoped CRDs, and (today)
+advisory delegation — are the frame for the whole book. When a later chapter says "enable the
 `capacity-controller`", it means add that string to `enabledControllers` on a manager that already
 runs the shared datasource/knowledge stack. When it says "apply a `Pipeline`", it means author a
 custom resource whose step names resolve to registered plugins. And when it says Cortex "recommends" a
-placement, it means exactly that — the platform still decides.
+placement, it means exactly that — today the platform still decides.
 
 ## Next
 

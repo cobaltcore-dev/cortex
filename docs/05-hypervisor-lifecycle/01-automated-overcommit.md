@@ -69,8 +69,6 @@ The `Hypervisor` kind here is **not** a Cortex CRD — it belongs to the OpenSta
 multicluster client and reacts to create/update/delete events from remote clusters, so a home Cortex can
 drive overcommit on hypervisors that live in remote AZ clusters.
 
-## How this relates to Cortex
-
 Overcommit management is where Cortex stops only *advising* and starts *writing* infrastructure state — it
 owns the `spec.overcommit` field of every matching hypervisor. It leans on the same
 [multicluster client](../06-cortex-library/01-multicluster-client.md) as the rest of Cortex to reach remote

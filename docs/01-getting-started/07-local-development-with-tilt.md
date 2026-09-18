@@ -110,8 +110,6 @@ tilt down
 kind delete cluster --name cortex-dev
 ```
 
-## How this relates to Cortex
-
 Tilt is just an orchestrator over the same artifacts the rest of the book describes: it runs the
 [Make targets](05-make-targets.md) to build the manager, installs the [bundles](04-helm-charts.md)
 you select with `ACTIVE_DEPLOYMENTS`, and brings up the [Postgres](06-postgres-and-tooling.md) they

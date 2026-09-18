@@ -97,8 +97,6 @@ Run the change under Tilt to see it reconcile against a live cluster — see
 change to the `api/v1alpha1` types means running `make generate` and committing the result
 ([Make targets](../01-getting-started/05-make-targets.md)).
 
-## How this relates to Cortex
-
 This is the whole point of the plugin model: because steps, extractors, and KPIs are named and resolved
 at run time, extending Cortex is adding code plus a registration, never editing a scheduler core. The
 webhook ties it back to the `Pipeline` CRD (`api/v1alpha1/pipeline_types.go`) — invalid parameters and

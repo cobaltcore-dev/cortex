@@ -102,8 +102,6 @@ These include a compute KVM overview and a placement-shim status dashboard, and 
 | Remotes reachable | `cortex_multicluster_remote_apiserver_reachable` |
 | Commitments covered | `cortex_committed_resource_unfulfilled`, oversubscription alert |
 
-## How this relates to Cortex
-
 Monitoring is where the whole book's machinery becomes observable: the `cortex_` metrics come from
 `pkg/monitoring` ([The monitoring package](../06-cortex-library/06-monitoring-package.md)), the KPIs
 from the [knowledge database](04-kpis-and-metrics-api.md), and the multicluster and overlay signals

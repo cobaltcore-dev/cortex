@@ -74,8 +74,6 @@ A couple of workflows are pure automation rather than gates: `rebuild-postgres.y
 Postgres image daily and opens a PR if doing so reduces CVEs, and the `claude-*` workflows run
 assistant automation. There is no separate DCO / sign-off gate in this repository.
 
-## How this relates to Cortex
-
 The pipeline is the bridge between the source tree you edit and the artifacts you deploy in later
 chapters. When [Install a domain bundle](08-installing-a-domain-bundle.md) tells you to
 `helm install cortex-nova`, that bundle came from `push-charts.yaml` and pulls the manager image built

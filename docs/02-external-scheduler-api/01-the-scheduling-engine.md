@@ -214,8 +214,6 @@ update and has two distinct behaviours:
   staged rollout. The consequence surfaces on the resource itself — its **All Steps Known** condition goes
   `False` — so after an edit, confirm that column is `True` rather than trusting that the apply succeeded.
 
-## How this relates to Cortex
-
 This engine is the machinery under stage 4 and 5 of the [end-to-end flow](../01-getting-started/01-what-is-cortex.md):
 filter-weigher pipelines answer live requests, detector pipelines produce descheduling recommendations.
 Every weigher and filter reads *features* produced by the knowledge database ([Chapter 4](../04-knowledge-database/readme.md)),

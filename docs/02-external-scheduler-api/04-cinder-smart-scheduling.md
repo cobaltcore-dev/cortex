@@ -35,8 +35,6 @@ order (see the input-weight handling in [The scheduling engine](01-the-schedulin
 > adding block-storage-specific logic later is only a matter of implementing and registering steps
 > ([Extend Cortex](07-extending-cortex.md)); the integration does not have to change.
 
-## How this relates to Cortex
-
 Cinder shows the integration cost of a new domain in its purest form: a route, a default pipeline name,
 and the shared `Decision`/`History` machinery — with the actual placement intelligence added later as
 plugins. It is the same engine as Nova and Manila with the plugin set empty. The next two domains break

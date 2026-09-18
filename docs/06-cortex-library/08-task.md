@@ -28,8 +28,6 @@ runner := &task.Runner{
 Because it is a controller, it participates in leader election, graceful shutdown, and metrics the same
 way every other controller does — there is no separate lifecycle to reason about.
 
-## How this relates to Cortex
-
 `task.Runner` is the machinery behind the detector pipelines of
 [Chapter 2](../02-external-scheduler-api/01-the-scheduling-engine.md) and other scheduled work selected
 by `enabledTasks`. It is why a periodic job in Cortex is observable and shuts down cleanly like the rest

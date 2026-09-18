@@ -118,8 +118,6 @@ kubectl logs deploy/cortex-nova-scheduling-controller-manager | grep -i "startin
 Install additional domains by repeating step 2 with a different bundle in the same cluster; the CRDs
 are shared.
 
-## How this relates to Cortex
-
 This is the operational counterpart to [The Helm charts](04-helm-charts.md): that page explained the
 chart *structure*, this one runs it. Once a bundle is up, configure its knowledge with
 [Datasources](../04-knowledge-database/02-datasources.md) and wire up observability with

@@ -65,8 +65,6 @@ A `Knowledge` resource names its input datasources in `dependencies.datasources`
 must exist and be Ready before the extractor runs — the dependency is explicit, so the chain is
 deterministic.
 
-## How this relates to Cortex
-
 This flow is the supply side for every decision in the book: the weighers of
 [Chapter 2](../02-external-scheduler-api/readme.md) read features, the reservation controllers of
 [Chapter 3](../03-reservations-and-inventory/readme.md) read datasource facts and features, and the

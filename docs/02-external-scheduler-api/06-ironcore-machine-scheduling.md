@@ -55,8 +55,6 @@ candidates without domain-specific scoring. Like Cinder, the integration is full
 is added later by implementing and registering steps
 ([Extend Cortex](07-extending-cortex.md)).
 
-## How this relates to Cortex
-
 IronCore machine scheduling completes the chapter's pattern: five domains, one shared engine, differing
 only in trigger and commit action. Nova, Manila, and Cinder answer HTTP calls and *advise*; pods and
 machines watch Kubernetes resources and *commit* (a pod `Binding`, a machine `MachinePoolRef`). All five

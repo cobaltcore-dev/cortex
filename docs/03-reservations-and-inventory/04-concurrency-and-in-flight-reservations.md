@@ -122,8 +122,6 @@ prevent.
 > report* — the enforcement is that concurrent requests see each other's holds, not that a placement is
 > hard-refused. See [Reservations overview](01-reservations-overview.md).
 
-## How this relates to Cortex
-
 In-flight reservations are the third term subtracted from usable capacity in
 [Reservations overview](01-reservations-overview.md), and the one that only exists because Cortex is an
 *advisor*: an owner of the workload lifecycle would know where each workload is, but Cortex must infer it

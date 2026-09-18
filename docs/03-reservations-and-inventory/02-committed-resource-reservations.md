@@ -151,8 +151,6 @@ NAME            PROJECT     AZ     DOMAIN      READY   LASTRECONCILE
 proj-1234-az-a  proj-1234   az-a   domain-42   True    30s
 ```
 
-## How this relates to Cortex
-
 Committed resources tie the knowledge database, the reservations, and the Nova pipeline together:
 `FlavorGroupCapacity` and `ProjectQuota` are derived from Limes and datasource facts
 ([Chapter 4](../04-knowledge-database/readme.md)), the reservations subtract from usable capacity

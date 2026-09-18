@@ -30,8 +30,6 @@ rt := sso.WrapUserAgent(base)   // every request now carries the User-Agent
 so upstream services can tell which Cortex build a request came from — invaluable when several versions
 run side by side during a rollout.
 
-## How this relates to Cortex
-
 `sso` is the transport under the [`keystone`](04-keystone.md) sessions and other outbound calls: where
 `keystone` authenticates, `sso` carries the bytes and labels them. The User-Agent it stamps is the same
 build identity that shows up in logs and metrics. The next page covers where those metrics are

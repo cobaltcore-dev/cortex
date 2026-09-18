@@ -105,8 +105,6 @@ manager) plus a Postgres, all from the one bundle. Values for each manager are s
 alias — for example `cortex-scheduling-controllers.conf.enabledControllers`. This is why the values
 reference talks about `<subchart>.conf` rather than a single top-level `conf`.
 
-## How this relates to Cortex
-
 The chart tiers mirror the architecture: the `cortex` library chart *is* the modular-monolith manager
 packaged for Helm, and each bundle is one point in the "one deployment per domain" design from the
 previous page. When Chapter 8 walks through installing a bundle, and when the reference lists

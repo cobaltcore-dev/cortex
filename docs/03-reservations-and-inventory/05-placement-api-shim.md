@@ -186,8 +186,6 @@ In self-heal mode the metrics server is plain `promhttp` (no TLS/authz), so `--m
 `--metrics-cert-path` are rejected when metrics are enabled. Set `--self-heal=false` for coupled mode,
 where a manager failure exits the process.
 
-## How this relates to Cortex
-
 The shim is the third Cortex component ([What is Cortex?](../01-getting-started/01-what-is-cortex.md)) and
 the piece through which Cortex intends to become the *authority* for inventory, not just an advisor on
 placement. Today it is a resilient, auth-aware passthrough proxy; its planned KVM backend would let it

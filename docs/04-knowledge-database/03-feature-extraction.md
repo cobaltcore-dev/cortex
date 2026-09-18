@@ -99,8 +99,6 @@ Read the conditions (including `InconsistentDatabaseSecretRefs`) and the extract
 kubectl get knowledge host-utilization -o yaml
 ```
 
-## How this relates to Cortex
-
 Feature extraction is the value-add stage of the [knowledge flow](01-knowledge-flow-overview.md): it turns
 the datasource rows of the [previous page](02-datasources.md) into the query-ready features that every
 weigher in [Chapter 2](../02-external-scheduler-api/readme.md) and every reservation controller in

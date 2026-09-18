@@ -55,8 +55,6 @@ So a lost apiserver connection becomes a *degraded* state (the manager loops, re
 > (no TLS/authz), and a looping manager is surfaced through `cortex_placement_shim_manager_up` rather than
 > by the pod going unready.
 
-## How this relates to Cortex
-
 The package is deliberately shim-agnostic so future shims can reuse it; today the
 [Placement API shim](../03-reservations-and-inventory/05-placement-api-shim.md) is its user, enabled by
 `--self-heal` (on by default). It is the resilience half of the shim's design: the shim page explains

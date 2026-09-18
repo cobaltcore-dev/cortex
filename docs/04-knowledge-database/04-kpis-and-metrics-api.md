@@ -73,8 +73,6 @@ Because KPIs publish onto the controller-manager's `/metrics` endpoint (above), 
 emitting by scraping that endpoint and looking for its gauge — for the `deployment` family, the
 `*_state_kpi` metrics report the health of each Cortex resource kind.
 
-## How this relates to Cortex
-
 KPIs are the read-out end of the [knowledge flow](01-knowledge-flow-overview.md): they consume the features
 that [feature extraction](03-feature-extraction.md) writes and expose them where operators and dashboards can
 see them. The `deployment` family closes the loop by making Cortex's own resources observable — the metrics

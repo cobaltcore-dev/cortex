@@ -194,8 +194,6 @@ These two are **not** runnable Go programs. `tools/perses` holds Perses dashboar
 `tools/plutono` is a Grafana-fork container image used to render them. They are covered in
 [The infrastructure dashboard](../04-knowledge-database/05-infrastructure-dashboard.md).
 
-## How this relates to Cortex
-
 Postgres is the hinge in the [end-to-end flow](01-what-is-cortex.md): datasources write raw facts into
 it, extractors read those facts and write features back, and KPIs and pipelines read the features. The
 custom image and the code-owned schema keep that hinge versioned with the rest of the source tree —

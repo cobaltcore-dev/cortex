@@ -28,8 +28,6 @@ The secret carries the usual OpenStack credentials (auth URL, username, project/
 Because the `Connector` is the one entry point, credential handling and session construction are uniform
 across every OpenStack datasource kind.
 
-## How this relates to Cortex
-
 `keystone` is the doorway the OpenStack [datasources](../04-knowledge-database/02-datasources.md) use to
 reach the services they cache — it is what a Nova or Cinder syncer holds to make its authenticated calls.
 It pairs with [`sso`](05-sso.md), which owns the outbound HTTP transport and User-Agent for those calls.

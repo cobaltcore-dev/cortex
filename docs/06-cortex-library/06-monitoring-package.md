@@ -26,8 +26,6 @@ logger := zap.New(monitoring.WrapCoreWithLogMetrics(core, monitor))
 by level, so an error-level spike shows up as a metric you can alert on rather than a pattern you have to
 notice in `kubectl logs`.
 
-## How this relates to Cortex
-
 `monitoring` is where the metrics of the whole book are born: the KPIs of
 [Chapter 4](../04-knowledge-database/04-kpis-and-metrics-api.md), the sync and pipeline counters, and the
 multicluster/overlay gauges all register through it, and the alerts of

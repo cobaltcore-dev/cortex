@@ -62,8 +62,6 @@ The overlay is scoped and bounded so it cannot grow without limit or hide stalen
 The `cache.*` keys are fields of the `conf` struct the manager loads via `pkg/conf`; see
 [The `conf` package](03-conf.md).
 
-## How this relates to Cortex
-
 The overlay is the read-consistency companion to the [multicluster client](01-multicluster-client.md):
 where that package answers *which cluster* a call goes to, this one answers *does a read reflect my own
 just-written change*. Both sit under the controllers you meet throughout the book — the scheduling

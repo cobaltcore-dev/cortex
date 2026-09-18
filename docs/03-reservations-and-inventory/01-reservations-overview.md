@@ -98,8 +98,6 @@ The controllers involved are enabled per deployment in `enabledControllers` (and
 `quota-controller`. Their exact configuration is the `conf` struct the manager loads via `pkg/conf`;
 see the defaults in the bundle `values.yaml` files under `helm/`.
 
-## How this relates to Cortex
-
 Reservations are the "reserved capacity" input to the [end-to-end flow](../01-getting-started/01-what-is-cortex.md):
 they feed the filter-weigher pipelines so a weigher like Nova's `kvm_committed_resource_reservation`
 ([Nova smart scheduling](../02-external-scheduler-api/02-nova-smart-scheduling.md)) can bias away from
