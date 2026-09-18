@@ -39,6 +39,13 @@ flowchart LR
     REL -->|push-charts.yaml| CH[Helm charts → ghcr.io]
 ```
 
+The split is also a **compliance control**, not only an engineering convenience. The `release` branch
+is protected by GitHub branch-protection rules requiring **two approving reviews** before any merge, so
+that everything published as a release passes a reviewed, auditable gate — this keeps the release
+process compliant with **PCI audit requirements**. Consequently, **only released charts should be
+deployed into production and audited environments**; the images built on every push to `main` are for
+development and testing, and are not audited artifacts on their own.
+
 - **`push-images.yaml`** runs on every push to **`main`** and builds the container images. The
   Postgres and shim images are only rebuilt when their own paths change; the manager image builds each
   time.
