@@ -65,7 +65,13 @@ cortex-postgres:
 > afterwards.
 
 Since Cortex re-derives all knowledge from its datasources, starting a fresh instance is recoverable:
-the datasources re-ingest and the extractors re-run. It is disruptive, not destructive.
+the datasources re-ingest and the extractors re-run. It is disruptive, not destructive. In effect the
+Postgres database is a **cache**, not a system of record — when it is empty, Cortex simply syncs the
+data in again from the datasources, so the instance can be replaced without losing any authoritative
+state. That property is exactly why a caching backend such as Redis is being considered in place of
+strong Postgres persistence (see the note under [Why a custom Postgres image](#why-a-custom-postgres-image)):
+if the store holds only re-derivable data, a lighter cache serves the purpose without the persistence
+guarantees a system of record would need.
 
 ## The `tools/` utilities
 
