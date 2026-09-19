@@ -13,7 +13,7 @@ jobs:
     # Pinned to ubuntu-24.04 so the pre-installed helm and yq versions are
     # stable. helm and yq come from the base runner image (no install step
     # needed); promtool is installed by the peimanja action below.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
 
