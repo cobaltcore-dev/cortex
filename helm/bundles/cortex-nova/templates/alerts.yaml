@@ -20,7 +20,7 @@ spec:
     - alert: CortexNovaSchedulingDown
       expr: |
         up{pod=~"cortex-nova-scheduling-.*"} != 1 or
-        absent(up{pod=~"cortex-nova-scheduling-.*"}))
+        absent(up{pod=~"cortex-nova-scheduling-.*"})
       for: 5m
       labels:
         context: liveness
