@@ -1,5 +1,58 @@
 # Changelog
 
+## 2026-09-21 — [#1222](https://github.com/cobaltcore-dev/cortex/pull/1222)
+
+### cortex v0.4.4 (sha-d4309076)
+
+Non-breaking changes:
+- Update `github.com/gophercloud/gophercloud/v2` to v2.15.0 ([#1218](https://github.com/cobaltcore-dev/cortex/pull/1218))
+- Update `github.com/ironcore-dev/ironcore` to v0.7.0 ([#1218](https://github.com/cobaltcore-dev/cortex/pull/1218))
+- Update `go.xyrillian.de/gg` to v1.16.0 ([#1215](https://github.com/cobaltcore-dev/cortex/pull/1215))
+- Update `github.com/sapcc/go-bits` ([#1214](https://github.com/cobaltcore-dev/cortex/pull/1214))
+- Update `github.com/sapcc/go-api-declarations` to v1.25.1 ([#1207](https://github.com/cobaltcore-dev/cortex/pull/1207))
+- Update `sigs.k8s.io/controller-runtime` to v0.25.1 ([#1201](https://github.com/cobaltcore-dev/cortex/pull/1201))
+- Bump Go module dependencies ([#1216](https://github.com/cobaltcore-dev/cortex/pull/1216))
+
+### cortex-postgres v0.6.17 (sha-f3d9a8b4)
+
+Non-breaking changes:
+- Rebuild image with updated `debian:trixie-slim` base ([#1220](https://github.com/cobaltcore-dev/cortex/pull/1220))
+
+### cortex-shim v0.1.19 (sha-d4309076)
+
+Non-breaking changes:
+- Refine placement API shim alerts — removed duplicate `CortexPlacementShimUpstreamUnreachable` alert and renamed `CortexPlacementShimUpstreamHttp5xxTooHigh` to `CortexPlacementShimUpstreamHttp500sTooHigh` for consistency ([#1211](https://github.com/cobaltcore-dev/cortex/pull/1211))
+- Add playbook link for shim multicluster alerts ([#1212](https://github.com/cobaltcore-dev/cortex/pull/1212))
+- Shared binary rebuild with updated Go dependencies
+
+### cortex-placement-shim v0.1.19
+
+Includes updated chart cortex-shim v0.1.19.
+
+### cortex-nova v0.0.93
+
+Includes updated charts cortex v0.4.4 and cortex-postgres v0.6.17.
+
+### cortex-cinder v0.0.93
+
+Includes updated charts cortex v0.4.4 and cortex-postgres v0.6.17.
+
+### cortex-manila v0.0.93
+
+Includes updated charts cortex v0.4.4 and cortex-postgres v0.6.17.
+
+### cortex-crds v0.0.93
+
+Includes updated chart cortex v0.4.4.
+
+### cortex-ironcore v0.0.93
+
+Includes updated chart cortex v0.4.4.
+
+### cortex-pods v0.0.93
+
+Includes updated chart cortex v0.4.4.
+
 ## 2026-09-15 — [#1208](https://github.com/cobaltcore-dev/cortex/pull/1208)
 
 ### cortex v0.4.3 (sha-83e5f5ec)
