@@ -396,10 +396,12 @@ func main() {
 	var cacheMonitor *cache.Monitor
 	var cacheWrapper *cache.Wrapper
 	if c := conf.GetConfigOrDie[cache.RootConfig](); c.Cache.Enabled {
-		setupLog.Info("overlay caching is enabled", "gvks", c.Cache.GVKs)
+		setupLog.Info("overlay caching is enabled", "gvks", c.Cache.GVKs, "ttl", c.Cache.TTL)
 		cacheMonitor = cache.NewMonitor("cortex_")
 		cacheWrapper = cache.NewWrapper(mgr, c.Cache, cacheMonitor)
 		multiclusterClient.Wrappers = append(multiclusterClient.Wrappers, cacheWrapper)
+	} else {
+		setupLog.Info("overlay caching is disabled")
 	}
 	if err := multiclusterClient.InitFromConf(ctx, mgr, multiclusterClientConfig); err != nil {
 		setupLog.Error(err, "unable to initialize multicluster client")
