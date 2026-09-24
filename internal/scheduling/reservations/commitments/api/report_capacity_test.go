@@ -352,7 +352,7 @@ func TestCapacityCalculator_VariableRatio(t *testing.T) {
 			flavorMemBytes := int64(tc.flavorMemMiB) * 1024 * 1024
 			knowledge := createVariableRatioFlavorGroupKnowledge(t, tc.flavorMemMiB)
 			// 3 running VMs, 5 exclusively free slots
-			crd := createFlavorGroupCapacityWithResources(3, 5*flavorMemBytes, 3*flavorMemBytes, 3*8)
+			crd := createFlavorGroupCapacityWithResources(3, 5*flavorMemBytes, 3*flavorMemBytes, 3*8, 0)
 			cfg := commitments.APIConfig{
 				FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
 					"*": {RAM: commitments.RAMResourceTypeConfig{HasCapacity: true, RAMUnitGiB: ramUnitGiB}},
@@ -374,6 +374,50 @@ func TestCapacityCalculator_VariableRatio(t *testing.T) {
 				t.Errorf("RAM usage = %d, want %d", usage, tc.wantRAMUsage)
 			}
 		})
+	}
+}
+
+// TestCapacityCalculator_VariableRatio_PrefersRawCapacity verifies that when
+// ExclusivelyRawCapacity is set, it is used for RAM capacity instead of the
+// slot-quantized ExclusivelyFreeCapacity fallback.
+func TestCapacityCalculator_VariableRatio_PrefersRawCapacity(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+
+	const (
+		ramUnitGiB     = 2
+		flavorMemMiB   = 2048
+		ramUnitBytes   = ramUnitGiB * 1024 * 1024 * 1024
+		flavorMemBytes = int64(flavorMemMiB) * 1024 * 1024
+	)
+
+	// 3 running VMs, 5 exclusively free slots (slot-quantized fallback = 8 units).
+	// Raw hardware = 20 GiB → 10 declared units. If raw is used, capacity = 10, not 8.
+	const rawMemBytes = 20 * 1024 * 1024 * 1024
+
+	knowledge := createVariableRatioFlavorGroupKnowledge(t, flavorMemMiB)
+	crd := createFlavorGroupCapacityWithResources(3, 5*flavorMemBytes, 3*flavorMemBytes, 3*8, rawMemBytes)
+	cfg := commitments.APIConfig{
+		FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
+			"*": {RAM: commitments.RAMResourceTypeConfig{HasCapacity: true, RAMUnitGiB: ramUnitGiB}},
+		},
+	}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).WithObjects(knowledge, crd).WithStatusSubresource(crd).Build()
+
+	report, err := commitments.NewCapacityCalculator(fakeClient, cfg).CalculateCapacity(
+		context.Background(), liquid.ServiceCapacityRequest{AllAZs: []liquid.AvailabilityZone{"az-one"}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	az := report.Resources["hw_version_test-group_ram"].PerAZ["az-one"]
+	if az.Capacity != 10 {
+		t.Errorf("RAM capacity = %d, want 10 (raw hardware / ramUnit, not slot-quantized fallback 8)", az.Capacity)
+	}
+	if usage := az.Usage.UnwrapOr(99); usage != 3 {
+		t.Errorf("RAM usage = %d, want 3", usage)
 	}
 }
 
@@ -503,21 +547,28 @@ func createVariableRatioFlavorGroupKnowledge(t *testing.T, flavorMemMiB int) *v1
 }
 
 // createFlavorGroupCapacityWithResources creates a ready FlavorGroupCapacity CRD with
-// RunningInstances, ExclusivelyFreeCapacity, and RunningResources all populated.
-func createFlavorGroupCapacityWithResources(runningInstances, exclusiveFreeMemBytes, runningMemBytes, runningCores int64) *v1alpha1.FlavorGroupCapacity {
+// RunningInstances, ExclusivelyFreeCapacity, RunningResources, and optionally
+// ExclusivelyRawCapacity all populated.
+func createFlavorGroupCapacityWithResources(runningInstances, exclusiveFreeMemBytes, runningMemBytes, runningCores, exclusivelyRawMemBytes int64) *v1alpha1.FlavorGroupCapacity {
+	status := v1alpha1.FlavorGroupCapacityStatus{
+		RunningInstances: runningInstances,
+		RunningResources: map[string]resource.Quantity{
+			string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(runningMemBytes, resource.BinarySI),
+			string(v1alpha1.CommittedResourceTypeCores):  *resource.NewQuantity(runningCores, resource.DecimalSI),
+		},
+		ExclusivelyFreeCapacity: map[string]resource.Quantity{
+			string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(exclusiveFreeMemBytes, resource.BinarySI),
+		},
+		Conditions: []v1.Condition{{Type: v1alpha1.FlavorGroupCapacityConditionReady, Status: v1.ConditionTrue}},
+	}
+	if exclusivelyRawMemBytes > 0 {
+		status.ExclusivelyRawCapacity = map[string]resource.Quantity{
+			string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(exclusivelyRawMemBytes, resource.BinarySI),
+		}
+	}
 	return &v1alpha1.FlavorGroupCapacity{
 		ObjectMeta: v1.ObjectMeta{Name: "test-group-az-one"},
 		Spec:       v1alpha1.FlavorGroupCapacitySpec{FlavorGroup: "test-group", AvailabilityZone: "az-one"},
-		Status: v1alpha1.FlavorGroupCapacityStatus{
-			RunningInstances: runningInstances,
-			RunningResources: map[string]resource.Quantity{
-				string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(runningMemBytes, resource.BinarySI),
-				string(v1alpha1.CommittedResourceTypeCores):  *resource.NewQuantity(runningCores, resource.DecimalSI),
-			},
-			ExclusivelyFreeCapacity: map[string]resource.Quantity{
-				string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(exclusiveFreeMemBytes, resource.BinarySI),
-			},
-			Conditions: []v1.Condition{{Type: v1alpha1.FlavorGroupCapacityConditionReady, Status: v1.ConditionTrue}},
-		},
+		Status:     status,
 	}
 }

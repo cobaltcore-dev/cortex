@@ -527,7 +527,7 @@ func (c *Reconciler) reconcileAZ(
 	}
 
 	groupInputs, hosts := buildSplitInputs(results, hvByName, blockedByReservations, az, logger)
-	freeResources, exclusiveResources, unassigned, strandedByHost := SplitCapacity(groupInputs, hosts)
+	freeResources, exclusiveResources, unassigned, strandedByHost, exclusiveHosts := SplitCapacity(groupInputs, hosts)
 
 	if unassigned[ResourceMemory] > 0 || unassigned[ResourceCores] > 0 {
 		groupNames := make([]string, 0, len(groupInputs))
@@ -556,6 +556,28 @@ func (c *Reconciler) reconcileAZ(
 
 	// Write one CRD per group. For groups with failed probes, mark Ready=False so the
 	// capacity API can detect staleness and return 5xx rather than serving stale data silently.
+	rawExclusiveByGroup := make(map[string]map[string]int64, len(exclusiveHosts))
+	for gName, hostList := range exclusiveHosts {
+		raw := make(map[string]int64, 2)
+		for _, hostName := range hostList {
+			hv, ok := hvByName[hostName]
+			if !ok {
+				continue
+			}
+			effCap := hv.Status.EffectiveCapacity
+			if effCap == nil {
+				effCap = hv.Status.Capacity
+			}
+			if qty, ok := effCap[hv1.ResourceMemory]; ok {
+				raw[ResourceMemory] += qty.Value()
+			}
+			if qty, ok := effCap[hv1.ResourceCPU]; ok {
+				raw[ResourceCores] += qty.Value()
+			}
+		}
+		rawExclusiveByGroup[gName] = raw
+	}
+
 	for _, r := range results {
 		if !r.allFresh {
 			if err := c.markCRDNotReady(ctx, r.groupName, az); err != nil {
@@ -569,6 +591,7 @@ func (c *Reconciler) reconcileAZ(
 			usageByKey[vmUsageKey{r.groupName, az}],
 			freeResources[r.groupName],
 			exclusiveResources[r.groupName],
+			rawExclusiveByGroup[r.groupName],
 		); err != nil {
 			logger.Error(err, "failed to write FlavorGroupCapacity CRD",
 				"flavorGroup", r.groupName, "az", az)
@@ -607,6 +630,7 @@ func (c *Reconciler) writeCRD(
 	usage vmUsage,
 	freeRes map[string]int64,
 	exclusiveRes map[string]int64,
+	exclusivelyRawRes map[string]int64,
 ) error {
 
 	crdName := crdNameFor(groupName, az)
@@ -651,6 +675,7 @@ func (c *Reconciler) writeCRD(
 	}
 	existing.Status.FreeCapacity = resMapToQuantity(freeRes)
 	existing.Status.ExclusivelyFreeCapacity = resMapToQuantity(exclusiveRes)
+	existing.Status.ExclusivelyRawCapacity = resMapToQuantity(exclusivelyRawRes)
 	var exclusivelyFreeSlots int64
 	if flavorMemBytes := int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024; flavorMemBytes > 0 { //nolint:gosec
 		flavorVCPUs := int64(groupData.SmallestFlavor.VCPUs) //nolint:gosec

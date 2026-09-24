@@ -180,6 +180,19 @@ spec:
                   VM slots available from ExclusivelyFreeCapacity.
                 format: int64
                 type: integer
+              exclusivelyRawCapacity:
+                additionalProperties:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
+                description: |-
+                  ExclusivelyRawCapacity is the unquantized sum of effective memory and CPU across the
+                  hosts exclusively assigned to this group by the round-robin split. Unlike
+                  ExclusivelyFreeCapacity, this is not constrained by slot packing or CPU/memory ratio.
+                  Safe to sum across groups — no host is counted twice.
+                type: object
               flavors:
                 description: Flavors holds per-flavor capacity data for all flavors
                   in the group.
