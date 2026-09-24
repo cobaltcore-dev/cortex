@@ -72,6 +72,9 @@ func TestHostUtilizationExtractor_Extract(t *testing.T) {
 			expected: []HostUtilization{
 				{
 					ComputeHost:            "host1",
+					PhysicalVCPUs:          100,
+					PhysicalRAMMB:          1000,
+					PhysicalDiskGB:         2000,
 					TotalVCPUsAllocatable:  100,
 					TotalRAMAllocatableMB:  1000,
 					TotalDiskAllocatableGB: 2000,
@@ -121,6 +124,9 @@ func TestHostUtilizationExtractor_Extract(t *testing.T) {
 			expected: []HostUtilization{
 				{
 					ComputeHost:            "host1",
+					PhysicalVCPUs:          100,
+					PhysicalRAMMB:          1000,
+					PhysicalDiskGB:         2000,
 					TotalVCPUsAllocatable:  100,
 					TotalRAMAllocatableMB:  1000,
 					TotalDiskAllocatableGB: 2000,
@@ -171,6 +177,9 @@ func TestHostUtilizationExtractor_Extract(t *testing.T) {
 			expected: []HostUtilization{
 				{
 					ComputeHost:            "host1",
+					PhysicalVCPUs:          100,
+					PhysicalRAMMB:          1000,
+					PhysicalDiskGB:         2000,
 					TotalVCPUsAllocatable:  200,
 					TotalRAMAllocatableMB:  1000,
 					TotalDiskAllocatableGB: 2000,

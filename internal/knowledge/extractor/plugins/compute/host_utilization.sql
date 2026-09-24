@@ -1,6 +1,9 @@
 WITH host_resources AS (
     SELECT
         h.service_host AS compute_host,
+        CAST((i_memory_mb.total - i_memory_mb.reserved) AS FLOAT) AS physical_ram_mb,
+        CAST((i_vcpu.total - i_vcpu.reserved) AS FLOAT) AS physical_vcpus,
+        CAST((i_disk_gb.total - i_disk_gb.reserved) AS FLOAT) AS physical_disk_gb,
         CAST((i_memory_mb.total - i_memory_mb.reserved) * i_memory_mb.allocation_ratio AS FLOAT) AS total_ram_allocatable_mb,
         CAST((i_vcpu.total - i_vcpu.reserved) * i_vcpu.allocation_ratio AS FLOAT) AS total_vcpus_allocatable,
         CAST((i_disk_gb.total - i_disk_gb.reserved) * i_disk_gb.allocation_ratio AS FLOAT) AS total_disk_allocatable_gb,
@@ -21,6 +24,8 @@ WITH host_resources AS (
 
 
 -- Resource usage formulas:
+-- - "PhysicalCapacity": Raw usable resource after subtracting reserved capacity, before overcommit.
+--      Formula: placement.total - placement.reserved
 -- - "TotalAllocatableCapacity": The maximum usable resource after reserving capacity and applying overcommit.
 --      Formula: (placement.total - placement.reserved) * placement.allocation_ratio
 -- - "UsedAbsolute": The actual amount of resource currently in use (includes overcommit).
@@ -35,6 +40,9 @@ WITH host_resources AS (
 
 SELECT
     compute_host,
+    physical_ram_mb,
+    physical_vcpus,
+    physical_disk_gb,
     total_ram_allocatable_mb,
     total_vcpus_allocatable,
     total_disk_allocatable_gb,

@@ -27,9 +27,10 @@ type hostReservationResources struct {
 
 type KVMHostCapacityKPI struct {
 	// Common base for all KPIs that provides standard functionality.
-	plugins.BaseKPI[struct{}] // No options passed through yaml config
-	totalCapacityPerHost      *prometheus.Desc
-	capacityPerHost           *prometheus.Desc
+	plugins.BaseKPI[struct{}]    // No options passed through yaml config
+	totalCapacityPerHost         *prometheus.Desc
+	totalPhysicalCapacityPerHost *prometheus.Desc
+	capacityPerHost              *prometheus.Desc
 }
 
 func (KVMHostCapacityKPI) GetName() string {
@@ -40,6 +41,12 @@ func (k *KVMHostCapacityKPI) Init(db *db.DB, client client.Client, opts conf.Raw
 	if err := k.BaseKPI.Init(db, client, opts); err != nil {
 		return err
 	}
+	k.totalPhysicalCapacityPerHost = prometheus.NewDesc(
+		"cortex_kvm_host_physical_capacity_total",
+		"Total physical resource capacity on the KVM hosts (individually by host, ignoring overcommit factor). CPU in vCPUs, memory in bytes.",
+		append(kvmHostLabels, "resource"),
+		nil,
+	)
 	k.totalCapacityPerHost = prometheus.NewDesc(
 		"cortex_kvm_host_capacity_total",
 		"Total resource capacity on the KVM hosts (individually by host). CPU in vCPUs, memory in bytes.",
@@ -57,6 +64,7 @@ func (k *KVMHostCapacityKPI) Init(db *db.DB, client client.Client, opts conf.Raw
 
 func (k *KVMHostCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.totalCapacityPerHost
+	ch <- k.totalPhysicalCapacityPerHost
 	ch <- k.capacityPerHost
 }
 
@@ -160,11 +168,18 @@ func (k *KVMHostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 
 	for _, hypervisor := range hypervisors {
 		cpuTotal, hasCPUTotal := hypervisor.getResourceCapacity(hv1.ResourceCPU)
-
 		ramTotal, hasRAMTotal := hypervisor.getResourceCapacity(hv1.ResourceMemory)
 
 		if !hasCPUTotal || !hasRAMTotal {
 			slog.Warn("hypervisor missing cpu or ram capacity, skipping", "host", hypervisor.Name)
+			continue
+		}
+
+		cpuPhysical, hasCPUPhysical := hypervisor.getPhysicalCapacity(hv1.ResourceCPU)
+		ramPhysical, hasRAMPhysical := hypervisor.getPhysicalCapacity(hv1.ResourceMemory)
+
+		if !hasCPUPhysical || !hasRAMPhysical {
+			slog.Warn("hypervisor missing physical cpu or ram capacity, skipping", "host", hypervisor.Name)
 			continue
 		}
 
@@ -182,6 +197,9 @@ func (k *KVMHostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		ramFailover := failoverRes.memory
 
 		labels := hypervisor.getHostLabels()
+
+		ch <- prometheus.MustNewConstMetric(k.totalPhysicalCapacityPerHost, prometheus.GaugeValue, cpuPhysical.AsApproximateFloat64(), append(labels, "cpu")...)
+		ch <- prometheus.MustNewConstMetric(k.totalPhysicalCapacityPerHost, prometheus.GaugeValue, ramPhysical.AsApproximateFloat64(), append(labels, "ram")...)
 
 		ch <- prometheus.MustNewConstMetric(k.totalCapacityPerHost, prometheus.GaugeValue, cpuTotal.AsApproximateFloat64(), append(labels, "cpu")...)
 		ch <- prometheus.MustNewConstMetric(k.totalCapacityPerHost, prometheus.GaugeValue, ramTotal.AsApproximateFloat64(), append(labels, "ram")...)
