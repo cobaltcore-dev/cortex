@@ -255,6 +255,11 @@ func TestReconcileAZ_CreatesCRD(t *testing.T) {
 	if excl.IsZero() {
 		t.Errorf("ExclusivelyFreeCapacity[memory] is zero, want non-zero (1 slot assigned)")
 	}
+	// ExclusivelyRawCapacity[memory] = full EffectiveCapacity of the exclusively assigned host.
+	rawCap := crd.Status.ExclusivelyRawCapacity[string(v1alpha1.CommittedResourceTypeMemory)]
+	if rawCap.Value() != memBytes {
+		t.Errorf("ExclusivelyRawCapacity[memory] = %d, want %d (hv effective capacity)", rawCap.Value(), memBytes)
+	}
 	// TotalInstances removed; per-group running VMs sourced from VMSource (nil in this test → 0).
 	if crd.Status.RunningInstances != 0 {
 		t.Errorf("RunningInstances = %d, want 0 (no VMSource configured)", crd.Status.RunningInstances)

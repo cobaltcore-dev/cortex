@@ -88,6 +88,13 @@ type FlavorGroupCapacityStatus struct {
 	// +kubebuilder:validation:Optional
 	ExclusivelyFreeCapacity map[string]resource.Quantity `json:"exclusivelyFreeCapacity,omitempty"`
 
+	// ExclusivelyRawCapacity is the unquantized sum of effective memory and CPU across the
+	// hosts exclusively assigned to this group by the round-robin split. Unlike
+	// ExclusivelyFreeCapacity, this is not constrained by slot packing or CPU/memory ratio.
+	// Safe to sum across groups — no host is counted twice.
+	// +kubebuilder:validation:Optional
+	ExclusivelyRawCapacity map[string]resource.Quantity `json:"exclusivelyRawCapacity,omitempty"`
+
 	// ExclusivelyFreeSlots is the number of smallest-flavor VM slots available from ExclusivelyFreeCapacity.
 	// +kubebuilder:validation:Optional
 	ExclusivelyFreeSlots int64 `json:"exclusivelyFreeSlots,omitempty"`
