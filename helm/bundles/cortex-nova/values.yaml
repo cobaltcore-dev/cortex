@@ -90,12 +90,6 @@ kvm:
     # skipped by the filter, even if they match one of the prefixes above.
     ignoredDomainNames: []
 
-# Cache configuration for the transparent in-process overlay cache.
-cache:
-  enabled: true
-  gvks:
-    - cortex.cloud/v1alpha1/Reservation
-
 cortex: &cortex
   crd: {enable: false}
   # Disable the default ServiceMonitor and metrics service from the kubebuilder stack.
@@ -139,6 +133,12 @@ cortex: &cortex
     # ssoSecretRef:
     #   name: cortex-nova-openstack-sso
     #   namespace: default
+    # Cache configuration for the transparent in-process overlay cache.
+    cache:
+      enabled: true
+      gvks:
+        - cortex.cloud/v1alpha1/Reservation
+        - cortex.cloud/v1alpha1/CommittedResource
     monitoring:
       labels: &cortexMonitoringLabels
         github_org: cobaltcore-dev

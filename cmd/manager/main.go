@@ -396,6 +396,7 @@ func main() {
 	var cacheMonitor *cache.Monitor
 	var cacheWrapper *cache.Wrapper
 	if c := conf.GetConfigOrDie[cache.RootConfig](); c.Cache.Enabled {
+		setupLog.Info("overlay caching is enabled", "gvks", c.Cache.GVKs)
 		cacheMonitor = cache.NewMonitor("cortex_")
 		cacheWrapper = cache.NewWrapper(mgr, c.Cache, cacheMonitor)
 		multiclusterClient.Wrappers = append(multiclusterClient.Wrappers, cacheWrapper)
