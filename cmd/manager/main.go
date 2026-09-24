@@ -399,6 +399,9 @@ func main() {
 		cacheMonitor = cache.NewMonitor("cortex_")
 		cacheWrapper = cache.NewWrapper(mgr, c.Cache, cacheMonitor)
 		multiclusterClient.Wrappers = append(multiclusterClient.Wrappers, cacheWrapper)
+		setupLog.Info("overlay cache enabled", "gvks", c.Cache.GVKs, "ttl", c.Cache.TTL.Duration.String())
+	} else {
+		setupLog.Info("overlay cache disabled")
 	}
 	if err := multiclusterClient.InitFromConf(ctx, mgr, multiclusterClientConfig); err != nil {
 		setupLog.Error(err, "unable to initialize multicluster client")
