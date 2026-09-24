@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -96,10 +97,10 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	log := ctrl.LoggerFrom(ctx)
 	startedAt := time.Now() // So we can measure sync duration.
 
-	pipeline, ok := c.Pipelines[decision.Spec.PipelineRef.Name]
+	pipeline, ok := c.GetPipeline(decision.Spec.PipelineRef.Name)
 	if !ok {
-		log.Error(nil, "skipping decision, pipeline not found or not ready")
-		return errors.New("pipeline not found or not ready")
+		log.Error(nil, "skipping decision, pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
+		return fmt.Errorf("pipeline not found or not ready: %q", decision.Spec.PipelineRef.Name)
 	}
 	if decision.Spec.ManilaRaw == nil {
 		log.Error(nil, "skipping decision, no manilaRaw spec defined")

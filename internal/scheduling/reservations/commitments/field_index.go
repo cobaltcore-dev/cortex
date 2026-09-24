@@ -131,7 +131,6 @@ func indexProjectQuotaByProjectID(ctx context.Context, mcl *multicluster.Client)
 	return err
 }
 
-// indexReservationByAllocationVMUUID registers an index over all VM UUIDs present in
 // Spec.CommittedResourceReservation.Allocations. This allows the reservation controller
 // to efficiently find all other Reservation CRDs carrying a specific VM UUID without
 // scanning every reservation in the cluster.

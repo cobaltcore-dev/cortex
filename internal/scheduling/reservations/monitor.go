@@ -6,6 +6,7 @@ package reservations
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
@@ -53,13 +54,19 @@ func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
 func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	// Fetch all reservations from kubernetes.
 	var reservations v1alpha1.ReservationList
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	if err := m.List(
-		context.Background(),
+		ctx,
 		&reservations,
 	); err != nil {
 		monitorLog.Error(err, "failed to list reservations")
 		return
 	}
+
+	// Reset all gauges so deleted reservations don't linger.
+	m.numberOfReservations.Reset()
+	m.reservedResources.Reset()
 
 	countByLabels := map[string]uint64{}
 	for _, reservation := range reservations.Items {

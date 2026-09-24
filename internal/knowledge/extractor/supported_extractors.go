@@ -22,7 +22,7 @@ var supportedExtractors = map[string]plugins.FeatureExtractor{
 	"vm_life_span_histogram_extractor":                 &compute.VMLifeSpanHistogramExtractor{},
 	"host_az_extractor":                                &compute.HostAZExtractor{},
 	"host_pinned_projects_extractor":                   &compute.HostPinnedProjectsExtractor{},
-	"sap_host_details_extractor":                       &compute.HostDetailsExtractor{},
+	"vmware_host_details_extractor":                    &compute.VMwareHostDetailsExtractor{},
 	"flavor_groups":                                    &compute.FlavorGroupExtractor{},
 
 	"netapp_storage_pool_cpu_usage_extractor": &storage.StoragePoolCPUUsageExtractor{},

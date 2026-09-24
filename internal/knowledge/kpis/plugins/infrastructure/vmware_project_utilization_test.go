@@ -53,7 +53,7 @@ func capacityMetric(computeHost, az, projectID, projectName, domainID, domainNam
 	return collectedVMwareMetric{Name: "cortex_vmware_project_capacity_usage", Labels: labels, Value: value}
 }
 
-func buildVMwareHostDetailsClient(t *testing.T, hostDetails []compute.HostDetails) *fake.ClientBuilder {
+func buildVMwareHostDetailsClient(t *testing.T, hostDetails []compute.VMwareHostDetails) *fake.ClientBuilder {
 	t.Helper()
 	scheme, err := v1alpha1.SchemeBuilder.Build()
 	if err != nil {
@@ -65,7 +65,7 @@ func buildVMwareHostDetailsClient(t *testing.T, hostDetails []compute.HostDetail
 	}
 	return fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(
 		&v1alpha1.Knowledge{
-			ObjectMeta: v1.ObjectMeta{Name: "host-details"},
+			ObjectMeta: v1.ObjectMeta{Name: vmwareHostDetailsKnowledgeName},
 			Status:     v1alpha1.KnowledgeStatus{Raw: raw},
 		},
 	)
@@ -82,24 +82,11 @@ func TestVMwareProjectUtilizationKPI_Init(t *testing.T) {
 }
 
 func TestVMwareProjectUtilizationKPI_getVMwareHosts(t *testing.T) {
-	hostDetails := []compute.HostDetails{
-		{
-			ComputeHost:      "nova-compute-1",
-			HypervisorFamily: hypervisorFamilyVMware,
-		},
-		{
-			ComputeHost:      "nova-compute-2",
-			HypervisorFamily: hypervisorFamilyVMware,
-		},
-		{
-			ComputeHost:      "nova-compute-ironic-1",
-			HypervisorType:   vmwareIronicHypervisorType,
-			HypervisorFamily: hypervisorFamilyVMware,
-		},
-		{
-			ComputeHost:      "nova-compute-3",
-			HypervisorFamily: "other",
-		},
+	// Filtering of KVM and ironic hosts happens in the extractor SQL, so the KPI
+	// maps every host present in the knowledge.
+	hostDetails := []compute.VMwareHostDetails{
+		{ComputeHost: "nova-compute-1"},
+		{ComputeHost: "nova-compute-2"},
 	}
 
 	clientBuilder := buildVMwareHostDetailsClient(t, hostDetails)
@@ -112,8 +99,8 @@ func TestVMwareProjectUtilizationKPI_getVMwareHosts(t *testing.T) {
 	}
 
 	expectedHosts := map[string]vmwareHost{
-		"nova-compute-1": {HostDetails: hostDetails[0]},
-		"nova-compute-2": {HostDetails: hostDetails[1]},
+		"nova-compute-1": {VMwareHostDetails: hostDetails[0]},
+		"nova-compute-2": {VMwareHostDetails: hostDetails[1]},
 	}
 
 	if len(hostMapping) != len(expectedHosts) {
@@ -125,7 +112,7 @@ func TestVMwareProjectUtilizationKPI_getVMwareHosts(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected host %s not found in mapping", computeHost)
 		}
-		if host.ComputeHost != expectedHost.ComputeHost || host.HypervisorFamily != expectedHost.HypervisorFamily {
+		if host.ComputeHost != expectedHost.ComputeHost {
 			t.Errorf("host details mismatch for %s: expected %+v, got %+v", computeHost, expectedHost, host)
 		}
 	}
@@ -272,7 +259,7 @@ func TestVMwareProjectUtilizationKPI_queryProjectInstanceCount(t *testing.T) {
 				}
 			}
 
-			client := buildVMwareHostDetailsClient(t, []compute.HostDetails{})
+			client := buildVMwareHostDetailsClient(t, []compute.VMwareHostDetails{})
 			kpi := &VMwareProjectUtilizationKPI{}
 			if err := kpi.Init(&testDB, client.Build(), conf.NewRawOpts("{}")); err != nil {
 				t.Fatalf("expected no error on Init, got %v", err)
@@ -468,7 +455,7 @@ func TestVMwareProjectUtilizationKPI_queryProjectCapacityUsage(t *testing.T) {
 				}
 			}
 
-			client := buildVMwareHostDetailsClient(t, []compute.HostDetails{})
+			client := buildVMwareHostDetailsClient(t, []compute.VMwareHostDetails{})
 			kpi := &VMwareProjectUtilizationKPI{}
 			if err := kpi.Init(&testDB, client.Build(), conf.NewRawOpts("{}")); err != nil {
 				t.Fatalf("expected no error on Init, got %v", err)
@@ -503,7 +490,7 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 		projects        []identity.Project
 		domains         []identity.Domain
 		flavors         []nova.Flavor
-		hostDetails     []compute.HostDetails
+		hostDetails     []compute.VMwareHostDetails
 		expectedMetrics []collectedVMwareMetric
 	}{
 		{
@@ -514,8 +501,8 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
 			domains:  []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors:  []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
-			hostDetails: []compute.HostDetails{
-				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
+			hostDetails: []compute.VMwareHostDetails{
+				{ComputeHost: "nova-compute-1", AvailabilityZone: "az1"},
 			},
 			expectedMetrics: []collectedVMwareMetric{
 				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "flavor-1", 1),
@@ -540,9 +527,9 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 				{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1},
 				{ID: "f2", Name: "flavor-2", VCPUs: 4, RAM: 8192, Disk: 2},
 			},
-			hostDetails: []compute.HostDetails{
-				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
-				{ComputeHost: "nova-compute-2", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az2"},
+			hostDetails: []compute.VMwareHostDetails{
+				{ComputeHost: "nova-compute-1", AvailabilityZone: "az1"},
+				{ComputeHost: "nova-compute-2", AvailabilityZone: "az2"},
 			},
 			expectedMetrics: []collectedVMwareMetric{
 				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "flavor-1", 1),
@@ -568,8 +555,8 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
 			domains:  []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors:  []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
-			hostDetails: []compute.HostDetails{
-				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
+			hostDetails: []compute.VMwareHostDetails{
+				{ComputeHost: "nova-compute-1", AvailabilityZone: "az1"},
 			},
 			expectedMetrics: []collectedVMwareMetric{
 				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "flavor-1", 1),
@@ -592,8 +579,8 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 				{ID: "f2", Name: "flavor-2", VCPUs: 4, RAM: 8192, Disk: 2},
 				{ID: "f3", Name: "flavor-3", VCPUs: 8, RAM: 16384, Disk: 4},
 			},
-			hostDetails: []compute.HostDetails{
-				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
+			hostDetails: []compute.VMwareHostDetails{
+				{ComputeHost: "nova-compute-1", AvailabilityZone: "az1"},
 			},
 			expectedMetrics: []collectedVMwareMetric{
 				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "flavor-3", 1),
@@ -613,9 +600,9 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
 			domains:  []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors:  []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
-			hostDetails: []compute.HostDetails{
-				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
-				{ComputeHost: "nova-compute-2", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az2"},
+			hostDetails: []compute.VMwareHostDetails{
+				{ComputeHost: "nova-compute-1", AvailabilityZone: "az1"},
+				{ComputeHost: "nova-compute-2", AvailabilityZone: "az2"},
 			},
 			expectedMetrics: []collectedVMwareMetric{
 				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "flavor-1", 2),
@@ -636,8 +623,8 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-unknown"}},
 			domains:  []identity.Domain{},
 			flavors:  []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
-			hostDetails: []compute.HostDetails{
-				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
+			hostDetails: []compute.VMwareHostDetails{
+				{ComputeHost: "nova-compute-1", AvailabilityZone: "az1"},
 			},
 			expectedMetrics: []collectedVMwareMetric{
 				// The domain_id is extracted from the project record, so it should be "domain-unknown" even though there is no matching domain entry
@@ -655,8 +642,8 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 			projects: []identity.Project{},
 			domains:  []identity.Domain{},
 			flavors:  []nova.Flavor{{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1}},
-			hostDetails: []compute.HostDetails{
-				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
+			hostDetails: []compute.VMwareHostDetails{
+				{ComputeHost: "nova-compute-1", AvailabilityZone: "az1"},
 			},
 			expectedMetrics: []collectedVMwareMetric{
 				instanceMetric("nova-compute-1", "az1", "project-1", "", "", "", "flavor-1", 1),
@@ -673,8 +660,8 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 			projects: []identity.Project{{ID: "project-1", Name: "Project One", DomainID: "domain-1"}},
 			domains:  []identity.Domain{{ID: "domain-1", Name: "Domain One"}},
 			flavors:  []nova.Flavor{},
-			hostDetails: []compute.HostDetails{
-				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
+			hostDetails: []compute.VMwareHostDetails{
+				{ComputeHost: "nova-compute-1", AvailabilityZone: "az1"},
 			},
 			expectedMetrics: []collectedVMwareMetric{
 				instanceMetric("nova-compute-1", "az1", "project-1", "Project One", "domain-1", "Domain One", "flavor-missing", 1),
@@ -693,8 +680,8 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 			flavors: []nova.Flavor{
 				{ID: "f1", Name: "flavor-1", VCPUs: 2, RAM: 4096, Disk: 1},
 			},
-			hostDetails: []compute.HostDetails{
-				{ComputeHost: "nova-compute-1", HypervisorFamily: hypervisorFamilyVMware, AvailabilityZone: "az1"},
+			hostDetails: []compute.VMwareHostDetails{
+				{ComputeHost: "nova-compute-1", AvailabilityZone: "az1"},
 			},
 			expectedMetrics: []collectedVMwareMetric{},
 		},

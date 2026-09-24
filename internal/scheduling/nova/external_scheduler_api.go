@@ -33,6 +33,17 @@ type HTTPAPIConfig struct {
 	// NovaLimitHostsToRequest, if true, will filter the Nova scheduler response
 	// to only include hosts that were in the original request.
 	NovaLimitHostsToRequest bool `json:"novaLimitHostsToRequest,omitempty"`
+	// ForcedDestinationEnabled toggles replicating Nova's forced-destination
+	// behavior (force_hosts/force_nodes skip the scheduling pipeline and
+	// filters). Defaults to true when unset; set to false to disable and let
+	// forced requests flow through the normal pipeline instead.
+	ForcedDestinationEnabled *bool `json:"forcedDestinationEnabled,omitempty"`
+}
+
+// forcedDestinationEnabled reports whether the forced-destination behavior is
+// enabled. It defaults to true when the config value is unset.
+func (c HTTPAPIConfig) forcedDestinationEnabled() bool {
+	return c.ForcedDestinationEnabled == nil || *c.ForcedDestinationEnabled
 }
 
 type HTTPAPIDelegate interface {
@@ -134,7 +145,7 @@ func shuffleTopHosts(hosts []string, k int) []string {
 	}
 	result := make([]string, len(hosts))
 	copy(result, hosts)
-	rand.Shuffle(n, func(i, j int) {
+	rand.Shuffle(n, func(i, j int) { //nolint:gosec // non-crypto shuffle for load balancing
 		result[i], result[j] = result[j], result[i]
 	})
 	slog.Info("shuffled top hosts for evacuation", "k", n, "hosts", result[:n])
@@ -208,6 +219,25 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	logger := slog.With(traceArgsAny...)
 	logger.Info("handling POST request", "url", "/scheduler/nova/external", "body", string(body))
 
+	// Replicate Nova's forced-destination behavior: when the request is forced
+	// onto specific hosts/nodes (force_hosts/force_nodes) and no _nova_check_type
+	// is set, Nova skips its filters entirely. We do the same here and return
+	// only the forced hosts, bypassing pipeline inference and execution.
+	// This must run before canRunScheduler because Nova may not send weights
+	// for forced-destination requests.
+	if httpAPI.config.forcedDestinationEnabled() && requestData.IsForcedDestination() {
+		hosts := requestData.ForcedHosts()
+		logger.Info("forced destination request, skipping filters", "hosts", hosts)
+		response := api.ExternalSchedulerResponse{Hosts: hosts}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			c.Respond(logger, http.StatusInternalServerError, err, "failed to encode response")
+			return
+		}
+		c.Respond(logger, http.StatusOK, nil, "Success")
+		return
+	}
+
 	if ok, reason := httpAPI.canRunScheduler(requestData); !ok {
 		internalErr := fmt.Errorf("cannot run scheduler: %s", reason)
 		c.Respond(logger, http.StatusBadRequest, internalErr, reason)
@@ -245,7 +275,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	}
 	ctx := r.Context()
 	if err := httpAPI.delegate.ProcessNewDecisionFromAPI(ctx, decision); err != nil {
-		c.Respond(logger, http.StatusInternalServerError, err, "failed to process scheduling decision")
+		c.Respond(logger, http.StatusInternalServerError, err, fmt.Sprintf("failed to process scheduling decision: %v", err))
 		return
 	}
 	// Check if the decision contains status conditions indicating an error.
@@ -268,6 +298,11 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	intent, err := requestData.GetIntent()
 	if err == nil && intent == api.EvacuateIntent {
 		hosts = shuffleTopHosts(hosts, httpAPI.config.EvacuationShuffleK)
+	}
+	// Ensure we always return an array, never null. Nova's schema requires
+	// hosts to be an array, and a nil slice would serialize to null.
+	if hosts == nil {
+		hosts = []string{}
 	}
 	response := api.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")

@@ -34,6 +34,37 @@ spec:
           on the shim for resource provider lookups and allocation candidates
           will degrade.
 
+    # Self-healing controller-manager (decoupled from pod liveness)
+    - alert: CortexPlacementShimManagerLooping
+      # Average uptime over a 15m window rather than a continuous "== 0": a
+      # crash-looping manager flaps the gauge 0->1->0 on every restart attempt,
+      # which would keep resetting a "== 0 for 5m" timer and never fire. Averaging
+      # catches both a manager that is continuously down (avg 0) and one that is
+      # only briefly healthy each cycle (avg well below 1). 0.9 = healthy less
+      # than ~90% of the window.
+      expr: |
+        avg_over_time(cortex_placement_shim_manager_up{service="cortex-placement-shim-metrics-service"}[15m]) < 0.9
+      for: 5m
+      labels:
+        context: liveness
+        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/shim-down
+      annotations:
+        summary: "Cortex Placement Shim controller-manager is not running"
+        description: >
+          The Cortex Placement Shim controller-manager has been up with a synced
+          cache less than 90% of the last 15 minutes while the shim process
+          itself stays up (the pod does not crash by design). This means the
+          manager cannot reach its (local or remote) apiserver and is down or
+          crash-looping, so the Kubernetes informer cache is stale or empty.
+          Passthrough requests to upstream Placement are unaffected, but any
+          KVM-backend behavior that reads from the cache is degraded.
+          Investigate apiserver connectivity and the shim logs for the
+          self-healing supervisor's restart errors.
+
     # Downstream HTTP errors (client -> shim)
     - alert: CortexPlacementShimDownstreamHttp400sTooHigh
       expr: rate(cortex_placement_shim_downstream_request_duration_seconds_count{service="cortex-placement-shim-metrics-service", responsecode=~"4.."}[5m]) > 0.1
@@ -73,7 +104,7 @@ spec:
           degraded placement functionality until the issue is resolved.
 
     # Upstream HTTP errors (shim -> Placement API)
-    - alert: CortexPlacementShimUpstreamHttp5xxTooHigh
+    - alert: CortexPlacementShimUpstreamHttp500sTooHigh
       expr: rate(cortex_placement_shim_upstream_request_duration_seconds_count{service="cortex-placement-shim-metrics-service", responsecode=~"5.."}[5m]) > 0.1
       for: 5m
       labels:
@@ -90,25 +121,6 @@ spec:
           This indicates the OpenStack Placement service itself is having
           problems. The shim forwards these errors to its clients. Investigate
           the Placement API service health and logs.
-
-    - alert: CortexPlacementShimUpstreamUnreachable
-      expr: rate(cortex_placement_shim_upstream_request_duration_seconds_count{service="cortex-placement-shim-metrics-service", responsecode="502"}[5m]) > 0.1
-      for: 5m
-      labels:
-        context: upstream
-        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
-        service: cortex
-        severity: warning
-        support_group: workload-management
-        playbook: docs/support/playbook/cortex/alerts/shim-api-errors
-      annotations:
-        summary: "Placement Shim cannot reach the upstream Placement API"
-        description: >
-          The Placement Shim is unable to reach the upstream OpenStack Placement
-          API and is returning 502 Bad Gateway errors. This means all forwarded
-          requests are failing. Check network connectivity, the Placement API
-          service endpoint configuration, and whether the upstream service is
-          running.
 
     # Latency alerts
     - alert: CortexPlacementShimDownstreamLatencyTooHigh
@@ -188,4 +200,56 @@ spec:
           against a limit of 500m. Under normal operation the shim should use
           much less since it primarily proxies requests. This may indicate a
           hot loop, excessive logging, or an unusual traffic spike.
+
+    # Multicluster
+    - alert: CortexPlacementShimMulticlusterNameConflicts
+      expr: |
+        sum by (method, gvk) (increase(cortex_multicluster_cross_cluster_name_conflicts_total{service="cortex-placement-shim-metrics-service"}[10m])) > 0
+      for: 5m
+      labels:
+        context: multicluster
+        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/shim-multicluster
+      annotations:
+        summary: "Cross-cluster name conflicts detected for `{{ "{{" }} $labels.gvk {{ "}}" }}`"
+        description: >
+          The multicluster client detected the same resource name for
+          `{{ "{{" }} $labels.gvk {{ "}}" }}` on more than one cluster during
+          `{{ "{{" }} $labels.method {{ "}}" }}` operations. This means reads fan
+          out to duplicates (surfaced as duplicate errors) and creates may be
+          rejected to avoid introducing new collisions. This usually indicates a
+          resource router is mapping the same object to multiple clusters, or an
+          object was created out-of-band on the wrong cluster. Investigate the
+          affected resources and the routing configuration.
+
+    - alert: CortexPlacementShimRemoteApiserverUnreachable
+      # min by (host): a remote is unreachable only if it was 0 for the whole
+      # window (a rebuild flips it 1->0->1, and min ignores the brief 1s during a
+      # reconnect attempt). Fires per host so the offending remote is named.
+      expr: |
+        min by (host) (cortex_multicluster_remote_apiserver_reachable{service="cortex-placement-shim-metrics-service"}) < 1
+      for: 5m
+      labels:
+        context: multicluster
+        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/shim-multicluster
+      annotations:
+        summary: "Remote apiserver `{{ "{{" }} $labels.host {{ "}}" }}` is unreachable"
+        description: >
+          The multicluster client cannot reach the remote apiserver at
+          `{{ "{{" }} $labels.host {{ "}}" }}`. The reachability probe has seen
+          sustained transport failures (connection refused, TLS/handshake failure,
+          or timeout), which is the signature of a deleted or network-partitioned
+          cluster rather than an authz/server error. The shim recycles its
+          controller-manager in response, so the manager cache for resources served
+          by that remote is stale or empty and `cortex_placement_shim_manager_up`
+          will average low (see CortexPlacementShimManagerLooping). Passthrough
+          requests to upstream Placement are unaffected. Investigate whether the
+          remote cluster still exists and network connectivity to its apiserver.
 {{- end }}

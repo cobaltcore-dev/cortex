@@ -18,6 +18,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/google/uuid"
+	"github.com/sapcc/go-bits/jobloop"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -94,7 +95,7 @@ func (c *FailoverReservationController) Reconcile(ctx context.Context, req ctrl.
 	// Skip if no failover status (reservation not yet initialized by periodic controller)
 	if res.Status.FailoverReservation == nil {
 		logger.V(1).Info("skipping reservation without failover status")
-		return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(c.Config.RevalidationInterval.Duration)}, nil
 	}
 
 	// Validate and acknowledge the reservation
@@ -126,7 +127,7 @@ func (c *FailoverReservationController) reconcileValidateAndAcknowledge(ctx cont
 			return ctrl.Result{}, patchErr
 		}
 
-		return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(c.Config.RevalidationInterval.Duration)}, nil
 	}
 
 	// Validate the reservation
@@ -134,7 +135,7 @@ func (c *FailoverReservationController) reconcileValidateAndAcknowledge(ctx cont
 
 	if validationErr != nil {
 		logger.Error(validationErr, "transient error during reservation validation, will retry", "host", res.Status.Host)
-		return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(c.Config.RevalidationInterval.Duration)}, nil
 	}
 
 	if !valid {
@@ -172,7 +173,7 @@ func (c *FailoverReservationController) reconcileValidateAndAcknowledge(ctx cont
 		logger.V(1).Info("reservation validation passed (no new changes to acknowledge)", "host", res.Status.Host)
 	}
 
-	return ctrl.Result{RequeueAfter: c.Config.RevalidationInterval.Duration}, nil
+	return ctrl.Result{RequeueAfter: jobloop.DefaultJitter(c.Config.RevalidationInterval.Duration)}, nil
 }
 
 // validateReservation validates that a reservation is still valid for all its allocated VMs.

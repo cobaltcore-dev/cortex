@@ -81,19 +81,16 @@ func (k *VMwareHostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 
 func (k *VMwareHostCapacityKPI) getVMwareHosts() ([]vmwareHost, error) {
 	knowledge := &v1alpha1.Knowledge{}
-	if err := k.Client.Get(context.Background(), client.ObjectKey{Name: hostDetailsKnowledgeName}, knowledge); err != nil {
+	if err := k.Client.Get(context.Background(), client.ObjectKey{Name: vmwareHostDetailsKnowledgeName}, knowledge); err != nil {
 		return nil, err
 	}
-	details, err := v1alpha1.UnboxFeatureList[compute.HostDetails](knowledge.Status.Raw)
+	details, err := v1alpha1.UnboxFeatureList[compute.VMwareHostDetails](knowledge.Status.Raw)
 	if err != nil {
 		return nil, err
 	}
 	hosts := make([]vmwareHost, 0, len(details))
 	for _, d := range details {
-		if d.HypervisorType == vmwareIronicHypervisorType || d.HypervisorFamily != hypervisorFamilyVMware {
-			continue
-		}
-		hosts = append(hosts, vmwareHost{HostDetails: d})
+		hosts = append(hosts, vmwareHost{VMwareHostDetails: d})
 	}
 	return hosts, nil
 }

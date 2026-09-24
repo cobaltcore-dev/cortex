@@ -30,6 +30,10 @@ type FilterWeigherPipelineMonitor struct {
 	hostNumberOutObserver *prometheus.HistogramVec
 	// Counter for the number of requests processed by the scheduler.
 	requestCounter *prometheus.CounterVec
+
+	// stepEventCollector is a collector for named events reported by steps
+	// during their run. The collector supports a dynamic set of labels per event.
+	stepEventCollector *pipelineStepEventCollector
 }
 
 // Create a new scheduler monitor and register the necessary Prometheus metrics.
@@ -83,6 +87,8 @@ func NewPipelineMonitor() FilterWeigherPipelineMonitor {
 			Name: "cortex_filter_weigher_pipeline_requests_total",
 			Help: "Total number of requests processed by the scheduler.",
 		}, []string{"pipeline"}),
+		// Additional collectors.
+		stepEventCollector: newPipelineStepEventCollector(),
 	}
 }
 
@@ -116,6 +122,12 @@ func (m *FilterWeigherPipelineMonitor) observePipelineResult(request FilterWeigh
 }
 
 func (m *FilterWeigherPipelineMonitor) Describe(ch chan<- *prometheus.Desc) {
+	// stepEventCollector is intentionally not described here: its label names
+	// are dynamic and only known when events are recorded, so a fixed
+	// descriptor cannot be provided upfront. The remaining metrics are
+	// described normally so the registry can validate them at registration
+	// time. In practice the current prometheus client allows Collect to emit
+	// event metrics with label sets that differ from the described metrics.
 	m.stepRunTimer.Describe(ch)
 	m.stepHostWeight.Describe(ch)
 	m.stepRemovedHostsObserver.Describe(ch)
@@ -137,4 +149,6 @@ func (m *FilterWeigherPipelineMonitor) Collect(ch chan<- prometheus.Metric) {
 	m.hostNumberInObserver.Collect(ch)
 	m.hostNumberOutObserver.Collect(ch)
 	m.requestCounter.Collect(ch)
+
+	m.stepEventCollector.Collect(ch)
 }

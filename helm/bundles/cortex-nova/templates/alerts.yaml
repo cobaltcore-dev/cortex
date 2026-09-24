@@ -303,6 +303,86 @@ spec:
           configuration. It is recommended to investigate the
           pipeline status and logs for more details.
 
+    - alert: CortexNovaInFlightReservationsBacklogGrowing
+      # Alert when the number of in-flight reservations stuck with
+      # reason=InstanceNotFound is trending upwards over a long window,
+      # rather than staying roughly the same or draining down. A healthy
+      # scheduler-hypervisor loop should quickly resolve in-flight
+      # reservations once the VM shows up on any hypervisor; a sustained
+      # positive derivative indicates the backlog is not being worked off.
+      #
+      # deriv() over 1h returns the per-second slope of the gauge; multiplied
+      # by 3600 it becomes "expected growth per hour". We require this to be
+      # meaningfully positive AND the current count to be non-trivial, so we
+      # don't page on a single lingering reservation.
+      expr: |
+        deriv(cortex_reservation_state{domain="nova",type="InFlightReservation",state="unknown",reason="InstanceNotFound"}[1h]) * 3600 > 5
+        and
+        cortex_reservation_state{domain="nova",type="InFlightReservation",state="unknown",reason="InstanceNotFound"} > 10
+      for: 2h
+      labels:
+        context: reservations
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/unready
+      annotations:
+        summary: "In-flight reservation backlog with reason=InstanceNotFound keeps growing"
+        description: >
+          The number of in-flight reservations that have not yet observed
+          their VM on any hypervisor (reason=InstanceNotFound) has been
+          increasing steadily for at least two hours. Normally these
+          reservations resolve once the hypervisor operator reports the
+          instance; a sustained positive trend suggests either VMs are not
+          landing on hypervisors, or the hypervisor status feed is stalled,
+          or the in-flight reservation controller is not pruning cleanly.
+          Investigate the hypervisor operator, the nova build pipeline, and
+          the in-flight reservation controller logs.
+
+    - alert: CortexNovaImagePropertiesHypervisorTypeUndetermined
+      expr: |
+        sum by (pipeline, step, intent) (rate(cortex_filter_weigher_pipeline_step_events_total{service="cortex-nova-metrics", event="image_properties_hv_type_undetermined"}[5m])) > 0.1
+      for: 15m
+      labels:
+        context: scheduling
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/scheduling
+      annotations:
+        summary: "Nova scheduling frequently cannot determine the hypervisor type from image properties"
+        description: >
+          The `filter_image_properties` step in pipeline `{{ "{{" }} $labels.pipeline {{ "}}" }}`
+          is frequently unable to determine the hypervisor type from the image properties
+          of incoming scheduling requests for intent `{{ "{{" }} $labels.intent {{ "}}" }}`.
+          In this case the filter is skipped and all hosts are returned, so kvm-only
+          images may be placed on non-kvm hypervisors (or vice versa). This may indicate
+          that images are missing the expected hypervisor type property, or that the
+          property format has changed. Investigate the image metadata of the affected
+          requests.
+
+    - alert: CortexNovaCapabilitiesUnknownHypervisorType
+      expr: |
+        sum by (pipeline, step, hypervisor_type) (rate(cortex_filter_weigher_pipeline_step_events_total{service="cortex-nova-metrics", event="filter_capabilities_unknown_hypervisor_type"}[5m])) > 0.1
+      for: 15m
+      labels:
+        context: scheduling
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/scheduling
+      annotations:
+        summary: "Nova capabilities filter frequently encounters unknown hypervisor types"
+        description: >
+          The `filter_capabilities` step in pipeline `{{ "{{" }} $labels.pipeline {{ "}}" }}`
+          is frequently unable to determine the hypervisor type
+          (`{{ "{{" }} $labels.hypervisor_type {{ "}}" }}`) for candidate hosts.
+          This may indicate that hypervisors are reporting incomplete domain capabilities.
+          Investigate the affected hosts and hypervisor operator status.
+
     {{- if .Values.kvm.enabled }}
     - alert: CortexNovaDoesntFindValidKVMHosts
       expr: sum by (az, hvtype) (increase(cortex_vm_faults{hvtype=~"CH|QEMU",faultmsg=~".*No valid host was found.*",faultmsg!~".*No such host.*"}[5m])) > 0
@@ -647,4 +727,124 @@ spec:
           The committed resource quota API (Limes LIQUID integration) is returning
           HTTP 5xx errors. This indicates internal problems computing or applying
           quota. Limes may not be able to enforce committed resource quotas.
+
+    - alert: CortexNovaMulticlusterNameConflicts
+      expr: |
+        sum by (method, gvk) (increase(cortex_multicluster_cross_cluster_name_conflicts_total{service="cortex-nova-metrics"}[10m])) > 0
+      for: 5m
+      labels:
+        context: multicluster
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+      annotations:
+        summary: "Cross-cluster name conflicts detected for `{{ "{{" }} $labels.gvk {{ "}}" }}`"
+        description: >
+          The multicluster client detected the same resource name for
+          `{{ "{{" }} $labels.gvk {{ "}}" }}` on more than one cluster during
+          `{{ "{{" }} $labels.method {{ "}}" }}` operations. This means reads fan
+          out to duplicates (surfaced as duplicate errors) and creates may be
+          rejected to avoid introducing new collisions. This usually indicates a
+          resource router is mapping the same object to multiple clusters, or an
+          object was created out-of-band on the wrong cluster. Investigate the
+          affected resources and the routing configuration.
+
+    - alert: CortexNovaCacheOverlayNotDraining
+      # The cache overlay holds writes only until the informer observes
+      # them, which normally happens within milliseconds. If the current entry
+      # count stays above the threshold for the entire `for` window, entries are
+      # piling up rather than draining — i.e. eviction is broken (informer lag,
+      # UID mismatch, or TTL fallback firing).
+      expr: |
+        max by (gvk, host) (cortex_cache_overlay_entries{service="cortex-nova-metrics"}) > {{ .Values.alerts.thresholds.cacheOverlayMaxEntries }}
+      for: 5m
+      labels:
+        context: multicluster
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+      annotations:
+        summary: "Cache overlay for `{{ "{{" }} $labels.gvk {{ "}}" }}` is not draining"
+        description: >
+          The in-process cache overlay for `{{ "{{" }} $labels.gvk {{ "}}" }}`
+          on host `{{ "{{" }} $labels.host {{ "}}" }}` has held entries above the
+          configured threshold across the whole alert window. The overlay is only
+          meant to bridge the short gap between a write and the informer observing
+          it, so it should drain back to zero within milliseconds. A sustained
+          non-zero current size indicates entries are not being evicted —
+          typically informer lag, a UID mismatch between the write and the observed
+          object, or the TTL fallback repeatedly firing. Investigate the informer
+          for this GVK/cluster and the overlay eviction logs.
+
+    {{- if .Values.kvm.enabled }}
+    - alert: CortexNovaHostReservationsOversubscribed
+      # Fires when the sum of running VM allocations + reservation blocks (committed +
+      # failover) exceeds the host's effective capacity for CPU or memory.
+      # This can happen due to: concurrent slot creation with stale informer cache,
+      # operator-driven VM migrations where the slot stays on the old host, or
+      # capacity changes (e.g. hardware replacement changing EffectiveCapacity).
+      # The 10m hold-off tolerates the known migration window: after a VM departs,
+      # the slot remains on the old host until the usage reconciler cleans it up.
+      # Note: `reserved` only counts Ready reservations — violations during the
+      # initial unready window (slot just created) are not captured by this alert.
+      expr: |
+        (
+          max by (compute_host, availability_zone, resource) (cortex_kvm_host_capacity_usage{type="utilized"})
+          + max by (compute_host, availability_zone, resource) (cortex_kvm_host_capacity_usage{type="reserved"})
+          + max by (compute_host, availability_zone, resource) (cortex_kvm_host_capacity_usage{type="failover"})
+          - max by (compute_host, availability_zone, resource) (cortex_kvm_host_capacity_total)
+        ) > 0
+      for: 15m
+      labels:
+        context: committed-resource-capacity
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/committed-resource-capacity
+      annotations:
+        summary: "Host {{ "{{" }} $labels.compute_host {{ "}}" }} reservation blocks exceed capacity for {{ "{{" }} $labels.resource {{ "}}" }}"
+        description: >
+          The total of running VM allocations and reservation blocks (committed resource +
+          failover) on host {{ "{{" }} $labels.compute_host {{ "}}" }} exceeds its effective
+          capacity for {{ "{{" }} $labels.resource {{ "}}" }} by {{ "{{" }} $value | humanize {{ "}}" }}.
+          This means the host is over-subscribed and committed resource or failover guarantees may not be
+          satisfied. Common causes: VM migrations with slot not yet reclaimed, outdated/stale reservations, or out of sync issues.
+          If problem remains, inspect the reservations on this host and check the CR/failover controller logs.
+    - alert: CortexCommittedResourceHostOversubscribed
+      expr: max by (host, az, resource) (cortex_committed_resource_host_oversubscribed) > 0
+      for: 15m
+      labels:
+        context: committed-resource-capacity
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/committed-resource-capacity
+      annotations:
+        summary: "Host {{ "{{" }} $labels.host {{ "}}" }} CR slots exceed effective capacity for {{ "{{" }} $labels.resource {{ "}}" }}"
+        description: >
+          Committed resource reservation slots on host {{ "{{" }} $labels.host {{ "}}" }} exceed
+          its effective capacity for {{ "{{" }} $labels.resource {{ "}}" }} by {{ "{{" }} $value | humanize {{ "}}" }}.
+          The oversubscription controller was unable to resolve this by evicting unallocated slots.
+          Inspect the CR reservations on this host and check the oversubscription controller logs.
+    - alert: CortexCommittedResourceHostOversubscriptionEvictionsHigh
+      expr: sum by (az) (increase(cortex_committed_resource_host_oversubscribed_evicted_reservations_total{service="cortex-nova-metrics"}[1h])) > 10
+      labels:
+        context: committed-resource-capacity
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/committed-resource-capacity
+      annotations:
+        summary: "High CR slot eviction rate in AZ {{ "{{" }} $labels.az {{ "}}" }}"
+        description: >
+          More than 10 committed resource reservation slots were evicted due to oversubscription
+          in AZ {{ "{{" }} $labels.az {{ "}}" }} within the last hour ({{ "{{" }} $value | humanize {{ "}}" }} evictions).
+          This indicates recurring oversubscription events — investigate capacity changes,
+          concurrent slot creation races, or VM migration patterns in this AZ.
+    {{- end }}
 {{- end }}

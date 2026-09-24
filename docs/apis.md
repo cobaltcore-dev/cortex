@@ -22,9 +22,11 @@ graph LR;
     committedresource(CommittedResource CRD)
     projectquota(ProjectQuota CRD)
     flavorgroupcapacity(FlavorGroupCapacity CRD)
+    history(History CRD)
     pipeline --> descheduling
     pipeline --> decision
     pipeline --> reservation
+    pipeline --> history
     committedresource --> reservation
     committedresource --> projectquota
     flavorgroupcapacity --> committedresource
@@ -94,6 +96,10 @@ The `scheduling.Options` struct configures a single pipeline invocation. All fie
 
 **Validation constraint:** A `ReadOnly` run must also set `SkipHistory=true`, `SkipInflight=true`, and `SkipCommittedResourceTracking=true`. This is enforced by `Options.Validate()` — omitting any of these fields causes validation to fail with an error before the pipeline executes.
 
+#### Step Events
+
+Pipeline steps can report named events via the `Events []FilterWeigherPipelineStepEvent` field on their result. Each event carries a `Name` and an optional `Labels map[string]string` for dynamic Prometheus labels. The pipeline monitor exports these as the `cortex_filter_weigher_pipeline_step_events_total` counter with fixed labels `pipeline`, `step`, `event` plus any dynamic labels the step provides. Use events to surface noteworthy step conditions (skipped filtering, missing data) as observable metrics. See `filter_image_properties` for a reference implementation that emits an `image_properties_hv_type_undetermined` event with an `intent` label.
+
 ### Decisions
 
 ```bash
@@ -103,6 +109,16 @@ kubectl get decisions
 Decisions are generated when pipelines are executed with an appropriate request, such as an initial placement request for a virtual machine. Decisions contain the input data necessary to determine a valid workload placement and a reference to the external resource that is managed, such as a virtual machine id.
 
 In its state, decisions reflect the outcome of the pipeline execution, for example the generated weights for each scheduling step. This outcome is reflected back to the caller of the pipeline. In addition, decisions provide a human-readable explanation why the workload was placed at this specific location.
+
+### History
+
+```bash
+kubectl get histories
+```
+
+History is a cluster-scoped audit trail of scheduling decisions for a given resource (e.g., a Nova instance). Each time a pipeline produces a placement decision, the result — including which pipeline was used, the scheduling intent, the target host, and an explanation — is recorded unless the caller sets `SkipHistory=true` in the pipeline options. The most recent decision lives in `status.current`; older entries are compacted into `status.history`, capped at 10 entries.
+
+See [`api/v1alpha1/history_types.go`](../api/v1alpha1/history_types.go) for the full struct definition.
 
 ### Reservations
 

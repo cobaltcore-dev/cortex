@@ -6,6 +6,8 @@ package failover
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
@@ -14,6 +16,33 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// maxAZNameSegmentLen caps the AZ portion of the failover reservation's
+// GenerateName. Real AZs look like "aa-bb-xxa" (9 chars); this cap keeps
+// generated names short and predictable while still leaving room for any
+// slightly longer AZ label without truncation surprises.
+const maxAZNameSegmentLen = 9
+
+// azInvalidCharsRE matches any character that is not allowed inside a DNS-1123
+// subdomain segment. Matches are stripped entirely.
+var azInvalidCharsRE = regexp.MustCompile(`[^a-z0-9-]+`)
+
+// sanitizeAZForName produces a DNS-1123 friendly segment from an availability
+// zone string suitable for use inside a Kubernetes GenerateName. In practice
+// AZ strings in cortex are already DNS-safe (e.g. "qa-de-1a"), but this
+// helper is defensive against unexpected inputs so we never produce invalid
+// object names. Empty input returns "unknown".
+func sanitizeAZForName(az string) string {
+	out := azInvalidCharsRE.ReplaceAllString(strings.ToLower(az), "")
+	if len(out) > maxAZNameSegmentLen {
+		out = out[:maxAZNameSegmentLen]
+	}
+	out = strings.Trim(out, "-")
+	if out == "" {
+		return "unknown"
+	}
+	return out
+}
 
 // resolvedReservationSpec holds the resolved resource spec for scheduling and reservation sizing.
 // When UseFlavorGroupResources is enabled and the VM's flavor is found in a group,
@@ -187,7 +216,10 @@ func newFailoverReservation(
 
 	reservation := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "failover-",
+			// Include the AZ so that names generated on different per-AZ
+			// clusters cannot collide (each apiserver picks its own random
+			// 5-char suffix independently). See workload-management-issues#568.
+			GenerateName: "failover-" + sanitizeAZForName(vm.AvailabilityZone) + "-",
 			Labels: map[string]string{
 				"cortex.cloud/creator":        creator,
 				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelFailover,

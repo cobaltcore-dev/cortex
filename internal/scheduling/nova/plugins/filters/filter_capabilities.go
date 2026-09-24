@@ -93,9 +93,16 @@ func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.External
 
 	hvCaps := make(map[string]map[string]string)
 	for _, hv := range hvs.Items {
+		if _, ok := result.Activations[hv.Name]; !ok {
+			continue
+		}
 		caps, err := hvToNovaCapabilities(hv)
 		if err != nil {
 			traceLog.Warn("hypervisor has unknown capabilities, using empty defaults", "host", hv.Name, "error", err)
+			result.Events = append(result.Events, lib.FilterWeigherPipelineStepEvent{
+				Name:   "filter_capabilities_unknown_hypervisor_type",
+				Labels: map[string]string{"hypervisor_type": hv.Status.DomainCapabilities.HypervisorType},
+			})
 			caps = make(map[string]string)
 		}
 		hvCaps[hv.Name] = caps

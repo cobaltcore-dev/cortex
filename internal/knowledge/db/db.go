@@ -18,7 +18,8 @@ import (
 	"github.com/go-gorp/gorp"
 	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-api-declarations/bininfo"
+	"go.xyrillian.de/gg/pgruntime"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -77,14 +78,16 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 		return nil, errors.New("missing port in secret data")
 	}
 	strip := func(s string) string { return strings.ReplaceAll(s, "\n", "") }
-	dbURL, err := easypg.URLFrom(easypg.URLParts{
+	target := pgruntime.ConnectionTarget{
 		HostName:          strip(string(host)),
 		Port:              strip(string(port)),
 		UserName:          strip(string(user)),
 		Password:          strip(string(password)),
 		DatabaseName:      strip(string(database)),
 		ConnectionOptions: "sslmode=disable",
-	})
+		ApplicationName:   bininfo.Component(),
+	}
+	dbURL, err := target.IntoURL()
 	if err != nil {
 		return nil, err
 	}

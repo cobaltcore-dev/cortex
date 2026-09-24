@@ -62,6 +62,9 @@ func (s *FilterHasRequestedTraits) Run(traceLog *slog.Logger, request api.Extern
 
 	hostsMatchingAllTraits := map[string]struct{}{}
 	for _, hv := range hvs.Items {
+		if _, ok := result.Activations[hv.Name]; !ok {
+			continue
+		}
 		allRequiredPresent := true
 		traits := hv.Status.Traits
 		traits = append(traits, hv.Spec.CustomTraits...)

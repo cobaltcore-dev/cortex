@@ -235,14 +235,12 @@ func TestLogNoHostFound(t *testing.T) {
 			reg.MustRegister(counter)
 
 			controller := &FilterWeigherPipelineController{
-				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
-					Client: fakeClient,
-				},
 				CRRecorder: crs.Recorder{
 					Client:             fakeClient,
 					NoHostFoundCounter: counter,
 				},
 			}
+			controller.Client = fakeClient
 
 			requestFlavorName := flavorName
 			if tt.payg {

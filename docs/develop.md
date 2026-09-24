@@ -56,7 +56,7 @@ The `testsum` target provides cleaner output by showing only full verbose output
 
 Helm charts bundle the application into a package, containing all the [Kubernetes](https://kubernetes.io/docs/tutorials/hello-minikube/) resources needed to run the application. The configuration for the application is specified in the [Helm `values.yaml`](cortex.secrets.example.yaml).
 
-Read [the helm chart structure documentation](helm/README.md) for more information about the structure of the Helm charts used in this repository.
+Read [the helm chart structure documentation](../helm/README.md) for more information about the structure of the Helm charts used in this repository.
 
 For local development, use the `cortex.secrets.example.yaml` file to override the default Helm values. You can write your OpenStack credentials here to include credentials, such as SSO certificates to access Prometheus metrics or OpenStack credentials to authenticate with Keystone.
 

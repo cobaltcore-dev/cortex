@@ -88,6 +88,75 @@ func (r ExternalSchedulerRequest) Filter(includedHosts map[string]float64) lib.F
 	return r
 }
 
+// IsForcedDestination reports whether Nova forced this request onto specific
+// hosts/nodes and the scheduler filters should be skipped entirely.
+//
+// This replicates Nova's native behavior: when force_hosts or force_nodes is
+// set and the scheduler hint "_nova_check_type" is not set, Nova skips the
+// filters and returns only the forced destinations.
+// See: https://github.com/sapcc/nova/blob/05f384a938e3d6a8740a8f404d79d767d6ebdbd7/nova/scheduler/host_manager.py#L610-L620
+func (r ExternalSchedulerRequest) IsForcedDestination() bool {
+	forceHosts := r.Spec.Data.ForceHosts != nil && len(*r.Spec.Data.ForceHosts) > 0
+	forceNodes := r.Spec.Data.ForceNodes != nil && len(*r.Spec.Data.ForceNodes) > 0
+	if !forceHosts && !forceNodes {
+		return false
+	}
+	// If _nova_check_type is set (e.g. rebuild/evacuate/resize), the host is
+	// forced but must still be validated by the filters, so don't skip.
+	checkType, err := r.Spec.Data.GetSchedulerHintStr("_nova_check_type")
+	if err == nil && checkType != "" {
+		return false
+	}
+	return true
+}
+
+// ForcedHosts returns the subset of request hosts that match the forced
+// destinations (force_hosts / force_nodes). Matching mirrors Nova:
+//   - force_hosts matches on the compute host name, case-insensitive.
+//   - force_nodes matches on the hypervisor hostname, case-sensitive.
+//   - When both are set, a host must match both (intersection).
+//
+// The returned slice preserves the order of the request hosts. If nothing
+// matches, an empty slice is returned (Nova would then raise NoValidHost).
+func (r ExternalSchedulerRequest) ForcedHosts() []string {
+	var forceHosts []string
+	if r.Spec.Data.ForceHosts != nil {
+		forceHosts = *r.Spec.Data.ForceHosts
+	}
+	var forceNodes []string
+	if r.Spec.Data.ForceNodes != nil {
+		forceNodes = *r.Spec.Data.ForceNodes
+	}
+	forceHostSet := make(map[string]bool, len(forceHosts))
+	for _, h := range forceHosts {
+		forceHostSet[strings.ToLower(h)] = true
+	}
+	forceNodeSet := make(map[string]bool, len(forceNodes))
+	for _, n := range forceNodes {
+		forceNodeSet[n] = true
+	}
+	matched := make([]string, 0, len(r.Hosts))
+	// Candidates are (host, node) pairs, so a single compute host may appear
+	// multiple times (once per node). Deduplicate by compute host name, since
+	// the response only carries host names.
+	seen := make(map[string]bool, len(r.Hosts))
+	for _, host := range r.Hosts {
+		if len(forceHostSet) > 0 && !forceHostSet[strings.ToLower(host.ComputeHost)] {
+			continue
+		}
+		if len(forceNodeSet) > 0 && !forceNodeSet[host.HypervisorHostname] {
+			continue
+		}
+		key := strings.ToLower(host.ComputeHost)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		matched = append(matched, host.ComputeHost)
+	}
+	return matched
+}
+
 type FlavorType string
 
 const (
@@ -313,6 +382,48 @@ type NovaImageMeta struct {
 	MinRAM          int                        `json:"min_ram"`
 	MinDisk         int                        `json:"min_disk"`
 	Properties      NovaObject[map[string]any] `json:"properties"`
+}
+
+type NovaImageMetaHVType string
+
+const (
+	NovaImageMetaHVTypeVMware    NovaImageMetaHVType = "vmware"
+	NovaImageMetaHVTypeBaremetal NovaImageMetaHVType = "baremetal"
+	NovaImageMetaHVTypeKVM       NovaImageMetaHVType = "kvm"
+)
+
+// GetHypervisorType determines the hypervisor type based on the image properties.
+func (m NovaImageMeta) GetHypervisorType() (NovaImageMetaHVType, error) {
+	if m.Properties.Data == nil {
+		return "", errors.New("image properties are not set")
+	}
+	keys := []string{
+		// See https://github.com/sapcc/nova/blob/27eb1f0/nova/scheduler/filters/image_props_filter.py#L55
+		"img_hv_type", // Used by kvm images
+		// See https://github.com/sapcc/nova/blob/27eb1f0/doc/source/admin/configuration/hypervisor-vmware.rst#tag-vmware-images
+		"hypervisor_type", // Used by other images (e.g., VMware)
+	}
+	for _, key := range keys {
+		val, ok := m.Properties.Data[key]
+		if !ok {
+			continue
+		}
+		str, ok := val.(string)
+		if !ok {
+			return "", fmt.Errorf("hypervisor type in image properties is not a string: %v", val)
+		}
+		switch strings.ToLower(str) {
+		case "vmware":
+			return NovaImageMetaHVTypeVMware, nil
+		case "baremetal":
+			return NovaImageMetaHVTypeBaremetal, nil
+		case "kvm":
+			return NovaImageMetaHVTypeKVM, nil
+		default:
+			return "", fmt.Errorf("unsupported hypervisor type in image properties: %s", str)
+		}
+	}
+	return "", errors.New("hypervisor type not found in image properties")
 }
 
 // Nova flavor metadata for the specified VM.

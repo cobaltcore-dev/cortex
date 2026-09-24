@@ -20,5 +20,9 @@ import (
 // microversion 1.38, an optional consumer_type query parameter allows
 // filtering the results. Available since microversion 1.9.
 func (s *Shim) HandleListUsages(w http.ResponseWriter, r *http.Request) {
-	s.dispatchPassthroughOnly(w, r, s.config.Features.Usages)
+	if !s.config.Features.Usages {
+		s.forward(w, r)
+		return
+	}
+	http.Error(w, "not yet implemented", http.StatusNotImplemented)
 }

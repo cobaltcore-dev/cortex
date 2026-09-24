@@ -112,7 +112,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.External
 	// field is in the trace log.
 	projectID := request.Spec.Data.ProjectID
 	az := request.Spec.Data.AvailabilityZone
-	hwVersion := request.Spec.Data.Flavor.Data.ExtraSpecs["hw_version"]
+	hwVersion := request.Spec.Data.Flavor.Data.ExtraSpecs["quota:hw_version"]
 
 	if projectID == "" {
 		traceLog.Warn("no project ID in request, skipping quota enforcement")

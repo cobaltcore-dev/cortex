@@ -113,7 +113,15 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 				if qty, ok := crd.Status.ExclusivelyFreeCapacity[string(v1alpha1.CommittedResourceTypeMemory)]; ok {
 					freeMemBytes = qty.Value()
 				}
-				ramCapacity = uint64(runningMemBytes+freeMemBytes) / uint64(ramUnitBytes)
+				// Prefer raw hardware bytes (not slot-quantized) when available.
+				// For variable-ratio groups the smallest-flavor quantum can severely undercount
+				// memory when CPU is the binding constraint. ExclusivelyRawCapacity sums full
+				// EffectiveCapacity["memory"] over exclusively-assigned hosts, bypassing that bias.
+				if qty, ok := crd.Status.ExclusivelyRawCapacity[string(v1alpha1.CommittedResourceTypeMemory)]; ok && qty.Value() > 0 {
+					ramCapacity = uint64(qty.Value()) / uint64(ramUnitBytes) //nolint:gosec
+				} else {
+					ramCapacity = uint64(runningMemBytes+freeMemBytes) / uint64(ramUnitBytes)
+				}
 			}
 
 			// Cores capacity: running cores + exclusively free cores.

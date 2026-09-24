@@ -157,7 +157,7 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 	}
 	ctx := r.Context()
 	if err := httpAPI.delegate.ProcessNewDecisionFromAPI(ctx, decision); err != nil {
-		c.Respond(logger, http.StatusInternalServerError, err, "failed to process scheduling decision")
+		c.Respond(logger, http.StatusInternalServerError, err, fmt.Sprintf("failed to process scheduling decision: %v", err))
 		return
 	}
 	// Check if the decision contains status conditions indicating an error.
@@ -170,6 +170,11 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 		return
 	}
 	hosts := decision.Status.Result.OrderedHosts
+	// Ensure we always return an array, never null. The schema requires hosts
+	// to be an array, and a nil slice would serialize to null.
+	if hosts == nil {
+		hosts = []string{}
+	}
 	response := api.ExternalSchedulerResponse{Hosts: hosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(response); err != nil {

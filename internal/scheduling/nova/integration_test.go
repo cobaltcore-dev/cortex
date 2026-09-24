@@ -142,7 +142,7 @@ func newNovaRequest(instanceUUID, projectID, flavorName, flavorGroup string, vcp
 
 	extraSpecs := map[string]string{
 		"capabilities:hypervisor_type": "qemu",
-		"hw_version":                   flavorGroup,
+		"quota:hw_version":             flavorGroup,
 	}
 
 	var schedulerHints map[string]any

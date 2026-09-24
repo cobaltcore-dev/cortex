@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -194,13 +195,40 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 				},
 			},
 		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host-empty-type",
+			},
+			Status: hv1.HypervisorStatus{
+				DomainCapabilities: hv1.DomainCapabilities{
+					HypervisorType: "",
+				},
+				Capabilities: hv1.Capabilities{
+					HostCpuArch: "x86_64",
+				},
+			},
+		},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "host-unknown-type",
+			},
+			Status: hv1.HypervisorStatus{
+				DomainCapabilities: hv1.DomainCapabilities{
+					HypervisorType: "xen",
+				},
+				Capabilities: hv1.Capabilities{
+					HostCpuArch: "x86_64",
+				},
+			},
+		},
 	}
 
 	tests := []struct {
-		name          string
-		request       api.ExternalSchedulerRequest
-		expectedHosts []string
-		filteredHosts []string
+		name           string
+		request        api.ExternalSchedulerRequest
+		expectedHosts  []string
+		filteredHosts  []string
+		expectedEvents []lib.FilterWeigherPipelineStepEvent
 	}{
 		{
 			name: "No extra specs in request - all hosts pass",
@@ -392,6 +420,76 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 			filteredHosts: []string{"host1", "host2", "host3"},
 		},
 		{
+			name: "Ignore hypervisors not in request even with unknown type",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type": "CH",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+				},
+			},
+			expectedHosts:  []string{"host1"},
+			filteredHosts:  []string{},
+			expectedEvents: []lib.FilterWeigherPipelineStepEvent{},
+		},
+		{
+			name: "Candidate hypervisor with empty hypervisor type emits event and is filtered out",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type": "CH",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host-empty-type"},
+				},
+			},
+			expectedHosts: []string{},
+			filteredHosts: []string{"host-empty-type"},
+			expectedEvents: []lib.FilterWeigherPipelineStepEvent{
+				{Name: "filter_capabilities_unknown_hypervisor_type", Labels: map[string]string{"hypervisor_type": ""}},
+			},
+		},
+		{
+			name: "Candidate hypervisor with unknown hypervisor type emits event and is filtered out",
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{
+									"capabilities:hypervisor_type": "CH",
+								},
+							},
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host-unknown-type"},
+				},
+			},
+			expectedHosts: []string{},
+			filteredHosts: []string{"host-unknown-type"},
+			expectedEvents: []lib.FilterWeigherPipelineStepEvent{
+				{Name: "filter_capabilities_unknown_hypervisor_type", Labels: map[string]string{"hypervisor_type": "xen"}},
+			},
+		},
+		{
 			name: "No matching hosts",
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
@@ -577,6 +675,28 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 			// Check total count
 			if len(result.Activations) != len(tt.expectedHosts) {
 				t.Errorf("expected %d hosts, got %d", len(tt.expectedHosts), len(result.Activations))
+			}
+
+			// Check events
+			if len(result.Events) != len(tt.expectedEvents) {
+				t.Errorf("expected %d events, got %d", len(tt.expectedEvents), len(result.Events))
+			}
+			for i, expectedEvent := range tt.expectedEvents {
+				if i >= len(result.Events) {
+					break
+				}
+				gotEvent := result.Events[i]
+				if gotEvent.Name != expectedEvent.Name {
+					t.Errorf("expected event name %q, got %q", expectedEvent.Name, gotEvent.Name)
+				}
+				if len(gotEvent.Labels) != len(expectedEvent.Labels) {
+					t.Errorf("expected event labels %v, got %v", expectedEvent.Labels, gotEvent.Labels)
+				}
+				for k, v := range expectedEvent.Labels {
+					if gotEvent.Labels[k] != v {
+						t.Errorf("expected event label %q=%q, got %q", k, v, gotEvent.Labels[k])
+					}
+				}
 			}
 		})
 	}

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -160,10 +161,10 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	log := ctrl.LoggerFrom(ctx)
 	startedAt := time.Now() // So we can measure sync duration.
 
-	pipeline, ok := c.Pipelines[decision.Spec.PipelineRef.Name]
+	pipeline, ok := c.GetPipeline(decision.Spec.PipelineRef.Name)
 	if !ok {
 		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
-		return nil, errors.New("pipeline not found or not ready")
+		return nil, fmt.Errorf("pipeline not found or not ready: %q", decision.Spec.PipelineRef.Name)
 	}
 	if decision.Spec.NovaRaw == nil {
 		log.Error(nil, "skipping decision, no novaRaw spec defined")
@@ -184,10 +185,10 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 
 	// If necessary gather all placement candidates before filtering.
 	// This will override the hosts and weights in the nova request.
-	pipelineConf, ok := c.PipelineConfigs[decision.Spec.PipelineRef.Name]
+	pipelineConf, ok := c.GetPipelineConfig(decision.Spec.PipelineRef.Name)
 	if !ok {
 		log.Error(nil, "pipeline config not found", "pipelineName", decision.Spec.PipelineRef.Name)
-		return &request, errors.New("pipeline config not found")
+		return &request, fmt.Errorf("pipeline config not found: %q", decision.Spec.PipelineRef.Name)
 	}
 	if pipelineConf.Spec.IgnorePreselection {
 		log.Info("gathering all placement candidates before filtering")

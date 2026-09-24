@@ -43,6 +43,9 @@ func (s *FilterStatusConditionsStep) Run(traceLog *slog.Logger, request api.Exte
 
 	var hostsReady = make(map[string]struct{})
 	for _, hv := range hvs.Items {
+		if _, ok := result.Activations[hv.Name]; !ok {
+			continue
+		}
 		allMet := true
 		for conditionType, expectedStatus := range expected {
 			cd := meta.FindStatusCondition(hv.Status.Conditions, conditionType)

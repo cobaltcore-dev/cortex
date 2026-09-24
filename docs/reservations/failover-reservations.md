@@ -2,18 +2,9 @@
 
 The failover reservation system ensures VMs have pre-reserved capacity on alternate hypervisors for evacuation. It's a Kubernetes controller that manages `Reservation` CRDs.
 
-## File Structure
+## Implementation
 
-```text
-internal/scheduling/reservations/
-├── vm_source.go                 # Shared VM data source interface (used by failover, commitments, and quota controllers)
-└── failover/
-    ├── config.go                    # Configuration struct (intervals, flavor requirements)
-    ├── controller.go                # Handles lifecycle of Reservation CRD of type failover
-    ├── reservation_eligibility.go   # Checks if a VM can use a failover reservation from a HA perspective (independent of normal scheduling constraints)
-    ├── reservation_scheduling.go    # Scheduling (new and reusing) of failover reservations via our scheduling pipeline
-    └── helpers.go                   # Utility functions for reservation manipulation
-```
+Code: `internal/scheduling/reservations/failover/`
 
 ## Reconciliation Flow
 
@@ -131,7 +122,7 @@ sequenceDiagram
 ### 1. Controller (`controller.go`)
 
 The main orchestrator with dual reconciliation:
-- **Periodic bulk processing**: Runs every `ReconcileInterval` (default 5s), processes all VMs
+- **Periodic bulk processing**: Runs every `ReconcileInterval` (default 30s), processes all VMs
 - **Watch-based validation**: Triggered by Reservation CRD changes, validates individual reservations
 
 ### 2. VM Source (`vm_source.go`)
@@ -155,32 +146,30 @@ Five constraints ensure safe failover without conflicts:
 
 ### 4. Scheduling (`reservation_scheduling.go`)
 
-Integrates with Nova external scheduler API using three pipelines.
+Integrates with Nova external scheduler API. The pipeline is chosen by `inferFailoverPipeline()` based on the VM's flavor extra specs: HANA workloads (`trait:CUSTOM_HANA_EXCLUSIVE_HOST = required`) use `kvm-hana-bin-packing`, everything else uses `kvm-general-purpose-load-balancing`.
 
-## Scheduler Pipelines
+## Scheduler Pipeline Usage
 
-We use three different scheduler pipelines for failover reservations, each serving a specific purpose:
+All three scheduling use cases call the same pipeline (determined by `inferFailoverPipeline`), differentiated only by `scheduling.Options`:
 
-### `kvm-valid-host-reuse-failover-reservation`
+### Reuse existing reservation
 **Used when:** Trying to reuse an existing reservation for a VM.
 
-**Why:** When reusing a reservation, capacity is already reserved on the target host. We only need to verify that the VM is compatible with the host (traits, capabilities, AZ, etc.) without checking if there's enough free capacity.
+**Why:** Capacity is already reserved on the target host. We only need to verify that the VM is compatible with the host (traits, capabilities, AZ, etc.) without checking free capacity.
 
 Options: `ReadOnly: true, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true` — pure compatibility check, no state mutations.
 
-### `kvm-general-purpose-load-balancing` (new reservation)
+### Create new reservation
 **Used when:** Creating a new failover reservation.
 
-**Why:** When creating a new reservation, we need to find a host that:
-1. Is compatible with the VM (traits, capabilities, AZ, etc.)
-2. Has enough free capacity to accommodate the VM if it needs to evacuate
+**Why:** We need to find a host that is compatible with the VM and has enough free capacity to accommodate it if it needs to evacuate.
 
 Options: `LockReservations: true, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true` — capacity check must see true remaining capacity with all reservation slots locked.
 
-### `kvm-acknowledge-failover-reservation`
+### Validate existing reservation (watch-based)
 **Used when:** Validating that an existing reservation is still valid (watch-based reconciliation).
 
-**Why:** Periodically we need to verify that a VM could still evacuate to its reserved host. This sends an evacuation-style scheduling request with only the reservation's host as the eligible target. If the scheduler rejects it, the reservation is no longer valid and should be deleted so the periodic controller can create a new one on a valid host.
+**Why:** Verifies that a VM could still evacuate to its reserved host. Sends an evacuation-style scheduling request with only the reservation's host as the eligible target. If the scheduler rejects it, the reservation is deleted so the periodic controller can create a new one on a valid host.
 
 Options: `ReadOnly: true, LockReservations: true, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true` — validation only, no state mutations.
 

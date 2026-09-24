@@ -1,4 +1,4 @@
-FROM debian:trixie-slim@sha256:020c0d20b9880058cbe785a9db107156c3c75c2ac944a6aa7ab59f2add76a7bd
+FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
 
 # explicitly set user/group IDs
 RUN set -eux; \
@@ -73,7 +73,7 @@ RUN set -ex; \
 ENV PG_MAJOR 18
 ENV PATH $PATH:/usr/lib/postgresql/$PG_MAJOR/bin
 
-ENV PG_VERSION 18.4-1.pgdg13+1
+ENV PG_VERSION 18.6-1.pgdg13+2
 
 RUN set -ex; \
 	\

@@ -178,15 +178,17 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
 metadata:
-  name: host-details
+  name: vmware-host-details
 spec:
   schedulingDomain: nova
   extractor:
-    name: sap_host_details_extractor
+    name: vmware_host_details_extractor
   description: |
-    This knowledge extracts SAP-specific host details information.
+    This knowledge extracts details of VMware compute hosts. KVM hosts are
+    served by a dedicated CRD and ironic hosts are excluded.
   recency: "60s"
   dependencies:
     datasources:
       - name: placement-resource-provider-traits
+      - name: placement-resource-provider-inventory-usages
       - name: nova-hypervisors

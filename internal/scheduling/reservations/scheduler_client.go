@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -79,6 +80,10 @@ type ScheduleReservationRequest struct {
 	// SchedulerHints are hints passed to the scheduler pipeline.
 	// Used to set _nova_check_type for evacuation intent detection.
 	SchedulerHints map[string]any
+	// ImageProperties are Glance-style image properties (e.g., "img_hv_type", "hypervisor_type")
+	// forwarded on Spec.Data.Image.Data.Properties.Data. Optional; when empty the outgoing
+	// request leaves the image field at its zero value. Used by FilterImagePropertiesStep.
+	ImageProperties map[string]any
 }
 
 // ScheduleReservationResponse contains the result of scheduling a reservation.
@@ -143,6 +148,13 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 						// Disk is currently not considered.
 					},
 				},
+				Image: api.NovaObject[api.NovaImageMeta]{
+					Data: api.NovaImageMeta{
+						Properties: api.NovaObject[map[string]any]{
+							Data: req.ImageProperties,
+						},
+					},
+				},
 			},
 		},
 	}
@@ -185,8 +197,13 @@ func (c *SchedulerClient) ScheduleReservation(ctx context.Context, req ScheduleR
 
 	// Check response status
 	if response.StatusCode != http.StatusOK {
-		logger.Error(nil, "external scheduler returned non-OK status", "statusCode", response.StatusCode)
-		return nil, fmt.Errorf("external scheduler returned status %d", response.StatusCode)
+		body, err := io.ReadAll(io.LimitReader(response.Body, 1024))
+		if err != nil {
+			logger.Error(err, "failed to read error response body", "statusCode", response.StatusCode)
+			return nil, fmt.Errorf("external scheduler returned status %d", response.StatusCode)
+		}
+		logger.Error(nil, "external scheduler returned non-OK status", "statusCode", response.StatusCode, "body", string(body))
+		return nil, fmt.Errorf("external scheduler returned status %d: %s", response.StatusCode, string(body))
 	}
 
 	// Decode the response

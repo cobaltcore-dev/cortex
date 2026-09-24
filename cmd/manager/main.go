@@ -64,7 +64,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	commitmentsapi "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/inflight"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/quota"
+	"github.com/cobaltcore-dev/cortex/pkg/cache"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/monitoring"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
@@ -375,10 +377,12 @@ func main() {
 	committedResourceGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}
 	flavorGroupCapacityGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "FlavorGroupCapacity"}
 	projectQuotaGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "ProjectQuota"}
+	multiclusterMonitor := multicluster.NewMonitor("cortex_")
 	multiclusterClient := &multicluster.Client{
 		HomeCluster:    homeCluster,
 		HomeRestConfig: restConfig,
 		HomeScheme:     scheme,
+		Monitor:        multiclusterMonitor,
 		ResourceRouters: map[schema.GroupVersionKind]multicluster.ResourceRouter{
 			hvGVK:                  multicluster.HypervisorResourceRouter{},
 			reservationGVK:         multicluster.ReservationsResourceRouter{},
@@ -389,6 +393,17 @@ func main() {
 		},
 	}
 	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
+
+	var cacheMonitor *cache.Monitor
+	var cacheWrapper *cache.Wrapper
+	if c := conf.GetConfigOrDie[cache.RootConfig](); c.Cache.Enabled {
+		setupLog.Info("overlay caching is enabled", "gvks", c.Cache.GVKs, "ttl", c.Cache.TTL)
+		cacheMonitor = cache.NewMonitor("cortex_")
+		cacheWrapper = cache.NewWrapper(mgr, c.Cache, cacheMonitor)
+		multiclusterClient.Wrappers = append(multiclusterClient.Wrappers, cacheWrapper)
+	} else {
+		setupLog.Info("overlay caching is disabled")
+	}
 	if err := multiclusterClient.InitFromConf(ctx, mgr, multiclusterClientConfig); err != nil {
 		setupLog.Error(err, "unable to initialize multicluster client")
 		os.Exit(1)
@@ -399,6 +414,10 @@ func main() {
 	metricsConfig := conf.GetConfigOrDie[monitoring.Config]()
 	metrics.Registry = monitoring.WrapRegistry(metrics.Registry, metricsConfig)
 	metrics.Registry.MustRegister(&logMetricsMonitor)
+	metrics.Registry.MustRegister(multiclusterMonitor)
+	if cacheMonitor != nil {
+		metrics.Registry.MustRegister(cacheMonitor)
+	}
 
 	// TODO: Remove me after scheduling pipeline steps don't require DB connections anymore.
 	metrics.Registry.MustRegister(&db.Monitor)
@@ -496,6 +515,18 @@ func main() {
 		novaPipelineWebhook := nova.NewPipelineWebhook()
 		if err := novaPipelineWebhook.SetupWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to setup nova pipeline webhook")
+			os.Exit(1)
+		}
+	}
+	if slices.Contains(mainConfig.EnabledControllers, "inflight-reservation-controller") {
+		setupLog.Info("enabling controller",
+			"controller", "inflight-reservation-controller")
+		config := conf.GetConfigOrDie[inflight.NovaVMClientConfig]()
+		vmClient := inflight.NewNovaVMClient(config)
+		controller := &inflight.Controller{Client: multiclusterClient, VMClient: vmClient}
+		if err := controller.SetupWithManager(ctx, mgr); err != nil {
+			setupLog.Error(err, "unable to create controller",
+				"controller", "inflight-reservation-controller")
 			os.Exit(1)
 		}
 	}
@@ -652,6 +683,20 @@ func main() {
 				Monitor:  usageReconcilerMonitor,
 			}).SetupWithManager(mgr, multiclusterClient); err != nil {
 				setupLog.Error(err, "unable to create controller", "controller", "CommittedResourceUsage")
+				os.Exit(1)
+			}
+		}
+
+		if commitmentsConfig.ReservationController.EnableOversubscriptionCheck {
+			reservationControllerMonitor := commitments.NewReservationControllerMonitor()
+			metrics.Registry.MustRegister(&reservationControllerMonitor)
+
+			if err := (&commitments.HostOversubscriptionController{
+				Client:  multiclusterClient,
+				Conf:    commitmentsConfig.ReservationController,
+				Monitor: &reservationControllerMonitor,
+			}).SetupWithManager(mgr, multiclusterClient); err != nil {
+				setupLog.Error(err, "unable to create controller", "controller", "HostOversubscription")
 				os.Exit(1)
 			}
 		}

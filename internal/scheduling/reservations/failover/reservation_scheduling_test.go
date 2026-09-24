@@ -207,9 +207,11 @@ func TestBuildNewFailoverReservation(t *testing.T) {
 				t.Errorf("type label = %v, want %v", result.Labels[v1alpha1.LabelReservationType], v1alpha1.ReservationTypeLabelFailover)
 			}
 
-			// Verify GenerateName is set
-			if result.GenerateName != "failover-" {
-				t.Errorf("GenerateName = %v, want %v", result.GenerateName, "failover-")
+			// Verify GenerateName includes the VM's AZ so per-AZ clusters
+			// cannot collide on the random suffix.
+			wantGenerateName := "failover-" + tt.vm.AvailabilityZone + "-"
+			if result.GenerateName != wantGenerateName {
+				t.Errorf("GenerateName = %v, want %v", result.GenerateName, wantGenerateName)
 			}
 
 			// Verify Ready condition is set
@@ -453,6 +455,7 @@ func buildSchedulingTestVM(uuid, hypervisor string) reservations.VM { //nolint:u
 		CurrentHypervisor: hypervisor,
 		FlavorName:        "m1.large",
 		ProjectID:         "test-project",
+		AvailabilityZone:  "az1",
 		Resources: map[string]resource.Quantity{
 			"vcpus":  resource.MustParse("4"),
 			"memory": resource.MustParse("8Gi"),
@@ -466,6 +469,7 @@ func buildSchedulingTestVMWithResources(uuid, hypervisor string, memoryMB, vcpus
 		CurrentHypervisor: hypervisor,
 		FlavorName:        "m1.large",
 		ProjectID:         "test-project",
+		AvailabilityZone:  "az1",
 		Resources: map[string]resource.Quantity{
 			"vcpus":  *resource.NewQuantity(vcpus, resource.DecimalSI),
 			"memory": *resource.NewQuantity(memoryMB*1024*1024, resource.BinarySI),
@@ -568,6 +572,100 @@ func TestFailoverSchedulerOptions(t *testing.T) {
 			}
 			if capturedReq.Options.LockReservations != tt.wantLockReservations {
 				t.Errorf("LockReservations = %v, want %v", capturedReq.Options.LockReservations, tt.wantLockReservations)
+			}
+		})
+	}
+}
+
+// ============================================================================
+// Test: imagePropertiesFromFlavor
+// ============================================================================
+
+func TestImagePropertiesFromFlavor(t *testing.T) {
+	tests := []struct {
+		name       string
+		extraSpecs map[string]string
+		want       map[string]any
+	}{
+		{
+			name:       "qemu (lowercase) -> kvm img_hv_type",
+			extraSpecs: map[string]string{"capabilities:hypervisor_type": "qemu"},
+			want:       map[string]any{"img_hv_type": "kvm"},
+		},
+		{
+			name:       "QEMU (uppercase) -> kvm img_hv_type",
+			extraSpecs: map[string]string{"capabilities:hypervisor_type": "QEMU"},
+			want:       map[string]any{"img_hv_type": "kvm"},
+		},
+		{
+			name:       "CH -> kvm img_hv_type",
+			extraSpecs: map[string]string{"capabilities:hypervisor_type": "CH"},
+			want:       map[string]any{"img_hv_type": "kvm"},
+		},
+		{
+			name:       "VMware -> hypervisor_type=vmware",
+			extraSpecs: map[string]string{"capabilities:hypervisor_type": "VMware vCenter Server"},
+			want:       map[string]any{"hypervisor_type": "vmware"},
+		},
+		{
+			name:       "Ironic -> hypervisor_type=baremetal",
+			extraSpecs: map[string]string{"capabilities:hypervisor_type": "Ironic"},
+			want:       map[string]any{"hypervisor_type": "baremetal"},
+		},
+		{
+			name:       "unspecified -> nil",
+			extraSpecs: map[string]string{},
+			want:       nil,
+		},
+		{
+			name:       "unknown value -> nil",
+			extraSpecs: map[string]string{"capabilities:hypervisor_type": "SomeFuturisticThing"},
+			want:       nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := imagePropertiesFromFlavor(tt.extraSpecs)
+			if len(got) != len(tt.want) {
+				t.Fatalf("length mismatch: got %v want %v", got, tt.want)
+			}
+			for k, v := range tt.want {
+				if got[k] != v {
+					t.Errorf("key %q: got %v want %v", k, got[k], v)
+				}
+			}
+		})
+	}
+}
+
+// ============================================================================
+// Test: sanitizeAZForName
+// ============================================================================
+
+func TestSanitizeAZForName(t *testing.T) {
+	tests := []struct {
+		name string
+		az   string
+		want string
+	}{
+		{"typical SAP AZ", "qa-de-1a", "qa-de-1a"},
+		{"short AZ", "az1", "az1"},
+		{"uppercase lowered", "AZ1", "az1"},
+		{"underscore stripped", "az_1", "az1"},
+		{"slash stripped", "az/1", "az1"},
+		{"dot stripped", "az.1", "az1"},
+		{"runs of invalid chars stripped", "az___1", "az1"},
+		{"leading/trailing hyphens trimmed", "-az1-", "az1"},
+		{"empty falls back to unknown", "", "unknown"},
+		{"only invalid chars falls back to unknown", "___", "unknown"},
+		{"overlong truncated to cap", "aa-bb-xxa-extra", "aa-bb-xxa"},
+		{"truncated trailing hyphen trimmed", "aa-bb-xx-yyy", "aa-bb-xx"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sanitizeAZForName(tt.az)
+			if got != tt.want {
+				t.Errorf("sanitizeAZForName(%q) = %q, want %q", tt.az, got, tt.want)
 			}
 		})
 	}

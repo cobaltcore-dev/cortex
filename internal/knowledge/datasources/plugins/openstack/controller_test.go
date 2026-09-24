@@ -9,7 +9,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -29,10 +28,9 @@ func TestOpenStackDatasourceReconciler_Creation(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	reconciler := &OpenStackDatasourceReconciler{
-		Client:  client,
-		Scheme:  scheme,
-		Monitor: datasources.Monitor{},
-		conf:    config{SchedulingDomain: "test-operator"},
+		Client: client,
+		Scheme: scheme,
+		conf:   config{SchedulingDomain: "test-operator"},
 	}
 
 	if reconciler.Client == nil {

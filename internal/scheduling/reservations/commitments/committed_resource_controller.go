@@ -396,6 +396,16 @@ func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Co
 }
 
 func (r *CommittedResourceController) setAccepted(ctx context.Context, cr *v1alpha1.CommittedResource) error {
+	// Skip the patch when the CR is already accepted for the current generation.
+	// Without this guard, every reconcile writes a new AcceptedAt timestamp and a
+	// time-varying StatusSummary, triggering the self-watch and causing a reconcile storm.
+	cond := meta.FindStatusCondition(cr.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+	if cond != nil &&
+		cond.Status == metav1.ConditionTrue &&
+		cond.Reason == v1alpha1.CommittedResourceReasonAccepted &&
+		cond.ObservedGeneration == cr.Generation {
+		return nil
+	}
 	now := metav1.Now()
 	old := cr.DeepCopy()
 	specCopy := cr.Spec.DeepCopy()

@@ -2,7 +2,7 @@
 
 ### 1. Tilt Values Setup
 
-Copy the example secrets values file. This file is used for local development and overrides the Helm chart values provided in [values.yaml](helm/cortex/values.yaml) for your local testing setup.
+Copy the example secrets values file. This file is used for local development and overrides the Helm chart values provided in [values.yaml](../helm/library/cortex/values.yaml) for your local testing setup.
 ```bash
 cp cortex.secrets.example.yaml "${HOME}/cortex.secrets.yaml"
 ```

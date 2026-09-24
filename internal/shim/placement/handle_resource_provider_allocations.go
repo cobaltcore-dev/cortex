@@ -16,8 +16,12 @@ import (
 // endpoint. The response includes the resource_provider_generation. Returns
 // 404 if the provider does not exist.
 func (s *Shim) HandleListResourceProviderAllocations(w http.ResponseWriter, r *http.Request) {
+	if !s.config.Features.Allocations {
+		s.forward(w, r)
+		return
+	}
 	if _, ok := requiredUUIDPathParam(w, r, "uuid"); !ok {
 		return
 	}
-	s.dispatchPassthroughOnly(w, r, s.config.Features.Allocations)
+	http.Error(w, "not yet implemented", http.StatusNotImplemented)
 }
