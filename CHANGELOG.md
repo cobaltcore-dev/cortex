@@ -1,5 +1,61 @@
 # Changelog
 
+## 2026-09-24 — [#1231](https://github.com/cobaltcore-dev/cortex/pull/1231)
+
+### cortex v0.4.5 (sha-d4309076)
+
+Bug fixes:
+- Aggregate filter must consider failover requests — the `FilterAggregateMetadata` scheduling filter now enforces tenant-pinning checks for failover intents (`reserve_for_failover`, `reuse_failover_reservation`); only capacity-probe requests bypass the filter ([#1229](https://github.com/cobaltcore-dev/cortex/pull/1229))
+- Report capacity without CPU as the binding factor for flavor groups with varying cpu/mem ratios — introduces `ExclusivelyRawCapacity` on `FlavorGroupCapacity` status, providing unquantized memory/CPU totals from exclusively-assigned hosts for accurate Limes/LIQUID capacity reporting ([#1227](https://github.com/cobaltcore-dev/cortex/pull/1227))
+- Fix overlay cache config — moved the `cache` configuration block into the correct `cortex` config scope in Helm values and added `CommittedResource` to cached GVKs ([#1228](https://github.com/cobaltcore-dev/cortex/pull/1228))
+
+Non-breaking changes:
+- Update `k8s.io/api`, `k8s.io/apimachinery`, `k8s.io/client-go` to v0.37.1 ([#1225](https://github.com/cobaltcore-dev/cortex/pull/1225))
+
+New metrics:
+- `cortex_committed_resource_exclusively_raw_capacity_gib` — raw unquantized memory in GiB across hosts exclusively assigned to a flavor group
+
+CRD changes:
+- `FlavorGroupCapacity` `.status.exclusivelyRawCapacity` added (map, optional)
+
+### cortex-postgres v0.6.18 (sha-f3d9a8b4)
+
+Non-breaking changes:
+- Shared rebuild with updated dependencies
+
+### cortex-shim v0.1.20 (sha-d4309076)
+
+Non-breaking changes:
+- Shared binary rebuild with updated dependencies
+
+### cortex-placement-shim v0.1.20
+
+Includes updated chart cortex-shim v0.1.20.
+
+### cortex-nova v0.0.94
+
+Includes updated charts cortex v0.4.5 and cortex-postgres v0.6.18.
+
+### cortex-cinder v0.0.94
+
+Includes updated charts cortex v0.4.5 and cortex-postgres v0.6.18.
+
+### cortex-manila v0.0.94
+
+Includes updated charts cortex v0.4.5 and cortex-postgres v0.6.18.
+
+### cortex-crds v0.0.94
+
+Includes updated chart cortex v0.4.5.
+
+### cortex-ironcore v0.0.94
+
+Includes updated chart cortex v0.4.5.
+
+### cortex-pods v0.0.94
+
+Includes updated chart cortex v0.4.5.
+
 ## 2026-09-21 — [#1222](https://github.com/cobaltcore-dev/cortex/pull/1222)
 
 ### cortex v0.4.4 (sha-d4309076)
