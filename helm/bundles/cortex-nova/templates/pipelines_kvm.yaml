@@ -162,11 +162,11 @@ spec:
     - name: kvm_cr_migration_slot
       description: |
         During live migrations of VMs that occupy a committed-resource reservation
-        slot, this weigher boosts hosts that have a ready CR reservation with
-        sufficient remaining capacity for the full slot size. This steers migrations
-        toward hosts where the reservation can follow the VM, minimising the
-        double-blocking window. If no candidate has a matching slot, or the VM has
-        no CR reservation, all candidates receive equal weight.
+        slot, this weigher boosts hosts that either have a ready matching CR slot
+        with enough remaining capacity for the full slot size, or have enough free
+        memory for the slot to follow via the reconciler. Hosts that can accommodate
+        neither receive a lower weight. If the VM has no confirmed CR slot, all
+        candidates receive equal weight.
         Only activates for live_migrate requests. All other intents pass through.
         Emits cortex_nova_weigh_cr_migration_slot_requests_total.
 ---
@@ -329,11 +329,11 @@ spec:
     - name: kvm_cr_migration_slot
       description: |
         During live migrations of VMs that occupy a committed-resource reservation
-        slot, this weigher boosts hosts that have a ready CR reservation with
-        sufficient remaining capacity for the full slot size. This steers migrations
-        toward hosts where the reservation can follow the VM, minimising the
-        double-blocking window. If no candidate has a matching slot, or the VM has
-        no CR reservation, all candidates receive equal weight.
+        slot, this weigher boosts hosts that either have a ready matching CR slot
+        with enough remaining capacity for the full slot size, or have enough free
+        memory for the slot to follow via the reconciler. Hosts that can accommodate
+        neither receive a lower weight. If the VM has no confirmed CR slot, all
+        candidates receive equal weight.
         Only activates for live_migrate requests. All other intents pass through.
         Emits cortex_nova_weigh_cr_migration_slot_requests_total.
 ---
@@ -809,11 +809,11 @@ spec:
     - name: kvm_cr_migration_slot
       description: |
         During live migrations of VMs that occupy a committed-resource reservation
-        slot, this weigher boosts hosts that have a ready CR reservation with
-        sufficient remaining capacity for the full slot size. This steers migrations
-        toward hosts where the reservation can follow the VM, minimising the
-        double-blocking window. If no candidate has a matching slot, or the VM has
-        no CR reservation, all candidates receive equal weight.
+        slot, this weigher boosts hosts that either have a ready matching CR slot
+        with enough remaining capacity for the full slot size, or have enough free
+        memory for the slot to follow via the reconciler. Hosts that can accommodate
+        neither receive a lower weight. If the VM has no confirmed CR slot, all
+        candidates receive equal weight.
         Only activates for live_migrate requests. All other intents pass through.
         Emits cortex_nova_weigh_cr_migration_slot_requests_total.
 ---
@@ -976,11 +976,11 @@ spec:
     - name: kvm_cr_migration_slot
       description: |
         During live migrations of VMs that occupy a committed-resource reservation
-        slot, this weigher boosts hosts that have a ready CR reservation with
-        sufficient remaining capacity for the full slot size. This steers migrations
-        toward hosts where the reservation can follow the VM, minimising the
-        double-blocking window. If no candidate has a matching slot, or the VM has
-        no CR reservation, all candidates receive equal weight.
+        slot, this weigher boosts hosts that either have a ready matching CR slot
+        with enough remaining capacity for the full slot size, or have enough free
+        memory for the slot to follow via the reconciler. Hosts that can accommodate
+        neither receive a lower weight. If the VM has no confirmed CR slot, all
+        candidates receive equal weight.
         Only activates for live_migrate requests. All other intents pass through.
         Emits cortex_nova_weigh_cr_migration_slot_requests_total.
 {{- end }}

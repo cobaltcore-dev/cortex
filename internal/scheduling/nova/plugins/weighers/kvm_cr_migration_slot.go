@@ -18,11 +18,11 @@ import (
 
 // Options for the KVM CR migration slot weigher.
 type KVMCRMigrationSlotOpts struct {
-	// Weight assigned to hosts that have a compatible CR reservation slot.
-	// Default: 1.0
-	SlotHostWeight *float64 `json:"slotHostWeight,omitempty"`
-	// Weight assigned to all other hosts when a source slot is found.
+	// Weight assigned to hosts that can accommodate the CR reservation slot.
 	// Default: 0.1
+	SlotHostWeight *float64 `json:"slotHostWeight,omitempty"`
+	// Weight assigned to hosts that cannot accommodate the CR reservation slot.
+	// Default: 0.0
 	DefaultHostWeight *float64 `json:"defaultHostWeight,omitempty"`
 }
 
@@ -48,12 +48,13 @@ func (o KVMCRMigrationSlotOpts) GetDefaultHostWeight() float64 {
 // accommodate the CR reservation slot of the migrating VM.
 //
 // When a VM with a CR reservation slot is migrated, this weigher boosts hosts
-// that have a ready CR reservation with sufficient remaining capacity for the
-// slot (not just the VM flavor). This steers the migration toward hosts where
-// the reservation can follow the VM, minimising the double-blocking window.
+// that either have a ready CR reservation with sufficient remaining capacity for
+// the slot, or have enough free memory for the slot to follow via the reconciler.
+// This steers the migration toward hosts where double-blocking is avoided or
+// minimised.
 //
-// If the VM has no CR reservation, or no candidate can accommodate the slot,
-// all candidates receive zero weight (no effect on ranking).
+// If the VM has no confirmed CR reservation, all candidates receive equal weight
+// (no effect on ranking).
 //
 // Only activates for LiveMigrationIntent.
 type KVMCRMigrationSlotStep struct {
@@ -86,7 +87,10 @@ func (s *KVMCRMigrationSlotStep) Run(
 	var sourceSlot *v1alpha1.Reservation
 	for i := range allReservations.Items {
 		res := &allReservations.Items[i]
-		if res.Status.CommittedResourceReservation == nil {
+		if !res.IsReady() {
+			continue
+		}
+		if res.Status.CommittedResourceReservation == nil || res.Spec.CommittedResourceReservation == nil {
 			continue
 		}
 		if _, ok := res.Status.CommittedResourceReservation.Allocations[instanceUUID]; ok {
@@ -107,7 +111,7 @@ func (s *KVMCRMigrationSlotStep) Run(
 		traceLog.Info("source CR slot has no memory resource, skipping slot weigher",
 			"instanceUUID", instanceUUID,
 			"reservation", sourceSlot.Name)
-		CRMigrationSlotMetricsSingleton.RecordResult("no_source_slot")
+		CRMigrationSlotMetricsSingleton.RecordResult("invalid_source_slot")
 		return result, nil
 	}
 

@@ -130,7 +130,7 @@ func (e *SlotEvaluator) HasSlotWithCapacity(hostName, projectID, flavorGroup str
 // a migrating VM to this host via the reconciler, even when no existing
 // compatible slot is present.
 //
-// Free memory is computed as: hvFreeMemory - sum(all reservation blocks on host).
+// Free memory is computed as: hvFreeMemory - sum(all ready committed-resource reservation blocks on host).
 func (e *SlotEvaluator) CanAccommodateSlot(hostName string, requiredBytes int64) bool {
 	var allBlocks int64
 	for _, res := range e.reservationsByHost[hostName] {

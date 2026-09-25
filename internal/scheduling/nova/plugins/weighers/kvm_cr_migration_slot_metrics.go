@@ -13,9 +13,10 @@ import (
 // CRMigrationSlotMetrics holds Prometheus metrics for the CR migration slot weigher.
 type CRMigrationSlotMetrics struct {
 	// Results counts live migration requests by outcome:
-	//   - slot_found:      at least one candidate has a compatible CR slot
-	//   - no_slot:         source slot found but no candidate is compatible
-	//   - no_source_slot:  migrating VM has no confirmed CR reservation
+	//   - slot_found:          at least one candidate has a compatible CR slot
+	//   - no_slot:             source slot found but no candidate is compatible
+	//   - no_source_slot:      migrating VM has no confirmed CR reservation
+	//   - invalid_source_slot: source slot found but has no memory resource
 	Results *prometheus.CounterVec
 }
 
