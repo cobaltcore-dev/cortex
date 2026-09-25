@@ -1,0 +1,5 @@
+{
+  "name": "cortex-agents",
+  "version": "0.1.0",
+  "description": "Reusable Claude Code integration for cobaltcore-dev repositories: PR review, weekly bugfinder/docswriter grooming, an @claude assistant, and release preparation. Commands and agents are shared from cortex and loaded onto CI runners at run time."
+}

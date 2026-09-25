@@ -1,0 +1,46 @@
+# Cortex Agents configuration.
+#
+# Copy this file to .github/cortex-agents.config.yaml in your repository to activate the
+# cortex agents. Every feature is inactive by default: with no file, or with a
+# feature set to active: false, that feature never runs.
+#
+# See .agents/README.md for the full schema and the one-time organization setup.
+
+# Logins allowed to trigger the interactive agents (review, assistant).
+# An empty or missing allowlist denies everyone.
+allowlist:
+  - # github login of an allowed user, e.g., "username"
+
+# Review each pull request opened or updated by an allowlisted author.
+review:
+  active: true
+  # model: sap/anthropic--claude-4.6-opus
+  # command: /cortex-agents:review
+
+# Grooming passes, each independently toggleable. Their cadence is the static
+# cron in the hub workflow (.github/workflows/cortex-agents-hub.yaml) — edit it
+# there. It cannot be set from this file (GitHub does not allow a cron to be read
+# from a file), so it need not run weekly; set the cron to whatever you like.
+bugfinder:
+  active: true
+  # model: sap/anthropic--claude-4.6-opus
+  # command: /cortex-agents:bugfinder
+docswriter:
+  active: true
+  # model: sap/anthropic--claude-4.6-opus
+  # command: /cortex-agents:docswriter
+
+# Respond to @claude mentions from allowlisted users on issues and PRs.
+assistant:
+  active: true
+  # trigger_phrase: "@claude"
+  # model: sap/anthropic--claude-4.6-opus
+
+# Prepare a release when a pull request is opened into a matching base branch.
+release:
+  active: false
+  branches:
+    - release
+    - "release/*"
+  # model: sap/anthropic--claude-4.6-opus
+  # command: /cortex-agents:release

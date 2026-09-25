@@ -1,0 +1,149 @@
+name: "Parse Cortex Agents Config"
+description: "Reads .github/cortex-agents.config.yaml and emits per-feature activation flags and options. Absent file means every feature is inactive."
+
+outputs:
+  config_present:
+    description: "true when .github/cortex-agents.config.yaml exists"
+    value: ${{ steps.parse.outputs.config_present }}
+  allowlist:
+    description: "CSV of logins allowed to trigger agents (empty means deny)"
+    value: ${{ steps.parse.outputs.allowlist }}
+  review_active:
+    description: "true when PR review is enabled"
+    value: ${{ steps.parse.outputs.review_active }}
+  review_model:
+    description: "LiteLLM model for review"
+    value: ${{ steps.parse.outputs.review_model }}
+  review_command:
+    description: "Command prompt for review"
+    value: ${{ steps.parse.outputs.review_command }}
+  bugfinder_active:
+    description: "true when the bugfinder is enabled"
+    value: ${{ steps.parse.outputs.bugfinder_active }}
+  bugfinder_model:
+    description: "LiteLLM model for the bugfinder"
+    value: ${{ steps.parse.outputs.bugfinder_model }}
+  bugfinder_command:
+    description: "Command prompt for the bugfinder"
+    value: ${{ steps.parse.outputs.bugfinder_command }}
+  docswriter_active:
+    description: "true when the docswriter is enabled"
+    value: ${{ steps.parse.outputs.docswriter_active }}
+  docswriter_model:
+    description: "LiteLLM model for the docswriter"
+    value: ${{ steps.parse.outputs.docswriter_model }}
+  docswriter_command:
+    description: "Command prompt for the docswriter"
+    value: ${{ steps.parse.outputs.docswriter_command }}
+  assistant_active:
+    description: "true when the @claude assistant is enabled"
+    value: ${{ steps.parse.outputs.assistant_active }}
+  assistant_model:
+    description: "LiteLLM model for the assistant"
+    value: ${{ steps.parse.outputs.assistant_model }}
+  assistant_trigger_phrase:
+    description: "Trigger phrase for the assistant"
+    value: ${{ steps.parse.outputs.assistant_trigger_phrase }}
+  release_active:
+    description: "true when release preparation is enabled"
+    value: ${{ steps.parse.outputs.release_active }}
+  release_model:
+    description: "LiteLLM model for release preparation"
+    value: ${{ steps.parse.outputs.release_model }}
+  release_command:
+    description: "Command prompt for release preparation"
+    value: ${{ steps.parse.outputs.release_command }}
+  release_branches:
+    description: "CSV of base-branch glob patterns that trigger release preparation"
+    value: ${{ steps.parse.outputs.release_branches }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Parse config
+      id: parse
+      shell: bash
+      run: |
+        set -euo pipefail
+        CONFIG=".github/cortex-agents.config.yaml"
+        DEFAULT_MODEL="sap/anthropic--claude-4.6-opus"
+
+        if [ ! -f "$CONFIG" ]; then
+          echo "No $CONFIG found — all features inactive."
+          {
+            echo "config_present=false"
+            echo "allowlist="
+            echo "review_active=false"
+            echo "review_model=${DEFAULT_MODEL}"
+            echo "review_command=/cortex-agents:review"
+            echo "bugfinder_active=false"
+            echo "bugfinder_model=${DEFAULT_MODEL}"
+            echo "bugfinder_command=/cortex-agents:bugfinder"
+            echo "docswriter_active=false"
+            echo "docswriter_model=${DEFAULT_MODEL}"
+            echo "docswriter_command=/cortex-agents:docswriter"
+            echo "assistant_active=false"
+            echo "assistant_model=${DEFAULT_MODEL}"
+            echo "assistant_trigger_phrase=@claude"
+            echo "release_active=false"
+            echo "release_model=${DEFAULT_MODEL}"
+            echo "release_command=/cortex-agents:release"
+            echo "release_branches=release,release/*"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        if ! yq eval '.' "$CONFIG" > /dev/null 2>&1; then
+          echo "ERROR: $CONFIG is not valid YAML." >&2
+          exit 1
+        fi
+
+        # yq returns the literal string "null" for a missing path; map that to a fallback.
+        get() {
+          local path="$1" fallback="$2" val
+          val=$(yq eval "$path // \"__NULL__\"" "$CONFIG")
+          if [ "$val" = "__NULL__" ] || [ "$val" = "null" ]; then
+            printf '%s' "$fallback"
+          else
+            printf '%s' "$val"
+          fi
+        }
+
+        # Booleans normalize to literal true/false; anything not exactly "true" is false.
+        boolean() {
+          local path="$1" val
+          val=$(get "$path" "false")
+          if [ "$val" = "true" ]; then echo "true"; else echo "false"; fi
+        }
+
+        # A YAML sequence -> CSV; a scalar passes through unchanged.
+        csv() {
+          local path="$1" fallback="$2" val
+          val=$(yq eval "${path} // \"__NULL__\"" "$CONFIG")
+          if [ "$val" = "__NULL__" ] || [ "$val" = "null" ]; then
+            printf '%s' "$fallback"
+          else
+            yq eval "${path} | (select(tag == \"!!seq\") | join(\",\")) // ." "$CONFIG"
+          fi
+        }
+
+        {
+          echo "config_present=true"
+          echo "allowlist=$(csv '.allowlist' '')"
+          echo "review_active=$(boolean '.review.active')"
+          echo "review_model=$(get '.review.model' "${DEFAULT_MODEL}")"
+          echo "review_command=$(get '.review.command' '/cortex-agents:review')"
+          echo "bugfinder_active=$(boolean '.bugfinder.active')"
+          echo "bugfinder_model=$(get '.bugfinder.model' "${DEFAULT_MODEL}")"
+          echo "bugfinder_command=$(get '.bugfinder.command' '/cortex-agents:bugfinder')"
+          echo "docswriter_active=$(boolean '.docswriter.active')"
+          echo "docswriter_model=$(get '.docswriter.model' "${DEFAULT_MODEL}")"
+          echo "docswriter_command=$(get '.docswriter.command' '/cortex-agents:docswriter')"
+          echo "assistant_active=$(boolean '.assistant.active')"
+          echo "assistant_model=$(get '.assistant.model' "${DEFAULT_MODEL}")"
+          echo "assistant_trigger_phrase=$(get '.assistant.trigger_phrase' '@claude')"
+          echo "release_active=$(boolean '.release.active')"
+          echo "release_model=$(get '.release.model' "${DEFAULT_MODEL}")"
+          echo "release_command=$(get '.release.command' '/cortex-agents:release')"
+          echo "release_branches=$(csv '.release.branches' 'release,release/*')"
+        } >> "$GITHUB_OUTPUT"
