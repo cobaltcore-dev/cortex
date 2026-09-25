@@ -1,5 +1,56 @@
 # Changelog
 
+## 2026-09-25 — [#1239](https://github.com/cobaltcore-dev/cortex/pull/1239)
+
+### cortex v0.4.6 (sha-51ca67fa)
+
+Breaking changes:
+- **`ironcore` upgraded to v0.8.0:** etcd has been bumped to the 3.6.x series. **v0.7.0 (with etcd v3.5.33) must be deployed to all environments before rolling out this release.** Includes resource limit increase for controller-manager ([#1235](https://github.com/cobaltcore-dev/cortex/pull/1235))
+
+Non-breaking changes:
+- Update `github.com/golangci/golangci-lint/v2` from v2.13.2 to v2.14.0 with new linter features (exhaustruct, revive) and bug fixes ([#1235](https://github.com/cobaltcore-dev/cortex/pull/1235))
+- Update `kube-prometheus-stack` Helm chart from 91.5.1 to 91.5.2, fixing RBAC to allow operator to adjust finalizers on configmap/secret ([#1235](https://github.com/cobaltcore-dev/cortex/pull/1235))
+- Update `github.com/sapcc/go-bits` digest from d8aaf2d to e0aa5c6 ([#1234](https://github.com/cobaltcore-dev/cortex/pull/1234))
+- Bump transitive Go dependencies: `golang.org/x/net` v0.59.0, `golang.org/x/text` v0.42.0, `golang.org/x/time` v0.16.0, `golang.org/x/mod` v0.41.0, `golang.org/x/tools` v0.49.0 ([#1235](https://github.com/cobaltcore-dev/cortex/pull/1235))
+
+### cortex-postgres v0.6.19 (sha-f3d9a8b4)
+
+Non-breaking changes:
+- Shared rebuild with updated dependencies
+
+### cortex-shim v0.1.21 (sha-3bc1856b)
+
+Non-breaking changes:
+- Shared binary rebuild with updated dependencies
+
+### cortex-placement-shim v0.1.21
+
+Includes updated chart cortex-shim v0.1.21.
+
+### cortex-nova v0.0.95
+
+Includes updated charts cortex v0.4.6 and cortex-postgres v0.6.19.
+
+### cortex-cinder v0.0.95
+
+Includes updated charts cortex v0.4.6 and cortex-postgres v0.6.19.
+
+### cortex-manila v0.0.95
+
+Includes updated charts cortex v0.4.6 and cortex-postgres v0.6.19.
+
+### cortex-crds v0.0.95
+
+Includes updated chart cortex v0.4.6.
+
+### cortex-ironcore v0.0.95
+
+Includes updated chart cortex v0.4.6.
+
+### cortex-pods v0.0.95
+
+Includes updated chart cortex v0.4.6.
+
 ## 2026-09-24 — [#1231](https://github.com/cobaltcore-dev/cortex/pull/1231)
 
 ### cortex v0.4.5 (sha-d4309076)
