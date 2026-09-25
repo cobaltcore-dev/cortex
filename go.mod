@@ -8,7 +8,7 @@ require (
 	github.com/go-logr/logr v1.4.4
 	github.com/google/uuid v1.6.0
 	github.com/gophercloud/gophercloud/v2 v2.15.0
-	github.com/ironcore-dev/ironcore v0.7.0
+	github.com/ironcore-dev/ironcore v0.8.0
 	github.com/lib/pq v1.12.3
 	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/ory/dockertest v3.3.5+incompatible
