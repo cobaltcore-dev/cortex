@@ -1,0 +1,197 @@
+# Cortex Agents hub for cortex itself — the first consumer of the
+# reusable cortex agent workflows. Consumers use .agents/cortex-agents-hub.yaml
+# instead; this copy pins cortex_ref to the running commit and runs under the
+# `claude` environment so its protection rules and secrets apply.
+
+name: Cortex Agents
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+  pull_request_review_comment:
+    types: [created]
+  schedule:
+    - cron: "0 6 * * 1"  # 06:00 UTC every Monday — bugfinder + docswriter
+  workflow_dispatch:
+    inputs:
+      feature:
+        description: "Which feature to run (bugfinder, docswriter). Leave empty to run both scheduled features."
+        required: false
+        default: ""
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      allowlist: ${{ steps.parse.outputs.allowlist }}
+      review_active: ${{ steps.parse.outputs.review_active }}
+      review_model: ${{ steps.parse.outputs.review_model }}
+      review_command: ${{ steps.parse.outputs.review_command }}
+      bugfinder_active: ${{ steps.parse.outputs.bugfinder_active }}
+      bugfinder_model: ${{ steps.parse.outputs.bugfinder_model }}
+      bugfinder_command: ${{ steps.parse.outputs.bugfinder_command }}
+      docswriter_active: ${{ steps.parse.outputs.docswriter_active }}
+      docswriter_model: ${{ steps.parse.outputs.docswriter_model }}
+      docswriter_command: ${{ steps.parse.outputs.docswriter_command }}
+      assistant_active: ${{ steps.parse.outputs.assistant_active }}
+      assistant_model: ${{ steps.parse.outputs.assistant_model }}
+      assistant_trigger_phrase: ${{ steps.parse.outputs.assistant_trigger_phrase }}
+      release_active: ${{ steps.parse.outputs.release_active }}
+      release_model: ${{ steps.parse.outputs.release_model }}
+      release_command: ${{ steps.parse.outputs.release_command }}
+      release_branches: ${{ steps.parse.outputs.release_branches }}
+      cortex_ref: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+      - id: parse
+        uses: ./.github/actions/parse-cortex-config
+
+  review-gate:
+    needs: config
+    if: >-
+      needs.config.outputs.review_active == 'true' &&
+      (github.event_name == 'pull_request_target' || github.event_name == 'pull_request_review_comment')
+    runs-on: ubuntu-latest
+    outputs:
+      allowed: ${{ steps.check.outputs.allowed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions
+      - id: check
+        uses: ./.github/actions/check-allowlist
+        with:
+          allowlist: ${{ needs.config.outputs.allowlist }}
+          login: ${{ github.event.pull_request.user.login || github.event.comment.user.login }}
+
+  review:
+    needs: [config, review-gate]
+    if: needs.review-gate.outputs.allowed == 'true'
+    uses: ./.github/workflows/cortex-agent-review.yaml
+    secrets: inherit
+    with:
+      model: ${{ needs.config.outputs.review_model }}
+      command: ${{ needs.config.outputs.review_command }}
+      cortex_ref: ${{ needs.config.outputs.cortex_ref }}
+      environment: claude
+
+  bugfinder:
+    needs: config
+    if: >-
+      needs.config.outputs.bugfinder_active == 'true' &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' &&
+        (github.event.inputs.feature == '' || github.event.inputs.feature == 'bugfinder')))
+    uses: ./.github/workflows/cortex-agent-bugfinder.yaml
+    secrets: inherit
+    with:
+      model: ${{ needs.config.outputs.bugfinder_model }}
+      command: ${{ needs.config.outputs.bugfinder_command }}
+      cortex_ref: ${{ needs.config.outputs.cortex_ref }}
+      environment: claude
+
+  docswriter:
+    needs: config
+    if: >-
+      needs.config.outputs.docswriter_active == 'true' &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' &&
+        (github.event.inputs.feature == '' || github.event.inputs.feature == 'docswriter')))
+    uses: ./.github/workflows/cortex-agent-docswriter.yaml
+    secrets: inherit
+    with:
+      model: ${{ needs.config.outputs.docswriter_model }}
+      command: ${{ needs.config.outputs.docswriter_command }}
+      cortex_ref: ${{ needs.config.outputs.cortex_ref }}
+      environment: claude
+
+  assistant-gate:
+    needs: config
+    if: >-
+      needs.config.outputs.assistant_active == 'true' &&
+      (github.event_name == 'issue_comment' ||
+       github.event_name == 'issues' ||
+       github.event_name == 'pull_request_review_comment')
+    runs-on: ubuntu-latest
+    outputs:
+      allowed: ${{ steps.check.outputs.allowed }}
+      triggered: ${{ steps.trigger.outputs.triggered }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions
+      - id: check
+        uses: ./.github/actions/check-allowlist
+        with:
+          allowlist: ${{ needs.config.outputs.allowlist }}
+          login: ${{ github.event.sender.login }}
+      - id: trigger
+        env:
+          PHRASE: ${{ needs.config.outputs.assistant_trigger_phrase }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          if [[ "$COMMENT_BODY" == *"$PHRASE"* ]] \
+             || [[ "$ISSUE_BODY" == *"$PHRASE"* ]] \
+             || [[ "$ISSUE_TITLE" == *"$PHRASE"* ]]; then
+            echo "triggered=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "triggered=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  assistant:
+    needs: [config, assistant-gate]
+    if: needs.assistant-gate.outputs.allowed == 'true' && needs.assistant-gate.outputs.triggered == 'true'
+    uses: ./.github/workflows/cortex-agent-assistant.yaml
+    secrets: inherit
+    with:
+      model: ${{ needs.config.outputs.assistant_model }}
+      trigger_phrase: ${{ needs.config.outputs.assistant_trigger_phrase }}
+      allowlist: ${{ needs.config.outputs.allowlist }}
+      cortex_ref: ${{ needs.config.outputs.cortex_ref }}
+      environment: claude
+
+  release-gate:
+    needs: config
+    if: needs.config.outputs.release_active == 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      matched: ${{ steps.match.outputs.matched }}
+    steps:
+      - id: match
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PATTERNS: ${{ needs.config.outputs.release_branches }}
+        run: |
+          matched=false
+          IFS=',' read -ra pats <<< "${PATTERNS}"
+          for pat in "${pats[@]}"; do
+            pat="$(echo "$pat" | xargs)"
+            # Unquoted $pat on purpose: patterns like release/* must glob-match.
+            # shellcheck disable=SC2254
+            case "${BASE_REF}" in
+              $pat) matched=true; break ;;
+            esac
+          done
+          echo "matched=${matched}" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: [config, release-gate]
+    if: needs.release-gate.outputs.matched == 'true'
+    uses: ./.github/workflows/cortex-agent-release.yaml
+    secrets: inherit
+    with:
+      model: ${{ needs.config.outputs.release_model }}
+      command: ${{ needs.config.outputs.release_command }}
+      pr_number: ${{ github.event.pull_request.number }}
+      cortex_ref: ${{ needs.config.outputs.cortex_ref }}
+      environment: claude

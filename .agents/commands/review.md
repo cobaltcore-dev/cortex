@@ -15,15 +15,13 @@ Determine the PR number from the user's invocation (or from the current branch v
 
 ## Phase 2: Dispatch subagents
 
-Dispatch the read-only reviewer:
+Dispatch the read-only reviewer via the Agent tool with `subagent_type: "cortex-agents:common-pitfall-guard"` — it checks for codebase-specific pitfalls.
 
-- **`common-pitfall-guard`** — checks for codebase-specific pitfalls.
-
-Instruct each agent to surface only noteworthy feedback, and to return findings as text — never to post comments themselves.
+Instruct the agent to surface only noteworthy feedback, and to return findings as text — never to post comments itself.
 
 ## Phase 3: Filter findings
 
-Read each agent's report. Drop anything that is not noteworthy: speculative concerns, style nits, theoretical issues, or findings the agent itself flagged as uncertain. Keep only findings you are confident a reviewer would want to see.
+Read the agent's report. Drop anything that is not noteworthy: speculative concerns, style nits, theoretical issues, or findings the agent itself flagged as uncertain. Keep only findings you are confident a reviewer would want to see.
 
 ## Phase 4: Post comments
 
