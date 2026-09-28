@@ -242,12 +242,19 @@ func collectExclusiveResources(states []groupState) map[string]map[string]int64 
 }
 
 // collectExclusiveHosts returns the set of unique host names assigned to each group by the split.
-// A host selected multiple rounds by the same group is counted once.
+// Each host appears in at most one group's list. When multiple groups were assigned
+// allocations on the same host during round-robin, the first group in the slice (which
+// preserves the round-robin priority order) claims the host exclusively.
 func collectExclusiveHosts(states []groupState) map[string][]string {
+	seen := make(map[string]struct{})
 	result := make(map[string][]string, len(states))
 	for _, g := range states {
 		hosts := make([]string, 0, len(g.assignedHosts))
 		for h := range g.assignedHosts {
+			if _, ok := seen[h]; ok {
+				continue
+			}
+			seen[h] = struct{}{}
 			hosts = append(hosts, h)
 		}
 		result[g.input.Name] = hosts

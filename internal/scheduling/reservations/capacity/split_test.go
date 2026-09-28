@@ -4,6 +4,7 @@
 package capacity
 
 import (
+	"sort"
 	"testing"
 )
 
@@ -503,6 +504,77 @@ func TestSplitCapacity_SumNeverExceedsTotal(t *testing.T) {
 	}
 	if totalAssigned > totalInstalled {
 		t.Errorf("totalAssigned (%d) > totalInstalled (%d): capacity overreported", totalAssigned, totalInstalled)
+	}
+}
+
+// TestCollectExclusiveHosts_NoDoubleCount verifies that when two groups share a host,
+// collectExclusiveHosts assigns it to only one group's list (the first group in priority
+// order), preventing double-counting of host capacity downstream.
+func TestCollectExclusiveHosts_NoDoubleCount(t *testing.T) {
+	// Two groups share a single 8 GiB host. The 2 GiB flavor group gets 4 allocations,
+	// the 4 GiB flavor group gets 1 allocation. Both have the host in their assignedHosts,
+	// but collectExclusiveHosts must assign it to only one group.
+	states := []groupState{
+		{
+			input:         GroupInput{Name: "small", FlavorResources: flavor(2*GiB, 1)},
+			assignedCount: 4,
+			assignedHosts: map[string]struct{}{"shared-host": {}},
+		},
+		{
+			input:         GroupInput{Name: "large", FlavorResources: flavor(4*GiB, 2)},
+			assignedCount: 1,
+			assignedHosts: map[string]struct{}{"shared-host": {}},
+		},
+	}
+
+	result := collectExclusiveHosts(states)
+
+	// Count how many groups list the shared host.
+	ownerCount := 0
+	for _, hostList := range result {
+		for _, h := range hostList {
+			if h == "shared-host" {
+				ownerCount++
+			}
+		}
+	}
+	if ownerCount != 1 {
+		t.Errorf("shared-host appears in %d group lists, want exactly 1 (no double-counting)", ownerCount)
+	}
+
+	// The first group in the slice should win.
+	if len(result["small"]) != 1 || result["small"][0] != "shared-host" {
+		t.Errorf("expected first group 'small' to own shared-host, got small=%v large=%v",
+			result["small"], result["large"])
+	}
+	if len(result["large"]) != 0 {
+		t.Errorf("expected second group 'large' to have no exclusive hosts, got %v", result["large"])
+	}
+}
+
+// TestSplitCapacity_ExclusiveHostsNoOverlap verifies the end-to-end invariant documented
+// on SplitCapacity: "Each host appears in at most one group's list."
+func TestSplitCapacity_ExclusiveHostsNoOverlap(t *testing.T) {
+	groups := []GroupInput{
+		{Name: "g1", FlavorResources: flavor(2*GiB, 1), CandidateHosts: []string{"h1"}},
+		{Name: "g2", FlavorResources: flavor(4*GiB, 2), CandidateHosts: []string{"h1"}},
+	}
+	hosts := map[string]HostState{
+		"h1": host(8*GiB, 4),
+	}
+
+	_, _, _, _, exclusiveHosts := SplitCapacity(groups, hosts)
+
+	// Collect all hosts across all groups and verify no duplicates.
+	allHosts := make([]string, 0)
+	for _, hostList := range exclusiveHosts {
+		allHosts = append(allHosts, hostList...)
+	}
+	sort.Strings(allHosts)
+	for i := 1; i < len(allHosts); i++ {
+		if allHosts[i] == allHosts[i-1] {
+			t.Errorf("host %q appears in multiple groups' exclusive lists: %v", allHosts[i], exclusiveHosts)
+		}
 	}
 }
 
