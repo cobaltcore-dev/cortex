@@ -266,6 +266,65 @@ func TestReconcileAZ_CreatesCRD(t *testing.T) {
 	}
 }
 
+func TestReconcileAZ_AttributesReservedCapacity(t *testing.T) {
+	const (
+		groupName  = "hana-v2"
+		az         = "qa-de-1a"
+		memMB      = 4096 // flavor memory (1 slot)
+		flavorMem  = int64(memMB) * 1024 * 1024
+		flavorCPUs = 2
+	)
+
+	scheme := newTestScheme(t)
+	// Host holds 2 flavor slots worth of memory; 1 slot is reserved (blocked), 1 remains free.
+	hv := newHypervisor("host-1", az, 2*flavorMem)
+	knowledge := newFlavorGroupKnowledge(t, groupName, memMB)
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(knowledge, hv).
+		WithStatusSubresource(&v1alpha1.FlavorGroupCapacity{}, &v1alpha1.Knowledge{}).
+		Build()
+
+	schedulerServer := newMockSchedulerServer(t, []string{"host-1"})
+	defer schedulerServer.Close()
+
+	ctrl := newController(t, fakeClient, Config{
+		SchedulerURL:      schedulerServer.URL,
+		TotalPipeline:     "kvm-report-capacity",
+		PlaceablePipeline: "kvm-general-purpose",
+	})
+
+	smallFlavor := compute.FlavorInGroup{Name: groupName + "-small", MemoryMB: memMB, VCPUs: flavorCPUs}
+	groupData := compute.FlavorGroupFeature{SmallestFlavor: smallFlavor, Flavors: []compute.FlavorInGroup{smallFlavor}}
+	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
+
+	// One flavor slot on host-1 is blocked by reservations (e.g. a failover slot).
+	blockedByReservations := map[string]map[string]int64{
+		"host-1": {ResourceMemory: flavorMem, ResourceCores: flavorCPUs},
+	}
+
+	ctrl.reconcileAZ(context.Background(), az,
+		map[string]compute.FlavorGroupFeature{groupName: groupData},
+		hvByName, blockedByReservations, map[vmUsageKey]vmUsage{})
+
+	var crd v1alpha1.FlavorGroupCapacity
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdNameFor(groupName, az)}, &crd); err != nil {
+		t.Fatalf("failed to get CRD: %v", err)
+	}
+	reservedMem := crd.Status.ExclusivelyReservedCapacity[string(v1alpha1.CommittedResourceTypeMemory)]
+	if reservedMem.Value() != flavorMem {
+		t.Errorf("ExclusivelyReservedCapacity[memory] = %d, want %d (one blocked slot on assigned host)", reservedMem.Value(), flavorMem)
+	}
+	reservedCores := crd.Status.ExclusivelyReservedCapacity[string(v1alpha1.CommittedResourceTypeCores)]
+	if reservedCores.Value() != flavorCPUs {
+		t.Errorf("ExclusivelyReservedCapacity[cores] = %d, want %d", reservedCores.Value(), flavorCPUs)
+	}
+	if crd.Status.ExclusivelyReservedSlots != 1 {
+		t.Errorf("ExclusivelyReservedSlots = %d, want 1", crd.Status.ExclusivelyReservedSlots)
+	}
+}
+
 func TestReconcileAZ_SkipsCRDWriteOnSchedulerError(t *testing.T) {
 	const (
 		groupName = "hana-v2"

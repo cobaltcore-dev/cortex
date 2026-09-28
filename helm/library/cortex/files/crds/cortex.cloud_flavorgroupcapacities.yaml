@@ -193,6 +193,25 @@ spec:
                   ExclusivelyFreeCapacity, this is not constrained by slot packing or CPU/memory ratio.
                   Safe to sum across groups — no host is counted twice.
                 type: object
+              exclusivelyReservedCapacity:
+                additionalProperties:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
+                description: |-
+                  ExclusivelyReservedCapacity is the reservation-blocked memory and CPU (failover slots and
+                  unfilled committed-resource slots) on the hosts exclusively assigned to this group by the
+                  round-robin split. These slots are subtracted from both the placeable probe and the split,
+                  so they are neither running nor free; they must be added back to report installed capacity.
+                type: object
+              exclusivelyReservedSlots:
+                description: |-
+                  ExclusivelyReservedSlots is the number of smallest-flavor VM slots represented by
+                  ExclusivelyReservedCapacity.
+                format: int64
+                type: integer
               flavors:
                 description: Flavors holds per-flavor capacity data for all flavors
                   in the group.

@@ -578,6 +578,23 @@ func (c *Reconciler) reconcileAZ(
 		rawExclusiveByGroup[gName] = raw
 	}
 
+	// Reservation blocks (failover + unfilled committed slots) attributed to each group over its
+	// exclusively-assigned hosts. These slots were subtracted from the placeable probe and the
+	// split, so they are neither running nor free; the report adds them back as installed capacity.
+	reservedByGroup := make(map[string]map[string]int64, len(exclusiveHosts))
+	for gName, hostList := range exclusiveHosts {
+		reserved := make(map[string]int64, 2)
+		for _, hostName := range hostList {
+			blocked, ok := blockedByReservations[hostName]
+			if !ok {
+				continue
+			}
+			reserved[ResourceMemory] += blocked[ResourceMemory]
+			reserved[ResourceCores] += blocked[ResourceCores]
+		}
+		reservedByGroup[gName] = reserved
+	}
+
 	for _, r := range results {
 		if !r.allFresh {
 			if err := c.markCRDNotReady(ctx, r.groupName, az); err != nil {
@@ -592,6 +609,7 @@ func (c *Reconciler) reconcileAZ(
 			freeResources[r.groupName],
 			exclusiveResources[r.groupName],
 			rawExclusiveByGroup[r.groupName],
+			reservedByGroup[r.groupName],
 		); err != nil {
 			logger.Error(err, "failed to write FlavorGroupCapacity CRD",
 				"flavorGroup", r.groupName, "az", az)
@@ -631,6 +649,7 @@ func (c *Reconciler) writeCRD(
 	freeRes map[string]int64,
 	exclusiveRes map[string]int64,
 	exclusivelyRawRes map[string]int64,
+	reservedRes map[string]int64,
 ) error {
 
 	crdName := crdNameFor(groupName, az)
@@ -676,11 +695,13 @@ func (c *Reconciler) writeCRD(
 	existing.Status.FreeCapacity = resMapToQuantity(freeRes)
 	existing.Status.ExclusivelyFreeCapacity = resMapToQuantity(exclusiveRes)
 	existing.Status.ExclusivelyRawCapacity = resMapToQuantity(exclusivelyRawRes)
+	existing.Status.ExclusivelyReservedCapacity = resMapToQuantity(reservedRes)
 	var exclusivelyFreeSlots int64
 	if flavorMemBytes := int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024; flavorMemBytes > 0 { //nolint:gosec
 		flavorVCPUs := int64(groupData.SmallestFlavor.VCPUs) //nolint:gosec
 		exclusivelyFreeSlots = flavorSlots(exclusiveRes, flavorMemBytes, flavorVCPUs)
 		existing.Status.ExclusivelyFreeSlots = exclusivelyFreeSlots
+		existing.Status.ExclusivelyReservedSlots = flavorSlots(reservedRes, flavorMemBytes, flavorVCPUs)
 	}
 	existing.Status.LastReconcileAt = metav1.Now()
 
