@@ -167,7 +167,7 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 					if qty, ok := crd.Status.RunningResources[string(v1alpha1.CommittedResourceTypeMemory)]; ok {
 						runningMemBytes = qty.Value()
 					}
-					ramEntry.Usage = Some[uint64](uint64(runningMemBytes) / uint64(ramUnitBytes))
+					ramEntry.Usage = Some[uint64](uint64(runningMemBytes+reservedMemBytes) / uint64(ramUnitBytes))
 				}
 			}
 
