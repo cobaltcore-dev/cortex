@@ -9,7 +9,7 @@ config:
     folders:
       - /etc/perses/provisioning
       - /etc/perses/datasources
-    interval: 1m
+    interval: 20s
   plugin:
     path: /etc/perses/plugins
     archive_paths:
@@ -20,7 +20,7 @@ datasources:
     metadata:
       name: PrometheusOpenstack
     spec:
-      default: true
+      default: false
       plugin:
         kind: PrometheusDatasource
         spec:
@@ -28,3 +28,15 @@ datasources:
             kind: HTTPProxy
             spec:
               url: http://prometheus-operated:9090
+  - kind: GlobalDatasource
+    metadata:
+      name: thanos-global-query
+    spec:
+      default: true
+      plugin:
+        kind: PrometheusDatasource
+        spec:
+          proxy:
+            kind: HTTPProxy
+            spec:
+              url: https://metrics.global.cloud.sap
