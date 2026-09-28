@@ -362,9 +362,15 @@ func phase2Fill(allRes []v1alpha1.Reservation, currentIdx []int, unassigned map[
 			continue
 		}
 		// No VMs on current host — relocate to any host where the smallest VM fits.
-		// Map iteration is intentionally non-deterministic: any host that fits is acceptable.
+		// Sort host names for deterministic relocation across consecutive repair runs.
 		slotMem := repairSlotMemoryBytes(res)
-		for hvName, vms := range unassigned {
+		hvNames := make([]string, 0, len(unassigned))
+		for hv := range unassigned {
+			hvNames = append(hvNames, hv)
+		}
+		sort.Strings(hvNames)
+		for _, hvName := range hvNames {
+			vms := unassigned[hvName]
 			if len(vms) == 0 || repairVMMemoryBytes(&vms[len(vms)-1]) > slotMem {
 				continue
 			}

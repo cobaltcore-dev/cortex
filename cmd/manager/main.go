@@ -691,6 +691,8 @@ func main() {
 			metrics.Registry.MustRegister(&repairReconcilerMonitor)
 			repairReconcilerConf := commitmentsConfig.RepairReconciler
 			repairReconcilerConf.ApplyDefaults()
+			// RepairReconciler.SetupWithManager is always called here; the Enabled flag check
+			// lives inside SetupWithManager itself and returns nil early when disabled.
 			if err := (&commitments.RepairReconciler{
 				Client:   multiclusterClient,
 				Conf:     repairReconcilerConf,
