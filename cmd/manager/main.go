@@ -56,6 +56,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/migrationcounter"
 	novafilters "github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
@@ -476,7 +477,23 @@ func main() {
 		setupLog.Info("loaded nova API config",
 			"evacuationShuffleK", novaAPIConfig.EvacuationShuffleK,
 			"novaLimitHostsToRequest", novaAPIConfig.NovaLimitHostsToRequest)
-		nova.NewAPI(novaAPIConfig, filterWeigherController).Init(mux)
+		// In-memory repeated-migration counter, gated by a single feature flag.
+		// When disabled, nothing is constructed, registered, or wired: the
+		// counter stays nil and the handler/controller nil-guards skip all
+		// feature code.
+		var migrations *migrationcounter.RepeatedMigrationCounter
+		if novaAPIConfig.EvacuationTracking.Enabled {
+			migrations = migrationcounter.New(novaAPIConfig.EvacuationTracking.ToCounterConfig())
+			metrics.Registry.MustRegister(migrationcounter.NewTrackedEntriesCollector(migrations))
+			softForceCounter := migrationcounter.NewSoftForceCounter()
+			metrics.Registry.MustRegister(softForceCounter)
+			filterWeigherController.RepeatedMigrationCounting = nova.RepeatedMigrationCounting{
+				Counter:          migrations,
+				Threshold:        novaAPIConfig.EvacuationTracking.EffectiveThreshold(),
+				SoftForceCounter: softForceCounter,
+			}
+		}
+		nova.NewAPI(novaAPIConfig, filterWeigherController, migrations).Init(mux)
 
 		// Detector pipeline controller setup.
 		novaClient := nova.NewNovaClient()
