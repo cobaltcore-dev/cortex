@@ -225,7 +225,7 @@ func TestReconcileAZ_CreatesCRD(t *testing.T) {
 
 	ctrl.reconcileAZ(context.Background(), az,
 		map[string]compute.FlavorGroupFeature{groupName: groupData},
-		hvByName, map[string]map[string]int64{}, map[vmUsageKey]vmUsage{})
+		hvByName, map[string]map[string]int64{}, nil, map[vmUsageKey]vmUsage{})
 
 	var crd v1alpha1.FlavorGroupCapacity
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdNameFor(groupName, az)}, &crd); err != nil {
@@ -266,7 +266,7 @@ func TestReconcileAZ_CreatesCRD(t *testing.T) {
 	}
 }
 
-func TestReconcileAZ_AttributesReservedCapacity(t *testing.T) {
+func TestReconcileAZ_WritesReservedCapacity(t *testing.T) {
 	const (
 		groupName  = "hana-v2"
 		az         = "qa-de-1a"
@@ -276,7 +276,7 @@ func TestReconcileAZ_AttributesReservedCapacity(t *testing.T) {
 	)
 
 	scheme := newTestScheme(t)
-	// Host holds 2 flavor slots worth of memory; 1 slot is reserved (blocked), 1 remains free.
+	// Host holds 2 flavor slots worth of memory; 1 slot is reserved, 1 remains free.
 	hv := newHypervisor("host-1", az, 2*flavorMem)
 	knowledge := newFlavorGroupKnowledge(t, groupName, memMB)
 
@@ -299,14 +299,15 @@ func TestReconcileAZ_AttributesReservedCapacity(t *testing.T) {
 	groupData := compute.FlavorGroupFeature{SmallestFlavor: smallFlavor, Flavors: []compute.FlavorInGroup{smallFlavor}}
 	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
 
-	// One flavor slot on host-1 is blocked by reservations (e.g. a failover slot).
-	blockedByReservations := map[string]map[string]int64{
-		"host-1": {ResourceMemory: flavorMem, ResourceCores: flavorCPUs},
+	// One flavor slot is reserved for this (group, AZ) — attributed upstream by
+	// reservedResourcesByGroupAZ and passed in here; reconcileAZ must persist it to the CRD.
+	reservedByGroupAZ := map[vmUsageKey]map[string]int64{
+		{group: groupName, az: az}: {ResourceMemory: flavorMem, ResourceCores: flavorCPUs},
 	}
 
 	ctrl.reconcileAZ(context.Background(), az,
 		map[string]compute.FlavorGroupFeature{groupName: groupData},
-		hvByName, blockedByReservations, map[vmUsageKey]vmUsage{})
+		hvByName, map[string]map[string]int64{}, reservedByGroupAZ, map[vmUsageKey]vmUsage{})
 
 	var crd v1alpha1.FlavorGroupCapacity
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdNameFor(groupName, az)}, &crd); err != nil {
@@ -314,7 +315,7 @@ func TestReconcileAZ_AttributesReservedCapacity(t *testing.T) {
 	}
 	reservedMem := crd.Status.ExclusivelyReservedCapacity[string(v1alpha1.CommittedResourceTypeMemory)]
 	if reservedMem.Value() != flavorMem {
-		t.Errorf("ExclusivelyReservedCapacity[memory] = %d, want %d (one blocked slot on assigned host)", reservedMem.Value(), flavorMem)
+		t.Errorf("ExclusivelyReservedCapacity[memory] = %d, want %d", reservedMem.Value(), flavorMem)
 	}
 	reservedCores := crd.Status.ExclusivelyReservedCapacity[string(v1alpha1.CommittedResourceTypeCores)]
 	if reservedCores.Value() != flavorCPUs {
@@ -322,6 +323,123 @@ func TestReconcileAZ_AttributesReservedCapacity(t *testing.T) {
 	}
 	if crd.Status.ExclusivelyReservedSlots != 1 {
 		t.Errorf("ExclusivelyReservedSlots = %d, want 1", crd.Status.ExclusivelyReservedSlots)
+	}
+}
+
+// TestReservedResourcesByGroupAZ verifies that reservation-blocked capacity is attributed to a
+// flavor group by each reservation's own ResourceGroup — independent of the round-robin split —
+// so a host fully packed by empty reservations still contributes, and a host shared by two groups
+// splits its reservations correctly. It also covers failover ResourceGroup carrying a flavor name
+// and the skipping of pending and in-flight reservations.
+func TestReservedResourcesByGroupAZ(t *testing.T) {
+	const az = "qa-de-1a"
+	const flavorMem = int64(4096) * 1024 * 1024
+	const flavorCPUs = 2
+
+	scheme := newTestScheme(t)
+	// host-1 is shared by group-a and group-b reservations; host-2 is fully packed by a single
+	// failover reservation (zero free slots — it would drop out of the split's exclusiveHosts).
+	hv1a := newHypervisor("host-1", az, 2*flavorMem)
+	hv2 := newHypervisor("host-2", az, flavorMem)
+
+	resources := map[hv1.ResourceName]resource.Quantity{
+		hv1.ResourceMemory: *resource.NewQuantity(flavorMem, resource.BinarySI),
+		hv1.ResourceCPU:    *resource.NewQuantity(flavorCPUs, resource.DecimalSI),
+	}
+
+	// committed reservation on host-1 → group-a (carries the group directly).
+	committedA := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "committed-a"},
+		Spec: v1alpha1.ReservationSpec{
+			Type:                         v1alpha1.ReservationTypeCommittedResource,
+			AvailabilityZone:             az,
+			TargetHost:                   "host-1",
+			Resources:                    resources,
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{ResourceGroup: "group-a"},
+		},
+		Status: v1alpha1.ReservationStatus{Host: "host-1"},
+	}
+	// failover reservation on the same host-1 → group-b (carries the group name).
+	failoverB := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "failover-b"},
+		Spec: v1alpha1.ReservationSpec{
+			Type:                v1alpha1.ReservationTypeFailover,
+			AvailabilityZone:    az,
+			TargetHost:          "host-1",
+			Resources:           resources,
+			FailoverReservation: &v1alpha1.FailoverReservationSpec{ResourceGroup: "group-b"},
+		},
+		Status: v1alpha1.ReservationStatus{Host: "host-1"},
+	}
+	// failover reservation on the fully-packed host-2 → group-a, resolved from the flavor NAME.
+	failoverAByFlavor := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "failover-a-flavor"},
+		Spec: v1alpha1.ReservationSpec{
+			Type:                v1alpha1.ReservationTypeFailover,
+			AvailabilityZone:    az,
+			TargetHost:          "host-2",
+			Resources:           resources,
+			FailoverReservation: &v1alpha1.FailoverReservationSpec{ResourceGroup: "group-a-small"},
+		},
+		Status: v1alpha1.ReservationStatus{Host: "host-2"},
+	}
+	// pending reservation (no placed host) → skipped, reported on a later cycle.
+	pending := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "pending"},
+		Spec: v1alpha1.ReservationSpec{
+			Type:                         v1alpha1.ReservationTypeCommittedResource,
+			AvailabilityZone:             az,
+			Resources:                    resources,
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{ResourceGroup: "group-a"},
+		},
+	}
+	// in-flight reservation → skipped (counted as running, not reserved).
+	inflight := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "inflight"},
+		Spec: v1alpha1.ReservationSpec{
+			Type:             v1alpha1.ReservationTypeInFlight,
+			AvailabilityZone: az,
+			TargetHost:       "host-1",
+			Resources:        resources,
+		},
+		Status: v1alpha1.ReservationStatus{Host: "host-1"},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(committedA, failoverB, failoverAByFlavor, pending, inflight).
+		Build()
+
+	c := newController(t, fakeClient, Config{})
+
+	flavorA := compute.FlavorInGroup{Name: "group-a-small", MemoryMB: 4096, VCPUs: flavorCPUs}
+	flavorB := compute.FlavorInGroup{Name: "group-b-small", MemoryMB: 4096, VCPUs: flavorCPUs}
+	flavorGroups := map[string]compute.FlavorGroupFeature{
+		"group-a": {Name: "group-a", SmallestFlavor: flavorA, Flavors: []compute.FlavorInGroup{flavorA}},
+		"group-b": {Name: "group-b", SmallestFlavor: flavorB, Flavors: []compute.FlavorInGroup{flavorB}},
+	}
+	hvByName := map[string]hv1.Hypervisor{"host-1": *hv1a, "host-2": *hv2}
+
+	reserved, err := c.reservedResourcesByGroupAZ(context.Background(), flavorGroups, hvByName)
+	if err != nil {
+		t.Fatalf("reservedResourcesByGroupAZ failed: %v", err)
+	}
+
+	// group-a: committed on host-1 + failover on fully-packed host-2 = 2 slots.
+	a := reserved[vmUsageKey{group: "group-a", az: az}]
+	if a[ResourceMemory] != 2*flavorMem {
+		t.Errorf("group-a reserved memory = %d, want %d", a[ResourceMemory], 2*flavorMem)
+	}
+	if a[ResourceCores] != 2*flavorCPUs {
+		t.Errorf("group-a reserved cores = %d, want %d", a[ResourceCores], 2*flavorCPUs)
+	}
+	// group-b: single failover on the shared host-1 = 1 slot.
+	b := reserved[vmUsageKey{group: "group-b", az: az}]
+	if b[ResourceMemory] != flavorMem {
+		t.Errorf("group-b reserved memory = %d, want %d", b[ResourceMemory], flavorMem)
+	}
+	if b[ResourceCores] != flavorCPUs {
+		t.Errorf("group-b reserved cores = %d, want %d", b[ResourceCores], flavorCPUs)
 	}
 }
 
@@ -361,7 +479,7 @@ func TestReconcileAZ_SkipsCRDWriteOnSchedulerError(t *testing.T) {
 
 	ctrl.reconcileAZ(context.Background(), az,
 		map[string]compute.FlavorGroupFeature{groupName: groupData},
-		map[string]hv1.Hypervisor{}, map[string]map[string]int64{}, map[vmUsageKey]vmUsage{})
+		map[string]hv1.Hypervisor{}, map[string]map[string]int64{}, nil, map[vmUsageKey]vmUsage{})
 
 	// Stale probes → CRD must NOT be written; last good state is preserved.
 	var list v1alpha1.FlavorGroupCapacityList
@@ -433,7 +551,7 @@ func TestReconcileAZ_MarksExistingCRDNotReadyOnSchedulerError(t *testing.T) {
 
 	ctrl.reconcileAZ(context.Background(), az,
 		map[string]compute.FlavorGroupFeature{groupName: groupData},
-		hvByName, map[string]map[string]int64{}, map[vmUsageKey]vmUsage{})
+		hvByName, map[string]map[string]int64{}, nil, map[vmUsageKey]vmUsage{})
 
 	var crd v1alpha1.FlavorGroupCapacity
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdName}, &crd); err != nil {
@@ -498,9 +616,9 @@ func TestReconcileAZ_IdempotentUpdate(t *testing.T) {
 	groups := map[string]compute.FlavorGroupFeature{groupName: groupData}
 
 	// First call
-	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]map[string]int64{}, map[vmUsageKey]vmUsage{})
+	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]map[string]int64{}, nil, map[vmUsageKey]vmUsage{})
 	// Second call — should not error on the already-existing CRD.
-	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]map[string]int64{}, map[vmUsageKey]vmUsage{})
+	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]map[string]int64{}, nil, map[vmUsageKey]vmUsage{})
 
 	var crd v1alpha1.FlavorGroupCapacity
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdName}, &crd); err != nil {
@@ -728,7 +846,7 @@ func TestReconcileAZ_ZeroMemoryFlavorSkipped(t *testing.T) {
 	// reconcileAZ logs and skips groups with zero memory; it does not return an error.
 	c.reconcileAZ(context.Background(), "az-a",
 		map[string]compute.FlavorGroupFeature{"hana-v2": groupData},
-		nil, nil, nil)
+		nil, nil, nil, nil)
 
 	// No CRD should have been created.
 	var list v1alpha1.FlavorGroupCapacityList
@@ -1048,7 +1166,7 @@ func TestComputeVMUsage_ZerosOutWhenAllVMsRemoved(t *testing.T) {
 	}
 
 	// Now run reconcileAZ to verify the CRD gets zeroed out.
-	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]map[string]int64{}, usageByKey)
+	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]map[string]int64{}, nil, usageByKey)
 
 	var crd v1alpha1.FlavorGroupCapacity
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdName}, &crd); err != nil {

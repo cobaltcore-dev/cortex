@@ -100,9 +100,11 @@ type FlavorGroupCapacityStatus struct {
 	ExclusivelyFreeSlots int64 `json:"exclusivelyFreeSlots,omitempty"`
 
 	// ExclusivelyReservedCapacity is the reservation-blocked memory and CPU (failover slots and
-	// unfilled committed-resource slots) on the hosts exclusively assigned to this group by the
-	// round-robin split. These slots are subtracted from both the placeable probe and the split,
-	// so they are neither running nor free; they must be added back to report installed capacity.
+	// unfilled committed-resource slots) attributed to this group by each reservation's own
+	// ResourceGroup. These slots are subtracted from both the placeable probe and the split, so
+	// they are neither running nor free; they must be added back to report installed capacity.
+	// Because every reservation belongs to exactly one group, the sum across groups never
+	// exceeds installed capacity.
 	// +kubebuilder:validation:Optional
 	ExclusivelyReservedCapacity map[string]resource.Quantity `json:"exclusivelyReservedCapacity,omitempty"`
 

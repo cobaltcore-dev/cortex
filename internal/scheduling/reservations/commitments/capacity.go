@@ -96,9 +96,10 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			// ExclusivelyFreeSlots is pre-computed by the controller using min(memSlots, cpuSlots).
 			exclusiveFreeSlots := uint64(crd.Status.ExclusivelyFreeSlots) //nolint:gosec
 
-			// Reservation-blocked slots (failover + unfilled committed) on this group's assigned
-			// hosts. They are subtracted from both the placeable probe and the split, so they are
-			// neither running nor free. Add them back so reported capacity reflects installed hardware.
+			// Reservation-blocked slots (failover + unfilled committed) attributed to this group
+			// by each reservation's own ResourceGroup. They are subtracted from both the placeable
+			// probe and the split, so they are neither running nor free. Add them back so reported
+			// capacity reflects installed hardware.
 			reservedSlots := uint64(crd.Status.ExclusivelyReservedSlots) //nolint:gosec
 			reservedCores := int64(0)
 			if qty, ok := crd.Status.ExclusivelyReservedCapacity[string(v1alpha1.CommittedResourceTypeCores)]; ok {
