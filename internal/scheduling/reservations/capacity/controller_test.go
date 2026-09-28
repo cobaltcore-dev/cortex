@@ -326,11 +326,10 @@ func TestReconcileAZ_WritesReservedCapacity(t *testing.T) {
 	}
 }
 
-// TestReservedResourcesByGroupAZ verifies that reservation-blocked capacity is attributed to a
-// flavor group by each reservation's own ResourceGroup — independent of the round-robin split —
-// so a host fully packed by empty reservations still contributes, and a host shared by two groups
-// splits its reservations correctly. It also covers failover ResourceGroup carrying a flavor name
-// and the skipping of pending and in-flight reservations.
+// TestReservedResourcesByGroupAZ verifies reservations are attributed by their own ResourceGroup
+// (independent of the split): a host fully packed by empty reservations still counts, a shared host
+// splits across two groups, failover ResourceGroup may hold a flavor name, and pending/in-flight
+// reservations are skipped.
 func TestReservedResourcesByGroupAZ(t *testing.T) {
 	const az = "qa-de-1a"
 	const flavorMem = int64(4096) * 1024 * 1024

@@ -871,13 +871,10 @@ func (c *Reconciler) blockedResourcesByHost(ctx context.Context) (map[string]map
 	return blocked, nil
 }
 
-// reservedResourcesByGroupAZ attributes reservation-blocked capacity (failover slots and
-// unfilled committed-resource slots) to the flavor group that owns each reservation, keyed by
-// (group, AZ). Attribution uses each reservation's own ResourceGroup rather than the host it
-// sits on, so a host that is fully packed by empty reservations — and therefore assigned to no
-// group by the round-robin split — still contributes its reserved capacity to the right group.
-// Only placed reservations (with a target/status host that is a known hypervisor) are counted,
-// each exactly once; pending reservations are picked up on a later reconcile once placed.
+// reservedResourcesByGroupAZ sums reservation-blocked capacity (failover + unfilled committed
+// slots) per (group, AZ), attributing each reservation by its own ResourceGroup rather than by
+// host — so a host fully packed by empty reservations still counts. Only placed reservations are
+// included, each once.
 func (c *Reconciler) reservedResourcesByGroupAZ(
 	ctx context.Context,
 	flavorGroups map[string]compute.FlavorGroupFeature,
@@ -941,10 +938,9 @@ func (c *Reconciler) reservedResourcesByGroupAZ(
 	return reserved, nil
 }
 
-// resolveReservationGroup determines the flavor group a reservation belongs to. Committed
-// reservations carry the group directly. Failover reservations carry either the group name or —
-// when useFlavorGroupResources is disabled — the flavor name, which is resolved to its group.
-// Returns false if no group can be determined.
+// resolveReservationGroup returns the flavor group a reservation belongs to. Committed reservations
+// carry the group directly; failover reservations carry the group name, or the flavor name (resolved
+// to its group) when useFlavorGroupResources is disabled. Returns false if none can be determined.
 func resolveReservationGroup(
 	res *v1alpha1.Reservation,
 	flavorGroups map[string]compute.FlavorGroupFeature,
