@@ -44,7 +44,7 @@ func (r *RepairReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	log := ctrl.LoggerFrom(ctx).WithValues("committedResource", req.Name)
+	log := LoggerFromContext(ctx).WithValues("component", "cr-repair", "committedResource", req.Name)
 
 	minInterval := r.Conf.MinInterval.Duration
 	maxInterval := r.Conf.MaxInterval.Duration
@@ -111,7 +111,7 @@ func (r *RepairReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// Build exclusion set from post-Phase-1 state, then fetch unassigned VMs.
 	exclusion := buildExclusionSet(allRes)
-	unassigned, err := r.buildUnassignedVMs(ctx, &cr, &hv1.HypervisorList{Items: azHVItems}, flavorNames, exclusion)
+	unassigned, err := r.buildUnassignedVMs(ctx, &cr, azHVItems, flavorNames, exclusion)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -240,8 +240,11 @@ func (r *RepairReconciler) loadProjectReservations(ctx context.Context, projectI
 }
 
 // buildUnassignedVMs returns a per-HV map of project VMs in the flavor group not yet in any slot.
-func (r *RepairReconciler) buildUnassignedVMs(ctx context.Context, cr *v1alpha1.CommittedResource, azHVList *hv1.HypervisorList, flavorNames map[string]bool, exclusion map[string]struct{}) (map[string][]reservations.VM, error) {
-	azVMs, err := r.VMSource.ListVMsOnHypervisors(ctx, azHVList, true)
+func (r *RepairReconciler) buildUnassignedVMs(ctx context.Context, cr *v1alpha1.CommittedResource, azHVItems []hv1.Hypervisor, flavorNames map[string]bool, exclusion map[string]struct{}) (map[string][]reservations.VM, error) {
+	// ListVMsOnHypervisors with trustHypervisorLocation=true is used instead of ListVMsByProject
+	// so that VM host assignments come from the HV CRD (authoritative) rather than the Nova DB
+	// (which lags during live migrations). TODO: revisit when the VM CRD is available.
+	azVMs, err := r.VMSource.ListVMsOnHypervisors(ctx, &hv1.HypervisorList{Items: azHVItems}, true)
 	if err != nil {
 		return nil, err
 	}
@@ -359,13 +362,15 @@ func phase2Fill(allRes []v1alpha1.Reservation, currentIdx []int, unassigned map[
 			continue
 		}
 		// No VMs on current host — relocate to any host where the smallest VM fits.
+		// Map iteration is intentionally non-deterministic: any host that fits is acceptable.
 		slotMem := repairSlotMemoryBytes(res)
 		for hvName, vms := range unassigned {
 			if len(vms) == 0 || repairVMMemoryBytes(&vms[len(vms)-1]) > slotMem {
 				continue
 			}
 			res.Spec.TargetHost = hvName
-			fillSlotFromHost(res, hvName, unassigned, exclusion)
+			// Slot capacity check above guarantees at least one VM fits; discard the bool.
+			_ = fillSlotFromHost(res, hvName, unassigned, exclusion)
 			modified[idx] = struct{}{}
 			break
 		}
@@ -453,7 +458,7 @@ func repairMakeAllocation(vm reservations.VM) v1alpha1.CommittedResourceAllocati
 	return alloc
 }
 
-// sortVMsDescByMemory sorts VMs by memory descending; UUID is the stable tie-break.
+// sortVMsDescByMemory sorts VMs by memory descending; UUID is the deterministic tie-break.
 func sortVMsDescByMemory(vms []reservations.VM) {
 	sort.Slice(vms, func(i, j int) bool {
 		mi, mj := repairVMMemoryBytes(&vms[i]), repairVMMemoryBytes(&vms[j])
@@ -468,7 +473,7 @@ func sortVMsDescByMemory(vms []reservations.VM) {
 // of projects that have reservation slots on that host.
 func (r *RepairReconciler) hypervisorToCommittedResourcesForRepair(ctx context.Context, obj client.Object) []reconcile.Request {
 	hvName := obj.GetName()
-	log := ctrl.LoggerFrom(ctx)
+	log := LoggerFromContext(ctx).WithValues("component", "cr-repair")
 
 	var reservationList v1alpha1.ReservationList
 	if err := r.List(ctx, &reservationList, client.MatchingLabels{
