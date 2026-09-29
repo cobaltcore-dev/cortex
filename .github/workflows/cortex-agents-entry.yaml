@@ -1,0 +1,289 @@
+# Cortex Agents entry workflow — the single reusable entry point.
+#
+# Consumer repositories carry only a thin stub (.agents/cortex-agents-hub.yaml
+# in this repository) that declares the triggers and calls this workflow.
+# Everything else lives here: config parsing, the allowlist and branch gates,
+# and the fan-out to the feature workflows. Logic changes land in cortex alone
+# and reach every consumer when it re-pins.
+#
+# Self-pinning: a consumer pins this file once
+# (uses: cobaltcore-dev/cortex/.github/workflows/cortex-agents-entry.yaml@<tag
+# or SHA>). This workflow then resolves its own commit via job.workflow_sha,
+# clones cortex at exactly that commit to reuse the composite actions, and
+# passes that commit down as cortex_ref — the actions, the .agents plugin, and
+# the feature workflows all run from the one commit the stub pinned. The
+# feature workflows are called with relative refs, which resolve to the same
+# commit as this file. job.workflow_* is unavailable on GitHub Enterprise
+# Server.
+#
+# Permissions: GitHub only lets a called workflow maintain or reduce the
+# caller's grant, never elevate it, so the caller must consent to the union of
+# what the feature workflows may need. The top-level grant below is that
+# union; every job here reduces it to what it actually uses, and the feature
+# workflows tighten it further per job.
+
+name: Cortex Agents — Entry
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "GitHub environment the agent jobs run in"
+        type: string
+        required: false
+        default: ""
+    # Optional on purpose: fork-originated pull_request events carry no
+    # secrets at all, and this workflow must still load for them so the gates
+    # can skip the agent jobs. The feature workflows declare the secrets as
+    # required and fail loudly if ever reached without them.
+    secrets:
+      AICORE_RESOURCE_GROUP:
+        required: false
+      AICORE_BASE_URL:
+        required: false
+      AICORE_AUTH_URL:
+        required: false
+      AICORE_CLIENT_ID:
+        required: false
+      AICORE_CLIENT_SECRET:
+        required: false
+      CORTEX_AI_AGENTS_APP_ID:
+        required: false
+      CORTEX_AI_AGENTS_CLIENT_PKEY:
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      allowlist: ${{ steps.parse.outputs.allowlist }}
+      review_active: ${{ steps.parse.outputs.review_active }}
+      review_model: ${{ steps.parse.outputs.review_model }}
+      review_command: ${{ steps.parse.outputs.review_command }}
+      bugfinder_active: ${{ steps.parse.outputs.bugfinder_active }}
+      bugfinder_model: ${{ steps.parse.outputs.bugfinder_model }}
+      bugfinder_command: ${{ steps.parse.outputs.bugfinder_command }}
+      docswriter_active: ${{ steps.parse.outputs.docswriter_active }}
+      docswriter_model: ${{ steps.parse.outputs.docswriter_model }}
+      docswriter_command: ${{ steps.parse.outputs.docswriter_command }}
+      assistant_active: ${{ steps.parse.outputs.assistant_active }}
+      assistant_model: ${{ steps.parse.outputs.assistant_model }}
+      assistant_trigger_phrase: ${{ steps.parse.outputs.assistant_trigger_phrase }}
+      release_active: ${{ steps.parse.outputs.release_active }}
+      release_model: ${{ steps.parse.outputs.release_model }}
+      release_command: ${{ steps.parse.outputs.release_command }}
+      release_branches: ${{ steps.parse.outputs.release_branches }}
+      cortex_ref: ${{ job.workflow_sha }}
+    steps:
+      # Check out the base ref, never the fork head — the fork-safety linchpin
+      # for pull_request_target.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+      # Clone cortex at the exact commit this workflow was called from, to
+      # reuse the composite actions co-located with this file.
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .cortex-agent
+          sparse-checkout: .github/actions
+      - id: parse
+        uses: ./.cortex-agent/.github/actions/parse-cortex-config
+
+  review-gate:
+    needs: config
+    if: >-
+      needs.config.outputs.review_active == 'true' &&
+      (github.event_name == 'pull_request_target' || github.event_name == 'pull_request_review_comment')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      allowed: ${{ steps.check.outputs.allowed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .cortex-agent
+          sparse-checkout: .github/actions
+      - id: check
+        uses: ./.cortex-agent/.github/actions/check-allowlist
+        with:
+          allowlist: ${{ needs.config.outputs.allowlist }}
+          login: ${{ github.event.pull_request.user.login || github.event.comment.user.login }}
+
+  review:
+    needs: [config, review-gate]
+    if: needs.review-gate.outputs.allowed == 'true'
+    uses: ./.github/workflows/cortex-agent-review.yaml
+    secrets:
+      AICORE_RESOURCE_GROUP: ${{ secrets.AICORE_RESOURCE_GROUP }}
+      AICORE_BASE_URL: ${{ secrets.AICORE_BASE_URL }}
+      AICORE_AUTH_URL: ${{ secrets.AICORE_AUTH_URL }}
+      AICORE_CLIENT_ID: ${{ secrets.AICORE_CLIENT_ID }}
+      AICORE_CLIENT_SECRET: ${{ secrets.AICORE_CLIENT_SECRET }}
+      CORTEX_AI_AGENTS_APP_ID: ${{ secrets.CORTEX_AI_AGENTS_APP_ID }}
+      CORTEX_AI_AGENTS_CLIENT_PKEY: ${{ secrets.CORTEX_AI_AGENTS_CLIENT_PKEY }}
+    with:
+      model: ${{ needs.config.outputs.review_model }}
+      command: ${{ needs.config.outputs.review_command }}
+      cortex_ref: ${{ needs.config.outputs.cortex_ref }}
+      environment: ${{ inputs.environment }}
+
+  bugfinder:
+    needs: config
+    if: >-
+      needs.config.outputs.bugfinder_active == 'true' &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' &&
+        (github.event.inputs.feature == '' || github.event.inputs.feature == 'bugfinder')))
+    uses: ./.github/workflows/cortex-agent-bugfinder.yaml
+    secrets:
+      AICORE_RESOURCE_GROUP: ${{ secrets.AICORE_RESOURCE_GROUP }}
+      AICORE_BASE_URL: ${{ secrets.AICORE_BASE_URL }}
+      AICORE_AUTH_URL: ${{ secrets.AICORE_AUTH_URL }}
+      AICORE_CLIENT_ID: ${{ secrets.AICORE_CLIENT_ID }}
+      AICORE_CLIENT_SECRET: ${{ secrets.AICORE_CLIENT_SECRET }}
+      CORTEX_AI_AGENTS_APP_ID: ${{ secrets.CORTEX_AI_AGENTS_APP_ID }}
+      CORTEX_AI_AGENTS_CLIENT_PKEY: ${{ secrets.CORTEX_AI_AGENTS_CLIENT_PKEY }}
+    with:
+      model: ${{ needs.config.outputs.bugfinder_model }}
+      command: ${{ needs.config.outputs.bugfinder_command }}
+      cortex_ref: ${{ needs.config.outputs.cortex_ref }}
+      environment: ${{ inputs.environment }}
+
+  docswriter:
+    needs: config
+    if: >-
+      needs.config.outputs.docswriter_active == 'true' &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' &&
+        (github.event.inputs.feature == '' || github.event.inputs.feature == 'docswriter')))
+    uses: ./.github/workflows/cortex-agent-docswriter.yaml
+    secrets:
+      AICORE_RESOURCE_GROUP: ${{ secrets.AICORE_RESOURCE_GROUP }}
+      AICORE_BASE_URL: ${{ secrets.AICORE_BASE_URL }}
+      AICORE_AUTH_URL: ${{ secrets.AICORE_AUTH_URL }}
+      AICORE_CLIENT_ID: ${{ secrets.AICORE_CLIENT_ID }}
+      AICORE_CLIENT_SECRET: ${{ secrets.AICORE_CLIENT_SECRET }}
+      CORTEX_AI_AGENTS_APP_ID: ${{ secrets.CORTEX_AI_AGENTS_APP_ID }}
+      CORTEX_AI_AGENTS_CLIENT_PKEY: ${{ secrets.CORTEX_AI_AGENTS_CLIENT_PKEY }}
+    with:
+      model: ${{ needs.config.outputs.docswriter_model }}
+      command: ${{ needs.config.outputs.docswriter_command }}
+      cortex_ref: ${{ needs.config.outputs.cortex_ref }}
+      environment: ${{ inputs.environment }}
+
+  assistant-gate:
+    needs: config
+    if: >-
+      needs.config.outputs.assistant_active == 'true' &&
+      (github.event_name == 'issue_comment' ||
+       github.event_name == 'issues' ||
+       github.event_name == 'pull_request_review_comment')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      allowed: ${{ steps.check.outputs.allowed }}
+      triggered: ${{ steps.trigger.outputs.triggered }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .cortex-agent
+          sparse-checkout: .github/actions
+      - id: check
+        uses: ./.cortex-agent/.github/actions/check-allowlist
+        with:
+          allowlist: ${{ needs.config.outputs.allowlist }}
+          login: ${{ github.event.sender.login }}
+      - id: trigger
+        env:
+          PHRASE: ${{ needs.config.outputs.assistant_trigger_phrase }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          if [[ "$COMMENT_BODY" == *"$PHRASE"* ]] \
+             || [[ "$ISSUE_BODY" == *"$PHRASE"* ]] \
+             || [[ "$ISSUE_TITLE" == *"$PHRASE"* ]]; then
+            echo "triggered=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "triggered=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  assistant:
+    needs: [config, assistant-gate]
+    if: needs.assistant-gate.outputs.allowed == 'true' && needs.assistant-gate.outputs.triggered == 'true'
+    uses: ./.github/workflows/cortex-agent-assistant.yaml
+    secrets:
+      AICORE_RESOURCE_GROUP: ${{ secrets.AICORE_RESOURCE_GROUP }}
+      AICORE_BASE_URL: ${{ secrets.AICORE_BASE_URL }}
+      AICORE_AUTH_URL: ${{ secrets.AICORE_AUTH_URL }}
+      AICORE_CLIENT_ID: ${{ secrets.AICORE_CLIENT_ID }}
+      AICORE_CLIENT_SECRET: ${{ secrets.AICORE_CLIENT_SECRET }}
+      CORTEX_AI_AGENTS_APP_ID: ${{ secrets.CORTEX_AI_AGENTS_APP_ID }}
+      CORTEX_AI_AGENTS_CLIENT_PKEY: ${{ secrets.CORTEX_AI_AGENTS_CLIENT_PKEY }}
+    with:
+      model: ${{ needs.config.outputs.assistant_model }}
+      trigger_phrase: ${{ needs.config.outputs.assistant_trigger_phrase }}
+      allowlist: ${{ needs.config.outputs.allowlist }}
+      cortex_ref: ${{ needs.config.outputs.cortex_ref }}
+      environment: ${{ inputs.environment }}
+
+  release-gate:
+    needs: config
+    if: needs.config.outputs.release_active == 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matched: ${{ steps.match.outputs.matched }}
+    steps:
+      - id: match
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PATTERNS: ${{ needs.config.outputs.release_branches }}
+        run: |
+          matched=false
+          IFS=',' read -ra pats <<< "${PATTERNS}"
+          for pat in "${pats[@]}"; do
+            pat="$(echo "$pat" | xargs)"
+            # Unquoted $pat on purpose: patterns like release/* must glob-match.
+            # shellcheck disable=SC2254
+            case "${BASE_REF}" in
+              $pat) matched=true; break ;;
+            esac
+          done
+          echo "matched=${matched}" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: [config, release-gate]
+    if: needs.release-gate.outputs.matched == 'true'
+    uses: ./.github/workflows/cortex-agent-release.yaml
+    secrets:
+      AICORE_RESOURCE_GROUP: ${{ secrets.AICORE_RESOURCE_GROUP }}
+      AICORE_BASE_URL: ${{ secrets.AICORE_BASE_URL }}
+      AICORE_AUTH_URL: ${{ secrets.AICORE_AUTH_URL }}
+      AICORE_CLIENT_ID: ${{ secrets.AICORE_CLIENT_ID }}
+      AICORE_CLIENT_SECRET: ${{ secrets.AICORE_CLIENT_SECRET }}
+      CORTEX_AI_AGENTS_APP_ID: ${{ secrets.CORTEX_AI_AGENTS_APP_ID }}
+      CORTEX_AI_AGENTS_CLIENT_PKEY: ${{ secrets.CORTEX_AI_AGENTS_CLIENT_PKEY }}
+    with:
+      model: ${{ needs.config.outputs.release_model }}
+      command: ${{ needs.config.outputs.release_command }}
+      pr_number: ${{ github.event.pull_request.number }}
+      cortex_ref: ${{ needs.config.outputs.cortex_ref }}
+      environment: ${{ inputs.environment }}
