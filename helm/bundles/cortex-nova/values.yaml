@@ -283,6 +283,16 @@ cortex-scheduling-controllers:
       # Also acts as the periodic fallback interval: a successful reconcile schedules
       # the next run after this duration, so this is also the maximum status staleness.
       cooldownInterval: "5m"
+    committedResourceRepairReconciler:
+      # When true, the repair reconciler starts and periodically corrects reservation slot drift:
+      # stale VM allocations are removed, duplicates de-duplicated, and empty slots refilled.
+      enabled: true
+      # Minimum time between repair runs for the same CommittedResource (skip gate).
+      # A repair triggered by a watch event is deferred if one ran within this window.
+      minInterval: "1h"
+      # Maximum time between repair runs for the same CommittedResource (periodic fallback).
+      # Every successful repair schedules the next run after this duration.
+      maxInterval: "24h"
     # OvercommitMappings is a list of mappings that map hypervisor traits to
     # overcommit ratios. Note that this list is applied in order, so if there
     # are multiple mappings applying to the same hypervisors, the last mapping
