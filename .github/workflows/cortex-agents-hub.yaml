@@ -81,7 +81,6 @@ jobs:
       model: ${{ needs.config.outputs.review_model }}
       command: ${{ needs.config.outputs.review_command }}
       cortex_ref: ${{ needs.config.outputs.cortex_ref }}
-      environment: claude
 
   bugfinder:
     needs: config
@@ -96,7 +95,6 @@ jobs:
       model: ${{ needs.config.outputs.bugfinder_model }}
       command: ${{ needs.config.outputs.bugfinder_command }}
       cortex_ref: ${{ needs.config.outputs.cortex_ref }}
-      environment: claude
 
   docswriter:
     needs: config
@@ -111,7 +109,6 @@ jobs:
       model: ${{ needs.config.outputs.docswriter_model }}
       command: ${{ needs.config.outputs.docswriter_command }}
       cortex_ref: ${{ needs.config.outputs.cortex_ref }}
-      environment: claude
 
   assistant-gate:
     needs: config
@@ -158,7 +155,6 @@ jobs:
       trigger_phrase: ${{ needs.config.outputs.assistant_trigger_phrase }}
       allowlist: ${{ needs.config.outputs.allowlist }}
       cortex_ref: ${{ needs.config.outputs.cortex_ref }}
-      environment: claude
 
   release-gate:
     needs: config
@@ -194,4 +190,3 @@ jobs:
       command: ${{ needs.config.outputs.release_command }}
       pr_number: ${{ github.event.pull_request.number }}
       cortex_ref: ${{ needs.config.outputs.cortex_ref }}
-      environment: claude
