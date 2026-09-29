@@ -15,7 +15,6 @@ allowlist:
 review:
   active: true
   # model: sap/anthropic--claude-4.6-opus
-  # command: /cortex-agents:review
 
 # Grooming passes, each independently toggleable. Their cadence is the static
 # cron in the hub workflow (.github/workflows/cortex-agents-hub.yaml) — edit it
