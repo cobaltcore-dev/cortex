@@ -30,8 +30,30 @@ and `/cortex-agents:release`, and makes the agents dispatchable as
 Review runs from an inline prompt in the reusable review workflow rather than
 a plugin command.
 
-The `.github/` folder holds only the *activation*: a config file and a hub
-workflow that calls cortex's reusable workflows.
+The `.github/` folder of a consumer holds only the *activation*: a config
+file and a ~50-line stub workflow that lists the triggers and calls cortex's
+single entry workflow (`cortex-agents-entry.yaml`). The entry workflow holds
+everything else — config parsing, the allowlist and branch gates, and the
+fan-out to the feature workflows — so logic changes land in cortex alone and
+reach every consumer when it re-pins.
+
+Three things must live in the consuming repository, because GitHub requires
+the caller to consent to them: the `on:` triggers (they cannot be inherited),
+`secrets: inherit`, and the `permissions:` grant — the union of what the
+agents may request, since a called workflow may only maintain or reduce the
+caller's grant, never elevate it. Every job inside cortex downgrades to what
+it actually uses.
+
+## Version pinning
+
+The stub pins the entry workflow once
+(`uses: cobaltcore-dev/cortex/.github/workflows/cortex-agents-entry.yaml@<tag
+or SHA>`). That pin is the only place a cortex version is referenced: the
+entry workflow resolves its own commit from it (`job.workflow_sha`), clones
+cortex at exactly that commit to reuse its composite actions, and passes that
+commit down as `cortex_ref` to the feature workflows, which fetch the
+`.agents/` plugin from the same commit. Re-pinning the one line upgrades the
+whole chain atomically.
 
 ## One-time organization setup (admin)
 
@@ -50,7 +72,7 @@ the agents:
 | `CORTEX_AI_AGENTS_CLIENT_PKEY` | GitHub App private key (PEM) |
 
 Because they are organization secrets, consumer repositories define **zero**
-repository secrets — the hub workflow passes `secrets: inherit`.
+repository secrets — the stub workflow passes `secrets: inherit`.
 
 The `cortex-ai-agents` GitHub App must be installed on cortex with `contents: read`
 so the runner can fetch the `.agents/` plugin.
@@ -58,14 +80,15 @@ so the runner can fetch the `.agents/` plugin.
 ## Adopting the agents (per repository)
 
 1. Copy [`cortex-agents-hub.yaml`](cortex-agents-hub.yaml) to
-   `.github/workflows/cortex-agents-hub.yaml` in your repository. Pin `CORTEX_REF` (and
-   the `@main` refs on the `uses:` lines) to a released cortex tag or SHA for
-   reproducibility.
+   `.github/workflows/cortex-agents-hub.yaml` in your repository. Pin the
+   `uses:` line in it to a released cortex tag or SHA for reproducibility —
+   that one pin versions the entire chain (see *Version pinning* above).
 2. Copy [`cortex-agents.config.yaml`](cortex-agents.config.yaml) to
    `.github/cortex-agents.config.yaml` and turn on the features you want.
 
 That is all. With no config file, or with every feature set to `active: false`,
-nothing runs.
+nothing runs. From then on, the stub never changes — feature and gating
+changes are picked up by re-pinning the `uses:` line alone.
 
 ## Config schema (`.github/cortex-agents.config.yaml`)
 
@@ -93,7 +116,7 @@ nothing runs.
 
 - **The bugfinder/docswriter cadence is a static cron.** GitHub cannot read a
   cron expression from a file, so the schedule lives only as the `cron:` in the
-  hub workflow — there is no cadence config field, and the cron need not be
+  stub workflow — there is no cadence config field, and the cron need not be
   weekly. Both passes share that one cron and are then gated by their own `active`
   flag, so you can enable either alone. To change the cadence, edit the `cron:` in
   your `.github/workflows/cortex-agents-hub.yaml`. Each pass examines a fixed 7-day
@@ -104,6 +127,15 @@ nothing runs.
   read-only nature of the review pass (its only mutation is PR comments).
 - **The `.agents/` plugin is fetched from cortex at run time.** This needs the App
   installation and the private-repository access setting above.
-- **Non-Go repositories** may need to extend the hub workflow for their own build
-  toolchain; the Go setup step is skipped automatically when there is no `go.mod`.
+- **The stub grants write permissions up front.** GitHub requires the caller
+  to consent to everything a called workflow may do, so the stub carries the
+  union (`contents`, `pull-requests`, `issues`, `id-token: write`). Tightening
+  happens inside cortex: the gates and config jobs run read-only, and each
+  feature workflow requests only what it needs. Fork-originated
+  `pull_request` events never see secrets regardless.
+- **`job.workflow_sha` self-pinning needs github.com**, not GitHub Enterprise
+  Server.
+- **Non-Go repositories** may need cortex to extend the agent workflows for
+  their build toolchain; the Go setup step is skipped automatically when there
+  is no `go.mod`.
 - **`effort` is intentionally not supported** yet.
