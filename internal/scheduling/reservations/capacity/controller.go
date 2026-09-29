@@ -248,10 +248,16 @@ func (c *Reconciler) reconcileAll(ctx context.Context) error {
 		blockedByReservations = map[string]map[string]int64{}
 	}
 
+	reservedByGroupAZ, err := c.reservedResourcesByGroupAZ(ctx, flavorGroups, hvByName)
+	if err != nil {
+		logger.Error(err, "failed to attribute reserved capacity to flavor groups, reserved capacity will be omitted")
+		reservedByGroupAZ = map[vmUsageKey]map[string]int64{}
+	}
+
 	usageByKey, vmByHostGroup := c.computeVMUsage(ctx, flavorGroups, hvList.Items)
 
 	for _, az := range azs {
-		c.reconcileAZ(ctx, az, flavorGroups, hvByName, blockedByReservations, usageByKey, vmByHostGroup)
+		c.reconcileAZ(ctx, az, flavorGroups, hvByName, blockedByReservations, reservedByGroupAZ, usageByKey, vmByHostGroup)
 	}
 
 	logger.Info("capacity reconcile cycle completed",
@@ -521,6 +527,7 @@ func (c *Reconciler) reconcileAZ(
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	hvByName map[string]hv1.Hypervisor,
 	blockedByReservations map[string]map[string]int64,
+	reservedByGroupAZ map[vmUsageKey]map[string]int64,
 	usageByKey map[vmUsageKey]vmUsage,
 	vmByHostGroup map[vmHostGroupKey]map[string]int64,
 ) {
@@ -633,6 +640,7 @@ func (c *Reconciler) reconcileAZ(
 			freeResources[r.groupName],
 			exclusiveResources[r.groupName],
 			rawExclusiveByGroup[r.groupName],
+			reservedByGroupAZ[vmUsageKey{r.groupName, az}],
 		); err != nil {
 			logger.Error(err, "failed to write FlavorGroupCapacity CRD",
 				"flavorGroup", r.groupName, "az", az)
@@ -672,6 +680,7 @@ func (c *Reconciler) writeCRD(
 	freeRes map[string]int64,
 	exclusiveRes map[string]int64,
 	exclusivelyRawRes map[string]int64,
+	reservedRes map[string]int64,
 ) error {
 
 	crdName := crdNameFor(groupName, az)
@@ -717,11 +726,13 @@ func (c *Reconciler) writeCRD(
 	existing.Status.FreeCapacity = resMapToQuantity(freeRes)
 	existing.Status.ExclusivelyFreeCapacity = resMapToQuantity(exclusiveRes)
 	existing.Status.ExclusivelyRawCapacity = resMapToQuantity(exclusivelyRawRes)
+	existing.Status.ExclusivelyReservedCapacity = resMapToQuantity(reservedRes)
 	var exclusivelyFreeSlots int64
 	if flavorMemBytes := int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024; flavorMemBytes > 0 { //nolint:gosec
 		flavorVCPUs := int64(groupData.SmallestFlavor.VCPUs) //nolint:gosec
 		exclusivelyFreeSlots = flavorSlots(exclusiveRes, flavorMemBytes, flavorVCPUs)
 		existing.Status.ExclusivelyFreeSlots = exclusivelyFreeSlots
+		existing.Status.ExclusivelyReservedSlots = flavorSlots(reservedRes, flavorMemBytes, flavorVCPUs)
 	}
 	existing.Status.LastReconcileAt = metav1.Now()
 
@@ -899,6 +910,110 @@ func (c *Reconciler) blockedResourcesByHost(ctx context.Context) (map[string]map
 		}
 	}
 	return blocked, nil
+}
+
+// reservedResourcesByGroupAZ sums reservation-blocked capacity (failover + unfilled committed
+// slots) per (group, AZ), attributing each reservation by its own ResourceGroup rather than by
+// host — so a host fully packed by empty reservations still counts. Only placed reservations are
+// included, each once.
+func (c *Reconciler) reservedResourcesByGroupAZ(
+	ctx context.Context,
+	flavorGroups map[string]compute.FlavorGroupFeature,
+	hvByName map[string]hv1.Hypervisor,
+) (map[vmUsageKey]map[string]int64, error) {
+
+	logger := LoggerFromContext(ctx)
+	var list v1alpha1.ReservationList
+	if err := c.client.List(ctx, &list); err != nil {
+		return nil, fmt.Errorf("failed to list reservations: %w", err)
+	}
+
+	flavorToGroup := make(map[string]string)
+	for groupName, gd := range flavorGroups {
+		for _, f := range gd.Flavors {
+			flavorToGroup[f.Name] = groupName
+		}
+	}
+
+	reserved := make(map[vmUsageKey]map[string]int64)
+	for i := range list.Items {
+		res := &list.Items[i]
+		// Only committed and failover reservations represent capacity that is reserved but
+		// empty; in-flight reservations are VMs in buildup and are counted as running instead.
+		if res.Spec.Type != v1alpha1.ReservationTypeCommittedResource && res.Spec.Type != v1alpha1.ReservationTypeFailover {
+			continue
+		}
+		host := res.Status.Host
+		if host == "" {
+			host = res.Spec.TargetHost
+		}
+		if host == "" {
+			continue // pending; reported on a later cycle once placed
+		}
+		hv, ok := hvByName[host]
+		if !ok {
+			continue // host is not a known hypervisor in this cluster
+		}
+		az := hv.Labels["topology.kubernetes.io/zone"]
+		if az == "" {
+			continue
+		}
+		group, ok := resolveReservationGroup(res, flavorGroups, flavorToGroup)
+		if !ok {
+			logger.Info("reservation could not be attributed to a flavor group; its reserved capacity is not reported",
+				"reservation", res.Name, "type", res.Spec.Type, "az", az)
+			continue
+		}
+		blockedRes := reservations.UnusedReservationCapacity(res, false)
+		key := vmUsageKey{group: group, az: az}
+		if reserved[key] == nil {
+			reserved[key] = make(map[string]int64)
+		}
+		if qty, ok := blockedRes[hv1.ResourceMemory]; ok {
+			reserved[key][ResourceMemory] += qty.Value()
+		}
+		if qty, ok := blockedRes[hv1.ResourceCPU]; ok {
+			reserved[key][ResourceCores] += qty.Value()
+		}
+	}
+	return reserved, nil
+}
+
+// resolveReservationGroup returns the flavor group a reservation belongs to. Committed reservations
+// carry the group directly; failover reservations carry the group name, or the flavor name (resolved
+// to its group) when useFlavorGroupResources is disabled. Returns false if none can be determined.
+func resolveReservationGroup(
+	res *v1alpha1.Reservation,
+	flavorGroups map[string]compute.FlavorGroupFeature,
+	flavorToGroup map[string]string,
+) (string, bool) {
+
+	switch res.Spec.Type {
+	case v1alpha1.ReservationTypeCommittedResource:
+		if res.Spec.CommittedResourceReservation == nil {
+			return "", false
+		}
+		if g := res.Spec.CommittedResourceReservation.ResourceGroup; g != "" {
+			if _, ok := flavorGroups[g]; ok {
+				return g, true
+			}
+		}
+		return "", false
+	case v1alpha1.ReservationTypeFailover:
+		if res.Spec.FailoverReservation == nil {
+			return "", false
+		}
+		g := res.Spec.FailoverReservation.ResourceGroup
+		if _, ok := flavorGroups[g]; ok {
+			return g, true
+		}
+		if group, ok := flavorToGroup[g]; ok {
+			return group, true
+		}
+		return "", false
+	default:
+		return "", false
+	}
 }
 
 // sumCommittedCapacity sums active CommittedResource amounts (memory type, guaranteed/confirmed)
