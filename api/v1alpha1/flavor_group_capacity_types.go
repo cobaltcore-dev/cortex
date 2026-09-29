@@ -99,6 +99,18 @@ type FlavorGroupCapacityStatus struct {
 	// +kubebuilder:validation:Optional
 	ExclusivelyFreeSlots int64 `json:"exclusivelyFreeSlots,omitempty"`
 
+	// ExclusivelyReservedCapacity is the reservation-blocked memory and CPU (failover + unfilled
+	// committed slots) attributed to this group by each reservation's own ResourceGroup. These
+	// slots are neither running nor free, so they are added back to report installed capacity;
+	// each reservation belongs to one group, so the sum across groups never exceeds capacity.
+	// +kubebuilder:validation:Optional
+	ExclusivelyReservedCapacity map[string]resource.Quantity `json:"exclusivelyReservedCapacity,omitempty"`
+
+	// ExclusivelyReservedSlots is the number of smallest-flavor VM slots represented by
+	// ExclusivelyReservedCapacity.
+	// +kubebuilder:validation:Optional
+	ExclusivelyReservedSlots int64 `json:"exclusivelyReservedSlots,omitempty"`
+
 	// RunningInstances is the number of VMs running in this (flavor group × AZ) whose
 	// flavor belongs to this group.
 	// +kubebuilder:validation:Optional

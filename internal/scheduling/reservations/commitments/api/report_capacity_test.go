@@ -421,6 +421,96 @@ func TestCapacityCalculator_VariableRatio_PrefersRawCapacity(t *testing.T) {
 	}
 }
 
+// TestCapacityCalculator_ReservedSlots verifies that reserved-but-empty slots (failover +
+// unfilled committed reservations, stored in ExclusivelyReservedCapacity/Slots) are added back
+// into reported capacity for a fixed-ratio group, and counted as usage so availability stays
+// equal to the truly-free amount.
+func TestCapacityCalculator_ReservedSlots(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	const flavorMemBytes = 32752 * 1024 * 1024
+
+	// running=200, exclusively free=800 slots, reserved=100 slots.
+	// capacity = 200 + 800 + 100 = 1100; usage = 200 + 100 = 300; availability = 800.
+	crd := createTestFlavorGroupCapacity(200, 800*flavorMemBytes, true)
+	crd.Status.ExclusivelyReservedSlots = 100
+	crd.Status.ExclusivelyReservedCapacity = map[string]resource.Quantity{
+		string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(100*flavorMemBytes, resource.BinarySI),
+		string(v1alpha1.CommittedResourceTypeCores):  *resource.NewQuantity(100*8, resource.DecimalSI),
+	}
+	calc := commitments.NewCapacityCalculator(
+		fake.NewClientBuilder().WithScheme(scheme).
+			WithObjects(createTestFlavorGroupKnowledge(t), crd).WithStatusSubresource(crd).Build(),
+		defaultCapacityConfig,
+	)
+	report, err := calc.CalculateCapacity(context.Background(),
+		liquid.ServiceCapacityRequest{AllAZs: []liquid.AvailabilityZone{"az-one"}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, res := range []string{"hw_version_test-group_ram", "hw_version_test-group_instances"} {
+		az := report.Resources[liquid.ResourceName(res)].PerAZ["az-one"]
+		if az.Capacity != 1100 {
+			t.Errorf("%s: capacity = %d, want 1100 (running 200 + free 800 + reserved 100)", res, az.Capacity)
+		}
+		if usage := az.Usage.UnwrapOr(0); usage != 300 {
+			t.Errorf("%s: usage = %d, want 300 (running 200 + reserved 100)", res, usage)
+		}
+		if avail := az.Capacity - az.Usage.UnwrapOr(0); avail != 800 {
+			t.Errorf("%s: availability = %d, want 800 (free slots)", res, avail)
+		}
+	}
+	cores := report.Resources["hw_version_test-group_cores"].PerAZ["az-one"]
+	if cores.Capacity != 800 {
+		t.Errorf("cores capacity = %d, want 800 (reserved cores added back)", cores.Capacity)
+	}
+	if usage := cores.Usage.UnwrapOr(0); usage != 800 {
+		t.Errorf("cores usage = %d, want 800 (reserved cores)", usage)
+	}
+}
+
+// TestCapacityCalculator_VariableRatio_RawIgnoresReserved verifies that for a variable-ratio
+// group the RAM raw path already includes reserved hardware, so ExclusivelyReservedCapacity is
+// NOT added again (no double count).
+func TestCapacityCalculator_VariableRatio_RawIgnoresReserved(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	const (
+		ramUnitGiB     = 2
+		flavorMemMiB   = 2048
+		flavorMemBytes = int64(flavorMemMiB) * 1024 * 1024
+		rawMemBytes    = 20 * 1024 * 1024 * 1024 // 20 GiB → 10 declared units
+	)
+	knowledge := createVariableRatioFlavorGroupKnowledge(t, flavorMemMiB)
+	crd := createFlavorGroupCapacityWithResources(3, 5*flavorMemBytes, 3*flavorMemBytes, 3*8, rawMemBytes)
+	// Reserved is set but must be ignored on the raw RAM path.
+	crd.Status.ExclusivelyReservedCapacity = map[string]resource.Quantity{
+		string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(4*1024*1024*1024, resource.BinarySI),
+	}
+	crd.Status.ExclusivelyReservedSlots = 2
+	cfg := commitments.APIConfig{
+		FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
+			"*": {RAM: commitments.RAMResourceTypeConfig{HasCapacity: true, RAMUnitGiB: ramUnitGiB}},
+		},
+	}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).WithObjects(knowledge, crd).WithStatusSubresource(crd).Build()
+	report, err := commitments.NewCapacityCalculator(fakeClient, cfg).CalculateCapacity(
+		context.Background(), liquid.ServiceCapacityRequest{AllAZs: []liquid.AvailabilityZone{"az-one"}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	az := report.Resources["hw_version_test-group_ram"].PerAZ["az-one"]
+	if az.Capacity != 10 {
+		t.Errorf("RAM capacity = %d, want 10 (raw hardware only, reserved not double counted)", az.Capacity)
+	}
+}
+
 func verifyPerAZMatchesRequest(t *testing.T, res *liquid.ResourceCapacityReport, requestedAZs []liquid.AvailabilityZone) {
 	t.Helper()
 	if res == nil {
