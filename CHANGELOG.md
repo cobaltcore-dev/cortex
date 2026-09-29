@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-09-29 — cortex v0.4.6
+
+### cortex v0.4.6 (sha-48602477)
+
+Bug fixes:
+- Fix failover and reservation capacity underreporting — reserved-but-empty capacity (failover reservations and unfilled committed-resource slots) was subtracted from the placeable probe and the round-robin split but never added back to the report, so it counted as neither used nor free and dropped out of reported capacity. Reserved capacity is now attributed per-reservation via each reservation's own `ResourceGroup`, so the three host slices (running, free, reserved) sum back to installed hardware ([#1247](https://github.com/cobaltcore-dev/cortex/pull/1247))
+
+CRD changes:
+- `FlavorGroupCapacity` `.status.exclusivelyReservedCapacity` added (map, optional) — reservation-blocked memory and CPU attributed per group
+- `FlavorGroupCapacity` `.status.exclusivelyReservedSlots` added (int64, optional) — smallest-flavor VM slots represented by `exclusivelyReservedCapacity`
+
+### cortex-shim v0.1.21 (sha-48602477)
+
+Non-breaking changes:
+- Shared binary rebuild with updated dependencies
+
+### cortex-placement-shim v0.1.21
+
+Includes updated chart cortex-shim v0.1.21.
+
+### cortex-nova v0.0.95
+
+Includes updated charts cortex v0.4.6 and cortex-postgres v0.6.18.
+
+### cortex-cinder v0.0.95
+
+Includes updated charts cortex v0.4.6 and cortex-postgres v0.6.18.
+
+### cortex-manila v0.0.95
+
+Includes updated charts cortex v0.4.6 and cortex-postgres v0.6.18.
+
+### cortex-crds v0.0.95
+
+Includes updated chart cortex v0.4.6.
+
+### cortex-ironcore v0.0.95
+
+Includes updated chart cortex v0.4.6.
+
+### cortex-pods v0.0.95
+
+Includes updated chart cortex v0.4.6.
+
 ## 2026-09-24 — [#1231](https://github.com/cobaltcore-dev/cortex/pull/1231)
 
 ### cortex v0.4.5 (sha-d4309076)
