@@ -483,7 +483,8 @@ func main() {
 		// feature code.
 		var migrations *migrationcounter.RepeatedMigrationCounter
 		if novaAPIConfig.EvacuationTracking.Enabled {
-			migrations = migrationcounter.New(novaAPIConfig.EvacuationTracking.ToCounterConfig())
+			counterConfig := novaAPIConfig.EvacuationTracking.ToCounterConfig()
+			migrations = migrationcounter.New(counterConfig)
 			metrics.Registry.MustRegister(migrationcounter.NewTrackedEntriesCollector(migrations))
 			softForceCounter := migrationcounter.NewSoftForceCounter()
 			metrics.Registry.MustRegister(softForceCounter)
@@ -492,6 +493,13 @@ func main() {
 				Threshold:        novaAPIConfig.EvacuationTracking.EffectiveThreshold(),
 				SoftForceCounter: softForceCounter,
 			}
+			setupLog.Info("evacuation soft-force tracking enabled",
+				"threshold", novaAPIConfig.EvacuationTracking.EffectiveThreshold(),
+				"window", counterConfig.Window,
+				"cleanupInterval", counterConfig.CleanupInterval,
+				"maxEntries", counterConfig.MaxEntries)
+		} else {
+			setupLog.Info("evacuation soft-force tracking disabled")
 		}
 		nova.NewAPI(novaAPIConfig, filterWeigherController, migrations).Init(mux)
 
