@@ -8,9 +8,11 @@ on:
         required: false
         default: "sap/anthropic--claude-4.6-opus"
       command:
+        # Accepted for backwards compatibility with the hub's passthrough; the
+        # review runs from the inline prompt below and ignores this value.
         type: string
         required: false
-        default: "/cortex-agents:review"
+        default: ""
       cortex_ref:
         type: string
         required: false
@@ -40,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
       id-token: write
     steps:
@@ -59,8 +61,31 @@ jobs:
           github_app_id: ${{ secrets.CORTEX_AI_AGENTS_APP_ID }}
           github_app_private_key: ${{ secrets.CORTEX_AI_AGENTS_CLIENT_PKEY }}
           litellm_model: ${{ inputs.model }}
-          prompt: ${{ inputs.command }}
           cortex_ref: ${{ inputs.cortex_ref }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Please review this pull request with a focus on:
+            - Code quality and best practices
+            - Potential bugs or issues
+            - Security implications
+            - Performance considerations
+
+            Note: The PR branch is already checked out in the current working directory.
+
+            Consider comments that have already been posted on this PR. Use
+            `gh pr view <PR> --json comments` and `gh api` to inspect existing
+            review and inline comments before writing anything. Do not repeat,
+            restate, or duplicate feedback that is already there. If everything
+            worth raising has already been covered, or the PR looks good, DO NOT
+            post any comment.
+
+            Use `gh pr comment` for top-level feedback.
+            Use `mcp__github_inline_comment__create_inline_comment` (with `confirmed: true`) to highlight specific code issues.
+            Only post GitHub comments - don't submit review text as messages.
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh api:*)"
           aicore_resource_group: ${{ secrets.AICORE_RESOURCE_GROUP }}
           aicore_base_url: ${{ secrets.AICORE_BASE_URL }}
           aicore_auth_url: ${{ secrets.AICORE_AUTH_URL }}

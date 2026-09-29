@@ -24,9 +24,11 @@ drifts.
 `.agents/` is a Claude Code plugin (`.claude-plugin/plugin.json` plus `commands/`
 and `agents/`). At run time the reusable workflow fetches this folder from cortex
 and loads it with `--plugin-dir`, which namespaces the commands as
-`/cortex-agents:review`, `/cortex-agents:bugfinder`, `/cortex-agents:docswriter`,
+`/cortex-agents:bugfinder`, `/cortex-agents:docswriter`,
 and `/cortex-agents:release`, and makes the agents dispatchable as
 `cortex-agents:<name>`. Your repository's own `.claude/` is never touched.
+Review runs from an inline prompt in the reusable review workflow rather than
+a plugin command.
 
 The `.github/` folder holds only the *activation*: a config file and a hub
 workflow that calls cortex's reusable workflows.
@@ -72,7 +74,7 @@ nothing runs.
 | `allowlist` | list of logins | empty (deny all) | Who may trigger review and assistant |
 | `review.active` | bool | `false` | Review allowlisted-author PRs |
 | `review.model` | string | `sap/anthropic--claude-4.6-opus` | Model for review |
-| `review.command` | string | `/cortex-agents:review` | Command prompt |
+| `review.command` | string | `/cortex-agents:review` | Accepted but ignored; review runs from an inline prompt |
 | `bugfinder.active` | bool | `false` | Enable the bugfinder pass |
 | `bugfinder.model` | string | default model | Model for the bugfinder |
 | `bugfinder.command` | string | `/cortex-agents:bugfinder` | Command prompt |
@@ -99,7 +101,7 @@ nothing runs.
   commits (the dedup step still prevents duplicate PRs).
 - **Review runs via `pull_request_target`.** Fork safety rests on checking out the
   base ref (never the fork head) for config parsing, the author allowlist, and the
-  read-only nature of `/cortex-agents:review` (its only mutation is PR comments).
+  read-only nature of the review pass (its only mutation is PR comments).
 - **The `.agents/` plugin is fetched from cortex at run time.** This needs the App
   installation and the private-repository access setting above.
 - **Non-Go repositories** may need to extend the hub workflow for their own build
