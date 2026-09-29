@@ -49,11 +49,7 @@ func (r *CommittedResourceController) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if creatorReq := cr.Annotations[v1alpha1.AnnotationCreatorRequestID]; creatorReq != "" {
-		ctx = WithGlobalRequestID(ctx, creatorReq)
-	} else {
-		ctx = WithNewGlobalRequestID(ctx)
-	}
+	ctx = WithNewGlobalRequestID(ctx)
 	logger := LoggerFromContext(ctx).WithValues(
 		"committedResource", req.Name,
 	)

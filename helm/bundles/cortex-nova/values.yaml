@@ -175,7 +175,7 @@ cortex-scheduling-controllers:
       # Enables VM allocation write-back into Reservation slots and no-host-found
       # classification by committed resource coverage. Enable only on deployments
       # that use committed resources. Requires also enabling of CR controllers and tasks
-      committedResourceTracking: false
+      committedResourceTracking: true
     # Pipeline used for the empty-state capacity probe (ignores allocations and reservations).
     capacityTotalPipeline: "kvm-general-purpose-load-balancing"
     # Pipeline used for the current-state capacity probe (considers current VM allocations).
@@ -244,7 +244,7 @@ cortex-scheduling-controllers:
       maxSlotsPerCommitment: 0
       # When true, the controller scans the AZ for existing PAYG VMs and pre-allocates them
       # into reservation slots before falling back to blind scheduler placement.
-      enablePaygPreAllocation: false
+      enablePaygPreAllocation: true
     committedResourceAPI:
       # Timeout for watching CommittedResource CRDs before rolling back
       watchTimeout: "15s"
