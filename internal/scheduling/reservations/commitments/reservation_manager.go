@@ -203,12 +203,6 @@ func (m *ReservationManager) ApplyCommitmentState(
 	// Phase 4.5 (PAYG PRE-ALLOCATE): absorb existing PAYG VMs into pre-populated slots.
 	// Creates one slot per PAYG VM (largest-first), consuming the delta.
 	// Any remaining delta falls through to Phase 5 (blind scheduler).
-	log.Info("PAYG pre-allocation check",
-		"enabled", m.cfg.EnablePaygPreAllocation,
-		"vmSourceConfigured", m.cfg.VMSource != nil,
-		"deltaMemoryBytes", deltaMemoryBytes,
-		"availabilityZone", desiredState.AvailabilityZone,
-	)
 	if m.cfg.EnablePaygPreAllocation && m.cfg.VMSource != nil && deltaMemoryBytes > 0 && desiredState.AvailabilityZone != "" {
 		scanStart := time.Now()
 		candidatesByHV, scanErr := ScanAZForPaygCandidates(
@@ -275,6 +269,13 @@ func (m *ReservationManager) ApplyCommitmentState(
 			}
 		}
 		log.Info("PAYG remapping done", "slotsCreated", result.Created, "durationMs", time.Since(scanStart).Milliseconds())
+	} else {
+		log.V(1).Info("PAYG pre-allocation skipped",
+			"enabled", m.cfg.EnablePaygPreAllocation,
+			"vmSourceConfigured", m.cfg.VMSource != nil,
+			"deltaMemoryBytes", deltaMemoryBytes,
+			"availabilityZone", desiredState.AvailabilityZone,
+		)
 	}
 
 	if deltaMemoryBytes > 0 {

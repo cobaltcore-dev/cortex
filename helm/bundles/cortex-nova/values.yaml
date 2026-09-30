@@ -175,7 +175,7 @@ cortex-scheduling-controllers:
       # Enables VM allocation write-back into Reservation slots and no-host-found
       # classification by committed resource coverage. Enable only on deployments
       # that use committed resources. Requires also enabling of CR controllers and tasks
-      committedResourceTracking: true
+      committedResourceTracking: false
     # Pipeline used for the empty-state capacity probe (ignores allocations and reservations).
     capacityTotalPipeline: "kvm-general-purpose-load-balancing"
     # Pipeline used for the current-state capacity probe (considers current VM allocations).
