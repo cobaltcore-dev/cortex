@@ -225,7 +225,7 @@ For flavor groups with `HandlesCommitments=true`, the response includes per-AZ q
 
 `POST /commitments/v1/report-capacity`
 
-Reports available capacity per flavor group and AZ, read from pre-computed `FlavorGroupCapacity` CRDs. Usage is always reported as `None`: Limes derives project usage from the separate [Report-Usage](#report-usage) endpoint, so a usage value here is unused and would only invite misinterpretation of reserved-vs-free capacity.
+Reports available capacity per flavor group and AZ, read from pre-computed `FlavorGroupCapacity` CRDs. Committed-resource reservations stay counted as installed capacity; failover reservations are excluded (they hold hardware out of service for host evacuation). Usage is always reported as `None`: Limes derives project usage from the separate [Report-Usage](#report-usage) endpoint, so a usage value here is unused and would only invite misinterpretation of reserved-vs-free capacity.
 
 ### Capacity Reporting Reference
 
@@ -247,9 +247,12 @@ This section maps every reporting surface to the values it exposes, the resource
 | `FreeCapacity` | Memory + Cores (separate) | Current + reservations | Raw sum across candidate hosts; may double-count across groups sharing hosts |
 | `ExclusivelyFreeCapacity` | Memory + Cores (separate) | Current + reservations | Round-robin split result — sum across all groups never exceeds installed capacity |
 | `ExclusivelyFreeSlots` | Min(memory, CPU) → Memory | Current + reservations | `ExclusivelyFreeCapacity[memory] / smallestFlavorMemBytes`; the memory pool is CPU-gated: the round-robin excludes hosts where the flavor doesn't fit on CPU before summing bytes |
+| `ExclusivelyCommittedReservedCapacity` / `Slots` | Memory + Cores (separate) | Current + reservations | Unfilled committed-resource reservation slots, attributed by each reservation's own ResourceGroup; stay included in reported capacity. Disjoint from the failover bucket |
+| `ExclusivelyFailoverReservedCapacity` / `Slots` | Memory + Cores (separate) | Current + reservations | Failover reservation slots (hardware held out of service for evacuation); **excluded** from reported capacity. Disjoint from the committed bucket |
 | `TotalCapacity` | Memory + Cores (separate) | Empty datacenter | `max(TotalCapacityVMSlots × flavorResources)` over all flavors in the group |
 | `CommittedCapacity` | Memory (slot units) | — | Active CR accepted amounts in smallest-flavor slot units |
 | `RunningInstances` / `RunningResources` | Memory + Cores | — | Actual running VMs in this group × AZ |
+| `RunningSlots` | Min(memory, CPU) | — | Running consumption slot-quantized to the smallest flavor; a VM larger than the smallest flavor counts as the several slots it occupies (unlike `RunningInstances`, which counts VMs) |
 
 #### Prometheus metrics
 
@@ -274,10 +277,10 @@ Capacity is derived from `FlavorGroupCapacity` CRDs and reported per AZ for thre
 
 | Resource | Capacity formula | Usage | Notes |
 |---|---|---|---|
-| `_instances` | `runningInstances + ExclusivelyFreeSlots + ExclusivelyReservedSlots` | `None` | `ExclusivelyFreeSlots` is CPU-and-memory-gated (round-robin), final slot count via memory division |
+| `_instances` | `RunningSlots + ExclusivelyFreeSlots + ExclusivelyCommittedReservedSlots` | `None` | Failover reservations excluded; `RunningSlots` slot-quantizes running consumption so oversized VMs are not undercounted; `ExclusivelyFreeSlots` is CPU-and-memory-gated (round-robin), final slot count via memory division |
 | `_ram` (fixed core ratio) | same as `_instances` | `None` | Slot count stands in for RAM |
-| `_ram` (variable) | raw `ExclusivelyRawCapacity[memory] / ramUnitBytes` when set, else `(runningMemBytes + ExclusivelyFreeCapacity[memory] + ExclusivelyReservedCapacity[memory]) / ramUnitBytes` | `None` | Both in declared units (e.g. GiB); `ramUnitBytes` configured per group |
-| `_cores` | `runningCoresCount + ExclusivelyFreeCapacity[cores] + ExclusivelyReservedCapacity[cores]` | `None` | CPU-dimension-driven |
+| `_ram` (variable) | `(ExclusivelyRawCapacity[memory] − ExclusivelyFailoverReservedCapacity[memory]) / ramUnitBytes` when raw is set, else `(runningMemBytes + ExclusivelyFreeCapacity[memory] + ExclusivelyCommittedReservedCapacity[memory]) / ramUnitBytes` | `None` | Raw already includes reserved-but-empty hosts, so only the failover slice is subtracted; declared units (e.g. GiB), `ramUnitBytes` configured per group |
+| `_cores` | `runningCoresCount + ExclusivelyFreeCapacity[cores] + ExclusivelyCommittedReservedCapacity[cores]` | `None` | Failover reservations excluded; CPU-dimension-driven |
 
 ## Syncer Task
 

@@ -244,16 +244,17 @@ func (c *Reconciler) reconcileAll(ctx context.Context) error {
 		blockedByReservations = map[string]map[string]int64{}
 	}
 
-	reservedByGroupAZ, err := c.reservedResourcesByGroupAZ(ctx, flavorGroups, hvByName)
+	committedByGroupAZ, failoverByGroupAZ, err := c.reservedResourcesByGroupAZ(ctx, flavorGroups, hvByName)
 	if err != nil {
 		logger.Error(err, "failed to attribute reserved capacity to flavor groups, reserved capacity will be omitted")
-		reservedByGroupAZ = map[vmUsageKey]map[string]int64{}
+		committedByGroupAZ = map[vmUsageKey]map[string]int64{}
+		failoverByGroupAZ = map[vmUsageKey]map[string]int64{}
 	}
 
 	usageByKey := c.computeVMUsage(ctx, flavorGroups, hvList.Items)
 
 	for _, az := range azs {
-		c.reconcileAZ(ctx, az, flavorGroups, hvByName, blockedByReservations, reservedByGroupAZ, usageByKey)
+		c.reconcileAZ(ctx, az, flavorGroups, hvByName, blockedByReservations, committedByGroupAZ, failoverByGroupAZ, usageByKey)
 	}
 
 	logger.Info("capacity reconcile cycle completed",
@@ -511,7 +512,8 @@ func (c *Reconciler) reconcileAZ(
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	hvByName map[string]hv1.Hypervisor,
 	blockedByReservations map[string]map[string]int64,
-	reservedByGroupAZ map[vmUsageKey]map[string]int64,
+	committedByGroupAZ map[vmUsageKey]map[string]int64,
+	failoverByGroupAZ map[vmUsageKey]map[string]int64,
 	usageByKey map[vmUsageKey]vmUsage,
 ) {
 
@@ -599,7 +601,8 @@ func (c *Reconciler) reconcileAZ(
 			freeResources[r.groupName],
 			exclusiveResources[r.groupName],
 			rawExclusiveByGroup[r.groupName],
-			reservedByGroupAZ[vmUsageKey{r.groupName, az}],
+			committedByGroupAZ[vmUsageKey{r.groupName, az}],
+			failoverByGroupAZ[vmUsageKey{r.groupName, az}],
 		); err != nil {
 			logger.Error(err, "failed to write FlavorGroupCapacity CRD",
 				"flavorGroup", r.groupName, "az", az)
@@ -639,7 +642,8 @@ func (c *Reconciler) writeCRD(
 	freeRes map[string]int64,
 	exclusiveRes map[string]int64,
 	exclusivelyRawRes map[string]int64,
-	reservedRes map[string]int64,
+	committedRes map[string]int64,
+	failoverRes map[string]int64,
 ) error {
 
 	crdName := crdNameFor(groupName, az)
@@ -685,13 +689,21 @@ func (c *Reconciler) writeCRD(
 	existing.Status.FreeCapacity = resMapToQuantity(freeRes)
 	existing.Status.ExclusivelyFreeCapacity = resMapToQuantity(exclusiveRes)
 	existing.Status.ExclusivelyRawCapacity = resMapToQuantity(exclusivelyRawRes)
-	existing.Status.ExclusivelyReservedCapacity = resMapToQuantity(reservedRes)
+	existing.Status.ExclusivelyCommittedReservedCapacity = resMapToQuantity(committedRes)
+	existing.Status.ExclusivelyFailoverReservedCapacity = resMapToQuantity(failoverRes)
 	var exclusivelyFreeSlots int64
 	if flavorMemBytes := int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024; flavorMemBytes > 0 { //nolint:gosec
 		flavorVCPUs := int64(groupData.SmallestFlavor.VCPUs) //nolint:gosec
 		exclusivelyFreeSlots = flavorSlots(exclusiveRes, flavorMemBytes, flavorVCPUs)
 		existing.Status.ExclusivelyFreeSlots = exclusivelyFreeSlots
-		existing.Status.ExclusivelyReservedSlots = flavorSlots(reservedRes, flavorMemBytes, flavorVCPUs)
+		existing.Status.ExclusivelyCommittedReservedSlots = flavorSlots(committedRes, flavorMemBytes, flavorVCPUs)
+		existing.Status.ExclusivelyFailoverReservedSlots = flavorSlots(failoverRes, flavorMemBytes, flavorVCPUs)
+		// Slot-quantize running consumption the same way, so a VM larger than the smallest flavor
+		// counts as the several slots it occupies rather than one instance. Guarded by fresh for the
+		// same reason as RunningInstances above.
+		if usage.fresh {
+			existing.Status.RunningSlots = flavorSlots(usage.resources, flavorMemBytes, flavorVCPUs)
+		}
 	}
 	existing.Status.LastReconcileAt = metav1.Now()
 
@@ -871,20 +883,22 @@ func (c *Reconciler) blockedResourcesByHost(ctx context.Context) (map[string]map
 	return blocked, nil
 }
 
-// reservedResourcesByGroupAZ sums reservation-blocked capacity (failover + unfilled committed
-// slots) per (group, AZ), attributing each reservation by its own ResourceGroup rather than by
-// host — so a host fully packed by empty reservations still counts. Only placed reservations are
-// included, each once.
+// reservedResourcesByGroupAZ sums reservation-blocked capacity per (group, AZ), attributing each
+// reservation by its own ResourceGroup rather than by host — so a host fully packed by empty
+// reservations still counts. Results are split into two disjoint buckets by reservation type:
+// committed (unfilled committed-resource slots, which stay in reported capacity) and failover
+// (hardware held out of service for host evacuation, which is excluded from reported capacity).
+// Only placed reservations are included, each once.
 func (c *Reconciler) reservedResourcesByGroupAZ(
 	ctx context.Context,
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	hvByName map[string]hv1.Hypervisor,
-) (map[vmUsageKey]map[string]int64, error) {
+) (committed, failover map[vmUsageKey]map[string]int64, err error) {
 
 	logger := LoggerFromContext(ctx)
 	var list v1alpha1.ReservationList
 	if err := c.client.List(ctx, &list); err != nil {
-		return nil, fmt.Errorf("failed to list reservations: %w", err)
+		return nil, nil, fmt.Errorf("failed to list reservations: %w", err)
 	}
 
 	flavorToGroup := make(map[string]string)
@@ -894,7 +908,8 @@ func (c *Reconciler) reservedResourcesByGroupAZ(
 		}
 	}
 
-	reserved := make(map[vmUsageKey]map[string]int64)
+	committed = make(map[vmUsageKey]map[string]int64)
+	failover = make(map[vmUsageKey]map[string]int64)
 	for i := range list.Items {
 		res := &list.Items[i]
 		// Only committed and failover reservations represent capacity that is reserved but
@@ -924,18 +939,23 @@ func (c *Reconciler) reservedResourcesByGroupAZ(
 			continue
 		}
 		blockedRes := reservations.UnusedReservationCapacity(res, false)
+		// Route each reservation to exactly one bucket by type; the two are disjoint.
+		bucket := committed
+		if res.Spec.Type == v1alpha1.ReservationTypeFailover {
+			bucket = failover
+		}
 		key := vmUsageKey{group: group, az: az}
-		if reserved[key] == nil {
-			reserved[key] = make(map[string]int64)
+		if bucket[key] == nil {
+			bucket[key] = make(map[string]int64)
 		}
 		if qty, ok := blockedRes[hv1.ResourceMemory]; ok {
-			reserved[key][ResourceMemory] += qty.Value()
+			bucket[key][ResourceMemory] += qty.Value()
 		}
 		if qty, ok := blockedRes[hv1.ResourceCPU]; ok {
-			reserved[key][ResourceCores] += qty.Value()
+			bucket[key][ResourceCores] += qty.Value()
 		}
 	}
-	return reserved, nil
+	return committed, failover, nil
 }
 
 // resolveReservationGroup returns the flavor group a reservation belongs to. Committed reservations
