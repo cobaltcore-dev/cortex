@@ -14,6 +14,7 @@ import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -59,6 +60,9 @@ type ReservationManagerConfig struct {
 	MaxSlots                int
 	EnablePaygPreAllocation bool
 	VMSource                reservations.VMSource
+	// NoHostsFoundTTL is the minimum age of a NoHostsFound condition before the slot is
+	// deleted and its memory reclaimed into the delta. A zero value disables TTL expiry.
+	NoHostsFoundTTL time.Duration
 }
 
 // ReservationManager handles CRUD operations for Reservation CRDs.
@@ -165,6 +169,37 @@ func (m *ReservationManager) ApplyCommitmentState(
 		}
 	}
 	existing = validReservations
+
+	// Phase 3.5 (DELETE): Delete reservation slots stuck in NoHostsFound beyond TTL.
+	// Reclaims their memory into deltaMemoryBytes so Phase 4.5/5 can retry placement.
+	if m.cfg.NoHostsFoundTTL > 0 {
+		var activeReservations []v1alpha1.Reservation
+		for _, res := range existing {
+			cond := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ReservationConditionReady)
+			if res.Spec.TargetHost == "" &&
+				cond != nil &&
+				cond.Reason == "NoHostsFound" &&
+				time.Since(cond.LastTransitionTime.Time) > m.cfg.NoHostsFoundTTL {
+				log.Info("deleting reservation slot stuck in NoHostsFound beyond TTL",
+					"commitmentUUID", desiredState.CommitmentUUID,
+					"name", res.Name,
+					"noHostsFoundSince", cond.LastTransitionTime.Time,
+					"ttl", m.cfg.NoHostsFoundTTL,
+				)
+				result.Deleted++
+				result.RemovedReservations = append(result.RemovedReservations, res)
+				memValue := res.Spec.Resources[hv1.ResourceMemory]
+				deltaMemoryBytes += memValue.Value()
+
+				if err := m.Delete(ctx, &res); err != nil {
+					return result, fmt.Errorf("failed to delete reservation %s: %w", res.Name, err)
+				}
+			} else {
+				activeReservations = append(activeReservations, res)
+			}
+		}
+		existing = activeReservations
+	}
 
 	// Phase 4 (DELETE): Remove reservations (capacity decreased)
 	for deltaMemoryBytes < 0 && len(existing) > 0 {

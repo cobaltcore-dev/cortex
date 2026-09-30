@@ -339,6 +339,7 @@ func (r *CommittedResourceController) applyReservationState(ctx context.Context,
 		MaxSlots:                maxSlots,
 		EnablePaygPreAllocation: r.Conf.EnablePaygPreAllocation,
 		VMSource:                r.VMSource,
+		NoHostsFoundTTL:         r.Conf.NoHostsFoundTTL.Duration,
 	})
 	result, err := mgr.ApplyCommitmentState(ctx, logger, state, flavorGroups, "committed-resource-controller")
 	if err != nil {
