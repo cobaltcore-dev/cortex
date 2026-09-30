@@ -483,6 +483,150 @@ spec:
 EOF
 ```
 
+#### Port-forward the scheduler API
+
+Expose the Nova scheduling controller's HTTP endpoint so you can `curl` it from your host:
+
+```bash
+kubectl --context kind-cortex-home port-forward deploy/cortex-nova-scheduling-controller-manager 8001:8001 &
+```
+
+#### Send the request
+
+Send a Nova external scheduler request targeting availability zone `cortex-remote-az-b`. The request
+lists all four hypervisors (two per AZ) as candidates. The `filter_correct_az` step should discard the
+`az-a` hosts, leaving only `hypervisor-1-az-b` and `hypervisor-2-az-b`:
+
+```bash
+curl -s -X POST http://localhost:8001/scheduler/nova/external \
+  -H "Content-Type: application/json" \
+  -d '{
+  "spec": {
+    "nova_object.name": "RequestSpec",
+    "nova_object.namespace": "nova",
+    "nova_object.version": "1.14",
+    "nova_object.data": {
+      "project_id": "test-project",
+      "user_id": "test-user",
+      "instance_uuid": "cortex-test-instance-001",
+      "availability_zone": "cortex-remote-az-b",
+      "num_instances": 1,
+      "is_bfv": false,
+      "scheduler_hints": {},
+      "image": {
+        "nova_object.name": "ImageMeta",
+        "nova_object.namespace": "nova",
+        "nova_object.version": "1.8",
+        "nova_object.data": {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "name": "test-image",
+          "status": "active",
+          "properties": {
+            "nova_object.name": "ImageMetaProps",
+            "nova_object.namespace": "nova",
+            "nova_object.version": "1.36",
+            "nova_object.data": {}
+          }
+        }
+      },
+      "flavor": {
+        "nova_object.name": "Flavor",
+        "nova_object.namespace": "nova",
+        "nova_object.version": "1.2",
+        "nova_object.data": {
+          "id": 1,
+          "name": "m1.small",
+          "memory_mb": 2048,
+          "vcpus": 1,
+          "root_gb": 20,
+          "ephemeral_gb": 0,
+          "flavorid": "1",
+          "swap": 0,
+          "rxtx_factor": 1.0,
+          "vcpu_weight": 0,
+          "disabled": false,
+          "is_public": true,
+          "extra_specs": {}
+        }
+      },
+      "request_level_params": {
+        "nova_object.name": "RequestLevelParams",
+        "nova_object.namespace": "nova",
+        "nova_object.version": "1.1",
+        "nova_object.data": {
+          "root_required": [],
+          "root_forbidden": [],
+          "same_subtree": []
+        }
+      },
+      "network_metadata": {
+        "nova_object.name": "NetworkMetadata",
+        "nova_object.namespace": "nova",
+        "nova_object.version": "1.0",
+        "nova_object.data": { "physnets": [], "tunneled": false }
+      },
+      "limits": {
+        "nova_object.name": "SchedulerLimits",
+        "nova_object.namespace": "nova",
+        "nova_object.version": "1.0",
+        "nova_object.data": {}
+      }
+    }
+  },
+  "context": {
+    "user": "test-user",
+    "project_id": "test-project",
+    "project": "test-project",
+    "user_domain": "Default",
+    "project_domain": "Default",
+    "is_admin": false,
+    "request_id": "req-test-001"
+  },
+  "hosts": [
+    {"host": "hypervisor-1-az-a", "hypervisor_hostname": "hypervisor-1-az-a"},
+    {"host": "hypervisor-2-az-a", "hypervisor_hostname": "hypervisor-2-az-a"},
+    {"host": "hypervisor-1-az-b", "hypervisor_hostname": "hypervisor-1-az-b"},
+    {"host": "hypervisor-2-az-b", "hypervisor_hostname": "hypervisor-2-az-b"}
+  ],
+  "weights": {
+    "hypervisor-1-az-a": 1.0,
+    "hypervisor-2-az-a": 2.0,
+    "hypervisor-1-az-b": 3.0,
+    "hypervisor-2-az-b": 4.0
+  },
+  "pipeline": "multicluster-test"
+}' | python3 -m json.tool
+```
+
+A `200` response with a JSON body listing only `az-b` hosts confirms the scheduler filtered correctly.
+
+#### Verify the History landed on the correct remote
+
+Because the pipeline has `createHistory: true` and the request targeted `cortex-remote-az-b`, the
+multicluster client should have written the `History` resource to that remote — not to the home cluster
+or the other remote. Check each cluster:
+
+```bash
+echo "--- kind-cortex-home ---"
+kubectl --context kind-cortex-home get histories 2>/dev/null || echo "  (none)"
+echo "--- kind-cortex-remote-az-a ---"
+kubectl --context kind-cortex-remote-az-a get histories 2>/dev/null || echo "  (none)"
+echo "--- kind-cortex-remote-az-b ---"
+kubectl --context kind-cortex-remote-az-b get histories 2>/dev/null || echo "  (none)"
+```
+
+You should see the `History` named `nova-cortex-test-instance-001` only in `kind-cortex-remote-az-b`.
+Describe it to see the full scheduling decision — which pipeline ran, which host was selected, and the
+explanation for each filter step:
+
+```bash
+kubectl --context kind-cortex-remote-az-b describe history nova-cortex-test-instance-001
+```
+
+This confirms end-to-end multicluster routing: the scheduling request entered through the home cluster,
+the `filter_correct_az` filter ran against hosts from both remotes, and the resulting `History` was
+written to the remote whose labels matched the request's availability zone.
+
 ### Step 3 — Clean up
 
 Tear everything down — the three kind clusters and the temporary CA and override files under `/tmp`:
