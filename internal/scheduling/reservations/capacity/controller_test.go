@@ -225,7 +225,7 @@ func TestReconcileAZ_CreatesCRD(t *testing.T) {
 
 	ctrl.reconcileAZ(context.Background(), az,
 		map[string]compute.FlavorGroupFeature{groupName: groupData},
-		hvByName, map[string]map[string]int64{}, nil, map[vmUsageKey]vmUsage{})
+		hvByName, map[string]map[string]int64{}, nil, map[vmUsageKey]vmUsage{}, nil)
 
 	var crd v1alpha1.FlavorGroupCapacity
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdNameFor(groupName, az)}, &crd); err != nil {
@@ -307,7 +307,7 @@ func TestReconcileAZ_WritesReservedCapacity(t *testing.T) {
 
 	ctrl.reconcileAZ(context.Background(), az,
 		map[string]compute.FlavorGroupFeature{groupName: groupData},
-		hvByName, map[string]map[string]int64{}, reservedByGroupAZ, map[vmUsageKey]vmUsage{})
+		hvByName, map[string]map[string]int64{}, reservedByGroupAZ, map[vmUsageKey]vmUsage{}, nil)
 
 	var crd v1alpha1.FlavorGroupCapacity
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdNameFor(groupName, az)}, &crd); err != nil {
@@ -478,7 +478,7 @@ func TestReconcileAZ_SkipsCRDWriteOnSchedulerError(t *testing.T) {
 
 	ctrl.reconcileAZ(context.Background(), az,
 		map[string]compute.FlavorGroupFeature{groupName: groupData},
-		map[string]hv1.Hypervisor{}, map[string]map[string]int64{}, nil, map[vmUsageKey]vmUsage{})
+		map[string]hv1.Hypervisor{}, map[string]map[string]int64{}, nil, map[vmUsageKey]vmUsage{}, nil)
 
 	// Stale probes → CRD must NOT be written; last good state is preserved.
 	var list v1alpha1.FlavorGroupCapacityList
@@ -550,7 +550,7 @@ func TestReconcileAZ_MarksExistingCRDNotReadyOnSchedulerError(t *testing.T) {
 
 	ctrl.reconcileAZ(context.Background(), az,
 		map[string]compute.FlavorGroupFeature{groupName: groupData},
-		hvByName, map[string]map[string]int64{}, nil, map[vmUsageKey]vmUsage{})
+		hvByName, map[string]map[string]int64{}, nil, map[vmUsageKey]vmUsage{}, nil)
 
 	var crd v1alpha1.FlavorGroupCapacity
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdName}, &crd); err != nil {
@@ -615,9 +615,9 @@ func TestReconcileAZ_IdempotentUpdate(t *testing.T) {
 	groups := map[string]compute.FlavorGroupFeature{groupName: groupData}
 
 	// First call
-	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]map[string]int64{}, nil, map[vmUsageKey]vmUsage{})
+	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]map[string]int64{}, nil, map[vmUsageKey]vmUsage{}, nil)
 	// Second call — should not error on the already-existing CRD.
-	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]map[string]int64{}, nil, map[vmUsageKey]vmUsage{})
+	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]map[string]int64{}, nil, map[vmUsageKey]vmUsage{}, nil)
 
 	var crd v1alpha1.FlavorGroupCapacity
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdName}, &crd); err != nil {
@@ -845,7 +845,7 @@ func TestReconcileAZ_ZeroMemoryFlavorSkipped(t *testing.T) {
 	// reconcileAZ logs and skips groups with zero memory; it does not return an error.
 	c.reconcileAZ(context.Background(), "az-a",
 		map[string]compute.FlavorGroupFeature{"hana-v2": groupData},
-		nil, nil, nil, nil)
+		nil, nil, nil, nil, nil)
 
 	// No CRD should have been created.
 	var list v1alpha1.FlavorGroupCapacityList
@@ -1151,7 +1151,7 @@ func TestComputeVMUsage_ZerosOutWhenAllVMsRemoved(t *testing.T) {
 	groups := map[string]compute.FlavorGroupFeature{groupName: groupData}
 
 	// Compute VM usage — should return fresh=true with zero instances.
-	usageByKey := ctrl.computeVMUsage(context.Background(), groups, []hv1.Hypervisor{*hv})
+	usageByKey, _ := ctrl.computeVMUsage(context.Background(), groups, []hv1.Hypervisor{*hv})
 	key := vmUsageKey{group: groupName, az: az}
 	usage, exists := usageByKey[key]
 	if !exists {
@@ -1165,7 +1165,7 @@ func TestComputeVMUsage_ZerosOutWhenAllVMsRemoved(t *testing.T) {
 	}
 
 	// Now run reconcileAZ to verify the CRD gets zeroed out.
-	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]map[string]int64{}, nil, usageByKey)
+	ctrl.reconcileAZ(context.Background(), az, groups, hvByName, map[string]map[string]int64{}, nil, usageByKey, nil)
 
 	var crd v1alpha1.FlavorGroupCapacity
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdName}, &crd); err != nil {

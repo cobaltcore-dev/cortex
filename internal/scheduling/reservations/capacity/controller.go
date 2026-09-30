@@ -183,6 +183,10 @@ func (c *Reconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client
 
 type vmUsageKey struct{ group, az string }
 
+// vmHostGroupKey identifies running VM resources per (host × group), used to attribute
+// each group's own consumption when computing ExclusivelyRawCapacity for shared hosts.
+type vmHostGroupKey struct{ host, group string }
+
 // vmUsage aggregates resource totals for running VMs in one (group × AZ).
 // resources keys are ResourceMemory (bytes) and ResourceCores (count).
 // fresh is false when the VMSource call failed — running fields must not be overwritten.
@@ -250,10 +254,10 @@ func (c *Reconciler) reconcileAll(ctx context.Context) error {
 		reservedByGroupAZ = map[vmUsageKey]map[string]int64{}
 	}
 
-	usageByKey := c.computeVMUsage(ctx, flavorGroups, hvList.Items)
+	usageByKey, vmByHostGroup := c.computeVMUsage(ctx, flavorGroups, hvList.Items)
 
 	for _, az := range azs {
-		c.reconcileAZ(ctx, az, flavorGroups, hvByName, blockedByReservations, reservedByGroupAZ, usageByKey)
+		c.reconcileAZ(ctx, az, flavorGroups, hvByName, blockedByReservations, reservedByGroupAZ, usageByKey, vmByHostGroup)
 	}
 
 	logger.Info("capacity reconcile cycle completed",
@@ -265,24 +269,27 @@ func (c *Reconciler) reconcileAll(ctx context.Context) error {
 }
 
 // computeVMUsage fetches running VMs and aggregates usage per (flavorGroup, az).
-// On error returns an empty map with fresh=false — callers must not overwrite running fields.
+// It also returns a per-(host × group) resource map used to correct ExclusivelyRawCapacity
+// when hosts are shared across groups.
+// On error both maps are empty and fresh=false — callers must not overwrite running fields.
 func (c *Reconciler) computeVMUsage(
 	ctx context.Context,
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	hvs []hv1.Hypervisor,
-) map[vmUsageKey]vmUsage {
+) (usageByKey map[vmUsageKey]vmUsage, vmByHostGroup map[vmHostGroupKey]map[string]int64) {
 
 	logger := LoggerFromContext(ctx)
 	result := make(map[vmUsageKey]vmUsage)
+	hostGroupRes := make(map[vmHostGroupKey]map[string]int64)
 	if c.vmSource == nil {
-		return result
+		return result, hostGroupRes
 	}
 
 	hvList := &hv1.HypervisorList{Items: hvs}
 	vms, err := c.vmSource.ListVMsOnHypervisors(ctx, hvList, true)
 	if err != nil {
 		logger.Error(err, "failed to list VMs for usage computation, running fields will retain last known values")
-		return result
+		return result, hostGroupRes
 	}
 
 	// Pre-populate all (flavorGroup, AZ) pairs with fresh=true and zero resources.
@@ -321,8 +328,17 @@ func (c *Reconciler) computeVMUsage(
 		u.resources[ResourceCores] += flavorVCPUs[vm.FlavorName]
 		u.fresh = true
 		result[key] = u
+
+		if vm.CurrentHypervisor != "" {
+			hgKey := vmHostGroupKey{host: vm.CurrentHypervisor, group: groupName}
+			if hostGroupRes[hgKey] == nil {
+				hostGroupRes[hgKey] = make(map[string]int64)
+			}
+			hostGroupRes[hgKey][ResourceMemory] += flavorMemBytes[vm.FlavorName]
+			hostGroupRes[hgKey][ResourceCores] += flavorVCPUs[vm.FlavorName]
+		}
 	}
-	return result
+	return result, hostGroupRes
 }
 
 // hvRemainingResources returns remaining schedulable resources after subtracting
@@ -513,6 +529,7 @@ func (c *Reconciler) reconcileAZ(
 	blockedByReservations map[string]map[string]int64,
 	reservedByGroupAZ map[vmUsageKey]map[string]int64,
 	usageByKey map[vmUsageKey]vmUsage,
+	vmByHostGroup map[vmHostGroupKey]map[string]int64,
 ) {
 
 	logger := LoggerFromContext(ctx)
@@ -561,8 +578,15 @@ func (c *Reconciler) reconcileAZ(
 		}
 	}
 
-	// Write one CRD per group. For groups with failed probes, mark Ready=False so the
-	// capacity API can detect staleness and return 5xx rather than serving stale data silently.
+	// Compute ExclusivelyRawCapacity: sum of effective capacity over each group's exclusively
+	// assigned hosts, minus running VMs of other groups on that host.
+	//
+	// For an exclusive host (no other group has VMs there):
+	//   EffectiveCapacity - Allocation + winner_allocation = EffectiveCapacity  (unchanged)
+	// For a shared host:
+	//   EffectiveCapacity - Allocation + winner_allocation
+	//   = free_on_host + what this group's VMs already hold
+	//   (other groups' consumption is correctly excluded)
 	rawExclusiveByGroup := make(map[string]map[string]int64, len(exclusiveHosts))
 	for gName, hostList := range exclusiveHosts {
 		raw := make(map[string]int64, 2)
@@ -575,11 +599,28 @@ func (c *Reconciler) reconcileAZ(
 			if effCap == nil {
 				effCap = hv.Status.Capacity
 			}
+			groupRes := vmByHostGroup[vmHostGroupKey{host: hostName, group: gName}]
 			if qty, ok := effCap[hv1.ResourceMemory]; ok {
-				raw[ResourceMemory] += qty.Value()
+				mem := qty.Value()
+				if alloc, ok := hv.Status.Allocation[hv1.ResourceMemory]; ok {
+					mem -= alloc.Value()
+				}
+				mem += groupRes[ResourceMemory]
+				if mem < 0 {
+					mem = 0
+				}
+				raw[ResourceMemory] += mem
 			}
 			if qty, ok := effCap[hv1.ResourceCPU]; ok {
-				raw[ResourceCores] += qty.Value()
+				cpu := qty.Value()
+				if alloc, ok := hv.Status.Allocation[hv1.ResourceCPU]; ok {
+					cpu -= alloc.Value()
+				}
+				cpu += groupRes[ResourceCores]
+				if cpu < 0 {
+					cpu = 0
+				}
+				raw[ResourceCores] += cpu
 			}
 		}
 		rawExclusiveByGroup[gName] = raw
