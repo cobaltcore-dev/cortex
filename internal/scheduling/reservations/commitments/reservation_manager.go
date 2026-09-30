@@ -437,10 +437,10 @@ func selectFlavor(deltaMemoryBytes int64, flavorGroup compute.FlavorGroupFeature
 	flavor = flavorGroup.Flavors[len(flavorGroup.Flavors)-1]
 	memoryBytes = deltaMemoryBytes
 	for _, f := range flavorGroup.Flavors {
-		flavorBytes := int64(f.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory from specs, realistically bounded
+		flavorBytes := int64(f.MemoryMB+f.VideoRAMMiB) * 1024 * 1024 //nolint:gosec // flavor memory from specs, realistically bounded
 		if flavorBytes <= deltaMemoryBytes {
 			flavor = f
-			memoryBytes = flavorBytes
+			memoryBytes = int64(f.MemoryMB) * 1024 * 1024 //nolint:gosec // slot holds usable memory only
 			break
 		}
 	}

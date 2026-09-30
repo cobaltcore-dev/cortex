@@ -281,23 +281,29 @@ func getProjectVMs(
 			vcpus = uint64(qty.Value()) //nolint:gosec
 		}
 
-		var usageMultiple uint64
-		if memoryMB > 0 {
-			if fg, ok := flavorGroups[flavorGroup]; ok && fg.HasFixedRamCoreRatio() {
-				usageMultiple = memoryMB / fg.SmallestFlavor.MemoryMB
-			} else {
-				usageMultiple = (memoryMB + 16) / 1024
-			}
-		}
-
-		normalizedAZ := liquid.NormalizeAZ(vm.AvailabilityZone, allAZs)
-
 		var videoRAMMiB *uint64
 		if val, ok := vm.FlavorExtraSpecs["hw_video:ram_max_mb"]; ok {
 			if parsed, err := strconv.ParseUint(val, 10, 64); err == nil {
 				videoRAMMiB = &parsed
 			}
 		}
+
+		var usageMultiple uint64
+		if memoryMB > 0 {
+			if fg, ok := flavorGroups[flavorGroup]; ok && fg.HasFixedRamCoreRatio() {
+				usageMultiple = memoryMB / fg.SmallestFlavor.MemoryMB
+			} else {
+				var vram uint64
+				if videoRAMMiB != nil {
+					vram = *videoRAMMiB
+				} else if ok {
+					vram = fg.SmallestFlavor.VideoRAMMiB
+				}
+				usageMultiple = (memoryMB + vram) / 1024
+			}
+		}
+
+		normalizedAZ := liquid.NormalizeAZ(vm.AvailabilityZone, allAZs)
 
 		vms = append(vms, VMUsageInfo{
 			UUID:          vm.UUID,
