@@ -188,14 +188,13 @@ func TestCapacityCalculator(t *testing.T) {
 		wantResourceCount  int  // 0 = don't check
 		wantNotReady       bool // expect ErrCapacityNotReady
 	}
-	u := func(v uint64) *uint64 { return &v }
 
 	crdCases := []crdValueCase{
 		{
-			// running=200, exclusively_free=800 slots → capacity=1000, usage=200
-			name:             "ready CRD: capacity = running + exclusively free, usage = running",
+			// running=200, exclusively_free=800 slots → capacity=1000; usage always None.
+			name:             "ready CRD: capacity = running + exclusively free, usage None",
 			runningInstances: 200, exclusiveFreeBytes: 800 * flavorMemBytes, ready: true,
-			checkAZ: "az-one", wantCapacity: 1000, wantUsage: u(200),
+			checkAZ: "az-one", wantCapacity: 1000, wantUsage: nil,
 		},
 		{
 			// stale CRD: CalculateCapacity returns ErrCapacityNotReady → caller returns 503
@@ -328,14 +327,12 @@ func TestCapacityCalculator_VariableRatio(t *testing.T) {
 		name         string
 		flavorMemMiB int
 		wantRAMCap   uint64
-		wantRAMUsage uint64
 	}{
 		{
 			// Exact: 3 running + 5 free = 8 × 2 GiB = 8 declared units.
 			name:         "exact 2 GiB flavor (no vRAM offset)",
 			flavorMemMiB: 2048,
 			wantRAMCap:   8,
-			wantRAMUsage: 3,
 		},
 		{
 			// 3 VMs × 2032 MiB = 6096 MiB. 6096 / 2048 = 2 (not 3) — undercount by 1 unit.
@@ -343,7 +340,6 @@ func TestCapacityCalculator_VariableRatio(t *testing.T) {
 			name:         "2032 MiB flavor (16 MiB vRAM offset, hw_video:ram_max_mb=16)",
 			flavorMemMiB: 2032,
 			wantRAMCap:   7,
-			wantRAMUsage: 2,
 		},
 	}
 
@@ -370,8 +366,8 @@ func TestCapacityCalculator_VariableRatio(t *testing.T) {
 			if az.Capacity != tc.wantRAMCap {
 				t.Errorf("RAM capacity = %d, want %d", az.Capacity, tc.wantRAMCap)
 			}
-			if usage := az.Usage.UnwrapOr(99); usage != tc.wantRAMUsage {
-				t.Errorf("RAM usage = %d, want %d", usage, tc.wantRAMUsage)
+			if az.Usage.IsSome() {
+				t.Errorf("RAM usage = %v, want None", az.Usage)
 			}
 		})
 	}
@@ -416,15 +412,14 @@ func TestCapacityCalculator_VariableRatio_PrefersRawCapacity(t *testing.T) {
 	if az.Capacity != 10 {
 		t.Errorf("RAM capacity = %d, want 10 (raw hardware / ramUnit, not slot-quantized fallback 8)", az.Capacity)
 	}
-	if usage := az.Usage.UnwrapOr(99); usage != 3 {
-		t.Errorf("RAM usage = %d, want 3", usage)
+	if az.Usage.IsSome() {
+		t.Errorf("RAM usage = %v, want None", az.Usage)
 	}
 }
 
 // TestCapacityCalculator_ReservedSlots verifies that reserved-but-empty slots (failover +
 // unfilled committed reservations, stored in ExclusivelyReservedCapacity/Slots) are added back
-// into reported capacity for a fixed-ratio group, and counted as usage so availability stays
-// equal to the truly-free amount.
+// into reported capacity for a fixed-ratio group, and that usage is reported as None.
 func TestCapacityCalculator_ReservedSlots(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
@@ -433,7 +428,7 @@ func TestCapacityCalculator_ReservedSlots(t *testing.T) {
 	const flavorMemBytes = 32752 * 1024 * 1024
 
 	// running=200, exclusively free=800 slots, reserved=100 slots.
-	// capacity = 200 + 800 + 100 = 1100; usage = 200 + 100 = 300; availability = 800.
+	// capacity = 200 + 800 + 100 = 1100; usage None.
 	crd := createTestFlavorGroupCapacity(200, 800*flavorMemBytes, true)
 	crd.Status.ExclusivelyReservedSlots = 100
 	crd.Status.ExclusivelyReservedCapacity = map[string]resource.Quantity{
@@ -456,19 +451,16 @@ func TestCapacityCalculator_ReservedSlots(t *testing.T) {
 		if az.Capacity != 1100 {
 			t.Errorf("%s: capacity = %d, want 1100 (running 200 + free 800 + reserved 100)", res, az.Capacity)
 		}
-		if usage := az.Usage.UnwrapOr(0); usage != 300 {
-			t.Errorf("%s: usage = %d, want 300 (running 200 + reserved 100)", res, usage)
-		}
-		if avail := az.Capacity - az.Usage.UnwrapOr(0); avail != 800 {
-			t.Errorf("%s: availability = %d, want 800 (free slots)", res, avail)
+		if az.Usage.IsSome() {
+			t.Errorf("%s: usage = %v, want None", res, az.Usage)
 		}
 	}
 	cores := report.Resources["hw_version_test-group_cores"].PerAZ["az-one"]
 	if cores.Capacity != 800 {
 		t.Errorf("cores capacity = %d, want 800 (reserved cores added back)", cores.Capacity)
 	}
-	if usage := cores.Usage.UnwrapOr(0); usage != 800 {
-		t.Errorf("cores usage = %d, want 800 (reserved cores)", usage)
+	if cores.Usage.IsSome() {
+		t.Errorf("cores usage = %v, want None", cores.Usage)
 	}
 }
 
