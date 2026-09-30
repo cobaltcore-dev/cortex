@@ -1,5 +1,60 @@
 # Changelog
 
+## 2026-09-30 — cortex v0.4.7 ([#1260](https://github.com/cobaltcore-dev/cortex/pull/1260))
+
+### cortex 0.4.7
+
+Bug fixes:
+- Prevent inflight controller from corrupting CommittedResourceReservation status (#1255) — @mblos
+- Remove unused usage reporting in capacity endpoint (#1258) — @juliusclausnitzer
+- Fix spurious rejection recovery, NoHostsFound re-placement, and VRAM slot sizing (#1257) — @mblos
+
+Refactoring:
+- Export all interface methods of multicluster router — @PhilippMatthes
+
+Documentation:
+- Add `.agents/` and CI workflows to `AGENTS.md` repository structure (#1243)
+
+CI / Tooling:
+- Enhance review agent (#1252) — @PhilippMatthes
+- Move hub logic into reusable entry workflow (#1256) — @henrichter-sap
+
+Dependencies:
+- Update kube-prometheus-stack 91.5.2 → 91.8.2 (#1242)
+
+### cortex-shim 0.1.22
+
+Non-breaking changes:
+- Shared binary rebuild with updated dependencies
+
+### cortex-placement-shim 0.1.22
+
+Includes updated chart cortex-shim 0.1.22.
+
+### cortex-nova 0.0.96
+
+Includes updated chart cortex 0.4.7.
+
+### cortex-cinder 0.0.96
+
+Includes updated chart cortex 0.4.7.
+
+### cortex-manila 0.0.96
+
+Includes updated chart cortex 0.4.7.
+
+### cortex-crds 0.0.96
+
+Includes updated chart cortex 0.4.7.
+
+### cortex-ironcore 0.0.96
+
+Includes updated chart cortex 0.4.7.
+
+### cortex-pods 0.0.96
+
+Includes updated chart cortex 0.4.7.
+
 ## 2026-09-29 — cortex v0.4.6
 
 ### cortex v0.4.6 (sha-48602477)
