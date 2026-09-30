@@ -163,6 +163,45 @@ spec:
                   - type
                   type: object
                 type: array
+              exclusivelyCommittedReservedCapacity:
+                additionalProperties:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
+                description: |-
+                  ExclusivelyCommittedReservedCapacity is the committed-resource share of reservation-blocked
+                  memory and CPU: unfilled committed slots, attributed to this group by each reservation's own
+                  ResourceGroup. These slots are neither running nor free but represent installed hardware held
+                  for a customer, so they stay included in reported capacity. Disjoint from
+                  ExclusivelyFailoverReservedCapacity; each reservation belongs to one group, so the sum across
+                  groups never exceeds capacity.
+                type: object
+              exclusivelyCommittedReservedSlots:
+                description: |-
+                  ExclusivelyCommittedReservedSlots is the number of smallest-flavor VM slots represented by
+                  ExclusivelyCommittedReservedCapacity.
+                format: int64
+                type: integer
+              exclusivelyFailoverReservedCapacity:
+                additionalProperties:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
+                description: |-
+                  ExclusivelyFailoverReservedCapacity is the failover share of reservation-blocked memory and
+                  CPU. Failover reservations hold hardware out of service for host evacuation, so they are
+                  excluded from reported capacity. Disjoint from ExclusivelyCommittedReservedCapacity.
+                type: object
+              exclusivelyFailoverReservedSlots:
+                description: |-
+                  ExclusivelyFailoverReservedSlots is the number of smallest-flavor VM slots represented by
+                  ExclusivelyFailoverReservedCapacity.
+                format: int64
+                type: integer
               exclusivelyFreeCapacity:
                 additionalProperties:
                   anyOf:
@@ -193,25 +232,6 @@ spec:
                   ExclusivelyFreeCapacity, this is not constrained by slot packing or CPU/memory ratio.
                   Safe to sum across groups — no host is counted twice.
                 type: object
-              exclusivelyReservedCapacity:
-                additionalProperties:
-                  anyOf:
-                  - type: integer
-                  - type: string
-                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                  x-kubernetes-int-or-string: true
-                description: |-
-                  ExclusivelyReservedCapacity is the reservation-blocked memory and CPU (failover + unfilled
-                  committed slots) attributed to this group by each reservation's own ResourceGroup. These
-                  slots are neither running nor free, so they are added back to report installed capacity;
-                  each reservation belongs to one group, so the sum across groups never exceeds capacity.
-                type: object
-              exclusivelyReservedSlots:
-                description: |-
-                  ExclusivelyReservedSlots is the number of smallest-flavor VM slots represented by
-                  ExclusivelyReservedCapacity.
-                format: int64
-                type: integer
               flavors:
                 description: Flavors holds per-flavor capacity data for all flavors
                   in the group.
