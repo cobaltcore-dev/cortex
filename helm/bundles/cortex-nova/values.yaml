@@ -244,7 +244,7 @@ cortex-scheduling-controllers:
       maxSlotsPerCommitment: 0
       # When true, the controller scans the AZ for existing PAYG VMs and pre-allocates them
       # into reservation slots before falling back to blind scheduler placement.
-      enablePaygPreAllocation: false
+      enablePaygPreAllocation: true
     committedResourceAPI:
       # Timeout for watching CommittedResource CRDs before rolling back
       watchTimeout: "15s"

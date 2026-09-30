@@ -269,6 +269,13 @@ func (m *ReservationManager) ApplyCommitmentState(
 			}
 		}
 		log.Info("PAYG remapping done", "slotsCreated", result.Created, "durationMs", time.Since(scanStart).Milliseconds())
+	} else {
+		log.V(1).Info("PAYG pre-allocation skipped",
+			"enabled", m.cfg.EnablePaygPreAllocation,
+			"vmSourceConfigured", m.cfg.VMSource != nil,
+			"deltaMemoryBytes", deltaMemoryBytes,
+			"availabilityZone", desiredState.AvailabilityZone,
+		)
 	}
 
 	if deltaMemoryBytes > 0 {
