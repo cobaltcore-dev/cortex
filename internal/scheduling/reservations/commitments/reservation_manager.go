@@ -324,16 +324,16 @@ func (m *ReservationManager) ApplyCommitmentState(
 			"slotCreationDelay", m.cfg.SlotCreationDelay,
 		)
 	}
-	smallestNominal := int64(flavorGroup.SmallestFlavor.MemoryMB+flavorGroup.SmallestFlavor.VideoRAMMiB) * 1024 * 1024 //nolint:gosec
-	if smallestNominal == 0 {
-		smallestNominal = 1 // SmallestFlavor not populated; fall back to >0 behavior
+	smallestMemBytes := int64(flavorGroup.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec
+	if smallestMemBytes == 0 {
+		smallestMemBytes = 1 // SmallestFlavor not populated; fall back to >0 behavior
 	}
-	for deltaMemoryBytes >= smallestNominal {
+	for deltaMemoryBytes >= smallestMemBytes {
 		// Select the largest flavor that fits the remaining delta (flavors sorted descending by memory).
-		_, _, nominalBytes := selectFlavor(deltaMemoryBytes, flavorGroup)
+		_, memoryBytes := selectFlavor(deltaMemoryBytes, flavorGroup)
 		reservation := m.newReservation(desiredState, nextSlotIndex, deltaMemoryBytes, flavorGroup, creator)
 		result.TouchedReservations = append(result.TouchedReservations, *reservation)
-		deltaMemoryBytes -= nominalBytes
+		deltaMemoryBytes -= memoryBytes
 		result.Created++
 
 		if err := m.Create(ctx, reservation); err != nil {
@@ -436,16 +436,14 @@ func (m *ReservationManager) syncReservationMetadata(
 // selectFlavor picks the largest flavor whose memory fits within deltaMemoryBytes.
 // Returns the selected flavor and its memory in bytes. If no flavor fits, returns the
 // smallest flavor with memoryBytes = deltaMemoryBytes (consumes the full remainder).
-func selectFlavor(deltaMemoryBytes int64, flavorGroup compute.FlavorGroupFeature) (flavor compute.FlavorInGroup, usableBytes, nominalBytes int64) {
+func selectFlavor(deltaMemoryBytes int64, flavorGroup compute.FlavorGroupFeature) (flavor compute.FlavorInGroup, memoryBytes int64) {
 	flavor = flavorGroup.Flavors[len(flavorGroup.Flavors)-1]
-	usableBytes = deltaMemoryBytes
-	nominalBytes = deltaMemoryBytes
+	memoryBytes = deltaMemoryBytes
 	for _, f := range flavorGroup.Flavors {
-		nominal := int64(f.MemoryMB+f.VideoRAMMiB) * 1024 * 1024 //nolint:gosec // flavor memory from specs, realistically bounded
-		if nominal <= deltaMemoryBytes {
+		fMemBytes := int64(f.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory from specs, realistically bounded
+		if fMemBytes <= deltaMemoryBytes {
 			flavor = f
-			usableBytes = int64(f.MemoryMB) * 1024 * 1024 //nolint:gosec // slot holds usable memory only
-			nominalBytes = nominal
+			memoryBytes = fMemBytes
 			break
 		}
 	}
@@ -455,14 +453,14 @@ func selectFlavor(deltaMemoryBytes int64, flavorGroup compute.FlavorGroupFeature
 // countNewSlots returns how many Reservation slots would be created to cover deltaMemoryBytes.
 // Used to pre-check MaxSlots before creating any slots, so a limit violation never leaves partial state.
 func countNewSlots(deltaMemoryBytes int64, flavorGroup compute.FlavorGroupFeature) int {
-	smallestNominal := int64(flavorGroup.SmallestFlavor.MemoryMB+flavorGroup.SmallestFlavor.VideoRAMMiB) * 1024 * 1024 //nolint:gosec
-	if smallestNominal == 0 {
-		smallestNominal = 1
+	smallestMemBytes := int64(flavorGroup.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec
+	if smallestMemBytes == 0 {
+		smallestMemBytes = 1
 	}
 	count := 0
-	for deltaMemoryBytes >= smallestNominal {
-		_, _, nominalBytes := selectFlavor(deltaMemoryBytes, flavorGroup)
-		deltaMemoryBytes -= nominalBytes
+	for deltaMemoryBytes >= smallestMemBytes {
+		_, memoryBytes := selectFlavor(deltaMemoryBytes, flavorGroup)
+		deltaMemoryBytes -= memoryBytes
 		count++
 	}
 	return count
@@ -482,7 +480,7 @@ func (m *ReservationManager) newReservation(
 	}
 	name := fmt.Sprintf("%s%d", namePrefix, slotIndex)
 
-	flavorInGroup, memoryBytes, _ := selectFlavor(deltaMemoryBytes, flavorGroup)
+	flavorInGroup, memoryBytes := selectFlavor(deltaMemoryBytes, flavorGroup)
 	cpus := int64(flavorInGroup.VCPUs) //nolint:gosec // VCPUs from flavor specs, realistically bounded
 
 	spec := v1alpha1.ReservationSpec{

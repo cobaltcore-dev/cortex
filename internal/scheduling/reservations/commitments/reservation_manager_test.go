@@ -1108,8 +1108,8 @@ func TestSelectFlavor(t *testing.T) {
 			wantMemoryMiB: 3 * 1024,
 		},
 		{
-			name:     "vram: nominal delta fits exactly when VideoRAMMiB added to fit-check",
-			deltaMiB: 4096, // 4080 usable + 16 VRAM = 4096 MiB nominal
+			name:     "vram: usable delta fits flavor with VideoRAMMiB",
+			deltaMiB: 4080, // usable bytes (TotalMemoryBytes = SmallestFlavor.MemoryMB × amount)
 			flavorGroup: &compute.FlavorGroupFeature{
 				Name: "vram-group",
 				Flavors: []compute.FlavorInGroup{
@@ -1119,7 +1119,7 @@ func TestSelectFlavor(t *testing.T) {
 				LargestFlavor:  compute.FlavorInGroup{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
 			},
 			wantFlavor:    "vram-flavor",
-			wantMemoryMiB: 4080, // slot holds usable memory, not nominal
+			wantMemoryMiB: 4080,
 		},
 	}
 
@@ -1134,7 +1134,7 @@ func TestSelectFlavor(t *testing.T) {
 				deltaMiB = tt.deltaGiB * 1024
 			}
 			deltaBytes := deltaMiB * 1024 * 1024
-			flavor, memoryBytes, _ := selectFlavor(deltaBytes, fg)
+			flavor, memoryBytes := selectFlavor(deltaBytes, fg)
 			if flavor.Name != tt.wantFlavor {
 				t.Errorf("flavor: want %s, got %s", tt.wantFlavor, flavor.Name)
 			}

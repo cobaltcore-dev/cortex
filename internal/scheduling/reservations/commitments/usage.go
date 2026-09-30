@@ -294,10 +294,13 @@ func getProjectVMs(
 				usageMultiple = memoryMB / fg.SmallestFlavor.MemoryMB
 			} else {
 				var vram uint64
-				if videoRAMMiB != nil {
+				switch {
+				case videoRAMMiB != nil:
 					vram = *videoRAMMiB
-				} else if ok {
+				case ok:
 					vram = fg.SmallestFlavor.VideoRAMMiB
+				default:
+					vram = 16 // default hw_video:ram_max_mb for KVM flavors when flavor group is unknown
 				}
 				usageMultiple = (memoryMB + vram) / 1024
 			}
