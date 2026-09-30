@@ -61,7 +61,7 @@ type ReservationManagerConfig struct {
 	EnablePaygPreAllocation bool
 	VMSource                reservations.VMSource
 	// NoHostsFoundTTL is the minimum age of a NoHostsFound condition before the slot is
-	// deleted and its memory reclaimed into the delta. Defaults to 20 minutes when zero.
+	// deleted and its memory reclaimed into the delta. A zero value disables TTL expiry.
 	NoHostsFoundTTL time.Duration
 }
 
@@ -350,8 +350,8 @@ func (m *ReservationManager) ApplyCommitmentState(
 		nextSlotIndex++
 
 		// Throttle: pause between consecutive creates to spread scheduler load.
-		// Skip after the last slot (deltaMemoryBytes <= 0) — no follow-up create to defer.
-		if m.cfg.SlotCreationDelay > 0 && deltaMemoryBytes > 0 {
+		// Skip after the last slot (delta < smallestMemBytes) — no follow-up create to defer.
+		if m.cfg.SlotCreationDelay > 0 && deltaMemoryBytes >= smallestMemBytes {
 			timer := time.NewTimer(m.cfg.SlotCreationDelay)
 			select {
 			case <-ctx.Done():
