@@ -36,8 +36,8 @@ func NewCapacityCalculator(client client.Client, conf APIConfig) *CapacityCalcul
 // For each flavor group, three resources are reported: _ram, _cores, _instances.
 // All values are read from FlavorGroupCapacity CRDs pre-computed by the capacity controller:
 //   - Capacity: RunningInstances + ExclusivelyFreeCapacity + ExclusivelyReservedCapacity, in slots.
-//   - Usage: RunningInstances / RunningResources + ExclusivelyReservedCapacity (so availability
-//     stays equal to the truly-free amount and reserved capacity is not advertised as available).
+//   - Usage: always None. Limes derives project usage from the separate Report-Usage endpoint, so
+//     a usage value here is unused and would only invite misinterpretation of reserved capacity.
 func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.ServiceCapacityRequest) (liquid.ServiceCapacityReport, error) {
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
@@ -149,27 +149,12 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			}
 			coresCapacity = uint64(runningCoresCount + freeCoresCount + reservedCores)
 
-			ramEntry := &liquid.AZResourceCapacityReport{Capacity: ramCapacity}
-			coresEntry := &liquid.AZResourceCapacityReport{Capacity: coresCapacity}
-			instancesEntry := &liquid.AZResourceCapacityReport{Capacity: instancesCapacity}
-
-			// Usage from actual running VMs plus reserved-but-empty slots — only when CRD data is
-			// fresh. Reserved slots are counted as usage so that capacity − usage stays equal to
-			// the truly-free amount and reserved capacity is never advertised as available.
-			if apimeta.IsStatusConditionTrue(crd.Status.Conditions, v1alpha1.FlavorGroupCapacityConditionReady) {
-				instancesEntry.Usage = Some[uint64](runningInstances + reservedSlots)
-				coresEntry.Usage = Some[uint64](uint64(runningCoresCount + reservedCores))
-
-				if groupData.HasFixedRamCoreRatio() {
-					ramEntry.Usage = Some[uint64](runningInstances + reservedSlots)
-				} else if ramUnitBytes > 0 {
-					runningMemBytes := int64(0)
-					if qty, ok := crd.Status.RunningResources[string(v1alpha1.CommittedResourceTypeMemory)]; ok {
-						runningMemBytes = qty.Value()
-					}
-					ramEntry.Usage = Some[uint64](uint64(runningMemBytes+reservedMemBytes) / uint64(ramUnitBytes))
-				}
-			}
+			// Usage is intentionally None: Limes derives project usage from the separate
+			// Report-Usage endpoint, so a usage value here is unused and would only invite
+			// misinterpretation of reserved-vs-free capacity.
+			ramEntry := &liquid.AZResourceCapacityReport{Capacity: ramCapacity, Usage: None[uint64]()}
+			coresEntry := &liquid.AZResourceCapacityReport{Capacity: coresCapacity, Usage: None[uint64]()}
+			instancesEntry := &liquid.AZResourceCapacityReport{Capacity: instancesCapacity, Usage: None[uint64]()}
 
 			ramAZCapacity[az] = ramEntry
 			coresAZCapacity[az] = coresEntry

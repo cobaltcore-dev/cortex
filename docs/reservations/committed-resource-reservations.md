@@ -225,7 +225,7 @@ For flavor groups with `HandlesCommitments=true`, the response includes per-AZ q
 
 `POST /commitments/v1/report-capacity`
 
-Reports available capacity per flavor group and AZ, read from pre-computed `FlavorGroupCapacity` CRDs. If a CRD's `Ready` condition is stale, usage is omitted from the response (capacity is still reported) to avoid underreporting during a controller outage.
+Reports available capacity per flavor group and AZ, read from pre-computed `FlavorGroupCapacity` CRDs. Usage is always reported as `None`: Limes derives project usage from the separate [Report-Usage](#report-usage) endpoint, so a usage value here is unused and would only invite misinterpretation of reserved-vs-free capacity.
 
 ### Capacity Reporting Reference
 
@@ -270,14 +270,14 @@ All metrics carry `flavor_group` and `az` labels; per-flavor metrics additionall
 
 #### Report-Capacity REST endpoint
 
-Capacity and usage are derived from `FlavorGroupCapacity` CRDs and reported per AZ for three resource types per group:
+Capacity is derived from `FlavorGroupCapacity` CRDs and reported per AZ for three resource types per group. Usage is always `None` (unused by Limes, which sources usage from Report-Usage):
 
-| Resource | Capacity formula | Usage formula | Notes |
+| Resource | Capacity formula | Usage | Notes |
 |---|---|---|---|
-| `_instances` | `runningInstances + ExclusivelyFreeSlots` | `runningInstances` | `ExclusivelyFreeSlots` is CPU-and-memory-gated (round-robin), final slot count via memory division |
-| `_ram` (fixed core ratio) | same as `_instances` | `runningInstances` | Slot count stands in for RAM |
-| `_ram` (variable) | `(runningMemBytes + ExclusivelyFreeCapacity[memory]) / ramUnitBytes` | `runningMemBytes / ramUnitBytes` | Both in declared units (e.g. GiB); `ramUnitBytes` configured per group |
-| `_cores` | `runningCoresCount + ExclusivelyFreeCapacity[cores]` | `runningCoresCount` | CPU-dimension-driven |
+| `_instances` | `runningInstances + ExclusivelyFreeSlots + ExclusivelyReservedSlots` | `None` | `ExclusivelyFreeSlots` is CPU-and-memory-gated (round-robin), final slot count via memory division |
+| `_ram` (fixed core ratio) | same as `_instances` | `None` | Slot count stands in for RAM |
+| `_ram` (variable) | raw `ExclusivelyRawCapacity[memory] / ramUnitBytes` when set, else `(runningMemBytes + ExclusivelyFreeCapacity[memory] + ExclusivelyReservedCapacity[memory]) / ramUnitBytes` | `None` | Both in declared units (e.g. GiB); `ramUnitBytes` configured per group |
+| `_cores` | `runningCoresCount + ExclusivelyFreeCapacity[cores] + ExclusivelyReservedCapacity[cores]` | `None` | CPU-dimension-driven |
 
 ## Syncer Task
 
