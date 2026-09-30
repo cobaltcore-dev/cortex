@@ -110,6 +110,23 @@ func newMockSchedulerServer(t *testing.T, hosts []string) *httptest.Server {
 	}))
 }
 
+// newMockSchedulerServerPerPipeline returns different candidate hosts depending on the request's
+// pipeline, so a test can model a host that passes the total (empty-datacenter) probe but drops
+// out of the placeable probe because it is fully occupied.
+func newMockSchedulerServerPerPipeline(t *testing.T, hostsByPipeline map[string][]string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req schedulerapi.ExternalSchedulerRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("mock scheduler: failed to decode request: %v", err)
+		}
+		resp := schedulerapi.ExternalSchedulerResponse{Hosts: hostsByPipeline[req.Pipeline]}
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("mock scheduler: failed to encode response: %v", err)
+		}
+	}))
+}
+
 // newController is a test helper that creates a Reconciler with a nil VMSource.
 func newController(t *testing.T, c client.Client, cfg Config) *Reconciler {
 	t.Helper()
@@ -263,6 +280,73 @@ func TestReconcileAZ_CreatesCRD(t *testing.T) {
 	// TotalInstances removed; per-group running VMs sourced from VMSource (nil in this test → 0).
 	if crd.Status.RunningInstances != 0 {
 		t.Errorf("RunningInstances = %d, want 0 (no VMSource configured)", crd.Status.RunningInstances)
+	}
+}
+
+// TestReconcileAZ_RawCapacityIncludesOccupiedHosts proves that ExclusivelyRawCapacity sums effective
+// capacity over ALL eligible hosts, including a fully-occupied host that passes the total
+// (empty-datacenter) probe but drops out of the placeable probe. This is the occupied-host dropout
+// fix: the raw sum must not lose that host's installed memory.
+func TestReconcileAZ_RawCapacityIncludesOccupiedHosts(t *testing.T) {
+	const (
+		groupName     = "gp-v2"
+		az            = "qa-de-1a"
+		memMB         = 4096 // 4 GiB flavor
+		host1MemByte  = int64(memMB) * 1024 * 1024
+		host2MemByte  = 3 * int64(memMB) * 1024 * 1024 // distinct value so we can see host-2 in the sum
+		totalPipe     = "kvm-report-capacity"
+		placeablePipe = "kvm-general-purpose"
+	)
+
+	scheme := newTestScheme(t)
+	host1 := newHypervisor("host-1", az, host1MemByte)
+	host2 := newHypervisor("host-2", az, host2MemByte)
+	knowledge := newFlavorGroupKnowledge(t, groupName, memMB)
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(knowledge, host1, host2).
+		WithStatusSubresource(&v1alpha1.FlavorGroupCapacity{}, &v1alpha1.Knowledge{}).
+		Build()
+
+	// Total probe sees both hosts (empty-datacenter); placeable probe sees only host-1 because
+	// host-2 is fully occupied and the smallest flavor no longer fits.
+	schedulerServer := newMockSchedulerServerPerPipeline(t, map[string][]string{
+		totalPipe:     {"host-1", "host-2"},
+		placeablePipe: {"host-1"},
+	})
+	defer schedulerServer.Close()
+
+	ctrl := newController(t, fakeClient, Config{
+		SchedulerURL:      schedulerServer.URL,
+		TotalPipeline:     totalPipe,
+		PlaceablePipeline: placeablePipe,
+	})
+
+	smallFlavor := compute.FlavorInGroup{Name: groupName + "-small", MemoryMB: memMB, VCPUs: 2}
+	groupData := compute.FlavorGroupFeature{
+		SmallestFlavor: smallFlavor,
+		Flavors:        []compute.FlavorInGroup{smallFlavor},
+	}
+	hvByName := map[string]hv1.Hypervisor{"host-1": *host1, "host-2": *host2}
+
+	ctrl.reconcileAZ(context.Background(), az,
+		map[string]compute.FlavorGroupFeature{groupName: groupData},
+		hvByName, map[string]map[string]int64{}, nil, nil, map[vmUsageKey]vmUsage{})
+
+	var crd v1alpha1.FlavorGroupCapacity
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: crdNameFor(groupName, az)}, &crd); err != nil {
+		t.Fatalf("failed to get CRD: %v", err)
+	}
+	// Raw must include the occupied host-2, so it equals host-1 + host-2 effective memory.
+	rawCap := crd.Status.ExclusivelyRawCapacity[string(v1alpha1.CommittedResourceTypeMemory)]
+	if want := host1MemByte + host2MemByte; rawCap.Value() != want {
+		t.Errorf("ExclusivelyRawCapacity[memory] = %d, want %d (both eligible hosts incl. occupied host-2)", rawCap.Value(), want)
+	}
+	// Sanity: the placeable-only free capacity reflects just host-1's single slot, confirming host-2
+	// really did drop out of the placeable path.
+	if crd.Status.ExclusivelyFreeSlots != 1 {
+		t.Errorf("ExclusivelyFreeSlots = %d, want 1 (only host-1 is placeable)", crd.Status.ExclusivelyFreeSlots)
 	}
 }
 

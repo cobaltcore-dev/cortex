@@ -200,7 +200,10 @@ type probeGroupResult struct {
 	// allFresh is false if any scheduler probe failed; the group's CRD is left unchanged.
 	allFresh           bool
 	smallestCandidates []string
-	committedCapacity  int64
+	// smallestTotalCandidates are the smallest flavor's empty-datacenter candidates: every host
+	// eligible for the group in this AZ, including fully occupied ones. Used for InstalledRawCapacity.
+	smallestTotalCandidates []string
+	committedCapacity       int64
 }
 
 // flavorSlots returns the number of VM slots a resource map can fit for the given flavor.
@@ -406,12 +409,13 @@ func (c *Reconciler) probeGroup(
 	allFresh := true
 	newFlavors := make([]v1alpha1.FlavorCapacityStatus, 0, len(flavors))
 	var smallestCandidates []string
+	var smallestTotalCandidates []string
 
 	for _, flavor := range flavors {
 		cur := existingByName[flavor.Name]
 		cur.FlavorName = flavor.Name
 
-		totalVMSlots, totalHosts, _, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName, true, nil)
+		totalVMSlots, totalHosts, totalCandidates, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName, true, nil)
 		placeableVMs, placeableHosts, candidates, placeableErr := c.probeScheduler(ctx, flavor, az, c.config.PlaceablePipeline, hvByName, false, blockedByReservations)
 
 		if totalErr != nil {
@@ -426,9 +430,15 @@ func (c *Reconciler) probeGroup(
 			cur.PlaceableVMs = placeableVMs
 			cur.PlaceableHosts = placeableHosts
 		}
-		// Capture candidates for the smallest flavor — used as split inputs.
-		if flavor.Name == groupData.SmallestFlavor.Name && placeableErr == nil {
-			smallestCandidates = candidates
+		// Capture the smallest flavor's candidates: placeable (split inputs) and total (all
+		// eligible hosts incl. occupied ones, for InstalledRawCapacity).
+		if flavor.Name == groupData.SmallestFlavor.Name {
+			if placeableErr == nil {
+				smallestCandidates = candidates
+			}
+			if totalErr == nil {
+				smallestTotalCandidates = totalCandidates
+			}
 		}
 		newFlavors = append(newFlavors, cur)
 	}
@@ -440,12 +450,13 @@ func (c *Reconciler) probeGroup(
 	}
 
 	return probeGroupResult{
-		groupName:          groupName,
-		groupData:          groupData,
-		flavors:            newFlavors,
-		allFresh:           allFresh,
-		smallestCandidates: smallestCandidates,
-		committedCapacity:  committedCapacity,
+		groupName:               groupName,
+		groupData:               groupData,
+		flavors:                 newFlavors,
+		allFresh:                allFresh,
+		smallestCandidates:      smallestCandidates,
+		smallestTotalCandidates: smallestTotalCandidates,
+		committedCapacity:       committedCapacity,
 	}, nil
 }
 
@@ -565,26 +576,21 @@ func (c *Reconciler) reconcileAZ(
 
 	// Write one CRD per group. For groups with failed probes, mark Ready=False so the
 	// capacity API can detect staleness and return 5xx rather than serving stale data silently.
-	rawExclusiveByGroup := make(map[string]map[string]int64, len(exclusiveHosts))
-	for gName, hostList := range exclusiveHosts {
-		raw := make(map[string]int64, 2)
-		for _, hostName := range hostList {
-			hv, ok := hvByName[hostName]
-			if !ok {
-				continue
-			}
-			effCap := hv.Status.EffectiveCapacity
-			if effCap == nil {
-				effCap = hv.Status.Capacity
-			}
-			if qty, ok := effCap[hv1.ResourceMemory]; ok {
-				raw[ResourceMemory] += qty.Value()
-			}
-			if qty, ok := effCap[hv1.ResourceCPU]; ok {
-				raw[ResourceCores] += qty.Value()
-			}
+	// ExclusivelyRawCapacity is computed differently per group:
+	//   - Variable-ratio groups (GP) consume it for the _ram report and are a single group with
+	//     exclusive hosts, so we sum effective capacity over ALL eligible hosts (the smallest
+	//     flavor's empty-datacenter candidates, incl. fully occupied ones) — avoiding the
+	//     occupied-host dropout a placeable-only sum would suffer.
+	//   - Fixed-ratio groups (HANA) never read it and share hosts across multiple flavor groups, so
+	//     an all-eligible sum would double-count. We keep the split-assigned exclusiveHosts sum,
+	//     which stays disjoint across groups and non-double-counted.
+	rawExclusiveByGroup := make(map[string]map[string]int64, len(results))
+	for _, r := range results {
+		if r.groupData.HasFixedRamCoreRatio() {
+			rawExclusiveByGroup[r.groupName] = sumEffectiveCapacity(exclusiveHosts[r.groupName], hvByName)
+		} else {
+			rawExclusiveByGroup[r.groupName] = sumEffectiveCapacity(r.smallestTotalCandidates, hvByName)
 		}
-		rawExclusiveByGroup[gName] = raw
 	}
 
 	for _, r := range results {
@@ -608,6 +614,29 @@ func (c *Reconciler) reconcileAZ(
 				"flavorGroup", r.groupName, "az", az)
 		}
 	}
+}
+
+// sumEffectiveCapacity sums the effective memory and CPU of the named hosts, keyed by
+// ResourceMemory/ResourceCores. Falls back to raw Capacity when EffectiveCapacity is absent.
+func sumEffectiveCapacity(hostNames []string, hvByName map[string]hv1.Hypervisor) map[string]int64 {
+	raw := make(map[string]int64, 2)
+	for _, hostName := range hostNames {
+		hv, ok := hvByName[hostName]
+		if !ok {
+			continue
+		}
+		effCap := hv.Status.EffectiveCapacity
+		if effCap == nil {
+			effCap = hv.Status.Capacity
+		}
+		if qty, ok := effCap[hv1.ResourceMemory]; ok {
+			raw[ResourceMemory] += qty.Value()
+		}
+		if qty, ok := effCap[hv1.ResourceCPU]; ok {
+			raw[ResourceCores] += qty.Value()
+		}
+	}
+	return raw
 }
 
 // computeTotalCapacity returns the maximum memory bytes and CPU cores representable
