@@ -373,7 +373,8 @@ func TestCommittedResourceController_RejectionGuards(t *testing.T) {
 		k8sClient := newCRTestClient(scheme, cr)
 		controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: CommittedResourceControllerConfig{}}
 
-		_, _ = controller.Reconcile(context.Background(), reconcileReq(cr.Name))
+		_, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name))
+		_ = err // rollbackToAccepted may error due to missing knowledge; the condition invariant still holds
 
 		var got v1alpha1.CommittedResource
 		if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: cr.Name}, &got); err != nil {
