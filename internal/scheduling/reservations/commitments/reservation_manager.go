@@ -14,6 +14,7 @@ import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -59,6 +60,9 @@ type ReservationManagerConfig struct {
 	MaxSlots                int
 	EnablePaygPreAllocation bool
 	VMSource                reservations.VMSource
+	// NoHostsFoundTTL is the minimum age of a NoHostsFound condition before the slot is
+	// deleted and its memory reclaimed into the delta. A zero value disables TTL expiry.
+	NoHostsFoundTTL time.Duration
 }
 
 // ReservationManager handles CRUD operations for Reservation CRDs.
@@ -165,6 +169,36 @@ func (m *ReservationManager) ApplyCommitmentState(
 		}
 	}
 	existing = validReservations
+
+	// Phase 3.5 (DELETE): Delete reservation slots stuck in NoHostsFound beyond TTL.
+	// Reclaims their memory into deltaMemoryBytes so Phase 4.5/5 can retry placement.
+	if m.cfg.NoHostsFoundTTL > 0 {
+		var activeReservations []v1alpha1.Reservation
+		for _, res := range existing {
+			cond := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ReservationConditionReady)
+			if res.Spec.TargetHost == "" &&
+				cond != nil &&
+				cond.Reason == "NoHostsFound" &&
+				time.Since(cond.LastTransitionTime.Time) > m.cfg.NoHostsFoundTTL {
+				log.Info("deleting reservation slot stuck in NoHostsFound beyond TTL",
+					"commitmentUUID", desiredState.CommitmentUUID,
+					"name", res.Name,
+					"noHostsFoundSince", cond.LastTransitionTime.Time,
+					"ttl", m.cfg.NoHostsFoundTTL,
+				)
+				if err := m.Delete(ctx, &res); err != nil {
+					return result, fmt.Errorf("failed to delete reservation %s: %w", res.Name, err)
+				}
+				result.Deleted++
+				result.RemovedReservations = append(result.RemovedReservations, res)
+				memValue := res.Spec.Resources[hv1.ResourceMemory]
+				deltaMemoryBytes += memValue.Value()
+			} else {
+				activeReservations = append(activeReservations, res)
+			}
+		}
+		existing = activeReservations
+	}
 
 	// Phase 4 (DELETE): Remove reservations (capacity decreased)
 	for deltaMemoryBytes < 0 && len(existing) > 0 {
@@ -278,9 +312,9 @@ func (m *ReservationManager) ApplyCommitmentState(
 		)
 	}
 
-	if deltaMemoryBytes > 0 {
+	newSlots := countNewSlots(deltaMemoryBytes, flavorGroup)
+	if newSlots > 0 {
 		// MaxSlots caps only blind-scheduler slots (PAYG remapping slots and existing slots are excluded).
-		newSlots := countNewSlots(deltaMemoryBytes, flavorGroup)
 		if m.cfg.MaxSlots > 0 && newSlots > m.cfg.MaxSlots {
 			return nil, &SlotLimitExceededError{NewSlots: newSlots, Limit: m.cfg.MaxSlots}
 		}
@@ -290,12 +324,16 @@ func (m *ReservationManager) ApplyCommitmentState(
 			"slotCreationDelay", m.cfg.SlotCreationDelay,
 		)
 	}
-	for deltaMemoryBytes > 0 {
+	smallestMemBytes := int64(flavorGroup.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec
+	if smallestMemBytes == 0 {
+		smallestMemBytes = 1 // SmallestFlavor not populated; fall back to >0 behavior
+	}
+	for deltaMemoryBytes >= smallestMemBytes {
 		// Select the largest flavor that fits the remaining delta (flavors sorted descending by memory).
+		_, memoryBytes := selectFlavor(deltaMemoryBytes, flavorGroup)
 		reservation := m.newReservation(desiredState, nextSlotIndex, deltaMemoryBytes, flavorGroup, creator)
 		result.TouchedReservations = append(result.TouchedReservations, *reservation)
-		memValue := reservation.Spec.Resources[hv1.ResourceMemory]
-		deltaMemoryBytes -= memValue.Value()
+		deltaMemoryBytes -= memoryBytes
 		result.Created++
 
 		if err := m.Create(ctx, reservation); err != nil {
@@ -402,10 +440,10 @@ func selectFlavor(deltaMemoryBytes int64, flavorGroup compute.FlavorGroupFeature
 	flavor = flavorGroup.Flavors[len(flavorGroup.Flavors)-1]
 	memoryBytes = deltaMemoryBytes
 	for _, f := range flavorGroup.Flavors {
-		flavorBytes := int64(f.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory from specs, realistically bounded
-		if flavorBytes <= deltaMemoryBytes {
+		fMemBytes := int64(f.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory from specs, realistically bounded
+		if fMemBytes <= deltaMemoryBytes {
 			flavor = f
-			memoryBytes = flavorBytes
+			memoryBytes = fMemBytes
 			break
 		}
 	}
@@ -415,8 +453,12 @@ func selectFlavor(deltaMemoryBytes int64, flavorGroup compute.FlavorGroupFeature
 // countNewSlots returns how many Reservation slots would be created to cover deltaMemoryBytes.
 // Used to pre-check MaxSlots before creating any slots, so a limit violation never leaves partial state.
 func countNewSlots(deltaMemoryBytes int64, flavorGroup compute.FlavorGroupFeature) int {
+	smallestMemBytes := int64(flavorGroup.SmallestFlavor.MemoryMB) * 1024 * 1024 //nolint:gosec
+	if smallestMemBytes == 0 {
+		smallestMemBytes = 1
+	}
 	count := 0
-	for deltaMemoryBytes > 0 {
+	for deltaMemoryBytes >= smallestMemBytes {
 		_, memoryBytes := selectFlavor(deltaMemoryBytes, flavorGroup)
 		deltaMemoryBytes -= memoryBytes
 		count++

@@ -245,6 +245,9 @@ cortex-scheduling-controllers:
       # When true, the controller scans the AZ for existing PAYG VMs and pre-allocates them
       # into reservation slots before falling back to blind scheduler placement.
       enablePaygPreAllocation: true
+      # How long a slot may remain unplaced (NoHostsFound) before it is deleted so PAYG
+      # remapping and re-sizing can be retried; 0 disables the TTL.
+      noHostsFoundTTL: "20m"
     committedResourceAPI:
       # Timeout for watching CommittedResource CRDs before rolling back
       watchTimeout: "15s"
