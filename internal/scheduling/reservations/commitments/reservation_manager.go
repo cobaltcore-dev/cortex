@@ -61,7 +61,7 @@ type ReservationManagerConfig struct {
 	EnablePaygPreAllocation bool
 	VMSource                reservations.VMSource
 	// NoHostsFoundTTL is the minimum age of a NoHostsFound condition before the slot is
-	// deleted and its memory reclaimed into the delta. A zero value disables TTL expiry.
+	// deleted and its memory reclaimed into the delta. Defaults to 20 minutes when zero.
 	NoHostsFoundTTL time.Duration
 }
 
@@ -330,8 +330,8 @@ func (m *ReservationManager) ApplyCommitmentState(
 	}
 	for deltaMemoryBytes >= smallestMemBytes {
 		// Select the largest flavor that fits the remaining delta (flavors sorted descending by memory).
-		_, memoryBytes := selectFlavor(deltaMemoryBytes, flavorGroup)
-		reservation := m.newReservation(desiredState, nextSlotIndex, deltaMemoryBytes, flavorGroup, creator)
+		flavorInGroup, memoryBytes := selectFlavor(deltaMemoryBytes, flavorGroup)
+		reservation := m.newReservation(desiredState, nextSlotIndex, flavorInGroup, memoryBytes, creator)
 		result.TouchedReservations = append(result.TouchedReservations, *reservation)
 		deltaMemoryBytes -= memoryBytes
 		result.Created++
@@ -469,8 +469,8 @@ func countNewSlots(deltaMemoryBytes int64, flavorGroup compute.FlavorGroupFeatur
 func (m *ReservationManager) newReservation(
 	state *CommitmentState,
 	slotIndex int,
-	deltaMemoryBytes int64,
-	flavorGroup compute.FlavorGroupFeature,
+	flavorInGroup compute.FlavorInGroup,
+	memoryBytes int64,
 	creator string,
 ) *v1alpha1.Reservation {
 
@@ -480,7 +480,6 @@ func (m *ReservationManager) newReservation(
 	}
 	name := fmt.Sprintf("%s%d", namePrefix, slotIndex)
 
-	flavorInGroup, memoryBytes := selectFlavor(deltaMemoryBytes, flavorGroup)
 	cpus := int64(flavorInGroup.VCPUs) //nolint:gosec // VCPUs from flavor specs, realistically bounded
 
 	spec := v1alpha1.ReservationSpec{
