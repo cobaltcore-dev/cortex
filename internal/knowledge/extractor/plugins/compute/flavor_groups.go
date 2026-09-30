@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -19,6 +20,7 @@ type FlavorInGroup struct {
 	Name        string            `json:"name"`
 	VCPUs       uint64            `json:"vcpus"`
 	MemoryMB    uint64            `json:"memoryMB"`
+	VideoRAMMiB uint64            `json:"videoRAMMiB,omitempty"`
 	DiskGB      uint64            `json:"diskGB"`
 	EphemeralGB uint64            `json:"ephemeralGB,omitempty"`
 	ExtraSpecs  map[string]string `json:"extraSpecs,omitempty"`
@@ -162,6 +164,11 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 			DiskGB:      row.DiskGB,
 			EphemeralGB: row.EphemeralGB,
 			ExtraSpecs:  extraSpecs,
+		}
+		if val, ok := extraSpecs["hw_video:ram_max_mb"]; ok {
+			if parsed, err := strconv.ParseUint(val, 10, 64); err == nil {
+				flavor.VideoRAMMiB = parsed
+			}
 		}
 		groupMap[hwVersion] = append(groupMap[hwVersion], flavor)
 	}

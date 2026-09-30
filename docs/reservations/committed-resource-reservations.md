@@ -88,6 +88,16 @@ Cortex handles two resource types with different acceptance mechanisms:
 
 The two types share lifecycle states and acceptance/rejection semantics — they differ only in how capacity is verified and held.
 
+### VRAM and memory accounting
+
+Nova flavors expose `MemoryMB` as usable RAM (nominal − `hw_video:ram_max_mb`, typically 16 MiB). The reconciler uses usable RAM throughout — VRAM is not subtracted or added anywhere in slot sizing or placement. The one place VRAM matters is usage reporting:
+
+- **Limes / CR amounts**: usable RAM per slot (`SmallestFlavor.MemoryMB`) — VRAM excluded
+- **Reservation slots**: `Resources[Memory]` stores usable RAM, consistent with CR amounts
+- **Usage reporting**: `(MemoryMB + VideoRAMMiB) / 1024` — adds VRAM back to get the correct nominal slot count per VM
+- **Capacity reporting**: slot counts derived from usable RAM, consistent with slot specs
+- **Placement pipeline**: capacity filter accounts for reservations in usable RAM, matching host free-memory reporting
+
 ## Commitment Lifecycle
 
 ```mermaid

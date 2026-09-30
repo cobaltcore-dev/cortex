@@ -7,12 +7,14 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -61,6 +63,17 @@ func withDomainID(res v1alpha1.Reservation, domainID string) v1alpha1.Reservatio
 	return res
 }
 
+// withNoHostsFoundCondition stamps a NoHostsFound Ready=False condition aged by the given duration.
+func withNoHostsFoundCondition(res v1alpha1.Reservation, age time.Duration) v1alpha1.Reservation {
+	meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+		Type:               v1alpha1.ReservationConditionReady,
+		Status:             metav1.ConditionFalse,
+		Reason:             "NoHostsFound",
+		LastTransitionTime: metav1.NewTime(time.Now().Add(-age)),
+	})
+	return res
+}
+
 // testFlavorGroups returns the default flavor groups map used across tests.
 func testFlavorGroups() map[string]compute.FlavorGroupFeature {
 	return map[string]compute.FlavorGroupFeature{"test-group": testFlavorGroup()}
@@ -79,6 +92,7 @@ func TestApplyCommitmentState(t *testing.T) {
 		desiredDomainID     string
 		flavorGroupOverride map[string]compute.FlavorGroupFeature // nil = testFlavorGroups()
 		maxSlots            int                                   // 0 = no limit
+		noHostsFoundTTL     time.Duration                         // 0 = disabled
 		wantError           bool
 		wantRemovedCount    int // exact count; -1 = at least one
 		validateRemoved     func(t *testing.T, removed []v1alpha1.Reservation)
@@ -359,6 +373,34 @@ func TestApplyCommitmentState(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "TTL: slot stuck in NoHostsFound beyond TTL is deleted and replaced",
+			existingSlots: []v1alpha1.Reservation{
+				withNoHostsFoundCondition(newTestCRSlot("commitment-abc123-0", 8, "", "test-group", nil), time.Hour),
+			},
+			desiredMemoryGiB: 8,
+			noHostsFoundTTL:  30 * time.Minute,
+			wantRemovedCount: 1,
+			validateTouched: func(t *testing.T, touched []v1alpha1.Reservation) {
+				if len(touched) != 1 {
+					t.Fatalf("expected 1 new slot created, got %d", len(touched))
+				}
+			},
+		},
+		{
+			name: "TTL: slot stuck in NoHostsFound within TTL is kept",
+			existingSlots: []v1alpha1.Reservation{
+				withNoHostsFoundCondition(newTestCRSlot("commitment-abc123-0", 8, "", "test-group", nil), time.Minute),
+			},
+			desiredMemoryGiB: 8,
+			noHostsFoundTTL:  30 * time.Minute,
+			wantRemovedCount: 0,
+			validateTouched: func(t *testing.T, touched []v1alpha1.Reservation) {
+				if len(touched) != 0 {
+					t.Errorf("expected no new slots, got %d", len(touched))
+				}
+			},
+		},
 	}
 
 	scheme := newCRTestScheme(t)
@@ -370,7 +412,7 @@ func TestApplyCommitmentState(t *testing.T) {
 				objects[i] = &tt.existingSlots[i]
 			}
 			k8sClient := newCRTestClient(scheme, objects...)
-			manager := NewReservationManager(k8sClient, ReservationManagerConfig{MaxSlots: tt.maxSlots})
+			manager := NewReservationManager(k8sClient, ReservationManagerConfig{MaxSlots: tt.maxSlots, NoHostsFoundTTL: tt.noHostsFoundTTL})
 
 			flavorGroups := testFlavorGroups()
 			if tt.flavorGroupOverride != nil {
@@ -1031,48 +1073,72 @@ func TestNewReservation_VariableRatioGroup_SelectsLargestByMemory(t *testing.T) 
 // ============================================================================
 
 func TestSelectFlavor(t *testing.T) {
-	fg := testFlavorGroup() // small=8GiB/4c, medium=16GiB/8c, large=32GiB/16c
+	defaultFG := testFlavorGroup() // small=8GiB/4c, medium=16GiB/8c, large=32GiB/16c
 
 	tests := []struct {
 		name          string
 		deltaGiB      int64
+		deltaMiB      int64 // used when deltaGiB==0
+		flavorGroup   *compute.FlavorGroupFeature
 		wantFlavor    string
-		wantMemoryGiB int64
+		wantMemoryMiB int64
 	}{
 		{
 			name:          "exact fit: picks that flavor",
 			deltaGiB:      8,
 			wantFlavor:    "small",
-			wantMemoryGiB: 8,
+			wantMemoryMiB: 8 * 1024,
 		},
 		{
 			name:          "delta between small and medium: picks small",
 			deltaGiB:      12,
 			wantFlavor:    "small",
-			wantMemoryGiB: 8,
+			wantMemoryMiB: 8 * 1024,
 		},
 		{
 			name:          "delta larger than all flavors: picks largest, memory = largest flavor size",
 			deltaGiB:      100,
 			wantFlavor:    "large",
-			wantMemoryGiB: 32,
+			wantMemoryMiB: 32 * 1024,
 		},
 		{
 			name:          "delta smaller than smallest flavor: falls back, memory = full delta",
 			deltaGiB:      3,
 			wantFlavor:    "small", // smallest flavor returned as fallback
-			wantMemoryGiB: 3,       // but memory = full delta (remainder consumed)
+			wantMemoryMiB: 3 * 1024,
+		},
+		{
+			name:     "vram: usable delta fits flavor with VideoRAMMiB",
+			deltaMiB: 4080, // usable bytes (TotalMemoryBytes = SmallestFlavor.MemoryMB × amount)
+			flavorGroup: &compute.FlavorGroupFeature{
+				Name: "vram-group",
+				Flavors: []compute.FlavorInGroup{
+					{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+				},
+				SmallestFlavor: compute.FlavorInGroup{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+				LargestFlavor:  compute.FlavorInGroup{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+			},
+			wantFlavor:    "vram-flavor",
+			wantMemoryMiB: 4080,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			deltaBytes := tt.deltaGiB * 1024 * 1024 * 1024
+			fg := defaultFG
+			if tt.flavorGroup != nil {
+				fg = *tt.flavorGroup
+			}
+			deltaMiB := tt.deltaMiB
+			if deltaMiB == 0 {
+				deltaMiB = tt.deltaGiB * 1024
+			}
+			deltaBytes := deltaMiB * 1024 * 1024
 			flavor, memoryBytes := selectFlavor(deltaBytes, fg)
 			if flavor.Name != tt.wantFlavor {
 				t.Errorf("flavor: want %s, got %s", tt.wantFlavor, flavor.Name)
 			}
-			wantBytes := tt.wantMemoryGiB * 1024 * 1024 * 1024
+			wantBytes := tt.wantMemoryMiB * 1024 * 1024
 			if memoryBytes != wantBytes {
 				t.Errorf("memoryBytes: want %d, got %d", wantBytes, memoryBytes)
 			}
