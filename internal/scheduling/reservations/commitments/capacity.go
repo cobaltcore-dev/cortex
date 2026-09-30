@@ -44,7 +44,7 @@ func NewCapacityCalculator(client client.Client, conf APIConfig) *CapacityCalcul
 // CalculateCapacity computes per-AZ capacity for all flavor groups.
 // For each flavor group, three resources are reported: _ram, _cores, _instances.
 // All values are read from FlavorGroupCapacity CRDs pre-computed by the capacity controller:
-//   - Capacity: RunningInstances + ExclusivelyFreeCapacity + ExclusivelyCommittedReservedCapacity,
+//   - Capacity: RunningSlots + ExclusivelyFreeCapacity + ExclusivelyCommittedReservedCapacity,
 //     in slots. Failover reservations are excluded.
 //   - Usage: always None. Limes derives project usage from the separate Report-Usage endpoint, so
 //     a usage value here is unused and would only invite misinterpretation of reserved capacity.
@@ -118,8 +118,10 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			failoverMemBytes := quantityValue(crd.Status.ExclusivelyFailoverReservedCapacity, memKey)
 
 			// Capacity = running + exclusively free + committed reserved.
-			runningInstances := uint64(crd.Status.RunningInstances) //nolint:gosec
-			instancesCapacity := runningInstances + exclusiveFreeSlots + committedReservedSlots
+			// RunningSlots (not RunningInstances) so a VM larger than the smallest flavor counts as
+			// the several slots it occupies — heterogeneous groups would otherwise be undercounted.
+			runningSlots := uint64(crd.Status.RunningSlots) //nolint:gosec
+			instancesCapacity := runningSlots + exclusiveFreeSlots + committedReservedSlots
 
 			// RAM capacity in declared units. Fixed-ratio groups report in slots (1 unit = 1 instance).
 			var ramCapacity uint64

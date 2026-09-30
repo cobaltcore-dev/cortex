@@ -698,6 +698,12 @@ func (c *Reconciler) writeCRD(
 		existing.Status.ExclusivelyFreeSlots = exclusivelyFreeSlots
 		existing.Status.ExclusivelyCommittedReservedSlots = flavorSlots(committedRes, flavorMemBytes, flavorVCPUs)
 		existing.Status.ExclusivelyFailoverReservedSlots = flavorSlots(failoverRes, flavorMemBytes, flavorVCPUs)
+		// Slot-quantize running consumption the same way, so a VM larger than the smallest flavor
+		// counts as the several slots it occupies rather than one instance. Guarded by fresh for the
+		// same reason as RunningInstances above.
+		if usage.fresh {
+			existing.Status.RunningSlots = flavorSlots(usage.resources, flavorMemBytes, flavorVCPUs)
+		}
 	}
 	existing.Status.LastReconcileAt = metav1.Now()
 

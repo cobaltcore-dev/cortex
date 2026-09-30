@@ -242,6 +242,7 @@ This section maps every reporting surface to the values it exposes, the resource
 | `TotalCapacity` | Memory + Cores (separate) | Empty datacenter | `max(TotalCapacityVMSlots × flavorResources)` over all flavors in the group |
 | `CommittedCapacity` | Memory (slot units) | — | Active CR accepted amounts in smallest-flavor slot units |
 | `RunningInstances` / `RunningResources` | Memory + Cores | — | Actual running VMs in this group × AZ |
+| `RunningSlots` | Min(memory, CPU) | — | Running consumption slot-quantized to the smallest flavor; a VM larger than the smallest flavor counts as the several slots it occupies (unlike `RunningInstances`, which counts VMs) |
 
 #### Prometheus metrics
 
@@ -266,7 +267,7 @@ Capacity is derived from `FlavorGroupCapacity` CRDs and reported per AZ for thre
 
 | Resource | Capacity formula | Usage | Notes |
 |---|---|---|---|
-| `_instances` | `runningInstances + ExclusivelyFreeSlots + ExclusivelyCommittedReservedSlots` | `None` | Failover reservations excluded; `ExclusivelyFreeSlots` is CPU-and-memory-gated (round-robin), final slot count via memory division |
+| `_instances` | `RunningSlots + ExclusivelyFreeSlots + ExclusivelyCommittedReservedSlots` | `None` | Failover reservations excluded; `RunningSlots` slot-quantizes running consumption so oversized VMs are not undercounted; `ExclusivelyFreeSlots` is CPU-and-memory-gated (round-robin), final slot count via memory division |
 | `_ram` (fixed core ratio) | same as `_instances` | `None` | Slot count stands in for RAM |
 | `_ram` (variable) | `(ExclusivelyRawCapacity[memory] − ExclusivelyFailoverReservedCapacity[memory]) / ramUnitBytes` when raw is set, else `(runningMemBytes + ExclusivelyFreeCapacity[memory] + ExclusivelyCommittedReservedCapacity[memory]) / ramUnitBytes` | `None` | Raw already includes reserved-but-empty hosts, so only the failover slice is subtracted; declared units (e.g. GiB), `ramUnitBytes` configured per group |
 | `_cores` | `runningCoresCount + ExclusivelyFreeCapacity[cores] + ExclusivelyCommittedReservedCapacity[cores]` | `None` | Failover reservations excluded; CPU-dimension-driven |

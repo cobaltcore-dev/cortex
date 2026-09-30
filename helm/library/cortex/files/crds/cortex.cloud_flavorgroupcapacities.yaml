@@ -304,6 +304,14 @@ spec:
                 description: RunningResources is the total resource consumption of
                   running VMs, keyed by resource type.
                 type: object
+              runningSlots:
+                description: |-
+                  RunningSlots is the number of smallest-flavor VM slots the running VMs' resource consumption
+                  occupies (min over memory and CPU). Unlike RunningInstances, which counts VMs, this scales
+                  with VM size: a VM larger than the smallest flavor occupies several slots. Reported capacity
+                  uses this so heterogeneous groups are not undercounted.
+                format: int64
+                type: integer
               smallestFlavorName:
                 description: |-
                   SmallestFlavorName is the name of the smallest flavor in this group, used as the

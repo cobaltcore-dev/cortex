@@ -640,7 +640,9 @@ func createTestFlavorGroupCapacity(runningInstances, exclusiveFreeMemBytes int64
 	status := v1alpha1.FlavorGroupCapacityStatus{
 		Flavors:          []v1alpha1.FlavorCapacityStatus{{FlavorName: "test_c8_m32"}},
 		RunningInstances: runningInstances,
-		Conditions:       []v1.Condition{{Type: v1alpha1.FlavorGroupCapacityConditionReady, Status: conditionStatus}},
+		// Homogeneous single-flavor test group: every running VM is exactly one smallest-flavor slot.
+		RunningSlots: runningInstances,
+		Conditions:   []v1.Condition{{Type: v1alpha1.FlavorGroupCapacityConditionReady, Status: conditionStatus}},
 	}
 	if exclusiveFreeMemBytes > 0 {
 		const flavorMemBytes = 32752 * 1024 * 1024 // test flavor memory size
@@ -723,6 +725,8 @@ func createVariableRatioFlavorGroupKnowledge(t *testing.T, flavorMemMiB int) *v1
 func createFlavorGroupCapacityWithResources(runningInstances, exclusiveFreeMemBytes, runningMemBytes, exclusivelyRawMemBytes int64) *v1alpha1.FlavorGroupCapacity {
 	status := v1alpha1.FlavorGroupCapacityStatus{
 		RunningInstances: runningInstances,
+		// Homogeneous single-flavor test group: every running VM is exactly one smallest-flavor slot.
+		RunningSlots: runningInstances,
 		RunningResources: map[string]resource.Quantity{
 			string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(runningMemBytes, resource.BinarySI),
 			string(v1alpha1.CommittedResourceTypeCores):  *resource.NewQuantity(runningInstances*8, resource.DecimalSI),

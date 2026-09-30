@@ -133,6 +133,13 @@ type FlavorGroupCapacityStatus struct {
 	// +kubebuilder:validation:Optional
 	RunningResources map[string]resource.Quantity `json:"runningResources,omitempty"`
 
+	// RunningSlots is the number of smallest-flavor VM slots the running VMs' resource consumption
+	// occupies (min over memory and CPU). Unlike RunningInstances, which counts VMs, this scales
+	// with VM size: a VM larger than the smallest flavor occupies several slots. Reported capacity
+	// uses this so heterogeneous groups are not undercounted.
+	// +kubebuilder:validation:Optional
+	RunningSlots int64 `json:"runningSlots,omitempty"`
+
 	// LastReconcileAt is the timestamp of the last successful reconcile.
 	// +kubebuilder:validation:Optional
 	LastReconcileAt metav1.Time `json:"lastReconcileAt,omitempty"`
