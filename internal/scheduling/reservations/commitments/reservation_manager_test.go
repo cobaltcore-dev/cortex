@@ -1134,7 +1134,7 @@ func TestSelectFlavor(t *testing.T) {
 				deltaMiB = tt.deltaGiB * 1024
 			}
 			deltaBytes := deltaMiB * 1024 * 1024
-			flavor, memoryBytes := selectFlavor(deltaBytes, fg)
+			flavor, memoryBytes, _ := selectFlavor(deltaBytes, fg)
 			if flavor.Name != tt.wantFlavor {
 				t.Errorf("flavor: want %s, got %s", tt.wantFlavor, flavor.Name)
 			}
