@@ -162,13 +162,21 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		// and calling setAccepted would re-expose the current bad spec on the next reconcile.
 		if cr.Status.AcceptedSpec != nil && equality.Semantic.DeepEqual(cr.Spec, *cr.Status.AcceptedSpec) {
 			result, applyErr := r.applyReservationState(ctx, logger, cr)
-			if applyErr == nil {
+			if applyErr != nil {
+				logger.V(1).Info("spurious-rejection recovery: apply failed, will retry", "err", applyErr)
+			} else {
 				allReady, anyFailed, _, _, _, _, checkErr := r.checkChildReservationStatus(ctx, cr, result.TotalSlots)
 				if checkErr == nil && allReady && !anyFailed {
 					logger.Info("recovered from spurious rejection: all slots ready", "generation", cr.Generation)
 					return ctrl.Result{}, r.setAccepted(ctx, cr)
 				}
+				if checkErr != nil {
+					logger.V(1).Info("spurious-rejection recovery: slot check failed, will retry", "err", checkErr)
+				}
 			}
+			// Slots exist but are not all ready yet. No need to re-apply the same accepted spec;
+			// requeue and wait for the reservation controller to complete placement.
+			return ctrl.Result{RequeueAfter: r.retryDelay(cr)}, nil
 		}
 		logger.V(1).Info("spec already rejected for current generation, maintaining rollback state", "generation", cr.Generation)
 		return ctrl.Result{}, r.rollbackToAccepted(ctx, logger, cr)

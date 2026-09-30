@@ -355,6 +355,65 @@ func TestCommittedResourceController_Reconcile(t *testing.T) {
 	}
 }
 
+func TestCommittedResourceController_RejectionGuards(t *testing.T) {
+	t.Run("genuine rejection: spec!=acceptedSpec does not recover to Accepted", func(t *testing.T) {
+		scheme := newCRTestScheme(t)
+		cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
+		// AcceptedSpec has a different Amount — simulates a genuine rejection (bad new spec).
+		mutatedSpec := cr.Spec.DeepCopy()
+		mutatedSpec.Amount = resource.MustParse("999Gi")
+		cr.Status.AcceptedSpec = mutatedSpec
+		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+			Type:               v1alpha1.CommittedResourceConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             v1alpha1.CommittedResourceReasonRejected,
+			ObservedGeneration: cr.Generation,
+			Message:            "bad new spec",
+		})
+		k8sClient := newCRTestClient(scheme, cr)
+		controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: CommittedResourceControllerConfig{}}
+
+		_, _ = controller.Reconcile(context.Background(), reconcileReq(cr.Name))
+
+		var got v1alpha1.CommittedResource
+		if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: cr.Name}, &got); err != nil {
+			t.Fatalf("get CR: %v", err)
+		}
+		cond := meta.FindStatusCondition(got.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+		if cond != nil && cond.Reason == v1alpha1.CommittedResourceReasonAccepted {
+			t.Errorf("genuine rejection must not recover to Accepted; got reason %q", cond.Reason)
+		}
+	})
+
+	t.Run("spurious rejection: slots not yet ready stays Rejected", func(t *testing.T) {
+		scheme := newCRTestScheme(t)
+		cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
+		// AcceptedSpec matches Spec — simulates a spurious rejection where slots just haven't recovered yet.
+		acceptedSpec := cr.Spec.DeepCopy()
+		cr.Status.AcceptedSpec = acceptedSpec
+		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+			Type:               v1alpha1.CommittedResourceConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             v1alpha1.CommittedResourceReasonRejected,
+			ObservedGeneration: cr.Generation,
+			Message:            "transient failure",
+		})
+		k8sClient := newCRTestClient(scheme, cr, newTestFlavorKnowledge())
+		controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme, Conf: CommittedResourceControllerConfig{}}
+
+		// Reconcile creates slots but we do NOT mark them ready.
+		if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
+			t.Fatalf("reconcile: %v", err)
+		}
+
+		if got := countChildReservations(t, k8sClient, cr.Spec.CommitmentUUID); got == 0 {
+			t.Error("expected slots to be created during recovery attempt")
+		}
+		// CR must not flip to Accepted while slots are still pending.
+		assertCondition(t, k8sClient, cr.Name, metav1.ConditionFalse, v1alpha1.CommittedResourceReasonRejected)
+	})
+}
+
 func TestCommittedResourceController_InactiveStates(t *testing.T) {
 	tests := []struct {
 		name  string
