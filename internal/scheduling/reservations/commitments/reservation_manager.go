@@ -186,14 +186,13 @@ func (m *ReservationManager) ApplyCommitmentState(
 					"noHostsFoundSince", cond.LastTransitionTime.Time,
 					"ttl", m.cfg.NoHostsFoundTTL,
 				)
+				if err := m.Delete(ctx, &res); err != nil {
+					return result, fmt.Errorf("failed to delete reservation %s: %w", res.Name, err)
+				}
 				result.Deleted++
 				result.RemovedReservations = append(result.RemovedReservations, res)
 				memValue := res.Spec.Resources[hv1.ResourceMemory]
 				deltaMemoryBytes += memValue.Value()
-
-				if err := m.Delete(ctx, &res); err != nil {
-					return result, fmt.Errorf("failed to delete reservation %s: %w", res.Name, err)
-				}
 			} else {
 				activeReservations = append(activeReservations, res)
 			}
@@ -313,9 +312,9 @@ func (m *ReservationManager) ApplyCommitmentState(
 		)
 	}
 
-	if deltaMemoryBytes > 0 {
+	newSlots := countNewSlots(deltaMemoryBytes, flavorGroup)
+	if newSlots > 0 {
 		// MaxSlots caps only blind-scheduler slots (PAYG remapping slots and existing slots are excluded).
-		newSlots := countNewSlots(deltaMemoryBytes, flavorGroup)
 		if m.cfg.MaxSlots > 0 && newSlots > m.cfg.MaxSlots {
 			return nil, &SlotLimitExceededError{NewSlots: newSlots, Limit: m.cfg.MaxSlots}
 		}
