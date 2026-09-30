@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/equality"
+
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -154,6 +156,20 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 	// Without this guard the controller oscillates: apply bad spec → rollback →
 	// Reservation watch re-enqueues → apply bad spec again → loop.
 	if isRejectedForGeneration(cr) {
+		// Recovery: if the current spec matches the accepted spec, the rejection was
+		// spurious (e.g. transient host failure). Check if slots have since recovered.
+		// Only safe when specs match — if they differ, the rejection was genuine (bad new spec)
+		// and calling setAccepted would re-expose the current bad spec on the next reconcile.
+		if cr.Status.AcceptedSpec != nil && equality.Semantic.DeepEqual(cr.Spec, *cr.Status.AcceptedSpec) {
+			result, applyErr := r.applyReservationState(ctx, logger, cr)
+			if applyErr == nil {
+				allReady, anyFailed, _, _, _, _, checkErr := r.checkChildReservationStatus(ctx, cr, result.TotalSlots)
+				if checkErr == nil && allReady && !anyFailed {
+					logger.Info("recovered from spurious rejection: all slots ready", "generation", cr.Generation)
+					return ctrl.Result{}, r.setAccepted(ctx, cr)
+				}
+			}
+		}
 		logger.V(1).Info("spec already rejected for current generation, maintaining rollback state", "generation", cr.Generation)
 		return ctrl.Result{}, r.rollbackToAccepted(ctx, logger, cr)
 	}

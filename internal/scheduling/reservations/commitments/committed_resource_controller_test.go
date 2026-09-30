@@ -252,6 +252,7 @@ func TestCommittedResourceController_Reconcile(t *testing.T) {
 		expectedReason string
 		expectedSlots  int
 		needsKnowledge bool
+		preRejected    bool // pre-stamp Rejected with AcceptedSpec==Spec to simulate spurious rejection
 	}{
 		{
 			name:           "planned: no Reservations created, Ready=False/Planned",
@@ -284,12 +285,33 @@ func TestCommittedResourceController_Reconcile(t *testing.T) {
 			expectedSlots:  1,
 			needsKnowledge: true,
 		},
+		{
+			name:           "spurious rejection: spec==acceptedSpec, all slots ready → recovers to Accepted",
+			state:          v1alpha1.CommitmentStatusConfirmed,
+			preRejected:    true,
+			expectedStatus: metav1.ConditionTrue,
+			expectedReason: "Accepted",
+			expectedSlots:  1,
+			needsKnowledge: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			scheme := newCRTestScheme(t)
 			cr := newTestCommittedResource("test-cr", tt.state)
+			if tt.preRejected {
+				// Simulate a spurious rejection: spec matches acceptedSpec but Ready=Rejected.
+				acceptedSpec := cr.Spec.DeepCopy()
+				cr.Status.AcceptedSpec = acceptedSpec
+				meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+					Type:               v1alpha1.CommittedResourceConditionReady,
+					Status:             metav1.ConditionFalse,
+					Reason:             v1alpha1.CommittedResourceReasonRejected,
+					ObservedGeneration: cr.Generation,
+					Message:            "transient failure",
+				})
+			}
 			objects := []client.Object{cr}
 			if tt.needsKnowledge {
 				objects = append(objects, newTestFlavorKnowledge())
