@@ -882,8 +882,15 @@ func (in *FlavorGroupCapacityStatus) DeepCopyInto(out *FlavorGroupCapacityStatus
 			(*out)[key] = val.DeepCopy()
 		}
 	}
-	if in.ExclusivelyReservedCapacity != nil {
-		in, out := &in.ExclusivelyReservedCapacity, &out.ExclusivelyReservedCapacity
+	if in.ExclusivelyCommittedReservedCapacity != nil {
+		in, out := &in.ExclusivelyCommittedReservedCapacity, &out.ExclusivelyCommittedReservedCapacity
+		*out = make(map[string]resource.Quantity, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val.DeepCopy()
+		}
+	}
+	if in.ExclusivelyFailoverReservedCapacity != nil {
+		in, out := &in.ExclusivelyFailoverReservedCapacity, &out.ExclusivelyFailoverReservedCapacity
 		*out = make(map[string]resource.Quantity, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val.DeepCopy()
