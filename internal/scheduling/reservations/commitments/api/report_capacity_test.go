@@ -511,6 +511,28 @@ func TestCapacityCalculator_ExcludesFailoverReserved(t *testing.T) {
 	}
 }
 
+// TestCapacityCalculator_FixedRatioUnresolvableSmallestFlavor verifies that a Ready fixed-ratio
+// CRD whose SmallestFlavorName does not match any flavor entry yields ErrCapacityNotReady rather
+// than silently reporting zero HANA capacity for the whole AZ.
+func TestCapacityCalculator_FixedRatioUnresolvableSmallestFlavor(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	crd := createTestFlavorGroupCapacity(1100, 0, true)
+	crd.Status.SmallestFlavorName = "nonexistent_flavor"
+	calc := commitments.NewCapacityCalculator(
+		fake.NewClientBuilder().WithScheme(scheme).
+			WithObjects(createTestFlavorGroupKnowledge(t), crd).WithStatusSubresource(crd).Build(),
+		defaultCapacityConfig,
+	)
+	_, err := calc.CalculateCapacity(context.Background(),
+		liquid.ServiceCapacityRequest{AllAZs: []liquid.AvailabilityZone{"az-one"}})
+	if !errors.Is(err, commitments.ErrCapacityNotReady) {
+		t.Fatalf("expected ErrCapacityNotReady, got %v", err)
+	}
+}
+
 // TestCapacityCalculator_VariableRatio_RawSubtractsFailover verifies that for a variable-ratio
 // group the RAM raw path subtracts only the failover slice: raw already includes reserved-but-empty
 // hosts, so committed reserved stays counted while failover is removed.

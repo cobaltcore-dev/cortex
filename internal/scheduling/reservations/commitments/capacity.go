@@ -33,13 +33,15 @@ func quantityValue(m map[string]resource.Quantity, key string) int64 {
 
 // smallestFlavorTotalSlots returns the empty-datacenter VM slot count of the group's smallest
 // flavor — the installed slot capacity if the whole eligible host pool held only that flavor.
-func smallestFlavorTotalSlots(crd *v1alpha1.FlavorGroupCapacity) int64 {
+// The bool is false when the smallest flavor is unset or missing from the flavor list, letting
+// the caller refuse to serve a zero rather than silently dropping the group's HANA capacity.
+func smallestFlavorTotalSlots(crd *v1alpha1.FlavorGroupCapacity) (int64, bool) {
 	for _, f := range crd.Status.Flavors {
 		if f.FlavorName == crd.Status.SmallestFlavorName {
-			return f.TotalCapacityVMSlots
+			return f.TotalCapacityVMSlots, true
 		}
 	}
-	return 0
+	return 0, false
 }
 
 // CapacityCalculator computes capacity reports for Limes LIQUID API.
@@ -137,7 +139,13 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			// occupies.
 			var instancesCapacity uint64
 			if groupData.HasFixedRamCoreRatio() {
-				totalSlots := smallestFlavorTotalSlots(crd)
+				totalSlots, ok := smallestFlavorTotalSlots(crd)
+				if !ok {
+					// A Ready CRD must expose its smallest flavor's empty-datacenter slots; without
+					// them the fixed-ratio path would report zero HANA capacity for the whole AZ.
+					// Treat the gap like a failed probe rather than serving a bogus zero.
+					return liquid.ServiceCapacityReport{}, fmt.Errorf("%w: flavorGroup=%s az=%s smallest flavor %q total slots unavailable", ErrCapacityNotReady, groupName, string(az), crd.Status.SmallestFlavorName)
+				}
 				instancesCapacity = uint64(max(totalSlots-crd.Status.ExclusivelyFailoverReservedSlots, 0))
 			} else {
 				runningSlots := uint64(crd.Status.RunningSlots) //nolint:gosec
