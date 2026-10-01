@@ -2,7 +2,7 @@
 
 ## 2026-10-01 — [#1263](https://github.com/cobaltcore-dev/cortex/pull/1263)
 
-### cortex v0.5.0
+### cortex v0.6.0
 
 Bug fixes:
 - Fix inflight controller cross-type reconciliation corruption — the inflight reservation controller's hypervisor watch was inadvertently reconciling `CommittedResourceReservations`, corrupting their status; a `ReservationTypeInFLight` filter now prevents cross-type reconciliation ([#1255](https://github.com/cobaltcore-dev/cortex/pull/1255))
@@ -23,43 +23,43 @@ CRD changes:
 - `FlavorGroupCapacity` `.status.exclusivelyReservedSlots` removed — replaced by `.status.exclusivelyCommittedReservedSlots` + `.status.exclusivelyFailoverReservedSlots`
 - `FlavorGroupCapacity` `.status.runningSlots` added (int64, optional) — smallest-flavor VM slots occupied by running VMs, scaling with VM size for accurate heterogeneous group reporting
 
-### cortex-shim v0.1.22
+### cortex-shim v0.1.23
 
 Non-breaking changes:
 - Shared binary rebuild with updated dependencies
 
-### cortex-postgres v0.6.19
+### cortex-postgres v0.6.20
 
 Security:
 - Rebuild image to resolve CVEs flagged by daily scan ([#1268](https://github.com/cobaltcore-dev/cortex/pull/1268))
 
-### cortex-placement-shim v0.1.22
+### cortex-placement-shim v0.1.23
 
-Includes updated chart cortex-shim v0.1.22.
+Includes updated chart cortex-shim v0.1.23.
 
-### cortex-nova v0.0.96
+### cortex-nova v0.0.97
 
-Includes updated charts cortex v0.5.0 and cortex-postgres v0.6.19.
+Includes updated charts cortex v0.6.0 and cortex-postgres v0.6.20.
 
-### cortex-cinder v0.0.96
+### cortex-cinder v0.0.97
 
-Includes updated charts cortex v0.5.0 and cortex-postgres v0.6.19.
+Includes updated charts cortex v0.6.0 and cortex-postgres v0.6.20.
 
-### cortex-manila v0.0.96
+### cortex-manila v0.0.97
 
-Includes updated charts cortex v0.5.0 and cortex-postgres v0.6.19.
+Includes updated charts cortex v0.6.0 and cortex-postgres v0.6.20.
 
-### cortex-crds v0.0.96
+### cortex-crds v0.0.97
 
-Includes updated chart cortex v0.5.0.
+Includes updated chart cortex v0.6.0.
 
-### cortex-ironcore v0.0.96
+### cortex-ironcore v0.0.97
 
-Includes updated chart cortex v0.5.0.
+Includes updated chart cortex v0.6.0.
 
-### cortex-pods v0.0.96
+### cortex-pods v0.0.97
 
-Includes updated chart cortex v0.5.0.
+Includes updated chart cortex v0.6.0.
 
 ## 2026-09-29 — cortex v0.4.6
 
