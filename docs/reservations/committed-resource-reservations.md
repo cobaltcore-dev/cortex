@@ -282,7 +282,7 @@ Capacity is derived from `FlavorGroupCapacity` CRDs and reported per AZ for thre
 | `_ram` (fixed core ratio) | same as `_instances` (fixed) | `None` | Slot count stands in for RAM |
 | `_ram` (variable) | `(ExclusivelyRawCapacity[memory] − ExclusivelyFailoverReservedCapacity[memory]) / ramUnitBytes` when raw is set, else `(runningMemBytes + ExclusivelyFreeCapacity[memory] + ExclusivelyCommittedReservedCapacity[memory]) / ramUnitBytes` | `None` | Raw already includes reserved-but-empty hosts, so only the failover slice is subtracted; declared units (e.g. GiB), `ramUnitBytes` configured per group |
 | `_cores` (fixed core ratio) | `TotalCapacity[cores] − ExclusivelyFailoverReservedCapacity[cores]` | `None` | Empty-datacenter installed cores minus the failover carve-out, matching `_instances` (fixed) |
-| `_cores` (variable) | `runningCoresCount + ExclusivelyFreeCapacity[cores] + ExclusivelyCommittedReservedCapacity[cores]` | `None` | Failover reservations excluded; CPU-dimension-driven |
+| `_cores` (variable) | `max(ExclusivelyRawCapacity[cores] − ExclusivelyFailoverReservedCapacity[cores], 0)` when raw is set, else `runningCoresCount + ExclusivelyFreeCapacity[cores] + ExclusivelyCommittedReservedCapacity[cores]` | `None` | Prefers raw hardware cores, consistent with the `_ram` raw path; raw already includes reserved-but-empty hosts, so only the failover slice is subtracted |
 
 ## Syncer Task
 

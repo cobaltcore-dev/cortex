@@ -163,13 +163,17 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			}
 
 			// Cores capacity. Fixed-ratio groups use installed empty-datacenter cores minus the
-			// failover carve-out, matching instances. Variable-ratio groups sum running + exclusively
-			// free + committed reserved cores.
+			// failover carve-out, matching instances. Variable-ratio groups prefer raw hardware cores
+			// (ExclusivelyRawCapacity), consistent with the _ram raw path: raw already includes
+			// reserved-but-empty hosts, so only the failover slice is subtracted. Fall back to the
+			// running + free + committed sum when raw is unavailable.
+			failoverCores := quantityValue(crd.Status.ExclusivelyFailoverReservedCapacity, coresKey)
 			var coresCapacity uint64
 			if groupData.HasFixedRamCoreRatio() {
 				totalCores := quantityValue(crd.Status.TotalCapacity, coresKey)
-				failoverCores := quantityValue(crd.Status.ExclusivelyFailoverReservedCapacity, coresKey)
 				coresCapacity = uint64(max(totalCores-failoverCores, 0))
+			} else if raw := quantityValue(crd.Status.ExclusivelyRawCapacity, coresKey); raw > 0 {
+				coresCapacity = uint64(max(raw-failoverCores, 0))
 			} else {
 				runningCoresCount := quantityValue(crd.Status.RunningResources, coresKey)
 				freeCoresCount := quantityValue(crd.Status.ExclusivelyFreeCapacity, coresKey)

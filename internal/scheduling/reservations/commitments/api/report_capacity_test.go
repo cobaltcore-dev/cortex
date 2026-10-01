@@ -589,6 +589,49 @@ func TestCapacityCalculator_VariableRatio_RawIgnoresReserved(t *testing.T) {
 	}
 }
 
+// TestCapacityCalculator_VariableRatio_CoresPrefersRaw verifies that for a variable-ratio group
+// _cores uses raw hardware cores minus failover, consistent with the _ram raw path, rather than the
+// running + free + committed sum.
+func TestCapacityCalculator_VariableRatio_CoresPrefersRaw(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	const (
+		flavorMemMiB   = 2048
+		flavorMemBytes = int64(flavorMemMiB) * 1024 * 1024
+	)
+	knowledge := createVariableRatioFlavorGroupKnowledge(t, flavorMemMiB)
+	// Helper sets RunningResources cores to 3*8=24; raw cores (100) minus failover cores (10) = 90,
+	// which differs from the summation (24) so a correct result proves the raw path is used.
+	crd := createFlavorGroupCapacityWithResources(3, 5*flavorMemBytes, 3*flavorMemBytes, 0)
+	crd.Status.ExclusivelyRawCapacity = map[string]resource.Quantity{
+		string(v1alpha1.CommittedResourceTypeCores): *resource.NewQuantity(100, resource.DecimalSI),
+	}
+	crd.Status.ExclusivelyFailoverReservedCapacity = map[string]resource.Quantity{
+		string(v1alpha1.CommittedResourceTypeCores): *resource.NewQuantity(10, resource.DecimalSI),
+	}
+	cfg := commitments.APIConfig{
+		FlavorGroupResourceConfig: map[string]commitments.FlavorGroupResourcesConfig{
+			"*": {Cores: commitments.ResourceTypeConfig{HasCapacity: true}},
+		},
+	}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).WithObjects(knowledge, crd).WithStatusSubresource(crd).Build()
+	report, err := commitments.NewCapacityCalculator(fakeClient, cfg).CalculateCapacity(
+		context.Background(), liquid.ServiceCapacityRequest{AllAZs: []liquid.AvailabilityZone{"az-one"}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	cores := report.Resources["hw_version_test-group_cores"].PerAZ["az-one"]
+	if cores.Capacity != 90 {
+		t.Errorf("cores capacity = %d, want 90 (raw 100 minus failover 10)", cores.Capacity)
+	}
+	if cores.Usage.IsSome() {
+		t.Errorf("cores usage = %v, want None", cores.Usage)
+	}
+}
+
 func verifyPerAZMatchesRequest(t *testing.T, res *liquid.ResourceCapacityReport, requestedAZs []liquid.AvailabilityZone) {
 	t.Helper()
 	if res == nil {
