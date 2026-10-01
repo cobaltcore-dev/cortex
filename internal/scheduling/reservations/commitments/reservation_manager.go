@@ -330,8 +330,8 @@ func (m *ReservationManager) ApplyCommitmentState(
 	}
 	for deltaMemoryBytes >= smallestMemBytes {
 		// Select the largest flavor that fits the remaining delta (flavors sorted descending by memory).
-		_, memoryBytes := selectFlavor(deltaMemoryBytes, flavorGroup)
-		reservation := m.newReservation(desiredState, nextSlotIndex, deltaMemoryBytes, flavorGroup, creator)
+		flavorInGroup, memoryBytes := selectFlavor(deltaMemoryBytes, flavorGroup)
+		reservation := m.newReservation(desiredState, nextSlotIndex, flavorInGroup, memoryBytes, creator)
 		result.TouchedReservations = append(result.TouchedReservations, *reservation)
 		deltaMemoryBytes -= memoryBytes
 		result.Created++
@@ -350,8 +350,8 @@ func (m *ReservationManager) ApplyCommitmentState(
 		nextSlotIndex++
 
 		// Throttle: pause between consecutive creates to spread scheduler load.
-		// Skip after the last slot (deltaMemoryBytes <= 0) — no follow-up create to defer.
-		if m.cfg.SlotCreationDelay > 0 && deltaMemoryBytes > 0 {
+		// Skip after the last slot (delta < smallestMemBytes) — no follow-up create to defer.
+		if m.cfg.SlotCreationDelay > 0 && deltaMemoryBytes >= smallestMemBytes {
 			timer := time.NewTimer(m.cfg.SlotCreationDelay)
 			select {
 			case <-ctx.Done():
@@ -469,8 +469,8 @@ func countNewSlots(deltaMemoryBytes int64, flavorGroup compute.FlavorGroupFeatur
 func (m *ReservationManager) newReservation(
 	state *CommitmentState,
 	slotIndex int,
-	deltaMemoryBytes int64,
-	flavorGroup compute.FlavorGroupFeature,
+	flavorInGroup compute.FlavorInGroup,
+	memoryBytes int64,
 	creator string,
 ) *v1alpha1.Reservation {
 
@@ -480,7 +480,6 @@ func (m *ReservationManager) newReservation(
 	}
 	name := fmt.Sprintf("%s%d", namePrefix, slotIndex)
 
-	flavorInGroup, memoryBytes := selectFlavor(deltaMemoryBytes, flavorGroup)
 	cpus := int64(flavorInGroup.VCPUs) //nolint:gosec // VCPUs from flavor specs, realistically bounded
 
 	spec := v1alpha1.ReservationSpec{

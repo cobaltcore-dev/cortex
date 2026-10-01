@@ -971,7 +971,8 @@ func TestNewReservation_SelectsAppropriateFlavor(t *testing.T) {
 				TotalMemoryBytes: tt.deltaMemory,
 			}
 
-			reservation := manager.newReservation(state, 0, tt.deltaMemory, flavorGroup, "syncer")
+			flavorInGroup, memoryBytes := selectFlavor(tt.deltaMemory, flavorGroup)
+			reservation := manager.newReservation(state, 0, flavorInGroup, memoryBytes, "syncer")
 
 			if reservation.Spec.CommittedResourceReservation.ResourceName != tt.expectedName {
 				t.Errorf("expected flavor %s, got %s",
@@ -1056,7 +1057,8 @@ func TestNewReservation_VariableRatioGroup_SelectsLargestByMemory(t *testing.T) 
 				ProjectID:       "project-1",
 				FlavorGroupName: "gp-group",
 			}
-			res := manager.newReservation(state, 0, deltaBytes, fg, "test")
+			flavorInGroup, memoryBytes := selectFlavor(deltaBytes, fg)
+			res := manager.newReservation(state, 0, flavorInGroup, memoryBytes, "test")
 			if got := res.Spec.CommittedResourceReservation.ResourceName; got != tt.wantFlavor {
 				t.Errorf("flavor: want %s, got %s", tt.wantFlavor, got)
 			}
