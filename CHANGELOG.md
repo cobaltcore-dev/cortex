@@ -1,5 +1,56 @@
 # Changelog
 
+## 2026-09-30 — [#1263](https://github.com/cobaltcore-dev/cortex/pull/1263)
+
+### cortex v0.4.7
+
+Bug fixes:
+- Fix inflight controller reconciling wrong reservation type — the inflight reservation controller's hypervisor watch was inadvertently reconciling `CommittedResourceReservations`, corrupting their status to `Ready=False, Reason=UnexpectedType`; a `ReservationTypeInFlight` filter now prevents cross-type reconciliation ([#1255](https://github.com/cobaltcore-dev/cortex/pull/1255))
+- Fix spurious-rejection recovery, NoHostsFound re-placement, and VRAM slot sizing — committed reservations stuck in `Rejected` while all slots are `Ready=True` now auto-recover to `Accepted` (guarded: only when `Spec == AcceptedSpec`); slots stuck in `NoHostsFound` beyond a configurable TTL (default 20 min) are deleted to re-trigger PAYG remapping; slot sizing now accounts for nominal flavor memory (usable + VRAM), eliminating unplaceable sub-flavor remainder slots ([#1257](https://github.com/cobaltcore-dev/cortex/pull/1257))
+- Split reservations by type to exclude failover from capacity — reservations are now split into `Committed` vs `Failover` in the `FlavorGroupCapacity` API so Limes correctly reports capacity including committed reservations but excluding failover; also fixes slot-quantization of oversized VMs for `RunningSlots` counting in heterogeneous groups ([#1259](https://github.com/cobaltcore-dev/cortex/pull/1259))
+- Remove usage reporting from capacity endpoint — Limes does not consume usage data from this endpoint; removed to avoid discrepancies ([#1258](https://github.com/cobaltcore-dev/cortex/pull/1258))
+
+Non-breaking changes:
+- Export all interface methods of multicluster router — all methods on the multicluster router interface are now capitalized/exported, enabling external consumers
+- Rebuild postgres image to resolve CVEs detected by daily scan ([#1268](https://github.com/cobaltcore-dev/cortex/pull/1268))
+
+CRD changes:
+- `FlavorGroupCapacity` `.status.exclusivelyReservedCapacity` replaced by `.status.exclusivelyCommittedReservedCapacity` and `.status.exclusivelyFailoverReservedCapacity` — separates committed and failover reservation capacity for correct Limes reporting
+- `FlavorGroupCapacity` `.status.exclusivelyReservedSlots` replaced by `.status.exclusivelyCommittedReservedSlots` and `.status.exclusivelyFailoverReservedSlots` — corresponding slot counts per reservation type
+
+### cortex-shim v0.1.22
+
+Non-breaking changes:
+- Shared binary rebuild with updated dependencies
+
+### cortex-placement-shim v0.1.22
+
+Includes updated chart cortex-shim v0.1.22.
+
+### cortex-nova v0.0.96
+
+Includes updated chart cortex v0.4.7.
+
+### cortex-cinder v0.0.96
+
+Includes updated chart cortex v0.4.7.
+
+### cortex-manila v0.0.96
+
+Includes updated chart cortex v0.4.7.
+
+### cortex-crds v0.0.96
+
+Includes updated chart cortex v0.4.7.
+
+### cortex-ironcore v0.0.96
+
+Includes updated chart cortex v0.4.7.
+
+### cortex-pods v0.0.96
+
+Includes updated chart cortex v0.4.7.
+
 ## 2026-09-29 — cortex v0.4.6
 
 ### cortex v0.4.6 (sha-48602477)
