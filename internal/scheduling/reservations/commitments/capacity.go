@@ -130,14 +130,11 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			committedReservedMemBytes := quantityValue(crd.Status.ExclusivelyCommittedReservedCapacity, memKey)
 			failoverMemBytes := quantityValue(crd.Status.ExclusivelyFailoverReservedCapacity, memKey)
 
-			// Instances capacity.
-			// Fixed-ratio groups (e.g. HANA) report installed empty-datacenter slots minus the
-			// failover carve-out. The running + free + committed summation underreports here because
-			// the round-robin free split drops fully-occupied hosts, so capacity falls below installed
-			// hardware. Empty-datacenter slots already include running, free and committed-reserved
-			// hosts alike, so we only subtract the failover slice to exclude evacuation hold-back.
-			// Variable-ratio groups keep the summation: RunningSlots (not RunningInstances) so a VM
-			// larger than the smallest flavor counts as the several slots it occupies.
+			// Instances capacity. Fixed-ratio groups report installed empty-datacenter slots minus the
+			// failover carve-out; the running + free + committed summation underreports HANA in
+			// practice. Variable-ratio groups keep the summation, using RunningSlots (not
+			// RunningInstances) so a VM larger than the smallest flavor counts as the several slots it
+			// occupies.
 			var instancesCapacity uint64
 			if groupData.HasFixedRamCoreRatio() {
 				totalSlots := smallestFlavorTotalSlots(crd)
@@ -166,8 +163,8 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			}
 
 			// Cores capacity. Fixed-ratio groups use installed empty-datacenter cores minus the
-			// failover carve-out, for the same dropout reason as instances. Variable-ratio groups sum
-			// running + exclusively free + committed reserved cores.
+			// failover carve-out, matching instances. Variable-ratio groups sum running + exclusively
+			// free + committed reserved cores.
 			var coresCapacity uint64
 			if groupData.HasFixedRamCoreRatio() {
 				totalCores := quantityValue(crd.Status.TotalCapacity, coresKey)
