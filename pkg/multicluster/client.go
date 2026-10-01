@@ -264,7 +264,7 @@ func (c *Client) clusterForWrite(gvk schema.GroupVersionKind, obj any) (cluster.
 			return c.HomeCluster, nil
 		}
 		// No match and no home fallback — return an error.
-		selector, err := router.extractClusterSelector(obj)
+		selector, err := router.ExtractClusterSelector(obj)
 		if err != nil {
 			return nil, fmt.Errorf("failed to extract cluster selector for GVK %s: %w", gvk, err)
 		}

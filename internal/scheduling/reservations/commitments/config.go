@@ -159,6 +159,10 @@ type CommittedResourceControllerConfig struct {
 	// blind reservation slots. When true, the controller absorbs matching PAYG VMs into
 	// pre-populated slots, consuming CR delta before falling back to the blind scheduler path.
 	EnablePaygPreAllocation bool `json:"enablePaygPreAllocation,omitempty"`
+
+	// NoHostsFoundTTL is how long a slot can remain unplaced before it is deleted,
+	// allowing PAYG VM remapping and re-sizing to be retried. A zero value disables TTL expiry.
+	NoHostsFoundTTL metav1.Duration `json:"noHostsFoundTTL,omitempty"`
 }
 
 // ResourceTypeConfig holds per-resource flags for a single resource type within a flavor group.

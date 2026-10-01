@@ -76,13 +76,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// Use creator request ID from annotation for end-to-end traceability if available,
-	// otherwise generate a new one for this reconcile loop.
-	if creatorReq := res.Annotations[v1alpha1.AnnotationCreatorRequestID]; creatorReq != "" {
-		ctx = WithGlobalRequestID(ctx, creatorReq)
-	} else {
-		ctx = WithNewGlobalRequestID(ctx)
-	}
+	ctx = WithNewGlobalRequestID(ctx)
 	ctx = reservations.WithRequestID(ctx, req.Name)
 	logger := LoggerFromContext(ctx).WithValues("reservation", req.Name)
 

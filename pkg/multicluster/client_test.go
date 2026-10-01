@@ -165,14 +165,14 @@ func (r testRouter) Match(obj any, labels map[string]string) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	objAZ, err := r.extractClusterSelector(obj)
+	objAZ, err := r.ExtractClusterSelector(obj)
 	if err != nil {
 		return false, err
 	}
 	return objAZ == az, nil
 }
 
-func (r testRouter) extractClusterSelector(obj any) (string, error) {
+func (r testRouter) ExtractClusterSelector(obj any) (string, error) {
 	cm, ok := obj.(*corev1.ConfigMap)
 	if !ok {
 		return "", errors.New("object is not a ConfigMap")
@@ -187,7 +187,7 @@ func (r alwaysMatchRouter) Match(any, map[string]string) (bool, error) {
 	return true, nil
 }
 
-func (r alwaysMatchRouter) extractClusterSelector(obj any) (string, error) {
+func (r alwaysMatchRouter) ExtractClusterSelector(obj any) (string, error) {
 	return "", nil
 }
 

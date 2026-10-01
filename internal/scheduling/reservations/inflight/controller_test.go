@@ -522,9 +522,22 @@ func TestIdxReservationByTargetHostFn(t *testing.T) {
 			want: nil,
 		},
 		{
+			name: "non-inflight reservation ignored",
+			obj: &v1alpha1.Reservation{
+				Spec: v1alpha1.ReservationSpec{
+					Type:       v1alpha1.ReservationTypeCommittedResource,
+					TargetHost: "host-1",
+				},
+			},
+			want: nil,
+		},
+		{
 			name: "target host set",
 			obj: &v1alpha1.Reservation{
-				Spec: v1alpha1.ReservationSpec{TargetHost: "host-1"},
+				Spec: v1alpha1.ReservationSpec{
+					Type:       v1alpha1.ReservationTypeInFlight,
+					TargetHost: "host-1",
+				},
 			},
 			want: []string{"host-1"},
 		},
