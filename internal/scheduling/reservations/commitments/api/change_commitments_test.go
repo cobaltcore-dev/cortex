@@ -1176,3 +1176,36 @@ func (vm *TestVM) ToVM() VM {
 		},
 	}
 }
+
+type deletedObjectRecorder struct {
+	client.Client
+	deletedCRs []*v1alpha1.CommittedResource
+}
+
+func (r *deletedObjectRecorder) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	if cr, ok := obj.(*v1alpha1.CommittedResource); ok {
+		r.deletedCRs = append(r.deletedCRs, cr.DeepCopy())
+	}
+	return r.Client.Delete(ctx, obj, opts...)
+}
+
+func TestRollbackCR_DeleteSetsAZ(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	baseClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	recorder := &deletedObjectRecorder{Client: baseClient}
+
+	snap := crSnapshot{crName: "commitment-abc", az: "eu-de-2b"}
+	rollbackCR(context.Background(), log.Log, recorder, snap)
+
+	if len(recorder.deletedCRs) != 1 {
+		t.Fatalf("expected 1 Delete call, got %d", len(recorder.deletedCRs))
+	}
+	got := recorder.deletedCRs[0].Spec.AvailabilityZone
+	if got != "eu-de-2b" {
+		t.Errorf("Delete called with AZ %q, want %q", got, "eu-de-2b")
+	}
+}
