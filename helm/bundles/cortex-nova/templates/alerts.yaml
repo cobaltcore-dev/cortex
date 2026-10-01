@@ -574,11 +574,11 @@ spec:
     - alert: CortexNovaCommittedResourceRejectionRateTooHigh
       expr: |
         (
-          sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected", dry_run="false"}[15m]))
-          / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", dry_run="false"}[15m]))
+          sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected", dry_run="false"}[1h]))
+          / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", dry_run="false"}[1h]))
         ) > 0.3
-        and on() sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", dry_run="false"}[15m])) > 0
-      for: 15m
+        and on() sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", dry_run="false"}[1h])) > 0
+      for: 30m
       labels:
         context: committed-resource-api
         dashboard: cortex-status-dashboard/cortex-status-dashboard
@@ -589,7 +589,7 @@ spec:
       annotations:
         summary: "Committed Resource rejection rate too high ({{ "{{" }} $value | humanizePercentage {{ "}}" }})"
         description: >
-          More than 30% of commitment changes have been rejected over the last 15 minutes.
+          More than 30% of commitment changes have been rejected over the last hour.
           This may indicate insufficient capacity to fulfill new commitments. Rejected
           commitments are rolled back.
 

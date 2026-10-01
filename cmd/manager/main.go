@@ -651,7 +651,6 @@ func main() {
 		}
 
 		crControllerConf := commitmentsConfig.CommittedResourceController
-		crControllerConf.ApplyDefaults()
 
 		crControllerMonitor := commitments.NewCRControllerMonitor(multiclusterClient)
 		metrics.Registry.MustRegister(&crControllerMonitor)

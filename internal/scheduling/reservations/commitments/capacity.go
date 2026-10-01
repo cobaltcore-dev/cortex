@@ -159,8 +159,9 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			} else if ramUnitBytes > 0 {
 				// Variable-ratio: prefer raw hardware bytes (not slot-quantized), which for
 				// CPU-bound groups avoids the smallest-flavor quantum severely undercounting memory.
-				// ExclusivelyRawCapacity already includes reserved-but-empty hosts, so subtract only
-				// the failover slice to exclude it while keeping committed reserved capacity.
+				// ExclusivelyRawCapacity sums effective memory over all eligible hosts (running, free,
+				// and reserved-but-empty alike, including fully occupied ones), so subtract only the
+				// failover slice to exclude it while keeping committed reserved capacity.
 				if raw := quantityValue(crd.Status.ExclusivelyRawCapacity, memKey); raw > 0 {
 					ramCapacity = uint64(max(raw-failoverMemBytes, 0)) / uint64(ramUnitBytes)
 				} else {

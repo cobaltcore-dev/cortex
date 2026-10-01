@@ -114,7 +114,12 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 		}
 		delay := r.retryDelay(cr)
 		logger.Error(applyErr, "pending commitment placement failed, will retry", "requeueAfter", delay)
-		return ctrl.Result{RequeueAfter: delay}, r.setNotReadyRetry(ctx, cr, applyErr.Error())
+		if setErr := r.setNotReadyRetry(ctx, cr, applyErr.Error()); setErr != nil {
+			logger.Info("status update failed after placement error, will be corrected on next reconcile", "err", setErr)
+		}
+		// Return nil so controller-runtime honours RequeueAfter. Returning the status-update
+		// error would cause controller-runtime to ignore RequeueAfter and use exponential backoff.
+		return ctrl.Result{RequeueAfter: delay}, nil
 	}
 	allReady, anyFailed, readySlots, failReason, firstSlotReason, failedSlots, err := r.checkChildReservationStatus(ctx, cr, result.TotalSlots)
 	if err != nil {
@@ -130,7 +135,12 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 		}
 		delay := r.retryDelay(cr)
 		logger.Info("pending commitment placement failed, will retry", "reason", failReason, "firstSlotReason", firstSlotReason, "slotsReady", readySlots, "slotsTotal", result.TotalSlots, "failedSlots", failedSlots, "requeueAfter", delay)
-		return ctrl.Result{RequeueAfter: delay}, r.setNotReadyRetry(ctx, cr, failReason)
+		if setErr := r.setNotReadyRetry(ctx, cr, failReason); setErr != nil {
+			logger.Info("status update failed after placement failure, will be corrected on next reconcile", "err", setErr)
+		}
+		// Return nil so controller-runtime honours RequeueAfter. Returning the status-update
+		// error would cause controller-runtime to ignore RequeueAfter and use exponential backoff.
+		return ctrl.Result{RequeueAfter: delay}, nil
 	}
 	if !allReady {
 		// Reservation controller hasn't processed all slots yet; Reservation watch will re-enqueue.
@@ -198,8 +208,10 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		delay := r.retryDelay(cr)
 		logger.Error(applyErr, "committed placement incomplete, will retry", "requeueAfter", delay)
 		if setErr := r.setNotReadyRetry(ctx, cr, applyErr.Error()); setErr != nil {
-			logger.V(1).Info("status update failed after placement error, will be corrected on next reconcile", "err", setErr)
+			logger.Info("status update failed after placement error, will be corrected on next reconcile", "err", setErr)
 		}
+		// Return nil so controller-runtime honours RequeueAfter. Returning the status-update
+		// error would cause controller-runtime to ignore RequeueAfter and use exponential backoff.
 		return ctrl.Result{RequeueAfter: delay}, nil
 	}
 	allReady, anyFailed, readySlots, failReason, firstSlotReason, failedSlots, err := r.checkChildReservationStatus(ctx, cr, result.TotalSlots)
@@ -217,7 +229,7 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		delay := r.retryDelay(cr)
 		logger.Info("committed placement failed, will retry", "reason", failReason, "firstSlotReason", firstSlotReason, "slotsReady", readySlots, "slotsTotal", result.TotalSlots, "failedSlots", failedSlots, "requeueAfter", delay)
 		if setErr := r.setNotReadyRetry(ctx, cr, failReason); setErr != nil {
-			logger.V(1).Info("status update failed after placement failure, will be corrected on next reconcile", "err", setErr)
+			logger.Info("status update failed after placement failure, will be corrected on next reconcile", "err", setErr)
 		}
 		return ctrl.Result{RequeueAfter: delay}, nil
 	}

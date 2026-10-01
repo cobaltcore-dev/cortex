@@ -51,8 +51,10 @@ type crWatch struct {
 // crSnapshot captures a CommittedResource CRD's prior state for batch rollback.
 // prevSpec is nil when the CRD was newly created (i.e. did not exist before the batch).
 // wasDeleted is true when the batch operation deleted the CRD; rollback must re-create it.
+// az is the request's availability zone, needed to route the delete when prevSpec is nil.
 type crSnapshot struct {
 	crName     string
+	az         string
 	prevSpec   *v1alpha1.CommittedResourceSpec
 	wasDeleted bool
 }
@@ -235,7 +237,7 @@ ProcessLoop:
 					"delete", isDelete)
 
 				// Snapshot the current spec before mutation so we can restore it on rollback.
-				snap := crSnapshot{crName: crName}
+				snap := crSnapshot{crName: crName, az: string(req.AZ)}
 				existing := &v1alpha1.CommittedResource{}
 				if err := api.client.Get(ctx, types.NamespacedName{Name: crName}, existing); err != nil {
 					if !apierrors.IsNotFound(err) {
@@ -487,6 +489,7 @@ func rollbackCR(ctx context.Context, logger logr.Logger, k8sClient client.Client
 	if snap.prevSpec == nil {
 		cr := &v1alpha1.CommittedResource{}
 		cr.Name = snap.crName
+		cr.Spec.AvailabilityZone = snap.az
 		if err := k8sClient.Delete(ctx, cr); client.IgnoreNotFound(err) != nil {
 			logger.Error(err, "failed to delete CommittedResource CRD during rollback", "name", snap.crName)
 		}

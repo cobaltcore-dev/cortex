@@ -126,15 +126,8 @@ type CommittedResourceControllerConfig struct {
 	EnablePaygPreAllocation bool `json:"enablePaygPreAllocation,omitempty"`
 
 	// NoHostsFoundTTL is how long a slot can remain unplaced before it is deleted,
-	// allowing PAYG VM remapping and re-sizing to be retried. Defaults to 20 minutes.
+	// allowing PAYG VM remapping and re-sizing to be retried. A zero value disables TTL expiry.
 	NoHostsFoundTTL metav1.Duration `json:"noHostsFoundTTL,omitempty"`
-}
-
-// ApplyDefaults fills in zero-value fields from the defaults, leaving explicitly configured values intact.
-func (c *CommittedResourceControllerConfig) ApplyDefaults() {
-	if c.NoHostsFoundTTL.Duration == 0 {
-		c.NoHostsFoundTTL = metav1.Duration{Duration: 20 * time.Minute}
-	}
 }
 
 // ResourceTypeConfig holds per-resource flags for a single resource type within a flavor group.

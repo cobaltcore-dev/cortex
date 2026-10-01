@@ -88,10 +88,18 @@ type FlavorGroupCapacityStatus struct {
 	// +kubebuilder:validation:Optional
 	ExclusivelyFreeCapacity map[string]resource.Quantity `json:"exclusivelyFreeCapacity,omitempty"`
 
-	// ExclusivelyRawCapacity is the unquantized sum of effective memory and CPU across the
-	// hosts exclusively assigned to this group by the round-robin split. Unlike
-	// ExclusivelyFreeCapacity, this is not constrained by slot packing or CPU/memory ratio.
-	// Safe to sum across groups — no host is counted twice.
+	// ExclusivelyRawCapacity is the unquantized sum of effective memory and CPU attributed to this
+	// group, not constrained by slot packing or CPU/memory ratio. It is computed differently by
+	// group type:
+	//   - Variable-ratio groups (e.g. general-purpose), which consume it for the _ram report and
+	//     today are a single group with hosts exclusive to it, sum over ALL eligible hosts (the
+	//     smallest flavor's empty-datacenter candidates), including fully occupied ones — so it
+	//     reflects true installed hardware without the occupied-host dropout a placeable-only sum
+	//     would suffer.
+	//   - Fixed-ratio groups (e.g. HANA) share hosts across multiple flavor groups, so an
+	//     all-eligible sum would double-count. They instead sum only the round-robin split's
+	//     exclusively-assigned hosts, which stays disjoint across groups (no host counted twice).
+	//     These groups do not read this field for capacity; it is informational (metrics) only.
 	// +kubebuilder:validation:Optional
 	ExclusivelyRawCapacity map[string]resource.Quantity `json:"exclusivelyRawCapacity,omitempty"`
 
