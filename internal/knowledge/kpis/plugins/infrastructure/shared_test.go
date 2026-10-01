@@ -29,6 +29,7 @@ func mockKVMHostLabels(host, az string) map[string]string {
 		"external_customer": "false",
 		"maintenance":       "false",
 		"os_version":        "unknown",
+		"status":            "unknown",
 	}
 }
 
@@ -218,7 +219,31 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
 				Status:     hv1.HypervisorStatus{OperatingSystem: hv1.OperatingSystemStatus{Version: "1.1.1"}},
 			}},
-			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false", "1.1.1"},
+			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false", "1.1.1", "unknown"},
+		},
+		{
+			name: "status from ready condition reason",
+			host: kvmHost{hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
+				Status: hv1.HypervisorStatus{Conditions: []metav1.Condition{{
+					Type:   hv1.ConditionTypeReady,
+					Status: metav1.ConditionTrue,
+					Reason: hv1.ConditionReasonReadyReady,
+				}}},
+			}},
+			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false", "unknown", "Ready"},
+		},
+		{
+			name: "status from maintenance ready condition reason",
+			host: kvmHost{hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
+				Status: hv1.HypervisorStatus{Conditions: []metav1.Condition{{
+					Type:   hv1.ConditionTypeReady,
+					Status: metav1.ConditionFalse,
+					Reason: hv1.ConditionReasonReadyMaintenance,
+				}}},
+			}},
+			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false", "unknown", "Maintenance"},
 		},
 	}
 
