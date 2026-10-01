@@ -1,5 +1,50 @@
 # Changelog
 
+## 2026-10-01 — [#1273](https://github.com/cobaltcore-dev/cortex/pull/1273)
+
+### cortex v0.5.1 (sha-7a1440e9)
+
+Non-breaking changes:
+- Automated app version bump — image SHA advanced from `sha-e1dafe4f` to `sha-7a1440e9` after the 0.5.0 release ([#1272](https://github.com/cobaltcore-dev/cortex/pull/1272))
+
+### cortex-shim v0.1.23
+
+Non-breaking changes:
+- Shared binary rebuild with updated dependencies
+
+### cortex-postgres v0.6.20
+
+Non-breaking changes:
+- Chart version bump with no functional changes
+
+### cortex-placement-shim v0.1.23
+
+Includes updated chart cortex-shim v0.1.23.
+
+### cortex-nova v0.0.97
+
+Includes updated charts cortex v0.5.1 and cortex-postgres v0.6.20.
+
+### cortex-cinder v0.0.97
+
+Includes updated charts cortex v0.5.1 and cortex-postgres v0.6.20.
+
+### cortex-manila v0.0.97
+
+Includes updated charts cortex v0.5.1 and cortex-postgres v0.6.20.
+
+### cortex-crds v0.0.97
+
+Includes updated chart cortex v0.5.1.
+
+### cortex-ironcore v0.0.97
+
+Includes updated chart cortex v0.5.1.
+
+### cortex-pods v0.0.97
+
+Includes updated chart cortex v0.5.1.
+
 ## 2026-10-01 — [#1263](https://github.com/cobaltcore-dev/cortex/pull/1263)
 
 ### cortex v0.5.0
