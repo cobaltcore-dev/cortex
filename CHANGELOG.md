@@ -1,5 +1,51 @@
 # Changelog
 
+## 2026-10-01 — [#1263](https://github.com/cobaltcore-dev/cortex/pull/1263)
+
+### cortex v0.5.0
+
+#### Breaking Changes
+
+- **Split reservations by type in FlavorGroupCapacity CRD** ([#1259](https://github.com/cobaltcore-dev/cortex/pull/1259)) — The `FlavorGroupCapacity` status fields `.status.exclusivelyReservedCapacity` and `.status.exclusivelyReservedSlots` have been removed and replaced with type-specific fields: `.status.exclusivelyCommittedReservedCapacity`, `.status.exclusivelyFailoverReservedCapacity`, `.status.exclusivelyCommittedReservedSlots`, and `.status.exclusivelyFailoverReservedSlots`. A new `.status.runningSlots` field has been added for accurate heterogeneous group reporting. Consumers of this CRD (e.g. Limes) must be updated before or during rollout.
+
+#### Bug Fixes
+
+- **Fix inflight controller cross-type reconciliation corruption** ([#1255](https://github.com/cobaltcore-dev/cortex/pull/1255)) — The inflight reservation controller's hypervisor watch was inadvertently reconciling `CommittedResourceReservations`, corrupting their status to `Ready=False, Reason=UnexpectedType`. A `ReservationTypeInFlight` filter now prevents cross-type reconciliation.
+- **Fix spurious-rejection recovery, NoHostsFound re-placement & VRAM slot sizing** ([#1257](https://github.com/cobaltcore-dev/cortex/pull/1257)) — Committed reservations stuck in `Rejected` while all slots are `Ready=True` now auto-recover to `Accepted`. Slots stuck in `NoHostsFound` beyond a configurable TTL (default 20 min) are deleted to re-trigger PAYG remapping. Slot sizing now accounts for nominal flavor memory (usable + VRAM), eliminating unplaceable sub-flavor remainder slots.
+- **Split reservations by type to exclude failover from capacity** ([#1259](https://github.com/cobaltcore-dev/cortex/pull/1259)) — Reservations are now split into `Committed` vs `Failover` in the `FlavorGroupCapacity` API so Limes correctly reports capacity including committed reservations but excluding failover. Also fixes slot-quantization of oversized VMs for `RunningSlots` counting in heterogeneous groups.
+- **Remove usage reporting from capacity endpoint** ([#1258](https://github.com/cobaltcore-dev/cortex/pull/1258)) — Limes does not consume usage data from this endpoint; removed to prevent discrepancies.
+- **Fix missing AZ on committed-reservation rollback deletion** ([#1226](https://github.com/cobaltcore-dev/cortex/pull/1226)) — Availability zone was not set during committed-reservation rollback deletion.
+- **Remove redundant call** ([#1265](https://github.com/cobaltcore-dev/cortex/pull/1265)) — Removed a redundant function call.
+
+#### Enhancements
+
+- **Export all multicluster router interface methods** ([#1256](https://github.com/cobaltcore-dev/cortex/pull/1256)) — All methods on the multicluster router interface are now capitalized/exported, enabling external consumers.
+
+#### Dependencies
+
+- **Update `kube-prometheus-stack`** to v91.8.2 ([#1242](https://github.com/cobaltcore-dev/cortex/pull/1242)) — Includes Grafana v13.2.7, kube-state-metrics v8.6.0, and prometheus-node-exporter v4.59.0.
+
+### cortex-postgres v0.6.19
+
+- **Image rebuild for CVE remediation** ([#1268](https://github.com/cobaltcore-dev/cortex/pull/1268)) — Rebuild to resolve CVEs flagged by the daily security scan.
+
+### cortex-shim v0.1.22
+
+- Shared binary rebuild with updated dependencies.
+
+### cortex-placement-shim v0.1.22
+
+- Bundles cortex-shim v0.1.22.
+
+### bundles v0.0.96
+
+- **cortex-nova** v0.0.96 — Bundles cortex v0.5.0 + cortex-postgres v0.6.19
+- **cortex-cinder** v0.0.96 — Bundles cortex v0.5.0 + cortex-postgres v0.6.19
+- **cortex-manila** v0.0.96 — Bundles cortex v0.5.0 + cortex-postgres v0.6.19
+- **cortex-crds** v0.0.96 — Bundles cortex v0.5.0
+- **cortex-ironcore** v0.0.96 — Bundles cortex v0.5.0
+- **cortex-pods** v0.0.96 — Bundles cortex v0.5.0
+
 ## 2026-09-29 — cortex v0.4.6
 
 ### cortex v0.4.6 (sha-48602477)
