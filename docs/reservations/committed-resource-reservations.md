@@ -279,7 +279,7 @@ Capacity is derived from `FlavorGroupCapacity` CRDs and reported per AZ for thre
 |---|---|---|---|
 | `_instances` | `RunningSlots + ExclusivelyFreeSlots + ExclusivelyCommittedReservedSlots` | `None` | Failover reservations excluded; `RunningSlots` slot-quantizes running consumption so oversized VMs are not undercounted; `ExclusivelyFreeSlots` is CPU-and-memory-gated (round-robin), final slot count via memory division |
 | `_ram` (fixed core ratio) | same as `_instances` | `None` | Slot count stands in for RAM |
-| `_ram` (variable) | `(ExclusivelyRawCapacity[memory] − ExclusivelyFailoverReservedCapacity[memory]) / ramUnitBytes` when raw is set, else `(runningMemBytes + ExclusivelyFreeCapacity[memory] + ExclusivelyCommittedReservedCapacity[memory]) / ramUnitBytes` | `None` | Raw already includes reserved-but-empty hosts, so only the failover slice is subtracted; declared units (e.g. GiB), `ramUnitBytes` configured per group |
+| `_ram` (variable) | `(ExclusivelyRawCapacity[memory] − ExclusivelyFailoverReservedCapacity[memory]) / ramUnitBytes` when raw is set, else `(runningMemBytes + ExclusivelyFreeCapacity[memory] + ExclusivelyCommittedReservedCapacity[memory]) / ramUnitBytes` | `None` | For variable-ratio groups `ExclusivelyRawCapacity` sums effective memory over **all** eligible hosts (running + free + reserved, incl. fully occupied ones), so no host is dropped; only the failover slice is subtracted. Declared units (e.g. GiB), `ramUnitBytes` configured per group |
 | `_cores` | `runningCoresCount + ExclusivelyFreeCapacity[cores] + ExclusivelyCommittedReservedCapacity[cores]` | `None` | Failover reservations excluded; CPU-dimension-driven |
 
 ## Syncer Task
