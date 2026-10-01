@@ -590,7 +590,7 @@ func (c *Reconciler) reconcileAZ(
 			rawExclusiveByGroup[r.groupName] = sumEffectiveCapacity(exclusiveHosts[r.groupName], hvByName)
 		} else {
 			// FIXME: summing all total candidates assumes variable-ratio groups have disjoint host sets.
-			// If two variable-ratio groups share hosts, their smallestTotalCandidates overlap and ExclusivelyRawCapacity double-counts those hosts. 
+			// If two variable-ratio groups share hosts, their smallestTotalCandidates overlap and ExclusivelyRawCapacity double-counts those hosts.
 			rawExclusiveByGroup[r.groupName] = sumEffectiveCapacity(r.smallestTotalCandidates, hvByName)
 		}
 	}
