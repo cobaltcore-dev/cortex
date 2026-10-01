@@ -277,10 +277,12 @@ Capacity is derived from `FlavorGroupCapacity` CRDs and reported per AZ for thre
 
 | Resource | Capacity formula | Usage | Notes |
 |---|---|---|---|
-| `_instances` | `RunningSlots + ExclusivelyFreeSlots + ExclusivelyCommittedReservedSlots` | `None` | Failover reservations excluded; `RunningSlots` slot-quantizes running consumption so oversized VMs are not undercounted; `ExclusivelyFreeSlots` is CPU-and-memory-gated (round-robin), final slot count via memory division |
-| `_ram` (fixed core ratio) | same as `_instances` | `None` | Slot count stands in for RAM |
+| `_instances` (fixed core ratio) | `smallestFlavor.TotalCapacityVMSlots − ExclusivelyFailoverReservedSlots` | `None` | Empty-datacenter installed slots minus the failover carve-out. Used for HANA: the running + free + committed summation underreports because the round-robin free split drops fully-occupied hosts, so capacity falls below installed hardware. The empty-datacenter total already includes running, free and committed-reserved hosts alike, so only failover is subtracted |
+| `_instances` (variable) | `RunningSlots + ExclusivelyFreeSlots + ExclusivelyCommittedReservedSlots` | `None` | Failover reservations excluded; `RunningSlots` slot-quantizes running consumption so oversized VMs are not undercounted; `ExclusivelyFreeSlots` is CPU-and-memory-gated (round-robin), final slot count via memory division |
+| `_ram` (fixed core ratio) | same as `_instances` (fixed) | `None` | Slot count stands in for RAM |
 | `_ram` (variable) | `(ExclusivelyRawCapacity[memory] − ExclusivelyFailoverReservedCapacity[memory]) / ramUnitBytes` when raw is set, else `(runningMemBytes + ExclusivelyFreeCapacity[memory] + ExclusivelyCommittedReservedCapacity[memory]) / ramUnitBytes` | `None` | Raw already includes reserved-but-empty hosts, so only the failover slice is subtracted; declared units (e.g. GiB), `ramUnitBytes` configured per group |
-| `_cores` | `runningCoresCount + ExclusivelyFreeCapacity[cores] + ExclusivelyCommittedReservedCapacity[cores]` | `None` | Failover reservations excluded; CPU-dimension-driven |
+| `_cores` (fixed core ratio) | `TotalCapacity[cores] − ExclusivelyFailoverReservedCapacity[cores]` | `None` | Empty-datacenter installed cores minus the failover carve-out, same reasoning as `_instances` (fixed) |
+| `_cores` (variable) | `runningCoresCount + ExclusivelyFreeCapacity[cores] + ExclusivelyCommittedReservedCapacity[cores]` | `None` | Failover reservations excluded; CPU-dimension-driven |
 
 ## Syncer Task
 

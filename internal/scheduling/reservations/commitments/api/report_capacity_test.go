@@ -87,8 +87,6 @@ func TestCapacityCalculator(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const flavorMemBytes = 32752 * 1024 * 1024 // test flavor: 32752 MiB
-
 	newCalculator := func(objects ...client.Object) *commitments.CapacityCalculator {
 		return commitments.NewCapacityCalculator(
 			fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).
@@ -177,35 +175,35 @@ func TestCapacityCalculator(t *testing.T) {
 
 	// CRD-value cases: all use fixed-ratio knowledge + one CRD for az-one.
 	type crdValueCase struct {
-		name               string
-		runningInstances   int64
-		exclusiveFreeBytes int64
-		ready              bool
-		checkAZ            liquid.AvailabilityZone
-		wantCapacity       uint64
-		wantUsage          *uint64 // nil = expect absent
-		cfg                *commitments.APIConfig
-		wantResourceCount  int  // 0 = don't check
-		wantNotReady       bool // expect ErrCapacityNotReady
+		name              string
+		totalSlots        int64
+		failoverSlots     int64
+		ready             bool
+		checkAZ           liquid.AvailabilityZone
+		wantCapacity      uint64
+		wantUsage         *uint64 // nil = expect absent
+		cfg               *commitments.APIConfig
+		wantResourceCount int  // 0 = don't check
+		wantNotReady      bool // expect ErrCapacityNotReady
 	}
 
 	crdCases := []crdValueCase{
 		{
-			// running=200, exclusively_free=800 slots → capacity=1000; usage always None.
-			name:             "ready CRD: capacity = running + exclusively free, usage None",
-			runningInstances: 200, exclusiveFreeBytes: 800 * flavorMemBytes, ready: true,
+			// empty-datacenter total=1000 slots, no failover → capacity=1000; usage always None.
+			name:       "ready CRD: capacity = empty-datacenter total minus failover, usage None",
+			totalSlots: 1000, failoverSlots: 0, ready: true,
 			checkAZ: "az-one", wantCapacity: 1000, wantUsage: nil,
 		},
 		{
 			// stale CRD: CalculateCapacity returns ErrCapacityNotReady → caller returns 503
-			name:             "stale CRD: returns ErrCapacityNotReady",
-			runningInstances: 200, exclusiveFreeBytes: 800 * flavorMemBytes, ready: false,
+			name:       "stale CRD: returns ErrCapacityNotReady",
+			totalSlots: 1000, failoverSlots: 0, ready: false,
 			checkAZ: "az-one", wantNotReady: true,
 		},
 		{
 			// CRD only covers az-one; az-two has no CRD → capacity=0
-			name:             "missing CRD for AZ: capacity=0",
-			runningInstances: 500, exclusiveFreeBytes: 400, ready: true,
+			name:       "missing CRD for AZ: capacity=0",
+			totalSlots: 500, failoverSlots: 0, ready: true,
 			checkAZ: "az-two", wantCapacity: 0, wantUsage: nil,
 		},
 	}
@@ -221,7 +219,7 @@ func TestCapacityCalculator(t *testing.T) {
 				if tc.cfg != nil {
 					cfg = *tc.cfg
 				}
-				crd := createTestFlavorGroupCapacity(tc.runningInstances, tc.exclusiveFreeBytes, tc.ready)
+				crd := createTestFlavorGroupCapacity(tc.totalSlots, tc.failoverSlots, tc.ready)
 				calc := commitments.NewCapacityCalculator(
 					fake.NewClientBuilder().WithScheme(scheme).
 						WithObjects(createTestFlavorGroupKnowledge(t), crd).
@@ -286,7 +284,7 @@ func TestCapacityCalculator(t *testing.T) {
 					},
 				},
 			}
-			crd := createTestFlavorGroupCapacity(100, 80, true)
+			crd := createTestFlavorGroupCapacity(100, 0, true)
 			calc := commitments.NewCapacityCalculator(
 				fake.NewClientBuilder().WithScheme(scheme).
 					WithObjects(createTestFlavorGroupKnowledge(t), crd).
@@ -420,16 +418,19 @@ func TestCapacityCalculator_VariableRatio_PrefersRawCapacity(t *testing.T) {
 // TestCapacityCalculator_ReservedSlots verifies that committed-resource reserved slots
 // (ExclusivelyCommittedReservedCapacity/Slots) are added back into reported capacity for a
 // fixed-ratio group, and that usage is reported as None.
-func TestCapacityCalculator_ReservedSlots(t *testing.T) {
+// TestCapacityCalculator_FixedRatioIncludesReservedInTotal verifies that for a fixed-ratio group
+// the empty-datacenter total already accounts for committed-reserved hosts, so committed slots are
+// not added a second time on top of totalSlots. Capacity = totalSlots (no failover); usage None.
+func TestCapacityCalculator_FixedRatioIncludesReservedInTotal(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
 	const flavorMemBytes = 32752 * 1024 * 1024
 
-	// running=200, exclusively free=800 slots, committed reserved=100 slots.
-	// capacity = 200 + 800 + 100 = 1100; usage None.
-	crd := createTestFlavorGroupCapacity(200, 800*flavorMemBytes, true)
+	// empty-datacenter total=1100 slots, already including 100 committed-reserved slots.
+	// capacity must stay 1100 (committed not re-added); usage None.
+	crd := createTestFlavorGroupCapacity(1100, 0, true)
 	crd.Status.ExclusivelyCommittedReservedSlots = 100
 	crd.Status.ExclusivelyCommittedReservedCapacity = map[string]resource.Quantity{
 		string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(100*flavorMemBytes, resource.BinarySI),
@@ -449,25 +450,26 @@ func TestCapacityCalculator_ReservedSlots(t *testing.T) {
 	for _, res := range []string{"hw_version_test-group_ram", "hw_version_test-group_instances"} {
 		az := report.Resources[liquid.ResourceName(res)].PerAZ["az-one"]
 		if az.Capacity != 1100 {
-			t.Errorf("%s: capacity = %d, want 1100 (running 200 + free 800 + reserved 100)", res, az.Capacity)
+			t.Errorf("%s: capacity = %d, want 1100 (empty-datacenter total, committed not re-added)", res, az.Capacity)
 		}
 		if az.Usage.IsSome() {
 			t.Errorf("%s: usage = %v, want None", res, az.Usage)
 		}
 	}
+	// cores = empty-datacenter total cores = 1100 * 8 vCPUs.
 	cores := report.Resources["hw_version_test-group_cores"].PerAZ["az-one"]
-	if cores.Capacity != 800 {
-		t.Errorf("cores capacity = %d, want 800 (reserved cores added back)", cores.Capacity)
+	if cores.Capacity != 1100*8 {
+		t.Errorf("cores capacity = %d, want %d (empty-datacenter total cores)", cores.Capacity, 1100*8)
 	}
 	if cores.Usage.IsSome() {
 		t.Errorf("cores usage = %v, want None", cores.Usage)
 	}
 }
 
-// TestCapacityCalculator_ExcludesFailoverReserved verifies that failover reservations
-// (ExclusivelyFailoverReservedCapacity/Slots) are excluded from reported capacity while committed
-// reservations (ExclusivelyCommittedReservedCapacity/Slots) stay included, for a fixed-ratio group
-// across all three resources. Usage is None throughout.
+// TestCapacityCalculator_ExcludesFailoverReserved verifies that for a fixed-ratio group the
+// failover slice (ExclusivelyFailoverReservedSlots/Capacity) is subtracted from the empty-datacenter
+// total, while committed reservations stay included (they are already baked into the total).
+// Usage is None throughout.
 func TestCapacityCalculator_ExcludesFailoverReserved(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
@@ -475,18 +477,13 @@ func TestCapacityCalculator_ExcludesFailoverReserved(t *testing.T) {
 	}
 	const flavorMemBytes = 32752 * 1024 * 1024
 
-	// running=200, free=800, committed reserved=70 slots, failover reserved=30 slots (excluded).
-	// instances/ram = 200 + 800 + 70 = 1070; failover 30 does not count.
-	crd := createTestFlavorGroupCapacity(200, 800*flavorMemBytes, true)
+	// empty-datacenter total=1100 slots (includes 70 committed), failover=30 slots (excluded).
+	// instances/ram = 1100 - 30 = 1070.
+	crd := createTestFlavorGroupCapacity(1100, 30, true)
 	crd.Status.ExclusivelyCommittedReservedSlots = 70
 	crd.Status.ExclusivelyCommittedReservedCapacity = map[string]resource.Quantity{
 		string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(70*flavorMemBytes, resource.BinarySI),
 		string(v1alpha1.CommittedResourceTypeCores):  *resource.NewQuantity(70*8, resource.DecimalSI),
-	}
-	crd.Status.ExclusivelyFailoverReservedSlots = 30
-	crd.Status.ExclusivelyFailoverReservedCapacity = map[string]resource.Quantity{
-		string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(30*flavorMemBytes, resource.BinarySI),
-		string(v1alpha1.CommittedResourceTypeCores):  *resource.NewQuantity(30*8, resource.DecimalSI),
 	}
 	calc := commitments.NewCapacityCalculator(
 		fake.NewClientBuilder().WithScheme(scheme).
@@ -501,16 +498,16 @@ func TestCapacityCalculator_ExcludesFailoverReserved(t *testing.T) {
 	for _, res := range []string{"hw_version_test-group_ram", "hw_version_test-group_instances"} {
 		az := report.Resources[liquid.ResourceName(res)].PerAZ["az-one"]
 		if az.Capacity != 1070 {
-			t.Errorf("%s: capacity = %d, want 1070 (running 200 + free 800 + committed 70, failover 30 excluded)", res, az.Capacity)
+			t.Errorf("%s: capacity = %d, want 1070 (total 1100 minus failover 30)", res, az.Capacity)
 		}
 		if az.Usage.IsSome() {
 			t.Errorf("%s: usage = %v, want None", res, az.Usage)
 		}
 	}
-	// cores: committed = 70*8 = 560; running/free cores are 0; failover excluded.
+	// cores = total cores (1100*8) minus failover cores (30*8) = 8560.
 	cores := report.Resources["hw_version_test-group_cores"].PerAZ["az-one"]
-	if cores.Capacity != 560 {
-		t.Errorf("cores capacity = %d, want 560 (committed reserved cores, failover excluded)", cores.Capacity)
+	if cores.Capacity != (1100-30)*8 {
+		t.Errorf("cores capacity = %d, want %d (total cores minus failover cores)", cores.Capacity, (1100-30)*8)
 	}
 }
 
@@ -631,25 +628,31 @@ func createEmptyFlavorGroupKnowledge() *v1alpha1.Knowledge {
 	}
 }
 
-// createTestFlavorGroupCapacity creates a FlavorGroupCapacity CRD for a fixed-ratio group.
-func createTestFlavorGroupCapacity(runningInstances, exclusiveFreeMemBytes int64, ready bool) *v1alpha1.FlavorGroupCapacity {
+// createTestFlavorGroupCapacity creates a FlavorGroupCapacity CRD for a fixed-ratio group,
+// populated for the empty-datacenter-minus-failover report path: totalSlots is the smallest
+// flavor's empty-datacenter slot count and failoverSlots the evacuation carve-out. The test
+// flavor has 8 vCPUs, so cores scale as slots*8.
+func createTestFlavorGroupCapacity(totalSlots, failoverSlots int64, ready bool) *v1alpha1.FlavorGroupCapacity {
 	conditionStatus := v1.ConditionTrue
 	if !ready {
 		conditionStatus = v1.ConditionFalse
 	}
+	const vcpus = 8
 	status := v1alpha1.FlavorGroupCapacityStatus{
-		Flavors:          []v1alpha1.FlavorCapacityStatus{{FlavorName: "test_c8_m32"}},
-		RunningInstances: runningInstances,
-		// Homogeneous single-flavor test group: every running VM is exactly one smallest-flavor slot.
-		RunningSlots: runningInstances,
-		Conditions:   []v1.Condition{{Type: v1alpha1.FlavorGroupCapacityConditionReady, Status: conditionStatus}},
+		SmallestFlavorName: "test_c8_m32",
+		Flavors: []v1alpha1.FlavorCapacityStatus{
+			{FlavorName: "test_c8_m32", TotalCapacityVMSlots: totalSlots},
+		},
+		TotalCapacity: map[string]resource.Quantity{
+			string(v1alpha1.CommittedResourceTypeCores): *resource.NewQuantity(totalSlots*vcpus, resource.DecimalSI),
+		},
+		Conditions: []v1.Condition{{Type: v1alpha1.FlavorGroupCapacityConditionReady, Status: conditionStatus}},
 	}
-	if exclusiveFreeMemBytes > 0 {
-		const flavorMemBytes = 32752 * 1024 * 1024 // test flavor memory size
-		status.ExclusivelyFreeCapacity = map[string]resource.Quantity{
-			string(v1alpha1.CommittedResourceTypeMemory): *resource.NewQuantity(exclusiveFreeMemBytes, resource.BinarySI),
+	if failoverSlots > 0 {
+		status.ExclusivelyFailoverReservedSlots = failoverSlots
+		status.ExclusivelyFailoverReservedCapacity = map[string]resource.Quantity{
+			string(v1alpha1.CommittedResourceTypeCores): *resource.NewQuantity(failoverSlots*vcpus, resource.DecimalSI),
 		}
-		status.ExclusivelyFreeSlots = exclusiveFreeMemBytes / flavorMemBytes
 	}
 	return &v1alpha1.FlavorGroupCapacity{
 		ObjectMeta: v1.ObjectMeta{Name: "test-group-az-one"},
