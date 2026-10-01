@@ -1,5 +1,66 @@
 # Changelog
 
+## 2026-10-01 — [#1263](https://github.com/cobaltcore-dev/cortex/pull/1263)
+
+### cortex v0.5.0
+
+Bug fixes:
+- Fix inflight controller cross-type reconciliation corruption — the inflight reservation controller's hypervisor watch was inadvertently reconciling `CommittedResourceReservations`, corrupting their status; a `ReservationTypeInFLight` filter now prevents cross-type reconciliation ([#1255](https://github.com/cobaltcore-dev/cortex/pull/1255))
+- Fix spurious-rejection recovery, NoHostsFound re-placement and VRAM slot sizing — committed reservations stuck in `Rejected` while all slots are `Ready=True` now auto-recover to `Accepted`; slots stuck in `NoHostsFound` beyond a configurable TTL (default 20 min) are deleted to re-trigger PAYG remapping; slot sizing now accounts for nominal flavor memory (usable + VRAM) ([#1257](https://github.com/cobaltcore-dev/cortex/pull/1257))
+- Split reservations by type to exclude failover from capacity — reservations are now split into `Committed` vs `Failover` in the `FlavorGroupCapacity` API so Limes correctly reports capacity including committed reservations but excluding failover; also fixes slot-quantization of oversized VMs for `RunningSlots` counting in heterogeneous groups ([#1259](https://github.com/cobaltcore-dev/cortex/pull/1259))
+- Remove usage reporting from capacity endpoint — Limes does not consume usage data from this endpoint; removed to avoid discrepancies ([#1258](https://github.com/cobaltcore-dev/cortex/pull/1258))
+- Fix missing AZ on CR rollback deletion ([#1226](https://github.com/cobaltcore-dev/cortex/pull/1226))
+- Fix underreporting of fully packed general purpose hosts ([#1266](https://github.com/cobaltcore-dev/cortex/pull/1266))
+- Fix fixed-ratio groups to use empty datacenter slots minus failover ([#1270](https://github.com/cobaltcore-dev/cortex/pull/1270))
+- Fix redundant call ([#1265](https://github.com/cobaltcore-dev/cortex/pull/1265))
+
+Non-breaking changes:
+- Export all multicluster router interface methods — all methods on the multicluster router interface are now capitalized/exported, enabling external consumers ([#1256](https://github.com/cobaltcore-dev/cortex/pull/1256))
+- Update `kube-prometheus-stack` to v91.8.2 ([#1242](https://github.com/cobaltcore-dev/cortex/pull/1242))
+
+CRD changes:
+- `FlavorGroupCapacity` `.status.exclusivelyReservedCapacity` removed — replaced by `.status.exclusivelyCommittedReservedCapacity` + `.status.exclusivelyFailoverReservedCapacity`
+- `FlavorGroupCapacity` `.status.exclusivelyReservedSlots` removed — replaced by `.status.exclusivelyCommittedReservedSlots` + `.status.exclusivelyFailoverReservedSlots`
+- `FlavorGroupCapacity` `.status.runningSlots` added (int64, optional) — smallest-flavor VM slots occupied by running VMs, scaling with VM size for accurate heterogeneous group reporting
+
+### cortex-shim v0.1.22
+
+Non-breaking changes:
+- Shared binary rebuild with updated dependencies
+
+### cortex-postgres v0.6.19
+
+Security:
+- Rebuild image to resolve CVEs flagged by daily scan ([#1268](https://github.com/cobaltcore-dev/cortex/pull/1268))
+
+### cortex-placement-shim v0.1.22
+
+Includes updated chart cortex-shim v0.1.22.
+
+### cortex-nova v0.0.96
+
+Includes updated charts cortex v0.5.0 and cortex-postgres v0.6.19.
+
+### cortex-cinder v0.0.96
+
+Includes updated charts cortex v0.5.0 and cortex-postgres v0.6.19.
+
+### cortex-manila v0.0.96
+
+Includes updated charts cortex v0.5.0 and cortex-postgres v0.6.19.
+
+### cortex-crds v0.0.96
+
+Includes updated chart cortex v0.5.0.
+
+### cortex-ironcore v0.0.96
+
+Includes updated chart cortex v0.5.0.
+
+### cortex-pods v0.0.96
+
+Includes updated chart cortex v0.5.0.
+
 ## 2026-09-29 — cortex v0.4.6
 
 ### cortex v0.4.6 (sha-48602477)
