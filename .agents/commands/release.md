@@ -10,36 +10,37 @@ You orchestrate the release process for a given release PR. Two deliverables, in
 1. A single prep PR (`release/prepare-<PR_NUMBER>`) combining the changelog entry and helm chart version bumps.
 2. The release PR description updated with the changelog and a reference to the prep PR.
 
-You are the only mutator. The investigator subagents — `release-digest`, `release-bump-planner`, `release-changelog-writer` — are read-only by construction. They return text; you apply edits, run git, push branches, and dispatch `pull-request-creator` to open PRs. Never call `gh pr create` directly.
+You are the only mutator. The investigator subagents — `release-digest`, `release-bump-planner`, `release-changelog-writer` — are read-only by construction. They return text; you apply edits, run git, push branches, and dispatch `pull-request-creator` to open PRs. Never call `gh pr create` directly. All subagents ship under the `cortex-agents` plugin, so their `subagent_type` is always the namespaced `cortex-agents:<name>` form.
 
 ---
 
 ## Phase 1: Setup
 
-Read `AGENTS.md`. Capture `<PR_NUMBER>` from the user's invocation. If no number was provided, find the open PR targeting `main` whose head branch matches a release pattern:
+Read `AGENTS.md`. Capture `<PR_NUMBER>` from the user's invocation. If no number was provided, find the open PR whose head branch matches a release pattern:
 
 ```sh
-gh pr list --state open --base main --json number,title,headRefName | \
+gh pr list --state open --json number,title,headRefName,baseRefName | \
   jq '.[] | select(.headRefName | test("release|bump-app-version"; "i"))'
 ```
 
 If exactly one candidate is found, use it and tell the user which PR was detected. If none or multiple, abort and ask the user to specify the PR number explicitly.
 
-Then:
+Then put the working tree on a clean `main` — the release mechanics (chart bumps, changelog prepend, prep branch) are all computed relative to `main`, but when this command runs from CI the checkout may be on the release PR ref instead:
 
 ```sh
 git fetch origin main
+git checkout main || git checkout -B main origin/main
+git reset --hard origin/main
 git status --porcelain
-git rev-parse --abbrev-ref HEAD
 ```
 
-Working tree must be clean and HEAD must be on `main`. If either precondition fails, abort and tell the user what to fix.
+The working tree must be clean after this. If `git reset --hard` cannot produce a clean tree (e.g. untracked files block it), abort and tell the user what to fix.
 
 ---
 
 ## Phase 2: Digest
 
-Dispatch the **release-digest** agent.
+Dispatch the **release-digest** agent via the Agent tool with `subagent_type: "cortex-agents:release-digest"`.
 
 Prompt: `Produce a release digest for PR #<PR_NUMBER>.`
 
@@ -49,7 +50,7 @@ Save its full output as `<digest>`.
 
 ## Phase 3: Plan the bump
 
-Dispatch the **release-bump-planner** agent. Pass it the PR number and the full digest.
+Dispatch the **release-bump-planner** agent with `subagent_type: "cortex-agents:release-bump-planner"`. Pass it the PR number and the full digest.
 
 Prompt:
 ```
@@ -85,7 +86,7 @@ Do NOT commit yet — leave the edits uncommitted in the working tree.
 
 ## Phase 5: Write the changelog
 
-Dispatch the **release-changelog-writer** agent. Pass the digest and the bumped-versions summary; do NOT pass the verbose bump plan.
+Dispatch the **release-changelog-writer** agent with `subagent_type: "cortex-agents:release-changelog-writer"`. Pass the digest and the bumped-versions summary; do NOT pass the verbose bump plan.
 
 Prompt:
 ```
@@ -115,7 +116,7 @@ Do NOT commit yet — both `helm/` edits and `CHANGELOG.md` remain uncommitted i
 
 ## Phase 6: Open the prep PR
 
-Dispatch **`pull-request-creator`** with:
+Dispatch **`pull-request-creator`** with `subagent_type: "cortex-agents:pull-request-creator"` and:
 
 - `branch`: `release/prepare-<PR_NUMBER>`
 - `commit_message`: `Release cortex <cortex_new_version>`

@@ -1,0 +1,228 @@
+name: "Cortex Agent Run"
+description: "Self-contained runner for cortex agents: mints an app token, fetches the shared .agents plugin, patches and starts the LiteLLM/SAP AI Core proxy, runs claude-code-action, and stops the proxy."
+
+inputs:
+  github_app_id:
+    description: "GitHub App ID used to mint the run token"
+    required: true
+  github_app_private_key:
+    description: "GitHub App private key (PEM) used to mint the run token"
+    required: true
+  litellm_model:
+    description: "LiteLLM model identifier routed through SAP AI Core"
+    required: false
+    default: "sap/anthropic--claude-4.6-opus"
+  prompt:
+    description: "Prompt handed to claude-code-action. Leave empty for the trigger-phrase driven assistant mode."
+    required: false
+    default: ""
+  claude_args:
+    description: "Arguments passed through to the Claude CLI"
+    required: false
+    default: |
+      --max-turns 10000
+      --permission-mode auto
+      --allowedTools "Read,Write,Edit,Bash(*),WebSearch,WebFetch"
+  trigger_phrase:
+    description: "Phrase that triggers the assistant on issues/PRs"
+    required: false
+    default: ""
+  include_comments_by_actor:
+    description: "Comma-separated actors whose comments claude-code-action should include"
+    required: false
+    default: ""
+  bot_id:
+    description: "Numeric id of the cortex agents bot"
+    required: false
+    default: "279748396"
+  bot_name:
+    description: "Login of the cortex agents bot"
+    required: false
+    default: "cortex-ai-agents[bot]"
+  aicore_resource_group:
+    description: "SAP AI Core resource group"
+    required: true
+  aicore_base_url:
+    description: "SAP AI Core base URL"
+    required: true
+  aicore_auth_url:
+    description: "SAP AI Core auth URL"
+    required: true
+  aicore_client_id:
+    description: "SAP AI Core client id"
+    required: true
+  aicore_client_secret:
+    description: "SAP AI Core client secret"
+    required: true
+  cortex_ref:
+    description: "Cortex git ref to fetch the shared .agents plugin from"
+    required: false
+    default: "main"
+  agents_dir_fetch:
+    description: "Fetch the .agents plugin from cortex. Set to false when the caller already has .agents checked out (cortex on itself)."
+    required: false
+    default: "true"
+  upstream_repo:
+    description: "Upstream claude-code-action repository"
+    required: false
+    default: "anthropics/claude-code-action"
+  upstream_ref:
+    description: "Commit SHA to pin the upstream clone to"
+    required: false
+    default: "e58dfa55559035499a4982426bb73605e8b5ad8e"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Go
+      if: hashFiles('go.mod') != ''
+      uses: actions/setup-go@v7
+      with:
+        go-version-file: 'go.mod'
+
+    - name: Generate GitHub App token
+      id: app-token
+      uses: actions/create-github-app-token@v3
+      with:
+        app-id: ${{ inputs.github_app_id }}
+        private-key: ${{ inputs.github_app_private_key }}
+
+    - name: Fetch shared .agents plugin from cortex
+      id: agents-dir
+      shell: bash
+      env:
+        AGENTS_DIR_FETCH: ${{ inputs.agents_dir_fetch }}
+        CORTEX_REF: ${{ inputs.cortex_ref }}
+        GH_TOKEN: ${{ steps.app-token.outputs.token }}
+      run: |
+        set -euo pipefail
+        if [ "${AGENTS_DIR_FETCH}" != "true" ]; then
+          echo "Using the caller's own .agents plugin."
+          echo "plugin_dir=${{ github.workspace }}/.agents" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        DEST="${{ runner.temp }}/cortex-agents"
+        rm -rf "$DEST"
+        git clone --no-checkout --depth 1 --filter=blob:none \
+          "https://x-access-token:${GH_TOKEN}@github.com/cobaltcore-dev/cortex.git" "$DEST"
+        cd "$DEST"
+        git sparse-checkout init --cone
+        git sparse-checkout set .agents
+        git fetch --depth 1 origin "${CORTEX_REF}"
+        git checkout FETCH_HEAD -- .agents
+        echo "plugin_dir=${DEST}/.agents" >> "$GITHUB_OUTPUT"
+
+    - name: Clone upstream claude-code-action
+      shell: bash
+      env:
+        UPSTREAM_REPO: ${{ inputs.upstream_repo }}
+        UPSTREAM_REF: ${{ inputs.upstream_ref }}
+      run: |
+        set -euo pipefail
+        rm -rf "${{ github.workspace }}/.claude-code-action"
+        git clone --depth 1 "https://github.com/${UPSTREAM_REPO}.git" "${{ github.workspace }}/.claude-code-action"
+        cd "${{ github.workspace }}/.claude-code-action"
+        git fetch --depth 1 origin "${UPSTREAM_REF}"
+        git checkout "${UPSTREAM_REF}"
+
+    - name: Apply LiteLLM proxy patch
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd "${{ github.workspace }}/.claude-code-action"
+        git apply "${{ github.action_path }}/litellm-proxy.patch"
+
+    - name: Install Bun
+      shell: bash
+      run: |
+        curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.13"
+        echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+
+    - name: Setup Python
+      uses: actions/setup-python@v7
+      with:
+        python-version: "3.13"
+
+    - name: Install LiteLLM dependencies
+      shell: bash
+      run: pip install litellm==1.83.10 fastapi==0.136.0 uvicorn==0.44.0 --quiet
+
+    - name: Start LiteLLM proxy
+      shell: bash
+      env:
+        LITELLM_MODEL: ${{ inputs.litellm_model }}
+        AICORE_RESOURCE_GROUP: ${{ inputs.aicore_resource_group }}
+        AICORE_BASE_URL: ${{ inputs.aicore_base_url }}
+        AICORE_AUTH_URL: ${{ inputs.aicore_auth_url }}
+        AICORE_CLIENT_ID: ${{ inputs.aicore_client_id }}
+        AICORE_CLIENT_SECRET: ${{ inputs.aicore_client_secret }}
+      run: |
+        LITELLM_PORT=$(python3 -c "import socket; s=socket.socket(); s.bind(('',0)); print(s.getsockname()[1]); s.close()")
+        echo "Starting LiteLLM proxy on port ${LITELLM_PORT}..."
+        LITELLM_PROXY_PORT=${LITELLM_PORT} python3 "${{ github.action_path }}/litellm-proxy.py" &
+        LITELLM_PID=$!
+        echo "LITELLM_PID=${LITELLM_PID}" >> "$GITHUB_ENV"
+        echo "LITELLM_PORT=${LITELLM_PORT}" >> "$GITHUB_ENV"
+        for i in $(seq 1 30); do
+          if curl -sf --connect-timeout 2 --max-time 3 "http://localhost:${LITELLM_PORT}/health/readiness" > /dev/null 2>&1; then
+            echo "LiteLLM proxy is ready on port ${LITELLM_PORT}"
+            break
+          fi
+          if ! kill -0 $LITELLM_PID 2>/dev/null; then
+            echo "ERROR: LiteLLM proxy process died"
+            exit 1
+          fi
+          sleep 2
+        done
+        if ! curl -sf --connect-timeout 2 --max-time 3 "http://localhost:${LITELLM_PORT}/health/readiness" > /dev/null 2>&1; then
+          echo "ERROR: LiteLLM proxy failed to start after 60 seconds"
+          exit 1
+        fi
+        echo "ANTHROPIC_BASE_URL=http://localhost:${LITELLM_PORT}" >> "$GITHUB_ENV"
+        echo "ANTHROPIC_MODEL=${{ inputs.litellm_model }}" >> "$GITHUB_ENV"
+        echo "LITELLM_PROXY_API_KEY=litellm-proxy-key" >> "$GITHUB_ENV"
+
+    - name: Compose claude_args with the shared plugin
+      id: compose
+      shell: bash
+      env:
+        CLAUDE_ARGS: ${{ inputs.claude_args }}
+        PLUGIN_DIR: ${{ steps.agents-dir.outputs.plugin_dir }}
+      run: |
+        {
+          echo "claude_args<<EOF"
+          printf '%s\n' "${CLAUDE_ARGS}"
+          echo "--plugin-dir \"${PLUGIN_DIR}\""
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Run Claude Code
+      uses: ./.claude-code-action
+      with:
+        prompt: ${{ inputs.prompt }}
+        claude_args: ${{ steps.compose.outputs.claude_args }}
+        trigger_phrase: ${{ inputs.trigger_phrase }}
+        include_comments_by_actor: ${{ inputs.include_comments_by_actor }}
+        use_litellm: "true"
+        litellm_model: ${{ inputs.litellm_model }}
+        github_token: ${{ steps.app-token.outputs.token }}
+        bot_id: ${{ inputs.bot_id }}
+        bot_name: ${{ inputs.bot_name }}
+        show_full_output: "true"
+
+    - name: Stop LiteLLM proxy
+      if: always()
+      shell: bash
+      run: |
+        if [ -n "${LITELLM_PID}" ] && kill -0 "${LITELLM_PID}" 2>/dev/null; then
+          echo "Stopping LiteLLM proxy (PID: ${LITELLM_PID})..."
+          kill "${LITELLM_PID}" 2>/dev/null || true
+          for _ in $(seq 1 20); do
+            kill -0 "${LITELLM_PID}" 2>/dev/null || break
+            sleep 0.5
+          done
+          kill -9 "${LITELLM_PID}" 2>/dev/null || true
+          echo "LiteLLM proxy stopped."
+        else
+          echo "LiteLLM proxy already stopped."
+        fi

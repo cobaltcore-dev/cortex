@@ -8,22 +8,22 @@ require (
 	github.com/go-logr/logr v1.4.4
 	github.com/google/uuid v1.6.0
 	github.com/gophercloud/gophercloud/v2 v2.15.0
-	github.com/ironcore-dev/ironcore v0.7.0
+	github.com/ironcore-dev/ironcore v0.8.0
 	github.com/lib/pq v1.12.3
 	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.3
 	github.com/sapcc/go-api-declarations v1.25.1
-	github.com/sapcc/go-bits v0.0.0-20260917095256-d8aaf2d73069
+	github.com/sapcc/go-bits v0.0.0-20260924170438-e0aa5c665ed9
 	go.uber.org/zap v1.28.0
 	go.xyrillian.de/gg v1.16.0
 	golang.org/x/sync v0.23.0
 	golang.org/x/term v0.46.0
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.37.0
-	k8s.io/apimachinery v0.37.0
-	k8s.io/client-go v0.37.0
+	k8s.io/api v0.37.1
+	k8s.io/apimachinery v0.37.1
+	k8s.io/client-go v0.37.1
 	sigs.k8s.io/controller-runtime v0.25.1
 )
 
@@ -106,11 +106,11 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
-	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
-	golang.org/x/time v0.15.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/time v0.16.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
@@ -124,7 +124,7 @@ require (
 	k8s.io/component-base v0.37.0 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect
-	k8s.io/streaming v0.37.0 // indirect
+	k8s.io/streaming v0.37.1 // indirect
 	k8s.io/utils v0.0.0-20260626114624-be93311217bd // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.36.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect

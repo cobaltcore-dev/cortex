@@ -1,0 +1,39 @@
+name: "Check Cortex Agents Allowlist"
+description: "Exact-match a login against a CSV allowlist. An empty allowlist denies everyone."
+
+inputs:
+  allowlist:
+    description: "CSV of allowed logins"
+    required: true
+  login:
+    description: "The login to check"
+    required: true
+
+outputs:
+  allowed:
+    description: "true when login is on the allowlist"
+    value: ${{ steps.check.outputs.allowed }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check allowlist
+      id: check
+      shell: bash
+      env:
+        ALLOWLIST: ${{ inputs.allowlist }}
+        LOGIN: ${{ inputs.login }}
+      run: |
+        set -euo pipefail
+        allowed=false
+        if [ -n "${ALLOWLIST}" ] && [ -n "${LOGIN}" ]; then
+          IFS=',' read -ra entries <<< "${ALLOWLIST}"
+          for entry in "${entries[@]}"; do
+            trimmed="$(echo "$entry" | xargs)"
+            if [ "$trimmed" = "${LOGIN}" ]; then
+              allowed=true
+              break
+            fi
+          done
+        fi
+        echo "allowed=${allowed}" >> "$GITHUB_OUTPUT"

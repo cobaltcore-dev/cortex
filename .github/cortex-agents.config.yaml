@@ -1,0 +1,29 @@
+# Cortex Agents configuration for cortex itself — the first consumer.
+# See .agents/README.md for the schema and organization setup.
+
+allowlist:
+  - auhlig
+  - umswmayj
+  - juliusclausnitzer
+  - mblos
+  - PhilippMatthes
+  - Varsius
+  - henrichter
+  - SoWieMarkus
+
+review:
+  active: true
+
+bugfinder:
+  active: true
+docswriter:
+  active: true
+
+assistant:
+  active: true
+
+release:
+  active: true
+  branches:
+    - release
+    - "release/*"

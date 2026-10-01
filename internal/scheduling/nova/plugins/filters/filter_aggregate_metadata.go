@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
@@ -23,12 +22,11 @@ type FilterAggregateMetadata struct {
 // the "filter_tenant_id" metadata key set.
 func (s *FilterAggregateMetadata) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
-	// Failover and capacity probe calls are not placed on behalf of a tenant project;
-	if intent, err := request.GetIntent(); err == nil && slices.Contains([]v1alpha1.SchedulingIntent{
-		api.ReserveForFailoverIntent,
-		api.ReuseFailoverReservationIntent,
-		api.CapacityProbeIntent,
-	}, intent) {
+	// Capacity probe calls are synthetic and not placed on behalf of a tenant
+	// project, so they must ignore tenant pinning. Failover reservations DO respect
+	// tenant pinning: a reservation on a host the VM's project cannot use is dead
+	// weight and would be deleted at validation time.
+	if intent, err := request.GetIntent(); err == nil && intent == api.CapacityProbeIntent {
 		return result, nil
 	}
 

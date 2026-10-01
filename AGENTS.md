@@ -69,6 +69,10 @@ Tooling:
 Documentation:
 - `docs` contains documentation for cortex, which should be written in markdown
 
+CI/Agents:
+- `.agents/` is a Claude Code plugin containing reusable agent and command definitions for automated code review, bug finding, docs writing, and release preparation. See `.agents/README.md` for details
+- `.github/workflows/cortex-agent-*.yaml` are reusable GitHub Actions workflows that run the agents via CI. `.github/cortex-agents.config.yaml` activates features for this repository
+
 ## Tooling
 
 Before finishing your task, you should always ensure local tests and lints are passing:

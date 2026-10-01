@@ -1,0 +1,41 @@
+# Cortex Agents hub for cortex itself — a thin stub like every other consumer,
+# calling the shared entry workflow from this repository at the running commit.
+# All gating, config parsing, and fan-out live in cortex-agents-entry.yaml;
+# the entry workflow re-clones cortex at its own commit to reuse the shared
+# actions and passes that commit down to the feature workflows.
+
+name: Cortex Agents
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+  pull_request_review_comment:
+    types: [created]
+  schedule:
+    - cron: "0 6 * * 1"  # 06:00 UTC every Monday — bugfinder + docswriter
+  workflow_dispatch:
+    inputs:
+      feature:
+        description: "Which feature to run (bugfinder, docswriter). Leave empty to run both scheduled features."
+        required: false
+        default: ""
+
+# Consent to the union of permissions the cortex agents may request; GitHub
+# lets called workflows only maintain or reduce this grant, never elevate it.
+# Every job inside the entry workflow downgrades to what it actually uses.
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  cortex-agents:
+    uses: ./.github/workflows/cortex-agents-entry.yaml
+    secrets: inherit

@@ -1,0 +1,73 @@
+name: Cortex Agent — Release
+
+on:
+  workflow_call:
+    inputs:
+      model:
+        type: string
+        required: false
+        default: "sap/anthropic--claude-4.6-opus"
+      command:
+        type: string
+        required: false
+        default: "/cortex-agents:release"
+      pr_number:
+        type: string
+        required: true
+      cortex_ref:
+        type: string
+        required: false
+        default: "main"
+      environment:
+        type: string
+        required: false
+        default: ""
+    secrets:
+      AICORE_RESOURCE_GROUP:
+        required: true
+      AICORE_BASE_URL:
+        required: true
+      AICORE_AUTH_URL:
+        required: true
+      AICORE_CLIENT_ID:
+        required: true
+      AICORE_CLIENT_SECRET:
+        required: true
+      CORTEX_AI_AGENTS_APP_ID:
+        required: true
+      CORTEX_AI_AGENTS_CLIENT_PKEY:
+        required: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout caller repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Fetch cortex agent actions
+        uses: actions/checkout@v7
+        with:
+          repository: cobaltcore-dev/cortex
+          ref: ${{ inputs.cortex_ref }}
+          path: .cortex-agent
+          sparse-checkout: .github/actions
+      - name: Run release preparation
+        uses: ./.cortex-agent/.github/actions/cortex-agent-run
+        with:
+          github_app_id: ${{ secrets.CORTEX_AI_AGENTS_APP_ID }}
+          github_app_private_key: ${{ secrets.CORTEX_AI_AGENTS_CLIENT_PKEY }}
+          litellm_model: ${{ inputs.model }}
+          prompt: "${{ inputs.command }} ${{ inputs.pr_number }}"
+          cortex_ref: ${{ inputs.cortex_ref }}
+          aicore_resource_group: ${{ secrets.AICORE_RESOURCE_GROUP }}
+          aicore_base_url: ${{ secrets.AICORE_BASE_URL }}
+          aicore_auth_url: ${{ secrets.AICORE_AUTH_URL }}
+          aicore_client_id: ${{ secrets.AICORE_CLIENT_ID }}
+          aicore_client_secret: ${{ secrets.AICORE_CLIENT_SECRET }}

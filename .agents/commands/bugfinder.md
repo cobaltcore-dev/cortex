@@ -1,17 +1,17 @@
 ---
 allowed-tools: Read, Write, Edit, Bash(*), WebSearch, WebFetch, Agent
-description: Weekly orchestrator that summarizes recent changes and dispatches subagents for bug-checking and docs-checking.
+description: Weekly bug-finding orchestrator — summarizes recent changes, dispatches the bug-detective, and opens pull requests for the findings worth fixing.
 ---
 
-# Weekly Codebase Review Orchestrator
+# Weekly Bugfinder Orchestrator
 
-You are an orchestrator agent. Your job is to build a thorough digest of the last 7 days of changes, hand it off to specialized subagents for investigation, and then act on their findings by creating pull requests where warranted. You coordinate the full cycle: collect, investigate, deduplicate, fix, and report.
+You are an orchestrator agent. Your job is to build a thorough digest of the last 7 days of changes, hand it off to the bug-detective for investigation, and then act on its findings by creating pull requests where warranted. You coordinate the full cycle: collect, investigate, deduplicate, fix, and report.
 
 ---
 
 ## Phase 1: Setup
 
-Read the `AGENTS.md` file in the repository root. Follow all conventions, best practices, and structural guidance described there. This applies to all work you do, including any code or documentation changes in pull requests.
+Read the `AGENTS.md` file in the repository root. Follow all conventions, best practices, and structural guidance described there. This applies to all work you do, including any code changes in pull requests.
 
 ---
 
@@ -43,47 +43,34 @@ For each significant change:
 Bulleted list of every non-bump commit with one-line description.
 ```
 
-**Important**: Do NOT skip this phase or produce a shallow summary. Read the actual diffs. Understand the intent. The subagents depend on the quality of this digest.
+**Important**: Do NOT skip this phase or produce a shallow summary. Read the actual diffs. Understand the intent. The subagent depends on the quality of this digest.
 
 ---
 
 ## Phase 3: Collect open PRs for deduplication
 
-Before dispatching subagents, gather all currently open pull requests so findings can be checked against them:
+Before dispatching the subagent, gather all currently open pull requests so findings can be checked against them:
 
 1. Run `gh pr list --state open --json number,title,body,headRefBranch --limit 100` to get all open PRs.
 2. Keep this list available. In Phase 5, you will use it to skip findings that are already being addressed by an open PR.
 
 ---
 
-## Phase 4: Dispatch — Hand off to subagents in parallel
+## Phase 4: Dispatch — Hand off to the bug-detective
 
-Dispatch all subagents **in parallel** using the Agent tool. The bug detective and docs expert investigate and report findings — they do NOT open pull requests.
+Dispatch the **bug-detective** via the Agent tool with `subagent_type: "cortex-agents:bug-detective"`. Send it a prompt containing the full digest from Phase 2. The agent investigates and reports findings — it does NOT open pull requests.
 
-### Subagent 1: Bug Detective
+(All subagents in this integration ship under the `cortex-agents` plugin, so their `subagent_type` is always the namespaced `cortex-agents:<name>` form.)
 
-Use `subagent_type: "general-purpose"`.
-
-Read the instructions from `.claude/agents/bug-detective.md`. Send the agent a prompt that includes:
-1. The full digest from Phase 2
-2. The full instructions from the bug-detective agent file
-
-### Subagent 2: Docs Expert
-
-Use `subagent_type: "general-purpose"`.
-
-Read the instructions from `.claude/agents/docs-expert.md`. Send the agent a prompt that includes:
-1. The full digest from Phase 2
-2. The full instructions from the docs-expert agent file
 ---
 
 ## Phase 5: Deduplicate and filter findings
 
-After both subagents return their findings:
+After the subagent returns its findings:
 
 1. **Check against open PRs.** For each finding that recommends a PR, compare it against the open PR list from Phase 3. If an open PR already addresses the same issue (matching by title keywords, affected files, or described problem), skip the finding and note it was already covered.
 
-2. **Combine and re-prioritize.** Merge the remaining findings from both agents into a single prioritized list. Consider:
+2. **Re-prioritize.** Consider:
    - Severity and impact of each finding
    - PR fatigue: humans must review every PR, so be selective. A weekly run producing 1-3 PRs is ideal. More than 5 is too many unless they are all critical.
    - If there are many findings, drop the least impactful ones to the backlog
@@ -96,12 +83,10 @@ Dispatch one **`finding-fix-shipper`** subagent per approved finding, **in paral
 
 For each approved finding, dispatch a subagent with:
 
-- `subagent_type`: `"general-purpose"` (so it picks up the `finding-fix-shipper` instructions you pass)
+- `subagent_type`: `"cortex-agents:finding-fix-shipper"`
 - `isolation`: `"worktree"`
 - Prompt:
   ```
-  Read the instructions from .claude/agents/finding-fix-shipper.md and follow them.
-
   Finding:
   - Title: <title>
   - Description: <description>
@@ -125,7 +110,7 @@ Do not retry abandoned or aborted findings automatically — surface them in the
 After all work is done, produce a short summary:
 
 ```
-## Weekly Review Summary ({{date_range}})
+## Weekly Bugfinder Summary ({{date_range}})
 
 ### Changes Reviewed
 (3-5 bullet points from the digest)
@@ -135,12 +120,6 @@ After all work is done, produce a short summary:
 - Skipped (already covered by open PRs): N
 - PRs opened: list PR numbers/titles, or "none"
 - Abandoned: list titles + one-line reason (build broke, pr-creator aborted, etc.), or "none"
-
-### Docs Expert
-- Findings: N gaps found
-- Skipped (already covered by open PRs): N
-- PRs opened: list PR numbers/titles, or "none"
-- Abandoned: list titles + reason, or "none"
 
 ### Backlog (for future runs)
 - <title> — <one-line description>

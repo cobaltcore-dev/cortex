@@ -88,9 +88,41 @@ type FlavorGroupCapacityStatus struct {
 	// +kubebuilder:validation:Optional
 	ExclusivelyFreeCapacity map[string]resource.Quantity `json:"exclusivelyFreeCapacity,omitempty"`
 
+	// ExclusivelyRawCapacity is the unquantized sum of effective memory and CPU across the
+	// hosts exclusively assigned to this group by the round-robin split. Unlike
+	// ExclusivelyFreeCapacity, this is not constrained by slot packing or CPU/memory ratio.
+	// Safe to sum across groups — no host is counted twice.
+	// +kubebuilder:validation:Optional
+	ExclusivelyRawCapacity map[string]resource.Quantity `json:"exclusivelyRawCapacity,omitempty"`
+
 	// ExclusivelyFreeSlots is the number of smallest-flavor VM slots available from ExclusivelyFreeCapacity.
 	// +kubebuilder:validation:Optional
 	ExclusivelyFreeSlots int64 `json:"exclusivelyFreeSlots,omitempty"`
+
+	// ExclusivelyCommittedReservedCapacity is the committed-resource share of reservation-blocked
+	// memory and CPU: unfilled committed slots, attributed to this group by each reservation's own
+	// ResourceGroup. These slots are neither running nor free but represent installed hardware held
+	// for a customer, so they stay included in reported capacity. Disjoint from
+	// ExclusivelyFailoverReservedCapacity; each reservation belongs to one group, so the sum across
+	// groups never exceeds capacity.
+	// +kubebuilder:validation:Optional
+	ExclusivelyCommittedReservedCapacity map[string]resource.Quantity `json:"exclusivelyCommittedReservedCapacity,omitempty"`
+
+	// ExclusivelyCommittedReservedSlots is the number of smallest-flavor VM slots represented by
+	// ExclusivelyCommittedReservedCapacity.
+	// +kubebuilder:validation:Optional
+	ExclusivelyCommittedReservedSlots int64 `json:"exclusivelyCommittedReservedSlots,omitempty"`
+
+	// ExclusivelyFailoverReservedCapacity is the failover share of reservation-blocked memory and
+	// CPU. Failover reservations hold hardware out of service for host evacuation, so they are
+	// excluded from reported capacity. Disjoint from ExclusivelyCommittedReservedCapacity.
+	// +kubebuilder:validation:Optional
+	ExclusivelyFailoverReservedCapacity map[string]resource.Quantity `json:"exclusivelyFailoverReservedCapacity,omitempty"`
+
+	// ExclusivelyFailoverReservedSlots is the number of smallest-flavor VM slots represented by
+	// ExclusivelyFailoverReservedCapacity.
+	// +kubebuilder:validation:Optional
+	ExclusivelyFailoverReservedSlots int64 `json:"exclusivelyFailoverReservedSlots,omitempty"`
 
 	// RunningInstances is the number of VMs running in this (flavor group × AZ) whose
 	// flavor belongs to this group.
@@ -100,6 +132,13 @@ type FlavorGroupCapacityStatus struct {
 	// RunningResources is the total resource consumption of running VMs, keyed by resource type.
 	// +kubebuilder:validation:Optional
 	RunningResources map[string]resource.Quantity `json:"runningResources,omitempty"`
+
+	// RunningSlots is the number of smallest-flavor VM slots the running VMs' resource consumption
+	// occupies (min over memory and CPU). Unlike RunningInstances, which counts VMs, this scales
+	// with VM size: a VM larger than the smallest flavor occupies several slots. Reported capacity
+	// uses this so heterogeneous groups are not undercounted.
+	// +kubebuilder:validation:Optional
+	RunningSlots int64 `json:"runningSlots,omitempty"`
 
 	// LastReconcileAt is the timestamp of the last successful reconcile.
 	// +kubebuilder:validation:Optional

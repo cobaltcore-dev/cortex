@@ -1,0 +1,63 @@
+# Cortex Agents stub — the only workflow a consuming repository needs.
+#
+# Copy this file to .github/workflows/cortex-agents-hub.yaml in your repository
+# and add a .github/cortex-agents.config.yaml config file to activate features.
+# With no config file, or with every feature set to active: false, nothing runs.
+#
+# All secrets are inherited from cobaltcore-dev organization secrets — you do
+# not define any repository secrets. See .agents/README.md for the one-time org
+# setup and the config schema.
+#
+# Everything except the triggers lives in the entry workflow in cortex:
+# config parsing, the allowlist and branch gates, and the fan-out to the agent
+# workflows. This stub only declares what GitHub requires to live in the
+# consuming repository — the triggers, the secrets consent (secrets: inherit),
+# and the permissions consent (the union of what the agents may need; every
+# job inside cortex downgrades to what it actually uses).
+#
+# The cron below drives the bugfinder/docswriter passes and is static (GitHub
+# does not allow a cron expression to be read from a file). Edit the `cron:`
+# value here to change the schedule — it need not be weekly. There is no
+# cadence field in the config; the passes are only toggled there via their
+# `active` flags.
+#
+# Pin the uses: line below to a released cortex tag or SHA for
+# reproducibility. That pin is the only place a cortex version is referenced:
+# the entry workflow resolves its own commit from it and runs the actions, the
+# .agents plugin, and the feature workflows from exactly that commit.
+
+name: Cortex Agents
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+  pull_request_review_comment:
+    types: [created]
+  schedule:
+    - cron: "0 6 * * 1"  # 06:00 UTC every Monday — bugfinder + docswriter
+  workflow_dispatch:
+    inputs:
+      feature:
+        description: "Which feature to run (bugfinder, docswriter). Leave empty to run both scheduled features."
+        required: false
+        default: ""
+
+# Consent to the union of permissions the cortex agents may request; GitHub
+# lets called workflows only maintain or reduce this grant, never elevate it.
+# Every job inside the entry workflow downgrades to what it actually uses.
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  cortex-agents:
+    uses: cobaltcore-dev/cortex/.github/workflows/cortex-agents-entry.yaml@main
+    secrets: inherit
