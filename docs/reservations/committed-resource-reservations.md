@@ -277,10 +277,12 @@ Capacity is derived from `FlavorGroupCapacity` CRDs and reported per AZ for thre
 
 | Resource | Capacity formula | Usage | Notes |
 |---|---|---|---|
-| `_instances` | `RunningSlots + ExclusivelyFreeSlots + ExclusivelyCommittedReservedSlots` | `None` | Failover reservations excluded; `RunningSlots` slot-quantizes running consumption so oversized VMs are not undercounted; `ExclusivelyFreeSlots` is CPU-and-memory-gated (round-robin), final slot count via memory division |
-| `_ram` (fixed core ratio) | same as `_instances` | `None` | Slot count stands in for RAM |
+| `_instances` (fixed core ratio) | `smallestFlavor.TotalCapacityVMSlots − ExclusivelyFailoverReservedSlots` | `None` | Empty-datacenter installed slots minus the failover carve-out. Used for HANA, where the running + free + committed summation underreports in practice. The empty-datacenter total already includes running, free and committed-reserved hosts, so only failover is subtracted |
+| `_instances` (variable) | `RunningSlots + ExclusivelyFreeSlots + ExclusivelyCommittedReservedSlots` | `None` | Failover reservations excluded; `RunningSlots` slot-quantizes running consumption so oversized VMs are not undercounted; `ExclusivelyFreeSlots` is CPU-and-memory-gated (round-robin), final slot count via memory division |
+| `_ram` (fixed core ratio) | same as `_instances` (fixed) | `None` | Slot count stands in for RAM |
 | `_ram` (variable) | `(ExclusivelyRawCapacity[memory] − ExclusivelyFailoverReservedCapacity[memory]) / ramUnitBytes` when raw is set, else `(runningMemBytes + ExclusivelyFreeCapacity[memory] + ExclusivelyCommittedReservedCapacity[memory]) / ramUnitBytes` | `None` | For variable-ratio groups `ExclusivelyRawCapacity` sums effective memory over **all** eligible hosts (running + free + reserved, incl. fully occupied ones), so no host is dropped; only the failover slice is subtracted. Declared units (e.g. GiB), `ramUnitBytes` configured per group |
-| `_cores` | `runningCoresCount + ExclusivelyFreeCapacity[cores] + ExclusivelyCommittedReservedCapacity[cores]` | `None` | Failover reservations excluded; CPU-dimension-driven |
+| `_cores` (fixed core ratio) | `TotalCapacity[cores] − ExclusivelyFailoverReservedCapacity[cores]` | `None` | Empty-datacenter installed cores minus the failover carve-out, matching `_instances` (fixed) |
+| `_cores` (variable) | `max(ExclusivelyRawCapacity[cores] − ExclusivelyFailoverReservedCapacity[cores], 0)` when raw is set, else `runningCoresCount + ExclusivelyFreeCapacity[cores] + ExclusivelyCommittedReservedCapacity[cores]` | `None` | Prefers raw hardware cores, consistent with the `_ram` raw path; `ExclusivelyRawCapacity` sums over all eligible hosts incl. fully occupied ones, so only the failover slice is subtracted |
 
 ## Syncer Task
 

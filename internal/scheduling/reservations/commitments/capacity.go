@@ -31,6 +31,19 @@ func quantityValue(m map[string]resource.Quantity, key string) int64 {
 	return 0
 }
 
+// smallestFlavorTotalSlots returns the empty-datacenter VM slot count of the group's smallest
+// flavor — the installed slot capacity if the whole eligible host pool held only that flavor.
+// The bool is false when the smallest flavor is unset or missing from the flavor list, letting
+// the caller refuse to serve a zero rather than silently dropping the group's HANA capacity.
+func smallestFlavorTotalSlots(crd *v1alpha1.FlavorGroupCapacity) (int64, bool) {
+	for _, f := range crd.Status.Flavors {
+		if f.FlavorName == crd.Status.SmallestFlavorName {
+			return f.TotalCapacityVMSlots, true
+		}
+	}
+	return 0, false
+}
+
 // CapacityCalculator computes capacity reports for Limes LIQUID API.
 type CapacityCalculator struct {
 	client client.Client
@@ -44,8 +57,10 @@ func NewCapacityCalculator(client client.Client, conf APIConfig) *CapacityCalcul
 // CalculateCapacity computes per-AZ capacity for all flavor groups.
 // For each flavor group, three resources are reported: _ram, _cores, _instances.
 // All values are read from FlavorGroupCapacity CRDs pre-computed by the capacity controller:
-//   - Capacity: RunningSlots + ExclusivelyFreeCapacity + ExclusivelyCommittedReservedCapacity,
-//     in slots. Failover reservations are excluded.
+//   - Fixed-ratio groups (e.g. HANA): installed empty-datacenter capacity minus the failover
+//     carve-out (TotalCapacity / smallest-flavor TotalCapacityVMSlots, less the failover slice).
+//   - Variable-ratio groups: RunningSlots + ExclusivelyFreeCapacity + ExclusivelyCommittedReserved,
+//     with the _ram raw byte path preferred when available. Failover reservations are excluded.
 //   - Usage: always None. Limes derives project usage from the separate Report-Usage endpoint, so
 //     a usage value here is unused and would only invite misinterpretation of reserved capacity.
 func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.ServiceCapacityRequest) (liquid.ServiceCapacityReport, error) {
@@ -117,11 +132,25 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 			committedReservedMemBytes := quantityValue(crd.Status.ExclusivelyCommittedReservedCapacity, memKey)
 			failoverMemBytes := quantityValue(crd.Status.ExclusivelyFailoverReservedCapacity, memKey)
 
-			// Capacity = running + exclusively free + committed reserved.
-			// RunningSlots (not RunningInstances) so a VM larger than the smallest flavor counts as
-			// the several slots it occupies — heterogeneous groups would otherwise be undercounted.
-			runningSlots := uint64(crd.Status.RunningSlots) //nolint:gosec
-			instancesCapacity := runningSlots + exclusiveFreeSlots + committedReservedSlots
+			// Instances capacity. Fixed-ratio groups report installed empty-datacenter slots minus the
+			// failover carve-out; the running + free + committed summation underreports HANA in
+			// practice. Variable-ratio groups keep the summation, using RunningSlots (not
+			// RunningInstances) so a VM larger than the smallest flavor counts as the several slots it
+			// occupies.
+			var instancesCapacity uint64
+			if groupData.HasFixedRamCoreRatio() {
+				totalSlots, ok := smallestFlavorTotalSlots(crd)
+				if !ok {
+					// A Ready CRD must expose its smallest flavor's empty-datacenter slots; without
+					// them the fixed-ratio path would report zero HANA capacity for the whole AZ.
+					// Treat the gap like a failed probe rather than serving a bogus zero.
+					return liquid.ServiceCapacityReport{}, fmt.Errorf("%w: flavorGroup=%s az=%s smallest flavor %q total slots unavailable", ErrCapacityNotReady, groupName, string(az), crd.Status.SmallestFlavorName)
+				}
+				instancesCapacity = uint64(max(totalSlots-crd.Status.ExclusivelyFailoverReservedSlots, 0))
+			} else {
+				runningSlots := uint64(crd.Status.RunningSlots) //nolint:gosec
+				instancesCapacity = runningSlots + exclusiveFreeSlots + committedReservedSlots
+			}
 
 			// RAM capacity in declared units. Fixed-ratio groups report in slots (1 unit = 1 instance).
 			var ramCapacity uint64
@@ -142,10 +171,23 @@ func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.S
 				}
 			}
 
-			// Cores capacity: running + exclusively free + committed reserved cores.
-			runningCoresCount := quantityValue(crd.Status.RunningResources, coresKey)
-			freeCoresCount := quantityValue(crd.Status.ExclusivelyFreeCapacity, coresKey)
-			coresCapacity := uint64(runningCoresCount + freeCoresCount + committedReservedCores) //nolint:gosec
+			// Cores capacity. Fixed-ratio groups use installed empty-datacenter cores minus the
+			// failover carve-out, matching instances. Variable-ratio groups prefer raw hardware cores
+			// (ExclusivelyRawCapacity), consistent with the _ram raw path: raw already includes
+			// reserved-but-empty hosts, so only the failover slice is subtracted. Fall back to the
+			// running + free + committed sum when raw is unavailable.
+			failoverCores := quantityValue(crd.Status.ExclusivelyFailoverReservedCapacity, coresKey)
+			var coresCapacity uint64
+			if groupData.HasFixedRamCoreRatio() {
+				totalCores := quantityValue(crd.Status.TotalCapacity, coresKey)
+				coresCapacity = uint64(max(totalCores-failoverCores, 0))
+			} else if raw := quantityValue(crd.Status.ExclusivelyRawCapacity, coresKey); raw > 0 {
+				coresCapacity = uint64(max(raw-failoverCores, 0))
+			} else {
+				runningCoresCount := quantityValue(crd.Status.RunningResources, coresKey)
+				freeCoresCount := quantityValue(crd.Status.ExclusivelyFreeCapacity, coresKey)
+				coresCapacity = uint64(runningCoresCount + freeCoresCount + committedReservedCores) //nolint:gosec
+			}
 
 			// Usage is intentionally None: Limes derives project usage from the separate
 			// Report-Usage endpoint, so a usage value here is unused and would only invite
