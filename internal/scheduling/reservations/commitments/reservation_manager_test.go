@@ -401,6 +401,56 @@ func TestApplyCommitmentState(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:             "vram: nominal delta creates exact slot count, no leftover slot",
+			desiredMemoryGiB: 4, // 4096 MiB = 4080 usable + 16 VRAM; remainder must be dropped
+			flavorGroupOverride: map[string]compute.FlavorGroupFeature{
+				"test-group": {
+					Name: "test-group",
+					Flavors: []compute.FlavorInGroup{
+						{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+					},
+					SmallestFlavor: compute.FlavorInGroup{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+					LargestFlavor:  compute.FlavorInGroup{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+				},
+			},
+			validateTouched: func(t *testing.T, touched []v1alpha1.Reservation) {
+				if len(touched) != 1 {
+					t.Fatalf("expected exactly 1 slot, got %d (VRAM leftover must not create a second slot)", len(touched))
+				}
+				wantMem := int64(4080) * 1024 * 1024
+				q := touched[0].Spec.Resources[hv1.ResourceMemory]
+				if got := q.Value(); got != wantMem {
+					t.Errorf("slot memory: want %d (4080 MiB), got %d", wantMem, got)
+				}
+			},
+		},
+		{
+			name:             "vram: N nominal slots creates exactly N slots, no leftover",
+			desiredMemoryGiB: 12, // 12288 MiB = 3 × (4080 usable + 16 VRAM) nominal
+			flavorGroupOverride: map[string]compute.FlavorGroupFeature{
+				"test-group": {
+					Name: "test-group",
+					Flavors: []compute.FlavorInGroup{
+						{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+					},
+					SmallestFlavor: compute.FlavorInGroup{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+					LargestFlavor:  compute.FlavorInGroup{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+				},
+			},
+			validateTouched: func(t *testing.T, touched []v1alpha1.Reservation) {
+				if len(touched) != 3 {
+					t.Fatalf("expected exactly 3 slots, got %d", len(touched))
+				}
+				wantMem := int64(4080) * 1024 * 1024
+				for i, r := range touched {
+					q := r.Spec.Resources[hv1.ResourceMemory]
+					if got := q.Value(); got != wantMem {
+						t.Errorf("slot %d memory: want %d (4080 MiB), got %d", i, wantMem, got)
+					}
+				}
+			},
+		},
 	}
 
 	scheme := newCRTestScheme(t)
@@ -471,6 +521,29 @@ func TestApplyCommitmentState(t *testing.T) {
 			}
 		})
 	}
+
+	vramFG := compute.FlavorGroupFeature{
+		Name: "vram-group",
+		Flavors: []compute.FlavorInGroup{
+			{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+		},
+		SmallestFlavor: compute.FlavorInGroup{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+		LargestFlavor:  compute.FlavorInGroup{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+	}
+	t.Run("vram: countNewSlots with nominal delta returns correct slot count", func(t *testing.T) {
+		delta := int64(4096) * 1024 * 1024 // 4080 usable + 16 VRAM
+		got := countNewSlots(delta, vramFG)
+		if got != 1 {
+			t.Errorf("countNewSlots: want 1, got %d (VRAM remainder must not produce a second slot)", got)
+		}
+	})
+	t.Run("vram: countNewSlots with N nominal slots returns N", func(t *testing.T) {
+		delta := int64(3*4096) * 1024 * 1024 // 3 × (4080 + 16) MiB
+		got := countNewSlots(delta, vramFG)
+		if got != 3 {
+			t.Errorf("countNewSlots: want 3, got %d", got)
+		}
+	})
 }
 
 // ============================================================================
@@ -779,6 +852,54 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 			}
 		})
 	}
+
+	// PAYG + VRAM: 4080 MiB PAYG VM absorbed, 16 MiB remainder must not create a blind-scheduler slot.
+	t.Run("vram: PAYG candidate absorbed, 16 MiB remainder dropped in Phase 5", func(t *testing.T) {
+		const vmID = "vm-vram-payg-1"
+		vramGroup := compute.FlavorGroupFeature{
+			Name: "test-group",
+			Flavors: []compute.FlavorInGroup{
+				{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+			},
+			SmallestFlavor: compute.FlavorInGroup{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+			LargestFlavor:  compute.FlavorInGroup{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+		}
+		k8sClient := newCRTestClient(scheme, hvWithAZ(hvName, vmID))
+		mgr := NewReservationManager(k8sClient, ReservationManagerConfig{
+			EnablePaygPreAllocation: true,
+			VMSource:                &fakeVMSource{vms: []reservations.VM{paygVM(vmID, "vram-flavor")}},
+		})
+		desiredState := &CommitmentState{
+			CommitmentUUID:   "abc123",
+			ProjectID:        projectID,
+			FlavorGroupName:  "test-group",
+			TotalMemoryBytes: 4096 * 1024 * 1024, // 4096 MiB = 4080 usable + 16 VRAM
+			AvailabilityZone: az,
+		}
+		result, err := mgr.ApplyCommitmentState(
+			context.Background(), logr.Discard(), desiredState, map[string]compute.FlavorGroupFeature{"test-group": vramGroup}, "test",
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// Phase 4.5 creates one PAYG slot for the 4080 MiB VM.
+		// Phase 5 must not create a slot for the 16 MiB VRAM remainder.
+		if len(result.TouchedReservations) != 1 {
+			t.Fatalf("want 1 slot (PAYG only), got %d", len(result.TouchedReservations))
+		}
+		res := result.TouchedReservations[0]
+		if res.Spec.TargetHost != hvName {
+			t.Errorf("TargetHost: want %q, got %q", hvName, res.Spec.TargetHost)
+		}
+		if _, ok := res.Spec.CommittedResourceReservation.Allocations[vmID]; !ok {
+			t.Errorf("expected PAYG VM %q in Allocations", vmID)
+		}
+		wantMem := int64(4080) * 1024 * 1024
+		memQty := res.Spec.Resources[hv1.ResourceMemory]
+		if got := memQty.Value(); got != wantMem {
+			t.Errorf("slot memory: want %d (4080 MiB), got %d", wantMem, got)
+		}
+	})
 }
 
 // ============================================================================
@@ -1112,6 +1233,35 @@ func TestSelectFlavor(t *testing.T) {
 		{
 			name:     "vram: usable delta fits flavor with VideoRAMMiB",
 			deltaMiB: 4080, // usable bytes (TotalMemoryBytes = SmallestFlavor.MemoryMB × amount)
+			flavorGroup: &compute.FlavorGroupFeature{
+				Name: "vram-group",
+				Flavors: []compute.FlavorInGroup{
+					{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+				},
+				SmallestFlavor: compute.FlavorInGroup{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+				LargestFlavor:  compute.FlavorInGroup{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+			},
+			wantFlavor:    "vram-flavor",
+			wantMemoryMiB: 4080,
+		},
+		{
+			name:     "vram: nominal delta (usable + VRAM) picks flavor by usable size",
+			deltaMiB: 4096, // 4080 usable + 16 VRAM
+			flavorGroup: &compute.FlavorGroupFeature{
+				Name: "vram-group",
+				Flavors: []compute.FlavorInGroup{
+					{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+				},
+				SmallestFlavor: compute.FlavorInGroup{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+				LargestFlavor:  compute.FlavorInGroup{Name: "vram-flavor", VCPUs: 2, MemoryMB: 4080, VideoRAMMiB: 16},
+			},
+			wantFlavor:    "vram-flavor",
+			wantMemoryMiB: 4080,
+		},
+		{
+			// delta covers 3 slots; selectFlavor must return the flavor, not a fallback.
+			name:     "vram: nominal delta for 3 slots picks correct flavor",
+			deltaMiB: 3 * 4096, // 3 × (4080 + 16) MiB
 			flavorGroup: &compute.FlavorGroupFeature{
 				Name: "vram-group",
 				Flavors: []compute.FlavorInGroup{
