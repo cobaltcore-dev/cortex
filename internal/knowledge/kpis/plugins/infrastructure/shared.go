@@ -127,7 +127,7 @@ func (h kvmHost) getHostLabels() []string {
 	}
 
 	maintenance := h.Spec.Maintenance != hv1.MaintenanceUnset
-
+	// status mirrors the "State" column shown by kubectl for a Hypervisor.
 	// status mirrors the "State" column shown by kubectl for a Hypervisor,
 	status := "unknown"
 	if cond := meta.FindStatusCondition(h.Status.Conditions, hv1.ConditionTypeReady); cond != nil {
