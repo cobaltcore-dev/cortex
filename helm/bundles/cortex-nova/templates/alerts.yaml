@@ -571,13 +571,33 @@ spec:
           processing commitment changes. Limes will retry, but new commitments may
           not be fulfilled until the issue is resolved.
 
+    - alert: CortexNovaCommittedResourceChangeInternalErrors
+      expr: |
+        rate(cortex_committed_resource_change_api_commitment_changes_total{
+          service="cortex-nova-metrics",
+          result="error",
+          dry_run="false"
+        }[5m]) > 0
+      for: 5m
+      labels:
+        context: committed-resource-api
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/committed-resource-api-errors
+      annotations:
+        summary: "Committed resource change API returning internal errors"
+        description: >
+          Internal errors (not capacity rejections) in the committed resource change API.
+
     - alert: CortexNovaCommittedResourceRejectionRateTooHigh
       expr: |
         (
           sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result="rejected", dry_run="false"}[1h]))
-          / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", dry_run="false"}[1h]))
+          / sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result=~"rejected|accepted", dry_run="false"}[1h]))
         ) > 0.3
-        and on() sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", dry_run="false"}[1h])) > 0
+        and on() sum(rate(cortex_committed_resource_change_api_commitment_changes_total{service="cortex-nova-metrics", result=~"rejected|accepted", dry_run="false"}[1h])) > 0
       for: 30m
       labels:
         context: committed-resource-api
@@ -592,6 +612,24 @@ spec:
           More than 30% of commitment changes have been rejected over the last hour.
           This may indicate insufficient capacity to fulfill new commitments. Rejected
           commitments are rolled back.
+
+    - alert: CortexNovaCommittedResourceBadRequests
+      expr: |
+        rate(cortex_committed_resource_change_api_commitment_changes_total{
+          service="cortex-nova-metrics",
+          result="bad_request"
+        }[10m]) > 0
+      for: 30m
+      labels:
+        context: committed-resource-api
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: info
+        support_group: workload-management
+      annotations:
+        summary: "Committed resource change API receiving bad requests"
+        description: >
+          Requests with invalid parameters (e.g. unknown availability zone) sustained for 30 minutes.
 
     - alert: CortexNovaCommittedResourceTimeoutsTooHigh
       expr: increase(cortex_committed_resource_change_api_timeouts_total{service="cortex-nova-metrics", dry_run="false"}[10m]) > 0

@@ -62,7 +62,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 			},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-rej", "confirmed", 2)),
-			ExpectedAPIResponse: newAPIResponse("commitment uuid-rej: not sufficient capacity"),
+			ExpectedAPIResponse: newAPIResponse("not sufficient capacity, please try again later"),
 		},
 		// --- Planned state ---
 		{
@@ -97,7 +97,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 			},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-rollback", "confirmed", 2)),
-			ExpectedAPIResponse: newAPIResponse("uuid-rollback: not sufficient capacity"),
+			ExpectedAPIResponse: newAPIResponse("not sufficient capacity, please try again later"),
 			ExpectedDeletedCRs:  []string{"commitment-uuid-rollback"},
 		},
 		// --- Rollback: updated CR spec restored on batch failure ---
@@ -112,7 +112,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 			},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-restore", "confirmed", 4)),
-			ExpectedAPIResponse: newAPIResponse("uuid-restore: not sufficient capacity"),
+			ExpectedAPIResponse: newAPIResponse("not sufficient capacity, please try again later"),
 			// CRD still exists but amount restored to 1024 MiB
 			ExpectedCRSpecs: map[string]int64{"commitment-uuid-restore": 1024 * 1024 * 1024},
 		},
@@ -127,7 +127,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-a", "confirmed", 2),
 				createCommitment("hw_version_hana_1_ram", "project-B", "uuid-b", "confirmed", 2),
 			),
-			ExpectedAPIResponse: newAPIResponse("uuid-b: not sufficient capacity"),
+			ExpectedAPIResponse: newAPIResponse("not sufficient capacity, please try again later"),
 			ExpectedDeletedCRs:  []string{"commitment-uuid-a", "commitment-uuid-b"},
 		},
 		// --- AZ validation ---
@@ -157,7 +157,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 				}
 				return &cfg
 			}(),
-			ExpectedAPIResponse: newAPIResponse("timeout reached while processing commitment changes"),
+			ExpectedAPIResponse: newAPIResponse("internal error on commitment uuid-timeout"),
 			ExpectedDeletedCRs:  []string{"commitment-uuid-timeout"},
 		},
 		// --- Input validation ---
@@ -166,7 +166,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 			Flavors: []*TestFlavor{m1Small},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
 				createCommitment("hw_version_hana_1_ram", "project-A", strings.Repeat("x", 50), "confirmed", 2)),
-			ExpectedAPIResponse: newAPIResponse("unexpected commitment format"),
+			ExpectedAPIResponse: newAPIResponse("internal error on commitment"),
 			ExpectedDeletedCRs:  []string{"commitment-" + strings.Repeat("x", 50)},
 		},
 		{
@@ -174,7 +174,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 			Flavors: []*TestFlavor{m1Small},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
 				createCommitment("hw_version_nonexistent_ram", "project-A", "uuid-unk", "confirmed", 2)),
-			ExpectedAPIResponse: newAPIResponse("flavor group not found"),
+			ExpectedAPIResponse: newAPIResponse("internal error processing request"),
 		},
 		// --- Infrastructure ---
 		{
@@ -289,7 +289,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 				deleteCommitment("hw_version_hana_1_ram", "project-A", "uuid-del-rb", "confirmed", 2),
 				createCommitment("hw_version_hana_1_ram", "project-B", "uuid-new-rb", "confirmed", 2),
 			),
-			ExpectedAPIResponse:    newAPIResponse("not enough capacity"),
+			ExpectedAPIResponse:    newAPIResponse("not sufficient capacity, please try again later"),
 			ExpectedCreatedCRNames: []string{"commitment-uuid-del-rb"}, // re-created during rollback
 		},
 		// --- Non-confirming changes (RequiresConfirmation=false → AllowRejection=false, no watch) ---
@@ -426,7 +426,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-pva", "confirmed", 2),
 				createCommitment("hw_version_nonexistent_ram", "project-B", "uuid-pvb", "confirmed", 2),
 			),
-			ExpectedAPIResponse: newAPIResponse("flavor group not found"),
+			ExpectedAPIResponse: newAPIResponse("internal error processing request"),
 			ExpectedDeletedCRs:  []string{"commitment-uuid-pva"},
 		},
 	}

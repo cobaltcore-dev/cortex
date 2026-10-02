@@ -16,6 +16,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
+	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -28,6 +29,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
+
+// errBadRequest is returned by processCommitmentChanges when the caller sent an invalid request (e.g. unknown AZ).
+var errBadRequest = errors.New("bad request")
 
 // sortedKeys returns map keys sorted alphabetically for deterministic iteration.
 func sortedKeys[K ~string, V any](m map[K]V) []K {
@@ -150,6 +154,8 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	if err := api.processCommitmentChanges(ctx, w, logger, req, &resp); err != nil {
 		if strings.Contains(err.Error(), "caches not ready") {
 			statusCode = http.StatusServiceUnavailable
+		} else if errors.Is(err, errBadRequest) {
+			statusCode = http.StatusBadRequest
 		}
 		api.recordMetrics(req, resp, statusCode, startTime)
 		return
@@ -178,10 +184,12 @@ func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.Respons
 	allowRejection := req.RequiresConfirmation()
 
 	var (
-		toWatch      []crWatch    // CRD names + expected generations to poll for terminal conditions (upserts only)
-		snapshots    []crSnapshot // ordered list for deterministic rollback
-		failedReason string
-		rollback     bool
+		toWatch         []crWatch    // CRD names + expected generations to poll for terminal conditions (upserts only)
+		snapshots       []crSnapshot // ordered list for deterministic rollback
+		failedReason    string
+		sanitisedReason string
+		isBadRequest    bool
+		rollback        bool
 	)
 
 ProcessLoop:
@@ -200,12 +208,14 @@ ProcessLoop:
 			flavorGroupName, resourceType, err := commitments.GetFlavorGroupAndTypeFromResource(string(resourceName))
 			if err != nil {
 				failedReason = fmt.Sprintf("project with unknown resource name %s: %v", projectID, err)
+				sanitisedReason = "internal error processing request"
 				rollback = true
 				break ProcessLoop
 			}
 
 			if _, ok := flavorGroups[flavorGroupName]; !ok {
 				failedReason = "flavor group not found: " + flavorGroupName
+				sanitisedReason = "internal error processing request"
 				rollback = true
 				break ProcessLoop
 			}
@@ -222,6 +232,7 @@ ProcessLoop:
 			}
 			if !handlesCommitments {
 				failedReason = fmt.Sprintf("flavor group %q is not configured to handle %s commitments", flavorGroupName, resourceType)
+				sanitisedReason = "internal error processing request"
 				rollback = true
 				break ProcessLoop
 			}
@@ -242,6 +253,7 @@ ProcessLoop:
 				if err := api.client.Get(ctx, types.NamespacedName{Name: crName}, existing); err != nil {
 					if !apierrors.IsNotFound(err) {
 						failedReason = fmt.Sprintf("commitment %s: failed to read pre-update snapshot: %v", commitment.UUID, err)
+						sanitisedReason = "internal error on commitment " + string(commitment.UUID)
 						rollback = true
 						break ProcessLoop
 					}
@@ -258,11 +270,13 @@ ProcessLoop:
 					if snap.prevSpec != nil {
 						if err := api.client.Delete(ctx, existing); err != nil && !apierrors.IsNotFound(err) {
 							failedReason = fmt.Sprintf("commitment %s: failed to delete CommittedResource CRD: %v", commitment.UUID, err)
+							sanitisedReason = "internal error on commitment " + string(commitment.UUID)
 							rollback = true
 							break ProcessLoop
 						}
 						if err := commitments.DeleteChildReservations(ctx, api.client, existing); err != nil {
 							failedReason = fmt.Sprintf("commitment %s: failed to delete child reservations: %v", commitment.UUID, err)
+							sanitisedReason = "internal error on commitment " + string(commitment.UUID)
 							rollback = true
 							break ProcessLoop
 						}
@@ -275,6 +289,7 @@ ProcessLoop:
 					commitment, string(projectID), domainID, flavorGroupName, resourceType, string(req.AZ), ramUnitMiB)
 				if err != nil {
 					failedReason = fmt.Sprintf("commitment %s: %s", commitment.UUID, err)
+					sanitisedReason = "internal error on commitment " + string(commitment.UUID)
 					rollback = true
 					break ProcessLoop
 				}
@@ -298,7 +313,14 @@ ProcessLoop:
 					crGeneration = cr.Generation
 					return nil
 				}); err != nil {
-					failedReason = fmt.Sprintf("commitment %s: failed to write CommittedResource CRD: %v", commitment.UUID, err)
+					if multicluster.IsNoClusterMatchedError(err) {
+						failedReason = fmt.Sprintf("commitment %s: failed to write CommittedResource CRD: %v", commitment.UUID, err)
+						sanitisedReason = "unknown availability zone: " + string(req.AZ)
+						isBadRequest = true
+					} else {
+						failedReason = fmt.Sprintf("commitment %s: failed to write CommittedResource CRD: %v", commitment.UUID, err)
+						sanitisedReason = "internal error on commitment " + string(commitment.UUID)
+					}
 					rollback = true
 					break ProcessLoop
 				}
@@ -340,6 +362,7 @@ ProcessLoop:
 				}
 			}
 			failedReason = b.String()
+			sanitisedReason = "not sufficient capacity, please try again later"
 			rollback = true
 		case len(watchErrs) > 0:
 			msgs := make([]string, len(watchErrs))
@@ -347,18 +370,27 @@ ProcessLoop:
 				msgs[i] = e.Error()
 			}
 			failedReason = "timeout reached while processing commitment changes: " + strings.Join(msgs, "; ")
+			if len(toWatch) == 1 {
+				sanitisedReason = "internal error on commitment " + strings.TrimPrefix(toWatch[0].name, "commitment-")
+			} else {
+				sanitisedReason = "internal error (request ID: " + strings.TrimPrefix(reservations.GlobalRequestIDFromContext(ctx), "committed-resource-") + ")"
+			}
 			api.monitor.timeouts.WithLabelValues("false").Inc()
 			rollback = true
 		}
 	}
 
 	if rollback {
-		resp.RejectionReason = failedReason
+		resp.RejectionReason = sanitisedReason
 		logger.Info("rolling back CommittedResource CRDs", "reason", failedReason, "count", len(snapshots))
 		for i := len(snapshots) - 1; i >= 0; i-- {
 			rollbackCR(ctx, logger, api.client, snapshots[i])
 		}
 		logger.Info("rollback complete")
+		if isBadRequest {
+			http.Error(w, sanitisedReason, http.StatusBadRequest)
+			return errBadRequest
+		}
 		return nil
 	}
 
@@ -543,11 +575,13 @@ func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req l
 
 		flavorGroupName, resourceType, err := commitments.GetFlavorGroupAndTypeFromResource(string(resourceName))
 		if err != nil {
-			resp.RejectionReason = fmt.Sprintf("dry run: %v", err)
+			logger.Info("dry run: unknown resource name", "resource", resourceName, "error", err)
+			resp.RejectionReason = "internal error processing dry-run request"
 			return
 		}
 		if _, ok := flavorGroups[flavorGroupName]; !ok {
-			resp.RejectionReason = "dry run: flavor group not found: " + flavorGroupName
+			logger.Info("dry run: flavor group not found", "flavorGroup", flavorGroupName)
+			resp.RejectionReason = "internal error processing dry-run request"
 			return
 		}
 
@@ -648,7 +682,13 @@ func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req l
 			},
 		}
 		if createErr := api.client.Create(ctx, probe); createErr != nil {
-			resp.RejectionReason = "dry run: failed to create probe: " + createErr.Error()
+			if multicluster.IsNoClusterMatchedError(createErr) {
+				logger.Info("dry run: unknown availability zone", "az", req.AZ, "error", createErr)
+				resp.RejectionReason = "unknown availability zone: " + string(req.AZ)
+			} else {
+				logger.Info("dry run: failed to create probe", "error", createErr)
+				resp.RejectionReason = "internal error processing dry-run request"
+			}
 			return
 		}
 		probeWatches = append(probeWatches, crWatch{name: probeName, generation: probe.Generation})
@@ -667,8 +707,8 @@ func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req l
 				fmt.Fprintf(&b, "\n- %s: %s", strings.TrimPrefix(w.name, "commitment-"), reason)
 			}
 		}
-		logger.Info("dry run: capacity not available", "accepted", len(probeWatches)-len(rejected), "rejected", len(rejected), "total", len(probeWatches))
-		resp.RejectionReason = b.String()
+		logger.Info("dry run: capacity not available", "accepted", len(probeWatches)-len(rejected), "rejected", len(rejected), "total", len(probeWatches), "detail", b.String())
+		resp.RejectionReason = "not sufficient capacity, please try again later"
 	case len(watchErrs) > 0:
 		msgs := make([]string, len(watchErrs))
 		for i, e := range watchErrs {
@@ -676,7 +716,7 @@ func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req l
 		}
 		api.monitor.timeouts.WithLabelValues("true").Inc()
 		logger.Info("dry run: timed out waiting for controller outcome", "probes", len(probeWatches), "errors", strings.Join(msgs, "; "))
-		resp.RejectionReason = "dry run: timeout: " + strings.Join(msgs, "; ")
+		resp.RejectionReason = "internal error processing dry-run request"
 	default:
 		logger.Info("dry run: capacity available", "probes", len(probeWatches))
 	}
