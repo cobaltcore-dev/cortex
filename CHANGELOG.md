@@ -1,5 +1,56 @@
 # Changelog
 
+## 2026-10-02 — [#1281](https://github.com/cobaltcore-dev/cortex/pull/1281)
+
+### cortex v0.5.2 (sha-c96a99cc)
+
+CI/CD:
+- Fixed release gating so that opening a PR into a release branch correctly triggers the release agent instead of the review agent. The review gate now checks `review.except.branches` (configured as `release`, `release/*`) and skips review for those base branches ([#1280](https://github.com/cobaltcore-dev/cortex/pull/1280))
+- Reduced review agent noise by rewriting the review prompt to report only critical issues: correctness bugs, security vulnerabilities, data loss/corruption risks, resource or goroutine leaks, concurrency hazards, and breaking API changes ([#1280](https://github.com/cobaltcore-dev/cortex/pull/1280))
+- Added a `gh pr comment` step in the release gate that posts a notification when the release agent starts ([#1280](https://github.com/cobaltcore-dev/cortex/pull/1280))
+
+Dependencies:
+- Updated `sigs.k8s.io/controller-runtime` from v0.25.1 to v0.25.2 ([#1279](https://github.com/cobaltcore-dev/cortex/pull/1279))
+- Updated `github.com/sapcc/go-bits` digest from `e0aa5c6` to `e86369b` ([#1278](https://github.com/cobaltcore-dev/cortex/pull/1278))
+
+### cortex-shim v0.1.24
+
+Non-breaking changes:
+- Shared binary rebuild with updated dependencies
+
+### cortex-postgres v0.6.21
+
+Non-breaking changes:
+- Chart version bump with no functional changes
+
+### cortex-placement-shim v0.1.24
+
+Includes updated chart cortex-shim v0.1.24.
+
+### cortex-nova v0.0.98
+
+Includes updated charts cortex v0.5.2 and cortex-postgres v0.6.21.
+
+### cortex-cinder v0.0.98
+
+Includes updated charts cortex v0.5.2 and cortex-postgres v0.6.21.
+
+### cortex-manila v0.0.98
+
+Includes updated charts cortex v0.5.2 and cortex-postgres v0.6.21.
+
+### cortex-crds v0.0.98
+
+Includes updated chart cortex v0.5.2.
+
+### cortex-ironcore v0.0.98
+
+Includes updated chart cortex v0.5.2.
+
+### cortex-pods v0.0.98
+
+Includes updated chart cortex v0.5.2.
+
 ## 2026-10-01 — [#1273](https://github.com/cobaltcore-dev/cortex/pull/1273)
 
 ### cortex v0.5.1 (sha-7a1440e9)
