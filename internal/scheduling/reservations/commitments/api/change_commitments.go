@@ -119,6 +119,14 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	if err := validateChangeRequest(req); err != nil {
+		statusCode = http.StatusBadRequest
+		http.Error(w, err.Error(), statusCode)
+		logger.Info("commitment change bad request", "reason", err)
+		api.recordMetrics(req, resp, statusCode, startTime)
+		return
+	}
+
 	{
 		knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
 		if knowledgeCRD, err := knowledge.Get(ctx); err == nil && knowledgeCRD != nil {
@@ -760,6 +768,38 @@ func (api *HTTPAPI) cleanupDryRunProbes(ctx context.Context, logger logr.Logger,
 			}
 		}
 	}
+}
+
+// validateChangeRequest returns an error if the request contains fields that indicate
+// Limes accidentally omitted required totals or sent a zero-amount non-delete commitment.
+func validateChangeRequest(req liquid.CommitmentChangeRequest) error {
+	for _, projectChanges := range req.ByProject {
+		for resourceName, resourceChanges := range projectChanges.ByResource {
+			for _, c := range resourceChanges.Commitments {
+				if c.NewStatus.IsSome() && c.Amount == 0 {
+					return fmt.Errorf("commitment %s: amount must be > 0 for non-delete commitment", c.UUID)
+				}
+			}
+			hasConfirmedOrGuaranteed := false
+			for _, c := range resourceChanges.Commitments {
+				oldS := c.OldStatus.UnwrapOr("")
+				newS := c.NewStatus.UnwrapOr("")
+				if oldS == liquid.CommitmentStatusConfirmed || oldS == liquid.CommitmentStatusGuaranteed ||
+					newS == liquid.CommitmentStatusConfirmed || newS == liquid.CommitmentStatusGuaranteed {
+					hasConfirmedOrGuaranteed = true
+					break
+				}
+			}
+			if hasConfirmedOrGuaranteed &&
+				resourceChanges.TotalConfirmedBefore == 0 &&
+				resourceChanges.TotalConfirmedAfter == 0 &&
+				resourceChanges.TotalGuaranteedBefore == 0 &&
+				resourceChanges.TotalGuaranteedAfter == 0 {
+				return fmt.Errorf("resource %s: all Total* fields are zero but commitments reference confirmed/guaranteed status", resourceName)
+			}
+		}
+	}
+	return nil
 }
 
 // applyCRSpec writes CommitmentState fields into a CommittedResource CRD spec.

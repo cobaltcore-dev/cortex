@@ -176,6 +176,39 @@ func TestHandleChangeCommitments(t *testing.T) {
 				createCommitment("hw_version_nonexistent_ram", "project-A", "uuid-unk", "confirmed", 2)),
 			ExpectedAPIResponse: newAPIResponse("internal error processing request"),
 		},
+		// --- validateChangeRequest: Rule 1 ---
+		{
+			Name:    "Rule 1: Amount=0 on non-delete commitment → 400 bad request",
+			Flavors: []*TestFlavor{m1Small},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-zero-amt", "confirmed", 0)),
+			ExpectedAPIResponse: APIResponseExpectation{StatusCode: http.StatusBadRequest},
+		},
+		// --- validateChangeRequest: Rule 2 ---
+		{
+			Name:    "Rule 2: all Total* zero with NewStatus=confirmed → 400 bad request",
+			Flavors: []*TestFlavor{m1Small},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				TestCommitment{
+					ResourceName:   "hw_version_hana_1_ram",
+					ProjectID:      "project-A",
+					ConfirmationID: "uuid-zero-totals",
+					State:          "confirmed",
+					Amount:         2,
+					ZeroTotals:     true,
+				}),
+			ExpectedAPIResponse: APIResponseExpectation{StatusCode: http.StatusBadRequest},
+		},
+		// --- validateChangeRequest: valid request (regression) ---
+		{
+			Name:    "Validation: valid confirmed commitment with proper totals → accepted",
+			Flavors: []*TestFlavor{m1Small},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-valid-totals", "confirmed", 2)),
+			ExpectedAPIResponse:    newAPIResponse(),
+			ExpectedCreatedCRNames: []string{"commitment-uuid-valid-totals"},
+			ExpectedAllowRejection: map[string]bool{"commitment-uuid-valid-totals": true},
+		},
 		// --- Infrastructure ---
 		{
 			Name:    "Version mismatch: 409 Conflict",
@@ -524,6 +557,7 @@ type TestCommitment struct {
 	State          string // empty = None (deletion)
 	Amount         uint64
 	OldAmount      uint64 // if non-zero, used for TotalBefore totals instead of Amount (for resize-down)
+	ZeroTotals     bool   // if true, skip Total* accumulation (for testing Rule 2 validation)
 }
 
 type APIResponseExpectation struct {
@@ -1005,21 +1039,24 @@ func buildRequestJSON(req CommitmentChangeRequest) string {
 
 		// Compute per-resource totals so RequiresConfirmation() behaves correctly.
 		// OldAmount overrides Amount for TotalBefore (resize-down: old amount != new amount).
-		oldAmt := tc.Amount
-		if tc.OldAmount != 0 {
-			oldAmt = tc.OldAmount
-		}
-		if oldStatus == Some(liquid.CommitmentStatusConfirmed) {
-			byResource.TotalConfirmedBefore += oldAmt
-		}
-		if newStatus == Some(liquid.CommitmentStatusConfirmed) {
-			byResource.TotalConfirmedAfter += tc.Amount
-		}
-		if oldStatus == Some(liquid.CommitmentStatusGuaranteed) {
-			byResource.TotalGuaranteedBefore += oldAmt
-		}
-		if newStatus == Some(liquid.CommitmentStatusGuaranteed) {
-			byResource.TotalGuaranteedAfter += tc.Amount
+		// ZeroTotals skips accumulation to simulate a malformed request (for Rule 2 validation tests).
+		if !tc.ZeroTotals {
+			oldAmt := tc.Amount
+			if tc.OldAmount != 0 {
+				oldAmt = tc.OldAmount
+			}
+			if oldStatus == Some(liquid.CommitmentStatusConfirmed) {
+				byResource.TotalConfirmedBefore += oldAmt
+			}
+			if newStatus == Some(liquid.CommitmentStatusConfirmed) {
+				byResource.TotalConfirmedAfter += tc.Amount
+			}
+			if oldStatus == Some(liquid.CommitmentStatusGuaranteed) {
+				byResource.TotalGuaranteedBefore += oldAmt
+			}
+			if newStatus == Some(liquid.CommitmentStatusGuaranteed) {
+				byResource.TotalGuaranteedAfter += tc.Amount
+			}
 		}
 
 		byProject[pid].ByResource[tc.ResourceName] = byResource
