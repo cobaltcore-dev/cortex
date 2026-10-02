@@ -1,5 +1,50 @@
 # Changelog
 
+## Release 2026-10-02 — PR [#1287](https://github.com/cobaltcore-dev/cortex/pull/1287)
+
+### Version Bumps
+
+| Package | Previous | New |
+|---|---|---|
+| cortex | 0.5.1 | 0.5.2 |
+| cortex-postgres | 0.6.20 | 0.6.21 |
+| cortex-shim | 0.1.23 | 0.1.24 |
+| bundles | 0.0.97 | 0.0.98 |
+| cortex-placement-shim | 0.1.23 | 0.1.24 |
+
+### Bug Fixes
+
+- **Commitment API error-response hardening** ([#1284](https://github.com/cobaltcore-dev/cortex/pull/1284)) — Internal error details (Kubernetes errors, cluster selectors, scheduler internals) no longer leak to callers via `RejectionReason`; full detail is retained in logs only. Unknown availability zones now correctly return HTTP 400 with `"unknown availability zone: <az>"` instead of an opaque internal error. Added input validation that rejects malformed commitments/requests earlier. A new `result="bad_request"` metric label separates caller mistakes from capacity rejections and internal errors; alert rules updated accordingly.
+- **AllowedProjects filter now enforces tenant pinning for failover intents** ([#1244](https://github.com/cobaltcore-dev/cortex/pull/1244)) — Failover intents (`reserve_for_failover`, `reuse_failover_reservation`) no longer bypass the `AllowedProjects` check — only `capacity_probe` intents skip tenant pinning. This prevents dead-weight failover reservations on hosts whose `AllowedProjects` excludes the VM's project.
+
+### Features
+
+- **Status label on KVM hosts** ([#1277](https://github.com/cobaltcore-dev/cortex/pull/1277)) — Added a status label to KVM host infrastructure KPIs and updated tests for condition reasons.
+
+### Alerting
+
+- **Missing failover capacity alert** ([#1283](https://github.com/cobaltcore-dev/cortex/pull/1283)) — Added a new alert rule for failover capacity in the `cortex-nova` Helm bundle.
+
+### CI / Cortex Agents
+
+- **Fix release gating, reduce review noise, add release-start comment** ([#1280](https://github.com/cobaltcore-dev/cortex/pull/1280)) — Switched release gate to `pull_request_target` so secrets are available and added an allowlist check. The review agent prompt now reports only critical issues (correctness bugs, security vulnerabilities, data loss, resource leaks, concurrency hazards, breaking changes). The release branch is exempted from the review agent via new `review.except.branches` config. A release-triggered comment is now posted on the PR when the release workflow starts.
+
+### Dependency Updates
+
+- **`sigs.k8s.io/controller-runtime`** `v0.25.1` → `v0.25.2` ([#1279](https://github.com/cobaltcore-dev/cortex/pull/1279)) — Includes a sub-resource create options fix, metrics handler options, and a new ReadYourWrite consistency-wait metric.
+- **`github.com/sapcc/go-bits`** digest `e0aa5c6` → `e86369b` ([#1278](https://github.com/cobaltcore-dev/cortex/pull/1278))
+
+### Helm Version Bumps
+
+- `cortex`: `sha-7a1440e9` → `sha-826fe041` ([#1276](https://github.com/cobaltcore-dev/cortex/pull/1276), [#1286](https://github.com/cobaltcore-dev/cortex/pull/1286))
+- `cortex-shim`: `sha-e1dafe4f` → `sha-7a32c180` ([#1276](https://github.com/cobaltcore-dev/cortex/pull/1276), [#1286](https://github.com/cobaltcore-dev/cortex/pull/1286))
+
+### ⚠️ Breaking Changes & Risk Areas
+
+- **Commitment API behavioral change** — Error responses are now sanitized and HTTP status codes differ (400 vs 500 for bad AZ). Consumers relying on specific error message strings may need updating.
+- **AllowedProjects filter tightening** — Failover intents that previously bypassed tenant pinning will now be filtered. Existing failover reservations on tenant-restricted hosts may no longer be placed.
+- **Alert rule changes** — The new `bad_request` metric label means existing alert-rule consumers and dashboards should verify they match the new label values.
+
 ## 2026-10-01 — [#1273](https://github.com/cobaltcore-dev/cortex/pull/1273)
 
 ### cortex v0.5.1 (sha-7a1440e9)
