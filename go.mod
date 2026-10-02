@@ -17,7 +17,7 @@ require (
 	github.com/sapcc/go-api-declarations v1.25.1
 	github.com/sapcc/go-bits v0.0.0-20261001170337-e86369bc8beb
 	go.uber.org/zap v1.28.0
-	go.xyrillian.de/gg v1.16.0
+	go.xyrillian.de/gg v1.17.0
 	golang.org/x/sync v0.23.0
 	golang.org/x/term v0.46.0
 	gopkg.in/yaml.v3 v3.0.1
