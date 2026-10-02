@@ -415,9 +415,6 @@ func TestCapacityCalculator_VariableRatio_PrefersRawCapacity(t *testing.T) {
 	}
 }
 
-// TestCapacityCalculator_ReservedSlots verifies that committed-resource reserved slots
-// (ExclusivelyCommittedReservedCapacity/Slots) are added back into reported capacity for a
-// fixed-ratio group, and that usage is reported as None.
 // TestCapacityCalculator_FixedRatioIncludesReservedInTotal verifies that for a fixed-ratio group
 // the empty-datacenter total already accounts for committed-reserved hosts, so committed slots are
 // not added a second time on top of totalSlots. Capacity = totalSlots (no failover); usage None.
