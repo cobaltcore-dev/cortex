@@ -1,5 +1,36 @@
 # Changelog
 
+## cortex 0.5.2 (2026-10-02) — [#1287](https://github.com/cobaltcore-dev/cortex/pull/1287)
+
+### Bug Fixes
+
+- **Commitment API error-response hardening** ([#1284](https://github.com/cobaltcore-dev/cortex/pull/1284)) — Internal error details (Kubernetes errors, cluster selectors, scheduler internals) no longer leak to callers via `RejectionReason`; full detail is retained in logs only. Unknown availability zones now return HTTP 400 with a clear message instead of an opaque 500. New input validation rejects malformed commitments earlier. A new `result="bad_request"` metric label separates caller mistakes from capacity rejections and internal errors; alert rules updated accordingly.
+
+- **AllowedProjects filter enforces tenant pinning for failover intents** ([#1244](https://github.com/cobaltcore-dev/cortex/pull/1244)) — Failover intents (`reserve_for_failover`, `reuse_failover_reservation`) no longer bypass the `AllowedProjects` check — only `capacity_probe` intents skip tenant pinning. This prevents dead-weight failover reservations on hosts whose `AllowedProjects` excludes the VM's project.
+
+### Features
+
+- **Status label on KVM hosts** ([#1277](https://github.com/cobaltcore-dev/cortex/pull/1277)) — Added a status label to KVM host infrastructure KPIs and updated tests for condition reasons.
+
+### Alerting
+
+- **Missing failover capacity alert** ([#1283](https://github.com/cobaltcore-dev/cortex/pull/1283)) — New alert rule for failover capacity in the `cortex-nova` Helm bundle.
+
+### CI / Cortex Agents
+
+- **Fix release gating, reduce review noise, add release-start comment** ([#1280](https://github.com/cobaltcore-dev/cortex/pull/1280)) — Release gate switched to `pull_request_target` for secret access with allowlist check. Review agent prompt now surfaces only critical issues. Release branch exempted from review agent; release-triggered comment posted on PR.
+
+### Dependencies
+
+- Bump `sigs.k8s.io/controller-runtime` from v0.25.1 to v0.25.2 ([#1279](https://github.com/cobaltcore-dev/cortex/pull/1279))
+- Bump `github.com/sapcc/go-bits` from `e0aa5c6` to `e86369b` ([#1278](https://github.com/cobaltcore-dev/cortex/pull/1278))
+
+### Breaking Changes
+
+- **Commitment API behavioral change** — Error responses are sanitized and HTTP status codes differ (400 vs 500 for bad AZ). Consumers parsing specific error strings may need updating.
+- **AllowedProjects filter tightening** — Failover intents that previously bypassed tenant pinning are now filtered. Existing failover reservations on tenant-restricted hosts may no longer be placed.
+- **Alert rule label change** — New `bad_request` metric label; existing alert rules and dashboards should verify they match the new label values.
+
 ## 2026-10-01 — [#1273](https://github.com/cobaltcore-dev/cortex/pull/1273)
 
 ### cortex v0.5.1 (sha-7a1440e9)
