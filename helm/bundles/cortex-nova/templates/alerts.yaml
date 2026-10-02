@@ -890,5 +890,32 @@ spec:
           in AZ {{ "{{" }} $labels.az {{ "}}" }} within the last hour ({{ "{{" }} $value | humanize {{ "}}" }} evictions).
           This indicates recurring oversubscription events — investigate capacity changes,
           concurrent slot creation races, or VM migration patterns in this AZ.
+    - alert: CortexNovaFailoverReservationsMissing
+      # Fires when VMs never regained their required failover reservations over the
+      # whole lookback window. The gauge is set every reconcile cycle to the number
+      # of VMs still short of their required failover count. A new VM transiently
+      # pushes it >0, which is normal — the controller is expected to drive it back
+      # to 0 within a few cycles. min_over_time > 0 means the gauge never reached 0
+      # in the window, i.e. at least one VM stayed unprotected the entire time:
+      # e.g. no eligible hypervisors, exhausted capacity, or scheduling failures.
+      expr: max(min_over_time(cortex_failover_reconciliation_vms_missing_failover{service="cortex-nova-metrics"}[{{ .Values.alerts.thresholds.failoverMissingFor }}])) > 0
+      labels:
+        context: failover-reservations
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: ""
+      annotations:
+        summary: "Failover reservations missing for VMs"
+        description: >
+          {{ "{{" }} $value | humanize {{ "}}" }} VM(s) never regained their required failover
+          reservations over the whole lookback window (the missing count never returned to zero).
+          This means those VMs have no pre-reserved capacity to fail over to and failover
+          guarantees are not satisfied. Common causes: no eligible hypervisors in the VM's
+          availability zone, exhausted capacity, or scheduling failures. Inspect the failover
+          controller logs (filter on "periodic reconciliation completed" and
+          "processed VM failover reservations") to identify the affected VMs and the reason
+          their reservations cannot be created.
     {{- end }}
 {{- end }}
