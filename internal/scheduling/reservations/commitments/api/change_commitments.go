@@ -382,6 +382,11 @@ ProcessLoop:
 
 	if rollback {
 		resp.RejectionReason = sanitisedReason
+		if isBadRequest {
+			logger.Info("commitment change bad request", "az", req.AZ, "reason", failedReason)
+		} else if sanitisedReason != "not sufficient capacity, please try again later" {
+			logger.Error(nil, "commitment change internal error", "reason", failedReason)
+		}
 		logger.Info("rolling back CommittedResource CRDs", "reason", failedReason, "count", len(snapshots))
 		for i := len(snapshots) - 1; i >= 0; i-- {
 			rollbackCR(ctx, logger, api.client, snapshots[i])
@@ -575,12 +580,12 @@ func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req l
 
 		flavorGroupName, resourceType, err := commitments.GetFlavorGroupAndTypeFromResource(string(resourceName))
 		if err != nil {
-			logger.Info("dry run: unknown resource name", "resource", resourceName, "error", err)
+			logger.Error(err, "dry run internal error", "resource", resourceName)
 			resp.RejectionReason = "internal error processing dry-run request"
 			return
 		}
 		if _, ok := flavorGroups[flavorGroupName]; !ok {
-			logger.Info("dry run: flavor group not found", "flavorGroup", flavorGroupName)
+			logger.Error(nil, "dry run internal error", "flavorGroup", flavorGroupName)
 			resp.RejectionReason = "internal error processing dry-run request"
 			return
 		}
@@ -683,10 +688,10 @@ func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req l
 		}
 		if createErr := api.client.Create(ctx, probe); createErr != nil {
 			if multicluster.IsNoClusterMatchedError(createErr) {
-				logger.Info("dry run: unknown availability zone", "az", req.AZ, "error", createErr)
+				logger.Info("dry run bad request", "az", req.AZ, "error", createErr)
 				resp.RejectionReason = "unknown availability zone: " + string(req.AZ)
 			} else {
-				logger.Info("dry run: failed to create probe", "error", createErr)
+				logger.Error(createErr, "dry run internal error")
 				resp.RejectionReason = "internal error processing dry-run request"
 			}
 			return
@@ -715,7 +720,7 @@ func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req l
 			msgs[i] = e.Error()
 		}
 		api.monitor.timeouts.WithLabelValues("true").Inc()
-		logger.Info("dry run: timed out waiting for controller outcome", "probes", len(probeWatches), "errors", strings.Join(msgs, "; "))
+		logger.Error(nil, "dry run internal error", "probes", len(probeWatches), "errors", strings.Join(msgs, "; "))
 		resp.RejectionReason = "internal error processing dry-run request"
 	default:
 		logger.Info("dry run: capacity available", "probes", len(probeWatches))

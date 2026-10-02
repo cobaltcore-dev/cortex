@@ -589,7 +589,10 @@ spec:
       annotations:
         summary: "Committed resource change API returning internal errors"
         description: >
-          Internal errors (not capacity rejections) in the committed resource change API.
+          The committed resource change API encountered internal errors processing commitment
+          changes (not capacity rejections). Limes will retry, but new commitments may not be
+          fulfilled until the issue is resolved. Search logs for msg="commitment change internal
+          error" or msg="dry run internal error" to find the full error detail.
 
     - alert: CortexNovaCommittedResourceRejectionRateTooHigh
       expr: |
@@ -629,7 +632,10 @@ spec:
       annotations:
         summary: "Committed resource change API receiving bad requests"
         description: >
-          Requests with invalid parameters (e.g. unknown availability zone) sustained for 30 minutes.
+          The committed resource change API has been receiving requests with invalid parameters
+          (e.g. unknown availability zone) for more than 30 minutes. This likely indicates a
+          misconfiguration in Limes or the caller. Search logs for msg="commitment change bad
+          request" or msg="dry run bad request" to identify the invalid parameter.
 
     - alert: CortexNovaCommittedResourceTimeoutsTooHigh
       expr: increase(cortex_committed_resource_change_api_timeouts_total{service="cortex-nova-metrics", dry_run="false"}[10m]) > 0
