@@ -12,14 +12,14 @@ import (
 )
 
 // recordMetrics records Prometheus metrics for a change commitments request.
-func (api *HTTPAPI) recordMetrics(req liquid.CommitmentChangeRequest, resp liquid.CommitmentChangeResponse, statusCode int, startTime time.Time) {
+func (api *HTTPAPI) recordMetrics(req liquid.CommitmentChangeRequest, resp liquid.CommitmentChangeResponse, statusCode int, isBadRequest bool, startTime time.Time) {
 	duration := time.Since(startTime).Seconds()
 	statusCodeStr := strconv.Itoa(statusCode)
 	dryRunStr := strconv.FormatBool(req.DryRun)
 
 	result := "accepted"
 	switch {
-	case statusCode == http.StatusBadRequest:
+	case statusCode == http.StatusBadRequest || isBadRequest:
 		result = "bad_request"
 	case statusCode != http.StatusOK:
 		result = "error"

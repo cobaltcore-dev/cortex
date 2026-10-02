@@ -30,9 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-// errBadRequest is returned by processCommitmentChanges when the caller sent an invalid request (e.g. unknown AZ).
-var errBadRequest = errors.New("bad request")
-
 // sortedKeys returns map keys sorted alphabetically for deterministic iteration.
 func sortedKeys[K ~string, V any](m map[K]V) []K {
 	keys := make([]K, 0, len(m))
@@ -84,7 +81,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	if !api.config.EnableChangeCommitments {
 		statusCode = http.StatusServiceUnavailable
 		http.Error(w, "change-commitments API is disabled", statusCode)
-		api.recordMetrics(req, resp, statusCode, startTime)
+		api.recordMetrics(req, resp, statusCode, false, startTime)
 		return
 	}
 
@@ -98,7 +95,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	if r.Method != http.MethodPost {
 		statusCode = http.StatusMethodNotAllowed
 		http.Error(w, "Method not allowed", statusCode)
-		api.recordMetrics(req, resp, statusCode, startTime)
+		api.recordMetrics(req, resp, statusCode, false, startTime)
 		return
 	}
 
@@ -106,7 +103,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 		logger.Error(err, "invalid request body")
 		statusCode = http.StatusBadRequest
 		http.Error(w, "Invalid request body: "+err.Error(), statusCode)
-		api.recordMetrics(req, resp, statusCode, startTime)
+		api.recordMetrics(req, resp, statusCode, false, startTime)
 		return
 	}
 
@@ -115,7 +112,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	if req.AZ == "" {
 		statusCode = http.StatusBadRequest
 		http.Error(w, "availability zone is required", statusCode)
-		api.recordMetrics(req, resp, statusCode, startTime)
+		api.recordMetrics(req, resp, statusCode, false, startTime)
 		return
 	}
 
@@ -123,7 +120,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 		statusCode = http.StatusBadRequest
 		http.Error(w, err.Error(), statusCode)
 		logger.Info("commitment change bad request", "reason", err)
-		api.recordMetrics(req, resp, statusCode, startTime)
+		api.recordMetrics(req, resp, statusCode, false, startTime)
 		return
 	}
 
@@ -141,7 +138,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 				statusCode = http.StatusConflict
 				http.Error(w, fmt.Sprintf("Version mismatch: request version %d, current version %d. Please refresh and retry.",
 					req.InfoVersion, currentVersion), statusCode)
-				api.recordMetrics(req, resp, statusCode, startTime)
+				api.recordMetrics(req, resp, statusCode, false, startTime)
 				return
 			}
 		}
@@ -149,7 +146,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 
 	if req.DryRun {
 		api.performDryRun(ctx, logger, req, &resp)
-		api.recordMetrics(req, resp, statusCode, startTime)
+		api.recordMetrics(req, resp, statusCode, false, startTime)
 		logger.Info("dry run complete", "rejected", resp.RejectionReason != "")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -159,17 +156,16 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := api.processCommitmentChanges(ctx, w, logger, req, &resp); err != nil {
+	isBadRequest, err := api.processCommitmentChanges(ctx, w, logger, req, &resp)
+	if err != nil {
 		if strings.Contains(err.Error(), "caches not ready") {
 			statusCode = http.StatusServiceUnavailable
-		} else if errors.Is(err, errBadRequest) {
-			statusCode = http.StatusBadRequest
 		}
-		api.recordMetrics(req, resp, statusCode, startTime)
+		api.recordMetrics(req, resp, statusCode, false, startTime)
 		return
 	}
 
-	api.recordMetrics(req, resp, statusCode, startTime)
+	api.recordMetrics(req, resp, statusCode, isBadRequest, startTime)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
@@ -177,13 +173,13 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.ResponseWriter, logger logr.Logger, req liquid.CommitmentChangeRequest, resp *liquid.CommitmentChangeResponse) error {
+func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.ResponseWriter, logger logr.Logger, req liquid.CommitmentChangeRequest, resp *liquid.CommitmentChangeResponse) (isBadRequest bool, err error) {
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		logger.Info("failed to get flavor groups from knowledge extractor", "error", err)
 		http.Error(w, "caches not ready, please retry later", http.StatusServiceUnavailable)
-		return errors.New("caches not ready")
+		return false, errors.New("caches not ready")
 	}
 
 	// If Limes does not require confirmation for this batch (e.g. deletions, status-only transitions),
@@ -196,7 +192,6 @@ func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.Respons
 		snapshots       []crSnapshot // ordered list for deterministic rollback
 		failedReason    string
 		sanitisedReason string
-		isBadRequest    bool
 		rollback        bool
 	)
 
@@ -346,7 +341,7 @@ ProcessLoop:
 		// AllowRejection=false, meaning the controller will retry indefinitely in the background.
 		if !allowRejection {
 			logger.Info("non-confirming changes applied, returning without polling", "count", len(toWatch))
-			return nil
+			return false, nil
 		}
 
 		logger.Info("CommittedResource CRDs written, polling for controller outcome", "count", len(toWatch))
@@ -400,15 +395,11 @@ ProcessLoop:
 			rollbackCR(ctx, logger, api.client, snapshots[i])
 		}
 		logger.Info("rollback complete")
-		if isBadRequest {
-			http.Error(w, sanitisedReason, http.StatusBadRequest)
-			return errBadRequest
-		}
-		return nil
+		return isBadRequest, nil
 	}
 
 	logger.Info("commitment changes accepted")
-	return nil
+	return false, nil
 }
 
 // watchCRsUntilReady polls CommittedResource conditions until each CRD reaches a terminal state:
