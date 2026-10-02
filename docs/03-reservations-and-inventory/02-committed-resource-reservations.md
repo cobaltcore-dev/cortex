@@ -41,6 +41,12 @@ That split is why memory and CPU commitments behave differently at scheduling ti
 - **CPU-only commitments do not create a slot.** They are checked arithmetically against headroom and
   drive billing, but do not hold a specific place on a specific host.
 
+> [!NOTE]
+> Slot sizing and placement use a flavor's *usable* RAM throughout — the nominal memory minus the small
+> VRAM carve-out (`hw_video:ram_max_mb`, typically 16 MiB). VRAM is never subtracted or added in sizing or
+> placement; the one place it reappears is Nova usage reporting, which adds it back so a VM's reported slot
+> count matches its nominal flavor.
+
 ### Nova as the source of truth for group membership
 
 Which flavors belong to which group is defined in the platform (a shared flavor extra-spec), not in a
@@ -125,6 +131,16 @@ Two controllers keep that split answerable without probing the scheduler on ever
   `FlavorGroupCapacity` type in `api/v1alpha1/flavor_group_capacity_types.go`.
 - **`quota-controller`** maintains `ProjectQuota` resources from Limes' **LIQUID** quota endpoint, tracking
   total versus pay-as-you-go usage. See the `ProjectQuota` type in `api/v1alpha1/project_quota_types.go`.
+
+What the capacity API reports back to Limes follows two deliberate rules:
+
+- **The two reservation kinds count differently.** Committed-resource reservations stay counted as
+  installed capacity — the hardware is in service, just promised. [Failover reservations](03-failover-reservations.md)
+  are *excluded*: they hold hardware out of service for host evacuation, so reporting them as available
+  would overstate what Limes can hand out.
+- **Reported usage is always empty.** The capacity endpoint reports capacity, not usage — Limes derives
+  per-project usage from the separate report-usage endpoint, so returning a usage value here would be
+  unused and only invite misreading reserved-versus-free capacity.
 
 > [!NOTE]
 > LIQUID is the Limes quota/usage interface Cortex reads. The quota controller consumes it over HTTP to
