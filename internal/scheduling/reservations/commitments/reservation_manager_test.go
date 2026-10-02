@@ -427,7 +427,7 @@ func TestApplyCommitmentState(t *testing.T) {
 		},
 		{
 			name:             "vram: N nominal slots creates exactly N slots, no leftover",
-			desiredMemoryGiB: 12, // 12288 MiB = 3 × (4080 usable + 16 VRAM) nominal
+			desiredMemoryGiB: 12, // 3 × (4080 usable + 16 VRAM)
 			flavorGroupOverride: map[string]compute.FlavorGroupFeature{
 				"test-group": {
 					Name: "test-group",
@@ -882,8 +882,6 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		// Phase 4.5 creates one PAYG slot for the 4080 MiB VM.
-		// Phase 5 must not create a slot for the 16 MiB VRAM remainder.
 		if len(result.TouchedReservations) != 1 {
 			t.Fatalf("want 1 slot (PAYG only), got %d", len(result.TouchedReservations))
 		}
@@ -1259,7 +1257,6 @@ func TestSelectFlavor(t *testing.T) {
 			wantMemoryMiB: 4080,
 		},
 		{
-			// delta covers 3 slots; selectFlavor must return the flavor, not a fallback.
 			name:     "vram: nominal delta for 3 slots picks correct flavor",
 			deltaMiB: 3 * 4096, // 3 × (4080 + 16) MiB
 			flavorGroup: &compute.FlavorGroupFeature{
