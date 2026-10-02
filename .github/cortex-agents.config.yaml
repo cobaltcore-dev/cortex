@@ -13,6 +13,10 @@ allowlist:
 
 review:
   active: true
+  except:
+    branches:
+      - release
+      - "release/*"
 
 bugfinder:
   active: true
