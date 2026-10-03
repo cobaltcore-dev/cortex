@@ -16,9 +16,11 @@ As part of the CobaltCore project, it complements the platform with advanced pla
 
 Learn more about [CobaltCore](https://cobaltcore-dev.github.io/docs/) and the broader [Apeiro Reference Architecture](https://apeirora.eu) ecosystem.
 
-<img align="right" width="60%" src="./docs/assets/cortex-key-figure-1.png" alt="Cortex provides unified initial placement and scheduling across multiple resource domains by composing scheduling logic via pipelines." />
+<img align="right" width="45%" src="./docs/assets/cortex-key-figure-1.png" />
 
-*Cortex provides unified initial placement and scheduling across multiple resource domains by composing scheduling logic via pipelines.*
+Cortex provides unified initial placement and scheduling across multiple resource domains by composing scheduling logic via pipelines.
+It handles workloads such as virtual machines (VM) as well as reservations (RES) for customer commitments and failover capacity.
+
 
 <br clear="right"/>
 
