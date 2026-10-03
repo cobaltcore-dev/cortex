@@ -16,6 +16,11 @@ As part of the CobaltCore project, it complements the platform with advanced pla
 
 Learn more about [CobaltCore](https://cobaltcore-dev.github.io/docs/) and the broader [Apeiro Reference Architecture](https://apeirora.eu) ecosystem.
 
+<p align="center">
+  <img src="./docs/assets/cortex-key-figure-1.png" width="85%" alt="Cortex provides unified initial placement and scheduling across multiple resource domains by composing scheduling logic via pipelines." /><br/>
+  <em>Cortex provides unified initial placement and scheduling across multiple resource domains by composing scheduling logic via pipelines.</em>
+</p>
+
 ## Features
 
 - **Modular and extensible design**
@@ -41,16 +46,13 @@ Learn more about [CobaltCore](https://cobaltcore-dev.github.io/docs/) and the br
 
 Read the full documentation at [docs/readme.md](docs/readme.md).
 
-## Roadmap
-
-See our [roadmap](https://github.com/orgs/cobaltcore-dev/projects/14) and [issue tracker](https://github.com/cobaltcore-dev/cortex/issues) for upcoming features and improvements.
-
 ## Support, Feedback, Contributing
 
 This project is open to feature requests/suggestions, bug reports etc. via [GitHub issues](https://github.com/cobaltcore-dev/cortex/issues). Contribution and feedback are encouraged and always welcome. For more information about how to contribute, the project structure, as well as additional contribution information, see our [Contribution Guidelines](CONTRIBUTING.md).
 
 ## Security / Disclosure
-If you find any bug that may be a security problem, please follow our instructions at [in our security policy](https://github.com/SAP/<your-project>/security/policy) on how to report it. Please do not create GitHub issues for security-related doubts or problems.
+
+If you find any bug that may be a security problem, please follow our instructions at [in our security policy](SECURITY.md) on how to report it. Please do not create GitHub issues for security-related doubts or problems.
 
 ## Code of Conduct
 
@@ -58,7 +60,7 @@ We as members, contributors, and leaders pledge to make participation in our com
 
 ## Licensing
 
-Copyright SAP SE. Please see our [LICENSE](LICENSE) for copyright and license information. Detailed information including third-party components and their licensing/copyright information is available [via the REUSE tool](https://api.reuse.software/info/github.com/cobaltcore-dev/cortex).
+Please see our [LICENSE](LICENSE) for copyright and license information. Detailed information including third-party components and their licensing/copyright information is available [via the REUSE tool](https://api.reuse.software/info/github.com/cobaltcore-dev/cortex).
 
 <p align="center">
   <img alt="Bundesministerium für Wirtschaft und Energie (BMWE)-EU funding logo" src="https://apeirora.eu/assets/img/BMWK-EU.png" width="400"/>

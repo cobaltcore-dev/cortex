@@ -6,85 +6,129 @@
 
 # What is Cortex?
 
-Cortex is a Kubernetes operator that makes smarter placement decisions for cloud workloads. Instead
-of scheduling with only the point-in-time facts a cloud platform's own scheduler sees, Cortex
-continuously ingests operational data, distills it into reusable *knowledge*, and runs that knowledge
-through configurable *pipelines* to influence where a workload lands — or to recommend moving one that
-is already placed.
+Cortex is a modular and extensible service for initial placement and scheduling in large-scale cloud computing environments.
+It covers multiple scheduling domains, such as compute, storage, network, and GPU, and uses pipelines to compose scheduling logic and enable cross-domain decisions.
+Cortex is designed for large-scale, production environments where placement and scheduling decisions must be made timely, with low configuration effort and a minimal resource footprint.
 
-This page explains the problem Cortex solves, the components it ships as, and the single arc that
-everything else in the book elaborates on. If you are impatient to run it, skip ahead to
-[Local development with Tilt](08-local-development-with-tilt.md) and come back.
+## Motivation
 
-## Declarative by design
+Scheduling in large-scale cloud infrastructures remains challenging.
+OpenStack services such as Nova, Manila, and Cinder each expose a dedicated scheduler, but they are limited to initial placement within a single domain and do not perform continuous rebalancing.
+They also do not coordinate across domains, which prevents cross-domain scheduling logic such as considering storage locality when placing compute workloads.
+Moreover, these systems have no concept of in-advance resource commitments, where a user reserves capacity for future use before the workload exists.
 
-Cortex is a Kubernetes operator built **cloud-native**: its entire behaviour is modeled as custom
-resources in the API group `cortex.cloud/v1alpha1`, reconciled by controllers. You do not call Cortex to
-*perform* an action — you declare the *desired state* (which datasources to ingest, which pipelines to
-run, which capacity to reserve) as Kubernetes objects, and the controllers continuously converge the
-system toward it, reporting progress through resource `status`/conditions and Prometheus metrics.
+More broadly, common schedulers address domains in isolation, rely on declared resource requests rather than real-time infrastructure telemetry, and provide no unified support for both initial placement and continuous scheduling.
 
-This is deliberately the opposite of the world Cortex extends. OpenStack is **imperative and RPC-driven**:
-you issue a request over an API and the service carries it out then and there. Cortex sits beside that
-platform and adds a **declarative control plane** on top of it — the same reconcile-to-desired-state model
-Kubernetes uses for pods, applied to placement intelligence. Every concept in the rest of this book —
-`Datasource`, `Knowledge`, `Pipeline`, `Reservation`, `Decision` — is an instance of this one idea; they
-are all cluster-scoped custom resources, catalogued in
-[Architecture at a glance](02-architecture-at-a-glance.md#everything-is-a-cluster-scoped-custom-resource).
+*Initial placement* refers to the first assignment of a workload to a target resource, such as binding a VM to a hypervisor, a volume to a storage backend when they are created.
+*Scheduling* is the subsequent, continuous process of reassessing and reallocating resources to maintain stability, balance utilization, and meet operational constraints and objectives.
 
-## Why a scheduling operator
+Cortex addresses these gaps in a unified system.
+It prioritizes simplicity, speed, and scale.
+Rather than pursuing globally optimal solutions via learning-based approaches or mixed-integer programming, which often require substantial computational resources and introduce additional system complexity, Cortex relies on algorithmic and heuristic logic that yields fast and approximate solutions sufficient in practice.
 
-A cloud platform's built-in scheduler (Nova for compute, Cinder for block storage, and so on) decides
-placement from the state it can cheaply observe at request time. That state is narrow: it rarely
-reflects historical load, cross-project commitments, hardware health trends, or capacity that is
-promised but not yet consumed. Encoding that richer picture into each platform scheduler is hard and
-couples policy to the platform.
+## Decision Model
 
-There is also a *fragmentation* problem. In a typical OpenStack cloud, placement intelligence is
-scattered across several independent schedulers — one inside Nova for compute, one inside Cinder for
-block storage, one inside Manila for shares, network-locality logic in Neutron. Each has its own
-extension mechanism, its own configuration surface, and its own copy of concerns that recur
-everywhere: how to weigh load, how to respect capacity commitments, how to keep related workloads
-together or apart. Improving placement means making the same change in several codebases, in several
-different ways — and cross-service objectives (placing a VM near the storage it will attach, spreading
-a tenant's resources across failure domains) have no single place to live at all.
+Scheduling decisions are based on two logical requirement classes.
 
-Cortex takes a different stance: it treats *placement intelligence* as its own concern, deployed
-beside the platform and shared across domains. The platform still owns the workload lifecycle — it
-boots and tracks the workload — while Cortex owns the placement decision: depending on the domain it
-either reorders the platform's candidates or selects the hosts itself, built from data the platform
-does not track (see [Architecture at a glance](02-architecture-at-a-glance.md#advise-or-own--it-depends-on-the-hypervisor-type)).
-Because the intelligence lives outside the platform, the same model serves
-compute, storage, bare metal, and Kubernetes pods, and generic scheduling logic (load balancing,
-anti-affinity) is written once and reused, while domain-specific logic is layered on top.
+**Filters** enforce hard constraints, such as hardware compatibility, affinity rules, and capacity limits, and reduce the set of valid placement candidates.
+Filters are applied first and ordered by cost and selectivity to minimize decision latency.
 
-The alternative — keep improving each platform's *own* scheduler and glue the results together — was
-weighed and set aside. A hybrid like that spreads the same concerns back across every service's extension
-mechanism, gives cross-service objectives nowhere central to live, and leaves each improvement to be
-re-implemented per platform. A single scheduling brain, external to the platforms, is what makes the
-shared logic and the cross-domain view possible at all.
+**Weighers** apply soft objectives, such as resource utilization and locality, by ordering the remaining candidates.
+Individual weighers may fail without risking valid placement, but this can lead to sub-optimal decisions.
 
-> [!NOTE]
-> Consolidating the logic in one operator is what makes *cross-domain* placement possible in
-> principle — reasoning about compute and storage together in a single decision. Today each domain is
-> scheduled independently; joint cross-domain scheduling is a future direction, not current behaviour.
+Filters and weighers are chained into **pipelines**, which are evaluated deterministically.
+Given identical input, a pipeline always yields reproducible results, which simplifies debugging, validation, and operational reasoning.
+Pipelines draw on a unified knowledge base that aggregates real-time infrastructure telemetry across domains.
 
-## The three components
+## Multi-Pipeline Architecture
 
-Cortex is delivered as three separately deployed components:
+Initial placement and scheduling must handle workloads with conflicting objectives.
+Within the SAP Cloud Infrastructure, for example, SAP S/4HANA workloads are bin-packed, general-purpose workloads are load-balanced, and high-availability workloads are scheduled to dedicated hosts.
+Implementing these strategies within a single decision path introduces complexity and reduces transparency.
 
-- **cortex core** — the `manager` binary (`cmd/manager`), packaged through the `cortex` library chart
-  and the per-domain bundles (`cortex-nova`, `cortex-cinder`, `cortex-manila`, `cortex-ironcore`,
-  `cortex-pods`). This runs the controllers, the knowledge pipeline, and the external scheduler API.
-- **cortex-postgres** — the datastore for ingested facts and derived knowledge, a custom Postgres
-  image rendered by the `cortex-postgres` library chart. See
-  [Postgres](06-postgres.md).
-- **cortex-shim** — the `shim` binary (`cmd/shim`), packaged through the `cortex-shim` library and the
-  `cortex-placement-shim` bundle, presenting an OpenStack Placement-API-compatible surface. See
-  [The Placement API shim](../03-reservations-and-inventory/05-placement-api-shim.md).
+Cortex addresses this through a multi-pipeline architecture.
+Workloads are organized into logical groups based on their dominant scheduling objective, and each group is managed by a dedicated pipeline.
+Filters and weighers are reusable and composable across pipelines, implemented once and instantiated per pipeline, each operating without shared state.
+Pipelines are intentionally kept short and explicit to ensure maintainability and traceability of scheduling decisions.
 
-The next page, [Architecture at a glance](02-architecture-at-a-glance.md), explains how one binary
-serves every domain and how its custom resources and controllers fit together.
+## Resource Reservations
+
+Cortex handles both commitment reservations for long-term customers and failover capacity for high-availability scenarios.
+Both are treated as active workloads using the same pipeline logic, avoiding duplication of scheduling logic.
+
+**Commitment reservations** model customer commitments per flavor group using tokens.
+Each token initially reserves capacity equal to the maximum flavor of the group.
+Cortex uses the largest-fit algorithm to preserve guarantees while minimizing fragmentation.
+
+**Failover reservations** ensure that sufficient capacity is available to restart VMs when a host fails.
+Failover slots are reserved atomically at placement time, ahead of actual failover events, and are shared among eligible VMs.
+The number of tolerated host failures is configurable per flavor group.
+
+Cortex acts as the central authority for capacity management and serves as the basis for capacity forecasting and hardware delivery planning.
+
+## Implementation
+
+Cortex is implemented as a Kubernetes-native system with a declarative design.
+Core abstractions such as pipelines and scheduling decisions are defined as Custom Resource Definitions (CRDs).
+State and configuration are managed through Kubernetes objects, enabling idempotent reconciliation.
+This allows operators to inspect, debug, manage, and extend Cortex with standard Kubernetes tooling, and avoids introducing proprietary APIs or hiding relevant state and audit details in databases.
+
+Cortex is open source under the Apache license.
+
+## The end-to-end flow
+
+Everything Cortex does follows one arc: raw facts become knowledge, knowledge feeds pipelines, and
+pipelines emit decisions the platform acts on.
+
+```mermaid
+flowchart LR
+    subgraph DB[Knowledge Database]
+        K8S[Kubernetes]
+        OS[OpenStack APIs]
+        PM[Prometheus]
+    end
+    K[Knowledge extractors]
+    RES[Reservations]
+    WORK[Workloads]
+
+    subgraph PIPE[Pipeline]
+        F[Filters]
+        W[Weighers]
+    end
+
+    IP[Initial placement]
+    SC[Scheduler]
+    PLAT[Platform]
+
+    K8S & OS & PM --> K
+    K --> PIPE
+    K --> KPI[KPIs → Prometheus]
+    RES --> PIPE
+    WORK --> PIPE
+    PIPE --> IP
+    PIPE --> SC
+    IP -->|ordered hosts| PLAT
+    SC -->|migration decisions| PLAT
+```
+
+1. **Datasources** pull raw facts from Kubernetes, APIs, and Prometheus and persist them in Kubernetes. See
+   [Datasources](../04-knowledge-database/02-datasources.md).
+2. **Knowledge extractors** turn those raw rows into features — the reusable, query-ready facts a
+   pipeline step consumes. See [Feature extraction](../04-knowledge-database/03-feature-extraction.md).
+3. **Reservations** hold resource capacity that is allocated in advance, such as customer commitments, failover headroom, and in-flight placements — so a pipeline treats reserved space as unavailable
+   even before a workload lands on it. See
+   [Reservations overview](../03-reservations-and-inventory/01-reservations-overview.md).
+4. **Workloads** are the entities being scheduled, such as VMs, volumes, bare-metal nodes, and more. Both
+   initial placement and continuous scheduling decisions are made on their behalf.
+5. **Pipelines** consist of Filters and Weighers and provide a declarative and composable way to configure hard constraints and soft objectives. See
+   [The scheduling engine](../02-external-scheduler-api/01-the-scheduling-engine.md).
+6. **KPIs** publish knowledge as Prometheus metrics for dashboards and alerting. See
+   [KPIs and the Metrics API](../04-knowledge-database/04-kpis-and-metrics-api.md).
+
+This arc *is* Cortex — every feature chapter in this book slots into one of its stages. Chapter 2
+covers the pipelines and the scheduler API; Chapter 3 covers reservations and inventory; Chapter 4
+covers the datasource-to-KPI knowledge database. Keep the diagram above in mind as a map: whenever a
+later page introduces a component, locate it on the arc first.
 
 ## Cortex in the CobaltCore ecosystem
 
@@ -111,61 +155,6 @@ In short: Cortex reaches down into the imperative OpenStack world to gather stat
 placement, and reaches up into the cloud-native CobaltCore/ApeiroRA ecosystem that consumes its
 decisions.
 
-## The end-to-end flow
-
-Everything Cortex does follows one arc: raw facts become knowledge, knowledge feeds pipelines, and
-pipelines emit decisions the platform acts on.
-
-```mermaid
-flowchart LR
-    subgraph sources[Datasources]
-        OS[OpenStack APIs]
-        PM[Prometheus]
-    end
-    DB[(Postgres)]
-    K[Knowledge extractors]
-    subgraph pipe[Pipelines]
-        FW[Filter-weigher pipeline]
-        DET[Detector pipeline]
-    end
-    RES[Reservations / capacity]
-    DEC[Decision / Descheduling]
-    PLAT[Platform scheduler]
-
-    OS --> DB
-    PM --> DB
-    DB --> K
-    K --> FW
-    K --> DET
-    RES -->|reserved capacity| FW
-    PLAT -->|placement request| FW
-    FW -->|ordered hosts| PLAT
-    FW --> DEC
-    DET --> DEC
-    K --> KPI[KPIs → Prometheus]
-```
-
-1. **Datasources** pull raw facts from OpenStack APIs and Prometheus into Postgres. See
-   [Datasources](../04-knowledge-database/02-datasources.md).
-2. **Knowledge extractors** turn those raw rows into features — the reusable, query-ready facts a
-   pipeline step consumes. See [Feature extraction](../04-knowledge-database/03-feature-extraction.md).
-3. **Reservations** hold capacity that is promised but not yet consumed — customer commitments,
-   failover headroom, and in-flight placements — so a pipeline treats reserved space as unavailable
-   even before a workload lands on it. See
-   [Reservations overview](../03-reservations-and-inventory/01-reservations-overview.md).
-4. **Filter-weigher pipelines** answer a live placement request: filters remove unsuitable hosts,
-   weighers score the survivors, and the platform receives a re-ordered candidate list. See
-   [The scheduling engine](../02-external-scheduler-api/01-the-scheduling-engine.md).
-5. **Detector pipelines** run on a schedule to spot already-placed workloads that should move, emitting
-   descheduling recommendations.
-6. **KPIs** publish knowledge as Prometheus metrics for dashboards and alerting. See
-   [KPIs and the Metrics API](../04-knowledge-database/04-kpis-and-metrics-api.md).
-
-This arc *is* Cortex — every feature chapter in this book slots into one of its stages. Chapter 2
-covers the pipelines and the scheduler API; Chapter 3 covers reservations and inventory; Chapter 4
-covers the datasource-to-KPI knowledge database. Keep the diagram above in mind as a map: whenever a
-later page introduces a component, locate it on the arc first.
-
 ## Next
 
-[Prev: Chapter 1 — Getting started](readme.md) · [Next: Architecture at a glance »](02-architecture-at-a-glance.md)
+[Prev: Chapter 1 - Getting started](readme.md) · [Next: Architecture at a glance »](02-architecture-at-a-glance.md)
