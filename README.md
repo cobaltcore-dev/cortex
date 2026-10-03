@@ -7,7 +7,7 @@
 Cortex
 ======
 [![REUSE status](https://api.reuse.software/badge/github.com/cobaltcore-dev/cortex)](https://api.reuse.software/info/github.com/cobaltcore-dev/cortex)
-<a href="https://github.com/cobaltcore-dev/cortex"><img align="left" width="190" height="190" src="./docs/assets/Cortex_Logo_black_space_square_bg_rd@2x.png"></a>
+<a href="https://github.com/cobaltcore-dev/cortex"><img align="left" width="180" height="180" src="./docs/assets/Cortex_Logo_black_space_square_bg_rd@2x.png"></a>
 
 Cortex is a modular and extensible service for initial placement and scheduling in cloud-native environments covering workloads such as compute, storage, network, and other scheduling domains.
 It improves resource utilization and operational performance by making smart placement decisions based on the current state of the environment and defined constraints and objectives.
