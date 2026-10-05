@@ -512,6 +512,12 @@ func (c *Overlay) Get(ctx context.Context, key client.ObjectKey, obj client.Obje
 		return err
 	}
 	if e.deleted {
+		// Clear fields that the inner Get may have written onto obj before the tombstone check.
+		// If we return NotFound with a stale ResourceVersion, controllerutil.CreateOrUpdate takes
+		// the Create path and the apiserver rejects: "resourceVersion should not be set on objects
+		// to be created". Clearing UID is analogous hygiene.
+		obj.SetResourceVersion("")
+		obj.SetUID("")
 		return apierrors.NewNotFound(schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind}, key.Name)
 	}
 	// Live overlay entry: copy it into obj, overriding the inner result.
