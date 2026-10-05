@@ -18,8 +18,15 @@ alerts:
   enabled: true
   prometheus: openstack
   thresholds:
-    # Memory threshold for CortexNovaHighMemoryUsage in MiB.
-    highMemoryMiB: 6000
+    # Fraction of each pod's configured container memory limit above which
+    # CortexNovaHighMemoryUsage fires. The alert joins process_resident_memory_bytes
+    # against kube_pod_container_resource_limits per pod, so it stays correct
+    # across per-region limit overrides (2Gi/4Gi/8Gi) without hand-maintained
+    # MiB values. 0.8 = 80% of the limit.
+    highMemoryFraction: 0.8
+    # Fraction of each pod's configured container CPU limit above which
+    # CortexNovaHighCPUUsage fires. Mirrors highMemoryFraction. 0.8 = 80% of the limit.
+    highCPUFraction: 0.8
     # Reconcile-duration threshold for CortexNovaReconcileDurationHigher10Min in seconds.
     reconcileDurationSeconds: 600
     # High-watermark of cache overlay entries above which
