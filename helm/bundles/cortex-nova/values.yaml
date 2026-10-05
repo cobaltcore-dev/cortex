@@ -329,6 +329,8 @@ cortex-scheduling-controllers:
     useFlavorGroupResources: false
     # How often the commitments syncer reconciles Limes commitments to Reservation CRDs
     committedResourceSyncInterval: "1h"
+    # Delete CommittedResource CRDs that are present locally but absent from Limes.
+    deleteStaleCRs: true
 
 cortex-knowledge-controllers:
   <<: *cortex

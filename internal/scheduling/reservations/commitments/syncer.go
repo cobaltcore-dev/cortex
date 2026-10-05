@@ -37,6 +37,9 @@ type SyncerConfig struct {
 	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
 	// SyncInterval defines how often the syncer reconciles Limes commitments to Reservation CRDs.
 	SyncInterval metav1.Duration `json:"committedResourceSyncInterval"`
+	// DeleteStaleCRs enables automatic deletion of CommittedResource CRDs that are present locally
+	// but absent from Limes. When false (default) stale CRDs are counted and logged but not removed.
+	DeleteStaleCRs bool `json:"deleteStaleCRs,omitempty"`
 	// FlavorGroupResourceConfig maps flavor group names to resource configs; "*" acts as catch-all.
 	// Not read from JSON — populated by the caller from the shared APIConfig.
 	FlavorGroupResourceConfig map[string]FlavorGroupResourcesConfig
@@ -322,7 +325,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		}
 		return err
 	}
-	staleCRCount, gcDeleted := 0, 0
+	staleCRCount, gcDeleted, staleDeleted := 0, 0, 0
 	for i := range existingCRs.Items {
 		cr := &existingCRs.Items[i]
 		if cr.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
@@ -330,7 +333,19 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		}
 		isExpired := cr.Spec.EndTime != nil && !cr.Spec.EndTime.After(time.Now())
 		if !activeCommitments[cr.Spec.CommitmentUUID] && !isExpired {
-			staleCRCount++
+			if s.resourceConfig.DeleteStaleCRs {
+				if err := s.Delete(ctx, cr); client.IgnoreNotFound(err) != nil {
+					logger.Error(err, "failed to delete stale committed resource CRD", "name", cr.Name)
+					return err
+				}
+				logger.Info("deleted stale committed resource CRD",
+					"name", cr.Name, "commitmentUUID", cr.Spec.CommitmentUUID)
+				staleDeleted++
+			} else {
+				logger.Info("stale committed resource CRD: present locally but absent from Limes",
+					"name", cr.Name, "commitmentUUID", cr.Spec.CommitmentUUID)
+				staleCRCount++
+			}
 		}
 		if isExpired {
 			if err := s.Delete(ctx, cr); client.IgnoreNotFound(err) != nil {
@@ -385,6 +400,9 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		if gcDeleted > 0 {
 			s.monitor.RecordCRDeletes(gcDeleted)
 		}
+		if staleDeleted > 0 {
+			s.monitor.RecordCRStaleDeletes(staleDeleted)
+		}
 	}
 
 	if staleCRCount > 0 {
@@ -398,6 +416,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		"created", totalCreated,
 		"updated", totalUpdated,
 		"staleCRs", staleCRCount,
+		"staleDeleted", staleDeleted,
 		"expiredCRsGCd", gcDeleted,
 		"orphanReservationsDeleted", totalReservationDeleted)
 	return nil
