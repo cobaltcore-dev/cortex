@@ -29,6 +29,7 @@ func mockKVMHostLabels(host, az string) map[string]string {
 		"external_customer": "false",
 		"maintenance":       "false",
 		"os_version":        "unknown",
+		"status":            "unknown",
 	}
 }
 
@@ -136,7 +137,7 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 			host: kvmHost{hv1.Hypervisor{
 				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
 			}},
-			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false"},
+			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false", "unknown", "unknown"},
 		},
 		{
 			name: "availability zone from label",
@@ -146,14 +147,14 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 					Labels: map[string]string{"topology.kubernetes.io/zone": "az1"},
 				},
 			}},
-			want: []string{"node001-bb01", "az1", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false"},
+			want: []string{"node001-bb01", "az1", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false", "unknown", "unknown"},
 		},
 		{
 			name: "name without dash results in unknown building block",
 			host: kvmHost{hv1.Hypervisor{
 				ObjectMeta: metav1.ObjectMeta{Name: "nodewithoutdash"},
 			}},
-			want: []string{"nodewithoutdash", "unknown", "unknown", "cascade-lake", "general-purpose", "true", "false", "false", "false"},
+			want: []string{"nodewithoutdash", "unknown", "unknown", "cascade-lake", "general-purpose", "true", "false", "false", "false", "unknown", "unknown"},
 		},
 		{
 			name: "sapphire rapids trait",
@@ -161,7 +162,7 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
 				Status:     hv1.HypervisorStatus{Traits: []string{"CUSTOM_HW_SAPPHIRE_RAPIDS"}},
 			}},
-			want: []string{"node001-bb01", "unknown", "bb01", "sapphire-rapids", "general-purpose", "true", "false", "false", "false"},
+			want: []string{"node001-bb01", "unknown", "bb01", "sapphire-rapids", "general-purpose", "true", "false", "false", "false", "unknown", "unknown"},
 		},
 		{
 			name: "hana exclusive host trait",
@@ -169,7 +170,7 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
 				Status:     hv1.HypervisorStatus{Traits: []string{"CUSTOM_HANA_EXCLUSIVE_HOST"}},
 			}},
-			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "hana", "true", "false", "false", "false"},
+			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "hana", "true", "false", "false", "false", "unknown", "unknown"},
 		},
 		{
 			name: "decommissioning trait",
@@ -177,7 +178,7 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
 				Status:     hv1.HypervisorStatus{Traits: []string{"CUSTOM_DECOMMISSIONING"}},
 			}},
-			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "true", "false", "false"},
+			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "true", "false", "false", "unknown", "unknown"},
 		},
 		{
 			name: "external customer exclusive trait",
@@ -185,7 +186,7 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
 				Status:     hv1.HypervisorStatus{Traits: []string{"CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE"}},
 			}},
-			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "true", "false"},
+			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "true", "false", "unknown", "unknown"},
 		},
 		{
 			name: "maintenance set",
@@ -193,7 +194,7 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
 				Spec:       hv1.HypervisorSpec{Maintenance: hv1.MaintenanceManual},
 			}},
-			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "true"},
+			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "true", "unknown", "unknown"},
 		},
 		{
 			name: "all traits and maintenance set",
@@ -210,7 +211,7 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 					"CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE",
 				}},
 			}},
-			want: []string{"node001-bb42", "az3", "bb42", "sapphire-rapids", "hana", "true", "true", "true", "true"},
+			want: []string{"node001-bb42", "az3", "bb42", "sapphire-rapids", "hana", "true", "true", "true", "true", "unknown", "unknown"},
 		},
 		{
 			name: "os version set",
@@ -218,7 +219,31 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
 				Status:     hv1.HypervisorStatus{OperatingSystem: hv1.OperatingSystemStatus{Version: "1.1.1"}},
 			}},
-			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false", "1.1.1"},
+			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false", "1.1.1", "unknown"},
+		},
+		{
+			name: "status from ready condition reason",
+			host: kvmHost{hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
+				Status: hv1.HypervisorStatus{Conditions: []metav1.Condition{{
+					Type:   hv1.ConditionTypeReady,
+					Status: metav1.ConditionTrue,
+					Reason: hv1.ConditionReasonReadyReady,
+				}}},
+			}},
+			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false", "unknown", "Ready"},
+		},
+		{
+			name: "status from maintenance ready condition reason",
+			host: kvmHost{hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{Name: "node001-bb01"},
+				Status: hv1.HypervisorStatus{Conditions: []metav1.Condition{{
+					Type:   hv1.ConditionTypeReady,
+					Status: metav1.ConditionFalse,
+					Reason: hv1.ConditionReasonReadyMaintenance,
+				}}},
+			}},
+			want: []string{"node001-bb01", "unknown", "bb01", "cascade-lake", "general-purpose", "true", "false", "false", "false", "unknown", "Maintenance"},
 		},
 	}
 
@@ -227,6 +252,9 @@ func TestKVMHost_GetHostLabels(t *testing.T) {
 			got := tt.host.getHostLabels()
 			if len(got) != len(kvmHostLabels) {
 				t.Fatalf("getHostLabels() returned %d values, want %d (matching kvmHostLabels)", len(got), len(kvmHostLabels))
+			}
+			if len(tt.want) != len(kvmHostLabels) {
+				t.Fatalf("want has %d values, expected %d (every label must be asserted)", len(tt.want), len(kvmHostLabels))
 			}
 			for i, want := range tt.want {
 				if got[i] != want {

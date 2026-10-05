@@ -17,6 +17,9 @@ outputs:
   review_command:
     description: "Command prompt for review"
     value: ${{ steps.parse.outputs.review_command }}
+  review_except_branches:
+    description: "CSV of base-branch glob patterns exempt from review"
+    value: ${{ steps.parse.outputs.review_except_branches }}
   bugfinder_active:
     description: "true when the bugfinder is enabled"
     value: ${{ steps.parse.outputs.bugfinder_active }}
@@ -76,6 +79,7 @@ runs:
             echo "review_active=false"
             echo "review_model=${DEFAULT_MODEL}"
             echo "review_command=/cortex-agents:review"
+            echo "review_except_branches="
             echo "bugfinder_active=false"
             echo "bugfinder_model=${DEFAULT_MODEL}"
             echo "bugfinder_command=/cortex-agents:bugfinder"
@@ -133,6 +137,7 @@ runs:
           echo "review_active=$(boolean '.review.active')"
           echo "review_model=$(get '.review.model' "${DEFAULT_MODEL}")"
           echo "review_command=$(get '.review.command' '/cortex-agents:review')"
+          echo "review_except_branches=$(csv '.review.except.branches' '')"
           echo "bugfinder_active=$(boolean '.bugfinder.active')"
           echo "bugfinder_model=$(get '.bugfinder.model' "${DEFAULT_MODEL}")"
           echo "bugfinder_command=$(get '.bugfinder.command' '/cortex-agents:bugfinder')"

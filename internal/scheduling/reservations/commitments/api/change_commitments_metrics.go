@@ -18,9 +18,12 @@ func (api *HTTPAPI) recordMetrics(req liquid.CommitmentChangeRequest, resp liqui
 	dryRunStr := strconv.FormatBool(req.DryRun)
 
 	result := "accepted"
-	if statusCode != http.StatusOK {
+	switch {
+	case statusCode == http.StatusBadRequest:
+		result = "bad_request"
+	case statusCode != http.StatusOK:
 		result = "error"
-	} else if resp.RejectionReason != "" {
+	case resp.RejectionReason != "":
 		result = "rejected"
 	}
 

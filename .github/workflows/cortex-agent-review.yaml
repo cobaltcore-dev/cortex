@@ -66,20 +66,23 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
 
-            Please review this pull request with a focus on:
-            - Code quality and best practices
-            - Potential bugs or issues
-            - Security implications
-            - Performance considerations
+            Review this pull request for CRITICAL issues only. Report only:
+            - Correctness bugs (wrong logic, off-by-one errors, incorrect assumptions)
+            - Security vulnerabilities (injection, auth bypass, insecure handling of secrets/credentials)
+            - Data loss or corruption risks
+            - Resource or goroutine leaks
+            - Concurrency hazards (races, deadlocks)
+            - Clear breaking changes to public APIs or contracts
+
+            DO NOT comment on: style, naming, formatting, minor refactors, idiom preferences,
+            "consider" suggestions, documentation, test coverage, or anything that is a matter
+            of opinion. Absolutely no nits. If there are no critical issues, post nothing at all.
 
             Note: The PR branch is already checked out in the current working directory.
 
-            Consider comments that have already been posted on this PR. Use
-            `gh pr view <PR> --json comments` and `gh api` to inspect existing
-            review and inline comments before writing anything. Do not repeat,
-            restate, or duplicate feedback that is already there. If everything
-            worth raising has already been covered, or the PR looks good, DO NOT
-            post any comment.
+            Check existing comments first — use `gh pr view <PR> --json comments` and `gh api`
+            to inspect existing review and inline comments. Do not repeat or duplicate feedback
+            that is already there. If everything critical has already been covered, post nothing.
 
             Use `gh pr comment` for top-level feedback.
             Use `mcp__github_inline_comment__create_inline_comment` (with `confirmed: true`) to highlight specific code issues.
