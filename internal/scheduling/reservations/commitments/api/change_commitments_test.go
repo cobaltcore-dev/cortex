@@ -157,7 +157,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 				}
 				return &cfg
 			}(),
-			ExpectedAPIResponse: newAPIResponse("internal error on commitment uuid-timeout"),
+			ExpectedAPIResponse: APIResponseExpectation{StatusCode: http.StatusInternalServerError},
 			ExpectedDeletedCRs:  []string{"commitment-uuid-timeout"},
 		},
 		// --- Input validation ---
@@ -166,7 +166,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 			Flavors: []*TestFlavor{m1Small},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
 				createCommitment("hw_version_hana_1_ram", "project-A", strings.Repeat("x", 50), "confirmed", 2)),
-			ExpectedAPIResponse: newAPIResponse("internal error on commitment"),
+			ExpectedAPIResponse: APIResponseExpectation{StatusCode: http.StatusInternalServerError},
 			ExpectedDeletedCRs:  []string{"commitment-" + strings.Repeat("x", 50)},
 		},
 		{
@@ -174,7 +174,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 			Flavors: []*TestFlavor{m1Small},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
 				createCommitment("hw_version_nonexistent_ram", "project-A", "uuid-unk", "confirmed", 2)),
-			ExpectedAPIResponse: newAPIResponse("internal error processing request"),
+			ExpectedAPIResponse: APIResponseExpectation{StatusCode: http.StatusInternalServerError},
 		},
 		// --- validateChangeRequest: Rule 1 ---
 		{
@@ -459,7 +459,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-pva", "confirmed", 2),
 				createCommitment("hw_version_nonexistent_ram", "project-B", "uuid-pvb", "confirmed", 2),
 			),
-			ExpectedAPIResponse: newAPIResponse("internal error processing request"),
+			ExpectedAPIResponse: APIResponseExpectation{StatusCode: http.StatusInternalServerError},
 			ExpectedDeletedCRs:  []string{"commitment-uuid-pva"},
 		},
 	}
