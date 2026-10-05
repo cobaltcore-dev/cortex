@@ -18,16 +18,16 @@ const (
 
 // SyncerMonitor provides metrics for the commitment syncer.
 type SyncerMonitor struct {
-	syncErrors             prometheus.Counter
-	syncDuration           prometheus.Histogram
-	limesCommitmentsActive prometheus.Gauge
-	staleCRs               prometheus.Gauge
-	commitmentsSkipped     *prometheus.CounterVec
-	crCreates                    prometheus.Counter
-	crUpdates                    prometheus.Counter
-	crDeletes                    prometheus.Counter
-	crStaleDeletes               prometheus.Counter
-	orphanReservationDeletes     prometheus.Counter
+	syncErrors               prometheus.Counter
+	syncDuration             prometheus.Histogram
+	limesCommitmentsActive   prometheus.Gauge
+	staleCRs                 prometheus.Gauge
+	commitmentsSkipped       *prometheus.CounterVec
+	crCreates                prometheus.Counter
+	crUpdates                prometheus.Counter
+	crDeletes                prometheus.Counter
+	crStaleDeletes           prometheus.Counter
+	orphanReservationDeletes prometheus.Counter
 }
 
 // NewSyncerMonitor creates a new monitor with Prometheus metrics.
