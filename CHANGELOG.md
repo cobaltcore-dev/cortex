@@ -1,5 +1,90 @@
 # Changelog
 
+## 2026-10-05 — [#1295](https://github.com/cobaltcore-dev/cortex/pull/1295)
+
+### cortex 0.6.0
+
+#### 🚀 Features
+
+- **KVM host status label** — Added a status label to KVM hosts and updated tests for condition reasons. (#1277 — @SoWieMarkus)
+- **Failover capacity alert** — Added a missing alert for failover capacity. (#1283 — @umswmayj)
+
+#### 🐛 Bug Fixes
+
+- **Change-commitments error responses & alert classification** — Internal error details (K8s errors, cluster selectors, scheduler internals) no longer leak to callers via `RejectionReason`; full detail stays in logs only. Bad AZ (`NoClusterMatchedError`) now returns HTTP 400 with a clear message. New `result="bad_request"` metric label separates caller mistakes from capacity rejections and internal errors; alert rules updated accordingly. (#1284 — @mblos)
+- **AllowedProjects filter respects tenant pinning for failover intents** — Failover intents (`reserve_for_failover`, `reuse_failover_reservation`) no longer bypass the `AllowedProjects` check. Only `capacity_probe` intents skip tenant pinning, preventing dead-weight reservations. (#1244 — @cortex-ai-agents[bot] & Claude)
+- **CR API status code fix** — Corrected status code handling in the committed-resource API. (#1289 — @mblos)
+
+#### 📖 Documentation
+
+- **Full documentation rewrite** — Comprehensive rewrite of Cortex documentation covering architecture, scheduling, reservations, knowledge database, hypervisor lifecycle, and the Cortex library. New textbook-style structure across 6 sections with clear getting-started, API, and contribution guides. (#1221 — @PhilippMatthes)
+- **VRAM note correction** — Fixed an inaccurate `[!NOTE]` block in committed-resource reservations docs that incorrectly stated VRAM is never subtracted in sizing/placement. (#1294 — @cortex-ai-agents[bot] & Claude)
+- **README & SECURITY.md updates** — Reworked Cortex description in README, added missing `SECURITY.md`, and resized key figures. (@auhlig)
+
+#### ⚙️ CI / Infrastructure
+
+- **Cortex Agents: fix release gating, review noise, and release-start comment** — Release-gate switched to `pull_request_target`, review agent prompt rewritten to only flag critical issues, and new PR comment signals when the release workflow starts. (#1280 — @PhilippMatthes)
+
+#### 📦 Dependency Updates
+
+- `sigs.k8s.io/controller-runtime` `v0.25.1` → `v0.25.2` (#1279)
+- `github.com/sapcc/go-bits` digest `e0aa5c6` → `e86369b` (#1278)
+
+### cortex-shim 0.1.24, cortex-placement-shim 0.1.24
+
+- Bumped in lockstep with cortex 0.6.0; no shim-specific changes.
+
+### cortex-nova 0.0.98, cortex-cinder 0.0.98, cortex-manila 0.0.98, cortex-crds 0.0.98, cortex-ironcore 0.0.98, cortex-pods 0.0.98
+
+- Helm chart app version bumps (#1276, #1286, #1291); no plugin-specific changes.
+
+**Full diff:** [PR #1295](https://github.com/cobaltcore-dev/cortex/pull/1295) — 20 commits · 91 files changed · +6,063 / −1,975 lines
+
+## 2026-10-01 — [#1273](https://github.com/cobaltcore-dev/cortex/pull/1273)
+
+### cortex v0.5.1 (sha-7a1440e9)
+
+Non-breaking changes:
+- Automated app version bump — image SHA advanced from `sha-e1dafe4f` to `sha-7a1440e9` after the 0.5.0 release ([#1272](https://github.com/cobaltcore-dev/cortex/pull/1272))
+
+### cortex-shim v0.1.23
+
+Non-breaking changes:
+- Shared binary rebuild with updated dependencies
+
+### cortex-postgres v0.6.20
+
+Non-breaking changes:
+- Chart version bump with no functional changes
+
+### cortex-placement-shim v0.1.23
+
+Includes updated chart cortex-shim v0.1.23.
+
+### cortex-nova v0.0.97
+
+Includes updated charts cortex v0.5.1 and cortex-postgres v0.6.20.
+
+### cortex-cinder v0.0.97
+
+Includes updated charts cortex v0.5.1 and cortex-postgres v0.6.20.
+
+### cortex-manila v0.0.97
+
+Includes updated charts cortex v0.5.1 and cortex-postgres v0.6.20.
+
+### cortex-crds v0.0.97
+
+Includes updated chart cortex v0.5.1.
+
+### cortex-ironcore v0.0.97
+
+Includes updated chart cortex v0.5.1.
+
+### cortex-pods v0.0.97
+
+Includes updated chart cortex v0.5.1.
+
 ## 2026-10-01 — [#1263](https://github.com/cobaltcore-dev/cortex/pull/1263)
 
 ### cortex v0.5.0

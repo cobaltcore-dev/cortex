@@ -68,6 +68,7 @@ jobs:
       review_active: ${{ steps.parse.outputs.review_active }}
       review_model: ${{ steps.parse.outputs.review_model }}
       review_command: ${{ steps.parse.outputs.review_command }}
+      review_except_branches: ${{ steps.parse.outputs.review_except_branches }}
       bugfinder_active: ${{ steps.parse.outputs.bugfinder_active }}
       bugfinder_model: ${{ steps.parse.outputs.bugfinder_model }}
       bugfinder_command: ${{ steps.parse.outputs.bugfinder_command }}
@@ -108,7 +109,7 @@ jobs:
     permissions:
       contents: read
     outputs:
-      allowed: ${{ steps.check.outputs.allowed }}
+      allowed: ${{ steps.gate.outputs.allowed }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -121,6 +122,27 @@ jobs:
         with:
           allowlist: ${{ needs.config.outputs.allowlist }}
           login: ${{ github.event.pull_request.user.login || github.event.comment.user.login }}
+      # Exempt release-base PRs (and anything else in review.except.branches) from
+      # review, so the review and release agents don't both run on a release PR.
+      - id: gate
+        env:
+          ALLOWED: ${{ steps.check.outputs.allowed }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PATTERNS: ${{ needs.config.outputs.review_except_branches }}
+        run: |
+          allowed="${ALLOWED}"
+          if [ "${allowed}" = "true" ] && [ -n "${BASE_REF}" ] && [ -n "${PATTERNS}" ]; then
+            IFS=',' read -ra pats <<< "${PATTERNS}"
+            for pat in "${pats[@]}"; do
+              pat="$(echo "$pat" | xargs)"
+              # Unquoted $pat on purpose: patterns like release/* must glob-match.
+              # shellcheck disable=SC2254
+              case "${BASE_REF}" in
+                $pat) allowed=false; break ;;
+              esac
+            done
+          fi
+          echo "allowed=${allowed}" >> "$GITHUB_OUTPUT"
 
   review:
     needs: [config, review-gate]
@@ -245,33 +267,58 @@ jobs:
 
   release-gate:
     needs: config
-    if: needs.config.outputs.release_active == 'true' && github.event_name == 'pull_request'
+    if: needs.config.outputs.release_active == 'true' && github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      pull-requests: write
     outputs:
-      matched: ${{ steps.match.outputs.matched }}
+      should_run: ${{ steps.gate.outputs.should_run }}
     steps:
-      - id: match
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .cortex-agent
+          sparse-checkout: .github/actions
+      - id: check
+        uses: ./.cortex-agent/.github/actions/check-allowlist
+        with:
+          allowlist: ${{ needs.config.outputs.allowlist }}
+          login: ${{ github.event.pull_request.user.login }}
+      - id: gate
         env:
+          ALLOWED: ${{ steps.check.outputs.allowed }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           PATTERNS: ${{ needs.config.outputs.release_branches }}
         run: |
-          matched=false
-          IFS=',' read -ra pats <<< "${PATTERNS}"
-          for pat in "${pats[@]}"; do
-            pat="$(echo "$pat" | xargs)"
-            # Unquoted $pat on purpose: patterns like release/* must glob-match.
-            # shellcheck disable=SC2254
-            case "${BASE_REF}" in
-              $pat) matched=true; break ;;
-            esac
-          done
-          echo "matched=${matched}" >> "$GITHUB_OUTPUT"
+          should_run=false
+          if [ "${ALLOWED}" = "true" ]; then
+            IFS=',' read -ra pats <<< "${PATTERNS}"
+            for pat in "${pats[@]}"; do
+              pat="$(echo "$pat" | xargs)"
+              # Unquoted $pat on purpose: patterns like release/* must glob-match.
+              # shellcheck disable=SC2254
+              case "${BASE_REF}" in
+                $pat) should_run=true; break ;;
+              esac
+            done
+          fi
+          echo "should_run=${should_run}" >> "$GITHUB_OUTPUT"
+      - name: Post release-triggered comment
+        if: steps.gate.outputs.should_run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh pr comment "${PR_NUMBER}" \
+            --repo "${REPO}" \
+            --body "🚀 **Release workflow triggered** — the release agent is preparing the release for this PR."
 
   release:
     needs: [config, release-gate]
-    if: needs.release-gate.outputs.matched == 'true'
+    if: needs.release-gate.outputs.should_run == 'true'
     uses: ./.github/workflows/cortex-agent-release.yaml
     secrets:
       AICORE_RESOURCE_GROUP: ${{ secrets.AICORE_RESOURCE_GROUP }}
