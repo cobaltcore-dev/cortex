@@ -121,7 +121,7 @@ spec:
       expr: |
         process_resident_memory_bytes{service="cortex-nova-metrics"}
           > on (pod) group_left ()
-            {{ .Values.alerts.thresholds.highMemoryFraction }} * kube_pod_container_resource_limits{resource="memory", container="manager", pod=~"cortex-nova-.*"}
+            ({{ .Values.alerts.thresholds.highMemoryFraction }} * kube_pod_container_resource_limits{resource="memory", container="manager", pod=~"cortex-nova-.*"})
       for: 5m
       labels:
         context: memory
@@ -147,7 +147,7 @@ spec:
       expr: |
         rate(process_cpu_seconds_total{service="cortex-nova-metrics"}[1m])
           > on (pod) group_left ()
-            {{ .Values.alerts.thresholds.highCPUFraction }} * kube_pod_container_resource_limits{resource="cpu", container="manager", pod=~"cortex-nova-.*"}
+            ({{ .Values.alerts.thresholds.highCPUFraction }} * kube_pod_container_resource_limits{resource="cpu", container="manager", pod=~"cortex-nova-.*"})
       for: 5m
       labels:
         context: cpu
