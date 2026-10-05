@@ -42,10 +42,11 @@ That split is why memory and CPU commitments behave differently at scheduling ti
   drive billing, but do not hold a specific place on a specific host.
 
 > [!NOTE]
-> Slot sizing and placement use a flavor's *usable* RAM throughout — the nominal memory minus the small
-> VRAM carve-out (`hw_video:ram_max_mb`, typically 16 MiB). VRAM is never subtracted or added in sizing or
-> placement; the one place it reappears is Nova usage reporting, which adds it back so a VM's reported slot
-> count matches its nominal flavor.
+> Slot sizing uses the flavor's *usable* RAM — nominal memory minus the VRAM carve-out
+> (`hw_video:ram_max_mb`, typically 16 MiB). Because commitment deltas from Limes are in nominal bytes
+> while slot sizes are in usable bytes, the VRAM gap is correctly accounted for: a commitment whose
+> nominal size equals exactly one flavor's nominal memory produces exactly one slot, not one-plus-remainder.
+> Nova usage reporting adds VRAM back so a VM's reported slot count matches its nominal flavor.
 
 ### Nova as the source of truth for group membership
 
