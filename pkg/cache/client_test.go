@@ -848,6 +848,38 @@ func TestGetNotFoundWithNoOverlay(t *testing.T) {
 	}
 }
 
+func TestGetTombstoneDoesNotLeakResourceVersion(t *testing.T) {
+	// Pre-populate the inner fake with a Reservation that has a real ResourceVersion and UID.
+	r := newReservation("res-a", "az-1", "42")
+	inner := newTestClient(t, r)
+	c := newCaching(t, inner)
+
+	// Add the tombstone directly rather than via Delete: Delete also removes the object from the
+	// fake inner client, which eliminates the informer-lag condition we need to exercise. By calling
+	// tombstone() directly we simulate the real scenario: the API server has deleted the object
+	// (tombstone recorded), but the informer-backed inner client has not yet propagated the event.
+	c.tombstone(reservationGVK(), r)
+
+	// Simulate what controllerutil.CreateOrUpdate does: Get with a freshly-constructed object.
+	var got v1alpha1.Reservation
+	got.Name = "res-a"
+	err := c.Get(context.Background(), types.NamespacedName{Name: "res-a"}, &got)
+
+	if !apierrors.IsNotFound(err) {
+		t.Fatalf("expected NotFound, got %v", err)
+	}
+	// The inner fake still has the object (informer lag), so Overlay.Get's inner Get succeeds and
+	// writes obj.ResourceVersion = "42". The tombstone path must clear this before returning
+	// NotFound, otherwise a subsequent Create is rejected by the apiserver with:
+	//   "resourceVersion should not be set on objects to be created"
+	if got.ResourceVersion != "" {
+		t.Errorf("ResourceVersion leaked through tombstone Get: got %q, want empty", got.ResourceVersion)
+	}
+	if got.UID != "" {
+		t.Errorf("UID leaked through tombstone Get: got %q, want empty", got.UID)
+	}
+}
+
 func TestGetNonCachedPropagatesError(t *testing.T) {
 	sentinel := errors.New("get boom")
 	c := cachingFrom(t, clusterFor(t, &errClient{Client: newTestClient(t).GetClient(), getErr: sentinel}), Config{})
