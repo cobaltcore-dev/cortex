@@ -120,8 +120,8 @@ spec:
       # memory-limit series for that pod.
       expr: |
         process_resident_memory_bytes{service="cortex-nova-metrics"}
-          > {{ .Values.alerts.thresholds.highMemoryFraction }} * on (pod) group_left ()
-            kube_pod_container_resource_limits{resource="memory", container="manager", pod=~"cortex-nova-.*"}
+          > on (pod) group_left ()
+            {{ .Values.alerts.thresholds.highMemoryFraction }} * kube_pod_container_resource_limits{resource="memory", container="manager", pod=~"cortex-nova-.*"}
       for: 5m
       labels:
         context: memory
@@ -146,8 +146,8 @@ spec:
       # correct even if CPU limits are overridden per component/region.
       expr: |
         rate(process_cpu_seconds_total{service="cortex-nova-metrics"}[1m])
-          > {{ .Values.alerts.thresholds.highCPUFraction }} * on (pod) group_left ()
-            kube_pod_container_resource_limits{resource="cpu", container="manager", pod=~"cortex-nova-.*"}
+          > on (pod) group_left ()
+            {{ .Values.alerts.thresholds.highCPUFraction }} * kube_pod_container_resource_limits{resource="cpu", container="manager", pod=~"cortex-nova-.*"}
       for: 5m
       labels:
         context: cpu
