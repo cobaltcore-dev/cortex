@@ -848,9 +848,12 @@ func TestGetNotFoundWithNoOverlay(t *testing.T) {
 	}
 }
 
-func TestGetTombstoneDoesNotLeakResourceVersion(t *testing.T) {
-	// Pre-populate the inner fake with a Reservation that has a real ResourceVersion and UID.
+func TestGetTombstoneDoesNotLeakServerManagedFields(t *testing.T) {
+	// Pre-populate the inner fake with a Reservation that has server-managed fields set.
 	r := newReservation("res-a", "az-1", "42")
+	r.Finalizers = []string{"stale-finalizer"}
+	r.Generation = 5
+	r.OwnerReferences = []metav1.OwnerReference{{Name: "stale-owner", APIVersion: "v1", Kind: "Pod"}}
 	inner := newTestClient(t, r)
 	c := newCaching(t, inner)
 
@@ -869,14 +872,24 @@ func TestGetTombstoneDoesNotLeakResourceVersion(t *testing.T) {
 		t.Fatalf("expected NotFound, got %v", err)
 	}
 	// The inner fake still has the object (informer lag), so Overlay.Get's inner Get succeeds and
-	// writes obj.ResourceVersion = "42". The tombstone path must clear this before returning
-	// NotFound, otherwise a subsequent Create is rejected by the apiserver with:
-	//   "resourceVersion should not be set on objects to be created"
+	// writes the stale fields onto obj before the tombstone check. The tombstone path must clear
+	// all server-managed fields before returning NotFound so that a subsequent Create is not
+	// corrupted by stale data (e.g. ResourceVersion causes apiserver rejection; Finalizers are
+	// silently accepted, leaving the new object with unexpected finalizers).
 	if got.ResourceVersion != "" {
 		t.Errorf("ResourceVersion leaked through tombstone Get: got %q, want empty", got.ResourceVersion)
 	}
 	if got.UID != "" {
 		t.Errorf("UID leaked through tombstone Get: got %q, want empty", got.UID)
+	}
+	if got.Generation != 0 {
+		t.Errorf("Generation leaked through tombstone Get: got %d, want 0", got.Generation)
+	}
+	if len(got.Finalizers) != 0 {
+		t.Errorf("Finalizers leaked through tombstone Get: got %v, want empty", got.Finalizers)
+	}
+	if len(got.OwnerReferences) != 0 {
+		t.Errorf("OwnerReferences leaked through tombstone Get: got %v, want empty", got.OwnerReferences)
 	}
 }
 

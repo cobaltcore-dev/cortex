@@ -12,6 +12,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -512,12 +513,20 @@ func (c *Overlay) Get(ctx context.Context, key client.ObjectKey, obj client.Obje
 		return err
 	}
 	if e.deleted {
-		// Clear fields that the inner Get may have written onto obj before the tombstone check.
-		// If we return NotFound with a stale ResourceVersion, controllerutil.CreateOrUpdate takes
-		// the Create path and the apiserver rejects: "resourceVersion should not be set on objects
-		// to be created". Clearing UID is analogous hygiene.
+		// Clear all server-managed metadata that the inner Get may have written onto obj.
+		// Stale ResourceVersion causes an explicit apiserver rejection on Create ("resourceVersion
+		// should not be set on objects to be created"). Stale Finalizers are silently accepted and
+		// leave the new object with unexpected finalizers. The rest (UID, Generation,
+		// CreationTimestamp, DeletionTimestamp, ManagedFields, OwnerReferences) are either rejected
+		// or ignored on Create, but pollute the caller's object before any mutate function runs.
 		obj.SetResourceVersion("")
 		obj.SetUID("")
+		obj.SetGeneration(0)
+		obj.SetCreationTimestamp(metav1.Time{})
+		obj.SetDeletionTimestamp(nil)
+		obj.SetFinalizers(nil)
+		obj.SetOwnerReferences(nil)
+		obj.SetManagedFields(nil)
 		return apierrors.NewNotFound(schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind}, key.Name)
 	}
 	// Live overlay entry: copy it into obj, overriding the inner result.
