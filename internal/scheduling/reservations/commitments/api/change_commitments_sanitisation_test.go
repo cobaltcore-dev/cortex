@@ -216,14 +216,14 @@ func TestSanitisedRejectionReasons(t *testing.T) {
 			notWantInReason: []string{"etcd", "connection refused"},
 		},
 		{
-			name: "non-dry-run: NoClusterMatchedError → HTTP 400 with unknown AZ in body",
+			name: "non-dry-run: NoClusterMatchedError → HTTP 200 with unknown AZ rejection reason",
 			makeClient: func(base client.Client) client.Client {
 				return &errInjectClient{Client: base, crCreateErr: &multicluster.NoClusterMatchedError{}}
 			},
-			az:               "az-nonexistent",
-			dryRun:           false,
-			wantStatusCode:   http.StatusBadRequest,
-			wantBodyContains: "unknown availability zone: az-nonexistent",
+			az:             "az-nonexistent",
+			dryRun:         false,
+			wantStatusCode: http.StatusOK,
+			wantReason:     "unknown availability zone: az-nonexistent",
 		},
 		{
 			name: "dry-run: NoClusterMatchedError → HTTP 200 with unknown AZ rejection reason",
@@ -291,7 +291,7 @@ func TestSanitisedRejectionReasons(t *testing.T) {
 // Tests — metric label "bad_request"
 // ============================================================================
 
-func TestMetricBadRequest(t *testing.T) {
+func TestMetricUnknownAZ(t *testing.T) {
 	log.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
 
 	m1Small := &TestFlavor{Name: "m1.small", Group: "hana_1", MemoryMB: 1024, VCPUs: 4}
@@ -307,27 +307,27 @@ func TestMetricBadRequest(t *testing.T) {
 		createCommitment("hw_version_hana_1_ram", "project-A", "uuid-metric-bad-req", "confirmed", 2)))
 	_, _, statusCode := env.te.CallChangeCommitmentsAPI(reqJSON)
 
-	if statusCode != http.StatusBadRequest {
-		t.Fatalf("expected HTTP 400, got %d — test precondition not met", statusCode)
+	if statusCode != http.StatusOK {
+		t.Fatalf("expected HTTP 200, got %d", statusCode)
 	}
 
 	const counterName = "cortex_committed_resource_change_api_requests_total"
 
-	badRequestCount := getCounterValueForSanitisation(t, env.registry, counterName, map[string]string{
-		"status_code": "400",
+	rejectedCount := getCounterValueForSanitisation(t, env.registry, counterName, map[string]string{
+		"status_code": "200",
 		"dry_run":     "false",
-		"result":      "bad_request",
+		"result":      "rejected",
 	})
-	if badRequestCount < 1 {
-		t.Errorf("result=bad_request counter (status 400) = %g, want ≥1", badRequestCount)
+	if rejectedCount < 1 {
+		t.Errorf("result=rejected counter (status 200) = %g, want ≥1", rejectedCount)
 	}
 
 	errorCount := getCounterValueForSanitisation(t, env.registry, counterName, map[string]string{
-		"status_code": "400",
+		"status_code": "200",
 		"dry_run":     "false",
 		"result":      "error",
 	})
 	if errorCount != 0 {
-		t.Errorf("result=error counter (status 400) = %g, want 0", errorCount)
+		t.Errorf("result=error counter (status 200) = %g, want 0", errorCount)
 	}
 }

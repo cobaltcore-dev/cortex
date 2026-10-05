@@ -30,9 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-// errBadRequest is returned by processCommitmentChanges when the caller sent an invalid request (e.g. unknown AZ).
-var errBadRequest = errors.New("bad request")
-
 // sortedKeys returns map keys sorted alphabetically for deterministic iteration.
 func sortedKeys[K ~string, V any](m map[K]V) []K {
 	keys := make([]K, 0, len(m))
@@ -162,8 +159,6 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	if err := api.processCommitmentChanges(ctx, w, logger, req, &resp); err != nil {
 		if strings.Contains(err.Error(), "caches not ready") {
 			statusCode = http.StatusServiceUnavailable
-		} else if errors.Is(err, errBadRequest) {
-			statusCode = http.StatusBadRequest
 		}
 		api.recordMetrics(req, resp, statusCode, startTime)
 		return
@@ -400,10 +395,6 @@ ProcessLoop:
 			rollbackCR(ctx, logger, api.client, snapshots[i])
 		}
 		logger.Info("rollback complete")
-		if isBadRequest {
-			http.Error(w, sanitisedReason, http.StatusBadRequest)
-			return errBadRequest
-		}
 		return nil
 	}
 
