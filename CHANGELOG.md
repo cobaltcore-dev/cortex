@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-10-06 — [#1308](https://github.com/cobaltcore-dev/cortex/pull/1308)
+
+### cortex 0.6.1
+
+#### 🚀 Features
+
+- **Stale CommittedResource CRD cleanup** (#1303, @mblos): The CR syncer now detects, logs, and optionally deletes CommittedResource CRDs that exist locally but are no longer present in Limes. A configurable grace period (`staleCRDeletionGracePeriod`, default 10 min) prevents race conditions where recently-created CRDs haven't propagated to the global fetch yet. New Helm values: `deleteStaleCRs` and `staleCRDeletionGracePeriod`.
+
+#### 🐛 Bug Fixes
+
+- **Cache: clear stale metadata on tombstone NotFound** (#1299, @mblos): When a tombstone existed but the informer hadn't caught up, `Overlay.Get` left the old `ResourceVersion` on the caller's object before returning `NotFound`. This caused `controllerutil.CreateOrUpdate` to attempt a Create with a non-empty `ResourceVersion`, which the API server rejects. The fix now clears stale metadata properly.
+- **Cache tombstone Get mutates object** (#1306, @SoWieMarkus): Follow-up fix ensuring that a cache tombstone `Get` does not inadvertently mutate the caller's object during create operations.
+- **Route internal CR acceptance errors to HTTP 500** (#1302, @mblos): Internal errors during CR acceptance are now correctly surfaced as HTTP 500 responses instead of being swallowed, with improved error logging for observability.
+
+#### 📦 Dependency Updates
+
+- Update `debian:trixie-slim` Docker digest from `a99cfc5` to `a29215f` (#1305).
+- Helm chart version bumps: `cortex-shim` appVersion → `sha-d3780339`, `cortex` appVersion → `sha-a49ab67e`.
+
+### cortex-shim 0.1.25, cortex-placement-shim 0.1.25
+
+- Bumped in lockstep with cortex 0.6.1; no shim-specific changes.
+
+### cortex-nova 0.0.99, cortex-cinder 0.0.99, cortex-manila 0.0.99, cortex-crds 0.0.99, cortex-ironcore 0.0.99, cortex-pods 0.0.99
+
+- Helm chart version bumps; no plugin-specific changes.
+
+| Package | From | To |
+|---|---|---|
+| cortex | 0.6.0 | 0.6.1 |
+| cortex-postgres | 0.6.20 | 0.6.21 |
+| cortex-shim | 0.1.24 | 0.1.25 |
+| bundles | 0.0.98 | 0.0.99 |
+| cortex-placement-shim | 0.1.24 | 0.1.25 |
+
+**Contributors:** Marcel (@mblos), Markus Wieland (@SoWieMarkus), renovate[bot]
+
+**Full diff:** [PR #1308](https://github.com/cobaltcore-dev/cortex/pull/1308) — 8 commits · 14 files changed · +507 / −57 lines
+
 ## 2026-10-05 — [#1295](https://github.com/cobaltcore-dev/cortex/pull/1295)
 
 ### cortex 0.6.0
