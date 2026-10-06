@@ -205,15 +205,14 @@ func TestSanitisedRejectionReasons(t *testing.T) {
 			},
 		},
 		{
-			name: "non-dry-run: k8s write error → sanitised per-commitment message",
+			name: "non-dry-run: k8s write error → HTTP 500 with generic retry message",
 			makeClient: func(base client.Client) client.Client {
 				return &errInjectClient{Client: base, crCreateErr: errors.New("etcd connection refused: internal server error details")}
 			},
-			az:              "az-a",
-			dryRun:          false,
-			wantStatusCode:  http.StatusOK,
-			wantReason:      "internal error on commitment uuid-san",
-			notWantInReason: []string{"etcd", "connection refused"},
+			az:               "az-a",
+			dryRun:           false,
+			wantStatusCode:   http.StatusInternalServerError,
+			wantBodyContains: "internal error processing commitment changes, please retry",
 		},
 		{
 			name: "non-dry-run: NoClusterMatchedError → HTTP 200 with unknown AZ rejection reason",
