@@ -502,22 +502,33 @@ func (c *Overlay) Get(ctx context.Context, key client.ObjectKey, obj client.Obje
 	if !cached {
 		return c.Client.Get(ctx, key, obj, opts...)
 	}
+	// Short-circuit a tombstone before touching the inner client. The inner Get
+	// would populate obj with the not-yet-evicted informer copy (ResourceVersion,
+	// UID, Finalizers, Spec, ...); returning NotFound with that stale data makes
+	// controllerutil.CreateOrUpdate take the Create path on a polluted object,
+	// which the apiserver rejects ("resourceVersion should not be set on objects
+	// to be created"). By returning NotFound here, obj is never written to.
+	if e, ok := c.getEntry(gvk, key); ok && e.deleted {
+		return apierrors.NewNotFound(schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind}, key.Name)
+	}
 	err := c.Client.Get(ctx, key, obj, opts...)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
+	// Re-read the overlay: a concurrent Delete may have tombstoned the entry
+	// between the short-circuit check above and the inner Get. Without this
+	// second read, a tombstone that appeared in that window would fall through
+	// to the live-entry copy below and serve a deleted object instead of NotFound.
 	e, ok := c.getEntry(gvk, key)
 	if !ok {
 		// No overlay entry: return the inner result (value or NotFound) as-is.
 		return err
 	}
 	if e.deleted {
-		// Clear fields that the inner Get may have written onto obj before the tombstone check.
-		// If we return NotFound with a stale ResourceVersion, controllerutil.CreateOrUpdate takes
-		// the Create path and the apiserver rejects: "resourceVersion should not be set on objects
-		// to be created". Clearing UID is analogous hygiene.
-		obj.SetResourceVersion("")
-		obj.SetUID("")
+		// A tombstone appeared between the short-circuit check above and here
+		// (concurrent Delete). obj may have been populated by the inner Get, but
+		// since we are returning NotFound the caller must not observe it; return
+		// NotFound and let the caller treat obj as absent.
 		return apierrors.NewNotFound(schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind}, key.Name)
 	}
 	// Live overlay entry: copy it into obj, overriding the inner result.
