@@ -331,6 +331,9 @@ cortex-scheduling-controllers:
     committedResourceSyncInterval: "1h"
     # Delete CommittedResource CRDs that are present locally but absent from Limes.
     deleteStaleCRs: true
+    # Minimum age a CommittedResource CRD must reach before the syncer treats it as stale
+    # and deletes it. Prevents timing races of recently-created CRDs not yet visible in the global fetch.
+    staleCRDeletionGracePeriod: "10m"
 
 cortex-knowledge-controllers:
   <<: *cortex

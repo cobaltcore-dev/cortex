@@ -1009,6 +1009,7 @@ func TestSyncer_SyncReservations_DeleteStaleCRs(t *testing.T) {
 		name              string
 		deleteStaleCRs    bool
 		crAge             time.Duration
+		limesReturnsEmpty bool
 		wantCRDeleted     bool
 		wantStaleCRsGauge float64
 		wantStaleDeleted  float64
@@ -1032,7 +1033,16 @@ func TestSyncer_SyncReservations_DeleteStaleCRs(t *testing.T) {
 		{
 			name:              "flag on, CR within grace period: preserved",
 			deleteStaleCRs:    true,
-			crAge:             time.Minute, // less than staleCRDeletionGracePeriod
+			crAge:             time.Minute, // less than defaultStaleCRDeletionGracePeriod
+			wantCRDeleted:     false,
+			wantStaleCRsGauge: 1,
+			wantStaleDeleted:  0,
+		},
+		{
+			name:              "flag on, Limes returns nothing: safety guard fires",
+			deleteStaleCRs:    true,
+			crAge:             time.Hour,
+			limesReturnsEmpty: true,
 			wantCRDeleted:     false,
 			wantStaleCRsGauge: 1,
 			wantStaleDeleted:  0,
@@ -1064,7 +1074,20 @@ func TestSyncer_SyncReservations_DeleteStaleCRs(t *testing.T) {
 
 			mockClient := &mockCommitmentsClient{
 				listCommitmentsByIDFunc: func(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
-					return map[string]Commitment{}, nil // UUID absent from Limes
+					if tc.limesReturnsEmpty {
+						return map[string]Commitment{}, nil // triggers safety guard
+					}
+					// Return one active commitment (different UUID) so the safety guard doesn't fire.
+					// Use an unknown status so it ends up in skippedUUIDs without needing
+					// FlavorGroupResourceConfig to be fully populated.
+					// The stale CR's UUID is absent, making it stale.
+					return map[string]Commitment{
+						"other-uuid": {
+							UUID:        "other-uuid",
+							ServiceType: "compute",
+							Status:      "unknown_test_status", // → skippedUUIDs, limesEmpty=false
+						},
+					}, nil
 				},
 				listProjectsFunc: func(ctx context.Context) ([]Project, error) {
 					return []Project{{ID: "p", DomainID: "d"}}, nil
