@@ -1,28 +1,45 @@
 # Changelog
 
-## Changelog — Release 0.6.2 (2026-10-06)
+## 2026-10-06 — [#1313](https://github.com/cobaltcore-dev/cortex/pull/1313)
 
-### Bumped Versions
-- cortex 0.6.1 → 0.6.2
-- cortex-postgres 0.6.21 → 0.6.22
-- cortex-shim 0.1.25 → 0.1.26
-- bundles 0.0.99 → 0.0.100
-- cortex-placement-shim 0.1.25 → 0.1.26
+### cortex 0.6.3
 
-### Bug Fixes
-- **Commitment marketplace transfers now handled as in-place CRD updates ([#1313](https://github.com/cobaltcore-dev/cortex/pull/1313)):** Previously, marketplace transfers — where the same commitment UUID is moved between projects in a single Limes request — caused timeouts due to a race condition on the same CommittedResource name. The delete-then-create path has been replaced with an atomic in-place update of the CR's `ProjectID`. A new `transferredCommitmentUUIDs()` function detects UUIDs that appear as both a deletion and a creation within the same request, and `processCommitmentChanges` now skips the deletion for these UUIDs while the create side updates the `ProjectID` via `CreateOrUpdate`. Reservation slots whose `ProjectID` no longer matches are replaced during Phase 3 of `ApplyCommitmentState`.
-- **Syncer: stale `AllowRejection` no longer preserved ([#1313](https://github.com/cobaltcore-dev/cortex/pull/1313)):** The syncer now explicitly sets `AllowRejection = false` on the sync path instead of preserving the existing value. This prevents a stale `true` from a prior API request from causing an unintended rejection of synced commitments.
-- **E2E stale-generation guard ([#1313](https://github.com/cobaltcore-dev/cortex/pull/1313)):** `e2eIsTerminalCR` now verifies that the `Ready` condition's `ObservedGeneration` matches the CR's current `Generation` before considering it terminal. This ensures a CR whose generation was bumped (e.g. by a transfer) is properly re-reconciled rather than being prematurely treated as ready.
+#### 🐛 Bug Fixes
 
-### E2E / Test Improvements
-- **New E2E check: `CheckCommitmentsMarketplaceTransfer` ([#1313](https://github.com/cobaltcore-dev/cortex/pull/1313)):** Added a full create → transfer (A→B) → verify usage → delete lifecycle check for every `(AZ, resource)` pair that handles commitments. Configurable via `transferProjectID` in `E2EChecksConfig`.
-- **Rejection-reason string updated ([#1313](https://github.com/cobaltcore-dev/cortex/pull/1313)):** Several e2e checks updated from `"insufficient capacity"` to `"not sufficient capacity"` to match current rejection wording.
-- **Unit tests:** Two new cases covering transfer accepted (ProjectID updated to target project) and transfer rejected (ProjectID rolled back to source project).
-- **E2E test:** Full lifecycle test (`marketplace transfer A→B then delete`) covering initial create, in-place transfer, reservation slot verification, and final cleanup.
+- **Commitment marketplace transfers now handled as in-place CRD updates** ([#1312](https://github.com/cobaltcore-dev/cortex/pull/1312), @mblos): Marketplace transfers—where a committed resource is moved between projects in a single Limes request—previously timed out due to a race condition. The old path deleted the CR in the source project and created a new one in the target, but concurrent operations collided on the same CRD name. Transfers are now detected up front by `transferredCommitmentUUIDs()`, which scans the request for UUIDs that appear as a deletion in one project and a creation in another. The delete side is skipped entirely, and the create side performs an in-place `ProjectID` update on the existing CRD, eliminating the race.
+- **Syncer: stale `AllowRejection` no longer preserved** ([#1312](https://github.com/cobaltcore-dev/cortex/pull/1312), @mblos): The syncer now explicitly sets `AllowRejection = false` on the sync path instead of preserving the existing value. This prevents a stale `true` from a prior API request from causing an unintended rejection of synced commitments.
 
-### ⚠️ Notes
+#### ✅ E2E / Test Improvements
+
+- **New E2E check: `CheckCommitmentsMarketplaceTransfer`** ([#1312](https://github.com/cobaltcore-dev/cortex/pull/1312), @mblos): Full create → transfer (A→B) → verify usage → delete lifecycle check for every `(AZ, resource)` pair that handles commitments. Configurable via `transferProjectID` in `E2EChecksConfig`.
+- **E2E stale-generation guard** ([#1312](https://github.com/cobaltcore-dev/cortex/pull/1312)): `e2eIsTerminalCR` now verifies that the `Ready` condition's `ObservedGeneration` matches the CR's current `Generation` before considering it terminal, ensuring a CR whose generation was bumped (e.g. by a transfer) is properly re-reconciled rather than being prematurely treated as ready.
+- Rejection-reason string updated from `"insufficient capacity"` to `"not sufficient capacity"` to match current rejection wording.
+- Unit tests: two new cases covering transfer accepted (ProjectID updated to target project) and transfer rejected (ProjectID rolled back to source project).
+
+#### ⚠️ Notes
+
 - **Behavioral change in syncer:** `AllowRejection` is now forcibly set to `false` on every sync-path upsert rather than being preserved. Synced commitments must not be rejected, but callers relying on the previous preserve-on-sync semantics should be aware of this change.
 - **Atomicity assumption:** The transfer path assumes both the "delete" and "create" entries for the same UUID always appear in the same request. If they are split across separate requests, the skip-deletion logic will not trigger and the old delete-then-create path applies.
+
+### cortex-shim 0.1.27, cortex-placement-shim 0.1.27
+
+- Bumped in lockstep with cortex 0.6.3; no shim-specific changes.
+
+### cortex-nova 0.0.101, cortex-cinder 0.0.101, cortex-manila 0.0.101, cortex-crds 0.0.101, cortex-ironcore 0.0.101, cortex-pods 0.0.101
+
+- Helm chart version bumps; no plugin-specific changes.
+
+| Package | From | To |
+|---|---|---|
+| cortex | 0.6.2 | 0.6.3 |
+| cortex-postgres | 0.6.22 | 0.6.23 |
+| cortex-shim | 0.1.26 | 0.1.27 |
+| bundles | 0.0.100 | 0.0.101 |
+| cortex-placement-shim | 0.1.26 | 0.1.27 |
+
+**Contributors:** Marcel (@mblos), Markus Wieland (@SoWieMarkus), cortex-ai-agents[bot]
+
+**Full diff:** [PR #1313](https://github.com/cobaltcore-dev/cortex/pull/1313) — 3 commits · 16 files changed · +364 / −12 lines
 
 ## 2026-10-06 — [#1308](https://github.com/cobaltcore-dev/cortex/pull/1308)
 
