@@ -494,12 +494,11 @@ func (s *Syncer) upsertCommittedResource(ctx context.Context, logger logr.Logger
 		if cr.Spec.AvailabilityZone != "" && cr.Spec.AvailabilityZone != state.AvailabilityZone {
 			return errAZChanged
 		}
-		// AllowRejection is an API execution flag, not a Limes commitment property.
-		// Preserve the existing value so a syncer write never clobbers an in-flight
-		// change-commitments request. For new CRDs the zero value (false) is correct.
-		allowRejection := cr.Spec.AllowRejection
 		s.applyCommittedResourceSpec(cr, state)
-		cr.Spec.AllowRejection = allowRejection
+		// Limes commitments on the sync path must always be fulfilled — there is no
+		// valid rejection scenario here. Explicitly clear AllowRejection so a stale
+		// true value from a prior API request never causes an unintended rejection.
+		cr.Spec.AllowRejection = false
 		return nil
 	})
 	if errors.Is(err, errAZChanged) {
