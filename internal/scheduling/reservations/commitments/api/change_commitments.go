@@ -47,6 +47,33 @@ func sortedKeys[K ~string, V any](m map[K]V) []K {
 	return keys
 }
 
+// transferredCommitmentUUIDs returns the set of commitment UUIDs that are being transferred
+// from one project to another in this request: the same UUID appears as a deletion
+// (NewStatus=None) in one project and as a creation (NewStatus!=None) in a different project.
+// Transfers are handled by a single in-place spec update rather than delete+create.
+func transferredCommitmentUUIDs(req liquid.CommitmentChangeRequest) map[liquid.CommitmentUUID]struct{} {
+	deletedBy := make(map[liquid.CommitmentUUID]liquid.ProjectUUID)
+	createdBy := make(map[liquid.CommitmentUUID]liquid.ProjectUUID)
+	for projectID, projectChanges := range req.ByProject {
+		for _, resourceChanges := range projectChanges.ByResource {
+			for _, c := range resourceChanges.Commitments {
+				if c.NewStatus.IsNone() {
+					deletedBy[c.UUID] = projectID
+				} else {
+					createdBy[c.UUID] = projectID
+				}
+			}
+		}
+	}
+	transfers := make(map[liquid.CommitmentUUID]struct{})
+	for uuid, deleteProject := range deletedBy {
+		if createProject, ok := createdBy[uuid]; ok && createProject != deleteProject {
+			transfers[uuid] = struct{}{}
+		}
+	}
+	return transfers
+}
+
 // crWatch pairs a CRD name with the generation written by the API so the polling loop
 // can skip cache reads that have not yet reflected the write (stale-cache guard).
 type crWatch struct {
@@ -194,6 +221,10 @@ func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.Respons
 	// Conversely, when Limes requires confirmation, the controller may reject and report back.
 	allowRejection := req.RequiresConfirmation()
 
+	// Pre-scan for marketplace transfers: same UUID deleted in one project and created in another.
+	// These are handled by a single in-place ProjectID update rather than delete+create.
+	transfers := transferredCommitmentUUIDs(req)
+
 	var (
 		toWatch         []crWatch    // CRD names + expected generations to poll for terminal conditions (upserts only)
 		snapshots       []crSnapshot // ordered list for deterministic rollback
@@ -275,6 +306,15 @@ ProcessLoop:
 				}
 
 				if isDelete {
+					if _, isTransfer := transfers[commitment.UUID]; isTransfer {
+						// This commitment is being transferred to another project in this same request.
+						// The create side will update ProjectID in place via CreateOrUpdate; no deletion
+						// needed here. Phase 3 of ApplyCommitmentState will replace any reservation slots
+						// whose ProjectID no longer matches.
+						logger.Info("commitment transfer: skipping deletion, will update in place",
+							"commitmentUUID", commitment.UUID)
+						continue
+					}
 					// Limes is removing this commitment; delete the CRD if it exists.
 					snap.wasDeleted = true
 					snapshots = append(snapshots, snap)
