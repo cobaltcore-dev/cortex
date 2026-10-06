@@ -25,6 +25,9 @@ var (
 	// CreatorValue identifies reservations created by this syncer.
 	CreatorValue = "commitments-syncer"
 
+	// defaultStaleCRDeletionGracePeriod is used when SyncerConfig.StaleCRDeletionGracePeriod is zero.
+	defaultStaleCRDeletionGracePeriod = 10 * time.Minute
+
 	// errAZChanged is a sentinel returned from CreateOrUpdate mutateFns when the existing CR's
 	// AZ differs from the desired state. The caller logs an error and skips the CR.
 	errAZChanged = errors.New("availability zone changed")
@@ -37,6 +40,13 @@ type SyncerConfig struct {
 	SSOSecretRef *corev1.SecretReference `json:"ssoSecretRef"`
 	// SyncInterval defines how often the syncer reconciles Limes commitments to Reservation CRDs.
 	SyncInterval metav1.Duration `json:"committedResourceSyncInterval"`
+	// DeleteStaleCRs enables automatic deletion of CommittedResource CRDs that are present locally
+	// but absent from Limes. Stale CRDs are always counted and logged regardless of this setting.
+	DeleteStaleCRs bool `json:"deleteStaleCRs,omitempty"`
+	// StaleCRDeletionGracePeriod is the minimum age a CommittedResource CRD must have before the
+	// syncer deletes it as stale. Protects against race conditions where a CRD was just created
+	// but the Limes response hasn't caught up yet. Defaults to 10 minutes if zero.
+	StaleCRDeletionGracePeriod metav1.Duration `json:"staleCRDeletionGracePeriod,omitempty"`
 	// FlavorGroupResourceConfig maps flavor group names to resource configs; "*" acts as catch-all.
 	// Not read from JSON — populated by the caller from the shared APIConfig.
 	FlavorGroupResourceConfig map[string]FlavorGroupResourcesConfig
@@ -322,7 +332,19 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		}
 		return err
 	}
-	staleCRCount, gcDeleted := 0, 0
+	staleCRCount, gcDeleted, staleDeleted := 0, 0, 0
+	// Safety guard: if Limes returned no active commitments at all but we have local CRDs,
+	// Limes may be experiencing an outage or misconfiguration. Skip stale deletion entirely
+	// rather than risk wiping all CRDs due to a transient empty response.
+	limesEmpty := len(commitmentResult.states) == 0 && len(commitmentResult.skippedUUIDs) == 0
+	safeToDeleteStale := s.resourceConfig.DeleteStaleCRs && (!limesEmpty || len(existingCRs.Items) == 0)
+	if s.resourceConfig.DeleteStaleCRs && limesEmpty && len(existingCRs.Items) != 0 {
+		logger.Info("WARNING: Limes returned no active commitments but local CRDs exist — skipping stale CR deletion as safety guard")
+	}
+	gracePeriod := s.resourceConfig.StaleCRDeletionGracePeriod.Duration
+	if gracePeriod == 0 {
+		gracePeriod = defaultStaleCRDeletionGracePeriod
+	}
 	for i := range existingCRs.Items {
 		cr := &existingCRs.Items[i]
 		if cr.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
@@ -330,7 +352,26 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		}
 		isExpired := cr.Spec.EndTime != nil && !cr.Spec.EndTime.After(time.Now())
 		if !activeCommitments[cr.Spec.CommitmentUUID] && !isExpired {
-			staleCRCount++
+			if safeToDeleteStale {
+				if time.Since(cr.CreationTimestamp.Time) < gracePeriod {
+					logger.V(1).Info("stale committed resource CRD within grace period, skipping deletion",
+						"name", cr.Name, "commitmentUUID", cr.Spec.CommitmentUUID,
+						"age", time.Since(cr.CreationTimestamp.Time).Round(time.Second))
+					staleCRCount++
+				} else {
+					if err := s.Delete(ctx, cr); client.IgnoreNotFound(err) != nil {
+						logger.Error(err, "failed to delete stale committed resource CRD", "name", cr.Name)
+						return err
+					}
+					logger.Info("deleted stale committed resource CRD",
+						"name", cr.Name, "commitmentUUID", cr.Spec.CommitmentUUID)
+					staleDeleted++
+				}
+			} else {
+				logger.Info("stale committed resource CRD: present locally but absent from Limes",
+					"name", cr.Name, "commitmentUUID", cr.Spec.CommitmentUUID)
+				staleCRCount++
+			}
 		}
 		if isExpired {
 			if err := s.Delete(ctx, cr); client.IgnoreNotFound(err) != nil {
@@ -345,6 +386,14 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 
 	// Delete orphaned Reservation CRDs: type=committed-resource but commitment no longer active.
 	// These are left over from the pre-refactor path where the syncer wrote Reservations directly.
+	// Extend activeCommitments with UUIDs from surviving local CRDs so that Reservations are
+	// not deleted while their parent CR still exists (guards against transient Limes absences).
+	for i := range existingCRs.Items {
+		cr := &existingCRs.Items[i]
+		if cr.DeletionTimestamp.IsZero() && cr.Spec.CommitmentUUID != "" {
+			activeCommitments[cr.Spec.CommitmentUUID] = true
+		}
+	}
 	var existingReservations v1alpha1.ReservationList
 	if err := s.List(ctx, &existingReservations, client.MatchingLabels{
 		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
@@ -385,6 +434,12 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		if gcDeleted > 0 {
 			s.monitor.RecordCRDeletes(gcDeleted)
 		}
+		if staleDeleted > 0 {
+			s.monitor.RecordCRStaleDeletes(staleDeleted)
+		}
+		if totalReservationDeleted > 0 {
+			s.monitor.RecordOrphanReservationDeletes(totalReservationDeleted)
+		}
 	}
 
 	if staleCRCount > 0 {
@@ -398,6 +453,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		"created", totalCreated,
 		"updated", totalUpdated,
 		"staleCRs", staleCRCount,
+		"staleDeleted", staleDeleted,
 		"expiredCRsGCd", gcDeleted,
 		"orphanReservationsDeleted", totalReservationDeleted)
 	return nil
