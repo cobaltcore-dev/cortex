@@ -502,34 +502,33 @@ func (c *Overlay) Get(ctx context.Context, key client.ObjectKey, obj client.Obje
 	if !cached {
 		return c.Client.Get(ctx, key, obj, opts...)
 	}
-	// Short-circuit a tombstone before touching the inner client. The inner Get
+	// Consult the overlay before touching the inner client.
+	//
+	// Tombstone: return NotFound without calling the inner Get. The inner Get
 	// would populate obj with the not-yet-evicted informer copy (ResourceVersion,
-	// UID, Finalizers, Spec, ...); returning NotFound with that stale data makes
-	// controllerutil.CreateOrUpdate take the Create path on a polluted object,
-	// which the apiserver rejects ("resourceVersion should not be set on objects
-	// to be created"). By returning NotFound here, obj is never written to.
-	if e, ok := c.getEntry(gvk, key); ok && e.deleted {
+	// UID, Finalizers, Spec, ...), and returning NotFound with that stale data
+	// makes controllerutil.CreateOrUpdate take the Create path on a polluted
+	// object, which the apiserver rejects ("resourceVersion should not be set on
+	// objects to be created"). By returning here, obj is never written to.
+	//
+	// Known limitation: this reads the overlay once, before the inner Get. A
+	// Delete that lands AFTER this read but during the inner Get is not observed,
+	// so a just-deleted object may be served once (the next reconcile corrects
+	// it). This is consistent with the overlay's best-effort model against
+	// concurrent external mutations (informer lag, TTL, and evictIfSeen are all
+	// best-effort too). Crucially it does NOT reintroduce the Create-pollution
+	// bug: on a tombstone we return before the inner Get, so obj stays pristine.
+	e, ok := c.getEntry(gvk, key)
+	if ok && e.deleted {
 		return apierrors.NewNotFound(schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind}, key.Name)
 	}
 	err := c.Client.Get(ctx, key, obj, opts...)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	// Re-read the overlay: a concurrent Delete may have tombstoned the entry
-	// between the short-circuit check above and the inner Get. Without this
-	// second read, a tombstone that appeared in that window would fall through
-	// to the live-entry copy below and serve a deleted object instead of NotFound.
-	e, ok := c.getEntry(gvk, key)
 	if !ok {
 		// No overlay entry: return the inner result (value or NotFound) as-is.
 		return err
-	}
-	if e.deleted {
-		// A tombstone appeared between the short-circuit check above and here
-		// (concurrent Delete). obj may have been populated by the inner Get, but
-		// since we are returning NotFound the caller must not observe it; return
-		// NotFound and let the caller treat obj as absent.
-		return apierrors.NewNotFound(schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind}, key.Name)
 	}
 	// Live overlay entry: copy it into obj, overriding the inner result.
 	// Deep-copy the cached object first so scheme.Convert cannot alias the
