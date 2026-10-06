@@ -2,7 +2,7 @@
 
 ## 2026-10-06 — [#1308](https://github.com/cobaltcore-dev/cortex/pull/1308)
 
-### cortex 0.6.1
+### cortex 0.6.2
 
 #### 🚀 Features
 
@@ -19,25 +19,25 @@
 - Update `debian:trixie-slim` Docker digest from `a99cfc5` to `a29215f` (#1305).
 - Helm chart version bumps: `cortex-shim` appVersion → `sha-d3780339`, `cortex` appVersion → `sha-a49ab67e`.
 
-### cortex-shim 0.1.25, cortex-placement-shim 0.1.25
+### cortex-shim 0.1.26, cortex-placement-shim 0.1.26
 
-- Bumped in lockstep with cortex 0.6.1; no shim-specific changes.
+- Bumped in lockstep with cortex 0.6.2; no shim-specific changes.
 
-### cortex-nova 0.0.99, cortex-cinder 0.0.99, cortex-manila 0.0.99, cortex-crds 0.0.99, cortex-ironcore 0.0.99, cortex-pods 0.0.99
+### cortex-nova 0.0.100, cortex-cinder 0.0.100, cortex-manila 0.0.100, cortex-crds 0.0.100, cortex-ironcore 0.0.100, cortex-pods 0.0.100
 
 - Helm chart version bumps; no plugin-specific changes.
 
 | Package | From | To |
 |---|---|---|
-| cortex | 0.6.0 | 0.6.1 |
-| cortex-postgres | 0.6.20 | 0.6.21 |
-| cortex-shim | 0.1.24 | 0.1.25 |
-| bundles | 0.0.98 | 0.0.99 |
-| cortex-placement-shim | 0.1.24 | 0.1.25 |
+| cortex | 0.6.1 | 0.6.2 |
+| cortex-postgres | 0.6.21 | 0.6.22 |
+| cortex-shim | 0.1.25 | 0.1.26 |
+| bundles | 0.0.99 | 0.0.100 |
+| cortex-placement-shim | 0.1.25 | 0.1.26 |
 
 **Contributors:** Marcel (@mblos), Markus Wieland (@SoWieMarkus), renovate[bot]
 
-**Full diff:** [PR #1308](https://github.com/cobaltcore-dev/cortex/pull/1308) — 8 commits · 14 files changed · +507 / −57 lines
+**Full diff:** [PR #1308](https://github.com/cobaltcore-dev/cortex/pull/1308) — 10 commits · 23 files changed · +570 / −81 lines
 
 ## 2026-10-05 — [#1295](https://github.com/cobaltcore-dev/cortex/pull/1295)
 
