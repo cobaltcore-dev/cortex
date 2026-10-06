@@ -354,7 +354,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		if !activeCommitments[cr.Spec.CommitmentUUID] && !isExpired {
 			if safeToDeleteStale {
 				if time.Since(cr.CreationTimestamp.Time) < gracePeriod {
-					logger.Info("stale committed resource CRD within grace period, skipping deletion",
+					logger.V(1).Info("stale committed resource CRD within grace period, skipping deletion",
 						"name", cr.Name, "commitmentUUID", cr.Spec.CommitmentUUID,
 						"age", time.Since(cr.CreationTimestamp.Time).Round(time.Second))
 					staleCRCount++
