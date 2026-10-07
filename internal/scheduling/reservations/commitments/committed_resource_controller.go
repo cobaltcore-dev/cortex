@@ -146,7 +146,12 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 		// Reservation controller hasn't processed all slots yet; Reservation watch will re-enqueue.
 		// Reset the retry timer: applyReservationState just succeeded, so the watch suppression
 		// gate should not fire while we wait for slots to become ready.
-		return ctrl.Result{}, r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", true)
+		// Fallback requeue: in case the watch event is missed,
+		// re-check after 1s rather than waiting for the full watch timeout.
+		if err := r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", true); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
 	return ctrl.Result{}, r.setAccepted(ctx, cr)
@@ -237,7 +242,12 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		// Reservation controller hasn't processed all slots yet; Reservation watch will re-enqueue.
 		// Reset the retry timer: applyReservationState just succeeded, so the watch suppression
 		// gate should not fire while we wait for slots to become ready.
-		return ctrl.Result{}, r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", true)
+		// Fallback requeue: in case the watch event is missed,
+		// re-check after 1s rather than waiting for the full watch timeout.
+		if err := r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", true); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
 	return ctrl.Result{}, r.setAccepted(ctx, cr)
