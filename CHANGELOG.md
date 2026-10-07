@@ -10,7 +10,7 @@
 - cortex-placement-shim 0.1.26 → 0.1.27
 
 ### Bug Fixes
-- **Requeue CR after 1s when child reservations not yet ready ([#1319](https://github.com/cobaltcore-dev/cortex/pull/1319)):** When a `CommittedResource` was updated, the controller previously relied solely on a watch event to re-enqueue reconciliation while waiting for child reservations to become ready. If timing was unlucky, this path could hang indefinitely. Both `reconcilePending` and `reconcileCommitted` now return a `ctrl.Result{RequeueAfter: 1s}` fallback requeue instead of relying only on the watch event, ensuring the controller re-checks within 1 second even if the watch event is missed.
+- **Requeue CR after 1s when child reservations not yet ready ([#1319](https://github.com/cobaltcore-dev/cortex/pull/1319)):** When a `CommittedResource` was reconciled while its child reservations were not yet ready, the controller previously relied solely on a watch event to re-enqueue the next reconciliation pass. If the watch event was missed or arrived late, the reconciliation could stall indefinitely. Both `reconcilePending` and `reconcileCommitted` now return a `ctrl.Result{RequeueAfter: 1s}` fallback instead of relying only on the watch, ensuring the controller re-checks within 1 second even if the watch event is missed.
 
 ### Dependency Updates
 - Update `github.com/sapcc/go-bits` digest `e86369b` → `62a588a` and `go.xyrillian.de/gg` `v1.16.0` → `v1.17.0` ([#1304](https://github.com/cobaltcore-dev/cortex/pull/1304))
@@ -25,7 +25,7 @@
 
 **Contributors:** Marcel (@mblos), renovate[bot]
 
-**Full diff:** [PR #1321](https://github.com/cobaltcore-dev/cortex/pull/1321) — 5 commits · 6 files changed · +21 / −11 lines
+**Full diff:** [PR #1321](https://github.com/cobaltcore-dev/cortex/pull/1321) — 6 commits · 15 files changed · +69 / −32 lines
 
 ## Changelog — Release 0.6.2 (2026-10-06)
 
