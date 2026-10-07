@@ -1,5 +1,32 @@
 # Changelog
 
+## Changelog — Release 0.6.3 (2026-10-07)
+
+### Bumped Versions
+- cortex 0.6.2 → 0.6.3
+- cortex-postgres 0.6.22 → 0.6.23
+- cortex-shim 0.1.26 → 0.1.27
+- bundles 0.0.100 → 0.0.101
+- cortex-placement-shim 0.1.26 → 0.1.27
+
+### Bug Fixes
+- **Requeue CR after 1s when child reservations not yet ready ([#1319](https://github.com/cobaltcore-dev/cortex/pull/1319)):** When a `CommittedResource` was updated, the controller previously relied solely on a watch event to re-enqueue reconciliation while waiting for child reservations to become ready. If timing was unlucky, this path could hang indefinitely. Both `reconcilePending` and `reconcileCommitted` now return a `ctrl.Result{RequeueAfter: 1s}` fallback requeue instead of relying only on the watch event, ensuring the controller re-checks within 1 second even if the watch event is missed.
+
+### Dependency Updates
+- Update `github.com/sapcc/go-bits` digest `e86369b` → `62a588a` and `go.xyrillian.de/gg` `v1.16.0` → `v1.17.0` ([#1304](https://github.com/cobaltcore-dev/cortex/pull/1304))
+- Update `kube-prometheus-stack` to v92.0.0 ([#1318](https://github.com/cobaltcore-dev/cortex/pull/1318))
+
+### App Version Bumps
+- cortex appVersion → `sha-6c8dab71` ([#1317](https://github.com/cobaltcore-dev/cortex/pull/1317), [#1320](https://github.com/cobaltcore-dev/cortex/pull/1320))
+- cortex-shim appVersion → `sha-f08b84c5` ([#1320](https://github.com/cobaltcore-dev/cortex/pull/1320))
+
+### ⚠️ Notes
+- **kube-prometheus-stack v92** is a **major** version bump. Key change: Linux-only workloads now default to `kubernetes.io/os: linux` node selector. Verify this does not affect mixed-OS clusters.
+
+**Contributors:** Marcel (@mblos), renovate[bot]
+
+**Full diff:** [PR #1321](https://github.com/cobaltcore-dev/cortex/pull/1321) — 5 commits · 6 files changed · +21 / −11 lines
+
 ## Changelog — Release 0.6.2 (2026-10-06)
 
 ### Bumped Versions
