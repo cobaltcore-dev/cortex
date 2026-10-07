@@ -464,6 +464,69 @@ func TestEviction(t *testing.T) {
 	}
 }
 
+// TestEvictionAfterConcurrentStatusPatch verifies that a spec-patch overlay entry is
+// evicted when the informer delivers the corresponding watch event, even if a status
+// patch on the same object occurred between the spec patch and the informer event.
+//
+// Invariant: the overlay exists to serve a write until the informer catches up to that
+// write's ResourceVersion. A later status patch (by any controller) must not raise the
+// eviction threshold for an earlier spec write — those are independent writes at the
+// subresource level and carry independent ResourceVersions.
+func TestEvictionAfterConcurrentStatusPatch(t *testing.T) {
+	r := newReservation("res-1", "az-1", "")
+	inner := newTestClient(t, r)
+	c := newCaching(t, inner)
+
+	ctx := t.Context()
+	go func() {
+		if err := c.Start(ctx); err != nil && ctx.Err() == nil {
+			t.Errorf("c.Start: %v", err)
+		}
+	}()
+	waitFor(t, func() bool {
+		inner.inf.mu.Lock()
+		defer inner.inf.mu.Unlock()
+		return len(inner.inf.handlers) > 0
+	})
+
+	key := client.ObjectKey{Name: "res-1"}
+
+	// Step 1: spec patch — overlay entry created at R_spec.
+	var cur v1alpha1.Reservation
+	if err := inner.GetClient().Get(context.Background(), key, &cur); err != nil {
+		t.Fatalf("inner get: %v", err)
+	}
+	specBase := cur.DeepCopy()
+	cur.Spec.TargetHost = "host-after-spec-patch"
+	if err := c.Patch(context.Background(), &cur, client.MergeFrom(specBase)); err != nil {
+		t.Fatalf("spec Patch: %v", err)
+	}
+	specRV := cur.ResourceVersion
+
+	// Step 2: status patch on the same object — overlay entry updated to R_status > R_spec.
+	// Re-fetch from inner to get the RV the server assigned after the spec patch.
+	var cur2 v1alpha1.Reservation
+	if err := inner.GetClient().Get(context.Background(), key, &cur2); err != nil {
+		t.Fatalf("inner get after spec patch: %v", err)
+	}
+	statusBase := cur2.DeepCopy()
+	cur2.Status.Host = "host-after-status-patch"
+	if err := c.Status().Patch(context.Background(), &cur2, client.MergeFrom(statusBase)); err != nil {
+		t.Fatalf("status Patch: %v", err)
+	}
+
+	// Step 3: informer delivers the spec-patch watch event (ResourceVersion = R_spec).
+	// The overlay must be evicted: the informer has now caught up to the spec write.
+	specWatchObj := newReservation("res-1", "az-1", specRV)
+	specWatchObj.UID = cur2.UID
+	inner.inf.fireAdd(specWatchObj)
+
+	_, present := c.getEntry(reservationGVK(), key)
+	if present {
+		t.Fatal("overlay entry not evicted after informer delivered spec-patch watch event; status patch must not block spec-patch eviction")
+	}
+}
+
 func TestEvictionIgnoresNonObject(t *testing.T) {
 	inner := newTestClient(t)
 	c := newCaching(t, inner)
