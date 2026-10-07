@@ -11,6 +11,12 @@
 allowlist:
   - # github login of an allowed user, e.g., "username"
 
+# Bots allowed to trigger agents. 
+# The [bot] suffix is optional (e.g. "renovate" matches "renovate[bot]").
+# Empty or missing allows no bots. '*' allows all bots.
+# allowed_bots:
+#   - "renovate"
+
 # Review each pull request opened or updated by an allowlisted author.
 review:
   active: true

@@ -95,6 +95,7 @@ changes are picked up by re-pinning the `uses:` line alone.
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `allowlist` | list of logins | empty (deny all) | Who may trigger review and assistant |
+| `allowed_bots` | list of bot logins | empty (deny all bots) | Bots who may trigger actions. Read by workflows that opt in |
 | `review.active` | bool | `false` | Review allowlisted-author PRs |
 | `review.model` | string | `sap/anthropic--claude-4.6-opus` | Model for review |
 | `review.command` | string | `/cortex-agents:review` | Accepted but ignored; review runs from an inline prompt |

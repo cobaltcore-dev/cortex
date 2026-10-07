@@ -31,6 +31,10 @@ inputs:
     description: "Comma-separated actors whose comments claude-code-action should include"
     required: false
     default: ""
+  allowed_bots:
+    description: "Comma-separated bot logins allowed to trigger the agent (passed to claude-code-action's allowed_bots). Empty (default) allows no bots, '*' allows all."
+    required: false
+    default: ""
   bot_id:
     description: "Numeric id of the cortex agents bot"
     required: false
@@ -203,6 +207,7 @@ runs:
         claude_args: ${{ steps.compose.outputs.claude_args }}
         trigger_phrase: ${{ inputs.trigger_phrase }}
         include_comments_by_actor: ${{ inputs.include_comments_by_actor }}
+        allowed_bots: ${{ inputs.allowed_bots }}
         use_litellm: "true"
         litellm_model: ${{ inputs.litellm_model }}
         github_token: ${{ steps.app-token.outputs.token }}
