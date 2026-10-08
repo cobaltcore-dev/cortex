@@ -56,6 +56,9 @@ func (r *CommittedResourceController) Reconcile(ctx context.Context, req ctrl.Re
 		"committedResource", req.Name,
 	)
 
+	// Debug: timing anchor for CR reconcile relative to Phase 6 and Reservation echo.
+	logger.V(1).Info("reconcile entry", "rv", cr.ResourceVersion, "gen", cr.Generation)
+
 	if !cr.DeletionTimestamp.IsZero() {
 		return ctrl.Result{}, nil
 	}
@@ -416,6 +419,17 @@ func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Co
 	// other slots are still pending.
 	allReady = true
 	for _, res := range list.Items {
+		obs := int64(0)
+		if res.Status.CommittedResourceReservation != nil {
+			obs = res.Status.CommittedResourceReservation.ObservedParentGeneration
+		}
+		ctrl.LoggerFrom(ctx).V(1).Info("checkChildReservationStatus slot",
+			"slot", res.Name,
+			"rv", res.ResourceVersion,
+			"crGen", cr.Generation,
+			"obsParentGen", obs,
+			"genMatch", obs == cr.Generation,
+		)
 		if res.Status.CommittedResourceReservation == nil ||
 			res.Status.CommittedResourceReservation.ObservedParentGeneration != cr.Generation {
 			allReady = false
