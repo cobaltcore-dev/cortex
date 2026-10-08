@@ -184,6 +184,13 @@ func (c *commitmentsClient) listCommitments(ctx context.Context, project Project
 		defer resp.Body.Close()
 	}
 	if err != nil {
+		// Limes returns 404 for projects that exist in Keystone but haven't been
+		// discovered by Limes yet. Treat as no commitments rather than failing the sync.
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			LoggerFromContext(ctx).V(1).Info("project not found in Limes, skipping",
+				"projectID", project.ID, "domainID", project.DomainID)
+			return nil, nil
+		}
 		return nil, err
 	}
 

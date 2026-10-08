@@ -56,6 +56,9 @@ func (r *CommittedResourceController) Reconcile(ctx context.Context, req ctrl.Re
 		"committedResource", req.Name,
 	)
 
+	// Debug: timing anchor for CR reconcile relative to Phase 6 and Reservation echo.
+	logger.V(1).Info("reconcile entry", "rv", cr.ResourceVersion, "gen", cr.Generation)
+
 	if !cr.DeletionTimestamp.IsZero() {
 		return ctrl.Result{}, nil
 	}
@@ -146,7 +149,12 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 		// Reservation controller hasn't processed all slots yet; Reservation watch will re-enqueue.
 		// Reset the retry timer: applyReservationState just succeeded, so the watch suppression
 		// gate should not fire while we wait for slots to become ready.
-		return ctrl.Result{}, r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", true)
+		// Fallback requeue: in case the watch event is missed,
+		// re-check after 1s rather than waiting for the full watch timeout.
+		if err := r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", true); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
 	return ctrl.Result{}, r.setAccepted(ctx, cr)
@@ -237,7 +245,12 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		// Reservation controller hasn't processed all slots yet; Reservation watch will re-enqueue.
 		// Reset the retry timer: applyReservationState just succeeded, so the watch suppression
 		// gate should not fire while we wait for slots to become ready.
-		return ctrl.Result{}, r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", true)
+		// Fallback requeue: in case the watch event is missed,
+		// re-check after 1s rather than waiting for the full watch timeout.
+		if err := r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", true); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
 	return ctrl.Result{}, r.setAccepted(ctx, cr)
@@ -406,6 +419,17 @@ func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Co
 	// other slots are still pending.
 	allReady = true
 	for _, res := range list.Items {
+		obs := int64(0)
+		if res.Status.CommittedResourceReservation != nil {
+			obs = res.Status.CommittedResourceReservation.ObservedParentGeneration
+		}
+		ctrl.LoggerFrom(ctx).V(1).Info("checkChildReservationStatus slot",
+			"slot", res.Name,
+			"rv", res.ResourceVersion,
+			"crGen", cr.Generation,
+			"obsParentGen", obs,
+			"genMatch", obs == cr.Generation,
+		)
 		if res.Status.CommittedResourceReservation == nil ||
 			res.Status.CommittedResourceReservation.ObservedParentGeneration != cr.Generation {
 			allReady = false

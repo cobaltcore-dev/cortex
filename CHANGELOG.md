@@ -1,5 +1,128 @@
 # Changelog
 
+## Changelog — Release 0.6.4 (2026-10-08)
+
+### Release PR: [#1328](https://github.com/cobaltcore-dev/cortex/pull/1328)
+
+### Version Bumps
+
+| Package | Previous Version | New Version |
+|---|---|---|
+| cortex | 0.6.3 | 0.6.4 |
+| cortex-postgres | 0.6.23 | 0.6.24 |
+| cortex-shim | 0.1.27 | 0.1.28 |
+| bundles | 0.0.101 | 0.0.102 |
+| cortex-placement-shim | 0.1.27 | 0.1.28 |
+
+### Changes
+
+#### Observability — Debug Logging for Scheduling Reconciliation Pipeline
+
+- **committed_resource_controller.go**: Added V(1) debug logging on reconcile entry with `ResourceVersion` and `Generation`; added per-slot logging in `checkChildReservationStatus` including `ResourceVersion`, `crGeneration`, `observedParentGeneration`, and generation-match status for diagnosing stale-watch or missed-update scenarios ([#1327](https://github.com/cobaltcore-dev/cortex/pull/1327))
+- **reservation_controller.go**: Added V(1) debug logging on reconcile entry with `ResourceVersion`, `specGeneration`, `parentGeneration`, and `observedParentGeneration`; added logging when `echoParentGeneration` fires capturing parent vs. observed generation mismatch ([#1327](https://github.com/cobaltcore-dev/cortex/pull/1327))
+- **pkg/cache/client.go**: Added V(1) debug logging for overlay cache upsert operations (kind, key, new RV), `evictIfSeen` decisions (observed RV, threshold RV, eviction outcome), and `statusWriter.Update`/`statusWriter.Patch` upsert calls for full write-path visibility ([#1327](https://github.com/cobaltcore-dev/cortex/pull/1327))
+
+### Included Pull Requests
+
+| PR | Title |
+|---|---|
+| [#1327](https://github.com/cobaltcore-dev/cortex/pull/1327) | fix: adding debug logging to overlay cache and CR/Reservation controllers |
+| [#1324](https://github.com/cobaltcore-dev/cortex/pull/1324) | bump app version `[skip ci]` |
+
+### Risk Assessment
+
+**Low risk.** All changes are debug-level log statements gated behind V(1) verbosity — invisible at default log levels with no impact on control flow, data mutation, or API behavior.
+
+## Changelog — Release 0.6.3 (2026-10-07)
+
+### Bumped Versions
+- cortex 0.6.2 → 0.6.3
+- cortex-postgres 0.6.22 → 0.6.23
+- cortex-shim 0.1.26 → 0.1.27
+- bundles 0.0.100 → 0.0.101
+- cortex-placement-shim 0.1.26 → 0.1.27
+
+### Bug Fixes
+- **Requeue CR after 1s when child reservations not yet ready ([#1319](https://github.com/cobaltcore-dev/cortex/pull/1319)):** When a `CommittedResource` was updated, the controller previously relied solely on a watch event to re-enqueue reconciliation while waiting for child reservations to become ready. If timing was unlucky, this path could hang indefinitely. Both `reconcilePending` and `reconcileCommitted` now return a `ctrl.Result{RequeueAfter: 1s}` fallback requeue instead of relying only on the watch event, ensuring the controller re-checks within 1 second even if the watch event is missed.
+
+### Dependency Updates
+- Update `github.com/sapcc/go-bits` digest `e86369b` → `62a588a` and `go.xyrillian.de/gg` `v1.16.0` → `v1.17.0` ([#1304](https://github.com/cobaltcore-dev/cortex/pull/1304))
+- Update `kube-prometheus-stack` to v92.0.0 ([#1318](https://github.com/cobaltcore-dev/cortex/pull/1318))
+
+### App Version Bumps
+- cortex appVersion → `sha-6c8dab71` ([#1317](https://github.com/cobaltcore-dev/cortex/pull/1317), [#1320](https://github.com/cobaltcore-dev/cortex/pull/1320))
+- cortex-shim appVersion → `sha-f08b84c5` ([#1320](https://github.com/cobaltcore-dev/cortex/pull/1320))
+
+### ⚠️ Notes
+- **kube-prometheus-stack v92** is a **major** version bump. Key change: Linux-only workloads now default to `kubernetes.io/os: linux` node selector. Verify this does not affect mixed-OS clusters.
+
+**Contributors:** Marcel (@mblos), renovate[bot]
+
+**Full diff:** [PR #1321](https://github.com/cobaltcore-dev/cortex/pull/1321) — 5 commits · 6 files changed · +21 / −11 lines
+
+## Changelog — Release 0.6.2 (2026-10-06)
+
+### Bumped Versions
+- cortex 0.6.1 → 0.6.2
+- cortex-postgres 0.6.21 → 0.6.22
+- cortex-shim 0.1.25 → 0.1.26
+- bundles 0.0.99 → 0.0.100
+- cortex-placement-shim 0.1.25 → 0.1.26
+
+### Bug Fixes
+- **Commitment marketplace transfers now handled as in-place CRD updates ([#1313](https://github.com/cobaltcore-dev/cortex/pull/1313)):** Previously, marketplace transfers — where the same commitment UUID is moved between projects in a single Limes request — caused timeouts due to a race condition on the same CommittedResource name. The delete-then-create path has been replaced with an atomic in-place update of the CR's `ProjectID`. A new `transferredCommitmentUUIDs()` function detects UUIDs that appear as both a deletion and a creation within the same request, and `processCommitmentChanges` now skips the deletion for these UUIDs while the create side updates the `ProjectID` via `CreateOrUpdate`. Reservation slots whose `ProjectID` no longer matches are replaced during Phase 3 of `ApplyCommitmentState`.
+- **Syncer: stale `AllowRejection` no longer preserved ([#1313](https://github.com/cobaltcore-dev/cortex/pull/1313)):** The syncer now explicitly sets `AllowRejection = false` on the sync path instead of preserving the existing value. This prevents a stale `true` from a prior API request from causing an unintended rejection of synced commitments.
+- **E2E stale-generation guard ([#1313](https://github.com/cobaltcore-dev/cortex/pull/1313)):** `e2eIsTerminalCR` now verifies that the `Ready` condition's `ObservedGeneration` matches the CR's current `Generation` before considering it terminal. This ensures a CR whose generation was bumped (e.g. by a transfer) is properly re-reconciled rather than being prematurely treated as ready.
+
+### E2E / Test Improvements
+- **New E2E check: `CheckCommitmentsMarketplaceTransfer` ([#1313](https://github.com/cobaltcore-dev/cortex/pull/1313)):** Added a full create → transfer (A→B) → verify usage → delete lifecycle check for every `(AZ, resource)` pair that handles commitments. Configurable via `transferProjectID` in `E2EChecksConfig`.
+- **Rejection-reason string updated ([#1313](https://github.com/cobaltcore-dev/cortex/pull/1313)):** Several e2e checks updated from `"insufficient capacity"` to `"not sufficient capacity"` to match current rejection wording.
+- **Unit tests:** Two new cases covering transfer accepted (ProjectID updated to target project) and transfer rejected (ProjectID rolled back to source project).
+- **E2E test:** Full lifecycle test (`marketplace transfer A→B then delete`) covering initial create, in-place transfer, reservation slot verification, and final cleanup.
+
+### ⚠️ Notes
+- **Behavioral change in syncer:** `AllowRejection` is now forcibly set to `false` on every sync-path upsert rather than being preserved. Synced commitments must not be rejected, but callers relying on the previous preserve-on-sync semantics should be aware of this change.
+- **Atomicity assumption:** The transfer path assumes both the "delete" and "create" entries for the same UUID always appear in the same request. If they are split across separate requests, the skip-deletion logic will not trigger and the old delete-then-create path applies.
+
+## 2026-10-06 — [#1308](https://github.com/cobaltcore-dev/cortex/pull/1308)
+
+### cortex 0.6.1
+
+#### 🚀 Features
+
+- **Stale CommittedResource CRD cleanup** (#1303, @mblos): The CR syncer now detects, logs, and optionally deletes CommittedResource CRDs that exist locally but are no longer present in Limes. A configurable grace period (`staleCRDeletionGracePeriod`, default 10 min) prevents race conditions where recently-created CRDs haven't propagated to the global fetch yet. New Helm values: `deleteStaleCRs` and `staleCRDeletionGracePeriod`.
+
+#### 🐛 Bug Fixes
+
+- **Cache: clear stale metadata on tombstone NotFound** (#1299, @mblos): When a tombstone existed but the informer hadn't caught up, `Overlay.Get` left the old `ResourceVersion` on the caller's object before returning `NotFound`. This caused `controllerutil.CreateOrUpdate` to attempt a Create with a non-empty `ResourceVersion`, which the API server rejects. The fix now clears stale metadata properly.
+- **Cache tombstone Get mutates object** (#1306, @SoWieMarkus): Follow-up fix ensuring that a cache tombstone `Get` does not inadvertently mutate the caller's object during create operations.
+- **Route internal CR acceptance errors to HTTP 500** (#1302, @mblos): Internal errors during CR acceptance are now correctly surfaced as HTTP 500 responses instead of being swallowed, with improved error logging for observability.
+
+#### 📦 Dependency Updates
+
+- Update `debian:trixie-slim` Docker digest from `a99cfc5` to `a29215f` (#1305).
+- Helm chart version bumps: `cortex-shim` appVersion → `sha-d3780339`, `cortex` appVersion → `sha-a49ab67e`.
+
+### cortex-shim 0.1.25, cortex-placement-shim 0.1.25
+
+- Bumped in lockstep with cortex 0.6.1; no shim-specific changes.
+
+### cortex-nova 0.0.99, cortex-cinder 0.0.99, cortex-manila 0.0.99, cortex-crds 0.0.99, cortex-ironcore 0.0.99, cortex-pods 0.0.99
+
+- Helm chart version bumps; no plugin-specific changes.
+
+| Package | From | To |
+|---|---|---|
+| cortex | 0.6.0 | 0.6.1 |
+| cortex-postgres | 0.6.20 | 0.6.21 |
+| cortex-shim | 0.1.24 | 0.1.25 |
+| bundles | 0.0.98 | 0.0.99 |
+| cortex-placement-shim | 0.1.24 | 0.1.25 |
+
+**Contributors:** Marcel (@mblos), Markus Wieland (@SoWieMarkus), renovate[bot]
+
+**Full diff:** [PR #1308](https://github.com/cobaltcore-dev/cortex/pull/1308) — 8 commits · 14 files changed · +507 / −57 lines
+
 ## 2026-10-05 — [#1295](https://github.com/cobaltcore-dev/cortex/pull/1295)
 
 ### cortex 0.6.0

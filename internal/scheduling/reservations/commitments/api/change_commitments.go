@@ -30,6 +30,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+// errInternalRollback is returned by processCommitmentChanges when a rollback was triggered by an
+// internal error (not a capacity rejection or bad request). HandleChangeCommitments maps this to
+// HTTP 500 so that the error metric fires and Limes retries rather than treating it as a permanent rejection.
+var errInternalRollback = errors.New("internal commitment change error")
+
 // sortedKeys returns map keys sorted alphabetically for deterministic iteration.
 func sortedKeys[K ~string, V any](m map[K]V) []K {
 	keys := make([]K, 0, len(m))
@@ -40,6 +45,33 @@ func sortedKeys[K ~string, V any](m map[K]V) []K {
 		return string(keys[i]) < string(keys[j])
 	})
 	return keys
+}
+
+// transferredCommitmentUUIDs returns the set of commitment UUIDs that are being transferred
+// from one project to another in this request: the same UUID appears as a deletion
+// (NewStatus=None) in one project and as a creation (NewStatus!=None) in a different project.
+// Transfers are handled by a single in-place spec update rather than delete+create.
+func transferredCommitmentUUIDs(req liquid.CommitmentChangeRequest) map[liquid.CommitmentUUID]struct{} {
+	deletedBy := make(map[liquid.CommitmentUUID]liquid.ProjectUUID)
+	createdBy := make(map[liquid.CommitmentUUID]liquid.ProjectUUID)
+	for projectID, projectChanges := range req.ByProject {
+		for _, resourceChanges := range projectChanges.ByResource {
+			for _, c := range resourceChanges.Commitments {
+				if c.NewStatus.IsNone() {
+					deletedBy[c.UUID] = projectID
+				} else {
+					createdBy[c.UUID] = projectID
+				}
+			}
+		}
+	}
+	transfers := make(map[liquid.CommitmentUUID]struct{})
+	for uuid, deleteProject := range deletedBy {
+		if createProject, ok := createdBy[uuid]; ok && createProject != deleteProject {
+			transfers[uuid] = struct{}{}
+		}
+	}
+	return transfers
 }
 
 // crWatch pairs a CRD name with the generation written by the API so the polling loop
@@ -157,7 +189,10 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := api.processCommitmentChanges(ctx, w, logger, req, &resp); err != nil {
-		if strings.Contains(err.Error(), "caches not ready") {
+		switch {
+		case errors.Is(err, errInternalRollback):
+			statusCode = http.StatusInternalServerError
+		case strings.Contains(err.Error(), "caches not ready"):
 			statusCode = http.StatusServiceUnavailable
 		}
 		api.recordMetrics(req, resp, statusCode, startTime)
@@ -185,6 +220,10 @@ func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.Respons
 	// the controller must not reject — it must retry until it succeeds (AllowRejection=false).
 	// Conversely, when Limes requires confirmation, the controller may reject and report back.
 	allowRejection := req.RequiresConfirmation()
+
+	// Pre-scan for marketplace transfers: same UUID deleted in one project and created in another.
+	// These are handled by a single in-place ProjectID update rather than delete+create.
+	transfers := transferredCommitmentUUIDs(req)
 
 	var (
 		toWatch         []crWatch    // CRD names + expected generations to poll for terminal conditions (upserts only)
@@ -267,6 +306,15 @@ ProcessLoop:
 				}
 
 				if isDelete {
+					if _, isTransfer := transfers[commitment.UUID]; isTransfer {
+						// This commitment is being transferred to another project in this same request.
+						// The create side will update ProjectID in place via CreateOrUpdate; no deletion
+						// needed here. Phase 3 of ApplyCommitmentState will replace any reservation slots
+						// whose ProjectID no longer matches.
+						logger.Info("commitment transfer: skipping deletion, will update in place",
+							"commitmentUUID", commitment.UUID)
+						continue
+					}
 					// Limes is removing this commitment; delete the CRD if it exists.
 					snap.wasDeleted = true
 					snapshots = append(snapshots, snap)
@@ -388,13 +436,21 @@ ProcessLoop:
 		if isBadRequest {
 			logger.Info("commitment change bad request", "az", req.AZ, "reason", failedReason)
 		} else if sanitisedReason != "not sufficient capacity, please try again later" {
-			logger.Error(nil, "commitment change internal error", "reason", failedReason)
+			logger.Error(nil, "commitment change internal error", "az", req.AZ, "reason", failedReason)
 		}
 		logger.Info("rolling back CommittedResource CRDs", "reason", failedReason, "count", len(snapshots))
 		for i := len(snapshots) - 1; i >= 0; i-- {
 			rollbackCR(ctx, logger, api.client, snapshots[i])
 		}
 		logger.Info("rollback complete")
+		// Internal errors (not capacity rejections, not bad requests) signal HTTP 500 to the caller:
+		// Limes retries rather than treating this as a permanent rejection, and result="error" in
+		// the metric fires CortexNovaCommittedResourceChangeInternalErrors rather than being
+		// silently absorbed into the capacity-rejection counter.
+		if !isBadRequest && sanitisedReason != "not sufficient capacity, please try again later" {
+			http.Error(w, "internal error processing commitment changes, please retry", http.StatusInternalServerError)
+			return errInternalRollback
+		}
 		return nil
 	}
 

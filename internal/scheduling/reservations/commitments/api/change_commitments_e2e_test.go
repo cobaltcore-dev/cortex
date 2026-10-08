@@ -225,7 +225,9 @@ func (e *e2eEnv) reconcileAll(ctx context.Context) {
 }
 
 // e2eIsTerminalCR returns true for states the API polling loop treats as final:
-// Accepted (Ready=True), Rejected, or Planned.
+// Accepted (Ready=True), Rejected, or Planned — but only when the condition reflects
+// the current generation. A CR whose generation was bumped (e.g. marketplace transfer)
+// must be re-reconciled even if it already has a stale Ready=True condition.
 func e2eIsTerminalCR(cr v1alpha1.CommittedResource) bool {
 	if !cr.DeletionTimestamp.IsZero() {
 		return true
@@ -233,6 +235,9 @@ func e2eIsTerminalCR(cr v1alpha1.CommittedResource) bool {
 	cond := apimeta.FindStatusCondition(cr.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
 	if cond == nil {
 		return false
+	}
+	if cond.ObservedGeneration < cr.Generation {
+		return false // condition is stale; the current generation has not been processed yet
 	}
 	if cond.Status == metav1.ConditionTrue {
 		return true
@@ -434,6 +439,79 @@ func TestE2EChangeCommitments(t *testing.T) {
 					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
 				}); err != nil {
 					t.Fatalf("list reservations: %v", err)
+				}
+				if len(resList.Items) != 0 {
+					t.Errorf("expected 0 Reservations after delete, got %d", len(resList.Items))
+				}
+			},
+		},
+		{
+			Name:      "lifecycle: marketplace transfer A→B then delete",
+			Scheduler: e2eAcceptScheduler,
+			ReqJSON: buildRequestJSON(newCommitmentRequest("az-a", false, e2eInfoVersion,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-e2e-mktxfer", "confirmed", 1))),
+			WantResp: newAPIResponse(),
+			Verify: func(t *testing.T, env *e2eEnv) {
+				t.Helper()
+				te := env.asCRTestEnv()
+
+				// Verify initial placement in project-A.
+				var cr v1alpha1.CommittedResource
+				if err := env.k8sClient.Get(context.Background(), types.NamespacedName{Name: "commitment-uuid-e2e-mktxfer"}, &cr); err != nil {
+					t.Fatalf("get CR after initial create: %v", err)
+				}
+				if cr.Spec.ProjectID != "project-A" {
+					t.Errorf("before transfer: ProjectID want project-A, got %q", cr.Spec.ProjectID)
+				}
+				if !apimeta.IsStatusConditionTrue(cr.Status.Conditions, v1alpha1.CommittedResourceConditionReady) {
+					t.Errorf("before transfer: expected Ready=True")
+				}
+
+				// Transfer: same UUID released from project-A, assigned to project-B.
+				transferJSON := buildRequestJSON(newCommitmentRequest("az-a", false, e2eInfoVersion,
+					deleteCommitment("hw_version_hana_1_ram", "project-A", "uuid-e2e-mktxfer", "confirmed", 1),
+					createCommitment("hw_version_hana_1_ram", "project-B", "uuid-e2e-mktxfer", "confirmed", 1),
+				))
+				resp, _, statusCode := te.CallChangeCommitmentsAPI(transferJSON)
+				te.VerifyAPIResponse(newAPIResponse(), resp, statusCode)
+
+				// Verify CR was updated in place: same CRD name, ProjectID=B, Ready=True.
+				if err := env.k8sClient.Get(context.Background(), types.NamespacedName{Name: "commitment-uuid-e2e-mktxfer"}, &cr); err != nil {
+					t.Fatalf("get CR after transfer: %v", err)
+				}
+				if cr.Spec.ProjectID != "project-B" {
+					t.Errorf("after transfer: ProjectID want project-B, got %q", cr.Spec.ProjectID)
+				}
+				if !apimeta.IsStatusConditionTrue(cr.Status.Conditions, v1alpha1.CommittedResourceConditionReady) {
+					t.Errorf("after transfer: expected Ready=True")
+				}
+
+				// Old slot (project-A) must be gone; exactly one new slot (project-B) must be placed.
+				var resList v1alpha1.ReservationList
+				if err := env.k8sClient.List(context.Background(), &resList, client.MatchingLabels{
+					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+				}); err != nil {
+					t.Fatalf("list reservations after transfer: %v", err)
+				}
+				if len(resList.Items) != 1 {
+					t.Fatalf("expected 1 Reservation after transfer, got %d", len(resList.Items))
+				}
+				if !apimeta.IsStatusConditionTrue(resList.Items[0].Status.Conditions, v1alpha1.ReservationConditionReady) {
+					t.Errorf("after transfer: Reservation not Ready=True")
+				}
+
+				// Delete from project-B: CR and child Reservations must be cleaned up.
+				deleteJSON := buildRequestJSON(newCommitmentRequest("az-a", false, e2eInfoVersion,
+					deleteCommitment("hw_version_hana_1_ram", "project-B", "uuid-e2e-mktxfer", "confirmed", 1)))
+				resp, _, statusCode = te.CallChangeCommitmentsAPI(deleteJSON)
+				te.VerifyAPIResponse(newAPIResponse(), resp, statusCode)
+
+				env.waitForCRAbsent(t, "commitment-uuid-e2e-mktxfer")
+
+				if err := env.k8sClient.List(context.Background(), &resList, client.MatchingLabels{
+					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+				}); err != nil {
+					t.Fatalf("list reservations after delete: %v", err)
 				}
 				if len(resList.Items) != 0 {
 					t.Errorf("expected 0 Reservations after delete, got %d", len(resList.Items))

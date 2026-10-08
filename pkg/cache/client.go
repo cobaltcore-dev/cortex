@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
@@ -192,6 +193,7 @@ func (c *Overlay) upsert(gvk schema.GroupVersionKind, obj client.Object) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.ensureGVK(gvk)
+	ctrl.Log.WithName("cache").V(1).Info("overlay upsert", "kind", gvk.Kind, "key", client.ObjectKeyFromObject(obj), "newRV", obj.GetResourceVersion())
 	c.byGVK[gvk][client.ObjectKeyFromObject(obj)] = &entry{
 		obj:             obj.DeepCopyObject().(client.Object),
 		uid:             obj.GetUID(),
@@ -238,7 +240,9 @@ func (c *Overlay) evictIfSeen(gvk schema.GroupVersionKind, obj client.Object) {
 	if e.uid != "" && obj.GetUID() != "" && e.uid != obj.GetUID() {
 		return
 	}
-	if !resourceVersionAtLeast(obj.GetResourceVersion(), e.resourceVersion) {
+	evicts := resourceVersionAtLeast(obj.GetResourceVersion(), e.resourceVersion)
+	ctrl.Log.WithName("cache").V(1).Info("evictIfSeen", "kind", gvk.Kind, "key", key, "observedRV", obj.GetResourceVersion(), "thresholdRV", e.resourceVersion, "evicts", evicts)
+	if !evicts {
 		return
 	}
 	delete(entries, key)
@@ -502,23 +506,33 @@ func (c *Overlay) Get(ctx context.Context, key client.ObjectKey, obj client.Obje
 	if !cached {
 		return c.Client.Get(ctx, key, obj, opts...)
 	}
+	// Consult the overlay before touching the inner client.
+	//
+	// Tombstone: return NotFound without calling the inner Get. The inner Get
+	// would populate obj with the not-yet-evicted informer copy (ResourceVersion,
+	// UID, Finalizers, Spec, ...), and returning NotFound with that stale data
+	// makes controllerutil.CreateOrUpdate take the Create path on a polluted
+	// object, which the apiserver rejects ("resourceVersion should not be set on
+	// objects to be created"). By returning here, obj is never written to.
+	//
+	// Known limitation: this reads the overlay once, before the inner Get. A
+	// Delete that lands AFTER this read but during the inner Get is not observed,
+	// so a just-deleted object may be served once (the next reconcile corrects
+	// it). This is consistent with the overlay's best-effort model against
+	// concurrent external mutations (informer lag, TTL, and evictIfSeen are all
+	// best-effort too). Crucially it does NOT reintroduce the Create-pollution
+	// bug: on a tombstone we return before the inner Get, so obj stays pristine.
+	e, ok := c.getEntry(gvk, key)
+	if ok && e.deleted {
+		return apierrors.NewNotFound(schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind}, key.Name)
+	}
 	err := c.Client.Get(ctx, key, obj, opts...)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	e, ok := c.getEntry(gvk, key)
 	if !ok {
 		// No overlay entry: return the inner result (value or NotFound) as-is.
 		return err
-	}
-	if e.deleted {
-		// Clear fields that the inner Get may have written onto obj before the tombstone check.
-		// If we return NotFound with a stale ResourceVersion, controllerutil.CreateOrUpdate takes
-		// the Create path and the apiserver rejects: "resourceVersion should not be set on objects
-		// to be created". Clearing UID is analogous hygiene.
-		obj.SetResourceVersion("")
-		obj.SetUID("")
-		return apierrors.NewNotFound(schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind}, key.Name)
 	}
 	// Live overlay entry: copy it into obj, overriding the inner result.
 	// Deep-copy the cached object first so scheme.Convert cannot alias the
@@ -589,6 +603,7 @@ func (s *statusWriter) Update(ctx context.Context, obj client.Object, opts ...cl
 	if err := s.inner.Update(ctx, obj, opts...); err != nil {
 		return err
 	}
+	ctrl.Log.WithName("cache").V(1).Info("statusWriter.Update upsert", "kind", gvk.Kind, "key", client.ObjectKeyFromObject(obj), "newRV", obj.GetResourceVersion())
 	s.c.upsert(gvk, obj)
 	return nil
 }
@@ -603,6 +618,7 @@ func (s *statusWriter) Patch(ctx context.Context, obj client.Object, patch clien
 	if err := s.inner.Patch(ctx, obj, patch, opts...); err != nil {
 		return err
 	}
+	ctrl.Log.WithName("cache").V(1).Info("statusWriter.Patch upsert", "kind", gvk.Kind, "key", client.ObjectKeyFromObject(obj), "newRV", obj.GetResourceVersion())
 	s.c.upsert(gvk, obj)
 	return nil
 }
