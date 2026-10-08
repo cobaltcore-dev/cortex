@@ -221,6 +221,10 @@ func (in *CommittedResourceStatus) DeepCopyInto(out *CommittedResourceStatus) {
 		*out = new(int64)
 		**out = **in
 	}
+	if in.LastRepairAt != nil {
+		in, out := &in.LastRepairAt, &out.LastRepairAt
+		*out = (*in).DeepCopy()
+	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]v1.Condition, len(*in))

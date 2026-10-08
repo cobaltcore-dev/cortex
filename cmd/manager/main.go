@@ -684,6 +684,26 @@ func main() {
 			}
 		}
 
+		if commitmentsVMSource == nil {
+			setupLog.Error(nil, "RepairReconciler requires a datasource but commitments.datasourceName is not configured — skipping")
+		} else {
+			repairReconcilerMonitor := commitments.NewRepairReconcilerMonitor()
+			metrics.Registry.MustRegister(&repairReconcilerMonitor)
+			repairReconcilerConf := commitmentsConfig.RepairReconciler
+			repairReconcilerConf.ApplyDefaults()
+			// RepairReconciler.SetupWithManager is always called here; the Enabled flag check
+			// lives inside SetupWithManager itself and returns nil early when disabled.
+			if err := (&commitments.RepairReconciler{
+				Client:   multiclusterClient,
+				Conf:     repairReconcilerConf,
+				VMSource: commitmentsVMSource,
+				Monitor:  repairReconcilerMonitor,
+			}).SetupWithManager(mgr, multiclusterClient); err != nil {
+				setupLog.Error(err, "unable to create controller", "controller", "CommittedResourceRepair")
+				os.Exit(1)
+			}
+		}
+
 		if commitmentsConfig.ReservationController.EnableOversubscriptionCheck {
 			reservationControllerMonitor := commitments.NewReservationControllerMonitor()
 			metrics.Registry.MustRegister(&reservationControllerMonitor)
