@@ -8,6 +8,9 @@ outputs:
   allowlist:
     description: "CSV of logins allowed to trigger agents (empty means deny)"
     value: ${{ steps.parse.outputs.allowlist }}
+  allowed_bots:
+    description: "CSV of bot logins allowed to trigger agents (empty means no bots)"
+    value: ${{ steps.parse.outputs.allowed_bots }}
   review_active:
     description: "true when PR review is enabled"
     value: ${{ steps.parse.outputs.review_active }}
@@ -76,6 +79,7 @@ runs:
           {
             echo "config_present=false"
             echo "allowlist="
+            echo "allowed_bots="
             echo "review_active=false"
             echo "review_model=${DEFAULT_MODEL}"
             echo "review_command=/cortex-agents:review"
@@ -134,6 +138,7 @@ runs:
         {
           echo "config_present=true"
           echo "allowlist=$(csv '.allowlist' '')"
+          echo "allowed_bots=$(csv '.allowed_bots' '')"
           echo "review_active=$(boolean '.review.active')"
           echo "review_model=$(get '.review.model' "${DEFAULT_MODEL}")"
           echo "review_command=$(get '.review.command' '/cortex-agents:review')"
