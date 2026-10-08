@@ -16,7 +16,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-const testInstanceUUID = "vm-migrating"
+const (
+	testInstanceUUID = "vm-migrating"
+	testProjectID    = "proj-1"
+	testSourceHost   = "host-src"
+)
 
 // newCRMigrationSlotWeigher builds a KVMCRMigrationSlotStep backed by a fake client.
 func newCRMigrationSlotWeigher(t *testing.T, opts KVMCRMigrationSlotOpts, objs ...client.Object) *KVMCRMigrationSlotStep {
@@ -29,7 +33,7 @@ func newCRMigrationSlotWeigher(t *testing.T, opts KVMCRMigrationSlotOpts, objs .
 }
 
 // migrationRequest builds a live-migration request from the given candidate hosts.
-func migrationRequest(projectID string, hosts ...string) api.ExternalSchedulerRequest {
+func migrationRequest(hosts ...string) api.ExternalSchedulerRequest {
 	hostList := make([]api.ExternalSchedulerHost, len(hosts))
 	for i, h := range hosts {
 		hostList[i] = api.ExternalSchedulerHost{ComputeHost: h}
@@ -38,7 +42,7 @@ func migrationRequest(projectID string, hosts ...string) api.ExternalSchedulerRe
 		Spec: api.NovaObject[api.NovaSpec]{
 			Data: api.NovaSpec{
 				InstanceUUID: testInstanceUUID,
-				ProjectID:    projectID,
+				ProjectID:    testProjectID,
 				SchedulerHints: map[string]any{
 					"_nova_check_type": "live_migrate",
 				},
@@ -49,32 +53,32 @@ func migrationRequest(projectID string, hosts ...string) api.ExternalSchedulerRe
 }
 
 // confirmedSourceSlot builds a ready CR reservation with testInstanceUUID confirmed in Status.
-func confirmedSourceSlot(host, resourceGroup, memory string) *v1alpha1.Reservation {
+func confirmedSourceSlot(resourceGroup, memory string) *v1alpha1.Reservation {
 	return &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "slot-src-" + host,
+			Name: "slot-src-" + testSourceHost,
 			Labels: map[string]string{
 				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
 			},
 		},
 		Spec: v1alpha1.ReservationSpec{
 			Type:       v1alpha1.ReservationTypeCommittedResource,
-			TargetHost: host,
+			TargetHost: testSourceHost,
 			Resources: map[hv1.ResourceName]resource.Quantity{
 				hv1.ResourceMemory: resource.MustParse(memory),
 			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				ProjectID:     "proj-1",
+				ProjectID:     testProjectID,
 				ResourceGroup: resourceGroup,
 			},
 		},
 		Status: v1alpha1.ReservationStatus{
-			Host: host,
+			Host: testSourceHost,
 			Conditions: []metav1.Condition{
 				{Type: v1alpha1.ReservationConditionReady, Status: metav1.ConditionTrue, Reason: "ReservationActive"},
 			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: map[string]string{testInstanceUUID: host},
+				Allocations: map[string]string{testInstanceUUID: testSourceHost},
 			},
 		},
 	}
@@ -125,11 +129,6 @@ func hvWithFreeMemory(name, memory string) *hv1.Hypervisor {
 }
 
 func TestKVMCRMigrationSlotStep_Run(t *testing.T) {
-	const (
-		instanceUUID = "vm-migrating"
-		projectID    = "proj-1"
-	)
-
 	defaultOpts := KVMCRMigrationSlotOpts{SlotHostWeight: floatPtr(1.0), DefaultHostWeight: floatPtr(0.1)}
 
 	tests := []struct {
@@ -142,13 +141,13 @@ func TestKVMCRMigrationSlotStep_Run(t *testing.T) {
 		{
 			name: "non-migration intent: all hosts get no-effect weight",
 			objects: []client.Object{
-				confirmedSourceSlot("host-src", "hana-v2", "16Gi"),
+				confirmedSourceSlot("hana-v2", "16Gi"),
 			},
 			request: api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
 						InstanceUUID: testInstanceUUID,
-						ProjectID:    projectID,
+						ProjectID:    testProjectID,
 						// no _nova_check_type → CreateIntent
 					},
 				},
@@ -160,48 +159,48 @@ func TestKVMCRMigrationSlotStep_Run(t *testing.T) {
 		{
 			name:            "no source slot for VM: all candidates get no-effect weight",
 			objects:         []client.Object{},
-			request:         migrationRequest(projectID, "host-a", "host-b"),
+			request:         migrationRequest("host-a", "host-b"),
 			opts:            defaultOpts,
 			expectedWeights: map[string]float64{"host-a": 0.0, "host-b": 0.0},
 		},
 		{
 			name: "host with matching slot gets slot weight, others get default weight",
 			objects: []client.Object{
-				confirmedSourceSlot("host-src", "hana-v2", "16Gi"),
+				confirmedSourceSlot("hana-v2", "16Gi"),
 				emptyTargetSlot("slot-a", "host-a", "hana-v2", "16Gi"),
 				emptyTargetSlot("slot-b", "host-b", "hana-v2", "8Gi"), // too small
 			},
-			request:         migrationRequest(projectID, "host-a", "host-b", "host-c"),
+			request:         migrationRequest("host-a", "host-b", "host-c"),
 			opts:            defaultOpts,
 			expectedWeights: map[string]float64{"host-a": 1.0, "host-b": 0.1, "host-c": 0.1},
 		},
 		{
 			name: "no compatible slot on any candidate: hosts penalised (no capacity)",
 			objects: []client.Object{
-				confirmedSourceSlot("host-src", "hana-v2", "16Gi"),
+				confirmedSourceSlot("hana-v2", "16Gi"),
 			},
-			request:         migrationRequest(projectID, "host-a", "host-b"),
+			request:         migrationRequest("host-a", "host-b"),
 			opts:            defaultOpts,
 			expectedWeights: map[string]float64{"host-a": 0.1, "host-b": 0.1},
 		},
 		{
 			name: "host with free capacity but no slot: boosted via accommodate path",
 			objects: []client.Object{
-				confirmedSourceSlot("host-src", "hana-v2", "16Gi"),
+				confirmedSourceSlot("hana-v2", "16Gi"),
 				hvWithFreeMemory("host-a", "32Gi"), // enough free memory for the slot
 				hvWithFreeMemory("host-b", "8Gi"),  // too small for the slot
 			},
-			request:         migrationRequest(projectID, "host-a", "host-b"),
+			request:         migrationRequest("host-a", "host-b"),
 			opts:            defaultOpts,
 			expectedWeights: map[string]float64{"host-a": 1.0, "host-b": 0.1},
 		},
 		{
 			name: "wrong resource group on target: no slot match, falls back to capacity check",
 			objects: []client.Object{
-				confirmedSourceSlot("host-src", "hana-v2", "16Gi"),
+				confirmedSourceSlot("hana-v2", "16Gi"),
 				emptyTargetSlot("slot-a", "host-a", "general-v3", "16Gi"),
 			},
-			request:         migrationRequest(projectID, "host-a"),
+			request:         migrationRequest("host-a"),
 			opts:            defaultOpts,
 			expectedWeights: map[string]float64{"host-a": 0.1},
 		},
@@ -210,23 +209,23 @@ func TestKVMCRMigrationSlotStep_Run(t *testing.T) {
 			objects: []client.Object{
 				// source slot with no memory resource
 				func() *v1alpha1.Reservation {
-					res := confirmedSourceSlot("host-src", "hana-v2", "0")
+					res := confirmedSourceSlot("hana-v2", "0")
 					res.Spec.Resources = map[hv1.ResourceName]resource.Quantity{} // no memory key
 					return res
 				}(),
 				emptyTargetSlot("slot-a", "host-a", "hana-v2", "16Gi"),
 			},
-			request:         migrationRequest(projectID, "host-a"),
+			request:         migrationRequest("host-a"),
 			opts:            defaultOpts,
 			expectedWeights: map[string]float64{"host-a": 0.0},
 		},
 		{
 			name: "nil opts use default weights",
 			objects: []client.Object{
-				confirmedSourceSlot("host-src", "hana-v2", "16Gi"),
+				confirmedSourceSlot("hana-v2", "16Gi"),
 				emptyTargetSlot("slot-a", "host-a", "hana-v2", "16Gi"),
 			},
-			request:         migrationRequest(projectID, "host-a", "host-b"),
+			request:         migrationRequest("host-a", "host-b"),
 			opts:            KVMCRMigrationSlotOpts{}, // nil → defaults: slot=0.1, default=0.0
 			expectedWeights: map[string]float64{"host-a": 0.1, "host-b": 0.0},
 		},
