@@ -1,5 +1,38 @@
 # Changelog
 
+## Changelog — Release 0.6.4 (2026-10-08)
+
+### Release PR: [#1328](https://github.com/cobaltcore-dev/cortex/pull/1328)
+
+### Version Bumps
+
+| Package | Previous Version | New Version |
+|---|---|---|
+| cortex | 0.6.3 | 0.6.4 |
+| cortex-postgres | 0.6.23 | 0.6.24 |
+| cortex-shim | 0.1.27 | 0.1.28 |
+| bundles | 0.0.101 | 0.0.102 |
+| cortex-placement-shim | 0.1.27 | 0.1.28 |
+
+### Changes
+
+#### Observability — Debug Logging for Scheduling Reconciliation Pipeline
+
+- **committed_resource_controller.go**: Added V(1) debug logging on reconcile entry with `ResourceVersion` and `Generation`; added per-slot logging in `checkChildReservationStatus` including `ResourceVersion`, `crGeneration`, `observedParentGeneration`, and generation-match status for diagnosing stale-watch or missed-update scenarios ([#1327](https://github.com/cobaltcore-dev/cortex/pull/1327))
+- **reservation_controller.go**: Added V(1) debug logging on reconcile entry with `ResourceVersion`, `specGeneration`, `parentGeneration`, and `observedParentGeneration`; added logging when `echoParentGeneration` fires capturing parent vs. observed generation mismatch ([#1327](https://github.com/cobaltcore-dev/cortex/pull/1327))
+- **pkg/cache/client.go**: Added V(1) debug logging for overlay cache upsert operations (kind, key, new RV), `evictIfSeen` decisions (observed RV, threshold RV, eviction outcome), and `statusWriter.Update`/`statusWriter.Patch` upsert calls for full write-path visibility ([#1327](https://github.com/cobaltcore-dev/cortex/pull/1327))
+
+### Included Pull Requests
+
+| PR | Title |
+|---|---|
+| [#1327](https://github.com/cobaltcore-dev/cortex/pull/1327) | fix: adding debug logging to overlay cache and CR/Reservation controllers |
+| [#1324](https://github.com/cobaltcore-dev/cortex/pull/1324) | bump app version `[skip ci]` |
+
+### Risk Assessment
+
+**Low risk.** All changes are debug-level log statements gated behind V(1) verbosity — invisible at default log levels with no impact on control flow, data mutation, or API behavior.
+
 ## Changelog — Release 0.6.3 (2026-10-07)
 
 ### Bumped Versions
