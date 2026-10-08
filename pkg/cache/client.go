@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
@@ -192,6 +193,7 @@ func (c *Overlay) upsert(gvk schema.GroupVersionKind, obj client.Object) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.ensureGVK(gvk)
+	ctrl.Log.WithName("cache").V(1).Info("overlay upsert", "kind", gvk.Kind, "key", client.ObjectKeyFromObject(obj), "newRV", obj.GetResourceVersion())
 	c.byGVK[gvk][client.ObjectKeyFromObject(obj)] = &entry{
 		obj:             obj.DeepCopyObject().(client.Object),
 		uid:             obj.GetUID(),
@@ -238,7 +240,9 @@ func (c *Overlay) evictIfSeen(gvk schema.GroupVersionKind, obj client.Object) {
 	if e.uid != "" && obj.GetUID() != "" && e.uid != obj.GetUID() {
 		return
 	}
-	if !resourceVersionAtLeast(obj.GetResourceVersion(), e.resourceVersion) {
+	evicts := resourceVersionAtLeast(obj.GetResourceVersion(), e.resourceVersion)
+	ctrl.Log.WithName("cache").V(1).Info("evictIfSeen", "kind", gvk.Kind, "key", key, "observedRV", obj.GetResourceVersion(), "thresholdRV", e.resourceVersion, "evicts", evicts)
+	if !evicts {
 		return
 	}
 	delete(entries, key)
@@ -599,6 +603,7 @@ func (s *statusWriter) Update(ctx context.Context, obj client.Object, opts ...cl
 	if err := s.inner.Update(ctx, obj, opts...); err != nil {
 		return err
 	}
+	ctrl.Log.WithName("cache").V(1).Info("statusWriter.Update upsert", "kind", gvk.Kind, "key", client.ObjectKeyFromObject(obj), "newRV", obj.GetResourceVersion())
 	s.c.upsert(gvk, obj)
 	return nil
 }
@@ -613,6 +618,7 @@ func (s *statusWriter) Patch(ctx context.Context, obj client.Object, patch clien
 	if err := s.inner.Patch(ctx, obj, patch, opts...); err != nil {
 		return err
 	}
+	ctrl.Log.WithName("cache").V(1).Info("statusWriter.Patch upsert", "kind", gvk.Kind, "key", client.ObjectKeyFromObject(obj), "newRV", obj.GetResourceVersion())
 	s.c.upsert(gvk, obj)
 	return nil
 }
