@@ -136,16 +136,17 @@ func (s *KVMCRMigrationSlotStep) Run(
 	for host := range result.Activations {
 		hasSlot := evaluator.HasSlotWithCapacity(host, projectID, resourceGroup, slotMemoryBytes.Value())
 		canFit := evaluator.CanAccommodateSlot(host, slotMemoryBytes.Value())
-		if hasSlot {
+		switch {
+		case hasSlot:
 			result.Activations[host] = slotHostWeight
 			slotFound = true
 			traceLog.Info("host has existing CR slot for migration, boosting weight",
 				"host", host, "weight", slotHostWeight)
-		} else if canFit {
+		case canFit:
 			result.Activations[host] = slotHostWeight
 			traceLog.Info("host can accommodate slot via reconciler, boosting weight",
 				"host", host, "weight", slotHostWeight)
-		} else {
+		default:
 			result.Activations[host] = defaultHostWeight
 			traceLog.Info("host cannot accommodate CR slot, applying low weight",
 				"host", host, "weight", defaultHostWeight)
