@@ -1,5 +1,28 @@
 # Changelog
 
+## Release PR [#1331](https://github.com/cobaltcore-dev/cortex/pull/1331) — 2026-10-08
+
+### Bumped Versions
+
+| Chart | Previous | New |
+|---|---|---|
+| cortex | 0.6.4 | 0.6.5 |
+| cortex-shim | 0.1.28 | 0.1.29 |
+| cortex-prometheus-operator | 0.2.3 | 0.2.4 |
+| cortex-nova | 0.0.102 | 0.0.103 |
+| cortex-cinder | 0.0.102 | 0.0.103 |
+| cortex-manila | 0.0.102 | 0.0.103 |
+| cortex-ironcore | 0.0.102 | 0.0.103 |
+| cortex-pods | 0.0.102 | 0.0.103 |
+| cortex-crds | 0.0.102 | 0.0.103 |
+| cortex-placement-shim | 0.1.28 | 0.1.29 |
+
+### Changes
+
+- **Updated external dependency `go.xyrillian.de/gg`** from v1.17.0 to v1.19.0 ([#1292](https://github.com/cobaltcore-dev/cortex/pull/1292))
+- **Updated Helm dependency `kube-prometheus-stack`** from 92.0.0 to 92.1.1, which includes Grafana image updates to v13.3.1 ([#1292](https://github.com/cobaltcore-dev/cortex/pull/1292))
+- **Bumped app version** for cortex and cortex-shim from `sha-eea9257e` to `sha-61485fb3` ([#1330](https://github.com/cobaltcore-dev/cortex/pull/1330))
+
 ## Changelog — Release 0.6.4 (2026-10-08)
 
 ### Release PR: [#1328](https://github.com/cobaltcore-dev/cortex/pull/1328)
