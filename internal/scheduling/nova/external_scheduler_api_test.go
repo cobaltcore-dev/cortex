@@ -33,7 +33,7 @@ func (m *mockHTTPAPIDelegate) ProcessNewDecisionFromAPI(ctx context.Context, dec
 func TestNewAPI(t *testing.T) {
 	delegate := &mockHTTPAPIDelegate{}
 
-	api := NewAPI(HTTPAPIConfig{}, delegate)
+	api := NewAPI(HTTPAPIConfig{}, delegate, nil)
 
 	if api == nil {
 		t.Fatal("NewAPI returned nil")
@@ -55,7 +55,7 @@ func TestNewAPI(t *testing.T) {
 
 func TestHTTPAPI_Init(t *testing.T) {
 	delegate := &mockHTTPAPIDelegate{}
-	api := NewAPI(HTTPAPIConfig{}, delegate)
+	api := NewAPI(HTTPAPIConfig{}, delegate, nil)
 
 	mux := http.NewServeMux()
 	api.Init(mux)
@@ -73,7 +73,7 @@ func TestHTTPAPI_Init(t *testing.T) {
 
 func TestHTTPAPI_canRunScheduler(t *testing.T) {
 	delegate := &mockHTTPAPIDelegate{}
-	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
+	api := NewAPI(HTTPAPIConfig{}, delegate, nil).(*httpAPI)
 
 	tests := []struct {
 		name        string
@@ -276,7 +276,7 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 				},
 			}
 
-			api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
+			api := NewAPI(HTTPAPIConfig{}, delegate, nil).(*httpAPI)
 
 			var body *strings.Reader
 			if tt.body != "" {
@@ -326,7 +326,7 @@ func TestHTTPAPI_NovaExternalScheduler_EmptyHostsSerializedAsArray(t *testing.T)
 			return nil
 		},
 	}
-	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
+	api := NewAPI(HTTPAPIConfig{}, delegate, nil).(*httpAPI)
 
 	req := novaapi.ExternalSchedulerRequest{
 		Spec: novaapi.NovaObject[novaapi.NovaSpec]{
@@ -370,7 +370,7 @@ func TestHTTPAPI_NovaExternalScheduler_DecisionCreation(t *testing.T) {
 		},
 	}
 
-	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
+	api := NewAPI(HTTPAPIConfig{}, delegate, nil).(*httpAPI)
 
 	requestData := novaapi.ExternalSchedulerRequest{
 		Spec: novaapi.NovaObject[novaapi.NovaSpec]{
@@ -452,7 +452,7 @@ func TestHTTPAPI_NovaExternalScheduler_ForcedDestination(t *testing.T) {
 			return nil
 		},
 	}
-	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
+	api := NewAPI(HTTPAPIConfig{}, delegate, nil).(*httpAPI)
 
 	body, err := json.Marshal(requestData)
 	if err != nil {
@@ -502,7 +502,7 @@ func TestHTTPAPI_NovaExternalScheduler_ForcedDestinationNoWeights(t *testing.T) 
 			return nil
 		},
 	}
-	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
+	api := NewAPI(HTTPAPIConfig{}, delegate, nil).(*httpAPI)
 
 	body, err := json.Marshal(requestData)
 	if err != nil {
@@ -556,7 +556,7 @@ func TestHTTPAPI_NovaExternalScheduler_ForcedDestinationDisabled(t *testing.T) {
 		},
 	}
 	disabled := false
-	api := NewAPI(HTTPAPIConfig{ForcedDestinationEnabled: &disabled}, delegate).(*httpAPI)
+	api := NewAPI(HTTPAPIConfig{ForcedDestinationEnabled: &disabled}, delegate, nil).(*httpAPI)
 
 	body, err := json.Marshal(requestData)
 	if err != nil {
@@ -805,7 +805,7 @@ func TestShuffleTopHosts(t *testing.T) {
 
 func TestHTTPAPI_inferPipelineName(t *testing.T) {
 	delegate := &mockHTTPAPIDelegate{}
-	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
+	api := NewAPI(HTTPAPIConfig{}, delegate, nil).(*httpAPI)
 
 	tests := []struct {
 		name           string

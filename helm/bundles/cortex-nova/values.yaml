@@ -202,6 +202,24 @@ cortex-scheduling-controllers:
     # the scheduling pipeline and filters. Set to false to disable this as a
     # kill-switch and route forced requests through the normal pipeline.
     forcedDestinationEnabled: true
+    # In-memory tracking of repeated evacuation requests. When a VM requests
+    # evacuation at least `threshold` times within `window`, it qualifies to be
+    # placed on ANY ready failover slot during evacuation (not just slots
+    # reserved for it), as long as other filters still pass. This trades the
+    # strict per-VM HA guarantee for the ability to actually evacuate a stuck VM
+    # during an incident. State is in-memory only and does not survive a pod
+    # restart. Disabled by default.
+    evacuationTracking:
+      enabled: false
+      # Number of evacuation requests (within window) after which a VM qualifies
+      # to use any failover slot.
+      threshold: 5
+      # Relevance window for counting repeated requests and evicting stale entries.
+      window: 6h
+      # Minimum gap between throttled lazy sweeps of stale entries.
+      cleanupInterval: 1h
+      # Soft cap on tracked entries (oldest third evicted when exceeded).
+      maxEntries: 10000
     committedResourceReservationController:
       # Pipeline selection for CR reservation scheduling. The catch-all default covers
       # general-purpose flavors. For HANA flavor groups, add an explicit entry, e.g.:
@@ -305,7 +323,7 @@ cortex-scheduling-controllers:
     # Maps flavor name patterns (glob) to required failover count
     # Example: {"hana_*": 2, "m1.xlarge": 1}
     flavorFailoverRequirements:
-      "*": 2
+      "*": 1
     # How often to check for missing failover reservations (periodic bulk reconciliation)
     reconcileInterval: 5m
     # Used when maxVMsToProcess limits processing, allows faster catch-up and for the first reconcile

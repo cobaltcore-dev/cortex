@@ -43,6 +43,13 @@ type ExternalSchedulerRequest struct {
 	// Set by the caller (CR controller, failover controller, Nova).
 	// Nova does not set these; Cortex fills in config-derived defaults server-side.
 	Options scheduling.Options `json:"options,omitempty"`
+
+	// FailoverSoftForce, when true, lets the capacity filter place this VM on
+	// any ready failover slot during evacuation (not just slots reserved for
+	// it). It is set server-side by the pipeline controller from the evacuation
+	// tracker and is intentionally not serialized: it must never be trusted
+	// from an incoming request body.
+	FailoverSoftForce bool `json:"-"`
 }
 
 func (r ExternalSchedulerRequest) GetOptions() scheduling.Options { return r.Options }
