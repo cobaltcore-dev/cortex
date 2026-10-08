@@ -8,6 +8,8 @@
 |---|---|---|
 | cortex | 0.6.4 | 0.6.5 |
 | cortex-shim | 0.1.28 | 0.1.29 |
+| cortex-postgres | 0.6.24 | 0.6.25 |
+| cortex-placement-shim | 0.1.28 | 0.1.29 |
 | cortex-prometheus-operator | 0.2.3 | 0.2.4 |
 | cortex-nova | 0.0.102 | 0.0.103 |
 | cortex-cinder | 0.0.102 | 0.0.103 |
@@ -15,13 +17,26 @@
 | cortex-ironcore | 0.0.102 | 0.0.103 |
 | cortex-pods | 0.0.102 | 0.0.103 |
 | cortex-crds | 0.0.102 | 0.0.103 |
-| cortex-placement-shim | 0.1.28 | 0.1.29 |
 
 ### Changes
 
 - **Updated external dependency `go.xyrillian.de/gg`** from v1.17.0 to v1.19.0 ([#1292](https://github.com/cobaltcore-dev/cortex/pull/1292))
-- **Updated Helm dependency `kube-prometheus-stack`** from 92.0.0 to 92.1.1, which includes Grafana image updates to v13.3.1 ([#1292](https://github.com/cobaltcore-dev/cortex/pull/1292))
+- **Updated Helm dependency `kube-prometheus-stack`** from 92.0.0 to 92.1.1, which includes Grafana image update to v13.3.1 ([#1292](https://github.com/cobaltcore-dev/cortex/pull/1292))
 - **Bumped app version** for cortex and cortex-shim from `sha-eea9257e` to `sha-61485fb3` ([#1330](https://github.com/cobaltcore-dev/cortex/pull/1330))
+
+### Included Pull Requests
+
+| PR | Title |
+|---|---|
+| [#1292](https://github.com/cobaltcore-dev/cortex/pull/1292) | Renovate: Update External dependencies |
+| [#1330](https://github.com/cobaltcore-dev/cortex/pull/1330) | Bump app version |
+| [#1332](https://github.com/cobaltcore-dev/cortex/pull/1332) | Release cortex 0.6.5 (prep) |
+| [#1333](https://github.com/cobaltcore-dev/cortex/pull/1333) | Bump app version (cortex-postgres) |
+| [#1334](https://github.com/cobaltcore-dev/cortex/pull/1334) | Bump app version (cortex) |
+
+### Risk Assessment
+
+**Low risk.** This is a maintenance-only release — external Go and Helm dependencies are updated (notably Grafana → v13.3.1) and all chart versions are incremented. No feature or behavioral changes.
 
 ## Changelog — Release 0.6.4 (2026-10-08)
 
