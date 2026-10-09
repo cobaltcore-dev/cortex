@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -165,6 +166,26 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			echoParentGeneration(&res)
 			if err := r.Status().Patch(ctx, &res, client.MergeFrom(old)); client.IgnoreNotFound(err) != nil {
 				return ctrl.Result{}, err
+			}
+		}
+
+		// Stale-read guard: workqueue dedup can cause this reconcile to read a
+		// pre-Phase-6 version of the Reservation (parentGen==obs, but Phase 6 already
+		// wrote a newer parentGen at a higher resourceVersion whose watch event was
+		// dropped). Cross-check the parent CR's generation to detect this and requeue
+		// with exponential backoff so the next Get() returns the fresh version.
+		if res.Spec.CommittedResourceReservation != nil {
+			if idx := strings.LastIndex(res.Name, "-"); idx > 0 {
+				var parentCR v1alpha1.CommittedResource
+				if err := r.Get(ctx, client.ObjectKey{Name: res.Name[:idx]}, &parentCR); err == nil {
+					if res.Spec.CommittedResourceReservation.ParentGeneration < parentCR.Generation {
+						logger.V(1).Info("stale reservation: parentGen behind parent CR generation, requeuing",
+							"parentGen", res.Spec.CommittedResourceReservation.ParentGeneration,
+							"crGen", parentCR.Generation,
+						)
+						return ctrl.Result{Requeue: true}, nil
+					}
+				}
 			}
 		}
 
