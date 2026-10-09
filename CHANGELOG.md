@@ -6,11 +6,11 @@
 
 | Chart | Previous | New |
 |---|---|---|
-| cortex | 0.6.5 | 0.6.6 |
-| cortex-postgres | 0.6.25 | 0.6.26 |
-| cortex-shim | 0.1.29 | 0.1.30 |
-| bundles | 0.0.103 | 0.0.104 |
-| cortex-placement-shim | 0.1.29 | 0.1.30 |
+| cortex | 0.6.6 | 0.6.7 |
+| cortex-postgres | 0.6.26 | 0.6.27 |
+| cortex-shim | 0.1.30 | 0.1.31 |
+| bundles | 0.0.104 | 0.0.105 |
+| cortex-placement-shim | 0.1.30 | 0.1.31 |
 
 ### Changes
 
@@ -20,6 +20,7 @@
 ### ⚠️ Notes
 
 - **Root-cause not yet addressed:** The `release-bump-planner` tool bumps the library chart `version:` field without emitting matching bundle dependency updates, and `push-charts.yaml` has no guard against this mismatch. A separate fix is recommended to prevent recurrence.
+- **No application code changes** — this is a patch release consisting purely of Helm chart version bumps and dependency pin corrections.
 
 ## Release PR [#1331](https://github.com/cobaltcore-dev/cortex/pull/1331) — 2026-10-08
 
