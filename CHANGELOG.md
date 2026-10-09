@@ -1,5 +1,26 @@
 # Changelog
 
+## Release PR [#1340](https://github.com/cobaltcore-dev/cortex/pull/1340) — 2026-10-09
+
+### Bumped Versions
+
+| Chart | Previous | New |
+|---|---|---|
+| cortex | 0.6.5 | 0.6.6 |
+| cortex-postgres | 0.6.25 | 0.6.26 |
+| cortex-shim | 0.1.29 | 0.1.30 |
+| bundles | 0.0.103 | 0.0.104 |
+| cortex-placement-shim | 0.1.29 | 0.1.30 |
+
+### Changes
+
+- **Fixed `cortex-postgres` dependency version alignment in Helm bundles** (`0.6.24` → `0.6.25`): The previous release (0.6.5) bumped the `cortex-postgres` library chart to `0.6.25` but left the dependency pins in three bundle charts (`cortex-nova`, `cortex-cinder`, `cortex-manila`) pointing at `0.6.24` — a version that was never published to the OCI registry. This broke `push-charts` workflow runs on the `release` branch. ([#1336](https://github.com/cobaltcore-dev/cortex/pull/1336))
+- **Bumped app version** for the `cortex` library chart from `sha-dbe244dd` to `sha-8618cf0f` ([#1339](https://github.com/cobaltcore-dev/cortex/pull/1339))
+
+### ⚠️ Notes
+
+- **Root-cause not yet addressed:** The `release-bump-planner` tool bumps the library chart `version:` field without emitting matching bundle dependency updates, and `push-charts.yaml` has no guard against this mismatch. A separate fix is recommended to prevent recurrence.
+
 ## Release PR [#1331](https://github.com/cobaltcore-dev/cortex/pull/1331) — 2026-10-08
 
 ### Bumped Versions
