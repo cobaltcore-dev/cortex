@@ -13,6 +13,7 @@ import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -84,6 +85,7 @@ var kvmHostLabels = []string{
 	"maintenance",
 	"os_version",
 	"status",
+	"ready",
 }
 
 type kvmHost struct {
@@ -129,8 +131,10 @@ func (h kvmHost) getHostLabels() []string {
 	maintenance := h.Spec.Maintenance != hv1.MaintenanceUnset
 	// status mirrors the "State" column shown by kubectl for a Hypervisor.
 	status := "unknown"
+	ready := false
 	if cond := meta.FindStatusCondition(h.Status.Conditions, hv1.ConditionTypeReady); cond != nil {
 		status = cond.Reason
+		ready = cond.Status == metav1.ConditionTrue
 	}
 
 	return []string{
@@ -145,6 +149,7 @@ func (h kvmHost) getHostLabels() []string {
 		strconv.FormatBool(maintenance),
 		osVersion,
 		status,
+		strconv.FormatBool(ready),
 	}
 }
 

@@ -403,7 +403,10 @@ func (m *ReservationManager) syncReservationMetadata(
 		// Apply patch
 		logger.V(1).Info("syncing reservation metadata",
 			"reservation", reservation.Name,
-			"commitmentUUID", state.CommitmentUUID)
+			"commitmentUUID", state.CommitmentUUID,
+			"currentParentGen", reservation.Spec.CommittedResourceReservation.ParentGeneration,
+			"newParentGen", state.ParentGeneration,
+		)
 
 		patch := client.MergeFrom(reservation.DeepCopy())
 
