@@ -166,7 +166,7 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 		if err := r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, msg, true); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: time.Second}, nil
+		return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
 	}
 	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
 	return ctrl.Result{}, r.setAccepted(ctx, cr)
@@ -269,7 +269,7 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		if err := r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, msg, true); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: time.Second}, nil
+		return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
 	}
 	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
 	return ctrl.Result{}, r.setAccepted(ctx, cr)
@@ -454,30 +454,29 @@ func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Co
 			// parentGen has been written to the Reservation spec (syncReservationMetadata
 			// already ran for this generation) but the Reservation controller hasn't echoed
 			// it to status yet. Poke the Reservation to generate a fresh watch event so the
-			// Reservation controller wakes up and fires the echo. Only nudge once per CR
-			// generation: if the annotation already carries the current generation we already
-			// sent the watch event — skip silently and let the 1s fallback requeue do the
-			// waiting. This bounds the Info log to at most one occurrence per slot per generation.
+			// Reservation controller wakes up and fires the echo.
+			// Use gen+ms as the annotation value so each nudge attempt is a distinct string:
+			// a same-value patch is a no-op on the API server (no watch event generated), and
+			// in a double-stale scenario the first nudge may itself be processed with a stale
+			// object, so periodic retries (every 3s via the fallback requeue) are needed.
 			// shouldNudge is false on the first cycle (CR condition not yet set for this
-			// generation) to give the normal echo path ~1s to complete before intervening.
+			// generation) to give the normal echo path ~3s to complete before intervening.
 			if shouldNudge &&
 				res.Spec.CommittedResourceReservation != nil &&
 				res.Spec.CommittedResourceReservation.ParentGeneration == cr.Generation {
-				currentGen := strconv.FormatInt(cr.Generation, 10)
-				if res.Annotations["cortex.cloud/echo-nudge"] != currentGen {
-					ctrl.LoggerFrom(ctx).Info("nudging stale reservation: parentGen written to spec but echo pending",
-						"slot", res.Name,
-						"crGen", cr.Generation,
-						"obs", obs,
-					)
-					old := res.DeepCopy()
-					if res.Annotations == nil {
-						res.Annotations = map[string]string{}
-					}
-					res.Annotations["cortex.cloud/echo-nudge"] = currentGen
-					if pErr := r.Patch(ctx, &res, client.MergeFrom(old)); client.IgnoreNotFound(pErr) != nil {
-						ctrl.LoggerFrom(ctx).V(1).Info("failed to nudge stale reservation echo", "slot", res.Name, "err", pErr)
-					}
+				nudgeVal := strconv.FormatInt(cr.Generation, 10) + "-" + strconv.FormatInt(time.Now().UnixMilli(), 10)
+				ctrl.LoggerFrom(ctx).Info("nudging stale reservation: parentGen written to spec but echo pending",
+					"slot", res.Name,
+					"crGen", cr.Generation,
+					"obs", obs,
+				)
+				old := res.DeepCopy()
+				if res.Annotations == nil {
+					res.Annotations = map[string]string{}
+				}
+				res.Annotations["cortex.cloud/echo-nudge"] = nudgeVal
+				if pErr := r.Patch(ctx, &res, client.MergeFrom(old)); client.IgnoreNotFound(pErr) != nil {
+					ctrl.LoggerFrom(ctx).V(1).Info("failed to nudge stale reservation echo", "slot", res.Name, "err", pErr)
 				}
 			}
 			allReady = false
