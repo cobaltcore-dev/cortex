@@ -57,7 +57,8 @@ func (r *CommittedResourceController) Reconcile(ctx context.Context, req ctrl.Re
 		"committedResource", req.Name,
 	)
 
-	// Debug: timing anchor for CR reconcile relative to Phase 6 and Reservation echo.
+	// Timing anchor: shows which generation the cache served when this reconcile fired.
+	// Missing for a specific generation means the CR controller never dequeued that gen.
 	logger.V(1).Info("reconcile entry", "rv", cr.ResourceVersion, "gen", cr.Generation)
 
 	if !cr.DeletionTimestamp.IsZero() {
