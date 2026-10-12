@@ -385,6 +385,7 @@ func main() {
 			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}:   multicluster.CommittedResourceRouter{},
 			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "FlavorGroupCapacity"}: multicluster.FlavorGroupCapacityResourceRouter{},
 			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "ProjectQuota"}:        multicluster.ProjectQuotaResourceRouter{},
+			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "ReschedulingRequest"}: multicluster.ReschedulingRequestResourceRouter{},
 		},
 	}
 	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
