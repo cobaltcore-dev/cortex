@@ -324,7 +324,7 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 	}
 }
 
-func TestFilterAllowedProjectsStep_SkipsForNonPlacementIntent(t *testing.T) {
+func TestFilterAllowedProjectsStep_SkipsForCapacityProbeIntent(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := hv1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add hv1 to scheme: %v", err)
@@ -340,8 +340,42 @@ func TestFilterAllowedProjectsStep_SkipsForNonPlacementIntent(t *testing.T) {
 	step := &FilterAllowedProjectsStep{}
 	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 
-	for _, intent := range []string{"reserve_for_failover", "reuse_failover_reservation", "capacity_probe"} {
+	request := api.ExternalSchedulerRequest{
+		Spec: api.NovaObject[api.NovaSpec]{
+			Data: api.NovaSpec{
+				ProjectID:      "project-y",
+				SchedulerHints: map[string]any{"_nova_check_type": "capacity_probe"},
+			},
+		},
+		Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
+	}
+	result, err := step.Run(slog.Default(), request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Activations) != 2 {
+		t.Errorf("expected both hosts to pass, got %d", len(result.Activations))
+	}
+}
+
+func TestFilterAllowedProjectsStep_AppliesForFailoverIntents(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add hv1 to scheme: %v", err)
+	}
+	// host2 is pinned to project-x; request is project-y → host2 must be filtered out.
+	objects := []client.Object{
+		&hv1.Hypervisor{ObjectMeta: v1.ObjectMeta{Name: "host1"}},
+		&hv1.Hypervisor{
+			ObjectMeta: v1.ObjectMeta{Name: "host2"},
+			Spec:       hv1.HypervisorSpec{AllowedProjects: []string{"project-x"}},
+		},
+	}
+
+	for _, intent := range []string{"reserve_for_failover", "reuse_failover_reservation"} {
 		t.Run(intent, func(t *testing.T) {
+			step := &FilterAllowedProjectsStep{}
+			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			request := api.ExternalSchedulerRequest{
 				Spec: api.NovaObject[api.NovaSpec]{
 					Data: api.NovaSpec{
@@ -355,8 +389,11 @@ func TestFilterAllowedProjectsStep_SkipsForNonPlacementIntent(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if len(result.Activations) != 2 {
-				t.Errorf("expected both hosts to pass, got %d", len(result.Activations))
+			if len(result.Activations) != 1 {
+				t.Errorf("expected only host1 to pass, got %d hosts", len(result.Activations))
+			}
+			if _, ok := result.Activations["host2"]; ok {
+				t.Errorf("expected host2 (pinned to project-x) to be filtered out for project-y")
 			}
 		})
 	}

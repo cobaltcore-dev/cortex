@@ -183,10 +183,6 @@ func (c *Reconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client
 
 type vmUsageKey struct{ group, az string }
 
-// vmHostGroupKey identifies running VM resources per (host × group), used to attribute
-// each group's own consumption when computing ExclusivelyRawCapacity for shared hosts.
-type vmHostGroupKey struct{ host, group string }
-
 // vmUsage aggregates resource totals for running VMs in one (group × AZ).
 // resources keys are ResourceMemory (bytes) and ResourceCores (count).
 // fresh is false when the VMSource call failed — running fields must not be overwritten.
@@ -204,7 +200,10 @@ type probeGroupResult struct {
 	// allFresh is false if any scheduler probe failed; the group's CRD is left unchanged.
 	allFresh           bool
 	smallestCandidates []string
-	committedCapacity  int64
+	// smallestTotalCandidates are the smallest flavor's empty-datacenter candidates: every host
+	// eligible for the group in this AZ, including fully occupied ones. Used for InstalledRawCapacity.
+	smallestTotalCandidates []string
+	committedCapacity       int64
 }
 
 // flavorSlots returns the number of VM slots a resource map can fit for the given flavor.
@@ -248,16 +247,17 @@ func (c *Reconciler) reconcileAll(ctx context.Context) error {
 		blockedByReservations = map[string]map[string]int64{}
 	}
 
-	reservedByGroupAZ, err := c.reservedResourcesByGroupAZ(ctx, flavorGroups, hvByName)
+	committedByGroupAZ, failoverByGroupAZ, err := c.reservedResourcesByGroupAZ(ctx, flavorGroups, hvByName)
 	if err != nil {
 		logger.Error(err, "failed to attribute reserved capacity to flavor groups, reserved capacity will be omitted")
-		reservedByGroupAZ = map[vmUsageKey]map[string]int64{}
+		committedByGroupAZ = map[vmUsageKey]map[string]int64{}
+		failoverByGroupAZ = map[vmUsageKey]map[string]int64{}
 	}
 
-	usageByKey, vmByHostGroup := c.computeVMUsage(ctx, flavorGroups, hvList.Items)
+	usageByKey := c.computeVMUsage(ctx, flavorGroups, hvList.Items)
 
 	for _, az := range azs {
-		c.reconcileAZ(ctx, az, flavorGroups, hvByName, blockedByReservations, reservedByGroupAZ, usageByKey, vmByHostGroup)
+		c.reconcileAZ(ctx, az, flavorGroups, hvByName, blockedByReservations, committedByGroupAZ, failoverByGroupAZ, usageByKey)
 	}
 
 	logger.Info("capacity reconcile cycle completed",
@@ -276,20 +276,19 @@ func (c *Reconciler) computeVMUsage(
 	ctx context.Context,
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	hvs []hv1.Hypervisor,
-) (usageByKey map[vmUsageKey]vmUsage, vmByHostGroup map[vmHostGroupKey]map[string]int64) {
+) map[vmUsageKey]vmUsage {
 
 	logger := LoggerFromContext(ctx)
 	result := make(map[vmUsageKey]vmUsage)
-	hostGroupRes := make(map[vmHostGroupKey]map[string]int64)
 	if c.vmSource == nil {
-		return result, hostGroupRes
+		return result
 	}
 
 	hvList := &hv1.HypervisorList{Items: hvs}
 	vms, err := c.vmSource.ListVMsOnHypervisors(ctx, hvList, true)
 	if err != nil {
 		logger.Error(err, "failed to list VMs for usage computation, running fields will retain last known values")
-		return result, hostGroupRes
+		return result
 	}
 
 	// Pre-populate all (flavorGroup, AZ) pairs with fresh=true and zero resources.
@@ -328,17 +327,8 @@ func (c *Reconciler) computeVMUsage(
 		u.resources[ResourceCores] += flavorVCPUs[vm.FlavorName]
 		u.fresh = true
 		result[key] = u
-
-		if vm.CurrentHypervisor != "" {
-			hgKey := vmHostGroupKey{host: vm.CurrentHypervisor, group: groupName}
-			if hostGroupRes[hgKey] == nil {
-				hostGroupRes[hgKey] = make(map[string]int64)
-			}
-			hostGroupRes[hgKey][ResourceMemory] += flavorMemBytes[vm.FlavorName]
-			hostGroupRes[hgKey][ResourceCores] += flavorVCPUs[vm.FlavorName]
-		}
 	}
-	return result, hostGroupRes
+	return result
 }
 
 // hvRemainingResources returns remaining schedulable resources after subtracting
@@ -421,12 +411,13 @@ func (c *Reconciler) probeGroup(
 	allFresh := true
 	newFlavors := make([]v1alpha1.FlavorCapacityStatus, 0, len(flavors))
 	var smallestCandidates []string
+	var smallestTotalCandidates []string
 
 	for _, flavor := range flavors {
 		cur := existingByName[flavor.Name]
 		cur.FlavorName = flavor.Name
 
-		totalVMSlots, totalHosts, _, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName, true, nil)
+		totalVMSlots, totalHosts, totalCandidates, totalErr := c.probeScheduler(ctx, flavor, az, c.config.TotalPipeline, hvByName, true, nil)
 		placeableVMs, placeableHosts, candidates, placeableErr := c.probeScheduler(ctx, flavor, az, c.config.PlaceablePipeline, hvByName, false, blockedByReservations)
 
 		if totalErr != nil {
@@ -441,9 +432,15 @@ func (c *Reconciler) probeGroup(
 			cur.PlaceableVMs = placeableVMs
 			cur.PlaceableHosts = placeableHosts
 		}
-		// Capture candidates for the smallest flavor — used as split inputs.
-		if flavor.Name == groupData.SmallestFlavor.Name && placeableErr == nil {
-			smallestCandidates = candidates
+		// Capture the smallest flavor's candidates: placeable (split inputs) and total (all
+		// eligible hosts incl. occupied ones, for InstalledRawCapacity).
+		if flavor.Name == groupData.SmallestFlavor.Name {
+			if placeableErr == nil {
+				smallestCandidates = candidates
+			}
+			if totalErr == nil {
+				smallestTotalCandidates = totalCandidates
+			}
 		}
 		newFlavors = append(newFlavors, cur)
 	}
@@ -455,12 +452,13 @@ func (c *Reconciler) probeGroup(
 	}
 
 	return probeGroupResult{
-		groupName:          groupName,
-		groupData:          groupData,
-		flavors:            newFlavors,
-		allFresh:           allFresh,
-		smallestCandidates: smallestCandidates,
-		committedCapacity:  committedCapacity,
+		groupName:               groupName,
+		groupData:               groupData,
+		flavors:                 newFlavors,
+		allFresh:                allFresh,
+		smallestCandidates:      smallestCandidates,
+		smallestTotalCandidates: smallestTotalCandidates,
+		committedCapacity:       committedCapacity,
 	}, nil
 }
 
@@ -527,9 +525,9 @@ func (c *Reconciler) reconcileAZ(
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	hvByName map[string]hv1.Hypervisor,
 	blockedByReservations map[string]map[string]int64,
-	reservedByGroupAZ map[vmUsageKey]map[string]int64,
+	committedByGroupAZ map[vmUsageKey]map[string]int64,
+	failoverByGroupAZ map[vmUsageKey]map[string]int64,
 	usageByKey map[vmUsageKey]vmUsage,
-	vmByHostGroup map[vmHostGroupKey]map[string]int64,
 ) {
 
 	logger := LoggerFromContext(ctx)
@@ -578,52 +576,25 @@ func (c *Reconciler) reconcileAZ(
 		}
 	}
 
-	// Compute ExclusivelyRawCapacity: sum of effective capacity over each group's exclusively
-	// assigned hosts, minus running VMs of other groups on that host.
-	//
-	// For an exclusive host (no other group has VMs there):
-	//   EffectiveCapacity - Allocation + winner_allocation = EffectiveCapacity  (unchanged)
-	// For a shared host:
-	//   EffectiveCapacity - Allocation + winner_allocation
-	//   = free_on_host + what this group's VMs already hold
-	//   (other groups' consumption is correctly excluded)
-	rawExclusiveByGroup := make(map[string]map[string]int64, len(exclusiveHosts))
-	for gName, hostList := range exclusiveHosts {
-		raw := make(map[string]int64, 2)
-		for _, hostName := range hostList {
-			hv, ok := hvByName[hostName]
-			if !ok {
-				continue
-			}
-			effCap := hv.Status.EffectiveCapacity
-			if effCap == nil {
-				effCap = hv.Status.Capacity
-			}
-			groupRes := vmByHostGroup[vmHostGroupKey{host: hostName, group: gName}]
-			if qty, ok := effCap[hv1.ResourceMemory]; ok {
-				mem := qty.Value()
-				if alloc, ok := hv.Status.Allocation[hv1.ResourceMemory]; ok {
-					mem -= alloc.Value()
-				}
-				mem += groupRes[ResourceMemory]
-				if mem < 0 {
-					mem = 0
-				}
-				raw[ResourceMemory] += mem
-			}
-			if qty, ok := effCap[hv1.ResourceCPU]; ok {
-				cpu := qty.Value()
-				if alloc, ok := hv.Status.Allocation[hv1.ResourceCPU]; ok {
-					cpu -= alloc.Value()
-				}
-				cpu += groupRes[ResourceCores]
-				if cpu < 0 {
-					cpu = 0
-				}
-				raw[ResourceCores] += cpu
-			}
+	// Write one CRD per group. For groups with failed probes, mark Ready=False so the
+	// capacity API can detect staleness and return 5xx rather than serving stale data silently.
+	// ExclusivelyRawCapacity is computed differently per group:
+	//   - Variable-ratio groups (GP) consume it for the _ram report and are a single group with
+	//     exclusive hosts, so we sum effective capacity over ALL eligible hosts (the smallest
+	//     flavor's empty-datacenter candidates, incl. fully occupied ones) — avoiding the
+	//     occupied-host dropout a placeable-only sum would suffer.
+	//   - Fixed-ratio groups (HANA) never read it and share hosts across multiple flavor groups, so
+	//     an all-eligible sum would double-count. We keep the split-assigned exclusiveHosts sum,
+	//     which stays disjoint across groups and non-double-counted.
+	rawExclusiveByGroup := make(map[string]map[string]int64, len(results))
+	for _, r := range results {
+		if r.groupData.HasFixedRamCoreRatio() {
+			rawExclusiveByGroup[r.groupName] = sumEffectiveCapacity(exclusiveHosts[r.groupName], hvByName)
+		} else {
+			// FIXME: summing all total candidates assumes variable-ratio groups have disjoint host sets.
+			// If two variable-ratio groups share hosts, their smallestTotalCandidates overlap and ExclusivelyRawCapacity double-counts those hosts.
+			rawExclusiveByGroup[r.groupName] = sumEffectiveCapacity(r.smallestTotalCandidates, hvByName)
 		}
-		rawExclusiveByGroup[gName] = raw
 	}
 
 	for _, r := range results {
@@ -640,12 +611,36 @@ func (c *Reconciler) reconcileAZ(
 			freeResources[r.groupName],
 			exclusiveResources[r.groupName],
 			rawExclusiveByGroup[r.groupName],
-			reservedByGroupAZ[vmUsageKey{r.groupName, az}],
+			committedByGroupAZ[vmUsageKey{r.groupName, az}],
+			failoverByGroupAZ[vmUsageKey{r.groupName, az}],
 		); err != nil {
 			logger.Error(err, "failed to write FlavorGroupCapacity CRD",
 				"flavorGroup", r.groupName, "az", az)
 		}
 	}
+}
+
+// sumEffectiveCapacity sums the effective memory and CPU of the named hosts, keyed by
+// ResourceMemory/ResourceCores. Falls back to raw Capacity when EffectiveCapacity is absent.
+func sumEffectiveCapacity(hostNames []string, hvByName map[string]hv1.Hypervisor) map[string]int64 {
+	raw := make(map[string]int64, 2)
+	for _, hostName := range hostNames {
+		hv, ok := hvByName[hostName]
+		if !ok {
+			continue
+		}
+		effCap := hv.Status.EffectiveCapacity
+		if effCap == nil {
+			effCap = hv.Status.Capacity
+		}
+		if qty, ok := effCap[hv1.ResourceMemory]; ok {
+			raw[ResourceMemory] += qty.Value()
+		}
+		if qty, ok := effCap[hv1.ResourceCPU]; ok {
+			raw[ResourceCores] += qty.Value()
+		}
+	}
+	return raw
 }
 
 // computeTotalCapacity returns the maximum memory bytes and CPU cores representable
@@ -680,7 +675,8 @@ func (c *Reconciler) writeCRD(
 	freeRes map[string]int64,
 	exclusiveRes map[string]int64,
 	exclusivelyRawRes map[string]int64,
-	reservedRes map[string]int64,
+	committedRes map[string]int64,
+	failoverRes map[string]int64,
 ) error {
 
 	crdName := crdNameFor(groupName, az)
@@ -726,13 +722,21 @@ func (c *Reconciler) writeCRD(
 	existing.Status.FreeCapacity = resMapToQuantity(freeRes)
 	existing.Status.ExclusivelyFreeCapacity = resMapToQuantity(exclusiveRes)
 	existing.Status.ExclusivelyRawCapacity = resMapToQuantity(exclusivelyRawRes)
-	existing.Status.ExclusivelyReservedCapacity = resMapToQuantity(reservedRes)
+	existing.Status.ExclusivelyCommittedReservedCapacity = resMapToQuantity(committedRes)
+	existing.Status.ExclusivelyFailoverReservedCapacity = resMapToQuantity(failoverRes)
 	var exclusivelyFreeSlots int64
 	if flavorMemBytes := int64(groupData.SmallestFlavor.MemoryMB) * 1024 * 1024; flavorMemBytes > 0 { //nolint:gosec
 		flavorVCPUs := int64(groupData.SmallestFlavor.VCPUs) //nolint:gosec
 		exclusivelyFreeSlots = flavorSlots(exclusiveRes, flavorMemBytes, flavorVCPUs)
 		existing.Status.ExclusivelyFreeSlots = exclusivelyFreeSlots
-		existing.Status.ExclusivelyReservedSlots = flavorSlots(reservedRes, flavorMemBytes, flavorVCPUs)
+		existing.Status.ExclusivelyCommittedReservedSlots = flavorSlots(committedRes, flavorMemBytes, flavorVCPUs)
+		existing.Status.ExclusivelyFailoverReservedSlots = flavorSlots(failoverRes, flavorMemBytes, flavorVCPUs)
+		// Slot-quantize running consumption the same way, so a VM larger than the smallest flavor
+		// counts as the several slots it occupies rather than one instance. Guarded by fresh for the
+		// same reason as RunningInstances above.
+		if usage.fresh {
+			existing.Status.RunningSlots = flavorSlots(usage.resources, flavorMemBytes, flavorVCPUs)
+		}
 	}
 	existing.Status.LastReconcileAt = metav1.Now()
 
@@ -912,20 +916,22 @@ func (c *Reconciler) blockedResourcesByHost(ctx context.Context) (map[string]map
 	return blocked, nil
 }
 
-// reservedResourcesByGroupAZ sums reservation-blocked capacity (failover + unfilled committed
-// slots) per (group, AZ), attributing each reservation by its own ResourceGroup rather than by
-// host — so a host fully packed by empty reservations still counts. Only placed reservations are
-// included, each once.
+// reservedResourcesByGroupAZ sums reservation-blocked capacity per (group, AZ), attributing each
+// reservation by its own ResourceGroup rather than by host — so a host fully packed by empty
+// reservations still counts. Results are split into two disjoint buckets by reservation type:
+// committed (unfilled committed-resource slots, which stay in reported capacity) and failover
+// (hardware held out of service for host evacuation, which is excluded from reported capacity).
+// Only placed reservations are included, each once.
 func (c *Reconciler) reservedResourcesByGroupAZ(
 	ctx context.Context,
 	flavorGroups map[string]compute.FlavorGroupFeature,
 	hvByName map[string]hv1.Hypervisor,
-) (map[vmUsageKey]map[string]int64, error) {
+) (committed, failover map[vmUsageKey]map[string]int64, err error) {
 
 	logger := LoggerFromContext(ctx)
 	var list v1alpha1.ReservationList
 	if err := c.client.List(ctx, &list); err != nil {
-		return nil, fmt.Errorf("failed to list reservations: %w", err)
+		return nil, nil, fmt.Errorf("failed to list reservations: %w", err)
 	}
 
 	flavorToGroup := make(map[string]string)
@@ -935,7 +941,8 @@ func (c *Reconciler) reservedResourcesByGroupAZ(
 		}
 	}
 
-	reserved := make(map[vmUsageKey]map[string]int64)
+	committed = make(map[vmUsageKey]map[string]int64)
+	failover = make(map[vmUsageKey]map[string]int64)
 	for i := range list.Items {
 		res := &list.Items[i]
 		// Only committed and failover reservations represent capacity that is reserved but
@@ -965,18 +972,23 @@ func (c *Reconciler) reservedResourcesByGroupAZ(
 			continue
 		}
 		blockedRes := reservations.UnusedReservationCapacity(res, false)
+		// Route each reservation to exactly one bucket by type; the two are disjoint.
+		bucket := committed
+		if res.Spec.Type == v1alpha1.ReservationTypeFailover {
+			bucket = failover
+		}
 		key := vmUsageKey{group: group, az: az}
-		if reserved[key] == nil {
-			reserved[key] = make(map[string]int64)
+		if bucket[key] == nil {
+			bucket[key] = make(map[string]int64)
 		}
 		if qty, ok := blockedRes[hv1.ResourceMemory]; ok {
-			reserved[key][ResourceMemory] += qty.Value()
+			bucket[key][ResourceMemory] += qty.Value()
 		}
 		if qty, ok := blockedRes[hv1.ResourceCPU]; ok {
-			reserved[key][ResourceCores] += qty.Value()
+			bucket[key][ResourceCores] += qty.Value()
 		}
 	}
-	return reserved, nil
+	return committed, failover, nil
 }
 
 // resolveReservationGroup returns the flavor group a reservation belongs to. Committed reservations

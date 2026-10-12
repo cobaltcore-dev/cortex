@@ -290,36 +290,55 @@ func TestCommitmentsClient_listCommitments(t *testing.T) {
 }
 
 func TestCommitmentsClient_listCommitments_HTTPError(t *testing.T) {
-	// Mock server that returns non-200 status
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "Not Found", http.StatusNotFound)
-	}))
-	defer server.Close()
-
-	client := &commitmentsClient{
-		limes: &gophercloud.ServiceClient{
-			ProviderClient: &gophercloud.ProviderClient{
-				HTTPClient: *http.DefaultClient,
-				TokenID:    "test-token",
-			},
-			Endpoint: server.URL + "/",
+	tests := []struct {
+		name        string
+		statusCode  int
+		wantErr     bool
+		wantNilList bool
+	}{
+		{
+			name:        "404: project not in Limes yet, treated as no commitments",
+			statusCode:  http.StatusNotFound,
+			wantErr:     false,
+			wantNilList: true,
+		},
+		{
+			name:       "500: real error, propagated",
+			statusCode: http.StatusInternalServerError,
+			wantErr:    true,
 		},
 	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, "error", tc.statusCode)
+			}))
+			defer server.Close()
 
-	project := Project{ID: "test-project", DomainID: "test-domain"}
-
-	ctx := context.Background()
-	commitments, err := client.listCommitments(ctx, project)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if commitments != nil {
-		t.Errorf("expected nil commitments, got %+v", commitments)
-	}
-
-	// Gophercloud returns a more detailed error message
-	if !strings.Contains(err.Error(), "404") {
-		t.Errorf("expected error to contain '404', got %q", err.Error())
+			client := &commitmentsClient{
+				limes: &gophercloud.ServiceClient{
+					ProviderClient: &gophercloud.ProviderClient{
+						HTTPClient: *http.DefaultClient,
+						TokenID:    "test-token",
+					},
+					Endpoint: server.URL + "/",
+				},
+			}
+			project := Project{ID: "test-project", DomainID: "test-domain"}
+			commitments, err := client.listCommitments(context.Background(), project)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("expected no error, got %v", err)
+				}
+			}
+			if tc.wantNilList && commitments != nil {
+				t.Errorf("expected nil commitments, got %+v", commitments)
+			}
+		})
 	}
 }
 

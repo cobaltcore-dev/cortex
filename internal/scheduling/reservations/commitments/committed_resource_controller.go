@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/equality"
+
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -49,14 +51,13 @@ func (r *CommittedResourceController) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if creatorReq := cr.Annotations[v1alpha1.AnnotationCreatorRequestID]; creatorReq != "" {
-		ctx = WithGlobalRequestID(ctx, creatorReq)
-	} else {
-		ctx = WithNewGlobalRequestID(ctx)
-	}
+	ctx = WithNewGlobalRequestID(ctx)
 	logger := LoggerFromContext(ctx).WithValues(
 		"committedResource", req.Name,
 	)
+
+	// Debug: timing anchor for CR reconcile relative to Phase 6 and Reservation echo.
+	logger.V(1).Info("reconcile entry", "rv", cr.ResourceVersion, "gen", cr.Generation)
 
 	if !cr.DeletionTimestamp.IsZero() {
 		return ctrl.Result{}, nil
@@ -116,7 +117,12 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 		}
 		delay := r.retryDelay(cr)
 		logger.Error(applyErr, "pending commitment placement failed, will retry", "requeueAfter", delay)
-		return ctrl.Result{RequeueAfter: delay}, r.setNotReadyRetry(ctx, cr, applyErr.Error())
+		if setErr := r.setNotReadyRetry(ctx, cr, applyErr.Error()); setErr != nil {
+			logger.Info("status update failed after placement error, will be corrected on next reconcile", "err", setErr)
+		}
+		// Return nil so controller-runtime honours RequeueAfter. Returning the status-update
+		// error would cause controller-runtime to ignore RequeueAfter and use exponential backoff.
+		return ctrl.Result{RequeueAfter: delay}, nil
 	}
 	allReady, anyFailed, readySlots, failReason, firstSlotReason, failedSlots, err := r.checkChildReservationStatus(ctx, cr, result.TotalSlots)
 	if err != nil {
@@ -132,13 +138,23 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 		}
 		delay := r.retryDelay(cr)
 		logger.Info("pending commitment placement failed, will retry", "reason", failReason, "firstSlotReason", firstSlotReason, "slotsReady", readySlots, "slotsTotal", result.TotalSlots, "failedSlots", failedSlots, "requeueAfter", delay)
-		return ctrl.Result{RequeueAfter: delay}, r.setNotReadyRetry(ctx, cr, failReason)
+		if setErr := r.setNotReadyRetry(ctx, cr, failReason); setErr != nil {
+			logger.Info("status update failed after placement failure, will be corrected on next reconcile", "err", setErr)
+		}
+		// Return nil so controller-runtime honours RequeueAfter. Returning the status-update
+		// error would cause controller-runtime to ignore RequeueAfter and use exponential backoff.
+		return ctrl.Result{RequeueAfter: delay}, nil
 	}
 	if !allReady {
 		// Reservation controller hasn't processed all slots yet; Reservation watch will re-enqueue.
 		// Reset the retry timer: applyReservationState just succeeded, so the watch suppression
 		// gate should not fire while we wait for slots to become ready.
-		return ctrl.Result{}, r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", true)
+		// Fallback requeue: in case the watch event is missed,
+		// re-check after 1s rather than waiting for the full watch timeout.
+		if err := r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", true); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
 	return ctrl.Result{}, r.setAccepted(ctx, cr)
@@ -158,6 +174,28 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 	// Without this guard the controller oscillates: apply bad spec → rollback →
 	// Reservation watch re-enqueues → apply bad spec again → loop.
 	if isRejectedForGeneration(cr) {
+		// Recovery: if the current spec matches the accepted spec, the rejection was
+		// spurious (e.g. transient host failure). Check if slots have since recovered.
+		// Only safe when specs match — if they differ, the rejection was genuine (bad new spec)
+		// and calling setAccepted would re-expose the current bad spec on the next reconcile.
+		if cr.Status.AcceptedSpec != nil && equality.Semantic.DeepEqual(cr.Spec, *cr.Status.AcceptedSpec) {
+			result, applyErr := r.applyReservationState(ctx, logger, cr)
+			if applyErr != nil {
+				logger.V(1).Info("spurious-rejection recovery: apply failed, will retry", "err", applyErr)
+			} else {
+				allReady, anyFailed, _, _, _, _, checkErr := r.checkChildReservationStatus(ctx, cr, result.TotalSlots)
+				if checkErr == nil && allReady && !anyFailed {
+					logger.Info("recovered from spurious rejection: all slots ready", "generation", cr.Generation)
+					return ctrl.Result{}, r.setAccepted(ctx, cr)
+				}
+				if checkErr != nil {
+					logger.V(1).Info("spurious-rejection recovery: slot check failed, will retry", "err", checkErr)
+				}
+			}
+			// Slots exist but are not all ready yet. No need to re-apply the same accepted spec;
+			// requeue and wait for the reservation controller to complete placement.
+			return ctrl.Result{RequeueAfter: r.retryDelay(cr)}, nil
+		}
 		logger.V(1).Info("spec already rejected for current generation, maintaining rollback state", "generation", cr.Generation)
 		return ctrl.Result{}, r.rollbackToAccepted(ctx, logger, cr)
 	}
@@ -177,7 +215,12 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		}
 		delay := r.retryDelay(cr)
 		logger.Error(applyErr, "committed placement incomplete, will retry", "requeueAfter", delay)
-		return ctrl.Result{RequeueAfter: delay}, r.setNotReadyRetry(ctx, cr, applyErr.Error())
+		if setErr := r.setNotReadyRetry(ctx, cr, applyErr.Error()); setErr != nil {
+			logger.Info("status update failed after placement error, will be corrected on next reconcile", "err", setErr)
+		}
+		// Return nil so controller-runtime honours RequeueAfter. Returning the status-update
+		// error would cause controller-runtime to ignore RequeueAfter and use exponential backoff.
+		return ctrl.Result{RequeueAfter: delay}, nil
 	}
 	allReady, anyFailed, readySlots, failReason, firstSlotReason, failedSlots, err := r.checkChildReservationStatus(ctx, cr, result.TotalSlots)
 	if err != nil {
@@ -193,13 +236,21 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		}
 		delay := r.retryDelay(cr)
 		logger.Info("committed placement failed, will retry", "reason", failReason, "firstSlotReason", firstSlotReason, "slotsReady", readySlots, "slotsTotal", result.TotalSlots, "failedSlots", failedSlots, "requeueAfter", delay)
-		return ctrl.Result{RequeueAfter: delay}, r.setNotReadyRetry(ctx, cr, failReason)
+		if setErr := r.setNotReadyRetry(ctx, cr, failReason); setErr != nil {
+			logger.Info("status update failed after placement failure, will be corrected on next reconcile", "err", setErr)
+		}
+		return ctrl.Result{RequeueAfter: delay}, nil
 	}
 	if !allReady {
 		// Reservation controller hasn't processed all slots yet; Reservation watch will re-enqueue.
 		// Reset the retry timer: applyReservationState just succeeded, so the watch suppression
 		// gate should not fire while we wait for slots to become ready.
-		return ctrl.Result{}, r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", true)
+		// Fallback requeue: in case the watch event is missed,
+		// re-check after 1s rather than waiting for the full watch timeout.
+		if err := r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", true); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
 	return ctrl.Result{}, r.setAccepted(ctx, cr)
@@ -327,6 +378,7 @@ func (r *CommittedResourceController) applyReservationState(ctx context.Context,
 		MaxSlots:                maxSlots,
 		EnablePaygPreAllocation: r.Conf.EnablePaygPreAllocation,
 		VMSource:                r.VMSource,
+		NoHostsFoundTTL:         r.Conf.NoHostsFoundTTL.Duration,
 	})
 	result, err := mgr.ApplyCommitmentState(ctx, logger, state, flavorGroups, "committed-resource-controller")
 	if err != nil {
@@ -367,6 +419,17 @@ func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Co
 	// other slots are still pending.
 	allReady = true
 	for _, res := range list.Items {
+		obs := int64(0)
+		if res.Status.CommittedResourceReservation != nil {
+			obs = res.Status.CommittedResourceReservation.ObservedParentGeneration
+		}
+		ctrl.LoggerFrom(ctx).V(1).Info("checkChildReservationStatus slot",
+			"slot", res.Name,
+			"rv", res.ResourceVersion,
+			"crGen", cr.Generation,
+			"obsParentGen", obs,
+			"genMatch", obs == cr.Generation,
+		)
 		if res.Status.CommittedResourceReservation == nil ||
 			res.Status.CommittedResourceReservation.ObservedParentGeneration != cr.Generation {
 			allReady = false

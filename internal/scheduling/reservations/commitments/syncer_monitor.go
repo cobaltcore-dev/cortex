@@ -18,14 +18,16 @@ const (
 
 // SyncerMonitor provides metrics for the commitment syncer.
 type SyncerMonitor struct {
-	syncErrors             prometheus.Counter
-	syncDuration           prometheus.Histogram
-	limesCommitmentsActive prometheus.Gauge
-	staleCRs               prometheus.Gauge
-	commitmentsSkipped     *prometheus.CounterVec
-	crCreates              prometheus.Counter
-	crUpdates              prometheus.Counter
-	crDeletes              prometheus.Counter
+	syncErrors               prometheus.Counter
+	syncDuration             prometheus.Histogram
+	limesCommitmentsActive   prometheus.Gauge
+	staleCRs                 prometheus.Gauge
+	commitmentsSkipped       *prometheus.CounterVec
+	crCreates                prometheus.Counter
+	crUpdates                prometheus.Counter
+	crDeletes                prometheus.Counter
+	crStaleDeletes           prometheus.Counter
+	orphanReservationDeletes prometheus.Counter
 }
 
 // NewSyncerMonitor creates a new monitor with Prometheus metrics.
@@ -63,6 +65,14 @@ func NewSyncerMonitor() *SyncerMonitor {
 		crDeletes: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "cortex_committed_resource_syncer_cr_deletes_total",
 			Help: "Total number of CommittedResource CRDs deleted by the syncer (expired GC)",
+		}),
+		crStaleDeletes: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "cortex_committed_resource_syncer_cr_stale_deletes_total",
+			Help: "Total number of CommittedResource CRDs deleted by the syncer because they were absent from Limes",
+		}),
+		orphanReservationDeletes: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "cortex_committed_resource_syncer_orphan_reservation_deletes_total",
+			Help: "Total number of orphaned Reservation CRDs deleted by the syncer because their commitment is no longer active",
 		}),
 	}
 
@@ -112,6 +122,14 @@ func (m *SyncerMonitor) RecordCRDeletes(count int) {
 	m.crDeletes.Add(float64(count))
 }
 
+func (m *SyncerMonitor) RecordCRStaleDeletes(count int) {
+	m.crStaleDeletes.Add(float64(count))
+}
+
+func (m *SyncerMonitor) RecordOrphanReservationDeletes(count int) {
+	m.orphanReservationDeletes.Add(float64(count))
+}
+
 // Describe implements prometheus.Collector.
 func (m *SyncerMonitor) Describe(ch chan<- *prometheus.Desc) {
 	m.syncErrors.Describe(ch)
@@ -122,6 +140,8 @@ func (m *SyncerMonitor) Describe(ch chan<- *prometheus.Desc) {
 	m.crCreates.Describe(ch)
 	m.crUpdates.Describe(ch)
 	m.crDeletes.Describe(ch)
+	m.crStaleDeletes.Describe(ch)
+	m.orphanReservationDeletes.Describe(ch)
 }
 
 // Collect implements prometheus.Collector.
@@ -134,4 +154,6 @@ func (m *SyncerMonitor) Collect(ch chan<- prometheus.Metric) {
 	m.crCreates.Collect(ch)
 	m.crUpdates.Collect(ch)
 	m.crDeletes.Collect(ch)
+	m.crStaleDeletes.Collect(ch)
+	m.orphanReservationDeletes.Collect(ch)
 }

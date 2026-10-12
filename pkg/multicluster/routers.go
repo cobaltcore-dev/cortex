@@ -28,15 +28,15 @@ var DefaultResourceRouters = map[schema.GroupVersionKind]ResourceRouter{
 // by matching the resource content against the cluster's labels.
 type ResourceRouter interface {
 	Match(obj any, labels map[string]string) (bool, error)
-	// extractClusterSelector extracts the routing key from the object (e.g. availability zone).
+	// ExtractClusterSelector extracts the routing key from the object (e.g. availability zone).
 	// Used to enrich error messages when no cluster matches.
-	extractClusterSelector(obj any) (string, error)
+	ExtractClusterSelector(obj any) (string, error)
 }
 
 // HypervisorResourceRouter routes hypervisors to clusters based on availability zone.
 type HypervisorResourceRouter struct{}
 
-func (h HypervisorResourceRouter) extractClusterSelector(obj any) (string, error) {
+func (h HypervisorResourceRouter) ExtractClusterSelector(obj any) (string, error) {
 	switch v := obj.(type) {
 	case *hv1.Hypervisor:
 		if v == nil {
@@ -86,7 +86,7 @@ func (h HypervisorResourceRouter) Match(obj any, labels map[string]string) (bool
 // ReservationsResourceRouter routes reservations to clusters based on availability zone.
 type ReservationsResourceRouter struct{}
 
-func (r ReservationsResourceRouter) extractClusterSelector(obj any) (string, error) {
+func (r ReservationsResourceRouter) ExtractClusterSelector(obj any) (string, error) {
 	switch v := obj.(type) {
 	case *v1alpha1.Reservation:
 		if v == nil {
@@ -134,7 +134,7 @@ func (r ReservationsResourceRouter) Match(obj any, labels map[string]string) (bo
 // CommittedResourceRouter routes committed resources to clusters based on availability zone.
 type CommittedResourceRouter struct{}
 
-func (c CommittedResourceRouter) extractClusterSelector(obj any) (string, error) {
+func (c CommittedResourceRouter) ExtractClusterSelector(obj any) (string, error) {
 	switch v := obj.(type) {
 	case *v1alpha1.CommittedResource:
 		if v == nil {
@@ -181,7 +181,7 @@ func (c CommittedResourceRouter) Match(obj any, labels map[string]string) (bool,
 // FlavorGroupCapacityResourceRouter routes flavor group capacity CRDs to clusters based on availability zone.
 type FlavorGroupCapacityResourceRouter struct{}
 
-func (f FlavorGroupCapacityResourceRouter) extractClusterSelector(obj any) (string, error) {
+func (f FlavorGroupCapacityResourceRouter) ExtractClusterSelector(obj any) (string, error) {
 	switch v := obj.(type) {
 	case *v1alpha1.FlavorGroupCapacity:
 		if v == nil {
@@ -228,7 +228,7 @@ func (f FlavorGroupCapacityResourceRouter) Match(obj any, labels map[string]stri
 // HistoryResourceRouter routes histories to clusters based on availability zone.
 type HistoryResourceRouter struct{}
 
-func (h HistoryResourceRouter) extractClusterSelector(obj any) (string, error) {
+func (h HistoryResourceRouter) ExtractClusterSelector(obj any) (string, error) {
 	switch v := obj.(type) {
 	case *v1alpha1.History:
 		if v == nil {
@@ -275,7 +275,7 @@ func (h HistoryResourceRouter) Match(obj any, labels map[string]string) (bool, e
 // ProjectQuotaResourceRouter routes project quotas to clusters based on availability zone.
 type ProjectQuotaResourceRouter struct{}
 
-func (p ProjectQuotaResourceRouter) extractClusterSelector(obj any) (string, error) {
+func (p ProjectQuotaResourceRouter) ExtractClusterSelector(obj any) (string, error) {
 	switch v := obj.(type) {
 	case *v1alpha1.ProjectQuota:
 		if v == nil {

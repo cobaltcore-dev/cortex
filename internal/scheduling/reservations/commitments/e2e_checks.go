@@ -28,6 +28,10 @@ const (
 	// defaultE2EProjectUUID is a well-known fake project UUID used when no ProjectID is configured.
 	// It is intentionally not a real OpenStack project — commitments created under it self-expire.
 	defaultE2EProjectUUID = "00000000-0000-0000-0000-000000000e2e"
+
+	// defaultE2ETransferProjectUUID is the destination project for marketplace transfer e2e checks.
+	// Distinct from defaultE2EProjectUUID so we can verify cross-project transfer.
+	defaultE2ETransferProjectUUID = "00000000-0000-0000-0000-000000000e2f"
 )
 
 // E2EChecksConfig holds the configuration for CR e2e checks.
@@ -40,6 +44,9 @@ type E2EChecksConfig struct {
 	// ProjectID is the OpenStack project UUID for all e2e test commitments.
 	// If empty, falls back to RoundTripCheck.TestProjectID, then defaultE2EProjectUUID.
 	ProjectID string `json:"projectID,omitempty"`
+	// TransferProjectID is the destination project UUID for the marketplace transfer check.
+	// If empty, defaults to defaultE2ETransferProjectUUID.
+	TransferProjectID string `json:"transferProjectID,omitempty"`
 	// AZs is the list of availability zones to test. If empty, falls back to
 	// RoundTripCheck.AZ, then uses "qa-de-1b".
 	AZs []string `json:"azs,omitempty"`
@@ -78,6 +85,14 @@ func e2eProjectID(config E2EChecksConfig) liquid.ProjectUUID {
 		return liquid.ProjectUUID(rt.TestProjectID)
 	}
 	return liquid.ProjectUUID(defaultE2EProjectUUID)
+}
+
+// e2eTransferProjectID returns the destination project UUID for the marketplace transfer check.
+func e2eTransferProjectID(config E2EChecksConfig) liquid.ProjectUUID {
+	if config.TransferProjectID != "" {
+		return liquid.ProjectUUID(config.TransferProjectID)
+	}
+	return liquid.ProjectUUID(defaultE2ETransferProjectUUID)
 }
 
 // e2eAZs returns the effective AZ list for e2e tests.
@@ -201,7 +216,7 @@ func e2eRoundTripResource(
 		// Only capacity rejections (no hosts available) are expected in production clusters.
 		// Any other reason (flavor group ineligible, config error, timeout) indicates a
 		// regression and should surface as a failure.
-		if !strings.Contains(rejectionReason, "insufficient capacity") && !strings.Contains(rejectionReason, "insufficient CPU cores") {
+		if !strings.Contains(rejectionReason, "not sufficient capacity") && !strings.Contains(rejectionReason, "insufficient CPU cores") {
 			panic(fmt.Sprintf("round-trip check: commitment rejected with unexpected reason for resource %s: %s", resourceName, rejectionReason))
 		}
 		slog.Info("round-trip check: commitment rejected — no capacity, continuing",
@@ -404,7 +419,7 @@ func e2eBatchFlavorGroupResource(
 		"project", projectID, "az", az)
 
 	if reason := e2eSendChangeCommitments(ctx, baseURL, req2, requestTimeout); reason != "" {
-		if !strings.Contains(reason, "insufficient capacity") && !strings.Contains(reason, "insufficient CPU cores") {
+		if !strings.Contains(reason, "not sufficient capacity") && !strings.Contains(reason, "insufficient CPU cores") {
 			panic(fmt.Sprintf("batch check: unexpected rejection for batch of %s: %s", resourceName, reason))
 		}
 		slog.Info("batch check: batch rejected — no capacity for full amount, cleanup will remove pending",
@@ -533,7 +548,7 @@ func e2eDryRunResource(
 	switch {
 	case rejectionReason == "":
 		slog.Info("dry-run check: accepted", "resource", resourceName, "az", az)
-	case strings.Contains(rejectionReason, "insufficient capacity") || strings.Contains(rejectionReason, "insufficient CPU cores"):
+	case strings.Contains(rejectionReason, "not sufficient capacity") || strings.Contains(rejectionReason, "insufficient CPU cores"):
 		slog.Info("dry-run check: capacity rejection (expected in constrained clusters)",
 			"resource", resourceName, "az", az, "reason", rejectionReason)
 	default:
@@ -653,6 +668,178 @@ func e2eBaseURL(config E2EChecksConfig) string {
 	return defaultCommitmentsAPIURL
 }
 
+// CheckCommitmentsMarketplaceTransfer verifies the marketplace transfer flow for each (AZ, resource) pair.
+// A marketplace transfer moves a commitment from one project to another while keeping the same UUID.
+// For each pair it:
+//  1. Creates a confirmed commitment in projectA (source)
+//  2. If no capacity: logs and continues — the slot sizing issue may cause false rejections in prod
+//  3. If accepted: transfers to projectB in a single atomic request (delete in A + create in B)
+//  4. If the transfer is rejected: cleans up from projectA and logs (may happen if slots are project-filtered)
+//  5. If the transfer is accepted: verifies the usage API, then deletes from projectB
+func CheckCommitmentsMarketplaceTransfer(ctx context.Context, config E2EChecksConfig) {
+	baseURL := e2eBaseURL(config)
+	projectA := e2eProjectID(config)
+	projectB := e2eTransferProjectID(config)
+	azs := e2eAZs(config)
+
+	serviceInfo := e2eFetchServiceInfo(ctx, baseURL)
+
+	checked := 0
+	for _, az := range azs {
+		for resourceName, resInfo := range serviceInfo.Resources {
+			if !resInfo.HandlesCommitments {
+				continue
+			}
+			e2eMarketplaceTransferResource(ctx, baseURL, serviceInfo.Version, az, projectA, projectB, resourceName, config.NoCleanup, config.e2eRequestTimeout())
+			checked++
+		}
+	}
+
+	if checked == 0 {
+		slog.Warn("transfer check: no HandlesCommitments resources found in /info — nothing checked")
+	}
+}
+
+// e2eMarketplaceTransferResource runs the create→transfer→delete cycle for one (AZ, resource) pair.
+func e2eMarketplaceTransferResource(
+	ctx context.Context,
+	baseURL string,
+	infoVersion int64,
+	az liquid.AvailabilityZone,
+	projectA, projectB liquid.ProjectUUID,
+	resourceName liquid.ResourceName,
+	noCleanup bool,
+	requestTimeout time.Duration,
+) {
+
+	now := time.Now()
+	expiresAt := now.Add(5 * time.Minute)
+	testUUID := liquid.CommitmentUUID(fmt.Sprintf("e2e-xfer-%d", now.UnixMilli()))
+	const amount = uint64(2)
+
+	// Step 1: create confirmed commitment in projectA.
+	createReq := liquid.CommitmentChangeRequest{
+		InfoVersion: infoVersion,
+		AZ:          az,
+		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+			projectA: {
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					resourceName: {
+						TotalConfirmedAfter: amount,
+						Commitments: []liquid.Commitment{{
+							UUID:      testUUID,
+							Amount:    amount,
+							NewStatus: Some(liquid.CommitmentStatusConfirmed),
+							ExpiresAt: expiresAt,
+						}},
+					},
+				},
+			},
+		},
+	}
+
+	slog.Info("transfer check: creating commitment in projectA",
+		"resource", resourceName, "uuid", testUUID, "projectA", projectA, "az", az)
+	if reason := e2eSendChangeCommitments(ctx, baseURL, createReq, requestTimeout); reason != "" {
+		if !strings.Contains(reason, "not sufficient capacity") && !strings.Contains(reason, "insufficient CPU cores") {
+			panic(fmt.Sprintf("transfer check: initial create rejected with unexpected reason for %s: %s", resourceName, reason))
+		}
+		slog.Info("transfer check: initial create rejected — no capacity, skipping transfer check",
+			"resource", resourceName, "reason", reason)
+		return
+	}
+	slog.Info("transfer check: commitment accepted in projectA", "resource", resourceName, "uuid", testUUID)
+
+	// cleanupProject tracks where the commitment lives; the deferred cleanup deletes from there.
+	cleanupProject := projectA
+	defer func() {
+		if noCleanup {
+			slog.Info("transfer check: NoCleanup=true, keeping commitment for inspection",
+				"resource", resourceName, "uuid", testUUID, "project", cleanupProject)
+			return
+		}
+		deleteReq := liquid.CommitmentChangeRequest{
+			InfoVersion: infoVersion,
+			AZ:          az,
+			ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+				cleanupProject: {
+					ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+						resourceName: {
+							TotalConfirmedBefore: amount,
+							Commitments: []liquid.Commitment{{
+								UUID:      testUUID,
+								Amount:    amount,
+								OldStatus: Some(liquid.CommitmentStatusConfirmed),
+								NewStatus: None[liquid.CommitmentStatus](),
+								ExpiresAt: expiresAt,
+							}},
+						},
+					},
+				},
+			},
+		}
+		slog.Info("transfer check: deleting commitment", "resource", resourceName, "uuid", testUUID, "project", cleanupProject)
+		if reason := e2eSendChangeCommitments(ctx, baseURL, deleteReq, requestTimeout); reason != "" {
+			panic(fmt.Sprintf("transfer check: cleanup of %s rejected: %s", testUUID, reason))
+		}
+		slog.Info("transfer check: commitment deleted", "resource", resourceName, "uuid", testUUID)
+	}()
+
+	// Step 2: transfer — delete UUID from projectA, create UUID in projectB, one atomic request.
+	transferReq := liquid.CommitmentChangeRequest{
+		InfoVersion: infoVersion,
+		AZ:          az,
+		ByProject: map[liquid.ProjectUUID]liquid.ProjectCommitmentChangeset{
+			projectA: {
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					resourceName: {
+						TotalConfirmedBefore: amount,
+						Commitments: []liquid.Commitment{{
+							UUID:      testUUID,
+							Amount:    amount,
+							OldStatus: Some(liquid.CommitmentStatusConfirmed),
+							NewStatus: None[liquid.CommitmentStatus](),
+							ExpiresAt: expiresAt,
+						}},
+					},
+				},
+			},
+			projectB: {
+				ByResource: map[liquid.ResourceName]liquid.ResourceCommitmentChangeset{
+					resourceName: {
+						TotalConfirmedAfter: amount,
+						Commitments: []liquid.Commitment{{
+							UUID:      testUUID,
+							Amount:    amount,
+							NewStatus: Some(liquid.CommitmentStatusConfirmed),
+							ExpiresAt: expiresAt,
+						}},
+					},
+				},
+			},
+		},
+	}
+
+	slog.Info("transfer check: transferring commitment from projectA to projectB",
+		"resource", resourceName, "uuid", testUUID, "projectA", projectA, "projectB", projectB, "az", az)
+	if reason := e2eSendChangeCommitments(ctx, baseURL, transferReq, requestTimeout); reason != "" {
+		if !strings.Contains(reason, "not sufficient capacity") && !strings.Contains(reason, "insufficient CPU cores") {
+			panic(fmt.Sprintf("transfer check: transfer rejected with unexpected reason for %s: %s", resourceName, reason))
+		}
+		// Transfer rejected — commitment is still in projectA (API rolled back to original project).
+		slog.Info("transfer check: transfer rejected — no capacity for project-B slots, will clean up from projectA",
+			"resource", resourceName, "reason", reason)
+		return
+	}
+
+	// Transfer accepted — update cleanup target to projectB.
+	cleanupProject = projectB
+	slog.Info("transfer check: transfer accepted", "resource", resourceName, "uuid", testUUID, "projectB", projectB)
+
+	report := e2eFetchUsageReport(ctx, baseURL, az, projectB)
+	e2eLogUsageReport(report, az, projectB)
+}
+
 // RunCommitmentsE2EChecks runs all e2e checks for the commitments API.
 func RunCommitmentsE2EChecks(ctx context.Context, config E2EChecksConfig) {
 	slog.Info("running commitments e2e checks")
@@ -660,5 +847,6 @@ func RunCommitmentsE2EChecks(ctx context.Context, config E2EChecksConfig) {
 	CheckCommitmentsDryRun(ctx, config)
 	CheckCommitmentsRoundTrip(ctx, config)
 	CheckCommitmentsMultiFlavorGroupBatch(ctx, config)
+	CheckCommitmentsMarketplaceTransfer(ctx, config)
 	slog.Info("all commitments e2e checks passed")
 }

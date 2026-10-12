@@ -1,0 +1,171 @@
+---
+title: "Security Response Process"
+github_target_path: "contributing/security.md"
+github_org: cobaltcore-dev
+github_repo: cortex
+github_source_path: SECURITY.md
+---
+
+# Cortex Security Response Process
+
+Cortex has a growing community of volunteers and users. The Cortex
+community has adopted the following security response process to ensure we
+responsibly handle critical issues.
+
+## Cortex Security Team
+
+Security vulnerabilities should be handled quickly and sometimes privately. The
+primary goal of this process is to reduce the total time users are vulnerable to
+publicly known exploits. The Cortex Security Team is responsible for
+organizing the entire response including internal communication and external
+disclosure but will need help from relevant developers and release managers
+to successfully run this process. The Cortex Security Team consists of the
+following volunteers:
+
+* Arno Uhlig (**[@auhlig](https://github.com/auhlig)**)
+
+## Disclosures
+
+### Private Disclosure Processes
+
+The Cortex community asks that all suspected vulnerabilities be privately and
+responsibly disclosed. If you've found a vulnerability or a potential
+vulnerability in Cortex, let us know by writing an e-mail to
+[cortex-security@lists.neonephos.org](mailto:cortex-security@lists.neonephos.org). We'll send a confirmation e-mail to
+acknowledge your report, and we'll send an additional e-mail when we've
+identified the issue positively or negatively.
+
+### Public Disclosure Processes
+
+If you know of a publicly disclosed vulnerability, IMMEDIATELY e-mail
+[cortex-security@lists.neonephos.org](mailto:cortex-security@lists.neonephos.org) to inform the Cortex Security Team
+about the vulnerability, so they may start the patch, release, and communication
+process.
+
+If possible the Cortex Security Team will ask the person making the public
+report if the issue can be handled via a
+[private disclosure process](#private-disclosure-process) (for example if the
+full exploit details have not yet been published). If the reporter denies the
+request for private disclosure, the Cortex Security Team will move swiftly
+with the fix and release process. In extreme cases GitHub can be asked to
+delete the issue but this generally isn't necessary and is unlikely to make
+a public disclosure less damaging.
+
+## Patch, Release, and Public Communication
+
+For each vulnerability a member of the Cortex Security Team will
+volunteer to lead coordination with the "Fix Team" and is responsible to send
+disclosure e-mails to the rest of the community. This lead will be referred
+to as the "Fix Lead." The role of the Fix Lead should rotate round-robin
+across the Cortex Security Team. The Cortex Security Team may
+decide to bring in additional contributors for added expertise depending on
+the area of the code that contains the vulnerability. All of the time lines
+below are suggestions and assume a private disclosure. The Fix Lead drives
+the schedule using his best judgment based on severity and development time.
+If the Fix Lead is dealing with a public disclosure, all time lines become
+ASAP (assuming the vulnerability has a CVSS score >= 7; see below). If the
+fix relies on another upstream project's disclosure time line, that will
+adjust the process as well. We will work with the upstream project to fit
+their time line and best protect our users.
+
+### Fix Team Organization
+
+The Fix Lead will work quickly to identify relevant engineers from the
+affected projects and packages and CC those engineers into the disclosure
+thread. These selected developers are the Fix Team.
+The Fix Lead will give the Fix Team access to a private security repository
+to develop the fix.
+
+### Fix Development Process
+
+The Fix Lead and the Fix Team will create a
+[CVSS](https://www.first.org/cvss/specification-document) using the
+[CVSS Calculator](https://www.first.org/cvss/calculator/3.0). The Fix Lead
+makes the final call on the calculated CVSS; it is better to move quickly
+than make the CVSS perfect.
+The Fix Team will notify the Fix Lead that work on the fix branch is complete
+once there are LGTMs on all commits in the private repository from one or more
+maintainers.
+If the CVSS score is under 7.0
+(a [medium severity score](https://www.first.org/cvss/specification-document#i5))
+the Fix Team can decide to slow the release process down in the face of holidays,
+developer bandwidth, etc. These decisions must be discussed on the private
+[Cortex Security mailing list](#communication-channel).
+
+### Fix Disclosure Process
+
+With the fix development underway, the Fix Lead needs to come up with an
+overall communication plan for the wider community. This Disclosure process
+should begin after the Fix Team has developed a Fix or mitigation so that a
+realistic time line can be communicated to users. The Fix Lead will inform
+the [Cortex mailing list](#communication-channel) that a security
+vulnerability has been disclosed and that a fix will be made available in
+the future on a certain release date. The Fix Lead will include any mitigating
+steps users can take until a fix is available. The communication to
+Cortex users should be actionable. They should know when to block
+time to apply patches, understand exact mitigation steps, etc.
+
+### Fix Release Day
+
+The Release Managers will ensure all the binaries are built, publicly
+available, and functional before the Release Date.
+The Release Managers will create a new patch release branch from the latest
+patch release tag + the fix from the security branch. As a practical example
+if 1877.0 is the latest patch release in Cortex, a new branch will be
+created called 1877.1 which includes only patches required to fix the issue.
+The Fix Lead will cherry-pick the patches onto the master branch and all
+relevant release branches. The Fix Team will
+[LGTM](https://github.com/lgtmco/lgtm) and merge.
+The Release Managers will merge these PRs as quickly as possible. Changes
+shouldn't be made to the commits even for a typo in the CHANGELOG as this will
+change the git sha of the already built and commits leading to confusion and
+potentially conflicts as the fix is cherry-picked around branches.
+The Fix Lead will request a CVE via the [GitHub Security advisory process](https://docs.github.com/en/code-security/security-advisories) with all the relevant information (description, potential impact, affected version, fixed version,
+CVSS v3 base score and supporting documentation for the CVSS score) for every
+vulnerability. The Fix Lead will inform the
+[Cortex mailing list](#communication-channel) and announce the new
+releases, the CVE number (if available), the location of the binaries, and
+the relevant merged PRs to get wide distribution and user action.
+
+As much as possible this e-mail should be actionable and include links how to
+apply the fix to users environments; this can include links to external
+distributor documentation. The recommended target time is 4pm UTC on a
+non-Friday weekday. This means the announcement will be seen morning
+in Pacific, early evening in Europe, and late evening in Asia.
+The Fix Lead will remove the Fix Team from the private security repository.
+
+### Retrospective
+
+These steps should be completed after the Release Date. The retrospective
+process
+[should be blameless](https://landing.google.com/sre/book/chapters/postmortem-culture.html).
+
+The Fix Lead will send a retrospective of the process to the
+[Cortex mailing list](mailto:cortex-discussion@lists.neonephos.org) including details on everyone
+involved, the time line of the process, links to relevant PRs that introduced
+the issue, if relevant, and any critiques of the response and release process.
+The Release Managers and Fix Team are also encouraged to send their own
+feedback on the process to the [Cortex mailing list](mailto:cortex-discussion@lists.neonephos.org).
+Honest critique is the only way we are going to get good at this as a community.
+
+
+### Communication Channel
+
+The [private](#private-disclosure-process) or [public disclosure process](#public-disclosure-process) should be triggered
+exclusively by writing an e-mail to [cortex-security@lists.neonephos.org](mailto:cortex-security@lists.neonephos.org).
+
+Cortex security announcements will be communicated by the Fix Lead
+sending an e-mail to the
+[Cortex mailing list](mailto:cortex-discussion@lists.neonephos.org)
+Public discussions about Cortex security announcements and retrospectives,
+will primarily happen in the Cortex mailing list. Thus Cortex community
+members who are interested in participating in discussions related to the
+Cortex Security Release Process are encouraged to join the Cortex mailing
+list.
+
+The members of the [Cortex Security Team](#cortex-security-team) are
+subscribed to Cortex Security mailing list [cortex-security@lists.neonephos.org](mailto:cortex-security@lists.neonephos.org).
+
+### Open-Source-Steward
+
+CRA stewardship: This project is supported under the Linux Foundation CRA stewardship framework. Our project CRA steward is the Linux Foundation Europe and its policy is available at https://www.linuxfoundation.org/security. Security vulnerabilities should be reported through Cortex security reporting which we will coordinate with our CRA steward. For actively exploited vulnerabilities or other security matters that may require CRA escalation, please use Cortex security emergency reporting channels as appropriate.

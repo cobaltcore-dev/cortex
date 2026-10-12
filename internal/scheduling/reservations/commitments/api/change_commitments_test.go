@@ -62,7 +62,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 			},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-rej", "confirmed", 2)),
-			ExpectedAPIResponse: newAPIResponse("commitment uuid-rej: not sufficient capacity"),
+			ExpectedAPIResponse: newAPIResponse("not sufficient capacity, please try again later"),
 		},
 		// --- Planned state ---
 		{
@@ -97,7 +97,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 			},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-rollback", "confirmed", 2)),
-			ExpectedAPIResponse: newAPIResponse("uuid-rollback: not sufficient capacity"),
+			ExpectedAPIResponse: newAPIResponse("not sufficient capacity, please try again later"),
 			ExpectedDeletedCRs:  []string{"commitment-uuid-rollback"},
 		},
 		// --- Rollback: updated CR spec restored on batch failure ---
@@ -112,7 +112,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 			},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-restore", "confirmed", 4)),
-			ExpectedAPIResponse: newAPIResponse("uuid-restore: not sufficient capacity"),
+			ExpectedAPIResponse: newAPIResponse("not sufficient capacity, please try again later"),
 			// CRD still exists but amount restored to 1024 MiB
 			ExpectedCRSpecs: map[string]int64{"commitment-uuid-restore": 1024 * 1024 * 1024},
 		},
@@ -127,7 +127,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-a", "confirmed", 2),
 				createCommitment("hw_version_hana_1_ram", "project-B", "uuid-b", "confirmed", 2),
 			),
-			ExpectedAPIResponse: newAPIResponse("uuid-b: not sufficient capacity"),
+			ExpectedAPIResponse: newAPIResponse("not sufficient capacity, please try again later"),
 			ExpectedDeletedCRs:  []string{"commitment-uuid-a", "commitment-uuid-b"},
 		},
 		// --- AZ validation ---
@@ -157,7 +157,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 				}
 				return &cfg
 			}(),
-			ExpectedAPIResponse: newAPIResponse("timeout reached while processing commitment changes"),
+			ExpectedAPIResponse: APIResponseExpectation{StatusCode: http.StatusInternalServerError},
 			ExpectedDeletedCRs:  []string{"commitment-uuid-timeout"},
 		},
 		// --- Input validation ---
@@ -166,7 +166,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 			Flavors: []*TestFlavor{m1Small},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
 				createCommitment("hw_version_hana_1_ram", "project-A", strings.Repeat("x", 50), "confirmed", 2)),
-			ExpectedAPIResponse: newAPIResponse("unexpected commitment format"),
+			ExpectedAPIResponse: APIResponseExpectation{StatusCode: http.StatusInternalServerError},
 			ExpectedDeletedCRs:  []string{"commitment-" + strings.Repeat("x", 50)},
 		},
 		{
@@ -174,7 +174,40 @@ func TestHandleChangeCommitments(t *testing.T) {
 			Flavors: []*TestFlavor{m1Small},
 			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
 				createCommitment("hw_version_nonexistent_ram", "project-A", "uuid-unk", "confirmed", 2)),
-			ExpectedAPIResponse: newAPIResponse("flavor group not found"),
+			ExpectedAPIResponse: APIResponseExpectation{StatusCode: http.StatusInternalServerError},
+		},
+		// --- validateChangeRequest: Rule 1 ---
+		{
+			Name:    "Rule 1: Amount=0 on non-delete commitment → 400 bad request",
+			Flavors: []*TestFlavor{m1Small},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-zero-amt", "confirmed", 0)),
+			ExpectedAPIResponse: APIResponseExpectation{StatusCode: http.StatusBadRequest},
+		},
+		// --- validateChangeRequest: Rule 2 ---
+		{
+			Name:    "Rule 2: all Total* zero with NewStatus=confirmed → 400 bad request",
+			Flavors: []*TestFlavor{m1Small},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				TestCommitment{
+					ResourceName:   "hw_version_hana_1_ram",
+					ProjectID:      "project-A",
+					ConfirmationID: "uuid-zero-totals",
+					State:          "confirmed",
+					Amount:         2,
+					ZeroTotals:     true,
+				}),
+			ExpectedAPIResponse: APIResponseExpectation{StatusCode: http.StatusBadRequest},
+		},
+		// --- validateChangeRequest: valid request (regression) ---
+		{
+			Name:    "Validation: valid confirmed commitment with proper totals → accepted",
+			Flavors: []*TestFlavor{m1Small},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-valid-totals", "confirmed", 2)),
+			ExpectedAPIResponse:    newAPIResponse(),
+			ExpectedCreatedCRNames: []string{"commitment-uuid-valid-totals"},
+			ExpectedAllowRejection: map[string]bool{"commitment-uuid-valid-totals": true},
 		},
 		// --- Infrastructure ---
 		{
@@ -289,8 +322,39 @@ func TestHandleChangeCommitments(t *testing.T) {
 				deleteCommitment("hw_version_hana_1_ram", "project-A", "uuid-del-rb", "confirmed", 2),
 				createCommitment("hw_version_hana_1_ram", "project-B", "uuid-new-rb", "confirmed", 2),
 			),
-			ExpectedAPIResponse:    newAPIResponse("not enough capacity"),
+			ExpectedAPIResponse:    newAPIResponse("not sufficient capacity, please try again later"),
 			ExpectedCreatedCRNames: []string{"commitment-uuid-del-rb"}, // re-created during rollback
+		},
+		// --- Marketplace transfer (same UUID: delete in one project, create in another) ---
+		{
+			Name:    "Transfer: CR updated in place to new project, controller accepts",
+			Flavors: []*TestFlavor{m1Small},
+			ExistingCRs: []*TestCR{
+				{CommitmentUUID: "uuid-xfer", State: v1alpha1.CommitmentStatusConfirmed, AmountMiB: 1024, ProjectID: "project-A", AZ: "az-a"},
+			},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				deleteCommitment("hw_version_hana_1_ram", "project-A", "uuid-xfer", "confirmed", 1024),
+				createCommitment("hw_version_hana_1_ram", "project-B", "uuid-xfer", "confirmed", 1024),
+			),
+			ExpectedAPIResponse:    newAPIResponse(),
+			ExpectedCRProjectIDs:   map[string]string{"commitment-uuid-xfer": "project-B"},
+			ExpectedAllowRejection: map[string]bool{"commitment-uuid-xfer": true},
+		},
+		{
+			Name:    "Transfer: controller rejects → spec restored to original project",
+			Flavors: []*TestFlavor{m1Small},
+			ExistingCRs: []*TestCR{
+				{CommitmentUUID: "uuid-xfer-rb", State: v1alpha1.CommitmentStatusConfirmed, AmountMiB: 1024, ProjectID: "project-A", AZ: "az-a"},
+			},
+			CROutcomes: map[string]string{
+				"commitment-uuid-xfer-rb": "not sufficient capacity",
+			},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				deleteCommitment("hw_version_hana_1_ram", "project-A", "uuid-xfer-rb", "confirmed", 1024),
+				createCommitment("hw_version_hana_1_ram", "project-B", "uuid-xfer-rb", "confirmed", 1024),
+			),
+			ExpectedAPIResponse:  newAPIResponse("not sufficient capacity, please try again later"),
+			ExpectedCRProjectIDs: map[string]string{"commitment-uuid-xfer-rb": "project-A"}, // rolled back
 		},
 		// --- Non-confirming changes (RequiresConfirmation=false → AllowRejection=false, no watch) ---
 		{
@@ -426,7 +490,7 @@ func TestHandleChangeCommitments(t *testing.T) {
 				createCommitment("hw_version_hana_1_ram", "project-A", "uuid-pva", "confirmed", 2),
 				createCommitment("hw_version_nonexistent_ram", "project-B", "uuid-pvb", "confirmed", 2),
 			),
-			ExpectedAPIResponse: newAPIResponse("flavor group not found"),
+			ExpectedAPIResponse: APIResponseExpectation{StatusCode: http.StatusInternalServerError},
 			ExpectedDeletedCRs:  []string{"commitment-uuid-pva"},
 		},
 	}
@@ -457,6 +521,9 @@ func runChangeCommitmentsTest(t *testing.T, tc CommitmentChangeTestCase) {
 	}
 	for crName, expectedAmountBytes := range tc.ExpectedCRSpecs {
 		env.VerifyCRAmountBytes(crName, expectedAmountBytes)
+	}
+	for crName, expectedProjectID := range tc.ExpectedCRProjectIDs {
+		env.VerifyCRProjectID(crName, expectedProjectID)
 	}
 	for _, crName := range tc.ExpectedDeletedCRs {
 		env.VerifyCRAbsent(crName)
@@ -489,8 +556,9 @@ type CommitmentChangeTestCase struct {
 	ExpectedAPIResponse APIResponseExpectation
 	// Post-call assertions.
 	ExpectedCreatedCRNames []string
-	ExpectedAllowRejection map[string]bool  // crName → expected AllowRejection value
-	ExpectedCRSpecs        map[string]int64 // crName → expected Amount.Value() in bytes
+	ExpectedAllowRejection map[string]bool   // crName → expected AllowRejection value
+	ExpectedCRSpecs        map[string]int64  // crName → expected Amount.Value() in bytes
+	ExpectedCRProjectIDs   map[string]string // crName → expected ProjectID
 	ExpectedDeletedCRs     []string
 	CustomConfig           *commitments.APIConfig
 	EnvInfoVersion         int64
@@ -524,6 +592,7 @@ type TestCommitment struct {
 	State          string // empty = None (deletion)
 	Amount         uint64
 	OldAmount      uint64 // if non-zero, used for TotalBefore totals instead of Amount (for resize-down)
+	ZeroTotals     bool   // if true, skip Total* accumulation (for testing Rule 2 validation)
 }
 
 type APIResponseExpectation struct {
@@ -896,6 +965,18 @@ func (env *CRTestEnv) VerifyCRAmountBytes(crName string, wantBytes int64) {
 	}
 }
 
+func (env *CRTestEnv) VerifyCRProjectID(crName, wantProjectID string) {
+	env.T.Helper()
+	cr := &v1alpha1.CommittedResource{}
+	if err := env.K8sClient.Get(context.Background(), client.ObjectKey{Name: crName}, cr); err != nil {
+		env.T.Errorf("CommittedResource %q not found: %v", crName, err)
+		return
+	}
+	if cr.Spec.ProjectID != wantProjectID {
+		env.T.Errorf("CommittedResource %q: ProjectID=%q, want %q", crName, cr.Spec.ProjectID, wantProjectID)
+	}
+}
+
 // ============================================================================
 // TestCR → v1alpha1.CommittedResource
 // ============================================================================
@@ -1005,21 +1086,24 @@ func buildRequestJSON(req CommitmentChangeRequest) string {
 
 		// Compute per-resource totals so RequiresConfirmation() behaves correctly.
 		// OldAmount overrides Amount for TotalBefore (resize-down: old amount != new amount).
-		oldAmt := tc.Amount
-		if tc.OldAmount != 0 {
-			oldAmt = tc.OldAmount
-		}
-		if oldStatus == Some(liquid.CommitmentStatusConfirmed) {
-			byResource.TotalConfirmedBefore += oldAmt
-		}
-		if newStatus == Some(liquid.CommitmentStatusConfirmed) {
-			byResource.TotalConfirmedAfter += tc.Amount
-		}
-		if oldStatus == Some(liquid.CommitmentStatusGuaranteed) {
-			byResource.TotalGuaranteedBefore += oldAmt
-		}
-		if newStatus == Some(liquid.CommitmentStatusGuaranteed) {
-			byResource.TotalGuaranteedAfter += tc.Amount
+		// ZeroTotals skips accumulation to simulate a malformed request (for Rule 2 validation tests).
+		if !tc.ZeroTotals {
+			oldAmt := tc.Amount
+			if tc.OldAmount != 0 {
+				oldAmt = tc.OldAmount
+			}
+			if oldStatus == Some(liquid.CommitmentStatusConfirmed) {
+				byResource.TotalConfirmedBefore += oldAmt
+			}
+			if newStatus == Some(liquid.CommitmentStatusConfirmed) {
+				byResource.TotalConfirmedAfter += tc.Amount
+			}
+			if oldStatus == Some(liquid.CommitmentStatusGuaranteed) {
+				byResource.TotalGuaranteedBefore += oldAmt
+			}
+			if newStatus == Some(liquid.CommitmentStatusGuaranteed) {
+				byResource.TotalGuaranteedAfter += tc.Amount
+			}
 		}
 
 		byProject[pid].ByResource[tc.ResourceName] = byResource
@@ -1174,5 +1258,38 @@ func (vm *TestVM) ToVM() VM {
 		FlavorExtraSpecs: map[string]string{
 			"quota:hw_version": vm.Flavor.Group,
 		},
+	}
+}
+
+type deletedObjectRecorder struct {
+	client.Client
+	deletedCRs []*v1alpha1.CommittedResource
+}
+
+func (r *deletedObjectRecorder) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	if cr, ok := obj.(*v1alpha1.CommittedResource); ok {
+		r.deletedCRs = append(r.deletedCRs, cr.DeepCopy())
+	}
+	return r.Client.Delete(ctx, obj, opts...)
+}
+
+func TestRollbackCR_DeleteSetsAZ(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	baseClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	recorder := &deletedObjectRecorder{Client: baseClient}
+
+	snap := crSnapshot{crName: "commitment-abc", az: "eu-de-2b"}
+	rollbackCR(context.Background(), log.Log, recorder, snap)
+
+	if len(recorder.deletedCRs) != 1 {
+		t.Fatalf("expected 1 Delete call, got %d", len(recorder.deletedCRs))
+	}
+	got := recorder.deletedCRs[0].Spec.AvailabilityZone
+	if got != "eu-de-2b" {
+		t.Errorf("Delete called with AZ %q, want %q", got, "eu-de-2b")
 	}
 }

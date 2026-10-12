@@ -991,3 +991,269 @@ func TestSyncer_SyncReservations_GC_ExpiredEndTime(t *testing.T) {
 		t.Errorf("Expected expired CRD to be GC'd, got %d CRDs", len(crList.Items))
 	}
 }
+
+func TestSyncer_SyncReservations_DeleteStaleCRs(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheme: %v", err)
+	}
+
+	flavorGroupsKnowledge := createFlavorGroupKnowledge(t, map[string]FlavorGroupData{
+		"test_group_v1": {
+			SmallestFlavorName: "f", SmallestFlavorVCPUs: 2, SmallestFlavorMemoryMB: 1024,
+			LargestFlavorName: "f", LargestFlavorVCPUs: 2, LargestFlavorMemoryMB: 1024,
+		},
+	})
+
+	tests := []struct {
+		name              string
+		deleteStaleCRs    bool
+		crAge             time.Duration
+		limesReturnsEmpty bool
+		wantCRDeleted     bool
+		wantStaleCRsGauge float64
+		wantStaleDeleted  float64
+	}{
+		{
+			name:              "flag off: stale CR preserved",
+			deleteStaleCRs:    false,
+			crAge:             time.Hour,
+			wantCRDeleted:     false,
+			wantStaleCRsGauge: 1,
+			wantStaleDeleted:  0,
+		},
+		{
+			name:              "flag on, old CR: deleted",
+			deleteStaleCRs:    true,
+			crAge:             time.Hour,
+			wantCRDeleted:     true,
+			wantStaleCRsGauge: 0,
+			wantStaleDeleted:  1,
+		},
+		{
+			name:              "flag on, CR within grace period: preserved",
+			deleteStaleCRs:    true,
+			crAge:             time.Minute, // less than defaultStaleCRDeletionGracePeriod
+			wantCRDeleted:     false,
+			wantStaleCRsGauge: 1,
+			wantStaleDeleted:  0,
+		},
+		{
+			name:              "flag on, Limes returns nothing: safety guard fires",
+			deleteStaleCRs:    true,
+			crAge:             time.Hour,
+			limesReturnsEmpty: true,
+			wantCRDeleted:     false,
+			wantStaleCRsGauge: 1,
+			wantStaleDeleted:  0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			staleCR := &v1alpha1.CommittedResource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "commitment-stale-del-uuid",
+					CreationTimestamp: metav1.NewTime(time.Now().Add(-tc.crAge)),
+				},
+				Spec: v1alpha1.CommittedResourceSpec{
+					CommitmentUUID:  "stale-del-uuid",
+					FlavorGroupName: "test_group_v1",
+					ResourceType:    v1alpha1.CommittedResourceTypeMemory,
+					Amount:          *resource.NewQuantity(1024*1024*1024, resource.BinarySI),
+					ProjectID:       "p", DomainID: "d", AvailabilityZone: "az1",
+					State:            v1alpha1.CommitmentStatusConfirmed,
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+				},
+			}
+
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(staleCR, flavorGroupsKnowledge).
+				Build()
+
+			mockClient := &mockCommitmentsClient{
+				listCommitmentsByIDFunc: func(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
+					if tc.limesReturnsEmpty {
+						return map[string]Commitment{}, nil // triggers safety guard
+					}
+					// Return one active commitment (different UUID) so the safety guard doesn't fire.
+					// Use an unknown status so it ends up in skippedUUIDs without needing
+					// FlavorGroupResourceConfig to be fully populated.
+					// The stale CR's UUID is absent, making it stale.
+					return map[string]Commitment{
+						"other-uuid": {
+							UUID:        "other-uuid",
+							ServiceType: "compute",
+							Status:      "unknown_test_status", // → skippedUUIDs, limesEmpty=false
+						},
+					}, nil
+				},
+				listProjectsFunc: func(ctx context.Context) ([]Project, error) {
+					return []Project{{ID: "p", DomainID: "d"}}, nil
+				},
+			}
+
+			monitor := NewSyncerMonitor()
+			syncer := &Syncer{
+				CommitmentsClient: mockClient,
+				Client:            k8sClient,
+				monitor:           monitor,
+				resourceConfig:    SyncerConfig{DeleteStaleCRs: tc.deleteStaleCRs},
+			}
+
+			if err := syncer.SyncReservations(context.Background()); err != nil {
+				t.Fatalf("SyncReservations() error = %v", err)
+			}
+
+			var crList v1alpha1.CommittedResourceList
+			if err := k8sClient.List(context.Background(), &crList); err != nil {
+				t.Fatalf("Failed to list CRs: %v", err)
+			}
+			gotDeleted := len(crList.Items) == 0
+			if gotDeleted != tc.wantCRDeleted {
+				t.Errorf("CR deleted=%v, want %v", gotDeleted, tc.wantCRDeleted)
+			}
+
+			ch := make(chan prometheus.Metric, 10)
+			monitor.staleCRs.Collect(ch)
+			close(ch)
+			var staleMet dto.Metric
+			if err := (<-ch).Write(&staleMet); err != nil {
+				t.Fatalf("failed to read staleCRs metric: %v", err)
+			}
+			if got := staleMet.GetGauge().GetValue(); got != tc.wantStaleCRsGauge {
+				t.Errorf("staleCRs gauge=%v, want %v", got, tc.wantStaleCRsGauge)
+			}
+
+			ch2 := make(chan prometheus.Metric, 10)
+			monitor.crStaleDeletes.Collect(ch2)
+			close(ch2)
+			var delMet dto.Metric
+			if err := (<-ch2).Write(&delMet); err != nil {
+				t.Fatalf("failed to read crStaleDeletes metric: %v", err)
+			}
+			if got := delMet.GetCounter().GetValue(); got != tc.wantStaleDeleted {
+				t.Errorf("crStaleDeletes counter=%v, want %v", got, tc.wantStaleDeleted)
+			}
+		})
+	}
+}
+
+func TestSyncer_SyncReservations_OrphanReservationGC(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheme: %v", err)
+	}
+
+	flavorGroupsKnowledge := createFlavorGroupKnowledge(t, map[string]FlavorGroupData{
+		"test_group_v1": {
+			SmallestFlavorName: "f", SmallestFlavorVCPUs: 2, SmallestFlavorMemoryMB: 1024,
+			LargestFlavorName: "f", LargestFlavorVCPUs: 2, LargestFlavorMemoryMB: 1024,
+		},
+	})
+
+	tests := []struct {
+		name                    string
+		hasLocalCR              bool
+		wantReservationDeleted  bool
+		wantOrphanDeletesMetric float64
+	}{
+		{
+			name:                    "no local CR, absent from Limes: reservation deleted",
+			hasLocalCR:              false,
+			wantReservationDeleted:  true,
+			wantOrphanDeletesMetric: 1,
+		},
+		{
+			name:                    "local CR exists, absent from Limes: reservation preserved",
+			hasLocalCR:              true,
+			wantReservationDeleted:  false,
+			wantOrphanDeletesMetric: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			const commitmentUUID = "orphan-uuid"
+
+			orphanRes := &v1alpha1.Reservation{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "orphan-reservation",
+					Labels: map[string]string{
+						v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+					},
+				},
+				Spec: v1alpha1.ReservationSpec{
+					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+						CommitmentUUID: commitmentUUID,
+					},
+				},
+			}
+
+			objects := []client.Object{flavorGroupsKnowledge, orphanRes}
+			if tc.hasLocalCR {
+				objects = append(objects, &v1alpha1.CommittedResource{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "commitment-" + commitmentUUID,
+						CreationTimestamp: metav1.NewTime(time.Now().Add(-time.Hour)),
+					},
+					Spec: v1alpha1.CommittedResourceSpec{
+						CommitmentUUID:   commitmentUUID,
+						SchedulingDomain: v1alpha1.SchedulingDomainNova,
+						FlavorGroupName:  "test_group_v1",
+						ResourceType:     v1alpha1.CommittedResourceTypeMemory,
+						Amount:           *resource.NewQuantity(1024*1024*1024, resource.BinarySI),
+						ProjectID:        "p", DomainID: "d", AvailabilityZone: "az1",
+						State: v1alpha1.CommitmentStatusConfirmed,
+					},
+				})
+			}
+
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objects...).
+				Build()
+
+			mockClient := &mockCommitmentsClient{
+				listCommitmentsByIDFunc: func(ctx context.Context, projects ...Project) (map[string]Commitment, error) {
+					return map[string]Commitment{}, nil // commitmentUUID absent from Limes
+				},
+				listProjectsFunc: func(ctx context.Context) ([]Project, error) {
+					return []Project{{ID: "p", DomainID: "d"}}, nil
+				},
+			}
+
+			monitor := NewSyncerMonitor()
+			syncer := &Syncer{
+				CommitmentsClient: mockClient,
+				Client:            k8sClient,
+				monitor:           monitor,
+			}
+
+			if err := syncer.SyncReservations(context.Background()); err != nil {
+				t.Fatalf("SyncReservations() error = %v", err)
+			}
+
+			var resList v1alpha1.ReservationList
+			if err := k8sClient.List(context.Background(), &resList); err != nil {
+				t.Fatalf("Failed to list reservations: %v", err)
+			}
+			gotDeleted := len(resList.Items) == 0
+			if gotDeleted != tc.wantReservationDeleted {
+				t.Errorf("reservation deleted=%v, want %v", gotDeleted, tc.wantReservationDeleted)
+			}
+
+			ch := make(chan prometheus.Metric, 10)
+			monitor.orphanReservationDeletes.Collect(ch)
+			close(ch)
+			var met dto.Metric
+			if err := (<-ch).Write(&met); err != nil {
+				t.Fatalf("failed to read orphanReservationDeletes metric: %v", err)
+			}
+			if got := met.GetCounter().GetValue(); got != tc.wantOrphanDeletesMetric {
+				t.Errorf("orphanReservationDeletes counter=%v, want %v", got, tc.wantOrphanDeletesMetric)
+			}
+		})
+	}
+}

@@ -35,6 +35,9 @@ var (
 		if !ok {
 			return nil
 		}
+		if res.Spec.Type != v1alpha1.ReservationTypeInFlight {
+			return nil
+		}
 		if res.Spec.TargetHost == "" {
 			return nil
 		}

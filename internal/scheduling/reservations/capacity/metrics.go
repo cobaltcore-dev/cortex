@@ -21,19 +21,24 @@ var (
 // Monitor provides Prometheus metrics for FlavorGroupCapacity CRDs.
 // It implements prometheus.Collector and reads CRD status on each Collect call.
 type Monitor struct {
-	client                     client.Client
-	vmSlotsEmpty               *prometheus.GaugeVec
-	vmSlotsPlaceable           *prometheus.GaugeVec
-	hostsEmpty                 *prometheus.GaugeVec
-	hostsPlaceable             *prometheus.GaugeVec
-	committedCapacityGiB       *prometheus.GaugeVec
-	committedReservations      *prometheus.GaugeVec
-	runningInstances           *prometheus.GaugeVec
-	freeCapacityGiB            *prometheus.GaugeVec
-	exclusivelyFreeCapacityGiB *prometheus.GaugeVec
-	exclusivelyRawCapacityGiB  *prometheus.GaugeVec
-	exclusivelyFreeSlots       *prometheus.GaugeVec
-	readyGauge                 *prometheus.GaugeVec
+	client                            client.Client
+	vmSlotsEmpty                      *prometheus.GaugeVec
+	vmSlotsPlaceable                  *prometheus.GaugeVec
+	hostsEmpty                        *prometheus.GaugeVec
+	hostsPlaceable                    *prometheus.GaugeVec
+	committedCapacityGiB              *prometheus.GaugeVec
+	committedReservations             *prometheus.GaugeVec
+	runningInstances                  *prometheus.GaugeVec
+	freeCapacityGiB                   *prometheus.GaugeVec
+	exclusivelyFreeCapacityGiB        *prometheus.GaugeVec
+	exclusivelyRawCapacityGiB         *prometheus.GaugeVec
+	exclusivelyFreeSlots              *prometheus.GaugeVec
+	runningSlots                      *prometheus.GaugeVec
+	exclusivelyCommittedReservedGiB   *prometheus.GaugeVec
+	exclusivelyCommittedReservedSlots *prometheus.GaugeVec
+	exclusivelyFailoverReservedGiB    *prometheus.GaugeVec
+	exclusivelyFailoverReservedSlots  *prometheus.GaugeVec
+	readyGauge                        *prometheus.GaugeVec
 }
 
 // NewMonitor creates a new Monitor that reads FlavorGroupCapacity CRDs.
@@ -84,6 +89,26 @@ func NewMonitor(c client.Client) Monitor {
 			Name: "cortex_committed_resource_exclusively_free_slots",
 			Help: "Number of smallest-flavor VM slots available after the cross-group capacity split.",
 		}, capacityFlavorLabels),
+		runningSlots: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_committed_resource_running_slots",
+			Help: "Running VM consumption in smallest-flavor slot units. Unlike running_instances, a VM larger than the smallest flavor counts as the several slots it occupies.",
+		}, capacityFlavorLabels),
+		exclusivelyCommittedReservedGiB: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_committed_resource_exclusively_committed_reserved_capacity_gib",
+			Help: "Memory in GiB held by unfilled committed-resource reservations. Included in reported capacity to Limes.",
+		}, capacityFlavorLabels),
+		exclusivelyCommittedReservedSlots: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_committed_resource_exclusively_committed_reserved_slots",
+			Help: "Unfilled committed-resource reservation slots in smallest-flavor units. Included in reported capacity to Limes.",
+		}, capacityFlavorLabels),
+		exclusivelyFailoverReservedGiB: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_committed_resource_exclusively_failover_reserved_capacity_gib",
+			Help: "Memory in GiB held by failover reservations (hardware held for host evacuation). Excluded from reported capacity to Limes.",
+		}, capacityFlavorLabels),
+		exclusivelyFailoverReservedSlots: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "cortex_committed_resource_exclusively_failover_reserved_slots",
+			Help: "Failover reservation slots in smallest-flavor units. Excluded from reported capacity to Limes.",
+		}, capacityFlavorLabels),
 		readyGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "cortex_committed_resource_capacity_ready",
 			Help: "1 if the FlavorGroupCapacity CRD is Ready (all scheduler probes succeeded), 0 otherwise.",
@@ -104,6 +129,11 @@ func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
 	m.exclusivelyFreeCapacityGiB.Describe(ch)
 	m.exclusivelyRawCapacityGiB.Describe(ch)
 	m.exclusivelyFreeSlots.Describe(ch)
+	m.runningSlots.Describe(ch)
+	m.exclusivelyCommittedReservedGiB.Describe(ch)
+	m.exclusivelyCommittedReservedSlots.Describe(ch)
+	m.exclusivelyFailoverReservedGiB.Describe(ch)
+	m.exclusivelyFailoverReservedSlots.Describe(ch)
 	m.readyGauge.Describe(ch)
 }
 
@@ -129,6 +159,11 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	m.exclusivelyFreeCapacityGiB.Reset()
 	m.exclusivelyRawCapacityGiB.Reset()
 	m.exclusivelyFreeSlots.Reset()
+	m.runningSlots.Reset()
+	m.exclusivelyCommittedReservedGiB.Reset()
+	m.exclusivelyCommittedReservedSlots.Reset()
+	m.exclusivelyFailoverReservedGiB.Reset()
+	m.exclusivelyFailoverReservedSlots.Reset()
 	m.readyGauge.Reset()
 
 	for _, crd := range list.Items {
@@ -155,6 +190,15 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 			m.exclusivelyRawCapacityGiB.With(groupAZFlavorLabels).Set(float64(qty.Value()) / (1024 * 1024 * 1024))
 		}
 		m.exclusivelyFreeSlots.With(groupAZFlavorLabels).Set(float64(crd.Status.ExclusivelyFreeSlots))
+		m.runningSlots.With(groupAZFlavorLabels).Set(float64(crd.Status.RunningSlots))
+		if qty, ok := crd.Status.ExclusivelyCommittedReservedCapacity[string(v1alpha1.CommittedResourceTypeMemory)]; ok {
+			m.exclusivelyCommittedReservedGiB.With(groupAZFlavorLabels).Set(float64(qty.Value()) / (1024 * 1024 * 1024))
+		}
+		m.exclusivelyCommittedReservedSlots.With(groupAZFlavorLabels).Set(float64(crd.Status.ExclusivelyCommittedReservedSlots))
+		if qty, ok := crd.Status.ExclusivelyFailoverReservedCapacity[string(v1alpha1.CommittedResourceTypeMemory)]; ok {
+			m.exclusivelyFailoverReservedGiB.With(groupAZFlavorLabels).Set(float64(qty.Value()) / (1024 * 1024 * 1024))
+		}
+		m.exclusivelyFailoverReservedSlots.With(groupAZFlavorLabels).Set(float64(crd.Status.ExclusivelyFailoverReservedSlots))
 
 		readyVal := 0.0
 		if apimeta.IsStatusConditionTrue(crd.Status.Conditions, v1alpha1.FlavorGroupCapacityConditionReady) {
@@ -186,5 +230,10 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	m.exclusivelyFreeCapacityGiB.Collect(ch)
 	m.exclusivelyRawCapacityGiB.Collect(ch)
 	m.exclusivelyFreeSlots.Collect(ch)
+	m.runningSlots.Collect(ch)
+	m.exclusivelyCommittedReservedGiB.Collect(ch)
+	m.exclusivelyCommittedReservedSlots.Collect(ch)
+	m.exclusivelyFailoverReservedGiB.Collect(ch)
+	m.exclusivelyFailoverReservedSlots.Collect(ch)
 	m.readyGauge.Collect(ch)
 }

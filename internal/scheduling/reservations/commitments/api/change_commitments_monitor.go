@@ -39,13 +39,13 @@ func NewChangeCommitmentsAPIMonitor() ChangeCommitmentsAPIMonitor {
 	// commitmentChanges uses az="" sentinel: az values are dynamic, and sums in alerts aggregate across all az values.
 	for _, dryRun := range []string{"true", "false"} {
 		for _, statusCode := range []string{"200", "400", "405", "409", "500", "503"} {
-			for _, result := range []string{"accepted", "rejected", "error"} {
+			for _, result := range []string{"accepted", "rejected", "error", "bad_request"} {
 				m.requestCounter.WithLabelValues(statusCode, dryRun, result)
 			}
 			m.requestDuration.WithLabelValues(statusCode, dryRun)
 		}
 		m.timeouts.WithLabelValues(dryRun)
-		for _, result := range []string{"accepted", "rejected", "error"} {
+		for _, result := range []string{"accepted", "rejected", "error", "bad_request"} {
 			m.commitmentChanges.WithLabelValues(result, "", dryRun)
 		}
 	}

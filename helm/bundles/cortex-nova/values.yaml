@@ -27,6 +27,12 @@ alerts:
     # back to zero within milliseconds, so any sustained non-zero watermark
     # indicates eviction is not keeping up.
     cacheOverlayMaxEntries: 50
+    # Lookback window for CortexNovaFailoverReservationsMissing. The alert fires
+    # only if the count of VMs missing their required failover reservations never
+    # returned to zero (min_over_time > 0) across this window. A new VM transiently
+    # bumps the count, so this must comfortably exceed the failover reconcileInterval
+    # (default 5m) to let the controller drive the count back to zero.
+    failoverMissingFor: 1h
 
 serviceMonitor:
   extraLabels: {}
@@ -244,7 +250,10 @@ cortex-scheduling-controllers:
       maxSlotsPerCommitment: 0
       # When true, the controller scans the AZ for existing PAYG VMs and pre-allocates them
       # into reservation slots before falling back to blind scheduler placement.
-      enablePaygPreAllocation: false
+      enablePaygPreAllocation: true
+      # How long a slot may remain unplaced (NoHostsFound) before it is deleted so PAYG
+      # remapping and re-sizing can be retried; 0 disables the TTL.
+      noHostsFoundTTL: "20m"
     committedResourceAPI:
       # Timeout for watching CommittedResource CRDs before rolling back
       watchTimeout: "15s"
@@ -320,6 +329,11 @@ cortex-scheduling-controllers:
     useFlavorGroupResources: false
     # How often the commitments syncer reconciles Limes commitments to Reservation CRDs
     committedResourceSyncInterval: "1h"
+    # Delete CommittedResource CRDs that are present locally but absent from Limes.
+    deleteStaleCRs: true
+    # Minimum age a CommittedResource CRD must reach before the syncer treats it as stale
+    # and deletes it. Prevents timing races of recently-created CRDs not yet visible in the global fetch.
+    staleCRDeletionGracePeriod: "10m"
 
 cortex-knowledge-controllers:
   <<: *cortex
