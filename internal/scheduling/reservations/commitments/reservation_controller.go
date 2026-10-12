@@ -183,7 +183,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 							"parentGen", res.Spec.CommittedResourceReservation.ParentGeneration,
 							"crGen", parentCR.Generation,
 						)
-						return ctrl.Result{Requeue: true}, nil
+						return ctrl.Result{RequeueAfter: 100 * time.Millisecond}, nil
 					}
 				}
 			}
