@@ -272,7 +272,18 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
 	}
 	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
-	return ctrl.Result{}, r.setAccepted(ctx, cr)
+	if err := r.setAccepted(ctx, cr); err != nil {
+		return ctrl.Result{}, err
+	}
+	var latest v1alpha1.CommittedResource
+	if err := r.Get(ctx, client.ObjectKeyFromObject(cr), &latest); err == nil && latest.Generation > cr.Generation {
+		logger.Info("generation advanced during reconcile, requeueing",
+			"processedGen", cr.Generation,
+			"latestGen", latest.Generation,
+		)
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+	}
+	return ctrl.Result{}, nil
 }
 
 // reconcileCoresHeadroom handles acceptance of CPU core commitments.
