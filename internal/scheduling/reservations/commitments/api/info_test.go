@@ -341,6 +341,13 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 	// v2_variable has ramCoreRatioMin=2048 MiB/vCPU, ramCoreRatioMax=16384 MiB/vCPU → expect 2, 16 GiB/vCPU.
 	checkAttrsRatio(t, "hw_version_v2_variable_ram", v2RamResource.Attributes, 0, ptr(uint64(2)), ptr(uint64(16)))
 
+	// Cores without quota (both groups) signal liquid-nova to keep cores unlimited;
+	// RAM (has quota) and instances must not carry the signal.
+	checkUnlimitedQuota(t, "hw_version_hana_fixed_cores", coresResource.Attributes, true)
+	checkUnlimitedQuota(t, "hw_version_v2_variable_cores", v2CoresResource.Attributes, true)
+	checkUnlimitedQuota(t, "hw_version_hana_fixed_ram", ramResource.Attributes, false)
+	checkUnlimitedQuota(t, "hw_version_hana_fixed_instances", instancesResource.Attributes, false)
+
 	// Verify RAM units: fixed-ratio groups use smallest-flavor-based unit (e.g. "16 GiB"),
 	// variable-ratio groups use UnitGibibytes ("GiB").
 	expectedFixedUnit, err := liquid.UnitMebibytes.MultiplyBy(16384) // hana_fixed smallest flavor: 16384 MiB = 16 GiB
@@ -464,5 +471,23 @@ func checkAttrsRatio(t *testing.T, resName string, raw json.RawMessage, ratioGiB
 		} else if *attrs.RamCoreRatioMax != *maxGiB {
 			t.Errorf("%s: expected ramCoreRatioMax=%d GiB/vCPU, got %d", resName, *maxGiB, *attrs.RamCoreRatioMax)
 		}
+	}
+}
+
+// checkUnlimitedQuota verifies whether the liquid-nova:set-unlimited-quota attribute
+// is present and true. When wantPresent is false, the attribute must be absent.
+func checkUnlimitedQuota(t *testing.T, resName string, raw json.RawMessage, wantPresent bool) {
+	t.Helper()
+	var attrs struct {
+		SetUnlimitedQuota *bool `json:"liquid-nova:set-unlimited-quota"`
+	}
+	if err := json.Unmarshal(raw, &attrs); err != nil {
+		t.Fatalf("%s: failed to decode attributes: %v", resName, err)
+	}
+	switch {
+	case wantPresent && (attrs.SetUnlimitedQuota == nil || !*attrs.SetUnlimitedQuota):
+		t.Errorf("%s: expected liquid-nova:set-unlimited-quota=true", resName)
+	case !wantPresent && attrs.SetUnlimitedQuota != nil:
+		t.Errorf("%s: expected no liquid-nova:set-unlimited-quota attribute, got %v", resName, *attrs.SetUnlimitedQuota)
 	}
 }
