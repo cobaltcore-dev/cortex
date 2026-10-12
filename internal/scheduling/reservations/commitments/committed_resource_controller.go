@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -432,6 +433,27 @@ func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Co
 		)
 		if res.Status.CommittedResourceReservation == nil ||
 			res.Status.CommittedResourceReservation.ObservedParentGeneration != cr.Generation {
+			// parentGen has been written to the Reservation spec (syncReservationMetadata
+			// already ran for this generation) but the Reservation controller hasn't echoed
+			// it to status yet. This should be rare — it means the Reservation controller's
+			// watch event for that spec write was dropped by workqueue deduplication. Poke
+			// the Reservation to generate a fresh watch event so it wakes up and echoes.
+			if res.Spec.CommittedResourceReservation != nil &&
+				res.Spec.CommittedResourceReservation.ParentGeneration == cr.Generation {
+				ctrl.LoggerFrom(ctx).Info("nudging stale reservation: parentGen written to spec but echo pending",
+					"slot", res.Name,
+					"crGen", cr.Generation,
+					"obs", obs,
+				)
+				old := res.DeepCopy()
+				if res.Annotations == nil {
+					res.Annotations = map[string]string{}
+				}
+				res.Annotations["cortex.cloud/echo-nudge"] = strconv.FormatInt(time.Now().UnixMilli(), 10)
+				if pErr := r.Patch(ctx, &res, client.MergeFrom(old)); client.IgnoreNotFound(pErr) != nil {
+					ctrl.LoggerFrom(ctx).V(1).Info("failed to nudge stale reservation echo", "slot", res.Name, "err", pErr)
+				}
+			}
 			allReady = false
 			continue
 		}
