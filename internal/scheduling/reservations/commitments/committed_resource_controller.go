@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -56,7 +57,8 @@ func (r *CommittedResourceController) Reconcile(ctx context.Context, req ctrl.Re
 		"committedResource", req.Name,
 	)
 
-	// Debug: timing anchor for CR reconcile relative to Phase 6 and Reservation echo.
+	// Timing anchor: shows which generation the cache served when this reconcile fired.
+	// Missing for a specific generation means the CR controller never dequeued that gen.
 	logger.V(1).Info("reconcile entry", "rv", cr.ResourceVersion, "gen", cr.Generation)
 
 	if !cr.DeletionTimestamp.IsZero() {
@@ -124,7 +126,12 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 		// error would cause controller-runtime to ignore RequeueAfter and use exponential backoff.
 		return ctrl.Result{RequeueAfter: delay}, nil
 	}
-	allReady, anyFailed, readySlots, failReason, firstSlotReason, failedSlots, err := r.checkChildReservationStatus(ctx, cr, result.TotalSlots)
+	// alreadyReserving is true when the CR condition already shows Reserving for this generation,
+	// meaning at least one reconcile cycle (~1s) has elapsed since we first entered the waiting state.
+	// We only nudge stale Reservation slots after that delay to give the normal echo path a chance
+	// to complete first, keeping logs quiet in the happy path.
+	alreadyReserving := isAlreadyReserving(cr)
+	allReady, anyFailed, readySlots, failReason, firstSlotReason, failedSlots, err := r.checkChildReservationStatus(ctx, cr, result.TotalSlots, alreadyReserving)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -151,10 +158,16 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 		// gate should not fire while we wait for slots to become ready.
 		// Fallback requeue: in case the watch event is missed,
 		// re-check after 1s rather than waiting for the full watch timeout.
-		if err := r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", true); err != nil {
+		// Use "still waiting" message after the first cycle so the condition is a visible hint
+		// that a nudge has been (or is about to be) sent to stale slots.
+		msg := "waiting for reservation placement"
+		if alreadyReserving {
+			msg = "still waiting for reservation placement"
+		}
+		if err := r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, msg, true); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: time.Second}, nil
+		return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
 	}
 	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
 	return ctrl.Result{}, r.setAccepted(ctx, cr)
@@ -183,7 +196,7 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 			if applyErr != nil {
 				logger.V(1).Info("spurious-rejection recovery: apply failed, will retry", "err", applyErr)
 			} else {
-				allReady, anyFailed, _, _, _, _, checkErr := r.checkChildReservationStatus(ctx, cr, result.TotalSlots)
+				allReady, anyFailed, _, _, _, _, checkErr := r.checkChildReservationStatus(ctx, cr, result.TotalSlots, false)
 				if checkErr == nil && allReady && !anyFailed {
 					logger.Info("recovered from spurious rejection: all slots ready", "generation", cr.Generation)
 					return ctrl.Result{}, r.setAccepted(ctx, cr)
@@ -222,7 +235,8 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		// error would cause controller-runtime to ignore RequeueAfter and use exponential backoff.
 		return ctrl.Result{RequeueAfter: delay}, nil
 	}
-	allReady, anyFailed, readySlots, failReason, firstSlotReason, failedSlots, err := r.checkChildReservationStatus(ctx, cr, result.TotalSlots)
+	alreadyReserving := isAlreadyReserving(cr)
+	allReady, anyFailed, readySlots, failReason, firstSlotReason, failedSlots, err := r.checkChildReservationStatus(ctx, cr, result.TotalSlots, alreadyReserving)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -247,13 +261,30 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		// gate should not fire while we wait for slots to become ready.
 		// Fallback requeue: in case the watch event is missed,
 		// re-check after 1s rather than waiting for the full watch timeout.
-		if err := r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, "waiting for reservation placement", true); err != nil {
+		// Use "still waiting" message after the first cycle so the condition is a visible hint
+		// that a nudge has been (or is about to be) sent to stale slots.
+		msg := "waiting for reservation placement"
+		if alreadyReserving {
+			msg = "still waiting for reservation placement"
+		}
+		if err := r.patchNotReady(ctx, cr, v1alpha1.CommittedResourceReasonReserving, msg, true); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: time.Second}, nil
+		return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
 	}
 	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
-	return ctrl.Result{}, r.setAccepted(ctx, cr)
+	if err := r.setAccepted(ctx, cr); err != nil {
+		return ctrl.Result{}, err
+	}
+	var latest v1alpha1.CommittedResource
+	if err := r.Get(ctx, client.ObjectKeyFromObject(cr), &latest); err == nil && latest.Generation > cr.Generation {
+		logger.Info("generation advanced during reconcile, requeueing",
+			"processedGen", cr.Generation,
+			"latestGen", latest.Generation,
+		)
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+	}
+	return ctrl.Result{}, nil
 }
 
 // reconcileCoresHeadroom handles acceptance of CPU core commitments.
@@ -398,7 +429,7 @@ func (r *CommittedResourceController) applyReservationState(ctx context.Context,
 // Returns allReady=false, anyFailed=false when some children have no condition yet (placement pending).
 // failReason includes a slot count when more than one slot failed.
 // failedSlots lists the names of all failing reservation slots for log context.
-func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Context, cr *v1alpha1.CommittedResource, expectedSlots int) (allReady, anyFailed bool, readySlots int, failReason, firstFailMessage string, failedSlots []string, err error) {
+func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Context, cr *v1alpha1.CommittedResource, expectedSlots int, shouldNudge bool) (allReady, anyFailed bool, readySlots int, failReason, firstFailMessage string, failedSlots []string, err error) {
 	var list v1alpha1.ReservationList
 	if err := r.List(ctx, &list,
 		client.MatchingLabels{v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource},
@@ -432,6 +463,34 @@ func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Co
 		)
 		if res.Status.CommittedResourceReservation == nil ||
 			res.Status.CommittedResourceReservation.ObservedParentGeneration != cr.Generation {
+			// parentGen has been written to the Reservation spec (syncReservationMetadata
+			// already ran for this generation) but the Reservation controller hasn't echoed
+			// it to status yet. Poke the Reservation to generate a fresh watch event so the
+			// Reservation controller wakes up and fires the echo.
+			// Use gen+ms as the annotation value so each nudge attempt is a distinct string:
+			// a same-value patch is a no-op on the API server (no watch event generated), and
+			// in a double-stale scenario the first nudge may itself be processed with a stale
+			// object, so periodic retries (every 3s via the fallback requeue) are needed.
+			// shouldNudge is false on the first cycle (CR condition not yet set for this
+			// generation) to give the normal echo path ~3s to complete before intervening.
+			if shouldNudge &&
+				res.Spec.CommittedResourceReservation != nil &&
+				res.Spec.CommittedResourceReservation.ParentGeneration == cr.Generation {
+				nudgeVal := strconv.FormatInt(cr.Generation, 10) + "-" + strconv.FormatInt(time.Now().UnixMilli(), 10)
+				ctrl.LoggerFrom(ctx).Info("nudging stale reservation: parentGen written to spec but echo pending",
+					"slot", res.Name,
+					"crGen", cr.Generation,
+					"obs", obs,
+				)
+				old := res.DeepCopy()
+				if res.Annotations == nil {
+					res.Annotations = map[string]string{}
+				}
+				res.Annotations["cortex.cloud/echo-nudge"] = nudgeVal
+				if pErr := r.Patch(ctx, &res, client.MergeFrom(old)); client.IgnoreNotFound(pErr) != nil {
+					ctrl.LoggerFrom(ctx).V(1).Info("failed to nudge stale reservation echo", "slot", res.Name, "err", pErr)
+				}
+			}
 			allReady = false
 			continue
 		}
@@ -569,6 +628,18 @@ func isRejectedForGeneration(cr *v1alpha1.CommittedResource) bool {
 	return cond != nil &&
 		cond.Status == metav1.ConditionFalse &&
 		cond.Reason == v1alpha1.CommittedResourceReasonRejected &&
+		cond.ObservedGeneration == cr.Generation
+}
+
+// isAlreadyReserving returns true when the CR condition already shows Reserving for this
+// generation, meaning at least one reconcile cycle (~1s) has elapsed since we first entered
+// the waiting-for-slots state. Used to gate the echo-nudge so the first reconcile cycle is
+// always silent, giving the normal Reservation echo path a chance to complete first.
+func isAlreadyReserving(cr *v1alpha1.CommittedResource) bool {
+	cond := meta.FindStatusCondition(cr.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+	return cond != nil &&
+		cond.Status == metav1.ConditionFalse &&
+		cond.Reason == v1alpha1.CommittedResourceReasonReserving &&
 		cond.ObservedGeneration == cr.Generation
 }
 
