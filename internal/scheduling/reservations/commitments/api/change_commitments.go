@@ -274,7 +274,8 @@ ProcessLoop:
 			}
 			if !handlesCommitments {
 				failedReason = fmt.Sprintf("flavor group %q is not configured to handle %s commitments", flavorGroupName, resourceType)
-				sanitisedReason = "internal error processing request"
+				sanitisedReason = failedReason
+				isBadRequest = true
 				rollback = true
 				break ProcessLoop
 			}
