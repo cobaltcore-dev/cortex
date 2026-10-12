@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
-	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -101,11 +100,9 @@ func (h kvmHost) getHostLabels() []string {
 		availabilityZone = "unknown"
 	}
 
-	buildingBlock := "unknown"
-	// Assuming hypervisor names are in the format nodeXXX-bbYY
-	parts := strings.Split(h.Name, "-")
-	if len(parts) > 1 {
-		buildingBlock = parts[1]
+	buildingBlock := h.Labels["kubernetes.metal.cloud.sap/bb"]
+	if buildingBlock == "" {
+		buildingBlock = "unknown"
 	}
 
 	osVersion := h.Status.OperatingSystem.Version
