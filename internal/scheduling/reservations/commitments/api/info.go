@@ -81,6 +81,11 @@ type resourceAttributes struct {
 	RamCoreRatio    *uint64 `json:"ramCoreRatio,omitempty"`
 	RamCoreRatioMin *uint64 `json:"ramCoreRatioMin,omitempty"`
 	RamCoreRatioMax *uint64 `json:"ramCoreRatioMax,omitempty"`
+	// SetUnlimitedQuota signals liquid-nova to maintain an unlimited quota for a
+	// resource that cortex does not manage quota for (HasQuota=false). Set on the
+	// cores resource of fixed-ratio groups, where RAM is crucial and a
+	// separate cores quota is redundant.
+	SetUnlimitedQuota *bool `json:"liquid-nova:set-unlimited-quota,omitempty"`
 }
 
 // mibToGiB converts a MiB pointer value to GiB, rounded to the nearest integer. Returns nil if v is nil.
@@ -135,6 +140,20 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 			attrsJSON = nil
 		}
 
+		// Cores reuses the shared attributes, plus a signal to liquid-nova to keep
+		// cores quota unlimited whenever cortex does not manage cores quota itself.
+		coresAttrsJSON := attrsJSON
+		if !resCfg.Cores.HasQuota {
+			coresAttrs := attrs
+			unlimited := true
+			coresAttrs.SetUnlimitedQuota = &unlimited
+			if marshaled, err := json.Marshal(coresAttrs); err != nil {
+				logger.Error(err, "failed to marshal cores resource attributes", "flavorGroup", groupName)
+			} else {
+				coresAttrsJSON = marshaled
+			}
+		}
+
 		// === 1. RAM Resource ===
 		ramResourceName := liquid.ResourceName(commitments.ResourceNameRAM(groupName))
 		ramUnit, err := liquid.UnitMebibytes.MultiplyBy(resCfg.RAM.RAMUnitMiB())
@@ -171,7 +190,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 			HasCapacity:         resCfg.Cores.HasCapacity,
 			HasQuota:            resCfg.Cores.HasQuota,
 			HandlesCommitments:  resCfg.Cores.HandlesCommitments,
-			Attributes:          attrsJSON,
+			Attributes:          coresAttrsJSON,
 		}
 
 		// === 3. Instances Resource ===
