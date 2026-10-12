@@ -1170,6 +1170,7 @@ func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 		wantReadySlots  int
 		wantReason      string
 		wantFailedSlots []string
+		wantNudge       bool
 	}{
 		{
 			name:           "Ready=False at stale generation: treated as pending",
@@ -1179,6 +1180,7 @@ func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 			wantAllReady:   false,
 			wantAnyFailed:  false,
 			wantReadySlots: 0,
+			wantNudge:      true,
 		},
 		{
 			name:            "Ready=False at current generation: is a current failure",
@@ -1205,6 +1207,15 @@ func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 			wantAllReady:   false,
 			wantAnyFailed:  false,
 			wantReadySlots: 0,
+		},
+		{
+			name:           "parentGen written to spec but echo not yet in status: nudge annotation set",
+			obsGen:         1, // obs behind cr.Generation=2; spec.parentGeneration already set to cr.Generation
+			condStatus:     metav1.ConditionTrue,
+			wantAllReady:   false,
+			wantAnyFailed:  false,
+			wantReadySlots: 0,
+			wantNudge:      true,
 		},
 	}
 
@@ -1266,6 +1277,14 @@ func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 			}
 			if !slices.Equal(failedSlots, tt.wantFailedSlots) {
 				t.Errorf("failedSlots: want %v, got %v", tt.wantFailedSlots, failedSlots)
+			}
+			var updated v1alpha1.Reservation
+			if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: child.Name}, &updated); err != nil {
+				t.Fatalf("get updated reservation: %v", err)
+			}
+			_, hasNudge := updated.Annotations["cortex.cloud/echo-nudge"]
+			if hasNudge != tt.wantNudge {
+				t.Errorf("echo-nudge annotation: want %v, got %v", tt.wantNudge, hasNudge)
 			}
 		})
 	}
