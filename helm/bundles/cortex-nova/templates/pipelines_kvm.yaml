@@ -104,6 +104,8 @@ spec:
         by aggregates. Aggregates use AND logic between list elements, with
         comma-separated UUIDs within an element using OR logic.
     - name: filter_quota_enforcement
+      params:
+        - {key: enforce, boolValue: {{ .Values.kvm.quotaEnforcement.enforce }}}
       description: |
         This step enforces project quota by checking whether the request has
         headroom under the project's committed resources or pay-as-you-go quota.
@@ -113,10 +115,11 @@ spec:
 
         Runs in shadow mode by default: the filter logs and emits the
         cortex_nova_filter_quota_enforcement_decisions_total metric for
-        would-be rejects but never actually removes hosts. To globally reject
-        requests without headroom, add `params: [{key: enforce, boolValue: true}]`
-        to this step. The shadow default is intentional so that newly-rolled-out
-        releases never silently start rejecting requests.
+        would-be rejects but never actually removes hosts. Enforcement is
+        controlled by the `kvm.quotaEnforcement.enforce` helm value, wired into
+        the `enforce` param above; set it to true to globally reject requests
+        without headroom. The shadow default is intentional so that
+        newly-rolled-out releases never silently start rejecting requests.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -264,6 +267,8 @@ spec:
         by aggregates. Aggregates use AND logic between list elements, with
         comma-separated UUIDs within an element using OR logic.
     - name: filter_quota_enforcement
+      params:
+        - {key: enforce, boolValue: {{ .Values.kvm.quotaEnforcement.enforce }}}
       description: |
         This step enforces project quota by checking whether the request has
         headroom under the project's committed resources or pay-as-you-go quota.
@@ -273,10 +278,11 @@ spec:
 
         Runs in shadow mode by default: the filter logs and emits the
         cortex_nova_filter_quota_enforcement_decisions_total metric for
-        would-be rejects but never actually removes hosts. To globally reject
-        requests without headroom, add `params: [{key: enforce, boolValue: true}]`
-        to this step. The shadow default is intentional so that newly-rolled-out
-        releases never silently start rejecting requests.
+        would-be rejects but never actually removes hosts. Enforcement is
+        controlled by the `kvm.quotaEnforcement.enforce` helm value, wired into
+        the `enforce` param above; set it to true to globally reject requests
+        without headroom. The shadow default is intentional so that
+        newly-rolled-out releases never silently start rejecting requests.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -731,6 +737,8 @@ spec:
         by aggregates. Aggregates use AND logic between list elements, with
         comma-separated UUIDs within an element using OR logic.
     - name: filter_quota_enforcement
+      params:
+        - {key: enforce, boolValue: {{ .Values.kvm.quotaEnforcement.enforce }}}
       description: |
         This step enforces project quota by checking whether the request has
         headroom under the project's committed resources or pay-as-you-go quota.
@@ -740,10 +748,11 @@ spec:
 
         Runs in shadow mode by default: the filter logs and emits the
         cortex_nova_filter_quota_enforcement_decisions_total metric for
-        would-be rejects but never actually removes hosts. To globally reject
-        requests without headroom, add `params: [{key: enforce, boolValue: true}]`
-        to this step. The shadow default is intentional so that newly-rolled-out
-        releases never silently start rejecting requests.
+        would-be rejects but never actually removes hosts. Enforcement is
+        controlled by the `kvm.quotaEnforcement.enforce` helm value, wired into
+        the `enforce` param above; set it to true to globally reject requests
+        without headroom. The shadow default is intentional so that
+        newly-rolled-out releases never silently start rejecting requests.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -891,6 +900,8 @@ spec:
         by aggregates. Aggregates use AND logic between list elements, with
         comma-separated UUIDs within an element using OR logic.
     - name: filter_quota_enforcement
+      params:
+        - {key: enforce, boolValue: {{ .Values.kvm.quotaEnforcement.enforce }}}
       description: |
         This step enforces project quota by checking whether the request has
         headroom under the project's committed resources or pay-as-you-go quota.
@@ -900,10 +911,11 @@ spec:
 
         Runs in shadow mode by default: the filter logs and emits the
         cortex_nova_filter_quota_enforcement_decisions_total metric for
-        would-be rejects but never actually removes hosts. To globally reject
-        requests without headroom, add `params: [{key: enforce, boolValue: true}]`
-        to this step. The shadow default is intentional so that newly-rolled-out
-        releases never silently start rejecting requests.
+        would-be rejects but never actually removes hosts. Enforcement is
+        controlled by the `kvm.quotaEnforcement.enforce` helm value, wired into
+        the `enforce` param above; set it to true to globally reject requests
+        without headroom. The shadow default is intentional so that
+        newly-rolled-out releases never silently start rejecting requests.
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
