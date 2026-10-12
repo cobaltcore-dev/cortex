@@ -109,7 +109,19 @@ spec:
           Thus, no immediate action is needed.
 
     - alert: CortexNovaHighMemoryUsage
-      expr: process_resident_memory_bytes{service="cortex-nova-metrics"} > {{ .Values.alerts.thresholds.highMemoryMiB }} * 1024 * 1024
+      # Fire at >=80% of each pod's own configured container memory limit. The
+      # service="cortex-nova-metrics" selector matches both nova-knowledge and
+      # nova-scheduling, which have different (and per-region-overridden) memory
+      # limits, so a single scalar threshold cannot express "80% of the limit"
+      # for both. We instead join each pod's resident memory against its actual
+      # container memory limit (kube-state-metrics) by the "pod" label, keeping
+      # the component label from the left side. group_left preserves the
+      # per-pod series (and its component label) while matching the single
+      # memory-limit series for that pod.
+      expr: |
+        process_resident_memory_bytes{service="cortex-nova-metrics"}
+          > on (pod) group_left ()
+            ({{ .Values.alerts.thresholds.highMemoryFraction }} * kube_pod_container_resource_limits{resource="memory", container="manager", pod=~"cortex-nova-.*"})
       for: 5m
       labels:
         context: memory
@@ -121,12 +133,21 @@ spec:
       annotations:
         summary: "`{{ "{{" }} $labels.component {{ "}}" }}` uses too much memory"
         description: >
-          `{{ "{{" }} $labels.component {{ "}}" }}` should not be using more than {{ .Values.alerts.thresholds.highMemoryMiB }} MiB of memory. Usually it
-          should use much less, so there may be a memory leak or other changes
-          that are causing the memory usage to increase significantly.
+          `{{ "{{" }} $labels.component {{ "}}" }}` is using more than {{ mulf .Values.alerts.thresholds.highMemoryFraction 100 | int }}% of its configured
+          container memory limit. Usually it should use much less, so there may
+          be a memory leak or other changes that are causing the memory usage to
+          increase significantly.
 
     - alert: CortexNovaHighCPUUsage
-      expr: rate(process_cpu_seconds_total{service="cortex-nova-metrics"}[1m]) > 0.5
+      # Fire at >=80% of each pod's own configured container CPU limit, mirroring
+      # the memory alert above. The service="cortex-nova-metrics" selector
+      # matches both nova-knowledge and nova-scheduling; joining against the
+      # actual CPU limit (kube-state-metrics) by the "pod" label keeps this
+      # correct even if CPU limits are overridden per component/region.
+      expr: |
+        rate(process_cpu_seconds_total{service="cortex-nova-metrics"}[1m])
+          > on (pod) group_left ()
+            ({{ .Values.alerts.thresholds.highCPUFraction }} * kube_pod_container_resource_limits{resource="cpu", container="manager", pod=~"cortex-nova-.*"})
       for: 5m
       labels:
         context: cpu
@@ -138,9 +159,10 @@ spec:
       annotations:
         summary: "`{{ "{{" }} $labels.component {{ "}}" }}` uses too much CPU"
         description: >
-          `{{ "{{" }} $labels.component {{ "}}" }}` should not be using more than 50% of a single CPU core. Usually
-          it should use much less, so there may be a CPU leak or other changes
-          that are causing the CPU usage to increase significantly.
+          `{{ "{{" }} $labels.component {{ "}}" }}` is using more than {{ mulf .Values.alerts.thresholds.highCPUFraction 100 | int }}% of its configured
+          container CPU limit. Usually it should use much less, so there may be a
+          CPU leak or other changes that are causing the CPU usage to increase
+          significantly.
 
     - alert: CortexNovaTooManyDBConnectionAttempts
       expr: rate(cortex_db_connection_attempts_total{service="cortex-nova-metrics"}[5m]) > 0.1
