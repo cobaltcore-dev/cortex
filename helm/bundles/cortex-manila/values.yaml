@@ -17,6 +17,16 @@ owner-info:
 alerts:
   enabled: true
   prometheus: openstack
+  thresholds:
+    # Fraction of each pod's configured container memory limit above which
+    # CortexManilaHighMemoryUsage fires. The alert joins process_resident_memory_bytes
+    # against kube_pod_container_resource_limits per pod, so it stays correct
+    # across per-region limit overrides without hand-maintained MiB values.
+    # 0.8 = 80% of the limit.
+    highMemoryFraction: 0.8
+    # Fraction of each pod's configured container CPU limit above which
+    # CortexManilaHighCPUUsage fires. Mirrors highMemoryFraction. 0.8 = 80% of the limit.
+    highCPUFraction: 0.8
 
 serviceMonitor:
   extraLabels: {}
