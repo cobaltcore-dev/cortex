@@ -79,6 +79,36 @@ held) — which is what the `STATE` column below reports.
 > refuse a placement that would eat into another tenant's committed slot. See
 > [Reservations overview](01-reservations-overview.md).
 
+### The change-commitments API and marketplace transfers
+
+The syncer reconciles commitments asynchronously in a periodic loop, but Limes also needs a
+**synchronous** path for operations that must succeed or fail atomically — creating, updating, and
+deleting commitments in a single HTTP round-trip. That path is the **change-commitments LIQUID API**
+(`POST /commitments/v1/change-commitments`), implemented in `api/change_commitments.go`.
+
+The two paths write the same `CommittedResource` CRDs and use the same controller to place
+reservation slots. They differ in how failure is handled:
+
+- **Syncer path (`AllowRejection=false`).** The controller retries with exponential backoff until
+  it succeeds. Limes does not wait for confirmation; the syncer fires and forgets.
+- **API path (`AllowRejection=true`).** The HTTP handler writes the CRDs and polls their status
+  conditions until the controller confirms or rejects each one. If any commitment in the batch
+  fails (e.g. insufficient capacity), the entire batch is rolled back and a rejection reason is
+  returned to Limes.
+
+One important operation the API enables is **marketplace transfers** — moving a commitment from one
+project to another within a single Limes request. In the LIQUID protocol a transfer arrives as the
+same commitment UUID appearing as a deletion (status=none) in the source project and a creation in
+the destination project. A naive delete-then-create would race: the reservation slots freed by the
+delete could be claimed by another commitment before the create runs.
+
+Cortex handles transfers as **in-place `ProjectID` updates** on the existing `CommittedResource`
+CRD. The API detects transfer pairs (same UUID, different projects), skips the deletion side, and
+lets the creation side's `CreateOrUpdate` update the CRD's `ProjectID` in place. The reservation
+manager's Phase 3 then replaces any child reservation slots whose `ProjectID` no longer matches,
+preserving the commitment and its reserved capacity without a window where the slots are unowned.
+See `transferredCommitmentUUIDs()` in `api/change_commitments.go`.
+
 ## Verifying the sync
 
 ```bash
