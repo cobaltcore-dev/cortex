@@ -252,6 +252,13 @@ func newNovaRequest(instanceUUID, projectID, flavorName, flavorGroup string, vcp
 	return newNovaRequestWithIntent(instanceUUID, projectID, flavorName, flavorGroup, vcpus, memory, "", evacuation, hosts)
 }
 
+// withSoftForce flags the request for soft-force failover use, as the pipeline
+// controller would after the evacuation tracker crosses its threshold.
+func withSoftForce(r api.ExternalSchedulerRequest) api.ExternalSchedulerRequest {
+	r.FailoverSoftForce = true
+	return r
+}
+
 // newNovaRequestWithIntent creates a nova request with a specific intent.
 // intentHint can be: "evacuate", "reserve_for_committed_resource", "reserve_for_failover", or "" for create.
 func newNovaRequestWithIntent(instanceUUID, projectID, flavorName, flavorGroup string, vcpus int, memory, intentHint string, evacuation bool, hosts []string) api.ExternalSchedulerRequest {
@@ -573,6 +580,17 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host3"},
 			filteredHosts: []string{"host1", "host2", "host4"},
+		},
+		{
+			name: "FailoverReservation unlocked for foreign VM during evacuation with soft-force",
+			reservations: []*v1alpha1.Reservation{
+				newFailoverReservation("failover-1", "host1", "8", "16Gi", map[string]string{"other-instance": "host5"}),
+				newFailoverReservation("failover-2", "host2", "4", "8Gi", map[string]string{"another-instance": "host6"}),
+			},
+			request:       withSoftForce(newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 4, "8Gi", true, []string{"host1", "host2", "host3", "host4"})),
+			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
+			expectedHosts: []string{"host1", "host2", "host3"},
+			filteredHosts: []string{"host4"},
 		},
 		{
 			name: "FailoverReservation with empty Allocations blocks reserved host",

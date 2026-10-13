@@ -13,11 +13,13 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/http"
+	"time"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
 	scheduling "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/migrationcounter"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,6 +40,58 @@ type HTTPAPIConfig struct {
 	// filters). Defaults to true when unset; set to false to disable and let
 	// forced requests flow through the normal pipeline instead.
 	ForcedDestinationEnabled *bool `json:"forcedDestinationEnabled,omitempty"`
+	// EvacuationTracking configures the in-memory tracker for repeated
+	// evacuation requests. When enabled, VMs that request evacuation often
+	// enough are allowed to use any ready failover slot during evacuation.
+	EvacuationTracking EvacuationTrackingConfig `json:"evacuationTracking,omitempty"`
+}
+
+// EvacuationTrackingConfig is the JSON-friendly configuration for the in-memory
+// evacuation tracker. It is disabled by default.
+type EvacuationTrackingConfig struct {
+	// Enabled toggles the whole feature. Default: false.
+	Enabled bool `json:"enabled,omitempty"`
+	// Threshold is the number of observed evacuation requests (within Window)
+	// after which a VM may use any failover slot. Owned by the pipeline
+	// controller, which compares the tracker count against it. Default: 5.
+	Threshold int `json:"threshold,omitempty"`
+	// Window is the relevance window for counting requests and evicting stale
+	// entries. Default: 6h.
+	Window metav1.Duration `json:"window,omitempty"`
+	// CleanupInterval is the minimum gap between throttled lazy sweeps. Default: 1h.
+	CleanupInterval metav1.Duration `json:"cleanupInterval,omitempty"`
+	// MaxEntries is the soft cap on tracked entries. Default: 10000.
+	MaxEntries int `json:"maxEntries,omitempty"`
+}
+
+// EffectiveThreshold returns the configured threshold, applying the default.
+func (c EvacuationTrackingConfig) EffectiveThreshold() int {
+	if c.Threshold <= 0 {
+		return 5
+	}
+	return c.Threshold
+}
+
+// ToCounterConfig converts the JSON config to a migrationcounter.Config,
+// applying defaults for any unset values. The threshold is not part of the
+// counter; it is owned by the controller (see EffectiveThreshold). Whether the
+// feature runs at all is decided by the caller (main.go) via Enabled.
+func (c EvacuationTrackingConfig) ToCounterConfig() migrationcounter.Config {
+	cfg := migrationcounter.Config{
+		Window:          c.Window.Duration,
+		CleanupInterval: c.CleanupInterval.Duration,
+		MaxEntries:      c.MaxEntries,
+	}
+	if cfg.Window <= 0 {
+		cfg.Window = 6 * time.Hour
+	}
+	if cfg.CleanupInterval <= 0 {
+		cfg.CleanupInterval = time.Hour
+	}
+	if cfg.MaxEntries <= 0 {
+		cfg.MaxEntries = 10000
+	}
+	return cfg
 }
 
 // forcedDestinationEnabled reports whether the forced-destination behavior is
@@ -57,16 +111,18 @@ type HTTPAPI interface {
 }
 
 type httpAPI struct {
-	monitor  scheduling.APIMonitor
-	delegate HTTPAPIDelegate
-	config   HTTPAPIConfig
+	monitor    scheduling.APIMonitor
+	delegate   HTTPAPIDelegate
+	config     HTTPAPIConfig
+	migrations *migrationcounter.RepeatedMigrationCounter
 }
 
-func NewAPI(config HTTPAPIConfig, delegate HTTPAPIDelegate) HTTPAPI {
+func NewAPI(config HTTPAPIConfig, delegate HTTPAPIDelegate, migrations *migrationcounter.RepeatedMigrationCounter) HTTPAPI {
 	return &httpAPI{
-		monitor:  scheduling.NewSchedulerMonitor(),
-		delegate: delegate,
-		config:   config,
+		monitor:    scheduling.NewSchedulerMonitor(),
+		delegate:   delegate,
+		config:     config,
+		migrations: migrations,
 	}
 }
 
@@ -274,6 +330,15 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		},
 	}
 	ctx := r.Context()
+	// Record repeated evacuation requests before processing, so the pipeline
+	// controller's count includes the current request when deciding whether the
+	// VM may use any failover slot. Keyed by VM UUID plus source host when
+	// cleanly derivable (single ignore_hosts entry).
+	if intent, err := requestData.GetIntent(); err == nil && intent == api.EvacuateIntent && httpAPI.migrations != nil {
+		count := httpAPI.migrations.Observe(requestData.Spec.Data.InstanceUUID, requestData.Spec.Data.IgnoreHosts)
+		logger.Info("tracked evacuation request",
+			"instanceUUID", requestData.Spec.Data.InstanceUUID, "count", count)
+	}
 	if err := httpAPI.delegate.ProcessNewDecisionFromAPI(ctx, decision); err != nil {
 		c.Respond(logger, http.StatusInternalServerError, err, fmt.Sprintf("failed to process scheduling decision: %v", err))
 		return

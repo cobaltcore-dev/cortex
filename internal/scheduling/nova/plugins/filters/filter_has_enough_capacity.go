@@ -181,7 +181,11 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 				// We only unlock during evacuations because:
 				// 1. Failover reservations are specifically for HA/evacuation scenarios.
 				// 2. During live migrations or other operations, we don't want to use failover capacity.
-				// Note: we cannot use failover reservations from other VMs, as that can invalidate our HA guarantees.
+				// Note: we normally cannot use failover reservations from other VMs, as that can
+				// invalidate our HA guarantees. The one exception is a VM flagged with
+				// FailoverSoftForce by the evacuation tracker after repeatedly failing to
+				// evacuate: such a VM is allowed to use any ready failover slot so it can
+				// actually be evacuated during an incident.
 				intent, err := request.GetIntent()
 				if err == nil {
 					switch intent {
@@ -193,6 +197,15 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 									"instanceUUID", request.Spec.Data.InstanceUUID)
 								continue
 							}
+						}
+						// VMs flagged for soft-force failover use (by the evacuation
+						// tracker) may use any ready failover slot, not just their own.
+						// This relaxes the per-VM HA guarantee, so log it as a warning.
+						if request.FailoverSoftForce {
+							traceLog.Warn("unlocking failover reservation for soft-force evacuation VM",
+								"reservation", reservation.Name,
+								"instanceUUID", request.Spec.Data.InstanceUUID)
+							continue
 						}
 					case api.ReuseFailoverReservationIntent:
 						// Reuse check: the reservation already pre-blocks the right capacity for this VM.

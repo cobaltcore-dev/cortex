@@ -18,10 +18,12 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/migrationcounter"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/weighers"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/prometheus/client_golang/prometheus"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -52,6 +54,23 @@ type FilterWeigherPipelineController struct {
 
 	// CRRecorder receives scheduling events and updates CR reservations and metrics.
 	CRRecorder crs.Recorder
+
+	// RepeatedMigrationCounting bundles the repeated-migration soft-force
+	// inputs. When its Counter is nil the feature is disabled.
+	RepeatedMigrationCounting RepeatedMigrationCounting
+}
+
+// RepeatedMigrationCounting configures the soft-force behavior driven by the
+// repeated-migration counter: a VM that has requested migration at or above
+// Threshold times may use any ready failover slot during evacuation.
+type RepeatedMigrationCounting struct {
+	// Counter of repeated migration requests. Nil disables the feature.
+	Counter *migrationcounter.RepeatedMigrationCounter
+	// Threshold is the count at or above which a VM may use any failover slot.
+	Threshold int
+	// SoftForceCounter is incremented once per pipeline run when a VM is
+	// flagged for soft-force failover use. May be nil.
+	SoftForceCounter prometheus.Counter
 }
 
 // The type of pipeline this controller manages.
@@ -181,6 +200,21 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		decision.Spec.Intent = v1alpha1.SchedulingIntentUnknown
 	} else {
 		decision.Spec.Intent = intent
+	}
+
+	// For evacuations, consult the repeated-migration counter: a VM that has
+	// requested migration at least Threshold times may use any ready failover
+	// slot (not just its own). This is a transient, server-side input to the
+	// pipeline. When the feature is disabled the Counter is nil.
+	if rmc := c.RepeatedMigrationCounting; rmc.Counter != nil && decision.Spec.Intent == api.EvacuateIntent {
+		if rmc.Counter.Count(request.Spec.Data.InstanceUUID, request.Spec.Data.IgnoreHosts) >= rmc.Threshold {
+			request.FailoverSoftForce = true
+			if rmc.SoftForceCounter != nil {
+				rmc.SoftForceCounter.Inc()
+			}
+			log.Info("VM flagged for soft-force failover use during evacuation",
+				"instanceUUID", request.Spec.Data.InstanceUUID)
+		}
 	}
 
 	// If necessary gather all placement candidates before filtering.

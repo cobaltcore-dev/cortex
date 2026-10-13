@@ -12,13 +12,18 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/migrationcounter"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/weighers"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -232,11 +237,35 @@ func DefaultPipelineConfig() PipelineConfig {
 	}
 }
 
+// IntegrationServerOption customizes the integration test server before the
+// HTTP server is started.
+type IntegrationServerOption func(*httpAPI, *FilterWeigherPipelineController)
+
+// WithEvacuationTracking wires a repeated-migration counter into both the API
+// (which records requests) and the controller (which reads the count and flags
+// soft-force at or above threshold), taking the soft-force counter so tests can
+// assert on it.
+func WithEvacuationTracking(threshold int, counter prometheus.Counter) IntegrationServerOption {
+	migrations := migrationcounter.New(migrationcounter.Config{
+		Window:          time.Hour,
+		CleanupInterval: time.Hour,
+		MaxEntries:      1000,
+	})
+	return func(api *httpAPI, c *FilterWeigherPipelineController) {
+		api.migrations = migrations
+		c.RepeatedMigrationCounting = RepeatedMigrationCounting{
+			Counter:          migrations,
+			Threshold:        threshold,
+			SoftForceCounter: counter,
+		}
+	}
+}
+
 // NewIntegrationTestServer creates a test server with:
 // - Fake k8s client for CRD operations (reservations, hypervisors, etc.)
 // - Real HTTP server for NovaExternalScheduler endpoint
 // - Real scheduling pipeline with filters and weighers
-func NewIntegrationTestServer(t *testing.T, pipelineConfig PipelineConfig, objects ...client.Object) *IntegrationTestServer {
+func NewIntegrationTestServer(t *testing.T, pipelineConfig PipelineConfig, opts []IntegrationServerOption, objects ...client.Object) *IntegrationTestServer {
 	t.Helper()
 
 	scheme := buildTestScheme(t)
@@ -289,6 +318,11 @@ func NewIntegrationTestServer(t *testing.T, pipelineConfig PipelineConfig, objec
 		config:   HTTPAPIConfig{EvacuationShuffleK: 0},
 		monitor:  lib.NewSchedulerMonitor(), // Create new monitor but don't register
 		delegate: controller,
+	}
+
+	// Apply optional customizations (e.g. evacuation tracking) before serving.
+	for _, opt := range opts {
+		opt(api, controller)
 	}
 
 	// Create test server
@@ -487,7 +521,7 @@ func TestIntegration_SchedulingWithReservations(t *testing.T) {
 				pipelineConfig.Weighers = tt.weighers
 			}
 
-			server := NewIntegrationTestServer(t, pipelineConfig, objects...)
+			server := NewIntegrationTestServer(t, pipelineConfig, nil, objects...)
 			defer server.Close()
 
 			response := server.SendPlacementRequest(t, tt.request)
@@ -527,5 +561,82 @@ func TestIntegration_SchedulingWithReservations(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestIntegration_EvacuationSoftForce exercises the full soft-force path over
+// real HTTP: the API records repeated evacuation requests, and once the count
+// crosses the threshold the pipeline controller flags the request so the
+// capacity filter unlocks failover slots reserved for OTHER VMs.
+//
+// Topology (each VM needs 4 CPU / 8Gi):
+//   - host1: free capacity, no reservation        -> always usable
+//   - host2: failover res1 (owned by vm2)         -> usable by vm2 always; by others only under soft-force
+//   - host3: failover res2 (owned by nobody here) -> usable only under soft-force
+//
+// vm1 owns no reservation:
+//   - i1: [host1], i2: [host1], i3: [host1, host2, host3]  (soft-force at threshold=3)
+//
+// vm2 owns res1 (on host2):
+//   - i1: [host1, host2], i2: [host1, host2], i3: [host1, host2, host3]
+func TestIntegration_EvacuationSoftForce(t *testing.T) {
+	const threshold = 3
+
+	// h1 free; h2/h3 have free capacity exactly equal to their reservation, so
+	// they are unusable while the slot is locked and usable once unlocked.
+	hypervisors := []*hv1.Hypervisor{
+		newHypervisor("host1", "8", "4", "16Gi", "8Gi"),
+		newHypervisor("host2", "8", "4", "16Gi", "8Gi"),
+		newHypervisor("host3", "8", "4", "16Gi", "8Gi"),
+	}
+	reservations := []*v1alpha1.Reservation{
+		newFailoverReservation("res1", "host2", "m1.large", "4", "8Gi", map[string]string{"vm2": "orig"}),
+		newFailoverReservation("res2", "host3", "m1.large", "4", "8Gi", map[string]string{"other-vm": "orig"}),
+	}
+	objects := make([]client.Object, 0, len(hypervisors)+len(reservations))
+	for _, hv := range hypervisors {
+		objects = append(objects, hv)
+	}
+	for _, res := range reservations {
+		objects = append(objects, res)
+	}
+
+	counter := migrationcounter.NewSoftForceCounter()
+	server := NewIntegrationTestServer(t, DefaultPipelineConfig(),
+		[]IntegrationServerOption{WithEvacuationTracking(threshold, counter)}, objects...)
+	defer server.Close()
+
+	allHosts := []string{"host1", "host2", "host3"}
+	evacReq := func(vm string) novaapi.ExternalSchedulerRequest {
+		return newNovaRequest(vm, "project-A", "m1.large", "gp-1", 4, "8Gi", true,
+			allHosts, "kvm-general-purpose-load-balancing")
+	}
+	assertHosts := func(t *testing.T, resp novaapi.ExternalSchedulerResponse, want []string) {
+		t.Helper()
+		if len(resp.Hosts) != len(want) {
+			t.Fatalf("expected hosts %v, got %v", want, resp.Hosts)
+		}
+		for _, h := range want {
+			if !slices.Contains(resp.Hosts, h) {
+				t.Fatalf("expected host %s in %v", h, resp.Hosts)
+			}
+		}
+	}
+
+	// vm1 owns no reservation: only host1 until soft-force unlocks host2+host3.
+	assertHosts(t, server.SendPlacementRequest(t, evacReq("vm1")), []string{"host1"})
+	assertHosts(t, server.SendPlacementRequest(t, evacReq("vm1")), []string{"host1"})
+	assertHosts(t, server.SendPlacementRequest(t, evacReq("vm1")), []string{"host1", "host2", "host3"})
+
+	// vm2 owns res1 (host2): host1+host2 via its own allocation, host3 added at
+	// the threshold via soft-force. vm2 has its own key, so it must cross the
+	// threshold independently.
+	assertHosts(t, server.SendPlacementRequest(t, evacReq("vm2")), []string{"host1", "host2"})
+	assertHosts(t, server.SendPlacementRequest(t, evacReq("vm2")), []string{"host1", "host2"})
+	assertHosts(t, server.SendPlacementRequest(t, evacReq("vm2")), []string{"host1", "host2", "host3"})
+
+	// Soft-force fired once per VM at its threshold-th request.
+	if got := testutil.ToFloat64(counter); got != 2 {
+		t.Fatalf("soft-force counter should be 2 (once per VM at threshold), got %v", got)
 	}
 }
