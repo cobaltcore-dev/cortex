@@ -17,9 +17,23 @@ owner-info:
 alerts:
   enabled: true
   prometheus: openstack
+  # Base URL (no trailing slash) for Perses dashboard links emitted as the
+  # `persesDashboard` annotation on each alert. The per-alert dashboard slug is
+  # appended to it. The value is templateable with Prometheus label expressions,
+  # e.g. a region-specific host:
+  #   https://perses.{{ $labels.region }}.example.com/projects/observability/dashboards
+  # Left empty by default so no persesDashboard annotation is emitted.
+  persesDashboardBaseURL: ""
   thresholds:
-    # Memory threshold for CortexNovaHighMemoryUsage in MiB.
-    highMemoryMiB: 6000
+    # Fraction of each pod's configured container memory limit above which
+    # CortexNovaHighMemoryUsage fires. The alert joins process_resident_memory_bytes
+    # against kube_pod_container_resource_limits per pod, so it stays correct
+    # across per-region limit overrides (2Gi/4Gi/8Gi) without hand-maintained
+    # MiB values. 0.8 = 80% of the limit.
+    highMemoryFraction: 0.8
+    # Fraction of each pod's configured container CPU limit above which
+    # CortexNovaHighCPUUsage fires. Mirrors highMemoryFraction. 0.8 = 80% of the limit.
+    highCPUFraction: 0.8
     # Reconcile-duration threshold for CortexNovaReconcileDurationHigher10Min in seconds.
     reconcileDurationSeconds: 600
     # High-watermark of cache overlay entries above which

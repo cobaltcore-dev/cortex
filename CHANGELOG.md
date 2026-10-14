@@ -1,5 +1,71 @@
 # Changelog
 
+## Release PR [#1350](https://github.com/cobaltcore-dev/cortex/pull/1350)
+
+### Bumped Versions
+
+| Chart | Previous | New |
+|---|---|---|
+| cortex | 0.6.6 | 0.6.7 |
+| cortex-shim | 0.1.30 | 0.1.31 |
+| cortex-prometheus-operator | 0.2.4 | 0.2.5 |
+| cortex-nova | 0.0.104 | 0.0.105 |
+| cortex-cinder | 0.0.104 | 0.0.105 |
+| cortex-manila | 0.0.104 | 0.0.105 |
+| cortex-crds | 0.0.104 | 0.0.105 |
+| cortex-ironcore | 0.0.104 | 0.0.105 |
+| cortex-pods | 0.0.104 | 0.0.105 |
+| cortex-placement-shim | 0.1.30 | 0.1.31 |
+
+### Bug Fixes
+
+- Fixed wrong HTTP status when a flavor group rejects a commitment — now correctly returns **400 Bad Request** instead of masking it as an internal error ([#1344](https://github.com/cobaltcore-dev/cortex/pull/1344)) — @mblos
+- Fixed a race condition where a new CommittedResource generation could arrive while a reconcile was in-flight, causing the controller to miss the update and get stuck. Mitigated via an echo-nudge annotation on stale Reservation slots and a post-accept generation check that requeues immediately if the generation advanced during processing ([#1344](https://github.com/cobaltcore-dev/cortex/pull/1344)) — @mblos
+- Replaced hard-coded memory (6000 MiB) and CPU (0.5) alert thresholds for CortexNova, CortexCinder, and CortexMalila with dynamic per-pod thresholds at 80% of actual container limits, joined against `kube_pod_container_resource_limits` via kube-state-metrics ([#1298](https://github.com/cobaltcore-dev/cortex/pull/1298)) — @markus-wieland
+
+### Features
+
+- KVM host infrastructure metrics now expose a `ready` boolean label derived from the Hypervisor's `ConditionTypeReady` status, enabling filtering and grouping hosts by readiness in dashboards and alerting ([#1348](https://github.com/cobaltcore-dev/cortex/pull/1348)) — @markus-wieland
+- For HANA and other fixed-ratio flavor groups where `cores.hasQuota: false`, the LIQUID `/v1/info` endpoint now signals liquid-nova to set unlimited quota for unmanaged cores resources, eliminating redundant finite cores quota that could block VM scheduling ([#1349](https://github.com/cobaltcore-dev/cortex/pull/1349)) — @juliusclausnitzer
+- Added `allowed_bots` configuration option for the agents hub, enabling specific bots (e.g., Renovate) to trigger cortex-agent workflows on an opt-in per-workflow basis ([#1325](https://github.com/cobaltcore-dev/cortex/pull/1325)) — @Varsius
+
+### Dependency Updates
+
+- Updated `ghcr.io/credativ/plutono` from v7.5.51 to v7.5.52 ([#1338](https://github.com/cobaltcore-dev/cortex/pull/1338))
+- Updated `github.com/prometheus/client_golang` from v1.24.1 to v1.25.0 ([#1338](https://github.com/cobaltcore-dev/cortex/pull/1338))
+- Updated `golang.org/x/sync` from v0.23.0 to v0.24.0 ([#1338](https://github.com/cobaltcore-dev/cortex/pull/1338))
+- Updated `golang.org/x/term` from v0.46.0 to v0.47.0 ([#1338](https://github.com/cobaltcore-dev/cortex/pull/1338))
+- Updated `helm/chart-testing-action` from v2.8.0 to v2.9.0 ([#1338](https://github.com/cobaltcore-dev/cortex/pull/1338))
+- Updated `kube-prometheus-stack` from 92.1.1 to 92.3.0 ([#1338](https://github.com/cobaltcore-dev/cortex/pull/1338))
+- Updated `github.com/sapcc/go-bits` digest from 62a588a to c011033 ([#1337](https://github.com/cobaltcore-dev/cortex/pull/1337))
+
+### Rollout Notes
+
+- **Alert threshold change (Cinder/Manila/Nova):** Existing static alerts are replaced with dynamic join queries. Ensure `kube-state-metrics` is exposing `kube_pod_container_resource_limits` in all target clusters, or alerts will not fire.
+- **Unlimited cores quota:** No behavior change until per-group secrets config flips `cores.hasQuota` to `false`. Coordinate with the liquid-nova team for rollout.
+- **prometheus/client_golang v1.25.0:** Contains breaking API changes in `api/prometheus/v1` — only relevant if cortex consumes that sub-package directly.
+
+## Release PR [#1340](https://github.com/cobaltcore-dev/cortex/pull/1340) — 2026-10-09
+
+### Bumped Versions
+
+| Chart | Previous | New |
+|---|---|---|
+| cortex | 0.6.5 | 0.6.6 |
+| cortex-postgres | 0.6.25 | 0.6.26 |
+| cortex-shim | 0.1.29 | 0.1.30 |
+| bundles | 0.0.103 | 0.0.104 |
+| cortex-placement-shim | 0.1.29 | 0.1.30 |
+
+### Changes
+
+- **Fixed `cortex-postgres` dependency version alignment in Helm bundles** (`0.6.24` → `0.6.25`): The previous release (0.6.5) bumped the `cortex-postgres` library chart to `0.6.25` but left the dependency pins in three bundle charts (`cortex-nova`, `cortex-cinder`, `cortex-manila`) pointing at `0.6.24` — a version that was never published to the OCI registry. This broke `push-charts` workflow runs on the `release` branch. ([#1336](https://github.com/cobaltcore-dev/cortex/pull/1336))
+- **Bumped app version** for the `cortex` library chart from `sha-dbe244dd` to `sha-8618cf0f` ([#1339](https://github.com/cobaltcore-dev/cortex/pull/1339))
+
+### ⚠️ Notes
+
+- **Root-cause not yet addressed:** The `release-bump-planner` tool bumps the library chart `version:` field without emitting matching bundle dependency updates, and `push-charts.yaml` has no guard against this mismatch. A separate fix is recommended to prevent recurrence.
+
 ## Release PR [#1331](https://github.com/cobaltcore-dev/cortex/pull/1331) — 2026-10-08
 
 ### Bumped Versions

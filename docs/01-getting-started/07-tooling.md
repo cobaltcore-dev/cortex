@@ -200,10 +200,10 @@ Output of pipeline : host-a, host-b
 Final output     : host-a, host-b
 ```
 
-## `tools/perses` and `tools/plutono` — dashboard definitions
+## `tools/perses` — dashboard definitions
 
-These two are **not** runnable Go programs. `tools/perses` holds Perses dashboard definitions (JSON) and
-`tools/plutono` is a Grafana-fork container image used to render them. They are covered in
+This is **not** a runnable Go program. `tools/perses` holds Perses dashboard definitions (JSON) rendered by a
+Perses instance. They are covered in
 [The infrastructure dashboard](../04-knowledge-database/05-infrastructure-dashboard.md).
 
 These utilities sit beside Cortex rather than inside it: none is shipped in the Helm charts, and each
