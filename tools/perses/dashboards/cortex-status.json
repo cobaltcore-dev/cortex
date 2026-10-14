@@ -1,0 +1,1333 @@
+{
+  "kind": "Dashboard",
+  "metadata": {
+    "name": "cortex_status",
+    "createdAt": "2026-05-19T06:01:13.720405Z",
+    "updatedAt": "2026-10-13T12:47:08.406940647Z",
+    "version": 15,
+    "tags": [
+      "cortex",
+      "ops"
+    ],
+    "project": "workload-management"
+  },
+  "spec": {
+    "display": {
+      "name": "Cortex Status"
+    },
+    "panels": {
+      "06450de87a3b42189edaeaf13a7a08b4": {
+        "kind": "Panel",
+        "spec": {
+          "display": {},
+          "plugin": {
+            "kind": "Table",
+            "spec": {
+              "actions": {},
+              "columnSettings": [
+                {
+                  "header": "Datasource",
+                  "name": "datasource"
+                },
+                {
+                  "cellSettings": [
+                    {
+                      "backgroundColor": "#59CC8D",
+                      "condition": {
+                        "kind": "Value",
+                        "spec": {
+                          "value": "ready"
+                        }
+                      },
+                      "text": ""
+                    },
+                    {
+                      "backgroundColor": "#EE6C6C",
+                      "condition": {
+                        "kind": "Regex",
+                        "spec": {
+                          "expr": ".*"
+                        }
+                      }
+                    }
+                  ],
+                  "header": "State",
+                  "name": "state"
+                }
+              ],
+              "defaultColumnHidden": true,
+              "density": "compact",
+              "enableFiltering": true
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "cortex_datasource_state{service=~\"$service\"}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "1238e3de28d9458bb1421b505bbad491": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "All Pods Up?"
+          },
+          "plugin": {
+            "kind": "StatChart",
+            "spec": {
+              "calculation": "last-number",
+              "colorMode": "background_solid",
+              "format": {
+                "unit": "decimal"
+              },
+              "legendMode": "on",
+              "mappings": [
+                {
+                  "kind": "Value",
+                  "spec": {
+                    "result": {
+                      "color": "#EE6C6C",
+                      "value": " Down"
+                    },
+                    "value": "0"
+                  }
+                },
+                {
+                  "kind": "Value",
+                  "spec": {
+                    "result": {
+                      "color": "#59CC8D",
+                      "value": " "
+                    },
+                    "value": "1"
+                  }
+                }
+              ]
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "datasource": {
+                      "kind": "PrometheusDatasource",
+                      "name": "thanos-regional-query"
+                    },
+                    "query": "up{pod=~\"cortex-nova-scheduling-controller-manager.*\", service=~\"$service\"}",
+                    "seriesNameFormat": "Cortex Nova Scheduling"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "up{pod=~\"cortex-nova-knowledge-controller-manager.*\", service=~\"$service\"}",
+                    "seriesNameFormat": "Cortex Nova Knowledge"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "up{pod=~\"cortex-manila-scheduling-controller-manager.*\", service=~\"$service\"}",
+                    "seriesNameFormat": "Cortex Manila Scheduling"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "up{pod=~\"cortex-manila-knowledge-controller-manager.*\", service=~\"$service\"}",
+                    "seriesNameFormat": "Cortex Manila Knowledge"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "125fee8683ae4f42a38811df95ca13bc": {
+        "kind": "Panel",
+        "spec": {
+          "display": {},
+          "plugin": {
+            "kind": "Table",
+            "spec": {
+              "actions": {},
+              "columnSettings": [
+                {
+                  "header": "Pipeline",
+                  "name": "pipeline"
+                },
+                {
+                  "cellSettings": [
+                    {
+                      "backgroundColor": "#59CC8D",
+                      "condition": {
+                        "kind": "Value",
+                        "spec": {
+                          "value": "ready"
+                        }
+                      },
+                      "text": ""
+                    },
+                    {
+                      "backgroundColor": "#EE6C6C",
+                      "condition": {
+                        "kind": "Regex",
+                        "spec": {
+                          "expr": ".*"
+                        }
+                      }
+                    }
+                  ],
+                  "header": "State",
+                  "name": "state"
+                }
+              ],
+              "defaultColumnHidden": true,
+              "density": "compact",
+              "enableFiltering": true
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "cortex_pipeline_state{service=~\"$service\"}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "39fd1bbdff9948e09145ebd8e4c073c8": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "95th percentile response time (success)"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "mode": "table",
+                "position": "bottom",
+                "values": [
+                  "min",
+                  "max",
+                  "mean"
+                ]
+              },
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "#EE6C6C",
+                    "value": 5
+                  }
+                ]
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "seconds"
+                },
+                "label": "",
+                "max": 6.5,
+                "min": 0,
+                "show": true
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "histogram_quantile(0.95, sum(rate(cortex_scheduler_api_request_duration_seconds_bucket{status=~\"2.+\", service=~\"$service\"}[2m])) by (le, method, path, status, error))",
+                    "seriesNameFormat": "{{method}} {{path}} {{status}} {{error}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "3c1149b9a1274198a31300d6ec9f12ae": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Average response time (error)"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "mode": "table",
+                "position": "bottom",
+                "values": [
+                  "min",
+                  "max",
+                  "mean"
+                ]
+              },
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "#EE6C6C",
+                    "value": 5
+                  }
+                ]
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "seconds"
+                },
+                "label": "",
+                "max": 6.5,
+                "min": 0,
+                "show": true
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "histogram_quantile(0.95, sum(rate(cortex_scheduler_api_request_duration_seconds_bucket{status=~\"4.+|5.+\",service=~\"$service\"}[2m])) by (le, method, path, status, error))",
+                    "seriesNameFormat": "{{method}} {{path}} {{status}} {{error}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "43a4008fc0ed4475bbb89809d6f438f2": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "CPU Usage"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "mode": "table",
+                "position": "right",
+                "values": [
+                  "max",
+                  "mean",
+                  "min"
+                ]
+              },
+              "thresholds": {
+                "mode": "percent",
+                "steps": [
+                  {
+                    "value": 60
+                  },
+                  {
+                    "color": "#EE6C6C",
+                    "value": 80
+                  }
+                ]
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "percent-decimal"
+                },
+                "label": "",
+                "max": 1,
+                "show": true
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "rate(process_cpu_seconds_total{service=~\"$service\"}[2m])\n  / on(pod) group_left\nkube_pod_container_resource_limits{pod=~\"cortex-.*\", container=\"manager\", resource=\"cpu\"}",
+                    "seriesNameFormat": "{{pod}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "4a5b90625fb345e8bc83e22a71ddc018": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Triggered migrations"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "position": "bottom"
+              },
+              "querySettings": [
+                {
+                  "queryIndex": 0
+                }
+              ],
+              "visual": {
+                "areaOpacity": 0,
+                "connectNulls": false,
+                "display": "line",
+                "lineStyle": "solid",
+                "lineWidth": 1.25,
+                "pointRadius": 2.75
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "decimal"
+                },
+                "label": "",
+                "show": true
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum by (error) (increase(cortex_detector_pipeline_run_duration_seconds_count{service=~\"$service\"}[2m]))",
+                    "seriesNameFormat": "Error: {{error}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "5d8c6135f7ab417c92a3170a6409e70c": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Deschedulings (rate over 2min)"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "mode": "table",
+                "position": "bottom",
+                "values": [
+                  "min",
+                  "max",
+                  "sum",
+                  "mean"
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum by(error) (rate(cortex_detector_pipeline_run_duration_seconds_count{service=~\"$service\"}[2m]))",
+                    "seriesNameFormat": "Error: {{error}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "5dd5c24ff08542979ba2fa5eefcedf87": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Error request rate"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "mode": "table",
+                "position": "bottom",
+                "values": [
+                  "min",
+                  "max",
+                  "mean"
+                ]
+              },
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "#EE6C6C",
+                    "value": 0.1
+                  }
+                ]
+              },
+              "yAxis": {
+                "format": {
+                  "shortValues": true,
+                  "unit": "decimal"
+                },
+                "label": "",
+                "min": 0,
+                "show": true
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(rate(cortex_scheduler_api_request_duration_seconds_count{status=~\"4.+|5.+\", service=~\"$service\"}[2m])) by (method, path, status, error)",
+                    "seriesNameFormat": "{{method}} {{path}} {{status}} {{error}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "73728d521c414875a95930f15a6aebc6": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "New objects synced"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "mode": "table",
+                "position": "right",
+                "values": [
+                  "max"
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "max by(datasource) (increase(cortex_sync_objects{service=~\"$service\"}[2m]))",
+                    "seriesNameFormat": "{{ datasource }}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "75e7e8c8a40c44feb58e0f82accd9ae0": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Time needed to deschedule VM"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "mode": "table",
+                "position": "bottom",
+                "values": [
+                  "max",
+                  "min",
+                  "mean"
+                ]
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "seconds"
+                },
+                "label": "",
+                "show": true
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "histogram_quantile(0.95, sum(rate(cortex_descheduler_pipeline_vm_descheduling_duration_seconds_bucket{service=~\"$service\"}[2m])) by (le, error, skipped))",
+                    "seriesNameFormat": "Error: {{error}}, Skipped: {{skipped}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "8a04aa0097244b789050ec713c575329": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Requests by type (rate over 2min)"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "mode": "table",
+                "position": "right",
+                "values": [
+                  "max",
+                  "min",
+                  "mean",
+                  "sum"
+                ]
+              },
+              "thresholds": {
+                "steps": []
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "decimal"
+                },
+                "label": "",
+                "min": 0,
+                "show": true
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum by(pipeline) (rate(cortex_filter_weigher_pipeline_requests_total{service=~\"$service\"}[2m]))",
+                    "seriesNameFormat": "Pipeline: {{pipeline}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "8c619223b4cb407da45e0fae4be27f27": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Time needed to run descheduler steps"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "mode": "table",
+                "position": "bottom",
+                "values": [
+                  "max",
+                  "min",
+                  "mean"
+                ]
+              },
+              "querySettings": [
+                {
+                  "queryIndex": 0
+                }
+              ],
+              "visual": {
+                "areaOpacity": 0,
+                "connectNulls": false,
+                "display": "line",
+                "lineStyle": "solid",
+                "lineWidth": 1.25,
+                "pointRadius": 2.75
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "seconds"
+                },
+                "label": "",
+                "show": true
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "histogram_quantile(0.95, sum(rate(cortex_detector_pipeline_step_run_duration_seconds_bucket{service=~\"$service\"}[2m])) by (le, step))",
+                    "seriesNameFormat": "{{step}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "8f900e63515649c296aafb249221c825": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Successful request rate"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "mode": "table",
+                "position": "bottom",
+                "values": [
+                  "min",
+                  "max",
+                  "mean"
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(rate(cortex_scheduler_api_request_duration_seconds_count{status=~\"2.+\",service=~\"$service\"}[2m])) by (method, path, status, error)",
+                    "seriesNameFormat": "{{method}} {{path}} {{status}} {{error}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "b444ff27c15640a185d33d0b3c4cd752": {
+        "kind": "Panel",
+        "spec": {
+          "display": {},
+          "plugin": {
+            "kind": "Table",
+            "spec": {
+              "actions": {},
+              "columnSettings": [
+                {
+                  "header": "Knowledge",
+                  "name": "knowledge"
+                },
+                {
+                  "cellSettings": [
+                    {
+                      "backgroundColor": "#59CC8D",
+                      "condition": {
+                        "kind": "Value",
+                        "spec": {
+                          "value": "ready"
+                        }
+                      },
+                      "text": ""
+                    },
+                    {
+                      "backgroundColor": "#EE6C6C",
+                      "condition": {
+                        "kind": "Regex",
+                        "spec": {
+                          "expr": ".*"
+                        }
+                      }
+                    }
+                  ],
+                  "header": "State",
+                  "name": "state"
+                }
+              ],
+              "defaultColumnHidden": true,
+              "density": "compact",
+              "enableFiltering": true
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "cortex_knowledge_state{service=~\"$service\"}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "c3f536445fca4f54a72b339b2bd12035": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Memory Usage"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "mode": "table",
+                "position": "right",
+                "values": [
+                  "max",
+                  "mean"
+                ]
+              },
+              "thresholds": {
+                "steps": [
+                  {
+                    "value": 0.6
+                  },
+                  {
+                    "color": "#EE6C6C",
+                    "value": 0.8
+                  }
+                ]
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "percent-decimal"
+                },
+                "label": "",
+                "max": 1,
+                "min": 0,
+                "show": true
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "process_resident_memory_bytes{service=~\"$service\"}\n          / on (pod) group_left ()\n    (kube_pod_container_resource_limits{resource=\"memory\", container=\"manager\", pod=~\"cortex-.*\"})",
+                    "seriesNameFormat": "{{pod}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "daa10c8ae42d4edc964a282042fcbf02": {
+        "kind": "Panel",
+        "spec": {
+          "display": {},
+          "plugin": {
+            "kind": "Table",
+            "spec": {
+              "actions": {},
+              "columnSettings": [
+                {
+                  "header": "KPI",
+                  "name": "kpi"
+                },
+                {
+                  "cellSettings": [
+                    {
+                      "backgroundColor": "#59CC8D",
+                      "condition": {
+                        "kind": "Value",
+                        "spec": {
+                          "value": "ready"
+                        }
+                      },
+                      "text": ""
+                    },
+                    {
+                      "backgroundColor": "#EE6C6C",
+                      "condition": {
+                        "kind": "Regex",
+                        "spec": {
+                          "expr": ".*"
+                        }
+                      }
+                    }
+                  ],
+                  "header": "State",
+                  "name": "state"
+                }
+              ],
+              "defaultColumnHidden": true,
+              "density": "compact",
+              "enableFiltering": true
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "cortex_kpi_state{service=~\"$service\"}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "e6191f23d56f4c18adff36a5987de684": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Time needed to run scheduler steps"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "mode": "table",
+                "position": "right",
+                "values": [
+                  "max",
+                  "min",
+                  "mean"
+                ]
+              },
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "#EE6C6C",
+                    "value": 5
+                  }
+                ]
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "seconds"
+                },
+                "label": "",
+                "max": 6.5,
+                "min": 0,
+                "show": true
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "histogram_quantile(0.95, sum(rate(cortex_filter_weigher_pipeline_step_run_duration_seconds_bucket{service=~\"$service\"}[2m])) by (le, step, alias, pipeline))",
+                    "seriesNameFormat": "{{pipeline}} {{step}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "f4df3ab941dc41418b793bab9bcd2328": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Times synced"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "mode": "table",
+                "position": "right",
+                "values": [
+                  "sum"
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "max by(datasource) (increase(cortex_sync_request_processed_total{service=~\"$service\"}[2m]))",
+                    "seriesNameFormat": "{{ datasource }}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "68ba7ec1566047369857a1f18733425b": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": ""
+          },
+          "plugin": {
+            "kind": "BarChart",
+            "spec": {
+              "calculation": "last",
+              "format": {
+                "unit": "decimal",
+                "shortValues": true
+              },
+              "sort": "desc",
+              "mode": "value",
+              "orientation": "horizontal",
+              "groupBy": [],
+              "isStacked": false
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "cortex_multicluster_object_count{service=~\"$service\"}",
+                    "seriesNameFormat": "{{kind}} / {{availability_zone}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "Kubernetes Pods",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "x": 0,
+              "y": 8,
+              "width": 12,
+              "height": 12,
+              "content": {
+                "$ref": "#/spec/panels/c3f536445fca4f54a72b339b2bd12035"
+              }
+            },
+            {
+              "x": 12,
+              "y": 8,
+              "width": 12,
+              "height": 12,
+              "content": {
+                "$ref": "#/spec/panels/43a4008fc0ed4475bbb89809d6f438f2"
+              }
+            },
+            {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 8,
+              "content": {
+                "$ref": "#/spec/panels/1238e3de28d9458bb1421b505bbad491"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "Custom Resources",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 5,
+              "height": 15,
+              "content": {
+                "$ref": "#/spec/panels/06450de87a3b42189edaeaf13a7a08b4"
+              }
+            },
+            {
+              "x": 5,
+              "y": 0,
+              "width": 5,
+              "height": 15,
+              "content": {
+                "$ref": "#/spec/panels/b444ff27c15640a185d33d0b3c4cd752"
+              }
+            },
+            {
+              "x": 10,
+              "y": 0,
+              "width": 5,
+              "height": 15,
+              "content": {
+                "$ref": "#/spec/panels/125fee8683ae4f42a38811df95ca13bc"
+              }
+            },
+            {
+              "x": 15,
+              "y": 0,
+              "width": 5,
+              "height": 15,
+              "content": {
+                "$ref": "#/spec/panels/daa10c8ae42d4edc964a282042fcbf02"
+              }
+            },
+            {
+              "x": 20,
+              "y": 0,
+              "width": 4,
+              "height": 15,
+              "content": {
+                "$ref": "#/spec/panels/68ba7ec1566047369857a1f18733425b"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "Scheduling Activity",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 6,
+              "height": 10,
+              "content": {
+                "$ref": "#/spec/panels/8f900e63515649c296aafb249221c825"
+              }
+            },
+            {
+              "x": 6,
+              "y": 0,
+              "width": 6,
+              "height": 10,
+              "content": {
+                "$ref": "#/spec/panels/5dd5c24ff08542979ba2fa5eefcedf87"
+              }
+            },
+            {
+              "x": 12,
+              "y": 0,
+              "width": 6,
+              "height": 10,
+              "content": {
+                "$ref": "#/spec/panels/39fd1bbdff9948e09145ebd8e4c073c8"
+              }
+            },
+            {
+              "x": 18,
+              "y": 0,
+              "width": 6,
+              "height": 10,
+              "content": {
+                "$ref": "#/spec/panels/3c1149b9a1274198a31300d6ec9f12ae"
+              }
+            },
+            {
+              "x": 0,
+              "y": 10,
+              "width": 12,
+              "height": 12,
+              "content": {
+                "$ref": "#/spec/panels/e6191f23d56f4c18adff36a5987de684"
+              }
+            },
+            {
+              "x": 12,
+              "y": 10,
+              "width": 12,
+              "height": 12,
+              "content": {
+                "$ref": "#/spec/panels/8a04aa0097244b789050ec713c575329"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "Datasources",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 12,
+              "content": {
+                "$ref": "#/spec/panels/73728d521c414875a95930f15a6aebc6"
+              }
+            },
+            {
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 12,
+              "content": {
+                "$ref": "#/spec/panels/f4df3ab941dc41418b793bab9bcd2328"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "Descheduling Activity",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 10,
+              "content": {
+                "$ref": "#/spec/panels/75e7e8c8a40c44feb58e0f82accd9ae0"
+              }
+            },
+            {
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 10,
+              "content": {
+                "$ref": "#/spec/panels/5d8c6135f7ab417c92a3170a6409e70c"
+              }
+            },
+            {
+              "x": 0,
+              "y": 10,
+              "width": 12,
+              "height": 10,
+              "content": {
+                "$ref": "#/spec/panels/8c619223b4cb407da45e0fae4be27f27"
+              }
+            },
+            {
+              "x": 12,
+              "y": 10,
+              "width": 12,
+              "height": 10,
+              "content": {
+                "$ref": "#/spec/panels/4a5b90625fb345e8bc83e22a71ddc018"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "variables": [
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "name": "service",
+          "display": {
+            "name": "Service"
+          },
+          "defaultValue": "$__all",
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "sort": "none",
+          "plugin": {
+            "kind": "StaticListVariable",
+            "spec": {
+              "values": [
+                {
+                  "label": "nova",
+                  "value": "cortex-nova-metrics"
+                },
+                {
+                  "label": "manila",
+                  "value": "cortex-manila-metrics"
+                }
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "annotations": [],
+    "duration": "6h",
+    "timezone": "local",
+    "refreshInterval": "0s",
+    "datasources": {},
+    "links": []
+  }
+}
