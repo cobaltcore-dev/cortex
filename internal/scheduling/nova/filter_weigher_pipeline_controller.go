@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -212,10 +213,24 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	if !request.Options.SkipHistory {
 		c.upsertHistory(ctx, decision, err)
 	}
-	// If this is a non-read-only request, we also create a virtual machine
-	// resource based on the given scheduling spec. Note: we only run this
-	// if the pipeline was successfully executed.
-	if err == nil && !request.Options.ReadOnly && c.FeatureGates.VirtualMachineCreation {
+	// If this is a non-read-only request for a real VM operation, we also
+	// create a virtual machine resource based on the given scheduling spec.
+	// Note: we only run this if the pipeline was successfully executed.
+	// Non-VM operations such as failover or committed-resource reservation
+	// scheduling also run with ReadOnly: false and flow through this method,
+	// but they must not produce VirtualMachine resources (their InstanceUUID
+	// is a reservation name, not a real VM UUID).
+	isRealVMOperation := slices.Contains([]v1alpha1.SchedulingIntent{
+		api.CreateIntent,
+		api.LiveMigrationIntent,
+		api.RebuildIntent,
+		api.ResizeIntent,
+		api.EvacuateIntent,
+	}, decision.Spec.Intent)
+	if err == nil &&
+		!request.Options.ReadOnly &&
+		isRealVMOperation &&
+		c.FeatureGates.VirtualMachineCreation {
 		vmUpsertErr := c.vmHandler.Upsert(ctx, decision, request)
 		if c.FeatureGates.VirtualMachineCreationMandatory && vmUpsertErr != nil {
 			log.Error(vmUpsertErr, "failed to upsert virtual machine resource and it is mandatory")
