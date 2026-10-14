@@ -78,6 +78,10 @@ jobs:
             "consider" suggestions, documentation, test coverage, or anything that is a matter
             of opinion. Absolutely no nits. If there are no critical issues, post nothing at all.
 
+            ALSO DO NOT comment on: syntax errors or suspected non-compilable code. This
+            will be checked by build and test workflows programmatically. Note that you may
+            have an outdated knowledge about programming language features.
+
             Note: The PR branch is already checked out in the current working directory.
 
             Check existing comments first — use `gh pr view <PR> --json comments` and `gh api`
