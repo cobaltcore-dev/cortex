@@ -1,0 +1,547 @@
+{
+  "kind": "Dashboard",
+  "metadata": {
+    "name": "cortex_status_-_global",
+    "createdAt": "2026-10-13T14:03:17.052403685Z",
+    "updatedAt": "2026-10-13T14:57:24.392681792Z",
+    "version": 20,
+    "project": "workload-management"
+  },
+  "spec": {
+    "display": {
+      "name": "Cortex Status Global"
+    },
+    "panels": {
+      "2cc67a00b7b04e2193aea3d819c78ecf": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Memory Usage"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "thresholds": {
+                "mode": "percent",
+                "steps": [
+                  {
+                    "value": 60
+                  },
+                  {
+                    "color": "#EE6C6C",
+                    "value": 80
+                  }
+                ]
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "percent-decimal"
+                },
+                "label": "",
+                "max": 1,
+                "min": 0,
+                "show": true
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "process_resident_memory_bytes{service=~\"$service\", pod=~\"cortex-.*\", region=~\"$region\"} / on (pod) group_left ()\nkube_pod_container_resource_limits{resource=\"memory\", container=\"manager\", pod=~\"cortex-.*\", region=~\"$region\"}\n",
+                    "seriesNameFormat": "{{region}} | {{pod}} "
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "57975062356b4bc6b403c6da7d0fbf40": {
+        "kind": "Panel",
+        "spec": {
+          "display": {},
+          "plugin": {
+            "kind": "BarChart",
+            "spec": {
+              "calculation": "last",
+              "format": {
+                "shortValues": true,
+                "unit": "decimal"
+              },
+              "groupBy": [],
+              "isStacked": false,
+              "mode": "value",
+              "orientation": "horizontal",
+              "sort": "desc"
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum by (region, kind) (cortex_multicluster_object_count{service=~\"$service\", region=~\"$region\"})",
+                    "seriesNameFormat": "{{region}} | {{kind}} "
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "99ebeb12b9704329bd2cc0639e8e21da": {
+        "kind": "Panel",
+        "spec": {
+          "display": {},
+          "plugin": {
+            "kind": "Table",
+            "spec": {
+              "cellSettings": [],
+              "columnSettings": [
+                {
+                  "align": "left",
+                  "dataLink": {
+                    "openNewTab": true,
+                    "title": "",
+                    "url": "https://perses.${__data.fields[\"region\"]}.cloud.sap/projects/workload-management/dashboards/cortex_status?var-service=${__data.fields[\"service\"]}&start=6h&refresh=0s"
+                  },
+                  "header": "Region",
+                  "name": "region"
+                },
+                {
+                  "cellSettings": [
+                    {
+                      "backgroundColor": "#00d3ff",
+                      "condition": {
+                        "kind": "Regex",
+                        "spec": {
+                          "expr": ".*-nova-.*"
+                        }
+                      },
+                      "text": "nova",
+                      "textColor": "#000"
+                    },
+                    {
+                      "backgroundColor": "#9094ff",
+                      "condition": {
+                        "kind": "Regex",
+                        "spec": {
+                          "expr": ".*-manila-.*"
+                        }
+                      },
+                      "text": "manila",
+                      "textColor": "#000"
+                    }
+                  ],
+                  "header": "Service",
+                  "name": "service"
+                },
+                {
+                  "align": "center",
+                  "cellSettings": [
+                    {
+                      "backgroundColor": "#59CC8D",
+                      "condition": {
+                        "kind": "Value",
+                        "spec": {
+                          "value": "1"
+                        }
+                      },
+                      "text": "Up",
+                      "textColor": "#000"
+                    },
+                    {
+                      "backgroundColor": "#ff0000",
+                      "condition": {
+                        "kind": "Value",
+                        "spec": {
+                          "value": "0"
+                        }
+                      },
+                      "text": "Down",
+                      "textColor": "#000"
+                    }
+                  ],
+                  "header": "Scheduling Service",
+                  "name": "value #1"
+                },
+                {
+                  "format": {
+                    "unit": "percent-decimal"
+                  },
+                  "header": "Mem. Scheduling",
+                  "name": "value #7"
+                },
+                {
+                  "align": "center",
+                  "cellSettings": [
+                    {
+                      "backgroundColor": "#59CC8D",
+                      "condition": {
+                        "kind": "Value",
+                        "spec": {
+                          "value": "1"
+                        }
+                      },
+                      "text": "Up",
+                      "textColor": "#000"
+                    },
+                    {
+                      "backgroundColor": "#ff0000",
+                      "condition": {
+                        "kind": "Value",
+                        "spec": {
+                          "value": "0"
+                        }
+                      },
+                      "text": "Down",
+                      "textColor": "#000"
+                    }
+                  ],
+                  "header": "Knowledge Service",
+                  "name": "value #2"
+                },
+                {
+                  "format": {
+                    "unit": "percent-decimal"
+                  },
+                  "header": "Mem. Knowledge",
+                  "name": "value #8"
+                },
+                {
+                  "align": "center",
+                  "cellSettings": [
+                    {
+                      "backgroundColor": "#59CC8D",
+                      "condition": {
+                        "kind": "Value",
+                        "spec": {
+                          "value": "1"
+                        }
+                      },
+                      "text": "Ready",
+                      "textColor": "#000"
+                    },
+                    {
+                      "backgroundColor": "#EE6C6C",
+                      "condition": {
+                        "kind": "Regex",
+                        "spec": {
+                          "expr": ".*"
+                        }
+                      },
+                      "text": "Issue",
+                      "textColor": "#000"
+                    }
+                  ],
+                  "header": "Pipeline",
+                  "name": "value #3"
+                },
+                {
+                  "align": "center",
+                  "cellSettings": [
+                    {
+                      "backgroundColor": "#59CC8D",
+                      "condition": {
+                        "kind": "Value",
+                        "spec": {
+                          "value": "1"
+                        }
+                      },
+                      "text": "Ready",
+                      "textColor": "#000"
+                    },
+                    {
+                      "backgroundColor": "#EE6C6C",
+                      "condition": {
+                        "kind": "Regex",
+                        "spec": {
+                          "expr": ".*"
+                        }
+                      },
+                      "text": "Issue",
+                      "textColor": "#000"
+                    }
+                  ],
+                  "header": "Knowledge",
+                  "name": "value #4"
+                },
+                {
+                  "align": "center",
+                  "cellSettings": [
+                    {
+                      "backgroundColor": "#59CC8D",
+                      "condition": {
+                        "kind": "Value",
+                        "spec": {
+                          "value": "1"
+                        }
+                      },
+                      "text": "Ready",
+                      "textColor": "#000"
+                    },
+                    {
+                      "backgroundColor": "#EE6C6C",
+                      "condition": {
+                        "kind": "Regex",
+                        "spec": {
+                          "expr": ".*"
+                        }
+                      },
+                      "text": "Issue",
+                      "textColor": "#000"
+                    }
+                  ],
+                  "header": "Datasource",
+                  "name": "value #5"
+                },
+                {
+                  "align": "center",
+                  "cellSettings": [
+                    {
+                      "backgroundColor": "#59CC8D",
+                      "condition": {
+                        "kind": "Value",
+                        "spec": {
+                          "value": "1"
+                        }
+                      },
+                      "text": "Ready",
+                      "textColor": "#000"
+                    },
+                    {
+                      "backgroundColor": "#EE6C6C",
+                      "condition": {
+                        "kind": "Regex",
+                        "spec": {
+                          "expr": ".*"
+                        }
+                      },
+                      "text": "Issue",
+                      "textColor": "#000"
+                    }
+                  ],
+                  "header": "KPI",
+                  "name": "value #6"
+                }
+              ],
+              "defaultColumnHidden": true,
+              "density": "compact",
+              "enableFiltering": true,
+              "transforms": [
+                {
+                  "kind": "MergeSeries",
+                  "spec": {}
+                }
+              ]
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "min by (region, service) (up{pod=~\"cortex-.*-scheduling-.*\",service=~\"$service\",region=~\"$region\"})",
+                    "seriesNameFormat": "Scheduling Up"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "min by (region, service) (up{pod=~\"cortex-.*-knowledge-.*\", service=~\"$service\",region=~\"$region\"})",
+                    "seriesNameFormat": "Knowledge Up"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "count(cortex_pipeline_state{state=\"ready\",service=~\"$service\",region=~\"$region\"}) by (region, service) / count(cortex_pipeline_state{service=~\"$service\",region=~\"$region\"}) by (region, service) and count(cortex_pipeline_state{service=~\"$service\",region=~\"$region\"}) by (region, service) > 0",
+                    "seriesNameFormat": "Pipeline"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "count(cortex_knowledge_state{state=\"ready\",service=~\"$service\",region=~\"$region\"}) by (region, service) / count(cortex_knowledge_state{service=~\"$service\",region=~\"$region\"}) by (region, service) and count(cortex_knowledge_state{service=~\"$service\",region=~\"$region\"}) by (region, service) > 0",
+                    "seriesNameFormat": "Knowledge"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "count(cortex_datasource_state{state=\"ready\",service=~\"$service\",region=~\"$region\"}) by (region, service) / count(cortex_datasource_state{service=~\"$service\",region=~\"$region\"}) by (region, service) and count(cortex_datasource_state{service=~\"$service\",region=~\"$region\"}) by (region, service) > 0",
+                    "seriesNameFormat": "Datasource"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "count by (region, service) (cortex_kpi_state{state=\"ready\", service=~\"$service\",region=~\"$region\"}) / count by (region, service) (cortex_kpi_state{service=~\"$service\",region=~\"$region\"}) and count(cortex_kpi_state{service=~\"$service\",region=~\"$region\"}) by (region, service) > 0",
+                    "seriesNameFormat": "KPI"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum by (region, service) (\n  process_resident_memory_bytes{service=~\"$service\", pod=~\"cortex-.*-scheduling-.*\",region=~\"$region\"}\n    / on (pod) group_left ()\n  kube_pod_container_resource_limits{resource=\"memory\", container=\"manager\", pod=~\"cortex-.*-scheduling-.*\",region=~\"$region\"}\n)"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum by (region, service) (\n  process_resident_memory_bytes{service=~\"$service\", pod=~\"cortex-.*-knowledge-.*\",region=~\"$region\"}\n    / on (pod) group_left ()\n  kube_pod_container_resource_limits{resource=\"memory\", container=\"manager\", pod=~\"cortex-.*-knowledge-.*\",region=~\"$region\"}\n)",
+                    "seriesNameFormat": "Mem. Knowledge"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "Overview",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 11,
+              "content": {
+                "$ref": "#/spec/panels/2cc67a00b7b04e2193aea3d819c78ecf"
+              }
+            },
+            {
+              "x": 0,
+              "y": 11,
+              "width": 24,
+              "height": 26,
+              "content": {
+                "$ref": "#/spec/panels/99ebeb12b9704329bd2cc0639e8e21da"
+              }
+            },
+            {
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 11,
+              "content": {
+                "$ref": "#/spec/panels/57975062356b4bc6b403c6da7d0fbf40"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "variables": [
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "display": {
+            "name": "Service",
+            "hidden": false
+          },
+          "defaultValue": "$__all",
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "sort": "none",
+          "plugin": {
+            "kind": "StaticListVariable",
+            "spec": {
+              "values": [
+                {
+                  "label": "nova",
+                  "value": "cortex-nova-metrics"
+                },
+                {
+                  "label": "manila",
+                  "value": "cortex-manila-metrics"
+                }
+              ]
+            }
+          },
+          "name": "service"
+        }
+      },
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "display": {
+            "name": "Region",
+            "hidden": false
+          },
+          "defaultValue": "$__all",
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "sort": "none",
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "region",
+              "matchers": [
+                "up{pod=~\"cortex-.*\"}"
+              ]
+            }
+          },
+          "name": "region"
+        }
+      }
+    ],
+    "annotations": [],
+    "duration": "6h",
+    "timezone": "local",
+    "refreshInterval": "0s",
+    "links": []
+  }
+}
