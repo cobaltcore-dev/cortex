@@ -103,7 +103,6 @@ func (s *KVMCRMigrationSlotStep) Run(
 	if sourceSlot == nil {
 		traceLog.Info("migrating VM has no confirmed CR reservation slot, skipping slot weigher",
 			"instanceUUID", instanceUUID)
-		CRMigrationSlotMetricsSingleton.RecordResult("no_source_slot")
 		return result, nil
 	}
 
@@ -112,7 +111,6 @@ func (s *KVMCRMigrationSlotStep) Run(
 		traceLog.Info("source CR slot has no memory resource, skipping slot weigher",
 			"instanceUUID", instanceUUID,
 			"reservation", sourceSlot.Name)
-		CRMigrationSlotMetricsSingleton.RecordResult("invalid_source_slot")
 		return result, nil
 	}
 
@@ -133,14 +131,12 @@ func (s *KVMCRMigrationSlotStep) Run(
 	slotHostWeight := s.Options.GetSlotHostWeight()
 	defaultHostWeight := s.Options.GetDefaultHostWeight()
 
-	slotFound := false
 	for host := range result.Activations {
 		hasSlot := evaluator.HasSlotWithCapacity(host, projectID, resourceGroup, slotMemoryBytes.Value())
 		canFit := evaluator.CanAccommodateSlot(host, slotMemoryBytes.Value())
 		switch {
 		case hasSlot:
 			result.Activations[host] = slotHostWeight
-			slotFound = true
 			traceLog.Info("host has existing CR slot for migration, boosting weight",
 				"host", host, "weight", slotHostWeight)
 		case canFit:
@@ -152,12 +148,6 @@ func (s *KVMCRMigrationSlotStep) Run(
 			traceLog.Info("host cannot accommodate CR slot, applying low weight",
 				"host", host, "weight", defaultHostWeight)
 		}
-	}
-
-	if slotFound {
-		CRMigrationSlotMetricsSingleton.RecordResult("slot_found")
-	} else {
-		CRMigrationSlotMetricsSingleton.RecordResult("no_slot")
 	}
 
 	return result, nil
