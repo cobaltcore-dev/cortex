@@ -50,6 +50,9 @@ type FilterWeigherPipelineController struct {
 	// Candidate gatherer to get all placement candidates if needed.
 	gatherer CandidateGatherer
 
+	// vmHandler maps processed decisions into vm-operator VirtualMachine resources.
+	vmHandler *VirtualMachineHandler
+
 	// CRRecorder receives scheduling events and updates CR reservations and metrics.
 	CRRecorder crs.Recorder
 }
@@ -209,6 +212,20 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	if !request.Options.SkipHistory {
 		c.upsertHistory(ctx, decision, err)
 	}
+	// If this is a non-read-only request, we also create a virtual machine
+	// resource based on the given scheduling spec. Note: we only run this
+	// if the pipeline was successfully executed.
+	if err == nil && !request.Options.ReadOnly && c.FeatureGates.VirtualMachineCreation {
+		vmUpsertErr := c.vmHandler.Upsert(ctx, decision, request)
+		if c.FeatureGates.VirtualMachineCreationMandatory && vmUpsertErr != nil {
+			log.Error(vmUpsertErr, "failed to upsert virtual machine resource and it is mandatory")
+			return &request, vmUpsertErr
+		}
+		if vmUpsertErr != nil {
+			// Non-fatal: the placement decision itself succeeded.
+			log.Error(vmUpsertErr, "failed to upsert virtual machine resource")
+		}
+	}
 	if err != nil {
 		log.Error(err, "failed to run pipeline")
 		return &request, err
@@ -254,6 +271,7 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	c.SchedulingDomain = v1alpha1.SchedulingDomainNova
 	c.HistoryManager = lib.HistoryClient{Client: mcl, Recorder: mcl.GetEventRecorder("cortex-nova-scheduler")}
 	c.gatherer = &candidateGatherer{Client: mcl}
+	c.vmHandler = &VirtualMachineHandler{Client: mcl}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
