@@ -313,14 +313,6 @@ k8s_resource(
     labels=['Monitoring'],
 )
 
-docker_build('cortex-plutono', './tools/plutono')
-k8s_yaml('./tools/plutono/app.yaml')
-k8s_resource('cortex-plutono', port_forwards=[
-    port_forward(5000, 3000, name='plutono'),
-], links=[
-    link('http://localhost:5000/d/cortex/cortex?orgId=1', 'cortex dashboard'),
-], labels=['Monitoring'])
-
 helm_resource(
     'cortex-perses',
     'perses/perses',
