@@ -103,6 +103,31 @@ cortex_committed_resource_unfulfilled == 0
 capacity is short or reservations failed. See the `CommittedResource` type in
 `api/v1alpha1/committed_resource_types.go`.
 
+### Stale CR cleanup
+
+A `CommittedResource` CRD is **stale** when it exists locally but no matching commitment is returned
+by Limes. Every sync run detects and counts stale CRDs regardless of configuration
+(`cortex_committed_resource_syncer_crd_unmatched` gauge). Two config keys on the syncer control
+whether stale CRDs are also *deleted*:
+
+| Key | Type | Default | Purpose |
+|---|---|---|---|
+| `deleteStaleCRs` | bool | `false` | Enable automatic deletion of stale CRDs. When `false`, stale CRDs are logged and counted but left in place. |
+| `staleCRDeletionGracePeriod` | duration | `10m` | Minimum age a CRD must reach before it is eligible for stale deletion. Protects against race conditions where a CRD was just created but the next Limes response has not caught up yet. |
+
+**Safety guard.** When Limes returns *zero* active commitments but local CRDs exist, the syncer
+assumes Limes may be experiencing an outage or misconfiguration and skips stale deletion entirely
+for that cycle. This prevents a transient empty response from wiping every CRD and the reservation
+slots they own. The syncer logs a warning when the guard triggers.
+
+Stale CRDs that are actually deleted are counted by
+`cortex_committed_resource_syncer_cr_stale_deletes_total`.
+
+> [!NOTE]
+> Stale detection excludes CRDs whose `EndTime` has already passed — those are handled by the
+> separate expired-CR garbage collection path and are not subject to the grace period or
+> `deleteStaleCRs` gate.
+
 ### Watch for oversubscription
 
 If reservations exceed a host's capacity, `cortex_committed_resource_host_oversubscribed` goes positive and
