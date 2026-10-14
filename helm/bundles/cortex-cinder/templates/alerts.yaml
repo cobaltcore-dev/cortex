@@ -24,12 +24,14 @@ spec:
       for: 5m
       labels:
         context: liveness
-        dashboard: cortex-status-dashboard/cortex-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/down
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+{{- end }}
         summary: "Cortex Scheduling for Cinder is down"
         description: >
           The Cortex scheduling service is down. Scheduling requests from Cinder will
@@ -43,12 +45,14 @@ spec:
       for: 5m
       labels:
         context: liveness
-        dashboard: cortex-status-dashboard/cortex-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/down
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+{{- end }}
         summary: "Cortex Knowledge for Cinder is down"
         description: >
           The Cortex Knowledge service is down. This is no immediate problem,
@@ -60,11 +64,13 @@ spec:
       for: 5m
       labels:
         context: api
-        dashboard: cortex-status-dashboard/cortex-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+{{- end }}
         summary: "Cinder Scheduler HTTP request 400 errors too high"
         description: >
           Cinder Scheduler is responding to placement requests with HTTP 4xx
@@ -77,11 +83,13 @@ spec:
       for: 5m
       labels:
         context: api
-        dashboard: cortex-status-dashboard/cortex-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+{{- end }}
         summary: "Cinder Scheduler HTTP request 500 errors too high"
         description: >
           Cinder Scheduler is responding to placement requests with HTTP 5xx errors.
@@ -106,12 +114,14 @@ spec:
       for: 5m
       labels:
         context: memory
-        dashboard: cortex-status-dashboard/cortex-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/deployment
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+{{- end }}
         summary: "`{{ "{{" }} $labels.component {{ "}}" }}` uses too much memory"
         description: >
           `{{ "{{" }} $labels.component {{ "}}" }}` is using more than {{ mulf .Values.alerts.thresholds.highMemoryFraction 100 | int }}% of its configured
@@ -132,12 +142,14 @@ spec:
       for: 5m
       labels:
         context: cpu
-        dashboard: cortex-status-dashboard/cortex-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/deployment
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+{{- end }}
         summary: "`{{ "{{" }} $labels.component {{ "}}" }}` uses too much CPU"
         description: >
           `{{ "{{" }} $labels.component {{ "}}" }}` is using more than {{ mulf .Values.alerts.thresholds.highCPUFraction 100 | int }}% of its configured
@@ -150,11 +162,13 @@ spec:
       for: 5m
       labels:
         context: db
-        dashboard: cortex-status-dashboard/cortex-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+{{- end }}
         summary: "`{{ "{{" }} $labels.component {{ "}}" }}` is trying to connect to the database too often"
         description: >
           `{{ "{{" }} $labels.component {{ "}}" }}` is trying to connect to the database too often. This may happen
@@ -165,11 +179,13 @@ spec:
       for: 5m
       labels:
         context: syncstatus
-        dashboard: cortex-status-dashboard/cortex-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+{{- end }}
         summary: "`{{ "{{" }} $labels.component {{ "}}" }}` Sync not successful"
         description: >
           `{{ "{{" }} $labels.component {{ "}}" }}` experienced an issue syncing data from the datasource `{{ "{{" }} $labels.datasource {{ "}}" }}`. This may
@@ -184,11 +200,13 @@ spec:
       for: 60m
       labels:
         context: syncobjects
-        dashboard: cortex-status-dashboard/cortex-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+{{- end }}
         summary: "`{{ "{{" }} $labels.component {{ "}}" }}` is not syncing any new data from `{{ "{{" }} $labels.datasource {{ "}}" }}`"
         description: >
           `{{ "{{" }} $labels.component {{ "}}" }}` is not syncing any objects from the datasource `{{ "{{" }} $labels.datasource {{ "}}" }}`. This may happen
@@ -203,11 +221,13 @@ spec:
       for: 60m
       labels:
         context: datasources
-        dashboard: cortex-status-dashboard/cortex-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+{{- end }}
         summary: "Datasource `{{ "{{" }} $labels.datasource {{ "}}" }}` is in `{{ "{{" }} $labels.state {{ "}}" }}` state"
         description: >
           This may indicate issues with the datasource
@@ -219,11 +239,13 @@ spec:
       for: 60m
       labels:
         context: knowledge
-        dashboard: cortex-status-dashboard/cortex-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+{{- end }}
         summary: "Knowledge `{{ "{{" }} $labels.knowledge {{ "}}" }}` is in `{{ "{{" }} $labels.state {{ "}}" }}` state"
         description: >
           This may indicate issues with the knowledge
@@ -235,11 +257,13 @@ spec:
       for: 5m
       labels:
         context: decisions
-        dashboard: cortex-status-dashboard/cortex-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+{{- end }}
         summary: "Some decisions are in error state for operator `{{ "{{" }} $labels.operator {{ "}}" }}`"
         description: >
           The cortex scheduling pipeline generated decisions that are in error state.
@@ -252,11 +276,13 @@ spec:
       for: 5m
       labels:
         context: decisions
-        dashboard: cortex-status-dashboard/cortex-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+{{- end }}
         summary: "Too many decisions are in waiting state for operator `{{ "{{" }} $labels.operator {{ "}}" }}`"
         description: >
           The cortex scheduling pipeline has a high number of decisions for which
@@ -272,11 +298,13 @@ spec:
       for: 60m
       labels:
         context: kpis
-        dashboard: cortex-status-dashboard/cortex-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+{{- end }}
         summary: "KPI `{{ "{{" }} $labels.kpi {{ "}}" }}` is in `{{ "{{" }} $labels.state {{ "}}" }}` state"
         description: >
           This may indicate issues with the KPI
@@ -288,11 +316,13 @@ spec:
       for: 5m
       labels:
         context: pipelines
-        dashboard: cortex-status-dashboard/cortex-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+{{- end }}
         summary: "Pipeline `{{ "{{" }} $labels.pipeline {{ "}}" }}` is in `{{ "{{" }} $labels.state {{ "}}" }}` state"
         description: >
           This may indicate issues with the pipeline
