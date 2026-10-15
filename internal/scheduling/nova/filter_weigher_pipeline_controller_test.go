@@ -1039,3 +1039,101 @@ func TestFilterWeigherPipelineController_PeekReadOnly(t *testing.T) {
 		})
 	}
 }
+
+// TestFilterWeigherPipelineController_VMwareSkipsHistory verifies that VMware
+// requests never write scheduling history, even when SkipHistory is not set in
+// the request options.
+func TestFilterWeigherPipelineController_VMwareSkipsHistory(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
+	}
+
+	tests := []struct {
+		name                 string
+		hypervisorType       string
+		expectHistoryCreated bool
+	}{
+		{name: "vmware skips history", hypervisorType: "vmware vcenter server", expectHistoryCreated: false},
+		{name: "qemu writes history", hypervisorType: "qemu", expectHistoryCreated: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						InstanceUUID: "test-instance-uuid",
+						NumInstances: 1,
+						Flavor: api.NovaObject[api.NovaFlavor]{
+							Data: api.NovaFlavor{
+								ExtraSpecs: map[string]string{"capabilities:hypervisor_type": tt.hypervisorType},
+							},
+						},
+					},
+				},
+				Hosts:    []api.ExternalSchedulerHost{{ComputeHost: "compute-1"}},
+				Weights:  map[string]float64{"compute-1": 1.0},
+				Pipeline: "test-pipeline",
+				Options:  scheduling.Options{SkipHistory: false},
+			}
+			novaRaw, err := json.Marshal(req)
+			if err != nil {
+				t.Fatalf("Failed to marshal nova request: %v", err)
+			}
+
+			pipeline := &v1alpha1.Pipeline{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-pipeline"},
+				Spec: v1alpha1.PipelineSpec{
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					Filters:          []v1alpha1.FilterSpec{},
+					Weighers:         []v1alpha1.WeigherSpec{},
+				},
+			}
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(pipeline).
+				WithStatusSubresource(&v1alpha1.Decision{}, &v1alpha1.History{}).
+				Build()
+			controller := &FilterWeigherPipelineController{
+				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
+					Client:          client,
+					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
+					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
+					HistoryManager:  lib.HistoryClient{Client: client},
+				},
+				Monitor: lib.FilterWeigherPipelineMonitor{},
+			}
+			controller.PipelineConfigs[pipeline.Name] = *pipeline
+			initResult := controller.InitPipeline(context.Background(), *pipeline)
+			if len(initResult.FilterErrors) > 0 || len(initResult.WeigherErrors) > 0 {
+				t.Fatalf("Failed to initialize pipeline: %v %v", initResult.FilterErrors, initResult.WeigherErrors)
+			}
+			controller.Pipelines[pipeline.Name] = initResult.Pipeline
+
+			decision := &v1alpha1.Decision{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-decision", Namespace: "default"},
+				Spec: v1alpha1.DecisionSpec{
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					ResourceID:       "test-instance-uuid",
+					PipelineRef:      corev1.ObjectReference{Name: "test-pipeline"},
+					NovaRaw:          &runtime.RawExtension{Raw: novaRaw},
+				},
+			}
+			if err := controller.ProcessNewDecisionFromAPI(context.Background(), decision); err != nil {
+				t.Fatalf("ProcessNewDecisionFromAPI failed: %v", err)
+			}
+
+			var histories v1alpha1.HistoryList
+			if err := client.List(context.Background(), &histories); err != nil {
+				t.Fatalf("Failed to list histories: %v", err)
+			}
+			if tt.expectHistoryCreated && len(histories.Items) == 0 {
+				t.Error("expected a history CRD but found none")
+			}
+			if !tt.expectHistoryCreated && len(histories.Items) != 0 {
+				t.Error("expected no history CRD but found one")
+			}
+		})
+	}
+}

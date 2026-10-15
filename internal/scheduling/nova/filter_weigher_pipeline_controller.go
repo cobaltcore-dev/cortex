@@ -208,7 +208,10 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	}
 	// VMware placements never write scheduling history, in addition to the
 	// caller-provided SkipHistory flag.
-	hvType, _ := request.GetHypervisorType()
+	hvType, hvErr := request.GetHypervisorType()
+	if hvErr != nil {
+		log.Error(hvErr, "failed to get hypervisor type from nova request")
+	}
 	if !request.Options.SkipHistory && hvType != api.HypervisorTypeVMware {
 		c.upsertHistory(ctx, decision, err)
 	}
