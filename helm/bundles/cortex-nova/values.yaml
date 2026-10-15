@@ -17,6 +17,13 @@ owner-info:
 alerts:
   enabled: true
   prometheus: openstack
+  # Base URL (no trailing slash) for Perses dashboard links emitted as the
+  # `persesDashboard` annotation on each alert. The per-alert dashboard slug is
+  # appended to it. The value is templateable with Prometheus label expressions,
+  # e.g. a region-specific host:
+  #   https://perses.{{ $labels.region }}.example.com/projects/observability/dashboards
+  # Left empty by default so no persesDashboard annotation is emitted.
+  persesDashboardBaseURL: ""
   thresholds:
     # Fraction of each pod's configured container memory limit above which
     # CortexNovaHighMemoryUsage fires. The alert joins process_resident_memory_bytes
@@ -138,6 +145,8 @@ cortex: &cortex
           - cortex.cloud/v1alpha1/FlavorGroupCapacityList
           - kvm.cloud.sap/v1/Hypervisor
           - kvm.cloud.sap/v1/HypervisorList
+          - cobaltcore.cloud/v1alpha1/VirtualMachine
+          - cobaltcore.cloud/v1alpha1/VirtualMachineList
           - v1/Secret
     keystoneSecretRef:
       name: cortex-nova-openstack-keystone
@@ -189,6 +198,10 @@ cortex-scheduling-controllers:
       # classification by committed resource coverage. Enable only on deployments
       # that use committed resources. Requires also enabling of CR controllers and tasks
       committedResourceTracking: false
+      # Enables the creation of VM resources based on the scheduling spec for
+      # non-read-only requests.
+      virtualMachineCreation: true
+      virtualMachineCreationMandatory: false
     # Pipeline used for the empty-state capacity probe (ignores allocations and reservations).
     capacityTotalPipeline: "kvm-general-purpose-load-balancing"
     # Pipeline used for the current-state capacity probe (considers current VM allocations).

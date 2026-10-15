@@ -54,6 +54,7 @@ spec:
       - cortex.cloud/v1alpha1/ReservationList
       - cortex.cloud/v1alpha1/CommittedResourceList
       - kvm.cloud.sap/v1/HypervisorList
+      - cobaltcore.cloud/v1alpha1/VirtualMachineList
   description: |
     This KPI reports the number of objects of each configured GVK per cluster
     (home and remote), labelled by the configured cluster labels. Home-cluster

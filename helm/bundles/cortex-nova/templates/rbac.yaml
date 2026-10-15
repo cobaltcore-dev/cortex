@@ -47,6 +47,24 @@ rules:
   - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cortex-nova-manager-role-vm
+rules:
+- apiGroups:
+  - cobaltcore.cloud
+  resources:
+  - virtualmachines
+  - virtualmachines/status
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: cortex-nova-manager-rolebinding-hypervisor-scheduling
@@ -67,6 +85,32 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: cortex-nova-manager-role-hypervisor
+subjects:
+- kind: ServiceAccount
+  name: {{ (index .Values "cortex-knowledge-controllers").namePrefix }}-controller-manager
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cortex-nova-manager-rolebinding-vm-scheduling
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cortex-nova-manager-role-vm
+subjects:
+- kind: ServiceAccount
+  name: {{ (index .Values "cortex-scheduling-controllers").namePrefix }}-controller-manager
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cortex-nova-manager-rolebinding-vm-knowledge
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cortex-nova-manager-role-vm
 subjects:
 - kind: ServiceAccount
   name: {{ (index .Values "cortex-knowledge-controllers").namePrefix }}-controller-manager
