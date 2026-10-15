@@ -213,24 +213,14 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	if !request.Options.SkipHistory {
 		c.upsertHistory(ctx, decision, err)
 	}
-	// If this is a non-read-only request for a real VM operation, we also
-	// create a virtual machine resource based on the given scheduling spec.
-	// Note: we only run this if the pipeline was successfully executed.
-	// Non-VM operations such as failover or committed-resource reservation
-	// scheduling also run with ReadOnly: false and flow through this method,
-	// but they must not produce VirtualMachine resources (their InstanceUUID
-	// is a reservation name, not a real VM UUID).
-	isRealVMOperation := slices.Contains([]v1alpha1.SchedulingIntent{
-		api.CreateIntent,
-		api.LiveMigrationIntent,
-		api.RebuildIntent,
-		api.ResizeIntent,
-		api.EvacuateIntent,
-	}, decision.Spec.Intent)
-	if err == nil &&
-		!request.Options.ReadOnly &&
-		isRealVMOperation &&
-		c.FeatureGates.VirtualMachineCreation {
+
+	// We create a virtual machine resource based on the scheduling decision if ...
+	createVM := err == nil && // The pipeline was executed successfully
+		!request.Options.ReadOnly && // The request is not read-only
+		c.FeatureGates.VirtualMachineCreation && // VM creation is enabled
+		slices.Contains(api.NovaIntents, decision.Spec.Intent) && // Triggered by Nova
+		request.IsKVMRequest() // Supported hypervisor type
+	if createVM {
 		vmUpsertErr := c.vmHandler.Upsert(ctx, decision, request)
 		if c.FeatureGates.VirtualMachineCreationMandatory && vmUpsertErr != nil {
 			log.Error(vmUpsertErr, "failed to upsert virtual machine resource and it is mandatory")
@@ -241,6 +231,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 			log.Error(vmUpsertErr, "failed to upsert virtual machine resource")
 		}
 	}
+
 	if err != nil {
 		log.Error(err, "failed to run pipeline")
 		return &request, err
