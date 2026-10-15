@@ -206,7 +206,10 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	if err == nil {
 		decision.Status.Result = &result
 	}
-	if !request.Options.SkipHistory {
+	// VMware placements never write scheduling history, in addition to the
+	// caller-provided SkipHistory flag.
+	hvType, _ := request.GetHypervisorType()
+	if !request.Options.SkipHistory && hvType != api.HypervisorTypeVMware {
 		c.upsertHistory(ctx, decision, err)
 	}
 	if err != nil {
