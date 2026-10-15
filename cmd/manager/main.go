@@ -72,6 +72,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
 	"github.com/cobaltcore-dev/cortex/pkg/task"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	vmopv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
+	vmopmcl "github.com/cobaltcore-dev/vm-operator/pkg/multicluster"
 	"github.com/sapcc/go-bits/httpext"
 	"github.com/sapcc/go-bits/must"
 	corev1 "k8s.io/api/core/v1"
@@ -90,6 +92,7 @@ func init() {
 	utilruntime.Must(ironcorev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(corev1.AddToScheme(scheme))
 	utilruntime.Must(hv1.AddToScheme(scheme))
+	utilruntime.Must(vmopv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -370,12 +373,6 @@ func main() {
 		setupLog.Error(err, "unable to add home cluster")
 		os.Exit(1)
 	}
-	hvGVK := schema.GroupVersionKind{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}
-	reservationGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}
-	historyGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}
-	committedResourceGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}
-	flavorGroupCapacityGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "FlavorGroupCapacity"}
-	projectQuotaGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "ProjectQuota"}
 	multiclusterMonitor := multicluster.NewMonitor("cortex_")
 	multiclusterClient := &multicluster.Client{
 		HomeCluster:    homeCluster,
@@ -383,12 +380,13 @@ func main() {
 		HomeScheme:     scheme,
 		Monitor:        multiclusterMonitor,
 		ResourceRouters: map[schema.GroupVersionKind]multicluster.ResourceRouter{
-			hvGVK:                  multicluster.HypervisorResourceRouter{},
-			reservationGVK:         multicluster.ReservationsResourceRouter{},
-			historyGVK:             multicluster.HistoryResourceRouter{},
-			committedResourceGVK:   multicluster.CommittedResourceRouter{},
-			flavorGroupCapacityGVK: multicluster.FlavorGroupCapacityResourceRouter{},
-			projectQuotaGVK:        multicluster.ProjectQuotaResourceRouter{},
+			{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}:               multicluster.HypervisorResourceRouter{},
+			{Group: "cobaltcore.cloud", Version: "v1alpha1", Kind: "VirtualMachine"}:  vmopmcl.VirtualMachineRouter{},
+			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}:         multicluster.ReservationsResourceRouter{},
+			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}:             multicluster.HistoryResourceRouter{},
+			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}:   multicluster.CommittedResourceRouter{},
+			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "FlavorGroupCapacity"}: multicluster.FlavorGroupCapacityResourceRouter{},
+			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "ProjectQuota"}:        multicluster.ProjectQuotaResourceRouter{},
 		},
 	}
 	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()

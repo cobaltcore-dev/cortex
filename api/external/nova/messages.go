@@ -212,6 +212,16 @@ func (req ExternalSchedulerRequest) GetHypervisorType() (HypervisorType, error) 
 	return "", errors.New("hypervisor type not specified in flavor extra specs")
 }
 
+// IsKVMRequest determines whether the request is intended for a KVM-based hypervisor.
+// If no hypervisor type is specified or an error occurs, it returns false.
+func (req ExternalSchedulerRequest) IsKVMRequest() bool {
+	hvType, err := req.GetHypervisorType()
+	if err != nil {
+		return false
+	}
+	return hvType == HypervisorTypeQEMU || hvType == HypervisorTypeCH
+}
+
 const (
 	// LiveMigrationIntent indicates that the request is intended for live migration.
 	LiveMigrationIntent v1alpha1.SchedulingIntent = "live_migration"
@@ -238,6 +248,15 @@ const (
 	// The weigher uses this to compare against existing reservations' ResourceGroup.
 	HintKeyResourceGroup = "_cortex_resource_group"
 )
+
+// NovaIntents lists all scheduling intents relevant to Nova.
+var NovaIntents = []v1alpha1.SchedulingIntent{
+	LiveMigrationIntent,
+	RebuildIntent,
+	ResizeIntent,
+	EvacuateIntent,
+	CreateIntent,
+}
 
 // GetIntent analyzes the request spec and determines the intent of the scheduling request.
 func (req ExternalSchedulerRequest) GetIntent() (v1alpha1.SchedulingIntent, error) {
