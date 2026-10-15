@@ -6,11 +6,11 @@
 
 | Package | Version |
 |---|---|
-| cortex | 0.6.7 → 0.6.8 |
-| cortex-postgres | 0.6.26 → 0.6.27 |
-| cortex-shim | 0.1.31 → 0.1.32 |
-| bundles | 0.0.105 → 0.0.106 |
-| cortex-placement-shim | 0.1.31 → 0.1.32 |
+| cortex | 0.6.8 → 0.6.9 |
+| cortex-postgres | 0.6.27 → 0.6.28 |
+| cortex-shim | 0.1.32 → 0.1.33 |
+| bundles | 0.0.106 → 0.0.107 |
+| cortex-placement-shim | 0.1.32 → 0.1.33 |
 
 ### Security Fixes
 
