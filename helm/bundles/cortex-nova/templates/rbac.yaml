@@ -48,16 +48,18 @@ rules:
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
-metadata:
-  name: cortex-nova-manager-role-vm
-rules:
 - apiGroups:
   - cobaltcore.cloud
   resources:
   - virtualmachines
   - virtualmachines/status
   verbs:
+  - create
   - get
+  - list
+  - patch
+  - update
+  - watch
   - list
   - patch
   - update
