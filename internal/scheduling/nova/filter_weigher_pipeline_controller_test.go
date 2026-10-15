@@ -374,6 +374,13 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				UserID:       "test-user",
 				InstanceUUID: "test-instance-uuid",
 				NumInstances: 1,
+				Flavor: api.NovaObject[api.NovaFlavor]{
+					Data: api.NovaFlavor{
+						ExtraSpecs: map[string]string{
+							"capabilities:hypervisor_type": "qemu",
+						},
+					},
+				},
 			},
 		},
 		Context: api.NovaRequestContext{
