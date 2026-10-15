@@ -188,6 +188,7 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, decision *v1alpha1.D
 		if err := h.Status().Update(ctx, vm); err != nil {
 			return fmt.Errorf("failed to update VM status: %w", err)
 		}
+		log.Info("created virtual machine resource", "instanceUUID", vm.Name, "targetHost", targetHost, "intent", intent)
 		return nil
 	} else if err != nil {
 		return fmt.Errorf("error talking to apiserver: %w", err)
@@ -229,5 +230,6 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, decision *v1alpha1.D
 	if err := h.Status().Update(ctx, vmInCluster); err != nil {
 		return fmt.Errorf("failed to update VM status: %w", err)
 	}
+	log.Info("updated virtual machine resource", "instanceUUID", vm.Name, "targetHost", targetHost, "intent", intent)
 	return nil
 }
