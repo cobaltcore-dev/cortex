@@ -21,12 +21,14 @@ spec:
       for: 5m
       labels:
         context: liveness
-        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-down
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         summary: "Cortex Placement Shim is down"
         description: >
           The Cortex Placement Shim is down. Placement API requests that are
@@ -47,12 +49,14 @@ spec:
       for: 5m
       labels:
         context: liveness
-        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-down
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         summary: "Cortex Placement Shim controller-manager is not running"
         description: >
           The Cortex Placement Shim controller-manager has been up with a synced
@@ -71,12 +75,14 @@ spec:
       for: 5m
       labels:
         context: api
-        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-api-errors
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         summary: "Placement Shim downstream HTTP 4xx errors too high"
         description: >
           The Placement Shim is responding to client requests with HTTP 4xx
@@ -90,12 +96,14 @@ spec:
       for: 5m
       labels:
         context: api
-        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-api-errors
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         summary: "Placement Shim downstream HTTP 5xx errors too high"
         description: >
           The Placement Shim is responding to client requests with HTTP 5xx
@@ -109,12 +117,14 @@ spec:
       for: 5m
       labels:
         context: upstream
-        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-api-errors
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         summary: "Placement Shim upstream HTTP 5xx errors too high"
         description: >
           The upstream Placement API is returning 5xx errors to the shim.
@@ -130,12 +140,14 @@ spec:
       for: 5m
       labels:
         context: api
-        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-api-errors
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         summary: "Placement Shim downstream latency too high"
         description: >
           The Placement Shim downstream request latency (p95) exceeds 10
@@ -151,12 +163,14 @@ spec:
       for: 5m
       labels:
         context: upstream
-        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-api-errors
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         summary: "Placement Shim upstream latency too high"
         description: >
           The upstream Placement API response latency (p95) as seen by the
@@ -170,12 +184,14 @@ spec:
       for: 5m
       labels:
         context: memory
-        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-resource-usage
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         summary: "Placement Shim uses too much memory"
         description: >
           The Placement Shim is using more than 1500 MiB of resident memory
@@ -188,12 +204,14 @@ spec:
       for: 5m
       labels:
         context: cpu
-        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-resource-usage
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         summary: "Placement Shim uses too much CPU"
         description: >
           The Placement Shim is consuming more than 40% of a single CPU core
@@ -208,12 +226,14 @@ spec:
       for: 5m
       labels:
         context: multicluster
-        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-multicluster
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         summary: "Cross-cluster name conflicts detected for `{{ "{{" }} $labels.gvk {{ "}}" }}`"
         description: >
           The multicluster client detected the same resource name for
@@ -234,12 +254,14 @@ spec:
       for: 5m
       labels:
         context: multicluster
-        dashboard: cortex-placement-shim-status-dashboard/cortex-placement-shim-status-dashboard
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-multicluster
       annotations:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         summary: "Remote apiserver `{{ "{{" }} $labels.host {{ "}}" }}` is unreachable"
         description: >
           The multicluster client cannot reach the remote apiserver at

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -49,6 +50,9 @@ type FilterWeigherPipelineController struct {
 	Monitor lib.FilterWeigherPipelineMonitor
 	// Candidate gatherer to get all placement candidates if needed.
 	gatherer CandidateGatherer
+
+	// vmHandler maps processed decisions into vm-operator VirtualMachine resources.
+	vmHandler *VirtualMachineHandler
 
 	// CRRecorder receives scheduling events and updates CR reservations and metrics.
 	CRRecorder crs.Recorder
@@ -215,6 +219,25 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	if !request.Options.SkipHistory && hvType != api.HypervisorTypeVMware {
 		c.upsertHistory(ctx, decision, err)
 	}
+
+	// We create a virtual machine resource based on the scheduling decision if ...
+	createVM := err == nil && // The pipeline was executed successfully
+		!request.Options.ReadOnly && // The request is not read-only
+		c.FeatureGates.VirtualMachineCreation && // VM creation is enabled
+		slices.Contains(api.NovaIntents, decision.Spec.Intent) && // Triggered by Nova
+		request.IsKVMRequest() // Supported hypervisor type
+	if createVM {
+		vmUpsertErr := c.vmHandler.Upsert(ctx, decision, request)
+		if c.FeatureGates.VirtualMachineCreationMandatory && vmUpsertErr != nil {
+			log.Error(vmUpsertErr, "failed to upsert virtual machine resource and it is mandatory")
+			return &request, vmUpsertErr
+		}
+		if vmUpsertErr != nil {
+			// Non-fatal: the placement decision itself succeeded.
+			log.Error(vmUpsertErr, "failed to upsert virtual machine resource")
+		}
+	}
+
 	if err != nil {
 		log.Error(err, "failed to run pipeline")
 		return &request, err
@@ -260,6 +283,7 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	c.SchedulingDomain = v1alpha1.SchedulingDomainNova
 	c.HistoryManager = lib.HistoryClient{Client: mcl, Recorder: mcl.GetEventRecorder("cortex-nova-scheduler")}
 	c.gatherer = &candidateGatherer{Client: mcl}
+	c.vmHandler = &VirtualMachineHandler{Client: mcl}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

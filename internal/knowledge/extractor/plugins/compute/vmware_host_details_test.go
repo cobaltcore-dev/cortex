@@ -37,6 +37,7 @@ func TestVMwareHostDetailsExtractor_Extract(t *testing.T) {
 	// Create dependency tables
 	if err := testDB.CreateTable(
 		testDB.AddTable(nova.Hypervisor{}),
+		testDB.AddTable(nova.Aggregate{}),
 		testDB.AddTable(placement.Trait{}),
 		testDB.AddTable(placement.InventoryUsage{}),
 	); err != nil {
@@ -128,6 +129,19 @@ func TestVMwareHostDetailsExtractor_Extract(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
+	// Aggregates model vcenter membership: aggregate names starting with "vc-"
+	// identify the vcenter of a host. nova-compute-bb01 belongs to vc-a-0; the
+	// other hosts have no vc-* aggregate and must fall back to "unknown". The
+	// non-vc aggregate on bb01 must be ignored.
+	aggregates := []any{
+		&nova.Aggregate{UUID: "agg1", Name: "vc-a-0", ComputeHost: new("nova-compute-bb01")},
+		&nova.Aggregate{UUID: "agg2", Name: "some-other-aggregate", ComputeHost: new("nova-compute-bb01")},
+		&nova.Aggregate{UUID: "agg3", Name: "not-a-vcenter", ComputeHost: new("nova-compute-bb04")},
+	}
+	if err := testDB.Insert(aggregates...); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
 	hostAvailabilityZones, err := v1alpha1.BoxFeatureList([]any{
 		&HostAZ{AvailabilityZone: new("az1"), ComputeHost: "nova-compute-bb01"},
 		&HostAZ{AvailabilityZone: new("az1"), ComputeHost: "nova-compute-bb04"},
@@ -173,6 +187,7 @@ func TestVMwareHostDetailsExtractor_Extract(t *testing.T) {
 			RunningVMs:       5,
 			PinnedProjects:   new("project-123,project-456"),
 			PhysicalHostSize: "4TiB",
+			VCenter:          "vc-a-0",
 		},
 		{
 			ComputeHost:      "nova-compute-bb04",
@@ -186,6 +201,7 @@ func TestVMwareHostDetailsExtractor_Extract(t *testing.T) {
 			RunningVMs:       1,
 			PinnedProjects:   nil,
 			PhysicalHostSize: "512GiB",
+			VCenter:          "unknown",
 		},
 		{
 			ComputeHost:      "nova-compute-bb05",
@@ -199,6 +215,7 @@ func TestVMwareHostDetailsExtractor_Extract(t *testing.T) {
 			RunningVMs:       1,
 			PinnedProjects:   nil,
 			PhysicalHostSize: "1TiB",
+			VCenter:          "unknown",
 		},
 		{
 			ComputeHost:      "nova-compute-bb06",
@@ -212,6 +229,7 @@ func TestVMwareHostDetailsExtractor_Extract(t *testing.T) {
 			RunningVMs:       2,
 			PinnedProjects:   nil,
 			PhysicalHostSize: "unknown",
+			VCenter:          "unknown",
 		},
 		{
 			ComputeHost:      "nova-compute-bb07",
@@ -225,6 +243,7 @@ func TestVMwareHostDetailsExtractor_Extract(t *testing.T) {
 			RunningVMs:       2,
 			PinnedProjects:   nil,
 			PhysicalHostSize: "unknown",
+			VCenter:          "unknown",
 		},
 	}
 
