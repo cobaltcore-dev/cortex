@@ -136,6 +136,12 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, decision *v1alpha1.D
 		}
 	}
 
+	// Needed to populate the Cortex intent field and the status condition.
+	intent, err := request.GetIntent()
+	if err != nil {
+		return fmt.Errorf("failed to get intent: %w", err)
+	}
+
 	// Write the cortex spec (our scheduling result).
 	vm.Spec.Cortex = &vmv1alpha1.CortexSpec{}
 	for _, host := range decision.Status.Result.OrderedHosts {
@@ -145,15 +151,13 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, decision *v1alpha1.D
 			Name:       host,
 		})
 	}
+	vm.Spec.Cortex.Explanation = decision.Status.Explanation
+	vm.Spec.Cortex.Intent = string(intent)
 
 	// Write the ConditionTypeScheduled condition to indicate that the VM has
 	// been successfully scheduled. For that we need to extract the scheduling
 	// intent from request and verify that the operation
 	var reason string
-	intent, err := request.GetIntent()
-	if err != nil {
-		return fmt.Errorf("failed to get intent: %w", err)
-	}
 	switch intent {
 	case api.LiveMigrationIntent:
 		reason = vmv1alpha1.ConditionReasonScheduledLiveMigration
@@ -221,6 +225,8 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, decision *v1alpha1.D
 		vmInCluster.Spec.Cortex = &vmv1alpha1.CortexSpec{}
 	}
 	vmInCluster.Spec.Cortex.HostCandidates = vm.Spec.Cortex.HostCandidates
+	vmInCluster.Spec.Cortex.Explanation = vm.Spec.Cortex.Explanation
+	vmInCluster.Spec.Cortex.Intent = vm.Spec.Cortex.Intent
 	if err := h.Update(ctx, vmInCluster); err != nil {
 		return fmt.Errorf("failed to update VM: %w", err)
 	}
