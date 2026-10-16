@@ -216,21 +216,29 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		c.upsertHistory(ctx, decision, err)
 	}
 
-	// We create a virtual machine resource based on the scheduling decision if ...
-	createVM := err == nil && // The pipeline was executed successfully
-		!request.Options.ReadOnly && // The request is not read-only
-		c.FeatureGates.VirtualMachineCreation && // VM creation is enabled
-		slices.Contains(api.NovaIntents, decision.Spec.Intent) && // Triggered by Nova
-		request.IsKVMRequest() // Supported hypervisor type
-	if createVM {
+	// We create a virtual machine resource based on the scheduling decision,
+	// logging the specific reason whenever we skip creation so it can be traced.
+	instanceUUID := request.Spec.Data.InstanceUUID
+	switch {
+	case err != nil:
+		log.V(1).Info("skipping virtual machine creation, pipeline run failed", "instanceUUID", instanceUUID)
+	case request.Options.ReadOnly:
+		log.V(1).Info("skipping virtual machine creation, request is read-only", "instanceUUID", instanceUUID)
+	case !c.FeatureGates.VirtualMachineCreation:
+		log.V(1).Info("skipping virtual machine creation, feature gate disabled", "instanceUUID", instanceUUID)
+	case !slices.Contains(api.NovaIntents, decision.Spec.Intent):
+		log.V(1).Info("skipping virtual machine creation, intent not triggered by Nova", "instanceUUID", instanceUUID, "intent", decision.Spec.Intent)
+	case !request.IsKVMRequest():
+		log.V(1).Info("skipping virtual machine creation, unsupported hypervisor type", "instanceUUID", instanceUUID)
+	default:
 		vmUpsertErr := c.vmHandler.Upsert(ctx, decision, request)
 		if c.FeatureGates.VirtualMachineCreationMandatory && vmUpsertErr != nil {
-			log.Error(vmUpsertErr, "failed to upsert virtual machine resource and it is mandatory")
+			log.Error(vmUpsertErr, "failed to upsert virtual machine resource and it is mandatory", "instanceUUID", instanceUUID)
 			return &request, vmUpsertErr
 		}
 		if vmUpsertErr != nil {
 			// Non-fatal: the placement decision itself succeeded.
-			log.Error(vmUpsertErr, "failed to upsert virtual machine resource")
+			log.Error(vmUpsertErr, "failed to upsert virtual machine resource", "instanceUUID", instanceUUID)
 		}
 	}
 

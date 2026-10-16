@@ -74,6 +74,25 @@ func transferredCommitmentUUIDs(req liquid.CommitmentChangeRequest) map[liquid.C
 	return transfers
 }
 
+// affectedCRNames returns the sorted CommittedResource CRD names (commitment-<uuid>) touched
+// by this request, so the entry log pinpoints which CRs to grep for during debugging.
+func affectedCRNames(req liquid.CommitmentChangeRequest) []string {
+	seen := make(map[liquid.CommitmentUUID]struct{})
+	for _, projectChanges := range req.ByProject {
+		for _, resourceChanges := range projectChanges.ByResource {
+			for _, c := range resourceChanges.Commitments {
+				seen[c.UUID] = struct{}{}
+			}
+		}
+	}
+	names := make([]string, 0, len(seen))
+	for uuid := range seen {
+		names = append(names, "commitment-"+string(uuid))
+	}
+	sort.Strings(names)
+	return names
+}
+
 // crWatch pairs a CRD name with the generation written by the API so the polling loop
 // can skip cache reads that have not yet reflected the write (stale-cache guard).
 type crWatch struct {
@@ -139,7 +158,11 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	logger.Info("received change commitments request", "affectedProjects", len(req.ByProject), "dryRun", req.DryRun, "availabilityZone", req.AZ)
+	logger.Info("received change commitments request",
+		"affectedProjects", len(req.ByProject),
+		"affectedCRs", affectedCRNames(req),
+		"dryRun", req.DryRun,
+		"availabilityZone", req.AZ)
 
 	if req.AZ == "" {
 		statusCode = http.StatusBadRequest
@@ -377,7 +400,15 @@ ProcessLoop:
 					break ProcessLoop
 				}
 
-				toWatch = append(toWatch, crWatch{name: crName, generation: crGeneration})
+				// Superseded/expired transitions reconcile to Ready=False with reason
+				// "superseded"/"expired", which is not a terminal outcome the poller
+				// recognizes — polling them runs out the full WatchTimeout and rolls back
+				// the confirmations batched alongside them. Limes needs no Ready outcome for
+				// an inactive transition, so snapshot it for rollback but do not poll it.
+				if stateDesired.State != v1alpha1.CommitmentStatusSuperseded &&
+					stateDesired.State != v1alpha1.CommitmentStatusExpired {
+					toWatch = append(toWatch, crWatch{name: crName, generation: crGeneration})
+				}
 				snapshots = append(snapshots, snap)
 				logger.V(1).Info("upserted CommittedResource CRD", "name", crName)
 			}

@@ -442,6 +442,45 @@ func TestHandleChangeCommitments(t *testing.T) {
 			ExpectedAllowRejection: map[string]bool{"commitment-uuid-to-sup": true},
 			ExpectedCRSpecs:        map[string]int64{"commitment-uuid-to-sup": 0},
 		},
+		// --- Regression: superseded/expired transitions must not be polled ---
+		{
+			// Batch combining a confirmation and a confirmed→superseded transition. The superseded CR
+			// gets no poller-terminal condition (NoCondition), mirroring the real controller which
+			// stamps Ready=False/Reason="superseded" — a reason the poller does not accept. Before the
+			// fix the superseded CR was added to toWatch, ran out the full WatchTimeout, and rolled back
+			// the good confirmation batched alongside it (HTTP 500, firing CortexNovaCommittedResource-
+			// TimeoutsTooHigh). With the fix it is snapshotted for rollback but not polled, so the
+			// confirmation is accepted and nothing is rolled back.
+			Name:    "Batch confirm + superseded with no terminal condition: superseded not polled, confirmation accepted, no rollback",
+			Flavors: []*TestFlavor{m1Small},
+			ExistingCRs: []*TestCR{
+				{CommitmentUUID: "uuid-sup-batch", State: v1alpha1.CommitmentStatusConfirmed, AmountMiB: 1024, ProjectID: "project-A", AZ: "az-a"},
+			},
+			NoCondition: []string{"commitment-uuid-sup-batch"},
+			CommitmentRequest: newCommitmentRequest("az-a", false, 1234,
+				createCommitment("hw_version_hana_1_ram", "project-B", "uuid-conf-batch", "confirmed", 2),
+				TestCommitment{
+					ResourceName:   "hw_version_hana_1_ram",
+					ProjectID:      "project-A",
+					ConfirmationID: "uuid-sup-batch",
+					OldState:       "confirmed",
+					State:          "superseded",
+					Amount:         1,
+				}),
+			// Short timeout: if the superseded CR were still polled, the request would run out the
+			// WatchTimeout and roll back, failing this test fast instead of hanging for the default.
+			CustomConfig: func() *commitments.APIConfig {
+				cfg := commitments.DefaultAPIConfig()
+				cfg.WatchTimeout = metav1.Duration{Duration: 2 * time.Second}
+				cfg.WatchPollInterval = metav1.Duration{Duration: 50 * time.Millisecond}
+				cfg.FlavorGroupResourceConfig = map[string]commitments.FlavorGroupResourcesConfig{
+					"*": {RAM: commitments.RAMResourceTypeConfig{HandlesCommitments: true, HasCapacity: true}},
+				}
+				return &cfg
+			}(),
+			ExpectedAPIResponse:    newAPIResponse(),
+			ExpectedCreatedCRNames: []string{"commitment-uuid-conf-batch", "commitment-uuid-sup-batch"},
+		},
 		// --- Resize ---
 		{
 			Name:    "Resize down: confirmed→confirmed with less capacity, RequiresConfirmation=true",
