@@ -20,15 +20,15 @@ spec:
         absent(up{pod=~"cortex-placement-shim-.*"})
       for: 5m
       labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         context: liveness
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-down
       annotations:
-{{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
-{{- end }}
         summary: "Cortex Placement Shim is down"
         description: >
           The Cortex Placement Shim is down. Placement API requests that are
@@ -48,15 +48,15 @@ spec:
         avg_over_time(cortex_placement_shim_manager_up{service="cortex-placement-shim-metrics-service"}[15m]) < 0.9
       for: 5m
       labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         context: liveness
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-down
       annotations:
-{{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
-{{- end }}
         summary: "Cortex Placement Shim controller-manager is not running"
         description: >
           The Cortex Placement Shim controller-manager has been up with a synced
@@ -74,15 +74,15 @@ spec:
       expr: rate(cortex_placement_shim_downstream_request_duration_seconds_count{service="cortex-placement-shim-metrics-service", responsecode=~"4.."}[5m]) > 0.1
       for: 5m
       labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         context: api
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-api-errors
       annotations:
-{{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
-{{- end }}
         summary: "Placement Shim downstream HTTP 4xx errors too high"
         description: >
           The Placement Shim is responding to client requests with HTTP 4xx
@@ -95,15 +95,15 @@ spec:
       expr: rate(cortex_placement_shim_downstream_request_duration_seconds_count{service="cortex-placement-shim-metrics-service", responsecode=~"5.."}[5m]) > 0.1
       for: 5m
       labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         context: api
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-api-errors
       annotations:
-{{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
-{{- end }}
         summary: "Placement Shim downstream HTTP 5xx errors too high"
         description: >
           The Placement Shim is responding to client requests with HTTP 5xx
@@ -116,15 +116,15 @@ spec:
       expr: rate(cortex_placement_shim_upstream_request_duration_seconds_count{service="cortex-placement-shim-metrics-service", responsecode=~"5.."}[5m]) > 0.1
       for: 5m
       labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         context: upstream
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-api-errors
       annotations:
-{{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
-{{- end }}
         summary: "Placement Shim upstream HTTP 5xx errors too high"
         description: >
           The upstream Placement API is returning 5xx errors to the shim.
@@ -139,15 +139,15 @@ spec:
         and on() sum(rate(cortex_placement_shim_downstream_request_duration_seconds_count{service="cortex-placement-shim-metrics-service"}[5m])) > 0
       for: 5m
       labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         context: api
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-api-errors
       annotations:
-{{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
-{{- end }}
         summary: "Placement Shim downstream latency too high"
         description: >
           The Placement Shim downstream request latency (p95) exceeds 10
@@ -162,15 +162,15 @@ spec:
         and on() sum(rate(cortex_placement_shim_upstream_request_duration_seconds_count{service="cortex-placement-shim-metrics-service"}[5m])) > 0
       for: 5m
       labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         context: upstream
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-api-errors
       annotations:
-{{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
-{{- end }}
         summary: "Placement Shim upstream latency too high"
         description: >
           The upstream Placement API response latency (p95) as seen by the
@@ -183,15 +183,15 @@ spec:
       expr: process_resident_memory_bytes{service="cortex-placement-shim-metrics-service"} > 1500 * 1024 * 1024
       for: 5m
       labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         context: memory
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-resource-usage
       annotations:
-{{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
-{{- end }}
         summary: "Placement Shim uses too much memory"
         description: >
           The Placement Shim is using more than 1500 MiB of resident memory
@@ -203,15 +203,15 @@ spec:
       expr: rate(process_cpu_seconds_total{service="cortex-placement-shim-metrics-service"}[1m]) > 0.4
       for: 5m
       labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         context: cpu
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-resource-usage
       annotations:
-{{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
-{{- end }}
         summary: "Placement Shim uses too much CPU"
         description: >
           The Placement Shim is consuming more than 40% of a single CPU core
@@ -225,15 +225,15 @@ spec:
         sum by (method, gvk) (increase(cortex_multicluster_cross_cluster_name_conflicts_total{service="cortex-placement-shim-metrics-service"}[10m])) > 0
       for: 5m
       labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         context: multicluster
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-multicluster
       annotations:
-{{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
-{{- end }}
         summary: "Cross-cluster name conflicts detected for `{{ "{{" }} $labels.gvk {{ "}}" }}`"
         description: >
           The multicluster client detected the same resource name for
@@ -253,15 +253,15 @@ spec:
         min by (host) (cortex_multicluster_remote_apiserver_reachable{service="cortex-placement-shim-metrics-service"}) < 1
       for: 5m
       labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
+{{- end }}
         context: multicluster
         service: cortex
         severity: warning
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/shim-multicluster
       annotations:
-{{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-placement-shim-status-dashboard"
-{{- end }}
         summary: "Remote apiserver `{{ "{{" }} $labels.host {{ "}}" }}` is unreachable"
         description: >
           The multicluster client cannot reach the remote apiserver at
