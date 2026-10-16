@@ -161,7 +161,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 			memValue := res.Spec.Resources[hv1.ResourceMemory]
 			deltaMemoryBytes += memValue.Value()
 
-			if err := m.Delete(ctx, &res); err != nil {
+			if err := client.IgnoreNotFound(m.Delete(ctx, &res)); err != nil {
 				return result, fmt.Errorf("failed to delete reservation %s: %w", res.Name, err)
 			}
 		} else {
@@ -186,7 +186,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 					"noHostsFoundSince", cond.LastTransitionTime.Time,
 					"ttl", m.cfg.NoHostsFoundTTL,
 				)
-				if err := m.Delete(ctx, &res); err != nil {
+				if err := client.IgnoreNotFound(m.Delete(ctx, &res)); err != nil {
 					return result, fmt.Errorf("failed to delete reservation %s: %w", res.Name, err)
 				}
 				result.Deleted++
@@ -229,7 +229,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 		memValue := reservationToDelete.Spec.Resources[hv1.ResourceMemory]
 		deltaMemoryBytes += memValue.Value()
 
-		if err := m.Delete(ctx, reservationToDelete); err != nil {
+		if err := client.IgnoreNotFound(m.Delete(ctx, reservationToDelete)); err != nil {
 			return result, fmt.Errorf("failed to delete reservation %s: %w", reservationToDelete.Name, err)
 		}
 	}
