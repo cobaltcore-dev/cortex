@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -383,7 +382,6 @@ func main() {
 			{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}:               multicluster.HypervisorResourceRouter{},
 			{Group: "cobaltcore.cloud", Version: "v1alpha1", Kind: "VirtualMachine"}:  vmopmcl.VirtualMachineRouter{},
 			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}:         multicluster.ReservationsResourceRouter{},
-			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}:             multicluster.HistoryResourceRouter{},
 			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}:   multicluster.CommittedResourceRouter{},
 			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "FlavorGroupCapacity"}: multicluster.FlavorGroupCapacityResourceRouter{},
 			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "ProjectQuota"}:        multicluster.ProjectQuotaResourceRouter{},
@@ -957,51 +955,6 @@ func main() {
 			Init:     func(ctx context.Context) error { return syncer.Init(ctx, syncerConfig) },
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to add commitments sync task to manager")
-			os.Exit(1)
-		}
-	}
-	if slices.Contains(mainConfig.EnabledTasks, "nova-history-cleanup-task") {
-		setupLog.Info("starting nova history cleanup task")
-		historyCleanupConfig := conf.GetConfigOrDie[nova.HistoryCleanupConfig]()
-		if err := (&task.Runner{
-			Client:   multiclusterClient,
-			Interval: time.Hour,
-			Name:     "nova-history-cleanup-task",
-			Run: func(ctx context.Context) error {
-				return nova.HistoryCleanup(ctx, multiclusterClient, historyCleanupConfig)
-			},
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to add nova history cleanup task to manager")
-			os.Exit(1)
-		}
-	}
-	if slices.Contains(mainConfig.EnabledTasks, "manila-history-cleanup-task") {
-		setupLog.Info("starting manila history cleanup task")
-		historyCleanupConfig := conf.GetConfigOrDie[manila.HistoryCleanupConfig]()
-		if err := (&task.Runner{
-			Client:   multiclusterClient,
-			Interval: time.Hour,
-			Name:     "manila-history-cleanup-task",
-			Run: func(ctx context.Context) error {
-				return manila.HistoryCleanup(ctx, multiclusterClient, historyCleanupConfig)
-			},
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to add manila history cleanup task to manager")
-			os.Exit(1)
-		}
-	}
-	if slices.Contains(mainConfig.EnabledTasks, "cinder-history-cleanup-task") {
-		setupLog.Info("starting cinder history cleanup task")
-		historyCleanupConfig := conf.GetConfigOrDie[cinder.HistoryCleanupConfig]()
-		if err := (&task.Runner{
-			Client:   multiclusterClient,
-			Interval: time.Hour,
-			Name:     "cinder-history-cleanup-task",
-			Run: func(ctx context.Context) error {
-				return cinder.HistoryCleanup(ctx, multiclusterClient, historyCleanupConfig)
-			},
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to add cinder history cleanup task to manager")
 			os.Exit(1)
 		}
 	}

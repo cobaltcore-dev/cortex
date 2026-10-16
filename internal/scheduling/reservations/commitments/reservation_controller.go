@@ -362,7 +362,6 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		AssumeEmptyHosts:              false,
 		IgnoredReservationTypes:       nil,
 		MaxCandidates:                 1,
-		SkipHistory:                   true,
 		SkipInflight:                  false, // TODO pessimistic blocking needed, will be addressed in follow up ticket
 		SkipCommittedResourceTracking: true,  // CR slot scheduling, not a VM placement
 	}

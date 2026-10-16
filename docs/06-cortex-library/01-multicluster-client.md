@@ -123,8 +123,8 @@ Setting up multicluster comes down to establishing that trust and declaring the 
              gvks:
                - kvm.cloud.sap/v1/Hypervisor
                - kvm.cloud.sap/v1/HypervisorList
-               - cortex.cloud/v1alpha1/History
-               - cortex.cloud/v1alpha1/HistoryList
+               - cobaltcore.cloud/v1alpha1/VirtualMachine
+               - cobaltcore.cloud/v1alpha1/VirtualMachineList
              labels:
                availabilityZone: az-a
              caCert: |
@@ -147,7 +147,7 @@ The rest of this page is a hands-on companion to the concepts above: it stands u
 multicluster environment on your laptop — a **home** cluster running the controllers and two **remote**
 clusters (`az-a` and `az-b`) that own their own resources — using three local
 [kind](https://kind.sigs.k8s.io/) clusters. You then send a scheduling request through Cortex and watch
-the resulting `History` land on the remote cluster that owns it, seeing the home/remote routing described
+the resulting `VirtualMachine` land on the remote cluster that owns it, seeing the home/remote routing described
 above work end to end.
 
 This is a learning-oriented walkthrough on throwaway clusters. Every command is spelled out inline, along
@@ -339,13 +339,16 @@ kubectl config use-context kind-cortex-remote-az-b
 helm install helm/bundles/cortex-crds --generate-name
 ```
 
-Install the external `Hypervisor` CRD on all three clusters:
+Install the external `Hypervisor` CRD on all three clusters, plus the vm-operator `VirtualMachine` CRD
+(the scheduling result is written as a `VirtualMachine`, routed to the remote that owns the target AZ):
 
 ```bash
 curl -L https://raw.githubusercontent.com/cobaltcore-dev/openstack-hypervisor-operator/refs/heads/main/charts/openstack-hypervisor-operator/crds/kvm.cloud.sap_hypervisors.yaml > /tmp/hypervisor-crd.yaml
-kubectl --context kind-cortex-home apply -f /tmp/hypervisor-crd.yaml
-kubectl --context kind-cortex-remote-az-a apply -f /tmp/hypervisor-crd.yaml
-kubectl --context kind-cortex-remote-az-b apply -f /tmp/hypervisor-crd.yaml
+curl -L https://raw.githubusercontent.com/cobaltcore-dev/vm-operator/refs/heads/main/dist/files/crds/cobaltcore.cloud_virtualmachines.yaml > /tmp/virtualmachine-crd.yaml
+for ctx in kind-cortex-home kind-cortex-remote-az-a kind-cortex-remote-az-b; do
+  kubectl --context "$ctx" apply -f /tmp/hypervisor-crd.yaml
+  kubectl --context "$ctx" apply -f /tmp/virtualmachine-crd.yaml
+done
 ```
 
 #### Configure routing and start Cortex
@@ -376,8 +379,8 @@ global:
         gvks:
         - kvm.cloud.sap/v1/Hypervisor
         - kvm.cloud.sap/v1/HypervisorList
-        - cortex.cloud/v1alpha1/History
-        - cortex.cloud/v1alpha1/HistoryList
+        - cobaltcore.cloud/v1alpha1/VirtualMachine
+        - cobaltcore.cloud/v1alpha1/VirtualMachineList
         labels:
           availabilityZone: cortex-remote-az-a
         caCert: |
@@ -386,8 +389,8 @@ $(cat /tmp/root-ca-remote-az-a.pem | sed 's/^/          /')
         gvks:
         - kvm.cloud.sap/v1/Hypervisor
         - kvm.cloud.sap/v1/HypervisorList
-        - cortex.cloud/v1alpha1/History
-        - cortex.cloud/v1alpha1/HistoryList
+        - cobaltcore.cloud/v1alpha1/VirtualMachine
+        - cobaltcore.cloud/v1alpha1/VirtualMachineList
         labels:
           availabilityZone: cortex-remote-az-b
         caCert: |
@@ -410,6 +413,7 @@ metadata:
   name: hypervisor-1-az-a
   labels:
     topology.kubernetes.io/zone: cortex-remote-az-a
+    topology.kubernetes.io/region: cortex-remote
 ---
 apiVersion: kvm.cloud.sap/v1
 kind: Hypervisor
@@ -417,6 +421,7 @@ metadata:
   name: hypervisor-2-az-a
   labels:
     topology.kubernetes.io/zone: cortex-remote-az-a
+    topology.kubernetes.io/region: cortex-remote
 EOF
 
 kubectl --context kind-cortex-remote-az-b apply -f - <<'EOF'
@@ -426,6 +431,7 @@ metadata:
   name: hypervisor-1-az-b
   labels:
     topology.kubernetes.io/zone: cortex-remote-az-b
+    topology.kubernetes.io/region: cortex-remote
 ---
 apiVersion: kvm.cloud.sap/v1
 kind: Hypervisor
@@ -433,6 +439,7 @@ metadata:
   name: hypervisor-2-az-b
   labels:
     topology.kubernetes.io/zone: cortex-remote-az-b
+    topology.kubernetes.io/region: cortex-remote
 EOF
 ```
 
@@ -463,7 +470,7 @@ With Tilt still up, work through the following in another terminal.
 
 #### Apply the test pipeline
 
-This is a minimal `filter-weigher` pipeline with `createHistory: true` and a single `filter_correct_az`
+This is a minimal `filter-weigher` pipeline with a single `filter_correct_az`
 step (no weighers, so surviving hosts keep their input order):
 
 ```bash
@@ -476,7 +483,6 @@ spec:
   schedulingDomain: nova
   description: Minimal test pipeline for the multicluster guide.
   type: filter-weigher
-  createHistory: true
   filters:
     - name: filter_correct_az
   weighers: []
@@ -546,7 +552,7 @@ curl -s -X POST http://localhost:8001/scheduler/nova/external \
           "vcpu_weight": 0,
           "disabled": false,
           "is_public": true,
-          "extra_specs": {}
+          "extra_specs": {"capabilities:hypervisor_type": "qemu"}
         }
       },
       "request_level_params": {
@@ -600,31 +606,40 @@ curl -s -X POST http://localhost:8001/scheduler/nova/external \
 
 A `200` response with a JSON body listing only `az-b` hosts confirms the scheduler filtered correctly.
 
-#### Verify the History landed on the correct remote
+#### Verify the VirtualMachine landed on the correct remote
 
-Because the pipeline has `createHistory: true` and the request targeted `cortex-remote-az-b`, the
-multicluster client should have written the `History` resource to that remote — not to the home cluster
-or the other remote. Check each cluster:
+Because the request targeted `cortex-remote-az-b`, Cortex writes the scheduling result as a
+`VirtualMachine` and the multicluster client should have routed it to that remote — not to the home
+cluster or the other remote.
+
+> [!NOTE]
+> VM creation is gated by the nova scheduler's `VirtualMachineCreation` feature gate. The guide's
+> default overrides enable it; if you see no `VirtualMachine` below, confirm the gate is on and that the
+> request's flavor carries `capabilities:hypervisor_type: qemu` (set above) so Cortex treats it as a KVM
+> placement.
+
+Check each cluster:
 
 ```bash
 echo "--- kind-cortex-home ---"
-kubectl --context kind-cortex-home get histories 2>/dev/null || echo "  (none)"
+kubectl --context kind-cortex-home get virtualmachines 2>/dev/null || echo "  (none)"
 echo "--- kind-cortex-remote-az-a ---"
-kubectl --context kind-cortex-remote-az-a get histories 2>/dev/null || echo "  (none)"
+kubectl --context kind-cortex-remote-az-a get virtualmachines 2>/dev/null || echo "  (none)"
 echo "--- kind-cortex-remote-az-b ---"
-kubectl --context kind-cortex-remote-az-b get histories 2>/dev/null || echo "  (none)"
+kubectl --context kind-cortex-remote-az-b get virtualmachines 2>/dev/null || echo "  (none)"
 ```
 
-You should see the `History` named `nova-cortex-test-instance-001` only in `kind-cortex-remote-az-b`.
-Describe it to see the full scheduling decision — which pipeline ran, which host was selected, and the
-explanation for each filter step:
+You should see the `VirtualMachine` named `cortex-test-instance-001` only in `kind-cortex-remote-az-b`.
+Describe it to see the full scheduling result — the target host under `spec.targetHost`, the ranked
+`spec.cortex.hostCandidates`, and `spec.cortex.explanation`, the human-readable summary of why that host
+won:
 
 ```bash
-kubectl --context kind-cortex-remote-az-b describe history nova-cortex-test-instance-001
+kubectl --context kind-cortex-remote-az-b describe virtualmachine cortex-test-instance-001
 ```
 
 This confirms end-to-end multicluster routing: the scheduling request entered through the home cluster,
-the `filter_correct_az` filter ran against hosts from both remotes, and the resulting `History` was
+the `filter_correct_az` filter ran against hosts from both remotes, and the resulting `VirtualMachine` was
 written to the remote whose labels matched the request's availability zone.
 
 ### Step 3 — Clean up

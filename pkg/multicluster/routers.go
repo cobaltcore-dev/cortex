@@ -18,7 +18,6 @@ import (
 var DefaultResourceRouters = map[schema.GroupVersionKind]ResourceRouter{
 	{Group: "kvm.cloud.sap", Version: "v1", Kind: "Hypervisor"}:               HypervisorResourceRouter{},
 	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}:         ReservationsResourceRouter{},
-	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}:             HistoryResourceRouter{},
 	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}:   CommittedResourceRouter{},
 	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "ProjectQuota"}:        ProjectQuotaResourceRouter{},
 	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "FlavorGroupCapacity"}: FlavorGroupCapacityResourceRouter{},
@@ -223,53 +222,6 @@ func (f FlavorGroupCapacityResourceRouter) Match(obj any, labels map[string]stri
 		return false, errors.New("flavor group capacity does not have availability zone in spec")
 	}
 	return fgc.Spec.AvailabilityZone == availabilityZone, nil
-}
-
-// HistoryResourceRouter routes histories to clusters based on availability zone.
-type HistoryResourceRouter struct{}
-
-func (h HistoryResourceRouter) ExtractClusterSelector(obj any) (string, error) {
-	switch v := obj.(type) {
-	case *v1alpha1.History:
-		if v == nil {
-			return "", errors.New("object is nil")
-		}
-		if v.Spec.AvailabilityZone == nil || *v.Spec.AvailabilityZone == "" {
-			return "", errors.New("history does not have availability zone in spec")
-		}
-		return *v.Spec.AvailabilityZone, nil
-	case v1alpha1.History:
-		if v.Spec.AvailabilityZone == nil || *v.Spec.AvailabilityZone == "" {
-			return "", errors.New("history does not have availability zone in spec")
-		}
-		return *v.Spec.AvailabilityZone, nil
-	default:
-		return "", errors.New("object is not a History")
-	}
-}
-
-func (h HistoryResourceRouter) Match(obj any, labels map[string]string) (bool, error) {
-	var hist v1alpha1.History
-
-	switch v := obj.(type) {
-	case *v1alpha1.History:
-		if v == nil {
-			return false, errors.New("object is nil")
-		}
-		hist = *v
-	case v1alpha1.History:
-		hist = v
-	default:
-		return false, errors.New("object is not a History")
-	}
-	availabilityZone, ok := labels["availabilityZone"]
-	if !ok {
-		return false, errors.New("cluster does not have availabilityZone label")
-	}
-	if hist.Spec.AvailabilityZone == nil || *hist.Spec.AvailabilityZone == "" {
-		return false, errors.New("history does not have availability zone in spec")
-	}
-	return *hist.Spec.AvailabilityZone == availabilityZone, nil
 }
 
 // ProjectQuotaResourceRouter routes project quotas to clusters based on availability zone.

@@ -147,20 +147,17 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		return errors.New("no nodes available for scheduling")
 	}
 
-	// Execute the scheduling pipeline. Options not set: pod scheduling always records history.
+	// Execute the scheduling pipeline.
 	request := pods.PodPipelineRequest{Nodes: nodes.Items, Pod: *pod}
 	result, err := pipeline.Run(request)
-	// Persist the result on the decision before upserting history so that
-	// CreateOrUpdateHistory can observe the target host and ordered hosts.
-	// On error the result is empty/meaningless, so only set it on success.
+
 	if err == nil {
 		decision.Status.Result = &result
 	}
-	if !request.Options.SkipHistory {
-		if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, nil, err); upsertErr != nil {
-			log.Error(upsertErr, "failed to create/update history")
-		}
-	}
+	// Record a human-readable explanation of the decision for downstream
+	// consumers. On error the result is nil and the explanation carries the
+	// failure reason.
+	decision.Status.Explanation = lib.GenerateExplanation(decision.Status.Result, err)
 	if err != nil {
 		log.V(1).Error(err, "failed to run scheduler pipeline")
 		return errors.New("failed to run scheduler pipeline")
@@ -220,22 +217,12 @@ func (c *FilterWeigherPipelineController) handlePod() handler.EventHandler {
 				log.Error(err, "failed to process new pod for scheduling", "pod", newPod.Name)
 			}
 		},
-		DeleteFunc: func(ctx context.Context, evt event.DeleteEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			c.processMu.Lock()
-			defer c.processMu.Unlock()
-			pod := evt.Object.(*corev1.Pod)
-			if err := c.HistoryManager.Delete(ctx, v1alpha1.SchedulingDomainPods, pod.Namespace+"--"+pod.Name); err != nil {
-				log := ctrl.LoggerFrom(ctx)
-				log.Error(err, "failed to delete history CRD for pod", "pod", pod.Name)
-			}
-		},
 	}
 }
 
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainPods
-	c.HistoryManager = lib.HistoryClient{Client: mcl, Recorder: mcl.GetEventRecorder("cortex-pods-scheduler")}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

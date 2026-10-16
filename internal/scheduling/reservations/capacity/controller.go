@@ -829,7 +829,6 @@ func (c *Reconciler) probeScheduler(
 		ReadOnly:                      true,
 		AssumeEmptyHosts:              ignoreAllocations,
 		IgnoredReservationTypes:       ignoredReservationTypes,
-		SkipHistory:                   true,
 		SkipInflight:                  true,
 		SkipCommittedResourceTracking: true,
 	})

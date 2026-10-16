@@ -56,7 +56,7 @@ So a default pod pipeline filters nodes down to the feasible set, then binpacks 
 most-utilized node that still fits.
 
 The pod scheduler reuses the exact `lib` filter/weigher engine of
-[The scheduling engine](01-the-scheduling-engine.md), producing the same `Decision`/`History` records as
+[The scheduling engine](01-the-scheduling-engine.md), producing the same `Decision` records as
 every other domain — only the trigger (a watch on pods, not an HTTP call) and the final action (a
 `Binding`, not a returned ordering) differ. IronCore machine scheduling, next, is the other watch-driven
 domain, and it commits its choice by setting a field on a Machine rather than binding a pod.

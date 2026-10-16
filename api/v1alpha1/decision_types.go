@@ -125,7 +125,8 @@ type DecisionStatus struct {
 
 // Currently the Decision CRD is an in-memory scheduling object used by the external scheduler API
 // and filter-weigher pipelines to compute a placement result. It is currently NOT persisted
-// to etcd — the scheduling outcome is recorded in the History CRD instead.
+// to etcd — the scheduling outcome (including a human-readable explanation) is written onto the
+// scheduled resource instead, e.g. the nova VM's spec.cortex fields.
 // The long-term shape of this CRD is still under discussion; until that is
 // settled the Decision serves only as a transient carrier within a single
 // scheduling run.

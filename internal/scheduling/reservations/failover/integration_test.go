@@ -1146,7 +1146,6 @@ func newIntegrationTestEnv(t *testing.T, vms []reservations.VM, hypervisors []*h
 			Client:          k8sClient,
 			Pipelines:       make(map[string]lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]),
 			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
-			HistoryManager:  lib.HistoryClient{Client: k8sClient},
 		},
 		Monitor: getSharedMonitor(),
 	}
@@ -1347,7 +1346,6 @@ func newIntegrationTestEnvWithTraitsFilter(t *testing.T, vms []reservations.VM, 
 			Client:          k8sClient,
 			Pipelines:       make(map[string]lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]),
 			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
-			HistoryManager:  lib.HistoryClient{Client: k8sClient},
 		},
 		Monitor: getSharedMonitor(),
 	}

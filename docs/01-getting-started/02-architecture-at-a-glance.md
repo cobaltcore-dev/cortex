@@ -105,8 +105,7 @@ flowchart LR
 - **Reservation** models capacity that is promised but not yet consumed, so a pipeline treats it as
   unavailable.
 
-That is the whole picture at a glance. Cortex owns eleven kinds in all — besides the six above,
-`History` records past decisions, and `CommittedResource`, `ProjectQuota`, and `FlavorGroupCapacity`
+That is the whole picture at a glance. Cortex owns ten kinds in all — besides the ones above, `CommittedResource`, `ProjectQuota`, and `FlavorGroupCapacity`
 round out the reservation-and-quota family, covered in
 [Chapter 3](../03-reservations-and-inventory/readme.md). Every field of every kind is defined on the Go
 types under `api/v1alpha1/*_types.go`; the generated CRD manifests are under
@@ -116,7 +115,7 @@ Cortex also *consumes but does not own* external kinds: `Hypervisor` (`kvm.cloud
 `Machine`, `MachinePool`, and `MachineClass` (`compute.ironcore.dev/v1alpha1`).
 
 Because the kinds are cluster-scoped but a cluster may run more than one Cortex deployment, the
-domain-owned kinds (`Datasource`, `Knowledge`, `KPI`, `Pipeline`, `Decision`, `History`, and the
+domain-owned kinds (`Datasource`, `Knowledge`, `KPI`, `Pipeline`, `Decision`, and the
 reservation kinds) carry a **`spec.schedulingDomain`** field — one of `nova`, `cinder`, `manila`,
 `machines`, or `pods`. Each domain controller watches with a predicate that ignores any object whose
 `schedulingDomain` does not match its own, so a `cortex-nova` and a `cortex-cinder` deployment can

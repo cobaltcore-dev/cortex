@@ -137,9 +137,9 @@ knowledge feature) exceeds a threshold over an observed window. The flow:
    issue real live-migrations via the Nova client).
 4. A **cleanup** controller TTL-expires old `Descheduling` resources (and runs once on startup).
 
-## Inspecting decisions, descheduling, and history
+## Inspecting decisions and descheduling
 
-Three cluster-scoped CRDs record what the pipelines did — inspect them with `kubectl` (no namespace,
+Two cluster-scoped CRDs record what the pipelines did — inspect them with `kubectl` (no namespace,
 Cortex kinds are cluster-scoped). Each request that hits the external scheduler produces a **`Decision`**:
 
 ```bash
@@ -152,7 +152,8 @@ nova     a1b2c3…       1   2m        kvm-general-purpose-load-balancing   node
 ```
 
 `TargetHost` (`.status.result.targetHost`) is what Cortex recommended and `Pipeline` names the pipeline
-that ran; `-o yaml` shows the full filter/weigher trace. The detector pipeline emits **`Descheduling`**
+that ran; `-o yaml` shows the full filter/weigher trace, and `.status.explanation` carries a
+human-readable summary of why that host won. The detector pipeline emits **`Descheduling`**
 resources for VMs it wants to move:
 
 ```bash
@@ -164,26 +165,16 @@ PREVIOUS HOST   NEW HOST   CREATED   REASON(S)              READY
 node-042        node-017   30s       avoid_high_steal_pct   True
 ```
 
-And **`History`** keeps the rolling record of past scheduling for a resource, so you can see where a VM has
-been placed over time:
-
-```bash
-kubectl get histories
-```
-
-```
-DOMAIN   RESOURCE ID   AZ     TARGET HOST   STATUS      LAST SCHEDULED   CREATED
-nova     a1b2c3…       az-a   node-017      Successful   30s              3d
-```
-
-The columns come from each resource's status; the field-by-field definitions live on the `Decision`,
-`Descheduling`, and `History` Go types in `api/v1alpha1/`.
+The columns come from each resource's status; the field-by-field definitions live on the `Decision`
+and `Descheduling` Go types in `api/v1alpha1/`. For VM placements the same human-readable explanation
+is also written onto the scheduled VM's `spec.cortex.explanation` (the vm-operator `VirtualMachine`),
+so operators can trace a placement from the VM itself.
 
 Nova exercises the full arc: an HTTP request drives a filter-weigher pipeline whose weighers read
-knowledge features and respect reservations, the result is a `Decision`, committed slots are recorded, and
-a scheduled detector emits `Descheduling` recommendations recorded as `History`. Every other domain in
-this chapter is a smaller version of this same shape — starting with the storage domains, which are
-HTTP-driven like Nova but ship far fewer steps.
+knowledge features and respect reservations, the result is a `Decision` (with its explanation recorded
+on the scheduled VM), committed slots are recorded, and a scheduled detector emits `Descheduling`
+recommendations. Every other domain in this chapter is a smaller version of this same shape —
+starting with the storage domains, which are HTTP-driven like Nova but ship far fewer steps.
 
 ## Next
 

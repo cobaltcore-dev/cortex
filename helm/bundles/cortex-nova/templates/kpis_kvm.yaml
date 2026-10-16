@@ -50,7 +50,6 @@ spec:
   impl: multicluster_object_count_kpi
   opts:
     gvks:
-      - cortex.cloud/v1alpha1/HistoryList
       - cortex.cloud/v1alpha1/ReservationList
       - cortex.cloud/v1alpha1/CommittedResourceList
       - kvm.cloud.sap/v1/HypervisorList
