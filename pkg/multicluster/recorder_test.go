@@ -70,19 +70,19 @@ func TestMultiClusterRecorder_HomeGVK(t *testing.T) {
 		fakeRecorder: homeRecorder,
 	}
 
-	historyGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}
+	reservationGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}
 	mcl := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
-		homeGVKs:    map[schema.GroupVersionKind]bool{historyGVK: true},
+		homeGVKs:    map[schema.GroupVersionKind]bool{reservationGVK: true},
 	}
 
 	recorder := mcl.GetEventRecorder("test-recorder")
 
-	history := &v1alpha1.History{
+	reservation := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{Name: "nova-uuid-1"},
 	}
-	recorder.Eventf(history, nil, corev1.EventTypeNormal, "SchedulingSucceeded", "Scheduled", "selected host: %s", "compute-1")
+	recorder.Eventf(reservation, nil, corev1.EventTypeNormal, "SchedulingSucceeded", "Scheduled", "selected host: %s", "compute-1")
 
 	calls := homeRecorder.getCalls()
 	if len(calls) != 1 {
@@ -241,11 +241,11 @@ func TestMultiClusterRecorder_ConcurrentEventf(t *testing.T) {
 	homeRecorder := &fakeEventRecorder{}
 	homeCluster := &fakeCluster{fakeRecorder: homeRecorder, fakeCache: &fakeCache{}}
 
-	historyGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "History"}
+	reservationGVK := schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Reservation"}
 	mcl := &Client{
 		HomeCluster: homeCluster,
 		HomeScheme:  scheme,
-		homeGVKs:    map[schema.GroupVersionKind]bool{historyGVK: true},
+		homeGVKs:    map[schema.GroupVersionKind]bool{reservationGVK: true},
 	}
 
 	recorder := mcl.GetEventRecorder("test-recorder")
@@ -256,10 +256,10 @@ func TestMultiClusterRecorder_ConcurrentEventf(t *testing.T) {
 	for i := range goroutines {
 		go func(n int) {
 			defer wg.Done()
-			history := &v1alpha1.History{
-				ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("history-%d", n)},
+			reservation := &v1alpha1.Reservation{
+				ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("reservation-%d", n)},
 			}
-			recorder.Eventf(history, nil, corev1.EventTypeNormal, "Test", "Test", "event %d", n)
+			recorder.Eventf(reservation, nil, corev1.EventTypeNormal, "Test", "Test", "event %d", n)
 		}(i)
 	}
 	wg.Wait()

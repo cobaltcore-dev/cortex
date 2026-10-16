@@ -123,8 +123,6 @@ cortex: &cortex
         gvks:
           - cortex.cloud/v1alpha1/Decision
           - cortex.cloud/v1alpha1/DecisionList
-          - cortex.cloud/v1alpha1/History
-          - cortex.cloud/v1alpha1/HistoryList
           - cortex.cloud/v1alpha1/Descheduling
           - cortex.cloud/v1alpha1/DeschedulingList
           - cortex.cloud/v1alpha1/Pipeline
@@ -190,7 +188,6 @@ cortex-scheduling-controllers:
       - quota-controller
       - capacity-controller
     enabledTasks:
-      - nova-history-cleanup-task
       - commitments-sync-task  # required for committed resources
     # Feature gates control optional capabilities within running components.
     # Enables VM allocation write-back into Reservation slots and no-host-found

@@ -58,7 +58,7 @@ is added later by implementing and registering steps
 IronCore machine scheduling completes the chapter's pattern: five domains, one shared engine, differing
 only in trigger and commit action. Nova, Manila, and Cinder answer HTTP calls and *advise*; pods and
 machines watch Kubernetes resources and *commit* (a pod `Binding`, a machine `MachinePoolRef`). All five
-produce `Decision` and `History` records through the same `lib` pipeline. With the scheduler API covered,
+produce `Decision` records through the same `lib` pipeline. With the scheduler API covered,
 the next chapter turns to the capacity that a pipeline must respect: reservations and inventory.
 
 ## Next
