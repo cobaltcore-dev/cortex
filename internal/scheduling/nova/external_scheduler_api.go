@@ -258,8 +258,8 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	intent, err := requestData.GetIntent()
 	if err != nil {
 		// Just log this in case the intent cannot be determined, but continue processing.
-		logger.Error("failed to get intent", "error", err)
-		intent = v1alpha1.SchedulingIntentUnknown
+		logger.Info("found no request intent (intended for initial placements)")
+		intent = api.CreateIntent
 	}
 
 	decision := &v1alpha1.Decision{
