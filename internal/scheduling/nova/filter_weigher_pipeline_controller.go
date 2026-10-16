@@ -180,13 +180,6 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		return nil, err
 	}
 
-	if intent, err := request.GetIntent(); err != nil {
-		log.Error(err, "failed to get intent from nova request, using Unknown")
-		decision.Spec.Intent = v1alpha1.SchedulingIntentUnknown
-	} else {
-		decision.Spec.Intent = intent
-	}
-
 	// If necessary gather all placement candidates before filtering.
 	// This will override the hosts and weights in the nova request.
 	pipelineConf, ok := c.GetPipelineConfig(decision.Spec.PipelineRef.Name)
