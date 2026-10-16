@@ -57,6 +57,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 	novafilters "github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/rescheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/capacity"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
@@ -542,6 +543,16 @@ func main() {
 			NovaClient: novaClient,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DeschedulingsExecutor")
+			os.Exit(1)
+		}
+	}
+	if slices.Contains(mainConfig.EnabledControllers, "rescheduler-controller") {
+		setupLog.Info("enabling controller", "controller", "rescheduler-controller")
+		if err := (&rescheduler.Scheduler{
+			Client: multiclusterClient,
+			Queue:  rescheduler.NewFIFOQueue(),
+		}).SetupWithManager(mgr, multiclusterClient); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "rescheduler-controller")
 			os.Exit(1)
 		}
 	}
