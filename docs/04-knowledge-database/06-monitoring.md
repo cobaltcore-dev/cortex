@@ -86,7 +86,6 @@ Expected — the `PrometheusRule` containing the `cortex-nova-alerts` group.
 Dashboards are not part of the Helm charts. Import them from the repository:
 
 - Perses: `tools/perses/dashboards/`
-- Plutono/Grafana: `tools/plutono/provisioning/dashboards/`
 
 These include a compute KVM overview and a placement-shim status dashboard, and are covered in
 [The infrastructure dashboard](05-infrastructure-dashboard.md).

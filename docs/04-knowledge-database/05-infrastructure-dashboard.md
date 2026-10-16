@@ -35,16 +35,15 @@ they need no special plumbing to reach a dashboard.
 The dashboard definitions are development/operations tooling, deliberately kept out of the deployable charts:
 
 - **Perses** — `tools/perses/dashboards/`, including `cortex-compute-kvm-overview.json` (the compute KVM
-  overview) and `project.json`.
-- **Plutono** — `tools/plutono/provisioning/dashboards/`, including `cortex-placement-shim-status.json`
-  (the [shim](../03-reservations-and-inventory/05-placement-api-shim.md) status board), `cortex-status.json`,
-  `cortex.json`, and a `compute/` subtree (`kvm-overview.json`, `kvm-details.json`, `vmware-overview.json`,
-  `vmware-details.json`, `flavors.json`, `global.json`).
+  overview), `cortex-placement-shim-status.json` (the
+  [shim](../03-reservations-and-inventory/05-placement-api-shim.md) status board), `cortex-status.json`,
+  the compute VMware boards (`cortex-compute-vmware-overview.json`, `cortex-compute-vmware-details.json`),
+  and `project.json`.
 
 > [!NOTE]
 > There are no dashboard JSON files under `helm/`. The only `dashboard:` strings in the charts are
 > alert-rule annotations pointing at dashboards by name — the definitions themselves ship in `tools/`. To
-> use one, import it into your own Perses or Plutono instance; Cortex does not deploy a dashboard server for
+> use one, import it into your own Perses instance; Cortex does not deploy a dashboard server for
 > you.
 
 This page is the visual read-out of the whole [knowledge flow](01-knowledge-flow-overview.md): datasources

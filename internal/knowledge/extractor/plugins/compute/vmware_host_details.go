@@ -45,6 +45,10 @@ type VMwareHostDetails struct {
 	// (e.g. "4TiB"), or to the nearest GiB (e.g. "512GiB") when smaller than
 	// 1 TiB. "unknown" when the memory inventory is missing.
 	PhysicalHostSize string `db:"physical_host_size"`
+	// VCenter of the building block this host belongs to, derived from the
+	// OpenStack aggregate whose name starts with "vc-". "unknown" when no such
+	// aggregate is associated with the host.
+	VCenter string `db:"vcenter"`
 }
 
 type VMwareHostDetailsExtractor struct {

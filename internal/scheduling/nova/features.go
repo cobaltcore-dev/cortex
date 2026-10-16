@@ -12,4 +12,12 @@ type FeatureGates struct {
 	// results by committed resource coverage. Enable only on deployments that
 	// use committed resources.
 	CommittedResourceTracking bool `json:"committedResourceTracking,omitempty"`
+
+	// VirtualMachineCreation enables the creation of VM resources based on the
+	// scheduling spec for non-read-only requests.
+	VirtualMachineCreation bool `json:"virtualMachineCreation,omitempty"`
+	// VirtualMachineCreationMandatory must be enabled together with
+	// the VirtualMachineCreation feature. If set, the pipeline will
+	// require that a VM is created for each scheduling request.
+	VirtualMachineCreationMandatory bool `json:"virtualMachineCreationMandatory,omitempty"`
 }

@@ -1,0 +1,352 @@
+{
+  "kind": "Dashboard",
+  "metadata": {
+    "name": "cortex_global_compute_capacity",
+    "createdAt": "2026-10-12T12:17:28.263413542Z",
+    "updatedAt": "2026-10-13T11:35:08.063290394Z",
+    "version": 9,
+    "project": "workload-management"
+  },
+  "spec": {
+    "display": {
+      "name": "Cortex Global Compute Capacity"
+    },
+    "panels": {
+      "efc0427f31fc448ebbaae150d149f238": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "",
+            "description": "Shows the available RAM capacity in the availability zone. They are split by cpu architecture and workload type. Only categories that actually have capacity are displayed here."
+          },
+          "plugin": {
+            "kind": "Table",
+            "spec": {
+              "cellSettings": [
+                {
+                  "backgroundColor": "#ff0000",
+                  "condition": {
+                    "kind": "Range",
+                    "spec": {
+                      "max": 0.05,
+                      "min": -100000000000
+                    }
+                  },
+                  "text": "",
+                  "suffix": "%"
+                },
+                {
+                  "backgroundColor": "#EE6C6C",
+                  "condition": {
+                    "kind": "Range",
+                    "spec": {
+                      "max": 0.2,
+                      "min": 0.05
+                    }
+                  },
+                  "suffix": "%"
+                },
+                {
+                  "backgroundColor": "#FFCC00",
+                  "condition": {
+                    "kind": "Range",
+                    "spec": {
+                      "max": 0.3,
+                      "min": 0.2
+                    }
+                  },
+                  "suffix": "%"
+                },
+                {
+                  "backgroundColor": "#59CC8D",
+                  "condition": {
+                    "kind": "Range",
+                    "spec": {
+                      "max": 100000000000000000,
+                      "min": 0.3
+                    }
+                  },
+                  "suffix": "%"
+                }
+              ],
+              "columnSettings": [
+                {
+                  "enableSorting": true,
+                  "header": "Availability Zone",
+                  "name": "availability_zone",
+                  "sort": "asc"
+                },
+                {
+                  "align": "left",
+                  "format": {
+                    "unit": "percent-decimal"
+                  },
+                  "header": "VMware - GP",
+                  "headerDescription": "VMware - General Purpose",
+                  "name": "value #1",
+                  "plugin": {
+                    "kind": "GaugeChart",
+                    "spec": {
+                      "calculation": "last-number",
+                      "format": {
+                        "unit": "percent-decimal"
+                      },
+                      "thresholds": {
+                        "steps": [
+                          {
+                            "value": 0.8
+                          },
+                          {
+                            "value": 0.9
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "dataLink": {
+                    "url": "https://perses.${__data.fields[\"region\"]}.cloud.sap/projects/workload-management/dashboards/cortex_compute_vmware_-_overview?var-availability_zone=${__data.fields[\"availability_zone\"]}&var-compute_host=%24__all&var-enabled=%24__all&var-show_decommissioned=1&var-show_unused_commitments=1&var-physical_size=%24__all&start=7d&refresh=0s",
+                    "openNewTab": true,
+                    "title": ""
+                  }
+                },
+                {
+                  "format": {
+                    "unit": "percent-decimal"
+                  },
+                  "header": "VMware - HANA - CL",
+                  "headerDescription": "VMware - HANA - Cascade Lake",
+                  "name": "value #2",
+                  "plugin": {
+                    "kind": "GaugeChart",
+                    "spec": {
+                      "calculation": "last-number",
+                      "format": {
+                        "unit": "percent-decimal"
+                      },
+                      "thresholds": {
+                        "steps": [
+                          {
+                            "value": 0.8
+                          },
+                          {
+                            "value": 0.9
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "dataLink": {
+                    "url": "https://perses.${__data.fields[\"region\"]}.cloud.sap/projects/workload-management/dashboards/cortex_compute_vmware_-_overview?var-availability_zone=${__data.fields[\"availability_zone\"]}&var-compute_host=%24__all&var-enabled=%24__all&var-show_decommissioned=1&var-show_unused_commitments=1&var-physical_size=%24__all&start=7d&refresh=0s",
+                    "openNewTab": true,
+                    "title": ""
+                  }
+                },
+                {
+                  "format": {
+                    "unit": "percent-decimal"
+                  },
+                  "header": "VMware - HANA - SR",
+                  "headerDescription": "VMware - HANA - Sapphire Rapids",
+                  "name": "value #3",
+                  "plugin": {
+                    "kind": "GaugeChart",
+                    "spec": {
+                      "calculation": "last-number",
+                      "format": {
+                        "unit": "percent-decimal"
+                      },
+                      "thresholds": {
+                        "steps": [
+                          {
+                            "value": 0.8
+                          },
+                          {
+                            "value": 0.9
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "dataLink": {
+                    "url": "https://perses.${__data.fields[\"region\"]}.cloud.sap/projects/workload-management/dashboards/cortex_compute_vmware_-_overview?var-availability_zone=${__data.fields[\"availability_zone\"]}&var-compute_host=%24__all&var-enabled=%24__all&var-show_decommissioned=1&var-show_unused_commitments=1&var-physical_size=%24__all&start=7d&refresh=0s",
+                    "openNewTab": true,
+                    "title": ""
+                  }
+                },
+                {
+                  "header": " ",
+                  "name": "column_space",
+                  "width": 10
+                },
+                {
+                  "format": {
+                    "unit": "percent-decimal"
+                  },
+                  "header": "KVM - GP",
+                  "headerDescription": "KVM - General Purpose",
+                  "name": "value #4",
+                  "plugin": {
+                    "kind": "GaugeChart",
+                    "spec": {
+                      "calculation": "last-number",
+                      "format": {
+                        "unit": "percent-decimal"
+                      },
+                      "thresholds": {
+                        "steps": [
+                          {
+                            "value": 0.8
+                          },
+                          {
+                            "value": 0.9
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "dataLink": {
+                    "url": "https://perses.${__data.fields[\"region\"]}.cloud.sap/projects/workload-management/dashboards/cortex_compute_kvm_-_overview?var-availability_zone=${__data.fields[\"availability_zone\"]}&var-workload_type=general-purpose&var-cpu_architecture=%24__all&var-building_block=%24__all&var-compute_host=%24__all&var-enabled=%24__all&var-maintenance=%24__all&var-decommissioned=%24__all&var-external_customer=%24__all&var-status=%24__all&start=7d&refresh=60s",
+                    "openNewTab": true,
+                    "title": ""
+                  }
+                },
+                {
+                  "format": {
+                    "unit": "percent-decimal"
+                  },
+                  "header": "KVM - HANA",
+                  "name": "value #5",
+                  "plugin": {
+                    "kind": "GaugeChart",
+                    "spec": {
+                      "calculation": "last-number",
+                      "format": {
+                        "unit": "percent-decimal"
+                      },
+                      "thresholds": {
+                        "steps": [
+                          {
+                            "value": 0.8
+                          },
+                          {
+                            "value": 0.9
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "dataLink": {
+                    "url": "https://perses.${__data.fields[\"region\"]}.cloud.sap/projects/workload-management/dashboards/cortex_compute_kvm_-_overview?var-availability_zone=${__data.fields[\"availability_zone\"]}&var-workload_type=hana&var-cpu_architecture=%24__all&var-building_block=%24__all&var-compute_host=%24__all&var-enabled=%24__all&var-maintenance=%24__all&var-decommissioned=%24__all&var-external_customer=%24__all&var-status=%24__all&start=7d&refresh=60s",
+                    "openNewTab": true,
+                    "title": ""
+                  }
+                }
+              ],
+              "defaultColumnHidden": true,
+              "density": "standard",
+              "enableFiltering": true,
+              "transforms": [
+                {
+                  "kind": "MergeSeries",
+                  "spec": {}
+                }
+              ]
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "1 - (\n  (\n    # Running workload (0 for AZs with none)\n    (\n      sum by (availability_zone, region) (\n        max by (compute_host, resource, availability_zone, region) (\n          cortex_vmware_host_capacity_usage{\n            resource=\"ram\",\n            workload_type=\"general-purpose\",\n            decommissioned=\"false\",\n            external_customer=\"false\",\n            pinned_projects=\"false\"\n          }\n        )\n      )\n      or\n      (0 * sum by (availability_zone, region) (\n        max by (compute_host, resource, availability_zone, region) (\n          cortex_vmware_host_capacity_total{\n            resource=\"ram\",\n            workload_type=\"general-purpose\",\n            decommissioned=\"false\",\n            external_customer=\"false\",\n            pinned_projects=\"false\"\n          }\n        )\n      ))\n    )\n\n    +\n\n    # Decommissioned workload (0 for AZs with none)\n    (\n      sum by (availability_zone, region) (\n        max by (compute_host, resource, availability_zone, region) (\n          cortex_vmware_host_capacity_usage{\n            resource=\"ram\",\n            workload_type=\"general-purpose\",\n            decommissioned=\"true\",\n            external_customer=\"false\",\n            pinned_projects=\"false\"\n          }\n        )\n      )\n      or\n      (0 * sum by (availability_zone, region) (\n        max by (compute_host, resource, availability_zone, region) (\n          cortex_vmware_host_capacity_total{\n            resource=\"ram\",\n            workload_type=\"general-purpose\",\n            decommissioned=\"false\",\n            external_customer=\"false\",\n            pinned_projects=\"false\"\n          }\n        )\n      ))\n    )\n\n    +\n\n    # Unused commitments (0 for AZs with none)\n    (\n      sum by (availability_zone, region) (\n        max by (availability_zone, project_id, resource, region) (\n          cortex_vmware_unused_commitments_general_purpose{\n            resource=\"ram\"\n          }\n        )\n      )\n      or\n      (0 * sum by (availability_zone, region) (\n        max by (compute_host, resource, availability_zone, region) (\n          cortex_vmware_host_capacity_total{\n            resource=\"ram\",\n            workload_type=\"general-purpose\",\n            decommissioned=\"false\",\n            external_customer=\"false\",\n            pinned_projects=\"false\"\n          }\n        )\n      ))\n    )\n  )\n\n  /\n\n  # Total available RAM\n  sum by (availability_zone, region) (\n    max by (compute_host, resource, availability_zone, region) (\n      cortex_vmware_host_capacity_total{\n        resource=\"ram\",\n        workload_type=\"general-purpose\",\n        decommissioned=\"false\",\n        external_customer=\"false\",\n        pinned_projects=\"false\"\n      }\n    )\n  )\n)",
+                    "seriesNameFormat": "General Purpose"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "1 - (\n  (\n    # Running workload (0 for AZs with none)\n    (\n      sum by (availability_zone, region) (\n        max by (compute_host, resource, availability_zone, region) (\n          cortex_vmware_host_capacity_usage{\n            resource=\"ram\",\n            workload_type=\"hana\",\n            cpu_architecture=\"cascade-lake\",\n            decommissioned=\"false\",\n            external_customer=\"false\",\n            pinned_projects=\"false\"\n          }\n        )\n      )\n      or\n      (0 * sum by (availability_zone, region) (\n        max by (compute_host, resource, availability_zone, region) (\n          cortex_vmware_host_capacity_total{\n            resource=\"ram\",\n            workload_type=\"hana\",\n            cpu_architecture=\"cascade-lake\",\n            decommissioned=\"false\",\n            external_customer=\"false\",\n            pinned_projects=\"false\"\n          }\n        )\n      ))\n    )\n\n    +\n\n    # Decommissioned workload (0 for AZs with none)\n    (\n      sum by (availability_zone, region) (\n        max by (compute_host, resource, availability_zone, region) (\n          cortex_vmware_host_capacity_usage{\n            resource=\"ram\",\n            workload_type=\"hana\",\n            cpu_architecture=\"cascade-lake\",\n            decommissioned=\"true\",\n            external_customer=\"false\",\n            pinned_projects=\"false\"\n          }\n        )\n      )\n      or\n      (0 * sum by (availability_zone, region) (\n        max by (compute_host, resource, availability_zone, region) (\n          cortex_vmware_host_capacity_total{\n            resource=\"ram\",\n            workload_type=\"hana\",\n            cpu_architecture=\"cascade-lake\",\n            decommissioned=\"false\",\n            external_customer=\"false\",\n            pinned_projects=\"false\"\n          }\n        )\n      ))\n    )\n\n    +\n\n    # Unused commitments (0 for AZs with none)\n    (\n      sum by (availability_zone, region) (\n        max by (availability_zone, project_id, resource, region) (\n          cortex_vmware_unused_commitments_hana_resources{\n            resource=\"ram\",\n            cpu_architecture=\"cascade-lake\"\n          }\n        )\n      )\n      or\n      (0 * sum by (availability_zone, region) (\n        max by (compute_host, resource, availability_zone, region) (\n          cortex_vmware_host_capacity_total{\n            resource=\"ram\",\n            workload_type=\"hana\",\n            cpu_architecture=\"cascade-lake\",\n            decommissioned=\"false\",\n            external_customer=\"false\",\n            pinned_projects=\"false\"\n          }\n        )\n      ))\n    )\n  )\n\n  /\n\n  # Total available RAM\n  sum by (availability_zone, region) (\n    max by (compute_host, resource, availability_zone, region) (\n      cortex_vmware_host_capacity_total{\n        resource=\"ram\",\n        workload_type=\"hana\",\n        cpu_architecture=\"cascade-lake\",\n        decommissioned=\"false\",\n        external_customer=\"false\",\n        pinned_projects=\"false\"\n      }\n    )\n  )\n)",
+                    "seriesNameFormat": "HANA / Cascade Lake"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "1 - (\n  (\n    # Running workload (0 for AZs with none)\n    (\n      sum by (availability_zone, region) (\n        max by (compute_host, resource, availability_zone, region) (\n          cortex_vmware_host_capacity_usage{\n            resource=\"ram\",\n            workload_type=\"hana\",\n            cpu_architecture=\"sapphire-rapids\",\n            decommissioned=\"false\",\n            external_customer=\"false\",\n            pinned_projects=\"false\"\n          }\n        )\n      )\n      or\n      (0 * sum by (availability_zone, region) (\n        max by (compute_host, resource, availability_zone, region) (\n          cortex_vmware_host_capacity_total{\n            resource=\"ram\",\n            workload_type=\"hana\",\n            cpu_architecture=\"sapphire-rapids\",\n            decommissioned=\"false\",\n            external_customer=\"false\",\n            pinned_projects=\"false\"\n          }\n        )\n      ))\n    )\n\n    +\n\n    # Decommissioned workload (0 for AZs with none)\n    (\n      sum by (availability_zone, region) (\n        max by (compute_host, resource, availability_zone, region) (\n          cortex_vmware_host_capacity_usage{\n            resource=\"ram\",\n            workload_type=\"hana\",\n            cpu_architecture=\"sapphire-rapids\",\n            decommissioned=\"true\",\n            external_customer=\"false\",\n            pinned_projects=\"false\"\n          }\n        )\n      )\n      or\n      (0 * sum by (availability_zone, region) (\n        max by (compute_host, resource, availability_zone, region) (\n          cortex_vmware_host_capacity_total{\n            resource=\"ram\",\n            workload_type=\"hana\",\n            cpu_architecture=\"sapphire-rapids\",\n            decommissioned=\"false\",\n            external_customer=\"false\",\n            pinned_projects=\"false\"\n          }\n        )\n      ))\n    )\n\n    +\n\n    # Unused commitments (0 for AZs with none)\n    (\n      sum by (availability_zone, region) (\n        max by (availability_zone, project_id, resource, region) (\n          cortex_vmware_unused_commitments_hana_resources{\n            resource=\"ram\",\n            cpu_architecture=\"sapphire-rapids\"\n          }\n        )\n      )\n      or\n      (0 * sum by (availability_zone, region) (\n        max by (compute_host, resource, availability_zone, region) (\n          cortex_vmware_host_capacity_total{\n            resource=\"ram\",\n            workload_type=\"hana\",\n            cpu_architecture=\"sapphire-rapids\",\n            decommissioned=\"false\",\n            external_customer=\"false\",\n            pinned_projects=\"false\"\n          }\n        )\n      ))\n    )\n  )\n\n  /\n\n  # Total available RAM\n  sum by (availability_zone, region) (\n    max by (compute_host, resource, availability_zone, region) (\n      cortex_vmware_host_capacity_total{\n        resource=\"ram\",\n        workload_type=\"hana\",\n        cpu_architecture=\"sapphire-rapids\",\n        decommissioned=\"false\",\n        external_customer=\"false\",\n        pinned_projects=\"false\"\n      }\n    )\n  )\n)",
+                    "seriesNameFormat": "HANA / Sapphire Rapids"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum by (availability_zone, region) (\n  max by (compute_host, availability_zone, region) (\n    cortex_kvm_host_capacity_usage{\n      resource=\"ram\",\n      type=\"available\",\n      workload_type=\"general-purpose\"\n    }\n  )\n)\n/\nsum by (availability_zone, region) (\n  max by (compute_host, availability_zone, region) (\n    cortex_kvm_host_capacity_total{\n      resource=\"ram\",\n      workload_type=\"general-purpose\",\n      decommissioned=\"false\"\n    }\n  )\n)",
+                    "seriesNameFormat": "KVM General Purpose"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum by (availability_zone, region) (\n  max by (compute_host, availability_zone, region) (\n    cortex_kvm_host_capacity_usage{\n      resource=\"ram\",\n      type=\"available\",\n      workload_type=\"hana\"\n    }\n  )\n)\n/\nsum by (availability_zone, region) (\n  max by (compute_host, availability_zone, region) (\n    cortex_kvm_host_capacity_total{\n      resource=\"ram\",\n      workload_type=\"hana\",\n      decommissioned=\"false\"\n    }\n  )\n)",
+                    "seriesNameFormat": "KVM HANA"
+                  }
+                }
+              }
+            }
+          ],
+          "links": []
+        }
+      }
+    },
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "Global Compute Capacity",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 34,
+              "content": {
+                "$ref": "#/spec/panels/efc0427f31fc448ebbaae150d149f238"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "variables": [],
+    "annotations": [],
+    "duration": "5m",
+    "refreshInterval": "0s",
+    "links": []
+  }
+}

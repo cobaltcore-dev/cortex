@@ -1,0 +1,384 @@
+{
+  "kind": "Dashboard",
+  "metadata": {
+    "name": "project_flavor_usage",
+    "createdAt": "2026-05-21T12:34:49.956070473Z",
+    "updatedAt": "2026-06-01T12:05:28.149975405Z",
+    "version": 3,
+    "tags": [
+      "flavor",
+      "kvm",
+      "vmware"
+    ],
+    "project": "workload-management"
+  },
+  "spec": {
+    "display": {
+      "name": "Project Flavor Usage"
+    },
+    "panels": {
+      "0255b3b37dae4998abcbdb9ccad9e76f": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "VMware Flavor Usage per Project"
+          },
+          "plugin": {
+            "kind": "Table",
+            "spec": {
+              "columnSettings": [
+                {
+                  "header": "Domain",
+                  "name": "domain_name"
+                },
+                {
+                  "enableSorting": true,
+                  "header": "Project",
+                  "name": "project_name"
+                },
+                {
+                  "enableSorting": true,
+                  "header": "Flavor",
+                  "name": "flavor_name"
+                },
+                {
+                  "enableSorting": false,
+                  "hide": true,
+                  "name": "timestamp"
+                },
+                {
+                  "enableSorting": true,
+                  "header": "Amount",
+                  "name": "value",
+                  "sort": "desc"
+                },
+                {
+                  "hide": true,
+                  "name": "domain_id"
+                },
+                {
+                  "hide": true,
+                  "name": "project_id"
+                }
+              ],
+              "density": "standard",
+              "enableFiltering": true
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum by (domain_name, domain_id, project_id, project_name, flavor_name) (cortex_vmware_project_instances{flavor_name=~\"$flavor_name\",project_name=~\"$project_name\",domain_name=~\"$domain_name\",availability_zone=~\"$availability_zone\"})"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "166b50060eb440499cc765a7f0a6f942": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Total KVM Flavor Usage"
+          },
+          "plugin": {
+            "kind": "BarChart",
+            "spec": {
+              "calculation": "last",
+              "format": {
+                "shortValues": true,
+                "unit": "decimal"
+              },
+              "mode": "value",
+              "sort": "desc"
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "topk(30,sort_desc(sum by (flavor_name) (cortex_kvm_project_instances{flavor_name=~\"$flavor_name\",domain_name=~\"$domain_name\",project_name=~\"$project_name\",availability_zone=~\"$availability_zone\"})))",
+                    "seriesNameFormat": "{{flavor_name}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "213df60fb32749c3ba908dc9cfb49f24": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "KVM Flavor Usage per Project"
+          },
+          "plugin": {
+            "kind": "Table",
+            "spec": {
+              "columnSettings": [
+                {
+                  "header": "Domain",
+                  "name": "domain_name"
+                },
+                {
+                  "enableSorting": true,
+                  "header": "Project",
+                  "name": "project_name"
+                },
+                {
+                  "enableSorting": true,
+                  "header": "Flavor",
+                  "name": "flavor_name"
+                },
+                {
+                  "enableSorting": false,
+                  "hide": true,
+                  "name": "timestamp"
+                },
+                {
+                  "enableSorting": true,
+                  "header": "Amount",
+                  "name": "value",
+                  "sort": "desc"
+                },
+                {
+                  "hide": true,
+                  "name": "domain_id"
+                },
+                {
+                  "hide": true,
+                  "name": "project_id"
+                }
+              ],
+              "density": "standard",
+              "enableFiltering": true
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum by (domain_name, domain_id, project_id, project_name, flavor_name) (cortex_kvm_project_instances{flavor_name=~\"$flavor_name\",project_name=~\"$project_name\",domain_name=~\"$domain_name\",availability_zone=~\"$availability_zone\"})"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "e18c30a653c44ce79dcee45d2f8c2e47": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Total VMware Flavor Usage"
+          },
+          "plugin": {
+            "kind": "BarChart",
+            "spec": {
+              "calculation": "last",
+              "format": {
+                "shortValues": true,
+                "unit": "decimal"
+              },
+              "mode": "value",
+              "sort": "desc"
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "topk(30,sort_desc(sum by (flavor_name) (cortex_vmware_project_instances{flavor_name=~\"$flavor_name\",domain_name=~\"$domain_name\",project_name=~\"$project_name\",availability_zone=~\"$availability_zone\"})))",
+                    "seriesNameFormat": "{{flavor_name}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "VMware",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 11,
+              "content": {
+                "$ref": "#/spec/panels/0255b3b37dae4998abcbdb9ccad9e76f"
+              }
+            },
+            {
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 11,
+              "content": {
+                "$ref": "#/spec/panels/e18c30a653c44ce79dcee45d2f8c2e47"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "KVM",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 11,
+              "content": {
+                "$ref": "#/spec/panels/213df60fb32749c3ba908dc9cfb49f24"
+              }
+            },
+            {
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 11,
+              "content": {
+                "$ref": "#/spec/panels/166b50060eb440499cc765a7f0a6f942"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "variables": [
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "display": {
+            "name": "Domain",
+            "hidden": false
+          },
+          "defaultValue": "$__all",
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "customAllValue": ".*",
+          "sort": "none",
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "domain_name",
+              "matchers": [
+                "cortex_kvm_project_instances",
+                "cortex_vmware_project_instances"
+              ]
+            }
+          },
+          "name": "domain_name"
+        }
+      },
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "name": "project_name",
+          "display": {
+            "name": "Project",
+            "hidden": false
+          },
+          "defaultValue": "$__all",
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "customAllValue": ".*",
+          "sort": "none",
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "project_name",
+              "matchers": [
+                "cortex_kvm_project_instances",
+                "cortex_vmware_project_instances"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "name": "availability_zone",
+          "display": {
+            "name": "Availability Zone",
+            "hidden": false
+          },
+          "defaultValue": "$__all",
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "customAllValue": ".*",
+          "sort": "none",
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "availability_zone",
+              "matchers": [
+                "cortex_vmware_project_instances",
+                "cortex_kvm_project_instances"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "display": {
+            "name": "Flavor",
+            "hidden": false
+          },
+          "defaultValue": "$__all",
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "customAllValue": ".*",
+          "sort": "none",
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "flavor_name",
+              "matchers": [
+                "cortex_vmware_project_instances",
+                "cortex_kvm_project_instances"
+              ]
+            }
+          },
+          "name": "flavor_name"
+        }
+      }
+    ],
+    "duration": "1h",
+    "refreshInterval": "0s"
+  }
+}

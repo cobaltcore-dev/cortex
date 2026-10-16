@@ -33,6 +33,18 @@ host_physical_memory AS (
     WHERE i.inventory_class_name = 'MEMORY_MB'
         AND i.max_unit > 0
         AND (i.total - i.reserved) > 0
+),
+-- VCenter of the building block, derived from the OpenStack aggregate whose
+-- name starts with 'vc-'. Aggregates are a flattened (name, compute_host)
+-- membership table. In practice each host belongs to exactly one 'vc-'
+-- aggregate; MIN keeps the result deterministic (lowest name) should a host
+-- ever be a member of more than one.
+host_vcenter AS (
+    SELECT
+        a.compute_host,
+        MIN(CASE WHEN a.name LIKE 'vc-%' THEN a.name END) AS vcenter
+    FROM openstack_aggregates_v2 a
+    GROUP BY a.compute_host
 )
 SELECT
     ht.service_host AS compute_host,
@@ -76,7 +88,10 @@ SELECT
         WHEN ROUND(hpm.physical_size_mb / 1024.0) >= 1024
         THEN CAST(CAST(ROUND(ROUND(hpm.physical_size_mb / 1024.0) / 1024.0) AS INTEGER) AS TEXT) || 'TiB'
         ELSE CAST(CAST(ROUND(hpm.physical_size_mb / 1024.0) AS INTEGER) AS TEXT) || 'GiB'
-    END AS physical_host_size
+    END AS physical_host_size,
+    COALESCE(hvc.vcenter, 'unknown') AS vcenter
 FROM host_traits ht
 LEFT JOIN host_physical_memory hpm
-    ON ht.hypervisor_id = hpm.resource_provider_uuid;
+    ON ht.hypervisor_id = hpm.resource_provider_uuid
+LEFT JOIN host_vcenter hvc
+    ON ht.service_host = hvc.compute_host;

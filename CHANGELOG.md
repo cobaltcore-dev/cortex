@@ -1,5 +1,39 @@
 # Changelog
 
+## Release 2026-10-15 — PR [#1367](https://github.com/cobaltcore-dev/cortex/pull/1367)
+
+### Bumped Versions
+
+| Package | Version |
+|---|---|
+| cortex | 0.6.7 → 0.6.8 |
+| cortex-postgres | 0.6.26 → 0.6.27 |
+| cortex-shim | 0.1.31 → 0.1.32 |
+| bundles | 0.0.105 → 0.0.106 |
+| cortex-placement-shim | 0.1.31 → 0.1.32 |
+
+### Security Fixes
+
+- **github.com/google/cel-go** upgraded from v0.29.2 to v0.30.0 — fixes [GHSA-gcjh-h69q-9w9g](https://github.com/advisories/GHSA-gcjh-h69q-9w9g) (JSON private fields exposed via NativeTypes / ParseStructTag).
+- **github.com/moby/sys/user** upgraded from v0.4.0 to v0.4.1 — fixes [CVE-2026-61801](https://nvd.nist.gov/vuln/detail/CVE-2026-61801), a medium-severity (CVSS 5.5) DoS via unbounded parsing of user/group database files.
+
+### Features
+
+- **CR VM live-migration slot weigher** ([#981](https://github.com/cobaltcore-dev/cortex/pull/981)) — New `kvm_cr_migration_slot` weigher that steers Capacity Reservation VM live migrations toward hosts that can accommodate the reservation slot (either an existing compatible slot or enough free capacity for the reconciler to move it). Includes a new `cortex_nova_weigh_cr_migration_slot_requests_total` metric and is wired into all 4 KVM pipelines. *(Julius Clausnitzer & Marcel)*
+- **VM resource handler in nova pipeline** ([#1362](https://github.com/cobaltcore-dev/cortex/pull/1362)) — Adds a `VirtualMachineHandler` to the nova pipeline controller that creates or merge-updates a virtual machine resource after each scheduling request. *(Philipp Matthes)*
+- **VCenter field on VMwareHostDetails** ([#1356](https://github.com/cobaltcore-dev/cortex/pull/1356)) — Adds a `VCenter` field to `VMwareHostDetails` and updates VMware infrastructure metrics accordingly. *(Markus Wieland)*
+
+### Chores & Fixes
+
+- **Migrate from Plutono to Perses** ([#1363](https://github.com/cobaltcore-dev/cortex/pull/1363)) — Replaces the Plutono dashboarding stack with Perses, removing all Plutono assets and adding new Perses JSON dashboards. *(Markus Wieland)*
+- **Remove large runner from workflows** ([#1360](https://github.com/cobaltcore-dev/cortex/pull/1360)) — Fixes CI workflows by removing references to a large runner. *(Markus Wieland)*
+- **Avoid review comments on outdated language features** ([#1361](https://github.com/cobaltcore-dev/cortex/pull/1361)) — Updates the AI review agent prompt to stop flagging valid modern Go syntax (e.g. `new()`) as uncompilable. *(Philipp Matthes)*
+
+### Dependency Updates
+
+- **github.com/sapcc/go-bits** — digest update c011033 → 416f3ad ([#1358](https://github.com/cobaltcore-dev/cortex/pull/1358))
+- **kube-prometheus-stack** — 92.3.0 → 92.7.0 ([#1359](https://github.com/cobaltcore-dev/cortex/pull/1359), [#1364](https://github.com/cobaltcore-dev/cortex/pull/1364), [#1365](https://github.com/cobaltcore-dev/cortex/pull/1365))
+
 ## Release PR [#1350](https://github.com/cobaltcore-dev/cortex/pull/1350)
 
 ### Bumped Versions

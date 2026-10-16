@@ -56,6 +56,7 @@ func (h vmwareHost) getHostLabels() []string {
 		strconv.FormatBool(pinnedProjects),
 		pinnedProjectIds,
 		physicalHostSize,
+		h.VCenter,
 	}
 }
 
@@ -71,6 +72,7 @@ var vmwareHostLabels = []string{
 	"pinned_projects",
 	"pinned_project_ids",
 	"physical_host_size",
+	"vcenter",
 }
 
 var kvmHostLabels = []string{
