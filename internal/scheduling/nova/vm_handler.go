@@ -186,9 +186,14 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, decision *v1alpha1.D
 		Name:      vm.Name,
 	}, vmInCluster)
 	if err != nil && apierrors.IsNotFound(err) {
+		// Create ignores the status subresource and writes the server response
+		// (with an empty status) back into vm, so snapshot the conditions and
+		// restore them before persisting the status.
+		conditions := vm.Status.Conditions
 		if err := h.Create(ctx, vm); err != nil {
 			return fmt.Errorf("failed to create VM: %w", err)
 		}
+		vm.Status.Conditions = conditions
 		if err := h.Status().Update(ctx, vm); err != nil {
 			return fmt.Errorf("failed to update VM status: %w", err)
 		}
