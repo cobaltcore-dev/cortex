@@ -225,6 +225,8 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, decision *v1alpha1.D
 		vmInCluster.Spec.Cortex = &vmv1alpha1.CortexSpec{}
 	}
 	vmInCluster.Spec.Cortex.HostCandidates = vm.Spec.Cortex.HostCandidates
+	vmInCluster.Spec.Cortex.Explanation = vm.Spec.Cortex.Explanation
+	vmInCluster.Spec.Cortex.Intent = vm.Spec.Cortex.Intent
 	if err := h.Update(ctx, vmInCluster); err != nil {
 		return fmt.Errorf("failed to update VM: %w", err)
 	}
