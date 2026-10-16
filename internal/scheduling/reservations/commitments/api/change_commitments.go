@@ -377,7 +377,15 @@ ProcessLoop:
 					break ProcessLoop
 				}
 
-				toWatch = append(toWatch, crWatch{name: crName, generation: crGeneration})
+				// Superseded/expired transitions reconcile to Ready=False with reason
+				// "superseded"/"expired", which is not a terminal outcome the poller
+				// recognizes — polling them runs out the full WatchTimeout and rolls back
+				// the confirmations batched alongside them. Limes needs no Ready outcome for
+				// an inactive transition, so snapshot it for rollback but do not poll it.
+				if stateDesired.State != v1alpha1.CommitmentStatusSuperseded &&
+					stateDesired.State != v1alpha1.CommitmentStatusExpired {
+					toWatch = append(toWatch, crWatch{name: crName, generation: crGeneration})
+				}
 				snapshots = append(snapshots, snap)
 				logger.V(1).Info("upserted CommittedResource CRD", "name", crName)
 			}
