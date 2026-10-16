@@ -170,7 +170,23 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 		return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
 	}
 	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
-	return ctrl.Result{}, r.setAccepted(ctx, cr)
+	initialGen := cr.Generation
+	if err := r.setAccepted(ctx, cr); err != nil {
+		return ctrl.Result{}, err
+	}
+	var latest v1alpha1.CommittedResource
+	if err := r.Get(ctx, client.ObjectKeyFromObject(cr), &latest); err != nil {
+		logger.V(1).Info("re-Get after accept failed, requeueing", "err", err)
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+	}
+	if latest.Generation > initialGen {
+		logger.Info("generation advanced during reconcile, requeueing",
+			"processedGen", initialGen,
+			"latestGen", latest.Generation,
+		)
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+	}
+	return ctrl.Result{}, nil
 }
 
 func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, logger logr.Logger, cr *v1alpha1.CommittedResource) (ctrl.Result, error) {
@@ -199,7 +215,23 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 				allReady, anyFailed, _, _, _, _, checkErr := r.checkChildReservationStatus(ctx, cr, result.TotalSlots, false)
 				if checkErr == nil && allReady && !anyFailed {
 					logger.Info("recovered from spurious rejection: all slots ready", "generation", cr.Generation)
-					return ctrl.Result{}, r.setAccepted(ctx, cr)
+					initialGen := cr.Generation
+					if err := r.setAccepted(ctx, cr); err != nil {
+						return ctrl.Result{}, err
+					}
+					var latest v1alpha1.CommittedResource
+					if err := r.Get(ctx, client.ObjectKeyFromObject(cr), &latest); err != nil {
+						logger.V(1).Info("re-Get after accept failed, requeueing", "err", err)
+						return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+					}
+					if latest.Generation > initialGen {
+						logger.Info("generation advanced during reconcile, requeueing",
+							"processedGen", initialGen,
+							"latestGen", latest.Generation,
+						)
+						return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+					}
+					return ctrl.Result{}, nil
 				}
 				if checkErr != nil {
 					logger.V(1).Info("spurious-rejection recovery: slot check failed, will retry", "err", checkErr)
@@ -273,13 +305,21 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
 	}
 	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
+	// setAccepted mutates cr in-place via the Patch response (server returns the latest object,
+	// which may already carry a newer generation from a concurrent spec write).
+	// Capture initialGen before the mutation so the comparison below is correct.
+	initialGen := cr.Generation
 	if err := r.setAccepted(ctx, cr); err != nil {
 		return ctrl.Result{}, err
 	}
 	var latest v1alpha1.CommittedResource
-	if err := r.Get(ctx, client.ObjectKeyFromObject(cr), &latest); err == nil && latest.Generation > cr.Generation {
+	if err := r.Get(ctx, client.ObjectKeyFromObject(cr), &latest); err != nil {
+		logger.V(1).Info("re-Get after accept failed, requeueing", "err", err)
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+	}
+	if latest.Generation > initialGen {
 		logger.Info("generation advanced during reconcile, requeueing",
-			"processedGen", cr.Generation,
+			"processedGen", initialGen,
 			"latestGen", latest.Generation,
 		)
 		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
@@ -382,7 +422,23 @@ func (r *CommittedResourceController) reconcileCoresHeadroom(ctx context.Context
 	}
 
 	logger.Info("cores commitment accepted", "generation", cr.Generation, "cores", requestedCores)
-	return ctrl.Result{}, r.setAccepted(ctx, cr)
+	initialGen := cr.Generation
+	if err := r.setAccepted(ctx, cr); err != nil {
+		return ctrl.Result{}, err
+	}
+	var latest v1alpha1.CommittedResource
+	if err := r.Get(ctx, client.ObjectKeyFromObject(cr), &latest); err != nil {
+		logger.V(1).Info("re-Get after accept failed, requeueing", "err", err)
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+	}
+	if latest.Generation > initialGen {
+		logger.Info("generation advanced during reconcile, requeueing",
+			"processedGen", initialGen,
+			"latestGen", latest.Generation,
+		)
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+	}
+	return ctrl.Result{}, nil
 }
 
 func (r *CommittedResourceController) applyReservationState(ctx context.Context, logger logr.Logger, cr *v1alpha1.CommittedResource) (*ApplyResult, error) {
@@ -683,6 +739,21 @@ func (r *CommittedResourceController) setNotReadyRetry(ctx context.Context, cr *
 // use this on the "apply succeeded, waiting for slots" path so the watch suppression gate
 // does not fire while placement is working.
 func (r *CommittedResourceController) patchNotReady(ctx context.Context, cr *v1alpha1.CommittedResource, reason, message string, resetTimer bool) error {
+	// Skip the write when nothing would change. Without this guard, every reconcile
+	// in a steady Reserving/etc. state issues a patch because computeStatusSummary
+	// receives time.Now() and may produce a different string, triggering the
+	// CommittedResource self-watch and causing a continuous reconcile loop.
+	// resetTimer=true forces a timestamp refresh — skip the guard in that case.
+	if !resetTimer {
+		cond := meta.FindStatusCondition(cr.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+		if cond != nil &&
+			cond.Status == metav1.ConditionFalse &&
+			cond.Reason == reason &&
+			cond.Message == message &&
+			cond.ObservedGeneration == cr.Generation {
+			return nil
+		}
+	}
 	old := cr.DeepCopy()
 	setReadyConditionFalse(&cr.Status.Conditions, reason, message, cr.Generation, resetTimer)
 	cr.Status.StatusSummary = computeStatusSummary(cr.Spec, cr.Status, time.Now())
