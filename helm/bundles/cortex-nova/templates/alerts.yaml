@@ -1029,5 +1029,39 @@ spec:
           controller logs (filter on "periodic reconciliation completed" and
           "processed VM failover reservations") to identify the affected VMs and the reason
           their reservations cannot be created.
+    - alert: CortexNovaQuotaEnforcementRejecting
+      # Informational: fires when filter_quota_enforcement is running in enforce
+      # mode (kvm.quotaEnforcement.enforce=true) and has actually removed all hosts
+      # for VM-creation requests that had no committed-resource or PAYG quota
+      # headroom. mode="shadow" rejects are deliberately excluded so this only
+      # surfaces real, customer-visible enforcement. Severity is info because
+      # rejecting a request without quota headroom is the filter's normal,
+      # intended behavior, not a cortex fault — it is surfaced only for
+      # visibility. See the playbook to inspect decisions by project/AZ/flavor
+      # group or to disable enforcement on the fly.
+      expr: |
+        sum(rate(cortex_nova_filter_quota_enforcement_decisions_total{
+          service="cortex-nova-metrics",
+          mode="enforce",
+          decision="reject"
+        }[15m])) > 0
+      for: 15m
+      labels:
+        context: quota-enforcement
+        dashboard: cortex-status-dashboard/cortex-status-dashboard
+        service: cortex
+        severity: info
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/quota-enforcement
+      annotations:
+        summary: "Cortex quota enforcement is rejecting Nova scheduling requests"
+        description: >
+          filter_quota_enforcement is running in enforce mode and has rejected
+          VM-creation requests over the last 15 minutes because the project had no
+          committed-resource or pay-as-you-go quota headroom. This is informational:
+          it confirms enforcement is active and working as intended. If the
+          rejections are unexpected, use the playbook to break the decisions down by
+          project, availability zone, and flavor group, or to disable enforcement on
+          the fly (revert to shadow mode) without a redeployment.
     {{- end }}
 {{- end }}

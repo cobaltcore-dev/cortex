@@ -98,6 +98,14 @@ kvm:
   # Set to false to keep KVM-related alerts at warning severity instead of critical.
   # Useful when rolling out a new KVM region before it is production-ready.
   criticalAlerts: true
+  # Controls filter_quota_enforcement across all KVM pipelines. When false
+  # (the default) the filter runs in shadow mode: it performs the full headroom
+  # analysis, logs would-be rejects, and emits
+  # cortex_nova_filter_quota_enforcement_decisions_total{mode="shadow",...} but
+  # never actually removes hosts. Set to true to globally reject VM-creation
+  # requests that have no committed-resource or pay-as-you-go quota headroom.
+  quotaEnforcement:
+    enforce: false
   # Options for the filter_external_customer pipeline step, which restricts hosts
   # for external customer domains. Applied to every KVM pipeline that uses the step.
   filterExternalCustomer:
