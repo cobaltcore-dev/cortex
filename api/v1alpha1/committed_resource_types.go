@@ -142,6 +142,14 @@ type CommittedResourceStatus struct {
 	// +kubebuilder:validation:Minimum=0
 	UsageObservedGeneration *int64 `json:"usageObservedGeneration,omitempty"`
 
+	// LastRepairAt is when the repair reconciler last ran for this CommittedResource.
+	// +kubebuilder:validation:Optional
+	LastRepairAt *metav1.Time `json:"lastRepairAt,omitempty"`
+
+	// LastRepairSlotsFixed is how many reservation slots were modified in the last repair run.
+	// +kubebuilder:validation:Optional
+	LastRepairSlotsFixed int32 `json:"lastRepairSlotsFixed,omitempty"`
+
 	// Conditions holds the current status conditions.
 	// +kubebuilder:validation:Optional
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`

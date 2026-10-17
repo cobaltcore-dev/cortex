@@ -337,6 +337,16 @@ spec:
                   loop for this resource.
                 format: date-time
                 type: string
+              lastRepairAt:
+                description: LastRepairAt is when the repair reconciler last ran for
+                  this CommittedResource.
+                format: date-time
+                type: string
+              lastRepairSlotsFixed:
+                description: LastRepairSlotsFixed is how many reservation slots were
+                  modified in the last repair run.
+                format: int32
+                type: integer
               lastUsageReconcileAt:
                 description: LastUsageReconcileAt is when the usage reconciler last
                   updated AssignedInstances and UsedResources.
