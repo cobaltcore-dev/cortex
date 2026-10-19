@@ -350,6 +350,13 @@ cortex-scheduling-controllers:
     # Minimum age a CommittedResource CRD must reach before the syncer treats it as stale
     # and deletes it. Prevents timing races of recently-created CRDs not yet visible in the global fetch.
     staleCRDeletionGracePeriod: "10m"
+    # Age at which a committed-resource Reservation CRD is pruned so the reconciler re-creates a
+    # fresh slot. Reservations drift from their VM mapping over time and can end up on hosts whose
+    # labels no longer match. A zero value disables pruning.
+    staleReservationMaxAge: "168h"
+    # Maximum number of aged committed-resource Reservation CRDs pruned per syncer run, oldest first.
+    # A zero value disables pruning.
+    maxReservationDeletesPerRun: 20
 
 cortex-knowledge-controllers:
   <<: *cortex

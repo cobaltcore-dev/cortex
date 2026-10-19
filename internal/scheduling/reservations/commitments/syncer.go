@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -47,6 +48,14 @@ type SyncerConfig struct {
 	// syncer deletes it as stale. Protects against race conditions where a CRD was just created
 	// but the Limes response hasn't caught up yet. Defaults to 10 minutes if zero.
 	StaleCRDeletionGracePeriod metav1.Duration `json:"staleCRDeletionGracePeriod,omitempty"`
+	// StaleReservationMaxAge is the age at which a committed-resource Reservation CRD is pruned so
+	// the reconciler re-creates a fresh slot. Reservations drift from their VM mapping over time
+	// and can end up on hosts whose labels no longer match; pruning the oldest resets them.
+	// A zero value disables age-based pruning.
+	StaleReservationMaxAge metav1.Duration `json:"staleReservationMaxAge,omitempty"`
+	// MaxReservationDeletesPerRun caps how many aged committed-resource Reservation CRDs the syncer
+	// prunes in a single run, oldest first. A zero value disables age-based pruning.
+	MaxReservationDeletesPerRun int `json:"maxReservationDeletesPerRun,omitempty"`
 	// FlavorGroupResourceConfig maps flavor group names to resource configs; "*" acts as catch-all.
 	// Not read from JSON — populated by the caller from the shared APIConfig.
 	FlavorGroupResourceConfig map[string]FlavorGroupResourcesConfig
@@ -277,6 +286,18 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		s.monitor.SetLimesCommitmentsActive(len(commitmentResult.states))
 	}
 
+	// Prune aged committed-resource Reservation CRDs before updating CommittedResources so the
+	// reconciler re-creates fresh slots. Reservations drift from their VM mapping over time and
+	// can end up on hosts whose labels no longer match.
+	agedReservationsPruned, err := s.pruneAgedReservations(ctx, logger)
+	if err != nil {
+		logger.Error(err, "failed to prune aged committed resource reservations")
+		if s.monitor != nil {
+			s.monitor.RecordError()
+		}
+		return err
+	}
+
 	// Upsert CommittedResource CRDs for each commitment
 	var totalCreated, totalUpdated int
 	for _, state := range commitmentResult.states {
@@ -440,6 +461,9 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		if totalReservationDeleted > 0 {
 			s.monitor.RecordOrphanReservationDeletes(totalReservationDeleted)
 		}
+		if agedReservationsPruned > 0 {
+			s.monitor.RecordCRReservationPrunes(agedReservationsPruned)
+		}
 	}
 
 	if staleCRCount > 0 {
@@ -455,8 +479,57 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		"staleCRs", staleCRCount,
 		"staleDeleted", staleDeleted,
 		"expiredCRsGCd", gcDeleted,
-		"orphanReservationsDeleted", totalReservationDeleted)
+		"orphanReservationsDeleted", totalReservationDeleted,
+		"agedReservationsPruned", agedReservationsPruned)
 	return nil
+}
+
+// pruneAgedReservations deletes committed-resource Reservation CRDs older than the configured
+// max age, oldest first, up to the per-run cap. Reservations drift from their VM mapping over
+// time and can settle on hosts whose labels no longer match; pruning them lets the reconciler
+// re-create fresh slots. A zero max age or per-run cap disables pruning. Returns the number of
+// Reservation CRDs deleted.
+func (s *Syncer) pruneAgedReservations(ctx context.Context, logger logr.Logger) (int, error) {
+	maxAge := s.resourceConfig.StaleReservationMaxAge.Duration
+	maxDeletes := s.resourceConfig.MaxReservationDeletesPerRun
+	if maxAge <= 0 || maxDeletes <= 0 {
+		return 0, nil
+	}
+
+	var reservations v1alpha1.ReservationList
+	if err := s.List(ctx, &reservations, client.MatchingLabels{
+		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+	}); err != nil {
+		return 0, err
+	}
+
+	// Collect reservations past the max age, then sort oldest-first so we prune the most-drifted
+	// slots first and stay within the per-run cap deterministically.
+	aged := make([]*v1alpha1.Reservation, 0, len(reservations.Items))
+	for i := range reservations.Items {
+		res := &reservations.Items[i]
+		if time.Since(res.CreationTimestamp.Time) > maxAge {
+			aged = append(aged, res)
+		}
+	}
+	sort.Slice(aged, func(i, j int) bool {
+		return aged[i].CreationTimestamp.Before(&aged[j].CreationTimestamp)
+	})
+
+	deleted := 0
+	for _, res := range aged {
+		if deleted >= maxDeletes {
+			break
+		}
+		if err := s.Delete(ctx, res); client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "failed to prune aged committed resource reservation", "name", res.Name)
+			return deleted, err
+		}
+		logger.Info("pruned aged committed resource reservation",
+			"name", res.Name, "age", time.Since(res.CreationTimestamp.Time).Round(time.Second))
+		deleted++
+	}
+	return deleted, nil
 }
 
 func (s *Syncer) applyCommittedResourceSpec(cr *v1alpha1.CommittedResource, state *CommitmentState) {
