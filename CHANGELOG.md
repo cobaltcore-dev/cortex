@@ -55,10 +55,11 @@
 
 - **Alert resolution:** This release fixes the `CortexNovaCommittedResourceTimeoutsTooHigh` alert by no longer polling superseded/expired CR transitions.
 - **Stale reservation pruning:** CR-backed Reservations are now automatically pruned past a configurable max age — verify the default threshold is appropriate for your deployment.
+- **Migration required:** Any tooling using `kubectl get histories` or the history client library must migrate to `spec.cortex.explanation` on the `VirtualMachine` CRD.
 
 **Contributors:** @PhilippMatthes, @mblos, @SoWieMarkus, @cortex-ai-agents[bot], @renovate[bot], @github-actions[bot]
 
-**PR:** [#1385](https://github.com/cobaltcore-dev/cortex/pull/1385) | **Commits:** 19 | **Files changed:** 79 | **Test coverage:** 71.4%
+**PR:** [#1385](https://github.com/cobaltcore-dev/cortex/pull/1385) | **Commits:** 20 | **Files changed:** 91 | **Test coverage:** 71.4%
 
 ## Release 2026-10-15 — PR [#1367](https://github.com/cobaltcore-dev/cortex/pull/1367)
 
