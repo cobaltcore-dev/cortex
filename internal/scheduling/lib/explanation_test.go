@@ -24,7 +24,7 @@ func TestGenerateExplanation(t *testing.T) {
 			name:     "nil result no error",
 			result:   nil,
 			err:      nil,
-			expected: "",
+			expected: "No decision result recorded.",
 		},
 		{
 			name:     "nil result with error",
@@ -97,7 +97,7 @@ func TestGenerateExplanation(t *testing.T) {
 					{StepName: "some-step", Activations: map[string]float64{}},
 				},
 			},
-			expected: "",
+			expected: "No host weight data recorded.",
 		},
 		{
 			name: "no weights with target",

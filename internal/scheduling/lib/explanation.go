@@ -35,11 +35,14 @@ func GenerateExplanation(result *v1alpha1.DecisionResult, pipelineErr error) str
 		return fmt.Sprintf("Pipeline run failed: %s.", pipelineErr.Error())
 	}
 
-	if result == nil || len(result.StepResults) == 0 {
-		if result != nil && result.TargetHost != nil {
+	if result == nil {
+		return "No decision result recorded."
+	}
+	if len(result.StepResults) == 0 {
+		if result.TargetHost != nil {
 			return fmt.Sprintf("Selected host: %s.", *result.TargetHost)
 		}
-		return ""
+		return "No pipeline steps recorded."
 	}
 
 	// Get all initial hosts from input weights.
@@ -53,7 +56,7 @@ func GenerateExplanation(result *v1alpha1.DecisionResult, pipelineErr error) str
 		if result.TargetHost != nil {
 			return fmt.Sprintf("Selected host: %s.", *result.TargetHost)
 		}
-		return ""
+		return "No host weight data recorded."
 	}
 
 	var sb strings.Builder
