@@ -1,5 +1,65 @@
 # Changelog
 
+## cortex v0.7.0 (2026-10-19)
+
+### ⚠️ Breaking Changes
+
+- **History CRD removed:** The `cortex.cloud_histories` CRD and all associated controllers/tasks have been deleted. Any tooling relying on `kubectl get histories` or the history client library must migrate to `spec.cortex.explanation` on the `VirtualMachine` CRD.
+- **CRD schema changes:** `Decision` and `VirtualMachine` CRDs updated with new `explanation` and `intent` fields.
+
+### Features
+
+- **Improve virtual machine creation logging** — Replaced the opaque boolean `createVM` gate with a `switch` that logs a specific skip reason (including `instanceUUID`) for each unmet precondition, plus logs successful VM create/update events for end-to-end traceability.
+- **Populate cortex intent and explanation on VM spec** ([#1373](https://github.com/cobaltcore-dev/cortex/pull/1373)) — Bumped `vm-operator` to v0.2.8 and writes the new `Explanation` and `Intent` fields into the `VirtualMachine` CRD spec during scheduling, replacing the now-removed `History` CRD as the explanation surface.
+- **Prune aged committed-resource reservations** ([#1382](https://github.com/cobaltcore-dev/cortex/pull/1382)) — The syncer now detects and deletes stale CR-backed Reservations that exceed a configurable max age (capped per run), so the reconciler can rebuild fresh slots rather than accumulating stale ones.
+
+### Bug Fixes
+
+- **Fix broken feature gate configuration in nova bundle** — Feature gate keys (`committedResourceTracking`, `virtualMachineCreation`, `virtualMachineCreationMandatory`) were incorrectly nested under a `featureGates:` block; moved to the correct nesting level.
+- **CRs confirm superseded/expired CRs correctly within CR transactions** ([#1372](https://github.com/cobaltcore-dev/cortex/pull/1372)) — Superseded/expired CR transitions are no longer added to the poll-watch list, eliminating `CortexNovaCommittedResourceTimeoutsTooHigh` alerts. Also adds a generation-advance hang guard and wraps reservation deletes in `IgnoreNotFound`.
+- **Fix scheduling intent set to Unknown always** ([#1374](https://github.com/cobaltcore-dev/cortex/pull/1374)) — Fixed a bug that caused VM resources to never be generated because intent was always `Unknown`.
+- **Default scheduling intent to Create for Nova API** ([#1376](https://github.com/cobaltcore-dev/cortex/pull/1376)) — When intent cannot be determined, it now defaults to `CreateIntent` instead of `Unknown`; removes redundant intent derivation that overrode the fallback.
+- **Fix VM status condition being wiped on create path** — Snapshots conditions before `Create` and restores them before the status sub-resource update so the `Scheduled` condition is preserved.
+- **Use decision intent in VM handler instead of re-deriving from request** ([#1379](https://github.com/cobaltcore-dev/cortex/pull/1379)) — Reads intent from `decision.Spec.Intent` (which already incorporates the API's fallback logic) rather than re-calling `GetIntent()` on the request, fixing initial VM create failures.
+- **Change execution order** ([#1384](https://github.com/cobaltcore-dev/cortex/pull/1384)) — Corrected execution ordering in the reservations path.
+
+### Chores & Refactoring
+
+- **Remove History CRD** ([#1375](https://github.com/cobaltcore-dev/cortex/pull/1375)) — Deleted the `History` custom resource definition, the history client, and all history cleanup tasks across Nova, Cinder, and Manila schedulers. Explanation data is now embedded directly on the `VirtualMachine` CRD.
+- **Add edge cases to explanation** ([#1383](https://github.com/cobaltcore-dev/cortex/pull/1383)) — Hardened the plain-text explanation generator with additional edge-case handling.
+
+### Documentation
+
+- **Correct Decision CRD section** ([#1381](https://github.com/cobaltcore-dev/cortex/pull/1381)) — Clarified that `Decision` is a transient in-memory CRD (not persisted to etcd); replaced the misleading `kubectl get decisions` example with `kubectl get virtualmachines` showing `spec.cortex.*` fields.
+
+### Dependency Updates
+
+| Dependency | Old | New |
+|---|---|---|
+| `vm-operator` | v0.1.2-pre | v0.2.9 |
+| `kube-prometheus-stack` | 92.7.0 | 92.10.1 |
+| `controller-tools` | v0.22.0 | v0.23.0 |
+| `golangci-lint` | v2.14.0 | v2.15.0 |
+
+### Package Versions
+
+| Package | Version |
+|---|---|
+| cortex | 0.7.0 |
+| cortex-postgres | 0.6.28 |
+| cortex-shim | 0.1.33 |
+| bundles | 0.0.107 |
+| cortex-placement-shim | 0.1.33 |
+
+### Operational Notes
+
+- **Alert resolution:** This release fixes the `CortexNovaCommittedResourceTimeoutsTooHigh` alert by no longer polling superseded/expired CR transitions.
+- **Stale reservation pruning:** CR-backed Reservations are now automatically pruned past a configurable max age — verify the default threshold is appropriate for your deployment.
+
+**Contributors:** @PhilippMatthes, @mblos, @SoWieMarkus, @cortex-ai-agents[bot], @renovate[bot], @github-actions[bot]
+
+**PR:** [#1385](https://github.com/cobaltcore-dev/cortex/pull/1385) | **Commits:** 19 | **Files changed:** 79 | **Test coverage:** 71.4%
+
 ## Release 2026-10-15 — PR [#1367](https://github.com/cobaltcore-dev/cortex/pull/1367)
 
 ### Bumped Versions
