@@ -35,6 +35,19 @@ type Scheduler struct {
 	client.Client
 	// Queue holds Acknowledged requests waiting to be scheduled.
 	Queue SchedulingQueue
+	// Placement computes initial placement for a request. Defaults to a stub.
+	Placement PlacementBackend
+	// placements is the internal channel over which scheduleOne requests initial
+	// placement from the placement broker (see Run/place). Keeping placement
+	// behind a channel decouples the scheduler from how placement is computed
+	// (today HTTP, later in-process).
+	placements chan placementCall
+}
+
+// placementCall is a single placement request with a channel for its reply.
+type placementCall struct {
+	req   PlacementRequest
+	reply chan PlacementResult
 }
 
 // updateStatus applies mutate to rr and patches the status subresource. The
@@ -167,6 +180,13 @@ func (s *Scheduler) handleFailed(ctx context.Context, rr *v1alpha1.ReschedulingR
 func (s *Scheduler) Run(ctx context.Context) {
 	log := logf.FromContext(ctx).WithName("rescheduler-scheduler")
 	log.Info("starting scheduler loop")
+	if s.placements == nil {
+		s.placements = make(chan placementCall)
+	}
+	if s.Placement == nil {
+		s.Placement = StubPlacementBackend{}
+	}
+	go s.runPlacement(ctx)
 	s.Queue.Run(ctx)
 	go wait.UntilWithContext(ctx, s.scheduleOne, 0)
 	<-ctx.Done()
@@ -174,8 +194,39 @@ func (s *Scheduler) Run(ctx context.Context) {
 	log.Info("scheduler loop stopped")
 }
 
-// scheduleOne pops a single request from the queue and runs the (stubbed)
-// scheduling pass, moving it Acknowledged -> Processing -> Accepted.
+// runPlacement is the placement broker: it serves placement requests sent on the
+// placements channel using the configured backend. It runs until ctx is done.
+func (s *Scheduler) runPlacement(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case call := <-s.placements:
+			call.reply <- s.Placement.Schedule(ctx, call.req)
+		}
+	}
+}
+
+// place requests initial placement over the channel and waits for the reply.
+func (s *Scheduler) place(ctx context.Context, req PlacementRequest) PlacementResult {
+	reply := make(chan PlacementResult, 1)
+	select {
+	case s.placements <- placementCall{req: req, reply: reply}:
+	case <-ctx.Done():
+		return PlacementResult{Err: ctx.Err()}
+	}
+	select {
+	case res := <-reply:
+		return res
+	case <-ctx.Done():
+		return PlacementResult{Err: ctx.Err()}
+	}
+}
+
+// scheduleOne pops a single request from the queue and runs the scheduling pass:
+// it claims the request (Acknowledged -> Processing), asks initial placement for
+// candidate hosts over the placement channel, and moves the request to Accepted
+// (hosts found), Rejected (none) or Failed (placement error).
 func (s *Scheduler) scheduleOne(ctx context.Context) {
 	log := logf.FromContext(ctx)
 	key, ok := s.Queue.Pop()
@@ -191,20 +242,51 @@ func (s *Scheduler) scheduleOne(ctx context.Context) {
 	if currentState(rr) != v1alpha1.ReschedulingRequestStateAcknowledged {
 		return
 	}
-	log.Info("scheduling rescheduling request (stub)", "request", rr.Name)
-	// Claim, then place. Real placement is stubbed for the walking skeleton.
+	log.Info("scheduling rescheduling request", "request", rr.Name)
 	if err := s.updateStatus(ctx, rr, func() {
 		rr.Status.State = v1alpha1.ReschedulingRequestStateProcessing
 	}); err != nil {
 		log.Error(err, "failed to mark request processing", "request", rr.Name)
 		return
 	}
-	if err := s.updateStatus(ctx, rr, func() {
-		rr.Status.State = v1alpha1.ReschedulingRequestStateAccepted
-	}); err != nil {
-		log.Error(err, "failed to accept request", "request", rr.Name)
-		return
+
+	result := s.place(ctx, placementRequestFor(rr))
+	switch {
+	case result.Err != nil:
+		log.Error(result.Err, "placement failed", "request", rr.Name)
+		if err := s.updateStatus(ctx, rr, func() {
+			rr.Status.State = v1alpha1.ReschedulingRequestStateFailed
+		}); err != nil {
+			log.Error(err, "failed to mark request failed", "request", rr.Name)
+		}
+	case len(result.Hosts) == 0:
+		log.Info("placement found no host, rejecting request", "request", rr.Name)
+		if err := s.updateStatus(ctx, rr, func() {
+			rr.Status.State = v1alpha1.ReschedulingRequestStateRejected
+		}); err != nil {
+			log.Error(err, "failed to mark request rejected", "request", rr.Name)
+		}
+	default:
+		if err := s.updateStatus(ctx, rr, func() {
+			rr.Status.State = v1alpha1.ReschedulingRequestStateAccepted
+		}); err != nil {
+			log.Error(err, "failed to accept request", "request", rr.Name)
+		}
 	}
+}
+
+// placementRequestFor builds the initial-placement request for a rescheduling
+// request. It is provisional: it carries what the walking skeleton knows (the
+// availability zone and the hosts being drained); the real resource shape is
+// filled in once data gathering lands.
+func placementRequestFor(rr *v1alpha1.ReschedulingRequest) PlacementRequest {
+	req := PlacementRequest{AvailabilityZone: rr.Spec.AvailabilityZone}
+	if rr.Spec.Drain != nil {
+		for _, host := range rr.Spec.Drain.Target.Hosts {
+			req.IgnoreHosts = append(req.IgnoreHosts, host.Host)
+		}
+	}
+	return req
 }
 
 // reconcileOnRestart rebuilds the in-memory state after a restart so that no

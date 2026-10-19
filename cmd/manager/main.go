@@ -548,9 +548,16 @@ func main() {
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "rescheduler-controller") {
 		setupLog.Info("enabling controller", "controller", "rescheduler-controller")
+		reschedulerConfig := conf.GetConfigOrDie[rescheduler.Config]()
+		schedulerURL := reschedulerConfig.SchedulerURL
+		if schedulerURL == "" {
+			schedulerURL = rescheduler.DefaultSchedulerURL
+		}
+		setupLog.Info("rescheduler using HTTP placement backend", "url", schedulerURL)
 		if err := (&rescheduler.Scheduler{
-			Client: multiclusterClient,
-			Queue:  rescheduler.NewFIFOQueue(),
+			Client:    multiclusterClient,
+			Queue:     rescheduler.NewFIFOQueue(),
+			Placement: rescheduler.NewHTTPPlacementBackend(schedulerURL),
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "rescheduler-controller")
 			os.Exit(1)
