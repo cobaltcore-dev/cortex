@@ -272,6 +272,18 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 		return err
 	}
 
+	// Prune aged committed-resource Reservation CRDs before updating CommittedResources so the
+	// reconciler re-creates fresh slots. Reservations drift from their VM mapping over time and
+	// can end up on hosts whose labels no longer match.
+	agedReservationsPruned, err := s.pruneAgedReservations(ctx, logger)
+	if err != nil {
+		logger.Error(err, "failed to prune aged committed resource reservations")
+		if s.monitor != nil {
+			s.monitor.RecordError()
+		}
+		return err
+	}
+
 	// Get all commitments as states
 	commitmentResult, err := s.getCommitmentStates(ctx, logger, flavorGroups)
 	if err != nil {
@@ -284,18 +296,6 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 
 	if s.monitor != nil {
 		s.monitor.SetLimesCommitmentsActive(len(commitmentResult.states))
-	}
-
-	// Prune aged committed-resource Reservation CRDs before updating CommittedResources so the
-	// reconciler re-creates fresh slots. Reservations drift from their VM mapping over time and
-	// can end up on hosts whose labels no longer match.
-	agedReservationsPruned, err := s.pruneAgedReservations(ctx, logger)
-	if err != nil {
-		logger.Error(err, "failed to prune aged committed resource reservations")
-		if s.monitor != nil {
-			s.monitor.RecordError()
-		}
-		return err
 	}
 
 	// Upsert CommittedResource CRDs for each commitment
