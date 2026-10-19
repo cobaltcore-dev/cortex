@@ -57,9 +57,14 @@ func vmTestRequest() api.ExternalSchedulerRequest {
 }
 
 func vmTestDecision(targetHost *string) *v1alpha1.Decision {
-	return &v1alpha1.Decision{Status: v1alpha1.DecisionStatus{
-		Result: &v1alpha1.DecisionResult{TargetHost: targetHost},
-	}}
+	return &v1alpha1.Decision{
+		Spec: v1alpha1.DecisionSpec{
+			Intent: api.CreateIntent,
+		},
+		Status: v1alpha1.DecisionStatus{
+			Result: &v1alpha1.DecisionResult{TargetHost: targetHost},
+		},
+	}
 }
 
 func vmTestHypervisor(region, az string) *hv1.Hypervisor {

@@ -136,11 +136,9 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, decision *v1alpha1.D
 		}
 	}
 
-	// Needed to populate the Cortex intent field and the status condition.
-	intent, err := request.GetIntent()
-	if err != nil {
-		return fmt.Errorf("failed to get intent: %w", err)
-	}
+	// Read intent from the decision, which was already resolved by the API layer
+	// (including a graceful fallback to CreateIntent for initial placements).
+	intent := decision.Spec.Intent
 
 	// Write the cortex spec (our scheduling result).
 	vm.Spec.Cortex = &vmv1alpha1.CortexSpec{}
@@ -181,7 +179,7 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, decision *v1alpha1.D
 
 	// If the vm resource doesn't exist yet, create it.
 	vmInCluster := &vmv1alpha1.VirtualMachine{}
-	err = h.Get(ctx, types.NamespacedName{
+	err := h.Get(ctx, types.NamespacedName{
 		Namespace: vm.Namespace,
 		Name:      vm.Name,
 	}, vmInCluster)
