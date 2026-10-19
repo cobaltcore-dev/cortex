@@ -9,10 +9,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -78,7 +76,7 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 		},
 		Weights:  map[string]float64{"compute-1": 1.0, "compute-2": 0.5},
 		Pipeline: "test-pipeline",
-		Options:  scheduling.Options{SkipHistory: true},
+		Options:  scheduling.Options{},
 	}
 
 	novaRaw, err := json.Marshal(novaRequest)
@@ -401,15 +399,10 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 		pipeline             *v1alpha1.Pipeline
 		pipelineConf         *v1alpha1.Pipeline
 		setupPipelineConfigs bool
-		createHistory        bool
 		expectError          bool
 		expectResult         bool
-		expectHistoryCreated bool
 		expectUpdatedStatus  bool
 		errorContains        string
-		// verifyHistory, if set, is invoked with the persisted History CRD so
-		// tests can assert the decision was written through correctly.
-		verifyHistory func(t *testing.T, history *v1alpha1.History)
 	}{
 		{
 			name: "successful processing with decision creation enabled",
@@ -452,41 +445,9 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				},
 			},
 			setupPipelineConfigs: true,
-			createHistory:        true,
 			expectError:          false,
 			expectResult:         true,
-			expectHistoryCreated: true,
 			expectUpdatedStatus:  true,
-			// Regression guard: the History CRD must reflect the actual
-			// decision (target host selected, ordered hosts, Ready=True).
-			// Previously the result was written to the decision *after* the
-			// history upsert, so history always recorded a failed decision
-			// with no target host.
-			verifyHistory: func(t *testing.T, history *v1alpha1.History) {
-				cur := history.Status.Current
-				if !cur.Successful {
-					t.Errorf("expected history current.successful=true, got false")
-				}
-				if cur.TargetHost == nil {
-					t.Errorf("expected history current.targetHost to be set, got nil")
-				}
-				if len(cur.OrderedHosts) == 0 {
-					t.Errorf("expected history current.orderedHosts to be populated, got empty")
-				}
-				if cur.Explanation == "" {
-					t.Errorf("expected history current.explanation to be set, got empty")
-				}
-				ready := meta.FindStatusCondition(history.Status.Conditions, v1alpha1.HistoryConditionReady)
-				if ready == nil {
-					t.Fatalf("expected Ready condition to be set")
-				}
-				if ready.Status != metav1.ConditionTrue {
-					t.Errorf("expected Ready condition status True, got %s", ready.Status)
-				}
-				if ready.Reason != v1alpha1.HistoryReasonSchedulingSucceeded {
-					t.Errorf("expected Ready reason %q, got %q", v1alpha1.HistoryReasonSchedulingSucceeded, ready.Reason)
-				}
-			},
 		},
 		{
 			name: "successful processing with decision creation disabled",
@@ -529,10 +490,8 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				},
 			},
 			setupPipelineConfigs: true,
-			createHistory:        false,
 			expectError:          false,
 			expectResult:         true,
-			expectHistoryCreated: false,
 			expectUpdatedStatus:  false,
 		},
 		{
@@ -557,7 +516,6 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 			setupPipelineConfigs: false,
 			expectError:          true,
 			expectResult:         false,
-			expectHistoryCreated: false,
 			expectUpdatedStatus:  false,
 			errorContains:        "pipeline not found or not ready",
 		},
@@ -599,10 +557,8 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				},
 			},
 			setupPipelineConfigs: true,
-			createHistory:        true,
 			expectError:          true,
 			expectResult:         false,
-			expectHistoryCreated: false,
 			expectUpdatedStatus:  false,
 			errorContains:        "no novaRaw spec defined",
 		},
@@ -636,10 +592,8 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				},
 			},
 			setupPipelineConfigs: true,
-			createHistory:        true,
 			expectError:          true,
 			expectResult:         false,
-			expectHistoryCreated: false,
 			expectUpdatedStatus:  false,
 			errorContains:        "pipeline not found or not ready",
 		},
@@ -673,10 +627,8 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				},
 			},
 			setupPipelineConfigs: true,
-			createHistory:        true,
 			expectError:          true,
 			expectResult:         false,
-			expectHistoryCreated: false,
 			expectUpdatedStatus:  false,
 			errorContains:        "pipeline not found or not ready",
 		},
@@ -692,7 +644,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 			client := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(objects...).
-				WithStatusSubresource(&v1alpha1.Decision{}, &v1alpha1.History{}).
+				WithStatusSubresource(&v1alpha1.Decision{}).
 				Build()
 
 			controller := &FilterWeigherPipelineController{
@@ -700,7 +652,6 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 					Client:          client,
 					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
-					HistoryManager:  lib.HistoryClient{Client: client},
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
@@ -726,7 +677,7 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 
 			if tt.decision.Spec.NovaRaw != nil {
 				req := novaRequest
-				req.Options = scheduling.Options{SkipHistory: !tt.createHistory}
+				req.Options = scheduling.Options{}
 				raw, marshalErr := json.Marshal(req)
 				if marshalErr != nil {
 					t.Fatalf("Failed to marshal request with options: %v", marshalErr)
@@ -746,35 +697,6 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 			}
 			if tt.errorContains != "" && (err == nil || !strings.Contains(err.Error(), tt.errorContains)) {
 				t.Errorf("Expected error to contain %q, got: %v", tt.errorContains, err)
-			}
-
-			// Check if history CRD was created when expected
-			if tt.expectHistoryCreated {
-				var histories v1alpha1.HistoryList
-				deadline := time.Now().Add(2 * time.Second)
-				for {
-					if err := client.List(context.Background(), &histories); err != nil {
-						t.Fatalf("Failed to list histories: %v", err)
-					}
-					if len(histories.Items) > 0 {
-						break
-					}
-					if time.Now().After(deadline) {
-						t.Fatal("timed out waiting for history CRD to be created")
-					}
-					time.Sleep(5 * time.Millisecond)
-				}
-				if tt.verifyHistory != nil {
-					tt.verifyHistory(t, &histories.Items[0])
-				}
-			} else {
-				var histories v1alpha1.HistoryList
-				if err := client.List(context.Background(), &histories); err != nil {
-					t.Fatalf("Failed to list histories: %v", err)
-				}
-				if len(histories.Items) != 0 {
-					t.Error("Expected no history CRD but found one")
-				}
 			}
 
 			// Validate result expectations
@@ -819,7 +741,7 @@ func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
 		},
 		Weights:  map[string]float64{"original-host-1": 1.0, "original-host-2": 0.5},
 		Pipeline: "test-pipeline",
-		Options:  scheduling.Options{SkipHistory: true},
+		Options:  scheduling.Options{},
 	}
 
 	novaRaw, err := json.Marshal(novaRequest)

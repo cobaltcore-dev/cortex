@@ -137,23 +137,27 @@ knowledge feature) exceeds a threshold over an observed window. The flow:
    issue real live-migrations via the Nova client).
 4. A **cleanup** controller TTL-expires old `Descheduling` resources (and runs once on startup).
 
-## Inspecting decisions, descheduling, and history
+## Inspecting scheduling results
 
-Three cluster-scoped CRDs record what the pipelines did — inspect them with `kubectl` (no namespace,
-Cortex kinds are cluster-scoped). Each request that hits the external scheduler produces a **`Decision`**:
+Each scheduling request produces a **`Decision`** internally, but the Decision is a transient
+in-memory object — it is **not** persisted to etcd. (The `Decision` CRD exists in
+`api/v1alpha1/`; its long-term shape is under discussion, but currently `kubectl get decisions`
+returns no results.) Instead, the scheduling outcome is written onto the **`VirtualMachine`**
+resource (the vm-operator CRD, cluster-scoped) so operators can inspect it directly:
 
 ```bash
-kubectl get decisions
+kubectl get virtualmachines -o custom-columns=\
+NAME:.metadata.name,\
+EXPLANATION:.spec.cortex.explanation,\
+INTENT:.spec.cortex.intent,\
+HOST:.spec.cortex.hostCandidates[0].name
 ```
 
-```
-DOMAIN   RESOURCE ID   #   CREATED   PIPELINE                             TARGETHOST   READY
-nova     a1b2c3…       1   2m        kvm-general-purpose-load-balancing   node-042     True
-```
-
-`TargetHost` (`.status.result.targetHost`) is what Cortex recommended and `Pipeline` names the pipeline
-that ran; `-o yaml` shows the full filter/weigher trace. The detector pipeline emits **`Descheduling`**
-resources for VMs it wants to move:
+`.spec.cortex.explanation` carries a human-readable summary of why the chosen host won,
+`.spec.cortex.intent` records the scheduling intent (e.g. initial placement or evacuation), and
+`.spec.cortex.hostCandidates` lists the candidate hosts in ranked order; `-o yaml` on a single
+VM shows the full detail. The detector pipeline emits **`Descheduling`** resources for VMs it
+wants to move:
 
 ```bash
 kubectl get deschedulings
@@ -164,26 +168,14 @@ PREVIOUS HOST   NEW HOST   CREATED   REASON(S)              READY
 node-042        node-017   30s       avoid_high_steal_pct   True
 ```
 
-And **`History`** keeps the rolling record of past scheduling for a resource, so you can see where a VM has
-been placed over time:
-
-```bash
-kubectl get histories
-```
-
-```
-DOMAIN   RESOURCE ID   AZ     TARGET HOST   STATUS      LAST SCHEDULED   CREATED
-nova     a1b2c3…       az-a   node-017      Successful   30s              3d
-```
-
-The columns come from each resource's status; the field-by-field definitions live on the `Decision`,
-`Descheduling`, and `History` Go types in `api/v1alpha1/`.
+The columns come from the resource's status; the field-by-field definitions live on the
+`Descheduling` Go type in `api/v1alpha1/`.
 
 Nova exercises the full arc: an HTTP request drives a filter-weigher pipeline whose weighers read
-knowledge features and respect reservations, the result is a `Decision`, committed slots are recorded, and
-a scheduled detector emits `Descheduling` recommendations recorded as `History`. Every other domain in
-this chapter is a smaller version of this same shape — starting with the storage domains, which are
-HTTP-driven like Nova but ship far fewer steps.
+knowledge features and respect reservations, the result is recorded on the scheduled VM's
+`spec.cortex` fields, committed slots are recorded, and a scheduled detector emits `Descheduling`
+recommendations. Every other domain in this chapter is a smaller version of this same shape —
+starting with the storage domains, which are HTTP-driven like Nova but ship far fewer steps.
 
 ## Next
 

@@ -41,7 +41,7 @@ CPU load, respecting Manila's incoming weights."
 > [Extend Cortex](07-extending-cortex.md) — implement the step, self-register it, and
 > reference it from the `manila-external-scheduler` pipeline.
 
-Manila is a second consumer of the same HTTP external-scheduler pattern and the same `Decision`/`History`
+Manila is a second consumer of the same HTTP external-scheduler pattern and the same `Decision`
 machinery as Nova, proving the "write the engine once, reuse per domain" design from
 [Architecture at a glance](../01-getting-started/02-architecture-at-a-glance.md). Its one weigher reads a
 NetApp-usage feature from the [knowledge database](../04-knowledge-database/readme.md). Cinder, next, is

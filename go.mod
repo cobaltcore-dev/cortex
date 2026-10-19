@@ -4,7 +4,7 @@ go 1.27
 
 require (
 	github.com/cobaltcore-dev/openstack-hypervisor-operator v1.2.3
-	github.com/cobaltcore-dev/vm-operator v0.1.2-0.20261014085525-20c781d5a4eb
+	github.com/cobaltcore-dev/vm-operator v0.2.9
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/go-logr/logr v1.4.4
 	github.com/google/uuid v1.6.0

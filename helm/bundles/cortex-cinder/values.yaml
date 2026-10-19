@@ -18,11 +18,11 @@ alerts:
   enabled: true
   prometheus: openstack
   # Base URL (no trailing slash) for Perses dashboard links emitted as the
-  # `persesDashboard` annotation on each alert. The per-alert dashboard slug is
+  # `persesDashboard` label on each alert. The per-alert dashboard slug is
   # appended to it. The value is templateable with Prometheus label expressions,
   # e.g. a region-specific host:
   #   https://perses.{{ $labels.region }}.example.com/projects/observability/dashboards
-  # Left empty by default so no persesDashboard annotation is emitted.
+  # Left empty by default so no persesDashboard label is emitted.
   persesDashboardBaseURL: ""
   thresholds:
     # Fraction of each pod's configured container memory limit above which
@@ -92,8 +92,6 @@ cortex: &cortex
         gvks:
           - cortex.cloud/v1alpha1/Decision
           - cortex.cloud/v1alpha1/DecisionList
-          - cortex.cloud/v1alpha1/History
-          - cortex.cloud/v1alpha1/HistoryList
           - cortex.cloud/v1alpha1/Descheduling
           - cortex.cloud/v1alpha1/DeschedulingList
           - cortex.cloud/v1alpha1/Pipeline
@@ -134,8 +132,6 @@ cortex-scheduling-controllers:
         component: cinder-scheduling
     enabledControllers:
       - cinder-decisions-pipeline-controller
-    enabledTasks:
-      - cinder-history-cleanup-task
 
 cortex-knowledge-controllers:
   <<: *cortex

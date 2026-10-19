@@ -5,12 +5,14 @@ package commitments
 
 import (
 	"context"
+	"reflect"
 	"sort"
 	"testing"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -1179,7 +1181,8 @@ func TestSyncer_SyncReservations_OrphanReservationGC(t *testing.T) {
 
 			orphanRes := &v1alpha1.Reservation{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "orphan-reservation",
+					Name:              "orphan-reservation",
+					CreationTimestamp: metav1.NewTime(time.Now()),
 					Labels: map[string]string{
 						v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
 					},
@@ -1253,6 +1256,154 @@ func TestSyncer_SyncReservations_OrphanReservationGC(t *testing.T) {
 			}
 			if got := met.GetCounter().GetValue(); got != tc.wantOrphanDeletesMetric {
 				t.Errorf("orphanReservationDeletes counter=%v, want %v", got, tc.wantOrphanDeletesMetric)
+			}
+		})
+	}
+}
+
+func TestSyncer_pruneAgedReservations(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add scheme: %v", err)
+	}
+
+	// makeReservation builds a committed-resource Reservation with the given name and age.
+	makeReservation := func(name string, age time.Duration) *v1alpha1.Reservation {
+		return &v1alpha1.Reservation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              name,
+				CreationTimestamp: metav1.NewTime(time.Now().Add(-age)),
+				Labels: map[string]string{
+					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
+				},
+			},
+			Spec: v1alpha1.ReservationSpec{
+				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+					CommitmentUUID: name,
+				},
+			},
+		}
+	}
+
+	const day = 24 * time.Hour
+
+	tests := []struct {
+		name         string
+		maxAge       time.Duration
+		maxDeletes   int
+		reservations []*v1alpha1.Reservation
+		wantDeleted  int
+		wantRemain   []string
+	}{
+		{
+			name:       "all young: nothing deleted",
+			maxAge:     7 * day,
+			maxDeletes: 20,
+			reservations: []*v1alpha1.Reservation{
+				makeReservation("res-a", 1*day),
+				makeReservation("res-b", 2*day),
+			},
+			wantDeleted: 0,
+			wantRemain:  []string{"res-a", "res-b"},
+		},
+		{
+			name:       "zero max age: pruning disabled",
+			maxAge:     0,
+			maxDeletes: 20,
+			reservations: []*v1alpha1.Reservation{
+				makeReservation("res-old", 10*day),
+				makeReservation("res-oldest", 30*day),
+			},
+			wantDeleted: 0,
+			wantRemain:  []string{"res-old", "res-oldest"},
+		},
+		{
+			name:       "zero per-run cap: pruning disabled",
+			maxAge:     7 * day,
+			maxDeletes: 0,
+			reservations: []*v1alpha1.Reservation{
+				makeReservation("res-old", 10*day),
+				makeReservation("res-oldest", 30*day),
+			},
+			wantDeleted: 0,
+			wantRemain:  []string{"res-old", "res-oldest"},
+		},
+		{
+			name:       "oldest-first deletion past threshold",
+			maxAge:     7 * day,
+			maxDeletes: 20,
+			reservations: []*v1alpha1.Reservation{
+				makeReservation("res-young", 1*day),
+				makeReservation("res-old", 10*day),
+				makeReservation("res-oldest", 30*day),
+			},
+			wantDeleted: 2,
+			wantRemain:  []string{"res-young"},
+		},
+		{
+			name:       "max-count cap respected, oldest deleted first",
+			maxAge:     7 * day,
+			maxDeletes: 1,
+			reservations: []*v1alpha1.Reservation{
+				makeReservation("res-old", 10*day),
+				makeReservation("res-oldest", 30*day),
+			},
+			wantDeleted: 1,
+			wantRemain:  []string{"res-old"}, // oldest (res-oldest) pruned first
+		},
+		{
+			name:       "max-age threshold respected",
+			maxAge:     7 * day,
+			maxDeletes: 20,
+			reservations: []*v1alpha1.Reservation{
+				makeReservation("res-6d", 6*day),
+				makeReservation("res-8d", 8*day),
+			},
+			wantDeleted: 1,
+			wantRemain:  []string{"res-6d"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			objs := make([]client.Object, 0, len(tc.reservations))
+			for _, r := range tc.reservations {
+				objs = append(objs, r)
+			}
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objs...).
+				Build()
+
+			syncer := &Syncer{
+				Client: k8sClient,
+				resourceConfig: SyncerConfig{
+					StaleReservationMaxAge:      metav1.Duration{Duration: tc.maxAge},
+					MaxReservationDeletesPerRun: tc.maxDeletes,
+				},
+			}
+
+			deleted, err := syncer.pruneAgedReservations(context.Background(), logr.Discard())
+			if err != nil {
+				t.Fatalf("pruneAgedReservations() error = %v", err)
+			}
+			if deleted != tc.wantDeleted {
+				t.Errorf("deleted = %d, want %d", deleted, tc.wantDeleted)
+			}
+
+			var remaining v1alpha1.ReservationList
+			if err := k8sClient.List(context.Background(), &remaining); err != nil {
+				t.Fatalf("Failed to list reservations: %v", err)
+			}
+			gotNames := make([]string, 0, len(remaining.Items))
+			for i := range remaining.Items {
+				gotNames = append(gotNames, remaining.Items[i].Name)
+			}
+			sort.Strings(gotNames)
+			want := append([]string(nil), tc.wantRemain...)
+			sort.Strings(want)
+			if !reflect.DeepEqual(gotNames, want) {
+				t.Errorf("remaining = %v, want %v", gotNames, want)
 			}
 		})
 	}

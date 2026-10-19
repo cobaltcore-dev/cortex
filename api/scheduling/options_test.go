@@ -12,10 +12,9 @@ func TestOptions_Validate(t *testing.T) {
 		wantErr bool
 	}{
 		{"zero value is valid", Options{}, false},
-		{"read-only run, skipping all writes", Options{ReadOnly: true, SkipHistory: true, SkipInflight: true, SkipCommittedResourceTracking: true}, false},
-		{"ReadOnly without SkipHistory is invalid", Options{ReadOnly: true}, true},
-		{"ReadOnly without SkipInflight is invalid", Options{ReadOnly: true, SkipHistory: true}, true},
-		{"ReadOnly without SkipCommittedResourceTracking is invalid", Options{ReadOnly: true, SkipHistory: true, SkipInflight: true}, true},
+		{"read-only run, skipping all writes", Options{ReadOnly: true, SkipInflight: true, SkipCommittedResourceTracking: true}, false},
+		{"ReadOnly without SkipInflight is invalid", Options{ReadOnly: true}, true},
+		{"ReadOnly without SkipCommittedResourceTracking is invalid", Options{ReadOnly: true, SkipInflight: true}, true},
 	}
 
 	for _, tt := range tests {

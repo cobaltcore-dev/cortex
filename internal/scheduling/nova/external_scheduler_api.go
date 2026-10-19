@@ -255,6 +255,13 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		logger.Info("inferred pipeline name", "pipeline", requestData.Pipeline)
 	}
 
+	intent, err := requestData.GetIntent()
+	if err != nil {
+		// Just log this in case the intent cannot be determined, but continue processing.
+		logger.Info("found no request intent (intended for initial placements)")
+		intent = api.CreateIntent
+	}
+
 	decision := &v1alpha1.Decision{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Decision",
@@ -270,7 +277,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 			},
 			ResourceID: requestData.Spec.Data.InstanceUUID,
 			NovaRaw:    &raw,
-			Intent:     v1alpha1.SchedulingIntentUnknown,
+			Intent:     intent,
 		},
 	}
 	ctx := r.Context()
@@ -295,8 +302,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	}
 	// This is a hack to address the problem that Nova only uses the first host in hosts for evacuation requests.
 	// Only for evacuation we shuffle the first k hosts to ensure that we do not get stuck on a single host
-	intent, err := requestData.GetIntent()
-	if err == nil && intent == api.EvacuateIntent {
+	if intent == api.EvacuateIntent {
 		hosts = shuffleTopHosts(hosts, httpAPI.config.EvacuationShuffleK)
 	}
 	// Ensure we always return an array, never null. Nova's schema requires

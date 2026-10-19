@@ -140,27 +140,6 @@ func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.
 	return err
 }
 
-func (c *FilterWeigherPipelineController) upsertHistory(ctx context.Context, decision *v1alpha1.Decision, pipelineErr error) {
-	log := ctrl.LoggerFrom(ctx)
-
-	var az *string
-
-	if decision.Spec.NovaRaw != nil {
-		var request api.ExternalSchedulerRequest
-		err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request)
-		if err != nil {
-			log.Error(err, "failed to unmarshal novaRaw for history, using defaults")
-		} else {
-			azStr := request.Spec.Data.AvailabilityZone
-			az = &azStr
-		}
-	}
-
-	if upsertErr := c.HistoryManager.CreateOrUpdateHistory(ctx, decision, az, pipelineErr); upsertErr != nil {
-		log.Error(upsertErr, "failed to create/update history")
-	}
-}
-
 func (c *FilterWeigherPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) (*api.ExternalSchedulerRequest, error) {
 	log := ctrl.LoggerFrom(ctx)
 	startedAt := time.Now() // So we can measure sync duration.
@@ -180,13 +159,6 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		return nil, err
 	}
 
-	if intent, err := request.GetIntent(); err != nil {
-		log.Error(err, "failed to get intent from nova request, using Unknown")
-		decision.Spec.Intent = v1alpha1.SchedulingIntentUnknown
-	} else {
-		decision.Spec.Intent = intent
-	}
-
 	// If necessary gather all placement candidates before filtering.
 	// This will override the hosts and weights in the nova request.
 	pipelineConf, ok := c.GetPipelineConfig(decision.Spec.PipelineRef.Name)
@@ -204,31 +176,36 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	}
 
 	result, err := pipeline.Run(request)
-	// Persist the result on the decision before upserting history so that
-	// CreateOrUpdateHistory can observe the target host and ordered hosts.
-	// On error the result is empty/meaningless, so only set it on success.
 	if err == nil {
 		decision.Status.Result = &result
 	}
-	if !request.Options.SkipHistory {
-		c.upsertHistory(ctx, decision, err)
-	}
-
-	// We create a virtual machine resource based on the scheduling decision if ...
-	createVM := err == nil && // The pipeline was executed successfully
-		!request.Options.ReadOnly && // The request is not read-only
-		c.FeatureGates.VirtualMachineCreation && // VM creation is enabled
-		slices.Contains(api.NovaIntents, decision.Spec.Intent) && // Triggered by Nova
-		request.IsKVMRequest() // Supported hypervisor type
-	if createVM {
+	// Record a human-readable explanation of the decision so it propagates to
+	// the VM CortexSpec.Explanation. On error the result is nil and the
+	// explanation carries the failure reason.
+	decision.Status.Explanation = lib.GenerateExplanation(decision.Status.Result, err)
+	// We create a virtual machine resource based on the scheduling decision,
+	// logging the specific reason whenever we skip creation so it can be traced.
+	instanceUUID := request.Spec.Data.InstanceUUID
+	switch {
+	case err != nil:
+		log.V(1).Info("skipping virtual machine creation, pipeline run failed", "instanceUUID", instanceUUID)
+	case request.Options.ReadOnly:
+		log.V(1).Info("skipping virtual machine creation, request is read-only", "instanceUUID", instanceUUID)
+	case !c.FeatureGates.VirtualMachineCreation:
+		log.V(1).Info("skipping virtual machine creation, feature gate disabled", "instanceUUID", instanceUUID)
+	case !slices.Contains(api.NovaIntents, decision.Spec.Intent):
+		log.V(1).Info("skipping virtual machine creation, intent not triggered by Nova", "instanceUUID", instanceUUID, "intent", decision.Spec.Intent)
+	case !request.IsKVMRequest():
+		log.V(1).Info("skipping virtual machine creation, unsupported hypervisor type", "instanceUUID", instanceUUID)
+	default:
 		vmUpsertErr := c.vmHandler.Upsert(ctx, decision, request)
 		if c.FeatureGates.VirtualMachineCreationMandatory && vmUpsertErr != nil {
-			log.Error(vmUpsertErr, "failed to upsert virtual machine resource and it is mandatory")
+			log.Error(vmUpsertErr, "failed to upsert virtual machine resource and it is mandatory", "instanceUUID", instanceUUID)
 			return &request, vmUpsertErr
 		}
 		if vmUpsertErr != nil {
 			// Non-fatal: the placement decision itself succeeded.
-			log.Error(vmUpsertErr, "failed to upsert virtual machine resource")
+			log.Error(vmUpsertErr, "failed to upsert virtual machine resource", "instanceUUID", instanceUUID)
 		}
 	}
 
@@ -275,7 +252,6 @@ func (c *FilterWeigherPipelineController) InitPipeline(
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainNova
-	c.HistoryManager = lib.HistoryClient{Client: mcl, Recorder: mcl.GetEventRecorder("cortex-nova-scheduler")}
 	c.gatherer = &candidateGatherer{Client: mcl}
 	c.vmHandler = &VirtualMachineHandler{Client: mcl}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {

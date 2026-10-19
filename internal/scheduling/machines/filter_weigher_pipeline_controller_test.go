@@ -6,7 +6,6 @@ package machines
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/external/ironcore"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/api/external/ironcore/v1alpha1"
@@ -125,7 +124,6 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 					Pipelines: map[string]lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]{
 						"machines-scheduler": createMockPipeline(),
 					},
-					HistoryManager: lib.HistoryClient{Client: client},
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
@@ -291,81 +289,10 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 		machine                   *ironcorev1alpha1.Machine
 		machinePools              []ironcorev1alpha1.MachinePool
 		pipelineConfig            *v1alpha1.Pipeline
-		createHistory             bool
 		expectError               bool
-		expectHistoryCreated      bool
 		expectMachinePoolAssigned bool
 		expectTargetHost          string
 	}{
-		{
-			name: "successful machine processing with history creation",
-			machine: &ironcorev1alpha1.Machine{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-machine",
-					Namespace: "default",
-				},
-				Spec: ironcorev1alpha1.MachineSpec{
-					Scheduler: "",
-				},
-			},
-			machinePools: []ironcorev1alpha1.MachinePool{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "pool1"},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "pool2"},
-				},
-			},
-			pipelineConfig: &v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "machines-scheduler",
-				},
-				Spec: v1alpha1.PipelineSpec{
-					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
-					Filters:          []v1alpha1.FilterSpec{},
-					Weighers:         []v1alpha1.WeigherSpec{},
-				},
-			},
-			createHistory:             true,
-			expectError:               false,
-			expectHistoryCreated:      true,
-			expectMachinePoolAssigned: true,
-			expectTargetHost:          "pool1",
-		},
-		{
-			name: "successful machine processing without history creation",
-			machine: &ironcorev1alpha1.Machine{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-machine-no-history",
-					Namespace: "default",
-				},
-				Spec: ironcorev1alpha1.MachineSpec{
-					Scheduler: "",
-				},
-			},
-			machinePools: []ironcorev1alpha1.MachinePool{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "pool1"},
-				},
-			},
-			pipelineConfig: &v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "machines-scheduler",
-				},
-				Spec: v1alpha1.PipelineSpec{
-					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					SchedulingDomain: v1alpha1.SchedulingDomainMachines,
-					Filters:          []v1alpha1.FilterSpec{},
-					Weighers:         []v1alpha1.WeigherSpec{},
-				},
-			},
-			createHistory:             false,
-			expectError:               false,
-			expectHistoryCreated:      true,
-			expectMachinePoolAssigned: true,
-			expectTargetHost:          "pool1",
-		},
 		{
 			name: "pipeline not configured",
 			machine: &ironcorev1alpha1.Machine{
@@ -380,7 +307,6 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 			machinePools:              []ironcorev1alpha1.MachinePool{},
 			pipelineConfig:            nil,
 			expectError:               true,
-			expectHistoryCreated:      false,
 			expectMachinePoolAssigned: false,
 		},
 		{
@@ -406,9 +332,7 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createHistory:             true,
 			expectError:               true,
-			expectHistoryCreated:      false,
 			expectMachinePoolAssigned: false,
 		},
 	}
@@ -426,14 +350,13 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 			client := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithRuntimeObjects(objects...).
-				WithStatusSubresource(&v1alpha1.Decision{}, &v1alpha1.History{}).
+				WithStatusSubresource(&v1alpha1.Decision{}).
 				Build()
 
 			controller := &FilterWeigherPipelineController{
 				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]]{
 					Pipelines:       map[string]lib.FilterWeigherPipeline[ironcore.MachinePipelineRequest]{},
 					PipelineConfigs: map[string]v1alpha1.Pipeline{},
-					HistoryManager:  lib.HistoryClient{Client: client},
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
@@ -454,32 +377,6 @@ func TestFilterWeigherPipelineController_ProcessNewMachine(t *testing.T) {
 			if !tt.expectError && err != nil {
 				t.Errorf("expected no error, got: %v", err)
 				return
-			}
-
-			// Check if history CRD was created when expected
-			if tt.expectHistoryCreated {
-				var histories v1alpha1.HistoryList
-				deadline := time.Now().Add(2 * time.Second)
-				for {
-					if err := client.List(context.Background(), &histories); err != nil {
-						t.Fatalf("Failed to list histories: %v", err)
-					}
-					if len(histories.Items) > 0 {
-						break
-					}
-					if time.Now().After(deadline) {
-						t.Fatal("timed out waiting for history CRD to be created")
-					}
-					time.Sleep(5 * time.Millisecond)
-				}
-			} else {
-				var histories v1alpha1.HistoryList
-				if err := client.List(context.Background(), &histories); err != nil {
-					t.Fatalf("Failed to list histories: %v", err)
-				}
-				if len(histories.Items) != 0 {
-					t.Error("Expected no history CRD but found one")
-				}
 			}
 
 			// Check if machine pool was assigned (if expected)

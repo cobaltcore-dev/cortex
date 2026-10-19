@@ -31,12 +31,12 @@ order (see the input-weight handling in [The scheduling engine](01-the-schedulin
 
 > [!NOTE]
 > An empty step set means Cinder scheduling is a *pass-through* today — Cortex is wired in and producing
-> `Decision`/`History` records, but not yet altering Cinder's ordering. The plumbing is in place so that
+> `Decision` records, but not yet altering Cinder's ordering. The plumbing is in place so that
 > adding block-storage-specific logic later is only a matter of implementing and registering steps
 > ([Extend Cortex](07-extending-cortex.md)); the integration does not have to change.
 
 Cinder shows the integration cost of a new domain in its purest form: a route, a default pipeline name,
-and the shared `Decision`/`History` machinery — with the actual placement intelligence added later as
+and the shared `Decision` machinery — with the actual placement intelligence added later as
 plugins. It is the same engine as Nova and Manila with the plugin set empty. The next two domains break
 from the HTTP pattern: pods and IronCore machines are scheduled by *watching* Kubernetes resources rather
 than answering an HTTP call.

@@ -6,7 +6,6 @@ package pods
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/external/pods"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -122,7 +121,6 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 					Pipelines: map[string]lib.FilterWeigherPipeline[pods.PodPipelineRequest]{
 						"pods-scheduler": createMockPodPipeline(),
 					},
-					HistoryManager: lib.HistoryClient{Client: client},
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
@@ -265,15 +263,13 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                 string
-		pod                  *corev1.Pod
-		nodes                []corev1.Node
-		pipelineConfig       *v1alpha1.Pipeline
-		createHistory        bool
-		expectError          bool
-		expectHistoryCreated bool
-		expectNodeAssigned   bool
-		expectTargetHost     string
+		name               string
+		pod                *corev1.Pod
+		nodes              []corev1.Node
+		pipelineConfig     *v1alpha1.Pipeline
+		expectError        bool
+		expectNodeAssigned bool
+		expectTargetHost   string
 	}{
 		{
 			name: "successful pod processing with decision creation",
@@ -305,11 +301,9 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createHistory:        true,
-			expectError:          false,
-			expectHistoryCreated: true,
-			expectNodeAssigned:   true,
-			expectTargetHost:     "node1",
+			expectError:        false,
+			expectNodeAssigned: true,
+			expectTargetHost:   "node1",
 		},
 		{
 			name: "successful pod processing without decision creation",
@@ -338,11 +332,9 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createHistory:        false,
-			expectError:          false,
-			expectHistoryCreated: true,
-			expectNodeAssigned:   true,
-			expectTargetHost:     "node1",
+			expectError:        false,
+			expectNodeAssigned: true,
+			expectTargetHost:   "node1",
 		},
 		{
 			name: "pipeline not configured",
@@ -355,11 +347,10 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 					SchedulerName: "",
 				},
 			},
-			nodes:                []corev1.Node{},
-			pipelineConfig:       nil,
-			expectError:          true,
-			expectHistoryCreated: false,
-			expectNodeAssigned:   false,
+			nodes:              []corev1.Node{},
+			pipelineConfig:     nil,
+			expectError:        true,
+			expectNodeAssigned: false,
 		},
 		{
 			name: "no nodes available",
@@ -384,10 +375,8 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			},
-			createHistory:        true,
-			expectError:          true,
-			expectHistoryCreated: false,
-			expectNodeAssigned:   false,
+			expectError:        true,
+			expectNodeAssigned: false,
 		},
 	}
 
@@ -404,14 +393,13 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 			client := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithRuntimeObjects(objects...).
-				WithStatusSubresource(&v1alpha1.Decision{}, &v1alpha1.History{}).
+				WithStatusSubresource(&v1alpha1.Decision{}).
 				Build()
 
 			controller := &FilterWeigherPipelineController{
 				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[pods.PodPipelineRequest]]{
 					Pipelines:       map[string]lib.FilterWeigherPipeline[pods.PodPipelineRequest]{},
 					PipelineConfigs: map[string]v1alpha1.Pipeline{},
-					HistoryManager:  lib.HistoryClient{Client: client},
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
@@ -432,32 +420,6 @@ func TestFilterWeigherPipelineController_ProcessNewPod(t *testing.T) {
 			if !tt.expectError && err != nil {
 				t.Errorf("expected no error, got: %v", err)
 				return
-			}
-
-			// Check if history CRD was created when expected
-			if tt.expectHistoryCreated {
-				var histories v1alpha1.HistoryList
-				deadline := time.Now().Add(2 * time.Second)
-				for {
-					if err := client.List(context.Background(), &histories); err != nil {
-						t.Fatalf("Failed to list histories: %v", err)
-					}
-					if len(histories.Items) > 0 {
-						break
-					}
-					if time.Now().After(deadline) {
-						t.Fatal("timed out waiting for history CRD to be created")
-					}
-					time.Sleep(5 * time.Millisecond)
-				}
-			} else {
-				var histories v1alpha1.HistoryList
-				if err := client.List(context.Background(), &histories); err != nil {
-					t.Fatalf("Failed to list histories: %v", err)
-				}
-				if len(histories.Items) != 0 {
-					t.Error("Expected no history CRD but found one")
-				}
 			}
 
 			// Check if node was assigned (if expected)

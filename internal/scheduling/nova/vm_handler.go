@@ -136,6 +136,10 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, decision *v1alpha1.D
 		}
 	}
 
+	// Read intent from the decision, which was already resolved by the API layer
+	// (including a graceful fallback to CreateIntent for initial placements).
+	intent := decision.Spec.Intent
+
 	// Write the cortex spec (our scheduling result).
 	vm.Spec.Cortex = &vmv1alpha1.CortexSpec{}
 	for _, host := range decision.Status.Result.OrderedHosts {
@@ -145,15 +149,13 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, decision *v1alpha1.D
 			Name:       host,
 		})
 	}
+	vm.Spec.Cortex.Explanation = decision.Status.Explanation
+	vm.Spec.Cortex.Intent = string(intent)
 
 	// Write the ConditionTypeScheduled condition to indicate that the VM has
 	// been successfully scheduled. For that we need to extract the scheduling
 	// intent from request and verify that the operation
 	var reason string
-	intent, err := request.GetIntent()
-	if err != nil {
-		return fmt.Errorf("failed to get intent: %w", err)
-	}
 	switch intent {
 	case api.LiveMigrationIntent:
 		reason = vmv1alpha1.ConditionReasonScheduledLiveMigration
@@ -177,17 +179,23 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, decision *v1alpha1.D
 
 	// If the vm resource doesn't exist yet, create it.
 	vmInCluster := &vmv1alpha1.VirtualMachine{}
-	err = h.Get(ctx, types.NamespacedName{
+	err := h.Get(ctx, types.NamespacedName{
 		Namespace: vm.Namespace,
 		Name:      vm.Name,
 	}, vmInCluster)
 	if err != nil && apierrors.IsNotFound(err) {
+		// Create ignores the status subresource and writes the server response
+		// (with an empty status) back into vm, so snapshot the conditions and
+		// restore them before persisting the status.
+		conditions := vm.Status.Conditions
 		if err := h.Create(ctx, vm); err != nil {
 			return fmt.Errorf("failed to create VM: %w", err)
 		}
+		vm.Status.Conditions = conditions
 		if err := h.Status().Update(ctx, vm); err != nil {
 			return fmt.Errorf("failed to update VM status: %w", err)
 		}
+		log.Info("created virtual machine resource", "instanceUUID", vm.Name, "targetHost", targetHost, "intent", intent)
 		return nil
 	} else if err != nil {
 		return fmt.Errorf("error talking to apiserver: %w", err)
@@ -220,6 +228,8 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, decision *v1alpha1.D
 		vmInCluster.Spec.Cortex = &vmv1alpha1.CortexSpec{}
 	}
 	vmInCluster.Spec.Cortex.HostCandidates = vm.Spec.Cortex.HostCandidates
+	vmInCluster.Spec.Cortex.Explanation = vm.Spec.Cortex.Explanation
+	vmInCluster.Spec.Cortex.Intent = vm.Spec.Cortex.Intent
 	if err := h.Update(ctx, vmInCluster); err != nil {
 		return fmt.Errorf("failed to update VM: %w", err)
 	}
@@ -229,5 +239,6 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, decision *v1alpha1.D
 	if err := h.Status().Update(ctx, vmInCluster); err != nil {
 		return fmt.Errorf("failed to update VM status: %w", err)
 	}
+	log.Info("updated virtual machine resource", "instanceUUID", vm.Name, "targetHost", targetHost, "intent", intent)
 	return nil
 }

@@ -19,14 +19,13 @@ import (
 // Pipeline names for failover reservation scheduling
 const (
 	// PipelineNewFailoverReservation is used to find a host for creating a new reservation.
-	// Uses the general-purpose pipeline; LockReservations and SkipHistory are set via Options.
+	// Uses the general-purpose pipeline; LockReservations is set via Options.
 	PipelineNewFailoverReservation = "kvm-general-purpose-load-balancing"
 )
 
 // DefaultFailoverOptions is the base scheduling.Options for all failover scheduling calls.
 // Per-call overrides (ReadOnly, LockReservations) are applied on top.
 var DefaultFailoverOptions = scheduling.Options{
-	SkipHistory:                   true,
 	SkipInflight:                  true,
 	SkipCommittedResourceTracking: true,
 }

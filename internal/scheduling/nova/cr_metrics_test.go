@@ -359,7 +359,7 @@ func TestFeatureGate_CommittedResourceTracking(t *testing.T) {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(flavorKnowledge).
-				WithStatusSubresource(&v1alpha1.Decision{}, &v1alpha1.History{}).
+				WithStatusSubresource(&v1alpha1.Decision{}).
 				Build()
 
 			counter := crs.NewNoHostFoundCounter()
@@ -371,7 +371,6 @@ func TestFeatureGate_CommittedResourceTracking(t *testing.T) {
 					Client:          fakeClient,
 					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
-					HistoryManager:  lib.HistoryClient{Client: fakeClient},
 				},
 				FeatureGates: FeatureGates{CommittedResourceTracking: enabled},
 				CRRecorder: crs.Recorder{

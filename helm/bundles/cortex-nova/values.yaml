@@ -18,11 +18,11 @@ alerts:
   enabled: true
   prometheus: openstack
   # Base URL (no trailing slash) for Perses dashboard links emitted as the
-  # `persesDashboard` annotation on each alert. The per-alert dashboard slug is
+  # `persesDashboard` label on each alert. The per-alert dashboard slug is
   # appended to it. The value is templateable with Prometheus label expressions,
   # e.g. a region-specific host:
   #   https://perses.{{ $labels.region }}.example.com/projects/observability/dashboards
-  # Left empty by default so no persesDashboard annotation is emitted.
+  # Left empty by default so no persesDashboard label is emitted.
   persesDashboardBaseURL: ""
   thresholds:
     # Fraction of each pod's configured container memory limit above which
@@ -123,8 +123,6 @@ cortex: &cortex
         gvks:
           - cortex.cloud/v1alpha1/Decision
           - cortex.cloud/v1alpha1/DecisionList
-          - cortex.cloud/v1alpha1/History
-          - cortex.cloud/v1alpha1/HistoryList
           - cortex.cloud/v1alpha1/Descheduling
           - cortex.cloud/v1alpha1/DeschedulingList
           - cortex.cloud/v1alpha1/Pipeline
@@ -190,18 +188,16 @@ cortex-scheduling-controllers:
       - quota-controller
       - capacity-controller
     enabledTasks:
-      - nova-history-cleanup-task
       - commitments-sync-task  # required for committed resources
     # Feature gates control optional capabilities within running components.
-    featureGates:
-      # Enables VM allocation write-back into Reservation slots and no-host-found
-      # classification by committed resource coverage. Enable only on deployments
-      # that use committed resources. Requires also enabling of CR controllers and tasks
-      committedResourceTracking: false
-      # Enables the creation of VM resources based on the scheduling spec for
-      # non-read-only requests.
-      virtualMachineCreation: true
-      virtualMachineCreationMandatory: false
+    # Enables VM allocation write-back into Reservation slots and no-host-found
+    # classification by committed resource coverage. Enable only on deployments
+    # that use committed resources. Requires also enabling of CR controllers and tasks
+    committedResourceTracking: false
+    # Enables the creation of VM resources based on the scheduling spec for
+    # non-read-only requests.
+    virtualMachineCreation: true
+    virtualMachineCreationMandatory: false
     # Pipeline used for the empty-state capacity probe (ignores allocations and reservations).
     capacityTotalPipeline: "kvm-general-purpose-load-balancing"
     # Pipeline used for the current-state capacity probe (considers current VM allocations).
@@ -354,6 +350,13 @@ cortex-scheduling-controllers:
     # Minimum age a CommittedResource CRD must reach before the syncer treats it as stale
     # and deletes it. Prevents timing races of recently-created CRDs not yet visible in the global fetch.
     staleCRDeletionGracePeriod: "10m"
+    # Age at which a committed-resource Reservation CRD is pruned so the reconciler re-creates a
+    # fresh slot. Reservations drift from their VM mapping over time and can end up on hosts whose
+    # labels no longer match. A zero value disables pruning.
+    staleReservationMaxAge: "168h"
+    # Maximum number of aged committed-resource Reservation CRDs pruned per syncer run, oldest first.
+    # A zero value disables pruning.
+    maxReservationDeletesPerRun: 20
 
 cortex-knowledge-controllers:
   <<: *cortex
