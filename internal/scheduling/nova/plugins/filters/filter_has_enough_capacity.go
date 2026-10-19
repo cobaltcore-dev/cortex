@@ -319,10 +319,9 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			continue
 		}
 		// Calculate how many instances can fit on this host, based on memory.
-		// Note: according to the OpenStack docs, the memory is in MB, not MiB.
-		// See: https://docs.openstack.org/nova/latest/user/flavors.html
+		// MemoryMB is in MiB (binary). HV capacity is in binary bytes. Divide by 1024*1024 to match.
 		//nolint:gosec // We're checking for underflows above (< 0).
-		memorySlots := uint64(freeMemory.Value()/1_000_000 /* MB */) /
+		memorySlots := uint64(freeMemory.Value()/(1024*1024)) /
 			request.Spec.Data.Flavor.Data.MemoryMB
 		if memorySlots < request.Spec.Data.NumInstances {
 			traceLog.Info(

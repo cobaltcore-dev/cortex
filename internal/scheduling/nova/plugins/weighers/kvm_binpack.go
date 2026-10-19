@@ -143,10 +143,10 @@ func (s *KVMBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSchedule
 // calcVMResources calculates the total resource requests for the VM to be scheduled.
 func (s *KVMBinpackStep) calcVMResources(req api.ExternalSchedulerRequest) map[hv1.ResourceName]resource.Quantity {
 	resources := make(map[hv1.ResourceName]resource.Quantity)
-	resourcesMemBytes := int64(req.Spec.Data.Flavor.Data.MemoryMB * 1_000_000) //nolint:gosec // memory values are bounded by Nova
-	resourcesMemBytes *= int64(req.Spec.Data.NumInstances)                     //nolint:gosec // instance count is bounded by Nova
+	resourcesMemBytes := int64(req.Spec.Data.Flavor.Data.MemoryMB) * (1024 * 1024) //nolint:gosec // memory values are bounded by Nova
+	resourcesMemBytes *= int64(req.Spec.Data.NumInstances)                         //nolint:gosec // instance count is bounded by Nova
 	resources[hv1.ResourceMemory] = *resource.
-		NewQuantity(resourcesMemBytes, resource.DecimalSI)
+		NewQuantity(resourcesMemBytes, resource.BinarySI)
 	resourcesCPU := int64(req.Spec.Data.Flavor.Data.VCPUs) //nolint:gosec // vCPU values are bounded by Nova
 	resourcesCPU *= int64(req.Spec.Data.NumInstances)      //nolint:gosec // instance count is bounded by Nova
 	resources[hv1.ResourceCPU] = *resource.
