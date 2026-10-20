@@ -319,10 +319,11 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			continue
 		}
 		// Calculate how many instances can fit on this host, based on memory.
-		// MemoryMB is in MiB (binary). HV capacity is in binary bytes. Divide by 1024*1024 to match.
+		// Nova's memory_mb field is named "megabytes" in the API docs, but the values
+		// are in mebibytes (1 MiB = 2^20 bytes). Multiply by 1<<20 to convert to bytes.
 		//nolint:gosec // We're checking for underflows above (< 0).
-		memorySlots := uint64(freeMemory.Value()/(1024*1024)) /
-			request.Spec.Data.Flavor.Data.MemoryMB
+		memorySlots := uint64(freeMemory.Value()) /
+			(request.Spec.Data.Flavor.Data.MemoryMB * (1 << 20))
 		if memorySlots < request.Spec.Data.NumInstances {
 			traceLog.Info(
 				"filtering host due to insufficient RAM capacity",
