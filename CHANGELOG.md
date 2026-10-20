@@ -1,5 +1,27 @@
 # Changelog
 
+## Release PR [#1393](https://github.com/cobaltcore-dev/cortex/pull/1393)
+
+### Versions
+- cortex 0.7.1
+- cortex-postgres 0.6.28
+- cortex-shim 0.1.33
+- bundles 0.0.108
+- cortex-placement-shim 0.1.33
+
+### Bug Fixes
+
+- **fix: update Perses dashboard URL for metrics in alerts** ([#1391](https://github.com/cobaltcore-dev/cortex/pull/1391)) — @SoWieMarkus
+  - Corrected stale `/cortex-status-dashboard` links in alert definitions to point to the correct Perses dashboard paths (`/cortex-status` for Cinder, `/cortex_status?var-service=...` for Manila and Nova).
+
+- **fix: correct memory unit conversion in capacity filter** ([#1392](https://github.com/cobaltcore-dev/cortex/pull/1392)) — @mblos
+  - Fixed memory conversion to use mebibytes (MiB, 1,048,576 bytes) instead of megabytes (MB, 1,000,000 bytes) in Nova scheduling plugins. The previous decimal conversion caused a ~4.86% undercount of memory capacity, potentially leading to incorrect host filtering and bin-packing scores. Affected components: `filter_has_enough_capacity`, `kvm_binpack`, and `vmware_binpack`.
+
+### Automation
+
+- **bump app version [skip ci]** ([#1389](https://github.com/cobaltcore-dev/cortex/pull/1389)) — github-actions (bot)
+  - App version updated from `sha-b4cf3be3` to `sha-3e478f14`.
+
 ## cortex v0.7.0 (2026-10-19)
 
 ### ⚠️ Breaking Changes
