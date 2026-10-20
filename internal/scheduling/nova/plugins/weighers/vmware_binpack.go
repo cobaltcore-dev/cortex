@@ -164,9 +164,9 @@ func (s *VMwareBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSched
 // calcHostCapacity calculates the total capacity of the host.
 func (s *VMwareBinpackStep) calcHostCapacity(hostUtilization compute.HostUtilization) map[corev1.ResourceName]resource.Quantity {
 	resources := make(map[corev1.ResourceName]resource.Quantity)
-	capaMemoryBytes := int64(hostUtilization.TotalRAMAllocatableMB) * 1_000_000
+	capaMemoryBytes := int64(hostUtilization.TotalRAMAllocatableMB) * (1 << 20)
 	resources[corev1.ResourceMemory] = *resource.
-		NewQuantity(capaMemoryBytes, resource.DecimalSI)
+		NewQuantity(capaMemoryBytes, resource.BinarySI)
 	capaCPU := int64(hostUtilization.TotalVCPUsAllocatable)
 	resources[corev1.ResourceCPU] = *resource.
 		NewQuantity(capaCPU, resource.DecimalSI)
@@ -177,7 +177,7 @@ func (s *VMwareBinpackStep) calcHostCapacity(hostUtilization compute.HostUtiliza
 func (s *VMwareBinpackStep) calcHostAllocation(hostUtilization compute.HostUtilization) map[corev1.ResourceName]resource.Quantity {
 	resources := make(map[corev1.ResourceName]resource.Quantity)
 	resources[corev1.ResourceMemory] = *resource.
-		NewQuantity(int64(hostUtilization.RAMUsedMB)*1_000_000, resource.DecimalSI)
+		NewQuantity(int64(hostUtilization.RAMUsedMB)*(1<<20), resource.BinarySI)
 	resources[corev1.ResourceCPU] = *resource.
 		NewQuantity(int64(hostUtilization.VCPUsUsed), resource.DecimalSI)
 	return resources
@@ -186,10 +186,10 @@ func (s *VMwareBinpackStep) calcHostAllocation(hostUtilization compute.HostUtili
 // calcVMResources calculates the total resource requests for the VM to be scheduled.
 func (s *VMwareBinpackStep) calcVMResources(req api.ExternalSchedulerRequest) map[corev1.ResourceName]resource.Quantity {
 	resources := make(map[corev1.ResourceName]resource.Quantity)
-	resourcesMemBytes := int64(req.Spec.Data.Flavor.Data.MemoryMB * 1_000_000) //nolint:gosec // memory values are bounded by Nova
+	resourcesMemBytes := int64(req.Spec.Data.Flavor.Data.MemoryMB) * (1 << 20) //nolint:gosec // memory values are bounded by Nova
 	resourcesMemBytes *= int64(req.Spec.Data.NumInstances)                     //nolint:gosec // instance count is bounded by Nova
 	resources[corev1.ResourceMemory] = *resource.
-		NewQuantity(resourcesMemBytes, resource.DecimalSI)
+		NewQuantity(resourcesMemBytes, resource.BinarySI)
 	resourcesCPU := int64(req.Spec.Data.Flavor.Data.VCPUs) //nolint:gosec // vCPU values are bounded by Nova
 	resourcesCPU *= int64(req.Spec.Data.NumInstances)      //nolint:gosec // instance count is bounded by Nova
 	resources[corev1.ResourceCPU] = *resource.
