@@ -24,7 +24,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: liveness
         service: cortex
@@ -46,7 +46,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: liveness
         service: cortex
@@ -65,7 +65,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: descheduler
         service: cortex
@@ -83,7 +83,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: api
         service: cortex
@@ -103,7 +103,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: api
         service: cortex
@@ -135,7 +135,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: memory
         service: cortex
@@ -163,7 +163,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: cpu
         service: cortex
@@ -183,7 +183,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: db
         service: cortex
@@ -201,7 +201,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: syncstatus
         service: cortex
@@ -223,7 +223,7 @@ spec:
       for: 60m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: syncobjects
         service: cortex
@@ -245,7 +245,7 @@ spec:
       for: 60m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: datasources
         service: cortex
@@ -264,7 +264,7 @@ spec:
       for: 60m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: knowledge
         service: cortex
@@ -283,7 +283,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: decisions
         service: cortex
@@ -302,7 +302,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: decisions
         service: cortex
@@ -324,7 +324,7 @@ spec:
       for: 60m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: kpis
         service: cortex
@@ -343,7 +343,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: pipelines
         service: cortex
@@ -376,7 +376,7 @@ spec:
       for: 2h
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: reservations
         service: cortex
@@ -402,7 +402,7 @@ spec:
       for: 15m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: scheduling
         service: cortex
@@ -427,7 +427,7 @@ spec:
       for: 15m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: scheduling
         service: cortex
@@ -449,7 +449,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: scheduling
         service: cortex
@@ -470,7 +470,7 @@ spec:
       for: 60m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: datasources
         service: cortex
@@ -491,7 +491,7 @@ spec:
       for: 30m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: datasources
         service: cortex
@@ -513,7 +513,7 @@ spec:
       for: 15m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: controller-errors
         service: cortex
@@ -535,7 +535,7 @@ spec:
       for: 15m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: controller-duration
         service: cortex
@@ -552,7 +552,7 @@ spec:
       for: 60m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: controller-workqueue
         service: cortex
@@ -573,7 +573,7 @@ spec:
       for: 15m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: controller-webhook
         service: cortex
@@ -593,7 +593,7 @@ spec:
       for: 15m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: controller-webhook
         service: cortex
@@ -614,7 +614,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: committed-resource-api
         service: cortex
@@ -636,7 +636,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: committed-resource-api
         service: cortex
@@ -661,7 +661,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: committed-resource-api
         service: cortex
@@ -686,7 +686,7 @@ spec:
       for: 30m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: committed-resource-api
         service: cortex
@@ -709,7 +709,7 @@ spec:
       for: 30m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: committed-resource-api
         service: cortex
@@ -728,7 +728,7 @@ spec:
       for: 1m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: committed-resource-api
         service: cortex
@@ -749,7 +749,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: committed-resource-api
         service: cortex
@@ -770,7 +770,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: committed-resource-api
         service: cortex
@@ -791,7 +791,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: committed-resource-api
         service: cortex
@@ -812,7 +812,7 @@ spec:
       for: 10m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: committed-resource-capacity
         service: cortex
@@ -837,7 +837,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: committed-resource-api
         service: cortex
@@ -858,7 +858,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: committed-resource-api
         service: cortex
@@ -878,7 +878,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: multicluster
         service: cortex
@@ -907,7 +907,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: multicluster
         service: cortex
@@ -947,7 +947,7 @@ spec:
       for: 15m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: committed-resource-capacity
         service: cortex
@@ -968,7 +968,7 @@ spec:
       for: 15m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: committed-resource-capacity
         service: cortex
@@ -986,7 +986,7 @@ spec:
       expr: sum by (az) (increase(cortex_committed_resource_host_oversubscribed_evicted_reservations_total{service="cortex-nova-metrics"}[1h])) > 10
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: committed-resource-capacity
         service: cortex
@@ -1011,7 +1011,7 @@ spec:
       expr: max(min_over_time(cortex_failover_reconciliation_vms_missing_failover{service="cortex-nova-metrics"}[{{ .Values.alerts.thresholds.failoverMissingFor }}])) > 0
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
 {{- end }}
         context: failover-reservations
         service: cortex

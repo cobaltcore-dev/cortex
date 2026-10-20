@@ -240,8 +240,8 @@ func TestVMwareBinpackStep_CalcHostCapacity(t *testing.T) {
 
 	capacity := step.calcHostCapacity(hostUtilization)
 
-	// Memory capacity: 6000 * 1_000_000 = 6_000_000_000 bytes
-	expectedMemoryBytes := int64(6000) * 1_000_000
+	// Memory capacity: 6000 MiB in bytes
+	expectedMemoryBytes := int64(6000) * (1 << 20)
 	memoryCapacity := capacity[corev1.ResourceMemory]
 	if memoryCapacity.Value() != expectedMemoryBytes {
 		t.Errorf("expected memory capacity %d, got %d",
@@ -270,8 +270,8 @@ func TestVMwareBinpackStep_CalcHostAllocation(t *testing.T) {
 
 	allocation := step.calcHostAllocation(hostUtilization)
 
-	// Memory allocation: 4000 * 1_000_000 = 4_000_000_000 bytes
-	expectedMemoryBytes := int64(4000) * 1_000_000
+	// Memory allocation: 4000 MiB in bytes
+	expectedMemoryBytes := int64(4000) * (1 << 20)
 	memoryAllocation := allocation[corev1.ResourceMemory]
 	if memoryAllocation.Value() != expectedMemoryBytes {
 		t.Errorf("expected memory allocation %d, got %d",
@@ -311,7 +311,7 @@ func TestVMwareBinpackStep_CalcVMResources(t *testing.T) {
 					},
 				},
 			},
-			expectedMemory: 2048 * 1_000_000, // 2048 MB in bytes
+			expectedMemory: 2048 * (1 << 20), // 2048 MiB in bytes
 			expectedCPU:    4,
 		},
 		{
@@ -329,7 +329,7 @@ func TestVMwareBinpackStep_CalcVMResources(t *testing.T) {
 					},
 				},
 			},
-			expectedMemory: 3 * 1024 * 1_000_000, // 3 instances * 1024 MB in bytes
+			expectedMemory: 3 * 1024 * (1 << 20), // 3 instances * 1024 MiB in bytes
 			expectedCPU:    3 * 2,                // 3 instances * 2 vCPUs
 		},
 	}

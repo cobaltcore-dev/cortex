@@ -24,7 +24,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-manila-metrics"
 {{- end }}
         context: liveness
         service: cortex
@@ -45,7 +45,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-manila-metrics"
 {{- end }}
         context: liveness
         service: cortex
@@ -64,7 +64,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-manila-metrics"
 {{- end }}
         context: api
         service: cortex
@@ -84,7 +84,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-manila-metrics"
 {{- end }}
         context: api
         service: cortex
@@ -116,7 +116,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-manila-metrics"
 {{- end }}
         context: memory
         service: cortex
@@ -144,7 +144,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-manila-metrics"
 {{- end }}
         context: cpu
         service: cortex
@@ -164,7 +164,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-manila-metrics"
 {{- end }}
         context: db
         service: cortex
@@ -182,7 +182,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-manila-metrics"
 {{- end }}
         context: syncstatus
         service: cortex
@@ -204,7 +204,7 @@ spec:
       for: 60m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-manila-metrics"
 {{- end }}
         context: syncobjects
         service: cortex
@@ -226,7 +226,7 @@ spec:
       for: 60m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-manila-metrics"
 {{- end }}
         context: datasources
         service: cortex
@@ -245,7 +245,7 @@ spec:
       for: 60m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-manila-metrics"
 {{- end }}
         context: knowledge
         service: cortex
@@ -265,7 +265,7 @@ spec:
       for: 60m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-manila-metrics"
 {{- end }}
         context: kpis
         service: cortex
@@ -284,7 +284,7 @@ spec:
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex-status-dashboard"
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-manila-metrics"
 {{- end }}
         context: kpis
         service: cortex
