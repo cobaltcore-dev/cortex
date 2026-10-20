@@ -492,13 +492,13 @@ func TestKVMBinpackStep_calcVMResources(t *testing.T) {
 		{
 			name:             "single instance with 8G memory and 4 CPUs",
 			request:          newBinpackRequest(8192, 4, 1, []string{"host1"}),
-			expectedMemBytes: 8192 * 1_000_000,
+			expectedMemBytes: 8192 * 1024 * 1024,
 			expectedCPU:      4,
 		},
 		{
 			name:             "multiple instances",
 			request:          newBinpackRequest(4096, 2, 3, []string{"host1"}),
-			expectedMemBytes: 4096 * 1_000_000 * 3,
+			expectedMemBytes: 4096 * 1024 * 1024 * 3,
 			expectedCPU:      2 * 3,
 		},
 		{
@@ -510,13 +510,13 @@ func TestKVMBinpackStep_calcVMResources(t *testing.T) {
 		{
 			name:             "zero CPUs",
 			request:          newBinpackRequest(8192, 0, 1, []string{"host1"}),
-			expectedMemBytes: 8192 * 1_000_000,
+			expectedMemBytes: 8192 * 1024 * 1024,
 			expectedCPU:      0,
 		},
 		{
 			name:             "large values",
 			request:          newBinpackRequest(524288, 128, 10, []string{"host1"}), // 512Gi, 128 CPUs, 10 instances
-			expectedMemBytes: 524288 * 1_000_000 * 10,
+			expectedMemBytes: 524288 * 1024 * 1024 * 10,
 			expectedCPU:      128 * 10,
 		},
 	}
