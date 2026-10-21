@@ -55,7 +55,7 @@ func (k *VMFaultsKPI) Describe(ch chan<- *prometheus.Desc) { ch <- k.vmFaultsDes
 // Collect collects the current state of vms from the database and sends it as
 // Prometheus metrics to the provided channel.
 func (k *VMFaultsKPI) Collect(ch chan<- prometheus.Metric) {
-	vmFaultsKPIlogger.Info("collecting metrics")
+	vmFaultsKPIlogger.V(1).Info("collecting metrics")
 
 	// This can happen when no datasource is provided that connects to a database.
 	if k.DB == nil {
@@ -71,7 +71,7 @@ func (k *VMFaultsKPI) Collect(ch chan<- prometheus.Metric) {
 		vmFaultsKPIlogger.Error(err, "failed to query servers from database")
 		return
 	}
-	vmFaultsKPIlogger.Info("queried servers from database", "nServers", nServers)
+	vmFaultsKPIlogger.V(1).Info("queried servers from database", "nServers", nServers)
 
 	// Get all flavors from the database to map them to the vms.
 	var flavors []nova.Flavor
@@ -80,7 +80,7 @@ func (k *VMFaultsKPI) Collect(ch chan<- prometheus.Metric) {
 		vmFaultsKPIlogger.Error(err, "failed to query flavors from database")
 		return
 	}
-	vmFaultsKPIlogger.Info("queried flavors from database", "nFlavors", nFlavors)
+	vmFaultsKPIlogger.V(1).Info("queried flavors from database", "nFlavors", nFlavors)
 
 	flavorsByName := make(map[string]nova.Flavor, len(flavors))
 	for _, flavor := range flavors {
@@ -103,7 +103,7 @@ func (k *VMFaultsKPI) Collect(ch chan<- prometheus.Metric) {
 	for _, server := range servers {
 		flavor, ok := flavorsByName[server.FlavorName]
 		if !ok {
-			vmFaultsKPIlogger.Info("warning: flavor not found for server", "server",
+			vmFaultsKPIlogger.V(1).Info("warning: flavor not found for server", "server",
 				server.ID, "flavor", server.FlavorName)
 			continue
 		}
@@ -147,5 +147,5 @@ func (k *VMFaultsKPI) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(k.vmFaultsDesc, prometheus.GaugeValue, count,
 			key.az, key.hvtype, key.state, key.errcode, key.errmessage, key.faultyVM)
 	}
-	vmFaultsKPIlogger.Info("collected metrics", "nMetrics", len(counts))
+	vmFaultsKPIlogger.V(1).Info("collected metrics", "nMetrics", len(counts))
 }
