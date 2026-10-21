@@ -58,7 +58,7 @@ func (c *novaVMClient) StartWithKubernetesSecrets(ctx context.Context, client cl
 			log.Error(err, "failed to create SSO authenticated HTTP client")
 			return err
 		}
-		log.Info("successfully created SSO authenticated HTTP client")
+		log.V(1).Info("successfully created SSO authenticated HTTP client")
 	}
 	authenticatedKeystone, err := keystone.
 		Connector{Client: client, HTTPClient: authenticatedHTTP}.
@@ -67,7 +67,7 @@ func (c *novaVMClient) StartWithKubernetesSecrets(ctx context.Context, client cl
 		log.Error(err, "failed to create authenticated keystone client")
 		return err
 	}
-	log.Info("successfully created authenticated keystone client")
+	log.V(1).Info("successfully created authenticated keystone client")
 	// Automatically fetch the nova endpoint from the keystone service catalog.
 	provider := authenticatedKeystone.Client()
 	serviceType := "compute"
@@ -115,6 +115,6 @@ func (c *novaVMClient) GetCurrentVMSize(ctx context.Context, vmID string) (map[h
 		hv1.ResourceMemory: *resource.
 			NewQuantity(server.Flavor.RAM*1024*1024, resource.BinarySI),
 	}
-	log.Info("successfully retrieved VM size from nova", "vmID", vmID, "size", size)
+	log.V(1).Info("successfully retrieved VM size from nova", "vmID", vmID, "size", size)
 	return size, nil
 }
