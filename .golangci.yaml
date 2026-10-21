@@ -160,6 +160,12 @@ linters:
       # Ref: https://go.dev/doc/effective_go#redeclaration
       - path: (.+)\.go$
         text: declaration of "err" shadows declaration at
+      # FailoverReservations are deprecated in favor of FailoverHostReservations,
+      # but remain in active use during the transition. Ignore the deprecation
+      # warning until the old type is fully removed.
+      - linters:
+          - staticcheck
+        text: "SA1019:.*FailoverReservations will be replaced with FailoverHostReservations"
       - linters:
           - goconst
         path: (.+)_test\.go
