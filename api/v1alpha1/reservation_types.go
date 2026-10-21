@@ -21,6 +21,9 @@ const (
 	ReservationTypeCommittedResource ReservationType = "CommittedResourceReservation"
 
 	// ReservationTypeFailover is a reservation for failover capacity.
+	//
+	// Deprecated: FailoverReservations will be replaced with
+	// FailoverHostReservations. See ReservationTypeFailoverHost.
 	ReservationTypeFailover ReservationType = "FailoverReservation"
 
 	// ReservationTypeInFlight is a reservation that blocks capacity for virtual
@@ -139,6 +142,9 @@ func (s *CommittedResourceReservationSpec) MatchesGroup(projectID, resourceGroup
 }
 
 // FailoverReservationSpec defines the spec fields specific to failover reservations.
+//
+// Deprecated: FailoverReservations will be replaced with FailoverHostReservations.
+// See FailoverHostReservationSpec.
 type FailoverReservationSpec struct {
 	// ResourceGroup is the group/category of the resource (e.g., "hana_medium_v2").
 	// +kubebuilder:validation:Optional
@@ -217,6 +223,8 @@ type ReservationSpec struct {
 
 	// FailoverReservation contains fields specific to failover reservations.
 	// Only used when Type is FailoverReservation.
+	//
+	// Deprecated: FailoverReservations will be replaced with FailoverHostReservations.
 	// +kubebuilder:validation:Optional
 	FailoverReservation *FailoverReservationSpec `json:"failoverReservation,omitempty"`
 
@@ -250,6 +258,9 @@ type CommittedResourceReservationStatus struct {
 }
 
 // FailoverReservationStatus defines the status fields specific to failover reservations.
+//
+// Deprecated: FailoverReservations will be replaced with FailoverHostReservations.
+// See FailoverHostReservationStatus.
 type FailoverReservationStatus struct {
 	// Allocations maps VM/instance UUIDs to the host they are currently allocated on.
 	// Key: VM/instance UUID, Value: Host name where the VM is currently running.
@@ -346,6 +357,8 @@ type ReservationStatus struct {
 
 	// FailoverReservation contains status fields specific to failover reservations.
 	// Only used when Type is FailoverReservation.
+	//
+	// Deprecated: FailoverReservations will be replaced with FailoverHostReservations.
 	// +kubebuilder:validation:Optional
 	FailoverReservation *FailoverReservationStatus `json:"failoverReservation,omitempty"`
 
