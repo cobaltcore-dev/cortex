@@ -75,7 +75,7 @@ func (api *novaAPI) Init(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Info("using nova endpoint", "url", url)
+	log.V(1).Info("using nova endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
 		ProviderClient: provider,
 		Endpoint:       url,
@@ -96,7 +96,7 @@ func (api *novaAPI) Init(ctx context.Context) error {
 // Get all Nova servers that are NOT deleted. (Includes ERROR, SHUTOFF etc)
 func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 	label := Server{}.TableName()
-	log.Info("fetching nova data", "label", label)
+	log.V(1).Info("fetching nova data", "label", label)
 
 	if api.mon.RequestTimer != nil {
 		hist := api.mon.RequestTimer.WithLabelValues(label)
@@ -137,7 +137,7 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 		}
 		for _, s := range list.Servers {
 			if _, ok := seen[s.ID]; ok {
-				log.Info("skipping duplicate server", "id", s.ID)
+				log.V(1).Info("skipping duplicate server", "id", s.ID)
 				continue
 			}
 			seen[s.ID] = struct{}{}
@@ -155,7 +155,7 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 	// Probe OS type concurrently for KVM servers.
 	api.probeOSTypes(ctx, allServers)
 
-	log.Info("fetched", "label", label, "count", len(allServers))
+	log.V(1).Info("fetched", "label", label, "count", len(allServers))
 	return allServers, nil
 }
 
@@ -163,7 +163,7 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 // The prober caches by image ID internally, so repeated images are instant.
 func (api *novaAPI) probeOSTypes(ctx context.Context, allServers []Server) {
 	if api.osTypeProber == nil {
-		log.Info("os_type prober not initialized, skipping")
+		log.V(1).Info("os_type prober not initialized, skipping")
 		return
 	}
 	var probed, resolved, unknown, rootdiskMissing int
@@ -184,7 +184,7 @@ func (api *novaAPI) probeOSTypes(ctx context.Context, allServers []Server) {
 			allServers[i].OSType = osType
 		}
 	}
-	log.Info("probed os_type for KVM servers",
+	log.V(1).Info("probed os_type for KVM servers",
 		"total", len(allServers),
 		"kvm", probed,
 		"resolved", resolved,
@@ -210,7 +210,7 @@ func (api *novaAPI) probeOSType(ctx context.Context, s Server) string {
 //   - This means historical server data is limited to 3 weeks
 func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]DeletedServer, error) {
 	label := DeletedServer{}.TableName()
-	log.Info("fetching nova data", "label", label, "changedSince", since)
+	log.V(1).Info("fetching nova data", "label", label, "changedSince", since)
 
 	if api.mon.RequestTimer != nil {
 		hist := api.mon.RequestTimer.WithLabelValues(label)
@@ -251,7 +251,7 @@ func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]D
 		}
 		for _, s := range list.Servers {
 			if _, ok := seen[s.ID]; ok {
-				log.Info("skipping duplicate deleted server", "id", s.ID)
+				log.V(1).Info("skipping duplicate deleted server", "id", s.ID)
 				continue
 			}
 			seen[s.ID] = struct{}{}
@@ -266,14 +266,14 @@ func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]D
 		}
 	}
 
-	log.Info("fetched", "label", label, "count", len(deletedServers))
+	log.V(1).Info("fetched", "label", label, "count", len(deletedServers))
 	return deletedServers, nil
 }
 
 // Get all Nova hypervisors.
 func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error) {
 	label := Hypervisor{}.TableName()
-	log.Info("fetching nova data", "label", label)
+	log.V(1).Info("fetching nova data", "label", label)
 	// Note: currently we need to fetch this without gophercloud.
 	// Gophercloud will just assume the request is a single page even when
 	// the response is paginated, returning only the first page.
@@ -314,7 +314,7 @@ func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
 		}
 		for _, h := range list.Hypervisors {
 			if _, ok := seen[h.ID]; ok {
-				log.Info("skipping duplicate hypervisor", "id", h.ID)
+				log.V(1).Info("skipping duplicate hypervisor", "id", h.ID)
 				continue
 			}
 			seen[h.ID] = struct{}{}
@@ -328,14 +328,14 @@ func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
 			}
 		}
 	}
-	log.Info("fetched", "label", label, "count", len(hypervisors))
+	log.V(1).Info("fetched", "label", label, "count", len(hypervisors))
 	return hypervisors, nil
 }
 
 // Get all Nova flavors.
 func (api *novaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
 	label := Flavor{}.TableName()
-	log.Info("fetching nova data", "label", label)
+	log.V(1).Info("fetching nova data", "label", label)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
 		if api.mon.RequestTimer != nil {
@@ -356,7 +356,7 @@ func (api *novaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
 	if err := pages.(flavors.FlavorPage).ExtractInto(data); err != nil {
 		return nil, err
 	}
-	log.Info("fetched", "label", label, "count", len(data.Flavors))
+	log.V(1).Info("fetched", "label", label, "count", len(data.Flavors))
 	return data.Flavors, nil
 }
 
@@ -372,7 +372,7 @@ func (api *novaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
 //   - This means historical migration data has limited retention
 func (api *novaAPI) GetAllMigrations(ctx context.Context) ([]Migration, error) {
 	label := Migration{}.TableName()
-	log.Info("fetching nova data", "label", label)
+	log.V(1).Info("fetching nova data", "label", label)
 	// Note: currently we need to fetch this without gophercloud.
 	// See: https://github.com/gophercloud/gophercloud/pull/3244
 	if api.mon.RequestTimer != nil {
@@ -413,7 +413,7 @@ func (api *novaAPI) GetAllMigrations(ctx context.Context) ([]Migration, error) {
 		}
 		for _, m := range list.Migrations {
 			if _, ok := seen[m.ID]; ok {
-				log.Info("skipping duplicate migration", "id", m.ID)
+				log.V(1).Info("skipping duplicate migration", "id", m.ID)
 				continue
 			}
 			seen[m.ID] = struct{}{}
@@ -427,13 +427,13 @@ func (api *novaAPI) GetAllMigrations(ctx context.Context) ([]Migration, error) {
 			}
 		}
 	}
-	log.Info("fetched", "label", label, "count", len(migrations))
+	log.V(1).Info("fetched", "label", label, "count", len(migrations))
 	return migrations, nil
 }
 
 func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 	label := Aggregate{}.TableName()
-	log.Info("fetching nova data", "label", label)
+	log.V(1).Info("fetching nova data", "label", label)
 
 	pages, err := func() (pagination.Page, error) {
 		if api.mon.RequestTimer != nil {
@@ -457,7 +457,7 @@ func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 		return nil, err
 	}
 
-	log.Info("fetched", "label", label, "count", len(data.Aggregate))
+	log.V(1).Info("fetched", "label", label, "count", len(data.Aggregate))
 
 	aggregates := []Aggregate{}
 

@@ -70,7 +70,7 @@ func (api *manilaAPI) Init(ctx context.Context) error {
 // Get all Manila storage pools.
 func (api *manilaAPI) GetAllStoragePools(ctx context.Context) ([]StoragePool, error) {
 	label := StoragePool{}.TableName()
-	log.Info("fetching manila data", "label", label)
+	log.V(1).Info("fetching manila data", "label", label)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
 		if api.mon.RequestTimer != nil {
@@ -88,10 +88,10 @@ func (api *manilaAPI) GetAllStoragePools(ctx context.Context) ([]StoragePool, er
 		Pools []StoragePool `json:"pools"`
 	}{}
 	// Log the raw body for debugging purposes.
-	log.Info("raw response body", "body", pages.(schedulerstats.PoolPage).Body)
+	log.V(1).Info("raw response body", "body", pages.(schedulerstats.PoolPage).Body)
 	if err := pages.(schedulerstats.PoolPage).ExtractInto(data); err != nil {
 		return nil, err
 	}
-	log.Info("fetched", "label", label, "count", len(data.Pools))
+	log.V(1).Info("fetched", "label", label, "count", len(data.Pools))
 	return data.Pools, nil
 }

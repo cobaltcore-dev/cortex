@@ -64,7 +64,7 @@ func (api *placementAPI) Init(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Info("using placement endpoint", "url", url)
+	log.V(1).Info("using placement endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
 		ProviderClient: provider,
 		Endpoint:       url,
@@ -78,7 +78,7 @@ func (api *placementAPI) Init(ctx context.Context) error {
 // Fetch all resource providers from the placement API.
 func (api *placementAPI) GetAllResourceProviders(ctx context.Context) ([]ResourceProvider, error) {
 	label := ResourceProvider{}.TableName()
-	log.Info("fetching placement data", "label", label)
+	log.V(1).Info("fetching placement data", "label", label)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
 		if api.mon.RequestTimer != nil {
@@ -98,7 +98,7 @@ func (api *placementAPI) GetAllResourceProviders(ctx context.Context) ([]Resourc
 	if err := pages.(resourceproviders.ResourceProvidersPage).ExtractInto(data); err != nil {
 		return nil, err
 	}
-	log.Info("fetched placement data", "label", label, "count", len(data.ResourceProviders))
+	log.V(1).Info("fetched placement data", "label", label, "count", len(data.ResourceProviders))
 	return data.ResourceProviders, nil
 }
 
@@ -106,7 +106,7 @@ func (api *placementAPI) GetAllResourceProviders(ctx context.Context) ([]Resourc
 // This function fetches the traits for each resource provider in parallel.
 func (api *placementAPI) GetAllTraits(ctx context.Context, providers []ResourceProvider) ([]Trait, error) {
 	label := Trait{}.TableName()
-	log.Info("fetching placement data", "label", label)
+	log.V(1).Info("fetching placement data", "label", label)
 	if api.mon.RequestTimer != nil {
 		hist := api.mon.RequestTimer.WithLabelValues(label)
 		timer := prometheus.NewTimer(hist)
@@ -180,7 +180,7 @@ func (api *placementAPI) getTraits(ctx context.Context, provider ResourceProvide
 // This function fetches the data for each resource provider in parallel.
 func (api *placementAPI) GetAllInventoryUsages(ctx context.Context, providers []ResourceProvider) ([]InventoryUsage, error) {
 	label := InventoryUsage{}.TableName()
-	log.Info("fetching placement data", "label", label)
+	log.V(1).Info("fetching placement data", "label", label)
 	if api.mon.RequestTimer != nil {
 		hist := api.mon.RequestTimer.WithLabelValues(label)
 		timer := prometheus.NewTimer(hist)
