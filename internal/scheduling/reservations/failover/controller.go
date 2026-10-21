@@ -73,7 +73,7 @@ type vmFailoverNeed struct {
 func (c *FailoverReservationController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	ctx = WithNewGlobalRequestID(ctx)
 	logger := LoggerFromContext(ctx).WithValues("reservation", req.Name, "namespace", req.Namespace)
-	logger.Info("reconciling failover reservation", "reservation", req.Name)
+	logger.V(1).Info("reconciling failover reservation", "reservation", req.Name)
 
 	// Fetch the reservation
 	var res v1alpha1.Reservation
@@ -441,19 +441,19 @@ func reconcileRemoveInvalidVMFromReservations(
 				// prevents a postgres data loss from cascading into a mass
 				// deletion of failover reservations.
 				if hv, stillOnHV := vmsOnHypervisor[vmUUID]; stillOnHV {
-					logger.Info("keeping VM allocation despite missing from VM source: still active on hypervisor",
+					logger.V(1).Info("keeping VM allocation despite missing from VM source: still active on hypervisor",
 						"vmUUID", vmUUID, "reservation", res.Name,
 						"allocatedHypervisor", allocatedHypervisor, "hypervisor", hv)
 					updatedAllocations[vmUUID] = allocatedHypervisor
 					continue
 				}
-				logger.Info("removing VM from reservation allocations because VM no longer exists",
+				logger.V(1).Info("removing VM from reservation allocations because VM no longer exists",
 					"vmUUID", vmUUID, "reservation", res.Name)
 				needsUpdate = true
 				continue
 			}
 			if vmCurrentHypervisor != allocatedHypervisor {
-				logger.Info("removing VM from reservation allocations because hypervisor has changed",
+				logger.V(1).Info("removing VM from reservation allocations because hypervisor has changed",
 					"vmUUID", vmUUID, "reservation", res.Name,
 					"allocatedHypervisor", allocatedHypervisor, "currentHypervisor", vmCurrentHypervisor)
 				needsUpdate = true
@@ -520,7 +520,7 @@ func reconcileRemoveNoneligibleVMFromReservations(
 			}
 		}
 
-		logger.Info("removing non-eligible VMs from reservation",
+		logger.V(1).Info("removing non-eligible VMs from reservation",
 			"reservation", res.Name,
 			"host", res.Status.Host,
 			"before", len(allocations),
@@ -557,7 +557,7 @@ func reconcileRemoveEmptyReservations(
 		if len(allocations) == 0 {
 			resCopy := res.DeepCopy()
 			reservationsToDelete = append(reservationsToDelete, resCopy)
-			logger.Info("marking empty failover reservation for deletion", "reservationName", res.Name, "hypervisor", res.Status.Host)
+			logger.V(1).Info("marking empty failover reservation for deletion", "reservationName", res.Name, "hypervisor", res.Status.Host)
 		} else {
 			updatedReservations = append(updatedReservations, res)
 		}
@@ -661,7 +661,7 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 		reqID := uuid.New().String()
 		vmCtx := reservations.WithRequestID(ctx, reqID)
 		vmLogger := LoggerFromContext(vmCtx).WithValues("vmUUID", need.VM.UUID)
-		vmLogger.Info("processing VM for failover reservation")
+		vmLogger.V(1).Info("processing VM for failover reservation")
 
 		// Resolve VM resources once per VM (may use LargestFlavor from flavor group)
 		resSpec := resolveVMSpecForScheduling(vmCtx, need.VM, c.Config.UseFlavorGroupResources, flavorGroups)
@@ -710,7 +710,7 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 			if err := c.patchReservationStatus(vmCtx, newRes); err != nil {
 				vmLogger.V(1).Info("failed to update failover reservation status", "error", err, "reservationName", newRes.Name, "status", newRes.Status)
 			} else {
-				vmLogger.Info("successfully updated failover reservation status",
+				vmLogger.V(1).Info("successfully updated failover reservation status",
 					"reservationName", newRes.Name,
 					"host", newRes.Status.Host,
 					"allocations", newRes.Status.FailoverReservation.Allocations)
@@ -721,7 +721,7 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 			excludeHypervisors[newRes.Status.Host] = true
 		}
 
-		vmLogger.Info("processed VM failover reservations",
+		vmLogger.V(1).Info("processed VM failover reservations",
 			"flavorName", need.VM.FlavorName,
 			"needed", need.Count,
 			"reused", vmReused,
