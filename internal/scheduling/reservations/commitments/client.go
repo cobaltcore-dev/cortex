@@ -69,7 +69,7 @@ func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf
 		Type:         "identity",
 		Availability: "public",
 	}))
-	logger.Info("using identity endpoint", "url", url)
+	logger.V(1).Info("using identity endpoint", "url", url)
 	c.keystone = &gophercloud.ServiceClient{
 		ProviderClient: c.provider,
 		Endpoint:       url,
@@ -81,7 +81,7 @@ func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf
 		Type:         "compute",
 		Availability: "public",
 	}))
-	logger.Info("using nova endpoint", "url", url)
+	logger.V(1).Info("using nova endpoint", "url", url)
 	c.nova = &gophercloud.ServiceClient{
 		ProviderClient: c.provider,
 		Endpoint:       url,
@@ -95,7 +95,7 @@ func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf
 		Type:         "resources",
 		Availability: "public",
 	}))
-	logger.Info("using limes endpoint", "url", url)
+	logger.V(1).Info("using limes endpoint", "url", url)
 	c.limes = &gophercloud.ServiceClient{
 		ProviderClient: c.provider,
 		Endpoint:       url,

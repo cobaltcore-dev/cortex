@@ -89,7 +89,7 @@ func (api *HTTPAPI) HandleReportCapacity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	logger.Info("calculated capacity report", "resourceCount", len(report.Resources))
+	logger.V(1).Info("calculated capacity report", "resourceCount", len(report.Resources))
 
 	// Update capacity gauge for each resource/AZ combination.
 	for resName, resReport := range report.Resources {
