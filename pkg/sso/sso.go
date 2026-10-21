@@ -9,12 +9,14 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("sso")
 
 // userAgent is the User-Agent value set on every outgoing HTTP request made
 // through clients created by this package, identifying cortex as the caller.
@@ -53,7 +55,7 @@ type requestLogger struct {
 
 // RoundTrip logs the request URL before making the request.
 func (lrt *requestLogger) RoundTrip(req *http.Request) (*http.Response, error) {
-	slog.Info("making http request", "url", req.URL.String())
+	log.V(1).Info("making http request", "url", req.URL.String())
 	return lrt.T.RoundTrip(req)
 }
 
@@ -151,7 +153,7 @@ func NewHTTPClient(conf SSOConfig) (*http.Client, error) {
 		return nil, err
 	}
 	if conf.Cert == "" {
-		slog.Debug("making http requests without SSO")
+		log.V(1).Info("making http requests without SSO")
 	}
 	return &http.Client{Transport: &userAgentTransport{T: &requestLogger{T: transport}}}, nil
 }
