@@ -466,6 +466,7 @@ func (r *CommittedResourceController) applyReservationState(ctx context.Context,
 		EnablePaygPreAllocation: r.Conf.EnablePaygPreAllocation,
 		VMSource:                r.VMSource,
 		NoHostsFoundTTL:         r.Conf.NoHostsFoundTTL.Duration,
+		OwnerObject:             cr,
 	})
 	result, err := mgr.ApplyCommitmentState(ctx, logger, state, flavorGroups, "committed-resource-controller")
 	if err != nil {
@@ -669,6 +670,7 @@ func (r *CommittedResourceController) rollbackToAccepted(ctx context.Context, lo
 	rollbackMgr := NewReservationManager(r.Client, ReservationManagerConfig{
 		EnablePaygPreAllocation: r.Conf.EnablePaygPreAllocation,
 		VMSource:                r.VMSource,
+		OwnerObject:             cr,
 	})
 	if _, err := rollbackMgr.ApplyCommitmentState(ctx, logger, state, flavorGroups, "committed-resource-controller-rollback"); err != nil {
 		return fmt.Errorf("rollback apply failed: %w", err)

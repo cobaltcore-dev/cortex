@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // ApplyResult contains the result of applying a commitment state.
@@ -63,6 +64,9 @@ type ReservationManagerConfig struct {
 	// NoHostsFoundTTL is the minimum age of a NoHostsFound condition before the slot is
 	// deleted and its memory reclaimed into the delta. A zero value disables TTL expiry.
 	NoHostsFoundTTL time.Duration
+	// OwnerObject, when set, is used to attach an owner reference to each newly created
+	// Reservation so the API server cascade-deletes slots when the owner is deleted.
+	OwnerObject client.Object
 }
 
 // ReservationManager handles CRUD operations for Reservation CRDs.
@@ -271,7 +275,10 @@ func (m *ReservationManager) ApplyCommitmentState(
 					slotMemoryBytes = deltaMemoryBytes
 				}
 				slotMemoryMB := uint64(slotMemoryBytes) / (1024 * 1024)
-				reservation := m.newPaygReservation(desiredState, nextSlotIndex, candidate, slotMemoryMB, flavorGroup, creator)
+				reservation, err := m.newPaygReservation(desiredState, nextSlotIndex, candidate, slotMemoryMB, flavorGroup, creator)
+				if err != nil {
+					return result, fmt.Errorf("failed to set owner reference on PAYG reservation slot %d: %w", nextSlotIndex, err)
+				}
 				deltaMemoryBytes -= slotMemoryBytes
 				result.Created++
 				result.TouchedReservations = append(result.TouchedReservations, *reservation)
@@ -331,7 +338,10 @@ func (m *ReservationManager) ApplyCommitmentState(
 	for deltaMemoryBytes >= smallestMemBytes {
 		// Select the largest flavor that fits the remaining delta (flavors sorted descending by memory).
 		flavorInGroup, memoryBytes := selectFlavor(deltaMemoryBytes, flavorGroup)
-		reservation := m.newReservation(desiredState, nextSlotIndex, flavorInGroup, memoryBytes, creator)
+		reservation, err := m.newReservation(desiredState, nextSlotIndex, flavorInGroup, memoryBytes, creator)
+		if err != nil {
+			return result, fmt.Errorf("failed to set owner reference on reservation slot %d: %w", nextSlotIndex, err)
+		}
 		result.TouchedReservations = append(result.TouchedReservations, *reservation)
 		deltaMemoryBytes -= memoryBytes
 		result.Created++
@@ -475,7 +485,7 @@ func (m *ReservationManager) newReservation(
 	flavorInGroup compute.FlavorInGroup,
 	memoryBytes int64,
 	creator string,
-) *v1alpha1.Reservation {
+) (*v1alpha1.Reservation, error) {
 
 	namePrefix := state.NamePrefix
 	if namePrefix == "" {
@@ -521,7 +531,7 @@ func (m *ReservationManager) newReservation(
 		spec.EndTime = &metav1.Time{Time: *state.EndTime}
 	}
 
-	return &v1alpha1.Reservation{
+	reservation := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			Labels: map[string]string{
@@ -533,6 +543,12 @@ func (m *ReservationManager) newReservation(
 		},
 		Spec: spec,
 	}
+	if m.cfg.OwnerObject != nil {
+		if err := controllerutil.SetControllerReference(m.cfg.OwnerObject, reservation, m.Scheme()); err != nil {
+			return nil, err
+		}
+	}
+	return reservation, nil
 }
 
 // newPaygReservation creates a Reservation pre-populated with a PAYG VM.
@@ -546,7 +562,7 @@ func (m *ReservationManager) newPaygReservation(
 	slotMemoryMB uint64,
 	flavorGroup compute.FlavorGroupFeature,
 	creator string,
-) *v1alpha1.Reservation {
+) (*v1alpha1.Reservation, error) {
 
 	namePrefix := state.NamePrefix
 	if namePrefix == "" {
@@ -600,7 +616,7 @@ func (m *ReservationManager) newPaygReservation(
 		spec.EndTime = &metav1.Time{Time: *state.EndTime}
 	}
 
-	return &v1alpha1.Reservation{
+	reservation := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			Labels: map[string]string{
@@ -612,4 +628,10 @@ func (m *ReservationManager) newPaygReservation(
 		},
 		Spec: spec,
 	}
+	if m.cfg.OwnerObject != nil {
+		if err := controllerutil.SetControllerReference(m.cfg.OwnerObject, reservation, m.Scheme()); err != nil {
+			return nil, err
+		}
+	}
+	return reservation, nil
 }

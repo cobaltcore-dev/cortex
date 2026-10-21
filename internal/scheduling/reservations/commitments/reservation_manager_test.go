@@ -95,6 +95,7 @@ func TestApplyCommitmentState(t *testing.T) {
 		noHostsFoundTTL     time.Duration                         // 0 = disabled
 		wantError           bool
 		wantRemovedCount    int // exact count; -1 = at least one
+		ownerObject         client.Object
 		validateRemoved     func(t *testing.T, removed []v1alpha1.Reservation)
 		validateTouched     func(t *testing.T, touched []v1alpha1.Reservation)
 		validateRemaining   func(t *testing.T, remaining []v1alpha1.Reservation)
@@ -102,6 +103,7 @@ func TestApplyCommitmentState(t *testing.T) {
 		{
 			name:             "creates reservations to match desired memory",
 			desiredMemoryGiB: 24, // 3 × 8 GiB slots
+			ownerObject:      &v1alpha1.CommittedResource{ObjectMeta: metav1.ObjectMeta{Name: "test-cr", UID: "test-uid-1234"}},
 			validateTouched: func(t *testing.T, touched []v1alpha1.Reservation) {
 				if len(touched) == 0 {
 					t.Fatal("expected at least one reservation created")
@@ -462,7 +464,7 @@ func TestApplyCommitmentState(t *testing.T) {
 				objects[i] = &tt.existingSlots[i]
 			}
 			k8sClient := newCRTestClient(scheme, objects...)
-			manager := NewReservationManager(k8sClient, ReservationManagerConfig{MaxSlots: tt.maxSlots, NoHostsFoundTTL: tt.noHostsFoundTTL})
+			manager := NewReservationManager(k8sClient, ReservationManagerConfig{MaxSlots: tt.maxSlots, NoHostsFoundTTL: tt.noHostsFoundTTL, OwnerObject: tt.ownerObject})
 
 			flavorGroups := testFlavorGroups()
 			if tt.flavorGroupOverride != nil {
@@ -518,6 +520,25 @@ func TestApplyCommitmentState(t *testing.T) {
 					t.Fatal(err)
 				}
 				tt.validateRemaining(t, remaining.Items)
+			}
+			for _, r := range applyResult.TouchedReservations {
+				if tt.ownerObject != nil {
+					if len(r.OwnerReferences) != 1 {
+						t.Errorf("expected 1 owner reference, got %d", len(r.OwnerReferences))
+						continue
+					}
+					if r.OwnerReferences[0].Name != tt.ownerObject.GetName() {
+						t.Errorf("owner reference name: want %q, got %q", tt.ownerObject.GetName(), r.OwnerReferences[0].Name)
+					}
+					if r.OwnerReferences[0].UID != tt.ownerObject.GetUID() {
+						t.Errorf("owner reference UID: want %q, got %q", tt.ownerObject.GetUID(), r.OwnerReferences[0].UID)
+					}
+					if r.OwnerReferences[0].Controller == nil || !*r.OwnerReferences[0].Controller {
+						t.Error("expected Controller=true on owner reference")
+					}
+				} else if len(r.OwnerReferences) != 0 {
+					t.Errorf("expected 0 owner references, got %d", len(r.OwnerReferences))
+				}
 			}
 		})
 	}
@@ -590,6 +611,7 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 		existingSlots    []v1alpha1.Reservation
 		desiredMemoryGiB int64
 		enablePayg       bool // must be set true to activate PAYG; false = flag disabled (Phase 5 only)
+		ownerObject      client.Object
 		validateTouched  func(t *testing.T, touched []v1alpha1.Reservation)
 	}{
 		{
@@ -598,6 +620,7 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 			paygVMs:          []reservations.VM{paygVM(vmUUID, "small")},
 			enablePayg:       true,
 			desiredMemoryGiB: 8,
+			ownerObject:      &v1alpha1.CommittedResource{ObjectMeta: metav1.ObjectMeta{Name: "test-cr", UID: "test-uid-1234"}},
 			validateTouched: func(t *testing.T, touched []v1alpha1.Reservation) {
 				if len(touched) != 1 {
 					t.Fatalf("want 1 slot, got %d", len(touched))
@@ -831,6 +854,7 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 			mgr := NewReservationManager(k8sClient, ReservationManagerConfig{
 				EnablePaygPreAllocation: tt.enablePayg,
 				VMSource:                &fakeVMSource{vms: tt.paygVMs},
+				OwnerObject:             tt.ownerObject,
 			})
 
 			desiredState := &CommitmentState{
@@ -849,6 +873,25 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 			}
 			if tt.validateTouched != nil {
 				tt.validateTouched(t, result.TouchedReservations)
+			}
+			for _, r := range result.TouchedReservations {
+				if tt.ownerObject != nil {
+					if len(r.OwnerReferences) != 1 {
+						t.Errorf("expected 1 owner reference, got %d", len(r.OwnerReferences))
+						continue
+					}
+					if r.OwnerReferences[0].Name != tt.ownerObject.GetName() {
+						t.Errorf("owner reference name: want %q, got %q", tt.ownerObject.GetName(), r.OwnerReferences[0].Name)
+					}
+					if r.OwnerReferences[0].UID != tt.ownerObject.GetUID() {
+						t.Errorf("owner reference UID: want %q, got %q", tt.ownerObject.GetUID(), r.OwnerReferences[0].UID)
+					}
+					if r.OwnerReferences[0].Controller == nil || !*r.OwnerReferences[0].Controller {
+						t.Error("expected Controller=true on owner reference")
+					}
+				} else if len(r.OwnerReferences) != 0 {
+					t.Errorf("expected 0 owner references, got %d", len(r.OwnerReferences))
+				}
 			}
 		})
 	}
@@ -1091,7 +1134,10 @@ func TestNewReservation_SelectsAppropriateFlavor(t *testing.T) {
 			}
 
 			flavorInGroup, memoryBytes := selectFlavor(tt.deltaMemory, flavorGroup)
-			reservation := manager.newReservation(state, 0, flavorInGroup, memoryBytes, "syncer")
+			reservation, err := manager.newReservation(state, 0, flavorInGroup, memoryBytes, "syncer")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
 			if reservation.Spec.CommittedResourceReservation.ResourceName != tt.expectedName {
 				t.Errorf("expected flavor %s, got %s",
@@ -1177,7 +1223,10 @@ func TestNewReservation_VariableRatioGroup_SelectsLargestByMemory(t *testing.T) 
 				FlavorGroupName: "gp-group",
 			}
 			flavorInGroup, memoryBytes := selectFlavor(deltaBytes, fg)
-			res := manager.newReservation(state, 0, flavorInGroup, memoryBytes, "test")
+			res, err := manager.newReservation(state, 0, flavorInGroup, memoryBytes, "test")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			if got := res.Spec.CommittedResourceReservation.ResourceName; got != tt.wantFlavor {
 				t.Errorf("flavor: want %s, got %s", tt.wantFlavor, got)
 			}
