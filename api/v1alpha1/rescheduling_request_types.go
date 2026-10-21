@@ -156,6 +156,29 @@ const (
 	ReschedulingRequestConditionInProgress = "InProgress"
 )
 
+// ReschedulingMove records a single entity relocation decided by the scheduling
+// pass: an entity is moved off its source host onto the chosen target host.
+type ReschedulingMove struct {
+	// EntityKind is the kind of the moved entity.
+	// +kubebuilder:validation:Required
+	EntityKind DrainEntityKind `json:"entityKind"`
+
+	// EntityRef references the moved entity (e.g. the Nova server uuid for a vm).
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MaxLength=253
+	EntityRef string `json:"entityRef"`
+
+	// SourceHost is the host the entity is moved away from.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MaxLength=253
+	SourceHost string `json:"sourceHost"`
+
+	// TargetHost is the host the entity is moved onto.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MaxLength=253
+	TargetHost string `json:"targetHost"`
+}
+
 // ReschedulingRequestStatus defines the observed state of ReschedulingRequest.
 type ReschedulingRequestStatus struct {
 	// State is the current lifecycle stage of the request.
@@ -167,6 +190,28 @@ type ReschedulingRequestStatus struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf || (oldSelf == 'Pending' && (self == 'Acknowledged' || self == 'Rejected')) || (oldSelf == 'Acknowledged' && (self == 'Processing' || self == 'Rejected')) || (oldSelf == 'Processing' && (self == 'Accepted' || self == 'Rejected' || self == 'Failed')) || (oldSelf == 'Accepted' && (self == 'Succeeded' || self == 'Failed'))",message="illegal rescheduling request state transition"
 	State ReschedulingRequestState `json:"state,omitempty"`
+
+	// Moves are the entity relocations the scheduling pass committed to when the
+	// request was accepted. Empty until the request reaches Accepted.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxItems=1000
+	Moves []ReschedulingMove `json:"moves,omitempty"`
+
+	// BlockedHosts are the hosts this request currently blocks from receiving
+	// incoming placement (the host-block taken for a drain with reserve). It is
+	// set while the request is active and cleared on rollback or, for a succeeded
+	// request, once BlockExpiresAt has passed. The drain-block scheduling filter
+	// reads this field across all requests to exclude these hosts.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxItems=10
+	BlockedHosts []string `json:"blockedHosts,omitempty"`
+
+	// BlockExpiresAt is the time after which the host-block of a succeeded request
+	// may be released. It is set when an accepted request succeeds and lets the
+	// block linger for a grace period so incoming placement does not immediately
+	// land on a just-drained host.
+	// +kubebuilder:validation:Optional
+	BlockExpiresAt *metav1.Time `json:"blockExpiresAt,omitempty"`
 
 	// The current status conditions of the rescheduling request.
 	// +kubebuilder:validation:Optional

@@ -553,11 +553,22 @@ func main() {
 		if schedulerURL == "" {
 			schedulerURL = rescheduler.DefaultSchedulerURL
 		}
+		blockedHostsTTL := reschedulerConfig.BlockedHostsTTL.Duration
+		if blockedHostsTTL == 0 {
+			blockedHostsTTL = rescheduler.DefaultBlockedHostsTTL.Duration
+		}
+		apiTimeout := reschedulerConfig.APITimeout.Duration
+		if apiTimeout == 0 {
+			apiTimeout = rescheduler.DefaultAPITimeout.Duration
+		}
 		setupLog.Info("rescheduler using HTTP placement backend", "url", schedulerURL)
 		if err := (&rescheduler.Scheduler{
-			Client:    multiclusterClient,
-			Queue:     rescheduler.NewFIFOQueue(),
-			Placement: rescheduler.NewHTTPPlacementBackend(schedulerURL),
+			Client:              multiclusterClient,
+			Queue:               rescheduler.NewFIFOQueue(),
+			Placement:           rescheduler.NewHTTPPlacementBackend(schedulerURL),
+			CandidateSaturation: reschedulerConfig.CandidateSaturation,
+			BlockedHostsTTL:     blockedHostsTTL,
+			APITimeout:          apiTimeout,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "rescheduler-controller")
 			os.Exit(1)

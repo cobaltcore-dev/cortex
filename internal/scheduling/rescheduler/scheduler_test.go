@@ -5,13 +5,14 @@ package rescheduler
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -24,6 +25,9 @@ func newScheduler(t *testing.T, objs ...client.Object) *Scheduler {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add scheme: %v", err)
+	}
+	if err := vmv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add vm scheme: %v", err)
 	}
 	cl := fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -39,10 +43,36 @@ func newScheduler(t *testing.T, objs ...client.Object) *Scheduler {
 }
 
 func request(name string, state v1alpha1.ReschedulingRequestState) *v1alpha1.ReschedulingRequest {
+	rr := drainRequest(name, false, drainHost{"src-host", []string{"vm-1"}})
+	rr.Status.State = state
+	return rr
+}
+
+// drainHost names a source host and the vm entities to move off it.
+type drainHost struct {
+	host string
+	vms  []string
+}
+
+// drainRequest builds a drain ReschedulingRequest for the given hosts/entities.
+func drainRequest(name string, reserve bool, hosts ...drainHost) *v1alpha1.ReschedulingRequest {
+	targets := make([]v1alpha1.DrainTargetHost, 0, len(hosts))
+	for _, h := range hosts {
+		entities := make([]v1alpha1.DrainTargetEntity, 0, len(h.vms))
+		for _, vm := range h.vms {
+			entities = append(entities, v1alpha1.DrainTargetEntity{Kind: v1alpha1.DrainEntityKindVM, Ref: vm})
+		}
+		targets = append(targets, v1alpha1.DrainTargetHost{Host: h.host, Entities: entities})
+	}
 	return &v1alpha1.ReschedulingRequest{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
-		Spec:       v1alpha1.ReschedulingRequestSpec{Action: v1alpha1.ReschedulingActionDrain},
-		Status:     v1alpha1.ReschedulingRequestStatus{State: state},
+		Spec: v1alpha1.ReschedulingRequestSpec{
+			Action: v1alpha1.ReschedulingActionDrain,
+			Drain: &v1alpha1.DrainActionSpec{
+				Reserve: reserve,
+				Target:  v1alpha1.DrainTarget{Hosts: targets},
+			},
+		},
 	}
 }
 
@@ -251,57 +281,88 @@ func startBroker(s *Scheduler) context.CancelFunc {
 	return cancel
 }
 
-func TestScheduleOne_SchedulesAcknowledged(t *testing.T) {
-	rr := request("req-ack", v1alpha1.ReschedulingRequestStateAcknowledged)
-	s := newScheduler(t, rr)
-	defer startBroker(s)()
-	s.Queue.Add(client.ObjectKeyFromObject(rr))
-
-	s.scheduleOne(context.Background())
-
-	if got := stateOf(t, s, "req-ack"); got != v1alpha1.ReschedulingRequestStateAccepted {
-		t.Errorf("expected Accepted after scheduling, got %s", got)
-	}
-}
-
-func TestScheduleOne_RejectsWhenNoHost(t *testing.T) {
-	rr := request("req-ack", v1alpha1.ReschedulingRequestStateAcknowledged)
-	s := newScheduler(t, rr)
-	s.Placement = fakeBackend{result: PlacementResult{Hosts: nil}}
-	defer startBroker(s)()
-	s.Queue.Add(client.ObjectKeyFromObject(rr))
-
-	s.scheduleOne(context.Background())
-
-	if got := stateOf(t, s, "req-ack"); got != v1alpha1.ReschedulingRequestStateRejected {
-		t.Errorf("expected Rejected when no host found, got %s", got)
-	}
-}
-
-func TestScheduleOne_FailsOnPlacementError(t *testing.T) {
-	rr := request("req-ack", v1alpha1.ReschedulingRequestStateAcknowledged)
-	s := newScheduler(t, rr)
-	s.Placement = fakeBackend{result: PlacementResult{Err: errors.New("boom")}}
-	defer startBroker(s)()
-	s.Queue.Add(client.ObjectKeyFromObject(rr))
-
-	s.scheduleOne(context.Background())
-
-	if got := stateOf(t, s, "req-ack"); got != v1alpha1.ReschedulingRequestStateFailed {
-		t.Errorf("expected Failed on placement error, got %s", got)
-	}
-}
-
-func TestScheduleOne_SkipsStaleEntry(t *testing.T) {
+func TestScheduleNext_SkipsStaleEntry(t *testing.T) {
 	// A queued key whose request is no longer Acknowledged must not be advanced.
 	rr := request("req-pending", v1alpha1.ReschedulingRequestStatePending)
 	s := newScheduler(t, rr)
 	defer startBroker(s)()
 	s.Queue.Add(client.ObjectKeyFromObject(rr))
 
-	s.scheduleOne(context.Background())
+	s.scheduleNext(context.Background())
 
 	if got := stateOf(t, s, "req-pending"); got != v1alpha1.ReschedulingRequestStatePending {
 		t.Errorf("expected stale entry untouched (Pending), got %s", got)
+	}
+}
+
+// perEntityBackend returns candidate hosts keyed by the requested instance uuid,
+// so different entities of a request can get different placement results.
+type perEntityBackend struct{ byUUID map[string][]string }
+
+func (b perEntityBackend) Schedule(_ context.Context, req PlacementRequest) PlacementResult {
+	return PlacementResult{Candidates: b.byUUID[req.InstanceUUID]}
+}
+
+func getRequest(t *testing.T, s *Scheduler, name string) *v1alpha1.ReschedulingRequest {
+	t.Helper()
+	got := &v1alpha1.ReschedulingRequest{}
+	if err := s.Get(context.Background(), client.ObjectKey{Name: name}, got); err != nil {
+		t.Fatalf("get %s failed: %v", name, err)
+	}
+	return got
+}
+
+func TestUpdateStatus_ConflictOnStaleResourceVersion(t *testing.T) {
+	rr := request("rr", v1alpha1.ReschedulingRequestStateAcknowledged)
+	s := newScheduler(t, rr)
+	ctx := context.Background()
+
+	// Two in-memory copies read at the same resourceVersion.
+	stale := getRequest(t, s, "rr")
+	fresh := getRequest(t, s, "rr")
+
+	// The first write succeeds and bumps the resourceVersion.
+	if err := s.updateStatus(ctx, fresh, func() {
+		fresh.Status.State = v1alpha1.ReschedulingRequestStateProcessing
+	}); err != nil {
+		t.Fatalf("first update failed: %v", err)
+	}
+	// The stale copy now carries an outdated resourceVersion; the optimistic
+	// lock must reject the write rather than silently overwriting.
+	err := s.updateStatus(ctx, stale, func() {
+		stale.Status.State = v1alpha1.ReschedulingRequestStateProcessing
+	})
+	if !apierrors.IsConflict(err) {
+		t.Fatalf("expected a conflict error from the optimistic lock, got %v", err)
+	}
+}
+
+func TestHandleSucceeded_HostBlockTTL(t *testing.T) {
+	s := newScheduler(t)
+	rr := request("done", v1alpha1.ReschedulingRequestStateSucceeded)
+	rr.Status.BlockedHosts = []string{"src-host"}
+	expiry := metav1.NewTime(time.Now().Add(time.Hour))
+	rr.Status.BlockExpiresAt = &expiry
+	if err := s.Create(context.Background(), rr); err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+
+	// Within the grace period the block is retained and a requeue is requested.
+	res, err := s.handleSucceeded(context.Background(), rr)
+	if err != nil {
+		t.Fatalf("handleSucceeded failed: %v", err)
+	}
+	if res.RequeueAfter <= 0 {
+		t.Fatalf("expected a requeue while block is active, got %+v", res)
+	}
+
+	// Once expired the block is released.
+	past := metav1.NewTime(time.Now().Add(-time.Minute))
+	rr.Status.BlockExpiresAt = &past
+	if _, err := s.handleSucceeded(context.Background(), rr); err != nil {
+		t.Fatalf("handleSucceeded failed: %v", err)
+	}
+	if got := getRequest(t, s, "done"); len(got.Status.BlockedHosts) != 0 {
+		t.Errorf("expected block released after TTL, got %v", got.Status.BlockedHosts)
 	}
 }

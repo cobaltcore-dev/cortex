@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
+    controller-gen.kubebuilder.io/version: v0.23.0
   name: reschedulingrequests.cortex.cloud
 spec:
   group: cortex.cloud
@@ -144,6 +144,25 @@ spec:
           status:
             description: status defines the observed state of ReschedulingRequest
             properties:
+              blockExpiresAt:
+                description: |-
+                  BlockExpiresAt is the time after which the host-block of a succeeded request
+                  may be released. It is set when an accepted request succeeds and lets the
+                  block linger for a grace period so incoming placement does not immediately
+                  land on a just-drained host.
+                format: date-time
+                type: string
+              blockedHosts:
+                description: |-
+                  BlockedHosts are the hosts this request currently blocks from receiving
+                  incoming placement (the host-block taken for a drain with reserve). It is
+                  set while the request is active and cleared on rollback or, for a succeeded
+                  request, once BlockExpiresAt has passed. The drain-block scheduling filter
+                  reads this field across all requests to exclude these hosts.
+                items:
+                  type: string
+                maxItems: 10
+                type: array
               conditions:
                 description: The current status conditions of the rescheduling request.
                 items:
@@ -200,6 +219,40 @@ spec:
                   - status
                   - type
                   type: object
+                type: array
+              moves:
+                description: |-
+                  Moves are the entity relocations the scheduling pass committed to when the
+                  request was accepted. Empty until the request reaches Accepted.
+                items:
+                  description: |-
+                    ReschedulingMove records a single entity relocation decided by the scheduling
+                    pass: an entity is moved off its source host onto the chosen target host.
+                  properties:
+                    entityKind:
+                      description: EntityKind is the kind of the moved entity.
+                      type: string
+                    entityRef:
+                      description: EntityRef references the moved entity (e.g. the
+                        Nova server uuid for a vm).
+                      maxLength: 253
+                      type: string
+                    sourceHost:
+                      description: SourceHost is the host the entity is moved away
+                        from.
+                      maxLength: 253
+                      type: string
+                    targetHost:
+                      description: TargetHost is the host the entity is moved onto.
+                      maxLength: 253
+                      type: string
+                  required:
+                  - entityKind
+                  - entityRef
+                  - sourceHost
+                  - targetHost
+                  type: object
+                maxItems: 1000
                 type: array
               state:
                 default: Pending
