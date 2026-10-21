@@ -63,7 +63,7 @@ func (api *limesAPI) Init(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Info("using limes endpoint", "url", url)
+	log.V(1).Info("using limes endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
 		ProviderClient: provider,
 		Endpoint:       url,
@@ -76,7 +76,7 @@ func (api *limesAPI) Init(ctx context.Context) error {
 // This function fetches the commitments for each project in parallel.
 func (api *limesAPI) GetAllCommitments(ctx context.Context, projects []identity.Project) ([]Commitment, error) {
 	label := Commitment{}.TableName()
-	log.Info("fetching limes data", "label", label)
+	log.V(1).Info("fetching limes data", "label", label)
 	if api.mon.RequestTimer != nil {
 		hist := api.mon.RequestTimer.WithLabelValues(label)
 		timer := prometheus.NewTimer(hist)
@@ -143,7 +143,7 @@ func (api *limesAPI) getCommitments(ctx context.Context, project identity.Projec
 	// This can happen if a project was deleted after we fetched the list of projects but before we fetched the commitments for the project.
 	// In this case, we can simply ignore the error and return an empty list of commitments for the project.
 	if resp.StatusCode == http.StatusNotFound {
-		log.Info("limes returned 404 for project, skipping", "projectID", project.ID, "domainID", project.DomainID)
+		log.V(1).Info("limes returned 404 for project, skipping", "projectID", project.ID, "domainID", project.DomainID)
 		return []Commitment{}, nil
 	}
 
