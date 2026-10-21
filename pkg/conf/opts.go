@@ -5,8 +5,11 @@ package conf
 
 import (
 	"encoding/json"
-	"log/slog"
+
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("conf")
 
 // Raw options that are not directly unmarshalled when loading from json.
 // Usage: call Unmarshal to unmarshal the options into a struct.
@@ -59,7 +62,7 @@ func (s *JsonOpts[Options]) Load(opts RawOpts) error {
 	if err := opts.Unmarshal(&o); err != nil {
 		return err
 	}
-	slog.Info("jsonopts: loaded", "options", o)
+	log.Info("jsonopts: loaded", "options", o)
 	s.Options = o
 	return nil
 }
