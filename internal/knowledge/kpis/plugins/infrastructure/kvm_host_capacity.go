@@ -5,7 +5,6 @@ package infrastructure
 
 import (
 	"context"
-	"log/slog"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -146,13 +145,13 @@ func (k *KVMHostCapacityKPI) getHypervisors() ([]kvmHost, error) {
 func (k *KVMHostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	hypervisors, err := k.getHypervisors()
 	if err != nil {
-		slog.Error("failed to get hypervisors", "error", err)
+		log.Error(err, "failed to get hypervisors")
 		return
 	}
 
 	reservations := &v1alpha1.ReservationList{}
 	if err := k.Client.List(context.Background(), reservations); err != nil {
-		slog.Error("failed to list reservations", "error", err)
+		log.Error(err, "failed to list reservations")
 		return
 	}
 
@@ -164,7 +163,7 @@ func (k *KVMHostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		ramTotal, hasRAMTotal := hypervisor.getResourceCapacity(hv1.ResourceMemory)
 
 		if !hasCPUTotal || !hasRAMTotal {
-			slog.Warn("hypervisor missing cpu or ram capacity, skipping", "host", hypervisor.Name)
+			log.Info("hypervisor missing cpu or ram capacity, skipping", "host", hypervisor.Name)
 			continue
 		}
 

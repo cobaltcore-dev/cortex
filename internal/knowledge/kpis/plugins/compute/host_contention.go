@@ -5,7 +5,6 @@ package compute
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
@@ -15,7 +14,10 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("compute")
 
 type VMwareHostContentionKPI struct {
 	// Common base for all KPIs that provides standard functionality.
@@ -58,13 +60,13 @@ func (k *VMwareHostContentionKPI) Collect(ch chan<- prometheus.Metric) {
 		client.ObjectKey{Name: "vmware-long-term-contended-hosts"},
 		knowledge,
 	); err != nil {
-		slog.Error("failed to get knowledge vmware-long-term-contended-hosts", "err", err)
+		log.Error(err, "failed to get knowledge vmware-long-term-contended-hosts")
 		return
 	}
 	contentions, err := v1alpha1.
 		UnboxFeatureList[compute.VROpsHostsystemContentionLongTerm](knowledge.Status.Raw)
 	if err != nil {
-		slog.Error("failed to unbox vmware hostsystem contention", "err", err)
+		log.Error(err, "failed to unbox vmware hostsystem contention")
 		return
 	}
 	buckets := prometheus.LinearBuckets(0, 5, 20)

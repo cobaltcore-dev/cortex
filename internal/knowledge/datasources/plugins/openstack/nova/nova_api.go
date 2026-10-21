@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
@@ -22,7 +21,10 @@ import (
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/liquidapi"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("nova")
 
 type NovaAPI interface {
 	// Init the nova API.
@@ -73,7 +75,7 @@ func (api *novaAPI) Init(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	slog.Info("using nova endpoint", "url", url)
+	log.Info("using nova endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
 		ProviderClient: provider,
 		Endpoint:       url,
@@ -94,7 +96,7 @@ func (api *novaAPI) Init(ctx context.Context) error {
 // Get all Nova servers that are NOT deleted. (Includes ERROR, SHUTOFF etc)
 func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 	label := Server{}.TableName()
-	slog.Info("fetching nova data", "label", label)
+	log.Info("fetching nova data", "label", label)
 
 	if api.mon.RequestTimer != nil {
 		hist := api.mon.RequestTimer.WithLabelValues(label)
@@ -135,7 +137,7 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 		}
 		for _, s := range list.Servers {
 			if _, ok := seen[s.ID]; ok {
-				slog.Warn("skipping duplicate server", "id", s.ID)
+				log.Info("skipping duplicate server", "id", s.ID)
 				continue
 			}
 			seen[s.ID] = struct{}{}
@@ -153,7 +155,7 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 	// Probe OS type concurrently for KVM servers.
 	api.probeOSTypes(ctx, allServers)
 
-	slog.Info("fetched", "label", label, "count", len(allServers))
+	log.Info("fetched", "label", label, "count", len(allServers))
 	return allServers, nil
 }
 
@@ -161,7 +163,7 @@ func (api *novaAPI) GetAllServers(ctx context.Context) ([]Server, error) {
 // The prober caches by image ID internally, so repeated images are instant.
 func (api *novaAPI) probeOSTypes(ctx context.Context, allServers []Server) {
 	if api.osTypeProber == nil {
-		slog.Info("os_type prober not initialized, skipping")
+		log.Info("os_type prober not initialized, skipping")
 		return
 	}
 	var probed, resolved, unknown, rootdiskMissing int
@@ -182,7 +184,7 @@ func (api *novaAPI) probeOSTypes(ctx context.Context, allServers []Server) {
 			allServers[i].OSType = osType
 		}
 	}
-	slog.Info("probed os_type for KVM servers",
+	log.Info("probed os_type for KVM servers",
 		"total", len(allServers),
 		"kvm", probed,
 		"resolved", resolved,
@@ -208,7 +210,7 @@ func (api *novaAPI) probeOSType(ctx context.Context, s Server) string {
 //   - This means historical server data is limited to 3 weeks
 func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]DeletedServer, error) {
 	label := DeletedServer{}.TableName()
-	slog.Info("fetching nova data", "label", label, "changedSince", since)
+	log.Info("fetching nova data", "label", label, "changedSince", since)
 
 	if api.mon.RequestTimer != nil {
 		hist := api.mon.RequestTimer.WithLabelValues(label)
@@ -249,7 +251,7 @@ func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]D
 		}
 		for _, s := range list.Servers {
 			if _, ok := seen[s.ID]; ok {
-				slog.Warn("skipping duplicate deleted server", "id", s.ID)
+				log.Info("skipping duplicate deleted server", "id", s.ID)
 				continue
 			}
 			seen[s.ID] = struct{}{}
@@ -264,14 +266,14 @@ func (api *novaAPI) GetDeletedServers(ctx context.Context, since time.Time) ([]D
 		}
 	}
 
-	slog.Info("fetched", "label", label, "count", len(deletedServers))
+	log.Info("fetched", "label", label, "count", len(deletedServers))
 	return deletedServers, nil
 }
 
 // Get all Nova hypervisors.
 func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error) {
 	label := Hypervisor{}.TableName()
-	slog.Info("fetching nova data", "label", label)
+	log.Info("fetching nova data", "label", label)
 	// Note: currently we need to fetch this without gophercloud.
 	// Gophercloud will just assume the request is a single page even when
 	// the response is paginated, returning only the first page.
@@ -312,7 +314,7 @@ func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
 		}
 		for _, h := range list.Hypervisors {
 			if _, ok := seen[h.ID]; ok {
-				slog.Warn("skipping duplicate hypervisor", "id", h.ID)
+				log.Info("skipping duplicate hypervisor", "id", h.ID)
 				continue
 			}
 			seen[h.ID] = struct{}{}
@@ -326,14 +328,14 @@ func (api *novaAPI) GetAllHypervisors(ctx context.Context) ([]Hypervisor, error)
 			}
 		}
 	}
-	slog.Info("fetched", "label", label, "count", len(hypervisors))
+	log.Info("fetched", "label", label, "count", len(hypervisors))
 	return hypervisors, nil
 }
 
 // Get all Nova flavors.
 func (api *novaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
 	label := Flavor{}.TableName()
-	slog.Info("fetching nova data", "label", label)
+	log.Info("fetching nova data", "label", label)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
 		if api.mon.RequestTimer != nil {
@@ -354,7 +356,7 @@ func (api *novaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
 	if err := pages.(flavors.FlavorPage).ExtractInto(data); err != nil {
 		return nil, err
 	}
-	slog.Info("fetched", "label", label, "count", len(data.Flavors))
+	log.Info("fetched", "label", label, "count", len(data.Flavors))
 	return data.Flavors, nil
 }
 
@@ -370,7 +372,7 @@ func (api *novaAPI) GetAllFlavors(ctx context.Context) ([]Flavor, error) {
 //   - This means historical migration data has limited retention
 func (api *novaAPI) GetAllMigrations(ctx context.Context) ([]Migration, error) {
 	label := Migration{}.TableName()
-	slog.Info("fetching nova data", "label", label)
+	log.Info("fetching nova data", "label", label)
 	// Note: currently we need to fetch this without gophercloud.
 	// See: https://github.com/gophercloud/gophercloud/pull/3244
 	if api.mon.RequestTimer != nil {
@@ -411,7 +413,7 @@ func (api *novaAPI) GetAllMigrations(ctx context.Context) ([]Migration, error) {
 		}
 		for _, m := range list.Migrations {
 			if _, ok := seen[m.ID]; ok {
-				slog.Warn("skipping duplicate migration", "id", m.ID)
+				log.Info("skipping duplicate migration", "id", m.ID)
 				continue
 			}
 			seen[m.ID] = struct{}{}
@@ -425,13 +427,13 @@ func (api *novaAPI) GetAllMigrations(ctx context.Context) ([]Migration, error) {
 			}
 		}
 	}
-	slog.Info("fetched", "label", label, "count", len(migrations))
+	log.Info("fetched", "label", label, "count", len(migrations))
 	return migrations, nil
 }
 
 func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 	label := Aggregate{}.TableName()
-	slog.Info("fetching nova data", "label", label)
+	log.Info("fetching nova data", "label", label)
 
 	pages, err := func() (pagination.Page, error) {
 		if api.mon.RequestTimer != nil {
@@ -455,7 +457,7 @@ func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 		return nil, err
 	}
 
-	slog.Info("fetched", "label", label, "count", len(data.Aggregate))
+	log.Info("fetched", "label", label, "count", len(data.Aggregate))
 
 	aggregates := []Aggregate{}
 
@@ -463,9 +465,10 @@ func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 	for _, rawAggregate := range data.Aggregate {
 		properties, err := json.Marshal(rawAggregate.Metadata)
 		if err != nil {
-			slog.Warn(
+			log.Error(
+				err,
 				"failed to marshal aggregate properties",
-				"aggregate", rawAggregate.UUID, "error", err,
+				"aggregate", rawAggregate.UUID,
 			)
 			properties = []byte{}
 		}
@@ -497,13 +500,13 @@ func (api *novaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error) {
 func initOSTypeProber(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (prober *liquidapi.OSTypeProber) {
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Warn("panic during OS type prober initialization - os_type will be empty", "panic", r)
+			log.Info("panic during OS type prober initialization - os_type will be empty", "panic", r)
 			prober = nil
 		}
 	}()
 	p, err := liquidapi.NewOSTypeProber(provider, eo)
 	if err != nil {
-		slog.Warn("failed to initialize OS type prober - os_type will be empty", "error", err)
+		log.Error(err, "failed to initialize OS type prober - os_type will be empty")
 		return nil
 	}
 	return p

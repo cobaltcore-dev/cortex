@@ -4,14 +4,15 @@
 package extractor
 
 import (
-	"log/slog"
-
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("extractor")
 
 // Collection of Prometheus metrics to monitor feature extraction.
 type Monitor struct {
@@ -95,7 +96,7 @@ func monitorFeatureExtractor[F plugins.FeatureExtractor](label string, f F, m Mo
 
 // Run the wrapped feature extractor and measure the time it takes.
 func (m FeatureExtractorMonitor[F]) Extract() ([]plugins.Feature, error) {
-	slog.Info("features: extracting", "extractor", m.label)
+	log.Info("features: extracting", "extractor", m.label)
 
 	features, err := m.FeatureExtractor.Extract()
 	if err != nil {

@@ -5,7 +5,6 @@ package infrastructure
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
@@ -52,18 +51,18 @@ func (k *VMwareHostCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
 func (k *VMwareHostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	hosts, err := k.getVMwareHosts()
 	if err != nil {
-		slog.Error("vmware_host_capacity: failed to get vmware hosts", "error", err)
+		log.Error(err, "vmware_host_capacity: failed to get vmware hosts")
 		return
 	}
 	utilizations, err := k.getHostUtilizations()
 	if err != nil {
-		slog.Error("vmware_host_capacity: failed to get host utilizations", "error", err)
+		log.Error(err, "vmware_host_capacity: failed to get host utilizations")
 		return
 	}
 	for _, host := range hosts {
 		util, ok := utilizations[host.ComputeHost]
 		if !ok {
-			slog.Warn("vmware_host_capacity: missing utilization for host", "compute_host", host.ComputeHost)
+			log.Info("vmware_host_capacity: missing utilization for host", "compute_host", host.ComputeHost)
 			continue
 		}
 
@@ -107,7 +106,7 @@ func (k *VMwareHostCapacityKPI) getHostUtilizations() (map[string]compute.HostUt
 	m := make(map[string]compute.HostUtilization, len(utils))
 	for _, u := range utils {
 		if u.TotalVCPUsAllocatable == 0 || u.TotalRAMAllocatableMB == 0 || u.TotalDiskAllocatableGB == 0 {
-			slog.Warn("vmware_host_capacity: skipping host with zero allocatable resources", "compute_host", u.ComputeHost)
+			log.Info("vmware_host_capacity: skipping host with zero allocatable resources", "compute_host", u.ComputeHost)
 			continue
 		}
 		m[u.ComputeHost] = u

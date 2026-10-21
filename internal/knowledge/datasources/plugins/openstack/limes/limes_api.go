@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -18,7 +17,10 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("limes")
 
 type LimesAPI interface {
 	// Init the limes API.
@@ -61,7 +63,7 @@ func (api *limesAPI) Init(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	slog.Info("using limes endpoint", "url", url)
+	log.Info("using limes endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
 		ProviderClient: provider,
 		Endpoint:       url,
@@ -74,7 +76,7 @@ func (api *limesAPI) Init(ctx context.Context) error {
 // This function fetches the commitments for each project in parallel.
 func (api *limesAPI) GetAllCommitments(ctx context.Context, projects []identity.Project) ([]Commitment, error) {
 	label := Commitment{}.TableName()
-	slog.Info("fetching limes data", "label", label)
+	log.Info("fetching limes data", "label", label)
 	if api.mon.RequestTimer != nil {
 		hist := api.mon.RequestTimer.WithLabelValues(label)
 		timer := prometheus.NewTimer(hist)
@@ -114,7 +116,7 @@ func (api *limesAPI) GetAllCommitments(ctx context.Context, projects []identity.
 	// Return the first error encountered, if any.
 	for err := range errChan {
 		if err != nil {
-			slog.Error("failed to resolve commitments", "error", err)
+			log.Error(err, "failed to resolve commitments")
 			return nil, err
 		}
 	}
@@ -141,7 +143,7 @@ func (api *limesAPI) getCommitments(ctx context.Context, project identity.Projec
 	// This can happen if a project was deleted after we fetched the list of projects but before we fetched the commitments for the project.
 	// In this case, we can simply ignore the error and return an empty list of commitments for the project.
 	if resp.StatusCode == http.StatusNotFound {
-		slog.Warn("limes returned 404 for project, skipping", "projectID", project.ID, "domainID", project.DomainID)
+		log.Info("limes returned 404 for project, skipping", "projectID", project.ID, "domainID", project.DomainID)
 		return []Commitment{}, nil
 	}
 

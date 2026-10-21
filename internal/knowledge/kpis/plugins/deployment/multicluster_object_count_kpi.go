@@ -6,7 +6,6 @@ package deployment
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 	"unicode"
 
@@ -17,7 +16,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("deployment")
 
 // MulticlusterObjectCountKPIOpts configures which GVKs to count per cluster.
 // Each entry is a "group/version/Kind" string, e.g.
@@ -94,8 +96,8 @@ func (k *MulticlusterObjectCountKPI) Collect(ch chan<- prometheus.Metric) {
 	for _, d := range k.descs {
 		perCluster, err := k.mcl.ListMetadataPerCluster(ctx, d.gvk)
 		if err != nil {
-			slog.Error("multicluster_object_count_kpi: failed to list object metadata",
-				"gvk", d.gvk, "err", err)
+			log.Error(err, "multicluster_object_count_kpi: failed to list object metadata",
+				"gvk", d.gvk)
 			continue
 		}
 		for _, c := range perCluster {

@@ -5,7 +5,6 @@ package identity
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -15,7 +14,10 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/domains"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
 	"github.com/prometheus/client_golang/prometheus"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("identity")
 
 type IdentityAPI interface {
 	Init(ctx context.Context) error
@@ -46,7 +48,7 @@ func (api *identityAPI) Init(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	slog.Info("using identity endpoint", "url", url)
+	log.Info("using identity endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
 		ProviderClient: provider,
 		Endpoint:       url,
@@ -58,7 +60,7 @@ func (api *identityAPI) Init(ctx context.Context) error {
 // Get all the domains from the OpenStack identity service.
 func (api *identityAPI) GetAllDomains(ctx context.Context) ([]Domain, error) {
 	label := Domain{}.TableName()
-	slog.Info("fetching identity data", "label", "domains")
+	log.Info("fetching identity data", "label", "domains")
 	if api.mon.RequestTimer != nil {
 		hist := api.mon.RequestTimer.WithLabelValues(label)
 		timer := prometheus.NewTimer(hist)
@@ -75,14 +77,14 @@ func (api *identityAPI) GetAllDomains(ctx context.Context) ([]Domain, error) {
 	if err := allPages.(domains.DomainPage).ExtractInto(data); err != nil {
 		return nil, err
 	}
-	slog.Info("fetched identity data", "label", "domains", "count", len(data.Domains))
+	log.Info("fetched identity data", "label", "domains", "count", len(data.Domains))
 	return data.Domains, nil
 }
 
 // Get all the projects from the OpenStack identity service.
 func (api *identityAPI) GetAllProjects(ctx context.Context) ([]Project, error) {
 	label := Project{}.TableName()
-	slog.Info("fetching identity data", "label", "projects")
+	log.Info("fetching identity data", "label", "projects")
 	if api.mon.RequestTimer != nil {
 		hist := api.mon.RequestTimer.WithLabelValues(label)
 		timer := prometheus.NewTimer(hist)
@@ -112,6 +114,6 @@ func (api *identityAPI) GetAllProjects(ctx context.Context) ([]Project, error) {
 			Tags:     strings.Join(p.Tags, ","),
 		})
 	}
-	slog.Info("fetched identity data", "label", "projects", "count", len(data.Projects))
+	log.Info("fetched identity data", "label", "projects", "count", len(data.Projects))
 	return result, nil
 }

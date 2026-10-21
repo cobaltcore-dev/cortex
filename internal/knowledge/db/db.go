@@ -8,7 +8,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/url"
 	"reflect"
 	"strings"
@@ -22,7 +21,10 @@ import (
 	"go.xyrillian.de/gg/pgruntime"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("db")
 
 // Wrapper around gorp.DbMap that adds some convenience functions.
 type DB struct {
@@ -94,11 +96,11 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 	dbUrlStr := dbURL.String()
 	// Strip the password from the URL for logging.
 	urlForLog := strings.ReplaceAll(dbUrlStr, strip(string(password)), "****")
-	slog.Info("connecting to database", "url", urlForLog)
+	log.Info("connecting to database", "url", urlForLog)
 
 	// Check if we already have a connection for this url.
 	if conn, ok := connections.Load(dbUrlStr); ok {
-		slog.Info("reusing existing database connection", "url", urlForLog)
+		log.Info("reusing existing database connection", "url", urlForLog)
 		return conn.(*DB), nil
 	}
 
@@ -120,13 +122,13 @@ func (c Connector) FromSecretRef(ctx context.Context, ref corev1.SecretReference
 			db.Close()
 			return nil, fmt.Errorf("giving up connecting to database: %w", lastErr)
 		}
-		slog.Error("failed to connect to database, retrying...", "error", lastErr)
+		log.Error(lastErr, "failed to connect to database, retrying...")
 		time.Sleep(1 * time.Second)
 	}
 
 	db.SetMaxOpenConns(16)
 	dbMap := &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
-	slog.Info("database is ready")
+	log.Info("database is ready")
 	wrapped := &DB{DbMap: dbMap, host: string(host), databaseName: string(database)}
 	connections.Store(dbUrlStr, wrapped)
 	return wrapped, nil
@@ -148,11 +150,11 @@ func (d *DB) CreateTable(table ...*gorp.TableMap) error {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	for _, t := range table {
-		slog.Info("creating table if exists", "table", t.TableName)
+		log.Info("creating table if exists", "table", t.TableName)
 		sql := t.SqlForCreate(true) // true means to add IF NOT EXISTS
 		if _, err := tx.Exec(sql); err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				slog.Error("failed to rollback transaction", "error", rbErr)
+				log.Error(rbErr, "failed to rollback transaction")
 			}
 			return fmt.Errorf("failed to create table %s: %w", t.TableName, err)
 		}
@@ -162,10 +164,10 @@ func (d *DB) CreateTable(table ...*gorp.TableMap) error {
 
 // Adds a Model table to the database.
 func (d *DB) AddTable(t Table) *gorp.TableMap {
-	slog.Info("adding table", "table", t.TableName(), "model", t)
+	log.Info("adding table", "table", t.TableName(), "model", t)
 	tablemap := d.AddTableWithName(t, t.TableName())
 	for indexName, columnNames := range t.Indexes() {
-		slog.Info("adding index", "index", indexName, "table", t.TableName(), "columns", columnNames)
+		log.Info("adding index", "index", indexName, "table", t.TableName(), "columns", columnNames)
 		tablemap.AddIndex(indexName, "Btree", columnNames)
 	}
 	return tablemap
@@ -188,13 +190,13 @@ func (d *DB) TableExists(t Table) bool {
 			WHERE type='table' AND name = :table_name
 		);`
 	default:
-		slog.Error("unsupported database dialect")
+		log.Error(nil, "unsupported database dialect")
 		return false
 	}
 	var exists bool
 	err := d.SelectOne(&exists, query, map[string]any{"table_name": t.TableName()})
 	if err != nil {
-		slog.Error("failed to check if table exists", "error", err)
+		log.Error(err, "failed to check if table exists")
 		return false
 	}
 	return exists
@@ -210,13 +212,13 @@ func ReplaceAll[T Table](db DB, objs ...T) error {
 	}
 	if _, err = tx.Exec("DELETE FROM " + tableName); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
-			slog.Error("failed to rollback transaction", "error", rbErr)
+			log.Error(rbErr, "failed to rollback transaction")
 		}
 		return fmt.Errorf("failed to delete old objects from %s: %w", tableName, err)
 	}
 	if err = BulkInsert(tx, db, objs...); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
-			slog.Error("failed to rollback transaction", "error", rbErr)
+			log.Error(rbErr, "failed to rollback transaction")
 		}
 		return fmt.Errorf("failed to insert new objects into %s: %w", tableName, err)
 	}
@@ -247,7 +249,7 @@ func BulkInsert[T Table](executor gorp.SqlExecutor, db DB, allObjs ...T) error {
 		objType := reflect.ValueOf(objs).Index(0).Type()
 		table, err := db.TableFor(objType, false)
 		if err != nil {
-			slog.Error("failed to get table for object", "error", err)
+			log.Error(err, "failed to get table for object")
 			return err
 		}
 
@@ -295,9 +297,9 @@ func BulkInsert[T Table](executor gorp.SqlExecutor, db DB, allObjs ...T) error {
 		builder.WriteString(db.Dialect.QuerySuffix())
 		query := builder.String()
 
-		slog.Debug("bulk inserting objects", "n", len(objs))
+		log.V(1).Info("bulk inserting objects", "n", len(objs))
 		if _, err = executor.Exec(query, params...); err != nil {
-			slog.Error("failed to execute bulk insert", "error", err)
+			log.Error(err, "failed to execute bulk insert")
 			return err
 		}
 	}
