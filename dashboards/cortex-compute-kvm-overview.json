@@ -1,0 +1,1603 @@
+{
+  "kind": "Dashboard",
+  "metadata": {
+    "name": "cortex_compute_kvm_-_overview",
+    "createdAt": "2026-08-07T12:22:15.443047024Z",
+    "updatedAt": "2026-10-16T08:40:03.66409193Z",
+    "version": 27,
+    "tags": [
+      "compute",
+      "infrastructure",
+      "kvm"
+    ],
+    "project": "workload-management"
+  },
+  "spec": {
+    "display": {
+      "name": "Cortex Compute KVM - Overview"
+    },
+    "panels": {
+      "0bd008cb61534dd79adf132c4dbf4cbe": {
+        "kind": "Panel",
+        "spec": {
+          "display": {},
+          "plugin": {
+            "kind": "StatChart",
+            "spec": {
+              "calculation": "last-number",
+              "colorMode": "background_solid",
+              "format": {
+                "unit": "percent-decimal"
+              },
+              "legendMode": "on",
+              "thresholds": {
+                "defaultColor": "#EE6C6C",
+                "steps": [
+                  {
+                    "value": 0.2
+                  },
+                  {
+                    "color": "#59CC8D",
+                    "value": 0.3
+                  }
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"cpu\", type=\"available\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)) /\nsum(max(cortex_kvm_host_capacity_total{resource=\"cpu\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Available (%)"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "21f4f235214c41e3af992369cd123460": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "CPU (Including Overcommit) per Node"
+          },
+          "plugin": {
+            "kind": "BarChart",
+            "spec": {
+              "calculation": "last",
+              "format": {
+                "shortValues": true,
+                "unit": "decimal"
+              },
+              "groupBy": [
+                "compute_host"
+              ],
+              "isStacked": true,
+              "mode": "value",
+              "orientation": "vertical",
+              "sort": "desc",
+              "visual": {
+                "colorOverrides": [
+                  {
+                    "color": "#59CC8D",
+                    "regex": "Available"
+                  },
+                  {
+                    "color": "#ff0000",
+                    "regex": "Workload"
+                  },
+                  {
+                    "color": "#EE6C6C",
+                    "regex": "Reserved"
+                  },
+                  {
+                    "color": "#FFCC00",
+                    "regex": "Failover"
+                  }
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "max(cortex_kvm_host_capacity_usage{resource=\"cpu\", type=\"utilized\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)",
+                    "seriesNameFormat": "Workload"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "max(cortex_kvm_host_capacity_usage{resource=\"cpu\", type=\"reserved\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)",
+                    "seriesNameFormat": "Reserved"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "max(cortex_kvm_host_capacity_usage{resource=\"cpu\", type=\"failover\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)",
+                    "seriesNameFormat": "Failover"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "max(cortex_kvm_host_capacity_usage{resource=\"cpu\", type=\"available\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)",
+                    "seriesNameFormat": "Available"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "25d5d82a303d4996ac8c54221a2c7930": {
+        "kind": "Panel",
+        "spec": {
+          "display": {},
+          "plugin": {
+            "kind": "StatChart",
+            "spec": {
+              "calculation": "last-number",
+              "colorMode": "background_solid",
+              "format": {
+                "unit": "percent-decimal"
+              },
+              "legendMode": "on",
+              "thresholds": {
+                "defaultColor": "#EE6C6C",
+                "steps": [
+                  {
+                    "value": 0.2
+                  },
+                  {
+                    "color": "#59CC8D",
+                    "value": 0.3
+                  }
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"cpu\", type=\"available\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)) /\nsum(max(cortex_kvm_host_capacity_total{resource=\"cpu\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Available (%)"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "3fa162da513245e48dc59a999f199b06": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "RAM"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "mode": "table",
+                "position": "bottom",
+                "size": "small",
+                "values": [
+                  "last"
+                ]
+              },
+              "querySettings": [
+                {
+                  "areaOpacity": 1,
+                  "colorMode": "fixed-single",
+                  "colorValue": "#ff0000",
+                  "queryIndex": 0
+                },
+                {
+                  "areaOpacity": 1,
+                  "colorMode": "fixed-single",
+                  "colorValue": "#EE6C6C",
+                  "queryIndex": 1
+                },
+                {
+                  "areaOpacity": 1,
+                  "colorMode": "fixed-single",
+                  "colorValue": "#FFCC00",
+                  "queryIndex": 2
+                },
+                {
+                  "colorMode": "fixed-single",
+                  "colorValue": "#59CC8D",
+                  "lineStyle": "dotted",
+                  "queryIndex": 3
+                }
+              ],
+              "visual": {
+                "areaOpacity": 0.3,
+                "connectNulls": false,
+                "display": "line",
+                "lineStyle": "solid",
+                "lineWidth": 1.25,
+                "pointRadius": 2.75,
+                "stack": "all"
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "bytes"
+                },
+                "label": "",
+                "min": 0,
+                "show": true
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"ram\", type=\"utilized\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Workload"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"ram\", type=\"reserved\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Reserved"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"ram\", type=\"failover\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Failover"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"ram\", type=\"available\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Available"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "637a56a9a10f4a01adc8fb093372e2d9": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "RAM"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "mode": "table",
+                "position": "bottom",
+                "size": "small",
+                "values": [
+                  "last"
+                ]
+              },
+              "querySettings": [
+                {
+                  "areaOpacity": 1,
+                  "colorMode": "fixed-single",
+                  "colorValue": "#ff0000",
+                  "queryIndex": 0
+                },
+                {
+                  "areaOpacity": 1,
+                  "colorMode": "fixed-single",
+                  "colorValue": "#EE6C6C",
+                  "queryIndex": 1
+                },
+                {
+                  "areaOpacity": 1,
+                  "colorMode": "fixed-single",
+                  "colorValue": "#FFCC00",
+                  "queryIndex": 2
+                },
+                {
+                  "colorMode": "fixed-single",
+                  "colorValue": "#59CC8D",
+                  "lineStyle": "dotted",
+                  "queryIndex": 3
+                }
+              ],
+              "visual": {
+                "areaOpacity": 0.3,
+                "connectNulls": false,
+                "display": "line",
+                "lineStyle": "solid",
+                "lineWidth": 1.25,
+                "pointRadius": 2.75,
+                "stack": "all"
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "bytes"
+                },
+                "label": "",
+                "min": 0,
+                "show": true
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"ram\", type=\"utilized\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Workload"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"ram\", type=\"reserved\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Reserved"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"ram\", type=\"failover\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Failover"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"ram\", type=\"available\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Available"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "67452971dc324dc895af19b9d53a534c": {
+        "kind": "Panel",
+        "spec": {
+          "display": {},
+          "plugin": {
+            "kind": "StatChart",
+            "spec": {
+              "calculation": "last-number",
+              "colorMode": "background_solid",
+              "format": {
+                "unit": "percent-decimal"
+              },
+              "legendMode": "on",
+              "thresholds": {
+                "defaultColor": "#EE6C6C",
+                "steps": [
+                  {
+                    "value": 0.2
+                  },
+                  {
+                    "color": "#59CC8D",
+                    "value": 0.3
+                  }
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"ram\", type=\"available\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)) /\nsum(max(cortex_kvm_host_capacity_total{resource=\"ram\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Available (%)"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "70c5f4938c6949cd8134e0cc4141b114": {
+        "kind": "Panel",
+        "spec": {
+          "display": {},
+          "plugin": {
+            "kind": "StatChart",
+            "spec": {
+              "calculation": "last-number",
+              "colorMode": "background_solid",
+              "format": {
+                "unit": "bytes"
+              },
+              "legendMode": "on",
+              "thresholds": {
+                "defaultColor": "#a8a8a8"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "sum(max(cortex_kvm_host_capacity_total{resource=\"ram\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Total"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "8903f96391d145edb726911120d44467": {
+        "kind": "Panel",
+        "spec": {
+          "display": {},
+          "plugin": {
+            "kind": "StatChart",
+            "spec": {
+              "calculation": "last-number",
+              "colorMode": "background_solid",
+              "format": {
+                "unit": "decimal"
+              },
+              "legendMode": "on",
+              "thresholds": {
+                "defaultColor": "#a8a8a8"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "sum(max(cortex_kvm_host_capacity_total{resource=\"cpu\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Total"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "89954bf09009496dbbef7d0187f0a6f1": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "RAM per Node (HANA Stacking)",
+            "description": "This panel shows the stacking of the HANA VMs."
+          },
+          "plugin": {
+            "kind": "BarChart",
+            "spec": {
+              "calculation": "last",
+              "format": {
+                "unit": "bytes"
+              },
+              "groupBy": [
+                "compute_host"
+              ],
+              "isStacked": true,
+              "mode": "value",
+              "orientation": "vertical",
+              "sort": "desc",
+              "visual": {
+                "colorOverrides": [
+                  {
+                    "color": "#ffffff",
+                    "regex": "Available"
+                  },
+                  {
+                    "color": "#ff0000",
+                    "regex": "Workload"
+                  },
+                  {
+                    "color": "#ababab",
+                    "regex": "Reserved"
+                  },
+                  {
+                    "color": "#838383",
+                    "regex": "Failover"
+                  }
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "sum by (compute_host, project_name, domain_name) (cortex_kvm_hana_stacking_ram_bytes{availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"})",
+                    "seriesNameFormat": "{{domain_name}} / {{project_name}}"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "max(cortex_kvm_host_capacity_usage{resource=\"ram\", type=\"reserved\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)",
+                    "seriesNameFormat": "Reserved"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "max(cortex_kvm_host_capacity_usage{resource=\"ram\", type=\"failover\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)",
+                    "seriesNameFormat": "Failover"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "max(cortex_kvm_host_capacity_usage{resource=\"ram\", type=\"available\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)",
+                    "seriesNameFormat": "Available"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "904dcac2a8e14775a4d8ae2ca2202938": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "RAM per Node"
+          },
+          "plugin": {
+            "kind": "BarChart",
+            "spec": {
+              "calculation": "last",
+              "format": {
+                "unit": "bytes"
+              },
+              "groupBy": [
+                "compute_host"
+              ],
+              "isStacked": true,
+              "mode": "value",
+              "orientation": "vertical",
+              "sort": "desc",
+              "visual": {
+                "colorOverrides": [
+                  {
+                    "color": "#59CC8D",
+                    "regex": "Available"
+                  },
+                  {
+                    "color": "#ff0000",
+                    "regex": "Workload"
+                  },
+                  {
+                    "color": "#EE6C6C",
+                    "regex": "Reserved"
+                  },
+                  {
+                    "color": "#FFCC00",
+                    "regex": "Failover"
+                  }
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "max(cortex_kvm_host_capacity_usage{resource=\"ram\", type=\"utilized\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)",
+                    "seriesNameFormat": "Workload"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "max(cortex_kvm_host_capacity_usage{resource=\"ram\", type=\"reserved\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)",
+                    "seriesNameFormat": "Reserved"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "max(cortex_kvm_host_capacity_usage{resource=\"ram\", type=\"failover\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)",
+                    "seriesNameFormat": "Failover"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "max(cortex_kvm_host_capacity_usage{resource=\"ram\", type=\"available\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)",
+                    "seriesNameFormat": "Available"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "a9dd34da3a4041c7ba68744a1575b517": {
+        "kind": "Panel",
+        "spec": {
+          "display": {},
+          "plugin": {
+            "kind": "StatChart",
+            "spec": {
+              "calculation": "last-number",
+              "colorMode": "background_solid",
+              "format": {
+                "unit": "decimal"
+              },
+              "legendMode": "on",
+              "thresholds": {
+                "defaultColor": "#a8a8a8"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "sum(max(cortex_kvm_host_capacity_total{resource=\"cpu\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Total"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "aaf7a61a2049412489127df64eeb9482": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "CPU (Including Overcommit)"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "mode": "table",
+                "position": "bottom",
+                "size": "small",
+                "values": [
+                  "last"
+                ]
+              },
+              "querySettings": [
+                {
+                  "areaOpacity": 1,
+                  "colorMode": "fixed-single",
+                  "colorValue": "#ff0000",
+                  "queryIndex": 0
+                },
+                {
+                  "areaOpacity": 1,
+                  "colorMode": "fixed-single",
+                  "colorValue": "#EE6C6C",
+                  "queryIndex": 1
+                },
+                {
+                  "areaOpacity": 1,
+                  "colorMode": "fixed-single",
+                  "colorValue": "#FFCC00",
+                  "queryIndex": 2
+                },
+                {
+                  "colorMode": "fixed-single",
+                  "colorValue": "#59CC8D",
+                  "lineStyle": "dotted",
+                  "queryIndex": 3
+                }
+              ],
+              "visual": {
+                "areaOpacity": 0.3,
+                "connectNulls": false,
+                "display": "line",
+                "lineStyle": "solid",
+                "lineWidth": 1.25,
+                "pointRadius": 2.75,
+                "stack": "all"
+              },
+              "yAxis": {
+                "format": {
+                  "shortValues": true,
+                  "unit": "decimal"
+                },
+                "label": "",
+                "min": 0,
+                "show": true
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"cpu\", type=\"utilized\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Workload"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"cpu\", type=\"reserved\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Reserved"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"cpu\", type=\"failover\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Failover"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"cpu\", type=\"available\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Available"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "cb02b2ba990c463db72337b2eede7489": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "CPU (Including Overcommit) per Node"
+          },
+          "plugin": {
+            "kind": "BarChart",
+            "spec": {
+              "calculation": "last",
+              "format": {
+                "shortValues": true,
+                "unit": "decimal"
+              },
+              "groupBy": [
+                "compute_host"
+              ],
+              "isStacked": true,
+              "mode": "value",
+              "orientation": "vertical",
+              "sort": "desc",
+              "visual": {
+                "colorOverrides": [
+                  {
+                    "color": "#59CC8D",
+                    "regex": "Available"
+                  },
+                  {
+                    "color": "#ff0000",
+                    "regex": "Workload"
+                  },
+                  {
+                    "color": "#EE6C6C",
+                    "regex": "Reserved"
+                  },
+                  {
+                    "color": "#FFCC00",
+                    "regex": "Failover"
+                  }
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "max(cortex_kvm_host_capacity_usage{resource=\"cpu\", type=\"utilized\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)",
+                    "seriesNameFormat": "Workload"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "max(cortex_kvm_host_capacity_usage{resource=\"cpu\", type=\"reserved\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)",
+                    "seriesNameFormat": "Reserved"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "max(cortex_kvm_host_capacity_usage{resource=\"cpu\", type=\"failover\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)",
+                    "seriesNameFormat": "Failover"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "max(cortex_kvm_host_capacity_usage{resource=\"cpu\", type=\"available\", availability_zone=~\"$availability_zone\", workload_type=\"hana\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)",
+                    "seriesNameFormat": "Available"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "e2e97cc902fd4754bbc907ca87952e24": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "CPU (Including Overcommit)"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "mode": "table",
+                "position": "bottom",
+                "size": "small",
+                "values": [
+                  "last"
+                ]
+              },
+              "querySettings": [
+                {
+                  "areaOpacity": 1,
+                  "colorMode": "fixed-single",
+                  "colorValue": "#ff0000",
+                  "queryIndex": 0
+                },
+                {
+                  "areaOpacity": 1,
+                  "colorMode": "fixed-single",
+                  "colorValue": "#EE6C6C",
+                  "queryIndex": 1
+                },
+                {
+                  "areaOpacity": 1,
+                  "colorMode": "fixed-single",
+                  "colorValue": "#FFCC00",
+                  "queryIndex": 2
+                },
+                {
+                  "colorMode": "fixed-single",
+                  "colorValue": "#59CC8D",
+                  "lineStyle": "dotted",
+                  "queryIndex": 3
+                }
+              ],
+              "visual": {
+                "areaOpacity": 0.3,
+                "connectNulls": false,
+                "display": "line",
+                "lineStyle": "solid",
+                "lineWidth": 1.25,
+                "pointRadius": 2.75,
+                "stack": "all"
+              },
+              "yAxis": {
+                "format": {
+                  "shortValues": true,
+                  "unit": "decimal"
+                },
+                "label": "",
+                "min": 0,
+                "show": true
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"cpu\", type=\"utilized\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Workload"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"cpu\", type=\"reserved\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Reserved"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"cpu\", type=\"failover\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Failover"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"cpu\", type=\"available\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Available"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "f99f5bdcf0254d7c8b3396ca5e3bcc9f": {
+        "kind": "Panel",
+        "spec": {
+          "display": {},
+          "plugin": {
+            "kind": "StatChart",
+            "spec": {
+              "calculation": "last-number",
+              "colorMode": "background_solid",
+              "format": {
+                "unit": "bytes"
+              },
+              "legendMode": "on",
+              "thresholds": {
+                "defaultColor": "#a8a8a8"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "sum(max(cortex_kvm_host_capacity_total{resource=\"ram\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Total"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "ff12a8beff3e493e86239d0d65386ef7": {
+        "kind": "Panel",
+        "spec": {
+          "display": {},
+          "plugin": {
+            "kind": "StatChart",
+            "spec": {
+              "calculation": "last-number",
+              "colorMode": "background_solid",
+              "format": {
+                "unit": "percent-decimal"
+              },
+              "legendMode": "on",
+              "thresholds": {
+                "defaultColor": "#EE6C6C",
+                "steps": [
+                  {
+                    "value": 0.2
+                  },
+                  {
+                    "color": "#59CC8D",
+                    "value": 0.3
+                  }
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "instant": true,
+                    "query": "sum(max(cortex_kvm_host_capacity_usage{resource=\"ram\", type=\"available\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host)) /\nsum(max(cortex_kvm_host_capacity_total{resource=\"ram\", availability_zone=~\"$availability_zone\", workload_type=\"general-purpose\", cpu_architecture=~\"$cpu_architecture\", building_block=~\"$building_block\", compute_host=~\"$compute_host\", ready=~\"$ready\", maintenance=~\"$maintenance\", decommissioned=~\"$decommissioned\", external_customer=~\"$external_customer\", status=~\"$status\"}) by (compute_host))",
+                    "seriesNameFormat": "Available (%)"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "HANA",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 10,
+              "content": {
+                "$ref": "#/spec/panels/aaf7a61a2049412489127df64eeb9482"
+              }
+            },
+            {
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 10,
+              "content": {
+                "$ref": "#/spec/panels/3fa162da513245e48dc59a999f199b06"
+              }
+            },
+            {
+              "x": 0,
+              "y": 10,
+              "width": 6,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/8903f96391d145edb726911120d44467"
+              }
+            },
+            {
+              "x": 6,
+              "y": 10,
+              "width": 6,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/25d5d82a303d4996ac8c54221a2c7930"
+              }
+            },
+            {
+              "x": 12,
+              "y": 10,
+              "width": 6,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/70c5f4938c6949cd8134e0cc4141b114"
+              }
+            },
+            {
+              "x": 18,
+              "y": 10,
+              "width": 6,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/67452971dc324dc895af19b9d53a534c"
+              }
+            },
+            {
+              "x": 0,
+              "y": 13,
+              "width": 12,
+              "height": 8,
+              "content": {
+                "$ref": "#/spec/panels/cb02b2ba990c463db72337b2eede7489"
+              }
+            },
+            {
+              "x": 12,
+              "y": 13,
+              "width": 12,
+              "height": 8,
+              "content": {
+                "$ref": "#/spec/panels/89954bf09009496dbbef7d0187f0a6f1"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "General Purpose",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 10,
+              "content": {
+                "$ref": "#/spec/panels/e2e97cc902fd4754bbc907ca87952e24"
+              }
+            },
+            {
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 10,
+              "content": {
+                "$ref": "#/spec/panels/637a56a9a10f4a01adc8fb093372e2d9"
+              }
+            },
+            {
+              "x": 0,
+              "y": 10,
+              "width": 6,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/a9dd34da3a4041c7ba68744a1575b517"
+              }
+            },
+            {
+              "x": 6,
+              "y": 10,
+              "width": 6,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/0bd008cb61534dd79adf132c4dbf4cbe"
+              }
+            },
+            {
+              "x": 12,
+              "y": 10,
+              "width": 6,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/f99f5bdcf0254d7c8b3396ca5e3bcc9f"
+              }
+            },
+            {
+              "x": 18,
+              "y": 10,
+              "width": 6,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/ff12a8beff3e493e86239d0d65386ef7"
+              }
+            },
+            {
+              "x": 0,
+              "y": 13,
+              "width": 12,
+              "height": 8,
+              "content": {
+                "$ref": "#/spec/panels/21f4f235214c41e3af992369cd123460"
+              }
+            },
+            {
+              "x": 12,
+              "y": 13,
+              "width": 12,
+              "height": 8,
+              "content": {
+                "$ref": "#/spec/panels/904dcac2a8e14775a4d8ae2ca2202938"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "variables": [
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "display": {
+            "name": "Availability Zone",
+            "hidden": false
+          },
+          "defaultValue": "$__all",
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "sort": "none",
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "availability_zone",
+              "matchers": [
+                "cortex_kvm_host_capacity_total"
+              ]
+            }
+          },
+          "name": "availability_zone"
+        }
+      },
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "display": {
+            "name": "Workload Type",
+            "description": "HANA / General Purpose",
+            "hidden": true
+          },
+          "defaultValue": "$__all",
+          "allowAllValue": true,
+          "allowMultiple": false,
+          "sort": "none",
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "workload_type",
+              "matchers": [
+                "cortex_kvm_host_capacity_total"
+              ]
+            }
+          },
+          "name": "workload_type"
+        }
+      },
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "display": {
+            "name": "CPU Architecture",
+            "hidden": false
+          },
+          "defaultValue": "$__all",
+          "allowAllValue": true,
+          "allowMultiple": false,
+          "sort": "none",
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "cpu_architecture",
+              "matchers": [
+                "cortex_kvm_host_capacity_total"
+              ]
+            }
+          },
+          "name": "cpu_architecture"
+        }
+      },
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "display": {
+            "name": "Building Block",
+            "hidden": false
+          },
+          "defaultValue": "$__all",
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "sort": "none",
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "building_block",
+              "matchers": [
+                "cortex_kvm_host_capacity_total{availability_zone=~\"$availability_zone\"}"
+              ]
+            }
+          },
+          "name": "building_block"
+        }
+      },
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "display": {
+            "name": "Nodes",
+            "hidden": false
+          },
+          "defaultValue": "$__all",
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "sort": "none",
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "compute_host",
+              "matchers": [
+                "cortex_kvm_host_capacity_total{building_block=~\"$building_block\",availability_zone=~\"$availability_zone\"}"
+              ]
+            }
+          },
+          "name": "compute_host"
+        }
+      },
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "display": {
+            "name": "Ready",
+            "hidden": false
+          },
+          "defaultValue": "$__all",
+          "allowAllValue": true,
+          "allowMultiple": false,
+          "customAllValue": ".*",
+          "sort": "none",
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "ready",
+              "matchers": [
+                "cortex_kvm_host_capacity_total"
+              ]
+            }
+          },
+          "name": "ready"
+        }
+      },
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "display": {
+            "name": "Maintenance",
+            "hidden": false
+          },
+          "defaultValue": "false",
+          "allowAllValue": true,
+          "allowMultiple": false,
+          "sort": "none",
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "maintenance",
+              "matchers": [
+                "cortex_kvm_host_capacity_total"
+              ]
+            }
+          },
+          "name": "maintenance"
+        }
+      },
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "display": {
+            "name": "Decommissioned",
+            "hidden": false
+          },
+          "defaultValue": "false",
+          "allowAllValue": true,
+          "allowMultiple": false,
+          "sort": "none",
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "decommissioned",
+              "matchers": [
+                "cortex_kvm_host_capacity_total"
+              ]
+            }
+          },
+          "name": "decommissioned"
+        }
+      },
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "display": {
+            "name": "External Customer",
+            "hidden": true
+          },
+          "defaultValue": "$__all",
+          "allowAllValue": true,
+          "allowMultiple": false,
+          "sort": "none",
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "external_customer",
+              "matchers": [
+                "cortex_kvm_host_capacity_total"
+              ]
+            }
+          },
+          "name": "external_customer"
+        }
+      },
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "display": {
+            "name": "Status",
+            "hidden": false
+          },
+          "defaultValue": "$__all",
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "customAllValue": ".*",
+          "sort": "none",
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "status",
+              "matchers": [
+                "cortex_kvm_host_capacity_total{availability_zone=~\"$availability_zone\"}"
+              ]
+            }
+          },
+          "name": "status"
+        }
+      }
+    ],
+    "annotations": [],
+    "duration": "7d",
+    "timezone": "local",
+    "refreshInterval": "60s",
+    "links": []
+  }
+}

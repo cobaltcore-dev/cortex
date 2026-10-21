@@ -322,10 +322,10 @@ helm_resource(
     labels=['Monitoring'],
     resource_deps=['perses'],
 )
-watch_file('./tools/perses/dashboards')
+watch_file('./dashboards')
 k8s_yaml(local(' '.join([
     'kubectl create configmap cortex-perses-dashboards',
-    '--from-file=./tools/perses/dashboards/',
+    '--from-file=./dashboards/',
     '--dry-run=client -o yaml |',
     'kubectl label --local -f - perses.dev/resource=true --dry-run=client -o yaml',
 ])))
