@@ -90,7 +90,7 @@ func (s *KVMBinpackStep) Run(traceLog logr.Logger, request api.ExternalScheduler
 	for host := range result.Activations {
 		hv, ok := hvsByName[host]
 		if !ok {
-			traceLog.Info("no hv for host, skipping", "host", host)
+			traceLog.V(1).Info("no hv for host, skipping", "host", host)
 			continue
 		}
 		var totalWeightedUtilization, totalWeight float64
@@ -99,24 +99,24 @@ func (s *KVMBinpackStep) Run(traceLog logr.Logger, request api.ExternalScheduler
 			// Effective capacity = capacity * overcommit ratio.
 			capacity, ok := hv.Status.EffectiveCapacity[resourceName]
 			if !ok {
-				traceLog.Info("no effective capacity in status, skipping",
+				traceLog.V(1).Info("no effective capacity in status, skipping",
 					"host", host, "resource", resourceName)
 				continue
 			}
 			if capacity.IsZero() {
-				traceLog.Info("effective capacity is zero, skipping",
+				traceLog.V(1).Info("effective capacity is zero, skipping",
 					"host", host, "resource", resourceName)
 				continue
 			}
 			allocation, ok := hv.Status.Allocation[resourceName]
 			if !ok {
-				traceLog.Info("no allocation in status, skipping",
+				traceLog.V(1).Info("no allocation in status, skipping",
 					"host", host, "resource", resourceName)
 				continue
 			}
 			vmReq, ok := vmResources[resourceName]
 			if !ok {
-				traceLog.Info("no resource request for vm, skipping",
+				traceLog.V(1).Info("no resource request for vm, skipping",
 					"resource", resourceName)
 				continue
 			}
@@ -133,7 +133,7 @@ func (s *KVMBinpackStep) Run(traceLog logr.Logger, request api.ExternalScheduler
 		}
 		result.Activations[host] = score
 		result.Statistics["binpack score"].Hosts[host] = score
-		traceLog.Info("calculated binpack score for host",
+		traceLog.V(1).Info("calculated binpack score for host",
 			"host", host, "score", score)
 	}
 

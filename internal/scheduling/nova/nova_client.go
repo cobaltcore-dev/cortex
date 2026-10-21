@@ -105,7 +105,7 @@ func (api *novaClient) Init(ctx context.Context, client client.Client, conf Nova
 	if err != nil {
 		return err
 	}
-	schedulerLog.Info("using nova endpoint", "url", url)
+	schedulerLog.V(1).Info("using nova endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
 		ProviderClient: provider,
 		Endpoint:       url,
@@ -186,7 +186,7 @@ func (api *novaClient) GetServerMigrations(ctx context.Context, id string) ([]mi
 		}
 		migrations = append(migrations, list.Migrations...)
 	}
-	schedulerLog.Info("fetched migrations for vm", "id", id, "count", len(migrations))
+	schedulerLog.V(1).Info("fetched migrations for vm", "id", id, "count", len(migrations))
 	return migrations, nil
 }
 
@@ -301,6 +301,6 @@ func (api *novaClient) ListProjectServers(ctx context.Context, projectID string)
 		}
 	}
 
-	schedulerLog.Info("fetched servers for project", "projectID", projectID, "count", len(result))
+	schedulerLog.V(1).Info("fetched servers for project", "projectID", projectID, "count", len(result))
 	return result, nil
 }

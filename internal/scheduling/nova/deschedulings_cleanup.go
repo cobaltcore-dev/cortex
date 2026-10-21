@@ -29,7 +29,7 @@ func (s *DeschedulingsCleanupOnStartup) Start(ctx context.Context) error {
 		log.Error(err, "failed to list descheduling resources during startup reconciliation")
 		return err
 	}
-	log.Info("processing existing resources for cleanup", "resourceCount", len(resources.Items))
+	log.V(1).Info("processing existing resources for cleanup", "resourceCount", len(resources.Items))
 	processed, deleted := 0, 0
 	for _, resource := range resources.Items {
 		// Use the shared cleanup logic
@@ -74,7 +74,7 @@ func (r *DeschedulingsCleanup) Reconcile(ctx context.Context, req ctrl.Request) 
 	elapsed := time.Since(descheduling.CreationTimestamp.Time)
 	if elapsed < 24*time.Hour {
 		// Not old enough yet - requeue for later
-		log.Info("descheduling not old enough yet to be cleaned up", "name", descheduling.Name, "age", elapsed.String())
+		log.V(1).Info("descheduling not old enough yet to be cleaned up", "name", descheduling.Name, "age", elapsed.String())
 		return ctrl.Result{RequeueAfter: 24*time.Hour - elapsed}, nil
 	}
 
@@ -84,11 +84,11 @@ func (r *DeschedulingsCleanup) Reconcile(ctx context.Context, req ctrl.Request) 
 			log.Error(err, "failed to delete old descheduling", "name", descheduling.Name)
 			return ctrl.Result{}, err
 		}
-		log.Info("descheduling was already deleted", "name", descheduling.Name)
+		log.V(1).Info("descheduling was already deleted", "name", descheduling.Name)
 		return ctrl.Result{}, nil
 	}
 
-	log.Info("descheduling was deleted", "name", descheduling.Name)
+	log.V(1).Info("descheduling was deleted", "name", descheduling.Name)
 	return ctrl.Result{}, nil
 }
 

@@ -50,7 +50,7 @@ func (s *FilterStatusConditionsStep) Run(traceLog logr.Logger, request api.Exter
 		for conditionType, expectedStatus := range expected {
 			cd := meta.FindStatusCondition(hv.Status.Conditions, conditionType)
 			if cd == nil {
-				traceLog.Info(
+				traceLog.V(1).Info(
 					"hypervisor missing condition, keeping",
 					"host", hv.Name, "condition", conditionType,
 				)
@@ -62,7 +62,7 @@ func (s *FilterStatusConditionsStep) Run(traceLog logr.Logger, request api.Exter
 				continue // Don't care about this condition
 			}
 			if cd.Status != expectedStatus {
-				traceLog.Info(
+				traceLog.V(1).Info(
 					"hypervisor condition not met, filtering host",
 					"host", hv.Name,
 					"condition", conditionType,
@@ -73,12 +73,12 @@ func (s *FilterStatusConditionsStep) Run(traceLog logr.Logger, request api.Exter
 			}
 		}
 		if allMet {
-			traceLog.Info("hypervisor meets all status conditions, keeping host", "host", hv.Name)
+			traceLog.V(1).Info("hypervisor meets all status conditions, keeping host", "host", hv.Name)
 			hostsReady[hv.Name] = struct{}{}
 		}
 	}
 
-	traceLog.Info("hosts passing status conditions filter", "hosts", hostsReady)
+	traceLog.V(1).Info("hosts passing status conditions filter", "hosts", hostsReady)
 	for host := range result.Activations {
 		if _, ok := hostsReady[host]; ok {
 			continue

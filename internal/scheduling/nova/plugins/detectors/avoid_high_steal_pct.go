@@ -50,7 +50,7 @@ func (s *AvoidHighStealPctStep) Init(ctx context.Context, client client.Client, 
 
 func (s *AvoidHighStealPctStep) Run() ([]plugins.VMDetection, error) {
 	if s.Options.MaxStealPctOverObservedTimeSpan <= 0 {
-		log.Info("skipping step because maxStealPctOverObservedTimeSpan is not set or <= 0")
+		log.V(1).Info("skipping step because maxStealPctOverObservedTimeSpan is not set or <= 0")
 		return nil, nil
 	}
 	// Get VMs matching the MaxStealPctOverObservedTimeSpan option.
@@ -75,7 +75,7 @@ func (s *AvoidHighStealPctStep) Run() ([]plugins.VMDetection, error) {
 				Reason: fmt.Sprintf("kvm monitoring indicates cpu steal pct %.2f%% which is above %.2f%% threshold", f.MaxStealTimePct, s.Options.MaxStealPctOverObservedTimeSpan),
 				Host:   f.Host,
 			})
-			log.Info("vm marked for descheduling due to high cpu steal pct",
+			log.V(1).Info("vm marked for descheduling due to high cpu steal pct",
 				"instanceUUID", f.InstanceUUID,
 				"maxStealTimePct", f.MaxStealTimePct,
 			)

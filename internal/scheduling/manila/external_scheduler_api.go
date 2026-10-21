@@ -119,7 +119,7 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 		return
 	}
 	logger := log.WithValues(requestData.GetTraceLogArgs()...)
-	logger.Info("handling POST request", "url", "/scheduler/manila/external", "body", string(body))
+	logger.V(1).Info("handling POST request", "url", "/scheduler/manila/external", "body", string(body))
 
 	if ok, reason := httpAPI.canRunScheduler(requestData); !ok {
 		internalErr := fmt.Errorf("cannot run scheduler: %s", reason)
@@ -135,7 +135,7 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 			c.Respond(logger, http.StatusBadRequest, err, err.Error())
 			return
 		}
-		logger.Info("inferred pipeline name", "pipeline", requestData.Pipeline)
+		logger.V(1).Info("inferred pipeline name", "pipeline", requestData.Pipeline)
 	}
 
 	// Create the decision object in kubernetes.

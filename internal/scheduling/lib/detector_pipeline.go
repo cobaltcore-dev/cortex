@@ -52,7 +52,7 @@ func (p *DetectorPipeline[DetectionType]) Init(
 		}
 		p.steps[stepConf.Name] = step
 		p.order = append(p.order, stepConf.Name)
-		pipelineLog.Info("descheduler: added step", "name", stepConf.Name)
+		pipelineLog.V(1).Info("descheduler: added step", "name", stepConf.Name)
 	}
 	return unknownDetectors, detectorErrs
 }
@@ -72,10 +72,10 @@ func (p *DetectorPipeline[DetectionType]) Run() map[string][]DetectionType {
 	var wg sync.WaitGroup
 	for stepName, step := range p.steps {
 		wg.Go(func() {
-			pipelineLog.Info("descheduler: running step")
+			pipelineLog.V(1).Info("descheduler: running step")
 			decisions, err := step.Run()
 			if errors.Is(err, ErrStepSkipped) {
-				pipelineLog.Info("descheduler: step skipped")
+				pipelineLog.V(1).Info("descheduler: step skipped")
 				return
 			}
 			lock.Lock()
@@ -85,7 +85,7 @@ func (p *DetectorPipeline[DetectionType]) Run() map[string][]DetectionType {
 				metricErrLabel = "true"
 				return
 			}
-			pipelineLog.Info("descheduler: finished step")
+			pipelineLog.V(1).Info("descheduler: finished step")
 			decisionsByStep[stepName] = decisions
 		})
 	}
@@ -147,6 +147,6 @@ func (p *DetectorPipeline[DetectionType]) Combine(decisionsByStep map[string][]D
 		combinedDecisions = append(combinedDecisions, mergedDecision)
 	}
 
-	pipelineLog.Info("descheduler: combined decisions", "combined", combinedDecisions)
+	pipelineLog.V(1).Info("descheduler: combined decisions", "combined", combinedDecisions)
 	return combinedDecisions
 }
