@@ -5,7 +5,6 @@ package compute
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
@@ -53,26 +52,26 @@ func (k *VMMigrationStatisticsKPI) Collect(ch chan<- prometheus.Metric) {
 		client.ObjectKey{Name: "vm-host-residency"},
 		knowledge,
 	); err != nil {
-		slog.Error("failed to get knowledge vm-host-residency", "err", err)
+		log.Error(err, "failed to get knowledge vm-host-residency")
 		return
 	}
 	buckets, err := v1alpha1.
 		UnboxFeatureList[compute.VMHostResidencyHistogramBucket](knowledge.Status.Raw)
 	if err != nil {
-		slog.Error("failed to unbox vm host residency", "err", err)
+		log.Error(err, "failed to unbox vm host residency")
 		return
 	}
 	bucketsByFlavor := make(map[string][]compute.VMHostResidencyHistogramBucket)
 	for _, bucket := range buckets {
 		if bucket.FlavorName == "" {
-			slog.Warn("vm_host_residency: empty flavor name in bucket", "bucket", bucket)
+			log.Info("vm_host_residency: empty flavor name in bucket", "bucket", bucket)
 			continue
 		}
 		bucketsByFlavor[bucket.FlavorName] = append(bucketsByFlavor[bucket.FlavorName], bucket)
 	}
 	for flavor, buckets := range bucketsByFlavor {
 		if len(buckets) == 0 {
-			slog.Warn("vm_host_residency: no buckets for flavor", "flavor", flavor)
+			log.Info("vm_host_residency: no buckets for flavor", "flavor", flavor)
 			continue
 		}
 		var count uint64

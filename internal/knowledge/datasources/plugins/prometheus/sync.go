@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -21,7 +20,10 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	prometheusclient "github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/jobloop"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("prometheus")
 
 type typedSyncer interface {
 	Sync(context.Context) (nResults int64, nextSync time.Time, err error)
@@ -112,7 +114,7 @@ func (s *syncer[M]) fetch(start, end time.Time) (*prometheusTimelineData[M], err
 	urlStr += "&start=" + strconv.FormatInt(start.Unix(), 10)
 	urlStr += "&end=" + strconv.FormatInt(end.Unix(), 10)
 	urlStr += "&step=" + strconv.Itoa(s.syncResolutionSeconds)
-	slog.Info("fetching metrics from", "url", urlStr)
+	log.Info("fetching metrics from", "url", urlStr)
 
 	ctx := context.Background()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, http.NoBody)
@@ -146,10 +148,10 @@ func (s *syncer[M]) fetch(start, end time.Time) (*prometheusTimelineData[M], err
 		if len(bodyTrunc) > 100 {
 			bodyTrunc = bodyTrunc[:100] + "..."
 		}
-		slog.Error(
+		log.Error(
+			err,
 			"failed to decode response",
 			"body", bodyTrunc,
-			"error", err,
 		)
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -213,7 +215,7 @@ func (s *syncer[M]) getSyncWindowStart() (time.Time, error) {
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to count rows: %w", err)
 	}
-	slog.Debug("number of rows", "nRows", nRows, "tableName", tableName)
+	log.V(1).Info("number of rows", "nRows", nRows, "tableName", tableName)
 	if nRows == 0 {
 		// No metrics in the database yet. Start <timeRange> in the past.
 		start := time.Now().Add(-s.syncTimeRange)
@@ -234,7 +236,7 @@ func (s *syncer[M]) getSyncWindowStart() (time.Time, error) {
 	if latestTimestamp.IsZero() {
 		return time.Time{}, errors.New("latestTimestamp is zero")
 	}
-	slog.Info("latest timestamp", "latestTimestamp", latestTimestamp)
+	log.Info("latest timestamp", "latestTimestamp", latestTimestamp)
 	return latestTimestamp, nil
 }
 
@@ -251,7 +253,7 @@ func (s *syncer[M]) sync(start time.Time) {
 
 	var model M
 	tableName := model.TableName()
-	slog.Info(
+	log.Info(
 		"syncing Prometheus data", "metricAlias", s.alias,
 		"start", start, "end", end, "tableName", tableName,
 	)
@@ -261,26 +263,26 @@ func (s *syncer[M]) sync(start time.Time) {
 		map[string]any{"name": s.alias, "timestamp": time.Now().Add(-s.syncTimeRange)},
 	)
 	if err != nil {
-		slog.Error("failed to delete old metrics", "error", err)
+		log.Error(err, "failed to delete old metrics")
 		return
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		slog.Error("failed to get rows affected", "error", err)
+		log.Error(err, "failed to get rows affected")
 		return
 	}
-	slog.Info("deleted old metrics", "rows", rowsAffected)
+	log.Info("deleted old metrics", "rows", rowsAffected)
 	// Fetch the metrics from Prometheus.
 	prometheusData, err := s.fetch(start, end)
 	if err != nil {
-		slog.Error("failed to fetch metrics", "error", err)
+		log.Error(err, "failed to fetch metrics")
 		return
 	}
 	if err := db.BulkInsert(s.db, *s.db, prometheusData.Metrics...); err != nil {
-		slog.Error("failed to bulk insert metrics", "error", err)
+		log.Error(err, "failed to bulk insert metrics")
 		return
 	}
-	slog.Info(
+	log.Info(
 		"synced Prometheus data", "newMetrics", len(prometheusData.Metrics),
 		"metricAlias", s.alias, "start", start, "end", end,
 	)
@@ -298,15 +300,15 @@ func (s *syncer[M]) Sync(context.Context) (nResults int64, nextSync time.Time, e
 		return 0, time.Time{}, err
 	}
 
-	slog.Info("syncing metrics", "metricAlias", s.alias)
+	log.Info("syncing metrics", "metricAlias", s.alias)
 	// Sync this metric until we are caught up.
 	start, err := s.getSyncWindowStart()
 	if err != nil {
-		slog.Error("failed to get sync window start", "error", err)
+		log.Error(err, "failed to get sync window start")
 		return 0, time.Time{}, err
 	}
 	s.sync(start)
-	slog.Info("synced metrics", "metricAlias", s.alias)
+	log.Info("synced metrics", "metricAlias", s.alias)
 
 	nResults, err = s.db.SelectInt(
 		"SELECT COUNT(*) FROM "+model.TableName()+" WHERE name = :name",

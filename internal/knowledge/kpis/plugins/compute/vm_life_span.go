@@ -5,7 +5,6 @@ package compute
 
 import (
 	"context"
-	"log/slog"
 	"strconv"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -61,13 +60,13 @@ func (k *VMLifeSpanKPI) collectVMBuckets(ch chan<- prometheus.Metric, deleted bo
 		client.ObjectKey{Name: "vm-life-span"},
 		knowledge,
 	); err != nil {
-		slog.Error("failed to get knowledge vm-life-span", "err", err)
+		log.Error(err, "failed to get knowledge vm-life-span")
 		return
 	}
 	buckets, err := v1alpha1.
 		UnboxFeatureList[compute.VMLifeSpanHistogramBucket](knowledge.Status.Raw)
 	if err != nil {
-		slog.Error("failed to unbox vm life span", "err", err)
+		log.Error(err, "failed to unbox vm life span")
 		return
 	}
 
@@ -77,7 +76,7 @@ func (k *VMLifeSpanKPI) collectVMBuckets(ch chan<- prometheus.Metric, deleted bo
 			continue
 		}
 		if bucket.FlavorName == "" {
-			slog.Warn("vm_life_span: empty flavor name in bucket", "bucket", bucket)
+			log.Info("vm_life_span: empty flavor name in bucket", "bucket", bucket)
 			continue
 		}
 		bucketsByFlavor[bucket.FlavorName] = append(bucketsByFlavor[bucket.FlavorName], bucket)
@@ -85,7 +84,7 @@ func (k *VMLifeSpanKPI) collectVMBuckets(ch chan<- prometheus.Metric, deleted bo
 
 	for flavor, flavorBuckets := range bucketsByFlavor {
 		if len(flavorBuckets) == 0 {
-			slog.Warn("vm_life_span: no buckets for flavor", "flavor", flavor)
+			log.Info("vm_life_span: no buckets for flavor", "flavor", flavor)
 			continue
 		}
 

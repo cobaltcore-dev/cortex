@@ -5,7 +5,6 @@ package infrastructure
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
@@ -15,7 +14,10 @@ import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("infrastructure")
 
 const hanaKVMFlavorPattern = "hana_k_%"
 
@@ -56,20 +58,20 @@ func (k *KVMHanaStackingKPI) Describe(ch chan<- *prometheus.Desc) {
 func (k *KVMHanaStackingKPI) Collect(ch chan<- prometheus.Metric) {
 	hosts, err := k.getKVMHosts()
 	if err != nil {
-		slog.Error("kvm_hana_stacking: failed to get KVM hosts", "error", err)
+		log.Error(err, "kvm_hana_stacking: failed to get KVM hosts")
 		return
 	}
 
 	rows, err := k.queryHanaStacking()
 	if err != nil {
-		slog.Error("kvm_hana_stacking: failed to query HANA stacking", "error", err)
+		log.Error(err, "kvm_hana_stacking: failed to query HANA stacking")
 		return
 	}
 
 	for _, row := range rows {
 		host, ok := hosts[row.ComputeHost]
 		if !ok {
-			slog.Warn("kvm_hana_stacking: compute host not found", "compute_host", row.ComputeHost)
+			log.Info("kvm_hana_stacking: compute host not found", "compute_host", row.ComputeHost)
 			continue
 		}
 		hostLabels := host.getHostLabels()

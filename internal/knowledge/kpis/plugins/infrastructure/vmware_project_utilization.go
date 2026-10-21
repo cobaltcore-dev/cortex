@@ -5,7 +5,6 @@ package infrastructure
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
@@ -83,20 +82,20 @@ func (k *VMwareProjectUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	hosts, err := k.getVMwareHosts()
 	if err != nil {
 		// Log the error and return early to avoid panicking. The KPI will be retried on the next scrape.
-		slog.Error("vmware_project_utilization: Failed to get VMware hosts for project utilization KPI", "error", err)
+		log.Error(err, "vmware_project_utilization: Failed to get VMware hosts for project utilization KPI")
 		return
 	}
 
 	// Export project x flavor x compute_host instance count metric
 	projectInstanceCounts, err := k.queryProjectInstanceCount()
 	if err != nil {
-		slog.Error("vmware_project_utilization: Failed to query project instance count for project utilization KPI", "error", err)
+		log.Error(err, "vmware_project_utilization: Failed to query project instance count for project utilization KPI")
 		return
 	}
 	for _, projectInstanceCount := range projectInstanceCounts {
 		host, ok := hosts[projectInstanceCount.ComputeHost]
 		if !ok {
-			slog.Warn("vmware_project_utilization: Compute host not found for project instance count", "compute_host", projectInstanceCount.ComputeHost)
+			log.Info("vmware_project_utilization: Compute host not found for project instance count", "compute_host", projectInstanceCount.ComputeHost)
 			continue
 		}
 		hostLabels := host.getHostLabels()
@@ -107,13 +106,13 @@ func (k *VMwareProjectUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	// Export project x compute_host x resource capacity usage metric
 	projectCapacityUsages, err := k.queryProjectCapacityUsage()
 	if err != nil {
-		slog.Error("vmware_project_utilization: Failed to query project capacity usage for project utilization KPI", "error", err)
+		log.Error(err, "vmware_project_utilization: Failed to query project capacity usage for project utilization KPI")
 		return
 	}
 	for _, projectCapacityUsage := range projectCapacityUsages {
 		host, ok := hosts[projectCapacityUsage.ComputeHost]
 		if !ok {
-			slog.Warn("vmware_project_utilization: Compute host not found for project capacity usage", "compute_host", projectCapacityUsage.ComputeHost)
+			log.Info("vmware_project_utilization: Compute host not found for project capacity usage", "compute_host", projectCapacityUsage.ComputeHost)
 			continue
 		}
 		hostLabels := host.getHostLabels()

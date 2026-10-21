@@ -5,7 +5,6 @@ package storage
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
@@ -15,7 +14,10 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("storage")
 
 type NetAppStoragePoolCPUUsageKPI struct {
 	// Common base for all KPIs that provides standard functionality.
@@ -58,13 +60,13 @@ func (k *NetAppStoragePoolCPUUsageKPI) Collect(ch chan<- prometheus.Metric) {
 		client.ObjectKey{Name: "netapp-storage-pool-cpu-usage-manila"},
 		knowledge,
 	); err != nil {
-		slog.Error("failed to get knowledge netapp-storage-pool-cpu-usage", "err", err)
+		log.Error(err, "failed to get knowledge netapp-storage-pool-cpu-usage")
 		return
 	}
 	usages, err := v1alpha1.
 		UnboxFeatureList[storage.StoragePoolCPUUsage](knowledge.Status.Raw)
 	if err != nil {
-		slog.Error("failed to unbox storage pool cpu usage", "err", err)
+		log.Error(err, "failed to unbox storage pool cpu usage")
 		return
 	}
 	buckets := prometheus.LinearBuckets(0, 5, 20)
