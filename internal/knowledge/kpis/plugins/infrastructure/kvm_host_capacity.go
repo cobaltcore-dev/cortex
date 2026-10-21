@@ -163,7 +163,7 @@ func (k *KVMHostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		ramTotal, hasRAMTotal := hypervisor.getResourceCapacity(hv1.ResourceMemory)
 
 		if !hasCPUTotal || !hasRAMTotal {
-			log.Info("hypervisor missing cpu or ram capacity, skipping", "host", hypervisor.Name)
+			log.V(1).Info("hypervisor missing cpu or ram capacity, skipping", "host", hypervisor.Name)
 			continue
 		}
 

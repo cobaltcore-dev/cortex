@@ -70,7 +70,7 @@ func extractHistogramBuckets(lifeSpansRaw []VMLifeSpanRaw, deleted bool) []VMLif
 	for key, hist := range hists {
 		labels := strings.Split(key, ",")
 		if len(labels) != 1 {
-			log.Info("vm_life_span: unexpected comma in flavor name")
+			log.V(1).Info("vm_life_span: unexpected comma in flavor name")
 			continue
 		}
 		for bucket, value := range hist {

@@ -20,18 +20,18 @@ type kpilogger struct {
 }
 
 func (l kpilogger) Describe(ch chan<- *prometheus.Desc) {
-	log.Info("kpi: describing", "name", l.kpi.GetName())
+	log.V(1).Info("kpi: describing", "name", l.kpi.GetName())
 	l.kpi.Describe(ch)
 }
 
 func (l kpilogger) Collect(ch chan<- prometheus.Metric) {
-	log.Info("kpi: collecting", "name", l.kpi.GetName())
+	log.V(1).Info("kpi: collecting", "name", l.kpi.GetName())
 	l.kpi.Collect(ch)
-	log.Info("kpi: collected", "name", l.kpi.GetName())
+	log.V(1).Info("kpi: collected", "name", l.kpi.GetName())
 }
 
 func (l kpilogger) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
-	log.Info("kpi: initializing", "name", l.kpi.GetName())
+	log.V(1).Info("kpi: initializing", "name", l.kpi.GetName())
 	return l.kpi.Init(db, client, opts)
 }
 
