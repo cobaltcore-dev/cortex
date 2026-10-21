@@ -29,7 +29,7 @@ func (s *FilterAllowedProjectsStep) Run(traceLog logr.Logger, request api.Extern
 		return result, nil
 	}
 	if request.Spec.Data.ProjectID == "" {
-		traceLog.Info("no project ID in request, skipping filter")
+		traceLog.V(1).Info("no project ID in request, skipping filter")
 		return result, nil
 	}
 
@@ -45,13 +45,13 @@ func (s *FilterAllowedProjectsStep) Run(traceLog logr.Logger, request api.Extern
 		}
 		if len(hv.Spec.AllowedProjects) == 0 {
 			// Hypervisor is available for all projects.
-			traceLog.Info("host allows all projects, keeping", "host", hv.Name)
+			traceLog.V(1).Info("host allows all projects, keeping", "host", hv.Name)
 			continue
 		}
 		if !slices.Contains(hv.Spec.AllowedProjects, request.Spec.Data.ProjectID) {
 			// Project is not allowed on this hypervisor, filter it out.
 			delete(result.Activations, hv.Name)
-			traceLog.Info(
+			traceLog.V(1).Info(
 				"filtering host not allowing project",
 				"host", hv.Name,
 				"project", request.Spec.Data.ProjectID,

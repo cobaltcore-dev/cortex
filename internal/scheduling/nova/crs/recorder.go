@@ -119,7 +119,7 @@ func (r *Recorder) RecordPlacement(ctx context.Context, decision *v1alpha1.Decis
 
 	for _, slot := range slotsOnTarget {
 		if _, exists := slot.Spec.CommittedResourceReservation.Allocations[instanceUUID]; exists {
-			log.Info("CR allocation: VM UUID already in reservation, skipping",
+			log.V(1).Info("CR allocation: VM UUID already in reservation, skipping",
 				"instanceUUID", instanceUUID, "reservation", slot.Name)
 			return
 		}
@@ -135,7 +135,7 @@ func (r *Recorder) RecordPlacement(ctx context.Context, decision *v1alpha1.Decis
 		return
 	}
 
-	log.Info("CR allocation: writing VM UUID into reservation",
+	log.V(1).Info("CR allocation: writing VM UUID into reservation",
 		"instanceUUID", instanceUUID, "reservation", slotName,
 		"projectID", projectID, "flavorGroup", flavorGroupName, "host", selectedHost)
 
@@ -166,7 +166,7 @@ func (r *Recorder) RecordPlacement(ctx context.Context, decision *v1alpha1.Decis
 		return
 	}
 
-	log.Info("CR allocation: done", "instanceUUID", instanceUUID, "reservation", slotName)
+	log.V(1).Info("CR allocation: done", "instanceUUID", instanceUUID, "reservation", slotName)
 }
 
 // RecordNoHostFound classifies a no-host-found result and emits a log line and metric.

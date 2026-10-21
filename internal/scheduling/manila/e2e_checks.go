@@ -58,14 +58,14 @@ func checkManilaSchedulerReturnsValidHosts(
 		Availability: gophercloud.Availability(authenticatedKeystone.Availability()),
 	}))
 	sc.Microversion = "2.65"
-	log.Info("authenticated against openstack", "url", sc.Endpoint)
-	log.Info("listing share hosts")
+	log.V(1).Info("authenticated against openstack", "url", sc.Endpoint)
+	log.V(1).Info("listing share hosts")
 	pages := must.Return(schedulerstats.List(sc, schedulerstats.ListOpts{}).AllPages(ctx))
 	pools := must.Return(schedulerstats.ExtractPools(pages))
 	if len(pools) == 0 {
 		panic("no storage pools found")
 	}
-	log.Info("found storage pools", "count", len(pools))
+	log.V(1).Info("found storage pools", "count", len(pools))
 
 	var hosts []api.ExternalSchedulerHost
 	weights := make(map[string]float64)
@@ -82,7 +82,7 @@ func checkManilaSchedulerReturnsValidHosts(
 		Weights: weights,
 	}
 	apiURL := "http://localhost:8080/scheduler/manila/external"
-	log.Info("sending request to external scheduler", "apiURL", apiURL)
+	log.V(1).Info("sending request to external scheduler", "apiURL", apiURL)
 
 	requestBody := must.Return(json.Marshal(request))
 	buf := bytes.NewBuffer(requestBody)

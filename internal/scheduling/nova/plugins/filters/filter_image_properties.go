@@ -67,7 +67,7 @@ func (s *FilterImagePropertiesStep) Run(traceLog logr.Logger, request api.Extern
 	}
 
 	if hvType != api.NovaImageMetaHVTypeKVM {
-		traceLog.Info("filtering out all known kvm hypervisors since image properties indicate a different hypervisor type",
+		traceLog.V(1).Info("filtering out all known kvm hypervisors since image properties indicate a different hypervisor type",
 			"image_hypervisor_type", hvType)
 		hvs := new(hv1.HypervisorList)
 		if err := s.Client.List(context.Background(), hvs); err != nil {

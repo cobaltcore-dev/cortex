@@ -35,7 +35,7 @@ func (s *FilterExcludeHostsStep) Run(
 	result := s.IncludeAllHostsFromRequest(request)
 	for _, host := range s.Options.ExcludedHosts {
 		delete(result.Activations, host) // noop if host is not in the map
-		traceLog.Info("filtering out host based on excluded hosts configuration", "host", host)
+		traceLog.V(1).Info("filtering out host based on excluded hosts configuration", "host", host)
 	}
 	return result, nil
 }

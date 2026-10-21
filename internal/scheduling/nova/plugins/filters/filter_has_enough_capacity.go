@@ -88,7 +88,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 		}
 		var sourceMap map[hv1.ResourceName]resource.Quantity
 		if hv.Status.EffectiveCapacity == nil {
-			traceLog.Info("hypervisor with nil effective capacity, use capacity instead (overprovisioning not considered)", "host", hv.Name)
+			traceLog.V(1).Info("hypervisor with nil effective capacity, use capacity instead (overprovisioning not considered)", "host", hv.Name)
 			sourceMap = hv.Status.Capacity
 		} else {
 			// Start with the total effective capacity which is capacity * overcommit ratio.
@@ -140,7 +140,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 			// Block the full slot now to prevent a concurrent scheduling call from picking the
 			// same host. Unlock logic is intentionally skipped — an unconfirmed slot must not
 			// be unlocked for any VM or project.
-			traceLog.Info("reservation has target host set but is not yet ready — blocking host to prevent double-booking",
+			traceLog.V(1).Info("reservation has target host set but is not yet ready — blocking host to prevent double-booking",
 				"reservation", reservation.Name,
 				"targetHost", reservation.Spec.TargetHost,
 				"statusHost", reservation.Status.Host,
@@ -169,7 +169,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 					// 1. Project ID matches
 					// 2. ResourceGroup matches the flavor's hw_version
 					reservation.Spec.CommittedResourceReservation.MatchesGroup(request.Spec.Data.ProjectID, request.Spec.Data.Flavor.Data.ExtraSpecs["quota:hw_version"]):
-					traceLog.Info("unlocking resources reserved by matching committed resource reservation with allocation",
+					traceLog.V(1).Info("unlocking resources reserved by matching committed resource reservation with allocation",
 						"reservation", reservation.Name,
 						"instanceUUID", request.Spec.Data.InstanceUUID,
 						"projectID", request.Spec.Data.ProjectID,
@@ -190,7 +190,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 					case api.EvacuateIntent:
 						if reservation.Status.FailoverReservation != nil {
 							if _, contained := reservation.Status.FailoverReservation.Allocations[request.Spec.Data.InstanceUUID]; contained {
-								traceLog.Info("unlocking resources reserved by failover reservation for VM in allocations (evacuation)",
+								traceLog.V(1).Info("unlocking resources reserved by failover reservation for VM in allocations (evacuation)",
 									"reservation", reservation.Name,
 									"instanceUUID", request.Spec.Data.InstanceUUID)
 								continue
@@ -249,7 +249,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 				if freeCPU, exists := freeResourcesByHost[host]["cpu"]; exists {
 					freeCPU.Sub(cpu)
 					if freeCPU.Value() < 0 {
-						traceLog.Info("negative free CPU after blocking reservation",
+						traceLog.V(1).Info("negative free CPU after blocking reservation",
 							"host", host,
 							"reservation", reservation.Name,
 							"reservationType", reservation.Spec.Type,
@@ -264,7 +264,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 				if freeMemory, exists := freeResourcesByHost[host]["memory"]; exists {
 					freeMemory.Sub(memory)
 					if freeMemory.Value() < 0 {
-						traceLog.Info("negative free memory after blocking reservation",
+						traceLog.V(1).Info("negative free memory after blocking reservation",
 							"host", host,
 							"reservation", reservation.Name,
 							"reservationType", reservation.Spec.Type,
@@ -288,7 +288,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 		}
 		freeCPU, ok := free["cpu"]
 		if !ok || freeCPU.Value() < 0 {
-			traceLog.Info(
+			traceLog.V(1).Info(
 				"host with invalid CPU capacity",
 				"host", host, "freeCPU", freeCPU.String(),
 			)
@@ -300,7 +300,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 		vcpuSlots := uint64(freeCPU.Value()) /
 			request.Spec.Data.Flavor.Data.VCPUs
 		if vcpuSlots < request.Spec.Data.NumInstances {
-			traceLog.Info(
+			traceLog.V(1).Info(
 				"filtering host due to insufficient CPU capacity",
 				"host", host, "requested", request.Spec.Data.Flavor.Data.VCPUs,
 				"available", freeCPU.String(),
@@ -330,7 +330,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 		memorySlots := uint64(freeMemory.Value()) /
 			(request.Spec.Data.Flavor.Data.MemoryMB * (1 << 20))
 		if memorySlots < request.Spec.Data.NumInstances {
-			traceLog.Info(
+			traceLog.V(1).Info(
 				"filtering host due to insufficient RAM capacity",
 				"host", host, "requested_mb", request.Spec.Data.Flavor.Data.MemoryMB,
 				"available_mb", freeMemory.String(),
@@ -338,7 +338,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 			delete(result.Activations, host)
 			continue
 		}
-		traceLog.Info(
+		traceLog.V(1).Info(
 			"host has enough capacity", "host", host,
 			"requested_cpus", request.Spec.Data.Flavor.Data.VCPUs,
 			"available_cpus", freeCPU.String(),
@@ -351,7 +351,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 	for host := range result.Activations {
 		if _, ok := hostsEncountered[host]; !ok {
 			delete(result.Activations, host)
-			traceLog.Info(
+			traceLog.V(1).Info(
 				"removing host with unknown capacity",
 				"host", host,
 			)

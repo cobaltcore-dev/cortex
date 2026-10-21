@@ -167,12 +167,12 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		return &request, fmt.Errorf("pipeline config not found: %q", decision.Spec.PipelineRef.Name)
 	}
 	if pipelineConf.Spec.IgnorePreselection {
-		log.Info("gathering all placement candidates before filtering")
+		log.V(1).Info("gathering all placement candidates before filtering")
 		if err := c.gatherer.MutateWithAllCandidates(ctx, &request); err != nil {
 			log.Error(err, "failed to gather all placement candidates")
 			return &request, err
 		}
-		log.Info("gathered all placement candidates", "numHosts", len(request.Hosts))
+		log.V(1).Info("gathered all placement candidates", "numHosts", len(request.Hosts))
 	}
 
 	result, err := pipeline.Run(request)
