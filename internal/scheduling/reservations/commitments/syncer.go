@@ -122,7 +122,7 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 	}
 	for id, commitment := range commitments {
 		if commitment.ServiceType != "compute" {
-			log.Info("skipping non-compute commitment", "id", id, "serviceType", commitment.ServiceType)
+			log.V(1).Info("skipping non-compute commitment", "id", id, "serviceType", commitment.ServiceType)
 			if s.monitor != nil {
 				s.monitor.RecordCommitmentSkipped(SkipReasonNonCompute)
 			}
@@ -139,7 +139,7 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 			v1alpha1.CommitmentStatusExpired:
 			// valid, continue processing
 		default:
-			log.Info("skipping commitment with unknown status", "id", id, "status", commitment.Status)
+			log.V(1).Info("skipping commitment with unknown status", "id", id, "status", commitment.Status)
 			if commitment.UUID != "" {
 				result.skippedUUIDs[commitment.UUID] = true
 			}
@@ -149,7 +149,7 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 		// Extract flavor group name from resource name (validates format: hw_version_<group>_ram)
 		flavorGroupName, err := GetFlavorGroupNameFromResource(commitment.ResourceName)
 		if err != nil {
-			log.Info("skipping commitment with invalid resource name",
+			log.V(1).Info("skipping commitment with invalid resource name",
 				"id", id,
 				"resourceName", commitment.ResourceName,
 				"error", err)
@@ -162,7 +162,7 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 		// Validate flavor group exists in Knowledge
 		_, exists := flavorGroups[flavorGroupName]
 		if !exists {
-			log.Info("skipping commitment with unknown flavor group",
+			log.V(1).Info("skipping commitment with unknown flavor group",
 				"id", id,
 				"flavorGroup", flavorGroupName)
 			if s.monitor != nil {
@@ -200,7 +200,7 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 
 		// Skip commitments with empty UUID
 		if commitment.UUID == "" {
-			log.Info("skipping commitment with empty UUID",
+			log.V(1).Info("skipping commitment with empty UUID",
 				"id", id)
 			if s.monitor != nil {
 				s.monitor.RecordCommitmentSkipped(SkipReasonEmptyUUID)
@@ -217,7 +217,7 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 			continue
 		}
 
-		log.Info("resolved commitment to state",
+		log.V(1).Info("resolved commitment to state",
 			"commitmentID", commitment.UUID,
 			"flavorGroup", flavorGroupName,
 			"amount", commitment.Amount,
@@ -301,7 +301,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	// Upsert CommittedResource CRDs for each commitment
 	var totalCreated, totalUpdated int
 	for _, state := range commitmentResult.states {
-		logger.Info("upserting committed resource CRD",
+		logger.V(1).Info("upserting committed resource CRD",
 			"commitmentUUID", state.CommitmentUUID,
 			"projectID", state.ProjectID,
 			"flavorGroup", state.FlavorGroupName,
@@ -389,7 +389,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 					staleDeleted++
 				}
 			} else {
-				logger.Info("stale committed resource CRD: present locally but absent from Limes",
+				logger.V(1).Info("stale committed resource CRD: present locally but absent from Limes",
 					"name", cr.Name, "commitmentUUID", cr.Spec.CommitmentUUID)
 				staleCRCount++
 			}
@@ -426,12 +426,12 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	for i := range existingReservations.Items {
 		res := &existingReservations.Items[i]
 		if res.Spec.CommittedResourceReservation == nil {
-			logger.Info("skipping reservation without committed resource spec", "name", res.Name)
+			logger.V(1).Info("skipping reservation without committed resource spec", "name", res.Name)
 			continue
 		}
 		commitmentUUID := res.Spec.CommittedResourceReservation.CommitmentUUID
 		if commitmentUUID == "" {
-			logger.Info("skipping reservation with empty commitment UUID", "name", res.Name)
+			logger.V(1).Info("skipping reservation with empty commitment UUID", "name", res.Name)
 			continue
 		}
 		if !activeCommitments[commitmentUUID] {

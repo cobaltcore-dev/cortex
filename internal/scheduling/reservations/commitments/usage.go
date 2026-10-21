@@ -136,7 +136,7 @@ func (c *UsageCalculator) CalculateUsage(
 			assignedToCommitments++
 		}
 	}
-	log.Info("completed usage report",
+	log.V(1).Info("completed usage report",
 		"projectID", projectID,
 		"vmCount", len(vms),
 		"assignedToCommitments", assignedToCommitments,
