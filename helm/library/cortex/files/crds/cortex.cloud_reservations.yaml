@@ -185,6 +185,8 @@ spec:
                 description: |-
                   FailoverReservation contains fields specific to failover reservations.
                   Only used when Type is FailoverReservation.
+
+                  Deprecated: FailoverReservations will be replaced with FailoverHostReservations.
                 properties:
                   resourceGroup:
                     description: ResourceGroup is the group/category of the resource
@@ -354,6 +356,8 @@ spec:
                 description: |-
                   FailoverReservation contains status fields specific to failover reservations.
                   Only used when Type is FailoverReservation.
+
+                  Deprecated: FailoverReservations will be replaced with FailoverHostReservations.
                 properties:
                   acknowledgedAt:
                     description: |-
